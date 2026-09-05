@@ -7,7 +7,7 @@ param(
     [string]$OutputRoot,
     [string]$CargoTestTarget,
     [string]$CargoTestFilter,
-    [ValidateSet("all", "fast-smoke", "compose", "release-gate", "full-nightly", "joint", "multi-server", "dual-soland")]
+    [ValidateSet("all", "fast-smoke", "compose", "release-gate", "services-live", "full-nightly", "joint", "multi-server")]
     [string]$Profile = "all",
     [string]$ProfileConfigPath,
     [switch]$PlanOnly,
@@ -203,8 +203,7 @@ function Invoke-JointSmokeGate {
         [string[]]$DockerCacheFrom = @(),
         [string]$DockerCacheTo,
         [bool]$DockerPull = $false,
-        [bool]$DockerNoCache = $false,
-        [bool]$SkipInkson = $false
+        [bool]$DockerNoCache = $false
     )
 
     $jointScript = Join-Path $RepoRoot "scripts\run-joint-e2e.ps1"
@@ -242,9 +241,6 @@ function Invoke-JointSmokeGate {
         if ($DockerNoCache) {
             $args += "-DockerNoCache"
         }
-    }
-    if ($SkipInkson) {
-        $args += "-SkipInkson"
     }
     $args += @(
         "-RunProfile", $RunProfile,
@@ -2050,7 +2046,7 @@ if (-not $OutputRoot) {
     $OutputRoot = Join-Path $repoRoot "artifacts"
 }
 
-$delegatedProfile = $Profile -in @("joint", "multi-server", "dual-soland")
+$delegatedProfile = $Profile -in @("joint", "multi-server")
 if ($delegatedProfile -and ($PlanOnly -or $ValidateProfile)) {
     throw "Profile '$Profile' delegates to the Playwright runner and does not have a Cargo test plan"
 }
@@ -2192,8 +2188,8 @@ if ($Profile -eq "joint") {
     exit ([int]$jointRun.exit_code)
 }
 
-if ($Profile -in @("multi-server", "dual-soland")) {
-    $profileServerCount = if ($Profile -eq "dual-soland") { Write-Warning "Profile dual-soland is deprecated; use multi-server."; 2 } else { 3 }
+if ($Profile -eq "multi-server") {
+    $profileServerCount = 3
     $multiRun = Invoke-JointSmokeGate `
         -RepoRoot $repoRoot `
         -RunDir $runDir `
@@ -2204,7 +2200,7 @@ if ($Profile -in @("multi-server", "dual-soland")) {
         -StartCoauth $true `
         -ServerCount $profileServerCount `
         -StartMocks $false `
-        -Grep $(if ($profileServerCount -eq 2) { "cross-server federation" } else { "@three-server-p0" }) `
+        -Grep "@three-server-p0" `
         -SolandRuntime $Runtime `
         -SolandImage $SutImage `
         -BuildSolandImage ([bool]$BuildImage) `
@@ -2296,8 +2292,56 @@ if ($Runtime -eq "process" -and -not $env:SOLAND_BIN) {
     Add-RawLogLine -Path $rawLog -Value "process SUT binary: $processSolandBin"
 }
 
+# The services-live lane spawns real coauth and teabay processes alongside
+# soland, so their binaries must be built from the current checkouts for the
+# same reason the SUT is: a stale sibling binary embeds an older SDK/spec
+# snapshot and then rejects envelopes the current cotest authors. An explicit
+# COAUTH_BIN / TEABAY_BIN stays an intentional immutable-binary override.
+$servicesLiveProfile = $Profile -eq "services-live"
+$servicesLiveBinaries = @{}
+if ($servicesLiveProfile -and -not $delegatedProfile -and -not $PlanOnly -and -not $ValidateProfile) {
+    $workspaceRoot = (Resolve-Path (Join-Path $repoRoot "..")).Path
+    # `BinTarget` is the Cargo bin target, which is not always the service name:
+    # teabay's server crate is `server`, so it builds and installs as
+    # `server.exe`. The Rust helper looks up `TEABAY_BIN` before falling back to
+    # `teabay/target/debug/teabay.exe`, a file a normal build never produces, so
+    # exporting the real path here is what makes the sibling checkout usable.
+    foreach ($sibling in @(
+            [pscustomobject]@{ Service = "coauth"; BinEnv = "COAUTH_BIN"; BinTarget = "coauth" },
+            [pscustomobject]@{ Service = "teabay"; BinEnv = "TEABAY_BIN"; BinTarget = "server" }
+        )) {
+        if ([Environment]::GetEnvironmentVariable($sibling.BinEnv)) {
+            Add-RawLogLine -Path $rawLog -Value "$($sibling.Service) binary: $($sibling.BinEnv) override"
+            continue
+        }
+        $manifest = Join-Path $workspaceRoot "$($sibling.Service)\Cargo.toml"
+        if (-not (Test-Path $manifest)) {
+            throw "Profile services-live needs the sibling $($sibling.Service) checkout at $manifest, or an explicit $($sibling.BinEnv)"
+        }
+        Add-RawLogLine -Path $rawLog -Value "=== prepare $($sibling.Service) ==="
+        $buildOutput = @(& cargo build --manifest-path $manifest --bin $sibling.BinTarget 2>&1)
+        $buildExitCode = $LASTEXITCODE
+        foreach ($line in $buildOutput) {
+            $text = [string]$line
+            Write-Host $text
+            Add-RawLogLine -Path $rawLog -Value $text
+        }
+        if ($buildExitCode -ne 0) {
+            throw "Failed to build $($sibling.Service) bin '$($sibling.BinTarget)' from $manifest (exit code $buildExitCode)"
+        }
+        $siblingTargetDirectory = Get-CargoTargetDirectory -ManifestPath $manifest
+        $siblingBinaryName = if ($IsWindows) { "$($sibling.BinTarget).exe" } else { $sibling.BinTarget }
+        $siblingBinary = Join-Path $siblingTargetDirectory "debug\$siblingBinaryName"
+        if (-not (Test-Path $siblingBinary)) {
+            throw "$($sibling.Service) build succeeded but the Cargo target binary is missing: $siblingBinary"
+        }
+        $servicesLiveBinaries[$sibling.BinEnv] = $siblingBinary
+        Add-RawLogLine -Path $rawLog -Value "$($sibling.Service) binary: $siblingBinary"
+    }
+}
+
 $originalEnv = @()
-foreach ($name in "COTEST_SUT_MODE", "COTEST_SUT_MANIFEST", "COTEST_SUT_IMAGE", "COTEST_ARTIFACT_DIR", "COTEST_SERVICE_LOG_DIR", "COTEST_TRANSCRIPT_PATH", "SOLAND_BIN", "COTEST_SOLAND_DATABASE_URL", "SOLAND_TEST_DATABASE_URL") {
+foreach ($name in "COTEST_SUT_MODE", "COTEST_SUT_MANIFEST", "COTEST_SUT_IMAGE", "COTEST_ARTIFACT_DIR", "COTEST_SERVICE_LOG_DIR", "COTEST_TRANSCRIPT_PATH", "SOLAND_BIN", "COAUTH_BIN", "TEABAY_BIN", "COTEST_SOLAND_DATABASE_URL", "COTEST_COAUTH_DATABASE_URL", "DATABASE_URL", "COTEST_REQUIRE_LIVE_SERVICES", "SOLAND_TEST_DATABASE_URL") {
     $originalEnv += [pscustomobject]@{
         Name   = $name
         Exists = Test-Path "Env:$name"
@@ -2334,11 +2378,32 @@ try {
         }
     }
 
-    if ($Profile -in @("all", "full-nightly") -and -not $env:COTEST_SOLAND_DATABASE_URL) {
+    if ($Profile -in @("all", "full-nightly", "services-live") -and -not $env:COTEST_SOLAND_DATABASE_URL) {
         Add-RawLogLine -Path $rawLog -Value "=== prepare conformance test PostgreSQL ==="
         $testPostgres = Start-CotestTestPostgres
         $env:COTEST_SOLAND_DATABASE_URL = $testPostgres.Url
         Add-RawLogLine -Path $rawLog -Value "conformance test PostgreSQL: $($testPostgres.ContainerName)"
+    }
+
+    if ($servicesLiveProfile) {
+        foreach ($binEnv in $servicesLiveBinaries.Keys) {
+            [Environment]::SetEnvironmentVariable($binEnv, $servicesLiveBinaries[$binEnv])
+        }
+        # Every COTEST_*_DATABASE_URL is consumed as an ADMIN url: the Rust
+        # bootstrap creates one freshly named database per spawn, so soland and
+        # coauth pointing at the same server still get isolated stores. Teabay
+        # reads DATABASE_URL directly, matching the joint bootstrap's contract.
+        if (-not $env:COTEST_COAUTH_DATABASE_URL -and $env:COTEST_SOLAND_DATABASE_URL) {
+            $env:COTEST_COAUTH_DATABASE_URL = $env:COTEST_SOLAND_DATABASE_URL
+        }
+        if (-not $env:DATABASE_URL -and $env:COTEST_SOLAND_DATABASE_URL) {
+            $env:DATABASE_URL = $env:COTEST_SOLAND_DATABASE_URL
+        }
+        # Declare the live stack present. Without this the selected scenarios
+        # soft-skip on a missing binary, database or Docker daemon and the lane
+        # reports a green run in which no service was ever started.
+        $env:COTEST_REQUIRE_LIVE_SERVICES = "1"
+        Add-RawLogLine -Path $rawLog -Value "services-live: live prerequisites declared present (fail-closed)"
     }
 
     $solandTestDatabaseUrl = Resolve-SolandTestDatabaseUrl `

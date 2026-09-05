@@ -70,7 +70,6 @@ param(
     [switch]$DockerNoCache,
     [string]$InksonCommand,
     [string]$InksonServer2Command,
-    [switch]$SkipInkson,
     [string]$CoauthCommand,
     [string]$CoauthHealthUrl,
     [switch]$StartCoauth,
@@ -117,9 +116,6 @@ param(
     [int]$ServerCount = 1,
     [ValidateSet("full-mesh", "ordered-candidates")]
     [string]$NetworkShape = "full-mesh",
-    # Deprecated input adapter. It is normalized immediately and never enters
-    # the topology, logs, reports, or scenario environment.
-    [switch]$DualSoland,
     [string]$SolandServer2NotarySigningKey = "ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg=",
     [string]$SolandServer2KeyStoreMasterKey = "ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmY=",
     [switch]$StartMockIdp,
@@ -194,13 +190,6 @@ if ($MockWitnessExtraDids.Count -gt 0) {
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
-if ($PSBoundParameters.ContainsKey("DualSoland")) {
-    Write-Warning "-DualSoland is deprecated; use -ServerCount 2. All outputs use server1/server2 naming."
-    if ($PSBoundParameters.ContainsKey("ServerCount") -and $ServerCount -ne 2) {
-        throw "-DualSoland cannot be combined with a conflicting -ServerCount"
-    }
-    $ServerCount = 2
-}
 $multiServer = $ServerCount -ge 2
 
 . (Join-Path $PSScriptRoot "lib\artifacts.ps1")
@@ -2808,27 +2797,15 @@ if ($SolandDatabaseUrl -and ($SolandRuntime -ne "process" -or $SolandCommand -or
 if ($SolandDatabaseUrl -and $multiServer) {
     throw "-SolandDatabaseUrl cannot be shared by a multi-server run; use isolated runner-owned databases."
 }
-if ($SkipInkson -and ($InksonCommand -or $InksonServer2Command -or $PSBoundParameters.ContainsKey("InksonBaseUrl") -or $PSBoundParameters.ContainsKey("InksonServer2BaseUrl"))) {
-    throw "-SkipInkson cannot be combined with Inkson URLs or commands."
-}
-# Coauth's generated development config still requires an Inkson origin even
-# for API-only runs. Keep that service URL out of the caller's scope while
-# providing a harmless placeholder for config generation; no Inkson process or
-# readiness probe is started when -SkipInkson is set.
-if ($SkipInkson -and -not $InksonBaseUrl) {
-    $InksonBaseUrl = "http://127.0.0.1:22817"
-}
 $inksonPort = $null
-if (-not $SkipInkson) {
-    if (-not $InksonBaseUrl) {
-        $inksonPort = Get-FreeTcpPort
-        $InksonBaseUrl = "http://127.0.0.1:$inksonPort"
-    }
+if (-not $InksonBaseUrl) {
+    $inksonPort = Get-FreeTcpPort
+    $InksonBaseUrl = "http://127.0.0.1:$inksonPort"
 }
 $inksonServer2Port = $null
 $inksonServer2BaseUrl = $null
 $inksonBaseUrlWasExplicit = $PSBoundParameters.ContainsKey("InksonBaseUrl")
-if ($multiServer -and -not $SkipInkson) {
+if ($multiServer) {
     if ($InksonServer2BaseUrl) {
         $inksonServer2BaseUrl = $InksonServer2BaseUrl
     } elseif ($InksonServer2Command) {
@@ -3115,7 +3092,7 @@ $startedAt = Get-Date
 $generatedSolandCommand = $false
 $generatedInksonCommand = $false
 $willStartDefaultSoland = (-not $SolandCommand -and $null -ne $solandPort)
-$willStartDefaultInkson = (-not $SkipInkson -and -not $InksonCommand -and $null -ne $inksonPort)
+$willStartDefaultInkson = (-not $InksonCommand -and $null -ne $inksonPort)
 $willStartDockerSoland = ($SolandRuntime -eq "docker" -and ($willStartDefaultSoland -or ($multiServer -and $null -ne $solandServer2Port)))
 $startedSolandRuntime = if ($willStartDockerSoland) { "docker" } elseif ($willStartDefaultSoland) { "process" } elseif ($SolandCommand) { "process-command" } else { "attached" }
 $coauthConfigPath = $null
@@ -4313,7 +4290,7 @@ try {
     $inksonService = $null
     $inksonServer2Service = $null
     $generatedInksonServer2Command = $false
-    if (-not $SkipInkson -and -not $InksonCommand -and $inksonPort) {
+    if (-not $InksonCommand -and $inksonPort) {
         $InksonCommand = "node {0} {1} {2} 127.0.0.1" -f `
             (Quote-PsLiteral (Join-Path $e2eRoot "scripts\serve-static.mjs")),
             (Quote-PsLiteral $inksonStaticRoot),
@@ -4325,13 +4302,11 @@ try {
         $inksonService = Start-ManagedCommand -Name $inksonName -Command $InksonCommand -WorkingDirectory $InksonRoot -LogDirectory $serviceLogDir
         $managedServices.Add($inksonService)
     }
-    if (-not $SkipInkson) {
-        Wait-HttpReady -Url $InksonBaseUrl -TimeoutSeconds $StartupTimeoutSeconds
-        if ($generatedInksonCommand) {
-            Wait-DioxusAppReady -Url $InksonBaseUrl -TimeoutSeconds $StartupTimeoutSeconds
-        }
+    Wait-HttpReady -Url $InksonBaseUrl -TimeoutSeconds $StartupTimeoutSeconds
+    if ($generatedInksonCommand) {
+        Wait-DioxusAppReady -Url $InksonBaseUrl -TimeoutSeconds $StartupTimeoutSeconds
     }
-    if (-not $SkipInkson -and $multiServer -and $inksonServer2BaseUrl -and $inksonServer2BaseUrl -ne $InksonBaseUrl) {
+    if ($multiServer -and $inksonServer2BaseUrl -and $inksonServer2BaseUrl -ne $InksonBaseUrl) {
         if (-not $InksonServer2Command -and $inksonServer2Port) {
             $InksonServer2Command = "node {0} {1} {2} 127.0.0.1" -f `
                 (Quote-PsLiteral (Join-Path $e2eRoot "scripts\serve-static.mjs")),
@@ -4397,11 +4372,6 @@ try {
     $env:COTEST_SOLAND_SERVICE_DID = $SolandServiceDid
     $env:COTEST_SERVER_COUNT = "$ServerCount"
     $env:COTEST_REQUIRED_SERVER_COUNT = if ($ServerCount -ge 3 -and $RunProfile -eq "joint-full") { "3" } else { "0" }
-    if ($SkipInkson) {
-        $env:COTEST_SKIP_INKSON = "1"
-    } else {
-        Remove-Item Env:COTEST_SKIP_INKSON -ErrorAction SilentlyContinue
-    }
     if ($generatedSolandCommand -and $solandDatabaseDsn) {
         $env:COTEST_SOLAND_CHAOS_CONTROL_FILE = $solandChaosControlFile
         $env:COTEST_SOLAND_STORAGE = "postgres"
@@ -4428,11 +4398,6 @@ try {
         $env:COTEST_INKSON_BASE_URL = $InksonBaseUrl
     } else {
         Remove-Item Env:COTEST_INKSON_BASE_URL -ErrorAction SilentlyContinue
-    }
-    if ($SkipInkson) {
-        $env:COTEST_SKIP_INKSON = "1"
-    } else {
-        Remove-Item Env:COTEST_SKIP_INKSON -ErrorAction SilentlyContinue
     }
     $runtimeServers.Clear()
     $runtimeServers.Add([pscustomobject]@{ Index = 1; Name = "server1"; SolandBaseUrl = $SolandBaseUrl; SolandServiceId = $SolandServiceId; SolandServiceDid = $SolandServiceDid; SolandPort = $solandPort; SolandService = $solandService; SolandDatabase = $ephemeralSolandPostgres; CoauthBaseUrl = $CoauthBaseUrl; CoauthPort = $coauthPort; CoauthConfigPath = $coauthConfigPath; InksonBaseUrl = $InksonBaseUrl; SigningKey = $SolandNotarySigningKey })
@@ -5391,7 +5356,6 @@ if ($RunProfile -eq "joint-smoke" -and -not $Grep) {
     $requiredScenarios = @(@(
         $requiredScenarios
         "encryption/key-backup"
-        "identity/contact-graph"
         "identity/multi-device"
         "identity/recovery-key-to-encrypted-realm"
         "kanban/cross-member-encrypted"

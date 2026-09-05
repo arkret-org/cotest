@@ -319,7 +319,7 @@ async fn wait_until_healthy(base_url: &str, path: &str, timeout: Duration) -> Re
 
 /// Resolve the `arkret/` workspace root by walking up from the cotest
 /// crate manifest dir until a sibling layout is detected.
-fn workspace_root() -> Option<PathBuf> {
+pub(crate) fn workspace_root() -> Option<PathBuf> {
     // CARGO_MANIFEST_DIR points at .../arkret/cotest at compile time.
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     manifest_dir.parent().map(Path::to_path_buf)

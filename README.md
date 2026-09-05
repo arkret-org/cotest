@@ -81,8 +81,7 @@ Recommended entrypoints:
 .\scripts\build-soland-image.ps1
 .\scripts\run-server-conformance.ps1 -Runtime docker -SutImage cotest-soland:latest
 .\scripts\run-server-conformance.ps1 -Runtime docker -BuildImage -Profile joint
-.\scripts\run-joint-e2e.ps1 -SolandRuntime docker -BuildSolandImage -SkipInkson `
-  -RunProfile joint-smoke -PlaywrightProject chromium -Grep "soland /_arkret/describe"
+.\scripts\run-server-conformance.ps1 -Runtime process -Profile services-live
 ```
 
 - `process` mode is the fast local path and spawns a pre-built SUT binary
@@ -94,8 +93,13 @@ Recommended entrypoints:
 - `docker` mode is the Complement-style path and spawns the SUT with
   `docker run` while Rust tests stay host-side.
 - Joint Playwright e2e can also run soland from the built image with
-  `run-joint-e2e.ps1 -SolandRuntime docker`, including a `-SkipInkson` mode for
-  soland-only wire/API probes.
+  `run-joint-e2e.ps1 -SolandRuntime docker`.
+- `-Profile services-live` is the headless service lane: it builds the sibling
+  soland, coauth and teabay binaries, provisions PostgreSQL, and runs the Rust
+  scenarios that spawn those processes for real. No browser and no Inkson. It
+  exports `COTEST_REQUIRE_LIVE_SERVICES=1`, so a missing binary, database or
+  Docker daemon fails the run instead of soft-skipping into a green report in
+  which nothing started.
 - `.\scripts\build-soland-image.ps1` builds the default SUT image from
   `soland` plus the sibling `arkret-rust-sdk` checkout using the workspace
   root as Docker build context.

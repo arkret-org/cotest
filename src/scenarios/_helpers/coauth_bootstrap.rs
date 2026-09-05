@@ -48,7 +48,7 @@ use tempfile::NamedTempFile;
 
 use crate::harness::{ReservedPort, reserve_port};
 use crate::scenarios::_helpers::external_binary::{
-    ExternalBinarySpec, SpawnedExternalProcess, locate_external_binary,
+    ExternalBinarySpec, SpawnedExternalProcess, locate_external_binary, workspace_root,
 };
 use crate::scenarios::_helpers::health::wait_for_health;
 
@@ -658,19 +658,38 @@ pub fn bootstrap_coauth_config(
     })
 }
 
-/// Walk up from `coauth_bin` to find the coauth repo root (the directory
-/// containing the `policies/` subtree). Returns `None` if the binary path
-/// has been copied out of a sibling checkout.
+/// Find the coauth repo root — the directory holding `policies/cedar` and
+/// `templates`. Returns `None` when neither layout below matches.
+///
+/// Walking up from the binary only works when coauth built into its own
+/// `<repo>/target/`. This workspace shares one target directory across every
+/// sibling, so the binary sits at `<workspace>/.shared-target/debug/coauth.exe`
+/// and the walk reaches the workspace root without ever passing through
+/// `<workspace>/coauth`. It then returned `None`, the generated config kept
+/// coauth's default relative `./templates/`, and coauth died on boot with
+/// "Failed to load the templates at ./templates/" — which the caller reported
+/// as a soft-skipped missing prerequisite. So fall back to the sibling checkout
+/// the same way `locate_external_binary` does.
 fn locate_sibling_coauth_repo(coauth_bin: &Path) -> Option<PathBuf> {
-    // <repo>/target/debug/coauth.exe → walk up 3 levels to <repo>.
-    let mut cursor = coauth_bin.parent()?; // target/debug
-    for _ in 0..3 {
-        if cursor.join("policies").join("cedar").is_dir() && cursor.join("templates").is_dir() {
-            return Some(cursor.to_path_buf());
-        }
-        cursor = cursor.parent()?;
+    fn is_coauth_repo(candidate: &Path) -> bool {
+        candidate.join("policies").join("cedar").is_dir() && candidate.join("templates").is_dir()
     }
-    None
+
+    // <repo>/target/debug/coauth.exe → walk up 3 levels to <repo>.
+    if let Some(mut cursor) = coauth_bin.parent() {
+        for _ in 0..3 {
+            if is_coauth_repo(cursor) {
+                return Some(cursor.to_path_buf());
+            }
+            match cursor.parent() {
+                Some(parent) => cursor = parent,
+                None => break,
+            }
+        }
+    }
+
+    let sibling = workspace_root()?.join("coauth");
+    is_coauth_repo(&sibling).then_some(sibling)
 }
 
 /// Convenience wrapper that returns the path to coauth's bundled

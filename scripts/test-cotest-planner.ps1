@@ -81,6 +81,18 @@ foreach ($invocation in $fast.invocations) {
     Assert-True -Condition ($invocation.cargo_args -contains "--exact") -Message "fast-smoke invocation must use exact libtest matching"
 }
 
+$servicesLive = Invoke-Planner -Arguments @("-Profile", "services-live", "-PlanOnly")
+Assert-Equal -Actual $servicesLive.invocations.Count -Expected 7 -Message "services-live invocation count drifted"
+foreach ($invocation in $servicesLive.invocations) {
+    Assert-Equal -Actual $invocation.selection_mode -Expected "target-filter" -Message "services-live must be target aware"
+    # Every scenario in this lane spawns a real service and is therefore
+    # `#[ignore]`d for ad hoc runs. Without `--ignored` the lane would select
+    # nothing and pass having started no service at all.
+    Assert-True -Condition ($invocation.include_ignored) -Message "services-live entry must opt into an ignored test"
+    Assert-True -Condition ($invocation.cargo_args -contains "--ignored") -Message "services-live invocation is missing --ignored"
+    Assert-True -Condition ($invocation.cargo_args -contains "--exact") -Message "services-live invocation must use exact libtest matching"
+}
+
 $release = Invoke-Planner -Arguments @("-Profile", "release-gate", "-PlanOnly")
 Assert-Equal -Actual $release.invocations.Count -Expected 30 -Message "release-gate invocation count drifted"
 Assert-Equal -Actual @($release.invocations | Select-Object -ExpandProperty target -Unique).Count -Expected 12 -Message "release-gate target count drifted"

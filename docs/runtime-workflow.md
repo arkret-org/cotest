@@ -225,19 +225,22 @@ Inspect or validate a profile without starting the SUT:
 `-ValidateProfile` runs `cargo test --test <target> -- --list` once per selected
 target and fails zero-match or ambiguous filter entries.
 
-### Run joint Playwright against the Docker image
+### Prove the server side without a browser
 
-For the PR-sized soland service-surface probe:
+`services-live` is the headless lane. It builds the sibling soland, coauth and
+teabay binaries, provisions PostgreSQL, and runs the live Rust scenarios that
+spawn those processes for real:
 
 ```powershell
-.\scripts\run-joint-e2e.ps1 `
-  -SolandRuntime docker `
-  -BuildSolandImage `
-  -SkipInkson `
-  -RunProfile joint-smoke `
-  -PlaywrightProject chromium `
-  -Grep "soland /_arkret/describe"
+.\scripts\run-server-conformance.ps1 -Runtime process -Profile services-live
 ```
+
+The lane exports `COTEST_REQUIRE_LIVE_SERVICES=1`, so a missing binary, database
+or Docker daemon fails the run instead of soft-skipping it into a green report
+where nothing started. Product journeys stay in the joint Playwright lanes; this
+one covers the service side only.
+
+### Run joint Playwright against the Docker image
 
 For the full product topology, keep Inkson and coauth enabled:
 

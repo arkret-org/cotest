@@ -10,7 +10,9 @@
 //! 5. compare the durable canonical event row, projection event row, and a retry under the same
 //!    operation id.
 //!
-//! If Postgres is not available locally the scenario returns `Ok(())`. The
+//! If Postgres is not available locally the scenario soft-skips and returns
+//! `Ok(())`, unless the lane set `COTEST_REQUIRE_LIVE_SERVICES=1` — there a
+//! missing database is a failure rather than a silently skipped live leg. The
 //! test entrypoint remains opt-in because it deliberately kills a child
 //! process and starts external infrastructure.
 
@@ -25,6 +27,7 @@ use crate::harness::{
     ArkretServer, dev_login, event_envelope, expect_json, message_create_text_payload,
 };
 use crate::scenarios::_helpers::coauth_bootstrap::{EphemeralPg, spawn_ephemeral_postgres};
+use crate::scenarios::_helpers::live_gate::skip_or_fail;
 use crate::scenarios::identity_test_support::actor_did_for_service_did;
 
 const TEST_NAME: &str = "chaos-midwrite";
@@ -33,9 +36,10 @@ const REALM_ID: &str = "ak:realm:AXhEXYzI8s81aVQ7eAb57jW3tjFK7CwkJZsKbptGq25n";
 
 pub async fn chaos_kill_midwrite_run() -> Result<()> {
     let Some(database) = ChaosDatabase::provision()? else {
-        eprintln!(
-            "CT-16 skipped: set COTEST_SOLAND_DATABASE_URL or run with Docker available for ephemeral Postgres"
-        );
+        skip_or_fail(
+            "CT-16 chaos kill mid-write",
+            "set COTEST_SOLAND_DATABASE_URL, or run with Docker available for an ephemeral Postgres",
+        )?;
         return Ok(());
     };
 

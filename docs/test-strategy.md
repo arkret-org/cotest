@@ -124,6 +124,7 @@ Recommended scripted entrypoints:
 .\scripts\run-server-conformance.ps1 -Runtime process
 .\scripts\run-server-conformance.ps1 -Runtime process -Profile fast-smoke
 .\scripts\run-server-conformance.ps1 -Runtime process -Profile release-gate
+.\scripts\run-server-conformance.ps1 -Runtime process -Profile services-live
 .\scripts\run-server-conformance.ps1 -Runtime process -Profile full-nightly
 .\scripts\run-server-conformance.ps1 -Runtime process -Profile multi-server
 .\scripts\run-server-conformance.ps1 -Runtime docker -BuildImage
@@ -160,8 +161,30 @@ entries use the exact `test_target` plus `test_filter` pair.
 `run-joint-e2e.ps1 -ServerCount 3 -RunProfile joint-full -Grep "@three-server-p0"`,
 starts server1/server2/server3 Soland on separate ports with independent stores and identities,
 and injects indexed `COTEST_SOLAND_SERVERN_*`, `COTEST_COAUTH_SERVERN_*`, and
-`COTEST_INKSON_SERVERN_BASE_URL` values for federation specs. The deprecated
-`dual-soland` profile remains a warning-emitting two-server adapter only.
+`COTEST_INKSON_SERVERN_BASE_URL` values for federation specs.
+
+## Lane matrix
+
+Which profile starts what. Read this before adding coverage: a browserless check
+belongs in a Rust lane, not in a Playwright one.
+
+| Profile | Runner | soland | coauth | Browser / Inkson |
+| --- | --- | --- | --- | --- |
+| `fast-smoke` | conformance | in-process or spawned SUT | none | no |
+| `release-gate` | conformance | in-process or spawned SUT | mock introspection | no (plus a joint smoke gate) |
+| `services-live` | conformance | real spawned binary | **real spawned binary** | no |
+| `all` / `full-nightly` | conformance | in-process or spawned SUT | mock introspection | no |
+| `joint` | delegates to Playwright | real | real | yes, `joint-inkson` project |
+| `multi-server` | delegates to Playwright | three real servers | three real | yes |
+
+`services-live` is the only Cargo lane where coauth is a real process rather
+than `MockCoauthIntrospectionServer`. It selects the live scenarios that spawn
+soland, coauth and teabay, builds those sibling binaries first so none of them
+embeds a stale SDK snapshot, and exports `COTEST_REQUIRE_LIVE_SERVICES=1`.
+That variable is what makes the lane trustworthy: without it the selected
+scenarios soft-skip on a missing binary, database or Docker daemon and the run
+reports green having started nothing. Floria is deliberately out of the lane —
+it is the push gateway, not part of the soland/coauth service contract.
 
 The local hygiene gate is `scripts/run-hygiene.ps1`. It runs `cargo deny check`,
 `typos`, and `cargo audit`, then records `raw.log`, `summary.json`,
@@ -277,7 +300,6 @@ Recommended local run:
 .\scripts\run-server-conformance.ps1 -Runtime docker -BuildImage -Profile joint
 .\scripts\run-joint-e2e.ps1
 .\scripts\run-joint-e2e.ps1 -SolandRuntime docker -BuildSolandImage -RunProfile joint-smoke
-.\scripts\run-joint-e2e.ps1 -SolandRuntime docker -BuildSolandImage -SkipInkson -RunProfile joint-smoke -PlaywrightProject chromium -Grep "soland /_arkret/describe"
 .\scripts\run-joint-e2e.ps1 -StartCoauth
 .\scripts\run-joint-e2e.ps1 -StartCoauth -RunProfile joint-smoke
 .\scripts\run-joint-e2e.ps1 -StartCoauth -RunProfile joint-full

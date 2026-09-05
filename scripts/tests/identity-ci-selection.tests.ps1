@@ -9,7 +9,6 @@ $playwrightConfig = Get-Content -LiteralPath (Join-Path $repoRoot "e2e\playwrigh
 $oidc = Get-Content -LiteralPath (Join-Path $repoRoot "e2e\tests\identity\oidc-login-flow.spec.ts") -Raw
 $lifecycle = Get-Content -LiteralPath (Join-Path $repoRoot "e2e\tests\identity\device-key-lifecycle.spec.ts") -Raw
 $keyBackup = Get-Content -LiteralPath (Join-Path $repoRoot "e2e\tests\encryption\key-backup.spec.ts") -Raw
-$contactGraph = Get-Content -LiteralPath (Join-Path $repoRoot "e2e\tests\identity\contact-graph.spec.ts") -Raw
 $multiDevice = Get-Content -LiteralPath (Join-Path $repoRoot "e2e\tests\identity\multi-device.spec.ts") -Raw
 $realmMatrix = Get-Content -LiteralPath (Join-Path $repoRoot "e2e\tests\identity\recovery-key-to-encrypted-realm.spec.ts") -Raw
 $crossMemberKanban = Get-Content -LiteralPath (Join-Path $repoRoot "e2e\tests\kanban\cross-member-encrypted.spec.ts") -Raw
@@ -49,16 +48,21 @@ Assert-Contains $runner '[switch]$ForbidSkippedTests' "joint runner has no non-s
 Assert-Contains $runner '[string]$RequireScenario' "joint runner has no required-scenario enforcement"
 Assert-Contains $selectionGate 'Playwright selected zero tests' "joint runner has no zero-selection enforcement"
 Assert-Contains $runner '"encryption/key-backup"' "joint-smoke does not require fresh-browser Recovery Key restore evidence"
-Assert-Contains $runner '"identity/contact-graph"' "joint-smoke does not require the Contact lineage lifecycle"
+# The Contact lineage lifecycle no longer has a Playwright spec: the API-only
+# migration removed identity/contact-graph.spec.ts and handed its coverage to
+# three Rust symbols (see api-only-migration.json). The runner must therefore
+# NOT require that scenario — an unfiltered joint-smoke would fail its selection
+# gate on evidence no run can produce. This guard used to read the deleted spec
+# at load time and crashed before any assertion ran, which is why the stale
+# requirement survived.
+Assert-NotContains $runner '"identity/contact-graph"' "joint-smoke still requires a scenario whose spec was migrated to Rust and deleted"
 Assert-Contains $runner '"identity/multi-device"' "joint-smoke does not require both fresh-device entry paths"
 Assert-Contains $runner '"identity/recovery-key-to-encrypted-realm"' "joint-smoke does not require the canonical Realm encryption matrix"
 Assert-Contains $runner '"kanban/cross-member-encrypted"' "joint-smoke does not require cross-member encrypted kanban evidence"
 Assert-Contains $playwrightConfig '"encryption/key-backup.spec.ts"' "joint-inkson does not discover fresh-browser Recovery Key restore"
-Assert-Contains $playwrightConfig '"identity/contact-graph.spec.ts"' "joint-inkson does not discover Contact lineage coverage"
+Assert-NotContains $playwrightConfig '"identity/contact-graph.spec.ts"' "joint-inkson still lists a spec the API-only migration deleted"
 Assert-Contains $playwrightConfig '"identity/recovery-key-to-encrypted-realm.spec.ts"' "joint-inkson does not discover the canonical Realm encryption matrix"
 Assert-Contains $playwrightConfig '"kanban/cross-member-encrypted.spec.ts"' "joint-inkson does not discover cross-member encrypted kanban"
-Assert-Contains $contactGraph 'scope narrowing is reversible on one lineage' "Contact lineage lifecycle coverage is missing"
-Assert-Contains $contactGraph '@fully-implemented' "Contact lineage lifecycle is not selected by joint-smoke"
 Assert-Contains $crossMemberKanban 'cross-member encrypted kanban @fully-implemented' "cross-member encrypted kanban is not selected by joint-smoke"
 Assert-Contains $crossMemberKanban 'assertJointStackNotRequired(' "cross-member encrypted kanban does not fail loud when the required joint stack is unavailable"
 

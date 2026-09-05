@@ -1,5 +1,17 @@
 #!/usr/bin/env python3
-"""Check that API-only Playwright ownership stays closed over Rust tests."""
+"""Check that API-only Playwright ownership stays closed over Rust tests.
+
+Three lists partition every Playwright spec that never reaches a browser:
+
+* ``candidates``          — migrated or deleted; the source must be gone and a
+                            named Rust symbol must have taken it over.
+* ``specialized_api_lanes`` — mock/platform lanes that stay in Playwright.
+* ``pending_migration``   — not migrated yet; the source must still exist, must
+                            still be API-only, and must say what it needs.
+
+Any API-only spec outside all three fails the gate, so new browserless coverage
+cannot be added to Playwright — it belongs in the Rust harness.
+"""
 
 from __future__ import annotations
 
@@ -12,10 +24,20 @@ from typing import Any
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 COTEST_ROOT = WORKSPACE_ROOT / "cotest"
 MANIFEST_PATH = COTEST_ROOT / "api-only-migration.json"
+# A spec counts as browser coverage when it actually takes a Playwright page
+# fixture or drives one. Matching the bare words `page` / `browser` / `context`
+# classified thirteen API-only specs as browser coverage because those words
+# occur in prose comments, in JSON-LD `"@context"`, and in
+# `request.newContext()` — the API-only request fixture. The signals below are
+# all syntactic uses of a page or a browser context.
 BROWSER_SIGNAL = re.compile(
-    r"\b(?:page|browser|context)\b|"
+    r"\bpage\s*[.,:})]|"
+    r"\bpage\b\s*=>|"
+    r"\.newPage\(|"
+    r"browser\.newContext\(|"
+    r"\btest\.use\(|"
     r"\.(?:locator|getByRole|getByText|getByTestId|getByLabel|getByPlaceholder|"
-    r"getByTitle|getByAltText|goto|screenshot)\("
+    r"getByTitle|getByAltText|screenshot)\("
 )
 
 
@@ -41,8 +63,12 @@ def validation_errors(
     expected = manifest.get("expected_candidate_count")
     if not isinstance(candidates, list):
         return errors + ["migration manifest candidates must be an array"]
-    if expected != 30 or len(candidates) != expected:
-        errors.append(f"expected exactly 30 migration candidates, found {len(candidates)}")
+    if not isinstance(expected, int) or expected < 1:
+        errors.append("expected_candidate_count must be a positive integer")
+    elif len(candidates) != expected:
+        errors.append(
+            f"expected exactly {expected} migration candidates, found {len(candidates)}"
+        )
 
     seen_sources: set[str] = set()
     for index, candidate in enumerate(candidates):
@@ -88,15 +114,53 @@ def validation_errors(
     ):
         return errors + ["specialized_api_lanes must be a string array"]
     specialized_set = set(specialized)
-    for path_string in specialized_set:
+    for path_string in sorted(specialized_set):
         if not (workspace_root / path_string).is_file():
             errors.append(f"specialized API lane is missing: {path_string}")
 
+    pending = manifest.get("pending_migration", [])
+    if not isinstance(pending, list):
+        return errors + ["pending_migration must be an array"]
+    pending_set: set[str] = set()
+    for index, entry in enumerate(pending):
+        if not isinstance(entry, dict):
+            errors.append(f"pending_migration[{index}] must be an object")
+            continue
+        source = entry.get("source")
+        if not isinstance(source, str) or not source.endswith(".spec.ts"):
+            errors.append(f"pending_migration[{index}] has an invalid source")
+            continue
+        if source in pending_set:
+            errors.append(f"duplicate pending migration source: {source}")
+        if source in seen_sources:
+            errors.append(f"pending migration source is already migrated: {source}")
+        if source in specialized_set:
+            errors.append(f"pending migration source is a specialized lane: {source}")
+        pending_set.add(source)
+        needs = entry.get("needs")
+        if not isinstance(needs, str) or not needs.strip():
+            errors.append(f"pending migration {source} does not say what it needs")
+        path = workspace_root / source
+        if not path.is_file():
+            errors.append(
+                f"pending migration source no longer exists — move it to candidates: {source}"
+            )
+            continue
+        if BROWSER_SIGNAL.search(path.read_text(encoding="utf-8", errors="replace")):
+            errors.append(
+                f"pending migration source now drives a browser — drop it from the list: {source}"
+            )
+
+    # `pending_migration` and `specialized_api_lanes` together are the complete,
+    # closed set of API-only Playwright specs. Anything else that reaches no
+    # browser is unclassified drift: new API-only coverage belongs in the Rust
+    # harness, not here.
+    classified = specialized_set | pending_set
     tests_root = workspace_root / "cotest" / "e2e" / "tests"
     for path in sorted(tests_root.rglob("*.spec.ts")):
         relative = path.relative_to(workspace_root).as_posix()
         text = path.read_text(encoding="utf-8", errors="replace")
-        if not BROWSER_SIGNAL.search(text) and relative not in specialized_set:
+        if not BROWSER_SIGNAL.search(text) and relative not in classified:
             errors.append(f"API-only Playwright spec is not classified: {relative}")
 
     return errors

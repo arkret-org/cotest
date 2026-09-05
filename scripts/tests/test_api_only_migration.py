@@ -86,6 +86,68 @@ class ApiOnlyMigrationTests(unittest.TestCase):
         errors = migration.validation_errors(self.root)
         self.assertTrue(any("replacement symbol 'missing' is missing" in item for item in errors))
 
+    def test_prose_and_json_ld_do_not_count_as_browser_coverage(self) -> None:
+        # The former signal matched the bare words `page`, `browser` and
+        # `context`, so a comment about a result page or a JSON-LD `@context`
+        # was enough to classify an API-only spec as browser coverage.
+        self.write(
+            "cotest/e2e/tests/prose-only.spec.ts",
+            "// keep the result page stable across browser restarts\n"
+            "test('api only', async ({ request }) => {\n"
+            "  const ctx = await request.newContext();\n"
+            "  await ctx.post('/x', { data: { '@context': ['https://w3id.org/x'] } });\n"
+            "});\n",
+        )
+        errors = migration.validation_errors(self.root)
+        self.assertIn(
+            "API-only Playwright spec is not classified: cotest/e2e/tests/prose-only.spec.ts",
+            errors,
+        )
+
+    def test_accepts_a_declared_pending_migration(self) -> None:
+        self.declare_pending("cotest/e2e/tests/still-api-only.spec.ts", api_only=True)
+        migration.validate_repository(self.root)
+
+    def test_rejects_a_pending_migration_that_needs_nothing_stated(self) -> None:
+        self.declare_pending(
+            "cotest/e2e/tests/still-api-only.spec.ts", api_only=True, needs="  "
+        )
+        errors = migration.validation_errors(self.root)
+        self.assertTrue(any("does not say what it needs" in item for item in errors))
+
+    def test_rejects_a_pending_migration_whose_source_is_gone(self) -> None:
+        self.manifest["pending_migration"] = [
+            {"source": "cotest/e2e/tests/vanished.spec.ts", "needs": "an SDK client"}
+        ]
+        self.write("cotest/api-only-migration.json", json.dumps(self.manifest))
+        errors = migration.validation_errors(self.root)
+        self.assertIn(
+            "pending migration source no longer exists — move it to candidates: "
+            "cotest/e2e/tests/vanished.spec.ts",
+            errors,
+        )
+
+    def test_rejects_a_pending_migration_that_now_drives_a_browser(self) -> None:
+        self.declare_pending("cotest/e2e/tests/grew-a-browser.spec.ts", api_only=False)
+        errors = migration.validation_errors(self.root)
+        self.assertIn(
+            "pending migration source now drives a browser — drop it from the list: "
+            "cotest/e2e/tests/grew-a-browser.spec.ts",
+            errors,
+        )
+
+    def declare_pending(
+        self, relative: str, *, api_only: bool, needs: str = "an SDK client method"
+    ) -> None:
+        body = (
+            "test('api only', async ({ request }) => { await request.get('/x'); });\n"
+            if api_only
+            else "test('browser', async ({ page }) => { await page.goto('/'); });\n"
+        )
+        self.write(relative, body)
+        self.manifest["pending_migration"] = [{"source": relative, "needs": needs}]
+        self.write("cotest/api-only-migration.json", json.dumps(self.manifest))
+
 
 if __name__ == "__main__":
     unittest.main()

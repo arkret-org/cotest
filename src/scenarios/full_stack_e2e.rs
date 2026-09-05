@@ -6,7 +6,9 @@
 //! message/push privacy checks from the former broad full-stack scenario.
 
 use anyhow::{Context, Result, ensure};
-use arkret_models_collaboration::events_payloads::{ContentBlock, MessageCreatePayload};
+use arkret_models_collaboration::events_payloads::{
+    CONTENT_KIND_TEXT, ContentBlock, MessageCreatePayload,
+};
 use arkret_push_policy::blind_payload_sanitizer::{
     sanitize_blind_payload, sanitize_blind_payload_strict,
 };
@@ -27,12 +29,37 @@ pub async fn full_stack_e2e_run() -> Result<()> {
         ContentBlock::text("hello from exact Station account"),
     )
     .to_value()?;
-    ensure!(message["content"]["text"] == "hello from exact Station account");
+    // A text block carries its body in `body` under an `ak.content.text` kind.
+    // The former assertion read `content.text`, a field the model has never
+    // serialized, so it compared `null` against the string and could only ever
+    // fail. It went unnoticed because the entrypoint was `#[ignore]`d for a
+    // live leg this scenario does not have.
+    ensure!(
+        message["content"]["kind"] == CONTENT_KIND_TEXT,
+        "message content must be an ak.content.text block, got {}",
+        message["content"]["kind"]
+    );
+    ensure!(
+        message["content"]["body"] == "hello from exact Station account",
+        "message content body must round-trip verbatim, got {}",
+        message["content"]["body"]
+    );
+    ensure!(
+        message["track_name"] == "discussion",
+        "message must keep its track name, got {}",
+        message["track_name"]
+    );
 
+    // The blind wakeup allow-list is closed: `wakeup_kind` and
+    // `timing_profile_hint` are the current field names, and strict mode
+    // requires both alongside `push_target_id`. The former payload still used
+    // `wake_reason` / `collapse_key`, which the sanitizer has rejected as
+    // forbidden fields since the vocabulary closed — another assertion the
+    // `#[ignore]` hid.
     let blind = json!({
         "push_target_id": PUSH_TARGET_ID,
-        "wake_reason": "new_activity",
-        "collapse_key": "realm-activity"
+        "wakeup_kind": "message",
+        "timing_profile_hint": "default"
     });
     sanitize_blind_payload(&blind).context("blind wakeup payload")?;
     sanitize_blind_payload_strict(&blind).context("strict blind wakeup payload")?;

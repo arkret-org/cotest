@@ -4,10 +4,6 @@ import { fileURLToPath } from "node:url";
 import { chromium, type FullConfig } from "@playwright/test";
 
 export default async function verifyInksonBuildIdentity(config: FullConfig) {
-  if (process.env.COTEST_SKIP_INKSON === "1") {
-    return;
-  }
-
   const here = path.dirname(fileURLToPath(import.meta.url));
   const workspaceRoot = path.resolve(here, "../..");
   const inksonRoot = path.join(workspaceRoot, "inkson");

@@ -79,8 +79,21 @@ Assert-Equal $null (Resolve-SolandTestDatabaseUrl `
         -ExistingDatabaseUrl $null) "publishes nothing without a conformance store"
 
 # 6. The variable must survive the run: the entry restores what it overwrote.
-if ($source -notmatch '"COTEST_SOLAND_DATABASE_URL",\s*"SOLAND_TEST_DATABASE_URL"') {
-    $failures.Add("SOLAND_TEST_DATABASE_URL is not in the saved/restored environment list")
+# Both names must appear in the `$originalEnv` capture list. The check used to
+# require them to be adjacent, which is not the property being asserted and
+# broke as soon as another variable was added between them.
+$originalEnvList = [regex]::Match(
+    $source,
+    'foreach\s*\(\$name\s+in\s+(?<names>"[^\r\n]*?")\s*\)\s*\{'
+)
+if (-not $originalEnvList.Success) {
+    $failures.Add("could not locate the saved/restored environment list in run-server-conformance.ps1")
+} else {
+    foreach ($required in "COTEST_SOLAND_DATABASE_URL", "SOLAND_TEST_DATABASE_URL") {
+        if ($originalEnvList.Groups["names"].Value -notmatch [regex]::Escape("`"$required`"")) {
+            $failures.Add("$required is not in the saved/restored environment list")
+        }
+    }
 }
 
 if ($failures.Count -gt 0) {

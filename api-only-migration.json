@@ -244,5 +244,21 @@
         { "file": "soland/crates/server/tests/realm_join_policy.rs", "symbol": "cooldown_gate_denies_independently_of_any_combinator" }
       ]
     }
+  ],
+  "pending_migration_note": "API-only Playwright specs not migrated yet. The gate treats this as a CLOSED set: each source must still exist and must still be API-only, and any API-only spec in neither this list nor specialized_api_lanes fails the gate, so new browserless Playwright coverage cannot be added. Tracked by arkret-work/work/active/2026-09-05-1311-cotest-services-live-lane-and-joint-runner-dead-switch-cleanup.md.",
+  "pending_migration": [
+    { "source": "cotest/e2e/tests/identity/oidc-login-chain.spec.ts", "needs": "Rust joint bootstrap must set soland's SOLAND_OAUTH_CLIENT_ID and spawn coauth with the password-bootstrap feature and its insecure-dev flags before the describe client_id and DPoP self-path contracts can be asserted from Rust." },
+    { "source": "cotest/e2e/tests/sync/account-stream-device-message.spec.ts", "needs": "Needs an SDK account-stream subscribe client; the spec drives the long-poll surface directly." },
+    { "source": "cotest/e2e/tests/events/batch-realm-bootstrap.spec.ts", "needs": "Needs the canonical bootstrap-unit builder exposed to Rust scenarios so the batch genesis is not hand-rolled." },
+    { "source": "cotest/e2e/tests/sync/transport-negotiation.spec.ts", "needs": "Needs transport negotiation in the Rust harness; the spec also captures screenshots, so its evidence must move to a Rust transcript artifact." },
+    { "source": "cotest/e2e/tests/encryption/audited-e2ee.spec.ts", "needs": "Needs SDK client coverage for the audited-E2EE read path." },
+    { "source": "cotest/e2e/tests/models/realm-links.spec.ts", "needs": "Needs SDK client methods for realm-link create and resolve." },
+    { "source": "cotest/e2e/tests/conformance/snapshot-query-scalability.spec.ts", "needs": "Needs the snapshot manifest and query surface in the Rust conformance harness." },
+    { "source": "cotest/e2e/tests/invites/invite-addressing.spec.ts", "needs": "Needs contact-api and invite addressing through SDK DTOs; shares the invite capability proof carrier spec gap." },
+    { "source": "cotest/e2e/tests/conformance/registry-drift.spec.ts", "needs": "Overlaps the Rust drift validator; fold the remaining assertions into that suite rather than porting the spec." },
+    { "source": "cotest/e2e/tests/models/private-read-marker.spec.ts", "needs": "Needs private read-marker SDK client coverage; some of its cases are currently red in joint-full." },
+    { "source": "cotest/e2e/tests/invites/third-party.spec.ts", "needs": "Needs third-party invite, encoding and webvh helpers as SDK clients." },
+    { "source": "cotest/e2e/tests/messaging/discussion-upgrade.spec.ts", "needs": "Largest remaining port: messaging fixtures, circle-api and webrtc helpers all need SDK equivalents." },
+    { "source": "cotest/e2e/tests/messaging/read-receipts.spec.ts", "needs": "Largest remaining port: the read-receipt matrix over messaging fixtures and webrtc helpers." }
   ]
 }

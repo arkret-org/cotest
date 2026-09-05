@@ -10,10 +10,12 @@ use cotest::scenarios::_helpers::coauth_bootstrap::{
     spawn_coauth_with_db, spawn_ephemeral_postgres,
 };
 use cotest::scenarios::_helpers::floria_bootstrap::spawn_floria_with_config;
+use cotest::scenarios::_helpers::live_gate::skip_or_fail;
 use cotest::scenarios::joint_service_smoke::joint_service_smoke_run;
 
-/// Gating: needs Docker daemon for the ephemeral Postgres image; soft-skips
-/// (prints `skip:`) when docker is unavailable.
+/// Gating: needs Docker daemon for the ephemeral Postgres image. Soft-skips
+/// (prints `skip:`) on an ad hoc `--ignored` run; fails when the lane set
+/// `COTEST_REQUIRE_LIVE_SERVICES=1`.
 /// Issue: C34.3 (ephemeral Postgres helper smoke)
 /// Tier: live
 #[tokio::test(flavor = "multi_thread")]
@@ -26,14 +28,18 @@ async fn ephemeral_postgres_starts_and_stops() -> Result<()> {
             eprintln!("ok: ephemeral pg up at {}", pg.connect_url);
         }
         None => {
-            eprintln!("skip: docker not available");
+            skip_or_fail(
+                "C34.3 ephemeral Postgres",
+                "docker is not available, so no ephemeral Postgres could be started",
+            )?;
         }
     }
     Ok(())
 }
 
-/// Gating: needs Docker (for ephemeral Postgres) plus a coauth binary;
-/// soft-skips when prereqs are missing.
+/// Gating: needs Docker (for ephemeral Postgres) plus a coauth binary. Soft-skips
+/// on an ad hoc `--ignored` run; fails when the lane set
+/// `COTEST_REQUIRE_LIVE_SERVICES=1`.
 /// Issue: C34.3 (coauth bootstrap smoke)
 /// Tier: live
 #[tokio::test(flavor = "multi_thread")]
@@ -52,14 +58,21 @@ async fn coauth_can_be_spawned_with_ephemeral_postgres() -> Result<()> {
             assert!(resp.status().is_success(), "health: {}", resp.status());
         }
         None => {
-            eprintln!("skip: coauth bootstrap reported missing prerequisites (docker / binary)");
+            // The bootstrap returns None from any of half a dozen stages, and
+            // prints which one it was. Naming a guess here (missing binary,
+            // missing database) sends the reader after the wrong thing.
+            skip_or_fail(
+                "C34.3 coauth bootstrap",
+                "the bootstrap did not produce a running coauth — the preceding [coauth_bootstrap] line names the stage that failed; rerun with COTEST_COAUTH_BOOTSTRAP_DEBUG=1 for command details",
+            )?;
         }
     }
     Ok(())
 }
 
-/// Gating: needs a floria binary on PATH (or `FLORIA_BIN`); soft-skips
-/// when the binary is missing.
+/// Gating: needs a floria binary on PATH (or `FLORIA_BIN`). Soft-skips on an
+/// ad hoc `--ignored` run; fails when the lane set
+/// `COTEST_REQUIRE_LIVE_SERVICES=1`.
 /// Issue: C34.3 (floria bootstrap smoke)
 /// Tier: live
 #[tokio::test(flavor = "multi_thread")]
@@ -72,7 +85,10 @@ async fn floria_can_be_spawned_with_rendered_config() -> Result<()> {
             assert!(resp.status().is_success(), "health: {}", resp.status());
         }
         None => {
-            eprintln!("skip: floria bootstrap reported missing binary");
+            skip_or_fail(
+                "C34.3 floria bootstrap",
+                "floria binary not found — set FLORIA_BIN or build the sibling checkout",
+            )?;
         }
     }
     Ok(())
