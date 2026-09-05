@@ -3148,12 +3148,18 @@ try {
         if (-not $freshness.Fresh) {
             Write-Host "Preparing soland binary: $($freshness.Detail)"
             $started = Get-Date
+            # `conformance-harness` compiles the development-only
+            # `/_arkret/_conformance/*` namespace into the SUT. It is off in
+            # soland's default (production) build, and the e2e conformance
+            # suites drive those endpoints, so the harness build must ask for it.
+            #
+            # Keep this comment ABOVE the call. A comment between a backtick
+            # continuation and the next argument ends the statement, so the
+            # earlier placement dispatched `Start-ManagedCommand -Name` alone
+            # and every stale-binary run died on "missing mandatory parameters:
+            # Command WorkingDirectory LogDirectory" instead of rebuilding.
             $service = Start-ManagedCommand `
                 -Name "prepare-soland" `
-                # `conformance-harness` compiles the development-only
-                # `/_arkret/_conformance/*` namespace into the SUT. It is off in
-                # soland's default (production) build, and the e2e conformance
-                # suites drive those endpoints, so the harness build must ask for it.
                 -Command ("cargo build --manifest-path {0} -p soland --bin soland --features conformance-harness" -f (Quote-PsLiteral $SutManifest)) `
                 -WorkingDirectory (Split-Path -Parent $SutManifest) `
                 -LogDirectory $serviceLogDir
