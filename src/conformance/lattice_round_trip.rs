@@ -69,6 +69,8 @@ pub fn run_lattice_round_trip_suite() -> Result<()> {
     fsm_legal_transition_advances_state()?;
     fsm_duplicate_transition_is_idempotent()?;
     fsm_same_from_different_to_returns_bottom()?;
+    fsm_reentered_transition_is_a_new_occurrence()?;
+    fsm_registered_self_loop_does_not_consume_its_state()?;
     fsm_illegal_transition_returns_bottom()?;
     run_realm_link_fsm_transition_matrix_vector()?;
     mv_register_concurrent_set_surfaces_multiple_values()?;
@@ -1102,6 +1104,91 @@ fn fsm_same_from_different_to_returns_bottom() -> Result<()> {
     }
 }
 
+/// §2.11 Case C: a cell that legally returns to a state is standing at that
+/// state's outgoing edges again, so the same `(from, to)` pair is a new
+/// occurrence rather than a replay of the first one.
+///
+/// `join -> leave -> join` must read `join`. An implementation that decides
+/// replay from the `(from, to)` pair alone folds the third transition away and
+/// reads `leave` — the same failure `event-auth-state-resolution.md` §9.3.1.4
+/// names when it deletes the value-edge join for `cas_register`, reachable here
+/// on membership and on every reversible lifecycle family.
+fn fsm_reentered_transition_is_a_new_occurrence() -> Result<()> {
+    let lattice = membership_fsm();
+    let cref = cell(
+        arkret_wire::CellFamilyId::MEMBER_STATE_V1,
+        "did.web.alice.example",
+    );
+    let ops = vec![
+        SealedOp::new(
+            issuer_digest("51"),
+            op_transition(json!("invited"), json!("join")),
+        ),
+        SealedOp::new(
+            issuer_digest("52"),
+            op_transition(json!("join"), json!("leave")),
+        ),
+        SealedOp::new(
+            issuer_digest("53"),
+            op_transition(json!("leave"), json!("join")),
+        ),
+        SealedOp::new(
+            issuer_digest("54"),
+            op_transition(json!("join"), json!("leave")),
+        ),
+    ];
+    let resolved = lattice.join(&cref, &ops);
+    if resolved != CellState::Value(json!("leave")) {
+        bail!(
+            "a transition re-entered after the cell returned to its source must apply again, \
+             got {resolved:?}"
+        );
+    }
+    // The redelivery case must stay idempotent, or an at-least-once transport
+    // would rewind the cell every time it repeated a frame.
+    let mut redelivered = ops.clone();
+    redelivered.push(ops[1].clone());
+    if lattice.join(&cref, &redelivered) != CellState::Value(json!("leave")) {
+        bail!("redelivering a transition the walk has moved past must stay a no-op");
+    }
+    Ok(())
+}
+
+/// §2.11 Case D: a registered self-loop is a legal repeated declaration, not the
+/// one edge out of its state.
+///
+/// `ak.component.realm.link.v1` declares `(active, active)` for exactly that
+/// reason. Recording it as "the transition out of active" turns the next legal
+/// `active -> tombstoned` into a phantom `same_from_different_to` conflict.
+fn fsm_registered_self_loop_does_not_consume_its_state() -> Result<()> {
+    let lattice = Fsm::new(vec![
+        (json!("active"), json!("active")),
+        (json!("active"), json!("tombstoned")),
+    ])
+    .with_initial(json!("active"));
+    let cref = cell(
+        arkret_wire::CellFamilyId::MEMBER_STATE_V1,
+        "did.web.alice.example",
+    );
+    let ops = vec![
+        SealedOp::new(
+            issuer_digest("55"),
+            op_transition(json!("active"), json!("active")),
+        ),
+        SealedOp::new(
+            issuer_digest("56"),
+            op_transition(json!("active"), json!("tombstoned")),
+        ),
+    ];
+    let resolved = lattice.join(&cref, &ops);
+    if resolved != CellState::Value(json!("tombstoned")) {
+        bail!(
+            "a registered self-loop must not block the next declared transition, got {resolved:?}"
+        );
+    }
+    Ok(())
+}
+
 fn fsm_illegal_transition_returns_bottom() -> Result<()> {
     let lattice = membership_fsm();
     let cref = cell(
@@ -1761,7 +1848,19 @@ fn executed_lattice_assertion(vector_id: &str, assertion: &str) -> bool {
         "Bottom is recomputed per view, so a receiver that later observes the missing leaf \
          converges with one that saw the full history",
     ];
+    // Four of section 2.11's assertions, and only four: "two reducers replaying
+    // in different orders reach the same result" is stated in the prose but is
+    // not executed anywhere, because `fsm` has no transition algebra yet and the
+    // fold is genuinely order-dependent (arkret-work spec-open 2026-09-06-1610).
+    // Claiming it here is what let the last drift through.
+    const FSM_JOIN: &[&str] = &[
+        "duplicate_same_transition_idempotent",
+        "same_from_different_to_returns_bottom",
+        "reentered_transition_is_a_new_occurrence",
+        "registered_self_loop_does_not_consume_its_state",
+    ];
     match vector_id {
+        "ak.vector.lattice.fsm_join.v1" => FSM_JOIN.contains(&assertion),
         "ak.vector.lattice.ordered_log_join.v1" => ORDERED_LOG_JOIN.contains(&assertion),
         "ak.vector.lattice.ordered_log_gap.v1" => ORDERED_LOG_GAP.contains(&assertion),
         VECTOR_ID_LATTICE_CAS_REGISTER_SUPERSESSION => {
