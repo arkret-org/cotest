@@ -6,14 +6,14 @@
 
 use anyhow::{Context, Result, anyhow, bail};
 use arkret_models_identity::agent_signer_evidence::{
-    AGENT_KEY_COMPONENT, AGENT_STATUS_COMPONENT, AgentAdmissionEvidence, AgentAuthoritySnapshot,
-    AgentAuthoritySnapshotCore, AgentAuthorizationEvidence, AgentAuthorizationStateWitness,
-    AgentAuthorizationStatus, AgentCurrentObservation, AgentDetachedJws,
-    AgentEventAdmissionReceipt, AgentEvidenceOuterAttestation,
+    AGENT_KEY_COMPONENT, AGENT_STATUS_COMPONENT, AgentAdmissionEvidence, AgentAuthorityState,
+    AgentAuthorityStateEvidence, AgentAuthorityStateLease, AgentAuthorizationEvidence,
+    AgentAuthorizationStateWitness, AgentAuthorizationStatus, AgentCurrentObservation,
+    AgentDetachedJws, AgentEventAdmissionReceipt, AgentEvidenceOuterAttestation,
     AgentHistoricalEvidenceOuterAttestation, AgentKeyCellEntry, AgentLifecycleProvenance,
     AgentLifecycleStatus, AgentLifecycleWitness, AgentSignerEvidence, AgentSigningPublicKey,
-    AgentSnapshotLease, ControllerAccountEligibility, ControllerAccountGateAttestation,
-    ControllerAccountGateBasis, ControllerAccountStatus,
+    ControllerAccountEligibility, ControllerAccountGateAttestation, ControllerAccountGateBasis,
+    ControllerAccountStatus,
 };
 use arkret_signatures::agent_evidence::{
     AgentEvidenceCommonContext, AgentEvidenceRejectedReason, AgentEvidenceStateVerificationContext,
@@ -58,13 +58,13 @@ pub const ALL_AGENT_SIGNER_EVIDENCE_CASES: &[&str] = &[
     "current_exact_request_and_three_active_gates_verified",
     "current_cross_verifier_replay_rejected",
     "current_request_or_challenge_replay_rejected",
-    "current_snapshot_digest_mix_and_match_rejected",
+    "current_authority_state_digest_mix_and_match_rejected",
     "current_stale_lease_is_unresolved",
     "current_paused_agent_rejected",
     "current_inactive_controller_account_rejected",
     "current_revoked_or_superseded_key_rejected",
     "historical_destination_receipt_preserves_admission",
-    "historical_current_snapshot_substitution_rejected",
+    "historical_current_authority_state_substitution_rejected",
     "historical_wrong_destination_receipt_rejected",
     "historical_inactive_gate_at_receipt_time_rejected",
     "historical_materialization_exact_replay_is_no_op",
@@ -111,7 +111,7 @@ struct EvidenceConfig {
     controller_eligibility: ControllerAccountEligibility,
     controller_status: ControllerAccountStatus,
     bare_authorization_tag: bool,
-    stale_snapshot_lease: bool,
+    stale_authority_state_lease: bool,
 }
 
 impl Default for EvidenceConfig {
@@ -122,7 +122,7 @@ impl Default for EvidenceConfig {
             controller_eligibility: ControllerAccountEligibility::Active,
             controller_status: ControllerAccountStatus::Active,
             bare_authorization_tag: false,
-            stale_snapshot_lease: false,
+            stale_authority_state_lease: false,
         }
     }
 }
@@ -233,20 +233,20 @@ fn execute_case(name: &str, case: &Value) -> Result<OutcomeClass> {
                 Some(CurrentOverride::RequestDigest(hash_byte(0xa7)?)),
             )
         }
-        "current_snapshot_digest_mix_and_match_rejected" => {
+        "current_authority_state_digest_mix_and_match_rejected" => {
             let mut fixture = build_evidence(EvidenceConfig::default())?;
             if let AgentSignerEvidence::CurrentAdmission {
                 current_observation,
                 ..
             } = &mut fixture.current
             {
-                current_observation.agent_snapshot_digest = hash_byte(0xa8)?;
+                current_observation.agent_authority_state_digest = hash_byte(0xa8)?;
             }
             current_outcome(&fixture, None)
         }
         "current_stale_lease_is_unresolved" => {
             let fixture = build_evidence(EvidenceConfig {
-                stale_snapshot_lease: true,
+                stale_authority_state_lease: true,
                 ..EvidenceConfig::default()
             })?;
             current_stale_outcome(&fixture)
@@ -276,7 +276,7 @@ fn execute_case(name: &str, case: &Value) -> Result<OutcomeClass> {
         "historical_destination_receipt_preserves_admission" => {
             historical_outcome(&build_evidence(EvidenceConfig::default())?, None, false)
         }
-        "historical_current_snapshot_substitution_rejected" => {
+        "historical_current_authority_state_substitution_rejected" => {
             let fixture = build_evidence(EvidenceConfig::default())?;
             historical_outcome_with(&fixture, Some(&fixture.current), None, false)
         }
@@ -387,8 +387,8 @@ fn execute_case(name: &str, case: &Value) -> Result<OutcomeClass> {
             let fixture = build_evidence(EvidenceConfig::default())?;
             let admission = admission(&fixture.current);
             let provenance = &admission
-                .agent_authority_snapshot
-                .core
+                .agent_authority_state_evidence
+                .state
                 .agent_lifecycle_witness
                 .provenance;
             if !matches!(
@@ -887,7 +887,7 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         .context("fixed timestamp")?;
     let now = issued_at + Duration::minutes(20);
     let expires_at = issued_at + Duration::hours(2);
-    let snapshot_lease_expires_at = if config.stale_snapshot_lease {
+    let authority_state_lease_expires_at = if config.stale_authority_state_lease {
         now - Duration::minutes(1)
     } else {
         expires_at
@@ -1057,7 +1057,7 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         leaf_count: 1,
         inclusion_proof: Vec::new(),
     };
-    let core = AgentAuthoritySnapshotCore {
+    let core = AgentAuthorityState {
         authority_id: authority_id.clone(),
         principal_control_realm_id: realm_id.clone(),
         frontier_seal_id: lifecycle_seal.id.clone(),
@@ -1069,23 +1069,23 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         agent_lifecycle_witness: lifecycle_witness,
         seal_lineages: vec![key_seal, lifecycle_seal],
     };
-    let snapshot_digest = canonical_hash(&core)?;
-    let mut snapshot = AgentAuthoritySnapshot {
-        core,
-        snapshot_digest: snapshot_digest.clone(),
-        lease: AgentSnapshotLease {
+    let state_digest = canonical_hash(&core)?;
+    let mut authority_state_evidence = AgentAuthorityStateEvidence {
+        state: core,
+        state_digest: state_digest.clone(),
+        lease: AgentAuthorityStateLease {
             authority_kind: nes("agent_authority")?,
             authority_id: authority_id.clone(),
             verification_method: authority_verification_method.clone(),
-            snapshot_digest: snapshot_digest.clone(),
+            state_digest: state_digest.clone(),
             issued_at,
-            expires_at: snapshot_lease_expires_at,
+            expires_at: authority_state_lease_expires_at,
             proof: pending_proof()?,
         },
     };
-    snapshot.lease.proof = sign_domain(
-        DomainSeparationId::AGENT_AUTHORITY_SNAPSHOT_V1,
-        &snapshot.lease,
+    authority_state_evidence.lease.proof = sign_domain(
+        DomainSeparationId::AGENT_AUTHORITY_STATE_EVIDENCE_V1,
+        &authority_state_evidence.lease,
         &authority_signing,
         None,
     )?;
@@ -1115,11 +1115,11 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
     )?;
     let gate_digest = canonical_hash(&gate)?;
     let admission_evidence_digest = canonical_hash(&serde_json::json!({
-        "agent_authority_snapshot": snapshot,
+        "agent_authority_state_evidence": authority_state_evidence,
         "controller_account_gate_attestation": gate,
     }))?;
     let admission = AgentAdmissionEvidence {
-        agent_authority_snapshot: snapshot,
+        agent_authority_state_evidence: authority_state_evidence,
         controller_account_gate_attestation: gate,
         admission_evidence_digest: admission_evidence_digest.clone(),
     };
@@ -1136,16 +1136,16 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         verifier_id: verifier_id.clone(),
         audience_id: audience.clone(),
         challenge: challenge.clone(),
-        agent_snapshot_digest: snapshot_digest.clone(),
+        agent_authority_state_digest: state_digest.clone(),
         agent_key_seal_id: admission
-            .agent_authority_snapshot
-            .core
+            .agent_authority_state_evidence
+            .state
             .key_state_witness
             .seal_id
             .clone(),
         agent_status_seal_id: admission
-            .agent_authority_snapshot
-            .core
+            .agent_authority_state_evidence
+            .state
             .agent_lifecycle_witness
             .seal_id
             .clone(),
