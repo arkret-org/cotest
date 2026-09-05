@@ -189,7 +189,10 @@ fn invite_live_target_uniqueness_is_carried_by_the_registered_slot() {
     let claim = live_target_write(&contracts["ak.invite.create"], FAMILY);
     assert_eq!(claim["lattice"].as_str(), Some("cas_register"));
     assert_eq!(claim["bottom"].as_str(), Some("reject"));
-    assert_eq!(claim["initial_value"].as_str(), Some("__unset__"));
+    assert!(
+        claim.get("initial_value").is_none(),
+        "event-auth-state-resolution.md section 9.3.1.2 deleted initial_value:          an unwritten cas_register cell reads null protocol-wide"
+    );
     assert_eq!(
         claim
             .pointer("/effect_projection/value/envelope_field")
@@ -216,7 +219,8 @@ fn invite_live_target_uniqueness_is_carried_by_the_registered_slot() {
 
     // Release writes: cancel is unconditional (its account is required),
     // accept and revoke are gated on the optional account being present, and
-    // every one of them sets the registered free value back.
+    // every one of them sets the slot back to null. That release is a real
+    // write with its own identity, not a delete back to "never written".
     for (kind, condition_field) in [
         ("ak.invite.accept", Some("payload.invitee_account_id")),
         ("ak.invite.cancel", None),
@@ -224,11 +228,9 @@ fn invite_live_target_uniqueness_is_carried_by_the_registered_slot() {
     ] {
         let release = live_target_write(&contracts[kind], FAMILY);
         assert_eq!(
-            release
-                .pointer("/effect_projection/value/const")
-                .and_then(Value::as_str),
-            Some("__unset__"),
-            "{kind} releases the slot by setting the registered free value"
+            release.pointer("/effect_projection/value/const"),
+            Some(&Value::Null),
+            "{kind} releases the slot with an explicit set null"
         );
         assert_eq!(
             release.pointer("/condition/field").and_then(Value::as_str),
@@ -337,9 +339,13 @@ fn invite_live_target_uniqueness_is_carried_by_the_registered_slot() {
         serde_json::json!(create_event_id.as_str()),
         "a release head_eq spelled as invite_id would never match the slot"
     );
+    // The free value is JSON null protocol-wide since
+    // event-auth-state-resolution.md section 9.3.1.2 deleted the registry's
+    // initial_value / sentinel_writers mechanism. A released slot is not an
+    // unwritten slot: the release Move writes null explicitly.
     assert_eq!(
-        arkret_schema::invite_live_target_unset_value().expect("registered contract"),
-        serde_json::json!("__unset__")
+        arkret_schema::invite_live_target_free_value(),
+        serde_json::Value::Null
     );
 
     assert_vector_variants(

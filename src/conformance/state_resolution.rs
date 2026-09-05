@@ -1160,7 +1160,8 @@ fn validate_sealed_control_move_full_digest_collision(
     }
 
     // Exactly one critical recovery capability, and never a state_witness: the
-    // fork-resolution cell is `__unset__` before its first write, so the role
+    // fork-resolution cell has no active head before its first write (it reads
+    // `null`), so the role
     // that attests a pre-Bottom value has no referent here.
     for name in [
         "resolution_voids_complete_sibling_position",

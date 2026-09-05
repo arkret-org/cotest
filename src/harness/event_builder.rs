@@ -1021,7 +1021,7 @@ fn invite_live_target_preconditions(event: &Event) -> Vec<arkret_wire::cba::Prec
         return Vec::new();
     };
     let slot = match event.kind.as_str() {
-        arkret_wire::event_kind_str::INVITE_CREATE => arkret_schema::InviteLiveTargetSlot::Unset,
+        arkret_wire::event_kind_str::INVITE_CREATE => arkret_schema::InviteLiveTargetSlot::Free,
         arkret_wire::event_kind_str::INVITE_ACCEPT
         | arkret_wire::event_kind_str::INVITE_CANCEL
         | arkret_wire::event_kind_str::INVITE_REVOKE => {
