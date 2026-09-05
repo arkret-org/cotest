@@ -217,7 +217,15 @@ fn validate_release_window(window: ReleaseWindow) -> std::result::Result<(), &'s
     if window.first_epoch < window.first_auditable_epoch || !window.target_eligible {
         return Err("audit_release_retroactive_scope_forbidden");
     }
-    if window.last_epoch >= window.active_epoch || !window.sealed_by_commit {
+    // audited-e2ee.md 1: covering the live epoch and omitting the commit that
+    // sealed the window are different failures with different registered
+    // codes. Folding them together left `audit_release_current_epoch_forbidden`
+    // with no producer, so nothing exercised the rule that actually protects
+    // the live epoch.
+    if window.last_epoch >= window.active_epoch {
+        return Err("audit_release_current_epoch_forbidden");
+    }
+    if !window.sealed_by_commit {
         return Err("audit_release_manifest_invalid");
     }
     Ok(())
@@ -243,10 +251,17 @@ pub fn run_release_window_vector() -> Result<()> {
     if validate_release_window(ReleaseWindow {
         last_epoch: 12,
         ..valid
-    }) != Err("audit_release_manifest_invalid")
+    }) != Err("audit_release_current_epoch_forbidden")
     {
         bail!("audit release included the active epoch");
     }
+    // The boundary: the last sealed epoch is admissible, the live one is not.
+    validate_release_window(ReleaseWindow {
+        last_epoch: 11,
+        active_epoch: 12,
+        ..valid
+    })
+    .map_err(|reason| anyhow!(reason))?;
     if validate_release_window(ReleaseWindow {
         sealed_by_commit: false,
         ..valid
