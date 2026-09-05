@@ -52,7 +52,7 @@
       }
     },
     {
-      "name": "fsm_member_state_concurrent_join_invite_quarantine",
+      "name": "fsm_member_state_concurrent_join_holder_quarantine",
       "cell_family": "ak.component.member.state.v1",
       "lattice": "fsm",
       "bottom": "reject",

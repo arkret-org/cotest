@@ -303,8 +303,9 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
             mentions: [
               {
                 kind: "mention",
-                subject_id: participantId,
-                controller_subject_id: jointRealm.alice.id,
+                subject_account_id: accountActorId(participantId).account_id,
+                controller_subject_account_id: accountActorId(jointRealm.alice.id)
+                  .account_id,
                 controller_handle_at_time: controllerHandle,
                 agent_slug_at_time: slug,
                 display_name_at_time: forgedDisplayName,

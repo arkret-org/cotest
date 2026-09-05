@@ -1058,11 +1058,17 @@ export class JointUserPage {
   }
 
   // Drive the Realm admin invite modal to invite `targetId` into realmId.
+  /// `expectStatus` overrides the "invited <label>" success assertion for a
+  /// call whose registered outcome is not a new Invite — re-issuing a directed
+  /// invite for an account that already holds the Realm's live-target slot is
+  /// refused by the reducer, and the client reports what it did about the
+  /// existing invite instead (governance-objects.md section 5.3).
   async inviteFromAdmin(
     realmId: string,
     targetId: string,
     expectedDisplayLabel?: string,
     locator?: { token: string; serverUrl?: string },
+    expectStatus?: RegExp,
   ): Promise<string> {
     let targetInput: string;
     if (locator) {
@@ -1129,12 +1135,12 @@ export class JointUserPage {
     await invite.getByTestId("send-invite-button").click();
     const status = members.getByTestId("realm-members-status");
     const displayLabel = expectedDisplayLabel ?? targetId;
-    await expect(status).toContainText(
+    const expected =
+      expectStatus ??
       new RegExp(
         `invited (${escapeRegex(displayLabel)}|${escapeRegex(targetId)})`,
-      ),
-      { timeout: 30_000 },
-    );
+      );
+    await expect(status).toContainText(expected, { timeout: 30_000 });
     return await status.innerText();
   }
 
@@ -1260,9 +1266,13 @@ export class JointUserPage {
     await this.waitForTimelineEventSettled(body);
   }
 
+  // A mention subject is a complete AccountId, so the picker row is selected
+  // by both components (identity-handles.md 3.8). Matching on the principal
+  // alone would pick the same principal hosted by another Station.
   async sendTimelineMentionMessage(
     realmId: string,
-    mentionId: string,
+    principalId: string,
+    stationId: string,
     suffix: string,
   ): Promise<string> {
     if (!this.page.url().includes(`/chat/${realmId}`)) {
@@ -1271,9 +1281,10 @@ export class JointUserPage {
     const input = this.page.getByTestId("chat-input");
     await input.fill("");
     await this.page.getByTestId("mention-trigger-button").click();
-    const escapedId = mentionId.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    const escapeAttr = (value: string) =>
+      value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
     const suggestion = this.page.locator(
-      `[data-testid="mention-suggestion"][data-mention-did="${escapedId}"]`,
+      `[data-testid="mention-suggestion"][data-mention-principal-id="${escapeAttr(principalId)}"][data-mention-station-id="${escapeAttr(stationId)}"]`,
     );
     await expect(suggestion).toBeVisible({ timeout: 30_000 });
     await suggestion.click();

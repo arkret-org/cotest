@@ -279,6 +279,17 @@ struct ChokepointContract {
     substitutable_by_generic_endpoint_rate_limit: bool,
     substitutable_by_directory_psi_device_quota: bool,
     substitutable_by_private_configuration: bool,
+    /// What an over-quota first contact loses, per converging surface. The three
+    /// surfaces share the ledger but not the discarded object.
+    surface_drop_targets: BTreeMap<String, String>,
+    /// `surface_kind` each surface writes into `ak.account.holder_quarantine`.
+    /// Contact delivery writes none, which is why its entry is `null`.
+    surface_kind_written: BTreeMap<String, Option<String>>,
+    contact_delivery_writes_a_quarantine_entry: bool,
+    contact_delivery_consumes_a_new_source_slot: bool,
+    consent_request_operation_is_a_no_op_shell: bool,
+    consent_request_dedupe: String,
+    invite_delivery_dedupe: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -868,6 +879,60 @@ fn check_chokepoint_contract(contract: &ChokepointContract) -> Result<()> {
             && !contract.substitutable_by_directory_psi_device_quota
             && !contract.substitutable_by_private_configuration,
         "receive_policy_constraints.new_source_quota is the only carrier for this ceiling"
+    );
+    // The three surfaces share one ledger and one ceiling but not one carrier.
+    // Contact delivery is billed and silently dropped like the other two, yet
+    // what it loses is the establishment of its own `pending_incoming` row: a
+    // second parallel review carrier would fight the Contact state machine over
+    // the same fact (`contact-and-direct-conversation.md` section 1.1).
+    ensure!(
+        contract.surface_drop_targets
+            == BTreeMap::from([
+                (
+                    "ak.peer.invites.command.submit.v1".to_owned(),
+                    "holder_quarantine_entry".to_owned()
+                ),
+                (
+                    "ak.peer.contacts.command.submit.v1".to_owned(),
+                    "contact_pending_incoming_head".to_owned()
+                ),
+                (
+                    "ak.self.consent.command.request.v1".to_owned(),
+                    "holder_quarantine_entry".to_owned()
+                ),
+            ]),
+        "each converging surface drops its own object, and only two of them drop a quarantine entry"
+    );
+    ensure!(
+        contract.surface_kind_written
+            == BTreeMap::from([
+                (
+                    "ak.peer.invites.command.submit.v1".to_owned(),
+                    Some("invite_delivery".to_owned())
+                ),
+                ("ak.peer.contacts.command.submit.v1".to_owned(), None),
+                (
+                    "ak.self.consent.command.request.v1".to_owned(),
+                    Some("consent_request".to_owned())
+                ),
+            ]),
+        "the closed surface_kind discriminator has exactly two branches, and contact delivery is not one of them"
+    );
+    ensure!(
+        !contract.contact_delivery_writes_a_quarantine_entry
+            && contract.contact_delivery_consumes_a_new_source_slot,
+        "a stranger's first Contact request is billed to the shared ledger yet leaves the holder quarantine cell at zero entries"
+    );
+    // The two branches deduplicate differently and MUST NOT be collapsed:
+    // `ak.self.consent.command.request.v1` declares idempotency_mechanism none
+    // and carries no nonce and no timestamp, so it has no source for a third
+    // digest and deduplicates on holder-local live-entry uniqueness instead.
+    ensure!(
+        !contract.consent_request_operation_is_a_no_op_shell
+            && contract.consent_request_dedupe
+                == "live_entry_uniqueness_over_account_id_source_peer_principal_id_consent_scope"
+            && contract.invite_delivery_dedupe == "request_digest_and_idempotency_key_digest",
+        "the consent request surface writes a real entry and deduplicates by live-entry uniqueness, not by a digest it has no source for"
     );
     Ok(())
 }

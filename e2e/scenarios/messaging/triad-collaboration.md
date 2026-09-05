@@ -100,7 +100,7 @@
 
 ## Edge cases / sub-tests
 
-- **E1.1 idempotent invite**:alice 在 Phase C 之前对 carol 连发两次 invite,只产生一个 `ak.invite.create` 事件,后续 accept 仍能成功
+- **E1.1 live-target slot**:同一 Realm 内对同一 `invitee_account_id` 连发两次 direct invite,第二条命中已登记的 `ak.component.invite.live_target.v1` 名额,被 `failed_precondition` / `invite_live_target_occupied` 原子拒绝:Realm 权威日志只出现一条 `ak.invite.create`,持有 active invite consent 的被邀请方也只看到一份 private delivery 凭据。客户端不得换新 `event_id` 重发 create。
 - **E1.2 history_access=all_history_for_current_members**:同样的步骤改用 `all_history_for_current_members` 而不是 `since_join`，carol 成为当前成员后应看到 `M1/M2/M2'/tombstone`；未加入者仍不得读取 Realm 历史。
 - **E1.4 membership leave/rejoin**:bob 主动 `leave` 后不再出现在 Realm `members[]`,普通消息写入被拒绝;owner 重新提交 `join` 后,bob 可以再次写入同一 Realm
 

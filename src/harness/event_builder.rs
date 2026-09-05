@@ -1002,6 +1002,44 @@ fn harness_event_created_at() -> DateTime<Utc> {
 
 /// Preconditions are signed content, so a Control Move that needs one has to
 /// declare it here rather than have it stamped onto an already-signed envelope.
+/// The `ak.component.invite.live_target.v1` `head_eq` this invite Move owes,
+/// read out of the registered contract.
+///
+/// `ak.invite.create` claims a free slot, so it asserts the registered free
+/// value. Every registered release (`accept` / `cancel` / `revoke` carrying
+/// `invitee_account_id`) asserts the slot's stored value, which is the
+/// occupying create Event id in `ak:event:` form — the SDK helper performs that
+/// retype so no call site can spell it `ak:invite:`. A Move that derives no
+/// slot write (a third-party invite, or a `send_failed` revoke, both of which
+/// omit the account) owes nothing.
+fn invite_live_target_preconditions(event: &Event) -> Vec<arkret_wire::cba::Precondition> {
+    let Some(invitee) = event
+        .payload
+        .get("invitee_account_id")
+        .and_then(|value| serde_json::from_value::<arkret_wire::AccountId>(value.clone()).ok())
+    else {
+        return Vec::new();
+    };
+    let slot = match event.kind.as_str() {
+        arkret_wire::event_kind_str::INVITE_CREATE => arkret_schema::InviteLiveTargetSlot::Unset,
+        arkret_wire::event_kind_str::INVITE_ACCEPT
+        | arkret_wire::event_kind_str::INVITE_CANCEL
+        | arkret_wire::event_kind_str::INVITE_REVOKE => {
+            let Some(invite_id) = event
+                .payload
+                .get("invite_id")
+                .and_then(Value::as_str)
+                .and_then(|value| arkret_identifiers::InviteId::new(value.to_owned()).ok())
+            else {
+                return Vec::new();
+            };
+            arkret_schema::InviteLiveTargetSlot::held_by_invite(&invite_id)
+        }
+        _ => return Vec::new(),
+    };
+    slot.precondition(&invitee).into_iter().collect()
+}
+
 #[allow(clippy::too_many_arguments)]
 fn event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
     actor: &str,
@@ -1059,6 +1097,23 @@ fn event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
     )
     .expect("SDK Event builder accepts cotest envelope");
     event.prev_refs = prev_event_ids;
+    // governance-objects.md section 5.3: every registered write on the
+    // `ak.component.invite.live_target.v1` slot MUST carry that cell's
+    // `head_eq`. Deriving it here from the registered contract keeps every
+    // invite Move the harness builds conformant without each scenario
+    // re-spelling the cell — and, critically, without any of them spelling the
+    // stored value as `ak:invite:`, which never compares equal and would strand
+    // the slot. A caller that passed its own precondition for the same cell
+    // (a negative case proving the wrong spelling is refused) keeps it.
+    let mut preconditions = preconditions;
+    for derived in invite_live_target_preconditions(&event) {
+        if !preconditions
+            .iter()
+            .any(|existing| existing.cell_id == derived.cell_id)
+        {
+            preconditions.push(derived);
+        }
+    }
     event.preconditions = preconditions;
     event.causal_refs = causal_refs
         .into_iter()

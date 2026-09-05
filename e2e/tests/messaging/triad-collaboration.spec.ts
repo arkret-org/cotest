@@ -23,6 +23,7 @@ import {
   signedEventEnvelope,
   submitSignedEventApi,
 } from "../../helpers/soland-api";
+import { grantInviteConsentArkret } from "../../helpers/contact-api";
 import {
   assertJointStackNotRequired,
   ensureRegistered,
@@ -395,20 +396,24 @@ test.describe("single-server triad collaboration", () => {
   );
 
   test.describe("E1 sub-cases", () => {
-    // E1.1 — governance-objects.md section 5.3 requires one live direct
-    // Invite per (realm_id, invitee_account_id). The registered write set has
-    // no slot/index cell for that key, however, so two distinct create Events
-    // deterministically target two distinct lifecycle cells. The private
-    // invite list cannot stand in for Realm state: without active consent the
-    // delivery is correctly quarantined and remains absent from that list.
-    test("E1.1 idempotent invite — re-issuing the same invite does not duplicate", async ({
+    // E1.1 — governance-objects.md section 5.3: one live directed Invite per
+    // (realm_id, invitee_account_id), carried by the registered
+    // `ak.component.invite.live_target.v1` slot. A second create for the same
+    // account contends on that one cell and is refused with
+    // `failed_precondition` / `invite_live_target_occupied`, so it never enters
+    // canonical history and derives no cell write.
+    //
+    // Both halves of the proof matter and neither substitutes for the other:
+    // the Realm log shows exactly one accepted create (authoritative state),
+    // and Bob's private delivery list shows exactly one credential. The list is
+    // only evidence because Bob granted an active invite consent first —
+    // without it both deliveries are correctly quarantined
+    // (sync/invite-addressing.md section 7) and a count of zero would say
+    // nothing about the reducer.
+    test("E1.1 live-target slot — a second directed invite for the same account is refused", async ({
       browser,
       request,
     }) => {
-      test.fixme(
-        true,
-        "@blocking-on arkret-work/review/spec-open/2026-09-04-1550-direct-invite-live-dedupe-lacks-registered-reducer-carrier.md",
-      );
       const stamp = Date.now();
       const bob = uniqueUser("s1e11-bob");
       await ensureRegistered(request, bob);
@@ -424,35 +429,75 @@ test.describe("single-server triad collaboration", () => {
         return;
       }
       const alicePage = aliceFlow.page;
+      const aliceToken = aliceFlow.session.grantJwt;
 
       try {
+        await grantInviteConsentArkret(
+          request,
+          bobToken,
+          bob,
+          aliceFlow.user.id,
+        );
+
         const realmId = await alicePage.createRealm({
-          title: `S1 Idempotent Invite ${stamp}`,
+          title: `S1 Live Target Invite ${stamp}`,
           discoverability: "listed",
           joinRule: "invite",
         });
 
-        // First invite. inviteFromAdmin internally calls gotoRealmAdminSection
-        // (Members) and opens the invite modal before submitting — that
-        // already defeats the RealmAdminPanel hydration race that historically
-        // caused fresh-nav fails (see scenarios/spaces/admin-section-route.md).
-        // We add an explicit waitForInviteActionReady belt-and-suspenders only
-        // on the second issue, where the helper's gotoRealmAdmin re-mounts.
+        // First invite claims the slot. inviteFromAdmin internally calls
+        // gotoRealmAdminSection (Members) and opens the invite modal before
+        // submitting — that already defeats the RealmAdminPanel hydration race
+        // that historically caused fresh-nav fails (see
+        // scenarios/spaces/admin-section-route.md).
         await alicePage.inviteFromAdmin(realmId, bob.id);
 
-        // Re-issue same invite — soland MUST treat as idempotent (same
-        // invite_id returned for any pending (space, invitee) pair).
-        await alicePage.inviteFromAdmin(realmId, bob.id);
+        // Second issue for the same account. The client MUST NOT re-sign the
+        // create under a fresh event_id — that only collides with the same
+        // cell again — so it acts on the occupant instead and says so.
+        await alicePage.inviteFromAdmin(
+          realmId,
+          bob.id,
+          undefined,
+          undefined,
+          /already has a live invite/,
+        );
 
-        // Bob's canonical invite projection should contain one pending invite.
-        await expect.poll(async () => {
-          const visible = await listInvitesApi(request, bobToken);
-          return visible.filter((invite) =>
-            invite.realm_id === realmId &&
-            invite.invitee_account_id?.principal_id === bob.id && invite.invitee_account_id.station_id === solandServiceId() &&
-            invite.state === "pending"
-          ).length;
-        }, { timeout: 30_000 }).toBe(1);
+        // Realm authoritative state: exactly one accepted ak.invite.create.
+        // The refused Event enters no canonical history at all, so a second
+        // one appearing here would mean the slot did not hold.
+        await expect
+          .poll(
+            async () => {
+              const events = await listRealmEventsViaApi(
+                request,
+                aliceToken,
+                realmId,
+                { limit: 200 },
+              );
+              return events.filter(
+                (event) => eventKind(event) === "ak.invite.create",
+              ).length;
+            },
+            { timeout: 30_000 },
+          )
+          .toBe(1);
+
+        // Holder-private delivery under an active consent: one credential.
+        await expect
+          .poll(
+            async () => {
+              const visible = await listInvitesApi(request, bobToken);
+              return visible.filter((invite) =>
+                invite.realm_id === realmId &&
+                invite.invitee_account_id?.principal_id === bob.id &&
+                invite.invitee_account_id.station_id === solandServiceId() &&
+                invite.state === "pending"
+              ).length;
+            },
+            { timeout: 30_000 },
+          )
+          .toBe(1);
       } finally {
         await alicePage.close();
       }

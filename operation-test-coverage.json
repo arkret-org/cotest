@@ -18,14 +18,14 @@
         "covered_operation_count": 36
       },
       "cotest_rust": {
-        "source_file_count": 307,
-        "source_sha256": "40871fad5301c8b46b7dccf32c42019c20dea87ea70a757a6fe48b29f45ccd08",
-        "evidence_count": 120,
+        "source_file_count": 309,
+        "source_sha256": "9cc1b9a5f87a48bb6ea57579a8850b174c8174c0b1954e43d82ae7b505e078f6",
+        "evidence_count": 129,
         "covered_operation_count": 71
       },
       "cotest_e2e": {
         "source_file_count": 89,
-        "source_sha256": "9322dc49d19396fe77885ad6d825dea19e5feeaa4e88b3589fc36ab478ba89c5",
+        "source_sha256": "0be21cc4fd090686959b2d08d23633ce20628495fb13cb2cfc103ff0330f4c56",
         "evidence_count": 29,
         "covered_operation_count": 16
       },
@@ -4074,11 +4074,11 @@
         "product_flow": [
           {
             "file": "cotest/e2e/helpers/users.ts",
-            "line": 1524,
+            "line": 1535,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1524
+              1535
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -6576,6 +6576,40 @@
               "\"ak.peer.contacts.command.submit.v1\","
             ],
             "assertion_preview": []
+          },
+          {
+            "file": "cotest/src/conformance/invite_new_source_quota.rs",
+            "line": 896,
+            "scope": "<module_helper>",
+            "scope_kind": "module_helper",
+            "occurrence_lines": [
+              896
+            ],
+            "protected_oracle": false,
+            "scope_sha256": "8868d8dce98191b0f12ebe038911d7008a0404c616769cefdf82de63ae54ea42",
+            "input_sha256": "8868d8dce98191b0f12ebe038911d7008a0404c616769cefdf82de63ae54ea42",
+            "assertion_sha256": null,
+            "input_preview": [
+              "\"ak.peer.contacts.command.submit.v1\".to_owned(),"
+            ],
+            "assertion_preview": []
+          },
+          {
+            "file": "cotest/src/conformance/invite_new_source_quota.rs",
+            "line": 913,
+            "scope": "<module_helper>",
+            "scope_kind": "module_helper",
+            "occurrence_lines": [
+              913
+            ],
+            "protected_oracle": false,
+            "scope_sha256": "d99287c00606325f660a7e3115e00e86ebc78e92015e76a6298c8e373aeeea92",
+            "input_sha256": "d99287c00606325f660a7e3115e00e86ebc78e92015e76a6298c8e373aeeea92",
+            "assertion_sha256": null,
+            "input_preview": [
+              "(\"ak.peer.contacts.command.submit.v1\".to_owned(), None),"
+            ],
+            "assertion_preview": []
           }
         ],
         "storage_parity": [],
@@ -8147,6 +8181,40 @@
               "\"ak.peer.invites.command.submit.v1\","
             ],
             "assertion_preview": []
+          },
+          {
+            "file": "cotest/src/conformance/invite_new_source_quota.rs",
+            "line": 892,
+            "scope": "<module_helper>",
+            "scope_kind": "module_helper",
+            "occurrence_lines": [
+              892
+            ],
+            "protected_oracle": false,
+            "scope_sha256": "16c919247b51904c834325ae35eda36fee290fe35b4518730a5e9477d0ef2547",
+            "input_sha256": "16c919247b51904c834325ae35eda36fee290fe35b4518730a5e9477d0ef2547",
+            "assertion_sha256": null,
+            "input_preview": [
+              "\"ak.peer.invites.command.submit.v1\".to_owned(),"
+            ],
+            "assertion_preview": []
+          },
+          {
+            "file": "cotest/src/conformance/invite_new_source_quota.rs",
+            "line": 910,
+            "scope": "<module_helper>",
+            "scope_kind": "module_helper",
+            "occurrence_lines": [
+              910
+            ],
+            "protected_oracle": false,
+            "scope_sha256": "16c919247b51904c834325ae35eda36fee290fe35b4518730a5e9477d0ef2547",
+            "input_sha256": "16c919247b51904c834325ae35eda36fee290fe35b4518730a5e9477d0ef2547",
+            "assertion_sha256": null,
+            "input_preview": [
+              "\"ak.peer.invites.command.submit.v1\".to_owned(),"
+            ],
+            "assertion_preview": []
           }
         ],
         "storage_parity": [],
@@ -8184,11 +8252,11 @@
           },
           {
             "file": "cotest/e2e/helpers/soland-api.ts",
-            "line": 3599,
+            "line": 3681,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              3599
+              3681
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -11032,11 +11100,11 @@
         "product_flow": [
           {
             "file": "cotest/e2e/helpers/users.ts",
-            "line": 1680,
+            "line": 1691,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1680
+              1691
             ],
             "protected_oracle": false,
             "scope_sha256": "7bc8e550bf2b5d638557096f7f54d8426af60f20d53a5e4bfaa690c96eaf9e9e",
@@ -14345,11 +14413,11 @@
           },
           {
             "file": "cotest/e2e/helpers/soland-api.ts",
-            "line": 1418,
+            "line": 1487,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1418
+              1487
             ],
             "protected_oracle": false,
             "scope_sha256": "2373fff14a20d85da0146a37b391dee3849e61eeb485e77de39e962b32d2c539",
@@ -14362,11 +14430,11 @@
           },
           {
             "file": "cotest/e2e/helpers/users.ts",
-            "line": 1194,
+            "line": 1200,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1194
+              1200
             ],
             "protected_oracle": false,
             "scope_sha256": "2373fff14a20d85da0146a37b391dee3849e61eeb485e77de39e962b32d2c539",
@@ -14404,11 +14472,11 @@
           },
           {
             "file": "cotest/e2e/tests/joint/joint-inkson-smoke.spec.ts",
-            "line": 391,
+            "line": 392,
             "scope": "admin invite preserves since-join history and a writable current baseline without poisoning the account cursor",
             "scope_kind": "typescript_test",
             "occurrence_lines": [
-              682
+              683
             ],
             "protected_oracle": false,
             "scope_sha256": "2172ff3891691a28f36ed2bdea4d2d543f536de3f9146b58bc1970cf442a3e65",
@@ -15718,6 +15786,91 @@
             "assertion_sha256": null,
             "input_preview": [
               "\"ak.self.consent.command.request.v1\","
+            ],
+            "assertion_preview": []
+          },
+          {
+            "file": "cotest/src/conformance/invite_new_source_quota.rs",
+            "line": 900,
+            "scope": "<module_helper>",
+            "scope_kind": "module_helper",
+            "occurrence_lines": [
+              900
+            ],
+            "protected_oracle": false,
+            "scope_sha256": "7a2d1c72fc027b995ab605fb4b3966f94145ad56471e792601b34ac750da18dd",
+            "input_sha256": "7a2d1c72fc027b995ab605fb4b3966f94145ad56471e792601b34ac750da18dd",
+            "assertion_sha256": null,
+            "input_preview": [
+              "\"ak.self.consent.command.request.v1\".to_owned(),"
+            ],
+            "assertion_preview": []
+          },
+          {
+            "file": "cotest/src/conformance/invite_new_source_quota.rs",
+            "line": 915,
+            "scope": "<module_helper>",
+            "scope_kind": "module_helper",
+            "occurrence_lines": [
+              915
+            ],
+            "protected_oracle": false,
+            "scope_sha256": "7a2d1c72fc027b995ab605fb4b3966f94145ad56471e792601b34ac750da18dd",
+            "input_sha256": "7a2d1c72fc027b995ab605fb4b3966f94145ad56471e792601b34ac750da18dd",
+            "assertion_sha256": null,
+            "input_preview": [
+              "\"ak.self.consent.command.request.v1\".to_owned(),"
+            ],
+            "assertion_preview": []
+          },
+          {
+            "file": "cotest/src/conformance/invite_new_source_quota.rs",
+            "line": 927,
+            "scope": "<module_helper>",
+            "scope_kind": "module_helper",
+            "occurrence_lines": [
+              927
+            ],
+            "protected_oracle": false,
+            "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "input_sha256": "17904c8836cd8185eeccee68b2d01d0c1871fcc4c145e14a8bc74e64213a7347",
+            "assertion_sha256": null,
+            "input_preview": [
+              "ak.self.consent.command.request.v1"
+            ],
+            "assertion_preview": []
+          },
+          {
+            "file": "cotest/src/scenarios/invite_new_source_quota_live.rs",
+            "line": 367,
+            "scope": "<module_helper>",
+            "scope_kind": "module_helper",
+            "occurrence_lines": [
+              367
+            ],
+            "protected_oracle": false,
+            "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "input_sha256": "17904c8836cd8185eeccee68b2d01d0c1871fcc4c145e14a8bc74e64213a7347",
+            "assertion_sha256": null,
+            "input_preview": [
+              "ak.self.consent.command.request.v1"
+            ],
+            "assertion_preview": []
+          },
+          {
+            "file": "cotest/src/scenarios/invite_new_source_quota_live.rs",
+            "line": 401,
+            "scope": "<module_helper>",
+            "scope_kind": "module_helper",
+            "occurrence_lines": [
+              401
+            ],
+            "protected_oracle": false,
+            "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "input_sha256": "17904c8836cd8185eeccee68b2d01d0c1871fcc4c145e14a8bc74e64213a7347",
+            "assertion_sha256": null,
+            "input_preview": [
+              "ak.self.consent.command.request.v1"
             ],
             "assertion_preview": []
           }
@@ -19369,11 +19522,11 @@
         "product_flow": [
           {
             "file": "cotest/e2e/helpers/users.ts",
-            "line": 1681,
+            "line": 1692,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1681
+              1692
             ],
             "protected_oracle": false,
             "scope_sha256": "a7096f9c4f6c3e93157fa1d03534f99e14715c63cf08230c91f4fabca11fdb47",
@@ -21238,11 +21391,11 @@
           },
           {
             "file": "cotest/e2e/helpers/soland-api.ts",
-            "line": 701,
+            "line": 756,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              701
+              756
             ],
             "protected_oracle": false,
             "scope_sha256": "65e7679ff5d43b2e0561a2ed79431e3249637f73fa829caf6b0ae9d0f1f4cfe8",
@@ -24854,11 +25007,11 @@
         "product_flow": [
           {
             "file": "cotest/e2e/helpers/soland-api.ts",
-            "line": 2728,
+            "line": 2810,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2728
+              2810
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -26080,11 +26233,11 @@
         "product_flow": [
           {
             "file": "cotest/e2e/helpers/users.ts",
-            "line": 1078,
+            "line": 1084,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1078
+              1084
             ],
             "protected_oracle": false,
             "scope_sha256": "406ae34ca80eb063c081a8492c23c11d38410ad57224a0a732498aa3f02f5ef9",

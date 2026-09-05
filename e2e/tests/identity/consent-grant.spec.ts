@@ -1193,87 +1193,10 @@ test.describe("consent grant", () => {
     }
   });
 
-  test("E1.4 pairwise DID consent isolates contact channels", async ({
-    browser,
-    request,
-  }, testInfo) => {
-    test.skip(
-      true,
-      "spec-open 2026-09-04-1351: consent pairwise peer lacks a verifiable Realm-local binding carrier",
-    );
-    // spec: identity/consent-model.md §3.2 and §8.1 pairwise DID isolation.
-    const aliceFlow = await openDpopUserPage(
-      browser,
-      request,
-      "consent-pairwise-alice",
-      { prepareMlsDevice: false },
-    );
-    if (!aliceFlow) {
-      assertJointStackNotRequired("pairwise consent DPoP login");
-      test.skip(true, "coauth DPoP session-grant login is unavailable");
-      return;
-    }
-    const alice = aliceFlow.user;
-    const bob = uniqueUser("consent-pairwise-bob");
-    const bobPairwise = {
-      ...bob,
-      did: `did:peer:${Date.now()}bob-consent-pairwise`,
-      handle: `${bob.handle}-pairwise`,
-    };
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, bob),
-      ensureRegistered(request, bobPairwise),
-    ]);
-    const [aliceToken, pairwiseToken, rootToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bobPairwise),
-      issueDevSession(request, bob),
-    ]);
-    const alicePage = aliceFlow.page;
-
-    try {
-      const pairwisePending = await requestContactApi(
-        request,
-        pairwiseToken,
-        alice.id,
-        "message",
-      );
-      expect(pairwisePending.state).toBe("pending_outgoing");
-      await gotoConsentSettings(alicePage);
-      await grantConsentDirect(alicePage, bobPairwise.did, "message");
-      await expectConsentCell(
-        request,
-        aliceToken,
-        alice.id,
-        bobPairwise.did,
-        "message",
-        "active",
-      );
-
-      const pairwiseStillPending = await requestContactApi(
-        request,
-        pairwiseToken,
-        alice.id,
-        "message",
-      );
-      expect(pairwiseStillPending.state).toBe("pending_outgoing");
-      const rootPending = await requestContactApi(
-        request,
-        rootToken,
-        alice.id,
-        "message",
-      );
-      expect(rootPending.state).toBe("pending_outgoing");
-      await expectConsentCellMissing(
-        request,
-        aliceToken,
-        bob.id,
-        "message",
-      );
-      await stepShot(alicePage.page, testInfo, "pairwise-isolated");
-    } finally {
-      await alicePage.close();
-    }
-  });
+  // E1.4 (pairwise consent isolation) is a Rust live scenario, not a browser
+  // test: it needs a real Realm-local ephemeral pairwise actor, which only
+  // exists as an accepted MLS LeafNode inside a
+  // `ak.profile.mls.minimal_metadata_realm.v1` Realm and has no account, no
+  // Principal Control Realm and no session to drive a browser with. See
+  // `cotest/tests/consent_pairwise_isolation_live.rs`.
 });

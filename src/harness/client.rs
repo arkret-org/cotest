@@ -441,8 +441,21 @@ impl TestActorClient {
         let realm_id = RealmId::new(realm_id.to_owned())?;
         let event_digest = event_id.event_digest();
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
+        // A frontier read can fail for reasons that have nothing to do with Seal
+        // coverage -- a governance cell in the bottom state makes this endpoint
+        // answer 409 forever. Swallowing that made a permanent server-side
+        // rejection look byte-for-byte like "the Seal has not caught up yet",
+        // so the last error is kept and reported with the timeout.
+        let mut last_frontier_error: Option<String> = None;
         loop {
-            if let Ok(frontier) = self.realm_seal_frontier(realm_id.as_str()).await {
+            let frontier = match self.realm_seal_frontier(realm_id.as_str()).await {
+                Ok(frontier) => Some(frontier),
+                Err(error) => {
+                    last_frontier_error = Some(error.to_string());
+                    None
+                }
+            };
+            if let Some(frontier) = frontier {
                 let state: arkret_models_collaboration::event_sync::SealFrontierState =
                     serde_json::from_value(frontier)?;
                 let frontier_leaf = state.frontier.sole_leaf()?.clone();
@@ -477,9 +490,16 @@ impl TestActorClient {
                 }
             }
             if std::time::Instant::now() >= deadline {
-                return Err(anyhow!(
-                    "accepted Event {event_id} was not covered by the Realm frontier Seal for {realm_id}"
-                ));
+                return Err(match last_frontier_error {
+                    Some(error) => anyhow!(
+                        "accepted Event {event_id} never reached the Realm frontier Seal for \
+                         {realm_id}; the frontier read kept failing: {error}"
+                    ),
+                    None => anyhow!(
+                        "accepted Event {event_id} was not covered by the Realm frontier Seal \
+                         for {realm_id}"
+                    ),
+                });
             }
             tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         }
@@ -1022,7 +1042,20 @@ impl TestActorClient {
             frontier.next_actor_seq,
         );
         event.prev_refs = frontier.frontier_event_ids;
-        event.preconditions = preconditions;
+        // Keep the guards the builder already derived from the registered
+        // contract (the invite live-target `head_eq`) and let the caller
+        // override only the cells it names itself, which is how a negative case
+        // proves a wrong guard is refused.
+        let mut merged = preconditions;
+        for derived in std::mem::take(&mut event.preconditions) {
+            if !merged
+                .iter()
+                .any(|existing| existing.cell_id == derived.cell_id)
+            {
+                merged.push(derived);
+            }
+        }
+        event.preconditions = merged;
         let event_kind = arkret_wire::EventKind::from(kind);
         let is_control_move = event_kind.is_control_plane();
         let is_data_event = event_kind.is_data_plane();
