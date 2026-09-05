@@ -289,7 +289,37 @@ export type MembershipPayload = {
     "service_id": string;
   };
   "membership": "join" | "knock" | "leave" | "ban";
-  "gate_proofs"?: Array<Record<string, unknown>>;
+  "gate_proofs"?: Array<{
+    "gate_id": string;
+    "kind": "challenge_response" | "claim_required";
+    "realm_id": string;
+    "applicant_actor_id": {
+      "kind": "account";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "service";
+      "service_id": string;
+    };
+    "policy_digest": string;
+    "created_at": string;
+    "challenge_kind"?: "captcha" | "pow" | "attested_human" | "idp_oidc";
+    "challenge_id"?: string;
+    "issuer_id"?: string;
+    "claims"?: string[];
+    "proofs": Array<{
+      "kind": "detached_jws";
+      "verification_method": string;
+      "payload_digest": string;
+      "created_at": string;
+      "domain"?: string;
+      "audience"?: string | string[];
+      "proof_purpose"?: "issuer_attestation" | "holder_acceptance" | "status_attestation" | "revocation_authorization" | "governance_authorization";
+      "jws": string;
+    }>;
+  }>;
   "reason"?: string;
   "membership_cause"?: "controller_membership_ended";
   "agent_controller_binding"?: {
