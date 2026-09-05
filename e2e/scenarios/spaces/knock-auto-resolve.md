@@ -45,21 +45,32 @@
 
 3. bob 向 claim-issuer 请求 VC `acme:employee` → 拿到 signed VC
 4. bob 向 captcha-provider 请求 challenge → 完成 → 拿到 signed proof
-5. bob 客户端组 `ak.member.state{ membership: "join", subject_did: bob.did, gate_proofs: [{ gate_id: "g-vc", claim_presentation: <VC> }, { gate_id: "g-captcha", challenge_proof: <proof> }] }`
+5. bob 客户端组 `ak.member.state{ membership: "join", member_id: bob.actor_id, gate_proofs: [...] }`，
+   每项是封闭的 `join_gate_proof`（`event-payload.schema.json#/$defs/join_gate_proof`，裁决
+   [`2026-09-05-0730`](../../../../arkret-work/review/spec-open/2026-09-05-0730-join-gate-proofs-have-no-closed-carrier.md)）：
+   `{ gate_id, kind, realm_id, applicant_actor_id, policy_digest, created_at, (challenge_kind + challenge_id | issuer_id + claims), proofs: [detached JWS] }`。
+   `policy_digest` 是当前 accepted `join_policy` component 的 canonical JSON sha256。
+   裁决前 soland 读的 `claim_presentation` / `challenge_proof.*` 成员名是实现自造，spec 从未定义，现已删除。
 6. 直接提交,**不**经过 application + review
 7. soland reducer:
    - 加载 join policy cell
    - 按 combinator=all 校验 gates
-   - 调用 verifier:`g-vc` 的 issuer 签名 OK + claim 匹配;`g-captcha` 的 challenge_proof 在 max_proof_age 内
+   - 先比对绑定元组:`realm_id` / `applicant_actor_id` / `policy_digest` 必须与本次 join 一致,
+     freshness 以该 Event 已签名的 `created_at` 为准(不用本地时钟)
+   - 再验签(admission 面,需要 DID 解析):`g-vc` 的 `issuer_id` 落在 gate 的 `trusted_issuer_ids`
+     且签名由该 issuer 控制的 key 作出;`g-captcha` 的签名由 gate `provider_did` 控制的 key 作出
    - 全过 → 接受 join Move
 8. 断言:`/realms/<R>/admin` 成员列表含 bob
 
 ### Phase C — mallory 自动解析失败
 
 9. mallory 没有 `acme:employee` VC
-10. mallory 试提交同样的 Move 但 `gate_proofs[]` 缺 claim_presentation 或 issuer 签名无效
-11. reducer 拒,reason `failed_precondition`,具体 gate fail = `g-vc`
-12. 断言:mallory inkson UI 显示 "Missing required credential: acme:employee"
+10. mallory 试提交同样的 Move,但 `gate_proofs[]` 缺 `g-vc` 项、`issuer_id` 不在 `trusted_issuer_ids`、
+    或签名无效
+11. 对外统一 `gate_check_failed`(§5 不可枚举:不得暴露是哪个 gate 失败、Realm 是否存在);
+    具体原因(`claim_invalid` / `challenge_proof_invalid` / `challenge_failed` / `challenge_expired`)
+    只进授权审计
+12. 断言:mallory inkson UI 显示不可枚举的加入失败提示,**不得**回显具体 gate 或所需 claim 名
 
 ### Phase D — Cooldown gate(独立 deny)
 
@@ -70,13 +81,18 @@
 
 ## Edge cases
 
-- **E6.2.1 expired claim**:bob 的 VC `expires_at` 过期 → 拒,reason `claim_invalid`
-- **E6.2.2 stale challenge proof**:`max_proof_age` 5 分钟,bob 拿 6 分钟前的 proof → 拒,reason `challenge_failed`
+- **E6.2.1 issuer 越界**:`issuer_id` 不在 gate 的 `trusted_issuer_ids` → 拒,审计 reason `claim_invalid`
+- **E6.2.2 stale challenge proof**:`max_proof_age` 5 分钟,bob 拿 6 分钟前的 proof → 拒,审计 reason `challenge_expired`
+- **E6.2.4 跨 Realm / 跨 applicant / 跨 policy revision 重放**:把一份对 Realm A 有效的 proof 原样提交给
+  Realm B(或换 applicant、或在 policy 改版后重放)→ 绑定元组比较即失败,对外 `gate_check_failed`
 - **E6.2.3 wrong combinator**:把 combinator 改 `any` → bob 只需要满足任一个 gate;但 cooldown 仍独立
 
 ## Implementation notes
 
-- **soland 缺口**:gate verifier(VC 签名校验 + challenge provider 校验)、`gate_proofs[]` 解析、cooldown 时间 tracking — 几乎全 ✗
+- **soland 现状(2026-09-05 傍晚)**:`gate_proofs[]` 按封闭载体解析 ✓、绑定元组与 freshness 比较 ✓、
+  issuer 边界与 claims 覆盖 ✓、detached JWS 验签接在 envelope 验证链上 ✓、cooldown 时间 tracking ✓。
+  soland 单元覆盖见 `crates/server/tests/realm_join_policy.rs`(24 条)。
+- **仍缺**:本 joint 场景本身;验签路径的定向正负例(需要真实 Ed25519 密钥与 DID document 夹具)
 - **harness 缺口**:mock claim-issuer 和 captcha-provider 服务
 
 ## 总耗时预估
