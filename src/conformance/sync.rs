@@ -8,7 +8,11 @@ use arkret_models_collaboration::sync_frames::account_subscribe::{
 use arkret_models_collaboration::sync_frames::stream_trace::{
     StreamTraceError, StreamTraceFrame, StreamTraceFrameKind, StreamTraceValidator,
 };
-use arkret_state::snapshot::{EventSetCommitmentAlgorithm, EventSetLeaf, event_set_root};
+use arkret_state::snapshot::{
+    EventSetCommitmentAlgorithm, EventSetLeaf, SnapshotChunkPayload, SnapshotMaterializedItem,
+    event_set_root, snapshot_conflict_records_digest, snapshot_erasure_stubs_digest,
+    snapshot_state_leaf_hash, state_digest_from_chunk_payloads, state_digest_from_items,
+};
 use arkret_wire::ErrorCode;
 use serde_json::{Value, json};
 
@@ -26,6 +30,7 @@ pub fn run_sync_fixture_suite() -> Result<()> {
     validate_strand_discussion_timeline(&value)?;
     validate_snapshot_frontier_recovery(&value)?;
     validate_snapshot_inclusion_challenge(&value)?;
+    validate_snapshot_state_digest(&value)?;
     super::snapshot_witness_quorum::run_snapshot_witness_quorum_attestation_vector()?;
     validate_e2ee_pending(&value)?;
     validate_realm_actor_frontier_vectors(&value)?;
@@ -641,6 +646,135 @@ fn validate_snapshot_inclusion_challenge(value: &Value) -> Result<()> {
     ] {
         if !seen.contains(required) {
             bail!("snapshot inclusion challenge fixture missing case {required}");
+        }
+    }
+    Ok(())
+}
+
+/// `ak.vector.snapshot.state_digest_recompute.v1` (`sync-fixture.json` block
+/// `snapshot_state_digest`, `snapshot-schema.md` §3 / §4).
+///
+/// The SDK is the implementation under test: every chunk is parsed through its
+/// closed `ak.schema.snapshot_chunk.v1` types and `state_digest` is recomputed
+/// with its consumer-side verifier, so a reject case that the SDK would accept
+/// — or an accept case whose bytes it hashes differently — fails here, not in
+/// a Station months later.
+fn validate_snapshot_state_digest(value: &Value) -> Result<()> {
+    let vector = required_field(value, "snapshot_state_digest")?;
+    let vector_id = value_field_str(vector, "vector_id")?;
+    if vector_id != "ak.vector.snapshot.state_digest_recompute.v1" {
+        bail!("sync artifact snapshot state digest vector id drifted");
+    }
+    let reducer_profile = value_field_str(required_field(vector, "manifest")?, "reducer_profile")?;
+    let cases = value_array(
+        required_field(vector, "cases")?,
+        "snapshot_state_digest.cases",
+    )?;
+
+    // The published leaves are reproduced item by item: the leaf preimage is
+    // the §6.2.1 `{"cell","state"}` canonical JSON and the leaf is
+    // H(0x00 || preimage) under the vector's SHA-256 baseline.
+    let canonical_items = cases
+        .first()
+        .and_then(|case| case.pointer("/chunks/0/items"))
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("snapshot state digest fixture has no canonical chunk"))?
+        .iter()
+        .map(|item| {
+            serde_json::from_value::<SnapshotMaterializedItem>(item.clone())
+                .map_err(|error| anyhow!("canonical snapshot item did not parse: {error}"))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    for row in value_array(
+        required_field(vector, "leaves")?,
+        "snapshot_state_digest.leaves",
+    )? {
+        let id = value_field_str(row, "id")?;
+        let item = canonical_items
+            .iter()
+            .find(|item| item.id() == id)
+            .ok_or_else(|| anyhow!("leaf row {id} names no canonical snapshot item"))?;
+        let preimage = super::canonical_json(&item.leaf_preimage())?;
+        if preimage != value_field_str(row, "leaf_preimage")? {
+            bail!("snapshot leaf preimage of {id} does not match the SDK canonical form");
+        }
+        if snapshot_state_leaf_hash(item)?.as_str() != value_field_str(row, "leaf")? {
+            bail!("snapshot leaf of {id} does not match the SDK leaf hash");
+        }
+    }
+    if state_digest_from_items(&canonical_items)?.as_str()
+        != value_field_str(vector, "state_digest")?
+    {
+        bail!(
+            "snapshot state_digest does not match the SDK recomputation over the canonical items"
+        );
+    }
+
+    let mut seen = BTreeSet::new();
+    for case in cases {
+        let name = value_field_str(case, "name")?;
+        seen.insert(name.to_owned());
+        let suite = arkret_canonical::digest_suite(value_field_str(case, "digest_algorithm")?)?;
+        let declared = value_field_str(case, "declared_state_digest")?;
+        let mut expected = json!({ "outcome": value_field_str(case, "expected")? });
+        for key in [
+            "expected_conflict_records_digest",
+            "expected_erasure_stubs_digest",
+        ] {
+            if let Some(digest) = case.get(key) {
+                expected[key.trim_start_matches("expected_")] = digest.clone();
+            }
+        }
+
+        let parsed = value_array(required_field(case, "chunks")?, "case.chunks")?
+            .iter()
+            .map(|chunk| serde_json::from_value::<SnapshotChunkPayload>(chunk.clone()))
+            .collect::<std::result::Result<Vec<_>, _>>();
+        let observed = match parsed {
+            Err(error) => json!({ "outcome": "reject", "reason": error.to_string() }),
+            Ok(chunks) => match state_digest_from_chunk_payloads(&chunks, reducer_profile, suite) {
+                Err(error) => json!({ "outcome": "reject", "reason": error.to_string() }),
+                Ok(root) if root.as_str() != declared => json!({
+                    "outcome": "reject",
+                    "reason": format!("recomputed {root} but the manifest declares {declared}"),
+                }),
+                Ok(_) => json!({
+                    "outcome": "accept",
+                    "conflict_records_digest": snapshot_conflict_records_digest(&chunks, suite)?,
+                    "erasure_stubs_digest": snapshot_erasure_stubs_digest(&chunks, suite)?,
+                }),
+            },
+        };
+        assert_expected_subset(name, &expected, &observed)?;
+        record_vector_event(
+            &format!("sync.snapshot_state_digest.{name}"),
+            &json!({ "vector_id": vector_id, "case": name }),
+            &expected,
+            &observed,
+        );
+    }
+
+    for required in [
+        "canonical_chunk_recomputes_state_digest",
+        "chunk_boundaries_do_not_change_state_digest",
+        "state_digest_follows_the_realm_digest_suite",
+        "empty_reducer_output_is_the_empty_tree_root",
+        "bottom_cell_is_a_conflict_record_not_a_leaf",
+        "erasure_stub_is_committed_by_its_own_digest_not_a_leaf",
+        "declared_state_digest_mismatch_is_rejected",
+        "materialized_object_branch_is_rejected",
+        "cas_cell_literal_is_rejected",
+        "cas_register_cell_with_value_state_is_rejected",
+        "non_cas_register_cell_with_heads_state_is_rejected",
+        "empty_head_set_is_rejected",
+        "unsorted_heads_are_rejected",
+        "unsorted_items_are_rejected",
+        "duplicate_cell_across_chunks_is_rejected",
+        "actor_private_family_is_rejected",
+        "reducer_profile_drift_between_chunk_and_manifest_is_rejected",
+    ] {
+        if !seen.contains(required) {
+            bail!("snapshot state digest fixture missing case {required}");
         }
     }
     Ok(())
