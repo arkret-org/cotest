@@ -34,6 +34,7 @@ import type {
   InviteDeliveryRequestBody,
   RealmObject,
   RealmSealFrontierView,
+  SelfInviteDispatchRequestBody,
 } from "./generated/spec-wire-objects";
 import {
   accountSubscribeDeltaApi,
@@ -120,7 +121,9 @@ const principalControlEvents = new Map<
   Array<Record<string, unknown>>
 >();
 
-const REALM_AUTHORITY_ROOT_CELL =
+// capabilities.md §3.2 — the only Realm authority source an operational
+// authorization may resolve against.
+export const REALM_AUTHORITY_ROOT_CELL =
   "ak:cell:ak.component.realm.authority_root.v1:null";
 
 function realmAuthorityControllerKey(
@@ -3609,12 +3612,144 @@ export async function rawPushFederationEvents(
 // `introduction_evidence` as opaque records and omitted the address members
 // the schema actually requires.
 export type InviteDeliveryRequestBodyBodyBody = InviteDeliveryRequestBody;
-export type SelfInviteDispatchRequestBody = Omit<
-  InviteDeliveryRequestBodyBodyBody,
-  "invite_event"
-> & {
-  invite_event_id: string;
-};
+export type { SelfInviteDispatchRequestBody };
+export type InviteDeliveryCbaProofBundle =
+  InviteDeliveryRequestBodyBodyBody["cba_proof_bundles"][number];
+
+// invite-addressing.md §7 step 4: the receiving Station is by definition not
+// yet a federation peer of the invite's Realm, so it MUST NOT fetch the
+// authority closure — the closure travels with the request. Exactly one bundle
+// per `invite_event.seal_basis.leaves` entry, keyed on that leaf, and every
+// leaf covered.
+//
+// The closure the receiver replays is the one an inviter-side Station would
+// have built: each leaf Seal plus its transitive `predecessor_refs`, and the
+// accepted Control Moves those Seals cover that write the Realm authority-root
+// cell (`capabilities.md` §3.2 admits no other authority source). Seals come
+// from `ak.self.seals.read.resolve.v1`; the Control Moves come from the
+// inviter's own Realm event query, filtered to the control plane. Extra
+// covered Moves are harmless — the receiver indexes them by digest and only
+// replays what a Seal delta names — but a MISSING one leaves the authority
+// cell empty and step 4 then fails with a capability reason, so the filter
+// stays wide rather than clever.
+//
+// `inclusion_proofs` / `availability_proofs` stay empty: the Seal closure is
+// self-verifying here (every Seal id is re-derived from its canonical bytes by
+// the receiver), which is the same shape the Station-side builder emits.
+export async function inviteDeliveryCbaProofBundles(
+  request: APIRequestContext,
+  token: string,
+  realmId: string,
+  sealBasis: { leaves?: unknown } | Record<string, unknown>,
+  opts: { server?: SolandKey } = {},
+): Promise<InviteDeliveryCbaProofBundle[]> {
+  const leaves = (sealBasis as { leaves?: unknown }).leaves;
+  if (!Array.isArray(leaves) || leaves.length === 0) {
+    throw new Error(
+      `invite_event.seal_basis.leaves is required to build the delivery CBA bundles, got ${JSON.stringify(sealBasis)}`,
+    );
+  }
+  const sealRefs = Array.from(
+    new Set(
+      leaves.map((leaf) => {
+        if (typeof leaf !== "string") {
+          throw new Error(
+            `seal_basis.leaves entry is not a Seal ref: ${JSON.stringify(leaf)}`,
+          );
+        }
+        return leaf;
+      }),
+    ),
+  ).sort();
+  const controlMoves = await realmControlMoves(request, token, realmId, opts);
+  const bundles: InviteDeliveryCbaProofBundle[] = [];
+  for (const sealRef of sealRefs) {
+    const seals = await sealPredecessorClosure(
+      request,
+      token,
+      realmId,
+      sealRef,
+      opts,
+    );
+    bundles.push({
+      target_seal_ref: sealRef,
+      seals,
+      control_moves: controlMoves,
+      inclusion_proofs: [],
+      availability_proofs: [],
+    });
+  }
+  // `cba-profiles.md` §5 canonical order: bundles strictly sorted by target.
+  return bundles;
+}
+
+// The target Seal and every Seal reachable through `predecessor_refs`, in
+// canonical id order. A predecessor the sender leaves out is exactly what
+// `dependency_missing.missing_seal_refs[]` reports, so the walk is transitive.
+async function sealPredecessorClosure(
+  request: APIRequestContext,
+  token: string,
+  realmId: string,
+  targetSealRef: string,
+  opts: { server?: SolandKey } = {},
+): Promise<InviteDeliveryCbaProofBundle["seals"]> {
+  const byId = new Map<string, Record<string, unknown>>();
+  const pending = [targetSealRef];
+  while (pending.length > 0) {
+    const sealId = pending.pop()!;
+    if (byId.has(sealId)) continue;
+    const seal = await readAcceptedSeal(
+      request,
+      token,
+      realmId,
+      sealId,
+      opts.server,
+    );
+    byId.set(sealId, seal);
+    const predecessors = seal.predecessor_refs;
+    if (Array.isArray(predecessors)) {
+      for (const predecessor of predecessors) {
+        if (typeof predecessor === "string") pending.push(predecessor);
+      }
+    }
+  }
+  return Array.from(byId.keys())
+    .sort()
+    // `readAcceptedSeal` returns the resolved Seal verbatim; wiring the Seal
+    // itself to a generated type is the same open item as the Event envelope.
+    .map((sealId) => byId.get(sealId) as InviteDeliveryCbaProofBundle["seals"][number]);
+}
+
+// The Realm's accepted control-plane Events, canonically ordered by event id.
+// A Control Move is the plane that carries `seal_basis`; DataEvents are not
+// admissible bundle members (`cba-proof-bundle.schema.json`).
+async function realmControlMoves(
+  request: APIRequestContext,
+  token: string,
+  realmId: string,
+  opts: { server?: SolandKey } = {},
+): Promise<InviteDeliveryCbaProofBundle["control_moves"]> {
+  const page = await queryRealmEventsApi(request, token, realmId, {
+    server: opts.server,
+    limit: 500,
+  });
+  const events = Array.isArray(page.events) ? page.events : [];
+  const byId = new Map<string, Record<string, unknown>>();
+  for (const candidate of events) {
+    if (typeof candidate !== "object" || candidate === null) continue;
+    const event = candidate as Record<string, unknown>;
+    const eventId = event.event_id;
+    if (typeof eventId !== "string") continue;
+    if (event.seal_basis === undefined || event.seal_basis === null) continue;
+    if (!byId.has(eventId)) byId.set(eventId, event);
+  }
+  return Array.from(byId.keys())
+    .sort()
+    .map(
+      (eventId) =>
+        byId.get(eventId) as InviteDeliveryCbaProofBundle["control_moves"][number],
+    );
+}
 
 // The closed `invite_delivery_outcome`
 // (`invite-delivery-request.schema.json#/$defs/invite_delivery_outcome`).
@@ -3702,7 +3837,9 @@ export async function submitPeerInviteDeliveryApi(
     "submit peer invite delivery",
   );
 }
-async function rawSubmitPeerInviteDeliveryApi(
+// Same peer submission without the 2xx expectation, so a §7 step-4 rejection
+// can be read as a status plus a registered wire code.
+export async function rawSubmitPeerInviteDeliveryApi(
   request: APIRequestContext,
   body: InviteDeliveryRequestBodyBodyBody,
   opts: {

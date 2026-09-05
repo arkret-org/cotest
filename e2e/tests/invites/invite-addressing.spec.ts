@@ -5,13 +5,16 @@ import {
   solandBaseUrl,
   solandServiceDid,
   solandServiceId,
-  solandServiceResolution,
+  type SolandKey,
 } from "../../helpers/env";
 import {
   countInvitesFor,
   listAuthzInvitesArkret,
 } from "../../helpers/contact-api";
-import type { InviteDeliveryRequestBodyBodyBody } from "../../helpers/soland-api";
+import type {
+  InviteDeliveryCbaProofBundle,
+  InviteDeliveryRequestBodyBodyBody,
+} from "../../helpers/soland-api";
 import {
   advanceEnvelopeToActorFrontier,
   canonicalServiceResolution,
@@ -20,16 +23,17 @@ import {
   authHeaders,
   createRealmApi,
   dispatchSelfInviteApi,
+  inviteDeliveryCbaProofBundles,
   rawDispatchSelfInviteApi,
+  rawSubmitPeerInviteDeliveryApi,
+  REALM_AUTHORITY_ROOT_CELL,
   selfInviteDispatchBody,
   readRealmSealBasis,
   refreshEventEnvelopeProof,
-  registerEventSigner,
   sha256CanonicalJson,
   signedEventEnvelope,
   submitPeerInviteDeliveryApi,
   submitSignedEventApi,
-  typedId,
   wireErrCode,
 } from "../../helpers/soland-api";
 import {
@@ -87,6 +91,12 @@ type AcceptedInviteFixture = {
   inviteeToken: string;
   realmId: string;
   acceptedEventId: string;
+  // The accepted `ak.invite.create` envelope and the Seal basis it committed
+  // to. §7 has the inviter-side Station read its own persisted canonical bytes
+  // rather than rebuild them, and step 4 keys the CBA closure on exactly these
+  // leaves.
+  inviteEvent: Record<string, unknown>;
+  sealBasis: Record<string, unknown>;
   evidence: InviteDeliveryRequestBodyBodyBody["introduction_evidence"];
   inviteAddress: InviteDeliveryRequestBodyBodyBody["invite_address"];
 };
@@ -130,7 +140,8 @@ async function acceptedInviteFixture(
     },
   });
   await advanceEnvelopeToActorFrontier(request, inviterToken, event);
-  event.seal_basis = await readRealmSealBasis(request, inviterToken, realmId);
+  const sealBasis = await readRealmSealBasis(request, inviterToken, realmId);
+  event.seal_basis = sealBasis;
   refreshEventEnvelopeProof(event);
   await submitSignedEventApi(request, inviterToken, event, {
     context: `persist ${slug} invite create`,
@@ -143,9 +154,127 @@ async function acceptedInviteFixture(
     inviteeToken,
     realmId,
     acceptedEventId: String(event.event_id),
+    inviteEvent: event,
+    sealBasis,
     evidence,
     inviteAddress,
   };
+}
+
+// §7 step 4 rejects before step 5 and MUST leave the holder untouched: no
+// delivery, no outbox enqueue, no holder-private write. The invitee's own
+// authz invite list and its `ak.account.invite_delivery` account-data cell are
+// the two holder-private surfaces a delivery would have written.
+async function assertNoHolderPrivateWrite(
+  request: APIRequestContext,
+  fixture: Pick<
+    AcceptedInviteFixture,
+    "inviteeToken" | "invitee" | "realmId"
+  >,
+  because: string,
+  opts: { server?: SolandKey } = {},
+) {
+  expect(
+    countInvitesFor(
+      await listAuthzInvitesArkret(request, fixture.inviteeToken, opts),
+      fixture.realmId,
+      fixture.invitee.id,
+    ),
+    `${because}: no holder-private invite may surface`,
+  ).toBe(0);
+
+  const accountDataUrl = `${solandBaseUrl(opts.server)}/_arkret/self/account_data`;
+  const listed = await request.get(accountDataUrl, {
+    headers: authHeaders(fixture.inviteeToken, "GET", accountDataUrl),
+  });
+  expect(listed.status(), await listed.text()).toBe(200);
+  const entries = ((await listed.json()) as {
+    account_data_entries?: Array<{ account_data_key?: string }>;
+  }).account_data_entries;
+  expect(
+    (entries ?? []).some(
+      (entry) => entry.account_data_key === "ak.account.invite_delivery",
+    ),
+    `${because}: no holder-private invite_delivery cell may be written`,
+  ).toBe(false);
+}
+
+// The §7 peer body for an already-accepted invite Event, with the caller's own
+// choice of capability bundles so a negative case can perturb exactly one
+// member.
+function peerDeliveryBody(
+  fixture: AcceptedInviteFixture,
+  bundles: InviteDeliveryCbaProofBundle[],
+  label: string,
+  inviteEvent: Record<string, unknown> = fixture.inviteEvent,
+): InviteDeliveryRequestBodyBodyBody {
+  return {
+    schema: "ak.schema.invite_delivery_request.v1",
+    // `signedEventEnvelope` still returns an untyped record — wiring the Event
+    // envelope itself to the generated type is the remaining B3 item.
+    invite_event:
+      inviteEvent as InviteDeliveryRequestBodyBodyBody["invite_event"],
+    invite_address: fixture.inviteAddress,
+    introduction_evidence: fixture.evidence,
+    cba_proof_bundles: bundles,
+    idempotency_key: `cotest-peer-invite-${label}-${Date.now()}`,
+  };
+}
+
+// RFC 9457 problem body plus the registered top-level members `cba-profiles.md`
+// §5 requires a `dependency_missing` to carry.
+async function peerRejection(response: {
+  status(): number;
+  text(): Promise<string>;
+}): Promise<{
+  status: number;
+  code?: string;
+  reason_code?: unknown;
+  missing_seal_refs?: unknown;
+  missing_event_digests?: unknown;
+}> {
+  const body = JSON.parse(await response.text()) as Record<string, unknown>;
+  return {
+    status: response.status(),
+    code: wireErrCode(body),
+    reason_code: body.reason_code,
+    missing_seal_refs: body.missing_seal_refs,
+    missing_event_digests: body.missing_event_digests,
+  };
+}
+
+// A second accepted `ak.invite.create` in the same Realm. Its Seal basis leaf
+// is the Seal that sealed the first one, so the leaf has a predecessor and the
+// capability closure is more than a single Seal — which is what makes an
+// incomplete closure constructible at all.
+async function acceptSuccessorInviteCreate(
+  request: APIRequestContext,
+  fixture: AcceptedInviteFixture,
+): Promise<{ event: Record<string, unknown>; sealBasis: Record<string, unknown> }> {
+  const event = signedEventEnvelope({
+    actorId: fixture.inviter.id,
+    realmId: fixture.realmId,
+    kind: "ak.invite.create",
+    payload: {
+      invitee_account_id: fixture.inviteAddress.account_id,
+      introduction_evidence_digest: `sha256:${sha256CanonicalJson(fixture.evidence)}`,
+      expires_at: canonicalTimestamp(
+        new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      ),
+    },
+  });
+  await advanceEnvelopeToActorFrontier(request, fixture.inviterToken, event);
+  const sealBasis = await readRealmSealBasis(
+    request,
+    fixture.inviterToken,
+    fixture.realmId,
+  );
+  event.seal_basis = sealBasis;
+  refreshEventEnvelopeProof(event);
+  await submitSignedEventApi(request, fixture.inviterToken, event, {
+    context: "persist successor invite create",
+  });
+  return { event, sealBasis };
 }
 
 test.describe("invite addressing", () => {
@@ -156,36 +285,13 @@ test.describe("invite addressing", () => {
   // reaches the same receive pipeline through
   // `ak.self.invites.command.dispatch.v1` (§7), covered below.
   test("peer invite delivery defers explicit_address evidence", async ({ request }) => {
+    // The invite Event must belong to a Realm this Station has actually
+    // accepted. §7 step 4 verifies the inviter's Realm capability against the
+    // closure keyed on `invite_event.seal_basis.leaves`, and a Realm that
+    // exists only inside the test process has no accepted Seal to key on — the
+    // request would fail step 4 before the §5 disclosure this case is about.
+    const fixture = await acceptedInviteFixture(request, "peer-explicit");
     const recipientServiceId = solandServiceId();
-    const invitee = "ak:did_core:web:cotest-invitee.example";
-    const introductionEvidence = { kind: "explicit_address" } as const;
-    const inviteDeliveryTarget = {
-      account_id: {
-        principal_id: invitee,
-        station_id: recipientServiceId,
-      },
-    };
-    // This inviter is synthetic — it never registers through the client path,
-    // so its Event proof has no signer unless one is registered here. The
-    // verification method must be a real DID URL: event-envelope.schema.json
-    // forbids concatenating a did_core_id into one.
-    const inviter = "ak:did_core:web:cotest-inviter.example";
-    const inviterDeviceId = "ak:device:01904100-0000-7000-8000-0000000000a1";
-    registerEventSigner({
-      actorId: inviter,
-      deviceId: inviterDeviceId,
-      verificationMethod: `did:web:cotest-inviter.example#${inviterDeviceId}`,
-    });
-    const inviteEvent = signedEventEnvelope({
-      actorId: inviter,
-      realmId: typedId("realm"),
-      kind: "ak.invite.create",
-      payload: {
-        invitee_account_id: inviteDeliveryTarget.account_id,
-        introduction_evidence_digest: `sha256:${sha256CanonicalJson(introductionEvidence)}`,
-        expires_at: canonicalTimestamp(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
-      },
-    });
 
     const outcome = await submitPeerInviteDeliveryApi(
       request,
@@ -194,12 +300,15 @@ test.describe("invite addressing", () => {
         // `signedEventEnvelope` still returns an untyped record — wiring the
         // Event envelope itself to the generated type is the remaining B3 item.
         invite_event:
-          inviteEvent as InviteDeliveryRequestBodyBodyBody["invite_event"],
-        invite_address: {
-          account_id: inviteDeliveryTarget.account_id,
-          service_resolution: solandServiceResolution(),
-        },
-        introduction_evidence: introductionEvidence,
+          fixture.inviteEvent as InviteDeliveryRequestBodyBodyBody["invite_event"],
+        invite_address: fixture.inviteAddress,
+        introduction_evidence: fixture.evidence,
+        cba_proof_bundles: await inviteDeliveryCbaProofBundles(
+          request,
+          fixture.inviterToken,
+          fixture.realmId,
+          fixture.sealBasis,
+        ),
         idempotency_key: `cotest-peer-invite-${Date.now()}`,
       },
       {
@@ -503,4 +612,236 @@ test.describe("invite addressing", () => {
       "a rejected §7 precondition must not create any holder-private invite",
     ).toBe(0);
   });
+
+  // ── §7 step 4: the Realm capability closure carried by cba_proof_bundles ──
+  //
+  // The receiving Station is by definition not yet a federation peer of the
+  // inviting Realm, so `ak.peer.seals.read.*` fails closed for it and the
+  // closure MUST travel inside the request. Step 4 is a function of
+  // `(invite_event, cba_proof_bundles)` alone and completes before step 5, so
+  // every rejection below is a precise registered outcome — not a member of
+  // the holder-indistinguishable class — and every one of them MUST leave the
+  // holder untouched.
+  //
+  // The inviter's own material is what makes these constructible; the one
+  // authorization verdict that needs a *narrowed* Realm authority is recorded
+  // as a gap at the end of this block rather than faked here.
+
+  test("step 4 rejects a delivery that carries no capability proof bundle", async ({
+    request,
+  }) => {
+    const fixture = await acceptedInviteFixture(request, "step4-no-bundle");
+    const bundles = await inviteDeliveryCbaProofBundles(
+      request,
+      fixture.inviterToken,
+      fixture.realmId,
+      fixture.sealBasis,
+    );
+    // `cba_proof_bundles` is a required top-level member, so a body without it
+    // never reaches the closure evaluation: it fails the request schema.
+    const { cba_proof_bundles: _omitted, ...withoutBundles } = peerDeliveryBody(
+      fixture,
+      bundles,
+      "no-bundle",
+    );
+    const response = await rawSubmitPeerInviteDeliveryApi(
+      request,
+      withoutBundles as InviteDeliveryRequestBodyBodyBody,
+      { origin: solandServiceId(), destination: solandServiceId() },
+    );
+    // error-code-registry.json maps `schema_violation` to HTTP 422 and defines
+    // it as "parsed input does not satisfy the declared schema contract" — a
+    // body missing a required member parses cleanly, so `json_invalid` ("JSON
+    // body cannot be parsed", HTTP 400) is not the registered answer here.
+    expect(await peerRejection(response)).toMatchObject({
+      status: 422,
+      code: "schema_violation",
+    });
+    await assertNoHolderPrivateWrite(
+      request,
+      fixture,
+      "a delivery without a capability proof bundle",
+    );
+  });
+
+  test("step 4 rejects a target_seal_ref outside invite_event.seal_basis.leaves", async ({
+    request,
+  }) => {
+    const fixture = await acceptedInviteFixture(request, "step4-foreign-leaf");
+    // A second Realm the same inviter owns. Its accepted Seal is a real,
+    // independently verifiable object — the single defect is that it is not a
+    // leaf of the invite Control Move's own basis, which §5 treats as an
+    // unreachable object and therefore a schema violation.
+    const otherRealmId = await createRealmApi(request, fixture.inviterToken, {
+      title: `step4 foreign leaf ${Date.now()}`,
+      ownerId: fixture.inviter.id,
+    });
+    const otherBasis = await readRealmSealBasis(
+      request,
+      fixture.inviterToken,
+      otherRealmId,
+    );
+    expect(
+      canonicalJson(otherBasis),
+      "the foreign Realm must have its own Seal basis",
+    ).not.toBe(canonicalJson(fixture.sealBasis));
+    const foreignBundles = await inviteDeliveryCbaProofBundles(
+      request,
+      fixture.inviterToken,
+      otherRealmId,
+      otherBasis,
+    );
+
+    const response = await rawSubmitPeerInviteDeliveryApi(
+      request,
+      peerDeliveryBody(fixture, foreignBundles, "foreign-leaf"),
+      { origin: solandServiceId(), destination: solandServiceId() },
+    );
+    expect(await peerRejection(response)).toMatchObject({
+      status: 422,
+      code: "schema_violation",
+    });
+    await assertNoHolderPrivateWrite(
+      request,
+      fixture,
+      "a bundle targeting a Seal outside the invite basis",
+    );
+  });
+
+  test("step 4 reports an incomplete capability closure with the exact missing Seals", async ({
+    request,
+  }) => {
+    const fixture = await acceptedInviteFixture(request, "step4-closure");
+    // The successor invite Control Move's basis leaf has a predecessor, so the
+    // closure is more than one Seal and a genuine hole can be opened in it.
+    const successor = await acceptSuccessorInviteCreate(request, fixture);
+    const complete = await inviteDeliveryCbaProofBundles(
+      request,
+      fixture.inviterToken,
+      fixture.realmId,
+      successor.sealBasis,
+    );
+    expect(complete, "one bundle per basis leaf").toHaveLength(1);
+    const target = complete[0]!.target_seal_ref;
+    const targetSeal = complete[0]!.seals.find(
+      (seal) => (seal as unknown as { id: string }).id === target,
+    ) as unknown as { predecessor_refs?: string[] } | undefined;
+    // Withholding the leaf's own predecessors is what the receiver can name
+    // precisely: it walks the Seals it was given and reports the refs they
+    // point at but that never arrived.
+    const withheld = Array.from(
+      new Set(targetSeal?.predecessor_refs ?? []),
+    ).sort();
+    expect(
+      withheld.length,
+      "the successor leaf must have at least one predecessor Seal to withhold",
+    ).toBeGreaterThan(0);
+
+    // cba-profiles.md §5: an incomplete closure is answered with the exact
+    // Seals the sender still owes, never with an opaque authorization failure
+    // and never by fetching the dependency from the inviting Realm.
+    const truncated: InviteDeliveryCbaProofBundle[] = [
+      {
+        ...complete[0]!,
+        seals: complete[0]!.seals.filter(
+          (seal) => (seal as unknown as { id: string }).id === target,
+        ),
+      },
+    ];
+    const response = await rawSubmitPeerInviteDeliveryApi(
+      request,
+      peerDeliveryBody(fixture, truncated, "closure", successor.event),
+      { origin: solandServiceId(), destination: solandServiceId() },
+    );
+    const rejection = await peerRejection(response);
+    expect(rejection).toMatchObject({
+      // error-code-registry.json maps `dependency_missing` to HTTP 409.
+      status: 409,
+      code: "dependency_missing",
+    });
+    expect(
+      rejection.missing_seal_refs,
+      "dependency_missing MUST name the withheld Seals exactly",
+    ).toEqual(withheld);
+    expect(
+      Array.isArray(rejection.missing_event_digests),
+      "dependency_missing MUST carry a bounded missing_event_digests list",
+    ).toBe(true);
+    await assertNoHolderPrivateWrite(
+      request,
+      fixture,
+      "a delivery whose capability closure is incomplete",
+    );
+  });
+
+  test("step 4 rejects an inviter that is not the authority-root controller", async ({
+    request,
+  }) => {
+    const fixture = await acceptedInviteFixture(request, "step4-controller");
+    // Registering is enough: the outsider only has to be able to sign an
+    // Event envelope, never to hold a session on the inviting Realm.
+    const outsider = uniqueUser(`step4-controller-outsider-${Date.now()}`);
+    await ensureRegistered(request, outsider);
+
+    // The Realm, its Seal basis and the whole capability closure are genuine;
+    // the only defect is the signer. capabilities.md §3.2 closes the
+    // authority-root branch on the cell's current controller and forbids any
+    // fallback to `realm_state.owner`, membership or `created_by`, so this MUST
+    // fail closed with the registered controller-mismatch reason rather than
+    // an opaque denial.
+    const foreignInvite = signedEventEnvelope({
+      actorId: outsider.id,
+      realmId: fixture.realmId,
+      kind: "ak.invite.create",
+      authorizationRef: REALM_AUTHORITY_ROOT_CELL,
+      sealBasis: fixture.sealBasis,
+      payload: {
+        invitee_account_id: fixture.inviteAddress.account_id,
+        introduction_evidence_digest: `sha256:${sha256CanonicalJson(fixture.evidence)}`,
+        expires_at: canonicalTimestamp(
+          new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        ),
+      },
+    });
+    const bundles = await inviteDeliveryCbaProofBundles(
+      request,
+      fixture.inviterToken,
+      fixture.realmId,
+      fixture.sealBasis,
+    );
+    const response = await rawSubmitPeerInviteDeliveryApi(
+      request,
+      peerDeliveryBody(fixture, bundles, "controller", foreignInvite),
+      { origin: solandServiceId(), destination: solandServiceId() },
+    );
+    // error-code-registry.json registers `realm_authority_controller_mismatch`
+    // as a reason code, not a top-level code: the closed top-level primitive
+    // for an authorization denial is `capability_denied` (HTTP 403), and the
+    // narrowest registered reason rides on it instead of being flattened away.
+    expect(await peerRejection(response)).toMatchObject({
+      status: 403,
+      code: "capability_denied",
+      reason_code: "realm_authority_controller_mismatch",
+    });
+    await assertNoHolderPrivateWrite(
+      request,
+      fixture,
+      "a delivery whose inviter is not the authority-root controller",
+    );
+  });
+
+  // GAP — "the inviter holds Realm authority but not `ak.invite.create`".
+  //
+  // The ruling's fifth step-4 case wants the narrowest capability reason
+  // (`missing_capability`) for an inviter whose authority is a `grant_ref`
+  // whose action set excludes the invite action. It is not written here
+  // because the closure this suite can transport carries only the Control
+  // Moves that write the authority-root cell — the one cell capabilities.md
+  // §3.2 admits, and the one the Station-side builder selects. A grant cell's
+  // establishing Move is therefore not in the closure, so the request would
+  // fail as an incomplete or unresolvable grant rather than as an authorized
+  // actor missing one action, and the assertion would be measuring the wrong
+  // thing. Landing it needs the grant branch of step 4 defined against a
+  // transported grant closure; the case above already pins the authority-root
+  // branch, which is the branch every invite created by a Realm owner takes.
 });

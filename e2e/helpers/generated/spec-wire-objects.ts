@@ -1247,6 +1247,391 @@ export type InviteDeliveryRequestBody = {
   } | {
     "kind": "explicit_address";
   };
+  "cba_proof_bundles": Array<{
+    "target_seal_ref": string;
+    "seals": Array<{
+      "id": string;
+      "realm_id": string;
+      "predecessor_refs": string[];
+      "delta": string[];
+      "control_event_set_root": string;
+      "state_root": string;
+      "completeness_root": string;
+      "notary_seq": number;
+      "data_view_root"?: string;
+      "data_event_set_root"?: string;
+      "availability_receipt_digests": string[];
+      "covered_event_digests"?: string[];
+      "previous_state_root"?: string;
+      "previous_digest_algorithm"?: "sha256" | "blake3";
+      "notary_signature": {
+        "verification_method": string;
+        "payload_digest": string;
+        "jws": string;
+      } | {
+        "kind": "multi_sig";
+        "signatures": Array<{
+          "verification_method": string;
+          "payload_digest": string;
+          "jws": string;
+        }>;
+      };
+      "sealed_at": string;
+      "hlc": string;
+    }>;
+    "control_moves": Array<{
+      "event_id": string;
+      "kind": string;
+      "realm_id"?: string;
+      "scope_ref": {
+        "kind": "realm";
+        "realm_id": string;
+      } | {
+        "kind": "circle";
+        "realm_id": string;
+        "circle_id": string;
+      } | {
+        "kind": "sidecar";
+        "realm_id": string;
+        "sidecar_id": string;
+      } | {
+        "kind": "realm_genesis";
+      };
+      "actor_id": {
+        "kind": "account";
+        "account_id": {
+          "principal_id": string;
+          "station_id": string;
+        };
+      } | {
+        "kind": "service";
+        "service_id": string;
+      };
+      "executed_by"?: {
+        "kind": "account";
+        "account_id": {
+          "principal_id": string;
+          "station_id": string;
+        };
+      } | {
+        "kind": "service";
+        "service_id": string;
+      };
+      "authorization_ref"?: string | "ak:cell:ak.component.realm.authority_root.v1:null" | "ak.authority.direct_conversation_participant.v1" | "ak.authority.direct_conversation_bootstrap_participant.v1";
+      "applet_id"?: string;
+      "external_ref"?: {
+        "schema"?: string;
+        "protocol"?: string;
+        "network_id"?: string;
+        "instance_id"?: string;
+        "user_id"?: string;
+        "location_id"?: string;
+        "event_id"?: string;
+        "external_id"?: string;
+        "uri"?: string;
+        [key: string]: unknown;
+      };
+      "actor_kind"?: "user" | "organization" | "team" | "agent" | "bot" | "service" | "integration";
+      "actor_seq": number;
+      "created_at": string;
+      "hlc"?: string;
+      "prev_refs": string[];
+      "refs": Array<{
+        "id": string;
+        "role": "state_witness" | "inclusion_proof";
+        "critical": true;
+        "proof": {
+          "kind": "rfc6962_merkle";
+          "root_field": "state_root" | "control_event_set_root";
+          "root_digest": string;
+          "leaf_canonical_preimage_b64u": string;
+          "leaf_digest": string;
+          "audit_path": string[];
+          "leaf_index": number;
+          "leaf_count": number;
+        };
+      } | {
+        "id": string;
+        "role": "authorized_by" | "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "did_inception" | "did_recovery_anchor" | "accountability";
+        "critical": boolean;
+      }>;
+      "causal_refs"?: string[];
+      "preconditions"?: Array<{
+        "cell_id": string;
+        "predicate": {
+          "op": "head_eq" | "head_in" | "satisfies" | "contains";
+          "value"?: unknown;
+          "values"?: unknown[];
+          "predicate_id"?: string;
+        };
+      }>;
+      "seal_ref"?: string;
+      "auth_context"?: {
+        "key_id": string;
+        "key_epoch": number;
+        "credential_epoch"?: number;
+      };
+      "seal_basis"?: {
+        "leaves": string[];
+      };
+      "payload": Record<string, unknown>;
+      "unsigned"?: Record<string, unknown>;
+      "proofs": Array<{
+        "kind": "detached_jws";
+        "verification_method": string;
+        "event_digest": string;
+        "created_at": string;
+        "signer_resolution_evidence_ref"?: string;
+        "domain"?: string;
+        "audience"?: string | string[];
+        "proof_purpose"?: "issuer_attestation" | "holder_acceptance";
+        "jws": string;
+      } | {
+        "kind": "station_admission";
+        "verification_method": string;
+        "event_digest": string;
+        "producer_proof_digest": string;
+        "producer_verification_method": string;
+        "producer_signing_key_did": string;
+        "producer_signer_resolution_evidence_ref"?: string;
+        "signer_resolution_evidence_ref": string;
+        "accepted_at": string;
+        "jws": string;
+      }>;
+      "requirements"?: {
+        "schema"?: string[];
+        "features"?: string[];
+        "critical_extensions"?: Array<{
+          "id": string;
+          "extension_scope": "event" | "payload" | "proof" | "authz" | "reducer" | "projection" | "encryption";
+          "schema_ref"?: string;
+          "profile_ref"?: string;
+          "parameters"?: Record<string, unknown>;
+          "material_digest"?: string;
+          "evidence_ref"?: string;
+          "fail_closed": true;
+        }>;
+      };
+    }>;
+    "inclusion_proofs": Array<{
+      "kind": "rfc6962_merkle";
+      "root_field": "state_root" | "control_event_set_root";
+      "root_digest": string;
+      "leaf_canonical_preimage_b64u": string;
+      "leaf_digest": string;
+      "audit_path": string[];
+      "leaf_index": number;
+      "leaf_count": number;
+    }>;
+    "availability_proofs": Array<{
+      "realm_id": string;
+      "event_id": string;
+      "bytes_digest": string;
+      "holder_service_id": string;
+      "retention_expires_at": string;
+      "holder_signer_evidence_ref": string;
+      "signature": {
+        "kind": "detached_jws";
+        "verification_method": string;
+        "payload_digest": string;
+        "created_at": string;
+        "domain"?: string;
+        "audience"?: string | string[];
+        "proof_purpose"?: "issuer_attestation" | "holder_acceptance" | "status_attestation" | "revocation_authorization" | "governance_authorization";
+        "jws": string;
+      };
+    }>;
+  }>;
+  "idempotency_key": string;
+};
+
+/** `invite-delivery-request.schema.json#/$defs/self_invite_dispatch_request_body` — closed object schema. */
+export type SelfInviteDispatchRequestBody = {
+  "schema": "ak.schema.invite_delivery_request.v1";
+  "invite_event_id": string;
+  "invite_address": {
+    "account_id": {
+      "principal_id": string;
+      "station_id": string;
+    };
+    "service_resolution": {
+      "inline": {
+        "record": {
+          "service_id": string;
+          "service_kind": string;
+          "did": string;
+          "method_history_head": string;
+          "version_id": string;
+          "resolution_event_ref": string;
+          "record_sequence": number;
+          "previous_record_digest": string | null;
+          "current_record_url": string;
+          "base_url": string;
+          "describe_digest": string;
+          "issued_at": string;
+          "refresh_after": string;
+          "expires_at": string;
+        };
+        "proof": {
+          "verification_method": string;
+          "created_at": string;
+          "jws": string;
+        };
+      };
+    } | {
+      "current_record_url": string;
+      "pinned_record_digest"?: string;
+    };
+    "route_assistance"?: unknown;
+  };
+  "introduction_evidence": {
+    "kind": "locator_ref";
+    "principal_locator": {
+      "schema": "ak.schema.principal_locator.v1";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+      "service_resolution": {
+        "inline": {
+          "record": {
+            "service_id": string;
+            "service_kind": string;
+            "did": string;
+            "method_history_head": string;
+            "version_id": string;
+            "resolution_event_ref": string;
+            "record_sequence": number;
+            "previous_record_digest": string | null;
+            "current_record_url": string;
+            "base_url": string;
+            "describe_digest": string;
+            "issued_at": string;
+            "refresh_after": string;
+            "expires_at": string;
+          };
+          "proof": {
+            "verification_method": string;
+            "created_at": string;
+            "jws": string;
+          };
+        };
+      } | {
+        "current_record_url": string;
+        "pinned_record_digest"?: string;
+      };
+      "route_assistance"?: unknown;
+      "issued_at": string;
+      "expires_at": string;
+      "locator_ref_digest": string;
+      "display_hint"?: {
+        "display_name_hint"?: string;
+        "avatar_blob_ref"?: string;
+      };
+      "proofs": Array<{
+        "proof_purpose": "subject_locator_authorization" | "recipient_service_acceptance";
+        "proof": {
+          "kind": "detached_jws";
+          "verification_method": string;
+          "payload_digest": string;
+          "created_at": string;
+          "domain"?: string;
+          "audience"?: string | string[];
+          "proof_purpose"?: "issuer_attestation" | "holder_acceptance" | "status_attestation" | "revocation_authorization" | "governance_authorization";
+          "jws": string;
+        };
+      }>;
+    };
+  } | {
+    "kind": "consent_grant";
+    "consent_grant_ref": string;
+    "consent_id"?: string;
+  } | {
+    "kind": "shared_realm";
+    "realm_id": string;
+    "inviter_member_ref": string;
+    "invitee_member_ref": string;
+  } | {
+    "kind": "handle_claim";
+    "handle": string;
+    "handle_claim": {
+      "schema": "ak.schema.handle_claim.v1";
+      "claim": {
+        "schema": "ak.schema.handle_claim_core.v1";
+        "handle": string;
+        "handle_aliases": string[];
+        "subject_account_id": {
+          "principal_id": string;
+          "station_id": string;
+        };
+        "issuer_id": string;
+        "claim": {
+          "kind": "handle_binding";
+        } | {
+          "kind": "organization_handle";
+          "organization_id": string;
+        };
+        "visibility": "public" | "restricted" | "private";
+        "audience": string | null;
+        "issued_at": string;
+        "expires_at": string | null;
+        "source_refs": string[];
+        "proofs": unknown[];
+      };
+      "status": "pending" | "verified" | "revoked";
+      "as_of": string;
+      "verifier_id": string;
+      "verified_at": string | null;
+      "revocation": {
+        "schema": "ak.schema.handle_claim_revocation.v1";
+        "claim_digest": string;
+        "revoked_at": string;
+        "revoker": {
+          "role": "issuer";
+          "issuer_id": string;
+        } | {
+          "role": "holder";
+          "subject_account_id": {
+            "principal_id": string;
+            "station_id": string;
+          };
+        };
+        "proof": {
+          "kind": "detached_jws";
+          "verification_method": string;
+          "payload_digest": string;
+          "created_at": string;
+          "domain"?: string;
+          "audience"?: string | string[];
+          "proof_purpose"?: "issuer_attestation" | "holder_acceptance" | "status_attestation" | "revocation_authorization" | "governance_authorization";
+          "jws": string;
+        } & {
+          "domain": "ak.handle_claim_revocation.v1";
+          "proof_purpose": "revocation_authorization";
+          [key: string]: unknown;
+        };
+      } | null;
+      "fresh_until": string;
+      "status_proof": {
+        "kind": "detached_jws";
+        "verification_method": string;
+        "payload_digest": string;
+        "created_at": string;
+        "domain"?: string;
+        "audience"?: string | string[];
+        "proof_purpose"?: "issuer_attestation" | "holder_acceptance" | "status_attestation" | "revocation_authorization" | "governance_authorization";
+        "jws": string;
+      } & {
+        "domain": "ak.handle_claim_status.v1";
+        "proof_purpose": "status_attestation";
+        [key: string]: unknown;
+      };
+    };
+    "resolved_by"?: string;
+    "resolved_at"?: string;
+  } | {
+    "kind": "explicit_address";
+  };
   "idempotency_key": string;
 };
 

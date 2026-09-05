@@ -40,10 +40,16 @@ import {
 
 test.describe.configure({ mode: "serial" });
 
+// Subset of `service-operation-dtos.schema.json#/$defs/ProjectionStrandRow`
+// that this suite asserts on. `stage` / `stage_changed_at` are the second half
+// of the common-fields.md §3.2 lifecycle cluster and sit immediately after
+// `state_changed_at` in the DTO; both are absent until `ak.strand.stage.set`
+// has written the object.
 type StrandProjectionRow = {
   strand_id: string;
   state: string;
   stage?: string | null;
+  stage_changed_at?: string | null;
   title?: string | null;
   board_space_id?: string | null;
   list_space_id?: string | null;
@@ -475,6 +481,16 @@ test.describe("project simulation", () => {
     );
     const task = await readStrandRow(request, aliceToken, realmId, taskStrandId);
     expect(task?.stage).toBe("done");
+    // common-fields.md §5.3.1, now machine-readable on the DTO as
+    // `if stage_changed_at is a string then stage is a string`: the reducer
+    // timestamp MUST NOT surface without the stage it dates. The DTO leaves
+    // `stage_changed_at` optional, so only this direction is asserted.
+    if (typeof task?.stage_changed_at === "string") {
+      expect(
+        typeof task.stage,
+        "stage_changed_at MUST NOT appear without stage",
+      ).toBe("string");
+    }
 
     // The legacy status spelling is forbidden wire, not a private core FSM.
     const forbiddenStatusEvent = signedEventEnvelope({
