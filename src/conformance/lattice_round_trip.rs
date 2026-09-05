@@ -25,6 +25,8 @@
 //! and `move_id` only). Failures here imply SDK lattice drift from the
 //! spec's normative join semantics.
 
+use std::collections::BTreeSet;
+
 use anyhow::{Result, anyhow, bail};
 use arkret_canonical::canonical_json_bytes;
 use arkret_identifiers::{CellRef, Did, Hash, RealmId};
@@ -483,15 +485,6 @@ fn op_set(value: serde_json::Value) -> LatticeOp {
     }
 }
 
-fn op_supersede(value: serde_json::Value, from: serde_json::Value) -> LatticeOp {
-    LatticeOp {
-        op_type: LatticeOpType::Set,
-        value: Some(value),
-        from: Some(from),
-        ..base_op()
-    }
-}
-
 fn op_inc(value: u64) -> LatticeOp {
     LatticeOp {
         op_type: LatticeOpType::Inc,
@@ -671,7 +664,93 @@ fn cas_register_single_set_returns_value() -> Result<()> {
     Ok(())
 }
 
+/// One write in a `cas_register` history, addressed the way the log addresses it.
+///
+/// `supersedes` is the set of head identities the write's own signed basis
+/// observed, which the reducer derives at admission. It is not a business value
+/// and never appears on the wire, so a scenario here is written as an identity
+/// graph rather than as a chain of values.
+fn cas_write(id: &str, value: Value, supersedes: &[&str]) -> SealedOp {
+    SealedOp::superseding(
+        issuer_digest(id),
+        op_set(value),
+        supersedes.iter().map(|id| issuer_digest(id)).collect(),
+    )
+}
+
+fn cas_head_ids(ops: &[SealedOp]) -> Result<Vec<String>> {
+    Ok(arkret_state::lattice::cas_register::cas_heads(ops)
+        .map_err(|bottom| anyhow!("cas_heads failed: {bottom:?}"))?
+        .into_iter()
+        .map(|head| head.move_id.as_str().to_owned())
+        .collect())
+}
+
+/// The active-write set, computed by a different algorithm than the one under test.
+///
+/// `cas_heads` answers with one pass over the op set. This walks the history
+/// forward instead — each write removes the heads it observed and adds itself —
+/// which is the "collect the active writes of the complete causal history"
+/// oracle section 30 obligation 8 asks the merge to agree with. Two algorithms
+/// that agree on every prefix-closed subset is the actual claim; one algorithm
+/// compared to itself would prove nothing.
+fn active_writes_oracle(ops: &[SealedOp]) -> Vec<String> {
+    let mut pending: Vec<&SealedOp> = ops.iter().collect();
+    let mut heads: Vec<String> = Vec::new();
+    let mut applied: BTreeSet<String> = BTreeSet::new();
+    // Apply in any order that respects the observed-before relation: a write may
+    // land once every write it superseded has landed, or is absent from this
+    // view entirely (a partial view is still a legal view).
+    while !pending.is_empty() {
+        let ready = pending.iter().position(|entry| {
+            entry.supersedes.iter().all(|superseded| {
+                applied.contains(superseded.as_str())
+                    || !ops
+                        .iter()
+                        .any(|other| other.move_id.as_str() == superseded.as_str())
+            })
+        });
+        let Some(index) = ready else {
+            // A cycle cannot occur in a digest-addressed history: a write's
+            // basis is fixed before its own identity exists.
+            break;
+        };
+        let entry = pending.remove(index);
+        heads.retain(|head| {
+            !entry
+                .supersedes
+                .iter()
+                .any(|superseded| superseded.as_str() == head)
+        });
+        if applied.insert(entry.move_id.as_str().to_owned()) {
+            heads.push(entry.move_id.as_str().to_owned());
+        }
+    }
+    heads.sort();
+    heads
+}
+
+fn cas_cell_root(cell: &CellRef, ops: &[SealedOp]) -> Result<String> {
+    let heads = arkret_state::lattice::cas_register::cas_heads(ops)
+        .map_err(|bottom| anyhow!("cas_heads failed: {bottom:?}"))?;
+    let cells = std::collections::BTreeMap::from([(cell.clone(), CasRegister.join(cell, ops))]);
+    let cas_heads = arkret_state::state::CasHeadsByCell::from([(cell.clone(), heads)]);
+    Ok(arkret_state::state::compute_state_root(
+        arkret_state::state::GovernanceView::new(&cells, &cas_heads),
+        arkret_canonical::DigestSuite::Sha256,
+    )
+    .map_err(|error| anyhow!("state_root failed: {error}"))?
+    .as_str()
+    .to_owned())
+}
+
 /// Exact runner for `ak.vector.lattice.cas_register_supersession.v1`.
+///
+/// Covers the ten obligations of `conformance-vectors.md` section 30 in order.
+/// Obligations 3, 4, 6 and 9 are the ones the deleted `(value, from)` join could
+/// not express at all: it read causality out of business values, so it could not
+/// tell a released cell from an unwritten one, `A -> B -> A` from
+/// `A -> B -> A -> B`, or two same-valued concurrent writes from one.
 pub fn run_lattice_cas_register_supersession_vector() -> Result<()> {
     let lattice = CasRegister;
     let cref = cell(
@@ -679,47 +758,230 @@ pub fn run_lattice_cas_register_supersession_vector() -> Result<()> {
         "ak.realm.01js0sp0000000000000000002",
     );
     let declaration = json!({"policy_revision": 1});
-    let tombstone = json!({"tombstone": true});
     let replacement = json!({"policy_revision": 2});
 
-    let chain = vec![
-        SealedOp::new(issuer_digest("d1"), op_set(declaration.clone())),
-        SealedOp::new(
-            issuer_digest("d2"),
-            op_supersede(tombstone.clone(), declaration.clone()),
-        ),
-        SealedOp::new(
-            issuer_digest("d3"),
-            op_supersede(replacement.clone(), tombstone.clone()),
-        ),
-    ];
-    if lattice.join(&cref, &chain) != CellState::Value(replacement.clone()) {
-        bail!("a complete declaration -> tombstone -> replacement chain did not settle");
+    // 1. An unwritten cell reads `null` and occupies no `state_root` leaf.
+    if lattice.join(&cref, &[]) != CellState::Value(Value::Null) {
+        bail!("an unwritten cas_register cell must read null");
     }
-    if lattice.join(&cref, &chain[..2]) != CellState::Value(tombstone.clone()) {
-        bail!("a prefix-closed historical view did not settle at its chain terminal");
+    if !cas_head_ids(&[])?.is_empty() {
+        bail!("an unwritten cas_register cell must have no heads");
+    }
+    if cas_cell_root(&cref, &[])? != arkret_state::state::EMPTY_STATE_ROOT {
+        bail!("an unwritten cas_register cell must not occupy a state_root leaf");
     }
 
-    let siblings = vec![
-        chain[0].clone(),
-        SealedOp::new(
-            issuer_digest("d4"),
-            op_supersede(tombstone.clone(), declaration.clone()),
-        ),
-        SealedOp::new(
-            issuer_digest("d5"),
-            op_supersede(replacement, declaration.clone()),
-        ),
+    // 2. A linear lifecycle: every write supersedes exactly what its own basis observed, so one
+    //    head survives and the cell never reaches bottom.
+    let lifecycle = vec![
+        cas_write("d1", declaration.clone(), &[]),
+        cas_write("d2", Value::Null, &["d1"]),
+        cas_write("d3", replacement.clone(), &["d2"]),
     ];
-    if !matches!(lattice.join(&cref, &siblings), CellState::Bottom(_)) {
-        bail!("concurrent distinct siblings on one predecessor must conflict");
+    if lattice.join(&cref, &lifecycle) != CellState::Value(replacement.clone()) {
+        bail!("a declaration -> release -> replacement lifecycle did not settle");
+    }
+    if cas_head_ids(&lifecycle)? != vec![issuer_digest("d3").as_str().to_owned()] {
+        bail!("a linear lifecycle must leave exactly its terminal write as the head");
     }
 
-    let duplicate = vec![chain[0].clone(), chain[1].clone(), chain[1].clone()];
-    if lattice.join(&cref, &duplicate) != CellState::Value(tombstone) {
-        bail!("a byte-identical repeated set was not idempotently deduplicated");
+    // 3. A release is a write with an identity, not an erasure. It reads `null` like an unwritten
+    //    cell and is a `state_root` member unlike one — which is the only thing that keeps the two
+    //    distinguishable, since a non-membership proof cannot tell them apart.
+    let released = &lifecycle[..2];
+    if lattice.join(&cref, released) != CellState::Value(Value::Null) {
+        bail!("a released cas_register cell must read null");
+    }
+    if cas_head_ids(released)? != vec![issuer_digest("d2").as_str().to_owned()] {
+        bail!("a released cas_register cell must keep its release write as the head");
+    }
+    if cas_cell_root(&cref, released)? == arkret_state::state::EMPTY_STATE_ROOT {
+        bail!("a released cas_register cell must still occupy a state_root leaf");
+    }
+
+    // 4. ABA and ABAB are different histories and must read differently. A join that follows value
+    //    edges answers `A` for both, which is exactly the defect this vector exists to catch.
+    let aba_via_null = vec![
+        cas_write("a1", declaration.clone(), &[]),
+        cas_write("a2", Value::Null, &["a1"]),
+        cas_write("a3", declaration.clone(), &["a2"]),
+    ];
+    if lattice.join(&cref, &aba_via_null) != CellState::Value(declaration.clone()) {
+        bail!("A -> null -> A must read A");
+    }
+    let aba = vec![
+        cas_write("b1", declaration.clone(), &[]),
+        cas_write("b2", replacement.clone(), &["b1"]),
+        cas_write("b3", declaration.clone(), &["b2"]),
+    ];
+    let mut abab = aba.clone();
+    abab.push(cas_write("b4", replacement.clone(), &["b3"]));
+    if lattice.join(&cref, &aba) != CellState::Value(declaration.clone()) {
+        bail!("A -> B -> A must read A");
+    }
+    if lattice.join(&cref, &abab) != CellState::Value(replacement.clone()) {
+        bail!("A -> B -> A -> B must read B");
+    }
+    if lattice.join(&cref, &aba) == lattice.join(&cref, &abab) {
+        bail!("A -> B -> A and A -> B -> A -> B must not resolve alike");
+    }
+
+    // 5. Two writes that could not see each other and disagree are two heads, and a `bottom=reject`
+    //    cell materializes that as a failure.
+    let concurrent_distinct = vec![
+        cas_write("c1", declaration.clone(), &[]),
+        cas_write("c2", replacement.clone(), &["c1"]),
+        cas_write("c3", json!({"policy_revision": 3}), &["c1"]),
+    ];
+    if !matches!(
+        lattice.join(&cref, &concurrent_distinct),
+        CellState::Bottom(_)
+    ) {
+        bail!("concurrent distinct writes on one predecessor must conflict");
+    }
+
+    // 6. Two concurrent writes of the *same* value read cleanly but are still two identities, and
+    //    both stay in the leaf. A successor that observed only one of them must not drop the branch
+    //    it never saw.
+    let concurrent_same = vec![
+        cas_write("e1", declaration.clone(), &[]),
+        cas_write("e2", replacement.clone(), &["e1"]),
+        cas_write("e3", replacement.clone(), &["e1"]),
+    ];
+    if lattice.join(&cref, &concurrent_same) != CellState::Value(replacement.clone()) {
+        bail!("same-valued concurrent writes must read that value");
+    }
+    let same_heads = cas_head_ids(&concurrent_same)?;
+    for id in ["e2", "e3"] {
+        if !same_heads.contains(&issuer_digest(id).as_str().to_owned()) {
+            bail!("same-valued concurrent writes must both stay in the head set");
+        }
+    }
+    if cas_cell_root(&cref, &concurrent_same)? == cas_cell_root(&cref, &concurrent_same[..2])? {
+        bail!("a second same-valued head must change the state_root leaf");
+    }
+    let mut one_branch_advanced = concurrent_same.clone();
+    one_branch_advanced.push(cas_write("e4", json!({"policy_revision": 4}), &["e2"]));
+    let advanced_heads = cas_head_ids(&one_branch_advanced)?;
+    if !advanced_heads.contains(&issuer_digest("e3").as_str().to_owned()) {
+        bail!("a successor must not remove a head its own basis never observed");
+    }
+
+    // 7. Exact replay is idempotent. The same identity carrying a *different* effect is a
+    //    verification error or a section 6.3.3 collision, and the lattice must refuse to pick
+    //    rather than settle it.
+    let mut replayed = lifecycle.clone();
+    replayed.push(lifecycle[1].clone());
+    if lattice.join(&cref, &replayed) != lattice.join(&cref, &lifecycle) {
+        bail!("a byte-identical repeated write was not idempotently deduplicated");
+    }
+    if cas_head_ids(&replayed)? != cas_head_ids(&lifecycle)? {
+        bail!("a byte-identical repeated write must not create a second head");
+    }
+    let forked_identity = vec![
+        lifecycle[0].clone(),
+        cas_write("d2", json!({"policy_revision": 99}), &["d1"]),
+        lifecycle[1].clone(),
+    ];
+    if arkret_state::lattice::cas_register::cas_heads(&forked_identity).is_ok() {
+        bail!("one identity carrying two different effects must fail closed, not be resolved");
+    }
+
+    // 8. The merge is associative, commutative and idempotent, and agrees with an independently
+    //    computed active-write set on every prefix-closed subset of a branching history.
+    let history = vec![
+        cas_write("f1", declaration.clone(), &[]),
+        cas_write("f2", replacement.clone(), &["f1"]),
+        cas_write("f3", json!({"policy_revision": 3}), &["f1"]),
+        cas_write("f4", json!({"policy_revision": 4}), &["f2", "f3"]),
+    ];
+    for subset in prefix_closed_subsets(&history) {
+        let mut heads = cas_head_ids(&subset)?;
+        heads.sort();
+        if heads != active_writes_oracle(&subset) {
+            bail!(
+                "cas_heads disagrees with the causal-history oracle on a prefix-closed subset \
+                 of {} writes",
+                subset.len()
+            );
+        }
+        // 10. Every prefix-closed subset is itself a deterministic view, so a receiver holding only
+        //     that subset recomputes the same answer.
+        let mut reversed = subset.clone();
+        reversed.reverse();
+        if cas_head_ids(&reversed)? != cas_head_ids(&subset)? {
+            bail!("a prefix-closed view must not depend on op arrival order");
+        }
+    }
+    let left = &history[..2];
+    let right = &history[1..];
+    let mut merged_lr = [left, right].concat();
+    let mut merged_rl = [right, left].concat();
+    if cas_head_ids(&merged_lr)? != cas_head_ids(&merged_rl)? {
+        bail!("merging two verified views must commute");
+    }
+    merged_lr.extend_from_slice(left);
+    if cas_head_ids(&merged_lr)? != cas_head_ids(&merged_rl)? {
+        bail!("merging a view that is already covered must be idempotent");
+    }
+    merged_rl.extend_from_slice(&history);
+    if cas_head_ids(&merged_rl)? != cas_head_ids(&history)? {
+        bail!("merging must associate: regrouping the same writes must not move the heads");
+    }
+
+    // 9. Bottom is a property of the view, not a flag. Two branches that each advance to the same
+    //    successor converge once both are covered, so a receiver that pinned bottom on a partial
+    //    view would permanently disagree with one that saw the whole history.
+    let terminal = json!({"policy_revision": 7});
+    let divergent = vec![
+        cas_write("ab1", declaration.clone(), &[]),
+        cas_write("ab2", replacement.clone(), &["ab1"]),
+        cas_write("ab3", json!({"policy_revision": 3}), &["ab1"]),
+    ];
+    if !matches!(lattice.join(&cref, &divergent), CellState::Bottom(_)) {
+        bail!("a partial view of two divergent branches must resolve to bottom");
+    }
+    let mut converged = divergent.clone();
+    converged.push(cas_write("ab4", terminal.clone(), &["ab2"]));
+    converged.push(cas_write("ab5", terminal.clone(), &["ab3"]));
+    if lattice.join(&cref, &converged) != CellState::Value(terminal.clone()) {
+        bail!("bottom must not be sticky: both branches reaching one value must converge");
+    }
+    let mut late_arrival = vec![converged[4].clone(), converged[3].clone()];
+    late_arrival.extend(divergent.iter().cloned());
+    if lattice.join(&cref, &late_arrival) != CellState::Value(terminal) {
+        bail!("a receiver that saw bottom first must converge once the leaves arrive");
     }
     Ok(())
+}
+
+/// Every subset of `history` that contains, for each member, every write that
+/// member superseded. Those are exactly the views a receiver can legally hold:
+/// a covered write drags its own basis into the view with it.
+fn prefix_closed_subsets(history: &[SealedOp]) -> Vec<Vec<SealedOp>> {
+    let mut subsets = Vec::new();
+    for mask in 0_u32..(1 << history.len()) {
+        let chosen = history
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| mask & (1 << index) != 0)
+            .map(|(_, entry)| entry.clone())
+            .collect::<Vec<_>>();
+        let present = chosen
+            .iter()
+            .map(|entry| entry.move_id.as_str().to_owned())
+            .collect::<BTreeSet<_>>();
+        let closed = chosen.iter().all(|entry| {
+            entry
+                .supersedes
+                .iter()
+                .all(|superseded| present.contains(superseded.as_str()))
+        });
+        if closed {
+            subsets.push(chosen);
+        }
+    }
+    subsets
 }
 
 // ─────────────────────────── Counter ─────────────────────────────────
@@ -1476,9 +1738,35 @@ fn executed_lattice_assertion(vector_id: &str, assertion: &str) -> bool {
         "no_pending_gap_diagnostic_exists",
         "additional_entry_recompute_is_arrival_order_independent",
     ];
+    // Every line here is executed by `run_lattice_cas_register_supersession_vector`
+    // in the order `conformance-vectors.md` section 30 lists its ten obligations.
+    // Itemising them is the point: while this vector fell through to `_ => true`,
+    // the fixture could claim nine assertions with nothing running behind them,
+    // which is how the runner kept passing after the join it exercised was
+    // replaced.
+    const CAS_REGISTER_SUPERSESSION: &[&str] = &[
+        "an unwritten cell has no head and reads null",
+        "each write is identified by its EventId and supersedes exactly the heads observed in \
+         its own signed seal_basis",
+        "a release write is set null, keeps its own head, and stays distinguishable from an \
+         unwritten cell",
+        "A -> null -> A reads A, and A -> B -> A -> B reads B",
+        "concurrent writes with different values leave two heads and a bottom=reject cell \
+         materializes failed_bottom",
+        "concurrent writes with the same value keep both head identities and a successor that \
+         saw only one of them removes only that one",
+        "exact replay of the same identity and canonical effect is idempotent",
+        "merging two verified (covered set, heads) states is associative, commutative, \
+         idempotent and agrees with a full causal-history oracle",
+        "Bottom is recomputed per view, so a receiver that later observes the missing leaf \
+         converges with one that saw the full history",
+    ];
     match vector_id {
         "ak.vector.lattice.ordered_log_join.v1" => ORDERED_LOG_JOIN.contains(&assertion),
         "ak.vector.lattice.ordered_log_gap.v1" => ORDERED_LOG_GAP.contains(&assertion),
+        VECTOR_ID_LATTICE_CAS_REGISTER_SUPERSESSION => {
+            CAS_REGISTER_SUPERSESSION.contains(&assertion)
+        }
         // Other lattice vectors keep the previous coverage contract until their
         // cases are itemised the same way.
         _ => true,

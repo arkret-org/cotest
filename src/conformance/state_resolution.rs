@@ -8,7 +8,7 @@
 
 use std::collections::BTreeSet;
 
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use arkret_wire::{Did, PayloadProof, Seal, project_did_to_core_id};
 use serde_json::{Map, Value, json};
 
@@ -988,6 +988,33 @@ fn validate_sealed_control_move_full_digest_collision(
             "reject",
             Some(arkret_wire::ErrorCode::SEAL_SIGNER_UNAUTHORIZED),
         ),
+        // Section 6.3.3 point 3: an accepted `canonical_winner` is not only a
+        // subtraction, it is the admission authority for the winner's bytes.
+        (
+            "resolution_admits_winner_on_loser_only_receiver",
+            "admit_winner",
+            None,
+        ),
+        (
+            "resolution_admission_is_a_pure_function_of_winner_bytes_and_seal",
+            "identical_admitted_event_and_projection",
+            None,
+        ),
+        (
+            "resolution_admission_is_idempotent_on_winner_holder",
+            "admit_winner",
+            None,
+        ),
+        (
+            "resolution_admission_rejects_winner_failing_its_own_precheck",
+            "reject",
+            Some(arkret_wire::ReasonCode::EVENT_ID_DIGEST_MISMATCH),
+        ),
+        (
+            "resolution_void_all_admits_no_variant",
+            "accept_and_project_exact_scope",
+            None,
+        ),
     ];
     for (name, expected, reason) in expectations {
         let case = cases
@@ -1069,6 +1096,171 @@ fn validate_sealed_control_move_full_digest_collision(
     if winner_index >= variants.len() as u64 {
         bail!("vector {vector_name} collision winner_index is outside its own evidence variants");
     }
+
+    // Section 6.3.3 point 3. A receiver that holds only the loser used to be
+    // left unable to answer for the identity at all, which is what made the
+    // second alignment phase of `federation.md` section 4.5.3 unreachable for
+    // this subject kind. The verdict itself admits the winner, so these cases
+    // pin what "admitted" has to mean rather than only that a winner was named.
+    let admit_case = cases["resolution_admits_winner_on_loser_only_receiver"];
+    require_str_eq(
+        admit_case,
+        "/receiver_state_before/held_variant",
+        "variant_b",
+        vector_name,
+    )?;
+    require_str_eq(
+        admit_case,
+        "/expected_receiver_state_after/accepted_variant",
+        "variant_a",
+        vector_name,
+    )?;
+    // The bytes come from the verdict; everything the digest preimage excludes
+    // is reused, because both variants compute the same `event_digest` and the
+    // receiver has already verified those proofs for this identity.
+    require_str_eq(
+        admit_case,
+        "/expected_receiver_state_after/accepted_variant_bytes_taken_from",
+        "the winner locator, verbatim",
+        vector_name,
+    )?;
+    require_str_eq(
+        admit_case,
+        "/expected_receiver_state_after/proofs_actor_kind_and_unsigned",
+        "reused_from_the_already_verified_local_event",
+        vector_name,
+    )?;
+    // A local clock here is what makes two receivers diverge, so the timestamp
+    // is the covering Seal's.
+    require_str_eq(
+        admit_case,
+        "/expected_receiver_state_after/received_at",
+        "resolution_seal_sealed_at",
+        vector_name,
+    )?;
+    require_str_eq(
+        admit_case,
+        "/expected_receiver_state_after/recompute_sealed_state_root",
+        "forbidden",
+        vector_name,
+    )?;
+    require_str_eq(
+        admit_case,
+        "/expected_receiver_state_after/witness_disagreement_on_local_byte_difference",
+        "forbidden",
+        vector_name,
+    )?;
+    // The loser is retained, not deleted: a collision bucket answers with every
+    // known canonical variant.
+    let loser_retention = required_pointer_str(
+        admit_case,
+        "/expected_receiver_state_after/loser_retention",
+        vector_name,
+    )?;
+    if !loser_retention.contains("forensic") {
+        bail!("vector {vector_name} must retain the displaced loser as a forensic variant");
+    }
+    require_str_eq(
+        admit_case,
+        "/expected_receiver_state_after/loser_derived_writes",
+        "removed",
+        vector_name,
+    )?;
+
+    // Purity: the admission may read the winner's bytes and the resolution Seal
+    // and nothing else. Each rejected input below is a way one receiver ends up
+    // with a different Event than another from the same verdict.
+    let pure_case = cases["resolution_admission_is_a_pure_function_of_winner_bytes_and_seal"];
+    let receivers = required_array(pure_case, "/receivers", vector_name)?;
+    if receivers.len() != 2 {
+        bail!("vector {vector_name} purity needs two receivers with different histories");
+    }
+    let rejected = required_array(
+        pure_case,
+        "/expected_divergent_inputs_rejected",
+        vector_name,
+    )?
+    .iter()
+    .filter_map(Value::as_str)
+    .collect::<BTreeSet<_>>();
+    for input in [
+        "local_wall_clock_received_at",
+        "local_first_seen_order",
+        // Backfilling the winner and overwriting locally is the path point 3
+        // explicitly closes: it would hit collision detection first, and each
+        // implementation would then diverge on receipt metadata.
+        "peer_backfill_of_winner_bytes",
+    ] {
+        if !rejected.contains(input) {
+            bail!("vector {vector_name} admission purity must rule out {input}");
+        }
+    }
+
+    // Replaying a verdict on a receiver that already holds the winner changes
+    // nothing at all.
+    require_u64_eq(
+        cases["resolution_admission_is_idempotent_on_winner_holder"],
+        "/expected_store_transitions",
+        0,
+        vector_name,
+    )?;
+
+    // The winner is re-checked on its own before admission, and a failure keeps
+    // the receiver exactly where it was — partial application would leave an
+    // identity half-adjudicated with no way back.
+    let precheck_case = cases["resolution_admission_rejects_winner_failing_its_own_precheck"];
+    require_str_eq(
+        precheck_case,
+        "/winner_precheck_failure",
+        "event_id_recompute_mismatch",
+        vector_name,
+    )?;
+    require_str_eq(
+        precheck_case,
+        "/expected_receiver_state_after",
+        "unchanged_and_still_quarantined",
+        vector_name,
+    )?;
+    require_str_eq(
+        precheck_case,
+        "/partial_application",
+        "forbidden",
+        vector_name,
+    )?;
+
+    // `void_all` over a collision leaves the identity with no accepted variant,
+    // and a late arrival must not bring it back.
+    let void_collision = cases["resolution_void_all_admits_no_variant"];
+    require_str_eq(
+        void_collision,
+        "/payload/subject/kind",
+        "event_id_collision",
+        vector_name,
+    )?;
+    require_str_eq(
+        void_collision,
+        "/payload/conflict_evidence/kind",
+        "full_hash_collision",
+        vector_name,
+    )?;
+    require_str_eq(
+        void_collision,
+        "/payload/verdict/kind",
+        "void_all",
+        vector_name,
+    )?;
+    if !void_collision
+        .pointer("/expected_receiver_state_after/accepted_variant")
+        .is_some_and(Value::is_null)
+    {
+        bail!("vector {vector_name} void_all must leave no accepted variant");
+    }
+    require_str_eq(
+        void_collision,
+        "/expected_receiver_state_after/late_arriving_variant",
+        "must_not_revive",
+        vector_name,
+    )?;
 
     // The reference arm exists because two preimages near the 1 MiB ceiling
     // cannot both be inlined into a resolution Event bounded by the same limit.
@@ -1811,19 +2003,32 @@ fn validate_cas_mixed_basis(vector: &Value, vector_name: &str) -> Result<()> {
     let cell = required_pointer_str(vector, "/cell", vector_name)?;
     require_str_eq(vector, "/cell_lattice/lattice", "cas_register", vector_name)?;
     require_str_eq(vector, "/cell_lattice/bottom", "reject", vector_name)?;
-    if !vector
-        .pointer("/cell_lattice/initial_value")
-        .is_some_and(Value::is_null)
-    {
-        bail!("vector {vector_name} cas_register initial_value must be null");
+    // A `cas_register` cell has no initial value to declare. `event-auth-state-resolution.md`
+    // section 9.3.1.2 makes "never written" and "released to null" two different
+    // states, and a declared initial value would collapse them: an unwritten cell
+    // would read as a write nobody made. Asserting the key is absent rather than
+    // null keeps a reintroduction from passing quietly.
+    if vector.pointer("/cell_lattice/initial_value").is_some() {
+        bail!("vector {vector_name} cas_register must not declare an initial_value");
     }
     require_str_eq(vector, "/pre_state/settled_value", "v1", vector_name)?;
+    // The pre-state is a head set, and its settled value is derived from it
+    // rather than stored beside it (section 6.2.1).
+    let pre_heads = required_array(vector, "/pre_state/heads", vector_name)?;
+    if pre_heads.len() != 1 {
+        bail!("vector {vector_name} pre_state must settle on exactly one head");
+    }
+    require_str_eq(vector, "/pre_state/heads/0/value", "v1", vector_name)?;
+    let settled_head = required_pointer_str(vector, "/pre_state/heads/0/event_id", vector_name)?;
 
     let mut seen = BTreeSet::new();
     for case in required_array(vector, "/cases", vector_name)? {
         let case_name = required_pointer_str(case, "/name", vector_name)?;
         seen.insert(case_name.to_owned());
         match case_name {
+            // No reconstructable signed basis means no derivable `H_c(B)`, so the
+            // write fails closed instead of degrading to an unconditional
+            // overwrite — and it takes every other projected write with it.
             "blind_write_without_basis" => {
                 require_str_eq(case, "/event/plane", "data", vector_name)?;
                 require_str_eq(case, "/event/projected_writes/0/cell", cell, vector_name)?;
@@ -1850,33 +2055,28 @@ fn validate_cas_mixed_basis(vector: &Value, vector_name: &str) -> Result<()> {
                     true,
                     vector_name,
                 )?;
-                require_str_eq(
-                    case,
-                    "/expected/defensive_join_result",
-                    "bottom",
-                    vector_name,
-                )?;
             }
-            "control_move_with_head_eq_basis" => {
+            // The positive: the guard is derived from the Move's own signed basis
+            // and compared to the frozen predecessor heads. No wire `head_eq`
+            // appears anywhere in this case, and requiring one would be
+            // non-conforming.
+            "basis_heads_match_frozen_predecessor" => {
                 require_str_eq(case, "/control_move/plane", "control", vector_name)?;
-                require_str_eq(
-                    case,
-                    "/control_move/preconditions/0/cell",
-                    cell,
-                    vector_name,
-                )?;
-                require_str_eq(
-                    case,
-                    "/control_move/preconditions/0/predicate/op",
-                    "head_eq",
-                    vector_name,
-                )?;
-                require_str_eq(
-                    case,
-                    "/control_move/preconditions/0/predicate/value",
-                    "v1",
-                    vector_name,
-                )?;
+                let basis_heads = required_array(case, "/control_move/basis_heads", vector_name)?;
+                if basis_heads.iter().map(Value::as_str).collect::<Vec<_>>()
+                    != vec![Some(settled_head)]
+                {
+                    bail!(
+                        "vector {vector_name} {case_name} basis heads must equal the frozen \
+                         predecessor head identities"
+                    );
+                }
+                if case.pointer("/control_move/preconditions").is_some() {
+                    bail!(
+                        "vector {vector_name} {case_name} must not carry a wire head_eq \
+                         precondition: the guard is derived, not declared"
+                    );
+                }
                 require_str_eq(
                     case,
                     "/control_move/projected_writes/0/cell",
@@ -1902,10 +2102,96 @@ fn validate_cas_mixed_basis(vector: &Value, vector_name: &str) -> Result<()> {
                     vector_name,
                 )?;
                 require_str_eq(case, "/expected/cell_value", "v2", vector_name)?;
+                // The accepted write supersedes the head it observed, so exactly
+                // one head survives and it is this Move's own identity.
+                let heads_after = required_array(case, "/expected/heads_after", vector_name)?;
+                if heads_after.len() != 1 {
+                    bail!("vector {vector_name} {case_name} must settle on one head");
+                }
+                require_str_eq(
+                    case,
+                    "/expected/heads_after/0/event_id",
+                    required_pointer_str(case, "/control_move/id", vector_name)?,
+                    vector_name,
+                )?;
+                require_str_eq(case, "/expected/heads_after/0/value", "v2", vector_name)?;
                 require_bool_eq(
                     case,
                     "/expected/replay_order_independent",
                     true,
+                    vector_name,
+                )?;
+            }
+            // The core negative, and the reason the value-edge join was deleted:
+            // a stale basis and the frozen predecessor settle to the same value,
+            // so any whole-value comparison accepts. Only the head identities
+            // differ, so only the identity guard rejects.
+            "stale_aba_basis_rejected" => {
+                require_str_eq(case, "/control_move/plane", "control", vector_name)?;
+                let history = required_array(case, "/history", vector_name)?;
+                let values = history
+                    .iter()
+                    .map(|entry| entry.pointer("/value").cloned().unwrap_or(Value::Null))
+                    .collect::<Vec<_>>();
+                if values
+                    != vec![
+                        Value::from("v1"),
+                        Value::Null,
+                        Value::from("v3"),
+                        Value::Null,
+                    ]
+                {
+                    bail!(
+                        "vector {vector_name} {case_name} needs a history that revisits one \
+                         value, or it is not the ABA case"
+                    );
+                }
+                let stale = required_pointer_str(case, "/control_move/basis_heads/0", vector_name)?;
+                let frozen = history
+                    .last()
+                    .and_then(|entry| entry.pointer("/event_id"))
+                    .and_then(Value::as_str)
+                    .with_context(|| format!("vector {vector_name} {case_name} history head"))?;
+                if stale == frozen {
+                    bail!(
+                        "vector {vector_name} {case_name} basis must name the earlier of the two \
+                         null-valued heads, not the frozen predecessor"
+                    );
+                }
+                let stale_value = history
+                    .iter()
+                    .find(|entry| entry.pointer("/event_id").and_then(Value::as_str) == Some(stale))
+                    .and_then(|entry| entry.pointer("/value").cloned())
+                    .with_context(|| {
+                        format!("vector {vector_name} {case_name} stale basis head in history")
+                    })?;
+                let frozen_value = history
+                    .last()
+                    .and_then(|entry| entry.pointer("/value").cloned())
+                    .unwrap_or(Value::Null);
+                if stale_value != frozen_value {
+                    bail!(
+                        "vector {vector_name} {case_name} the two heads must carry the same \
+                         value, or a value comparison would already reject"
+                    );
+                }
+                require_str_eq(case, "/expected/result", "failed_precondition", vector_name)?;
+            }
+            // A cell whose subject comes from the Move's own `event_id` cannot be
+            // named in the digest-covered `preconditions[]` without making the
+            // preimage self-referential, so the guard has to be derived after the
+            // id exists. Rejecting for a missing wire `head_eq` is non-conforming.
+            "self_derived_target_needs_no_wire_head_eq" => {
+                require_str_eq(case, "/control_move/plane", "control", vector_name)?;
+                let preconditions =
+                    required_array(case, "/control_move/preconditions", vector_name)?;
+                if !preconditions.is_empty() {
+                    bail!("vector {vector_name} {case_name} must carry no preconditions at all");
+                }
+                require_str_eq(
+                    case,
+                    "/expected/result",
+                    "accept_after_valid_seal",
                     vector_name,
                 )?;
             }
@@ -1917,7 +2203,9 @@ fn validate_cas_mixed_basis(vector: &Value, vector_name: &str) -> Result<()> {
         &seen,
         &[
             "blind_write_without_basis",
-            "control_move_with_head_eq_basis",
+            "basis_heads_match_frozen_predecessor",
+            "stale_aba_basis_rejected",
+            "self_derived_target_needs_no_wire_head_eq",
         ],
     )
 }

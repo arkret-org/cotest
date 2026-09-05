@@ -39,7 +39,8 @@
       "realm_governance_links",
       "realm_object_read",
       "realm_read",
-      "realtime_media"
+      "realtime_media",
+      "third_party_invite_handoff"
     ],
     "interop_bridge": [
       "applet",
