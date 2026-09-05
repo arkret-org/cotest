@@ -77,7 +77,7 @@ test.describe("first registration PCR genesis @fully-implemented", () => {
     expect(account.initialGrant.eventSigningKey?.publicJwk.x).toBeTruthy();
   });
 
-  test("a register-consumed handoff can still read the terminal onboarding snapshot", async ({
+  test("a register-consumed handoff can still read the terminal onboarding state", async ({
     request,
   }) => {
     const coauth = coauthBaseUrl();
