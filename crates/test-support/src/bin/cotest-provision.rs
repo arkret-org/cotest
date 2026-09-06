@@ -31,7 +31,7 @@ use anyhow::{Context, Result, bail};
 use cotest_test_support::provisioning::{
     AccountHandoff, DeploymentEndpoints, FoundPrincipalRequest, FoundingDeviceKey, MockEmailInbox,
     UnboundAccount, authorize_with_current_account, create_account_handoff, describe_station,
-    found_principal, provision_unbound_account,
+    found_principal, provision_unbound_account, read_self_account_viewer,
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -96,9 +96,15 @@ impl From<AccountBody> for UnboundAccount {
 ///
 /// Handoffs are held by id because `found_principal` needs the one this session
 /// created — including its founding device key, which never leaves the process.
+///
+/// Session grants are held the same way and for the same reason: a
+/// grant-authorized read has to present the grant *and* a proof signed by the
+/// device key it was issued to, and neither is allowed across the bridge. The
+/// caller refers to both by the handoff id it already has.
 struct Session {
     http: reqwest::Client,
     handoffs: HashMap<String, AccountHandoff>,
+    session_grants: HashMap<String, String>,
 }
 
 impl Session {
@@ -122,6 +128,7 @@ impl Session {
         Ok(Self {
             http,
             handoffs: HashMap::new(),
+            session_grants: HashMap::new(),
         })
     }
 
@@ -212,12 +219,49 @@ impl Session {
                     handoff,
                 )
                 .await?;
+                // Retained so `read_self_account_viewer` can present it. It
+                // is also in the response — the caller needs to assert on the
+                // outcome — but the read is done here so the proof is signed by
+                // the device key, which is not.
+                if let Some(grant) = principal
+                    .session_grant_outcome
+                    .get("session_grant")
+                    .and_then(Value::as_str)
+                {
+                    self.session_grants
+                        .insert(body.handoff_id.clone(), grant.to_owned());
+                }
                 Ok(json!({
                     "recovery_key": principal.recovery_key,
                     "session_grant_outcome": principal.session_grant_outcome,
                     "binding_receipt": principal.binding_receipt,
                     "pcr_genesis_receipt": principal.pcr_genesis_receipt,
                 }))
+            }
+            "read_self_account_viewer" => {
+                #[derive(Deserialize)]
+                struct Body {
+                    handoff_id: String,
+                    soland_base_url: String,
+                }
+                let body: Body = serde_json::from_value(request.body).context("parse request")?;
+                let handoff = self.handoffs.get(&body.handoff_id).with_context(|| {
+                    format!("no handoff {} in this session", body.handoff_id)
+                })?;
+                let grant = self.session_grants.get(&body.handoff_id).with_context(|| {
+                    format!(
+                        "handoff {} has no session grant; found_principal has not run for it",
+                        body.handoff_id
+                    )
+                })?;
+                let read = read_self_account_viewer(
+                    &self.http,
+                    &body.soland_base_url,
+                    grant,
+                    &handoff.device_key,
+                )
+                .await?;
+                Ok(json!({ "status": read.status, "body": read.body }))
             }
             other => bail!("unknown provisioning op {other:?}"),
         }

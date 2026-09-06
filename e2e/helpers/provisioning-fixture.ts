@@ -47,6 +47,14 @@ export type ProvisionedPrincipal = FoundedPrincipal & {
   /** The Coauth handle the account was registered under. */
   handle: string;
   deviceId: string;
+  /**
+   * The handoff this principal was founded through.
+   *
+   * It is the bridge's handle on the grant and the device key, neither of which
+   * crosses the boundary, so anything that needs to act *as* this principal
+   * goes through the bridge with this id rather than with credentials.
+   */
+  handoffId: string;
   /** The closed `AccountId` the Station bound, principal and Station both. */
   accountId: { principal_id: string; station_id: string };
   /** The `ak.session.grant` JWT the register step returned. */
@@ -66,6 +74,16 @@ export type CanonicalProvisioning = {
    * result before asking for the second.
    */
   provisionPrincipal(label: string): Promise<ProvisionedPrincipal>;
+  /**
+   * Present a founded principal's grant back to the Station.
+   *
+   * The one assertion the register response cannot make on its own: a chain
+   * that produced a well-formed but unusable grant passes every check about its
+   * receipts and fails here.
+   */
+  readSelfAccountViewer(
+    principal: ProvisionedPrincipal,
+  ): Promise<{ status: number; body: Record<string, unknown> }>;
 };
 
 /**
@@ -178,9 +196,16 @@ export const test = base.extend<
           ...founded,
           handle,
           deviceId,
+          handoffId: handoff.handoffId,
           accountId: { principal_id: principalId, station_id: stationId },
           sessionGrant: grant.session_grant,
         };
+      },
+      readSelfAccountViewer(principal: ProvisionedPrincipal) {
+        return bridge.readSelfAccountViewer({
+          handoffId: principal.handoffId,
+          solandBaseUrl: deployment.solandBaseUrl,
+        });
       },
     });
     // Nothing to tear down: the principal exists on an attached deployment and

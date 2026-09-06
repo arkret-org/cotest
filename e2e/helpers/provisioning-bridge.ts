@@ -7,8 +7,8 @@
 // principal means.
 //
 // **Placement**: 1725's P2 asks for this to live in a private
-// `e2e/packages/test-support` package. It is here for now because the API is
-// three methods and a lifecycle; move it once the surface is settled enough
+// `e2e/packages/test-support` package. It is here for now because the API is a
+// handful of calls and a lifecycle; move it once the surface is settled enough
 // that a package boundary buys something. What must not change in the move is
 // the ownership below.
 //
@@ -223,6 +223,33 @@ export class ProvisioningBridge {
       sessionGrantOutcome: result.session_grant_outcome as Record<string, unknown>,
       bindingReceipt: result.binding_receipt as Record<string, unknown>,
       pcrGenesisReceipt: result.pcr_genesis_receipt as Record<string, unknown>,
+    };
+  }
+
+  /**
+   * Read a founded principal's own account, as the Station sees it.
+   *
+   * Referred to by handoff id because both halves of the authorization stay in
+   * the bridge: the grant and the device key whose proof the Station checks
+   * against it. The endpoint and its operation id are chosen on the Rust side —
+   * a caller that passed its own URL would be carrying protocol knowledge on
+   * this side of the boundary, which is the thing one implementation of the
+   * chain is meant to prevent.
+   *
+   * Returns the status rather than throwing on a rejection, so a test can
+   * assert that the Station refuses what it should refuse.
+   */
+  async readSelfAccountViewer(args: {
+    handoffId: string;
+    solandBaseUrl: string;
+  }): Promise<{ status: number; body: Record<string, unknown> }> {
+    const result = await this.#call("read_self_account_viewer", {
+      handoff_id: args.handoffId,
+      soland_base_url: args.solandBaseUrl,
+    });
+    return {
+      status: Number(result.status),
+      body: (result.body ?? {}) as Record<string, unknown>,
     };
   }
 

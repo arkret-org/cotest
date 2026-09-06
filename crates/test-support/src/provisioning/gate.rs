@@ -385,6 +385,65 @@ pub struct FoundedPrincipal {
 const ISSUE_BINDING_CHALLENGE_OPERATION_ID: &str =
     "ak.gate.account.command.issue_identity_binding_challenge.v1";
 const GATE_REGISTER_OPERATION_ID: &str = "ak.gate.account.command.register.v1";
+const SELF_ACCOUNT_VIEWER_OPERATION_ID: &str = "ak.self.account.read.viewer.v1";
+
+/// The outcome of a session-grant-authorized read.
+///
+/// Status and body, not `Result`: a caller checking that the Station refuses a
+/// grant it should refuse needs the rejection, and turning it into an error
+/// would make the negative case indistinguishable from a broken deployment.
+#[derive(Clone, Debug)]
+pub struct SessionGrantRead {
+    pub status: u16,
+    pub body: Value,
+}
+
+/// Read the founded principal's own account, as the Station sees it.
+///
+/// This is the smallest honest proof that a founding actually worked: the
+/// grant the register step returned is presented against the Station, bound to
+/// the same device key the grant was issued to, and the Station answers with
+/// the account it recorded. A chain that produced an unusable grant would pass
+/// every assertion about its receipts and fail here.
+///
+/// `account/viewer` rather than `account/describe`: the latter answers with the
+/// *service* description and does not resolve a session at all, so it would
+/// have returned 200 for a grant the Station would never honour.
+///
+/// The endpoint is named here rather than taken as a parameter on purpose. A
+/// caller that could pass its own URL and operation id would be carrying
+/// protocol knowledge on the other side of the bridge, which is what having
+/// one implementation of the chain is meant to prevent.
+pub async fn read_self_account_viewer(
+    http: &reqwest::Client,
+    station_base: &str,
+    session_grant: &str,
+    device_key: &FoundingDeviceKey,
+) -> Result<SessionGrantRead> {
+    let url = format!(
+        "{}/_arkret/self/account/viewer",
+        station_base.trim_end_matches('/')
+    );
+    // The proof is bound to the grant through `access_token`; the Station
+    // checks that binding, so a proof minted without it is refused even though
+    // it is validly signed by the right key.
+    let request = arkret_http_client::DpopProofRequest::new("GET", &url)
+        .access_token(session_grant.to_owned());
+    let proof = garth::session::dpop::build_http_dpop_proof(request, &device_key.signing_key)
+        .map_err(|error| anyhow::anyhow!("build DPoP proof for GET {url}: {error}"))?;
+    let response = http
+        .get(&url)
+        .header("Arkret-Operation", SELF_ACCOUNT_VIEWER_OPERATION_ID)
+        .header("Authorization", format!("DPoP {session_grant}"))
+        .header("DPoP", proof)
+        .send()
+        .await
+        .with_context(|| format!("GET {url}"))?;
+    let status = response.status().as_u16();
+    let text = response.text().await.context("read response body")?;
+    let body = serde_json::from_str(&text).unwrap_or(Value::String(text));
+    Ok(SessionGrantRead { status, body })
+}
 
 /// Found a principal: steps 4 through 7.
 ///

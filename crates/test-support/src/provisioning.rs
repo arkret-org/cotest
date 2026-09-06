@@ -30,7 +30,8 @@ use anyhow::{Context, Result};
 pub use coauth_account::{MockEmailInbox, UnboundAccount};
 pub use gate::{
     AccountHandoff, FoundPrincipalRequest, FoundedPrincipal, FoundingDeviceKey, OidcAuthorization,
-    authorize_with_current_account, create_account_handoff, found_principal,
+    SessionGrantRead, authorize_with_current_account, create_account_handoff, found_principal,
+    read_self_account_viewer,
 };
 use serde_json::Value;
 

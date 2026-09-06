@@ -15,7 +15,7 @@
 use cotest_test_support::provisioning::{
     DeploymentEndpoints, FoundPrincipalRequest, FoundingDeviceKey, MockEmailInbox, UnboundAccount,
     authorize_with_current_account, create_account_handoff, describe_station, found_principal,
-    provision_unbound_account,
+    provision_unbound_account, read_self_account_viewer,
 };
 
 fn required_env(name: &str) -> String {
@@ -333,6 +333,48 @@ async fn the_canonical_chain_founds_a_principal_end_to_end() {
         grant.get("device_id").and_then(|v| v.as_str()),
         Some(device_id.as_str()),
         "initial grant bound to a different device: {grant}"
+    );
+
+    // Everything above reads the register response. This presents the grant
+    // back to the Station, which is the only assertion here that would fail if
+    // the chain produced a well-formed but unusable grant.
+    let read = read_self_account_viewer(
+        &http,
+        &endpoints.soland_base_url,
+        grant
+            .get("session_grant")
+            .and_then(|v| v.as_str())
+            .expect("checked above"),
+        &handoff.device_key,
+    )
+    .await
+    .expect("read the founded principal's own account view");
+    assert_eq!(
+        read.status, 200,
+        "the Station refused the grant it had just issued: {}",
+        read.body
+    );
+    // The Station answers about the principal this chain founded, not about
+    // whoever else the session happens to know.
+    assert_eq!(
+        read.body.get("principal_id"),
+        account_id.get("principal_id"),
+        "account viewer named a different principal: {}",
+        read.body
+    );
+    // The founding device is on the account. A grant that authenticated but
+    // whose device never landed would still read, and the next DPoP-bound call
+    // would be the one to fail.
+    let devices = read
+        .body
+        .get("devices")
+        .and_then(|v| v.as_array())
+        .unwrap_or_else(|| panic!("account viewer carried no devices: {}", read.body));
+    assert!(
+        devices.iter().any(|device| {
+            device.get("device_id").and_then(|v| v.as_str()) == Some(device_id.as_str())
+        }),
+        "the founding device is not on the account: {devices:?}"
     );
 }
 
