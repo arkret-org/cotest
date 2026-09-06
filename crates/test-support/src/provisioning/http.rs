@@ -38,6 +38,18 @@ pub async fn get_arkret_json(
     read_json(response, url).await
 }
 
+/// GET a non-Arkret endpoint — Coauth's product API, OIDC discovery, the mocks.
+///
+/// No operation selector: these are not protocol surfaces.
+pub async fn get_plain_json(http: &reqwest::Client, url: &str) -> Result<Value> {
+    let response = http
+        .get(url)
+        .send()
+        .await
+        .with_context(|| format!("GET {url}"))?;
+    read_json(response, url).await
+}
+
 async fn read_json(response: reqwest::Response, url: &str) -> Result<Value> {
     let status = response.status();
     let body = response

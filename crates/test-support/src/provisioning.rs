@@ -23,10 +23,12 @@
 //! a test suite ends up asserting against a principal it did not really create.
 
 pub mod coauth_account;
+pub mod gate;
 mod http;
 
 use anyhow::{Context, Result};
 pub use coauth_account::{MockEmailInbox, UnboundAccount};
+pub use gate::{OidcAuthorization, authorize_with_current_account};
 use serde_json::Value;
 
 /// Where the services under test are, and what the caller is allowed to assume

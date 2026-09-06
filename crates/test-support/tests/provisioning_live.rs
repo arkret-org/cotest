@@ -13,8 +13,8 @@
 //! no check, because the suite still reports a pass.
 
 use cotest_test_support::provisioning::{
-    DeploymentEndpoints, MockEmailInbox, UnboundAccount, describe_station,
-    provision_unbound_account,
+    DeploymentEndpoints, MockEmailInbox, UnboundAccount, authorize_with_current_account,
+    describe_station, provision_unbound_account,
 };
 
 fn required_env(name: &str) -> String {
@@ -41,7 +41,14 @@ fn http_client() -> reqwest::Client {
         .unwrap_or_else(|error| panic!("parse run-scoped CA {ca_pem}: {error}"));
     reqwest::Client::builder()
         .add_root_certificate(certificate)
+        // Coauth carries the authenticated account session in a cookie, and the
+        // gate handoff authorizes against it.
         .cookie_store(true)
+        // Redirects are not followed on purpose. The authorize step answers 302
+        // into the approval page and the grant id is in its `Location`; a client
+        // that follows it loses the one value that step produces, and does so
+        // silently.
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .expect("build HTTP client")
 }
@@ -109,5 +116,49 @@ async fn an_unbound_account_registers_and_authenticates() {
     assert!(
         repeated.is_err(),
         "Coauth accepted a second registration for the same handle"
+    );
+}
+
+#[tokio::test]
+#[ignore = "requires a running Coauth and Soland; see the module docs"]
+async fn an_authenticated_account_completes_the_authorization_code_flow() {
+    let http = http_client();
+    let endpoints = endpoints();
+    let client_id = required_env("COTEST_OIDC_CLIENT_ID");
+    let slug = format!(
+        "rust-oauth-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock before epoch")
+            .as_nanos()
+    );
+    let account = UnboundAccount {
+        email: format!("{slug}@example.test"),
+        display_name: format!("Rust OAuth {slug}"),
+        handle: slug,
+        password: "1amTester!".to_owned(),
+    };
+    provision_unbound_account(&http, &endpoints, &account)
+        .await
+        .expect("register and authenticate an unbound Coauth account");
+
+    let authorization =
+        authorize_with_current_account(&http, &endpoints.coauth_base_url, &client_id)
+            .await
+            .expect("complete the authorization-code flow as the logged-in account");
+
+    assert!(
+        !authorization.authorization_code.trim().is_empty(),
+        "authorization returned an empty code"
+    );
+    assert_eq!(
+        authorization.client_id, client_id,
+        "authorization came back for a different client"
+    );
+    // PKCE is only meaningful if the verifier is not the challenge; a flow that
+    // sent the verifier straight through would still return a code.
+    assert_ne!(
+        authorization.code_verifier, authorization.state,
+        "code_verifier and state must not be the same value"
     );
 }
