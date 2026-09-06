@@ -3334,7 +3334,7 @@ try {
             $cotestManifest = Join-Path $repoRoot "Cargo.toml"
             $service = Start-ManagedCommand `
                 -Name "prepare-cotest-wire" `
-                -Command ("cargo build --manifest-path {0} -p cotest-test-support --bin cotest-wire" -f (Quote-PsLiteral $cotestManifest)) `
+                -Command ("cargo build --manifest-path {0} -p cotest-test-support --bin cotest-wire --bin cotest-provision" -f (Quote-PsLiteral $cotestManifest)) `
                 -WorkingDirectory $repoRoot `
                 -LogDirectory $serviceLogDir
             $preparationTasks.Add([pscustomobject]@{ Name = "cotest-wire"; Service = $service; Started = $started; Artifact = $cotestWireBinary; AllowUnchangedArtifact = $true; RepositoryRoots = @($repoRoot, (Join-Path $workspaceRoot "arkret-rust-sdk")) })
@@ -4443,6 +4443,17 @@ try {
     $inksonService = $null
     $inksonServer2Service = $null
     $generatedInksonServer2Command = $false
+    # Absolute path to the provisioning bridge, so callers exec it instead of
+    # paying Cargo discovery and the build-directory lock. It is a long-lived
+    # process — the TypeScript side spawns one per Playwright worker — which
+    # makes `cargo run` per invocation worse here than it was for cotest-wire.
+    $provisionBinary = Join-Path $cotestTargetDirectory "debug\cotest-provision.exe"
+    if (Test-Path -LiteralPath $provisionBinary) {
+        $env:COTEST_PROVISION_BIN = $provisionBinary
+    } else {
+        Remove-Item Env:COTEST_PROVISION_BIN -ErrorAction SilentlyContinue
+    }
+
     if ($requiresInkson -and -not $InksonCommand -and $inksonPort) {
         $InksonCommand = "node {0} {1} {2} 127.0.0.1" -f `
             (Quote-PsLiteral (Join-Path $e2eRoot "scripts\serve-static.mjs")),
