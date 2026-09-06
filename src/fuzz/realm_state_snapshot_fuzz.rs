@@ -5,8 +5,8 @@
 //! asserts the typed deserializers never panic on adversarial inputs.
 //!
 //! Two entry points:
-//!   - [`fuzz_snapshot_manifest`] — drives the manifest envelope.
-//!   - [`fuzz_snapshot_chunk_header`] — drives the per-chunk header.
+//!   - [`fuzz_realm_state_snapshot_manifest`] — drives the manifest envelope.
+//!   - [`fuzz_realm_state_snapshot_chunk_header`] — drives the per-chunk header.
 //!
 //! Both use the same panic-catch pattern as `envelope_fuzz` so a fuzz
 //! finding surfaces as `Err(message)` rather than aborting the harness.
@@ -28,8 +28,8 @@ fn registry() -> arkret_schema::ProtocolSchemaRegistry {
 /// names mirror the canonical envelope so the schema validator sees a
 /// realistic structural shape, while values are random.
 #[derive(Debug, Arbitrary)]
-pub struct FuzzSnapshotManifestInput {
-    pub snapshot_id: String,
+pub struct FuzzRealmStateSnapshotManifestInput {
+    pub realm_state_snapshot_id: String,
     pub realm_id: String,
     pub root_anchor_ref: String,
     pub chunk_count: u32,
@@ -42,10 +42,10 @@ pub struct FuzzSnapshotManifestInput {
     pub predecessor_ref: String,
 }
 
-impl FuzzSnapshotManifestInput {
+impl FuzzRealmStateSnapshotManifestInput {
     fn to_json(&self) -> Value {
         let mut envelope = json!({
-            "snapshot_id": self.snapshot_id,
+            "realm_state_snapshot_id": self.realm_state_snapshot_id,
             "realm_id": self.realm_id,
             "root_anchor_ref": self.root_anchor_ref,
             "chunk_count": self.chunk_count,
@@ -64,17 +64,17 @@ impl FuzzSnapshotManifestInput {
 }
 
 /// Fuzz the snapshot manifest envelope.
-pub fn fuzz_snapshot_manifest(data: &[u8]) -> Result<(), String> {
+pub fn fuzz_realm_state_snapshot_manifest(data: &[u8]) -> Result<(), String> {
     catch(|| {
         let _ = serde_json::from_slice::<Value>(data);
     })?;
     let mut unstructured = Unstructured::new(data);
-    let Ok(input) = FuzzSnapshotManifestInput::arbitrary(&mut unstructured) else {
+    let Ok(input) = FuzzRealmStateSnapshotManifestInput::arbitrary(&mut unstructured) else {
         return Ok(());
     };
     let value = input.to_json();
     catch(|| {
-        let _ = registry().validate_value(SchemaId::SNAPSHOT_V1, &value);
+        let _ = registry().validate_value(SchemaId::REALM_STATE_SNAPSHOT_V1, &value);
     })?;
     catch(|| {
         let _ = serde_json::to_string(&value);
@@ -85,7 +85,7 @@ pub fn fuzz_snapshot_manifest(data: &[u8]) -> Result<(), String> {
 /// `bytes` field is intentionally a base64-url string so the harness
 /// can also exercise the decoder edge cases.
 #[derive(Debug, Arbitrary)]
-pub struct FuzzSnapshotChunkHeaderInput {
+pub struct FuzzRealmStateSnapshotChunkHeaderInput {
     pub chunk_id: u32,
     pub digest_algorithm: String,
     pub digest_value: String,
@@ -94,7 +94,7 @@ pub struct FuzzSnapshotChunkHeaderInput {
     pub compression: String,
 }
 
-impl FuzzSnapshotChunkHeaderInput {
+impl FuzzRealmStateSnapshotChunkHeaderInput {
     fn to_json(&self) -> Value {
         let mut header = json!({
             "chunk_id": self.chunk_id,
@@ -109,20 +109,20 @@ impl FuzzSnapshotChunkHeaderInput {
 }
 
 /// Fuzz the chunk header.
-pub fn fuzz_snapshot_chunk_header(data: &[u8]) -> Result<(), String> {
+pub fn fuzz_realm_state_snapshot_chunk_header(data: &[u8]) -> Result<(), String> {
     catch(|| {
-        let _ = serde_json::from_slice::<arkret_state::SnapshotChunk>(data);
+        let _ = serde_json::from_slice::<arkret_state::RealmStateSnapshotChunk>(data);
     })?;
     let mut unstructured = Unstructured::new(data);
-    let Ok(input) = FuzzSnapshotChunkHeaderInput::arbitrary(&mut unstructured) else {
+    let Ok(input) = FuzzRealmStateSnapshotChunkHeaderInput::arbitrary(&mut unstructured) else {
         return Ok(());
     };
     let value = input.to_json();
     catch(|| {
-        let _ = registry().validate_value(SchemaId::SNAPSHOT_V1, &value);
+        let _ = registry().validate_value(SchemaId::REALM_STATE_SNAPSHOT_V1, &value);
     })?;
     catch(|| {
-        let _ = serde_json::from_value::<arkret_state::SnapshotChunk>(value.clone());
+        let _ = serde_json::from_value::<arkret_state::RealmStateSnapshotChunk>(value.clone());
     })
 }
 
@@ -134,19 +134,19 @@ mod tests {
     /// harness. The validator returns `Ok` or typed `Err` — never a panic.
     #[test]
     fn empty_input_does_not_panic_manifest() {
-        let _ = fuzz_snapshot_manifest(&[]);
+        let _ = fuzz_realm_state_snapshot_manifest(&[]);
     }
 
     #[test]
     fn empty_input_does_not_panic_chunk_header() {
-        let _ = fuzz_snapshot_chunk_header(&[]);
+        let _ = fuzz_realm_state_snapshot_chunk_header(&[]);
     }
 
     /// Pseudo-random byte string at typical libFuzzer corpus size (4 KiB).
     #[test]
     fn four_kib_random_does_not_panic() {
         let data: Vec<u8> = (0..4096).map(|i| (i * 31 + 7) as u8).collect();
-        let _ = fuzz_snapshot_manifest(&data);
-        let _ = fuzz_snapshot_chunk_header(&data);
+        let _ = fuzz_realm_state_snapshot_manifest(&data);
+        let _ = fuzz_realm_state_snapshot_chunk_header(&data);
     }
 }

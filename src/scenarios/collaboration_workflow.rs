@@ -223,16 +223,21 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
 
     let snapshot = expect_json(
         alice
-            .get("/_arkret/self/snapshot/head")
+            .get("/_arkret/self/realm-state-snapshot/head")
             .query(&[("realm_id", realm_id.as_str())]),
         StatusCode::OK,
     )
     .await?;
     // Spec rename: the snapshot manifest's own identifier field is `id`
-    // (`snapshot_ref` is only used at external reference positions).
-    assert!(snapshot["id"].as_str().unwrap().starts_with("ak:snapshot:"));
-    // `ak.self.snapshot.read.manifest_head.v1` returns the full signed
-    // `ak.schema.snapshot.v1` manifest whose frontier is
+    // (`realm_state_snapshot_ref` is only used at external reference positions).
+    assert!(
+        snapshot["id"]
+            .as_str()
+            .unwrap()
+            .starts_with("ak:realm_state_snapshot:")
+    );
+    // `ak.self.realm_state_snapshot.read.manifest_head.v1` returns the full signed
+    // `ak.schema.realm_state_snapshot.v1` manifest whose frontier is
     // {event_ids, timeline_hlc}.
     assert!(
         snapshot["frontier"]["event_ids"]

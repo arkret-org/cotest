@@ -17,7 +17,7 @@ const REQUIRED_OPERATIONS: &[&str] = &[
     "ak.self.account.stream.subscribe.v1",
     "ak.self.events.stream.subscribe.v1",
     "ak.self.events.read.scan.v1",
-    "ak.self.snapshot.read.manifest_head.v1",
+    "ak.self.realm_state_snapshot.read.manifest_head.v1",
     "ak.self.authz.read.check.v1",
 ];
 
@@ -32,7 +32,7 @@ const REQUIRED_EVENT_KINDS: &[&str] = &[
 
 const REQUIRED_SCHEMAS: &[&str] = &[
     "ak.schema.account_subscribe_frame.v1",
-    "ak.schema.snapshot.v1",
+    "ak.schema.realm_state_snapshot.v1",
     "ak.schema.capability.v1",
     "ak.schema.grant_constraint.v1",
 ];

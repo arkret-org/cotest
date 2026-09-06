@@ -363,7 +363,7 @@ struct SidecarAcceptedRecord {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct SidecarStateSnapshot {
+struct SidecarRealmStateSnapshotState {
     durable: SidecarDurableState,
     idempotency_records: usize,
     reservations: usize,
@@ -417,8 +417,8 @@ impl SidecarExecutableModel {
         Ok(model)
     }
 
-    fn snapshot(&self) -> SidecarStateSnapshot {
-        SidecarStateSnapshot {
+    fn snapshot(&self) -> SidecarRealmStateSnapshotState {
+        SidecarRealmStateSnapshotState {
             durable: self.durable.clone(),
             idempotency_records: self.idempotency.len(),
             reservations: self.reservations.len(),

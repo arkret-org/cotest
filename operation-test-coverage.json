@@ -25663,8 +25663,8 @@
       }
     },
     {
-      "operation_id": "ak.self.snapshot.read.manifest_head.v1",
-      "http": "GET /_arkret/self/snapshot/head",
+      "operation_id": "ak.self.realm_state_snapshot.read.manifest_head.v1",
+      "http": "GET /_arkret/self/realm-state-snapshot/head",
       "test_layer": "soland_unit",
       "responsibilities": {
         "protocol_kat": [
@@ -25681,7 +25681,7 @@
             "input_sha256": "e5bf4126041a4cf9fa3ab4e38a50b619b80ee2519812c68e33241382e07f9a33",
             "assertion_sha256": null,
             "input_preview": [
-              "ak.self.snapshot.read.manifest_head.v1"
+              "ak.self.realm_state_snapshot.read.manifest_head.v1"
             ],
             "assertion_preview": []
           },
@@ -25698,7 +25698,7 @@
             "input_sha256": "afd7e1560d79b594b7665fd53782ef81dea5fba01c30614899bb60084b35191f",
             "assertion_sha256": null,
             "input_preview": [
-              "\"reason\": \"ak.self.snapshot.read.manifest_head.v1 returns a signed ak.schema.snapshot.v1 manifest; the /_soland dev bundle is development-only diagnostics\""
+              "\"reason\": \"ak.self.realm_state_snapshot.read.manifest_head.v1 returns a signed ak.schema.realm_state_snapshot.v1 manifest; the /_soland dev bundle is development-only diagnostics\""
             ],
             "assertion_preview": []
           }
@@ -25711,8 +25711,8 @@
       }
     },
     {
-      "operation_id": "ak.self.snapshot.read.manifest_head.v1",
-      "http": "GET /_arkret/self/snapshot/head",
+      "operation_id": "ak.self.realm_state_snapshot.read.manifest_head.v1",
+      "http": "GET /_arkret/self/realm-state-snapshot/head",
       "test_layer": "soland_http",
       "responsibilities": {
         "protocol_kat": [],
@@ -25724,8 +25724,8 @@
       }
     },
     {
-      "operation_id": "ak.self.snapshot.read.manifest_head.v1",
-      "http": "GET /_arkret/self/snapshot/head",
+      "operation_id": "ak.self.realm_state_snapshot.read.manifest_head.v1",
+      "http": "GET /_arkret/self/realm-state-snapshot/head",
       "test_layer": "cotest_rust",
       "responsibilities": {
         "protocol_kat": [
@@ -25742,7 +25742,7 @@
             "input_sha256": "ad5d7d483b91c511fbb09e8745d06dd0b8935ffa5458408d6c3b779e0c1f1eff",
             "assertion_sha256": null,
             "input_preview": [
-              "\"ak.self.snapshot.read.manifest_head.v1\","
+              "\"ak.self.realm_state_snapshot.read.manifest_head.v1\","
             ],
             "assertion_preview": []
           },
@@ -25759,7 +25759,7 @@
             "input_sha256": "e5bf4126041a4cf9fa3ab4e38a50b619b80ee2519812c68e33241382e07f9a33",
             "assertion_sha256": null,
             "input_preview": [
-              "ak.self.snapshot.read.manifest_head.v1"
+              "ak.self.realm_state_snapshot.read.manifest_head.v1"
             ],
             "assertion_preview": []
           }
@@ -25772,8 +25772,8 @@
       }
     },
     {
-      "operation_id": "ak.self.snapshot.read.manifest_head.v1",
-      "http": "GET /_arkret/self/snapshot/head",
+      "operation_id": "ak.self.realm_state_snapshot.read.manifest_head.v1",
+      "http": "GET /_arkret/self/realm-state-snapshot/head",
       "test_layer": "cotest_e2e",
       "responsibilities": {
         "protocol_kat": [],
@@ -25785,8 +25785,8 @@
       }
     },
     {
-      "operation_id": "ak.self.snapshot.read.manifest_head.v1",
-      "http": "GET /_arkret/self/snapshot/head",
+      "operation_id": "ak.self.realm_state_snapshot.read.manifest_head.v1",
+      "http": "GET /_arkret/self/realm-state-snapshot/head",
       "test_layer": "inkson_e2e",
       "responsibilities": {
         "protocol_kat": [],
@@ -25806,7 +25806,7 @@
             "input_sha256": "e5bf4126041a4cf9fa3ab4e38a50b619b80ee2519812c68e33241382e07f9a33",
             "assertion_sha256": null,
             "input_preview": [
-              "ak.self.snapshot.read.manifest_head.v1"
+              "ak.self.realm_state_snapshot.read.manifest_head.v1"
             ],
             "assertion_preview": []
           }

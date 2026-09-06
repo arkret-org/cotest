@@ -12,7 +12,7 @@
 use std::collections::BTreeMap;
 
 use cotest::fuzz::envelope_fuzz::{
-    fuzz_event_envelope, fuzz_seal_envelope, fuzz_signal_envelope, fuzz_snapshot_chunk,
+    fuzz_event_envelope, fuzz_realm_state_snapshot_chunk, fuzz_seal_envelope, fuzz_signal_envelope,
 };
 
 /// Deterministic-but-mixing PRNG: a 64-bit xorshift seeded from
@@ -58,7 +58,11 @@ fn fuzz_envelope_smoke() {
     run_fuzz_loop("event_envelope", fuzz_event_envelope, &mut findings);
     run_fuzz_loop("signal_envelope", fuzz_signal_envelope, &mut findings);
     run_fuzz_loop("seal_envelope", fuzz_seal_envelope, &mut findings);
-    run_fuzz_loop("snapshot_chunk", fuzz_snapshot_chunk, &mut findings);
+    run_fuzz_loop(
+        "realm_state_snapshot_chunk",
+        fuzz_realm_state_snapshot_chunk,
+        &mut findings,
+    );
 
     if !findings.is_empty() {
         // Build a single readable failure report. Each finding is a real

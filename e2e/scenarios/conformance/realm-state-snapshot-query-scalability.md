@@ -2,14 +2,14 @@
 
 ## 目标
 
-通过 soland 公开的 conformance 端点,执行 spec `conformance/snapshot-schema.md`、`conformance/query-schema.md` 与 `conformance/scalability-constraints.md` 对应的 conformance vector,逐项验证 snapshot manifest 的 chunk/hash/signature 形状、query 的 filter/sort/pagination 行为以及 scale/limit 的 fail-closed 阈值,确保 soland 的实现与 spec fixture 在 byte/digest/枚举值/HTTP 状态码层面完全一致。
+通过 soland 公开的 conformance 端点,执行 spec `conformance/realm-state-realm-state-snapshot-schema.md`、`conformance/query-schema.md` 与 `conformance/scalability-constraints.md` 对应的 conformance vector,逐项验证 snapshot manifest 的 chunk/hash/signature 形状、query 的 filter/sort/pagination 行为以及 scale/limit 的 fail-closed 阈值,确保 soland 的实现与 spec fixture 在 byte/digest/枚举值/HTTP 状态码层面完全一致。
 
 不验证:encoding & crypto / redaction(见 `conformance/encoding-vectors`)、registry drift(见 `conformance/registry-drift`)、profile claim 真实性(见 `conformance/profile-gates`)、state resolution(见 `sync/state-resolution-vectors`)、capability 向量(见 `authz/capability-vectors`)、sync pagination 通用向量(见 `sync/sync-vectors`)。本 scenario 与 `conformance/encoding-vectors` 是兄弟关系:同一组 vector loader 模式、同一 HTTP-over-fixture 思路,但覆盖的是 snapshot / query / scalability 三个分支。
 
 ## Spec 锚点
 
-- `arkret-spec/spec/v1/zh/conformance/snapshot-schema.md`
-  - §2 — Snapshot manifest 字段集(id / realm_id / reducer_profile / frontier / event_set_commitment / state_digest / chunks[] / verification_hints / signature;`snapshot_ref` 仅用于外部引用位)
+- `arkret-spec/spec/v1/zh/conformance/realm-state-realm-state-snapshot-schema.md`
+  - §2 — Snapshot manifest 字段集(id / realm_id / reducer_profile / frontier / event_set_commitment / state_digest / chunks[] / verification_hints / signature;`realm_state_snapshot_ref` 仅用于外部引用位)
   - §3 — Chunk descriptor 与 chunk payload canonical shape;`items` 按 `(kind, id)` byte order 排序
   - §4 — `state_digest` = canonical reducer 输出之上的 Merkle root;leaf = `sha256(kind || ":" || id || ":" || sha256(canonical_json(object)))`
   - §5 — Snapshot signature 必须覆盖 manifest payload(去掉 `signature` 自身)的 canonical 编码;签名 DID 必须属于 Realm owner / admin / trusted issuer / witness quorum / policy-approved issuer
@@ -31,7 +31,7 @@
   - §7 — Retention / snapshot pruning / tombstone 上限
   - §8 — 错误语义(MUST reject vs SHOULD soft_fail / quarantine,不得静默截断)
 - `arkret-spec/spec/v1/zh/conformance/conformance-vectors.md` — vector loader pattern(同一目录 `spec/v1/artifacts/fixtures/<vector_id>.json`,`expected_*` 字段命名约定,失败时报告 actual / expected diff)
-- 关联 artifact: `arkret-spec/spec/v1/artifacts/fixtures/ak.vector.snapshot.*.json`、`ak.vector.query.*.json`、`ak.vector.scalability.*.json`(目前尚未提交,见 Implementation notes 的 fixture absence fallback)
+- 关联 artifact: `arkret-spec/spec/v1/artifacts/fixtures/ak.vector.realm_state_snapshot.*.json`、`ak.vector.query.*.json`、`ak.vector.scalability.*.json`(目前尚未提交,见 Implementation notes 的 fixture absence fallback)
 - 关联实现:soland snapshot/query 模块、`/_arkret/_conformance/{snapshot,query}` 端点(目前未实现,见 Implementation notes)
 
 ## 拓扑
@@ -62,10 +62,10 @@
 
 ### Phase A — Snapshot manifest integrity (snapshot-schema §2 / §3 / §4)
 
-1. **harness** 加载 `ak.vector.snapshot.manifest_integrity.v1` (若存在);vector 形如:
+1. **harness** 加载 `ak.vector.realm_state_snapshot.manifest_integrity.v1` (若存在);vector 形如:
    ```json
    {
-     "vector_id": "ak.vector.snapshot.manifest_integrity.v1",
+     "vector_id": "ak.vector.realm_state_snapshot.manifest_integrity.v1",
      "protocol_version": "1.0",
      "input": { "manifest": { ... }, "chunks": [ { "chunk_ref": ..., "payload": { ... } } ] },
      "expected_manifest_digest": "sha256:...",
@@ -80,18 +80,18 @@
    - `response.chunk_hashes.length === expected_chunk_count`
    - `response.chunk_hashes` 与 `expected_chunk_hashes` 顺序一致、字节相等
    - 若 vector 提供 `expected_state_digest`,断言 `response.state_digest === expected_state_digest`(覆盖 §4 reducer-output Merkle root)
-4. 故意篡改一条 chunk payload(改一个 byte)再 POST → 端点 MUST 返回 4xx 与 `error.code === "snapshot_chunk_digest_mismatch"`,不静默接受
+4. 故意篡改一条 chunk payload(改一个 byte)再 POST → 端点 MUST 返回 4xx 与 `error.code === "realm_state_snapshot_chunk_digest_mismatch"`,不静默接受
 
 ### Phase B — Snapshot signature binding (snapshot-schema §5)
 
-5. **harness** 加载 `ak.vector.snapshot.signature_ed25519.v1`(deterministic Ed25519 vector)
+5. **harness** 加载 `ak.vector.realm_state_snapshot.signature_ed25519.v1`(deterministic Ed25519 vector)
 6. `POST /_arkret/_conformance/snapshot` with `{ vector_id, manifest, chunks }`(manifest 内含 `signature` 字段)
 7. 断言:
    - `response.signature_valid === true`
    - `response.signer_did === vector.expected_signer_did`(spec §5 列出的 5 类签名者之一:Realm owner / creator / admin / trusted snapshot issuer / witness quorum)
    - 签名 transcript 覆盖范围(id / realm_id / reducer_profile / schema_profile_refs / state_digest / frontier / event_set_commitment / chunks descriptor / verification_hints / created_by / created_at)与 vector 声明一致 — 端点应返回 `signed_transcript_fields[]` 或等价信号,断言它与 spec §5 列表逐项相等
 8. 同一 manifest 再 POST 一次:`response.signature` 字段(若回显)对 Ed25519 vector MUST 完全相等(deterministic);ECDSA vector 若存在则 `r/s` 可不同但 `signature_valid` 仍为 true
-9. 把 vector `signer_did` 替换为已撤销的 DID(vector `expected_signer_did_revoked` 字段) → 端点 MUST 返回 4xx，`error.code` 是登记的顶层 code（`capability_denied`），`reason_code === "snapshot_issuer_revoked"`(snapshot-schema §5 最大接受窗口规则)
+9. 把 vector `signer_did` 替换为已撤销的 DID(vector `expected_signer_did_revoked` 字段) → 端点 MUST 返回 4xx，`error.code` 是登记的顶层 code（`capability_denied`），`reason_code === "realm_state_snapshot_issuer_revoked"`(snapshot-schema §5 最大接受窗口规则)
 
 ### Phase C — Query filters / sort / pagination (query-schema §2 / §3 / §6 / §8)
 
@@ -166,8 +166,8 @@
 
 ## Observable assertions (合并清单)
 
-- Phase A:`manifest_digest` 字符串相等、`chunk_hashes` 顺序与字节相等、可选 `state_digest` 相等;篡改 chunk 后 4xx + `snapshot_chunk_digest_mismatch`
-- Phase B:`signature_valid === true`、`signer_did` 在 §5 五类合法签名者之一、Ed25519 deterministic 再签结果稳定、revoked signer 4xx + `snapshot_issuer_revoked`
+- Phase A:`manifest_digest` 字符串相等、`chunk_hashes` 顺序与字节相等、可选 `state_digest` 相等;篡改 chunk 后 4xx + `realm_state_snapshot_chunk_digest_mismatch`
+- Phase B:`signature_valid === true`、`signer_did` 在 §5 五类合法签名者之一、Ed25519 deterministic 再签结果稳定、revoked signer 4xx + `realm_state_snapshot_issuer_revoked`
 - Phase C:filter / sort 后行顺序与 `expected_rows_page_*` 顺序相等;`has_more` 与 expected 相同;`next_cursor` 非空且 opaque;同一 cursor 重发结果 byte-equal
 - Phase D:unknown filter op / conflicting sort / unauthorized projection 一律 4xx + `query_schema_violation`,响应不含 `items`
 - Phase E:超 page_size / 超 batch / 超 depth / 超 envelope 一律 4xx + `scalability_limit_exceeded` 或 `payload_too_large`,不静默截断
@@ -176,7 +176,7 @@
 
 ## Edge cases / sub-tests
 
-- **E1 unknown vector_id** / **E2 vector version skew**:`ak.vector.snapshot.bogus.v1` 与 `protocol_version="0.9"` 的旧 vector → MUST 4xx + `unknown_vector_id` / `unsupported_vector_version`,不静默走默认 canonicalizer
+- **E1 unknown vector_id** / **E2 vector version skew**:`ak.vector.realm_state_snapshot.bogus.v1` 与 `protocol_version="0.9"` 的旧 vector → MUST 4xx + `unknown_vector_id` / `unsupported_vector_version`,不静默走默认 canonicalizer
 - **E3 cursor cross-query reuse**:把 Phase C 的 cursor_A 放到不同 query body 再 POST → MUST 4xx + `cursor_query_mismatch`(cursor 绑定到具体 query 形状)
 - **E4 snapshot 跨服务器一致性**（multi-server only）：同一 snapshot vector POST 给 server1 与 server2，两边 `manifest_digest` / `chunk_hashes` MUST byte-equal；`hasServerCount(2)` 为 false 时 skip
 - **E5 large snapshot streaming**:chunk 总和 > 100 MiB 时端点必须分段验证不 OOM — 建议拆为 `conformance/snapshot-query-scalability.large-payload` 独立 spec,保持主 scenario 紧凑
@@ -187,8 +187,8 @@
 - **fixture 缺失 fallback**:目前 `arkret-spec/spec/v1/artifacts/fixtures/` 中**没有任何** `ak.vector.{snapshot,query,scalability}.*` 文件。Phase F 的 loader smoke 必须优雅降级:`readdirSync` 后命中数可以是 0,assertion 写成 `expect(count).toBeGreaterThanOrEqual(0)`(always-pass);candidate 清单与 count 用 `console.log` + `testInfo.attach` 输出,使得 (1) fixture 尚未提交时测试不红;(2) fixture 提交后日志里立刻能看到 vector 总数变化;(3) spec 作者新增 vector 时不需要改 harness。
 - **fixture loader 实现**:用 `fileURLToPath(import.meta.url)` + `dirname` + `path.resolve(..., "..", "..", "..", "..", "arkret-spec", "spec", "v1", "artifacts", "fixtures")` 从 spec 文件位置走到 fixtures 目录。**不**新增 `helpers/conformance-fixtures.ts`;loader 写在 spec 文件顶部(与 encoding-vectors 风格一致)。
 - **signing key 注入**:Phase B 验证 signature 时 vector 自带 `signer_did` + `public_key_jwk`,不依赖 alice 的 dev key — snapshot 签名者通常是服务自己或 trusted issuer,不是 actor。Phase C 的 query authz filter 才用 alice 的 session token。
-- **vector id 命名**(参考 encoding-vectors §1.2):`ak.vector.snapshot.<scenario>.v1` / `ak.vector.query.<scenario>.v1` / `ak.vector.scalability.<scenario>.v1`,具体 scenario 名见各 Phase 步骤。
-- **error codes**（`snapshot_issuer_revoked` 是 `reason_codes[]` 成员，出现在 `reason_code` 而不是顶层 `error.code`）:`snapshot_chunk_digest_mismatch`、`snapshot_issuer_revoked`、`query_schema_violation`、`scalability_limit_exceeded`、`payload_too_large`、`unknown_vector_id`、`unsupported_vector_version`、`cursor_query_mismatch` — 在 `arkret-spec/spec/v1/artifacts/registry/error-code-registry.json` 中应有对应条目(缺失属于 spec/registry 缺口,不属于 cotest 缺口)。
+- **vector id 命名**(参考 encoding-vectors §1.2):`ak.vector.realm_state_snapshot.<scenario>.v1` / `ak.vector.query.<scenario>.v1` / `ak.vector.scalability.<scenario>.v1`,具体 scenario 名见各 Phase 步骤。
+- **error codes**（`realm_state_snapshot_issuer_revoked` 是 `reason_codes[]` 成员，出现在 `reason_code` 而不是顶层 `error.code`）:`realm_state_snapshot_chunk_digest_mismatch`、`realm_state_snapshot_issuer_revoked`、`query_schema_violation`、`scalability_limit_exceeded`、`payload_too_large`、`unknown_vector_id`、`unsupported_vector_version`、`cursor_query_mismatch` — 在 `arkret-spec/spec/v1/artifacts/registry/error-code-registry.json` 中应有对应条目(缺失属于 spec/registry 缺口,不属于 cotest 缺口)。
 - **no new helper**:用现有 `request` fixture + `ensureRegistered` / `issueDevSession`;所有 loader / assertion 写在 spec 文件局部。
 
 ## 总耗时预估

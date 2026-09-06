@@ -7,7 +7,7 @@
 //! anything that still aborts the process.
 #![no_main]
 
-use cotest::fuzz::snapshot_fuzz::{fuzz_snapshot_chunk_header, fuzz_snapshot_manifest};
+use cotest::fuzz::realm_state_snapshot_fuzz::{fuzz_realm_state_snapshot_chunk_header, fuzz_realm_state_snapshot_manifest};
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &[u8]| {
@@ -16,8 +16,8 @@ fuzz_target!(|data: &[u8]| {
     }
     let (selector, payload) = data.split_first().expect("non-empty checked above");
     let _ = if selector & 1 == 0 {
-        fuzz_snapshot_manifest(payload)
+        fuzz_realm_state_snapshot_manifest(payload)
     } else {
-        fuzz_snapshot_chunk_header(payload)
+        fuzz_realm_state_snapshot_chunk_header(payload)
     };
 });

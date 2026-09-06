@@ -1,13 +1,13 @@
-//! `ak.vector.snapshot.witness_quorum_attestation.v1` — the typed snapshot
-//! witness-attestation family (`conformance/snapshot-schema.md` §5.1,
+//! `ak.vector.realm_state_snapshot.witness_quorum_attestation.v1` — the typed snapshot
+//! witness-attestation family (`conformance/realm-state-realm-state-snapshot-schema.md` §5.1,
 //! `sync-fixture.json` block `snapshot_witness_quorum`).
 //!
 //! A witness attestation is its own object family, not a bare proof appended to
-//! the manifest. It is signed under `ak.snapshot_witness_attestation_proof.v1`
+//! the manifest. It is signed under `ak.realm_state_snapshot_witness_attestation_proof.v1`
 //! over the signature-free canonical projection, so:
 //!
-//!  - reusing the manifest's `ak.snapshot_proof.v1` context yields a different transcript digest
-//!    and MUST be rejected even when the JWS itself verifies;
+//!  - reusing the manifest's `ak.realm_state_snapshot_proof.v1` context yields a different
+//!    transcript digest and MUST be rejected even when the JWS itself verifies;
 //!  - the projection may not contain `signature` or `witness_attestations`, otherwise a witness
 //!    would sign a transcript containing its own signature;
 //!  - quorum is counted per `witness_id` against the accepted Realm auth/policy state; the manifest
@@ -17,7 +17,7 @@
 //!
 //! Admission is driven in the order a receiver must apply it: the witness-list
 //! shape gate, then the issuer signature over the final list, then the quorum
-//! admission itself. Every step is the shared `arkret_state::snapshot` entry —
+//! admission itself. Every step is the shared `arkret_state::realm_state_snapshot` entry —
 //! `witness_attestation_projection` / `witness_attestation_digest` /
 //! `validate_witness_attestation_shape` / `verify_witness_attestations` — so a
 //! divergence here is a real divergence and not a test-local reimplementation.
@@ -25,10 +25,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Result, anyhow, bail};
-use arkret_state::snapshot::{
-    SNAPSHOT_WITNESS_ATTESTATION_PROOF_CONTEXT, SnapshotAuthorityKind, SnapshotManifest,
-    SnapshotValidationCode, SnapshotValidationError, SnapshotWitnessAttestation,
-    SnapshotWitnessQuorumPolicy,
+use arkret_state::realm_state_snapshot::{
+    REALM_STATE_SNAPSHOT_WITNESS_ATTESTATION_PROOF_CONTEXT, RealmStateSnapshotAuthorityKind,
+    RealmStateSnapshotManifest, RealmStateSnapshotValidationCode,
+    RealmStateSnapshotValidationError, RealmStateSnapshotWitnessAttestation,
+    RealmStateSnapshotWitnessQuorumPolicy,
 };
 use arkret_wire::{DidCoreId, Hash, ProofContextId};
 use chrono::{DateTime, Utc};
@@ -36,8 +37,8 @@ use serde_json::{Value, json};
 
 use super::{load_fixture_value, required_field, value_array, value_field_str};
 
-pub const VECTOR_ID_SNAPSHOT_WITNESS_QUORUM_ATTESTATION: &str =
-    "ak.vector.snapshot.witness_quorum_attestation.v1";
+pub const VECTOR_ID_REALM_STATE_SNAPSHOT_WITNESS_QUORUM_ATTESTATION: &str =
+    "ak.vector.realm_state_snapshot.witness_quorum_attestation.v1";
 
 /// The fixture case names, pinned so a spec-side rename or deletion is loud
 /// rather than silently reducing coverage.
@@ -68,10 +69,12 @@ const FORBIDDEN_PROJECTION_MEMBERS: &[&str] = &[
     "created_by",
 ];
 
-pub fn run_snapshot_witness_quorum_attestation_vector() -> Result<()> {
+pub fn run_realm_state_snapshot_witness_quorum_attestation_vector() -> Result<()> {
     let fixture = load_fixture_value("sync-fixture.json")?;
     let vector = required_field(&fixture, "snapshot_witness_quorum")?;
-    if value_field_str(vector, "vector_id")? != VECTOR_ID_SNAPSHOT_WITNESS_QUORUM_ATTESTATION {
+    if value_field_str(vector, "vector_id")?
+        != VECTOR_ID_REALM_STATE_SNAPSHOT_WITNESS_QUORUM_ATTESTATION
+    {
         bail!("sync fixture snapshot_witness_quorum block names another vector");
     }
     assert_registered_contexts(vector)?;
@@ -112,16 +115,16 @@ fn assert_registered_contexts(vector: &Value) -> Result<()> {
     if witness_context == manifest_context {
         bail!("the witness and manifest proof contexts collapsed into one value");
     }
-    if witness_context != ProofContextId::SNAPSHOT_WITNESS_ATTESTATION_PROOF_V1
-        || witness_context != SNAPSHOT_WITNESS_ATTESTATION_PROOF_CONTEXT
+    if witness_context != ProofContextId::REALM_STATE_SNAPSHOT_WITNESS_ATTESTATION_PROOF_V1
+        || witness_context != REALM_STATE_SNAPSHOT_WITNESS_ATTESTATION_PROOF_CONTEXT
     {
         bail!(
             "fixture witness context `{witness_context}` is not the registered `{}` the SDK \
              projection signs under",
-            ProofContextId::SNAPSHOT_WITNESS_ATTESTATION_PROOF_V1
+            ProofContextId::REALM_STATE_SNAPSHOT_WITNESS_ATTESTATION_PROOF_V1
         );
     }
-    if manifest_context != ProofContextId::SNAPSHOT_PROOF_V1 {
+    if manifest_context != ProofContextId::REALM_STATE_SNAPSHOT_PROOF_V1 {
         bail!("fixture manifest context `{manifest_context}` is not the registered snapshot proof");
     }
     Ok(())
@@ -129,7 +132,10 @@ fn assert_registered_contexts(vector: &Value) -> Result<()> {
 
 /// The canonical projection is exactly the fixture's `canonical_input`, its
 /// digest is the fixture golden, and it carries no signature-bearing member.
-fn assert_projection_and_digest(vector: &Value, manifest: &SnapshotManifest) -> Result<()> {
+fn assert_projection_and_digest(
+    vector: &Value,
+    manifest: &RealmStateSnapshotManifest,
+) -> Result<()> {
     let canonical_input = required_field(vector, "canonical_input")?;
     let witness_id = DidCoreId::new(value_field_str(canonical_input, "witness_id")?)?;
     let projection = manifest.witness_attestation_projection(&witness_id)?;
@@ -165,8 +171,8 @@ fn run_case(
     name: &str,
     case: &Value,
     vector: &Value,
-    manifest: &SnapshotManifest,
-    policy: &SnapshotWitnessQuorumPolicy,
+    manifest: &RealmStateSnapshotManifest,
+    policy: &RealmStateSnapshotWitnessQuorumPolicy,
 ) -> Result<()> {
     match name {
         "projection_must_not_contain_signature_fields" => {
@@ -289,19 +295,19 @@ fn run_case(
 /// issuer signature over the final list, then quorum admission against the
 /// accepted auth state.
 fn admit(
-    manifest: &SnapshotManifest,
-    policy: &SnapshotWitnessQuorumPolicy,
-) -> std::result::Result<(), SnapshotValidationError> {
+    manifest: &RealmStateSnapshotManifest,
+    policy: &RealmStateSnapshotWitnessQuorumPolicy,
+) -> std::result::Result<(), RealmStateSnapshotValidationError> {
     manifest.validate_witness_attestation_shape()?;
     let expected = manifest.expected_signature_digest().map_err(|error| {
-        SnapshotValidationError::new(
-            SnapshotValidationCode::DigestMismatch,
+        RealmStateSnapshotValidationError::new(
+            RealmStateSnapshotValidationCode::DigestMismatch,
             format!("snapshot manifest signing transcript could not be computed: {error}"),
         )
     })?;
     if manifest.signature.payload_digest != expected {
-        return Err(SnapshotValidationError::new(
-            SnapshotValidationCode::SignatureInvalid,
+        return Err(RealmStateSnapshotValidationError::new(
+            RealmStateSnapshotValidationCode::SignatureInvalid,
             "snapshot manifest signature does not cover the delivered witness list",
         ));
     }
@@ -310,7 +316,7 @@ fn admit(
 
 /// Bind the manifest signature to the current `authority_binding`, i.e. model
 /// an issuer that signed exactly the list it published.
-fn seal_issuer_signature(manifest: &mut SnapshotManifest) -> Result<()> {
+fn seal_issuer_signature(manifest: &mut RealmStateSnapshotManifest) -> Result<()> {
     manifest.signature.payload_digest = manifest.expected_signature_digest()?;
     Ok(())
 }
@@ -320,8 +326,8 @@ fn seal_issuer_signature(manifest: &mut SnapshotManifest) -> Result<()> {
 fn assert_deduplicated_count(
     name: &str,
     case: &Value,
-    manifest: &SnapshotManifest,
-    policy: &SnapshotWitnessQuorumPolicy,
+    manifest: &RealmStateSnapshotManifest,
+    policy: &RealmStateSnapshotWitnessQuorumPolicy,
 ) -> Result<()> {
     let Some(expected) = case
         .get("deduplicated_valid_witness_count")
@@ -352,8 +358,8 @@ fn assert_deduplicated_count(
 
 fn assert_signed_and_delivered_ids(
     case: &Value,
-    signed: &SnapshotManifest,
-    delivered: &SnapshotManifest,
+    signed: &RealmStateSnapshotManifest,
+    delivered: &RealmStateSnapshotManifest,
 ) -> Result<()> {
     for (field, manifest) in [
         ("issuer_signed_witness_ids", signed),
@@ -384,7 +390,7 @@ fn assert_signed_and_delivered_ids(
 fn expect_error(
     name: &str,
     case: &Value,
-    observed: std::result::Result<(), SnapshotValidationError>,
+    observed: std::result::Result<(), RealmStateSnapshotValidationError>,
 ) -> Result<()> {
     let expected = value_field_str(case, "expected_error")?;
     match observed {
@@ -405,13 +411,13 @@ fn expect_error(
 /// Build the manifest the fixture describes. Every witness row carries the
 /// digest the SDK projection derives for that witness, and the issuer signature
 /// is bound to the published list.
-fn manifest_from_fixture(vector: &Value) -> Result<SnapshotManifest> {
+fn manifest_from_fixture(vector: &Value) -> Result<RealmStateSnapshotManifest> {
     let fixture_manifest = required_field(vector, "manifest")?;
     let binding = required_field(fixture_manifest, "authority_binding")?;
     let security_class = value_field_str(fixture_manifest, "security_class")?;
     let created_at = value_field_str(fixture_manifest, "created_at")?;
-    let mut manifest: SnapshotManifest = serde_json::from_value(json!({
-        "id": value_field_str(fixture_manifest, "snapshot_ref")?,
+    let mut manifest: RealmStateSnapshotManifest = serde_json::from_value(json!({
+        "id": value_field_str(fixture_manifest, "realm_state_snapshot_ref")?,
         "realm_id": value_field_str(fixture_manifest, "realm_id")?,
         "reducer_profile": value_field_str(fixture_manifest, "reducer_profile")?,
         "security_class": security_class,
@@ -440,7 +446,7 @@ fn manifest_from_fixture(vector: &Value) -> Result<SnapshotManifest> {
             "jws": "eyJhbGciOiJFZDI1NTE5In0..c25hcHNob3Rpc3N1ZXI",
         },
     }))?;
-    if manifest.authority_binding.authority_kind != SnapshotAuthorityKind::WitnessQuorum {
+    if manifest.authority_binding.authority_kind != RealmStateSnapshotAuthorityKind::WitnessQuorum {
         bail!("witness quorum fixture manifest is not authority_kind=witness_quorum");
     }
     manifest.authority_binding.witness_attestations = attestations_from(binding, &manifest)?;
@@ -456,8 +462,8 @@ fn manifest_from_fixture(vector: &Value) -> Result<SnapshotManifest> {
 /// the digests are stable across every case built from the same manifest.
 fn attestations_from(
     source: &Value,
-    manifest: &SnapshotManifest,
-) -> Result<Vec<SnapshotWitnessAttestation>> {
+    manifest: &RealmStateSnapshotManifest,
+) -> Result<Vec<RealmStateSnapshotWitnessAttestation>> {
     let rows = value_array(
         required_field(source, "witness_attestations")?,
         "witness attestations",
@@ -465,10 +471,11 @@ fn attestations_from(
     let mut attestations = Vec::with_capacity(rows.len());
     for row in rows {
         let witness_id = DidCoreId::new(value_field_str(row, "witness_id")?)?;
-        let mut attestation: SnapshotWitnessAttestation = serde_json::from_value(json!({
-            "witness_id": witness_id,
-            "proof": required_field(row, "proof")?,
-        }))?;
+        let mut attestation: RealmStateSnapshotWitnessAttestation =
+            serde_json::from_value(json!({
+                "witness_id": witness_id,
+                "proof": required_field(row, "proof")?,
+            }))?;
         attestation.proof.payload_digest = manifest.witness_attestation_digest(&witness_id)?;
         attestation.proof.jws = detached_jws_placeholder(&witness_id);
         attestations.push(attestation);
@@ -481,9 +488,9 @@ fn attestations_from(
 fn intruder_attestation(
     case: &Value,
     vector: &Value,
-    manifest: &SnapshotManifest,
-    policy: &SnapshotWitnessQuorumPolicy,
-) -> Result<SnapshotWitnessAttestation> {
+    manifest: &RealmStateSnapshotManifest,
+    policy: &RealmStateSnapshotWitnessQuorumPolicy,
+) -> Result<RealmStateSnapshotWitnessAttestation> {
     let signed = value_array(
         required_field(case, "issuer_signed_witness_ids")?,
         "issuer signed witness ids",
@@ -525,7 +532,7 @@ fn intruder_attestation(
 /// witnesses authorized and not revoked at the resolution instant count, and a
 /// witness the resolver could not confirm is left out so it can never reach
 /// quorum.
-fn policy_from_fixture(vector: &Value) -> Result<SnapshotWitnessQuorumPolicy> {
+fn policy_from_fixture(vector: &Value) -> Result<RealmStateSnapshotWitnessQuorumPolicy> {
     let state = required_field(vector, "accepted_auth_state")?;
     let resolved_at: DateTime<Utc> = value_field_str(state, "resolved_at")?.parse()?;
     let threshold = state
@@ -555,7 +562,7 @@ fn policy_from_fixture(vector: &Value) -> Result<SnapshotWitnessQuorumPolicy> {
     if revoked.is_empty() {
         bail!("the witness quorum fixture lost its revoked-witness row");
     }
-    Ok(SnapshotWitnessQuorumPolicy {
+    Ok(RealmStateSnapshotWitnessQuorumPolicy {
         authorized_witnesses: authorized,
         threshold: u32::try_from(threshold)?,
     })

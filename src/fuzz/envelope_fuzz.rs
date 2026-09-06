@@ -309,13 +309,13 @@ pub fn fuzz_seal_envelope(data: &[u8]) -> Result<(), String> {
 // ── Snapshot chunk header ──────────────────────────────────────────────────
 
 #[derive(Debug, Arbitrary)]
-pub struct FuzzSnapshotChunkInput {
+pub struct FuzzRealmStateSnapshotChunkInput {
     pub chunk_id: u32,
     pub digest: String,
     pub bytes_b64url: String,
 }
 
-impl FuzzSnapshotChunkInput {
+impl FuzzRealmStateSnapshotChunkInput {
     fn to_json(&self) -> Value {
         json!({
             "chunk_id": self.chunk_id,
@@ -325,21 +325,21 @@ impl FuzzSnapshotChunkInput {
     }
 }
 
-/// Fuzz the `SnapshotChunk` wire shape. `SchemaId::SNAPSHOT_V1` covers the
+/// Fuzz the `RealmStateSnapshotChunk` wire shape. `SchemaId::REALM_STATE_SNAPSHOT_V1` covers the
 /// manifest-level envelope, so the schema validator leg uses the snapshot
-/// schema id while the typed-deserialization leg uses `SnapshotChunk` to
+/// schema id while the typed-deserialization leg uses `RealmStateSnapshotChunk` to
 /// shake out base64-url decoder edge cases (which the existing snapshot
 /// chunker `Deserializer::deserialize` impl unwraps internally).
-pub fn fuzz_snapshot_chunk(data: &[u8]) -> Result<(), String> {
+pub fn fuzz_realm_state_snapshot_chunk(data: &[u8]) -> Result<(), String> {
     catch(|| {
-        let _ = serde_json::from_slice::<arkret_state::SnapshotChunk>(data);
+        let _ = serde_json::from_slice::<arkret_state::RealmStateSnapshotChunk>(data);
     })?;
     let mut unstructured = Unstructured::new(data);
-    let Ok(input) = FuzzSnapshotChunkInput::arbitrary(&mut unstructured) else {
+    let Ok(input) = FuzzRealmStateSnapshotChunkInput::arbitrary(&mut unstructured) else {
         return Ok(());
     };
-    fuzz_via_value(&input.to_json(), SchemaId::SNAPSHOT_V1, |v| {
-        let _ = serde_json::from_value::<arkret_state::SnapshotChunk>(v.clone());
+    fuzz_via_value(&input.to_json(), SchemaId::REALM_STATE_SNAPSHOT_V1, |v| {
+        let _ = serde_json::from_value::<arkret_state::RealmStateSnapshotChunk>(v.clone());
     })
 }
 

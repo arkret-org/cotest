@@ -29,7 +29,7 @@
 
 ## 拓扑
 
-- 1 × soland (Station) — `solandBaseUrl()`;暴露 `/_arkret/describe`、`/_arkret/self/account/*`、`/_arkret/self/snapshot/*` 与 `/_arkret/self/events/*` namespace
+- 1 × soland (Station) — `solandBaseUrl()`;暴露 `/_arkret/describe`、`/_arkret/self/account/*`、`/_arkret/self/realm-state-snapshot/*` 与 `/_arkret/self/events/*` namespace
 - 1 × coauth (私有认证进程) — `coauthBaseUrl()`；不得暴露 canonical `/_arkret/describe`、service kind 或 profile claim
 - 1 × harness — Playwright `request` fixture,纯 HTTP;无 browser context
 

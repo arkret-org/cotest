@@ -1,7 +1,7 @@
 // Conformance — Snapshot / Query / Scalability Vectors
 // Contract: e2e/scenarios/conformance/snapshot-query-scalability.md
 // Spec:
-//   - conformance/snapshot-schema.md (§2 manifest, §3 chunk, §4 state_digest,
+//   - conformance/realm-state-realm-state-snapshot-schema.md (§2 manifest, §3 chunk, §4 state_digest,
 //     §5 signature binding, §6 event_set_commitment)
 //   - conformance/query-schema.md (§2 query object, §3 filter, §6 sort,
 //     §8 response, §9 security)
@@ -10,7 +10,7 @@
 //   - conformance/conformance-vectors.md (vector loader pattern: same as the
 //     sibling encoding-vectors suite — `ak.vector.<domain>.<scenario>.v1`
 //     fixtures live in arkret-spec/spec/v1/artifacts/fixtures/)
-// Fixtures: arkret-spec/spec/v1/artifacts/fixtures/ak.vector.snapshot.*.json,
+// Fixtures: arkret-spec/spec/v1/artifacts/fixtures/ak.vector.realm_state_snapshot.*.json,
 //           ak.vector.query.*.json, ak.vector.scalability.*.json
 //
 // Phases A-E exercise the test-only conformance endpoints under the
@@ -67,7 +67,7 @@ const FIXTURES_DIR = resolve(
 // (encoding-vectors, redaction-vectors, etc.) own their own namespaces; we
 // must not accidentally count them.
 const VECTOR_PREFIXES = [
-  "ak.vector.snapshot.",
+  "ak.vector.realm_state_snapshot.",
   "ak.vector.query.",
   "ak.vector.scalability.",
 ] as const;
@@ -118,7 +118,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     ];
     const chunkHashes = chunks.map(chunkDigest);
     const manifest = {
-      id: "ak:snapshot:ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K:fixture",
+      id: "ak:realm_state_snapshot:ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K:fixture",
       realm_id: "ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K",
       reducer_profile: "ak.reducer.core.v1",
       schema_profile_refs: ["ak.schema.event.v1"],
@@ -130,7 +130,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     const resp = await request.post(`${conformanceBaseUrl()}/snapshot`, {
       headers: { "content-type": "application/json" },
       data: canonicalJson({
-        vector_id: "ak.vector.snapshot.manifest_integrity.v1",
+        vector_id: "ak.vector.realm_state_snapshot.manifest_integrity.v1",
         manifest,
         chunks,
       }),
@@ -145,13 +145,13 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     const tampered = await request.post(`${conformanceBaseUrl()}/snapshot`, {
       headers: { "content-type": "application/json" },
       data: canonicalJson({
-        vector_id: "ak.vector.snapshot.tampered_chunk.v1",
+        vector_id: "ak.vector.realm_state_snapshot.tampered_chunk.v1",
         manifest,
         chunks: [{ ...chunks[0], payload: { cell: "a", value: "tampered", version: 1 } }, chunks[1]],
       }),
     });
     expect(tampered.status()).toBeGreaterThanOrEqual(400);
-    expect(wireErrCode(await tampered.json())).toBe("snapshot_chunk_digest_mismatch");
+    expect(wireErrCode(await tampered.json())).toBe("realm_state_snapshot_chunk_digest_mismatch");
   });
 
   test("Phase B — snapshot signature binding verifies against recorded signer DID", async ({
@@ -160,7 +160,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     const signerDid = "did:web:soland.conformance-signer";
     const chunks = [{ chunk_id: "chunk-1", payload: { cell: "a", value: "signed" } }];
     const manifest = {
-      id: "ak:snapshot:ak:realm:AT1FV5Oc-IicigRsbtaKiJcXWc0f4WBgwlQTJk_XFuyQ:signed",
+      id: "ak:realm_state_snapshot:ak:realm:AT1FV5Oc-IicigRsbtaKiJcXWc0f4WBgwlQTJk_XFuyQ:signed",
       realm_id: "ak:realm:AT1FV5Oc-IicigRsbtaKiJcXWc0f4WBgwlQTJk_XFuyQ",
       reducer_profile: "ak.reducer.core.v1",
       schema_profile_refs: ["ak.schema.event.v1"],
@@ -176,7 +176,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     const resp = await request.post(`${conformanceBaseUrl()}/snapshot`, {
       headers: { "content-type": "application/json" },
       data: canonicalJson({
-        vector_id: "ak.vector.snapshot.signature_binding.v1",
+        vector_id: "ak.vector.realm_state_snapshot.signature_binding.v1",
         manifest,
         chunks,
       }),
@@ -202,19 +202,19 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     const revoked = await request.post(`${conformanceBaseUrl()}/snapshot`, {
       headers: { "content-type": "application/json" },
       data: canonicalJson({
-        vector_id: "ak.vector.snapshot.signature_binding.revoked.v1",
+        vector_id: "ak.vector.realm_state_snapshot.signature_binding.revoked.v1",
         manifest,
         chunks,
         revoked_signer_dids: [signerDid],
       }),
     });
     expect(revoked.status()).toBeGreaterThanOrEqual(400);
-    // `snapshot_issuer_revoked` is a registered reason code, so it rides
+    // `realm_state_snapshot_issuer_revoked` is a registered reason code, so it rides
     // `reason_code`; the RFC 9457 `type` tail stays a registered top-level
     // code (api-conventions.md 5.1).
     const revokedBody = (await revoked.json()) as { reason_code?: unknown };
     expect(wireErrCode(revokedBody)).toBe("capability_denied");
-    expect(revokedBody.reason_code).toBe("snapshot_issuer_revoked");
+    expect(revokedBody.reason_code).toBe("realm_state_snapshot_issuer_revoked");
   });
 
   test("Phase C — query filters / sort / pagination return expected_rows in order", async ({
@@ -437,7 +437,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     const probe = await request.post(`${conformanceBaseUrl()}/snapshot`, {
       headers: { "content-type": "application/json" },
       data: canonicalJson({
-        vector_id: "ak.vector.snapshot.surface_probe.v1",
+        vector_id: "ak.vector.realm_state_snapshot.surface_probe.v1",
         manifest: {},
         chunks: [],
       }),

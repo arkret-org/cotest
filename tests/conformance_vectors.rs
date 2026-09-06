@@ -246,12 +246,12 @@ fn proof_context_domain_separation_vector_runs_clean() {
 /// counting, witness authorization and the issuer's binding to the final sorted
 /// list are cross-object rules.
 #[test]
-fn snapshot_witness_quorum_attestation_vector_runs_clean() {
+fn realm_state_snapshot_witness_quorum_attestation_vector_runs_clean() {
     assert_eq!(
-        cotest::conformance::VECTOR_ID_SNAPSHOT_WITNESS_QUORUM_ATTESTATION,
-        "ak.vector.snapshot.witness_quorum_attestation.v1"
+        cotest::conformance::VECTOR_ID_REALM_STATE_SNAPSHOT_WITNESS_QUORUM_ATTESTATION,
+        "ak.vector.realm_state_snapshot.witness_quorum_attestation.v1"
     );
-    cotest::conformance::run_snapshot_witness_quorum_attestation_vector()
+    cotest::conformance::run_realm_state_snapshot_witness_quorum_attestation_vector()
         .expect("snapshot witness quorum attestation vector must pass");
 }
 

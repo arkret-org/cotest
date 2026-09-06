@@ -321,7 +321,7 @@ fn current_spec_vector_registry_artifact_gate_validates() -> Result<()> {
             "spec/v1/artifacts/fixtures/redaction-fixture.json",
         ),
         (
-            "ak.vector.redaction.snapshot_pruning_stub.v1",
+            "ak.vector.redaction.realm_state_snapshot_pruning_stub.v1",
             "spec/v1/artifacts/fixtures/redaction-fixture.json",
         ),
     ] {

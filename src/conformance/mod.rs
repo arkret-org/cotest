@@ -72,6 +72,7 @@ mod protocol_gap_closure;
 mod push_route_revision;
 mod push_rule_core;
 mod read_receipt_signal;
+mod realm_state_snapshot_witness_quorum;
 mod recovery_completion_grant;
 pub mod recovery_transaction_faults;
 mod redaction;
@@ -92,7 +93,6 @@ mod signal_federation;
 #[cfg(test)]
 mod signal_recipient;
 mod signal_sequence_high_water;
-mod snapshot_witness_quorum;
 mod spec_business_flow;
 mod state_reducer_hardening;
 mod state_resolution;
@@ -366,6 +366,10 @@ pub use read_receipt_signal::{
     VECTOR_ID_READ_RECEIPT_ROUND_TRIP, run_genesis_join_policy_bundle_vector,
     run_read_receipt_round_trip_vector, run_read_receipt_signal_vector_suite,
 };
+pub use realm_state_snapshot_witness_quorum::{
+    VECTOR_ID_REALM_STATE_SNAPSHOT_WITNESS_QUORUM_ATTESTATION,
+    run_realm_state_snapshot_witness_quorum_attestation_vector,
+};
 pub use recovery_completion_grant::run_recovery_completion_grant_suite;
 pub use redaction::run_redaction_fixture_suite;
 pub use scaffold_gate::{
@@ -418,9 +422,6 @@ pub use signal_federation::{
     run_signal_federation_fixture_suite,
 };
 pub use signal_sequence_high_water::run_signal_sequence_high_water_suite;
-pub use snapshot_witness_quorum::{
-    VECTOR_ID_SNAPSHOT_WITNESS_QUORUM_ATTESTATION, run_snapshot_witness_quorum_attestation_vector,
-};
 pub use spec_business_flow::run_spec_business_flow_coverage_suite;
 pub use state_reducer_hardening::{
     ALL_STATE_REDUCER_HARDENING_VECTOR_IDS, VECTOR_ID_PATCH_REDACTABLE_CONTENT_SLOT_UNSET_BAN,

@@ -8,10 +8,12 @@ use arkret_models_collaboration::sync_frames::account_subscribe::{
 use arkret_models_collaboration::sync_frames::stream_trace::{
     StreamTraceError, StreamTraceFrame, StreamTraceFrameKind, StreamTraceValidator,
 };
-use arkret_state::snapshot::{
-    EventSetCommitmentAlgorithm, EventSetLeaf, SnapshotChunkPayload, SnapshotMaterializedItem,
-    event_set_root, snapshot_conflict_records_digest, snapshot_erasure_stubs_digest,
-    snapshot_state_leaf_hash, state_digest_from_chunk_payloads, state_digest_from_items,
+use arkret_state::realm_state_snapshot::{
+    EventSetCommitmentAlgorithm, EventSetLeaf, RealmStateSnapshotChunkPayload,
+    RealmStateSnapshotMaterializedItem, event_set_root,
+    realm_state_snapshot_conflict_records_digest, realm_state_snapshot_erasure_stubs_digest,
+    realm_state_snapshot_state_leaf_hash, state_digest_from_chunk_payloads,
+    state_digest_from_items,
 };
 use arkret_wire::ErrorCode;
 use serde_json::{Value, json};
@@ -28,10 +30,10 @@ pub fn run_sync_fixture_suite() -> Result<()> {
     validate_profile(&value, "ak.vector_group.sync.v1")?;
     validate_collection_projection(&value)?;
     validate_strand_discussion_timeline(&value)?;
-    validate_snapshot_frontier_recovery(&value)?;
-    validate_snapshot_inclusion_challenge(&value)?;
+    validate_realm_state_snapshot_frontier_recovery(&value)?;
+    validate_realm_state_snapshot_inclusion_challenge(&value)?;
     validate_snapshot_state_digest(&value)?;
-    super::snapshot_witness_quorum::run_snapshot_witness_quorum_attestation_vector()?;
+    super::realm_state_snapshot_witness_quorum::run_realm_state_snapshot_witness_quorum_attestation_vector()?;
     validate_e2ee_pending(&value)?;
     validate_realm_actor_frontier_vectors(&value)?;
     run_stream_frame_sequence_vector()?;
@@ -545,8 +547,8 @@ fn validate_strand_discussion_timeline(value: &Value) -> Result<()> {
     Ok(())
 }
 
-fn validate_snapshot_frontier_recovery(value: &Value) -> Result<()> {
-    let snapshot = required_field(value, "snapshot_frontier_recovery")?;
+fn validate_realm_state_snapshot_frontier_recovery(value: &Value) -> Result<()> {
+    let snapshot = required_field(value, "realm_state_snapshot_frontier_recovery")?;
     let state_digest = value_field_str(snapshot, "state_digest")?;
     if !looks_like_sha256_digest(state_digest) {
         bail!("sync artifact snapshot state_digest was invalid");
@@ -561,10 +563,10 @@ fn validate_snapshot_frontier_recovery(value: &Value) -> Result<()> {
     Ok(())
 }
 
-fn validate_snapshot_inclusion_challenge(value: &Value) -> Result<()> {
+fn validate_realm_state_snapshot_inclusion_challenge(value: &Value) -> Result<()> {
     let vector = required_field(value, "snapshot_inclusion_challenge")?;
     let vector_id = value_field_str(vector, "vector_id")?;
-    if vector_id != "ak.vector.snapshot.inclusion_challenge.v1" {
+    if vector_id != "ak.vector.realm_state_snapshot.inclusion_challenge.v1" {
         bail!("sync artifact snapshot inclusion challenge vector id drifted");
     }
 
@@ -626,8 +628,9 @@ fn validate_snapshot_inclusion_challenge(value: &Value) -> Result<()> {
         seen.insert(name.to_owned());
         let mut challenge = base_challenge.clone();
         let mut response = base_response.clone();
-        apply_snapshot_inclusion_mutation(case, &mut challenge, &mut response)?;
-        let observed = evaluate_snapshot_inclusion_case(manifest, entries, &challenge, &response)?;
+        apply_realm_state_snapshot_inclusion_mutation(case, &mut challenge, &mut response)?;
+        let observed =
+            evaluate_realm_state_snapshot_inclusion_case(manifest, entries, &challenge, &response)?;
         assert_expected_subset(name, required_field(case, "expected")?, &observed)?;
         record_vector_event(
             &format!("sync.snapshot_inclusion_challenge.{name}"),
@@ -651,18 +654,18 @@ fn validate_snapshot_inclusion_challenge(value: &Value) -> Result<()> {
     Ok(())
 }
 
-/// `ak.vector.snapshot.state_digest_recompute.v1` (`sync-fixture.json` block
-/// `snapshot_state_digest`, `snapshot-schema.md` §3 / §4).
+/// `ak.vector.realm_state_snapshot.state_digest_recompute.v1` (`sync-fixture.json` block
+/// `snapshot_state_digest`, `realm-state-snapshot-schema.md` §3 / §4).
 ///
 /// The SDK is the implementation under test: every chunk is parsed through its
-/// closed `ak.schema.snapshot_chunk.v1` types and `state_digest` is recomputed
+/// closed `ak.schema.realm_state_snapshot_chunk.v1` types and `state_digest` is recomputed
 /// with its consumer-side verifier, so a reject case that the SDK would accept
 /// — or an accept case whose bytes it hashes differently — fails here, not in
 /// a Station months later.
 fn validate_snapshot_state_digest(value: &Value) -> Result<()> {
     let vector = required_field(value, "snapshot_state_digest")?;
     let vector_id = value_field_str(vector, "vector_id")?;
-    if vector_id != "ak.vector.snapshot.state_digest_recompute.v1" {
+    if vector_id != "ak.vector.realm_state_snapshot.state_digest_recompute.v1" {
         bail!("sync artifact snapshot state digest vector id drifted");
     }
     let reducer_profile = value_field_str(required_field(vector, "manifest")?, "reducer_profile")?;
@@ -681,7 +684,7 @@ fn validate_snapshot_state_digest(value: &Value) -> Result<()> {
         .ok_or_else(|| anyhow!("snapshot state digest fixture has no canonical chunk"))?
         .iter()
         .map(|item| {
-            serde_json::from_value::<SnapshotMaterializedItem>(item.clone())
+            serde_json::from_value::<RealmStateSnapshotMaterializedItem>(item.clone())
                 .map_err(|error| anyhow!("canonical snapshot item did not parse: {error}"))
         })
         .collect::<Result<Vec<_>>>()?;
@@ -698,7 +701,7 @@ fn validate_snapshot_state_digest(value: &Value) -> Result<()> {
         if preimage != value_field_str(row, "leaf_preimage")? {
             bail!("snapshot leaf preimage of {id} does not match the SDK canonical form");
         }
-        if snapshot_state_leaf_hash(item)?.as_str() != value_field_str(row, "leaf")? {
+        if realm_state_snapshot_state_leaf_hash(item)?.as_str() != value_field_str(row, "leaf")? {
             bail!("snapshot leaf of {id} does not match the SDK leaf hash");
         }
     }
@@ -728,7 +731,7 @@ fn validate_snapshot_state_digest(value: &Value) -> Result<()> {
 
         let parsed = value_array(required_field(case, "chunks")?, "case.chunks")?
             .iter()
-            .map(|chunk| serde_json::from_value::<SnapshotChunkPayload>(chunk.clone()))
+            .map(|chunk| serde_json::from_value::<RealmStateSnapshotChunkPayload>(chunk.clone()))
             .collect::<std::result::Result<Vec<_>, _>>();
         let observed = match parsed {
             Err(error) => json!({ "outcome": "reject", "reason": error.to_string() }),
@@ -740,8 +743,8 @@ fn validate_snapshot_state_digest(value: &Value) -> Result<()> {
                 }),
                 Ok(_) => json!({
                     "outcome": "accept",
-                    "conflict_records_digest": snapshot_conflict_records_digest(&chunks, suite)?,
-                    "erasure_stubs_digest": snapshot_erasure_stubs_digest(&chunks, suite)?,
+                    "conflict_records_digest": realm_state_snapshot_conflict_records_digest(&chunks, suite)?,
+                    "erasure_stubs_digest": realm_state_snapshot_erasure_stubs_digest(&chunks, suite)?,
                 }),
             },
         };
@@ -780,7 +783,7 @@ fn validate_snapshot_state_digest(value: &Value) -> Result<()> {
     Ok(())
 }
 
-fn evaluate_snapshot_inclusion_case(
+fn evaluate_realm_state_snapshot_inclusion_case(
     manifest: &Value,
     entries: &[Value],
     challenge: &Value,
@@ -899,7 +902,7 @@ fn evaluate_snapshot_inclusion_case(
     Ok(json!({"decision": "accept"}))
 }
 
-fn apply_snapshot_inclusion_mutation(
+fn apply_realm_state_snapshot_inclusion_mutation(
     case: &Value,
     challenge: &mut Value,
     response: &mut Value,

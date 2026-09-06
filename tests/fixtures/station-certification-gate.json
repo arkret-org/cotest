@@ -60,7 +60,7 @@
         ],
         "supported_schemas": [
           "ak.schema.account_subscribe_frame.v1",
-          "ak.schema.snapshot.v1",
+          "ak.schema.realm_state_snapshot.v1",
           "ak.schema.capability.v1",
           "ak.schema.grant_constraint.v1"
         ],
@@ -109,7 +109,7 @@
         ],
         "supported_schemas": [
           "ak.schema.account_subscribe_frame.v1",
-          "ak.schema.snapshot.v1",
+          "ak.schema.realm_state_snapshot.v1",
           "ak.schema.capability.v1",
           "ak.schema.grant_constraint.v1"
         ],
