@@ -72,7 +72,11 @@ chacha20poly1305 = { version = "0.11.0", default-features = false }
 chrono = "0.4.45"
 ed25519-dalek = { version = "3.0.0", default-features = false }
 fs2 = "0.4.3"
-garth = { path = "../garth" }
+# `native` gives us `NativeExecutor` and the durable `FileStore`, which are what
+# a headless Garth client host is composed from. Without it cotest can only
+# reach Garth's pure builders, which is how the client runtime ended up with
+# inkson's browser as its only consumer.
+garth = { path = "../garth", features = ["native"] }
 hex = "0.4.3"
 hkdf = "0.13.0"
 hmac = "0.13.0"

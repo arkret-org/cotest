@@ -114,6 +114,11 @@ param(
     # Off by default: it builds the root package, which is the dependency graph
     # the browserless lane exists to skip.
     [switch]$RunHarnessClientCheck,
+    # Run `tests/garth_client_live.rs`: Garth driven as a headless client over
+    # its own durable store, against this run's Coauth and Soland. Same build
+    # cost as above, and the only path that exercises Garth's client runtime
+    # without a browser.
+    [switch]$RunGarthClientCheck,
     [switch]$PreflightOnly,
     [switch]$RunnerSelfTest,
     [ValidateRange(1, 32)]
@@ -4900,6 +4905,27 @@ try {
             foreach ($line in $harnessClientOutput) { Write-Host $line }
             if ($harnessClientExit -ne 0) {
                 throw "Rust harness client check failed (exit=$harnessClientExit); see $harnessClientLog"
+            }
+        }
+
+        # Garth as a client, headless. Cotest otherwise touches Garth only as a
+        # builder, so without this its client runtime has no consumer outside
+        # Inkson's browser.
+        if ($RunGarthClientCheck) {
+            Write-Host ""
+            Write-Host "=== Garth client check (live Coauth + Soland) ==="
+            $garthClientLog = Join-Path $jointDir "garth-client-check.log"
+            $garthClientArgs = @(
+                "test", "--manifest-path", (Join-Path $repoRoot "Cargo.toml"),
+                "-p", "cotest", "--test", "garth_client_live",
+                "--", "--ignored", "--nocapture"
+            )
+            $garthClientOutput = & cargo @garthClientArgs 2>&1
+            $garthClientExit = $LASTEXITCODE
+            $garthClientOutput | Set-Content -LiteralPath $garthClientLog -Encoding UTF8
+            foreach ($line in $garthClientOutput) { Write-Host $line }
+            if ($garthClientExit -ne 0) {
+                throw "Garth client check failed (exit=$garthClientExit); see $garthClientLog"
             }
         }
     }
