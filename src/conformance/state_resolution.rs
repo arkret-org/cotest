@@ -589,6 +589,32 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                     }),
                 );
             }
+            // `ak.vector.lattice.fsm_causal_heads.v1` is registered and its
+            // thirteen cases are in the fixture, but nothing executes them yet:
+            // the SDK still folds `fsm` by arrival order, so a runner here would
+            // be asserting against the semantics R7 is going to replace rather
+            // than the ones §9.3.1.5 defines. The shape is checked so the block
+            // cannot rot while it waits; the cases are wired with the SDK
+            // migration (`arkret-work/review/spec-open/2026-09-06-1610` §8).
+            "fsm_causal_heads" => {
+                let cases = required_array(vector, "/cases", name)?;
+                if cases.len() < 13 {
+                    bail!("fsm_causal_heads must keep all thirteen registered cases");
+                }
+                for required in [
+                    "input_order_permutation_is_one_result",
+                    "batch_split_is_one_result",
+                    "aba_is_distinguished_from_abab",
+                    "late_branch_merges_by_the_formula",
+                    "concurrent_different_to_recovery_still_conflicts",
+                ] {
+                    if !cases.iter().any(|case| {
+                        case.get("name").and_then(Value::as_str) == Some(required)
+                    }) {
+                        bail!("fsm_causal_heads is missing case {required}");
+                    }
+                }
+            }
             _ => bail!("unknown cba lattice vector: {name}"),
         }
     }
