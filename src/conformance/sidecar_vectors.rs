@@ -2614,7 +2614,7 @@ pub fn run_sidecar_exchange_binding_containment_vector() -> Result<()> {
             "strand_id": exchange_request_context()?.source_track_ref.strand_id,
             "content": {
                 "kind": "ak.content.text",
-                "text": approved_body
+                "body": approved_body
             }
         }
     });
@@ -2632,7 +2632,7 @@ pub fn run_sidecar_exchange_binding_containment_vector() -> Result<()> {
     {
         bail!("explicit publish output leaked Sidecar exchange or private locator material");
     }
-    if publish_output["payload"]["content"]["text"].as_str() != Some(approved_body) {
+    if publish_output["payload"]["content"]["body"].as_str() != Some(approved_body) {
         bail!("explicit publish output differs from the controller-approved body");
     }
     Ok(())

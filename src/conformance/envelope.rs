@@ -1108,25 +1108,17 @@ fn parse_hlc_millis(hlc: &str) -> Result<u64> {
 }
 
 /// Whether the Event declares a fail-closed critical extension this receiver
-/// has not advertised. Both the legacy top-level `critical_extensions` and the
-/// current `requirements.critical_extensions` carriers are scanned.
+/// has not advertised. `requirements.critical_extensions` is the only carrier.
 fn declares_unsupported_critical_extension(
     event: &Value,
     context: &EventEnvelopeContext,
 ) -> Result<bool> {
     let declared = event
-        .get("critical_extensions")
+        .get("requirements")
+        .and_then(|requirements| requirements.get("critical_extensions"))
         .and_then(Value::as_array)
         .into_iter()
-        .flatten()
-        .chain(
-            event
-                .get("requirements")
-                .and_then(|requirements| requirements.get("critical_extensions"))
-                .and_then(Value::as_array)
-                .into_iter()
-                .flatten(),
-        );
+        .flatten();
     for extension in declared {
         let id = required_str(extension, "id")?;
         if extension.get("fail_closed").and_then(Value::as_bool) == Some(true)

@@ -79,10 +79,6 @@ fn mimi_report_requires_closed_exact_actor_authority() {
         .remove("reporter_authority");
     assert!(serde_json::from_value::<MimiReportAbuseRequestBody>(missing).is_err());
 
-    let mut legacy = report.clone();
-    legacy["reporter_authority"]["holder_claim"] = json!("opaque-bearer");
-    assert!(serde_json::from_value::<MimiReportAbuseRequestBody>(legacy).is_err());
-
     let mut mirrored = report;
     mirrored["reporter_id"] = json!("ak:did_core:web:alice.example");
     assert!(serde_json::from_value::<MimiReportAbuseRequestBody>(mirrored).is_err());

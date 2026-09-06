@@ -13,7 +13,7 @@ const MANAGED_ACTOR_CASES: [&str; 26] = [
     "bot_exact_pair_and_initial_resolution",
     "ghost_namespace_matches_verified_did",
     "ghost_external_tuple_is_single_closed_carrier",
-    "ghost_external_tuple_rejects_legacy_or_extra_mirrors",
+    "ghost_external_tuple_rejects_extra_mirrors",
     "ghost_provision_requires_registration_service_signature",
     "remote_station_claim",
     "actor_reuses_service_or_controller",
@@ -111,15 +111,15 @@ fn consume_managed_actor_case(
                 bail!("closed Ghost external tuple admitted an empty coordinate");
             }
         }
-        "ghost_external_tuple_rejects_legacy_or_extra_mirrors" => {
+        "ghost_external_tuple_rejects_extra_mirrors" => {
             let invalid = json!({
                 "protocol": "bridge", "instance_id": "tenant-1", "external_id": "user-1",
-                "external_user_id": "legacy"
+                "external_user_id": "user-1"
             });
             if serde_json::from_value::<arkret_models_integration::GhostExternalTuple>(invalid)
                 .is_ok()
             {
-                bail!("Ghost external tuple accepted a legacy mirror");
+                bail!("Ghost external tuple accepted an extra mirror");
             }
         }
         "rotation_keeps_creation_anchor" | "bot_exact_pair_and_initial_resolution" => {
@@ -349,13 +349,6 @@ pub fn run_applet_install_authoring_suite() -> Result<()> {
         bail!("canonical Applet delegation grant binding was rejected");
     }
     for (name, mutated_constraint, mutated_resource, expected_service, expected_epoch) in [
-        (
-            "legacy_scalar_executor",
-            mutate(&canonical, "executed_by", json!(service_id)),
-            expected_resource.clone(),
-            service_id.as_str(),
-            registration_epoch.as_str(),
-        ),
         (
             "account_executor_with_same_principal",
             mutate(

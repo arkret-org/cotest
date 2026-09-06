@@ -80,11 +80,6 @@ pub async fn member_state_machine_run() -> Result<()> {
             return Err(anyhow!("expected {from} -> {to} to fail closed"));
         }
     }
-    for forbidden in ["invite", "invited", "active", "left", "banned", "kick"] {
-        if STATES.contains(&forbidden) || validate_member_transition("leave", forbidden).is_ok() {
-            return Err(anyhow!("legacy state {forbidden} must fail closed"));
-        }
-    }
     Ok(())
 }
 

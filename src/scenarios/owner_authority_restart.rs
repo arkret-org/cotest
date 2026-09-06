@@ -1,5 +1,5 @@
-//! Current-v1 owner authority survives process restart without legacy
-//! registry snapshots, compatibility grants, or database migration rows.
+//! Current-v1 owner authority survives process restart: it is rebuilt from
+//! the accepted Event log alone.
 
 use anyhow::{Context, Result, anyhow};
 use arkret_canonical::canonical_sha256;

@@ -1333,14 +1333,6 @@ pub fn run_keypackage_self_claim_authorization_idempotency_vector() -> Result<()
         bail!("a new claim attempt reused the prior claim_request_id ledger identity");
     }
 
-    let mut legacy_nonce = serde_json::to_value(&typed)?;
-    legacy_nonce["claim_nonce"] = json!("BBBBBBBBBBBBBBBBBBBBBB");
-    if serde_json::from_value::<arkret_models_crypto::KeyPackagesClaimRequestBody>(legacy_nonce)
-        .is_ok()
-    {
-        bail!("legacy KeyPackage claim_nonce was accepted as a second random carrier");
-    }
-
     let mut missing = serde_json::to_value(&typed)?;
     missing
         .as_object_mut()

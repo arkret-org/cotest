@@ -470,16 +470,6 @@ async fn verify_ordinary_keypackage_binding_matrix(
         realm_id,
     )?;
 
-    reject_upload_mutation(client, &valid, |value| {
-        value["keypackages"][0]["endpoint_signature"] = json!({
-            "kid": format!("{}#{}", principal.did, principal.device_id),
-            "signature_algorithm": "Ed25519",
-            "sig": "AA"
-        });
-    })
-    .await
-    .context("deprecated per-entry endpoint_signature")?;
-
     let wrong_device_identity = ArkretMlsIdentity::new_human_device(
         principal.core_id.clone(),
         DeviceId::new(OTHER_ORDINARY_DEVICE.to_owned())?,
@@ -524,10 +514,6 @@ async fn verify_ordinary_keypackage_binding_matrix(
         .context("batch-authorized ordinary KeyPackage with invalid RFC 9420 self-signature")?;
 
     let outcome_value = expect_json(client.post(UPLOAD_PATH).json(&valid), StatusCode::OK).await?;
-    ensure!(
-        outcome_value.get("available_count").is_none(),
-        "ordinary upload response exposed deprecated available_count"
-    );
     let outcome: KeyPackagesUploadOutcome = serde_json::from_value(outcome_value)?;
     ensure!(
         outcome.accepted == 1

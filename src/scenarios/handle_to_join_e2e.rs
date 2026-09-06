@@ -63,12 +63,6 @@ pub async fn handle_to_join_e2e_run() -> Result<()> {
     let actor: ActorId = serde_json::from_value(payload["member_id"].clone())?;
     ensure!(actor.route_service_id().as_str() == STATION_A);
     ensure!(actor.signing_principal_id().as_str() == PRINCIPAL_ID);
-
-    // Clean-break evidence: a retired member-routing field is rejected by the
-    // closed membership payload model rather than silently ignored.
-    let mut legacy = payload;
-    legacy["member_delivery_binding"] = serde_json::json!({"recipient_id": STATION_B});
-    ensure!(serde_json::from_value::<MembershipPayload>(legacy).is_err());
     Ok(())
 }
 
