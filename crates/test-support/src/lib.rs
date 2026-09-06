@@ -15,3 +15,5 @@
 //! handed endpoints, identities and trust material, and never starts a service.
 
 #![deny(unsafe_code)]
+
+pub mod wire;
