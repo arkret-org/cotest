@@ -194,7 +194,7 @@ async fn garth_syncs_an_account_over_its_own_durable_store() -> Result<()> {
     // half `tests/file_store_noop.rs` does not cover: it proves an idle
     // mutation writes nothing, never that a real one is readable again.
     drop(store);
-    let reopened = FileStore::open(&store_dir.join("decoy.json")).map_err(anyhow::Error::msg)?;
+    let reopened = FileStore::open(&store_path).map_err(anyhow::Error::msg)?;
     let restored = reopened
         .load(scope)
         .await
