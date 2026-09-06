@@ -30,7 +30,7 @@
       ]
     },
     {
-      "scenario_key": "conformance/snapshot-query-scalability",
+      "scenario_key": "conformance/realm-state-snapshot-query-scalability",
       "suite_kind": "joint-e2e",
       "realism_level": "fixture-only",
       "evidence_class": "fixture-only",

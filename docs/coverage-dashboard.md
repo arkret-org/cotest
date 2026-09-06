@@ -5,13 +5,13 @@ This static inventory does not claim runtime verification; use an Arkret Joint P
 
 | Journey | Implemented | Promised | Coverage | Blocking fixme |
 |---|---:|---:|---:|---:|
-| UJ-A - First login and multi-device recovery | 36 | 36 | 100.0% | 0 |
-| UJ-B - Workspace creation, invites, and archive visibility | 15 | 15 | 100.0% | 0 |
+| UJ-A - First login and multi-device recovery | 35 | 35 | 100.0% | 0 |
+| UJ-B - Workspace creation, invites, and archive visibility | 19 | 19 | 100.0% | 0 |
 | UJ-C - Daily messaging, edits, reactions, receipts, and mentions | 41 | 41 | 100.0% | 0 |
 | UJ-D - Encrypted realm lifecycle and cross-device decrypt | 7 | 7 | 100.0% | 0 |
-| UJ-E - Federation and cross-domain collaboration | 15 | 15 | 100.0% | 0 |
+| UJ-E - Federation and cross-domain collaboration | 20 | 20 | 100.0% | 0 |
 | UJ-F - Kanban collaboration and concurrent work | 46 | 46 | 100.0% | 0 |
-| UJ-G - Privacy rights, governance, and GDPR | 20 | 20 | 100.0% | 0 |
+| UJ-G - Privacy rights, governance, and GDPR | 19 | 19 | 100.0% | 0 |
 | UJ-H - Calls, push, and cross-platform sync | 5 | 5 | 100.0% | 0 |
 
 ## UJ-A - First login and multi-device recovery
@@ -20,7 +20,7 @@ This static inventory does not claim runtime verification; use an Arkret Joint P
 |---|---|---:|---:|---:|
 | encryption/key-backup | domain-fallback | 5 | 5 | 0 |
 | identity/account-profile-ui | domain-fallback | 1 | 1 | 0 |
-| identity/consent-grant | domain-fallback | 11 | 11 | 0 |
+| identity/consent-grant | domain-fallback | 10 | 10 | 0 |
 | identity/device-key-lifecycle | domain-fallback | 1 | 1 | 0 |
 | identity/multi-device | domain-fallback | 2 | 2 | 0 |
 | identity/oidc-login-chain | domain-fallback | 3 | 3 | 0 |
@@ -34,7 +34,7 @@ This static inventory does not claim runtime verification; use an Arkret Joint P
 
 | spec | mapping | implemented | promised | blocking |
 |---|---|---:|---:|---:|
-| invites/invite-addressing | domain-fallback | 4 | 4 | 0 |
+| invites/invite-addressing | domain-fallback | 8 | 8 | 0 |
 | invites/third-party | domain-fallback | 6 | 6 | 0 |
 | spaces/admin-section-route | domain-fallback | 1 | 1 | 0 |
 | spaces/moderation-ban | domain-fallback | 3 | 3 | 0 |
@@ -64,6 +64,7 @@ This static inventory does not claim runtime verification; use an Arkret Joint P
 |---|---|---:|---:|---:|
 | federation/contact-graph-federation | domain-fallback | 5 | 5 | 0 |
 | federation/cross-server | domain-fallback | 10 | 10 | 0 |
+| federation/three-server-p0 | domain-fallback | 5 | 5 | 0 |
 
 ## UJ-F - Kanban collaboration and concurrent work
 
@@ -86,7 +87,7 @@ This static inventory does not claim runtime verification; use an Arkret Joint P
 | spec | mapping | implemented | promised | blocking |
 |---|---|---:|---:|---:|
 | governance/personal-blocklist | domain-fallback | 6 | 6 | 0 |
-| identity/consent-grant | domain-fallback | 11 | 11 | 0 |
+| identity/consent-grant | domain-fallback | 10 | 10 | 0 |
 | spaces/moderation-ban | domain-fallback | 3 | 3 | 0 |
 
 ## UJ-H - Calls, push, and cross-platform sync
