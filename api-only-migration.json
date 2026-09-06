@@ -253,7 +253,7 @@
     { "source": "cotest/e2e/tests/sync/transport-negotiation.spec.ts", "needs": "Needs transport negotiation in the Rust harness; the spec also captures screenshots, so its evidence must move to a Rust transcript artifact." },
     { "source": "cotest/e2e/tests/encryption/audited-e2ee.spec.ts", "needs": "Needs SDK client coverage for the audited-E2EE read path." },
     { "source": "cotest/e2e/tests/models/realm-links.spec.ts", "needs": "Needs SDK client methods for realm-link create and resolve." },
-    { "source": "cotest/e2e/tests/conformance/snapshot-query-scalability.spec.ts", "needs": "Needs the snapshot manifest and query surface in the Rust conformance harness." },
+    { "source": "cotest/e2e/tests/conformance/realm-state-snapshot-query-scalability.spec.ts", "needs": "Needs the snapshot manifest and query surface in the Rust conformance harness." },
     { "source": "cotest/e2e/tests/invites/invite-addressing.spec.ts", "needs": "Needs contact-api and invite addressing through SDK DTOs; shares the invite capability proof carrier spec gap." },
     { "source": "cotest/e2e/tests/conformance/registry-drift.spec.ts", "needs": "Overlaps the Rust drift validator; fold the remaining assertions into that suite rather than porting the spec." },
     { "source": "cotest/e2e/tests/models/private-read-marker.spec.ts", "needs": "Needs private read-marker SDK client coverage; some of its cases are currently red in joint-full." },
