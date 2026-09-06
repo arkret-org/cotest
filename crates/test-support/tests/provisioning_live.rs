@@ -335,3 +335,147 @@ async fn the_canonical_chain_founds_a_principal_end_to_end() {
         "initial grant bound to a different device: {grant}"
     );
 }
+
+/// The stdio bridge, driven the way a Playwright worker would drive it.
+///
+/// Spawns the binary, sends two correlated requests on one connection, and
+/// checks that the second one sees the session the first one established. That
+/// last part is the whole reason the bridge is a long-lived process: Coauth's
+/// account session lives in a cookie jar, and a fresh process per call would
+/// lose it.
+#[tokio::test]
+#[ignore = "requires a running Coauth and Soland; see the module docs"]
+async fn the_stdio_bridge_keeps_one_session_across_requests() {
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+    let endpoints = endpoints();
+    let bridge = env!("CARGO_BIN_EXE_cotest-provision");
+    let mut child = tokio::process::Command::new(bridge)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::inherit())
+        .spawn()
+        .expect("spawn the provisioning bridge");
+    let mut stdin = child.stdin.take().expect("bridge stdin");
+    let mut stdout = BufReader::new(child.stdout.take().expect("bridge stdout")).lines();
+
+    let slug = format!(
+        "rust-bridge-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock before epoch")
+            .as_nanos()
+    );
+    let endpoints_json = serde_json::json!({
+        "coauth_base_url": endpoints.coauth_base_url,
+        "soland_base_url": endpoints.soland_base_url,
+        "mock_email_base_url": endpoints
+            .mock_email
+            .as_ref()
+            .map(|inbox| inbox.base_url.clone()),
+    });
+
+    let mut send = |request: serde_json::Value| {
+        let line = format!("{request}\n");
+        async { line }
+    };
+    let _ = &mut send;
+
+    // Request 1: register an account. This is what puts the session cookie in
+    // the bridge's jar.
+    let register = serde_json::json!({
+        "id": "1",
+        "op": "provision_unbound_account",
+        "endpoints": endpoints_json,
+        "account": { "handle": slug, "password": "1amTester!" },
+    });
+    stdin
+        .write_all(format!("{register}\n").as_bytes())
+        .await
+        .expect("write register request");
+    stdin.flush().await.expect("flush register request");
+    let first = stdout
+        .next_line()
+        .await
+        .expect("read register response")
+        .expect("bridge closed before answering");
+    let first: serde_json::Value = serde_json::from_str(&first).expect("parse register response");
+    assert_eq!(first.get("id").and_then(|v| v.as_str()), Some("1"));
+    assert_eq!(
+        first.get("ok").and_then(|v| v.as_bool()),
+        Some(true),
+        "register through the bridge failed: {first}"
+    );
+
+    // Request 2: a handoff, which only works if the session from request 1 is
+    // still there.
+    let client_id = required_env("COTEST_OIDC_CLIENT_ID");
+    let describe = serde_json::json!({
+        "id": "2",
+        "op": "describe_station",
+        "coauth_base_url": endpoints.coauth_base_url,
+        "soland_base_url": endpoints.soland_base_url,
+    });
+    stdin
+        .write_all(format!("{describe}\n").as_bytes())
+        .await
+        .expect("write describe request");
+    stdin.flush().await.expect("flush describe request");
+    let second = stdout
+        .next_line()
+        .await
+        .expect("read describe response")
+        .expect("bridge closed before answering");
+    let second: serde_json::Value = serde_json::from_str(&second).expect("parse describe response");
+    assert_eq!(second.get("id").and_then(|v| v.as_str()), Some("2"));
+    let service_id = second
+        .pointer("/result/service_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or_else(|| panic!("describe through the bridge failed: {second}"))
+        .to_owned();
+
+    let handoff = serde_json::json!({
+        "id": "3",
+        "op": "create_account_handoff",
+        "coauth_base_url": endpoints.coauth_base_url,
+        "client_id": client_id,
+        "audience_id": service_id,
+        "device_label": slug,
+    });
+    stdin
+        .write_all(format!("{handoff}\n").as_bytes())
+        .await
+        .expect("write handoff request");
+    stdin.flush().await.expect("flush handoff request");
+    let third = stdout
+        .next_line()
+        .await
+        .expect("read handoff response")
+        .expect("bridge closed before answering");
+    let third: serde_json::Value = serde_json::from_str(&third).expect("parse handoff response");
+    assert_eq!(
+        third.get("ok").and_then(|v| v.as_bool()),
+        Some(true),
+        "handoff through the bridge failed — the account session did not survive \
+         between requests: {third}"
+    );
+    assert!(
+        third.pointer("/result/handoff_id").is_some(),
+        "handoff response carried no id: {third}"
+    );
+
+    // The grant never crosses the bridge. A caller that could read it could
+    // also present it, which would put the session material this module owns
+    // into whatever process happened to ask.
+    assert!(
+        third.pointer("/result/account_handoff_grant").is_none(),
+        "the bridge leaked the handoff grant: {third}"
+    );
+
+    drop(stdin);
+    let status = child.wait().await.expect("wait for the bridge to exit");
+    assert!(
+        status.success(),
+        "bridge exited with {status} after its input closed"
+    );
+}

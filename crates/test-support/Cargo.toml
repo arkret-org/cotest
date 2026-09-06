@@ -65,4 +65,6 @@ workspace = true
 
 [dev-dependencies]
 # The live provisioning check needs a runtime and the run-scoped CA loader.
-tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+# The bridge test drives the binary as a child process, the way a Playwright
+# worker would.
+tokio = { workspace = true, features = ["io-util", "macros", "process", "rt-multi-thread"] }
