@@ -14,6 +14,7 @@ foreach ($file in Get-ChildItem -LiteralPath $testsRoot -Recurse -File -Filter "
     $scenarioKey = $relative.Substring(0, $relative.Length - ".spec.ts".Length)
     $usesProductUi = $source -match 'open(?:Dpop)?UserPage|openUserPage|\.goto(?:Home|Login|Setup|Timeline)|\.createRealm\(|\.sendTimelineMessage\('
     $usesRawHttp = $source -match '\brequest\.(?:get|post|put|patch|delete|fetch)\('
+    $usesCanonicalProvisioning = $source -match 'ProvisioningBridge'
     $bypasses = New-Object System.Collections.Generic.List[string]
     if ($source -match 'prepareMlsDevice\s*:\s*false') { $bypasses.Add("prepare_mls_device_false") }
     if ($source -match 'allowRecoveryOverride\s*:\s*true') { $bypasses.Add("recovery_override") }
@@ -31,6 +32,13 @@ foreach ($file in Get-ChildItem -LiteralPath $testsRoot -Recurse -File -Filter "
         $identity.Add("oauth_authorization_ui")
     }
     if ($bypasses -contains "session_injection") { $identity.Add("session_injection") }
+    # The canonical provisioning chain runs in Rust and reaches this suite
+    # through `cotest-provision`. It is neither a UI authorization nor a session
+    # injection: the account is registered, authorized and bound for real,
+    # without a browser and without an injected credential. Classifying it as
+    # `fixture_or_not_applicable` would understate the only browserless path
+    # that establishes a principal honestly.
+    if ($usesCanonicalProvisioning) { $identity.Add("canonical_provisioning_chain") }
     if ($identity.Count -eq 0) { $identity.Add("fixture_or_not_applicable") }
 
     $services = New-Object System.Collections.Generic.List[string]
@@ -51,10 +59,16 @@ foreach ($file in Get-ChildItem -LiteralPath $testsRoot -Recurse -File -Filter "
     if ($usesProductUi) { $producers.Add("inkson_product_client") }
     if ($source -match 'cotestWire|signedEventEnvelope|canonicalJson') { $producers.Add("cotest_wire_oracle") }
     if ($usesRawHttp) { $producers.Add("raw_http_fixture") }
+    if ($usesCanonicalProvisioning) { $producers.Add("rust_provisioning_bridge") }
     if ($producers.Count -eq 0) { $producers.Add("fixture_or_not_applicable") }
 
     $evidenceClass = if ($scenarioKey -eq "identity/recovery-key-to-encrypted-realm") {
         "live-product"
+    } elseif ($usesCanonicalProvisioning) {
+        # Real Coauth, real Soland, a real account and a real PCR genesis. The
+        # `harness/` blanket below covers specs that only exercise fixtures;
+        # this one exercises server contracts through the canonical chain.
+        "server-contract"
     } elseif ($scenarioKey -match '^(conformance|harness)/') {
         "fixture-only"
     } elseif ($usesProductUi -and $bypasses.Count -eq 0) {

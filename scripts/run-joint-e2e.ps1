@@ -2754,15 +2754,21 @@ $requiresInkson = Resolve-InksonRequirement `
     -RunProfile $RunProfile `
     -InksonArguments $inksonArguments
 
-# Two manifest gates, run before anything expensive.
+# Three manifest gates, run before anything expensive.
 #
-# Both already existed and neither was wired into a lane anyone runs, which is
+# All three already existed and none was wired into a lane anyone runs, which is
 # exactly how they went red unnoticed: a spec rename on 2026-09-06 left
-# `check_api_only_migration.py` failing across four commits, and the same rename
+# `check_api_only_migration.py` failing across four commits, the same rename
 # aborted a joint run at the evidence-manifest check after a full Inkson wasm
-# build. `api-only-migration.json` is now also the `joint-api` project's file
-# list, so a stale entry there selects the wrong specs rather than merely
+# build, and `generate-scenario-evidence.ps1 -Check` had been stale long enough
+# that `federation/three-server-p0` was recorded without the wire oracle it
+# actually uses. `api-only-migration.json` is now also the `joint-api` project's
+# file list, so a stale entry there selects the wrong specs rather than merely
 # misreporting. Running them here costs seconds and fails before any build.
+#
+# The evidence manifest is checked here rather than only at the reporting step
+# far below: that check is pure static source plus JSON, so paying for service
+# startup and a whole Playwright run before it fires buys nothing.
 $offlineGateFailures = @()
 $apiOnlyGateOutput = & (Get-PythonExecutable) (Join-Path $PSScriptRoot "check_api_only_migration.py") 2>&1
 if ($LASTEXITCODE -ne 0) {
@@ -2775,6 +2781,14 @@ $coverageGateOutput = & (Get-Process -Id $PID).Path @(
 ) 2>&1
 if ($LASTEXITCODE -ne 0) {
     $offlineGateFailures += "generate-e2e-coverage.ps1 -Check: $($coverageGateOutput -join ' ')"
+}
+$evidenceGateOutput = & (Get-Process -Id $PID).Path @(
+    "-NoProfile",
+    "-File", (Join-Path $PSScriptRoot "generate-scenario-evidence.ps1"),
+    "-Check"
+) 2>&1
+if ($LASTEXITCODE -ne 0) {
+    $offlineGateFailures += "generate-scenario-evidence.ps1 -Check: $($evidenceGateOutput -join ' ')"
 }
 if ($offlineGateFailures.Count -gt 0) {
     throw ("offline manifest gates failed before any build:{0}{1}" -f

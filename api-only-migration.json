@@ -3,7 +3,8 @@
   "expected_candidate_count": 30,
   "specialized_api_lanes": [
     "cotest/e2e/tests/extensions/platform-live.spec.ts",
-    "cotest/e2e/tests/harness/mocks-selftest.spec.ts"
+    "cotest/e2e/tests/harness/mocks-selftest.spec.ts",
+    "cotest/e2e/tests/harness/provisioning-bridge.spec.ts"
   ],
   "candidates": [
     {

@@ -3,6 +3,29 @@
   "suite_kind": "joint-e2e",
   "scenarios": [
     {
+      "scenario_key": "conformance/realm-state-snapshot-query-scalability",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "fixture_or_not_applicable"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle"
+      ],
+      "claims_excluded": [
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
       "scenario_key": "conformance/registry-drift",
       "suite_kind": "joint-e2e",
       "realism_level": "fixture-only",
@@ -26,29 +49,6 @@
       "claims_excluded": [
         "product_protocol_object_generation",
         "registration_login_authorization",
-        "ui_driven_business_flow_for_raw_http_steps"
-      ]
-    },
-    {
-      "scenario_key": "conformance/realm-state-snapshot-query-scalability",
-      "suite_kind": "joint-e2e",
-      "realism_level": "fixture-only",
-      "evidence_class": "fixture-only",
-      "real_services": [
-        "soland"
-      ],
-      "mocks": [],
-      "identity_establishment": [
-        "fixture_or_not_applicable"
-      ],
-      "protocol_object_producers": [
-        "cotest_wire_oracle",
-        "raw_http_fixture"
-      ],
-      "declared_test_bypasses": [
-        "raw_http_fixture_or_oracle"
-      ],
-      "claims_excluded": [
         "ui_driven_business_flow_for_raw_http_steps"
       ]
     },
@@ -386,6 +386,7 @@
         "session_injection"
       ],
       "protocol_object_producers": [
+        "cotest_wire_oracle",
         "raw_http_fixture"
       ],
       "declared_test_bypasses": [
@@ -454,6 +455,27 @@
       "claims_excluded": [
         "ui_driven_business_flow_for_raw_http_steps"
       ]
+    },
+    {
+      "scenario_key": "harness/provisioning-bridge",
+      "suite_kind": "joint-e2e",
+      "realism_level": "server-contract",
+      "evidence_class": "server-contract",
+      "real_services": [
+        "coauth",
+        "soland"
+      ],
+      "mocks": [
+        "email"
+      ],
+      "identity_establishment": [
+        "canonical_provisioning_chain"
+      ],
+      "protocol_object_producers": [
+        "rust_provisioning_bridge"
+      ],
+      "declared_test_bypasses": [],
+      "claims_excluded": []
     },
     {
       "scenario_key": "identity/account-profile-ui",
