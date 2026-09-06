@@ -685,9 +685,23 @@ fn validate_fsm_causal_heads(vector: &Value, vector_name: &str) -> Result<()> {
     }
 
     fn sealed(write: &Value) -> Result<SealedOp> {
+        // §9.5.1: a recovery write is a transition carrying only its `to`. It
+        // has no single `from` because it supersedes every divergent head at
+        // once, so a fixture that gave it one would be describing a write the
+        // reducer refuses.
+        let recovery = write
+            .get("recovery")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
         let mut op = arkret_wire::LatticeOp::empty();
         op.op_type = arkret_wire::LatticeOpType::Transition;
-        op.from = Some(require_pointer(write, "/from", "write")?.clone());
+        if recovery {
+            if write.get("from").is_some() {
+                bail!("a recovery write must not declare from");
+            }
+        } else {
+            op.from = Some(require_pointer(write, "/from", "write")?.clone());
+        }
         op.to = Some(require_pointer(write, "/to", "write")?.clone());
         let supersedes = required_array(write, "/supersedes", "write")?
             .iter()
@@ -698,11 +712,13 @@ fn validate_fsm_causal_heads(vector: &Value, vector_name: &str) -> Result<()> {
                 )
             })
             .collect::<Result<Vec<_>>>()?;
-        Ok(SealedOp::superseding(
+        let mut sealed = SealedOp::superseding(
             digest_of(required_pointer_str(write, "/id", "write")?)?,
             op,
             supersedes,
-        ))
+        );
+        sealed.recovery_reset = recovery;
+        Ok(sealed)
     }
 
     fn sealed_all(writes: &Value) -> Result<Vec<SealedOp>> {
@@ -835,6 +851,8 @@ fn validate_fsm_causal_heads(vector: &Value, vector_name: &str) -> Result<()> {
         "batch_split_is_one_result",
         "aba_is_distinguished_from_abab",
         "late_branch_merges_by_the_formula",
+        "recovery_lifts_the_cell_out_of_bottom",
+        "a_recovery_head_is_superseded_like_any_other",
         "concurrent_different_to_recovery_still_conflicts",
     ] {
         if !seen.contains(required) {
@@ -3269,7 +3287,135 @@ fn validate_conflict_recovery_move(vector: &Value, vector_name: &str) -> Result<
             "target_cell_mismatch",
             "ordinary_mls_commit_cannot_recover_bottom",
         ],
-    )
+    )?;
+    validate_fsm_recovery_admission(vector, vector_name)
+}
+
+/// The `fsm_recovery` half of `ak.vector.cba_lattice.conflict_recovery_move.v1`
+/// (`event-auth-state-resolution.md` §9.5.1 fsm additional admission).
+///
+/// The block above this one is prose the runner only shape-checks. This part is
+/// executed: the transition table comes from the registered contract of the cell
+/// the fixture names, and every assertion is run through the SDK's own `Fsm`, so
+/// a table edit or a relaxed admission fails here rather than in a Station.
+fn validate_fsm_recovery_admission(vector: &Value, vector_name: &str) -> Result<()> {
+    use arkret_state::lattice::{Fsm, Lattice};
+
+    let cell = required_pointer_str(vector, "/fsm_recovery/cell", vector_name)?;
+    require_non_empty_array(vector, "/fsm_recovery/assertions", vector_name)?;
+    require_non_empty_array(
+        vector,
+        "/fsm_recovery/shared_with_cas_register",
+        vector_name,
+    )?;
+    let family = cell
+        .strip_prefix("ak:cell:")
+        .and_then(|rest| rest.split(':').next())
+        .ok_or_else(|| anyhow!("vector {vector_name} fsm_recovery cell is not a cell ref"))?;
+
+    let contracts = arkret_lattice_registry::canonical_fsm_contracts()
+        .map_err(|error| anyhow!("vector {vector_name} cannot load fsm contracts: {error}"))?;
+    let contract = contracts
+        .iter()
+        .find(|contract| contract.cell_family == family)
+        .ok_or_else(|| {
+            anyhow!(
+                "vector {vector_name} fsm_recovery cell family {family} is not a registered fsm"
+            )
+        })?;
+
+    let mut fsm = Fsm::new(contract.runtime_transitions.clone());
+    if let Some(initial) = contract.runtime_initial_state.clone() {
+        fsm = fsm.with_initial(initial);
+    }
+
+    let recovery_to = |state: &str| {
+        let mut op = arkret_wire::LatticeOp::empty();
+        op.op_type = arkret_wire::LatticeOpType::Transition;
+        op.to = Some(json!(state));
+        op
+    };
+
+    // A recovery carries only its `to`: it supersedes every divergent head at
+    // once, so no single `from` names what it leaves.
+    let mut with_from = recovery_to("active");
+    with_from.from = Some(json!("paused"));
+    if fsm.validate_recovery_op(&with_from).is_ok() {
+        bail!(
+            "vector {vector_name} fsm_recovery: a recovery carrying a single from must be refused"
+        );
+    }
+    let mut as_set = arkret_wire::LatticeOp::empty();
+    as_set.op_type = arkret_wire::LatticeOpType::Set;
+    as_set.value = Some(json!("active"));
+    if fsm.validate_recovery_op(&as_set).is_ok() {
+        bail!("vector {vector_name} fsm_recovery: a recovery projected as a set must be refused");
+    }
+
+    // Empty heads are not the divergent-heads proof §9.5.1 item 1 requires.
+    if fsm
+        .validate_recovery_sources(&[], &recovery_to("active"))
+        .is_ok()
+    {
+        bail!(
+            "vector {vector_name} fsm_recovery: a recovery with no visible heads must be refused"
+        );
+    }
+
+    // Every registered non-terminal state has to be a legal source for at least
+    // one recovery target, and every terminal state has to be a legal source for
+    // none but its own registered self-loop. Both are read off the contract, so
+    // this holds for whichever family the fixture names.
+    for state in &contract.states {
+        let source = json!(state);
+        for target in &contract.states {
+            let op = recovery_to(target);
+            let registered = contract
+                .allowed_transitions
+                .iter()
+                .any(|(from, to)| from == state && to == target);
+            let admitted = fsm
+                .validate_recovery_sources(std::slice::from_ref(&source), &op)
+                .is_ok();
+            if registered != admitted {
+                bail!(
+                    "vector {vector_name} fsm_recovery: {family} recovery {state} -> {target} \n                     registered={registered} but admitted={admitted}"
+                );
+            }
+            if contract.terminal_states.contains(state) && state != target && admitted {
+                bail!(
+                    "vector {vector_name} fsm_recovery: {family} terminal state {state} must not \n                     be a recovery source for {target}"
+                );
+            }
+        }
+    }
+
+    // A recovery is refused when *any* superseded head has no edge, not only
+    // when all of them lack one.
+    let escape = contract.states.iter().find(|state| {
+        contract.terminal_states.contains(*state)
+            && contract
+                .allowed_transitions
+                .iter()
+                .any(|(from, _)| from != *state)
+    });
+    if let Some(terminal) = escape {
+        for (from, to) in &contract.allowed_transitions {
+            if from == terminal {
+                continue;
+            }
+            let sources = vec![json!(from), json!(terminal)];
+            if fsm
+                .validate_recovery_sources(&sources, &recovery_to(to))
+                .is_ok()
+            {
+                bail!(
+                    "vector {vector_name} fsm_recovery: {family} recovery to {to} was admitted \n                     although the terminal head {terminal} has no edge into it"
+                );
+            }
+        }
+    }
+    Ok(())
 }
 
 fn union_digest_sets(mut left: BTreeSet<String>, right: BTreeSet<String>) -> BTreeSet<String> {
