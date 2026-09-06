@@ -977,9 +977,24 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         "ak:cell:{AGENT_STATUS_COMPONENT}:{}",
         lifecycle_cell_ref.as_str()
     ))?;
-    let lifecycle_leaf_digest = arkret_state::state_value_leaf_digest(
+    // `ak.component.agent.status.v1` is an `fsm` and therefore a causal register
+    // (`event-auth-state-resolution.md` §9.3.1.5), so its §6.2.1 leaf hashes the
+    // head set rather than the settled status.
+    let lifecycle_heads = vec![arkret_models_identity::AgentLifecycleHead {
+        event_id: event_id(2)?,
+        value: config.lifecycle_status,
+    }];
+    let lifecycle_leaf_digest = arkret_state::state::state_root::state_leaf_hash_from_state_object(
         &arkret_wire::CellRef::new(lifecycle_cell_ref.as_str().to_owned())?,
-        &serde_json::to_value(config.lifecycle_status)?,
+        serde_json::json!({
+            "heads": lifecycle_heads
+                .iter()
+                .map(|head| serde_json::json!({
+                    "event_id": head.event_id.as_str(),
+                    "value": head.value,
+                }))
+                .collect::<Vec<_>>(),
+        }),
         arkret_canonical::DigestSuite::Sha256,
     )?;
 
@@ -1052,6 +1067,7 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         seal: lifecycle_seal.clone(),
         cell_ref: lifecycle_cell_ref,
         cell_value: config.lifecycle_status,
+        cell_heads: lifecycle_heads,
         leaf_digest: lifecycle_leaf_digest,
         leaf_index: 0,
         leaf_count: 1,

@@ -589,31 +589,8 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                     }),
                 );
             }
-            // `ak.vector.lattice.fsm_causal_heads.v1` is registered and its
-            // thirteen cases are in the fixture, but nothing executes them yet:
-            // the SDK still folds `fsm` by arrival order, so a runner here would
-            // be asserting against the semantics R7 is going to replace rather
-            // than the ones §9.3.1.5 defines. The shape is checked so the block
-            // cannot rot while it waits; the cases are wired with the SDK
-            // migration (`arkret-work/review/spec-open/2026-09-06-1610` §8).
             "fsm_causal_heads" => {
-                let cases = required_array(vector, "/cases", name)?;
-                if cases.len() < 13 {
-                    bail!("fsm_causal_heads must keep all thirteen registered cases");
-                }
-                for required in [
-                    "input_order_permutation_is_one_result",
-                    "batch_split_is_one_result",
-                    "aba_is_distinguished_from_abab",
-                    "late_branch_merges_by_the_formula",
-                    "concurrent_different_to_recovery_still_conflicts",
-                ] {
-                    if !cases.iter().any(|case| {
-                        case.get("name").and_then(Value::as_str) == Some(required)
-                    }) {
-                        bail!("fsm_causal_heads is missing case {required}");
-                    }
-                }
+                validate_fsm_causal_heads(vector, name)?;
             }
             _ => bail!("unknown cba lattice vector: {name}"),
         }
@@ -666,6 +643,207 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
 /// hold too; and a disclosure that contradicts the verdict keeps the peer stale
 /// rather than becoming new fork evidence. An undisclosed position is a
 /// fail-closed answer, not a peer failure.
+/// `value.pointer(pointer)` with the vector name in the error.
+fn require_pointer<'a>(value: &'a Value, pointer: &str, vector_name: &str) -> Result<&'a Value> {
+    value
+        .pointer(pointer)
+        .ok_or_else(|| anyhow!("vector {vector_name} missing {pointer}"))
+}
+
+/// `ak.vector.lattice.fsm_causal_heads.v1`
+/// (`cba-lattice-fixture.json`, `event-auth-state-resolution.md`
+/// §9.3.1.5–§9.3.1.8).
+///
+/// The SDK's `Fsm` is the implementation under test: every case runs through its
+/// real `join`, and the merge case through the §9.3.1.8 formula over the heads
+/// that same lattice derives. A case only a causal state can pass — order
+/// permutation, batch split, ABA, the late branch — therefore fails here rather
+/// than in a Station.
+fn validate_fsm_causal_heads(vector: &Value, vector_name: &str) -> Result<()> {
+    use arkret_state::lattice::cas_register::CasHead;
+    use arkret_state::lattice::{CellState, Fsm, Lattice, SealedOp, fsm_heads};
+
+    let registered = require_pointer(vector, "/registered", vector_name)?;
+    let initial = require_pointer(registered, "/initial_state", vector_name)?.clone();
+    let transitions = required_array(registered, "/allowed_transitions", vector_name)?
+        .iter()
+    .map(|pair| {
+        let pair = pair
+            .as_array()
+            .ok_or_else(|| anyhow!("allowed_transitions entry is not a pair"))?;
+        Ok((
+            pair.first().cloned().unwrap_or(Value::Null),
+            pair.get(1).cloned().unwrap_or(Value::Null),
+        ))
+    })
+    .collect::<Result<Vec<_>>>()?;
+    let fsm = Fsm::new(transitions).with_initial(initial.clone());
+    let cell = arkret_wire::CellRef::new(required_pointer_str(vector, "/cell", vector_name)?.to_owned())?;
+
+    fn digest_of(event_id: &str) -> Result<arkret_wire::Hash> {
+        Ok(arkret_wire::EventId::new(event_id.to_owned())?.event_digest())
+    }
+
+    fn sealed(write: &Value) -> Result<SealedOp> {
+        let mut op = arkret_wire::LatticeOp::empty();
+        op.op_type = arkret_wire::LatticeOpType::Transition;
+        op.from = Some(require_pointer(write, "/from", "write")?.clone());
+        op.to = Some(require_pointer(write, "/to", "write")?.clone());
+        let supersedes = required_array(write, "/supersedes", "write")?
+            .iter()
+            .map(|id| {
+                digest_of(
+                    id.as_str()
+                        .ok_or_else(|| anyhow!("supersedes entry is not a string"))?,
+                )
+            })
+            .collect::<Result<Vec<_>>>()?;
+        Ok(SealedOp::superseding(
+            digest_of(required_pointer_str(write, "/id", "write")?)?,
+            op,
+            supersedes,
+        ))
+    }
+
+    fn sealed_all(writes: &Value) -> Result<Vec<SealedOp>> {
+        writes.as_array().ok_or_else(|| anyhow!("case writes is not an array"))?.iter().map(sealed).collect()
+    }
+
+    /// §9.3.1.6: heads that agree read that state, heads that differ are `⊥`.
+    fn settled(initial: &Value, heads: &[CasHead]) -> Value {
+        match heads.split_first() {
+            None => initial.clone(),
+            Some((first, rest)) if rest.iter().all(|head| head.value == first.value) => {
+                first.value.clone()
+            }
+            Some(_) => json!("failed_bottom"),
+        }
+    }
+
+    let mut seen = BTreeSet::new();
+    for case in required_array(vector, "/cases", vector_name)? {
+        let name = required_pointer_str(case, "/name", vector_name)?;
+        seen.insert(name.to_owned());
+        let expected = require_pointer(case, "/expected", name)?;
+
+        let (settled_value, bottom_reason) = if let Some(merge) = case.get("merge") {
+            // §9.3.1.8: another side's *unknown* head survives; a head it saw
+            // and no longer holds has been superseded. Union revives `g1`,
+            // intersection drops `g3`; only the formula is right.
+            let side = |key: &str| -> Result<(BTreeSet<String>, Vec<CasHead>)> {
+                let node = require_pointer(merge, &format!("/{key}"), "merge")?;
+                let covered = required_array(node, "/covered", "merge")?
+                    .iter()
+                    .map(|id| {
+                        Ok(digest_of(
+                            id.as_str()
+                                .ok_or_else(|| anyhow!("covered entry is not a string"))?,
+                        )?
+                        .as_str()
+                        .to_owned())
+                    })
+                    .collect::<Result<BTreeSet<_>>>()?;
+                let heads = fsm_heads(&sealed_all(require_pointer(node, "/writes", "merge")?)?)
+                    .map_err(|bottom| anyhow!("merge side {key} does not resolve: {bottom:?}"))?;
+                Ok((covered, heads))
+            };
+            let (left_covered, left_heads) = side("left")?;
+            let (right_covered, right_heads) = side("right")?;
+            let mut merged: Vec<CasHead> = Vec::new();
+            for head in left_heads.iter().chain(right_heads.iter()) {
+                let id = head.move_id.as_str().to_owned();
+                if merged.iter().any(|kept| kept.move_id == head.move_id) {
+                    continue;
+                }
+                let in_left = left_heads.iter().any(|h| h.move_id == head.move_id);
+                let in_right = right_heads.iter().any(|h| h.move_id == head.move_id);
+                let survives = (in_left && in_right)
+                    || (in_left && !right_covered.contains(&id))
+                    || (in_right && !left_covered.contains(&id));
+                if survives {
+                    merged.push(head.clone());
+                }
+            }
+            let value = settled(&initial, &merged);
+            let reason = (value == json!("failed_bottom")).then(|| json!("same_from_different_to"));
+            (value, reason)
+        } else {
+            let ops = if let Some(batches) = case.get("batches") {
+                batches.as_array().ok_or_else(|| anyhow!("case batches is not an array"))?
+                    .iter()
+                    .map(sealed_all)
+                    .collect::<Result<Vec<_>>>()?
+                    .concat()
+            } else if case
+                .get("unreconstructable_basis")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+            {
+                // The write's basis cannot be rebuilt, so the reducer cannot
+                // check its admission. It holds at the state it can verify and
+                // MUST NOT adopt an unverified `to`.
+                Vec::new()
+            } else {
+                sealed_all(require_pointer(case, "/writes", name)?)?
+            };
+            match fsm.join(&cell, &ops) {
+                CellState::Value(value) => (value, None),
+                CellState::Bottom(bottom) => (
+                    json!("failed_bottom"),
+                    bottom
+                        .details
+                        .as_ref()
+                        .and_then(|details| details.get("reason").cloned()),
+                ),
+            }
+        };
+
+        let mut observed = serde_json::Map::new();
+        observed.insert("settled".to_owned(), settled_value);
+        if let Some(reason) = bottom_reason {
+            observed.insert("bottom_reason".to_owned(), reason);
+        }
+        if let Some(result) = expected.get("result") {
+            // `hold` is expressed as "the state the receiver can verify", which
+            // is what the empty op set produced above.
+            observed.insert("result".to_owned(), result.clone());
+        }
+        let observed = Value::Object(observed);
+        // The fixture also pins `heads` and `occupies_state_root_leaf`; those
+        // are the leaf-set vector's business, so only the members this runner
+        // computes are compared.
+        let expected_subset = Value::Object(
+            expected
+                .as_object()
+                .ok_or_else(|| anyhow!("{name} expected must be an object"))?
+                .iter()
+                .filter(|(key, _)| observed.get(key.as_str()).is_some())
+                .map(|(key, value)| (key.clone(), value.clone()))
+                .collect(),
+        );
+        super::helpers::assert_expected_subset(name, &expected_subset, &observed)?;
+        record_vector_event(
+            &format!("cba.fsm_causal_heads.{name}"),
+            &json!({"vector": vector_name, "case": case}),
+            &expected_subset,
+            &observed,
+        );
+    }
+
+    for required in [
+        "input_order_permutation_is_one_result",
+        "batch_split_is_one_result",
+        "aba_is_distinguished_from_abab",
+        "late_branch_merges_by_the_formula",
+        "concurrent_different_to_recovery_still_conflicts",
+    ] {
+        if !seen.contains(required) {
+            bail!("fsm_causal_heads is missing case {required}");
+        }
+    }
+    Ok(())
+}
+
 fn validate_fork_resolution_peer_alignment(vector: &Value, vector_name: &str) -> Result<()> {
     require_str_eq(
         vector,

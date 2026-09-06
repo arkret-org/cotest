@@ -1119,25 +1119,38 @@ fn fsm_reentered_transition_is_a_new_occurrence() -> Result<()> {
         arkret_wire::CellFamilyId::MEMBER_STATE_V1,
         "did.web.alice.example",
     );
+    // Each write supersedes the head its own verified basis observed
+    // (§9.3.1.7 item 4). `fsm` is a causal register since §9.3.1.5, so the chain
+    // has to say it is a chain — position in this list carries no causality.
     let ops = vec![
         SealedOp::new(
             issuer_digest("51"),
             op_transition(json!("invited"), json!("join")),
         ),
-        SealedOp::new(
+        SealedOp::superseding(
             issuer_digest("52"),
             op_transition(json!("join"), json!("leave")),
+            vec![issuer_digest("51")],
         ),
-        SealedOp::new(
+        SealedOp::superseding(
             issuer_digest("53"),
             op_transition(json!("leave"), json!("join")),
+            vec![issuer_digest("52")],
         ),
-        SealedOp::new(
+        SealedOp::superseding(
             issuer_digest("54"),
             op_transition(json!("join"), json!("leave")),
+            vec![issuer_digest("53")],
         ),
     ];
     let resolved = lattice.join(&cref, &ops);
+    // The same set in any order is the same state — the property the
+    // arrival-ordered fold could not offer.
+    let mut shuffled = ops.clone();
+    shuffled.reverse();
+    if lattice.join(&cref, &shuffled) != resolved {
+        bail!("the causal state must not depend on the order the ops arrive in");
+    }
     if resolved != CellState::Value(json!("leave")) {
         bail!(
             "a transition re-entered after the cell returned to its source must apply again, \
@@ -1149,7 +1162,7 @@ fn fsm_reentered_transition_is_a_new_occurrence() -> Result<()> {
     let mut redelivered = ops.clone();
     redelivered.push(ops[1].clone());
     if lattice.join(&cref, &redelivered) != CellState::Value(json!("leave")) {
-        bail!("redelivering a transition the walk has moved past must stay a no-op");
+        bail!("redelivering one identity must stay a no-op");
     }
     Ok(())
 }
@@ -1175,9 +1188,10 @@ fn fsm_registered_self_loop_does_not_consume_its_state() -> Result<()> {
             issuer_digest("55"),
             op_transition(json!("active"), json!("active")),
         ),
-        SealedOp::new(
+        SealedOp::superseding(
             issuer_digest("56"),
             op_transition(json!("active"), json!("tombstoned")),
+            vec![issuer_digest("55")],
         ),
     ];
     let resolved = lattice.join(&cref, &ops);
