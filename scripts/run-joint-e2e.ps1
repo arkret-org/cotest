@@ -3330,12 +3330,23 @@ try {
     # (`COTEST_WIRE_BIN`), which is what CI already does.
     if (-not $SkipBuild -and -not $env:COTEST_WIRE_BIN) {
         $cotestWireBinary = Join-Path $cotestTargetDirectory "debug\cotest-wire.exe"
+        $cotestProvisionBinary = Join-Path $cotestTargetDirectory "debug\cotest-provision.exe"
+        $buildInputRoots = @($repoRoot, (Join-Path $workspaceRoot "arkret-rust-sdk"))
+        # One `cargo build` produces both bins, so both have to be checked. With
+        # only the wire binary gated, a tree whose `cotest-wire.exe` was built
+        # before `cotest-provision` existed reports a cache hit, skips the
+        # build, and leaves no bridge — which does not fail anything: the
+        # provisioning specs skip on the missing `COTEST_PROVISION_BIN` and the
+        # run goes green having tested none of the canonical chain.
         $wireFreshness = Get-ArtifactFreshness `
             -ArtifactPath $cotestWireBinary `
-            -RepositoryRoots @(
-                $repoRoot,
-                (Join-Path $workspaceRoot "arkret-rust-sdk")
-            )
+            -RepositoryRoots $buildInputRoots
+        $provisionFreshness = Get-ArtifactFreshness `
+            -ArtifactPath $cotestProvisionBinary `
+            -RepositoryRoots $buildInputRoots
+        if ($wireFreshness.Fresh -and -not $provisionFreshness.Fresh) {
+            $wireFreshness = $provisionFreshness
+        }
         if (-not $wireFreshness.Fresh) {
             Write-Host "Preparing cotest-wire binary: $($wireFreshness.Detail)"
             $started = Get-Date
@@ -4466,6 +4477,10 @@ try {
         $env:COTEST_PROVISION_BIN = $provisionBinary
     } else {
         Remove-Item Env:COTEST_PROVISION_BIN -ErrorAction SilentlyContinue
+        # Say it out loud. Without the bridge the canonical provisioning specs
+        # skip, and a skip that only shows up as a missing line in the report is
+        # how a lane keeps passing while testing less than it did.
+        Write-Warning ("no provisioning bridge at {0}; canonical provisioning scenarios will skip" -f $provisionBinary)
     }
 
     if ($requiresInkson -and -not $InksonCommand -and $inksonPort) {

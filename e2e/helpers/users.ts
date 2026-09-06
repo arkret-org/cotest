@@ -1463,10 +1463,22 @@ export function uniqueUser(prefix: string, server?: SolandKey): JointUser {
   };
 }
 
+/// The identity fields canonical provisioning rebinds on the caller's user.
+type ProvisionedIdentity = Pick<
+  JointUser,
+  "id" | "did" | "deviceId" | "handle" | "displayName"
+>;
+
 // In-flight canonical provisioning per (server, user name). The first
 // `ensureRegistered` call for a user drives the co-located coauth account +
 // PCR genesis once; concurrent and repeat callers share the same promise.
-const provisionedPrincipals = new Map<string, Promise<void>>();
+//
+// It caches the *identity*, not a `Promise<void>` whose body writes to one
+// user object. With the latter, a second caller holding a different object
+// with the same name got a settled promise and an untouched user: same name,
+// same cache key, and none of `id`/`did`/`deviceId` rebound — a principal that
+// was never registered, failing later and somewhere else.
+const provisionedPrincipals = new Map<string, Promise<ProvisionedIdentity>>();
 
 export async function ensureRegistered(
   request: APIRequestContext,
@@ -1480,10 +1492,10 @@ export async function ensureRegistered(
   // `user` is rebound to the account-bound identity the ceremony returns.
   const coauth = coauthBaseUrl(opts.server);
   if (coauth) {
-    const key = `${opts.server ?? "default"}${user.name}`;
+    const key = `${opts.server ?? "default"}\0${user.name}`;
     let provisioning = provisionedPrincipals.get(key);
     if (!provisioning) {
-      provisioning = (async () => {
+      provisioning = (async (): Promise<ProvisionedIdentity> => {
         const accountRequest = withOperationSelectors(
           await playwrightRequest.newContext({
             ignoreHTTPSErrors: process.env.COTEST_IGNORE_HTTPS === "1",
@@ -1509,18 +1521,37 @@ export async function ensureRegistered(
               `ensureRegistered: canonical provisioning returned no session for ${user.name}`,
             );
           }
-          user.id = session.user.id;
-          user.did = session.user.did;
-          user.deviceId = session.user.deviceId;
-          user.handle = session.user.handle;
-          user.displayName = session.user.displayName;
+          return {
+            id: session.user.id,
+            did: session.user.did,
+            deviceId: session.user.deviceId,
+            handle: session.user.handle,
+            displayName: session.user.displayName,
+          };
         } finally {
           await accountRequest.dispose();
         }
       })();
+      // A failed provisioning must not be cached as a settled rejection: every
+      // later caller would inherit one deployment hiccup forever. Dropping the
+      // entry lets the next caller try again, which is bounded by how many
+      // callers there are rather than by a retry loop.
+      provisioning.catch(() => {
+        if (provisionedPrincipals.get(key) === provisioning) {
+          provisionedPrincipals.delete(key);
+        }
+      });
       provisionedPrincipals.set(key, provisioning);
     }
-    await provisioning;
+    const identity = await provisioning;
+    // Applied per caller, not inside the cached body. This is the line that
+    // makes a repeat caller with its own user object get a registered
+    // principal rather than an untouched one.
+    user.id = identity.id;
+    user.did = identity.did;
+    user.deviceId = identity.deviceId;
+    user.handle = identity.handle;
+    user.displayName = identity.displayName;
     return;
   }
   await ensureRegisteredRaw(request, user, opts);
