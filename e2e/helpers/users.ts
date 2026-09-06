@@ -45,6 +45,7 @@ import {
   registerRequestAuth,
   typedId,
 } from "./soland-api";
+import { deviceSuffix } from "./ids";
 import { base58btcEncode } from "./encoding";
 import { withOperationSelectors } from "./arkret-test";
 import {
@@ -1433,7 +1434,7 @@ export function assertJointStackNotRequired(context: string): void {
 export function uniqueUser(prefix: string, server?: SolandKey): JointUser {
   const stamp = randomUUID();
   const slug = `${prefix}-${stamp}`.toLowerCase().replace(/[^a-z0-9-]/g, "-");
-  const deviceSuffix = stamp.replace(/-/g, "").slice(0, 12);
+  const suffix = deviceSuffix(stamp);
   const scid = base58btcEncode(
     Buffer.concat([Buffer.from([0x12, 0x20]), randomBytes(32)]),
   );
@@ -1456,7 +1457,7 @@ export function uniqueUser(prefix: string, server?: SolandKey): JointUser {
     name: slug,
     id: projectDidToCoreId(principalDid),
     did: principalDid,
-    deviceId: `ak:device:01904100-0000-7000-8000-${deviceSuffix}`,
+    deviceId: `ak:device:01904100-0000-7000-8000-${suffix}`,
     handle: `@${slug}`,
     displayName: `${prefix} ${stamp}`,
   };

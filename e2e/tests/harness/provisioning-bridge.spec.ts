@@ -11,81 +11,75 @@
 // `api-only-migration.json`'s specialized lanes rather than pending migration
 // because it has nowhere to migrate to — it *is* the Rust path.
 
-import { expect, test } from "@playwright/test";
-
-import { coauthBaseUrl, coauthOidcClientId, mockEmailBaseUrl, solandBaseUrl } from "../../helpers/env";
-import { ProvisioningBridge } from "../../helpers/provisioning-bridge";
+import { expect, test } from "../../helpers/provisioning-fixture";
 
 test.describe("provisioning bridge @fully-implemented", () => {
-  test("the suite founds a principal through the Rust chain", async () => {
-    const coauth = coauthBaseUrl();
-    test.skip(!coauth, "canonical provisioning requires a Coauth deployment");
-    test.skip(
-      !process.env.COTEST_PROVISION_BIN,
-      "COTEST_PROVISION_BIN is set by the joint runner; this spec needs it",
-    );
-    const clientId = coauthOidcClientId();
-    expect(clientId, "COTEST_OIDC_CLIENT_ID must be set alongside Coauth").toBeTruthy();
+  test("the suite founds a principal through the Rust chain", async ({
+    canonicalProvisioning,
+  }) => {
+    const { station } = canonicalProvisioning;
+    expect(station.serviceId).toMatch(/^ak:did_core:/);
+    expect(station.trustDomain.trim()).not.toBe("");
 
-    const endpoints = {
-      coauthBaseUrl: coauth as string,
-      solandBaseUrl: solandBaseUrl(),
-      mockEmailBaseUrl: mockEmailBaseUrl(),
+    const principal = await canonicalProvisioning.provisionPrincipal("ts-bridge");
+
+    expect(principal.recoveryKey.split(/\s+/)).toHaveLength(24);
+    expect(principal.accountId.principal_id).toMatch(/^ak:did_core:/);
+    // The AccountId is closed: the Station half is the Station that registered
+    // it, not whatever the caller asked for.
+    expect(principal.accountId.station_id).toBe(station.serviceId);
+    expect(principal.sessionGrant, "grant carried no session JWT").toBeTruthy();
+
+    const outcome = principal.sessionGrantOutcome as {
+      audience_id?: string;
+      device_id?: string;
     };
-    const bridge = ProvisioningBridge.start();
-    try {
-      const slug = `ts-bridge-${Date.now()}${Math.floor(Math.random() * 1000)}`;
-      await bridge.provisionUnboundAccount(endpoints, {
-        handle: slug,
-        password: "1amTester!",
-      });
+    expect(outcome.audience_id).toBe(station.serviceId);
+    expect(outcome.device_id).toBe(principal.deviceId);
+  });
 
-      const facts = await bridge.describeStation(endpoints);
-      expect(facts.serviceId).toMatch(/^ak:did_core:/);
-      expect(facts.trustDomain.trim()).not.toBe("");
+  test("a second principal reuses the worker's bridge", async ({
+    canonicalProvisioning,
+  }) => {
+    // Two principals from one bridge. This is the property the worker-scoped
+    // fixture exists for: the second call re-registers and re-authenticates
+    // against the same process, so its handoff authorizes as the account it
+    // just created rather than as the one still signed in from the first.
+    const first = await canonicalProvisioning.provisionPrincipal("ts-bridge-a");
+    const second = await canonicalProvisioning.provisionPrincipal("ts-bridge-b");
 
-      // The handoff authorizes as the account registered above. It only works
-      // because the bridge kept that session — which is the property that makes
-      // it a long-lived process rather than one spawn per call.
-      const handoff = await bridge.createAccountHandoff({
-        coauthBaseUrl: endpoints.coauthBaseUrl,
-        clientId: clientId as string,
-        audienceId: facts.serviceId,
-        deviceLabel: slug,
-      });
-      expect(handoff.binding).toHaveProperty("identity_creation_lease");
+    expect(second.accountId.principal_id).not.toBe(first.accountId.principal_id);
+    expect(second.deviceId).not.toBe(first.deviceId);
+    expect(second.accountId.station_id).toBe(first.accountId.station_id);
+    expect(second.recoveryKey).not.toBe(first.recoveryKey);
+  });
 
-      const deviceId = `ak:device:01904100-0000-7000-8000-${Date.now().toString(16).padStart(12, "0").slice(-12)}`;
-      const principal = await bridge.foundPrincipal({
-        handoffId: handoff.handoffId,
-        endpoints,
-        trustDomain: facts.trustDomain,
-        audienceId: facts.serviceId,
-        deviceId,
-        displayName: `TS bridge ${slug}`,
-      });
+  test("the bridge does not hand its caller the account handoff grant", async ({
+    canonicalProvisioning,
+  }) => {
+    // The founding device key and the handoff grant stay in the bridge process.
+    // A caller that could read the grant could present it, so this asserts the
+    // boundary rather than the chain.
+    //
+    // The account is registered here rather than borrowed from a sibling test:
+    // a handoff authorizes against whatever session the bridge currently holds,
+    // and a test that depended on the previous one having left one behind would
+    // pass or fail on Playwright's worker assignment.
+    const { deployment, station } = canonicalProvisioning;
+    await canonicalProvisioning.bridge.provisionUnboundAccount(deployment, {
+      handle: `ts-bridge-boundary-${Date.now()}${Math.floor(Math.random() * 1000)}`,
+      password: "1amTester!",
+    });
+    const handoff = await canonicalProvisioning.bridge.createAccountHandoff({
+      coauthBaseUrl: deployment.coauthBaseUrl,
+      clientId: deployment.oidcClientId,
+      audienceId: station.serviceId,
+      deviceLabel: `ts-bridge-boundary-${Date.now()}`,
+    });
 
-      expect(principal.recoveryKey.split(/\s+/)).toHaveLength(24);
-      const grant = principal.sessionGrantOutcome as {
-        audience_id?: string;
-        device_id?: string;
-        session_grant?: string;
-        account_id?: { principal_id?: string; station_id?: string };
-      };
-      expect(grant.audience_id).toBe(facts.serviceId);
-      expect(grant.device_id).toBe(deviceId);
-      expect(grant.session_grant, "grant carried no session JWT").toBeTruthy();
-      expect(grant.account_id?.principal_id).toMatch(/^ak:did_core:/);
-      expect(grant.account_id?.station_id).toBe(facts.serviceId);
-
-      // The grant material stays in the bridge. If this ever starts coming
-      // back, the boundary has stopped protecting anything.
-      expect(
-        handoff.binding,
-        "the bridge must not hand the account handoff grant to its caller",
-      ).not.toHaveProperty("account_handoff_grant");
-    } finally {
-      await bridge.dispose();
-    }
+    expect(handoff.handoffId).not.toBe("");
+    expect(handoff.binding).toHaveProperty("identity_creation_lease");
+    expect(handoff.binding).not.toHaveProperty("account_handoff_grant");
+    expect(handoff.binding).not.toHaveProperty("founding_device_key");
   });
 });

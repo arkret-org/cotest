@@ -14,7 +14,7 @@ foreach ($file in Get-ChildItem -LiteralPath $testsRoot -Recurse -File -Filter "
     $scenarioKey = $relative.Substring(0, $relative.Length - ".spec.ts".Length)
     $usesProductUi = $source -match 'open(?:Dpop)?UserPage|openUserPage|\.goto(?:Home|Login|Setup|Timeline)|\.createRealm\(|\.sendTimelineMessage\('
     $usesRawHttp = $source -match '\brequest\.(?:get|post|put|patch|delete|fetch)\('
-    $usesCanonicalProvisioning = $source -match 'ProvisioningBridge'
+    $usesCanonicalProvisioning = $source -match 'ProvisioningBridge|canonicalProvisioning|provisioning-fixture'
     $bypasses = New-Object System.Collections.Generic.List[string]
     if ($source -match 'prepareMlsDevice\s*:\s*false') { $bypasses.Add("prepare_mls_device_false") }
     if ($source -match 'allowRecoveryOverride\s*:\s*true') { $bypasses.Add("recovery_override") }
@@ -48,12 +48,22 @@ foreach ($file in Get-ChildItem -LiteralPath $testsRoot -Recurse -File -Filter "
     foreach ($service in @("teabay", "floria", "savfox", "sodmin")) {
         if ($source -match $service) { $services.Add($service) }
     }
+    # This classifier reads one file, so a spec that reaches its services
+    # through a fixture shows none of the textual signals above. The canonical
+    # chain registers at Coauth, reads the verification mail out of the mock
+    # inbox, and founds the principal at the Station — say so here rather than
+    # letting the fixture make the manifest understate the run.
+    if ($usesCanonicalProvisioning) {
+        $services.Add("coauth")
+        $services.Add("soland")
+    }
 
     $mocks = New-Object System.Collections.Generic.List[string]
     foreach ($mock in @("idp", "email", "witness", "did_host", "push_gateway", "mimi_facade", "applet_registry", "savfox_model", "tsp_endpoint", "challenge_provider", "claim_issuer")) {
         $pattern = 'mock[_-]?' + [regex]::Escape($mock)
         if ($source -match $pattern) { $mocks.Add($mock) }
     }
+    if ($usesCanonicalProvisioning) { $mocks.Add("email") }
 
     $producers = New-Object System.Collections.Generic.List[string]
     if ($usesProductUi) { $producers.Add("inkson_product_client") }

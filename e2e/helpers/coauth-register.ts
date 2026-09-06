@@ -6,6 +6,8 @@
 // delegated to cotest-wire, which consumes Garth and the Arkret Rust SDK.
 
 import { createHash, randomBytes, randomUUID } from "node:crypto";
+
+import { newDeviceId } from "./ids";
 import { type APIRequestContext } from "@playwright/test";
 import {
   coauthOidcClientId,
@@ -432,8 +434,7 @@ export async function registerCoauthPasswordAccount(
     displayName,
   });
 
-  const deviceSuffix = randomUUID().replace(/-/g, "").slice(0, 12);
-  const genesisDeviceId = `ak:device:01904100-0000-7000-8000-${deviceSuffix}`;
+  const genesisDeviceId = newDeviceId();
   const principalDescribe = await responseJsonRecord(
     await request.get(`${solandBaseUrl(opts.server)}/_arkret/describe`),
     "soland describe",
