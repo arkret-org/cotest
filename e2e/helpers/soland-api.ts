@@ -3627,20 +3627,25 @@ export type InviteDeliveryCbaProofBundle =
 // per `invite_event.seal_basis.leaves` entry, keyed on that leaf, and every
 // leaf covered.
 //
-// The closure the receiver replays is the one an inviter-side Station would
-// have built: each leaf Seal plus its transitive `predecessor_refs`, and the
-// accepted Control Moves those Seals cover that write the Realm authority-root
-// cell (`capabilities.md` §3.2 admits no other authority source). Seals come
-// from `ak.self.seals.read.resolve.v1`; the Control Moves come from the
-// inviter's own Realm event query, filtered to the control plane. Extra
-// covered Moves are harmless — the receiver indexes them by digest and only
-// replays what a Seal delta names — but a MISSING one leaves the authority
-// cell empty and step 4 then fails with a capability reason, so the filter
-// stays wide rather than clever.
+// The closure is each leaf Seal plus its transitive `predecessor_refs`, from
+// `ak.self.seals.read.resolve.v1`.
 //
-// `inclusion_proofs` / `availability_proofs` stay empty: the Seal closure is
-// self-verifying here (every Seal id is re-derived from its canonical bytes by
-// the receiver), which is the same shape the Station-side builder emits.
+// `control_moves` stays EMPTY. `capabilities.md` §3.2 admits exactly one
+// authority source and fixes its evidence: the authority-root cell's
+// registered inclusion proof under the same Seal basis. Replaying the Control
+// Move that writes that cell is not an alternative — that Event is
+// `ak.realm.create`, a `seal_basis`-exempt anchor unit, and
+// `cba-proof-bundle.schema.json` requires `control_moves[]` to reject anchor
+// units outright.
+//
+// `inclusion_proofs` is the gap this helper cannot close. Building the branch
+// needs every governance leaf under the target Seal, which a member client
+// does not hold; the Station-side builder
+// (`soland/crates/http/src/routing/invites/capability_closure.rs`) reads them
+// locally. Until this helper can get them — `ak.self.realm_state_snapshot.read.manifest_head`
+// plus a `cotest-wire` branch command is the plausible route — step 4 answers
+// these peer-direct cases with `realm_authority_root_missing`. The product path
+// is unaffected: real deliveries are built by the inviting Station.
 export async function inviteDeliveryCbaProofBundles(
   request: APIRequestContext,
   token: string,
@@ -3666,7 +3671,6 @@ export async function inviteDeliveryCbaProofBundles(
       }),
     ),
   ).sort();
-  const controlMoves = await realmControlMoves(request, token, realmId, opts);
   const bundles: InviteDeliveryCbaProofBundle[] = [];
   for (const sealRef of sealRefs) {
     const seals = await sealPredecessorClosure(
@@ -3679,7 +3683,7 @@ export async function inviteDeliveryCbaProofBundles(
     bundles.push({
       target_seal_ref: sealRef,
       seals,
-      control_moves: controlMoves,
+      control_moves: [],
       inclusion_proofs: [],
       availability_proofs: [],
     });
@@ -3723,37 +3727,6 @@ async function sealPredecessorClosure(
     // `readAcceptedSeal` returns the resolved Seal verbatim; wiring the Seal
     // itself to a generated type is the same open item as the Event envelope.
     .map((sealId) => byId.get(sealId) as InviteDeliveryCbaProofBundle["seals"][number]);
-}
-
-// The Realm's accepted control-plane Events, canonically ordered by event id.
-// A Control Move is the plane that carries `seal_basis`; DataEvents are not
-// admissible bundle members (`cba-proof-bundle.schema.json`).
-async function realmControlMoves(
-  request: APIRequestContext,
-  token: string,
-  realmId: string,
-  opts: { server?: SolandKey } = {},
-): Promise<InviteDeliveryCbaProofBundle["control_moves"]> {
-  const page = await queryRealmEventsApi(request, token, realmId, {
-    server: opts.server,
-    limit: 500,
-  });
-  const events = Array.isArray(page.events) ? page.events : [];
-  const byId = new Map<string, Record<string, unknown>>();
-  for (const candidate of events) {
-    if (typeof candidate !== "object" || candidate === null) continue;
-    const event = candidate as Record<string, unknown>;
-    const eventId = event.event_id;
-    if (typeof eventId !== "string") continue;
-    if (event.seal_basis === undefined || event.seal_basis === null) continue;
-    if (!byId.has(eventId)) byId.set(eventId, event);
-  }
-  return Array.from(byId.keys())
-    .sort()
-    .map(
-      (eventId) =>
-        byId.get(eventId) as InviteDeliveryCbaProofBundle["control_moves"][number],
-    );
 }
 
 // The closed `invite_delivery_outcome`
