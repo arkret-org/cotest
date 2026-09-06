@@ -1704,7 +1704,13 @@ export async function createDpopUserSessionForAccount(
     handle: `@${account.handle}`,
     displayName: account.displayName,
   };
-  await ensureRegisteredRaw(request, user, { server: opts.server });
+  // No `ensureRegisteredRaw` here. Both halves of it were redundant on this
+  // path: Coauth performs the Station projection inside the canonical register
+  // saga (`account_register.rs`, before a usable grant leaves it), so the call
+  // could only replay it and take the 409 back; and its seed-less
+  // `registerEventSigner` was immediately overwritten by the seeded one below.
+  // A canonical path must not need a deployment-private endpoint to make its
+  // own principal usable.
   const eventSigningSeedB64url = dpopDeviceSeedB64url(eventSigningKey);
   registerEventSigner({
     actorId: user.id,
