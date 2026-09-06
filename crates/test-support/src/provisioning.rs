@@ -29,8 +29,8 @@ mod http;
 use anyhow::{Context, Result};
 pub use coauth_account::{MockEmailInbox, UnboundAccount};
 pub use gate::{
-    AccountHandoff, FoundingDeviceKey, OidcAuthorization, authorize_with_current_account,
-    create_account_handoff,
+    AccountHandoff, FoundPrincipalRequest, FoundedPrincipal, FoundingDeviceKey, OidcAuthorization,
+    authorize_with_current_account, create_account_handoff, found_principal,
 };
 use serde_json::Value;
 

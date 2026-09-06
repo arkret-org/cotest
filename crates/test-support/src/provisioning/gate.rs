@@ -209,6 +209,24 @@ impl FoundingDeviceKey {
         }
     }
 
+    /// The canonical JSON of this key's public JWK.
+    ///
+    /// `{"crv","kty","x"}` in canonical order — the same value the TypeScript
+    /// helper passes as `session_public_key`. The initial session grant binds to
+    /// this key, so it has to be the one whose proofs the Station will see next.
+    pub fn canonical_public_jwk(&self) -> Result<String> {
+        let x = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .encode(self.signing_key.verifying_key().to_bytes());
+        let jwk = json!({ "crv": "Ed25519", "kty": "OKP", "x": x });
+        let canonical = crate::wire::canonical_json(json!({ "value": jwk }))
+            .context("canonicalize the founding device public JWK")?;
+        canonical
+            .get("canonical")
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+            .context("canonical-json returned no canonical form")
+    }
+
     fn dpop_header(&self, method: &str, url: &str) -> Result<String> {
         let request = arkret_http_client::DpopProofRequest::new(method, url);
         garth::session::dpop::build_http_dpop_proof(request, &self.signing_key)
@@ -350,4 +368,187 @@ fn uuid_v7_like() -> String {
         &hex[3..6],
         &hex[6..18]
     )
+}
+
+/// A principal, founded through the canonical chain.
+#[derive(Clone, Debug)]
+pub struct FoundedPrincipal {
+    /// The 24-word recovery mnemonic. Held by the caller, never logged.
+    pub recovery_key: String,
+    /// `session_grant_outcome` from the register response: the initial
+    /// DPoP-bound grant, its audience, scopes and expiry.
+    pub session_grant_outcome: Value,
+    pub binding_receipt: Value,
+    pub pcr_genesis_receipt: Value,
+}
+
+const ISSUE_BINDING_CHALLENGE_OPERATION_ID: &str =
+    "ak.gate.account.command.issue_identity_binding_challenge.v1";
+const GATE_REGISTER_OPERATION_ID: &str = "ak.gate.account.command.register.v1";
+
+/// Found a principal: steps 4 through 7.
+///
+/// The protocol material — DID operation, PCR genesis unit, recovery key,
+/// register body — is built by [`crate::wire`], the same functions the
+/// TypeScript suite reaches through `cotest-wire`. What this adds is the two
+/// HTTP calls between them and the DPoP the handoff grant requires.
+///
+/// Returns the recovery key alongside the receipts: a caller that cannot
+/// recover the principal it just founded has not really founded one.
+///
+/// The inputs are packed into [`FoundPrincipalRequest`] rather than passed as
+/// six positional strings, where a swapped pair would type-check and fail
+/// somewhere deep in the chain.
+pub struct FoundPrincipalRequest<'a> {
+    pub coauth_base: &'a str,
+    pub station_base: &'a str,
+    /// From the Station's own description, not from configuration.
+    pub trust_domain: &'a str,
+    /// The Station service id the initial grant binds to.
+    pub audience_id: &'a str,
+    pub device_id: &'a str,
+    pub display_name: &'a str,
+}
+
+pub async fn found_principal(
+    http: &reqwest::Client,
+    request: FoundPrincipalRequest<'_>,
+    handoff: &AccountHandoff,
+) -> Result<FoundedPrincipal> {
+    let FoundPrincipalRequest {
+        coauth_base,
+        station_base,
+        trust_domain,
+        audience_id,
+        device_id,
+        display_name,
+    } = request;
+    let coauth = coauth_base.trim_end_matches('/');
+    let lease = handoff
+        .binding
+        .get("identity_creation_lease")
+        .cloned()
+        .context("handoff binding carried no identity-creation lease")?;
+
+    // Step 4: every piece of protocol material, in one call, in Rust.
+    let fixture = crate::wire::principal_registration_fixture(json!({
+        "station_url": station_base.trim_end_matches('/'),
+        "gate_account_base_url": format!("{coauth}/_arkret/gate/account"),
+        "handoff_request_id": handoff.request_id,
+        "identity_creation_lease": lease,
+        "device_id": device_id,
+        "trust_domain": trust_domain,
+        "initial_session": {
+            "session_public_key": handoff.device_key.canonical_public_jwk()?,
+            "audience_id": audience_id,
+        },
+    }))
+    .context("build the principal registration fixture")?;
+    let fixture = json_object(&fixture, "principal registration fixture")?;
+    let recovery_key = fixture
+        .get("recovery_key")
+        .and_then(Value::as_str)
+        .context("registration fixture omitted the recovery key")?
+        .to_owned();
+    let checkpoint = fixture
+        .get("checkpoint")
+        .context("registration fixture omitted the checkpoint")?;
+
+    // Step 5: the identity-binding challenge, authorized by the handoff grant.
+    let challenge_url = format!("{coauth}/_arkret/gate/account/identity-binding-challenges");
+    let challenge = handoff
+        .post_authorized(
+            http,
+            &challenge_url,
+            ISSUE_BINDING_CHALLENGE_OPERATION_ID,
+            fixture
+                .get("challenge_request")
+                .context("registration fixture omitted the challenge request")?,
+        )
+        .await
+        .context("request the identity-binding challenge")?;
+
+    // Step 6: the register body, again from the shared oracle.
+    let register_body = crate::wire::identity_creation_register_request(json!({
+        "challenge": challenge,
+        "did_operation": fixture
+            .get("did_operation")
+            .context("registration fixture omitted the DID operation")?,
+        "pcr_genesis_unit": checkpoint
+            .get("pcr_genesis_unit")
+            .context("checkpoint omitted the PCR genesis unit")?,
+        "initial_session": checkpoint
+            .get("initial_session")
+            .context("checkpoint omitted the initial session")?,
+        "recovery_key": recovery_key,
+        "display_name": display_name,
+    }))
+    .context("build the identity-creation register request")?;
+
+    // Step 7.
+    let registered = handoff
+        .post_authorized(
+            http,
+            &format!("{coauth}/_arkret/gate/account/register"),
+            GATE_REGISTER_OPERATION_ID,
+            &register_body,
+        )
+        .await
+        .context("register the principal identity")?;
+    let registered = json_object(&registered, "identity-creation register outcome")?;
+
+    Ok(FoundedPrincipal {
+        recovery_key,
+        session_grant_outcome: registered
+            .get("session_grant_outcome")
+            .cloned()
+            .context("register outcome carried no session grant")?,
+        binding_receipt: registered
+            .get("binding_receipt")
+            .cloned()
+            .context("register outcome carried no binding receipt")?,
+        pcr_genesis_receipt: registered
+            .get("pcr_genesis_receipt")
+            .cloned()
+            .context("register outcome carried no PCR genesis receipt")?,
+    })
+}
+
+impl AccountHandoff {
+    /// POST a gate operation authorized by this handoff grant.
+    ///
+    /// `Authorization: DPoP <grant>` plus a proof over this exact method and
+    /// URL, bound to the grant. Both halves are required; a proof without the
+    /// token, or a token without a matching proof, is refused.
+    async fn post_authorized(
+        &self,
+        http: &reqwest::Client,
+        url: &str,
+        operation_id: &str,
+        body: &Value,
+    ) -> Result<Value> {
+        let request = arkret_http_client::DpopProofRequest::new("POST", url)
+            .access_token(self.account_handoff_grant.clone());
+        let proof =
+            garth::session::dpop::build_http_dpop_proof(request, &self.device_key.signing_key)
+                .map_err(|error| anyhow::anyhow!("build DPoP proof for POST {url}: {error}"))?;
+        let response = http
+            .post(url)
+            .header("Arkret-Operation", operation_id)
+            .header(
+                "Authorization",
+                format!("DPoP {}", self.account_handoff_grant),
+            )
+            .header("DPoP", proof)
+            .json(body)
+            .send()
+            .await
+            .with_context(|| format!("POST {url}"))?;
+        let status = response.status();
+        let text = response.text().await.context("read response body")?;
+        if !status.is_success() {
+            bail!("{url} returned {status}: {text}");
+        }
+        serde_json::from_str(&text).with_context(|| format!("parse response of {url}: {text}"))
+    }
 }
