@@ -223,19 +223,31 @@ impl Session {
                 // is also in the response — the caller needs to assert on the
                 // outcome — but the read is done here so the proof is signed by
                 // the device key, which is not.
-                if let Some(grant) = principal
-                    .session_grant_outcome
-                    .get("session_grant")
-                    .and_then(Value::as_str)
-                {
-                    self.session_grants
-                        .insert(body.handoff_id.clone(), grant.to_owned());
-                }
+                let grant = principal.session_grant();
+                self.session_grants
+                    .insert(body.handoff_id.clone(), grant.session_grant.clone());
+                // Named fields, not the whole checkpoint: that carries
+                // `device_signing_seed_b64url`, and this boundary exists so key
+                // material stays on this side of it. What crosses is the
+                // identity — including the verification method the seed backs,
+                // which is public.
                 Ok(json!({
+                    "principal_id": principal.outcome.principal_id,
+                    "did": principal.did,
+                    "device_id": principal.device_id,
+                    "account_id": principal.account_id(),
+                    "event_verification_method": principal.event_verification_method,
                     "recovery_key": principal.recovery_key,
-                    "session_grant_outcome": principal.session_grant_outcome,
-                    "binding_receipt": principal.binding_receipt,
-                    "pcr_genesis_receipt": principal.pcr_genesis_receipt,
+                    "session_grant": {
+                        "session_grant": grant.session_grant,
+                        "session_grant_id": grant.session_grant_id,
+                        "audience_id": grant.audience_id,
+                        "device_id": grant.device_id,
+                        "granted_scope": grant.granted_scope,
+                        "expires_at": arkret_canonical::format_timestamp_canonical(grant.expires_at),
+                    },
+                    "binding_receipt": principal.outcome.binding_receipt,
+                    "pcr_genesis_receipt": principal.outcome.pcr_genesis_receipt,
                 }))
             }
             "read_self_account_viewer" => {

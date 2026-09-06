@@ -49,21 +49,20 @@ test.describe("provisioning dual run @fully-implemented", () => {
     );
 
     // --- grant scope and audience -------------------------------------------
-    const rustOutcome = rust.sessionGrantOutcome as {
-      audience_id?: string;
-      device_id?: string;
-      granted_scope?: string[];
-    };
-    expect(rustOutcome.audience_id).toBe(station.serviceId);
+    expect(rust.grant.audienceId).toBe(station.serviceId);
     expect(legacy.initialGrant.audience).toBe(station.serviceId);
-    expect(rustOutcome.device_id).toBe(rust.deviceId);
+    expect(rust.grant.deviceId).toBe(rust.deviceId);
     // Scopes are the one place a silently narrower Rust grant would show up as
-    // a later permission failure in a migrated consumer rather than here.
-    // Both read `granted_scope` off the same register response; the legacy
-    // helper just renames it on the way out.
-    const rustScopes = rustOutcome.granted_scope ?? [];
-    expect(rustScopes.length, "the Rust path's grant carried no scope").toBeGreaterThan(0);
-    expect(new Set(rustScopes)).toEqual(new Set(legacy.initialGrant.scopes));
+    // a later permission failure in a migrated consumer rather than here. Both
+    // come from `granted_scope` on the same register response; each side
+    // renames it on the way out.
+    expect(
+      rust.grant.grantedScope.length,
+      "the Rust path's grant carried no scope",
+    ).toBeGreaterThan(0);
+    expect(new Set(rust.grant.grantedScope)).toEqual(
+      new Set(legacy.initialGrant.scopes),
+    );
 
     // --- recovery material --------------------------------------------------
     expect(rust.recoveryKey.split(/\s+/)).toHaveLength(24);

@@ -45,9 +45,43 @@ export type StationFacts = {
   serviceId: string;
 };
 
+/// The closed `AccountId`: a principal is only addressable together with the
+/// Station that holds it.
+export type AccountId = {
+  principal_id: string;
+  station_id: string;
+};
+
+/// The initial DPoP-bound session grant, as the register step issued it.
+export type SessionGrant = {
+  sessionGrant: string;
+  sessionGrantId: string;
+  audienceId: string;
+  deviceId?: string;
+  grantedScope: string[];
+  expiresAt: string;
+};
+
+/**
+ * A principal the canonical chain founded.
+ *
+ * Named fields rather than the raw register response: the Rust side parses that
+ * into the SDK's own `AccountRegisterOutcome`, and re-deriving the same paths
+ * here would be a second reader of the same shape, free to drift from it.
+ *
+ * What is deliberately absent is key material. The founding device key, the
+ * handoff grant and the Event signer's seed all stay in the bridge process;
+ * `eventVerificationMethod` is the public name of the last one, and acting *as*
+ * this principal means asking the bridge to, not holding its keys.
+ */
 export type FoundedPrincipal = {
+  principalId: string;
+  did: string;
+  deviceId: string;
+  accountId: AccountId;
+  eventVerificationMethod: string;
   recoveryKey: string;
-  sessionGrantOutcome: Record<string, unknown>;
+  grant: SessionGrant;
   bindingReceipt: Record<string, unknown>;
   pcrGenesisReceipt: Record<string, unknown>;
 };
@@ -218,11 +252,24 @@ export class ProvisioningBridge {
       device_id: args.deviceId,
       display_name: args.displayName,
     });
+    const grant = result.session_grant as Record<string, unknown>;
     return {
+      principalId: String(result.principal_id),
+      did: String(result.did),
+      deviceId: String(result.device_id),
+      accountId: result.account_id as AccountId,
+      eventVerificationMethod: String(result.event_verification_method),
       recoveryKey: String(result.recovery_key),
-      sessionGrantOutcome: result.session_grant_outcome as Record<string, unknown>,
-      bindingReceipt: result.binding_receipt as Record<string, unknown>,
-      pcrGenesisReceipt: result.pcr_genesis_receipt as Record<string, unknown>,
+      grant: {
+        sessionGrant: String(grant.session_grant),
+        sessionGrantId: String(grant.session_grant_id),
+        audienceId: String(grant.audience_id),
+        deviceId: grant.device_id === null ? undefined : String(grant.device_id),
+        grantedScope: (grant.granted_scope ?? []) as string[],
+        expiresAt: String(grant.expires_at),
+      },
+      bindingReceipt: (result.binding_receipt ?? {}) as Record<string, unknown>,
+      pcrGenesisReceipt: (result.pcr_genesis_receipt ?? {}) as Record<string, unknown>,
     };
   }
 

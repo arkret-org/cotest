@@ -11,6 +11,8 @@
 //! cannot drift on what a registration looks like.
 
 use anyhow::{Context, Result, bail};
+use arkret_models_collaboration::account_lifecycle::AccountRegisterOutcome;
+use arkret_models_collaboration::session_grant_bodies::SessionGrantOutcome;
 use base64::Engine as _;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -371,15 +373,62 @@ fn uuid_v7_like() -> String {
 }
 
 /// A principal, founded through the canonical chain.
+///
+/// The register response is parsed into the SDK's own `AccountRegisterOutcome`
+/// rather than kept as a `Value`. Two reasons. A caller reaching into
+/// `session_grant_outcome["account_id"]["station_id"]` writes that path again
+/// on each side of the bridge, and the copies get to drift. And the SDK type is
+/// `deny_unknown_fields`, so a Station answering with a shape the model does
+/// not declare fails here, loudly, instead of being read past — which is the
+/// difference between a suite that checks conformance and one that checks that
+/// two implementations happen to agree.
 #[derive(Clone, Debug)]
 pub struct FoundedPrincipal {
+    /// The register outcome, in the model's own type.
+    pub outcome: AccountRegisterOutcome,
+    /// The resolvable DID the chain minted, from the registration checkpoint.
+    pub did: String,
+    /// The founding device, as asked for. The grant is checked to agree.
+    pub device_id: String,
+    /// `<did>#<device_id>`: the verification method Events signed by this
+    /// principal's founding device resolve through. Public by construction —
+    /// the seed behind it is not, and stays in [`Self::checkpoint`]'s owner.
+    pub event_verification_method: String,
     /// The 24-word recovery mnemonic. Held by the caller, never logged.
     pub recovery_key: String,
-    /// `session_grant_outcome` from the register response: the initial
-    /// DPoP-bound grant, its audience, scopes and expiry.
-    pub session_grant_outcome: Value,
-    pub binding_receipt: Value,
-    pub pcr_genesis_receipt: Value,
+    /// The full registration checkpoint.
+    ///
+    /// **Carries `device_signing_seed_b64url`.** In-process callers may use it;
+    /// it must not be handed across the bridge, which is why `cotest-provision`
+    /// answers with named fields rather than this value.
+    pub checkpoint: Value,
+}
+
+impl FoundedPrincipal {
+    /// The initial DPoP-bound session grant.
+    ///
+    /// Not an `Option`: the chain asks for one and a founding that produced no
+    /// grant did not finish, so [`found_principal`] fails before returning.
+    pub fn session_grant(&self) -> &SessionGrantOutcome {
+        self.outcome
+            .session_grant_outcome
+            .as_ref()
+            .expect("found_principal rejects an outcome without a session grant")
+    }
+
+    /// The closed `AccountId`: this principal at this Station.
+    pub fn account_id(&self) -> &arkret_wire::AccountId {
+        &self.session_grant().account_id
+    }
+
+    /// The signing seed for the founding device's Event signer.
+    ///
+    /// Key material. In-process only — see the note on [`Self::checkpoint`].
+    pub fn event_signing_seed_b64url(&self) -> Option<&str> {
+        self.checkpoint
+            .get("device_signing_seed_b64url")
+            .and_then(Value::as_str)
+    }
 }
 
 const ISSUE_BINDING_CHALLENGE_OPERATION_ID: &str =
@@ -554,22 +603,28 @@ pub async fn found_principal(
         )
         .await
         .context("register the principal identity")?;
-    let registered = json_object(&registered, "identity-creation register outcome")?;
+    // Parsed into the model's type, not read field by field. The Station's
+    // answer either is an `AccountRegisterOutcome` or it is not, and finding
+    // out here beats finding out in whichever assertion happens to touch the
+    // missing field first.
+    let outcome: AccountRegisterOutcome = serde_json::from_value(registered.clone())
+        .with_context(|| format!("parse the identity-creation register outcome: {registered}"))?;
+    if outcome.session_grant_outcome.is_none() {
+        bail!("register outcome carried no session grant: {registered}");
+    }
 
+    let did = checkpoint
+        .get("did")
+        .and_then(Value::as_str)
+        .context("checkpoint omitted the DID")?
+        .to_owned();
     Ok(FoundedPrincipal {
+        event_verification_method: format!("{did}#{device_id}"),
+        did,
+        device_id: device_id.to_owned(),
         recovery_key,
-        session_grant_outcome: registered
-            .get("session_grant_outcome")
-            .cloned()
-            .context("register outcome carried no session grant")?,
-        binding_receipt: registered
-            .get("binding_receipt")
-            .cloned()
-            .context("register outcome carried no binding receipt")?,
-        pcr_genesis_receipt: registered
-            .get("pcr_genesis_receipt")
-            .cloned()
-            .context("register outcome carried no PCR genesis receipt")?,
+        checkpoint: checkpoint.clone(),
+        outcome,
     })
 }
 

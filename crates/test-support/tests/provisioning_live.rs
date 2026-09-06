@@ -295,44 +295,62 @@ async fn the_canonical_chain_founds_a_principal_end_to_end() {
     // The grant has to bind to the Station that will be asked to honour it, and
     // to the device key that will present it. Either one wrong produces a grant
     // that looks valid and is refused on first use.
-    let grant = &principal.session_grant_outcome;
+    let grant = principal.session_grant();
     assert_eq!(
-        grant.get("audience_id").and_then(|v| v.as_str()),
-        Some(facts.service_id.as_str()),
-        "initial grant bound to the wrong audience: {grant}"
+        grant.audience_id.as_str(),
+        facts.service_id.as_str(),
+        "initial grant bound to the wrong audience"
     );
     assert!(
-        grant
-            .get("session_grant")
-            .and_then(|v| v.as_str())
-            .is_some_and(|jwt| !jwt.trim().is_empty()),
-        "initial grant carried no session grant JWT: {grant}"
+        !grant.session_grant.trim().is_empty(),
+        "initial grant carried no session grant JWT"
+    );
+    assert!(
+        !grant.granted_scope.is_empty(),
+        "initial grant carried no scope: {:?}",
+        grant.granted_scope
     );
 
     // The account id is closed: a principal is only addressable together with
     // the Station that holds it, and the grant must carry both halves.
-    let account_id = grant
-        .get("account_id")
-        .unwrap_or_else(|| panic!("grant carried no account id: {grant}"));
+    let account_id = principal.account_id();
     assert!(
-        account_id
-            .get("principal_id")
-            .and_then(|v| v.as_str())
-            .is_some_and(|id| id.starts_with("ak:did_core:")),
-        "grant account id has no principal: {account_id}"
+        account_id.principal_id.as_str().starts_with("ak:did_core:"),
+        "grant account id has no principal: {account_id:?}"
     );
     assert_eq!(
-        account_id.get("station_id").and_then(|v| v.as_str()),
-        Some(facts.service_id.as_str()),
-        "grant account id names a different Station: {account_id}"
+        account_id.station_id.as_str(),
+        facts.service_id.as_str(),
+        "grant account id names a different Station"
+    );
+    assert_eq!(
+        principal.outcome.principal_id, account_id.principal_id,
+        "register outcome and grant name different principals"
     );
 
     // The grant binds to the device this chain founded with. A grant bound to
     // some other device would present and be refused on first use.
     assert_eq!(
-        grant.get("device_id").and_then(|v| v.as_str()),
+        grant.device_id.as_ref().map(|id| id.as_str()),
         Some(device_id.as_str()),
-        "initial grant bound to a different device: {grant}"
+        "initial grant bound to a different device"
+    );
+
+    // The Event signer's verification method names this principal's own DID and
+    // its founding device. A test that later signs an Event resolves through
+    // it, so a wrong one fails at submission rather than here.
+    assert_eq!(
+        principal.event_verification_method,
+        format!("{}#{}", principal.did, device_id),
+        "event verification method does not name this principal's founding device"
+    );
+    // The seed behind it stays in this process. It is reachable in-process and
+    // must not be reachable from the other side of the bridge.
+    assert!(
+        principal
+            .event_signing_seed_b64url()
+            .is_some_and(|seed| !seed.trim().is_empty()),
+        "checkpoint carried no Event signing seed"
     );
 
     // Everything above reads the register response. This presents the grant
@@ -341,10 +359,7 @@ async fn the_canonical_chain_founds_a_principal_end_to_end() {
     let read = read_self_account_viewer(
         &http,
         &endpoints.soland_base_url,
-        grant
-            .get("session_grant")
-            .and_then(|v| v.as_str())
-            .expect("checked above"),
+        &grant.session_grant,
         &handoff.device_key,
     )
     .await
@@ -357,8 +372,8 @@ async fn the_canonical_chain_founds_a_principal_end_to_end() {
     // The Station answers about the principal this chain founded, not about
     // whoever else the session happens to know.
     assert_eq!(
-        read.body.get("principal_id"),
-        account_id.get("principal_id"),
+        read.body.get("principal_id").and_then(|v| v.as_str()),
+        Some(account_id.principal_id.as_str()),
         "account viewer named a different principal: {}",
         read.body
     );

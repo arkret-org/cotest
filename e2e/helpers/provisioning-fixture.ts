@@ -46,7 +46,6 @@ export type AttachedDeployment = DeploymentEndpoints & {
 export type ProvisionedPrincipal = FoundedPrincipal & {
   /** The Coauth handle the account was registered under. */
   handle: string;
-  deviceId: string;
   /**
    * The handoff this principal was founded through.
    *
@@ -55,10 +54,6 @@ export type ProvisionedPrincipal = FoundedPrincipal & {
    * goes through the bridge with this id rather than with credentials.
    */
   handoffId: string;
-  /** The closed `AccountId` the Station bound, principal and Station both. */
-  accountId: { principal_id: string; station_id: string };
-  /** The `ak.session.grant` JWT the register step returned. */
-  sessionGrant: string;
 };
 
 export type CanonicalProvisioning = {
@@ -176,30 +171,22 @@ export const test = base.extend<
           displayName: `E2E ${handle}`,
         });
 
-        const grant = founded.sessionGrantOutcome as {
-          session_grant?: string;
-          account_id?: { principal_id?: string; station_id?: string };
-        };
-        // Read the closed AccountId out here rather than letting each spec
-        // reach into the raw outcome: a principal without a Station is not a
-        // provisioned principal, and this is the one place that can say so.
-        const principalId = grant.account_id?.principal_id;
-        const stationId = grant.account_id?.station_id;
-        if (!grant.session_grant || !principalId || !stationId) {
+        // The bridge already reports a typed identity, so the check here is
+        // about the founding being complete rather than about reading a shape:
+        // a principal whose grant names a different Station than the one that
+        // answered is not this deployment's principal.
+        if (founded.accountId.station_id !== station.serviceId) {
           throw new Error(
-            `provisioning ${handle} returned an incomplete grant: ` +
-              `session_grant=${Boolean(grant.session_grant)} ` +
-              `principal_id=${principalId ?? "absent"} station_id=${stationId ?? "absent"}`,
+            `provisioning ${handle} bound to ${founded.accountId.station_id}, ` +
+              `not the Station under test (${station.serviceId})`,
           );
         }
-        return {
-          ...founded,
-          handle,
-          deviceId,
-          handoffId: handoff.handoffId,
-          accountId: { principal_id: principalId, station_id: stationId },
-          sessionGrant: grant.session_grant,
-        };
+        if (founded.deviceId !== deviceId) {
+          throw new Error(
+            `provisioning ${handle} founded device ${founded.deviceId}, not ${deviceId}`,
+          );
+        }
+        return { ...founded, handle, handoffId: handoff.handoffId };
       },
       readSelfAccountViewer(principal: ProvisionedPrincipal) {
         return bridge.readSelfAccountViewer({
