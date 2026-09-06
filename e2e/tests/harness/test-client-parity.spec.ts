@@ -19,7 +19,13 @@
 // Owner: `arkret-work/work/active/2026-09-07-0600-garth-as-the-complete-client-inkson-as-a-shell.md`.
 
 import { expect, test } from "../../helpers/arkret-test";
-import { coauthBaseUrl, coauthOidcClientId, mockEmailBaseUrl, solandBaseUrl } from "../../helpers/env";
+import {
+  coauthBaseUrl,
+  coauthOidcClientId,
+  inksonBaseUrl,
+  mockEmailBaseUrl,
+  solandBaseUrl,
+} from "../../helpers/env";
 import { GarthTestClient } from "../../helpers/test-client-garth";
 import { InksonTestClient } from "../../helpers/test-client-inkson";
 import { selectedClientKind, type TestClient } from "../../helpers/test-client";
@@ -51,6 +57,24 @@ test.describe("test client parity @fully-implemented", () => {
         oidcClientId: clientId as string,
       });
     } else {
+      // Said here rather than left to the browser fixture. Selecting `inkson`
+      // in a browserless lane fails with "Missing Inkson URL", which is a true
+      // statement about the deployment and a confusing one about the run: the
+      // mistake is the pairing, and that is what this names.
+      // Asked through the same resolver the helpers use. Checking one env var
+      // would skip a run whose Inkson URL came from the topology file instead —
+      // a false skip, which is worse than the confusing failure it replaces.
+      let hasInkson = true;
+      try {
+        inksonBaseUrl();
+      } catch {
+        hasInkson = false;
+      }
+      testInfo.skip(
+        !hasInkson,
+        "client-kind=inkson needs a browser lane; this run has no Inkson " +
+          "(use -RunProfile joint-smoke, or -ClientKind garth)",
+      );
       client = new InksonTestClient({ browser, request });
     }
 

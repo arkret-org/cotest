@@ -1278,11 +1278,41 @@ impl ArkretServer {
             );
         }
 
+        // Without this the client cannot author an Event. `demo_client` and
+        // `register_client` register their signer inside
+        // `bootstrap_registered_actor`; the canonical path had no equivalent,
+        // so every client it built could read and never write — which is why
+        // the Garth lane and the `TestClient` interface were read-only.
+        let event_seed = founded
+            .event_signing_seed_b64url()
+            .context("the founded principal carried no Event signing seed")?;
+        let event_seed: [u8; 32] = URL_SAFE_NO_PAD
+            .decode(event_seed)
+            .context("decode the founded principal's Event signing seed")?
+            .as_slice()
+            .try_into()
+            .map_err(|_| anyhow::anyhow!("Event signing seed is not 32 bytes"))?;
+        // Keyed by the resolvable DID, not the projected `ak:did_core:` id.
+        // `event_signing_identity_for_device` rebuilds the verification method
+        // as `{actor}#{device}` and parses it as a DID URL, so an actor that is
+        // a projection cannot be looked up at all — the canonical client used
+        // to report one, which only surfaced the first time something tried to
+        // author an Event.
+        crate::harness::register_event_signing_identity(
+            &founded.did,
+            event_seed,
+            founded.event_verification_method.clone(),
+            self.service_id.clone(),
+        );
+
         let session = crate::harness::ClientSession::Canonical {
             grant: founded.session_grant().session_grant.clone(),
             signing_key: std::sync::Arc::new(handoff.device_key.signing_key()),
         };
-        self.actor_client(account_id.principal_id.as_str(), &device_id, session, None)
+        // The actor is the resolvable DID for the same reason: every other
+        // constructor hands `TestActorClient` a `did:`, and the harness
+        // projects to `ak:did_core:` where a business object needs it.
+        self.actor_client(&founded.did, &device_id, session, None)
     }
 
     /// Register account-first, then publish a primary localpart through the

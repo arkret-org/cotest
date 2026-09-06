@@ -116,9 +116,11 @@ async fn the_harness_builds_a_client_from_the_canonical_chain() -> Result<()> {
         client.dev_bearer().is_none(),
         "a canonical session must not present a bearer"
     );
+    // A resolvable DID, not the projection: the harness rebuilds verification
+    // methods as `{actor}#{device}` and parses them as DID URLs.
     assert!(
-        client.actor.starts_with("ak:did_core:"),
-        "client actor is not a projected principal id: {}",
+        client.actor.starts_with("did:"),
+        "client actor is not a resolvable DID: {}",
         client.actor
     );
     assert_eq!(client.device_id, device_id, "client bound another device");
@@ -137,9 +139,17 @@ async fn the_harness_builds_a_client_from_the_canonical_chain() -> Result<()> {
         "the Station refused the canonical client's own grant: {body}"
     );
     let viewer: serde_json::Value = serde_json::from_str(&body)?;
+    // The Station answers with the projected `ak:did_core:` id; the client
+    // holds the resolvable DID it was founded under. Comparing them without
+    // projecting is what the previous version of this assertion did, and it
+    // passed only because the client used to report the projection.
+    let expected = arkret_identifiers::project_did_to_core_id(
+        &arkret_identifiers::Did::new(client.actor.clone()).map_err(anyhow::Error::msg)?,
+    )
+    .map_err(anyhow::Error::msg)?;
     assert_eq!(
         viewer.get("principal_id").and_then(|value| value.as_str()),
-        Some(client.actor.as_str()),
+        Some(expected.as_str()),
         "account viewer named a different principal: {body}"
     );
     // The founding device landed on the account. A grant that authenticated

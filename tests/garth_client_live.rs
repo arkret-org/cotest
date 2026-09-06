@@ -30,7 +30,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use anyhow::{Context, Result};
-use arkret_identifiers::{DeviceId, DidCoreId};
+use arkret_identifiers::DeviceId;
 use cotest::harness::{ArkretServer, CanonicalClientRequest};
 use cotest_test_support::provisioning::{DeploymentEndpoints, MockEmailInbox};
 use garth::{ArkretClient, CursorScope, CursorStore, FileStore, NativeExecutor, SyncLoopControl};
@@ -111,7 +111,10 @@ async fn garth_syncs_an_account_over_its_own_durable_store() -> Result<()> {
         })
         .await?;
 
-    let actor_id = DidCoreId::new(client.actor.clone()).map_err(anyhow::Error::msg)?;
+    let actor_id = arkret_identifiers::project_did_to_core_id(
+        &arkret_identifiers::Did::new(client.actor.clone()).map_err(anyhow::Error::msg)?,
+    )
+    .map_err(anyhow::Error::msg)?;
     let device = DeviceId::new(device_id.clone()).map_err(anyhow::Error::msg)?;
 
     // Garth's own durable store, on disk, at a path this test controls so it
@@ -207,6 +210,268 @@ async fn garth_syncs_an_account_over_its_own_durable_store() -> Result<()> {
     assert_eq!(
         restored, persisted,
         "the reopened store returned a different cursor than Garth committed"
+    );
+
+    let _ = std::fs::remove_dir_all(&store_dir);
+    Ok(())
+}
+
+/// A write delivered by Garth's outbound engine, and read back off the Station.
+///
+/// The read lane above proves Garth can talk. This one is the claim that was
+/// missing: a business effect produced *through* Garth and verifiable on a real
+/// Soland.
+///
+/// The split is the one the queue's own shape dictates. `SendQueueItem` carries
+/// `canonical_payload_bytes`, so authoring and signing are the host's — in
+/// production Inkson authors and Garth delivers, and here the harness authors
+/// with the canonical principal's registered signer. What is Garth's is the
+/// part that decides whether the write ever lands: the durable queue, the
+/// authoring-generation fence, `mark_sending`, the submit outcome and the
+/// terminal transition. A submitter that posted directly would skip all of it.
+#[tokio::test]
+#[ignore = "requires a running Coauth and Soland; see the module docs"]
+async fn garth_delivers_an_authored_event_and_the_station_keeps_it() -> Result<()> {
+    use chrono::Utc;
+    use garth::{
+        AuthoringAuthorityModel, AuthoringGeneration, OutboundEngine, OutboundEngineOutcome,
+        OutboundGenerationFence, OutboundGenerationFenceDecision, OutboundSubmitOutcome,
+        OutboundSubmitter, QueuedEventIntent, QueuedRecord, QueuedSdkEvent, SendQueueItem,
+    };
+
+    let endpoints = endpoints();
+    let http = provisioning_http();
+    let server = ArkretServer::attach(
+        &endpoints.soland_base_url,
+        &required_env("COTEST_SOLAND_NOTARY_SIGNING_KEY"),
+        Some(std::path::Path::new(&required_env(
+            "COTEST_RUN_SCOPED_CA_PEM",
+        ))),
+    )
+    .await?;
+
+    let stamp = unique_suffix();
+    let handle = format!("garth-write-{stamp}").to_lowercase();
+    let device_id = format!(
+        "ak:device:01904100-0000-7000-8000-{:012x}",
+        stamp & 0xffff_ffff_ffff
+    );
+    let client = server
+        .canonical_client(CanonicalClientRequest {
+            http: &http,
+            endpoints: &endpoints,
+            oidc_client_id: &required_env("COTEST_OIDC_CLIENT_ID"),
+            handle: &handle,
+            password: "1amTester!",
+            device_id: &device_id,
+            display_name: &format!("Garth write {handle}"),
+        })
+        .await?;
+
+    // A canonical client could not reach this line until it registered its
+    // Event signer: `create_realm` authors Events, and the canonical path used
+    // to build clients that could only read.
+    let realm_id = client.create_realm(&format!("Garth write {stamp}")).await?;
+
+    let body = format!("garth-delivered-{stamp}");
+    // Authored by the harness, not hand-rolled here. A data-plane Event has to
+    // anchor on the Realm Seal frontier with `seal_ref` + `auth_context` and
+    // must not carry `seal_basis` — a bare envelope is refused 422, which is
+    // exactly what happened when this built one itself. `author_event_with_causal_refs`
+    // is the harness's own authoring path and stops short of submitting, which
+    // is the split this test needs: the host authors, Garth delivers.
+    // Payload built by the SDK's own type, not hand-rolled JSON. The first
+    // attempt shaped it by eye and the Station answered "missing field `kind`":
+    // a typed contract exists precisely so this is not guesswork.
+    let strand_id = client.default_strand_id(&realm_id)?;
+    let payload = arkret_models_collaboration::events_payloads::MessageCreatePayload::with_content(
+        arkret_identifiers::StrandId::new(strand_id).map_err(anyhow::Error::msg)?,
+        "discussion",
+        arkret_models_collaboration::events_payloads::ContentBlock::text(&body),
+    )
+    .to_value()
+    .map_err(|error| anyhow::anyhow!("message create payload: {error}"))?;
+    let event = client
+        .author_event_with_causal_refs(
+            &realm_id,
+            "ak.message.create",
+            payload,
+            Vec::new(),
+            Vec::new(),
+        )
+        .await?;
+    let submission = cotest::publication::initial_submission(event.clone(), "")?;
+    // Canonical JSON, not `serde_json::to_vec`. The Station validates the body
+    // byte-for-byte and answers 422 `schema_violation` otherwise — which is
+    // what it did, and what the submitter's recorded refusal made visible.
+    let payload = arkret_canonical::canonical_json_bytes(&submission)?;
+
+    /// Posts what Garth hands it, and reports the outcome Garth's queue
+    /// transitions on. It does not decide when to send or whether to retry —
+    /// that is the engine's, which is the point of routing through it.
+    struct StationSubmitter {
+        client: cotest::harness::TestActorClient,
+        payload: Vec<u8>,
+        /// The last refusal, kept because `OutboundEngineOutcome::RetryAt`
+        /// reports that a retry was scheduled and not why. A failure a reader
+        /// cannot act on is the same as no failure message at all.
+        last_error: std::sync::Mutex<Option<String>>,
+    }
+
+    impl OutboundSubmitter for StationSubmitter {
+        fn submit<'a>(
+            &'a self,
+            _item: SendQueueItem,
+        ) -> garth::outbound::BoxOutboundFuture<'a, OutboundSubmitOutcome> {
+            // Recorded at the single exit rather than per branch. Adding it one
+            // arm at a time is how a failure came back as "the submitter
+            // recorded no refusal": every early return is a reason the caller
+            // needs, not only the one thought of first.
+            Box::pin(async move {
+                let outcome = self.submit_once().await;
+                if let Err(error) = &outcome {
+                    *self.last_error.lock().expect("submitter error lock") =
+                        Some(error.to_string());
+                }
+                outcome
+            })
+        }
+    }
+
+    impl StationSubmitter {
+        async fn submit_once(&self) -> garth::Result<OutboundSubmitOutcome> {
+            let response = self
+                .client
+                .post("/_arkret/self/events")
+                .header("content-type", "application/json")
+                .body(self.payload.clone())
+                .send()
+                .await
+                .map_err(|error| garth::Error::Http(error.to_string()))?;
+            let status = response.status();
+            let text = response
+                .text()
+                .await
+                .map_err(|error| garth::Error::Http(error.to_string()))?;
+            if !status.is_success() {
+                return Err(garth::Error::Http(format!(
+                    "Station refused the submission ({status}): {text}"
+                )));
+            }
+            let accepted: serde_json::Value = serde_json::from_str(&text)
+                .map_err(|error| garth::Error::Protocol(error.to_string()))?;
+            // The submission surface answers `{"status":"accepted","accepted":[id]}`.
+            // Reading a top-level `event_id` found nothing and reported the
+            // write as failed while the Station had in fact kept it — a false
+            // negative is still a wrong answer.
+            let event_id = accepted
+                .get("accepted")
+                .and_then(|value| value.as_array())
+                .and_then(|ids| ids.first())
+                .and_then(|value| value.as_str())
+                .ok_or_else(|| {
+                    garth::Error::Protocol(format!("accepted response named no Event: {text}"))
+                })?;
+            Ok(OutboundSubmitOutcome::Accepted {
+                event_id: arkret_identifiers::EventId::new(event_id.to_owned())
+                    .map_err(|error| garth::Error::Protocol(error.to_string()))?,
+                ingress_receipts: Vec::new(),
+            })
+        }
+    }
+
+    /// Every queued item is current here: this test authors one Event with the
+    /// generation it just founded. A host with device rotation supplies a real
+    /// fence; a test that quarantined its own write would be testing the stub.
+    struct CurrentGeneration;
+    impl OutboundGenerationFence for CurrentGeneration {
+        fn evaluate(
+            &self,
+            _item: &SendQueueItem,
+        ) -> garth::Result<OutboundGenerationFenceDecision> {
+            Ok(OutboundGenerationFenceDecision::Current)
+        }
+    }
+
+    let store_dir = std::env::temp_dir().join(format!("garth-write-live-{stamp}"));
+    std::fs::create_dir_all(&store_dir).context("create the Garth store directory")?;
+    let store = FileStore::open(store_dir.join("outbound.json")).map_err(anyhow::Error::msg)?;
+    let engine = OutboundEngine::new(store.clone());
+
+    let intent = QueuedEventIntent::new(
+        arkret_event_draft::EventIntent::from_authored(&event),
+        arkret_canonical::DigestSuite::Sha256,
+    );
+    let queued = QueuedSdkEvent::unauthored(
+        intent,
+        format!("garth-write-{stamp}"),
+        format!("attempt-{stamp}"),
+        None,
+        AuthoringGeneration {
+            authority_model: AuthoringAuthorityModel::AcceptedDevice,
+            authority_principal_id: arkret_identifiers::project_did_to_core_id(
+                &arkret_identifiers::Did::new(client.actor.clone()).map_err(anyhow::Error::msg)?,
+            )
+            .map_err(anyhow::Error::msg)?,
+            generation_ref: device_id.clone(),
+        },
+        None,
+    )
+    .map_err(anyhow::Error::msg)?;
+
+    engine
+        .enqueue(
+            Some(format!("txn-{stamp}")),
+            arkret_identifiers::RealmId::new(realm_id.clone()).map_err(anyhow::Error::msg)?,
+            QueuedRecord::SdkEvent(Box::new(queued)),
+            Vec::new(),
+            Utc::now(),
+        )
+        .await
+        .map_err(anyhow::Error::msg)?;
+
+    let submitter = StationSubmitter {
+        client: client.clone(),
+        payload,
+        last_error: std::sync::Mutex::new(None),
+    };
+    let outcome = engine
+        .submit_next_with_fence(&submitter, &CurrentGeneration, Utc::now())
+        .await
+        .map_err(anyhow::Error::msg)?;
+    let accepted = match outcome {
+        OutboundEngineOutcome::Accepted(item) => item,
+        other => {
+            let refusal = submitter
+                .last_error
+                .lock()
+                .expect("submitter error lock")
+                .clone()
+                .unwrap_or_else(|| "the submitter recorded no refusal".to_owned());
+            anyhow::bail!(
+                "Garth's outbound engine did not accept the write: {refusal}
+                 engine outcome: {other:?}"
+            );
+        }
+    };
+    assert_eq!(
+        accepted.status,
+        garth::SendQueueStatus::Sent,
+        "Garth accepted the submission without marking the item sent"
+    );
+
+    // The Station kept it. Everything above is Garth's bookkeeping; this is the
+    // business effect, read back from the deployment rather than from the
+    // queue that just claimed success.
+    let events = client
+        .query("/_arkret/self/events")
+        .json(&serde_json::json!({ "realm_ids": [realm_id], "limit": 50 }))
+        .send()
+        .await?;
+    let listed = events.text().await?;
+    assert!(
+        listed.contains(&body),
+        "the Station has no record of the message Garth delivered: {listed}"
     );
 
     let _ = std::fs::remove_dir_all(&store_dir);
