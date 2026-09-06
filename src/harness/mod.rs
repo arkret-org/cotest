@@ -35,8 +35,8 @@ pub use event_builder::{
     event_envelope, event_envelope_at_frontier_with_signing_seed, event_envelope_with_signing_seed,
     event_envelope_with_signing_seed_and_verification_method, head_eq_precondition,
     moderation_report_request, realm_bootstrap_event_batch,
-    realm_bootstrap_event_batch_with_signing_seed, register_account,
-    register_account_with_localpart, register_event_signing_identity, send_message, submit_event,
+    realm_bootstrap_event_batch_with_signing_seed, register_account_via_dev_login,
+    register_account_with_localpart_via_dev_login, register_event_signing_identity, send_message, submit_event,
     submit_event_with_signing_seed_and_verification_method,
 };
 pub(crate) use event_builder::{

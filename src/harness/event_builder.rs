@@ -147,7 +147,21 @@ fn verification_method_for_actor(actor: &str) -> DidUrl {
     default_event_verification_method(actor)
 }
 
-pub async fn register_account(
+/// Project a Station account and take a development session for it.
+///
+/// **This is not the canonical chain.** It posts a
+/// [`NonProtocolTestBody`](crate::harness::NonProtocolTestBody) to the
+/// deployment-private registration endpoint and then calls [`dev_login`], so
+/// nothing here exercises account authorization, the OAuth handoff, PCR
+/// genesis, or identity binding. The account it produces has no DID document it
+/// controls and no verified binding.
+///
+/// Use it where the test needs a principal to *exist* and is not about how one
+/// comes to exist. A scenario that claims to be services-live canonical must
+/// not reach for it: the canonical chain lives in
+/// `cotest_test_support::provisioning` and is the same code the TypeScript
+/// suite reaches through `cotest-provision`.
+pub async fn register_account_via_dev_login(
     server: &ArkretServer,
     did: &str,
     handle: &str,
@@ -178,14 +192,17 @@ pub async fn register_account(
     dev_login(server, did.as_str(), &device_id).await
 }
 
-pub async fn register_account_with_localpart(
+/// [`register_account_via_dev_login`] plus a primary localpart claim.
+///
+/// Carries the same caveat: development seam, not the canonical chain.
+pub async fn register_account_with_localpart_via_dev_login(
     server: &ArkretServer,
     did: &str,
     display_handle: &str,
     localpart: &str,
     device_id: &str,
 ) -> Result<String> {
-    let token = register_account(server, did, display_handle, device_id).await?;
+    let token = register_account_via_dev_login(server, did, display_handle, device_id).await?;
     expect_json(
         server
             .account_localpart_request(did)?
@@ -199,6 +216,13 @@ pub async fn register_account_with_localpart(
     Ok(token)
 }
 
+/// Take a session straight from the deployment-private dev-login endpoint.
+///
+/// No account authorization, no grant issuance, no DPoP binding — a token the
+/// Station will accept because it is configured to in test builds. Scenarios
+/// that assert anything about how a session is obtained must use the canonical
+/// chain instead; `conformance/inkson_client.rs` already fails a conformance
+/// path that is caught using this.
 pub async fn dev_login(server: &ArkretServer, actor: &str, device_id: &str) -> Result<String> {
     let device_id = canonical_device_id(device_id);
     let actor_id = project_did_to_core_id(&Did::new(actor.to_owned())?)?;

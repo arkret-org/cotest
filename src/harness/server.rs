@@ -1001,9 +1001,20 @@ impl ArkretServer {
         expect_json(self.http().get(url), StatusCode::OK).await
     }
 
-    /// Canonical actor provisioning: register (when requested), open the dev
-    /// session, and atomically install the §5.1 PCR genesis unit so the
-    /// founding device holds an accepted `ak.device.authorize`.
+    /// An actor with a real PCR genesis and a **development session**.
+    ///
+    /// What is canonical here is the §5.1 PCR genesis unit, installed
+    /// atomically so the founding device holds an accepted
+    /// `ak.device.authorize`. What is not is how the session is obtained:
+    /// `dev_login`, the deployment-private endpoint — no account
+    /// authorization, no OAuth handoff, no identity binding, no DPoP.
+    ///
+    /// The distinction matters because this is the entry point 52 scenarios
+    /// call. A scenario asserting anything about *how* a principal or a session
+    /// comes to exist is not testing that here; the canonical chain lives in
+    /// `cotest_test_support::provisioning`. This doc comment used to open with
+    /// "Canonical actor provisioning", which read as a claim about the whole
+    /// thing.
     pub async fn demo_client(&self, actor: &str, device_id: &str) -> Result<TestActorClient> {
         let (principal, token) = bootstrap_registered_actor(
             self,

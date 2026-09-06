@@ -61,7 +61,7 @@ use url::Url;
 
 use crate::harness::{
     ArkretServer, ProvisionedTestPrincipal, TestActorClient, canonical_device_id, dev_login,
-    expect_json, register_account, register_account_with_localpart,
+    expect_json, register_account_via_dev_login, register_account_with_localpart_via_dev_login,
     register_event_signing_identity,
 };
 
@@ -292,12 +292,12 @@ pub async fn bootstrap_registered_actor(
     let token = match registration {
         ActorBootstrapRegistration::DevLogin => dev_login(server, actor, &device_id).await?,
         ActorBootstrapRegistration::Account { handle } if cached.is_none() => {
-            register_account(server, actor, handle, &device_id).await?
+            register_account_via_dev_login(server, actor, handle, &device_id).await?
         }
         ActorBootstrapRegistration::AccountWithLocalpart { handle, localpart }
             if cached.is_none() =>
         {
-            register_account_with_localpart(server, actor, handle, localpart, &device_id).await?
+            register_account_with_localpart_via_dev_login(server, actor, handle, localpart, &device_id).await?
         }
         ActorBootstrapRegistration::Account { .. }
         | ActorBootstrapRegistration::AccountWithLocalpart { .. } => {
