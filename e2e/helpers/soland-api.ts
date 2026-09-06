@@ -568,7 +568,12 @@ export function inviteLiveTargetCell(
 
 /// The `head_eq` guard an invite Move owes on the live-target slot.
 ///
-/// `ak.invite.create` asserts the registered free value; every registered
+/// `ak.invite.create` asserts the free value, which is `null`: an unwritten
+/// `cas_register` cell reads `null` (§9.3.1.1), and so does a released slot,
+/// because a release is an explicit `set null`. The old `"__unset__"` spelling
+/// was the deleted `initial_value` mechanism; soland compares `head_eq` against
+/// `unwritten_cell_head()`, which is `Value::Null`, so that spelling made every
+/// harness-authored invite `failed_precondition`. Every registered
 /// release asserts the stored value, which is the occupying create Event id in
 /// `ak:event:` form. `invite_id` and `create_event_id` are the same 33-octet
 /// token under two prefixes, and only the `ak:event:` spelling ever matches —
@@ -581,7 +586,7 @@ function inviteLiveTargetPreconditions(
   if (!account || typeof account !== "object") return undefined;
   const cell = inviteLiveTargetCell(account as Record<string, unknown>);
   if (kind === "ak.invite.create") {
-    return [{ cell_id: cell, predicate: { op: "head_eq", value: "__unset__" } }];
+    return [{ cell_id: cell, predicate: { op: "head_eq", value: null } }];
   }
   if (
     kind !== "ak.invite.accept" && kind !== "ak.invite.cancel" &&

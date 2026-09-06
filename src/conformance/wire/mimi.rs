@@ -347,8 +347,9 @@ fn validate_consent_isolation_case(case: &Value) -> Result<()> {
     )
 }
 
-/// Ruling `review/spec-done/2026-09-05-1240-mimi-consent-correlation-cannot-carry-the-consent-peer.
-/// md`: the signed request names both identities in full and the correlation freezes exactly those,
+/// Ruling:
+/// `review/spec-done/2026-09-05-1240-mimi-consent-correlation-cannot-carry-the-consent-peer.md`.
+/// The signed request names both identities in full and the correlation freezes exactly those,
 /// so every case here is checked for complete identities rather than principal cores. A case
 /// that carried a bare DID would pass a "some identity is present" check and is
 /// exactly what this ruling removed, so absence of a Station is an error.
