@@ -10,13 +10,12 @@
 // the grant's `cnf.jkt` (RFC 7638 JWK SHA-256 thumbprint) obtained via
 // session-grant introspection at coauth.
 //
-// These helpers obtain a real DPoP-bound grant WITHOUT driving the full OIDC
-// browser ceremony, via coauth's cotest debug seam:
-//   POST /_coauth/account/test/debug/issue-dpop-grant
-// (coauth: crates/backend/src/handlers/arkret/mod.rs::debug_issue_dpop_grant).
-// That route is mounted only in debug builds with COAUTH_ENABLE_TEST_ENDPOINTS
-// enabled; `mintDpopBoundGrant` returns `undefined` when it is unavailable so
-// callers can `test.skip` cleanly.
+// These helpers mint the DPoP proofs and headers a caller presents alongside a
+// grant it already holds. The grant itself comes from the canonical chain in
+// `coauth-register.ts`; the debug seam that used to mint one here
+// (`POST /_coauth/account/test/debug/issue-dpop-grant`) had no callers left and
+// is gone, so nothing in this suite obtains a grant by asking coauth to skip
+// the ceremony.
 //
 // The DPoP proof shape mirrors exactly what soland's verifier accepts
 // (soland: crates/http/src/routing/identity/auth_grant_dpop.rs):
@@ -35,7 +34,6 @@ import {
   type KeyObject,
 } from "node:crypto";
 import { type APIRequestContext } from "@playwright/test";
-import { type SolandKey, solandServiceId } from "./env";
 import { base64url } from "./encoding";
 import { base64urlJsonRaw } from "./soland-api";
 
@@ -70,16 +68,6 @@ export type DpopBoundGrant = {
   /// Long-term founding Event signer, deliberately distinct from the
   /// ephemeral holder/DPoP key. Present on PCR-genesis registration outcomes.
   eventSigningKey?: DpopDeviceKey;
-};
-
-export type MintDpopGrantOpts = {
-  /// Audience the grant is bound to. MUST equal the target soland service DID,
-  /// because soland rejects a grant whose audience is not its own service_id.
-  audience?: string;
-  /// Operation scopes to bake into the grant. Human-device identity is carried
-  /// by the typed holder/device binding, never encoded as an OAuth scope.
-  scopes?: string[];
-  server?: SolandKey;
 };
 
 /// Generate a fresh Ed25519 device key and its public JWK + RFC 7638 thumbprint.
@@ -268,69 +256,5 @@ export function kickoffDpopHeaders(args: {
       url: args.url,
       includeAth: false,
     }),
-  };
-}
-
-/// Request a DPoP-bound `ak.session.grant` from coauth's cotest debug seam.
-///
-/// Returns `undefined` when the debug endpoint is not available (404 — the
-/// route is gated on debug builds + `COAUTH_ENABLE_TEST_ENDPOINTS`), so callers
-/// can `test.skip` rather than fail. Throws on any other non-2xx so genuine
-/// misconfiguration is visible.
-export async function mintDpopBoundGrant(
-  request: APIRequestContext,
-  coauthBase: string,
-  actorId: string,
-  deviceId: string,
-  deviceKey: DpopDeviceKey,
-  opts: MintDpopGrantOpts = {},
-): Promise<DpopBoundGrant | undefined> {
-  const audience = opts.audience ?? solandServiceId(opts.server);
-  const response = await request.post(
-    `${coauthBase}/_coauth/account/test/debug/issue-dpop-grant`,
-    {
-      data: {
-        actor_id: actorId,
-        device_id: deviceId,
-        dpop_jwk: deviceKey.publicJwk,
-        audience_id: audience,
-        ...(opts.scopes ? { scopes: opts.scopes } : {}),
-      },
-    },
-  );
-  if (response.status() === 404) {
-    // Route absent: release build or COAUTH_ENABLE_TEST_ENDPOINTS not set.
-    return undefined;
-  }
-  const text = await response.text();
-  if (!response.ok()) {
-    throw new Error(
-      `debug issue-dpop-grant returned ${response.status()}: ${text}`,
-    );
-  }
-  const body = JSON.parse(text) as {
-    grant_id: string;
-    grant_jwt: string;
-    account_id?: { principal_id: string; station_id: string };
-    dpop_jkt: string;
-    audience_id: string;
-    scopes: string[];
-    expires_at: string;
-    principal_id?: string;
-  };
-  if (!body.principal_id || !body.account_id) {
-    throw new Error(
-      "debug issue-dpop-grant omitted verified principal_id or account_id",
-    );
-  }
-  return {
-    grantId: body.grant_id,
-    grantJwt: body.grant_jwt,
-    accountId: body.account_id,
-    dpopJkt: body.dpop_jkt,
-    audience: body.audience_id,
-    scopes: body.scopes,
-    expiresAt: body.expires_at,
-    principalId: body.principal_id,
   };
 }
