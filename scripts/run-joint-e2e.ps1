@@ -4799,6 +4799,36 @@ try {
         Remove-Item Env:COTEST_MOCK_DID_HOST_SCID -ErrorAction SilentlyContinue
     }
 
+    # The Rust provisioning module against the deployment this run owns.
+    #
+    # It has to run here and nowhere else: it needs a real Coauth and Soland,
+    # and `-KeepServices` does not outlive a runner started as a background
+    # process, so there is no way to hand a running deployment to a separate
+    # `cargo test` invocation. Placing it before Playwright also means a broken
+    # canonical provisioning chain fails here, with its own error, rather than
+    # as a wave of "no session grant" failures across the suite.
+    #
+    # Failure is fatal. The whole point of the module is that a test suite and a
+    # Rust scenario prepare identities the same way; a check that is allowed to
+    # soft-skip proves nothing about that.
+    if ($StartCoauth) {
+        Write-Host ""
+        Write-Host "=== Rust provisioning check (live Coauth + Soland) ==="
+        $provisioningLog = Join-Path $jointDir "rust-provisioning-check.log"
+        $provisioningArgs = @(
+            "test", "--manifest-path", (Join-Path $repoRoot "Cargo.toml"),
+            "-p", "cotest-test-support", "--test", "provisioning_live",
+            "--", "--ignored", "--nocapture"
+        )
+        $provisioningOutput = & cargo @provisioningArgs 2>&1
+        $provisioningExit = $LASTEXITCODE
+        $provisioningOutput | Set-Content -LiteralPath $provisioningLog -Encoding UTF8
+        foreach ($line in $provisioningOutput) { Write-Host $line }
+        if ($provisioningExit -ne 0) {
+            throw "Rust provisioning check failed (exit=$provisioningExit); see $provisioningLog"
+        }
+    }
+
         $playwrightArgs = @("test", "--config", "playwright.config.ts")
         foreach ($project in $playwrightProjects) {
             $playwrightArgs += @("--project", $project)

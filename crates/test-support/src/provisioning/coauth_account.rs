@@ -80,7 +80,7 @@ pub async fn register_unbound_account(
             "this deployment requires email verification, but no mock inbox was configured; \
              start the harness with -StartMocks",
         )?;
-        let code = verification_code(http, inbox, &account.email).await?;
+        let code = await_verification_code(http, inbox, &account.email).await?;
         let verified = post_json(
             http,
             &format!("{base}/{registration_id}/verify-email"),
@@ -156,6 +156,30 @@ pub async fn login(
     Ok(())
 }
 
+/// Wait for the code Coauth mails asynchronously.
+///
+/// The registration response comes back before the mail lands, so a single read
+/// is a race. The TypeScript helper polls for thirty seconds; so does this. A
+/// timeout is an error, never a skip.
+async fn await_verification_code(
+    http: &reqwest::Client,
+    inbox: &MockEmailInbox,
+    email: &str,
+) -> Result<String> {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    let mut last_error = None;
+    while std::time::Instant::now() < deadline {
+        match verification_code(http, inbox, email).await {
+            Ok(code) => return Ok(code),
+            Err(error) => last_error = Some(error),
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    }
+    Err(last_error.unwrap_or_else(|| {
+        anyhow::anyhow!("mock inbox produced no verification code for {email} within 30s")
+    }))
+}
+
 async fn verification_code(
     http: &reqwest::Client,
     inbox: &MockEmailInbox,
@@ -177,10 +201,21 @@ async fn verification_code(
         bail!("mock email inbox returned {status}: {body}");
     }
     let body: Value = serde_json::from_str(&body).context("parse mock inbox body")?;
-    body.get("code")
-        .and_then(Value::as_str)
+    // The mock returns `{ messages: [ { token, ... } ] }`, newest last, and the
+    // code is the `token` field. The first live run of this module looked for a
+    // top-level `code` and found nothing — a shape mistake that reads as
+    // "Coauth never sent the mail", which is a much more alarming story than
+    // the truth.
+    let messages = body
+        .get("messages")
+        .and_then(Value::as_array)
+        .with_context(|| format!("mock inbox returned no messages array: {body}"))?;
+    messages
+        .iter()
+        .rev()
+        .find_map(|message| message.get("token").and_then(Value::as_str))
         .map(str::to_owned)
-        .with_context(|| format!("mock inbox held no verification code for {email}"))
+        .with_context(|| format!("mock inbox held no verification token for {email}"))
 }
 
 fn urlencoding(value: &str) -> String {

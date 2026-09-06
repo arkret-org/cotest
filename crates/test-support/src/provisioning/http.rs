@@ -18,9 +18,20 @@ pub async fn post_json(http: &reqwest::Client, url: &str, body: &Value) -> Resul
     read_json(response, url).await
 }
 
-pub async fn get_json(http: &reqwest::Client, url: &str) -> Result<Value> {
+/// GET a canonical Arkret endpoint.
+///
+/// `Arkret-Operation` is required, not decorative: a canonical request without
+/// it is refused with `operation_selector_required`, which is how the first
+/// live run of this module failed. The caller passes the registered operation
+/// id rather than this module guessing one from the path.
+pub async fn get_arkret_json(
+    http: &reqwest::Client,
+    url: &str,
+    operation_id: &str,
+) -> Result<Value> {
     let response = http
         .get(url)
+        .header("Arkret-Operation", operation_id)
         .send()
         .await
         .with_context(|| format!("GET {url}"))?;

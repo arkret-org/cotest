@@ -56,6 +56,14 @@ pub struct StationFacts {
     pub service_id: String,
 }
 
+/// The registered operation id for `GET /_arkret/describe`.
+///
+/// Spelled out rather than derived from the spec registry the way the
+/// TypeScript helper does. One constant for one call is not worth a registry
+/// walk; if this module ever needs a second, it should read the registry
+/// instead of growing a second constant.
+const DESCRIBE_OPERATION_ID: &str = "ak.server.read.describe.v1";
+
 pub async fn describe_station(
     http: &reqwest::Client,
     endpoints: &DeploymentEndpoints,
@@ -64,7 +72,7 @@ pub async fn describe_station(
         "{}/_arkret/describe",
         endpoints.soland_base_url.trim_end_matches('/')
     );
-    let described = http::get_json(http, &url)
+    let described = http::get_arkret_json(http, &url, DESCRIBE_OPERATION_ID)
         .await
         .context("describe Station")?;
     let described = http::json_object(&described, "Station description")?;
