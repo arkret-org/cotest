@@ -667,18 +667,19 @@ fn validate_fsm_causal_heads(vector: &Value, vector_name: &str) -> Result<()> {
     let initial = require_pointer(registered, "/initial_state", vector_name)?.clone();
     let transitions = required_array(registered, "/allowed_transitions", vector_name)?
         .iter()
-    .map(|pair| {
-        let pair = pair
-            .as_array()
-            .ok_or_else(|| anyhow!("allowed_transitions entry is not a pair"))?;
-        Ok((
-            pair.first().cloned().unwrap_or(Value::Null),
-            pair.get(1).cloned().unwrap_or(Value::Null),
-        ))
-    })
-    .collect::<Result<Vec<_>>>()?;
+        .map(|pair| {
+            let pair = pair
+                .as_array()
+                .ok_or_else(|| anyhow!("allowed_transitions entry is not a pair"))?;
+            Ok((
+                pair.first().cloned().unwrap_or(Value::Null),
+                pair.get(1).cloned().unwrap_or(Value::Null),
+            ))
+        })
+        .collect::<Result<Vec<_>>>()?;
     let fsm = Fsm::new(transitions).with_initial(initial.clone());
-    let cell = arkret_wire::CellRef::new(required_pointer_str(vector, "/cell", vector_name)?.to_owned())?;
+    let cell =
+        arkret_wire::CellRef::new(required_pointer_str(vector, "/cell", vector_name)?.to_owned())?;
 
     fn digest_of(event_id: &str) -> Result<arkret_wire::Hash> {
         Ok(arkret_wire::EventId::new(event_id.to_owned())?.event_digest())
@@ -722,7 +723,12 @@ fn validate_fsm_causal_heads(vector: &Value, vector_name: &str) -> Result<()> {
     }
 
     fn sealed_all(writes: &Value) -> Result<Vec<SealedOp>> {
-        writes.as_array().ok_or_else(|| anyhow!("case writes is not an array"))?.iter().map(sealed).collect()
+        writes
+            .as_array()
+            .ok_or_else(|| anyhow!("case writes is not an array"))?
+            .iter()
+            .map(sealed)
+            .collect()
     }
 
     /// §9.3.1.6: heads that agree read that state, heads that differ are `⊥`.
@@ -785,7 +791,9 @@ fn validate_fsm_causal_heads(vector: &Value, vector_name: &str) -> Result<()> {
             (value, reason)
         } else {
             let ops = if let Some(batches) = case.get("batches") {
-                batches.as_array().ok_or_else(|| anyhow!("case batches is not an array"))?
+                batches
+                    .as_array()
+                    .ok_or_else(|| anyhow!("case batches is not an array"))?
                     .iter()
                     .map(sealed_all)
                     .collect::<Result<Vec<_>>>()?

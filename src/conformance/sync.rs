@@ -16,8 +16,7 @@ use arkret_state::realm_state_snapshot::{
     realm_state_snapshot_state_leaf_hash, state_digest_from_chunk_payloads,
     state_digest_from_items,
 };
-use arkret_wire::{EventId, Hash};
-use arkret_wire::ErrorCode;
+use arkret_wire::{ErrorCode, EventId, Hash};
 use serde_json::{Value, json};
 
 use super::helpers::assert_expected_subset;
@@ -1080,9 +1079,7 @@ fn evaluate_restore_covered_membership_case(
     let root = match algorithm {
         EventSetCommitmentAlgorithm::MerkleEventSetV1 => Hash::new(declared_root.to_owned())
             .map_err(|error| anyhow!("declared root is not a digest: {error}"))?,
-        EventSetCommitmentAlgorithm::OrderedEventIdSha256V1 => {
-            event_set_root(&algorithm, entries)?
-        }
+        EventSetCommitmentAlgorithm::OrderedEventIdSha256V1 => event_set_root(&algorithm, entries)?,
     };
 
     let mut set = CoveredEventSet::new(

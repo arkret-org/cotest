@@ -2070,6 +2070,7 @@ dependencies = [
  "bip39",
  "chacha20poly1305 0.11.0",
  "chrono",
+ "cotest-test-support",
  "ed25519-dalek 3.0.0",
  "fs2",
  "garth",

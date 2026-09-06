@@ -297,7 +297,10 @@ pub async fn bootstrap_registered_actor(
         ActorBootstrapRegistration::AccountWithLocalpart { handle, localpart }
             if cached.is_none() =>
         {
-            register_account_with_localpart_via_dev_login(server, actor, handle, localpart, &device_id).await?
+            register_account_with_localpart_via_dev_login(
+                server, actor, handle, localpart, &device_id,
+            )
+            .await?
         }
         ActorBootstrapRegistration::Account { .. }
         | ActorBootstrapRegistration::AccountWithLocalpart { .. } => {

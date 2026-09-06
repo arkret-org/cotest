@@ -48,11 +48,11 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
     let alice = server
         .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
-    let alice_token = alice.token.clone();
+    let alice_token = alice.expect_dev_bearer().to_owned();
     let bob_did = actor_did_for_service_did(server.service_did(), "bob-offline-ordering")?;
     let bob_device = "ak:device:01904100-0000-7000-8000-0000000000ba";
     let bob = server.demo_client(&bob_did, bob_device).await?;
-    let bob_token = bob.token.clone();
+    let bob_token = bob.expect_dev_bearer().to_owned();
     // ── Step 2: alice sends msg 1 to bob's device.
     send_to_device(
         &server,

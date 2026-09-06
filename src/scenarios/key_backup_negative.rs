@@ -144,8 +144,8 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
     );
 
     if strict_device_digest_negatives_enabled() {
-        reject_wrong_device_on_put(server, &alice.token, &alice.actor).await?;
-        reject_digest_mismatch_on_put(server, &alice.token, &alice.actor).await?;
+        reject_wrong_device_on_put(server, alice.expect_dev_bearer(), &alice.actor).await?;
+        reject_digest_mismatch_on_put(server, alice.expect_dev_bearer(), &alice.actor).await?;
     }
 
     Ok(())

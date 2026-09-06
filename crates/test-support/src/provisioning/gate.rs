@@ -229,6 +229,16 @@ impl FoundingDeviceKey {
             .context("canonical-json returned no canonical form")
     }
 
+    /// The founding device's signing key.
+    ///
+    /// In-process only, and deliberately not reachable through the bridge: a
+    /// caller that holds this key can act as the principal. The Rust harness
+    /// needs it to build a client that signs its own DPoP proofs; the
+    /// TypeScript suite asks the bridge to act instead.
+    pub fn signing_key(&self) -> ed25519_dalek::SigningKey {
+        self.signing_key.clone()
+    }
+
     fn dpop_header(&self, method: &str, url: &str) -> Result<String> {
         let request = arkret_http_client::DpopProofRequest::new(method, url);
         garth::session::dpop::build_http_dpop_proof(request, &self.signing_key)

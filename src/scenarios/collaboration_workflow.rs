@@ -74,10 +74,11 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     );
 
     let me = expect_json(
-        server
-            .http()
-            .get(server.url("/_arkret/self/account/viewer"))
-            .bearer_auth(&bob.token),
+        bob.authorize(
+            server
+                .http()
+                .get(server.url("/_arkret/self/account/viewer")),
+        ),
         StatusCode::OK,
     )
     .await?;
@@ -289,20 +290,22 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     assert!(event_kinds.contains("ak.message.create"));
 
     let logout = expect_json(
-        server
-            .http()
-            .post(server.url("/_arkret/gate/account/session-grants/revoke"))
-            .bearer_auth(&bob.token),
+        bob.authorize(
+            server
+                .http()
+                .post(server.url("/_arkret/gate/account/session-grants/revoke")),
+        ),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(logout["revoked_count"], 1);
 
     expect_status(
-        server
-            .http()
-            .get(server.url("/_arkret/self/account/viewer"))
-            .bearer_auth(&bob.token),
+        bob.authorize(
+            server
+                .http()
+                .get(server.url("/_arkret/self/account/viewer")),
+        ),
         StatusCode::UNAUTHORIZED,
     )
     .await?;

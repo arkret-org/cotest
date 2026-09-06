@@ -198,7 +198,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
 
     let revoked_manage = submit_event(
         &server,
-        &alice.token,
+        alice.expect_dev_bearer(),
         &alice.actor,
         &realm_id,
         "ak.capability.revoke",

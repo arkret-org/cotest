@@ -30,8 +30,14 @@ pub async fn run(
         .device_signing_key
         .clone();
     let (actor, realm_id, message_event_id) =
-        submit_adapter_event(server, &client.token, &client.actor).await?;
-    upload_and_inspect_keys(server, &client.token, &client.actor, &device_key).await?;
+        submit_adapter_event(server, client.expect_dev_bearer(), &client.actor).await?;
+    upload_and_inspect_keys(
+        server,
+        client.expect_dev_bearer(),
+        &client.actor,
+        &device_key,
+    )
+    .await?;
     Ok((actor, realm_id, message_event_id))
 }
 

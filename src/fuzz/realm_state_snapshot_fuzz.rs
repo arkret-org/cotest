@@ -6,8 +6,7 @@
 //!
 //! Two entry points:
 //!   - [`fuzz_realm_state_snapshot_manifest`] — drives the manifest envelope.
-//!   - [`fuzz_realm_state_snapshot_chunk_lists`] — drives a chunk payload's
-//!     four auxiliary lists.
+//!   - [`fuzz_realm_state_snapshot_chunk_lists`] — drives a chunk payload's four auxiliary lists.
 //!
 //! Both use the same panic-catch pattern as `envelope_fuzz` so a fuzz
 //! finding surfaces as `Err(message)` rather than aborting the harness.
@@ -158,7 +157,8 @@ pub fn fuzz_realm_state_snapshot_chunk_lists(data: &[u8]) -> Result<(), String> 
         let _ = registry().validate_value(SchemaId::REALM_STATE_SNAPSHOT_CHUNK_V1, &value);
     })?;
     catch(|| {
-        let _ = serde_json::from_value::<arkret_state::RealmStateSnapshotChunkPayload>(value.clone());
+        let _ =
+            serde_json::from_value::<arkret_state::RealmStateSnapshotChunkPayload>(value.clone());
     })
 }
 

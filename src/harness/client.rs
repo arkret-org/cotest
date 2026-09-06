@@ -43,7 +43,14 @@ pub struct TestActorClient {
     pub(super) service_notary_signer: arkret_wire::NotarySignerDescriptor,
     pub actor: String,
     pub device_id: String,
-    pub token: String,
+    /// How this client authenticates.
+    ///
+    /// Private on purpose. It used to be a `pub token: String`, and scenarios
+    /// that needed a request shape the builders below do not produce reached
+    /// for `bearer_auth(&client.token)`. That is correct for a development
+    /// session and silently wrong for a canonical one, whose grant is only
+    /// valid with a per-request proof. Go through [`Self::authorize`].
+    pub(super) session: super::ClientSession,
     /// Realms this actor created, i.e. the ones whose authority-root cell it
     /// controls. `capabilities.md` section 3.2: v1 genesis issues no self-grant,
     /// so the controller authorizes its own Events by naming that cell in
@@ -547,26 +554,78 @@ impl TestActorClient {
             .to_string()
     }
 
+    /// This client's session.
+    ///
+    /// Read it to assert on the credential or to branch on the kind. To send a
+    /// request, use [`Self::authorize`] or the builders below.
+    pub fn session(&self) -> &super::ClientSession {
+        &self.session
+    }
+
+    /// The development bearer, when this client has one.
+    ///
+    /// `None` for a canonical session. A caller that needs a bearer and finds
+    /// `None` is not missing a field — it is holding a principal whose
+    /// credential cannot be presented that way.
+    pub fn dev_bearer(&self) -> Option<&str> {
+        self.session.dev_bearer()
+    }
+
+    /// The development bearer, or a panic naming why there is not one.
+    ///
+    /// For scenarios that hand a bearer to a helper or smuggle one into a query
+    /// string — shapes [] cannot serve because they are not a
+    /// request yet. A canonical session reaching here is a scenario asking for
+    /// a credential its principal does not have, and failing loudly beats
+    /// sending a grant as a bearer and reading the 401 as a protocol result.
+    /// The development bearer, or a panic naming why there is not one.
+    ///
+    /// For scenarios that hand a bearer to a helper or smuggle one into a query
+    /// string — shapes [`Self::authorize`] cannot serve, because those are not
+    /// a request yet. A canonical session reaching here is a scenario asking
+    /// for a credential its principal does not have; failing loudly beats
+    /// sending a grant as a bearer and reading the 401 back as a protocol
+    /// result.
+    pub fn expect_dev_bearer(&self) -> &str {
+        self.dev_bearer().unwrap_or_else(|| {
+            panic!(
+                "actor {} holds a canonical session, which has no bearer; build the request and \
+                 pass it to `authorize` instead",
+                self.actor
+            )
+        })
+    }
+
+    /// Attach this client's credentials to a request the caller built.
+    ///
+    /// The builders below cover the ordinary shapes; this is for the ones they
+    /// do not produce. It is the only supported way to authorize a hand-built
+    /// request, because a canonical session needs a proof over that request's
+    /// own method and URL, which only this can mint.
+    pub fn authorize(&self, builder: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+        self.session
+            .authorize(builder)
+            .expect("authorize a harness request")
+    }
+
     pub fn get(&self, path: &str) -> reqwest::RequestBuilder {
-        self.http.get(self.url(path)).bearer_auth(&self.token)
+        self.authorize(self.http.get(self.url(path)))
     }
 
     pub fn post(&self, path: &str) -> reqwest::RequestBuilder {
-        self.http.post(self.url(path)).bearer_auth(&self.token)
+        self.authorize(self.http.post(self.url(path)))
     }
 
     pub fn query(&self, path: &str) -> reqwest::RequestBuilder {
-        self.http
-            .request(query_method(), self.url(path))
-            .bearer_auth(&self.token)
+        self.authorize(self.http.request(query_method(), self.url(path)))
     }
 
     pub fn put(&self, path: &str) -> reqwest::RequestBuilder {
-        self.http.put(self.url(path)).bearer_auth(&self.token)
+        self.authorize(self.http.put(self.url(path)))
     }
 
     pub fn delete(&self, path: &str) -> reqwest::RequestBuilder {
-        self.http.delete(self.url(path)).bearer_auth(&self.token)
+        self.authorize(self.http.delete(self.url(path)))
     }
 
     pub async fn create_realm(&self, title: &str) -> Result<String> {

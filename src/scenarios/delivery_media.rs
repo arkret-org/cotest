@@ -28,7 +28,7 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
     let alice = server
         .register_client(&alice_did, "@delivery-alice", alice_device)
         .await?;
-    let token = alice.token.clone();
+    let token = alice.expect_dev_bearer().to_owned();
 
     // soland binds keys/upload to the authoritative device key: the canonical
     // bootstrap authorized Alice's founding device, whose deterministic
@@ -175,7 +175,7 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
     let alice_did = actor_did_for_service_did(server.service_did(), "delivery-to-device")?;
     let alice_device = "ak:device:01904100-0000-7000-8000-0000000000a1";
     let alice = server.demo_client(&alice_did, alice_device).await?;
-    let token = alice.token.clone();
+    let token = alice.expect_dev_bearer().to_owned();
 
     expect_api_error(
         server
@@ -383,10 +383,8 @@ pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
     )
     .await?;
     expect_api_error(
-        server
-            .http()
-            .post(server.url("/_arkret/self/blob/upload"))
-            .bearer_auth(&alice.token)
+        alice
+            .authorize(server.http().post(server.url("/_arkret/self/blob/upload")))
             .header(
                 "x-arkret-content-digest",
                 "sha256:deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
@@ -398,10 +396,8 @@ pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
     .await?;
 
     let blob = expect_json(
-        server
-            .http()
-            .post(server.url("/_arkret/self/blob/upload"))
-            .bearer_auth(&alice.token)
+        alice
+            .authorize(server.http().post(server.url("/_arkret/self/blob/upload")))
             .header("x-arkret-realm-id", &realm_id)
             .multipart(blob_upload_form(b"encrypted-bytes", "text/plain")?),
         StatusCode::OK,
@@ -410,12 +406,9 @@ pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
     let blob_ref = blob["blob_ref"].as_str().unwrap();
 
     let head = expect_response(
-        server
-            .http()
-            .head(server.url(&format!(
-                "/_arkret/self/blob/get?blob_ref={blob_ref}&purpose=message.attachment"
-            )))
-            .bearer_auth(&bob.token),
+        bob.authorize(server.http().head(server.url(&format!(
+            "/_arkret/self/blob/get?blob_ref={blob_ref}&purpose=message.attachment"
+        )))),
         StatusCode::OK,
     )
     .await?;
@@ -443,7 +436,7 @@ pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
     expect_api_error(
         server.http().get(server.url(&format!(
             "/_arkret/self/blob/get?blob_ref={blob_ref}&purpose=message.attachment&access_token={}",
-            alice.token
+            alice.expect_dev_bearer()
         ))),
         StatusCode::UNAUTHORIZED,
         "unauthenticated",
@@ -497,7 +490,7 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
     let alice_client = server
         .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
-    let alice = alice_client.token.clone();
+    let alice = alice_client.expect_dev_bearer().to_owned();
     let bob_did = actor_did_for_service_did(server.service_did(), "bob-delivery")?;
     let bob = server
         .register_client(
@@ -506,7 +499,8 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
             "ak:device:01904100-0000-7000-8000-0000000000b0",
         )
         .await?
-        .token;
+        .expect_dev_bearer()
+        .to_owned();
     let moderation_realm_create = alice_client
         .create_realm_with(json!({
             "title": "Moderation edge fixture",

@@ -21,10 +21,12 @@ pub async fn run(
     )
     .await?;
     let report = expect_json(
-        server
-            .http()
-            .post(server.url("/_arkret/self/moderation/report"))
-            .bearer_auth(&actor.token)
+        actor
+            .authorize(
+                server
+                    .http()
+                    .post(server.url("/_arkret/self/moderation/report")),
+            )
             .json(&request),
         StatusCode::OK,
     )

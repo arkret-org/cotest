@@ -145,10 +145,11 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
         alice_principal.pcr_realm_id != bob_principal.pcr_realm_id,
         "same DID on distinct Stations inherited one PCR lineage"
     );
-    let wrong_station_session =
-        group
-            .server(1)
-            .client_with_token(&alice_did, ALICE_DEVICE, alice.token.clone())?;
+    let wrong_station_session = group.server(1).client_with_token(
+        &alice_did,
+        ALICE_DEVICE,
+        alice.expect_dev_bearer().to_owned(),
+    )?;
     let cross_session = wrong_station_session
         .get("/_arkret/self/account/viewer")
         .send()

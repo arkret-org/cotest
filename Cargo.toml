@@ -10,6 +10,21 @@ resolver = "3"
 # `crates/test-support` is the light build edge: SDK-only dependencies, so the
 # tools that live there do not compile Inkson or the soland implementation
 # crates the root package pulls in.
+#
+# **The dependency arrow points one way: `cotest` -> `cotest-test-support`.**
+# It is not a preference. The crate exists so the browserless lane can build its
+# two binaries without Inkson's wasm, and a dependency back on the root package
+# would drag all of it in and destroy that property by construction. So
+# test-support never names the root package, and anything it would need from
+# there does not belong in it.
+#
+# What that settles in practice: the canonical provisioning chain lives in
+# test-support, because both the root harness and the TypeScript suite (through
+# `cotest-provision`) consume it. `ArkretServer` and `TestActorClient` stay in
+# the root package, because they manage processes and soland configuration —
+# exactly the weight the light edge must not carry. The root package therefore
+# calls into provisioning to build a client; provisioning knows nothing about
+# clients.
 members = ["crates/test-support"]
 
 [workspace.lints.rust]
@@ -23,6 +38,7 @@ unimplemented = "deny"
 
 [workspace.dependencies]
 aes-gcm = "0.11.1"
+cotest-test-support = { path = "crates/test-support" }
 anyhow = "1.0.104"
 arbitrary = "1.4"
 argon2 = { version = "0.6.0", default-features = false, features = ["alloc", "password-hash"] }
@@ -97,6 +113,11 @@ url = "2.5.8"
 test-with-containers = ["dep:testcontainers"]
 
 [dependencies]
+# The light build edge. See the workspace comment above for why the arrow
+# points this way: the canonical provisioning chain lives there because both
+# this harness and the TypeScript suite consume it, and it must stay buildable
+# without Inkson.
+cotest-test-support = { workspace = true }
 # CT-19 — `arbitrary` powers the wire-envelope fuzz harness in
 # `cotest/src/fuzz/`. Lives in `[dependencies]` rather than
 # `[dev-dependencies]` so the harness types (FuzzEventInput / FuzzMoveInput /

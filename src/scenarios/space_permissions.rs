@@ -38,7 +38,13 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
     )
     .await?;
 
-    let realm_id = create_realm(server, &alice.token, &alice_did, "Permission Space").await?;
+    let realm_id = create_realm(
+        server,
+        alice.expect_dev_bearer(),
+        &alice_did,
+        "Permission Space",
+    )
+    .await?;
     let mut unauthorized_join = alice
         .author_event(
             &realm_id,
@@ -60,10 +66,7 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
     .await?;
 
     expect_api_error(
-        server
-            .http()
-            .post(server.url("/_arkret/self/events"))
-            .bearer_auth(&bob.token)
+        bob.authorize(server.http().post(server.url("/_arkret/self/events")))
             .json(&unauthorized_submission),
         StatusCode::FORBIDDEN,
         "capability_denied",
@@ -72,10 +75,11 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
     // Keep the retired mutation surface absent after a real protocol Realm
     // create; this prevents a local CRUD bypass from returning unnoticed.
     expect_api_error(
-        server
-            .http()
-            .delete(server.url(&format!("/_soland/self/spaces/{realm_id}")))
-            .bearer_auth(&alice.token),
+        alice.authorize(
+            server
+                .http()
+                .delete(server.url(&format!("/_soland/self/spaces/{realm_id}"))),
+        ),
         StatusCode::NOT_FOUND,
         "unrecognized_endpoint",
     )
@@ -148,10 +152,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
         .await?;
     rebind_authored_event(&mut non_member_event, &bob.actor)?;
     expect_api_error(
-        server
-            .http()
-            .post(server.url("/_arkret/self/events"))
-            .bearer_auth(&bob.token)
+        bob.authorize(server.http().post(server.url("/_arkret/self/events")))
             .json(&crate::publication::initial_submission(
                 non_member_event,
                 "",
@@ -162,7 +163,14 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
     .await?;
 
     let pre_member_seal = current_seal_id(&alice, &realm_id).await?;
-    add_member(&server, &alice.token, &alice_did, &realm_id, &bob_did).await?;
+    add_member(
+        &server,
+        alice.expect_dev_bearer(),
+        &alice_did,
+        &realm_id,
+        &bob_did,
+    )
+    .await?;
     await_seal_advance(&alice, &realm_id, &pre_member_seal).await?;
     alice
         .grant_realm_actions_to_client(&realm_id, &bob, &["ak.message.create"])
@@ -193,10 +201,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
         )
         .await?;
     expect_api_error(
-        server
-            .http()
-            .post(server.url("/_arkret/self/events"))
-            .bearer_auth(&bob.token)
+        bob.authorize(server.http().post(server.url("/_arkret/self/events")))
             .json(&crate::publication::initial_submission(after_destroy, "")?),
         StatusCode::CONFLICT,
         // The top-level wire error code is `failed_precondition`; the

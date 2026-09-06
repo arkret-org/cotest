@@ -35,6 +35,27 @@ const DURABLE_TEST_KEYSTORE_MASTER_KEY: &str = "d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3
 const HARNESS_HTTP_TIMEOUT: Duration = Duration::from_secs(45);
 const HARNESS_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 
+/// What [`ArkretServer::canonical_client`] needs from its caller.
+///
+/// Packed rather than passed as seven strings, where a swapped pair would type
+/// check and fail somewhere deep in the chain. Every field is supplied by the
+/// caller: this harness never discovers or defaults a deployment endpoint,
+/// because a defaulted one is how a test ends up provisioning against the wrong
+/// Station and reporting it as a protocol failure.
+pub struct CanonicalClientRequest<'a> {
+    /// The HTTP client the chain runs on. It must trust the run-scoped CA and
+    /// keep a cookie jar: Coauth's account session lives in a cookie and the
+    /// gate handoff authorizes against it.
+    pub http: &'a reqwest::Client,
+    pub endpoints: &'a cotest_test_support::provisioning::DeploymentEndpoints,
+    pub oidc_client_id: &'a str,
+    /// Bare localpart; the email is derived from it.
+    pub handle: &'a str,
+    pub password: &'a str,
+    pub device_id: &'a str,
+    pub display_name: &'a str,
+}
+
 #[derive(Clone)]
 pub struct OperationSelectingHttpClient {
     inner: HttpClient,
@@ -1026,7 +1047,7 @@ impl ArkretServer {
         let client = self.actor_client(
             actor,
             principal.device_id.as_str(),
-            token,
+            crate::harness::ClientSession::DevBearer(token),
             Some(principal.clone()),
         )?;
         client.track_controlled_realm(&principal.pcr_realm_id);
@@ -1049,20 +1070,126 @@ impl ArkretServer {
         let client = self.actor_client(
             did,
             principal.device_id.as_str(),
-            token,
+            crate::harness::ClientSession::DevBearer(token),
             Some(principal.clone()),
         )?;
         client.track_controlled_realm(&principal.pcr_realm_id);
         Ok(client)
     }
 
+    /// A client carrying a bearer the caller already holds.
+    ///
+    /// Development seam by construction: a canonical grant is not a bearer.
+    /// Negative fixtures that present a bad or foreign token use this.
     pub fn client_with_token(
         &self,
         actor: &str,
         device_id: &str,
         token: String,
     ) -> Result<TestActorClient> {
-        self.actor_client(actor, &canonical_device_id(device_id), token, None)
+        self.actor_client(
+            actor,
+            &canonical_device_id(device_id),
+            crate::harness::ClientSession::DevBearer(token),
+            None,
+        )
+    }
+
+    /// A client whose principal was founded through the canonical chain.
+    ///
+    /// This is the entry point the dev-seam ones are measured against. The
+    /// account is registered at Coauth, authorized through OAuth, handed off,
+    /// and founds its PCR genesis and verified binding — the same code
+    /// `cotest-provision` runs for the TypeScript suite, so the two cannot
+    /// drift on what founding a principal means.
+    ///
+    /// Needs a Coauth deployment; `endpoints` and `oidc_client_id` come from
+    /// the runner's topology, never from a default. The session it returns is
+    /// [`ClientSession::Canonical`](crate::harness::ClientSession::Canonical):
+    /// every request carries a DPoP proof, and scenarios that reach for a
+    /// bearer will find `None` rather than a credential that 401s.
+    pub async fn canonical_client(
+        &self,
+        request: CanonicalClientRequest<'_>,
+    ) -> Result<TestActorClient> {
+        use cotest_test_support::provisioning;
+
+        let CanonicalClientRequest {
+            http,
+            endpoints,
+            oidc_client_id,
+            handle,
+            password,
+            device_id,
+            display_name,
+        } = request;
+
+        let account = provisioning::UnboundAccount {
+            handle: handle.to_owned(),
+            email: format!("{handle}@example.test"),
+            password: password.to_owned(),
+            display_name: display_name.to_owned(),
+        };
+        provisioning::provision_unbound_account(http, endpoints, &account)
+            .await
+            .context("register and authenticate the Coauth account")?;
+
+        let facts = provisioning::describe_station(http, endpoints)
+            .await
+            .context("describe the Station under test")?;
+        let authorization = provisioning::authorize_with_current_account(
+            http,
+            &endpoints.coauth_base_url,
+            oidc_client_id,
+        )
+        .await
+        .context("complete the authorization-code flow")?;
+        let device_key = provisioning::FoundingDeviceKey::derive(handle);
+        let handoff = provisioning::create_account_handoff(
+            http,
+            &endpoints.coauth_base_url,
+            &facts.service_id,
+            &authorization,
+            device_key,
+        )
+        .await
+        .context("exchange the authorization for an account handoff")?;
+
+        let device_id = canonical_device_id(device_id);
+        let founded = provisioning::found_principal(
+            http,
+            provisioning::FoundPrincipalRequest {
+                coauth_base: &endpoints.coauth_base_url,
+                station_base: &endpoints.soland_base_url,
+                trust_domain: &facts.trust_domain,
+                audience_id: &facts.service_id,
+                device_id: &device_id,
+                display_name,
+            },
+            &handoff,
+        )
+        .await
+        .context("found the principal through the canonical chain")?;
+
+        // The Station this client will talk to has to be the one that bound the
+        // principal. A grant for another Station is well formed and refused on
+        // first use, which reads as a broken scenario rather than a wrong
+        // deployment.
+        let account_id = founded.account_id();
+        if account_id.station_id.as_str() != self.service_id.as_str() {
+            anyhow::bail!(
+                "canonical provisioning bound {} to Station {}, not {}",
+                account_id.principal_id.as_str(),
+                account_id.station_id.as_str(),
+                self.service_id.as_str()
+            );
+        }
+
+        let session = crate::harness::ClientSession::Canonical {
+            grant: founded.session_grant().session_grant.clone(),
+            signing_key: std::sync::Arc::new(handoff.device_key.signing_key()),
+        };
+        self.actor_client(account_id.principal_id.as_str(), &device_id, session, None)
     }
 
     /// Register account-first, then publish a primary localpart through the
@@ -1087,7 +1214,7 @@ impl ArkretServer {
         let client = self.actor_client(
             did,
             principal.device_id.as_str(),
-            token,
+            crate::harness::ClientSession::DevBearer(token),
             Some(principal.clone()),
         )?;
         client.track_controlled_realm(&principal.pcr_realm_id);
@@ -1110,10 +1237,31 @@ impl ArkretServer {
         &self,
         actor: &str,
         device_id: &str,
-        token: String,
+        session: crate::harness::ClientSession,
         principal: Option<ProvisionedTestPrincipal>,
     ) -> Result<TestActorClient> {
-        let builder = SdkClient::builder(self.base_url()).auth(Auth::Bearer(token.clone()));
+        // The SDK client authenticates the same way the raw request path does.
+        // Two different credentials on one client is the shape that produces a
+        // scenario passing through one surface and 401-ing on the other.
+        let auth = match &session {
+            crate::harness::ClientSession::DevBearer(token) => Auth::Bearer(token.clone()),
+            crate::harness::ClientSession::Canonical { grant, signing_key } => {
+                let signing_key = signing_key.clone();
+                Auth::Dpop(arkret_http_client::DpopAuth::with_dpop_token(
+                    grant.clone(),
+                    move |request| {
+                        garth::session::dpop::build_http_dpop_proof(request, &signing_key).map_err(
+                            |error| {
+                                arkret_http_client::Error::Protocol(format!(
+                                    "build DPoP proof: {error}"
+                                ))
+                            },
+                        )
+                    },
+                ))
+            }
+        };
+        let builder = SdkClient::builder(self.base_url()).auth(auth);
         let sdk = if self._tls.is_some() {
             builder.http_client(self.http_client.clone()).build()?
         } else {
@@ -1131,7 +1279,7 @@ impl ArkretServer {
             service_notary_signer: self.service_notary_signer.clone(),
             actor: actor.to_owned(),
             device_id: device_id.to_owned(),
-            token,
+            session,
             principal,
             controlled_realms: std::sync::Arc::new(std::sync::Mutex::new(
                 std::collections::BTreeSet::new(),

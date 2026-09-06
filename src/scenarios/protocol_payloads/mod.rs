@@ -47,7 +47,7 @@ pub async fn events_keys_device_blob_push_and_moderation_surfaces_work() -> Resu
     let client = server
         .demo_client(&actor_id, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
-    let token = client.token.clone();
+    let token = client.expect_dev_bearer().to_owned();
 
     let (actor, adapter_realm_id, adapter_message_event_id) =
         events_keys_setup::run(&server, &client)

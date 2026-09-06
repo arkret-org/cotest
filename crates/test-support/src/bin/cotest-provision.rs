@@ -257,9 +257,10 @@ impl Session {
                     soland_base_url: String,
                 }
                 let body: Body = serde_json::from_value(request.body).context("parse request")?;
-                let handoff = self.handoffs.get(&body.handoff_id).with_context(|| {
-                    format!("no handoff {} in this session", body.handoff_id)
-                })?;
+                let handoff = self
+                    .handoffs
+                    .get(&body.handoff_id)
+                    .with_context(|| format!("no handoff {} in this session", body.handoff_id))?;
                 let grant = self.session_grants.get(&body.handoff_id).with_context(|| {
                     format!(
                         "handoff {} has no session grant; found_principal has not run for it",

@@ -20,6 +20,7 @@ mod invite_delivery;
 mod principal;
 mod proof;
 mod server;
+mod session;
 mod wire_body;
 
 pub use assertions::{
@@ -36,8 +37,8 @@ pub use event_builder::{
     event_envelope_with_signing_seed_and_verification_method, head_eq_precondition,
     moderation_report_request, realm_bootstrap_event_batch,
     realm_bootstrap_event_batch_with_signing_seed, register_account_via_dev_login,
-    register_account_with_localpart_via_dev_login, register_event_signing_identity, send_message, submit_event,
-    submit_event_with_signing_seed_and_verification_method,
+    register_account_with_localpart_via_dev_login, register_event_signing_identity, send_message,
+    submit_event, submit_event_with_signing_seed_and_verification_method,
 };
 pub(crate) use event_builder::{
     event_envelope_with_chain, invite_create_payload, member_join_payload_value,
@@ -53,6 +54,7 @@ pub use proof::{
 };
 pub use server::{ArkretServer, TestServerGroup};
 pub(crate) use server::{ReservedPort, reserve_port};
+pub use session::ClientSession;
 pub use wire_body::{CanonicalJsonBody, NonProtocolTestBody};
 
 static NEXT_EVENT_SEQ: AtomicU64 = AtomicU64::new(1);
