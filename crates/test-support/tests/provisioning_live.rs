@@ -13,8 +13,9 @@
 //! no check, because the suite still reports a pass.
 
 use cotest_test_support::provisioning::{
-    DeploymentEndpoints, MockEmailInbox, UnboundAccount, authorize_with_current_account,
-    describe_station, provision_unbound_account,
+    DeploymentEndpoints, FoundingDeviceKey, MockEmailInbox, UnboundAccount,
+    authorize_with_current_account, create_account_handoff, describe_station,
+    provision_unbound_account,
 };
 
 fn required_env(name: &str) -> String {
@@ -160,5 +161,62 @@ async fn an_authenticated_account_completes_the_authorization_code_flow() {
     assert_ne!(
         authorization.code_verifier, authorization.state,
         "code_verifier and state must not be the same value"
+    );
+}
+
+#[tokio::test]
+#[ignore = "requires a running Coauth and Soland; see the module docs"]
+async fn a_fresh_account_receives_an_identity_creation_lease() {
+    let http = http_client();
+    let endpoints = endpoints();
+    let client_id = required_env("COTEST_OIDC_CLIENT_ID");
+    let slug = format!(
+        "rust-handoff-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock before epoch")
+            .as_nanos()
+    );
+    let account = UnboundAccount {
+        email: format!("{slug}@example.test"),
+        display_name: format!("Rust handoff {slug}"),
+        handle: slug.clone(),
+        password: "1amTester!".to_owned(),
+    };
+    provision_unbound_account(&http, &endpoints, &account)
+        .await
+        .expect("register and authenticate an unbound Coauth account");
+
+    let facts = describe_station(&http, &endpoints)
+        .await
+        .expect("describe the Station under test");
+    let authorization =
+        authorize_with_current_account(&http, &endpoints.coauth_base_url, &client_id)
+            .await
+            .expect("complete the authorization-code flow");
+
+    let handoff = create_account_handoff(
+        &http,
+        &endpoints.coauth_base_url,
+        &facts.service_id,
+        &authorization,
+        FoundingDeviceKey::derive(&slug),
+    )
+    .await
+    .expect("exchange the authorization for an account handoff");
+
+    assert!(
+        !handoff.account_handoff_grant.trim().is_empty(),
+        "handoff returned an empty grant"
+    );
+    // The lease is what makes this account able to found a principal. Without
+    // asserting it, a handoff for an already-bound account would look the same.
+    let lease = handoff
+        .binding
+        .get("identity_creation_lease")
+        .unwrap_or_else(|| panic!("handoff binding carried no lease: {}", handoff.binding));
+    assert!(
+        lease.is_object(),
+        "identity_creation_lease is not an object: {lease}"
     );
 }

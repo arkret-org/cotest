@@ -176,3 +176,178 @@ fn random_b64url(label: &str) -> String {
     hasher.update(std::process::id().to_le_bytes());
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(hasher.finalize())
 }
+
+/// The founding device's DPoP key, and the seed the wire oracle needs to sign
+/// with it.
+///
+/// Derived, not drawn from an RNG, for the same reason the PKCE material is:
+/// this key exists for one provisioning run in one test process. The real
+/// clients generate device keys from the OS CSPRNG.
+#[derive(Clone, Debug)]
+pub struct FoundingDeviceKey {
+    pub seed_b64url: String,
+    signing_key: ed25519_dalek::SigningKey,
+}
+
+impl FoundingDeviceKey {
+    pub fn derive(label: &str) -> Self {
+        let seed: [u8; 32] = {
+            let nanos = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system clock before Unix epoch")
+                .as_nanos();
+            let mut hasher = Sha256::new();
+            hasher.update(b"cotest-provisioning-device-v1");
+            hasher.update(label.as_bytes());
+            hasher.update(nanos.to_le_bytes());
+            hasher.update(std::process::id().to_le_bytes());
+            hasher.finalize().into()
+        };
+        Self {
+            seed_b64url: base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(seed),
+            signing_key: ed25519_dalek::SigningKey::from_bytes(&seed),
+        }
+    }
+
+    fn dpop_header(&self, method: &str, url: &str) -> Result<String> {
+        let request = arkret_http_client::DpopProofRequest::new(method, url);
+        garth::session::dpop::build_http_dpop_proof(request, &self.signing_key)
+            .map_err(|error| anyhow::anyhow!("build DPoP proof for {method} {url}: {error}"))
+    }
+}
+
+/// Registered operation ids for the gate calls in this module.
+///
+/// Every canonical Arkret endpoint requires `Arkret-Operation`; the TypeScript
+/// helper derives the value from the spec's operation registry by matching
+/// method and path. These are named directly because there are few of them and
+/// the mapping is stable. If this list grows past a handful, read the registry
+/// rather than adding constants.
+const CREATE_HANDOFF_OPERATION_ID: &str = "ak.gate.account.exchange.create_handoff.v1";
+
+/// An account handoff, accepted by the Account Authority.
+#[derive(Clone, Debug)]
+pub struct AccountHandoff {
+    pub request_id: String,
+    pub account_handoff_grant: String,
+    pub expires_at: String,
+    /// The identity-creation binding. A fresh account must come back
+    /// `identity_creation_active` with a lease; anything else means this
+    /// account cannot found a principal and the caller must not proceed.
+    pub binding: Value,
+    pub device_key: FoundingDeviceKey,
+}
+
+/// Exchange an authorization for an account handoff grant.
+///
+/// Step 3, `ak.gate.account.exchange.create_handoff.v1`. The request body and
+/// the outcome validation both come from [`crate::wire`] — which routes through
+/// Garth's `oidc_account_handoff_request` — so this function only carries the
+/// HTTP and the checks that depend on what the caller asked for.
+pub async fn create_account_handoff(
+    http: &reqwest::Client,
+    coauth_base: &str,
+    audience_id: &str,
+    authorization: &OidcAuthorization,
+    device_key: FoundingDeviceKey,
+) -> Result<AccountHandoff> {
+    let request_id = format!("ak:request:{}", uuid_v7_like());
+    let body = crate::wire::account_handoff_request(json!({
+        "request_id": request_id,
+        "audience_id": audience_id,
+        "oidc_issuer_uri": authorization.issuer,
+        "client_id": authorization.client_id,
+        "redirect_uri": authorization.redirect_uri,
+        "state": authorization.state,
+        "nonce": authorization.nonce,
+        "authorization_code": authorization.authorization_code,
+        "code_verifier": authorization.code_verifier,
+        "dpop_seed_b64url": device_key.seed_b64url,
+    }))
+    .context("build the account handoff request body")?;
+
+    let url = format!(
+        "{}/_arkret/gate/account/authentication-handoffs",
+        coauth_base.trim_end_matches('/')
+    );
+    let response = http
+        .post(&url)
+        .header("Arkret-Operation", CREATE_HANDOFF_OPERATION_ID)
+        .header("DPoP", device_key.dpop_header("POST", &url)?)
+        .json(&body)
+        .send()
+        .await
+        .with_context(|| format!("POST {url}"))?;
+    let status = response.status();
+    let text = response.text().await.context("read handoff response")?;
+    if !status.is_success() {
+        bail!("{url} returned {status}: {text}");
+    }
+    let outcome: Value =
+        serde_json::from_str(&text).with_context(|| format!("parse handoff outcome: {text}"))?;
+
+    // Validated through the same oracle the TypeScript side uses, so a change
+    // in what a valid outcome looks like reaches both at once.
+    let validated = crate::wire::account_handoff_outcome(outcome)
+        .context("validate the account handoff outcome")?;
+    let validated = json_object(&validated, "account handoff outcome")?;
+    if validated.get("request_id").and_then(Value::as_str) != Some(request_id.as_str()) {
+        bail!("account handoff outcome answered a different request: {validated:?}");
+    }
+    let binding = validated
+        .get("binding")
+        .cloned()
+        .context("account handoff outcome carried no binding")?;
+    let state = binding.get("state").and_then(Value::as_str);
+    if state != Some("identity_creation_active") {
+        bail!(
+            "a fresh account must receive an active identity-creation lease, got {state:?}:              {binding}"
+        );
+    }
+
+    Ok(AccountHandoff {
+        request_id,
+        account_handoff_grant: validated
+            .get("account_handoff_grant")
+            .and_then(Value::as_str)
+            .context("handoff outcome omitted the grant")?
+            .to_owned(),
+        expires_at: validated
+            .get("expires_at")
+            .and_then(Value::as_str)
+            .context("handoff outcome omitted expires_at")?
+            .to_owned(),
+        binding,
+        device_key,
+    })
+}
+
+/// A UUIDv7-shaped id, without a uuid dependency.
+///
+/// `RequestId` only requires the shape; the value identifies one request inside
+/// one test run and is never correlated outside it.
+fn uuid_v7_like() -> String {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("system clock before Unix epoch");
+    let millis = u64::try_from(nanos.as_millis()).unwrap_or(u64::MAX);
+    let mut hasher = Sha256::new();
+    hasher.update(b"cotest-provisioning-request-v1");
+    hasher.update(nanos.as_nanos().to_le_bytes());
+    hasher.update(std::process::id().to_le_bytes());
+    let digest: [u8; 32] = hasher.finalize().into();
+    let hex = hex::encode(digest);
+    // 8-4-4-4-12, with the first twelve hex digits carrying the millisecond
+    // timestamp: `unix_ts_ms | ver 7 + rand | var + rand`. Getting the grouping
+    // wrong produces something that reads like a UUID and is rejected as an
+    // identifier, which is exactly how the first live run of this failed.
+    let millis_hex = format!("{:012x}", millis & 0xffff_ffff_ffff);
+    format!(
+        "{}-{}-7{}-8{}-{}",
+        &millis_hex[0..8],
+        &millis_hex[8..12],
+        &hex[0..3],
+        &hex[3..6],
+        &hex[6..18]
+    )
+}

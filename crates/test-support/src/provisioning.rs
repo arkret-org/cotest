@@ -28,7 +28,10 @@ mod http;
 
 use anyhow::{Context, Result};
 pub use coauth_account::{MockEmailInbox, UnboundAccount};
-pub use gate::{OidcAuthorization, authorize_with_current_account};
+pub use gate::{
+    AccountHandoff, FoundingDeviceKey, OidcAuthorization, authorize_with_current_account,
+    create_account_handoff,
+};
 use serde_json::Value;
 
 /// Where the services under test are, and what the caller is allowed to assume
