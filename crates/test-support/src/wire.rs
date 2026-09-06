@@ -180,7 +180,6 @@ struct InstallManagedActorAuthorInput {
     trust_domain: arkret::TrustDomainId,
 }
 
-
 pub fn invite_subject_proof(input: Value) -> Result<Value> {
     let input: InviteSubjectProofInput =
         serde_json::from_value(input).context("parse invite subject proof input")?;

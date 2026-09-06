@@ -16,4 +16,5 @@
 
 #![deny(unsafe_code)]
 
+pub mod provisioning;
 pub mod wire;

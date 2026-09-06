@@ -5,10 +5,7 @@
 //! reach the same oracle through stdin/stdout.
 
 use anyhow::{Context, Result, bail};
-
-use cotest_test_support::wire::{
-    self, EventDigestMode,
-};
+use cotest_test_support::wire::{self, EventDigestMode};
 
 fn main() -> Result<()> {
     let command = std::env::args().nth(1).context("missing command")?;

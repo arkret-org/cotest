@@ -45,10 +45,24 @@ ed25519-dalek = { workspace = true, default-features = false, features = ["alloc
 # strip.
 garth = { workspace = true }
 hex = { workspace = true }
+# The provisioning module talks to Coauth and Soland over HTTP. The SDK's
+# client carries DPoP and the standard operations; `reqwest` is for Coauth's
+# private account product API, which is not a spec surface and has no SDK
+# client by design.
+arkret-http-client = { workspace = true }
+# `cookies` is not optional here: Coauth carries the authenticated account
+# session in a cookie, and the gate handoff in step 3 authorizes against that
+# session. A client without a jar registers an account and then cannot use it.
+reqwest = { workspace = true, features = ["cookies", "json", "rustls"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
 url = { workspace = true }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+# The live provisioning check needs a runtime and the run-scoped CA loader.
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
