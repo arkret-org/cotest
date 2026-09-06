@@ -20,7 +20,6 @@ mod invite_delivery;
 mod principal;
 mod proof;
 mod server;
-mod session;
 mod wire_body;
 
 pub use assertions::{
@@ -30,6 +29,11 @@ pub use assertions::{
     expect_status, expect_text,
 };
 pub use client::TestActorClient;
+// Re-exported, not owned. `ClientSession` is about how a client presents its
+// credentials, which needs Garth and the SDK and nothing else — so it lives on
+// the light build edge, where it can be tested against a live Station without
+// building the server harness. See the workspace manifest for the arrow.
+pub use cotest_test_support::session::ClientSession;
 pub use event_builder::{
     add_member, auth_context_key_id, create_realm, create_realm_with_signing_seed,
     default_event_verification_method, dev_login, device_message_send_request, encrypted_envelope,
@@ -52,9 +56,8 @@ pub use proof::{
     attach_signal_proof, attach_signal_proof_value, refresh_typed_event_proof,
     refresh_typed_event_proof_with_signing_seed,
 };
-pub use server::{ArkretServer, TestServerGroup};
+pub use server::{ArkretServer, CanonicalClientRequest, TestServerGroup};
 pub(crate) use server::{ReservedPort, reserve_port};
-pub use session::ClientSession;
 pub use wire_body::{CanonicalJsonBody, NonProtocolTestBody};
 
 static NEXT_EVENT_SEQ: AtomicU64 = AtomicU64::new(1);

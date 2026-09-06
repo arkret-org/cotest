@@ -179,6 +179,25 @@ struct HarnessTls {
 }
 
 impl HarnessTls {
+    /// Trust a CA this process did not generate.
+    ///
+    /// The certificate and key paths are the harness's own and stay unused: an
+    /// attached Station already has its serving certificate, and the fields
+    /// exist for the spawn path that has to hand them to a child.
+    fn attached(ca_pem_path: &Path) -> Result<Self> {
+        let ca_pem = std::fs::read(ca_pem_path)
+            .with_context(|| format!("read the run-scoped CA {}", ca_pem_path.display()))?;
+        let directory =
+            tempfile::tempdir().context("create a scratch directory for attached TLS")?;
+        Ok(Self {
+            ca_path: ca_pem_path.to_path_buf(),
+            cert_path: directory.path().join("attached-unused.crt"),
+            key_path: directory.path().join("attached-unused.key"),
+            _directory: directory,
+            ca_pem,
+        })
+    }
+
     fn new() -> Result<Self> {
         use rcgen::{
             BasicConstraints, CertificateParams, ExtendedKeyUsagePurpose, IsCa, Issuer, KeyPair,
@@ -272,7 +291,15 @@ pub struct TestServerGroup {
 
 enum SutHandle {
     Local(Child),
-    Docker { container_name: String },
+    Docker {
+        container_name: String,
+    },
+    /// A deployment this process did not start and must not stop.
+    ///
+    /// The runner owns it and tears it down when the lane ends; a test that
+    /// killed it would take the rest of the run with it. Every shutdown path
+    /// checks for this variant rather than trusting callers to remember.
+    Attached,
     Terminated,
 }
 
@@ -343,6 +370,62 @@ fn harness_account_authority_env(has: impl Fn(&str) -> bool) -> Vec<(String, Str
 impl ArkretServer {
     pub async fn spawn(name: &str) -> Result<Self> {
         Self::spawn_with_env(name, &[]).await
+    }
+
+    /// Point at a Station this process did not start.
+    ///
+    /// Every other constructor spawns, which is why a Rust scenario could not
+    /// use the deployment `run-joint-e2e.ps1` already owns: `-KeepServices`
+    /// does not outlive a background runner, so there was no way to hand a
+    /// running Station to `cargo test`. This closes that, and it is the
+    /// counterpart of the TypeScript side's attached deployment — same rule,
+    /// the worker never stops what it did not start.
+    ///
+    /// The identity comes from the Station's own `/_arkret/describe`, never
+    /// from configuration. The notary signing seed cannot: it is the deployment
+    /// operator's, and a scenario that needs to author notary-signed Seals must
+    /// be told which key the runner configured. `run-joint-e2e.ps1` exports it
+    /// as `COTEST_SOLAND_NOTARY_SIGNING_KEY`.
+    pub async fn attach(
+        base_url: &str,
+        notary_signing_key_b64: &str,
+        ca_pem_path: Option<&Path>,
+    ) -> Result<Self> {
+        let base_url = Url::parse(base_url)
+            .with_context(|| format!("parse the attached Station base URL {base_url}"))?;
+        let tls = match ca_pem_path {
+            Some(path) => Some(Arc::new(HarnessTls::attached(path)?)),
+            None => None,
+        };
+        let (service_id, service_did, trust_domain) =
+            fetch_service_identity(&base_url, tls.as_deref()).await?;
+        let notary_seed_bytes = BASE64_STANDARD
+            .decode(notary_signing_key_b64)
+            .context("decode the attached Station notary signing key")?;
+        let notary_seed: [u8; 32] = notary_seed_bytes.as_slice().try_into().map_err(|_| {
+            anyhow::anyhow!(
+                "attached Station notary signing key is {} bytes, not 32",
+                notary_seed_bytes.len()
+            )
+        })?;
+        let service_notary_signer =
+            test_service_notary_signer(&service_id, &service_did, notary_seed)?;
+        Ok(Self {
+            handle: SutHandle::Attached,
+            http_client: probe_http_client(tls.as_deref())?,
+            external_restart: None,
+            base_url,
+            service_id,
+            service_did,
+            service_notary_signer,
+            trust_domain,
+            blob_root: None,
+            log_path: None,
+            metrics_bind: None,
+            _port_reservations: Vec::new(),
+            _database: None,
+            _tls: tls,
+        })
     }
 
     pub async fn spawn_with_env(name: &str, extra_env: &[(&str, &str)]) -> Result<Self> {
@@ -1007,6 +1090,16 @@ impl ArkretServer {
                 docker_remove_container(&container_name)
                     .with_context(|| format!("remove killed docker SUT {container_name}"))?;
             }
+            // Refused rather than ignored. A scenario asking to kill a Station
+            // the runner owns has mistaken which deployment it is holding, and
+            // silently doing nothing would let it go on asserting against a
+            // server it believes is dead.
+            SutHandle::Attached => {
+                anyhow::bail!(
+                    "refusing to kill an attached Station at {}: this process did not start it",
+                    self.base_url
+                );
+            }
             SutHandle::Terminated => {}
         }
         if let Some(blob_root) = self.blob_root.take() {
@@ -1307,6 +1400,8 @@ impl Drop for ArkretServer {
                 }
                 let _ = docker_remove_container(container_name);
             }
+            // Owned by the runner; dropping our handle must not touch it.
+            SutHandle::Attached => {}
             SutHandle::Terminated => {}
         }
         if let Some(blob_root) = &self.blob_root {

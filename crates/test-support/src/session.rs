@@ -1,4 +1,4 @@
-//! How a [`TestActorClient`](super::TestActorClient) holds its credentials.
+//! How a test client holds its credentials.
 //!
 //! The harness has two ways to be a principal and they are not interchangeable
 //! at the wire. A development session is a bearer the Station accepts because
@@ -11,6 +11,13 @@
 //! build until now, and would fail with a bare 401 the moment one of them came
 //! from the canonical chain. [`ClientSession`] makes the difference something
 //! the request path handles rather than something each caller has to remember.
+//!
+//! It lives on the light build edge rather than beside
+//! `cotest::harness::TestActorClient`, which re-exports it. Presenting a
+//! credential needs Garth and the SDK and nothing else, so keeping it here
+//! means it can be exercised against a live Station without building the
+//! server harness — and a proof minted over the wrong method or URL, its one
+//! real risk, only shows against a live Station.
 
 use std::sync::Arc;
 
@@ -55,9 +62,8 @@ impl ClientSession {
     ///
     /// `None` for a canonical session: its grant is not a bearer, and handing
     /// it to `bearer_auth` produces a request the Station will refuse. Callers
-    /// that build their own requests should use
-    /// [`TestActorClient::authorize`](super::TestActorClient::authorize)
-    /// instead of reaching for this.
+    /// that build their own requests should use [`Self::authorize`] instead of
+    /// reaching for this.
     pub fn dev_bearer(&self) -> Option<&str> {
         match self {
             Self::DevBearer(token) => Some(token),

@@ -110,6 +110,10 @@ param(
     [int]$StartupTimeoutSeconds = 900,
     [switch]$SkipBuild,
     [switch]$KeepServices,
+    # Run `tests/canonical_client_live.rs` against this run's deployment.
+    # Off by default: it builds the root package, which is the dependency graph
+    # the browserless lane exists to skip.
+    [switch]$RunHarnessClientCheck,
     [switch]$PreflightOnly,
     [switch]$RunnerSelfTest,
     [ValidateRange(1, 32)]
@@ -4694,6 +4698,11 @@ try {
         # SOLAND_OAUTH_CLIENT_ID in the generated soland config). Surfaced to e2e so
         # oidc-login-chain.spec.ts can assert /_arkret/describe advertises it.
         $env:COTEST_OIDC_CLIENT_ID = $CoauthOAuthClientId
+        # The notary signing seed this run configured soland with. A Rust
+        # scenario attaching to this deployment cannot derive the notary
+        # descriptor from `/_arkret/describe` — the seed is the operator's — so
+        # it has to be told which key the runner chose.
+        $env:COTEST_SOLAND_NOTARY_SIGNING_KEY = $SolandNotarySigningKey
         # Anti-false-green: coauth is up, so the crown-jewel cross-member paths
         # (MLS decrypt, cross-member kanban, multi-profile) MUST run. This flag
         # turns their "coauth session unavailable" branch from a silent
@@ -4716,6 +4725,7 @@ try {
         Remove-Item Env:COTEST_COAUTH_SERVICE_ID -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_COAUTH_SESSION_GRANT_INTROSPECTION_BEARER -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_OIDC_CLIENT_ID -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_SOLAND_NOTARY_SIGNING_KEY -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_REQUIRE_JOINT_STACK -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_REAL_OIDC_LOGIN -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_COAUTH_SECONDARY_BASE_URL -ErrorAction SilentlyContinue
@@ -4866,6 +4876,31 @@ try {
         foreach ($line in $provisioningOutput) { Write-Host $line }
         if ($provisioningExit -ne 0) {
             throw "Rust provisioning check failed (exit=$provisioningExit); see $provisioningLog"
+        }
+
+        # The same deployment, one layer up: `ArkretServer::canonical_client`
+        # building a `TestActorClient` on a canonical session.
+        #
+        # Opt-in because it lives in the root package, and building that pulls
+        # the 952-crate graph the `joint-api` lane exists to avoid. The check
+        # above stays on by default precisely because `cotest-test-support` is
+        # the light edge.
+        if ($RunHarnessClientCheck) {
+            Write-Host ""
+            Write-Host "=== Rust harness client check (live Coauth + Soland) ==="
+            $harnessClientLog = Join-Path $jointDir "rust-harness-client-check.log"
+            $harnessClientArgs = @(
+                "test", "--manifest-path", (Join-Path $repoRoot "Cargo.toml"),
+                "-p", "cotest", "--test", "canonical_client_live",
+                "--", "--ignored", "--nocapture"
+            )
+            $harnessClientOutput = & cargo @harnessClientArgs 2>&1
+            $harnessClientExit = $LASTEXITCODE
+            $harnessClientOutput | Set-Content -LiteralPath $harnessClientLog -Encoding UTF8
+            foreach ($line in $harnessClientOutput) { Write-Host $line }
+            if ($harnessClientExit -ne 0) {
+                throw "Rust harness client check failed (exit=$harnessClientExit); see $harnessClientLog"
+            }
         }
     }
 

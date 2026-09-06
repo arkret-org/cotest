@@ -17,4 +17,5 @@
 #![deny(unsafe_code)]
 
 pub mod provisioning;
+pub mod session;
 pub mod wire;

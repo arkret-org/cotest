@@ -17,6 +17,8 @@ use cotest_test_support::provisioning::{
     authorize_with_current_account, create_account_handoff, describe_station, found_principal,
     provision_unbound_account, read_self_account_viewer,
 };
+use cotest_test_support::session::ClientSession;
+use serde_json::Value;
 
 fn required_env(name: &str) -> String {
     std::env::var(name).unwrap_or_else(|_| {
@@ -390,6 +392,138 @@ async fn the_canonical_chain_founds_a_principal_end_to_end() {
             device.get("device_id").and_then(|v| v.as_str()) == Some(device_id.as_str())
         }),
         "the founding device is not on the account: {devices:?}"
+    );
+}
+
+/// A canonical [`ClientSession`] against the Station that issued its grant.
+///
+/// The chain's own assertions all read values the register step returned.
+/// This one exercises the path a *client* takes: a request built by the caller,
+/// handed to `authorize`, with the proof minted over that request's own method
+/// and URL. It is the only place a proof bound to the wrong URL, signed by the
+/// wrong key, or sent without its grant would show — and it is the seam
+/// `cotest::harness::TestActorClient` and `ArkretServer::canonical_client` are
+/// built on, so verifying it here covers them without building the server
+/// harness.
+#[tokio::test]
+#[ignore = "requires a running Coauth and Soland; see the module docs"]
+async fn a_canonical_session_authorizes_a_caller_built_request() {
+    let http = http_client();
+    let endpoints = endpoints();
+    let client_id = required_env("COTEST_OIDC_CLIENT_ID");
+    let slug = format!(
+        "rust-session-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock before epoch")
+            .as_nanos()
+    );
+    let account = UnboundAccount {
+        email: format!("{slug}@example.test"),
+        display_name: format!("Rust session {slug}"),
+        handle: slug.clone(),
+        password: "1amTester!".to_owned(),
+    };
+    provision_unbound_account(&http, &endpoints, &account)
+        .await
+        .expect("register and authenticate an unbound Coauth account");
+    let facts = describe_station(&http, &endpoints)
+        .await
+        .expect("describe the Station under test");
+    let authorization =
+        authorize_with_current_account(&http, &endpoints.coauth_base_url, &client_id)
+            .await
+            .expect("complete the authorization-code flow");
+    let handoff = create_account_handoff(
+        &http,
+        &endpoints.coauth_base_url,
+        &facts.service_id,
+        &authorization,
+        FoundingDeviceKey::derive(&slug),
+    )
+    .await
+    .expect("exchange the authorization for an account handoff");
+    let device_id = format!(
+        "ak:device:01904100-0000-7000-8000-{:012x}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock before epoch")
+            .as_nanos()
+            & 0xffff_ffff_ffff
+    );
+    let principal = found_principal(
+        &http,
+        FoundPrincipalRequest {
+            coauth_base: &endpoints.coauth_base_url,
+            station_base: &endpoints.soland_base_url,
+            trust_domain: &facts.trust_domain,
+            audience_id: &facts.service_id,
+            device_id: &device_id,
+            display_name: &account.display_name,
+        },
+        &handoff,
+    )
+    .await
+    .expect("found a principal through the canonical chain");
+
+    let session = ClientSession::Canonical {
+        grant: principal.session_grant().session_grant.clone(),
+        signing_key: std::sync::Arc::new(handoff.device_key.signing_key()),
+    };
+    // A canonical session has no bearer. A caller that treats it as one sends
+    // the grant to `bearer_auth` and reads the refusal as a protocol result.
+    assert!(
+        session.dev_bearer().is_none(),
+        "a canonical session must not present a bearer"
+    );
+
+    let url = format!(
+        "{}/_arkret/self/account/viewer",
+        endpoints.soland_base_url.trim_end_matches('/')
+    );
+    let response = session
+        .authorize(
+            http.get(&url)
+                .header("Arkret-Operation", "ak.self.account.read.viewer.v1"),
+        )
+        .expect("authorize the request")
+        .send()
+        .await
+        .expect("send the authorized request");
+    let status = response.status();
+    let body = response.text().await.expect("read the response body");
+    assert_eq!(
+        status.as_u16(),
+        200,
+        "the Station refused a request authorized by its own grant: {body}"
+    );
+    let viewer: Value = serde_json::from_str(&body).expect("parse the account viewer");
+    assert_eq!(
+        viewer.get("principal_id").and_then(Value::as_str),
+        Some(principal.account_id().principal_id.as_str()),
+        "account viewer named a different principal: {body}"
+    );
+
+    // The negative that makes the positive mean something: the same grant with
+    // a proof signed by a different key. The Station has to refuse it, or the
+    // binding it advertises is not being checked.
+    let impostor = ClientSession::Canonical {
+        grant: principal.session_grant().session_grant.clone(),
+        signing_key: std::sync::Arc::new(FoundingDeviceKey::derive("impostor").signing_key()),
+    };
+    let refused = impostor
+        .authorize(
+            http.get(&url)
+                .header("Arkret-Operation", "ak.self.account.read.viewer.v1"),
+        )
+        .expect("authorize with the wrong key")
+        .send()
+        .await
+        .expect("send the request proved by the wrong key");
+    assert_ne!(
+        refused.status().as_u16(),
+        200,
+        "the Station accepted a grant whose DPoP proof was signed by another key"
     );
 }
 
