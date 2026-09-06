@@ -27,7 +27,7 @@ otherwise.
 | 5 | `POST {coauth}/_arkret/gate/account/identity-binding-challenges` | Arkret standard — `ak.gate.account.command.issue_identity_binding_challenge.v1` | Authorized by the handoff grant + a matching DPoP proof over this exact method/URL. |
 | 6 | `cotest-wire identity-creation-register-request` | **Rust, already** | Assembles the register body from the challenge, DID operation, PCR genesis unit, initial session and recovery key. No HTTP. |
 | 7 | `POST {coauth}/_arkret/gate/account/register` | Arkret standard — `ak.gate.account.command.register.v1` | Returns `binding_receipt`, `pcr_genesis_receipt` and `session_grant_outcome` — the initial DPoP-bound grant, its audience, `dpop_jkt`, scopes and the founding event signing key. |
-| 8 | `POST {soland}/_soland/gate/account/project` | Soland deployment-private | **Should not be here.** Soland documents it as the edge the Account Authority calls after canonical registration; Coauth implements that call and never invokes it. See [1844](../../arkret-work/work/active/2026-09-06-1844-coauth-station-account-projection-never-wired.md). |
+| 8 | `POST {soland}/_soland/gate/account/project` | Soland deployment-private | An idempotent replay, not a required step. Coauth already performs this projection inside the canonical register saga (`crates/backend/src/handlers/arkret/account_register.rs:546`, before any usable grant leaves it), and `ensureRegisteredRaw` accepts the 409 that comes back. What the caller actually wants here is its other half, the local `registerEventSigner`. |
 
 Second devices do not repeat this chain: `createDpopUserSessionForAccount`
 fails closed on a second call for the same account, because reusing the founding
@@ -50,7 +50,8 @@ must not be dressed up as spec operations.
 Each needs a strongly typed SDK client method; where one is missing it is filed
 per R03 batch C rather than hand-rolled here.
 
-**Step 8 is the blocker.** Until 1844 lands, a Rust provisioning module that
-claims to be the canonical chain would still have to call a deployment-private
-projection endpoint to make the principal usable — which is exactly what 1725's
-P2 says a canonical path must not do.
+**Step 8 is a packaging problem, not a service gap.** `ensureRegisteredRaw` does
+two unrelated things — the private projection call and a local
+`registerEventSigner` — and the canonical path calls it for the second while
+paying for the first. Split them, and the canonical chain stops touching a
+deployment-private endpoint at all.
