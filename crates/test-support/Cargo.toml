@@ -1,0 +1,54 @@
+[package]
+name = "cotest-test-support"
+version = "0.3.0"
+edition = "2024"
+rust-version = "1.98"
+publish = false
+
+# The light build edge for Cotest's test tooling.
+#
+# The root `cotest` package depends on `garth`, `inkson` and four `soland-*`
+# crates, so anything living under its `src/bin/` inherits all of them —
+# `cargo tree -p inkson` alone is 848 crates. `cotest-wire` needs none of that:
+# it is a stdin-JSON/stdout-JSON oracle over SDK types with no `crate::` use at
+# all, which is why it moves here first. Dependencies are SDK plus Garth —
+# `cotest-wire` already builds account handoffs and register requests through
+# Garth, which is the shared client engine those flows belong to. Inkson,
+# Dioxus and the soland implementation crates must not appear.
+[dependencies]
+anyhow = { workspace = true }
+# `signer` is explicit here. The root package gets it through Cargo feature
+# unification — some other dependency turns it on — so its own manifest never
+# had to say so. An isolated build edge has nothing to unify with.
+arkret = { workspace = true, features = ["signer"] }
+arkret-bootstrap = { workspace = true }
+arkret-canonical = { workspace = true }
+arkret-event-draft = { workspace = true, features = ["test-support"] }
+arkret-hlc = { workspace = true }
+arkret-identifiers = { workspace = true }
+arkret-identity = { workspace = true }
+arkret-models-collaboration = { workspace = true }
+arkret-models-crypto = { workspace = true }
+arkret-models-identity = { workspace = true }
+arkret-schema = { workspace = true }
+arkret-signatures = { workspace = true }
+arkret-wire = { workspace = true, features = ["test-support"] }
+base64 = { workspace = true }
+bip39 = { workspace = true }
+chrono = { workspace = true }
+ed25519-dalek = { workspace = true, default-features = false, features = ["alloc"] }
+# Garth is a dependency on purpose: `cotest-wire` already builds account
+# handoffs, binding challenges and register requests through it, which is the
+# shared client engine those flows belong to. The 2026-09-06 review of 1725
+# reversed the earlier "no Garth in test support" boundary for exactly this
+# reason — Garth is the UI-free engine to reuse, not a heavy UI dependency to
+# strip.
+garth = { workspace = true }
+hex = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+url = { workspace = true }
+
+[lints]
+workspace = true

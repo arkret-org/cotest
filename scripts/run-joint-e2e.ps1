@@ -3325,10 +3325,16 @@ try {
         if (-not $wireFreshness.Fresh) {
             Write-Host "Preparing cotest-wire binary: $($wireFreshness.Detail)"
             $started = Get-Date
+            # Build the package, not the workspace root. `cotest-wire` lives in
+            # `crates/test-support`, whose dependency graph is SDK + Garth and
+            # excludes Inkson and the soland implementation crates the root
+            # package pulls in — 486 crates instead of 952. Naming the root
+            # manifest without `-p` would resolve the bin through the root
+            # package again and rebuild all of it.
             $cotestManifest = Join-Path $repoRoot "Cargo.toml"
             $service = Start-ManagedCommand `
                 -Name "prepare-cotest-wire" `
-                -Command ("cargo build --manifest-path {0} --bin cotest-wire" -f (Quote-PsLiteral $cotestManifest)) `
+                -Command ("cargo build --manifest-path {0} -p cotest-test-support --bin cotest-wire" -f (Quote-PsLiteral $cotestManifest)) `
                 -WorkingDirectory $repoRoot `
                 -LogDirectory $serviceLogDir
             $preparationTasks.Add([pscustomobject]@{ Name = "cotest-wire"; Service = $service; Started = $started; Artifact = $cotestWireBinary; AllowUnchangedArtifact = $true; RepositoryRoots = @($repoRoot, (Join-Path $workspaceRoot "arkret-rust-sdk")) })

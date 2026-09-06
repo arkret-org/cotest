@@ -7,6 +7,10 @@ publish = false
 
 [workspace]
 resolver = "3"
+# `crates/test-support` is the light build edge: SDK-only dependencies, so the
+# tools that live there do not compile Inkson or the soland implementation
+# crates the root package pulls in.
+members = ["crates/test-support"]
 
 [workspace.lints.rust]
 unsafe_code = "deny"

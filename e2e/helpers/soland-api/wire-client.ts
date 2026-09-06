@@ -155,7 +155,19 @@ export function cotestWire<T>(command: CotestWireCommand, input: unknown): T {
     binary ?? "cargo",
     binary
       ? [command]
-      : ["run", "--quiet", "--bin", "cotest-wire", "--", command],
+      : [
+          "run",
+          "--quiet",
+          // `cotest-wire` moved to `crates/test-support`, whose graph is SDK +
+          // Garth. Without `-p` Cargo resolves the bin through the root
+          // package and rebuilds Inkson and the soland crates with it.
+          "-p",
+          "cotest-test-support",
+          "--bin",
+          "cotest-wire",
+          "--",
+          command,
+        ],
     {
       cwd: cotestRepoRoot,
       encoding: "utf8",

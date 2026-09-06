@@ -2106,6 +2106,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "cotest-test-support"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "arkret",
+ "arkret-bootstrap",
+ "arkret-canonical",
+ "arkret-event-draft",
+ "arkret-hlc",
+ "arkret-identifiers",
+ "arkret-identity",
+ "arkret-models-collaboration",
+ "arkret-models-crypto",
+ "arkret-models-identity",
+ "arkret-schema",
+ "arkret-signatures",
+ "arkret-wire",
+ "base64 0.23.1",
+ "bip39",
+ "chrono",
+ "ed25519-dalek 3.0.0",
+ "garth",
+ "hex",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "url",
+]
+
+[[package]]
 name = "cpubits"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
