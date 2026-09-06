@@ -16,6 +16,7 @@
 
 #![deny(unsafe_code)]
 
+pub mod garth_client;
 pub mod provisioning;
 pub mod session;
 pub mod wire;

@@ -12,15 +12,14 @@
 //! What runs here is Garth's own subscription engine over its own durable
 //! store, authenticated by a principal founded through the canonical chain:
 //!
-//! 1. `ArkretServer::attach` + `canonical_client` produce a real principal on
-//!    the deployment this run owns, with a canonical DPoP session.
-//! 2. `ArkretClient::new(NativeExecutor, FileStore, FileStore)` — the headless
-//!    host. Nothing here is a test double: `FileStore` is the durable store
-//!    Garth ships for native consumers.
-//! 3. `run_account_to_inbox` drives one real account-subscribe round against
-//!    the Station through Garth's engine.
-//! 4. The store is reopened from the same path to prove the cursor survived,
-//!    which is the claim `file_store_noop` only tests the negative half of.
+//! 1. `ArkretServer::attach` + `canonical_client` produce a real principal on the deployment this
+//!    run owns, with a canonical DPoP session.
+//! 2. `ArkretClient::new(NativeExecutor, FileStore, FileStore)` — the headless host. Nothing here
+//!    is a test double: `FileStore` is the durable store Garth ships for native consumers.
+//! 3. `run_account_to_inbox` drives one real account-subscribe round against the Station through
+//!    Garth's engine.
+//! 4. The store is reopened from the same path to prove the cursor survived, which is the claim
+//!    `file_store_noop` only tests the negative half of.
 //!
 //! `#[ignore]` because it needs the deployment; `run-joint-e2e.ps1` runs it
 //! behind `-RunGarthClientCheck`, in the lane that owns the services.
@@ -88,13 +87,18 @@ async fn garth_syncs_an_account_over_its_own_durable_store() -> Result<()> {
     let server = ArkretServer::attach(
         &endpoints.soland_base_url,
         &required_env("COTEST_SOLAND_NOTARY_SIGNING_KEY"),
-        Some(std::path::Path::new(&required_env("COTEST_RUN_SCOPED_CA_PEM"))),
+        Some(std::path::Path::new(&required_env(
+            "COTEST_RUN_SCOPED_CA_PEM",
+        ))),
     )
     .await?;
 
     let stamp = unique_suffix();
     let handle = format!("garth-client-{stamp}").to_lowercase();
-    let device_id = format!("ak:device:01904100-0000-7000-8000-{:012x}", stamp & 0xffff_ffff_ffff);
+    let device_id = format!(
+        "ak:device:01904100-0000-7000-8000-{:012x}",
+        stamp & 0xffff_ffff_ffff
+    );
     let client = server
         .canonical_client(CanonicalClientRequest {
             http: &http,

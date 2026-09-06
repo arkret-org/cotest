@@ -300,6 +300,53 @@ export class ProvisioningBridge {
     };
   }
 
+  /**
+   * Build a Garth client for a founded principal.
+   *
+   * From here the bridge holds an `ArkretClient` over `NativeExecutor` and a
+   * durable `FileStore` for this principal. The grant and device key stay on
+   * that side; this call only says "make one", and later calls name it by the
+   * same handoff id.
+   */
+  async openGarthClient(args: {
+    handoffId: string;
+    solandBaseUrl: string;
+    actorId: string;
+    deviceId: string;
+  }): Promise<{ storeRoot: string }> {
+    const result = await this.#call("garth_client_open", {
+      handoff_id: args.handoffId,
+      soland_base_url: args.solandBaseUrl,
+      actor_id: args.actorId,
+      device_id: args.deviceId,
+    });
+    return { storeRoot: String(result.store_root) };
+  }
+
+  /** Run one bounded account-subscribe round through Garth's engine. */
+  async garthSyncAccount(args: {
+    handoffId: string;
+  }): Promise<{ rounds: number; cursor: string | null; stopReason: string }> {
+    const result = await this.#call("garth_sync_account", {
+      handoff_id: args.handoffId,
+    });
+    return {
+      rounds: Number(result.rounds),
+      cursor: (result.cursor ?? null) as string | null,
+      stopReason: String(result.stop_reason),
+    };
+  }
+
+  /** What Garth's store reports when reopened, as a restarted process sees it. */
+  async garthCursorAfterRestart(args: {
+    handoffId: string;
+  }): Promise<{ cursor: string | null }> {
+    const result = await this.#call("garth_cursor_after_restart", {
+      handoff_id: args.handoffId,
+    });
+    return { cursor: (result.cursor ?? null) as string | null };
+  }
+
   /** Close stdin and let the bridge exit; safe to call twice. */
   async dispose(): Promise<void> {
     if (this.#child.exitCode !== null || this.#child.signalCode !== null) return;

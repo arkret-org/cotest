@@ -119,6 +119,13 @@ param(
     # cost as above, and the only path that exercises Garth's client runtime
     # without a browser.
     [switch]$RunGarthClientCheck,
+    # Which client the `TestClient` journeys run against. `inkson` drives the
+    # product in a browser; `garth` drives Garth's own runtime through
+    # `cotest-provision`. The two are not interchangeable and the value is
+    # exported rather than defaulted per-spec, so a parity result always names
+    # the client it measured.
+    [ValidateSet("inkson", "garth")]
+    [string]$ClientKind = "inkson",
     [switch]$PreflightOnly,
     [switch]$RunnerSelfTest,
     [ValidateRange(1, 32)]
@@ -4708,6 +4715,7 @@ try {
         # descriptor from `/_arkret/describe` — the seed is the operator's — so
         # it has to be told which key the runner chose.
         $env:COTEST_SOLAND_NOTARY_SIGNING_KEY = $SolandNotarySigningKey
+        $env:COTEST_CLIENT_KIND = $ClientKind
         # Anti-false-green: coauth is up, so the crown-jewel cross-member paths
         # (MLS decrypt, cross-member kanban, multi-profile) MUST run. This flag
         # turns their "coauth session unavailable" branch from a silent
@@ -4731,6 +4739,7 @@ try {
         Remove-Item Env:COTEST_COAUTH_SESSION_GRANT_INTROSPECTION_BEARER -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_OIDC_CLIENT_ID -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_SOLAND_NOTARY_SIGNING_KEY -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_CLIENT_KIND -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_REQUIRE_JOINT_STACK -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_REAL_OIDC_LOGIN -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_COAUTH_SECONDARY_BASE_URL -ErrorAction SilentlyContinue

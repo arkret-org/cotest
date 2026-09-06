@@ -137,7 +137,7 @@ export type DpopUserSession = {
   principalControlEvents: Array<Record<string, unknown>>;
   recoveryMaterialEvidence?: Record<string, unknown>;
 };
-type DpopUserPageSession = {
+export type DpopUserPageSession = {
   user: JointUser;
   session: DpopUserSession;
   page: JointUserPage;

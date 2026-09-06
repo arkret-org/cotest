@@ -28,6 +28,7 @@ use std::collections::HashMap;
 use std::io::{BufRead, Write};
 
 use anyhow::{Context, Result, bail};
+use cotest_test_support::garth_client::GarthClientHandle;
 use cotest_test_support::provisioning::{
     AccountHandoff, DeploymentEndpoints, FoundPrincipalRequest, FoundingDeviceKey, MockEmailInbox,
     UnboundAccount, authorize_with_current_account, create_account_handoff, describe_station,
@@ -92,6 +93,24 @@ impl From<AccountBody> for UnboundAccount {
     }
 }
 
+/// A directory name that is legal on every platform the harness runs on.
+///
+/// Arkret ids carry colons, which Windows rejects in a path component. Keeping
+/// the mapping total and lossless-enough (one output char per input char) means
+/// two different ids cannot collide into one store.
+fn sanitize_path_component(value: &str) -> String {
+    value
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || character == '-' || character == '_' {
+                character
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
 /// State that must live across requests.
 ///
 /// Handoffs are held by id because `found_principal` needs the one this session
@@ -105,6 +124,13 @@ struct Session {
     http: reqwest::Client,
     handoffs: HashMap<String, AccountHandoff>,
     session_grants: HashMap<String, String>,
+    /// Garth clients, one per founded principal, keyed by handoff id.
+    ///
+    /// Held rather than rebuilt per call because a Garth client owns a durable
+    /// store on disk: rebuilding it for every request would give each call a
+    /// different process's view of the same account, which is the opposite of
+    /// what a client is.
+    garth_clients: HashMap<String, GarthClientHandle>,
 }
 
 impl Session {
@@ -129,6 +155,7 @@ impl Session {
             http,
             handoffs: HashMap::new(),
             session_grants: HashMap::new(),
+            garth_clients: HashMap::new(),
         })
     }
 
@@ -275,6 +302,85 @@ impl Session {
                 )
                 .await?;
                 Ok(json!({ "status": read.status, "body": read.body }))
+            }
+            // --- Garth as a client -------------------------------------------
+            //
+            // These drive `ArkretClient` itself, not the provisioning builders
+            // above. That distinction is the whole point of a `GarthClient`
+            // being selectable: a suite asking for Garth must get Garth's
+            // runtime, not the harness reproducing what it would have done.
+            "garth_client_open" => {
+                #[derive(Deserialize)]
+                struct Body {
+                    handoff_id: String,
+                    soland_base_url: String,
+                    actor_id: String,
+                    device_id: String,
+                }
+                let body: Body = serde_json::from_value(request.body).context("parse request")?;
+                let handoff = self
+                    .handoffs
+                    .get(&body.handoff_id)
+                    .with_context(|| format!("no handoff {} in this session", body.handoff_id))?;
+                let grant = self.session_grants.get(&body.handoff_id).with_context(|| {
+                    format!(
+                        "handoff {} has no session grant; found_principal has not run for it",
+                        body.handoff_id
+                    )
+                })?;
+                // One store directory per principal, under this process's
+                // scratch root, so a restart check reopens the same bytes.
+                //
+                // The handoff id is a `ak:request:<uuid>` and colons are not
+                // legal in a Windows path component, so the directory is named
+                // by a sanitized form rather than the id itself.
+                let store_root = std::env::temp_dir()
+                    .join("cotest-garth-client")
+                    .join(sanitize_path_component(&body.handoff_id));
+                let client = GarthClientHandle::new(
+                    self.http.clone(),
+                    &body.soland_base_url,
+                    grant.clone(),
+                    handoff.device_key.signing_key(),
+                    &body.actor_id,
+                    &body.device_id,
+                    &store_root,
+                )?;
+                self.garth_clients.insert(body.handoff_id.clone(), client);
+                Ok(json!({ "store_root": store_root.to_string_lossy() }))
+            }
+            "garth_sync_account" => {
+                #[derive(Deserialize)]
+                struct Body {
+                    handoff_id: String,
+                }
+                let body: Body = serde_json::from_value(request.body).context("parse request")?;
+                let client = self.garth_clients.get(&body.handoff_id).with_context(|| {
+                    format!(
+                        "no Garth client for handoff {}; call garth_client_open first",
+                        body.handoff_id
+                    )
+                })?;
+                let outcome = client.sync_account_once().await?;
+                Ok(json!({
+                    "rounds": outcome.rounds,
+                    "cursor": outcome.cursor,
+                    "stop_reason": outcome.stop_reason,
+                }))
+            }
+            "garth_cursor_after_restart" => {
+                #[derive(Deserialize)]
+                struct Body {
+                    handoff_id: String,
+                }
+                let body: Body = serde_json::from_value(request.body).context("parse request")?;
+                let client = self.garth_clients.get(&body.handoff_id).with_context(|| {
+                    format!(
+                        "no Garth client for handoff {}; call garth_client_open first",
+                        body.handoff_id
+                    )
+                })?;
+                Ok(json!({ "cursor": client.cursor_after_restart().await? }))
             }
             other => bail!("unknown provisioning op {other:?}"),
         }
