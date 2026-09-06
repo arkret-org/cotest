@@ -63,9 +63,11 @@ async function requestContact(
   await expect(actor.page.getByTestId("contact-request-panel")).toBeVisible({
     timeout: 120_000,
   });
+  // A contact target typed as a DID is an explicit address, which must be
+  // the complete account (handles still resolve through the directory).
   await actor.fillWithPassivePromptRetry(
     actor.page.getByTestId("contact-target-input"),
-    targetId,
+    canonicalJson(accountActorId(targetId)),
   );
   // Scope is selected via checkboxes (direct_message + invite default to
   // checked). Leave only the requested scope checked.
@@ -154,6 +156,11 @@ async function grantConsentDirect(
   await actor.page
     .getByTestId("consent-new-grant-grantee-input")
     .fill(peerId);
+  // The grantee is a remote account: its Station is part of the identity and
+  // Inkson no longer completes a bare principal with its own Station.
+  await actor.page
+    .getByTestId("consent-new-grant-grantee-station-input")
+    .fill(solandServiceId());
   await actor.page.getByTestId("consent-new-grant-ttl-input").fill(ttl);
   await expect(
     actor.page.getByTestId("consent-new-grant-submit-button"),
@@ -305,6 +312,9 @@ test.describe("consent grant", () => {
         .getByTestId("consent-new-grant-grantee-input")
         .fill(bob.id);
       await alicePage.page
+        .getByTestId("consent-new-grant-grantee-station-input")
+        .fill(solandServiceId());
+      await alicePage.page
         .getByTestId("consent-new-grant-ttl-input")
         .fill("30d");
       await expect(
@@ -365,6 +375,9 @@ test.describe("consent grant", () => {
       await alicePage.page
         .getByTestId("consent-request-holder-input")
         .fill(bob.id);
+      await alicePage.page
+        .getByTestId("consent-request-holder-station-input")
+        .fill(solandServiceId());
       await expect(
         alicePage.page.getByTestId("consent-request-submit-button"),
       ).toBeEnabled();

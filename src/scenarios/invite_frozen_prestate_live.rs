@@ -281,7 +281,12 @@ pub async fn invite_frozen_prestate_is_enforced_before_acceptance() -> Result<()
         &alice.actor,
         arkret_wire::DidCoreId::new(alice.service_id().to_owned())?,
         &invite_id,
-        &bob_core_id,
+        // The frozen invitee is Bob's complete account at Bob's Station; the
+        // builder no longer completes a principal with the author's Station.
+        &arkret_wire::AccountId::new(
+            arkret_wire::DidCoreId::new(bob_core_id.clone())?,
+            arkret_wire::DidCoreId::new(bob.service_id().to_owned())?,
+        ),
         "revoked",
         Some("inkson_producer_cancel"),
     )

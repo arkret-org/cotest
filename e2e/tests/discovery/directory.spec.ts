@@ -83,9 +83,11 @@ test.describe("discovery", () => {
       const aliceContactStatus = aliceContact.getByTestId(
         "contact-operation-status",
       );
+      // A DID-addressed contact request names the complete account; Inkson
+      // no longer completes a bare principal with its own Station.
       await alicePage.fillWithPassivePromptRetry(
         aliceContact.getByTestId("contact-target-did-input"),
-        bob.id,
+        canonicalJson(accountActorId(bob.id)),
       );
       await alicePage.clickWithPassivePromptRetry(
         aliceContact.getByTestId("request-contact-button"),
