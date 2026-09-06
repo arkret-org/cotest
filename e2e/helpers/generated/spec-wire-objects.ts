@@ -625,8 +625,6 @@ export type RealmObject = {
     "plane": "data" | "control";
     "sealed"?: boolean;
     "parameters"?: Record<string, unknown>;
-    "initial_value"?: unknown;
-    "sentinel_writers"?: string[];
   }>;
   "retention_policy_id"?: string;
   "avatar_blob_ref"?: string;
