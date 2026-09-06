@@ -2115,6 +2115,7 @@ dependencies = [
  "arkret-canonical",
  "arkret-event-draft",
  "arkret-hlc",
+ "arkret-http-client",
  "arkret-identifiers",
  "arkret-identity",
  "arkret-models-collaboration",
@@ -2129,9 +2130,11 @@ dependencies = [
  "ed25519-dalek 3.0.0",
  "garth",
  "hex",
+ "reqwest 0.13.4",
  "serde",
  "serde_json",
  "sha2 0.11.0",
+ "tokio",
  "url",
 ]
 
@@ -8433,6 +8436,8 @@ checksum = "219c5811de6525e5416c7d5d53bb656d3afdbc6c5af816e0802bcfa42dbdc1c3"
 dependencies = [
  "base64 0.22.1",
  "bytes",
+ "cookie",
+ "cookie_store",
  "futures-channel",
  "futures-core",
  "futures-util",
