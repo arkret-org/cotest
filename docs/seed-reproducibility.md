@@ -91,7 +91,7 @@ the next fuzz run starts with the regression already covered:
 | Target           | Corpus directory                          |
 |------------------|-------------------------------------------|
 | `envelope_fuzz`  | `cotest/fuzz/corpus/event_envelope/`      |
-| `snapshot_fuzz`  | `cotest/fuzz/corpus/snapshot_manifest/` and `.../realm_state_snapshot_chunk_header/` |
+| `snapshot_fuzz`  | `cotest/fuzz/corpus/realm_state_snapshot_manifest/` and `.../realm_state_snapshot_chunk_lists/` |
 | `seal_fuzz`      | `cotest/fuzz/corpus/seal_deep/`           |
 
 The seed filename should be `regression-<issue-id>` so reviewers can

@@ -306,41 +306,76 @@ pub fn fuzz_seal_envelope(data: &[u8]) -> Result<(), String> {
     })
 }
 
-// ── Snapshot chunk header ──────────────────────────────────────────────────
+// ── Snapshot chunk payload ─────────────────────────────────────────────────
 
+/// `arbitrary`-derived input shaped to `ak.schema.realm_state_snapshot_chunk.v1`,
+/// with the emphasis on the closed `items[]` union: `kind` is fuzzed rather than
+/// pinned to `"cell"`, and `state` carries both branches at once so a decoder
+/// that accepted the overlap would show up here.
 #[derive(Debug, Arbitrary)]
 pub struct FuzzRealmStateSnapshotChunkInput {
-    pub chunk_id: u32,
-    pub digest: String,
-    pub bytes_b64url: String,
+    pub chunk_kind: String,
+    pub realm_state_snapshot_ref: String,
+    pub index: u32,
+    pub reducer_profile: String,
+    pub item_kind: String,
+    pub item_id: String,
+    pub item_value: String,
+    pub head_event_id: String,
+    pub include_heads: bool,
+    pub include_value: bool,
 }
 
 impl FuzzRealmStateSnapshotChunkInput {
     fn to_json(&self) -> Value {
+        let mut state = json!({});
+        if self.include_value {
+            state["value"] = Value::String(self.item_value.clone());
+        }
+        if self.include_heads {
+            state["heads"] = json!([{
+                "event_id": self.head_event_id,
+                "value": self.item_value,
+            }]);
+        }
         json!({
-            "chunk_id": self.chunk_id,
-            "digest": self.digest,
-            "bytes": self.bytes_b64url,
+            "chunk_kind": self.chunk_kind,
+            "realm_state_snapshot_ref": self.realm_state_snapshot_ref,
+            "index": self.index,
+            "reducer_profile": self.reducer_profile,
+            "items": [{
+                "kind": self.item_kind,
+                "id": self.item_id,
+                "state": state,
+            }],
+            "conflict_records": [],
+            "soft_failed": [],
+            "quarantined": [],
+            "erasure_stubs": [],
         })
     }
 }
 
-/// Fuzz the `RealmStateSnapshotChunk` wire shape. `SchemaId::REALM_STATE_SNAPSHOT_V1` covers the
-/// manifest-level envelope, so the schema validator leg uses the snapshot
-/// schema id while the typed-deserialization leg uses `RealmStateSnapshotChunk` to
-/// shake out base64-url decoder edge cases (which the existing snapshot
-/// chunker `Deserializer::deserialize` impl unwraps internally).
+/// Fuzz the `ak.schema.realm_state_snapshot_chunk.v1` payload. The schema leg
+/// uses the chunk schema id, not the manifest's, and the typed leg uses
+/// `RealmStateSnapshotChunkPayload`, whose `deny_unknown_fields` and closed item
+/// union are the parts worth shaking.
 pub fn fuzz_realm_state_snapshot_chunk(data: &[u8]) -> Result<(), String> {
     catch(|| {
-        let _ = serde_json::from_slice::<arkret_state::RealmStateSnapshotChunk>(data);
+        let _ = serde_json::from_slice::<arkret_state::RealmStateSnapshotChunkPayload>(data);
     })?;
     let mut unstructured = Unstructured::new(data);
     let Ok(input) = FuzzRealmStateSnapshotChunkInput::arbitrary(&mut unstructured) else {
         return Ok(());
     };
-    fuzz_via_value(&input.to_json(), SchemaId::REALM_STATE_SNAPSHOT_V1, |v| {
-        let _ = serde_json::from_value::<arkret_state::RealmStateSnapshotChunk>(v.clone());
-    })
+    fuzz_via_value(
+        &input.to_json(),
+        SchemaId::REALM_STATE_SNAPSHOT_CHUNK_V1,
+        |v| {
+            let _ =
+                serde_json::from_value::<arkret_state::RealmStateSnapshotChunkPayload>(v.clone());
+        },
+    )
 }
 
 // ── Internal: schema validator + typed deserializer leg ────────────────────

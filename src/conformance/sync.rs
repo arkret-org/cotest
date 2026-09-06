@@ -9,12 +9,14 @@ use arkret_models_collaboration::sync_frames::stream_trace::{
     StreamTraceError, StreamTraceFrame, StreamTraceFrameKind, StreamTraceValidator,
 };
 use arkret_state::realm_state_snapshot::{
-    EventSetCommitmentAlgorithm, EventSetLeaf, RealmStateSnapshotChunkPayload,
-    RealmStateSnapshotMaterializedItem, event_set_root,
+    CoveredEventMembership, CoveredEventSet, EventSetCommitmentAlgorithm, EventSetLeaf,
+    RealmStateSnapshotChunkPayload, RealmStateSnapshotMaterializedItem,
+    RealmStateSnapshotMerkleTree, event_set_merkle_tree, event_set_root,
     realm_state_snapshot_conflict_records_digest, realm_state_snapshot_erasure_stubs_digest,
     realm_state_snapshot_state_leaf_hash, state_digest_from_chunk_payloads,
     state_digest_from_items,
 };
+use arkret_wire::{EventId, Hash};
 use arkret_wire::ErrorCode;
 use serde_json::{Value, json};
 
@@ -33,6 +35,7 @@ pub fn run_sync_fixture_suite() -> Result<()> {
     validate_realm_state_snapshot_frontier_recovery(&value)?;
     validate_realm_state_snapshot_inclusion_challenge(&value)?;
     validate_snapshot_state_digest(&value)?;
+    validate_realm_state_snapshot_restore_covered_membership(&value)?;
     super::realm_state_snapshot_witness_quorum::run_realm_state_snapshot_witness_quorum_attestation_vector()?;
     validate_e2ee_pending(&value)?;
     validate_realm_actor_frontier_vectors(&value)?;
@@ -955,6 +958,197 @@ fn apply_realm_state_snapshot_inclusion_mutation(
         other => bail!("unknown snapshot inclusion mutation {other}"),
     }
     Ok(())
+}
+
+/// `ak.vector.realm_state_snapshot.restore_covered_membership.v1`
+/// (`sync-fixture.json` block `snapshot_restore_covered_membership`,
+/// `realm-state-snapshot-schema.md` §3).
+///
+/// The SDK's [`CoveredEventSet`] is the implementation under test. The point of
+/// the vector is the answer it must *refuse* to give: an Event it has no
+/// evidence about is `Unknown`, never `NotCovered`, because §9.3.1.4 reads
+/// `NotCovered` as "the peer never saw it" and resurrects the writes that
+/// Event superseded.
+fn validate_realm_state_snapshot_restore_covered_membership(value: &Value) -> Result<()> {
+    let vector = required_field(value, "snapshot_restore_covered_membership")?;
+    let vector_id = value_field_str(vector, "vector_id")?;
+    if vector_id != "ak.vector.realm_state_snapshot.restore_covered_membership.v1" {
+        bail!("sync artifact snapshot restore membership vector id drifted");
+    }
+
+    // The committed set is not duplicated here: it is the inclusion-challenge
+    // block's, so the §6 challenge and this §3 membership rule cannot drift
+    // onto two different event sets.
+    let source = value_field_str(vector, "event_set_source")?;
+    let entries = value_array(
+        required_field(required_field(value, source)?, "event_set_entries")?,
+        "snapshot_restore_covered_membership.event_set_entries",
+    )?
+    .iter()
+    .cloned()
+    .map(serde_json::from_value::<EventSetLeaf>)
+    .collect::<std::result::Result<Vec<_>, _>>()
+    .map_err(|error| anyhow!("invalid event-set leaf: {error}"))?;
+
+    let commitment = required_field(vector, "event_set_commitment")?;
+    let declared_root = value_field_str(commitment, "root")?;
+    let covered_event_count = value_field_u64(commitment, "covered_event_count")?;
+    if covered_event_count as usize != entries.len() {
+        bail!("snapshot restore membership covered_event_count drifted from the source entries");
+    }
+    if event_set_root(&EventSetCommitmentAlgorithm::MerkleEventSetV1, &entries)?.as_str()
+        != declared_root
+    {
+        bail!("snapshot restore membership root does not match the source entries");
+    }
+
+    let frontier = value_array(
+        required_field(required_field(vector, "frontier")?, "event_ids")?,
+        "snapshot_restore_covered_membership.frontier.event_ids",
+    )?
+    .iter()
+    .map(|id| {
+        EventId::new(
+            id.as_str()
+                .ok_or_else(|| anyhow!("frontier event id was not a string"))?
+                .to_owned(),
+        )
+        .map_err(|error| anyhow!("frontier event id is invalid: {error}"))
+    })
+    .collect::<Result<Vec<_>>>()?;
+
+    let (sorted, tree) = event_set_merkle_tree(&entries)?;
+    let mut seen = BTreeSet::new();
+    for case in value_array(
+        required_field(vector, "cases")?,
+        "snapshot_restore_covered_membership.cases",
+    )? {
+        let name = value_field_str(case, "name")?;
+        seen.insert(name.to_owned());
+        let observed = evaluate_restore_covered_membership_case(
+            case,
+            &entries,
+            &sorted,
+            &tree,
+            declared_root,
+            covered_event_count,
+            &frontier,
+        )?;
+        assert_expected_subset(name, required_field(case, "expected")?, &observed)?;
+        record_vector_event(
+            &format!("sync.snapshot_restore_covered_membership.{name}"),
+            &json!({"vector_id": vector_id, "case": case}),
+            required_field(case, "expected")?,
+            &observed,
+        );
+    }
+
+    for required in [
+        "absent_event_without_evidence_holds_rather_than_answering_not_covered",
+        "committed_index_admits_and_absence_becomes_provable",
+        "committed_index_prefix_is_rejected",
+        "inclusion_proof_admits_one_entry_under_the_manifest_root",
+        "branch_verified_at_the_wrong_leaf_index_is_rejected",
+        "ordered_event_id_sha256_v1_has_no_per_entry_branch",
+    ] {
+        if !seen.contains(required) {
+            bail!("snapshot restore membership fixture missing case {required}");
+        }
+    }
+    Ok(())
+}
+
+fn evaluate_restore_covered_membership_case(
+    case: &Value,
+    entries: &[EventSetLeaf],
+    sorted: &[EventSetLeaf],
+    tree: &RealmStateSnapshotMerkleTree,
+    declared_root: &str,
+    covered_event_count: u64,
+    frontier: &[EventId],
+) -> Result<Value> {
+    let evidence = required_field(case, "evidence")?;
+    let kind = value_field_str(evidence, "kind")?;
+    let algorithm = match evidence.get("algorithm").and_then(Value::as_str) {
+        Some("ordered_event_id_sha256_v1") => EventSetCommitmentAlgorithm::OrderedEventIdSha256V1,
+        Some(other) => bail!("unknown event-set commitment algorithm {other}"),
+        None => EventSetCommitmentAlgorithm::MerkleEventSetV1,
+    };
+    // A case that swaps the algorithm commits to that algorithm's own root:
+    // the point is that no per-entry branch exists under it, not that the root
+    // stopped matching.
+    let root = match algorithm {
+        EventSetCommitmentAlgorithm::MerkleEventSetV1 => Hash::new(declared_root.to_owned())
+            .map_err(|error| anyhow!("declared root is not a digest: {error}"))?,
+        EventSetCommitmentAlgorithm::OrderedEventIdSha256V1 => {
+            event_set_root(&algorithm, entries)?
+        }
+    };
+
+    let mut set = CoveredEventSet::new(
+        algorithm,
+        root,
+        covered_event_count,
+        frontier.iter().cloned(),
+    );
+
+    let admitted = match kind {
+        "none" => Ok(()),
+        "committed_index" => {
+            let mut index = match value_field_str(evidence, "entries")? {
+                "all" => sorted.to_vec(),
+                "prefix" => {
+                    let count = value_field_u64(evidence, "count")? as usize;
+                    sorted.iter().take(count).cloned().collect()
+                }
+                other => bail!("unknown committed index selector {other}"),
+            };
+            if let Some(mutate) = evidence.get("mutate") {
+                let position = value_field_u64(mutate, "index")? as usize;
+                let target = index
+                    .get_mut(position)
+                    .ok_or_else(|| anyhow!("mutation index {position} is past the index"))?;
+                match value_field_str(mutate, "field")? {
+                    "actor_seq" => target.actor_seq = value_field_u64(mutate, "value")?,
+                    other => bail!("unknown committed index mutation field {other}"),
+                }
+            }
+            set.admit_committed_index(index)
+        }
+        "inclusion_proof" => {
+            let leaf_index = value_field_u64(evidence, "leaf_index")? as usize;
+            let verify_at = evidence
+                .get("verify_at_leaf_index")
+                .and_then(Value::as_u64)
+                .map_or(leaf_index, |index| index as usize);
+            let entry = sorted
+                .get(leaf_index)
+                .ok_or_else(|| anyhow!("leaf index {leaf_index} is past the committed set"))?
+                .clone();
+            let audit_path = tree
+                .audit_path(leaf_index)
+                .ok_or_else(|| anyhow!("no audit path for leaf {leaf_index}"))?;
+            set.admit_inclusion_proof(entry, verify_at, &audit_path)
+        }
+        other => bail!("unknown covered-membership evidence kind {other}"),
+    };
+
+    if let Err(error) = admitted {
+        return Ok(json!({
+            "outcome": "reject",
+            "error_code": error.code.as_str(),
+            "complete": set.is_complete(),
+        }));
+    }
+
+    let query = EventId::new(value_field_str(case, "query_event_id")?.to_owned())
+        .map_err(|error| anyhow!("query event id is invalid: {error}"))?;
+    let outcome = match set.membership(&query) {
+        CoveredEventMembership::Covered => "covered",
+        CoveredEventMembership::NotCovered => "not_covered",
+        CoveredEventMembership::Unknown => "unknown",
+    };
+    Ok(json!({"outcome": outcome, "complete": set.is_complete()}))
 }
 
 fn merkle_event_set_root(entries: &[Value]) -> Result<String> {

@@ -8,7 +8,7 @@ C.8 — Seed corpora for the cotest fuzz harnesses under
 | `event_envelope/`                  | `cotest::fuzz::envelope_fuzz::fuzz_event_envelope`     |
 | `seal_deep/`                       | `cotest::fuzz::seal_fuzz::fuzz_seal_deep`              |
 | `snapshot_manifest/`               | `cotest::fuzz::realm_state_snapshot_fuzz::fuzz_realm_state_snapshot_manifest`  |
-| `realm_state_snapshot_chunk_header/`           | `cotest::fuzz::realm_state_snapshot_fuzz::fuzz_realm_state_snapshot_chunk_header` |
+| `realm_state_snapshot_chunk_lists/`           | `cotest::fuzz::realm_state_snapshot_fuzz::fuzz_realm_state_snapshot_chunk_lists` |
 
 Each directory starts empty (`.gitkeep` only) — the full libFuzzer
 corpus is *not* committed to the repository. When promoting a finding
