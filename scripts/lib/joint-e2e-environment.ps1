@@ -91,14 +91,23 @@ function Remove-CotestHostsBlocks {
     if ($Marker -and $Marker -notlike "${script:CotestHostsMarkerPrefix}:*") {
         throw "Refusing non-cotest hosts marker '$Marker'"
     }
-    $markerPattern = if ($Marker) { [regex]::Escape($Marker) } else { [regex]::Escape($script:CotestHostsMarkerPrefix) + ':[A-Za-z0-9_.-]+' }
+    # Sweeping every cotest block also has to match the pre-`b6ab807b` marker,
+    # which separated the prefix from the stamp with a space rather than a
+    # colon. Runs that wrote that form stopped being detectable when the
+    # separator changed, so their loopback overrides stayed in the system hosts
+    # file — eight of them, until 2026-09-06. Writing still produces the colon
+    # form only; this is a recognizer, not a second format.
+    $markerPattern = if ($Marker) { [regex]::Escape($Marker) } else { [regex]::Escape($script:CotestHostsMarkerPrefix) + '[: ][A-Za-z0-9_.-]+' }
     $pattern = "(?ms)(?:^|\r?\n)# $markerPattern begin\r?\n.*?^# $markerPattern end(?:\r?\n|$)"
     return [regex]::Replace($Content, $pattern, { param($match) if ($match.Value.StartsWith("`r`n")) { "`r`n" } elseif ($match.Value.StartsWith("`n")) { "`n" } else { "" } })
 }
 
 function Get-CotestHostsMarkers {
     param([Parameter(Mandatory = $true)][string]$Content)
-    return @([regex]::Matches($Content, "(?m)^# ($([regex]::Escape($script:CotestHostsMarkerPrefix)):[A-Za-z0-9_.-]+) begin\r?$") | ForEach-Object { $_.Groups[1].Value })
+    # `[: ]` for the same reason as in Remove-CotestHostsBlocks: a stale block
+    # from before the separator changed is exactly the kind this check exists to
+    # find, and matching only the current form made it invisible.
+    return @([regex]::Matches($Content, "(?m)^# ($([regex]::Escape($script:CotestHostsMarkerPrefix))[: ][A-Za-z0-9_.-]+) begin\r?$") | ForEach-Object { $_.Groups[1].Value })
 }
 
 function Test-CotestAdministrator {

@@ -23,6 +23,21 @@ try { Add-CotestHostsBlock -Content $original -Hosts @("example.com") -Marker $m
 Assert-True $foreignRejected "foreign host insertion must fail closed"
 $stale = Add-CotestHostsBlock -Content $withBlock -Hosts @("soland-server1.local.host") -Marker (New-CotestHostsMarker -RunId "unit-stale")
 Assert-Equal $original (Remove-CotestHostsBlocks -Content $stale) "stale cleanup must remove every cotest block and preserve foreign content"
+# Blocks written before `b6ab807b` separated the prefix from the stamp with a
+# space. Eight of them survived in this machine's hosts file precisely because
+# the detector matched only the current colon form, so they are exercised here:
+# a sweep that cannot see the old shape cannot clean up after the change that
+# introduced the new one.
+$legacyBlock = $original +
+    "# cotest-joint-e2e 20260827-002729 begin`r`n" +
+    "127.0.0.1`tsoland-server1.local.host`r`n" +
+    "# cotest-joint-e2e 20260827-002729 end`r`n"
+Assert-Equal 1 (@(Get-CotestHostsMarkers -Content $legacyBlock).Count) "the pre-b6ab807b marker form must still be discoverable"
+Assert-Equal $original (Remove-CotestHostsBlocks -Content $legacyBlock) "stale cleanup must remove pre-b6ab807b blocks too"
+$mixed = Add-CotestHostsBlock -Content $legacyBlock -Hosts $hosts -Marker (New-CotestHostsMarker -RunId "unit-mixed")
+Assert-Equal 2 (@(Get-CotestHostsMarkers -Content $mixed).Count) "both marker forms must be reported together"
+Assert-Equal $original (Remove-CotestHostsBlocks -Content $mixed) "a sweep must clear both forms in one pass"
+
 Assert-True ((Test-CotestAdministrator) -is [bool]) "administrator detection must return a boolean"
 
 $topology = New-CotestServerTopology -ServerCount 3 -StartCoauth $true -NetworkShape full-mesh -TlsPort 24443 -RunRoot "C:\cotest-run"
