@@ -30,6 +30,21 @@ MANIFEST_PATH = COTEST_ROOT / "api-only-migration.json"
 # occur in prose comments, in JSON-LD `"@context"`, and in
 # `request.newContext()` — the API-only request fixture. The signals below are
 # all syntactic uses of a page or a browser context.
+# A spec also reaches a browser when it calls a helper that opens one for it.
+# `users.ts` has exactly one `browser.newContext()`, inside `openUser`; these are
+# the exported entry points whose call graph reaches it. Without them two specs
+# classified as API-only failed a real browserless run inside
+# `pairAcceptedSiblingDevice` -> `openUserPage` -> `openUser`, at the point
+# `inksonBaseUrl()` refuses to invent a URL. Keep this list in step with
+# `e2e/helpers/users.ts`: a new page-opening export belongs here.
+BROWSER_ENTRY_HELPERS = (
+    "openUser",
+    "openUserPage",
+    "openDpopUserPage",
+    "openDpopUserPageForAccount",
+    "openDpopUserPageFromSession",
+    "pairAcceptedSiblingDevice",
+)
 BROWSER_SIGNAL = re.compile(
     r"\bpage\s*[.,:})]|"
     r"\bpage\b\s*=>|"
@@ -37,7 +52,8 @@ BROWSER_SIGNAL = re.compile(
     r"browser\.newContext\(|"
     r"\btest\.use\(|"
     r"\.(?:locator|getByRole|getByText|getByTestId|getByLabel|getByPlaceholder|"
-    r"getByTitle|getByAltText|screenshot)\("
+    r"getByTitle|getByAltText|screenshot)\(|"
+    r"\b(?:" + "|".join(BROWSER_ENTRY_HELPERS) + r")\s*\("
 )
 
 

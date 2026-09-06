@@ -20,6 +20,12 @@
     "allowJs": false,
     "resolveJsonModule": true
   },
-  "include": ["helpers/**/*.ts", "tests/**/*.ts", "playwright.config.ts"],
+  "include": [
+    "config/**/*.ts",
+    "helpers/**/*.ts",
+    "setup/**/*.ts",
+    "tests/**/*.ts",
+    "playwright.config.ts"
+  ],
   "exclude": ["node_modules"]
 }

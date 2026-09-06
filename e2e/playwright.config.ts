@@ -1,5 +1,10 @@
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig, devices } from "@playwright/test";
+
+import { apiOnlyTestMatch } from "./config/api-only-selection";
+
+const e2eRoot = path.dirname(fileURLToPath(import.meta.url));
 
 // Canonical artifacts layout: orchestrated runs write under
 // `cotest/artifacts/runs/joint-e2e/`. Runners and CI pass COTEST_JOINT_RUN_DIR;
@@ -43,7 +48,9 @@ const tlsLaunchArgs = tlsSpkiSha256
   : [];
 
 export default defineConfig({
-  globalSetup: "./global-setup.ts",
+  // The Inkson build-id gate is a setup project (see `projects` below), not a
+  // `globalSetup`: as a global hook it launched Chromium for every invocation,
+  // including selections that reach no browser at all.
   testDir: "./tests",
   timeout: 180_000,
   expect: {
@@ -80,15 +87,42 @@ export default defineConfig({
   },
   projects: [
     {
+      // Browser lanes depend on this; `joint-api` deliberately does not. Its
+      // own `testDir` keeps the setup file out of every other project's
+      // collection, so it never counts as business coverage.
+      name: "inkson-build-id",
+      testDir: "./setup",
+      testMatch: /.*\.setup\.ts/,
+      use: { ...devices["Desktop Chrome"], baseURL },
+    },
+    {
       name: "chrome",
+      dependencies: ["inkson-build-id"],
       use: { ...devices["Desktop Chrome"], channel: "chrome" },
     },
     {
       name: "chromium",
+      dependencies: ["inkson-build-id"],
       use: { ...devices["Desktop Chrome"] },
     },
     {
+      // The specs that reach no browser, taken from `api-only-migration.json`
+      // so this project's selection cannot drift from the gate that classifies
+      // them. It runs no browser, so it declares no build-id dependency and
+      // needs no Inkson bundle, service or port.
+      //
+      // `baseURL` is left unset on purpose: a spec that quietly grows a browser
+      // or relative-URL dependency must fail here rather than reach whatever
+      // happens to be serving the Inkson origin. This project is meant to be
+      // run alone — the runner rejects mixing it with the overlapping browser
+      // projects, which collect the same files.
+      name: "joint-api",
+      testMatch: apiOnlyTestMatch(e2eRoot),
+      use: { baseURL: undefined },
+    },
+    {
       name: "joint-inkson",
+      dependencies: ["inkson-build-id"],
       testDir: "./tests",
       testMatch: [
         "joint/*.spec.ts",

@@ -140,7 +140,7 @@ param(
     [switch]$StartMocks,
     [string]$MockWitnessDid = "did:webvh:z6mkfixture:witness.joint-e2e.local",
     [string[]]$MockWitnessExtraDids = @(),
-    [ValidateSet("joint-smoke", "joint-full")]
+    [ValidateSet("joint-smoke", "joint-full", "joint-api")]
     [string]$RunProfile,
     [string]$PlaywrightProject = "chrome",
     [string]$Grep,
@@ -205,6 +205,14 @@ $SolandServer2ServiceId = $null
 $SolandServer2ServiceDid = $null
 $script:UseManagedCoauthAssertionKey = [bool]($StartCoauth -and -not $CoauthCommand)
 
+# The Playwright projects this runner knows how to provision, split by whether
+# they open a browser. Kept in step with `e2e/playwright.config.ts`; a name in
+# neither list stops the run rather than letting the resource decision below
+# guess. `inkson-build-id` is absent on purpose: it is a setup project that the
+# browser projects pull in through `dependencies`, never selected directly.
+$script:BrowserPlaywrightProjects = @("chrome", "chromium", "joint-inkson")
+$script:BrowserlessPlaywrightProjects = @("joint-api")
+
 function Resolve-PlaywrightProjects {
     param(
         [string]$RunProfile,
@@ -220,6 +228,9 @@ function Resolve-PlaywrightProjects {
         # @visual smoke tests were retired in favor of scenario-driven specs.
         return @("chrome")
     }
+    if ($RunProfile -eq "joint-api" -and -not $PlaywrightProjectWasExplicit) {
+        return @("joint-api")
+    }
 
     $projects = @()
     foreach ($project in ($PlaywrightProject -split ",")) {
@@ -232,6 +243,66 @@ function Resolve-PlaywrightProjects {
         return @("chrome")
     }
     return $projects
+}
+
+# Whether this selection needs an Inkson bundle, static server and browser.
+#
+# Every Inkson-shaped action in this runner — source and cargo-target probing,
+# port allocation, build, freshness and marker verification, the run-scoped
+# copy, service start and readiness waits, the Coauth redirect allowlist, the
+# environment and the topology record — is conditioned on the single answer
+# this returns, and it is computed before any of them so none can half-happen.
+# The removed `-SkipInkson` switch was the opposite shape: a free flag that
+# could be combined with a browser profile, which is how it came to serve a
+# placeholder URL to 45 browser specs. There is no flag here; the projects
+# decide, and a contradictory selection is refused.
+function Resolve-InksonRequirement {
+    param(
+        [string[]]$PlaywrightProjects,
+        [string]$RunProfile,
+        [hashtable]$InksonArguments
+    )
+
+    $selected = @($PlaywrightProjects | Where-Object { $_ })
+    if ($selected.Count -eq 0) {
+        throw "no Playwright project selected; the runner cannot decide which services to start."
+    }
+    $unknown = @($selected | Where-Object {
+            $_ -notin $script:BrowserPlaywrightProjects -and
+            $_ -notin $script:BrowserlessPlaywrightProjects
+        })
+    if ($unknown.Count -gt 0) {
+        throw (("unknown Playwright project(s): {0}. Known browser projects: {1}; browserless: {2}. " +
+                "Add the project to e2e/playwright.config.ts and to this runner's lists together.") -f
+            ($unknown -join ", "),
+            ($script:BrowserPlaywrightProjects -join ", "),
+            ($script:BrowserlessPlaywrightProjects -join ", "))
+    }
+
+    $browserless = @($selected | Where-Object { $_ -in $script:BrowserlessPlaywrightProjects })
+    $browser = @($selected | Where-Object { $_ -in $script:BrowserPlaywrightProjects })
+    if ($browserless.Count -gt 0 -and $browser.Count -gt 0) {
+        # `joint-api` selects files that `chrome`/`chromium` also collect, so a
+        # mixed run would execute them twice and report both results.
+        throw (("browserless project(s) {0} cannot be combined with browser project(s) {1}: " +
+                "their file sets overlap, so the same specs would run twice. Run them separately.") -f
+            ($browserless -join ", "), ($browser -join ", "))
+    }
+
+    $requiresInkson = $browser.Count -gt 0
+    if (-not $requiresInkson) {
+        $supplied = @($InksonArguments.Keys | Sort-Object)
+        if ($supplied.Count -gt 0) {
+            throw (("profile/project selection '{0}' starts no browser, so Inkson arguments ({1}) " +
+                    "cannot take effect. Remove them, or select a browser project.") -f
+                ($selected -join ", "), ($supplied -join ", "))
+        }
+    }
+    if ($RunProfile -eq "joint-api" -and $requiresInkson) {
+        throw (("-RunProfile joint-api was overridden with browser project(s) {0}; " +
+                "the API profile exists to run without Inkson.") -f ($browser -join ", "))
+    }
+    return $requiresInkson
 }
 
 function Add-PreflightResult {
@@ -673,6 +744,10 @@ function Invoke-JointE2ePreflight {
         [bool]$WillStartDockerSoland = $false,
         [string]$InksonBaseUrl,
         [string]$InksonCommand,
+        # False for a browserless lane. Without it the "neither URL nor command"
+        # arm below reads an absent Inkson as "the harness will serve the cached
+        # bundle" and fails the run on a bundle it is never going to load.
+        [bool]$RequiresInkson = $true,
         [bool]$WillStartDefaultInkson = $false,
         [string]$InksonStaticIndex,
         [bool]$JointTlsTopology = $false,
@@ -820,7 +895,7 @@ function Invoke-JointE2ePreflight {
         }
     }
 
-    if ($WillStartDefaultInkson -or (-not $InksonBaseUrl -and -not $InksonCommand)) {
+    if ($RequiresInkson -and ($WillStartDefaultInkson -or (-not $InksonBaseUrl -and -not $InksonCommand))) {
         if ($InksonStaticIndex -and (Test-Path -LiteralPath $InksonStaticIndex -PathType Leaf)) {
             Add-PreflightResult $results "inkson web bundle" "pass" $InksonStaticIndex
             $inksonFreshness = Get-ArtifactFreshness `
@@ -1697,7 +1772,10 @@ function New-CoauthJointConfig {
         [Parameter(Mandatory = $true)][string]$CoauthBaseUrl,
         [Parameter(Mandatory = $true)][string]$CoauthBind,
         [Parameter(Mandatory = $true)][string]$CedarPolicyFile,
-        [Parameter(Mandatory = $true)][string]$InksonBaseUrl,
+        # Absent for a browserless lane: with no Inkson served there is no
+        # callback origin to register, and `patch-coauth-config.py` keeps the
+        # loopback callbacks the non-browser flows use.
+        [string]$InksonBaseUrl,
         [string]$InksonServer2BaseUrl,
         [string[]]$InksonBaseUrls = @(),
         [Parameter(Mandatory = $true)][string]$OAuthClientId,
@@ -1738,7 +1816,12 @@ function New-CoauthJointConfig {
     if ($MockEmailBaseUrl) {
         $patchArgs += @("--mock-email-base-url", $MockEmailBaseUrl)
     }
-    $resolvedInksonUrls = @(if (@($InksonBaseUrls).Count -gt 0) { @($InksonBaseUrls) } else { @($InksonBaseUrl, $InksonServer2BaseUrl) | Where-Object { $_ } })
+    # Filter before counting: a browserless lane passes an empty
+    # `-InksonBaseUrls`, which PowerShell delivers as `$null` rather than an
+    # empty array, so `@($null).Count` is 1 and the loop below would emit a
+    # `--inkson-base-url` flag with no value.
+    $explicitInksonUrls = @($InksonBaseUrls | Where-Object { $_ })
+    $resolvedInksonUrls = @(if ($explicitInksonUrls.Count -gt 0) { $explicitInksonUrls } else { @($InksonBaseUrl, $InksonServer2BaseUrl) | Where-Object { $_ } })
     foreach ($url in $resolvedInksonUrls) {
         $patchArgs += @("--inkson-base-url", $url)
     }
@@ -2648,6 +2731,56 @@ $requiresDocker = (
     ((-not $SolandBaseUrl -and -not $SolandCommand -and -not $SolandDatabaseUrl)) -or
     $SolandRuntime -eq "docker"
 )
+# Decide the Playwright selection, and with it whether this run needs Inkson at
+# all, before anything else happens — before the manifest gates below, before
+# the environment probe, before the exclusive runner lock. A contradictory
+# selection (`joint-api` mixed with a browser project, an unknown project name,
+# Inkson arguments passed to a browserless lane) is a caller mistake that should
+# report itself immediately rather than after taking a lock another run is
+# waiting on. Every Inkson-shaped step further down is guarded by
+# `$requiresInkson`.
+$playwrightProjects = Resolve-PlaywrightProjects `
+    -RunProfile $RunProfile `
+    -PlaywrightProject $PlaywrightProject `
+    -PlaywrightProjectWasExplicit ($PSBoundParameters.ContainsKey("PlaywrightProject"))
+$inksonArguments = @{}
+foreach ($name in "InksonRoot", "InksonBaseUrl", "InksonServer2BaseUrl", "InksonCommand", "InksonServer2Command") {
+    if ($PSBoundParameters.ContainsKey($name)) {
+        $inksonArguments[$name] = $PSBoundParameters[$name]
+    }
+}
+$requiresInkson = Resolve-InksonRequirement `
+    -PlaywrightProjects $playwrightProjects `
+    -RunProfile $RunProfile `
+    -InksonArguments $inksonArguments
+
+# Two manifest gates, run before anything expensive.
+#
+# Both already existed and neither was wired into a lane anyone runs, which is
+# exactly how they went red unnoticed: a spec rename on 2026-09-06 left
+# `check_api_only_migration.py` failing across four commits, and the same rename
+# aborted a joint run at the evidence-manifest check after a full Inkson wasm
+# build. `api-only-migration.json` is now also the `joint-api` project's file
+# list, so a stale entry there selects the wrong specs rather than merely
+# misreporting. Running them here costs seconds and fails before any build.
+$offlineGateFailures = @()
+$apiOnlyGateOutput = & (Get-PythonExecutable) (Join-Path $PSScriptRoot "check_api_only_migration.py") 2>&1
+if ($LASTEXITCODE -ne 0) {
+    $offlineGateFailures += "check_api_only_migration.py: $($apiOnlyGateOutput -join ' ')"
+}
+$coverageGateOutput = & (Get-Process -Id $PID).Path @(
+    "-NoProfile",
+    "-File", (Join-Path $PSScriptRoot "generate-e2e-coverage.ps1"),
+    "-Check"
+) 2>&1
+if ($LASTEXITCODE -ne 0) {
+    $offlineGateFailures += "generate-e2e-coverage.ps1 -Check: $($coverageGateOutput -join ' ')"
+}
+if ($offlineGateFailures.Count -gt 0) {
+    throw ("offline manifest gates failed before any build:{0}{1}" -f
+        [Environment]::NewLine, ($offlineGateFailures -join [Environment]::NewLine))
+}
+
 $environmentOutputDirectory = if ($JointDir) {
     Join-Path ([System.IO.Path]::GetFullPath($JointDir)) "environment"
 } else {
@@ -2687,14 +2820,17 @@ if (-not $SutManifest) {
     $SutManifest = Join-Path $workspaceRoot "soland\Cargo.toml"
 }
 $SutManifest = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($SutManifest)
-if (-not $InksonRoot) {
-    $InksonRoot = Join-Path $workspaceRoot "inkson"
+$inksonTargetDirectory = $null
+if ($requiresInkson) {
+    if (-not $InksonRoot) {
+        $InksonRoot = Join-Path $workspaceRoot "inkson"
+    }
+    $InksonRoot = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($InksonRoot)
+    $inksonTargetDirectory = Get-CargoTargetDirectory -RepositoryRoot $InksonRoot
 }
-$InksonRoot = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($InksonRoot)
 $cotestTargetDirectory = Get-CargoTargetDirectory -RepositoryRoot $repoRoot
 $solandTargetDirectory = Get-CargoTargetDirectory -RepositoryRoot (Split-Path -Parent $SutManifest)
 $coauthTargetDirectory = Get-CargoTargetDirectory -RepositoryRoot (Join-Path $workspaceRoot "coauth")
-$inksonTargetDirectory = Get-CargoTargetDirectory -RepositoryRoot $InksonRoot
 if (-not $SavfoxRoot) {
     $SavfoxRoot = Join-Path (Split-Path -Parent $workspaceRoot) "savfox-ai\savfox"
 }
@@ -2798,14 +2934,14 @@ if ($SolandDatabaseUrl -and $multiServer) {
     throw "-SolandDatabaseUrl cannot be shared by a multi-server run; use isolated runner-owned databases."
 }
 $inksonPort = $null
-if (-not $InksonBaseUrl) {
+if ($requiresInkson -and -not $InksonBaseUrl) {
     $inksonPort = Get-FreeTcpPort
     $InksonBaseUrl = "http://127.0.0.1:$inksonPort"
 }
 $inksonServer2Port = $null
 $inksonServer2BaseUrl = $null
 $inksonBaseUrlWasExplicit = $PSBoundParameters.ContainsKey("InksonBaseUrl")
-if ($multiServer) {
+if ($multiServer -and $requiresInkson) {
     if ($InksonServer2BaseUrl) {
         $inksonServer2BaseUrl = $InksonServer2BaseUrl
     } elseif ($InksonServer2Command) {
@@ -3092,7 +3228,7 @@ $startedAt = Get-Date
 $generatedSolandCommand = $false
 $generatedInksonCommand = $false
 $willStartDefaultSoland = (-not $SolandCommand -and $null -ne $solandPort)
-$willStartDefaultInkson = (-not $InksonCommand -and $null -ne $inksonPort)
+$willStartDefaultInkson = ($requiresInkson -and -not $InksonCommand -and $null -ne $inksonPort)
 $willStartDockerSoland = ($SolandRuntime -eq "docker" -and ($willStartDefaultSoland -or ($multiServer -and $null -ne $solandServer2Port)))
 $startedSolandRuntime = if ($willStartDockerSoland) { "docker" } elseif ($willStartDefaultSoland) { "process" } elseif ($SolandCommand) { "process-command" } else { "attached" }
 $coauthConfigPath = $null
@@ -3108,12 +3244,12 @@ $managedServiceFailuresMd = Join-Path $jointDir "managed-service-failures.md"
 # compiles out devtools while retaining the cotest-only session injection feature.
 # Dioxus places every non-release custom profile under its `debug` web output
 # directory even though Cargo itself uses the named `joint-e2e` profile.
-$inksonStaticRoot = Join-Path $inksonTargetDirectory "dx\inkson\debug\web\public"
-$inksonStaticIndex = Join-Path $inksonStaticRoot "index.html"
-$playwrightProjects = Resolve-PlaywrightProjects `
-    -RunProfile $RunProfile `
-    -PlaywrightProject $PlaywrightProject `
-    -PlaywrightProjectWasExplicit ($PSBoundParameters.ContainsKey("PlaywrightProject"))
+$inksonStaticRoot = $null
+$inksonStaticIndex = $null
+if ($requiresInkson) {
+    $inksonStaticRoot = Join-Path $inksonTargetDirectory "dx\inkson\debug\web\public"
+    $inksonStaticIndex = Join-Path $inksonStaticRoot "index.html"
+}
 
 try {
     if ($willStartDockerSoland -and ($BuildSolandImage -or -not (Test-DockerImagePresent -ImageTag $SolandImage))) {
@@ -3389,6 +3525,7 @@ try {
         -WillStartDockerSoland $willStartDockerSoland `
         -InksonBaseUrl $InksonBaseUrl `
         -InksonCommand $InksonCommand `
+        -RequiresInkson $requiresInkson `
         -WillStartDefaultInkson $willStartDefaultInkson `
         -InksonStaticIndex $inksonStaticIndex `
         -JointTlsTopology ([bool]$jointTlsEnabled) `
@@ -4300,23 +4437,28 @@ try {
     $inksonService = $null
     $inksonServer2Service = $null
     $generatedInksonServer2Command = $false
-    if (-not $InksonCommand -and $inksonPort) {
+    if ($requiresInkson -and -not $InksonCommand -and $inksonPort) {
         $InksonCommand = "node {0} {1} {2} 127.0.0.1" -f `
             (Quote-PsLiteral (Join-Path $e2eRoot "scripts\serve-static.mjs")),
             (Quote-PsLiteral $inksonStaticRoot),
             $inksonPort
         $generatedInksonCommand = $true
     }
-    if ($InksonCommand) {
+    if ($requiresInkson -and $InksonCommand) {
         $inksonName = "inkson-server1"
         $inksonService = Start-ManagedCommand -Name $inksonName -Command $InksonCommand -WorkingDirectory $InksonRoot -LogDirectory $serviceLogDir
         $managedServices.Add($inksonService)
     }
-    Wait-HttpReady -Url $InksonBaseUrl -TimeoutSeconds $StartupTimeoutSeconds
-    if ($generatedInksonCommand) {
-        Wait-DioxusAppReady -Url $InksonBaseUrl -TimeoutSeconds $StartupTimeoutSeconds
+    # This readiness wait used to be unconditional, which is what forced a
+    # browserless run to point `-InksonBaseUrl` at a placeholder and then hang
+    # on it for the whole startup timeout.
+    if ($requiresInkson) {
+        Wait-HttpReady -Url $InksonBaseUrl -TimeoutSeconds $StartupTimeoutSeconds
+        if ($generatedInksonCommand) {
+            Wait-DioxusAppReady -Url $InksonBaseUrl -TimeoutSeconds $StartupTimeoutSeconds
+        }
     }
-    if ($multiServer -and $inksonServer2BaseUrl -and $inksonServer2BaseUrl -ne $InksonBaseUrl) {
+    if ($requiresInkson -and $multiServer -and $inksonServer2BaseUrl -and $inksonServer2BaseUrl -ne $InksonBaseUrl) {
         if (-not $InksonServer2Command -and $inksonServer2Port) {
             $InksonServer2Command = "node {0} {1} {2} 127.0.0.1" -f `
                 (Quote-PsLiteral (Join-Path $e2eRoot "scripts\serve-static.mjs")),
@@ -5134,6 +5276,14 @@ if (Test-Path $junitPath) {
             # Normalize backslashes to forward slashes so the key matches the
             # canonical `<domain>/<name>.spec.ts` form used by the static walk.
             $normalizedSuite = $suiteName -replace '\\', '/'
+            # A setup project's cases are infrastructure, not coverage. Left in,
+            # the Inkson build-id check would become a scenario of its own, add a
+            # passed case no static walk can account for, and show up as drift on
+            # every browser run. Its failure still fails the run: Playwright exits
+            # non-zero and every dependent test is reported as not run.
+            if ($normalizedSuite -match '\.setup\.ts$') {
+                continue
+            }
             # Narrow: prefer `<domain>/<name>.spec.ts` (single nesting level
             # under tests/). Fall back to the wider `*.spec.ts` anywhere in the
             # suite name string for suites without a domain directory (e.g.
@@ -5379,6 +5529,16 @@ if ($requiredScenarios.Count -gt 0 -or $forbidRuntimeSkips) {
             -Totals $totals `
             -ForbidRuntimeSkips $forbidRuntimeSkips `
             -JunitParseError $junitParseError)
+}
+# A run that executed no business test cannot be green. The setup project is
+# excluded from `$junitByScenario` above, so these totals count business cases
+# only: a grep that matched nothing, a project whose file set resolved empty, or
+# a crash before the first test all surface here instead of passing as "nothing
+# failed". `$junitParseError` has its own gate; this one covers a well-formed
+# report that simply contains no work.
+$businessCaseCount = $totals.passed + $totals.failed + $totals.skipped + $totals.fixme
+if (-not $junitParseError -and $businessCaseCount -eq 0) {
+    $selectionGateFailures += "no business test case ran; the selection resolved to nothing"
 }
 if ($selectionGateFailures.Count -gt 0) {
     $exitCode = 1
@@ -5646,6 +5806,11 @@ $summary = [pscustomobject]@{
     status = if ($exitCode -eq 0) { "success" } else { "failure" }
     run_profile = if ($RunProfile) { $RunProfile } else { "custom" }
     playwright_projects = $playwrightProjects -join ","
+    # The single decision that governs whether this run probed Inkson sources,
+    # allocated its port, built or verified its bundle, served it, waited on it,
+    # or registered its OAuth callback. Recorded so a reader can tell a genuine
+    # browserless run from one that merely happened to find a warm cache.
+    requires_inkson = $requiresInkson
     test_execution = if (($totals.passed + $totals.failed + $totals.skipped + $totals.fixme) -gt 0) { "executed" } else { "not_executed" }
     test_totals = $totals
     required_scenarios = $requiredScenarios
@@ -5725,6 +5890,7 @@ $summary | ConvertTo-Json -Depth 6 | Set-Content -Path $summaryJson -Encoding UT
 - status: $($summary.status)
 - run_profile: $($summary.run_profile)
 - playwright_projects: $($summary.playwright_projects)
+- requires_inkson: $($summary.requires_inkson)
 - required_scenarios: $($requiredScenarios -join ",")
 - forbid_skipped_tests: $($summary.forbid_skipped_tests)
 - selection_gate_failures: $(@($summary.selection_gate_failures) -join "; ")

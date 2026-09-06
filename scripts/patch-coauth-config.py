@@ -103,7 +103,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--coauth-base-url", required=True)
     parser.add_argument("--coauth-bind", required=True)
     parser.add_argument("--cedar-policy-file", required=True, type=pathlib.Path)
-    parser.add_argument("--inkson-base-url", action="append", required=True)
+    # Optional: a browserless lane (the `joint-api` Playwright project) starts no
+    # Inkson, so it has no callback origin to register. The OAuth client itself is
+    # still registered either way — `oidc-login-chain` asserts the advertised
+    # `client_id` without opening a browser.
+    parser.add_argument("--inkson-base-url", action="append", default=[])
     parser.add_argument("--inkson-server2-base-url")
     parser.add_argument("--oauth-client-id", required=True)
     parser.add_argument("--station", action="append", default=[])
@@ -219,18 +223,24 @@ def main() -> int:
         )
         src = replace_top_level_section(src, "email", email)
 
+    # Order is unchanged when Inkson is present: its first callback, the two
+    # loopback callbacks the non-browser flows use, then any further origins.
+    # With no Inkson only the loopback pair remains.
+    redirect_uris = [
+        *(yaml_string(callback) for callback in inkson_callbacks[:1]),
+        "http://127.0.0.1/auth/callback",
+        "http://localhost/auth/callback",
+        *(yaml_string(callback) for callback in inkson_callbacks[1:]),
+    ]
     clients = (
         "clients:\n"
         f"- client_id: {yaml_string(args.oauth_client_id)}\n"
         "  client_name: Inkson Joint E2E\n"
         "  client_auth_method: none\n"
         "  redirect_uris:\n"
-        f"  - {yaml_string(inkson_callbacks[0])}\n"
-        "  - http://127.0.0.1/auth/callback\n"
-        "  - http://localhost/auth/callback\n"
     )
-    for callback in inkson_callbacks[1:]:
-        clients += f"  - {yaml_string(callback)}\n"
+    for redirect_uri in redirect_uris:
+        clients += f"  - {redirect_uri}\n"
     src = replace_top_level_section(src, "clients", clients)
 
     stations = ""
