@@ -27,7 +27,7 @@ pub const ALL_STATE_REDUCER_HARDENING_VECTOR_IDS: &[&str] = &[
 const STATE_REDUCER_HARDENING_FIXTURE_FILE: &str = "state-reducer-hardening-fixture.json";
 const STATE_REDUCER_HARDENING_PROFILE: &str = "ak.vector_group.cba_lattice.v1";
 const STATE_REDUCER_HARDENING_SUITE_ENTRYPOINT: &str = "ak.suite.reducer.hardening.v1";
-const STRAND_TRACKS_CELL_FAMILY: &str = arkret_wire::CellFamilyId::STRAND_TRACKS_V1;
+const STRAND_OBJECT_CELL_FAMILY: &str = arkret_wire::CellFamilyId::STRAND_OBJECT_V1;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -267,9 +267,9 @@ fn run_strand_tracks_update_atomic_case(case: &Value) -> Result<()> {
         .get("input")
         .ok_or_else(|| anyhow!("strand_tracks case missing input"))?;
     let cell_id = required_str(input, "cell_id")?;
-    let expected_prefix = format!("ak:cell:{STRAND_TRACKS_CELL_FAMILY}:");
+    let expected_prefix = format!("ak:cell:{STRAND_OBJECT_CELL_FAMILY}:");
     if !cell_id.starts_with(&expected_prefix) {
-        bail!("strand tracks vector cell_id is not bound to {STRAND_TRACKS_CELL_FAMILY}");
+        bail!("strand tracks vector cell_id is not bound to {STRAND_OBJECT_CELL_FAMILY}");
     }
     required_str(input, "strand_id")?;
 
@@ -425,17 +425,17 @@ fn assert_strand_tracks_registry_binding() -> Result<()> {
         .cell_writes
         .iter()
         .find(|write| {
-            write.cell_family.map(|family| family.as_str()) == Some(STRAND_TRACKS_CELL_FAMILY)
+            write.cell_family.map(|family| family.as_str()) == Some(STRAND_OBJECT_CELL_FAMILY)
         })
         .ok_or_else(|| {
             anyhow!(
                 "{} has no SDK-declared {} write",
                 arkret_wire::event_kind_str::STRAND_TRACKS_UPDATE,
-                STRAND_TRACKS_CELL_FAMILY
+                STRAND_OBJECT_CELL_FAMILY
             )
         })?;
 
-    if write.cell_family.map(|family| family.as_str()) != Some(STRAND_TRACKS_CELL_FAMILY) {
+    if write.cell_family.map(|family| family.as_str()) != Some(STRAND_OBJECT_CELL_FAMILY) {
         bail!(
             "{eventkind_strand_tracks_update} cell family drifted",
             eventkind_strand_tracks_update = arkret_wire::event_kind_str::STRAND_TRACKS_UPDATE
