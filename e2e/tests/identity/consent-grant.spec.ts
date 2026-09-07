@@ -54,7 +54,6 @@ type ConsentCellBody = {
 async function requestContact(
   actor: Awaited<ReturnType<typeof openUserPage>>,
   targetId: string,
-  scope: "invite" | "message" | "call",
 ) {
   // "Add contact" is a popup modal opened from the contacts list, not a
   // standalone /contacts/new page.
@@ -71,16 +70,10 @@ async function requestContact(
     actor.page.getByTestId("contact-target-input"),
     canonicalJson(accountActorId(targetId)),
   );
-  // Scope is selected via checkboxes (direct_message + invite default to
-  // checked). Leave only the requested scope checked.
-  const wantInvite = scope === "invite";
-  const wantDm = scope === "message";
-  const dm = actor.page.getByTestId("contact-scope-direct_message");
-  const inv = actor.page.getByTestId("contact-scope-invite");
-  if ((await dm.isChecked()) !== wantDm)
-    await actor.clickWithPassivePromptRetry(dm);
-  if ((await inv.isChecked()) !== wantInvite)
-    await actor.clickWithPassivePromptRetry(inv);
+  // Ordinary contacts allow all scopes; per-contact restrictions live in
+  // Settings after acceptance, not in the add-contact form.
+  await expect(actor.page.getByTestId("contact-scope-direct_message")).toHaveCount(0);
+  await expect(actor.page.getByTestId("contact-scope-invite")).toHaveCount(0);
   await actor.clickWithPassivePromptRetry(
     actor.page.getByTestId("send-contact-request-button"),
   );
@@ -432,7 +425,7 @@ test.describe("consent grant", () => {
     const bobPage = bobFlow.page;
 
     try {
-      await requestContact(bobPage, alice.id, "message");
+      await requestContact(bobPage, alice.id);
       const escapedId = canonicalJson(accountActorId(alice.id))
         .replace(/\\/g, "\\\\")
         .replace(/"/g, '\\"');
@@ -912,7 +905,7 @@ test.describe("consent grant", () => {
       await alicePage.gotoHome();
       await bobPage.gotoHome();
 
-      await requestContact(bobPage, alice.id, "invite");
+      await requestContact(bobPage, alice.id);
       await expectContactState(bobPage, alice.id, [
         "pending",
         "pending_outgoing",
@@ -1014,7 +1007,7 @@ test.describe("consent grant", () => {
     const bobPage = bobFlow.page;
 
     try {
-      await requestContact(bobPage, alice.id, "invite");
+      await requestContact(bobPage, alice.id);
       await gotoConsentSettings(alicePage);
       await grantConsentDirect(alicePage, bob.id, "invite", "5s");
       await expectConsentCell(
@@ -1100,7 +1093,7 @@ test.describe("consent grant", () => {
     const bobPage = bobFlow.page;
 
     try {
-      await requestContact(bobPage, alice.id, "message");
+      await requestContact(bobPage, alice.id);
       await gotoConsentSettings(alicePage);
       await grantConsentDirect(alicePage, bob.id, "message");
       await expectConsentCell(
@@ -1189,7 +1182,7 @@ test.describe("consent grant", () => {
     const bobPage = bobFlow.page;
 
     try {
-      await requestContact(bobPage, alice.id, "invite");
+      await requestContact(bobPage, alice.id);
       await gotoConsentSettings(alicePage);
       await grantConsentDirect(alicePage, bob.id, "invite");
       await expectConsentCell(
