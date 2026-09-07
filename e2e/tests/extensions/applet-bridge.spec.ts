@@ -74,7 +74,9 @@ import {
 
 import type { ActorId, CapabilityGrantObject } from "../../helpers/generated/spec-wire-objects";
 
-test.describe.configure({ mode: "serial" });
+// Each case provisions its own identities and Realm; a failed case must not
+// skip the remaining independent admission and replay checks.
+test.describe.configure({ mode: "default" });
 
 type SignedPackage = {
   applet_package: Record<string, unknown> & {
@@ -1009,7 +1011,8 @@ test.describe("applet bridge", () => {
         authoring_request_basis: missingBasis,
       }),
     });
-    expect(missingEvidence.status()).toBe(400);
+    expect(missingEvidence.status()).toBe(422);
+    expect(wireErrCode(await missingEvidence.json())).toBe("schema_violation");
 
     const duplicateSibling = await request.fetch(previewUrl, {
       method: "POST",
