@@ -274,7 +274,7 @@ test.describe("notifications", () => {
       // ak.message.create grant before testing notification policy.
       await alicePage.grantRealmCapability(
         realmId,
-        alice.id,
+        aliceSession.session.accountId,
         "ak.message.create",
       );
 

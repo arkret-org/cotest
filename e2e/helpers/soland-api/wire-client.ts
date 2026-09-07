@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 type CotestWireCommand =
   | "canonical-json"
   | "sha256-canonical-json"
+  | "did-document-digest"
   | "event-envelope-proof"
   | "event-derived-id"
   | "invite-subject-proof"

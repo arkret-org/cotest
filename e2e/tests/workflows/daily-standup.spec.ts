@@ -76,12 +76,12 @@ test.describe("workflow: async daily standup", () => {
       ]);
       await linPage.grantRealmCapability(
         realmId,
-        pat.id,
+        patFlow.session.accountId,
         "ak.message.create",
       );
       await linPage.grantRealmCapability(
         realmId,
-        quincy.id,
+        quincyFlow.session.accountId,
         "ak.message.create",
       );
       await Promise.all([

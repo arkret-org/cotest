@@ -18,6 +18,9 @@ test("Applet package without optional Bot evidence persists encrypted and reload
     stdio: ["ignore", "ignore", "pipe"],
     env: {
       ...process.env,
+      COTEST_SOLAND_SERVICE_ID: "ak:did_core:web:station.joint-e2e.local",
+      COTEST_SOLAND_SERVICE_DID: "did:web:station.joint-e2e.local",
+      COTEST_SOLAND_SERVICE_SIGNING_KEY: Buffer.alloc(32, 53).toString("base64"),
       MOCK_APPLET_REGISTRY_PORT: "0",
       MOCK_APPLET_REGISTRY_STATE_FILE: statePath,
       MOCK_APPLET_REGISTRY_STATE_KEY_FILE: keyPath,
@@ -41,7 +44,16 @@ test("Applet package without optional Bot evidence persists encrypted and reload
       body: JSON.stringify(body),
     });
     for (const namespace of ["before-reload", "after-reload"]) {
-      const response = await post("/sign-package", { namespace });
+      const response = await post("/sign-package", {
+        namespace,
+        bot_actor_id: {
+          kind: "account",
+          account_id: {
+            principal_id: "ak:did_core:web:bot.joint-e2e.local",
+            station_id: "ak:did_core:web:station.joint-e2e.local",
+          },
+        },
+      });
       assert.equal(response.status, 200);
       const signed = await response.json();
       assert.match(signed.package_digest, /^sha256:[0-9a-f]{64}$/);

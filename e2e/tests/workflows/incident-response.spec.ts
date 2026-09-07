@@ -84,12 +84,12 @@ test.describe("workflow: incident response", () => {
       ]);
       await oncallPage.grantRealmCapability(
         realmId,
-        backend.id,
+        backendFlow.session.accountId,
         "ak.message.create",
       );
       await oncallPage.grantRealmCapability(
         realmId,
-        comms.id,
+        commsFlow.session.accountId,
         "ak.message.create",
       );
 

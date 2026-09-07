@@ -32,6 +32,7 @@ import {
   requireDidCoreId,
   canonicalTimestamp,
   canonicalJson,
+  cotestWire,
   sdkEventDerivedIds,
   sdkEventEnvelopeProof,
   createRealmApi,
@@ -71,12 +72,14 @@ import {
   type BuiltWebvhGenesis,
 } from "../../helpers/webvh-api";
 
+import type { ActorId, CapabilityGrantObject } from "../../helpers/generated/spec-wire-objects";
+
 test.describe.configure({ mode: "serial" });
 
 type SignedPackage = {
   applet_package: Record<string, unknown> & {
     applet_id: string;
-    bot_actor_id: string;
+    bot_actor_id: Extract<ActorId, { kind: "account" }>;
     service_id: string;
     controller_principal_id: string;
     namespaces?: {
@@ -97,7 +100,7 @@ type SignedPackage = {
 
 type AppletRegistration = {
   applet_id: string;
-  bot_actor_id: string;
+  bot_actor_id: Extract<ActorId, { kind: "account" }>;
   portal_realm_id: string;
   namespace: string;
   status: string;
@@ -178,7 +181,7 @@ async function revokeAppletRuntime(
   realmId: string,
   idempotencyKey: string,
 ): Promise<Record<string, unknown>> {
-  const effectiveScope = { kind: "realm", realm_id: realmId };
+  const effectiveScope = { kind: "realm" as const, realm_id: realmId };
   const reasonCode = "requested_by_admin";
   const revokeMode = "revoke_runtime_only";
   const base = `${solandBaseUrl()}/_arkret/self/applets/${encodeURIComponent(appletId)}/revoke`;
@@ -329,14 +332,14 @@ test.describe("applet bridge", () => {
         );
       }
       registerEventSigner({
-        actorId: signed.applet_package.bot_actor_id,
+        actorId: signed.applet_package.bot_actor_id.account_id.principal_id,
         deviceId: "bot-event-key",
         verificationMethod: botVerificationMethod,
         signingSeedB64url: botSigningJwk.d,
       });
       const botToken = await issueDevSession(request, {
         ...uniqueUser(`applet-bot-${stamp}`),
-        id: signed.applet_package.bot_actor_id,
+        id: signed.applet_package.bot_actor_id.account_id.principal_id,
       });
       const preInstallMembership = signedEventEnvelope({
         actorId: signed.applet_package.bot_actor_id,
@@ -353,7 +356,7 @@ test.describe("applet bridge", () => {
         proofVerificationMethod: botVerificationMethod,
         payload: {
           realm_id: realmId,
-          member_id: accountActorId(signed.applet_package.bot_actor_id),
+          member_id: signed.applet_package.bot_actor_id.account_id.principal_id,
           membership: "join",
         },
       });
@@ -374,9 +377,7 @@ test.describe("applet bridge", () => {
         `register-${stamp}`,
       );
       expect(registration.status).toBe("installed");
-      expect(registration.bot_actor_id).toMatch(
-        /^ak:did_core:web:bot-bridge-demo-/,
-      );
+      expect(registration.bot_actor_id).toEqual(signed.applet_package.bot_actor_id);
       expect(registration.portal_realm_id).toBe(realmId);
       const messageGrantRef = capabilityGrantRefForAction(
         registration,
@@ -404,7 +405,7 @@ test.describe("applet bridge", () => {
         proofVerificationMethod: botVerificationMethod,
         payload: {
           realm_id: realmId,
-          member_id: accountActorId(registration.bot_actor_id),
+          member_id: registration.bot_actor_id,
           membership: "join",
         },
       });
@@ -442,10 +443,10 @@ test.describe("applet bridge", () => {
         ).some(
           (event) =>
             event.kind === "ak.member.state" &&
-            event.actor_id === registration.bot_actor_id &&
+            canonicalJson(event.actor_id) === canonicalJson(registration.bot_actor_id) &&
             event.applet_id === registration.applet_id &&
-            (event.payload as Record<string, unknown>)?.actor_id ===
-              registration.bot_actor_id &&
+            canonicalJson((event.payload as Record<string, unknown>)?.member_id) ===
+              canonicalJson(registration.bot_actor_id) &&
             (event.payload as Record<string, unknown>)?.membership === "join" &&
             (event.proofs as Array<Record<string, unknown>>)?.[0]
               ?.verification_method === botVerificationMethod,
@@ -480,18 +481,18 @@ test.describe("applet bridge", () => {
         Array.isArray(preGhostTimeline.events) ? preGhostTimeline.events : []
       ) as Array<Record<string, unknown>>;
       const serviceHead = serviceEvents
-        .filter((event) => event.actor_id === signed.applet_package.service_id)
+        .filter((event) => canonicalJson(event.actor_id) === canonicalJson(serviceActorId(signed.applet_package.service_id)))
         .sort(
           (left, right) => Number(right.actor_seq) - Number(left.actor_seq),
         )[0];
-      const ghostCreation = buildGhostManagedActorCreation({
+      const ghostCreation = await buildGhostManagedActorCreation({
+        request,
+        token: aliceToken,
         signed,
         registration,
         realmId,
         ghostBuilt,
         externalUser,
-        appletAuthorityRef: provisionGrantRef,
-        createdAt: canonicalTimestamp(),
         serviceActorSeq: Number(serviceHead?.actor_seq ?? -1) + 1,
         servicePrevRef:
           typeof serviceHead?.event_id === "string"
@@ -501,7 +502,7 @@ test.describe("applet bridge", () => {
       const leaseResponse = await issueAuthorizationLeasesApi(
         request,
         aliceToken,
-        [ghostCreation.pcr_genesis_event],
+        [ghostCreation.managed_actor_bundle.pcr_genesis_event],
       );
       const leaseText = await leaseResponse.text();
       expect([200, 201], leaseText).toContain(leaseResponse.status());
@@ -517,7 +518,7 @@ test.describe("applet bridge", () => {
           "content-type": "application/json",
         },
         data: canonicalJson({
-          event: ghostCreation.pcr_genesis_event,
+          event: ghostCreation.managed_actor_bundle.pcr_genesis_event,
           authorization_lease: pcrLease,
         }),
       });
@@ -529,11 +530,11 @@ test.describe("applet bridge", () => {
 
       const peerPcrInjection = await rawPushFederationEvents(
         request,
-        [ghostCreation.pcr_genesis_event],
+        [ghostCreation.managed_actor_bundle.pcr_genesis_event],
         {
           origin: solandServiceId(),
           destination: solandServiceId(),
-          realmId: String(ghostCreation.pcr_genesis_event.realm_id),
+          realmId: String(ghostCreation.managed_actor_bundle.pcr_genesis_event.realm_id),
           idempotencyKey: `applet-pcr-peer-negative-${stamp}`,
         },
       );
@@ -559,8 +560,8 @@ test.describe("applet bridge", () => {
       const provisionText = await provision.text();
       expect(provision.status(), provisionText).toBe(200);
       const provisionBody = JSON.parse(provisionText);
-      const ghostActorId = String(provisionBody.ghost_actor_id);
-      expect(ghostActorId).toMatch(/^ak:did_core:web:ghost-/);
+      const ghostActorId = accountActorId(projectDidToCoreId(ghostBuilt.did));
+      expect(provisionBody.ghost_actor_id).toEqual(ghostActorId);
       await addRealmMemberApi(request, aliceToken, realmId, ghostActorId);
       await waitForRealmControlIdleApi(request, aliceToken, realmId);
       const portalStrandId = await resolveDefaultStrandId(
@@ -581,13 +582,14 @@ test.describe("applet bridge", () => {
           authorization_ref: messageGrantRef,
           provision_authorization_ref: provisionGrantRef,
           external_user: externalUser,
+          seal_basis: await readRealmSealBasis(request, aliceToken, realmId),
           payload: { kind: "message", text },
         },
       });
       const externalText = await external.text();
       expect(external.status(), externalText).toBe(200);
       const externalBody = JSON.parse(externalText);
-      expect(String(externalBody.ghost_actor_id)).toBe(ghostActorId);
+      expect(externalBody.ghost_actor_id).toEqual(ghostActorId);
       expect(String(externalBody.message_id)).toMatch(/^ak:message:/);
 
       const events = await queryRealmEventsApi(request, aliceToken, realmId);
@@ -598,14 +600,14 @@ test.describe("applet bridge", () => {
       const ghostProfile = acceptedEvents.find(
         (event) =>
           event.kind === "ak.profile.create" &&
-          event.actor_id === ghostActorId,
+          canonicalJson(event.actor_id) === canonicalJson(ghostActorId),
       );
       expect(ghostProfile, "accepted Ghost profile Event").toBeDefined();
       expect(
         (ghostProfile?.payload as Record<string, unknown> | undefined)?.object,
       ).toEqual(
         expect.objectContaining({
-          principal_id: ghostActorId,
+          principal_id: ghostActorId.account_id.principal_id,
           actor_kind: "integration",
           accountable_principal_ids: [signed.applet_package.service_id],
         }),
@@ -614,26 +616,26 @@ test.describe("applet bridge", () => {
         (event) =>
           event.kind === "ak.identity.accountability_grant" &&
           (event.payload as Record<string, unknown> | undefined)?.subject_id ===
-            ghostActorId,
+            ghostActorId.account_id.principal_id,
       );
       expect(
         accountabilityGrant,
         "accepted Ghost accountability grant",
       ).toEqual(
         expect.objectContaining({
-          actor_id: signed.applet_package.service_id,
+          actor_id: serviceActorId(signed.applet_package.service_id),
           authorization_ref: provisionGrantRef,
         }),
       );
       expect(accountabilityGrant?.payload).toEqual(
         expect.objectContaining({
           issuer_id: signed.applet_package.service_id,
-          subject_id: ghostActorId,
+          subject_id: ghostActorId.account_id.principal_id,
           grant_status: "active",
         }),
       );
       const acceptedGhostHead = acceptedEvents
-        .filter((event) => event.actor_id === ghostActorId)
+        .filter((event) => canonicalJson(event.actor_id) === canonicalJson(ghostActorId))
         .sort(
           (left, right) => Number(right.actor_seq) - Number(left.actor_seq),
         )[0];
@@ -698,7 +700,7 @@ test.describe("applet bridge", () => {
       expect(revoke.ok).toBe(true);
       expect(revoke.status).toBe("complete");
       expect(revoke.revoked_refs).toEqual(
-        expect.arrayContaining([registration.bot_actor_id, ghostActorId]),
+        expect.arrayContaining([registration.bot_actor_id.account_id.principal_id, ghostActorId.account_id.principal_id]),
       );
 
       const afterRevokeText = `after revoke ${stamp}`;
@@ -713,6 +715,7 @@ test.describe("applet bridge", () => {
           authorization_ref: messageGrantRef,
           provision_authorization_ref: provisionGrantRef,
           external_user: externalUser,
+          seal_basis: await readRealmSealBasis(request, aliceToken, realmId),
           payload: { kind: "message", text: afterRevokeText },
         },
       });
@@ -859,12 +862,12 @@ test.describe("applet bridge", () => {
     expect(revoke.ok).toBe(true);
     expect(revoke.status).toBe("complete");
     expect(revoke.revoked_refs).toEqual(
-      expect.arrayContaining([registration.bot_actor_id]),
+      expect.arrayContaining([registration.bot_actor_id.account_id.principal_id]),
     );
 
     const history = await queryRealmEventsApi(request, aliceToken, realmId);
     expect(JSON.stringify(history)).toContain("ak.applet.registration");
-    expect(JSON.stringify(history)).toContain(registration.bot_actor_id);
+    expect(canonicalJson(history)).toContain(canonicalJson(registration.bot_actor_id));
 
     const removedLegacyRoute = await request.post(
       `${solandBaseUrl()}/_soland/edge/applets/${encodeURIComponent(registration.applet_id)}/bot/messages`,
@@ -930,7 +933,7 @@ test.describe("applet bridge", () => {
       secondResult.grantActionsById,
     );
     expect(second.applet_id).toBe(first.applet_id);
-    expect(second.bot_actor_id).toBe(first.bot_actor_id);
+    expect(second.bot_actor_id).toEqual(first.bot_actor_id);
 
     const { response: conflict } = await rawInstallApplet(
       request,
@@ -1276,7 +1279,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
     stamp: number;
     sourceServiceId?: string;
     realmId?: string;
-    actorId?: string;
+    actorId?: ActorId;
     appletId?: string;
     authorizationRef?: string;
     strandId?: string;
@@ -1286,13 +1289,10 @@ test.describe("applet inbound transaction push — per-delivery source signature
   }) {
     const sourceServiceId = args.sourceServiceId ?? solandServiceId();
     const realmId = args.realmId ?? typedId("realm");
-    // This inbound Applet event is authored by a service principal. Keep the
-    // complete ActorId union on both the Event and its auth_context; the scalar
-    // did_core_id is only the service identity carried by that union.
-    const actorDid =
-      args.actorId ??
-      `ak:did_core:web:bot-applet-${args.stamp}.joint-e2e.local`;
-    const actorId = serviceActorId(actorDid);
+    // Preserve the accountable Bot account separately from the executing service.
+    const actorId = args.actorId ?? accountActorId(
+      `ak:did_core:web:bot-applet-${args.stamp}.joint-e2e.local`,
+    );
     const verificationMethod =
       args.verificationMethod ??
       `${solandServiceDid()}#applet-service-key`;
@@ -1316,7 +1316,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
         ? {
             seal_ref: args.sealRef,
             auth_context: {
-              actor_id: actorId,
+              actor_id: serviceActorId(sourceServiceId),
               key_id: authKeyId,
               key_epoch: 0,
             },
@@ -1682,7 +1682,7 @@ async function signPackage(
       actor_namespace_pattern:
         data.actor_namespace_pattern ??
         `did:webvh:*:*:ghost-${ghostNamespaceToken}:*`,
-      bot_actor_id: projectDidToCoreId(botBuilt.did),
+      bot_actor_id: accountActorId(projectDidToCoreId(botBuilt.did)),
       service_id: projectDidToCoreId(built.did),
       service_id_document: built.didDocument,
       service_id_method_version_evidence: {
@@ -1793,7 +1793,7 @@ async function rawInstallApplet(
   await publishAppletServiceIdDocument(request, signed);
   let resolved = prepared;
   if (!resolved) {
-    const effectiveScope = { kind: "realm", realm_id: realmId };
+    const effectiveScope = { kind: "realm" as const, realm_id: realmId };
     const authoring = await prepareAppletInstallAuthoringBasis(
       request,
       token,
@@ -2062,7 +2062,7 @@ async function prepareAppletInstallAuthoringBasis(
   token: string,
   signed: SignedPackage,
   realmId: string,
-  effectiveScope: Record<string, unknown>,
+  effectiveScope: CapabilityGrantObject["resources"][number],
   mutateRegistrationManifest?: (
     manifest: Record<string, unknown>,
   ) => void,
@@ -2118,7 +2118,10 @@ async function prepareAppletInstallAuthoringBasis(
   const capabilityGrantEvents: Array<Record<string, unknown>> = [];
   const grantActionsById = new Map<string, string[]>();
   for (const [offset, action] of approvedActions.entries()) {
-    const unsignedGrant: Record<string, unknown> = {
+    const unsignedGrant: Pick<CapabilityGrantObject,
+      "schema" | "realm_id" | "issuer_id" | "subject" | "actions" |
+      "resources" | "constraints" | "issued_at" | "issuer_authority_refs"
+    > = {
       schema: "ak.schema.capability.v1",
       realm_id: realmId,
       issuer_id: accountActorId(actorId),
@@ -2132,14 +2135,21 @@ async function prepareAppletInstallAuthoringBasis(
           effect: "allow",
           evaluation_class: "grant_local",
           applet_id: signed.applet_package.applet_id,
-          executed_by: signed.applet_package.service_id,
+          executed_by: serviceActorId(signed.applet_package.service_id),
           registration_epoch: signed.applet_package.registration_epoch,
+        },
+        {
+          constraint_kind: "temporal",
+          constraint_subkind: "window",
+          effect: "allow",
+          evaluation_class: "stateless",
+          not_before: createdAt,
+          expires_at: canonicalTimestamp(
+            new Date(Date.parse(createdAt) + 24 * 60 * 60 * 1000),
+          ),
         },
       ],
       issued_at: createdAt,
-      expires_at: canonicalTimestamp(
-        new Date(Date.parse(createdAt) + 24 * 60 * 60 * 1000),
-      ),
       issuer_authority_refs: [
         {
           kind: "realm_root",
@@ -2176,7 +2186,7 @@ async function prepareAppletInstallAuthoringBasis(
     schema: "ak.schema.applet_install_authoring_request_basis.v1",
     purpose: "install_bot",
     target_station_id: solandServiceId(),
-    install_actor_id: actorId,
+    install_actor_id: accountActorId(actorId),
     applet_id: signed.applet_package.applet_id,
     service_id: signed.applet_package.service_id,
     package_digest: signed.applet_package.package_digest,
@@ -2228,7 +2238,7 @@ function appletRegistrationPayload(
     e2ee_policy: pkg.e2ee_policy,
     registration_epoch_evidence: {
       did: operation.did,
-      document_digest: canonicalHash(operation.didDocument),
+      document_digest: cotestWire<string>("did-document-digest", operation.didDocument),
       method_version_evidence: {
         method: "did:webvh",
         version_id: operation.versionId,
@@ -2304,7 +2314,6 @@ function webvhManagedActorEvidence(built: BuiltWebvhGenesis) {
   return {
     initialResolution,
     methodHistoryEvidence: {
-      adapter_version: "did:webvh:1.0",
       evidence_kind: "webvh_log",
       boundary: {
         from_method_history_head: historyHead,
@@ -2315,9 +2324,7 @@ function webvhManagedActorEvidence(built: BuiltWebvhGenesis) {
       evidence: {
         kind: "ak.did.binding_evidence.v1",
         method: "webvh",
-        document_digest: `sha256:${createHash("sha256")
-          .update(canonicalJson(built.didDocument), "utf8")
-          .digest("hex")}`,
+        document_digest: cotestWire<string>("did-document-digest", built.didDocument),
         method_proofs: [
           {
             kind: "webvh_log",
@@ -2359,193 +2366,69 @@ function requiredAppletServiceDid(signed: SignedPackage): string {
   return did;
 }
 
-function buildGhostManagedActorCreation(args: {
+async function buildGhostManagedActorCreation(args: {
+  request: APIRequestContext;
+  token: string;
   signed: SignedPackage;
   registration: AppletRegistration;
   realmId: string;
   ghostBuilt: BuiltWebvhGenesis;
   externalUser: { id: string; display_name?: string };
-  appletAuthorityRef: string;
-  createdAt: string;
   serviceActorSeq: number;
   servicePrevRef?: string;
 }) {
-  const signingKey = args.signed.service_signing_private_key;
-  if (!signingKey) {
-    throw new Error("Ghost provision requires the Applet service signing key");
-  }
-  const serviceId = args.signed.applet_package.service_id;
-  const ghostId = projectDidToCoreId(args.ghostBuilt.did);
-  const evidence = webvhManagedActorEvidence(args.ghostBuilt);
   const externalRef = {
     protocol: "bridge",
     instance_id: "joint-e2e",
     external_id: args.externalUser.id,
   };
-  let provisionEvent = signedEventEnvelope({
-    actorId: serviceActorId(serviceId),
-    realmId: args.realmId,
-    kind: "ak.applet.managed_actor.provision",
-    actorSeq: args.serviceActorSeq,
-    createdAt: args.createdAt,
-    prevRefs: args.servicePrevRef ? [args.servicePrevRef] : [],
-    schemaId: "ak.schema.applet_managed_actor_provision.v1",
-    authorizationRef: args.appletAuthorityRef,
-    appletId: args.signed.applet_package.applet_id,
-    payload: {
-      schema: "ak.schema.applet_managed_actor_provision.v1",
-      applet_id: args.signed.applet_package.applet_id,
-      service_id: serviceId,
-      actor_id: ghostId,
-      actor_station_id: solandServiceId(),
-      actor_role: "ghost",
-      initial_resolution: evidence.initialResolution,
-      method_history_evidence: evidence.methodHistoryEvidence,
-      registration_ref: args.registration.registration_event_ref,
-      applet_authority_ref: args.appletAuthorityRef,
-      external_ref: externalRef,
-    },
-  });
-  provisionEvent = replaceWithAppletServiceProof(provisionEvent, args.signed);
-  const provisionEventId = String(provisionEvent.event_id);
-
-  const genesis = signedRealmGenesisEnvelope({
-    actorId: ghostId,
-    realmId: "",
-    kind: "ak.realm.create",
-    actorSeq: 0,
-    createdAt: args.createdAt,
-    executedBy: serviceActorId(serviceId),
-    stationId: solandServiceId(),
-    appletId: args.signed.applet_package.applet_id,
-    authorizationRef: args.appletAuthorityRef,
-    refs: [
-      {
-        id: provisionEventId,
-        role: "applet_managed_actor_provision",
-        critical: true,
-      },
-    ],
-    requirementsSchema: ["ak.schema.realm_genesis.v1"],
-    preconditions: [
-      {
-        cell_id: "ak:cell:ak.component.realm.create.v1:null",
-        predicate: { op: "head_eq", value: null },
-      },
-    ],
-    payload: {
-      object: {
-        schema: "ak.schema.realm_genesis.v1",
-        purpose: "applet_managed_control",
-        genesis_salt: Buffer.alloc(32, 11).toString("base64url"),
-        trust_domain: "ak:trust_domain:soland.local",
-        schema_refs: [
-          "ak.schema.realm.v1",
-          "ak.profile.principal_control_realm.v1",
-        ],
-        reducer_profile: "ak.reducer.core.v1",
-        encryption_profile: "mls_rfc9420",
-        security_class: "standard",
-        digest_algorithm: "sha256",
-        notary: singleSignerNotaryFromDid(solandServiceDid()),
-        initial_resolution: evidence.initialResolution,
-      },
-    },
-  });
-  const pcrGenesisEvent = replaceWithAppletServiceProof(
-    genesis.envelope,
-    args.signed,
-  );
-
-  const grantWithoutProof = {
-    schema: "ak.schema.accountability_grant.v1",
-    issuer_id: serviceId,
-    subject_id: ghostId,
-    accountability_scope: "contracted_service",
-    not_before: args.createdAt,
-    grant_status: "active",
-  };
-  const payloadDigest = `sha256:${createHash("sha256")
-    .update("ak.accountability-grant-v1\n", "utf8")
-    .update(canonicalJson(grantWithoutProof), "utf8")
-    .digest("hex")}`;
-  const verificationMethod = `${requiredAppletServiceDid(args.signed)}#applet-service-key`;
-  let accountabilityEvent = signedEventEnvelope({
-    actorId: serviceActorId(serviceId),
-    realmId: args.realmId,
-    kind: "ak.identity.accountability_grant",
-    actorSeq: args.serviceActorSeq + 1,
-    createdAt: args.createdAt,
-    prevRefs: [provisionEventId],
-    authorizationRef: args.appletAuthorityRef,
-    appletId: args.signed.applet_package.applet_id,
-    payload: {
-      ...grantWithoutProof,
-      proof: {
-        kind: "detached_jws",
-        verification_method: verificationMethod,
-        payload_digest: payloadDigest,
-        created_at: args.createdAt,
-        jws: detachedJws(
-          {
-            context: "ak.accountability_grant_proof.v1",
-            payload_digest: payloadDigest,
-            issuer: serviceId,
-            subject: ghostId,
-            verification_method: verificationMethod,
-            created_at: args.createdAt,
-          },
-          signingKey,
-        ),
-      },
-    },
-  });
-  accountabilityEvent = replaceWithAppletServiceProof(
-    accountabilityEvent,
-    args.signed,
-  );
-  let profileEvent = signedEventEnvelope({
-    actorId: ghostId,
-    realmId: args.realmId,
-    kind: "ak.profile.create",
-    actorSeq: 0,
-    createdAt: args.createdAt,
-    executedBy: serviceActorId(serviceId),
-    authorizationRef: args.appletAuthorityRef,
-    appletId: args.signed.applet_package.applet_id,
-    refs: [
-      {
-        id: accountabilityEvent.event_id,
-        role: "accountability",
-        critical: true,
-      },
-    ],
-    payload: {
-      object: {
-        schema: "ak.schema.actor_profile.v1",
-        realm_id: args.realmId,
-        principal_id: ghostId,
-        actor_kind: "integration",
-        display_name: args.externalUser.display_name ?? args.externalUser.id,
-        accountable_principal_ids: [serviceId],
-        profile_fields: {
-          managed_by_applet: args.signed.applet_package.applet_id,
-          external_ref: externalRef,
-        },
-        created_at: args.createdAt,
-      },
-    },
-  });
-  profileEvent = replaceWithAppletServiceProof(profileEvent, args.signed);
-  return {
-    ghost_actor_id: ghostId,
-    ghost_actor_did: args.ghostBuilt.did,
-    actor_station_id: solandServiceId(),
+  const targetUri = `${solandBaseUrl()}/_arkret/self/applets/${encodeURIComponent(args.registration.applet_id)}/ghosts/provision/preview`;
+  const previewBody = {
+    realm_id: args.realmId,
     external_ref: externalRef,
-    managed_actor_provision_event: provisionEvent,
-    pcr_genesis_event: pcrGenesisEvent,
-    accountability_grant_event: accountabilityEvent,
-    profile_event: profileEvent,
+    display_name: args.externalUser.display_name ?? args.externalUser.id,
+  };
+  const preview = await args.request.post(targetUri, {
+    headers: signedAppletTransactionHeaders({
+      body: previewBody,
+      targetUri,
+      sourceServiceId: args.signed.applet_package.service_id,
+      destinationServiceId: solandServiceId(),
+      keyId: `${requiredAppletServiceDid(args.signed)}#applet-service-key`,
+      signingKey: args.signed.service_signing_private_key,
+      idempotencyKey: `ghost-preview-${args.externalUser.id}`,
+    }),
+    data: canonicalJson(previewBody),
+  });
+  expect(preview.status(), await preview.text()).toBe(200);
+  const { authoring_request: authoringRequest } = await preview.json();
+  const evidence = webvhManagedActorEvidence(args.ghostBuilt);
+  const registryBase = String(args.signed.applet_package.base_url).replace(/\/$/, "");
+  const material = await args.request.post(`${registryBase}/inspect/ghost-authoring-material`, {
+    data: {
+      applet_id: args.registration.applet_id,
+      external_ref: externalRef,
+      material: {
+        actor_id: accountActorId(projectDidToCoreId(args.ghostBuilt.did)),
+        initial_resolution: evidence.initialResolution,
+        method_history_evidence: evidence.methodHistoryEvidence,
+        service_actor_seq: args.serviceActorSeq,
+        service_prev_refs: args.servicePrevRef ? [args.servicePrevRef] : [],
+        seal_basis: await readRealmSealBasis(args.request, args.token, args.realmId),
+      },
+    },
+  });
+  expect(material.status()).toBe(200);
+  const authored = await args.request.post(`${registryBase}/_arkret/edge/applet/managed-actors/author`, {
+    data: { authoring_request: authoringRequest },
+  });
+  expect(authored.status(), await authored.text()).toBe(200);
+  const outcome = await authored.json();
+  return {
+    authoring_request: authoringRequest,
+    managed_actor_bundle: outcome.managed_actor_bundle as Record<string, Record<string, unknown>>,
+    ghost_actor_did: args.ghostBuilt.did,
+    external_ref: externalRef,
   };
 }
 
@@ -2576,6 +2459,7 @@ function installRegistrationFromResponse(
   response: Record<string, unknown>,
   grantActionsById: Map<string, string[]>,
 ): AppletRegistration {
+  expect(response.bot_actor_id).toEqual(signed.applet_package.bot_actor_id);
   const capabilityGrantRefs = Array.isArray(response.capability_grant_refs)
     ? response.capability_grant_refs.map(String)
     : [];
@@ -2584,7 +2468,7 @@ function installRegistrationFromResponse(
   );
   return {
     applet_id: String(response.applet_id),
-    bot_actor_id: String(response.bot_actor_id),
+    bot_actor_id: signed.applet_package.bot_actor_id,
     portal_realm_id: realmId,
     namespace:
       signed.applet_package.namespaces?.handles?.[0]?.pattern ??

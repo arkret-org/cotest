@@ -22,7 +22,7 @@ import {
   solandServiceId,
 } from "./env";
 import { selectDxcOption } from "./dxc-select";
-import type { PublicPrincipalResolution, RealmObject } from "./generated/spec-wire-objects";
+import type { AccountId, PublicPrincipalResolution, RealmObject } from "./generated/spec-wire-objects";
 import {
   registerCoauthPasswordAccount,
   type CoauthPasswordAccount,
@@ -521,13 +521,13 @@ export class JointUserPage {
   // relies on the delegated action.
   async grantRealmCapability(
     realmId: string,
-    subjectId: string,
+    subjectAccount: AccountId,
     action: string,
   ): Promise<string> {
     await this.gotoRealmAdminSection(realmId, "security");
     await this.page.getByTestId("advanced-access-toggle").click();
     await this.page.getByTestId("cap-grant-tag-input").fill(action);
-    await this.page.getByTestId("cap-grant-subject-input").fill(subjectId);
+    await this.page.getByTestId("cap-grant-subject-input").fill(canonicalJson(subjectAccount));
     await this.page.getByTestId("cap-grant-submit-button").click();
     const status = this.page.getByTestId("realm-admin-status");
     await expect(status).toContainText("ak.capability.grant event", {
@@ -538,11 +538,7 @@ export class JointUserPage {
     const grantsUrl = new URL(
       `${this.serverUrl}/_arkret/self/authz/effective-grants`,
     );
-    const subject = accountActorId(
-      subjectId,
-      undefined,
-      this.session.grant?.accountId.station_id,
-    );
+    const subject = { kind: "account" as const, account_id: subjectAccount };
     grantsUrl.searchParams.set("subject_actor_id", canonicalJson(subject));
     grantsUrl.searchParams.set("realm_id", realmId);
     let projectedGrantId: string | undefined;

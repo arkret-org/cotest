@@ -366,23 +366,22 @@ function rfc3339Now() {
   return new Date().toISOString();
 }
 
+function requiredStationSetting(name) {
+  const value = process.env[name]?.trim();
+  if (!value) throw new Error(`Applet mock requires ${name} from the prepared Station`);
+  return value;
+}
+
 function stationId() {
-  return (
-    process.env.COTEST_SOLAND_SERVICE_ID ??
-    "ak:did_core:key:z6MkquRrzPs7F2ueYKgkbi6CgpYqwhbpBRDLeyWEAHVBxAdN"
-  );
+  return requiredStationSetting("COTEST_SOLAND_SERVICE_ID");
 }
 
 function stationDid() {
-  return (
-    process.env.COTEST_SOLAND_SERVICE_DID ??
-    "did:key:z6MkquRrzPs7F2ueYKgkbi6CgpYqwhbpBRDLeyWEAHVBxAdN"
-  );
+  return requiredStationSetting("COTEST_SOLAND_SERVICE_DID");
 }
 
 function configuredStationSeed() {
-  const encoded = process.env.COTEST_SOLAND_SERVICE_SIGNING_KEY?.trim();
-  if (!encoded) return undefined;
+  const encoded = requiredStationSetting("COTEST_SOLAND_SERVICE_SIGNING_KEY");
   const normalized = encoded.replace(/-/g, "+").replace(/_/g, "/");
   const seed = Buffer.from(
     normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "="),
@@ -397,43 +396,13 @@ function configuredStationSeed() {
 }
 
 function stationNotaryPrivateKey() {
-  const seed =
-    configuredStationSeed() ??
-    createHash("sha256")
-      .update("soland:notary-ephemeral:")
-      .update(stationId())
-      .digest();
+  const seed = configuredStationSeed();
   const pkcs8Prefix = Buffer.from("302e020100300506032b657004220420", "hex");
   return createPrivateKey({
     key: Buffer.concat([pkcs8Prefix, seed]),
     format: "der",
     type: "pkcs8",
   });
-}
-
-function stationNotaryDescriptor() {
-  const publicKeyDer = createPublicKey(
-    stationNotaryPrivateKey(),
-  ).export({
-    format: "der",
-    type: "spki",
-  });
-  const publicKeyBytes = Buffer.from(
-    publicKeyDer.subarray(publicKeyDer.length - 32),
-  );
-  return {
-    kind: "single_signer",
-    signer: {
-      actor_id: stationId(),
-      verification_method: `${stationDid()}#notary-key`,
-      key_kind: "ed25519_raw32",
-      jose_algorithm: "Ed25519",
-      frozen_public_key_b64u: publicKeyBytes.toString("base64url"),
-      frozen_public_key_digest: `sha256:${createHash("sha256")
-        .update(publicKeyBytes)
-        .digest("hex")}`,
-    },
-  };
 }
 
 function developmentAppletPrivateKey(verificationMethod) {
@@ -489,11 +458,10 @@ function deriveEventIdentity(event) {
 
 function runCotestWire(commandName, input) {
   const binary = process.env.COTEST_WIRE_BIN;
-  const command = binary ?? "cargo";
-  const args = binary
-    ? [commandName]
-    : ["run", "--quiet", "--bin", "cotest-wire", "--", commandName];
-  const result = spawnSync(command, args, {
+  if (!binary) {
+    throw new Error("Applet mock requires COTEST_WIRE_BIN from the preparation batch");
+  }
+  const result = spawnSync(binary, [commandName], {
     cwd: process.env.COTEST_ROOT ?? process.cwd().replace(/[\\/]e2e$/, ""),
     encoding: "utf8",
     input: canonicalJson(input),
@@ -512,9 +480,10 @@ function safeToken(value) {
   return safe || "bridge-demo";
 }
 
-function nextActorSequence(actorDid) {
-  const next = (actorSequences.get(actorDid) ?? -1) + 1;
-  actorSequences.set(actorDid, next);
+function nextActorSequence(actor) {
+  const key = canonicalJson(actor);
+  const next = (actorSequences.get(key) ?? -1) + 1;
+  actorSequences.set(key, next);
   return next;
 }
 
@@ -568,74 +537,32 @@ function exactObjectKeys(value, expected) {
   );
 }
 
-async function readRealmFrontier(solandBase, authorization, realmId) {
-  const response = await fetch(
-    `${String(solandBase).replace(/\/$/, "")}/_arkret/self/seals/frontier`,
-    {
-      method: "QUERY",
-      headers: { authorization, "content-type": "application/json" },
-      body: canonicalJson({ realm_id: realmId }),
-    },
-  );
-  const responseText = await response.text();
-  if (!response.ok) {
-    throw new Error(
-      `Realm frontier returned ${response.status}: ${responseText}`,
-    );
-  }
-  const body = JSON.parse(responseText);
-  const frontier = body?.frontier;
-  const leaves = frontier?.seal_basis?.leaves;
-  if (
-    frontier?.kind !== "realm_seal" ||
-    !Array.isArray(leaves) ||
-    leaves.length !== 1 ||
-    typeof leaves[0] !== "string"
-  ) {
-    throw new Error(
-      "Realm frontier response is missing the accepted Seal basis",
-    );
-  }
-  return {
-    sealRef: leaves[0],
-    sealBasis: { leaves: [...leaves] },
-  };
-}
-
 function signedGhostMessageEvent({
   packageInfo,
   provision,
-  stationId,
   authorizationRef,
   realmId,
   strandId,
-  sealRef,
+  sealBasis,
   externalId,
   displayName,
   text,
 }) {
   const createdAt = rfc3339Now();
-  const keyFragment = packageInfo.verificationMethod.split("#", 2)[1];
   const event = {
     kind: "ak.message.create",
     realm_id: realmId,
     scope_ref: { kind: "realm", realm_id: realmId },
     actor_id: provision.ghost_actor_id,
-    station_id: stationId,
     actor_seq: nextActorSequence(provision.ghost_actor_id),
     created_at: createdAt,
     hlc: currentHlc(),
     prev_refs: [provision.profile_event_ref],
     refs: [],
-    executed_by: packageInfo.serviceId,
+    executed_by: { kind: "service", service_id: packageInfo.serviceId },
     authorization_ref: authorizationRef,
     applet_id: packageInfo.appletId,
-    seal_ref: sealRef,
-    auth_context: {
-      actor_id: packageInfo.serviceId,
-      key_id: keyFragment ?? packageInfo.verificationMethod,
-      key_epoch: 0,
-    },
+    seal_basis: sealBasis,
     external_ref: {
       protocol: "bridge",
       instance_id: "joint-e2e",
@@ -647,14 +574,7 @@ function signedGhostMessageEvent({
       content: {
         kind: "ak.content.text",
         body: text,
-        portal: {
-          applet_id: packageInfo.appletId,
-          bot_actor_id: packageInfo.botActorId,
-          ghost_actor_id: provision.ghost_actor_id,
-          portal_realm_id: realmId,
-          external_id: externalId,
-          display_name: displayName,
-        },
+
       },
     },
   };
@@ -670,7 +590,7 @@ function signedGhostMessageEvent({
       proofs: [
         detachedEventProof(
           event,
-          provision.ghost_actor_did,
+          verificationMethod.split("#", 1)[0],
           verificationMethod,
           packageInfo.signingKey,
         ),
@@ -691,6 +611,7 @@ async function submitSignedAppletTransaction({
   const target = `${String(solandBase).replace(/\/$/, "")}/_arkret/edge/applet/transactions`;
   const targetUrl = new URL(target);
   const transaction = {
+    applet_id: packageInfo.appletId,
     source_id: packageInfo.serviceId,
     events: [event],
   };
@@ -722,6 +643,7 @@ async function submitSignedAppletTransaction({
   return await fetch(target, {
     method: "POST",
     headers: {
+      "arkret-operation": "ak.edge.applet.command.transaction.v1",
       "content-type": "application/json",
       "content-digest": contentDigest,
       "source-service-id": packageInfo.serviceId,
@@ -772,6 +694,7 @@ async function submitSignedGhostProvision({
   return await fetch(target, {
     method: "POST",
     headers: {
+      "arkret-operation": "ak.self.applet.ghost.command.provision.v1",
       "content-type": "application/json",
       "content-digest": contentDigest,
       "source-service-id": packageInfo.serviceId,
@@ -833,7 +756,7 @@ function signedPackage(body) {
   };
   const registrationEpochEvidence = {
     did: serviceIdDocument.id,
-    document_digest: canonicalHash(serviceIdDocument),
+    document_digest: runCotestWire("did-document-digest", serviceIdDocument),
     method_version_evidence:
       body.service_id_method_version_evidence ??
       (serviceDid.startsWith("did:webvh:")
@@ -860,8 +783,7 @@ function signedPackage(body) {
     service_id: serviceId,
     controller_principal_id: body.controller_principal_id ?? registryId,
     base_url: body.base_url ?? serverBaseUrl(),
-    bot_actor_id:
-      body.bot_actor_id ?? `ak:did_core:web:bot-${safe}.joint-e2e.local`,
+    bot_actor_id: body.bot_actor_id,
     claimed_profiles: [
       "ak.profile.applet_bridge.v1",
       "ak.profile.applet_service.v1",
@@ -1059,7 +981,27 @@ const server = createServer(async (req, res) => {
       res.end(JSON.stringify({ error: "invalid_json" }));
       return;
     }
+    if (!body.bot_actor_id) {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: "missing_bot_actor_id" }));
+      return;
+    }
     res.end(JSON.stringify(signedPackage(body)));
+    return;
+  }
+
+  if (url.pathname === "/inspect/ghost-authoring-material" && req.method === "POST") {
+    const body = await readJson(req);
+    const packageInfo = packagesByApplet.get(body?.applet_id);
+    if (!packageInfo || !body.external_ref || !body.material) {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: "invalid_ghost_authoring_material" }));
+      return;
+    }
+    packageInfo.ghostAuthoringMaterials ??= {};
+    packageInfo.ghostAuthoringMaterials[canonicalJson(body.external_ref)] = body.material;
+    persistDurableAuthoringState();
+    res.end(JSON.stringify({ status: "stored" }));
     return;
   }
 
@@ -1092,6 +1034,7 @@ const server = createServer(async (req, res) => {
       authoringRequest?.purpose,
       authoringRequest?.basis?.applet_id,
       authoringRequest?.basis?.target_station_id,
+      canonicalJson(authoringRequest?.basis?.external_ref ?? null),
     ].join("\n");
     const existing = managedActorAuthoringOutcomes.get(subject);
     if (existing) {
@@ -1100,16 +1043,16 @@ const server = createServer(async (req, res) => {
         return;
       }
     }
-    if (
-      !packageInfo.botInitialResolution ||
-      !packageInfo.botMethodHistoryEvidence ||
-      !packageInfo.botVerificationMethod ||
-      !packageInfo.botSigningKey
-    ) {
+    const material = authoringRequest?.purpose === "install_bot"
+      ? {
+          actor_id: packageInfo.botActorId,
+          initial_resolution: packageInfo.botInitialResolution,
+          method_history_evidence: packageInfo.botMethodHistoryEvidence,
+        }
+      : packageInfo.ghostAuthoringMaterials?.[canonicalJson(authoringRequest?.basis?.external_ref ?? null)];
+    if (!material?.actor_id || !material.initial_resolution || !material.method_history_evidence) {
       res.statusCode = 409;
-      res.end(
-        JSON.stringify({ error: "applet_bot_authoring_material_missing" }),
-      );
+      res.end(JSON.stringify({ error: "applet_managed_actor_authoring_material_missing" }));
       return;
     }
     const servicePrivateJwk = packageInfo.signingKey.export({ format: "jwk" });
@@ -1118,12 +1061,10 @@ const server = createServer(async (req, res) => {
       res.end(JSON.stringify({ error: "applet_service_key_unavailable" }));
       return;
     }
-    const outcome = runCotestWire("install-managed-actor-author", {
+    const outcome = runCotestWire("managed-actor-author", {
       authoring_request: authoringRequest,
       applet_package: packageInfo.appletPackage,
-      bot_actor_id: packageInfo.botActorId,
-      bot_initial_resolution: packageInfo.botInitialResolution,
-      bot_method_history_evidence: packageInfo.botMethodHistoryEvidence,
+      ...material,
       service_signing_seed_b64url: servicePrivateJwk.d,
       service_verification_method: packageInfo.verificationMethod,
       station_id: stationId(),
@@ -1159,17 +1100,9 @@ const server = createServer(async (req, res) => {
       body.soland_base_url ??
       process.env.SOLAND_BASE_URL ??
       process.env.COTEST_SOLAND_BASE_URL;
-    const authorization =
-      req.headers.authorization ??
-      body.authorization ??
-      (body.session_credential
-        ? `Bearer ${body.session_credential}`
-        : undefined);
-    if (!solandBase || !authorization) {
+    if (!solandBase) {
       res.statusCode = 400;
-      res.end(
-        JSON.stringify({ error: "missing_soland_base_url_or_authorization" }),
-      );
+      res.end(JSON.stringify({ error: "missing_soland_base_url" }));
       return;
     }
     const packageInfo = packagesByApplet.get(body.applet_id);
@@ -1192,21 +1125,12 @@ const server = createServer(async (req, res) => {
     let provision = provisionedGhosts.get(ghostKey);
     if (!provision) {
       const ghostCreation = body.ghost_creation;
-      const ghostActorId = ghostCreation?.ghost_actor_id;
-      if (
-        typeof ghostActorId !== "string" ||
-        typeof ghostCreation?.ghost_actor_did !== "string" ||
-        !ghostCreation.ghost_actor_did.startsWith("did:") ||
-        typeof ghostCreation?.actor_station_id !== "string" ||
-        !ghostCreation?.managed_actor_provision_event ||
-        !ghostCreation?.pcr_genesis_event ||
-        !ghostCreation?.accountability_grant_event ||
-        !ghostCreation?.profile_event
-      ) {
+      const bundle = ghostCreation?.managed_actor_bundle;
+      const ghostActorId = bundle?.managed_actor_provision_event?.payload?.actor_id;
+      if (!ghostCreation?.authoring_request || !bundle || !ghostActorId ||
+          typeof ghostCreation.ghost_actor_did !== "string") {
         res.statusCode = 400;
-        res.end(
-          JSON.stringify({ error: "missing_closed_ghost_creation_unit" }),
-        );
+        res.end(JSON.stringify({ error: "missing_closed_ghost_creation_unit" }));
         return;
       }
       const provisionAuthorizationRef = body.provision_authorization_ref;
@@ -1226,20 +1150,8 @@ const server = createServer(async (req, res) => {
           appletId: body.applet_id,
           idempotencyKey: `provision-${body.applet_id}-${safeToken(externalId)}`,
           requestBody: {
-            schema: "ak.applet.ghost_actor.provision_request.v1",
-            applet_id: body.applet_id,
-            service_id: packageInfo.serviceId,
-            ghost_actor_id: ghostActorId,
-            actor_station_id: ghostCreation.actor_station_id,
-            ...(displayName ? { display_name: displayName } : {}),
-            realm_id: body.realm_id,
-            external_ref: ghostCreation.external_ref,
-            managed_actor_provision_event:
-              ghostCreation.managed_actor_provision_event,
-            pcr_genesis_event: ghostCreation.pcr_genesis_event,
-            accountability_grant_event:
-              ghostCreation.accountability_grant_event,
-            profile_event: ghostCreation.profile_event,
+            authoring_request: ghostCreation.authoring_request,
+            managed_actor_bundle: bundle,
           },
         });
       } catch (err) {
@@ -1262,7 +1174,7 @@ const server = createServer(async (req, res) => {
         ...JSON.parse(provisionText),
         ghost_actor_did: ghostCreation.ghost_actor_did,
       };
-      actorSequences.set(ghostActorId, 0);
+      actorSequences.set(canonicalJson(ghostActorId), 0);
       provisionedGhosts.set(ghostKey, provision);
     }
     if (body.payload?.kind !== "message") {
@@ -1270,6 +1182,7 @@ const server = createServer(async (req, res) => {
         JSON.stringify({
           applet_id: body.applet_id,
           ghost_actor_id: provision.ghost_actor_id,
+          principal_control_realm_id: provision.principal_control_realm_id,
           external_id: externalId,
           display_name: displayName,
           authorization_ref: provision.authorization_ref,
@@ -1288,31 +1201,19 @@ const server = createServer(async (req, res) => {
       res.end(JSON.stringify({ error: "missing_strand_id" }));
       return;
     }
-    let sealRef;
-    try {
-      ({ sealRef } = await readRealmFrontier(
-        solandBase,
-        authorization,
-        body.realm_id,
-      ));
-    } catch (err) {
-      res.statusCode = 502;
-      res.end(
-        JSON.stringify({
-          error: "realm_frontier_unavailable",
-          detail: String(err),
-        }),
-      );
+    const sealBasis = body.seal_basis;
+    if (!Array.isArray(sealBasis?.leaves) || sealBasis.leaves.length === 0) {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: "missing_accepted_realm_seal_basis" }));
       return;
     }
     const signed = signedGhostMessageEvent({
       packageInfo,
       provision,
-      stationId: destinationServiceId,
       authorizationRef: body.authorization_ref ?? provision.authorization_ref,
       realmId: body.realm_id,
       strandId: body.strand_id,
-      sealRef,
+      sealBasis,
       externalId,
       displayName,
       text: body.payload.text,

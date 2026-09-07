@@ -48,6 +48,12 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
       );
       expect(realAliceRow).toBeTruthy();
       expect(realAliceRow?.contact_agents ?? []).toHaveLength(0);
+      const realAliceContacts = await listContacts(request, jointRealm.aliceSession);
+      expect(realAliceContacts.some((row) =>
+        canonicalJson(row.peer) === canonicalJson({
+          kind: "human", account_id: jointRealm.bobSession.accountId,
+        }) && row.state === "accepted",
+      )).toBe(true);
 
       const alicePage = jointRealm.alicePage.page;
       // The contact was established through the protocol API after Alice's
@@ -90,10 +96,7 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
 
       const bobPage = jointRealm.bobPage.page;
       const allowedAgent = {
-        actor_id: {
-          kind: "service",
-          service_id: `ak:did_core:web:agents.joint-e2e.local:${stamp}`,
-        },
+        actor_id: accountActorId(`ak:did_core:web:agents.joint-e2e.local:${stamp}`),
         controller_account_id: jointRealm.aliceSession.accountId,
         display_name: `Alice Allowed Agent ${stamp}`,
         agent_slug: `allowed-${stamp.toString(36)}`,

@@ -22,6 +22,29 @@
 
 import { createHash } from "node:crypto";
 
+// Playwright transport errors include a Call log containing request headers.
+// Classify the failure without retaining that error or its credential-bearing
+// stack/cause in any reporter-visible object.
+export function publicRequestFailure(
+  error: unknown,
+  method: string,
+  operationId?: string,
+): Error {
+  const message = error instanceof Error ? error.message : "";
+  const reason = message.includes("Request context disposed")
+    ? "request context disposed"
+    : /timeout|timed out/i.test(message)
+      ? "request timeout"
+      : /ECONNREFUSED/.test(message)
+        ? "connection refused"
+        : /ECONNRESET/.test(message)
+          ? "connection reset"
+          : /certificate|CERT_/i.test(message)
+            ? "TLS certificate verification failed"
+            : "transport error";
+  return new Error(`${method} ${operationId ?? "HTTP request"} failed: ${reason}`);
+}
+
 /// Deterministic structural handle for test-local comparison.
 ///
 /// NOT a protocol digest, and MUST NOT be compared against one. Arkret's

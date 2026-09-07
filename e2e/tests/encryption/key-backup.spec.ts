@@ -515,6 +515,7 @@ test.describe("key backup + restore", () => {
       "a2-mls-kanban-alice-a",
       account,
       coauth,
+      false,
     );
     if (!deviceAFlow) {
       assertJointStackNotRequired("A2 MLS Kanban restore device A login");

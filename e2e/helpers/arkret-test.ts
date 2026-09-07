@@ -9,6 +9,8 @@ import {
 
 export * from "@playwright/test";
 
+import { publicRequestFailure } from "./secret-safe";
+
 type RegisteredHttpOperation = {
   operationId: string;
   method: string;
@@ -54,7 +56,7 @@ export function withOperationSelectors(
   return new Proxy(request, {
     get(target, property, receiver) {
       if (property === "fetch") {
-        return (url: string, options: Record<string, unknown> = {}) => {
+        return async (url: string, options: Record<string, unknown> = {}) => {
           const call = Reflect.get(target, property, target) as (
             url: string,
             options?: Record<string, unknown>,
@@ -62,42 +64,48 @@ export function withOperationSelectors(
           const method =
             typeof options.method === "string" ? options.method.toUpperCase() : "GET";
           const selector = operationSelector(method, url);
-          if (!selector) return call.call(target, url, options);
           const headers = {
             ...((options.headers as Record<string, string> | undefined) ?? {}),
           };
-          if (
+          if (selector &&
             !Object.keys(headers).some(
               (name) => name.toLowerCase() === "arkret-operation",
             )
           ) {
             headers["Arkret-Operation"] = selector;
           }
-          return call.call(target, url, { ...options, headers });
+          try {
+            return await call.call(target, url, { ...options, headers });
+          } catch (error) {
+            throw publicRequestFailure(error, method, selector);
+          }
         };
       }
       if (typeof property !== "string" || !methods.has(property)) {
         const value = Reflect.get(target, property, receiver);
         return typeof value === "function" ? value.bind(target) : value;
       }
-      return (url: string, options: Record<string, unknown> = {}) => {
+      return async (url: string, options: Record<string, unknown> = {}) => {
         const call = Reflect.get(target, property, target) as (
           url: string,
           options?: Record<string, unknown>,
         ) => Promise<unknown>;
         const selector = operationSelector(property.toUpperCase(), url);
-        if (!selector) return call.call(target, url, options);
         const headers = {
           ...((options.headers as Record<string, string> | undefined) ?? {}),
         };
-        if (
+        if (selector &&
           !Object.keys(headers).some(
             (name) => name.toLowerCase() === "arkret-operation",
           )
         ) {
           headers["Arkret-Operation"] = selector;
         }
-        return call.call(target, url, { ...options, headers });
+        try {
+          return await call.call(target, url, { ...options, headers });
+        } catch (error) {
+          throw publicRequestFailure(error, property.toUpperCase(), selector);
+        }
       };
     },
   });

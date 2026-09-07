@@ -17,7 +17,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use anyhow::{Context, Result, bail};
 use arkret_canonical as canonical;
 use arkret_event_draft::EventPayloadExt as _;
-use arkret_identifiers::{ConsentId, DeviceId, Did, DidCoreId, Hash, project_did_to_core_id};
+use arkret_identifiers::{
+    ConsentId, DeviceId, Did, DidCoreId, EventId, Hash, project_did_to_core_id,
+};
 use arkret_models_collaboration::governance::membership_invite::{
     InviteClaimBindingProof, InviteSubjectProof, InviteSubjectProofBody,
 };
@@ -168,12 +170,18 @@ struct WebvhVerifyLogInput {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct InstallManagedActorAuthorInput {
+struct ManagedActorAuthorInput {
     authoring_request: Value,
     applet_package: arkret::AppletPackage,
-    bot_actor_id: DidCoreId,
-    bot_initial_resolution: arkret::ResolutionCommitment,
-    bot_method_history_evidence: arkret::ResolutionMethodHistoryEvidence,
+    actor_id: arkret_wire::ActorId,
+    initial_resolution: arkret::ResolutionCommitment,
+    method_history_evidence: arkret::ResolutionMethodHistoryEvidence,
+    #[serde(default)]
+    service_actor_seq: u64,
+    #[serde(default)]
+    service_prev_refs: Vec<EventId>,
+    #[serde(default)]
+    seal_basis: Option<SealBasis>,
     service_signing_seed_b64url: String,
     service_verification_method: DidUrl,
     station_id: DidCoreId,
@@ -210,9 +218,9 @@ pub fn invite_subject_proof(input: Value) -> Result<Value> {
     serde_json::to_value(proof).context("serialize invite subject proof")
 }
 
-pub fn install_managed_actor_author(input: Value) -> Result<Value> {
-    let input: InstallManagedActorAuthorInput =
-        serde_json::from_value(input).context("parse install managed-actor author input")?;
+pub fn managed_actor_author(input: Value) -> Result<Value> {
+    let input: ManagedActorAuthorInput =
+        serde_json::from_value(input).context("parse managed-actor author input")?;
     let raw = &input.authoring_request;
     let basis = raw.get("basis").and_then(Value::as_object);
     let purpose = raw.get("purpose").and_then(Value::as_str);
@@ -228,7 +236,7 @@ pub fn install_managed_actor_author(input: Value) -> Result<Value> {
     let package_digest = basis
         .and_then(|value| value.get("package_digest"))
         .and_then(Value::as_str);
-    if purpose != Some("install_bot")
+    if !matches!(purpose, Some("install_bot" | "provision_ghost"))
         || target != Some(input.station_id.as_str())
         || applet_id != Some(input.applet_package.applet_id.as_str())
         || service_id != Some(input.applet_package.service_id.as_str())
@@ -319,53 +327,68 @@ pub fn install_managed_actor_author(input: Value) -> Result<Value> {
         ));
     }
 
-    let install = request
-        .basis
-        .install()
-        .context("validated install request has no install basis")?;
-    if arkret_wire::ActorId::account(arkret_wire::AccountId::new(
-        input.bot_actor_id.clone(),
-        input.station_id.clone(),
-    )) != input.applet_package.bot_actor_id
+    let actor_account = input.actor_id.as_account_id();
+    if actor_account.is_none_or(|account| account.station_id != input.station_id)
+        || (request.basis.install().is_some()
+            && input.actor_id != input.applet_package.bot_actor_id)
         || input.service_verification_method != input.applet_package.webhook_auth.key_ref
     {
         return Ok(author_rejection(
             "authoring_request_coordinate_mismatch",
             400,
-            "package managed-actor material does not match the signed package",
+            "package managed-actor material does not match the signed request",
         ));
     }
-    let registration_evidence: arkret::AppletRegistrationEpochEvidence = install
-        .registration_event
-        .payload
-        .get("manifest")
-        .and_then(Value::as_object)
-        .and_then(|manifest| manifest.get("registration_epoch_evidence"))
-        .cloned()
-        .context("registration Event omits registration epoch evidence")
-        .and_then(|value| {
-            serde_json::from_value(value).context("parse registration epoch evidence")
-        })?;
-    let expected_registration = input
-        .applet_package
-        .to_registration(&registration_evidence)
-        .context("derive package registration payload")?;
-    let actual_registration = serde_json::to_value(&install.registration_event.payload)
-        .context("serialize registration Event payload")?;
-    if actual_registration != serde_json::to_value(expected_registration)?
-        || !registration_evidence.contains_signing_key(input.service_verification_method.as_str())
-    {
+    let (registration_evidence, seal_basis) = if let Some(install) = request.basis.install() {
+        let evidence: arkret::AppletRegistrationEpochEvidence = install
+            .registration_event
+            .payload
+            .get("manifest")
+            .and_then(Value::as_object)
+            .and_then(|manifest| manifest.get("registration_epoch_evidence"))
+            .cloned()
+            .context("registration Event omits registration epoch evidence")
+            .and_then(|value| {
+                serde_json::from_value(value).context("parse registration epoch evidence")
+            })?;
+        let expected = input.applet_package.to_registration(&evidence)?;
+        if serde_json::to_value(&install.registration_event.payload)?
+            != serde_json::to_value(expected)?
+        {
+            return Ok(author_rejection(
+                "authoring_request_event_binding_invalid",
+                400,
+                "registration Event does not bind the signed package",
+            ));
+        }
+        (
+            evidence,
+            install
+                .registration_event
+                .seal_basis
+                .clone()
+                .context("registration Event omits the accepted Realm Seal basis")?,
+        )
+    } else {
+        let ghost = request
+            .basis
+            .ghost()
+            .context("validated request has no Ghost basis")?;
+        (
+            ghost.registration_epoch_evidence.clone(),
+            input
+                .seal_basis
+                .clone()
+                .context("Ghost authoring requires the accepted Realm Seal basis")?,
+        )
+    };
+    if !registration_evidence.contains_signing_key(input.service_verification_method.as_str()) {
         return Ok(author_rejection(
             "authoring_request_event_binding_invalid",
             400,
-            "registration Event or epoch evidence does not bind the package service key",
+            "registration epoch evidence does not bind the package service key",
         ));
     }
-    let seal_basis: SealBasis = install
-        .registration_event
-        .seal_basis
-        .clone()
-        .context("registration Event omits the accepted Realm Seal basis")?;
     let seed = signing_key_from_seed(&input.service_signing_seed_b64url)?.to_bytes();
     let service_did = Did::new(
         input
@@ -391,11 +414,14 @@ pub fn install_managed_actor_author(input: Value) -> Result<Value> {
     let bundle = arkret::author_applet_managed_actor_bundle(
         &request,
         arkret::AppletManagedActorBundleAuthoringInput {
-            actor_id: input.bot_actor_id,
-            initial_resolution: input.bot_initial_resolution,
-            method_history_evidence: input.bot_method_history_evidence,
-            service_actor_seq: 0,
-            service_prev_refs: Vec::new(),
+            actor_id: actor_account
+                .context("validated managed account is missing")?
+                .principal_id
+                .clone(),
+            initial_resolution: input.initial_resolution,
+            method_history_evidence: input.method_history_evidence,
+            service_actor_seq: input.service_actor_seq,
+            service_prev_refs: input.service_prev_refs,
             seal_basis,
             digest_suite: arkret::DigestSuite::Sha256,
             trust_domain: input.trust_domain,
@@ -1122,6 +1148,14 @@ pub fn read_stdin_json() -> Result<Value> {
     serde_json::from_str(&stdin).context("parse stdin JSON")
 }
 
+pub fn did_document_digest(input: Value) -> Result<Value> {
+    let document: arkret_models_identity::DidDocument =
+        serde_json::from_value(input).context("parse DID document for normalized digest")?;
+    Ok(serde_json::to_value(
+        arkret_models_identity::normalized_did_document_digest(&document)?,
+    )?)
+}
+
 pub fn canonical_json(input: Value) -> Result<Value> {
     let input: CanonicalInput = serde_json::from_value(input).context("parse canonical input")?;
     let bytes = canonical::canonical_json_bytes(&input.value).context("canonical JSON encode")?;
@@ -1267,7 +1301,7 @@ pub fn mimi_consent_proof(input: Value) -> Result<Value> {
             domain: Some(input.domain),
             audience: Some(Audience::Single(input.audience)),
             proof_purpose: None,
-            jws: "pending".to_owned(),
+            jws: String::new(),
         },
         reason,
         expires_at,
@@ -1275,15 +1309,19 @@ pub fn mimi_consent_proof(input: Value) -> Result<Value> {
     request.signature.payload_digest =
         request.payload_digest().context("digest consent request")?;
     let binding = request
-        .signature_binding_bytes()
+        .unsigned_signature_binding_bytes(&request.signature.unsigned())
         .context("encode MIMI consent proof binding")?;
     let signing_key = match input.signing_seed_b64url.as_deref() {
         Some(seed) => signing_key_from_seed(seed).context("parse MIMI consent signing seed")?,
         None => development_event_signing_key(&input.verification_method),
     };
-    request.signature.jws =
-        arkret_signatures::proof::sign_ed25519_detached_jws(&signing_key, &binding)
-            .map_err(|error| anyhow::anyhow!("sign MIMI consent proof: {error}"))?;
+    let jws = arkret_signatures::proof::sign_ed25519_detached_jws(&signing_key, &binding)
+        .map_err(|error| anyhow::anyhow!("sign MIMI consent proof: {error}"))?;
+    request.signature = request
+        .signature
+        .unsigned()
+        .finalize(jws)
+        .context("finalize MIMI consent signature")?;
     serde_json::to_value(request.signature).context("serialize MIMI consent proof")
 }
 
@@ -1300,12 +1338,12 @@ pub fn mimi_request_consent_proof(input: Value) -> Result<Value> {
         serde_json::from_value(input).context("parse MIMI request-consent proof input")?;
     let created_at = canonical::parse_timestamp_canonical(&input.created_at)
         .with_context(|| format!("parse proof created_at {:?}", input.created_at))?;
-    let mut request: MimiRequestConsentRequestBody = serde_json::from_value(input.request.clone())
-        .context("parse MIMI request-consent body")?;
+    let mut request: MimiRequestConsentRequestBody =
+        serde_json::from_value(input.request.clone()).context("parse MIMI request-consent body")?;
     // The digest is over the body without `proofs`, so the proof being built
     // never enters its own preimage.
     request.proofs = Vec::new();
-    let mut proof = PayloadProof {
+    let proof = arkret_wire::UnsignedPayloadProof {
         kind: proof_kind::DETACHED_JWS.to_owned(),
         verification_method: input.verification_method.clone(),
         payload_digest: request
@@ -1315,10 +1353,9 @@ pub fn mimi_request_consent_proof(input: Value) -> Result<Value> {
         domain: Some(input.domain),
         audience: Some(Audience::Single(input.audience)),
         proof_purpose: None,
-        jws: "pending".to_owned(),
     };
     let binding = request
-        .proof_binding_bytes(&proof)
+        .unsigned_proof_binding_bytes(&proof)
         .context("encode MIMI request-consent proof binding")?;
     let signing_key = match input.signing_seed_b64url.as_deref() {
         Some(seed) => {
@@ -1326,8 +1363,11 @@ pub fn mimi_request_consent_proof(input: Value) -> Result<Value> {
         }
         None => development_event_signing_key(&input.verification_method),
     };
-    proof.jws = arkret_signatures::proof::sign_ed25519_detached_jws(&signing_key, &binding)
+    let jws = arkret_signatures::proof::sign_ed25519_detached_jws(&signing_key, &binding)
         .map_err(|error| anyhow::anyhow!("sign MIMI request-consent proof: {error}"))?;
+    let proof = proof
+        .finalize(jws)
+        .context("finalize MIMI request-consent proof")?;
     serde_json::to_value(proof).context("serialize MIMI request-consent proof")
 }
 
@@ -1397,6 +1437,51 @@ fn development_event_signing_key(verification_method: &str) -> SigningKey {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mimi_consent_authoring_signs_unsigned_binding_and_rejects_tampering() {
+        let body = json!({
+            "requester_actor_id": {"kind":"account", "account_id": {
+                "principal_id":"ak:did_core:web:bob.example", "station_id":"ak:did_core:web:station.example"
+            }},
+            "holder_account_id": {"principal_id":"ak:did_core:web:alice.example", "station_id":"ak:did_core:web:station.example"},
+            "purpose":"direct_message"
+        });
+        let input = json!({
+            "request":body,
+            "verification_method":"did:web:bob.example#device-1",
+            "created_at":"2026-09-07T00:00:00.000Z",
+            "domain":"ak:trust_domain:station.example",
+            "audience":"ak:did_core:web:station.example",
+            "signing_seed_b64url":canonical::base64url_encode(&[27;32])
+        });
+        let proof: PayloadProof =
+            serde_json::from_value(mimi_request_consent_proof(input).unwrap()).unwrap();
+        let mut request: MimiRequestConsentRequestBody = serde_json::from_value(body).unwrap();
+        let bytes = request.proof_binding_bytes(&proof).unwrap();
+        assert_eq!(
+            bytes,
+            request
+                .unsigned_proof_binding_bytes(&proof.unsigned())
+                .unwrap()
+        );
+        let key = SigningKey::from_bytes(&[27; 32]);
+        arkret_signatures::Ed25519DetachedJwsVerifier::new()
+            .verify_detached_jws(
+                &proof.jws,
+                &bytes,
+                &arkret_signatures::PublicKeyMaterial::Ed25519Raw {
+                    bytes: key.verifying_key().to_bytes().to_vec(),
+                },
+            )
+            .unwrap();
+        request.holder_account_id.principal_id =
+            DidCoreId::new("ak:did_core:web:mallory.example").unwrap();
+        assert!(request.proof_binding_bytes(&proof).is_err());
+        let mut malformed = proof;
+        malformed.jws = "pending".to_owned();
+        assert!(malformed.validate_production().is_err());
+    }
 
     fn actor_ids(value: &str) -> (Did, DidCoreId) {
         let did = Did::new(value.to_owned()).unwrap();

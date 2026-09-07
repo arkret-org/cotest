@@ -56,7 +56,7 @@ test.describe("workflow: team onboarding", () => {
       await yukiPage.acceptInvite(realmId);
       await meiPage.grantRealmCapability(
         realmId,
-        yuki.id,
+        yukiFlow.session.accountId,
         "ak.message.create",
       );
       await meiPage.sendTimelineMessage(realmId, welcome);
@@ -157,7 +157,7 @@ test.describe("workflow: team onboarding", () => {
       // bundles (capabilities.md §3.2). Pinning is the registered medium-risk
       // `ak.pin.add` action, so establish Mei's authority explicitly before
       // driving the shared-pin UI.
-      await meiPage.grantRealmCapability(realmId, meiFlow.user.id, "ak.pin.add");
+      await meiPage.grantRealmCapability(realmId, meiFlow.session.accountId, "ak.pin.add");
       await meiPage.sendTimelineMessage(realmId, welcome);
 
       // Mei pins the welcome via the message context menu. The

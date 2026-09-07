@@ -177,18 +177,52 @@
     {
       "name": "view_create_mv_register",
       "event_kind": "ak.view.create",
-      "cell_family": "ak.component.view.create.v1",
+      "cell_family": "ak.component.view.v1",
       "lattice": "mv_register",
       "bottom": "expose",
-      "payload_shape": { "view_id": "ak:view:ASVmv_EqnFQR2CH9hi8puYlg1qolDsgTIxqerMVv-1oN", "kind": "kanban" }
+      "payload_shape": {
+        "object": {
+          "schema": "ak.schema.view.v1",
+          "realm_id": "ak:realm:AQJmSg1s9QyzppFeJL40dN92YVHZeLdBBt3UWHa9XNOD",
+          "kind": "collection",
+          "state": "active",
+          "query": {
+            "object_kinds": [
+              "strand"
+            ]
+          },
+          "created_by": {
+            "kind": "account",
+            "account_id": {
+              "principal_id": "ak:did_core:webvh:z6mkfixture",
+              "station_id": "ak:did_core:webvh:z6mkfixturestationexample"
+            }
+          },
+          "created_at": "2026-06-01T00:00:00.000Z",
+          "collection": {
+            "item_object_kinds": [
+              "strand"
+            ],
+            "item_order_by": [
+              {
+                "field": "rank",
+                "direction": "asc"
+              }
+            ],
+            "grouping": {
+              "mode": "none"
+            }
+          }
+        }
+      }
     },
     {
       "name": "view_update_mv_register",
       "event_kind": "ak.view.update",
-      "cell_family": "ak.component.view.update.v1",
+      "cell_family": "ak.component.view.v1",
       "lattice": "mv_register",
       "bottom": "expose",
-      "payload_shape": { "view_id": "ak:view:ASVmv_EqnFQR2CH9hi8puYlg1qolDsgTIxqerMVv-1oN", "patch": { "title": "Updated" } }
+      "payload_shape": { "view_id": "ak:view:ASVmv_EqnFQR2CH9hi8puYlg1qolDsgTIxqerMVv-1oN", "patch": { "title": { "$op": "set", "value": "Updated" } } }
     },
     {
       "name": "profile_create_mv_register",

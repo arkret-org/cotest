@@ -295,17 +295,17 @@ test.describe("single-server triad collaboration", () => {
       await bobPage.acceptInvite(realmId);
       await alicePage.grantRealmCapability(
         realmId,
-        bob.id,
+        bobFlow.session.accountId,
         "ak.message.create",
       );
       await alicePage.grantRealmCapability(
         realmId,
-        bob.id,
+        bobFlow.session.accountId,
         "ak.message.revise",
       );
       await alicePage.grantRealmCapability(
         realmId,
-        bob.id,
+        bobFlow.session.accountId,
         "ak.message.redact",
       );
       await stepShot(bobPage.page, testInfo, "A-bob-accepted-invite");
@@ -346,7 +346,7 @@ test.describe("single-server triad collaboration", () => {
       await carolPage.acceptInvite(realmId);
       await alicePage.grantRealmCapability(
         realmId,
-        carol.id,
+        carolFlow.session.accountId,
         "ak.message.create",
       );
       await stepShot(carolPage.page, testInfo, "C-carol-accepted-invite");

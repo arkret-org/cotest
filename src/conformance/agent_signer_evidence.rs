@@ -87,7 +87,7 @@ pub const ALL_AGENT_SIGNER_EVIDENCE_CASES: &[&str] = &[
     "controller_gate_request_id_conflict_is_zero_issuance",
     "controller_gate_wrong_source_and_unknown_principal_are_indistinguishable",
     "controller_gate_inactive_status_is_signed_not_forged_by_producer",
-    "agent_genesis_active_requires_accepted_provision_declaration",
+    "agent_genesis_active_witness_binds_admitted_genesis",
     "organization_pcr_cannot_materialize_agent_active",
     "state_witness_uses_canonical_event_dot",
     "bare_event_id_state_tag_rejected",
@@ -187,7 +187,8 @@ pub fn run_agent_signer_evidence_vector_suite() -> Result<()> {
     for case in cases {
         let name = case["name"].as_str().context("case name missing")?;
         let expected = expected_class(case["expected"].as_str().context("expected missing")?)?;
-        let observed = execute_case(name, case)?;
+        let observed = execute_case(name, case)
+            .with_context(|| format!("Agent signer-evidence case {name}"))?;
         if observed != expected {
             bail!("Agent signer-evidence case {name} expected {expected:?}, observed {observed:?}");
         }
@@ -383,22 +384,16 @@ fn execute_case(name: &str, case: &Value) -> Result<OutcomeClass> {
         | "controller_gate_inactive_status_is_signed_not_forged_by_producer" => {
             execute_controller_gate_case(name, case)
         }
-        "agent_genesis_active_requires_accepted_provision_declaration" => {
+        "agent_genesis_active_witness_binds_admitted_genesis" => {
             let fixture = build_evidence(EvidenceConfig::default())?;
-            let admission = admission(&fixture.current);
-            let provenance = &admission
+            let witness = &admission(&fixture.current)
                 .agent_authority_state_evidence
                 .state
-                .agent_lifecycle_witness
-                .provenance;
-            if !matches!(
-                provenance,
-                AgentLifecycleProvenance::DelegatedPcrGenesis {
-                    agent_provision_event_id,
-                    ..
-                } if !agent_provision_event_id.as_str().is_empty()
-            ) {
-                bail!("active Agent genesis lacks provision reference");
+                .agent_lifecycle_witness;
+            if !matches!(&witness.provenance, AgentLifecycleProvenance::DelegatedPcrGenesis { realm_create_event_id }
+                if realm_create_event_id == &witness.accepted_status_event.event_id)
+            {
+                bail!("active Agent witness does not bind its admitted genesis");
             }
             current_outcome(&fixture, None)
         }
@@ -687,7 +682,10 @@ fn current_outcome(
     fixture: &ExecutableEvidence,
     override_value: Option<CurrentOverride>,
 ) -> Result<OutcomeClass> {
-    let verified_state = verified_state(fixture, &fixture.current, &|_| Ok(()))?;
+    let verified_state = match verified_state(fixture, &fixture.current, &|_| Ok(())) {
+        Ok(state) => state,
+        Err(_) => return Ok(OutcomeClass::Rejected),
+    };
     let controller_key = public_key(fixture.controller_public_key);
     let authority_key = public_key(fixture.authority_public_key);
     let account_key = public_key(fixture.account_authority_public_key);
@@ -777,7 +775,10 @@ fn historical_outcome_with(
     deny_key_resolution: bool,
 ) -> Result<OutcomeClass> {
     let state_source = evidence.unwrap_or(&fixture.historical);
-    let verified_state = verified_state(fixture, state_source, &|_| Ok(()))?;
+    let verified_state = match verified_state(fixture, state_source, &|_| Ok(())) {
+        Ok(state) => state,
+        Err(_) => return Ok(OutcomeClass::Rejected),
+    };
     let controller_key = public_key(fixture.controller_public_key);
     let authority_key = public_key(fixture.authority_public_key);
     let account_key = public_key(fixture.account_authority_public_key);
@@ -824,7 +825,49 @@ fn verified_state<'a>(
         &AgentLifecycleWitness,
     ) -> std::result::Result<(), AgentEvidenceRejectedReason>,
 ) -> Result<arkret_signatures::agent_evidence::VerifiedAgentEvidenceState> {
-    let seal_policy = |_seal: &Seal| Ok(());
+    let seal_policy = |seal: &Seal| {
+        let error = AgentEvidenceRejectedReason::SigningKeyMismatch;
+        let NotarySig::Single(signature) = &seal.notary_signature else {
+            return Err(error);
+        };
+        let bytes = seal.canonical_bytes_for_id().map_err(|_| error)?;
+        if signature.verification_method
+            != admission(evidence)
+                .agent_authority_state_evidence
+                .state
+                .signing_key_binding
+                .controller_proof
+                .verification_method
+            || signature.payload_digest.as_str() != arkret_canonical::sha256_digest(&bytes)
+            || seal
+                .validate_id(arkret_canonical::DigestSuite::Sha256)
+                .is_err()
+        {
+            return Err(error);
+        }
+        arkret_signatures::Ed25519DetachedJwsVerifier::new()
+            .verify_detached_jws(
+                &signature.jws,
+                &bytes,
+                &PublicKeyMaterial::Ed25519Raw {
+                    bytes: fixture.controller_public_key.to_vec(),
+                },
+            )
+            .map_err(|_| error)
+    };
+    let signature_policy = |witness: &AgentLifecycleWitness| {
+        arkret_signatures::agent_evidence::verify_agent_lifecycle_event_signature(
+            witness,
+            &|candidate| {
+                (candidate == &fixture.authority_verification_method).then(|| {
+                    PublicKeyMaterial::Ed25519Raw {
+                        bytes: fixture.authority_public_key.to_vec(),
+                    }
+                })
+            },
+        )?;
+        lifecycle_policy(witness)
+    };
     verify_agent_evidence_state(
         admission(evidence),
         &AgentEvidenceStateVerificationContext {
@@ -836,7 +879,7 @@ fn verified_state<'a>(
             authorize_public_key_digest: &fixture.authorize_public_key_digest,
             authorize_signing_key_binding_digest: &fixture.binding_digest,
             verify_seal_signature: &seal_policy,
-            verify_lifecycle_reducer: lifecycle_policy,
+            verify_lifecycle_reducer: &signature_policy,
         },
     )
     .map_err(|reason| anyhow!("state verification rejected: {reason:?}"))
@@ -927,7 +970,133 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         DidUrl::new(format!("{receiver_service_did}#assertion-1")).map_err(anyhow::Error::msg)?;
     let agent_key_id = nes("runtime-1")?;
     let authorize_event_id = event_id(1)?;
-    let realm_id = RealmId::new("ak:realm:AUf0Zz23_ZBqZYNvzHTY6qhhx-2YyO94WTorNCFnnvvN")?;
+    let agent_key = agent_signing.verifying_key().to_bytes();
+    let create_payload = arkret_bootstrap::build_agent_pcr_create_payload(
+        arkret_bootstrap::AgentPcrCreatePayloadInput {
+            agent_id: signer_id.clone(),
+            controller_principal_id: controller_principal_id.clone(),
+            notary: arkret_wire::NotaryValue::single_signer(arkret_wire::NotarySignerDescriptor {
+                actor_id: signer_actor_id.clone(),
+                verification_method: verification_method.clone(),
+                key_kind: arkret_wire::NotaryKeyKind::Ed25519Raw32,
+                jose_algorithm: arkret_wire::NotaryJoseAlgorithm::Ed25519,
+                frozen_public_key_b64u: arkret_canonical::base64url_encode(&agent_key),
+                frozen_public_key_digest: Hash::new(arkret_canonical::sha256_digest(agent_key))?,
+            }),
+            initial_resolution: arkret_models_identity::ResolutionCommitment {
+                did: signer_did.clone(),
+                method_history_head: hash_byte(0x31)?.to_string(),
+                version_id: "1".to_owned(),
+            },
+            genesis_salt: arkret_wire::GenesisSalt::new(arkret_canonical::base64url_encode(
+                &[0x31; 32],
+            ))?,
+            trust_domain: arkret_wire::TrustDomainId::new("ak:trust_domain:agent.example")?,
+            created_at: issued_at,
+        },
+    )?;
+    let mut genesis = arkret_wire::test_support::raw_event_at(
+        EventKind::RealmCreate.as_str(),
+        ScopeRef::RealmGenesis,
+        signer_id.clone(),
+        authority_id.clone(),
+        0,
+        Hlc::new("01970e589d21-0000-a13f9c2e")?,
+        serde_json::to_value(create_payload)?,
+        issued_at,
+    )?;
+    genesis.executed_by = Some(controller_actor_id.clone());
+    genesis.authorization_ref = Some(controller_verification_method.clone().into());
+    let controller_signer = arkret_signatures::Ed25519PayloadSigner::new(
+        controller_signing.clone(),
+        controller_did.clone(),
+        controller_verification_method.clone(),
+    );
+    let sign_lifecycle = |event| -> Result<arkret_wire::Event> {
+        let mut authored = arkret_wire::AuthoredEvent::finalize_with_digest_suite(
+            event,
+            arkret_canonical::DigestSuite::Sha256,
+        )?;
+        arkret_signatures::sign_event(
+            &mut authored,
+            &controller_signer,
+            &controller_verification_method,
+            arkret_signatures::SignEventOptions::new().with_created_at(issued_at),
+        )?;
+        let mut event = authored.into_event();
+        let producer = event.proofs[0].as_producer().context("producer proof")?;
+        let mut admission = arkret_wire::StationAdmissionProof {
+            kind: arkret_wire::StationAdmissionProofKind::StationAdmission,
+            verification_method: authority_verification_method.clone(),
+            event_digest: event.event_id.event_digest(),
+            producer_proof_digest: arkret_wire::StationAdmissionProof::producer_proof_digest(
+                producer,
+            )?,
+            producer_verification_method: producer.verification_method.clone(),
+            producer_signing_key_did: arkret_wire::DidKey::new(format!(
+                "did:key:{}",
+                arkret_canonical::ed25519_pubkey_to_did_key_multibase(
+                    &controller_signing.verifying_key().to_bytes()
+                )
+            ))
+            .map_err(anyhow::Error::msg)?,
+            producer_signer_resolution_evidence_ref: None,
+            signer_resolution_evidence_ref: SignerEvidenceRef::new(format!(
+                "ak:signer_evidence:{}",
+                hash_byte(0x72)?
+            ))?,
+            accepted_at: issued_at,
+            jws: String::new(),
+        };
+        admission.jws =
+            sign_ed25519_detached_jws(&authority_signing, &admission.canonical_binding_bytes()?)?;
+        event
+            .proofs
+            .push(arkret_wire::EventProof::StationAdmission(admission));
+        Ok(event)
+    };
+    let genesis = sign_lifecycle(genesis)?;
+    let realm_id = genesis.realm_id.clone();
+    let (accepted_status_event, lifecycle_provenance) = match config.lifecycle_status {
+        AgentLifecycleStatus::Active => {
+            let provenance = AgentLifecycleProvenance::DelegatedPcrGenesis {
+                realm_create_event_id: genesis.event_id.clone(),
+            };
+            (genesis, provenance)
+        }
+        status => {
+            let (kind, transition) = match status {
+                AgentLifecycleStatus::Paused => (EventKind::SelfAgentPause, "pause"),
+                AgentLifecycleStatus::Deactivated => (EventKind::SelfAgentDeactivate, "deactivate"),
+                AgentLifecycleStatus::Active => unreachable!(),
+            };
+            let mut event = arkret_wire::test_support::raw_event_at(
+                kind.as_str(),
+                ScopeRef::Realm {
+                    realm_id: realm_id.clone(),
+                },
+                signer_id.clone(),
+                authority_id.clone(),
+                1,
+                Hlc::new("01970e589d21-0001-a13f9c2e")?,
+                serde_json::json!({"transition": transition, "previous_status":"active", "status_changed_at":arkret_canonical::format_timestamp_canonical(issued_at)}),
+                issued_at,
+            )?;
+            event.executed_by = Some(controller_actor_id.clone());
+            event.authorization_ref = Some(controller_verification_method.clone().into());
+            event.prev_refs = vec![genesis.event_id.clone()];
+            let event = sign_lifecycle(event)?;
+            let provenance = match status {
+                AgentLifecycleStatus::Paused => AgentLifecycleProvenance::PauseAccepted {
+                    pause_event_id: event.event_id.clone(),
+                },
+                _ => AgentLifecycleProvenance::DeactivateAccepted {
+                    deactivate_event_id: event.event_id.clone(),
+                },
+            };
+            (event, provenance)
+        }
+    };
 
     let binding = build_agent_signing_key_binding(
         signer_id.clone(),
@@ -981,7 +1150,7 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
     // (`event-auth-state-resolution.md` §9.3.1.5), so its §6.2.1 leaf hashes the
     // head set rather than the settled status.
     let lifecycle_heads = vec![arkret_models_identity::AgentLifecycleHead {
-        event_id: event_id(2)?,
+        event_id: accepted_status_event.event_id.clone(),
         value: config.lifecycle_status,
     }];
     let lifecycle_leaf_digest = arkret_state::state::state_root::state_leaf_hash_from_state_object(
@@ -1005,30 +1174,19 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         1,
         issued_at,
         "01970e589d21-0000-a13f9c2e",
-        &authority_verification_method,
+        &binding.controller_proof.verification_method,
     )?;
-    let lifecycle_seal = make_seal(
+    let mut lifecycle_seal = make_seal(
         &realm_id,
         vec![key_seal.id.clone()],
         lifecycle_leaf_digest.clone(),
         2,
         issued_at + Duration::seconds(1),
         "01970e589d21-0001-a13f9c2e",
-        &authority_verification_method,
+        &binding.controller_proof.verification_method,
     )?;
-    let mut accepted_status_event = arkret_wire::test_support::raw_event(
-        EventKind::AgentProvision.as_str(),
-        ScopeRef::Realm {
-            realm_id: realm_id.clone(),
-        },
-        signer_id.clone(),
-        authority_id.clone(),
-        1,
-        Hlc::new("01970e589d21-0002-a13f9c2e")?,
-        serde_json::json!({"agent_id": signer_id}),
-    )?;
-    accepted_status_event.executed_by = Some(controller_actor_id);
-    let provision_event_id = accepted_status_event.event_id.clone();
+    lifecycle_seal.delta = vec![accepted_status_event.event_id.event_digest()];
+    sign_fixture_seal(&mut lifecycle_seal)?;
     let authorization = AgentAuthorizationEvidence {
         status: config.authorization_status,
         authorized_event_id: authorize_event_id.clone(),
@@ -1056,11 +1214,7 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
     let lifecycle_witness = AgentLifecycleWitness {
         component: nes(AGENT_STATUS_COMPONENT)?,
         agent_id: signer_id.clone(),
-        status: config.lifecycle_status,
-        provenance: AgentLifecycleProvenance::DelegatedPcrGenesis {
-            realm_create_event_id: event_id(2)?,
-            agent_provision_event_id: provision_event_id,
-        },
+        provenance: lifecycle_provenance,
         accepted_status_event,
         seal_id: lifecycle_seal.id.clone(),
         state_root: lifecycle_leaf_digest.clone(),
@@ -1281,13 +1435,24 @@ fn make_seal(
         notary_signature: NotarySig::Single(SealSignature {
             verification_method: verification_method.clone(),
             payload_digest: hash_byte(0x63)?,
-            jws: "e30..c2ln".to_owned(),
+            jws: String::new(),
         }),
         sealed_at,
         hlc: Hlc::new(hlc)?,
     };
-    seal.id = seal.derive_id(arkret_canonical::DigestSuite::Sha256)?;
+    sign_fixture_seal(&mut seal)?;
     Ok(seal)
+}
+
+fn sign_fixture_seal(seal: &mut Seal) -> Result<()> {
+    let bytes = seal.canonical_bytes_for_id()?;
+    let NotarySig::Single(signature) = &mut seal.notary_signature else {
+        bail!("fixture requires one signer");
+    };
+    signature.payload_digest = Hash::new(arkret_canonical::sha256_digest(&bytes))?;
+    signature.jws = sign_ed25519_detached_jws(&SigningKey::from_bytes(&[11; 32]), &bytes)?;
+    seal.id = seal.derive_id(arkret_canonical::DigestSuite::Sha256)?;
+    Ok(())
 }
 
 fn sign_outer(evidence: &mut AgentSignerEvidence, signing_key: &SigningKey) -> Result<()> {
@@ -1507,4 +1672,89 @@ fn event_id(suffix: u8) -> Result<EventId> {
 
 fn nes(value: &str) -> Result<NonEmptyString> {
     NonEmptyString::new(value.to_owned()).map_err(anyhow::Error::msg)
+}
+
+#[cfg(test)]
+mod lifecycle_regressions {
+    use super::*;
+
+    #[test]
+    fn lifecycle_witness_has_no_derived_status_field() {
+        let fixture = build_evidence(EvidenceConfig::default()).unwrap();
+        let witness = &admission(&fixture.current)
+            .agent_authority_state_evidence
+            .state
+            .agent_lifecycle_witness;
+        let mut value = serde_json::to_value(witness).unwrap();
+        assert!(value.get("status").is_none());
+        value["status"] = serde_json::json!("active");
+        assert!(serde_json::from_value::<AgentLifecycleWitness>(value).is_err());
+    }
+
+    #[test]
+    fn signed_lifecycle_requires_the_exact_provenance_event_and_controller() {
+        let fixture = build_evidence(EvidenceConfig::default()).unwrap();
+        verified_state(&fixture, &fixture.current, &|_| Ok(())).unwrap();
+        for mutation in 0..6 {
+            let mut evidence = fixture.current.clone();
+            let AgentSignerEvidence::CurrentAdmission {
+                admission_evidence: ref mut admission,
+                ..
+            } = evidence
+            else {
+                unreachable!();
+            };
+            let witness = &mut admission
+                .agent_authority_state_evidence
+                .state
+                .agent_lifecycle_witness;
+            match mutation {
+                0 => {
+                    let AgentLifecycleProvenance::DelegatedPcrGenesis {
+                        realm_create_event_id,
+                        ..
+                    } = &mut witness.provenance
+                    else {
+                        unreachable!();
+                    };
+                    *realm_create_event_id = event_id(99).unwrap();
+                }
+                1 => witness.accepted_status_event.event_id = event_id(98).unwrap(),
+                2 => {
+                    witness.accepted_status_event.executed_by =
+                        Some(fixture.signer_actor_id.clone())
+                }
+                3 => witness.accepted_status_event.created_at += Duration::days(365),
+                4 => {
+                    let arkret_wire::EventProof::StationAdmission(proof) =
+                        &mut witness.accepted_status_event.proofs[1]
+                    else {
+                        unreachable!();
+                    };
+                    proof.producer_signing_key_did = arkret_wire::DidKey::new(format!(
+                        "did:key:{}",
+                        arkret_canonical::ed25519_pubkey_to_did_key_multibase(&[99; 32])
+                    ))
+                    .unwrap();
+                }
+                _ => {
+                    witness.accepted_status_event.proofs.pop();
+                }
+            }
+            // Rebind the enclosing digests, so rejection cannot be attributed
+            // merely to stale outer hashes after the inner witness changed.
+            admission.agent_authority_state_evidence.state_digest =
+                canonical_hash(&admission.agent_authority_state_evidence.state).unwrap();
+            admission.admission_evidence_digest =
+                arkret_signatures::agent_evidence::agent_admission_evidence_digest(
+                    &admission.agent_authority_state_evidence,
+                    &admission.controller_account_gate_attestation,
+                )
+                .unwrap();
+            assert!(
+                verified_state(&fixture, &evidence, &|_| Ok(())).is_err(),
+                "mutation {mutation}"
+            );
+        }
+    }
 }

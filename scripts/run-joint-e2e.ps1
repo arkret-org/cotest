@@ -3694,6 +3694,18 @@ try {
         }
     }
 
+    # Child mocks must inherit the prepared oracle before they start.
+    if (-not $env:COTEST_WIRE_BIN) {
+        $preparedWireBinary = Join-Path $cotestTargetDirectory "debug\cotest-wire.exe"
+        if (Test-Path -LiteralPath $preparedWireBinary) {
+            $env:COTEST_WIRE_BIN = $preparedWireBinary
+        }
+    }
+    if ($StartMockAppletRegistry -and (-not $env:COTEST_WIRE_BIN -or
+        -not (Test-Path -LiteralPath $env:COTEST_WIRE_BIN -PathType Leaf))) {
+        throw "Applet mock requires a prepared cotest-wire binary; run the preparation batch first"
+    }
+
     # Start mock services first so coauth/soland configurations can reference them.
     $mocksRoot = Join-Path $repoRoot "e2e\mocks"
     if ($StartMockIdp) {
@@ -3746,21 +3758,6 @@ try {
         $mockPushGatewayCmd = "$envExpr; node " + (Quote-PsLiteral (Join-Path $mocksRoot "mock-push-gateway.mjs"))
         $managedServices.Add((Start-ManagedCommand -Name "mock-push-gateway" -Command $mockPushGatewayCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
         Wait-HttpReady -Url "$mockPushGatewayBaseUrl/jwks" -TimeoutSeconds 30
-    }
-    if ($StartMockAppletRegistry) {
-        $mockAppletRegistryStateFile = Join-Path $serviceLogDir "mock-applet-registry-state.json"
-        $mockAppletRegistryStateKeyFile = Join-Path ([System.IO.Path]::GetTempPath()) "cotest-mock-applet-registry-$timestamp.key"
-        [System.IO.File]::WriteAllBytes(
-            $mockAppletRegistryStateKeyFile,
-            [System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32)
-        )
-        $envExpr = "`$env:MOCK_APPLET_REGISTRY_PORT='$mockAppletRegistryPort'; `$env:MOCK_APPLET_REGISTRY_STATE_FILE=" + (Quote-PsLiteral $mockAppletRegistryStateFile) + "; `$env:MOCK_APPLET_REGISTRY_STATE_KEY_FILE=" + (Quote-PsLiteral $mockAppletRegistryStateKeyFile)
-        if ($MockAppletRegistryDid) {
-            $envExpr = "$envExpr; `$env:MOCK_APPLET_REGISTRY_DID=" + (Quote-PsLiteral $MockAppletRegistryDid)
-        }
-        $mockAppletRegistryCmd = "$envExpr; node " + (Quote-PsLiteral (Join-Path $mocksRoot "mock-applet-registry.mjs"))
-        $managedServices.Add((Start-ManagedCommand -Name "mock-applet-registry" -Command $mockAppletRegistryCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
-        Wait-HttpReady -Url "$mockAppletRegistryBaseUrl/identity" -TimeoutSeconds 30
     }
     if ($StartMockTspEndpoint) {
         $envExpr = "`$env:MOCK_TSP_ENDPOINT_PORT='$mockTspEndpointPort'"
@@ -4538,16 +4535,6 @@ try {
         }
     }
 
-    # Point the wire helper at the prebuilt binary so no test pays `cargo run`.
-    # Only when it actually exists: falling back to `cargo run` is slow but
-    # correct, whereas exec'ing a missing path fails every canonical assertion.
-    if (-not $env:COTEST_WIRE_BIN) {
-        $preparedWireBinary = Join-Path $cotestTargetDirectory "debug\cotest-wire.exe"
-        if (Test-Path -LiteralPath $preparedWireBinary) {
-            $env:COTEST_WIRE_BIN = $preparedWireBinary
-        }
-    }
-
     # 0530-C: prove the HTTPS identity topology before any business test runs.
     # A failure here is a topology defect, not a product regression, so it must
     # not be allowed to masquerade as 94 misleading testcase failures.
@@ -4607,6 +4594,23 @@ try {
         $env:COTEST_SOLAND_SERVICE_SIGNING_KEY = $SolandNotarySigningKey
     } else {
         Remove-Item Env:COTEST_SOLAND_SERVICE_SIGNING_KEY -ErrorAction SilentlyContinue
+    }
+    # The Applet author must inherit the described Station coordinates and
+    # its configured signing material before starting the mock process.
+    if ($StartMockAppletRegistry) {
+        $mockAppletRegistryStateFile = Join-Path $serviceLogDir "mock-applet-registry-state.json"
+        $mockAppletRegistryStateKeyFile = Join-Path ([System.IO.Path]::GetTempPath()) "cotest-mock-applet-registry-$timestamp.key"
+        [System.IO.File]::WriteAllBytes(
+            $mockAppletRegistryStateKeyFile,
+            [System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32)
+        )
+        $envExpr = "`$env:MOCK_APPLET_REGISTRY_PORT='$mockAppletRegistryPort'; `$env:MOCK_APPLET_REGISTRY_STATE_FILE=" + (Quote-PsLiteral $mockAppletRegistryStateFile) + "; `$env:MOCK_APPLET_REGISTRY_STATE_KEY_FILE=" + (Quote-PsLiteral $mockAppletRegistryStateKeyFile)
+        if ($MockAppletRegistryDid) {
+            $envExpr = "$envExpr; `$env:MOCK_APPLET_REGISTRY_DID=" + (Quote-PsLiteral $MockAppletRegistryDid)
+        }
+        $mockAppletRegistryCmd = "$envExpr; node " + (Quote-PsLiteral (Join-Path $mocksRoot "mock-applet-registry.mjs"))
+        $managedServices.Add((Start-ManagedCommand -Name "mock-applet-registry" -Command $mockAppletRegistryCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
+        Wait-HttpReady -Url "$mockAppletRegistryBaseUrl/identity" -TimeoutSeconds 30
     }
     if ($InksonBaseUrl) {
         $env:COTEST_INKSON_BASE_URL = $InksonBaseUrl

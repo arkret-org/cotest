@@ -55,7 +55,7 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
     });
     await page.grantRealmCapability(
       realmId,
-      session.accountId.principal_id,
+      session.accountId,
       "ak.rsvp.set",
     );
     await page.page.goto(`/kanban/${realmId}`, {

@@ -500,7 +500,7 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
       // Give Bob exactly the post-join action exercised below.
       await alicePage.grantRealmCapability(
         realmId,
-        bob.id,
+        bobFlow.session.accountId,
         "ak.message.create",
       );
 

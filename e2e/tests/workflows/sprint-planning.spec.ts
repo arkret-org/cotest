@@ -87,12 +87,12 @@ test.describe("workflow: sprint planning", () => {
       ]);
       await meiPage.grantRealmCapability(
         realmId,
-        bob.id,
+        bobFlow.session.accountId,
         "ak.message.create",
       );
       await meiPage.grantRealmCapability(
         realmId,
-        carol.id,
+        carolFlow.session.accountId,
         "ak.message.create",
       );
       await Promise.all([

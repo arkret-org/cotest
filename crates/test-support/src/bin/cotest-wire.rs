@@ -14,6 +14,7 @@ fn main() -> Result<()> {
     let output = match command.as_str() {
         "canonical-json" => wire::canonical_json(input)?,
         "sha256-canonical-json" => wire::sha256_canonical_json(input)?,
+        "did-document-digest" => wire::did_document_digest(input)?,
         "event-envelope-proof" => wire::event_proof(input, EventDigestMode::RawCanonicalJson)?,
         "event-derived-id" => wire::event_derived_id(input)?,
         "event-envelope-parse" => wire::event_envelope_parse(input)?,
@@ -31,7 +32,7 @@ fn main() -> Result<()> {
         "identity-creation-register-request" => wire::identity_creation_register_request(input)?,
         "principal-bootstrap-seal" => wire::principal_bootstrap_seal(input)?,
         "principal-successor-seal" => wire::principal_successor_seal(input)?,
-        "install-managed-actor-author" => wire::install_managed_actor_author(input)?,
+        "managed-actor-author" => wire::managed_actor_author(input)?,
         _ => bail!("unknown cotest-wire command {command:?}"),
     };
 

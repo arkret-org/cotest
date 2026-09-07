@@ -574,15 +574,15 @@ test.describe("chat advanced", () => {
       });
       await bobPage.acceptInvite(realmId);
       await carolPage.acceptInvite(realmId);
-      for (const member of [bob.id, carol.id]) {
+      for (const member of [bobFlow, carolFlow]) {
         await alicePage.grantRealmCapability(
           realmId,
-          member,
+          member.session.accountId,
           "ak.message.create",
         );
         await alicePage.grantRealmCapability(
           realmId,
-          member,
+          member.session.accountId,
           "ak.reaction.add",
         );
       }
@@ -703,7 +703,7 @@ test.describe("chat advanced", () => {
       });
       await alicePage.grantRealmCapability(
         realmId,
-        alice.id,
+        aliceFlow.session.accountId,
         "ak.message.create",
       );
       await Promise.all([
