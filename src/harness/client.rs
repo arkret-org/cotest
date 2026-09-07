@@ -418,7 +418,7 @@ impl TestActorClient {
                     .governance_health
                     .pending_proposals
                     .iter()
-                    .any(|pending| pending.proposal_digest.as_str() == proposal_digest);
+                    .any(|pending| pending.control_proposal_ack.proposal_digest.as_str() == proposal_digest);
                 let leaf = frontier.sole_leaf()?.clone();
                 if !pending && leaf.as_str() != previous_seal_id {
                     return Ok(leaf.to_string());

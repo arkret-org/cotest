@@ -1748,53 +1748,7 @@ export type RealmSealFrontierView = {
         [key: string]: unknown;
       };
     }>;
-    "retained_faults": Array<{
-      "control_proposal_ack": {
-        "kind": "signed_ack";
-        "realm_id": string;
-        "proposal_digest": string;
-        "received_at": string;
-        "decision_due_at": string;
-        "absolute_due_at": string;
-        "defer_count": 0;
-        "authority_set_ref": string;
-        "authority_acks": Array<{
-          "realm_id": string;
-          "proposal_digest": string;
-          "received_at": string;
-          "decision_due_at": string;
-          "absolute_due_at": string;
-          "authority_set_ref": string;
-          "signature": {
-            "verification_method": string;
-            "payload_digest": string;
-            "created_at": string;
-            "jws": string;
-          };
-        }>;
-      };
-      "decisions": Array<{
-        "kind": "signed_defer";
-        "realm_id": string;
-        "proposal_digest": string;
-        "proposal_ack_digest": string;
-        "decided_at": string;
-        "decision_due_at": string;
-        "absolute_due_at": string;
-        "defer_count": number;
-        "reason_code": string;
-        "authority_set_ref": string;
-        "proofs": Array<{
-          "verification_method": string;
-          "payload_digest": string;
-          "created_at": string;
-          "jws": string;
-        }>;
-      }>;
-      "accepted_seal_id": string;
-      "accepted_at": string;
-      "fault_reason": "control_proposal_decision_overdue";
-    }>;
+    "pending_proposals_complete": boolean;
   };
   "observation_coordinate": {
     "service_id": string;

@@ -18,6 +18,7 @@
 // Phase A / F now run live as negative probes: they submit a removed event
 // kind and scan server-managed responses for forbidden model terms.
 
+import { forbiddenWireScanner, type WireViolation } from "../../helpers/forbidden-wire";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -197,123 +198,6 @@ function forbiddenTermMatcher(term: string): RegExp {
   const leading = /^\w/.test(term) ? "\\b" : "";
   const trailing = /\w$/.test(term) ? "\\b" : "";
   return new RegExp(`${leading}${escaped}${trailing}`);
-}
-
-// ---------------------------------------------------------------------------
-// forbidden-wire-fields classifier + scanner (Phase G)
-// ---------------------------------------------------------------------------
-//
-// forbidden-wire-fields.json is heterogeneous: most entries are bare wire
-// field NAMES (`branch`, `title`, `sender`), but the `id` also encodes nested
-// key paths (`metadata.fields.stage`), patch op paths (`patch:stage`), enum
-// `key=value` forms (`kind=room`, `actor_kind=ghost`), typed-id value prefixes
-// (`ak:rtcpart:`), and removed event-kind / schema-id VALUES
-// (`ak.device.authorized`, `ak.schema.read_marker.v1`). The scanner classifies
-// each hard_reject entry and applies the matching probe against a real wire
-// document (submitted Event Envelope + soland's receipt + queried events).
-
-type WireFieldRule =
-  | { kind: "field_name"; id: string; name: string }
-  | { kind: "key_path"; id: string; segments: string[] }
-  | { kind: "patch_path"; id: string; path: string }
-  | { kind: "enum_pair"; id: string; key: string; value: string }
-  | { kind: "id_prefix"; id: string; prefix: string }
-  | { kind: "value"; id: string; value: string };
-
-function classifyWireField(entry: DriftEntry): WireFieldRule {
-  const id = entry.id;
-  const context = entry.context ?? "";
-  if (context === "typed_id_prefix" || /^ak:[a-z_0-9]+:$/.test(id)) {
-    return { kind: "id_prefix", id, prefix: id };
-  }
-  if (id.startsWith("patch:")) {
-    return { kind: "patch_path", id, path: id.slice("patch:".length) };
-  }
-  if (id.includes("=")) {
-    const [key, value] = id.split("=", 2);
-    return { kind: "enum_pair", id, key, value };
-  }
-  // Removed event-kind / schema-id entries forbid a VALUE, not a key name.
-  if (
-    context === "event_kind" ||
-    context === "event_kind_or_capability_action" ||
-    context === "schema_id" ||
-    context === "error_code"
-  ) {
-    return { kind: "value", id, value: id };
-  }
-  // Dotted ids are nested key paths (`metadata.fields.stage`,
-  // `notification.space_name`, `bound_to.actor`).
-  if (id.includes(".")) {
-    return { kind: "key_path", id, segments: id.split(".") };
-  }
-  return { kind: "field_name", id, name: id };
-}
-
-// True when `path` (a key/index trail) ends with `segments` as a contiguous run
-// of object keys (array indices in between are tolerated).
-function pathEndsWithKeySegments(path: string[], segments: string[]): boolean {
-  let s = segments.length - 1;
-  for (let p = path.length - 1; p >= 0 && s >= 0; p -= 1) {
-    if (/^\d+$/.test(path[p])) {
-      continue; // skip array indices
-    }
-    if (path[p] !== segments[s]) {
-      return false;
-    }
-    s -= 1;
-  }
-  return s < 0;
-}
-
-type WireViolation = { id: string; rule: string; path: string; detail: string };
-
-function scanForbiddenWireFields(
-  document: unknown,
-  rules: WireFieldRule[],
-): WireViolation[] {
-  const violations: WireViolation[] = [];
-  for (const node of walkTree(document)) {
-    for (const rule of rules) {
-      switch (rule.kind) {
-        case "field_name":
-          if (node.key === rule.name) {
-            violations.push({ id: rule.id, rule: rule.kind, path: node.path.join("."), detail: rule.name });
-          }
-          break;
-        case "key_path":
-          if (
-            node.key === rule.segments[rule.segments.length - 1] &&
-            pathEndsWithKeySegments(node.path, rule.segments)
-          ) {
-            violations.push({ id: rule.id, rule: rule.kind, path: node.path.join("."), detail: rule.segments.join(".") });
-          }
-          break;
-        case "enum_pair":
-          if (node.key === rule.key && node.value === rule.value) {
-            violations.push({ id: rule.id, rule: rule.kind, path: node.path.join("."), detail: `${rule.key}=${rule.value}` });
-          }
-          break;
-        case "id_prefix":
-          if (typeof node.value === "string" && node.value.startsWith(rule.prefix)) {
-            violations.push({ id: rule.id, rule: rule.kind, path: node.path.join("."), detail: node.value });
-          }
-          break;
-        case "value":
-          if (typeof node.value === "string" && node.value === rule.value) {
-            violations.push({ id: rule.id, rule: rule.kind, path: node.path.join("."), detail: rule.value });
-          }
-          break;
-        case "patch_path":
-          // A patch op object carrying the forbidden `path`.
-          if (node.key === "path" && node.value === rule.path) {
-            violations.push({ id: rule.id, rule: rule.kind, path: node.path.join("."), detail: `patch path ${rule.path}` });
-          }
-          break;
-      }
-    }
-  }
-  return violations;
 }
 
 function* stringLeaves(node: unknown, path: string[] = []): Generator<{ path: string[]; value: string }> {
@@ -538,21 +422,7 @@ test.describe("conformance registry drift @fully-implemented", () => {
   test("Phase G — submitted Event Envelopes carry no forbidden wire field", async ({
     request,
   }, testInfo) => {
-    // spec: forbidden-wire-fields.json (source_of_truth). Walk a REAL submitted
-    // Event Envelope (+ soland's receipt) and flag any hard_reject forbidden
-    // wire field / typed-id prefix / removed kind / forbidden patch path.
-    //
-    // The probe payload classes are chosen so that NONE of the context-scoped
-    // bare field names (`title`, `summary`, `sender`, `events`, …) are
-    // legitimate here — a message-create / read-cursor envelope never carries
-    // them — which lets the field-name rules run without the false positives a
-    // Realm/Space projection (legitimately carrying `title` / `name` / `id`)
-    // would trigger. The always-illegal rule kinds (typed-id prefixes, removed
-    // event-kind / schema-id / error-code VALUES) are context-independent.
-    const rules = forbiddenWireFields.entries
-      .filter((entry) => entry.rejection_level === "hard_reject")
-      .map(classifyWireField);
-    expect(rules.length).toBeGreaterThan(0);
+    const scanner = forbiddenWireScanner(artifactsRoot);
 
     const alice = uniqueUser("forbidden-wire-fields");
     await ensureRegistered(request, alice);
@@ -594,13 +464,16 @@ test.describe("conformance registry drift @fully-implemented", () => {
 
     const violations: WireViolation[] = [];
     for (const { name, document } of documents) {
-      for (const violation of scanForbiddenWireFields(document, rules)) {
+      const found = name.endsWith(".envelope")
+        ? scanner.scanEvent(document as Record<string, unknown>)
+        : scanner.scan(document, "http_response", "service-operation-dtos.schema.json#/$defs/EventsSubmitOutcome");
+      for (const violation of found) {
         violations.push({ ...violation, path: `${name}:${violation.path}` });
       }
     }
     await testInfo.attach("forbidden-wire-field-scan", {
       body: JSON.stringify(
-        { rule_count: rules.length, documents: documents.map((d) => d.name), violations },
+        { rule_count: scanner.ruleCount, documents: documents.map((d) => d.name), violations },
         null,
         2,
       ),
