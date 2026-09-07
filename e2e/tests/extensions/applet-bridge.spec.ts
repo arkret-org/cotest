@@ -295,7 +295,7 @@ test.describe("applet bridge", () => {
         package_id: `package:bridge:demo-${stamp}`,
         namespace: `bridge.demo.${stamp}`,
         display_name: "Demo Bridge Applet",
-        capabilities: ["ak.message.create", "ak.member.state", "ak.applet.ghost.provision"],
+        capabilities: ["ak.message.create", "ak.applet.ghost.provision"],
       });
       expect(signed.applet_package.claimed_profiles).toEqual([
         "ak.profile.applet_bridge.v1",
@@ -393,7 +393,7 @@ test.describe("applet bridge", () => {
         ...uniqueUser(`applet-service-${stamp}`),
         id: signed.applet_package.service_id,
       });
-      const botMembershipEvent = signedEventEnvelope({
+      const botSelfJoinAttempt = signedEventEnvelope({
         actorId: registration.bot_actor_id,
         realmId,
         kind: "ak.member.state",
@@ -401,9 +401,8 @@ test.describe("applet bridge", () => {
         // supplies the real accepted Seal frontier; no synthetic basis is used.
         sealBasis: await readRealmSealBasis(request, aliceToken, realmId),
         appletId: registration.applet_id,
-        // A registration proves installation; action authorization comes from
-        // the exact active grant covering this membership write (section 8).
-        authorizationRef: capabilityGrantRefForAction(registration, "ak.member.state"),
+        // Installation alone cannot authorize a Bot-authored membership write.
+        authorizationRef: registration.registration_event_ref,
         proofVerificationMethod: botVerificationMethod,
         payload: {
           realm_id: realmId,
@@ -411,8 +410,26 @@ test.describe("applet bridge", () => {
           membership: "join",
         },
       });
-      await submitSignedEventApi(request, botToken, botMembershipEvent, {
-        context: "post-install Applet Bot ordinary self-join admission",
+      const selfJoinLease = await issueAuthorizationLeasesApi(request, botToken, [botSelfJoinAttempt]);
+      expect(selfJoinLease.status()).toBe(403);
+      expect(wireErrCode(await selfJoinLease.json())).toBe("policy_violation");
+
+      // Membership management maps to ak.realm.admin in the capability
+      // registry. The human administrator signs the canonical member Event.
+      const botMembershipEvent = signedEventEnvelope({
+        actorId: alice.id,
+        realmId,
+        kind: "ak.member.state",
+        sealBasis: await readRealmSealBasis(request, aliceToken, realmId),
+        authorizationRef: "ak:cell:ak.component.realm.authority_root.v1:null",
+        payload: {
+          realm_id: realmId,
+          member_id: registration.bot_actor_id,
+          membership: "join",
+        },
+      });
+      await submitSignedEventApi(request, aliceToken, botMembershipEvent, {
+        context: "administrator admits the installed Applet Bot",
       });
       const federatedMembershipReplay = await rawPushFederationEvents(
         request,
@@ -429,7 +446,7 @@ test.describe("applet bridge", () => {
           accepted?: string[];
           duplicate?: string[];
         };
-      expect(federatedMembershipReplay.status()).toBe(200);
+      expect(federatedMembershipReplay.status(), JSON.stringify(federatedMembershipOutcome)).toBe(200);
       expect([
         ...(federatedMembershipOutcome.accepted ?? []),
         ...(federatedMembershipOutcome.duplicate ?? []),
@@ -445,13 +462,11 @@ test.describe("applet bridge", () => {
         ).some(
           (event) =>
             event.kind === "ak.member.state" &&
-            canonicalJson(event.actor_id) === canonicalJson(registration.bot_actor_id) &&
-            event.applet_id === registration.applet_id &&
+            event.event_id === botMembershipEvent.event_id &&
+            canonicalJson(event.actor_id) === canonicalJson(botMembershipEvent.actor_id) &&
             canonicalJson((event.payload as Record<string, unknown>)?.member_id) ===
               canonicalJson(registration.bot_actor_id) &&
-            (event.payload as Record<string, unknown>)?.membership === "join" &&
-            (event.proofs as Array<Record<string, unknown>>)?.[0]
-              ?.verification_method === botVerificationMethod,
+            (event.payload as Record<string, unknown>)?.membership === "join",
         ),
       ).toBe(true);
 
@@ -463,7 +478,7 @@ test.describe("applet bridge", () => {
       }
       const ghostBuilt = buildWebvhGenesisEntry({
         baseUrl: solandBaseUrl(),
-        localId: `ghost-${signed.ghost_namespace_token}/${externalUser.id.toLowerCase()}`,
+        localId: `ghost-${signed.ghost_namespace_token}:${externalUser.id.toLowerCase()}`,
         rootKey: generateWebvhKey(),
         nextRootKey: generateWebvhKey(),
         versionTime: canonicalTimestamp(),

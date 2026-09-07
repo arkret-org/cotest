@@ -2045,7 +2045,8 @@ export async function submitSignedEventApi(
     const text = await response.text();
     if ([200, 201].includes(response.status())) {
       const outcome = JSON.parse(text) as Record<string, unknown>;
-      rememberPublicationEvidence([envelope], [authorizationLease], outcome);
+      rememberPublicationEvidence([envelope], [authorizationLease], outcome,
+        { token: opts.controlObserverToken ?? token, server: opts.server }, [controlControlProposalAck]);
       if (realmId && previousControlRoot) {
         // A successful leave may immediately remove the author from the
         // Realm's read surface. Observe the resulting Control frontier with
@@ -2341,7 +2342,8 @@ export async function submitSignedEventBatchApi(
     const text = await response.text();
     if ([200, 201].includes(response.status())) {
       const outcome = JSON.parse(text) as Record<string, unknown>;
-      rememberPublicationEvidence(events, authorizationLeases, outcome);
+      rememberPublicationEvidence(events, authorizationLeases, outcome,
+        { token, server: opts.server }, submissions.map((submission) => submission.control_proposal_ack));
       if (realmId && previousControlRoot) {
         await waitForRealmControlIdleApi(request, token, realmId, {
           server: opts.server,
@@ -2630,11 +2632,14 @@ function parseJsonOrRaw(text: string): unknown {
 type PublicationEvidence = EventFederationSubmission;
 
 const publicationEvidenceByEventId = new Map<string, PublicationEvidence>();
+const publicationSourceByEventId = new Map<string, { token: string; server?: SolandKey }>();
 
 function rememberPublicationEvidence(
   events: Array<Record<string, unknown>>,
   leases: Array<Record<string, unknown>>,
   outcome: Record<string, unknown>,
+  source: { token: string; server?: SolandKey },
+  controlProposalAcks: unknown[],
 ): void {
   const receipts = Array.isArray(outcome.ingress_receipts)
     ? (outcome.ingress_receipts as Array<Record<string, unknown>>)
@@ -2669,7 +2674,11 @@ function rememberPublicationEvidence(
       ingress_receipts: [
         receipts[index],
       ] as PublicationEvidence["ingress_receipts"],
+      ...(controlProposalAcks[index] ? {
+        control_proposal_ack: controlProposalAcks[index] as PublicationEvidence["control_proposal_ack"],
+      } : {}),
     });
+    publicationSourceByEventId.set(eventId, source);
   });
 }
 
@@ -3589,7 +3598,7 @@ export async function rawPushFederationEvents(
   const url = `${solandBaseUrl(opts.server)}/_arkret/peer/events`;
   const body = peerEventsSubmitBody(
     opts.realmId,
-    events.map(federationEventWireBody),
+    await federationEventWireBodies(request, events),
     {
       serviceBindingFrontier: opts.serviceBindingFrontier,
     },
@@ -3837,19 +3846,44 @@ export async function rawSubmitPeerInviteDeliveryApi(
   });
 }
 
-function federationEventWireBody(
-  event: Record<string, unknown>,
-): Record<string, unknown> {
-  const eventId = stringValue(event.event_id);
-  const evidence = eventId
-    ? publicationEvidenceByEventId.get(eventId)
-    : undefined;
-  if (!evidence) {
-    throw new Error(
-      `federation requires stored authorization lease and ingress receipt for Event ${eventId ?? "<missing event_id>"}`,
-    );
+async function federationEventWireBodies(
+  request: APIRequestContext,
+  events: Array<Record<string, unknown>>,
+): Promise<PublicationEvidence[]> {
+  const groups = new Map<string, { token: string; server?: SolandKey; eventIds: string[] }>();
+  const entries = events.map((event) => {
+    const eventId = stringValue(event.event_id);
+    const evidence = eventId ? publicationEvidenceByEventId.get(eventId) : undefined;
+    const source = eventId ? publicationSourceByEventId.get(eventId) : undefined;
+    if (!eventId || !evidence || !source) {
+      throw new Error(`federation requires an accepted source Event and publication evidence: ${eventId ?? "<missing event_id>"}`);
+    }
+    const key = `${solandBaseUrl(source.server)}\0${source.token}`;
+    const group = groups.get(key) ?? { ...source, eventIds: [] };
+    group.eventIds.push(eventId);
+    groups.set(key, group);
+    return { eventId, evidence };
+  });
+  const accepted = new Map<string, PublicationEvidence["event"]>();
+  for (const group of groups.values()) {
+    // The source Station owns its admission proof. Read its accepted Event;
+    // never forward the producer-only draft or synthesize a Station signature.
+    const url = `${solandBaseUrl(group.server)}/_arkret/self/events/resolve`;
+    const response = await request.fetch(url, {
+      method: "QUERY",
+      headers: { ...authHeaders(group.token, "QUERY", url), "content-type": "application/json" },
+      data: canonicalJson({ event_ids: [...new Set(group.eventIds)], include_payload: true }),
+    });
+    const body = await expectJsonOk<Record<string, unknown>>(response, "resolve accepted source Events for federation");
+    for (const event of (body.events ?? []) as PublicationEvidence["event"][]) {
+      accepted.set(event.event_id, event);
+    }
   }
-  return stripUndefined(evidence) as Record<string, unknown>;
+  return entries.map(({ eventId, evidence }) => {
+    const event = accepted.get(eventId);
+    if (!event) throw new Error(`source Station did not return the accepted Event ${eventId}`);
+    return { ...evidence, event };
+  });
 }
 
 export async function queryPeerEventsApi(
@@ -4061,12 +4095,10 @@ const E2E_FIXTURES_ROOT = resolve(
 );
 
 // federation.md §4.1: membership_frontier is the sender's causal frontier
-// (`id[]`). The harness acts as the origin peer of a
-// fabricated realm whose entire causal history is the submitted batch, so the
-// frontier is the batch's head event ids (events no other batch event
-// references via prev_refs).
+// (`id[]`). For a batch-local frontier, use the accepted nested Events rather
+// than their federation transport wrappers. A wider frontier is caller-supplied.
 function batchFrontierEventIds(
-  events: Array<Record<string, unknown>>,
+  events: Array<PublicationEvidence["event"]>,
 ): string[] {
   const referenced = new Set<string>();
   for (const event of events) {
@@ -4074,11 +4106,6 @@ function batchFrontierEventIds(
     for (const entry of prevRefs) {
       if (typeof entry === "string") {
         referenced.add(entry);
-      } else if (entry && typeof entry === "object") {
-        const id = (entry as Record<string, unknown>).event_id;
-        if (typeof id === "string") {
-          referenced.add(id);
-        }
       }
     }
   }
@@ -4094,7 +4121,7 @@ function batchFrontierEventIds(
 
 function peerEventsSubmitBody(
   realmId: string,
-  events: Array<Record<string, unknown>>,
+  events: PublicationEvidence[],
   overrides: {
     serviceBindingFrontier?: string[];
   } = {},
@@ -4103,7 +4130,7 @@ function peerEventsSubmitBody(
     overrides.serviceBindingFrontier &&
     overrides.serviceBindingFrontier.length > 0
       ? overrides.serviceBindingFrontier
-      : batchFrontierEventIds(events);
+      : batchFrontierEventIds(events.map((submission) => submission.event));
   return stripUndefined({
     service_binding_ref: {
       realm_id: realmId,
