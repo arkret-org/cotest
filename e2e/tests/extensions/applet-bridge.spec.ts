@@ -343,6 +343,13 @@ test.describe("applet bridge", () => {
         realmId,
         kind: "ak.member.state",
         appletId: signed.applet_package.applet_id,
+        // `applet_id` requires `authorization_ref` on the wire
+        // (event-envelope.schema.json allOf), so the Event cannot be authored
+        // without one at all. Nothing has been installed yet, so this names a
+        // grant that resolves to no active registration — which is exactly
+        // what applet-integration.md §4 answers with
+        // `applet_registration_unauthorized`, the code this case asserts.
+        authorizationRef: typedId("grant"),
         proofVerificationMethod: botVerificationMethod,
         payload: {
           realm_id: realmId,
@@ -388,6 +395,12 @@ test.describe("applet bridge", () => {
         realmId,
         kind: "ak.member.state",
         appletId: registration.applet_id,
+        // The accepted `ak.applet.registration` Event is what produced this
+        // Bot's effective authorization to be in the Realm (§4: the install is
+        // gated on the admin's `ak.realm.admin` grant), and
+        // event-envelope.schema.json admits an Event id here when it points at
+        // exactly that accepted authorizing Event.
+        authorizationRef: registration.registration_event_ref,
         proofVerificationMethod: botVerificationMethod,
         payload: {
           realm_id: realmId,

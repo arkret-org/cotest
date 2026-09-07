@@ -217,12 +217,12 @@ async function createBoardWithCard(
       object: {
         schema: "ak.schema.strand.v1",
         realm_id: realmId,
+        // `metadata.fields.status` is hard_reject forbidden wire
+        // (registry/forbidden-wire-fields.json, context strand_payload); the
+        // registered replacement is the top-level `stage` below.
         metadata: {
           title: opts.cardTitle,
-          fields: {
-            status: "todo",
-            ...(opts.dueDate ? { due_date: opts.dueDate } : {}),
-          },
+          ...(opts.dueDate ? { fields: { due_date: opts.dueDate } } : {}),
         },
         stage: "planned",
         tracks: { discussion: { enabled: true, is_primary: true } },
