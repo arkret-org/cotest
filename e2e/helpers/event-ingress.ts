@@ -7,9 +7,8 @@
 // up to the moment the wire shape moved, and then reported "no request" for a
 // submission the server had actually accepted.
 //
-// So the canonical shape is the only one accepted by default. A caller that is
-// deliberately straddling a migration passes `allowBareEvents`, and anything
-// else raises here — once, in one place — instead of turning into a silently
+// The canonical shape is the only accepted shape. Anything else raises here
+// — once, in one place — instead of turning into a silently
 // empty result set in whichever scenario happened to look first.
 
 export type IngressEvent = Record<string, unknown> & {
@@ -30,9 +29,6 @@ export type IngressSubmission = {
 };
 
 export type IngressDecodeOptions = {
-  /// Accept a bare Event where the canonical wrapper is expected. Only for a
-  /// listener that must span a wire migration; it is never the default.
-  allowBareEvents?: boolean;
   /// Prefix for the thrown message, so a failure names the listener.
   context?: string;
 };
@@ -52,9 +48,6 @@ function decodeSubmission(
   }
   if (isRecord(candidate.event)) {
     return candidate as IngressSubmission;
-  }
-  if (options.allowBareEvents && typeof candidate.kind === "string") {
-    return { event: candidate as IngressEvent };
   }
   throw new Error(
     `${where} is not an EventInitialSubmission: expected a nested "event", ` +

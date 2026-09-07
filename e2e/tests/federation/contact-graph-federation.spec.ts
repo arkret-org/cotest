@@ -31,6 +31,7 @@ import {
   createRealmApi,
   readRealmSealBasis,
   accountActorId,
+  canonicalJson,
 } from "../../helpers/soland-api";
 import {
   ensureRegistered,
@@ -333,7 +334,7 @@ test.describe("contact graph federation (server1/server2)", () => {
       await alicePage.page.getByTestId("realm-sidebar-tab-direct").click();
       await alicePage.page
         .locator(
-          `[data-testid="direct-conversation-row"][data-peer="${bob.id}"]`,
+          `[data-testid="direct-conversation-row"][data-peer=${JSON.stringify(canonicalJson(accountActorId(bob.id, "server2")))}]`,
         )
         .click();
       await expect(alicePage.page).toHaveURL(/\/direct\/ak:realm:.*\/ak:strand:/, {
@@ -363,7 +364,7 @@ test.describe("contact graph federation (server1/server2)", () => {
       await bobPage.page.getByTestId("realm-sidebar-tab-direct").click();
       await bobPage.page
         .locator(
-          `[data-testid="direct-conversation-row"][data-peer="${alice.id}"]`,
+          `[data-testid="direct-conversation-row"][data-peer=${JSON.stringify(canonicalJson(accountActorId(alice.id, "server1")))}]`,
         )
         .click();
       await expect

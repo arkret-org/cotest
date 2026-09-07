@@ -327,6 +327,7 @@
         "session_injection"
       ],
       "protocol_object_producers": [
+        "cotest_wire_oracle",
         "inkson_product_client",
         "raw_http_fixture"
       ],
@@ -931,6 +932,24 @@
       "claims_excluded": [
         "ui_driven_business_flow_for_raw_http_steps"
       ]
+    },
+    {
+      "scenario_key": "joint/direct-conversation-live",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "fixture_or_not_applicable"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle"
+      ],
+      "declared_test_bypasses": [],
+      "claims_excluded": []
     },
     {
       "scenario_key": "joint/joint-inkson-smoke",
