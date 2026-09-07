@@ -926,6 +926,11 @@ pub async fn run_current_signer_evidence_live() -> Result<()> {
     ensure!(outcome.response.issuer_id == *group.server(0).service_id());
     ensure!(outcome.response.verifier_id == *group.server(1).service_id());
     let CurrentSignerEvidenceItem::AccountDevice {
+        // This scenario asserts on the resolved account/device and the
+        // attestation only. The ref is named rather than swallowed by `..` so
+        // that a future variant field fails the build here instead of being
+        // silently dropped; asserting on it is left to whoever added it.
+        signer_evidence_ref: _,
         account_id,
         device_id,
         device_projection_attestation,
