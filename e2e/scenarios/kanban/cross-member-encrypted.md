@@ -18,6 +18,7 @@
 - `models/realm-and-space.md` §2.2 —— Realm `encryption_profile`
 - `models/realm-and-space.md` §3.7.2 —— E2EE Realm
 - `models/strand-and-message.md` §2-§3 —— Strand 私有 `body` 内容路径
+- `sync/invite-addressing.md` §2 / §5 / §7 —— holder 主动交付的 locator 与默认私有投递策略
 
 ## 拓扑
 
@@ -40,16 +41,16 @@
 **顺序关键:内容必须在 bob 加入后创建。** 否则加入前内容对 bob 既被 history_access=since_join 裁剪、又因 MLS 前向保密(bob 无该 epoch 密钥)解不开——皆为正确行为,不是本场景要验的协作路径。
 
 1. alice 建**空** `encryption_profile=mls_rfc9420` 的 Realm。
-2. alice 邀请 bob;断言邀请状态含 `MLS Welcome queued`(KeyPackage 被 claim)。
-3. bob accept **加入**(此后内容才是 bob 可合法见+可解密的加入后内容)。
-4. alice **加入后**建 board + list + card(title 明文)+ 给 card 加**加密 description**(私有 `body`);断言 `ak.strand.update` 被接受且 description **不以明文出现在 wire**。
-5. **跨成员投递闸门**:以 bob 身份查 `/_arkret/self/events?realms=` 必含 board space id(隔离 soland 投递 vs inkson 投影)。
+2. bob 先授权 invite consent 并通过标准接口签发 locator；alice 使用该 locator 在界面中邀请 bob。此时 Bob 尚未开启浏览器／发布 KeyPackage，邀请事实必须持久化，状态不得伪称 `MLS Welcome queued`。裸地址在缺省策略下进入 quarantine，不能用放宽默认策略替代引介证据。
+3. bob 开启浏览器完成恢复策略与首个加密备份（其 PCR 已有 consent 前驱），发布真实 KeyPackage 后 accept **加入**并收到有效 Welcome。此后内容才是 bob 可合法见+可解密的加入后内容。
+4. alice **加入后**建 board + list + card(title 明文)，等待卡片脱离草稿态、取得已确认的 Strand 身份后，再给 card 加**加密 description**(私有 `body`);断言 `ak.strand.update` 被接受且 description **不以明文出现在 wire**。
+5. **跨成员投递闸门**:以 bob 身份使用 `QUERY /_arkret/self/events`（canonical JSON 的 `realm_ids` 条件）查询 必含 board space id(隔离 soland 投递 vs inkson 投影)。
 6. bob 深链进 `/kanban/{realm}/board/{boardId}`;bootstrap **backfill realm 事件并 ingest 进 raw_operations**→board Space 投影进 switcher→路由/auto-select 选中→列表卡片渲染。
 7. **核心断言**:bob 打开卡片,`card-description-panel` 含 alice 的明文 description,且 `card-detail-body-locked` 计数为 0(真解密,非锁态)。
 8. **假绿护栏**:目标卡不得渲染成 `kanban-card-redacted`(解密/水化失败占位)。
 9. **reload 存活**:bob 刷新后卡片与解密正文仍在(防"闪现即消失"= live refresh 覆盖 bootstrap backfill)。
-10. **反向投影**:bob 建自己的卡,alice 刷新后能看到(admission fork 历史上双向都断)。
-11. **原始 wire**:alice 拉 `/_arkret/self/events` 原始事件,description 永不以明文出现。
+10. **反向解密**:bob 建自己的卡，等待已确认 Strand 身份后写入私密 description；alice 必须看到卡片并实际解密正文，本地存储不能泄露正文。
+11. **原始 wire**:alice 使用 `QUERY /_arkret/self/events` 拉取原始事件，双方 description 均不得以明文出现。
 
 ## 关键前置(harness/产品修复,均为让本场景真正跑通)
 
@@ -67,3 +68,15 @@
 ## 已知会红即为抓到真 bug 的类别
 
 `invitee 见 0 卡`、`对方 board 闪现即消失`、`card 卡 Restoring`、`body locked 解不开`、`MLS Security Frontier 漂移`、`加入前历史`。本 spec 任一断言变红,基本就命中其中之一——这正是它存在的意义。
+
+## Outbound crash matrix
+
+同一主链另覆盖三个发送方刷新断点；均操作真实标准 Event 提交，不替换签名 Event 或服务器结果：
+
+- `commit-response-lost`：服务器实际接收 Commit 后丢弃 HTTP 响应，刷新 Alice，再恢复传输。
+- `welcome-before-durable`：Welcome 尚未发往服务器时断开提交，刷新 Alice，再恢复传输。
+- `welcome-response-lost`：服务器实际接收 Welcome 后丢弃响应，在发送方安装 staged state 前刷新。
+
+每项都必须完成双方私密正文解密、Bob 刷新重读、本地存储与 wire 无明文检查；观察到的目标
+EventId 必须保持唯一且等于断点前原 ID。仅重试请求或只见到 epoch/Welcome 不算通过。
+此矩阵不替代多个接收端中仅部分 Welcome 已 durable 的独立验收。

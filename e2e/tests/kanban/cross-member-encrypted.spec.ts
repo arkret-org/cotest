@@ -42,12 +42,15 @@ import {
   type Page,
 } from "../../helpers/arkret-test";
 import { solandBaseUrl } from "../../helpers/env";
+import { canonicalJson } from "../../helpers/soland-api";
 import { grantInviteConsentArkret } from "../../helpers/contact-api";
 import { stepShot } from "../../helpers/screenshots";
 import { selfPathGrantHeaders } from "../../helpers/session-grant-dpop";
+import { installMlsOutboundFault } from "../../helpers/mls-outbound-fault";
 import {
   assertJointStackNotRequired,
   createDpopUserSession,
+  issueInviteLocatorToken,
   openDpopUserPageFromSession,
   openUserPage,
   type DpopUserSession,
@@ -77,16 +80,19 @@ async function waitForMlsWelcome(
         const url = `${solandBaseUrl()}/_arkret/self/events`;
         const response = await request.fetch(url, {
           method: "QUERY",
-          data: { realm_ids: [realmId], limit: 500 },
-          headers: selfPathGrantHeaders({
-            deviceKey: session.deviceKey,
-            grantJwt: session.grantJwt,
-            method: "QUERY",
-            url,
-          }),
+          data: canonicalJson({ realm_ids: [realmId], limit: 500 }),
+          headers: {
+            "content-type": "application/json",
+            ...selfPathGrantHeaders({
+              deviceKey: session.deviceKey,
+              grantJwt: session.grantJwt,
+              method: "QUERY",
+              url,
+            }),
+          },
         });
         if (response.status() !== 200) {
-          return `status ${response.status()}`;
+          return `status ${response.status()}: ${await response.text()}`;
         }
         const body = await response.json();
         return (body.events ?? []).some(
@@ -251,9 +257,13 @@ async function buildEncryptedBoardListCard(
   await column.getByTestId("add-card-button").click();
   await column.getByTestId("new-card-title-input").fill(cardTitle);
   await column.getByTestId("save-card-button").click();
-  await expect(
-    column.getByTestId("kanban-card").filter({ hasText: cardTitle }),
-  ).toBeVisible({ timeout: 45_000 });
+  const createdCard = column.getByTestId("kanban-card").filter({ hasText: cardTitle });
+  await expect(createdCard).toBeVisible({ timeout: 45_000 });
+  // A visible optimistic draft does not yet name an accepted Strand. Editing
+  // its private tracks requires the confirmed object identity.
+  await expect(createdCard).toHaveAttribute("data-card-draft", "false", {
+    timeout: 120_000,
+  });
   return boardId;
 }
 
@@ -569,213 +579,250 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
     }
   });
 
-  test("bob joins an MLS-encrypted realm and decrypts alice's encrypted card content; survives reload; bob's own card projects back to alice", async ({
-    browser,
-    request,
-  }, testInfo) => {
-    // The full two-browser MLS flow (recovery-key setup, create, board+card,
-    // encrypt, invite, Welcome, join, cross-member decrypt, reload, reverse
-    // direction) does not fit the 180s default — mirror the sibling MLS browser
-    // budget so it does not time out mid-flow.
-    test.setTimeout(360_000);
+  for (const fault of [undefined, "commit-response-lost", "welcome-before-durable", "welcome-response-lost"] as const) {
+    test("bob joins an MLS-encrypted realm and decrypts alice's encrypted card content; survives reload; bob's own card projects back to alice" + (fault ? `; recovers ${fault}` : ""), async ({
+      browser,
+      request,
+    }, testInfo) => {
+      // The full two-browser MLS flow (recovery-key setup, create, board+card,
+      // encrypt, invite, Welcome, join, cross-member decrypt, reload, reverse
+      // direction) does not fit the 180s default — mirror the sibling MLS browser
+      // budget so it does not time out mid-flow.
+      test.setTimeout(fault ? 600_000 : 360_000);
 
-    const stamp = Date.now();
-    const [aliceSession, bobSession] = await Promise.all([
-      createDpopUserSession(request, "xmenc-alice"),
-      createDpopUserSession(request, "xmenc-bob"),
-    ]);
-    if (!aliceSession || !bobSession) {
-      // Do not silently green-skip the crown-jewel cross-member decrypt path on
-      // the joint harness; fail loud when the stack is declared present.
-      assertJointStackNotRequired(
-        "cross-member encrypted kanban requires coauth DPoP session-grant login",
-      );
-      test.skip(
-        true,
-        "coauth DPoP session-grant login is required for MLS device-authorized KeyPackages",
-      );
-      return;
-    }
-
-    const alice = aliceSession.user;
-    const bob = bobSession.user;
-    const aliceFlow = await openDpopUserPageFromSession(browser, aliceSession);
-    expect(aliceFlow).toBeTruthy();
-    const alicePage = aliceFlow!.page;
-    let bobPage: JointUserPage | undefined;
-
-    const boardTitle = `Enc XM Board ${stamp}`;
-    const listTitle = `Todo-${stamp}`;
-    const aliceCard = `Alice secret card ${stamp}`;
-    const aliceDescription = `Alice private detail ${stamp}`;
-    const bobCard = `Bob reply card ${stamp}`;
-
-    try {
-      await alicePage.gotoHome();
-      await alicePage.completeRecoveryKeySetupIfPrompted();
-      await alicePage.acknowledgeRecommendedEncryptionPromptIfVisible();
-
-      // 1) Alice creates an EMPTY MLS-encrypted realm.
-      const realmId = await alicePage.createRealm({
-        title: `Encrypted XM Kanban ${stamp}`,
-        discoverability: "listed",
-        joinRule: "invite",
-        historyAccess: "since_join",
-        encryptionProfile: "mls_rfc9420",
-      });
-      await grantInviteConsentArkret(
-        request,
-        bobSession.grantJwt,
-        bob,
-        alice.id,
-      );
-
-      // 2) Invite Bob before his browser has completed the founding-device
-      // bootstrap or published a KeyPackage. The invite must persist even
-      // though immediate MLS admission is deferred.
-      const inviteStatus = await alicePage.inviteFromAdmin(realmId, bob.id);
-      expect(
-        inviteStatus,
-        "the Realm invite must persist while Bob has no claimable KeyPackage",
-      ).toContain("invited");
-      expect(inviteStatus).not.toContain("MLS Welcome queued");
-
-      // Bob now completes the atomic PCR create + founding-device authorization.
-      // This publishes his real event-signer KeyPackage after the invite already
-      // exists, exercising the deferred Welcome reconciliation path.
-      const bobFlow = await openDpopUserPageFromSession(browser, bobSession);
-      expect(bobFlow).toBeTruthy();
-      bobPage = bobFlow!.page;
-      await bobPage.gotoHome();
-      await bobPage.completeRecoveryKeySetupIfPrompted();
-      await bobPage.acknowledgeRecommendedEncryptionPromptIfVisible();
-
-      // 3) Bob JOINS before any board content exists. This matters twice over:
-      //    under history_access=since_join, soland crops pre-join events from
-      //    bob's view; and under MLS forward secrecy, bob has no key for epochs
-      //    that predate his membership. So content alice creates AFTER this point
-      //    is the content bob can legitimately both see and decrypt. (Pre-join
-      //    history sharing is a separate, optional capability — not the core
-      //    cross-member collaboration path this test exercises.)
-      await bobPage.acceptInvite(realmId);
-      await bobPage.gotoTimelineRealm(realmId);
-      await waitForMlsWelcome(request, aliceSession, realmId, bob.id);
-      await bobPage.page.reload({ waitUntil: "domcontentloaded" });
-      await bobPage.completeRecoveryKeySetupIfPrompted();
-
-      // 4) Alice builds the board + encrypted card AFTER bob is a member, so it is
-      //    post-join shared content for bob.
-      const boardId = await buildEncryptedBoardListCard(
-        alicePage.page,
-        realmId,
-        boardTitle,
-        listTitle,
-        aliceCard,
-      );
-      await addEncryptedDescription(
-        alicePage.page,
-        aliceCard,
-        aliceDescription,
-      );
-      await stepShot(alicePage.page, testInfo, "A-alice-encrypted-card");
-
-      // 4b) Cross-member DELIVERY gate (isolates soland delivery from inkson
-      //     projection): soland MUST surface alice's post-join board Space create
-      //     on bob's own realm events feed — the same feed the kanban backfill
-      //     ingests. If the board id is absent here, the bug is soland-side
-      //     Space delivery/visibility; if present but the board never appears in
-      //     bob's UI below, the bug is inkson's board projection.
-      await expect
-        .poll(
-          async () => {
-            const url = `${solandBaseUrl()}/_arkret/self/events`;
-            const resp = await request.fetch(url, {
-              method: "QUERY",
-              data: { realm_ids: [realmId], limit: 500 },
-              headers: selfPathGrantHeaders({
-                deviceKey: bobSession.deviceKey,
-                grantJwt: bobSession.grantJwt,
-                method: "QUERY",
-                url,
-              }),
-            });
-            if (resp.status() !== 200) return `status ${resp.status()}`;
-            return JSON.stringify(await resp.json());
-          },
-          {
-            timeout: 60_000,
-            intervals: [1_000, 2_000, 5_000],
-            message: `soland never delivered alice's board Space (${boardId}) to bob's realm events feed — cross-member Space delivery/visibility gap (not a inkson projection issue)`,
-          },
-        )
-        .toContain(boardId);
-
-      // 5) THE CORE ASSERTION: bob opens the board and decrypts alice's private
-      //    card content.
-      await openReaderBoard(bobPage, realmId, boardId);
-      await assertCardDecrypts(bobPage, aliceCard, aliceDescription);
-      await assertE2eeStorageIsHardened(bobPage.page, [aliceDescription]);
-      await stepShot(bobPage.page, testInfo, "B-bob-decrypted-card");
-
-      // 5) Reload survival: the decrypted card must not flash-then-vanish when
-      //    the live refresh clobbers the bootstrap backfill.
-      await bobPage.page.reload({ waitUntil: "domcontentloaded" });
-      await readyReaderBoard(bobPage, boardId);
-      await assertCardDecrypts(bobPage, aliceCard, aliceDescription);
-      await assertE2eeStorageIsHardened(bobPage.page, [aliceDescription]);
-      await stepShot(bobPage.page, testInfo, "C-bob-card-survives-reload");
-
-      // 6) Reverse direction: bob adds his own card; it must project back to
-      //    alice (the admission fork historically broke BOTH directions).
-      const bobColumn = bobPage.page
-        .getByTestId("kanban-column")
-        .filter({ hasText: listTitle })
-        .first();
-      await bobColumn.getByTestId("add-card-button").click();
-      await bobColumn.getByTestId("new-card-title-input").fill(bobCard);
-      await bobColumn.getByTestId("save-card-button").click();
-      await expect(
-        bobColumn.getByTestId("kanban-card").filter({ hasText: bobCard }),
-      ).toBeVisible({
-        timeout: 45_000,
-      });
-
-      await openReaderBoard(alicePage, realmId, boardId);
-      await expect(
-        alicePage.page.getByTestId("kanban-card").filter({ hasText: bobCard }),
-        "bob's card must project back to alice (reverse cross-member sync)",
-      ).toBeVisible({ timeout: 90_000 });
-      await expect(
-        alicePage.page
-          .getByTestId("kanban-card-redacted")
-          .filter({ hasText: bobCard }),
-      ).toHaveCount(0);
-      await stepShot(alicePage.page, testInfo, "D-alice-sees-bob-card");
-
-      // 7) Raw wire stays ciphertext for the private body: the encrypted realm
-      //    must never expose alice's description verbatim in the event log.
-      const rawEventsUrl = `${solandBaseUrl()}/_arkret/self/events`;
-      const rawEvents = await request.fetch(rawEventsUrl, {
-        method: "QUERY",
-        data: { realm_ids: [realmId], limit: 200 },
-        headers: selfPathGrantHeaders({
-          deviceKey: aliceSession.deviceKey,
-          grantJwt: aliceSession.grantJwt,
-          method: "QUERY",
-          url: rawEventsUrl,
-        }),
-      });
-      expect(rawEvents.status()).toBe(200);
-      expect(JSON.stringify(await rawEvents.json())).not.toContain(
-        aliceDescription,
-      );
-    } finally {
-      await Promise.allSettled([
-        bobPage?.close() ?? Promise.resolve(),
-        alicePage.close(),
+      const stamp = Date.now();
+      const [aliceSession, bobSession] = await Promise.all([
+        createDpopUserSession(request, "xmenc-alice"),
+        createDpopUserSession(request, "xmenc-bob"),
       ]);
-    }
-  });
+      if (!aliceSession || !bobSession) {
+        // Do not silently green-skip the crown-jewel cross-member decrypt path on
+        // the joint harness; fail loud when the stack is declared present.
+        assertJointStackNotRequired(
+          "cross-member encrypted kanban requires coauth DPoP session-grant login",
+        );
+        test.skip(
+          true,
+          "coauth DPoP session-grant login is required for MLS device-authorized KeyPackages",
+        );
+        return;
+      }
+
+      const alice = aliceSession.user;
+      const bob = bobSession.user;
+      const aliceFlow = await openDpopUserPageFromSession(browser, aliceSession);
+      expect(aliceFlow).toBeTruthy();
+      const alicePage = aliceFlow!.page;
+      let bobPage: JointUserPage | undefined;
+      let outboundFault: Awaited<ReturnType<typeof installMlsOutboundFault>> | undefined;
+
+      const boardTitle = `Enc XM Board ${stamp}`;
+      const listTitle = `Todo-${stamp}`;
+      const aliceCard = `Alice secret card ${stamp}`;
+      const aliceDescription = `Alice private detail ${stamp}`;
+      const bobCard = `Bob reply card ${stamp}`;
+      const bobDescription = `Bob private reply ${stamp}`;
+
+      try {
+        await alicePage.gotoHome();
+        await alicePage.completeRecoveryKeySetupIfPrompted();
+        await alicePage.acknowledgeRecommendedEncryptionPromptIfVisible();
+
+        // 1) Alice creates an EMPTY MLS-encrypted realm.
+        const realmId = await alicePage.createRealm({
+          title: `Encrypted XM Kanban ${stamp}`,
+          discoverability: "listed",
+          joinRule: "invite",
+          historyAccess: "since_join",
+          encryptionProfile: "mls_rfc9420",
+        });
+        await grantInviteConsentArkret(
+          request,
+          bobSession.grantJwt,
+          bob,
+          alice.id,
+        );
+
+        // 2) Invite Bob before his browser has completed the founding-device
+        // bootstrap or published a KeyPackage. The invite must persist even
+        // though immediate MLS admission is deferred.
+        // Bob has not published a receive policy yet. His deliberately shared
+        // locator supplies the high-trust introduction the default requires;
+        // a bare address would correctly enter quarantine even with consent.
+        const bobLocatorToken = await issueInviteLocatorToken(request, bobSession.grantJwt);
+        const inviteStatus = await alicePage.inviteFromAdmin(
+          realmId,
+          bob.id,
+          bob.id,
+          { token: bobLocatorToken },
+        );
+        expect(
+          inviteStatus,
+          "the Realm invite must persist while Bob has no claimable KeyPackage",
+        ).toContain("invited");
+        expect(inviteStatus).not.toContain("MLS Welcome queued");
+
+        // Bob now completes the atomic PCR create + founding-device authorization.
+        // This publishes his real event-signer KeyPackage after the invite already
+        // exists, exercising the deferred Welcome reconciliation path.
+        const bobFlow = await openDpopUserPageFromSession(browser, bobSession);
+        expect(bobFlow).toBeTruthy();
+        bobPage = bobFlow!.page;
+        await bobPage.gotoHome();
+        await bobPage.completeRecoveryKeySetupIfPrompted();
+        await bobPage.acknowledgeRecommendedEncryptionPromptIfVisible();
+
+        // 3) Bob JOINS before any board content exists. This matters twice over:
+        //    under history_access=since_join, soland crops pre-join events from
+        //    bob's view; and under MLS forward secrecy, bob has no key for epochs
+        //    that predate his membership. So content alice creates AFTER this point
+        //    is the content bob can legitimately both see and decrypt. (Pre-join
+        //    history sharing is a separate, optional capability — not the core
+        //    cross-member collaboration path this test exercises.)
+        if (fault) {
+          outboundFault = await installMlsOutboundFault(alicePage.page, realmId, fault);
+        }
+        await bobPage.acceptInvite(realmId);
+        if (outboundFault) {
+          await outboundFault.waitForCut();
+          // Destroy the sender's wasm runtime while the real transport remains
+          // cut. Recovery must reload the original durable saga and signed IDs.
+          await alicePage.page.reload({ waitUntil: "domcontentloaded" });
+          await outboundFault.restore();
+        }
+        await bobPage.gotoTimelineRealm(realmId);
+        await waitForMlsWelcome(request, aliceSession, realmId, bob.id);
+        await bobPage.page.reload({ waitUntil: "domcontentloaded" });
+        await bobPage.completeRecoveryKeySetupIfPrompted();
+
+        // 4) Alice builds the board + encrypted card AFTER bob is a member, so it is
+        //    post-join shared content for bob.
+        const boardId = await buildEncryptedBoardListCard(
+          alicePage.page,
+          realmId,
+          boardTitle,
+          listTitle,
+          aliceCard,
+        );
+        await addEncryptedDescription(
+          alicePage.page,
+          aliceCard,
+          aliceDescription,
+        );
+        await stepShot(alicePage.page, testInfo, "A-alice-encrypted-card");
+
+        // 4b) Cross-member DELIVERY gate (isolates soland delivery from inkson
+        //     projection): soland MUST surface alice's post-join board Space create
+        //     on bob's own realm events feed — the same feed the kanban backfill
+        //     ingests. If the board id is absent here, the bug is soland-side
+        //     Space delivery/visibility; if present but the board never appears in
+        //     bob's UI below, the bug is inkson's board projection.
+        await expect
+          .poll(
+            async () => {
+              const url = `${solandBaseUrl()}/_arkret/self/events`;
+              const resp = await request.fetch(url, {
+                method: "QUERY",
+                data: canonicalJson({ realm_ids: [realmId], limit: 500 }),
+                headers: {
+                  "content-type": "application/json",
+                  ...selfPathGrantHeaders({
+                    deviceKey: bobSession.deviceKey,
+                    grantJwt: bobSession.grantJwt,
+                    method: "QUERY",
+                    url,
+                  }),
+                },
+              });
+              if (resp.status() !== 200) return `status ${resp.status()}`;
+              return JSON.stringify(await resp.json());
+            },
+            {
+              timeout: 60_000,
+              intervals: [1_000, 2_000, 5_000],
+              message: `soland never delivered alice's board Space (${boardId}) to bob's realm events feed — cross-member Space delivery/visibility gap (not a inkson projection issue)`,
+            },
+          )
+          .toContain(boardId);
+
+        // 5) THE CORE ASSERTION: bob opens the board and decrypts alice's private
+        //    card content.
+        await openReaderBoard(bobPage, realmId, boardId);
+        await assertCardDecrypts(bobPage, aliceCard, aliceDescription);
+        await assertE2eeStorageIsHardened(bobPage.page, [aliceDescription]);
+        await stepShot(bobPage.page, testInfo, "B-bob-decrypted-card");
+
+        // 5) Reload survival: the decrypted card must not flash-then-vanish when
+        //    the live refresh clobbers the bootstrap backfill.
+        await bobPage.page.reload({ waitUntil: "domcontentloaded" });
+        await readyReaderBoard(bobPage, boardId);
+        await assertCardDecrypts(bobPage, aliceCard, aliceDescription);
+        await assertE2eeStorageIsHardened(bobPage.page, [aliceDescription]);
+        await stepShot(bobPage.page, testInfo, "C-bob-card-survives-reload");
+
+        // 6) Reverse direction: bob adds his own card; it must project back to
+        //    alice (the admission fork historically broke BOTH directions).
+        const bobColumn = bobPage.page
+          .getByTestId("kanban-column")
+          .filter({ hasText: listTitle })
+          .first();
+        await bobColumn.getByTestId("add-card-button").click();
+        await bobColumn.getByTestId("new-card-title-input").fill(bobCard);
+        await bobColumn.getByTestId("save-card-button").click();
+        await expect(
+          bobColumn.getByTestId("kanban-card").filter({ hasText: bobCard }),
+        ).toBeVisible({
+          timeout: 45_000,
+        });
+        await expect(
+          bobColumn.getByTestId("kanban-card").filter({ hasText: bobCard }),
+        ).toHaveAttribute("data-card-draft", "false", { timeout: 120_000 });
+        await addEncryptedDescription(bobPage.page, bobCard, bobDescription);
+
+        await openReaderBoard(alicePage, realmId, boardId);
+        await expect(
+          alicePage.page.getByTestId("kanban-card").filter({ hasText: bobCard }),
+          "bob's card must project back to alice (reverse cross-member sync)",
+        ).toBeVisible({ timeout: 90_000 });
+        await expect(
+          alicePage.page
+            .getByTestId("kanban-card-redacted")
+            .filter({ hasText: bobCard }),
+        ).toHaveCount(0);
+        await assertCardDecrypts(alicePage, bobCard, bobDescription);
+        await assertE2eeStorageIsHardened(alicePage.page, [bobDescription]);
+        await stepShot(alicePage.page, testInfo, "D-alice-sees-bob-card");
+
+        // 7) Raw wire stays ciphertext for the private body: the encrypted realm
+        //    must never expose alice's description verbatim in the event log.
+        const rawEventsUrl = `${solandBaseUrl()}/_arkret/self/events`;
+        const rawEvents = await request.fetch(rawEventsUrl, {
+          method: "QUERY",
+          data: canonicalJson({ realm_ids: [realmId], limit: 200 }),
+          headers: {
+            "content-type": "application/json",
+            ...selfPathGrantHeaders({
+              deviceKey: aliceSession.deviceKey,
+              grantJwt: aliceSession.grantJwt,
+              method: "QUERY",
+              url: rawEventsUrl,
+            }),
+          },
+        });
+        expect(rawEvents.status()).toBe(200);
+        const rawEventBody = JSON.stringify(await rawEvents.json());
+        expect(rawEventBody).not.toContain(aliceDescription);
+        expect(rawEventBody).not.toContain(bobDescription);
+        outboundFault?.assertExactReplay();
+      } finally {
+        await outboundFault?.dispose();
+        await Promise.allSettled([
+          bobPage?.close() ?? Promise.resolve(),
+          alicePage.close(),
+        ]);
+      }
+    });
+  }
 
   test("bob joins a shared-history MLS realm after alice's encrypted card and decrypts the pre-join card content", async ({
     browser,
@@ -882,13 +929,16 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
             const url = `${solandBaseUrl()}/_arkret/self/events`;
             const resp = await request.fetch(url, {
               method: "QUERY",
-              data: { realm_ids: [realmId], limit: 500 },
-              headers: selfPathGrantHeaders({
-                deviceKey: bobSession.deviceKey,
-                grantJwt: bobSession.grantJwt,
-                method: "QUERY",
-                url,
-              }),
+              data: canonicalJson({ realm_ids: [realmId], limit: 500 }),
+              headers: {
+                "content-type": "application/json",
+                ...selfPathGrantHeaders({
+                  deviceKey: bobSession.deviceKey,
+                  grantJwt: bobSession.grantJwt,
+                  method: "QUERY",
+                  url,
+                }),
+              },
             });
             if (resp.status() !== 200) return `status ${resp.status()}`;
             return JSON.stringify(await resp.json());
@@ -919,13 +969,16 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
       const rawEventsUrl = `${solandBaseUrl()}/_arkret/self/events`;
       const rawEvents = await request.fetch(rawEventsUrl, {
         method: "QUERY",
-        data: { realm_ids: [realmId], limit: 200 },
-        headers: selfPathGrantHeaders({
-          deviceKey: aliceSession.deviceKey,
-          grantJwt: aliceSession.grantJwt,
-          method: "QUERY",
-          url: rawEventsUrl,
-        }),
+        data: canonicalJson({ realm_ids: [realmId], limit: 200 }),
+        headers: {
+          "content-type": "application/json",
+          ...selfPathGrantHeaders({
+            deviceKey: aliceSession.deviceKey,
+            grantJwt: aliceSession.grantJwt,
+            method: "QUERY",
+            url: rawEventsUrl,
+          }),
+        },
       });
       expect(rawEvents.status()).toBe(200);
       expect(JSON.stringify(await rawEvents.json())).not.toContain(

@@ -168,10 +168,11 @@ export async function issueInviteLocatorToken(
   sessionToken: string,
   server: SolandKey = "server1",
 ): Promise<string> {
+  const issueUrl = `${solandBaseUrl(server)}/_arkret/self/invite-locators`;
   const response = await request.post(
-    `${solandBaseUrl(server)}/_arkret/self/invite-locators`,
+    issueUrl,
     {
-      headers: authHeaders(sessionToken),
+      headers: authHeaders(sessionToken, "POST", issueUrl),
       data: { ttl_seconds: 900 },
     },
   );

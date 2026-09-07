@@ -281,7 +281,7 @@ pub async fn create_account_handoff(
     authorization: &OidcAuthorization,
     device_key: FoundingDeviceKey,
 ) -> Result<AccountHandoff> {
-    let request_id = format!("ak:request:{}", uuid_v7_like());
+    let request_id = arkret_identifiers::new_prefixed_uuid7("ak:request:");
     let body = crate::wire::account_handoff_request(json!({
         "request_id": request_id,
         "audience_id": audience_id,
@@ -350,36 +350,6 @@ pub async fn create_account_handoff(
         binding,
         device_key,
     })
-}
-
-/// A UUIDv7-shaped id, without a uuid dependency.
-///
-/// `RequestId` only requires the shape; the value identifies one request inside
-/// one test run and is never correlated outside it.
-fn uuid_v7_like() -> String {
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("system clock before Unix epoch");
-    let millis = u64::try_from(nanos.as_millis()).unwrap_or(u64::MAX);
-    let mut hasher = Sha256::new();
-    hasher.update(b"cotest-provisioning-request-v1");
-    hasher.update(nanos.as_nanos().to_le_bytes());
-    hasher.update(std::process::id().to_le_bytes());
-    let digest: [u8; 32] = hasher.finalize().into();
-    let hex = hex::encode(digest);
-    // 8-4-4-4-12, with the first twelve hex digits carrying the millisecond
-    // timestamp: `unix_ts_ms | ver 7 + rand | var + rand`. Getting the grouping
-    // wrong produces something that reads like a UUID and is rejected as an
-    // identifier, which is exactly how the first live run of this failed.
-    let millis_hex = format!("{:012x}", millis & 0xffff_ffff_ffff);
-    format!(
-        "{}-{}-7{}-8{}-{}",
-        &millis_hex[0..8],
-        &millis_hex[8..12],
-        &hex[0..3],
-        &hex[3..6],
-        &hex[6..18]
-    )
 }
 
 /// A principal, founded through the canonical chain.
