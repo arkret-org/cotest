@@ -87,7 +87,7 @@
    - content-digest 覆盖 body
    - service_binding_ref 与 server2 本地的 Realm policy snapshot 一致
    - 每个 Event 的 actor 签名 + 因果链
-   - server2 从每个 Event 的 `seal_ref` 或 `seal_basis` 所确定的 CBA 读取 Realm reducer-profile cell；请求和 binding 均不声明 profile
+   - server2 从每个 Event 的 `seal_ref` 或 `seal_basis` 所确定的 CBS 读取 Realm reducer-profile cell；请求和 binding 均不声明 profile
 8. server2 返回 `{accepted: [invite_event_id], rejected: [], quarantine: []}`
 9. 断言(测试侧从 server1 视角拿响应,或者从测试 harness 直接读 server2 的 sync state):invite event 在 server2 上可见
 
@@ -140,7 +140,7 @@
 
 ## Edge cases / sub-tests
 
-- **E2.3 unsupported_profile**：让 Event 的 CBA 落在 server2 未实现的 reducer profile；断言 Event 以 `unsupported_profile` 拒绝
+- **E2.3 unsupported_profile**：让 Event 的 CBS 落在 server2 未实现的 reducer profile；断言 Event 以 `unsupported_profile` 拒绝
 - **E2.4 idempotent push**:server1 把同一个 invite event 推两次,server2 第二次也返回 `accepted`(幂等),不重复写入
 - **E2.5 signature 失败**:篡改 server1 的 HTTP signature header,server2 整批拒绝;断言 4xx 状态码 + 标准 JSON error envelope
 - **E2.6 dependency_missing**:server1 发一个 `prev_refs` 指向 server2 未见过的 event 的 message,server2 把它放 `rejected[]` with `reason_code=dependency_missing`

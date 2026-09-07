@@ -1068,7 +1068,7 @@ impl TestActorClient {
         realm_id: &str,
         kind: &str,
         payload: Value,
-        preconditions: Vec<arkret_wire::cba::Precondition>,
+        preconditions: Vec<arkret_wire::cbs::Precondition>,
     ) -> Result<Event> {
         self.ensure_authority_for_kind(realm_id, kind).await?;
         let frontier = self

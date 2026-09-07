@@ -27,7 +27,7 @@ use arkret_models_collaboration::governance::membership_invite::{
     MembershipPayload, MembershipPayloadState,
 };
 use arkret_models_crypto::{MlsCommitPayload, MlsGovernanceBindingPayload};
-use arkret_wire::cba::{Precondition, Predicate, PredicateOp};
+use arkret_wire::cbs::{Precondition, Predicate, PredicateOp};
 use arkret_wire::{AccountId, ActorId, Event, EventId, EventKind, Hash, MlsGroupId, ScopeRef};
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;

@@ -428,7 +428,7 @@ pub use state_reducer_hardening::{
     run_patch_redactable_content_slot_unset_ban_vector, run_state_reducer_hardening_fixture_suite,
     run_state_root_incremental_vector, run_strand_tracks_update_atomic_vector,
 };
-pub use state_resolution::{run_cba_lattice_fixture_suite, run_state_resolution_fixture_suite};
+pub use state_resolution::{run_cbs_lattice_fixture_suite, run_state_resolution_fixture_suite};
 pub use station_certification::{
     StationCertificationStatus, run_station_certification_gate_suite,
     validate_station_certification,

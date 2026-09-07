@@ -4,7 +4,7 @@
 //! end to end, because the convergence properties only mean something once a
 //! real reducer has admitted the Events:
 //!
-//! * an RSVP carries the registry-derived cell effect, so it reaches its CBA cell instead of being
+//! * an RSVP carries the registry-derived cell effect, so it reaches its CBS cell instead of being
 //!   accepted as a side-band record;
 //! * two responses that do not observe each other stay exposed as two heads — the server may not
 //!   pick a winner by HLC, arrival order or event id;
@@ -706,7 +706,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
     Ok(())
 }
 
-/// The same Calendar CBA cell must survive a real process restart and exact
+/// The same Calendar CBS cell must survive a real process restart and exact
 /// Event replay. The scenario uses a throw-away Postgres when Docker is
 /// available; environments without either Postgres source report an explicit
 /// live-row skip while the always-on in-memory convergence scenario still runs.
@@ -1019,7 +1019,7 @@ pub async fn calendar_rsvp_without_cell_effect_is_rejected() -> Result<()> {
         .await?;
     if response.status() == StatusCode::OK {
         return Err(anyhow!(
-            "an effect-less RSVP must not be accepted: it never reaches its CBA cell"
+            "an effect-less RSVP must not be accepted: it never reaches its CBS cell"
         ));
     }
     Ok(())

@@ -1245,7 +1245,7 @@ export type InviteDeliveryRequestBody = {
   } | {
     "kind": "explicit_address";
   };
-  "cba_proof_bundles": Array<{
+  "cbs_proof_bundles": Array<{
     "target_seal_ref": string;
     "seals": Array<{
       "id": string;

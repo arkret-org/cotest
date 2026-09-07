@@ -1,7 +1,7 @@
 //! C10.C lattice round-trip vectors.
 //!
 //! Exercises the SDK's [`arkret_state::lattice`] module directly against the
-//! normative scenarios from `cba-lattice-fixture.json`.
+//! normative scenarios from `cbs-lattice-fixture.json`.
 //! The fixture itself is symbolic (it describes protocol-level semantics,
 //! eliding wire-required `space_id` / `hlc` / `sig`) — this suite reifies
 //! the symbolic ops as real `LatticeOp` + `SealedOp` values, runs the
@@ -95,11 +95,11 @@ pub fn run_lattice_round_trip_suite() -> Result<()> {
 // ──────────────────────────── helpers ────────────────────────────────
 
 fn validate_lattice_fixture_metadata() -> Result<()> {
-    let fixture = super::load_fixture_value("cba-lattice-fixture.json")?;
-    super::validate_profile(&fixture, "ak.vector_group.cba_lattice.v1")?;
+    let fixture = super::load_fixture_value("cbs-lattice-fixture.json")?;
+    super::validate_profile(&fixture, "ak.vector_group.cbs_lattice.v1")?;
     let metadata = fixture
         .get("lattice_round_trip")
-        .ok_or_else(|| anyhow!("cba-lattice fixture missing lattice_round_trip metadata"))?;
+        .ok_or_else(|| anyhow!("cbs-lattice fixture missing lattice_round_trip metadata"))?;
     let covers = metadata
         .get("covers_vectors")
         .and_then(Value::as_array)
@@ -150,7 +150,7 @@ fn validate_lattice_fixture_metadata() -> Result<()> {
 }
 
 fn realm_link_vector_case() -> Result<Value> {
-    let fixture = super::load_fixture_value("cba-lattice-fixture.json")?;
+    let fixture = super::load_fixture_value("cbs-lattice-fixture.json")?;
     fixture
         .pointer("/lattice_round_trip/cases")
         .and_then(Value::as_array)

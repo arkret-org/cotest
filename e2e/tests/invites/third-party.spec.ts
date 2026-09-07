@@ -18,7 +18,7 @@ import {
   canonicalTimestamp,
   createRealmApi,
   expectJsonOk,
-  prepareSignedEventCbaApi,
+  prepareSignedEventCbsApi,
   projectDidToCoreId,
   readRealmSealBasis,
   registerEventSigner,
@@ -134,7 +134,7 @@ async function submitSelfEvent(
   // This setup creates a real Realm, so bind the Event to its authoritative
   // frontier. A synthetic conformance basis would inject non-Event digests
   // into the real Seal DAG and poison every later control-seal pass.
-  await prepareSignedEventCbaApi(request, token, envelope);
+  await prepareSignedEventCbsApi(request, token, envelope);
   if (opts.alignFrontier !== false) {
     await alignSignedEventToActorFrontierApi(request, token, envelope);
   }
@@ -268,7 +268,7 @@ async function submitClaim(
   cell: ThirdPartyInviteCell,
   claimPayload: Record<string, unknown>,
 ): Promise<SelfEventsOutcome> {
-  // The claimant is not a Realm member yet. Carry the current accepted CBA
+  // The claimant is not a Realm member yet. Carry the current accepted CBS
   // basis obtained by an existing member as part of the out-of-band claim
   // flow; the claimant's self surface cannot discover membership-private
   // Realm state before the claim succeeds.

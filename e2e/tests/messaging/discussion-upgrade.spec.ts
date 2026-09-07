@@ -20,7 +20,7 @@ import {
   alignSignedEventToActorFrontierApi,
   canonicalJson,
   canonicalTimestamp,
-  prepareSignedEventCbaApi,
+  prepareSignedEventCbsApi,
   rawSubmitSignedEventApi,
   retypeEventDerivedId,
   resolveDefaultStrandId,
@@ -513,7 +513,7 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
       fixture.aliceToken,
       envelope,
     );
-    await prepareSignedEventCbaApi(
+    await prepareSignedEventCbsApi(
       request,
       fixture.aliceToken,
       envelope,

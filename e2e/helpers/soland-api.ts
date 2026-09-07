@@ -1675,7 +1675,7 @@ async function prepareAccountDataSetSubmissionApi(
   const draft = accountDataSetSubmission(args);
   const event = draft.event as Record<string, unknown>;
   // actor_private_event is outside the shared Realm Data/Control planes: the
-  // spec forbids seal_ref, seal_basis, CBA and shared-reducer coverage here.
+  // spec forbids seal_ref, seal_basis, CBS and shared-reducer coverage here.
   // It still participates in the holder's signed actor chain, so align that
   // frontier but do not ask the shared Event lease endpoint to authorize it.
   await advanceEnvelopeToActorFrontier(request, token, event, opts.server);
@@ -1972,7 +1972,7 @@ export async function submitSignedEventApi(
   } = {},
 ) {
   const context = opts.context ?? `submit ${String(envelope.kind)}`;
-  await applyRegisteredCbaPlane(request, token, envelope, opts.server);
+  await applyRegisteredCbsPlane(request, token, envelope, opts.server);
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const leaseResponse = await issueAuthorizationLeasesApi(
       request,
@@ -2077,7 +2077,7 @@ export async function submitSignedEventApi(
       ) &&
       attempt < 2
     ) {
-      await forceConformanceCbaBasis(request, envelope, opts.server);
+      await forceConformanceCbsBasis(request, envelope, opts.server);
       continue;
     }
     const actorFrontierRefreshRequired = requiresActorFrontierRefresh(
@@ -2103,7 +2103,7 @@ export async function prepareSignedEventSubmissionApi(
   opts: { server?: SolandKey; context?: string } = {},
 ): Promise<Record<string, unknown>> {
   const context = opts.context ?? `prepare ${String(envelope.kind)}`;
-  await applyRegisteredCbaPlane(request, token, envelope, opts.server);
+  await applyRegisteredCbsPlane(request, token, envelope, opts.server);
   // This helper returns an EventInitialSubmission for a later endpoint to
   // admit, so it cannot rely on the ordinary submit path's retry after an
   // actor-frontier rejection. Bind the envelope to the current frontier
@@ -2175,7 +2175,7 @@ export async function prepareSignedEventBatchSubmissionsApi(
   }
   const context = opts.context ?? "prepare Event batch";
   for (const event of events) {
-    await applyRegisteredCbaPlane(request, token, event, opts.server);
+    await applyRegisteredCbsPlane(request, token, event, opts.server);
   }
   await advanceEnvelopeToActorFrontier(request, token, events[0], opts.server);
   refreshBatchActorChain(events);
@@ -2251,7 +2251,7 @@ export async function submitSignedEventBatchApi(
   const context = opts.context ?? "submit Event batch";
   if (events[0]?.kind !== "ak.realm.create") {
     for (const event of events) {
-      await applyRegisteredCbaPlane(request, token, event, opts.server);
+      await applyRegisteredCbsPlane(request, token, event, opts.server);
     }
     // Leases authorize a candidate but do not repair its causal sequence.
     // Bind the first Event to the accepted frontier, then author each sibling
@@ -2369,7 +2369,7 @@ export async function submitSignedEventBatchApi(
       attempt < 2
     ) {
       for (const event of events) {
-        await forceConformanceCbaBasis(request, event, opts.server);
+        await forceConformanceCbsBasis(request, event, opts.server);
       }
       continue;
     }
@@ -2406,7 +2406,7 @@ export async function rawSubmitSignedEventApi(
   envelope: Record<string, unknown>,
   opts: { server?: SolandKey; retryActorFrontier?: boolean } = {},
 ): Promise<APIResponse> {
-  await applyRegisteredCbaPlane(request, token, envelope, opts.server);
+  await applyRegisteredCbsPlane(request, token, envelope, opts.server);
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const leaseResponse = await issueAuthorizationLeasesApi(
       request,
@@ -2499,7 +2499,7 @@ async function issueControlProposalAckApi(
     return undefined;
   }
   if (isAuthorityAuthoredSelfPrincipalMove(event)) {
-    // cba-profiles.md §4: once the human PCR genesis is accepted, a current
+    // cbs-profiles.md §4: once the human PCR genesis is accepted, a current
     // device authoring in its own principal-control Realm is the authority.
     // This exceptional Control Move must omit an independent Proposal Ack.
     return undefined;
@@ -2580,7 +2580,7 @@ export async function issueAuthorizationLeasesApi(
   });
 }
 
-/// Bind an authored Event to the same current CBA plane and actor frontier
+/// Bind an authored Event to the same current CBS plane and actor frontier
 /// used by `prepareSignedEventSubmissionApi`, but stop before requesting the
 /// lease. Negative conformance cases use this boundary to assert that a lease
 /// issuer performs full pre-admission and therefore refuses an Event that
@@ -2591,7 +2591,7 @@ export async function prepareEventForAuthorizationLeaseApi(
   envelope: Record<string, unknown>,
   server?: SolandKey,
 ): Promise<void> {
-  await applyRegisteredCbaPlane(request, token, envelope, server);
+  await applyRegisteredCbsPlane(request, token, envelope, server);
   await advanceEnvelopeToActorFrontier(request, token, envelope, server);
 }
 
@@ -3039,7 +3039,7 @@ export async function waitForRealmControlIdleApi(
   );
 }
 
-async function applyRegisteredCbaPlane(
+async function applyRegisteredCbsPlane(
   request: APIRequestContext,
   token: string,
   envelope: Record<string, unknown>,
@@ -3049,7 +3049,7 @@ async function applyRegisteredCbaPlane(
   const realmId = stringValue(envelope.realm_id);
   const actorId = eventPrincipalId(envelope);
   if (!kind || !realmId || !actorId) {
-    throw new Error("CBA preparation requires kind, realm_id, and actor_id");
+    throw new Error("CBS preparation requires kind, realm_id, and actor_id");
   }
   const descriptor = eventKindDescriptor(kind);
   if (
@@ -3113,7 +3113,7 @@ async function applyRegisteredCbaPlane(
           if (directoryBasis) {
             envelope.seal_basis = directoryBasis;
           } else {
-            await forceConformanceCbaBasis(request, envelope, server);
+            await forceConformanceCbsBasis(request, envelope, server);
             return;
           }
         }
@@ -3211,7 +3211,7 @@ async function readDirectoryJoinCandidateSealBasis(
   })?.seal_basis;
 }
 
-async function forceConformanceCbaBasis(
+async function forceConformanceCbsBasis(
   request: APIRequestContext,
   envelope: Record<string, unknown>,
   server?: SolandKey,
@@ -3220,7 +3220,7 @@ async function forceConformanceCbaBasis(
   const realmId = stringValue(envelope.realm_id);
   const actorId = eventPrincipalId(envelope);
   if (!kind || !realmId || !actorId) {
-    throw new Error("CBA fixture basis requires kind, realm_id, and actor_id");
+    throw new Error("CBS fixture basis requires kind, realm_id, and actor_id");
   }
   const descriptor = eventKindDescriptor(kind);
   if (!descriptor?.reducer_input) {
@@ -3233,7 +3233,7 @@ async function forceConformanceCbaBasis(
   const signerDid = verificationMethod?.split("#", 1)[0];
   if (!signerDid?.startsWith("did:")) {
     throw new Error(
-      `CBA fixture basis requires a canonical signer DID for ${kind}`,
+      `CBS fixture basis requires a canonical signer DID for ${kind}`,
     );
   }
   const response = await request.post(
@@ -3274,7 +3274,7 @@ function eventAuthContext(verificationMethod: string): Record<string, unknown> {
   // decoupled from the verification-method fragment: the fragment may stay a
   // typed device id, but the `ak:` sigil is stripped before it becomes a key_id
   // (same fragment→key_id mapping as inkson `event_submit.rs` and soland
-  // `cba_basis.rs`).
+  // `cbs_basis.rs`).
   const fragmentIndex = verificationMethod.indexOf("#");
   const fragment =
     fragmentIndex >= 0
@@ -3286,13 +3286,13 @@ function eventAuthContext(verificationMethod: string): Record<string, unknown> {
   };
 }
 
-export async function prepareSignedEventCbaApi(
+export async function prepareSignedEventCbsApi(
   request: APIRequestContext,
   token: string,
   envelope: Record<string, unknown>,
   opts: { server?: SolandKey } = {},
 ): Promise<void> {
-  await applyRegisteredCbaPlane(request, token, envelope, opts.server);
+  await applyRegisteredCbsPlane(request, token, envelope, opts.server);
 }
 
 export async function seedConformanceRealmBasisApi(
@@ -3382,7 +3382,7 @@ export async function resolveDefaultStrandId(
     ).toBe(requireDidCoreId(actorId));
     // UI-authored Realm bootstrap is outside this API helper's in-memory
     // registry. The fixture supplies the genesis actor it just observed so
-    // applyRegisteredCbaPlane can stamp the explicit authority-root claim;
+    // applyRegisteredCbsPlane can stamp the explicit authority-root claim;
     // Soland still validates that claim against the accepted Seal state.
     realmAuthorityControllers.set(
       realmAuthorityControllerKey(opts.server, realmId),
@@ -3629,8 +3629,8 @@ export async function rawPushFederationEvents(
 // the schema actually requires.
 export type InviteDeliveryRequestBodyBodyBody = InviteDeliveryRequestBody;
 export type { SelfInviteDispatchRequestBody };
-export type InviteDeliveryCbaProofBundle =
-  InviteDeliveryRequestBodyBodyBody["cba_proof_bundles"][number];
+export type InviteDeliveryCbsProofBundle =
+  InviteDeliveryRequestBodyBodyBody["cbs_proof_bundles"][number];
 
 // invite-addressing.md §7 step 4: the receiving Station is by definition not
 // yet a federation peer of the invite's Realm, so it MUST NOT fetch the
@@ -3646,7 +3646,7 @@ export type InviteDeliveryCbaProofBundle =
 // registered inclusion proof under the same Seal basis. Replaying the Control
 // Move that writes that cell is not an alternative — that Event is
 // `ak.realm.create`, a `seal_basis`-exempt anchor unit, and
-// `cba-proof-bundle.schema.json` requires `control_moves[]` to reject anchor
+// `cbs-proof-bundle.schema.json` requires `control_moves[]` to reject anchor
 // units outright.
 //
 // `inclusion_proofs` is the gap this helper cannot close. Building the branch
@@ -3657,17 +3657,17 @@ export type InviteDeliveryCbaProofBundle =
 // plus a `cotest-wire` branch command is the plausible route — step 4 answers
 // these peer-direct cases with `realm_authority_root_missing`. The product path
 // is unaffected: real deliveries are built by the inviting Station.
-export async function inviteDeliveryCbaProofBundles(
+export async function inviteDeliveryCbsProofBundles(
   request: APIRequestContext,
   token: string,
   realmId: string,
   sealBasis: { leaves?: unknown } | Record<string, unknown>,
   opts: { server?: SolandKey } = {},
-): Promise<InviteDeliveryCbaProofBundle[]> {
+): Promise<InviteDeliveryCbsProofBundle[]> {
   const leaves = (sealBasis as { leaves?: unknown }).leaves;
   if (!Array.isArray(leaves) || leaves.length === 0) {
     throw new Error(
-      `invite_event.seal_basis.leaves is required to build the delivery CBA bundles, got ${JSON.stringify(sealBasis)}`,
+      `invite_event.seal_basis.leaves is required to build the delivery CBS bundles, got ${JSON.stringify(sealBasis)}`,
     );
   }
   const sealRefs = Array.from(
@@ -3682,7 +3682,7 @@ export async function inviteDeliveryCbaProofBundles(
       }),
     ),
   ).sort();
-  const bundles: InviteDeliveryCbaProofBundle[] = [];
+  const bundles: InviteDeliveryCbsProofBundle[] = [];
   for (const sealRef of sealRefs) {
     const seals = await sealPredecessorClosure(
       request,
@@ -3699,7 +3699,7 @@ export async function inviteDeliveryCbaProofBundles(
       availability_proofs: [],
     });
   }
-  // `cba-profiles.md` §5 canonical order: bundles strictly sorted by target.
+  // `cbs-profiles.md` §5 canonical order: bundles strictly sorted by target.
   return bundles;
 }
 
@@ -3712,7 +3712,7 @@ async function sealPredecessorClosure(
   realmId: string,
   targetSealRef: string,
   opts: { server?: SolandKey } = {},
-): Promise<InviteDeliveryCbaProofBundle["seals"]> {
+): Promise<InviteDeliveryCbsProofBundle["seals"]> {
   const byId = new Map<string, Record<string, unknown>>();
   const pending = [targetSealRef];
   while (pending.length > 0) {
@@ -3737,7 +3737,7 @@ async function sealPredecessorClosure(
     .sort()
     // `readAcceptedSeal` returns the resolved Seal verbatim; wiring the Seal
     // itself to a generated type is the same open item as the Event envelope.
-    .map((sealId) => byId.get(sealId) as InviteDeliveryCbaProofBundle["seals"][number]);
+    .map((sealId) => byId.get(sealId) as InviteDeliveryCbsProofBundle["seals"][number]);
 }
 
 // The closed `invite_delivery_outcome`

@@ -315,7 +315,7 @@ fn validate_actor_private_contracts(
         let mut shared = event;
         shared["effects"] = json!([]);
         if private.validate_private_event_shape(&shared).is_ok() {
-            bail!("{event_kind} accepted shared CBA effects in an actor-private envelope");
+            bail!("{event_kind} accepted shared CBS effects in an actor-private envelope");
         }
     }
 

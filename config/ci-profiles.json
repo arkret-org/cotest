@@ -114,7 +114,7 @@
         },
         {
           "target": "conformance_fixtures",
-          "filter": "cba_lattice_fixture_suite_matches_reference_semantics"
+          "filter": "cbs_lattice_fixture_suite_matches_reference_semantics"
         },
         {
           "target": "conformance_fixtures",

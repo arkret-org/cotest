@@ -29,7 +29,7 @@ import {
   canonicalJson,
   canonicalTimestamp,
   createRealmApi,
-  prepareSignedEventCbaApi,
+  prepareSignedEventCbsApi,
   readAcceptedSeal,
   retypeEventDerivedId,
   signedEventEnvelope,
@@ -668,7 +668,7 @@ test.describe("core object invariants", () => {
         }),
       },
     });
-    await prepareSignedEventCbaApi(request, aliceToken, crossRealmEnvelope);
+    await prepareSignedEventCbsApi(request, aliceToken, crossRealmEnvelope);
     await alignSignedEventToActorFrontierApi(
       request,
       aliceToken,

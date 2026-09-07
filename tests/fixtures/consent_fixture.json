@@ -2,7 +2,7 @@
   "profile": "ak.profile.consent_vectors.v1",
   "version": "2026-08-22",
   "inherits": ["_shared/_canonical_dids.json"],
-  "comment": "Holder-private consent-cell OR-Set semantics. The caller-minted typed consent_id is the cell subject: ak:cell:ak.component.consent.grant.v1:<consent_id>. The first accepted grant freezes the exact (peer, consent_scope) intent for that cell; later grants add Event-derived dots only for the same intent, and revokes remove only explicitly observed dots. Downstream invite/message checks are operation-admission checks against the holder PCR projection, never cross-Realm CBA preconditions.",
+  "comment": "Holder-private consent-cell OR-Set semantics. The caller-minted typed consent_id is the cell subject: ak:cell:ak.component.consent.grant.v1:<consent_id>. The first accepted grant freezes the exact (peer, consent_scope) intent for that cell; later grants add Event-derived dots only for the same intent, and revokes remove only explicitly observed dots. Downstream invite/message checks are operation-admission checks against the holder PCR projection, never cross-Realm CBS preconditions.",
   "vectors": [
     {
       "name": "grant_then_invite_accepts",

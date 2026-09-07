@@ -174,7 +174,7 @@ fn service_and_product_do_not_keep_the_unsigned_patch_wrapper() {
     assert!(authoring.contains("profile_event"));
     assert!(authoring.contains("validate_authoring_context"));
     // The single finalize boundary: the write is authored (actor frontier,
-    // HLC, CBA) and signed in one step; nothing prepares an already-identified
+    // HLC, CBS) and signed in one step; nothing prepares an already-identified
     // Event any more.
     assert!(authoring.contains("author_for_direct_submission"));
     assert!(!authoring.contains("AccountUpdateProfileRequestBody { patch }"));

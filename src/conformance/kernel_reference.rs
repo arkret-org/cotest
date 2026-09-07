@@ -65,8 +65,8 @@ pub fn reduce(input: &KernelGateInput) -> KernelGateOutcome {
         "ak.capability.grant" => reduce_merge_safe(input),
         "ak.realm.policy" => reduce_exclusive_control(input),
         "ak.device.revoke" => reduce_security_barrier(input),
-        "ak.message.create" if input.payload.get("cba_proof_bundle").is_some() => {
-            reduce_cba_bundle(input)
+        "ak.message.create" if input.payload.get("cbs_proof_bundle").is_some() => {
+            reduce_cbs_bundle(input)
         }
         "ak.message.create" => reduce_offline_publication(input),
         "ak.self.authorization_leases.command.issue.v1" => reduce_lease_issue(input),
@@ -272,7 +272,7 @@ fn reduce_security_barrier(input: &KernelGateInput) -> KernelGateOutcome {
     KernelGateOutcome::projection(json!({"barrier": "accepted"}))
 }
 
-fn reduce_cba_bundle(input: &KernelGateInput) -> KernelGateOutcome {
+fn reduce_cbs_bundle(input: &KernelGateInput) -> KernelGateOutcome {
     let basis_known = input
         .basis
         .get("target_seal_known")
@@ -283,24 +283,24 @@ fn reduce_cba_bundle(input: &KernelGateInput) -> KernelGateOutcome {
     }
     let Some(bundle) = input
         .payload
-        .get("cba_proof_bundle")
+        .get("cbs_proof_bundle")
         .and_then(Value::as_object)
     else {
-        return KernelGateOutcome::error("dependency_missing", "cba_basis_incomplete");
+        return KernelGateOutcome::error("dependency_missing", "cbs_basis_incomplete");
     };
     let Some(target) = bundle.get("target_seal_ref").and_then(Value::as_str) else {
-        return KernelGateOutcome::error("dependency_missing", "cba_basis_incomplete");
+        return KernelGateOutcome::error("dependency_missing", "cbs_basis_incomplete");
     };
     let Some(seals) = bundle.get("seals").and_then(Value::as_array) else {
-        return KernelGateOutcome::error("dependency_missing", "cba_basis_incomplete");
+        return KernelGateOutcome::error("dependency_missing", "cbs_basis_incomplete");
     };
     let mut graph = BTreeMap::<String, (String, BTreeSet<String>)>::new();
     for seal in seals {
         let Some(seal_ref) = seal.get("seal_ref").and_then(Value::as_str) else {
-            return KernelGateOutcome::error("dependency_missing", "cba_basis_incomplete");
+            return KernelGateOutcome::error("dependency_missing", "cbs_basis_incomplete");
         };
         let Some(realm_id) = seal.get("realm_id").and_then(Value::as_str) else {
-            return KernelGateOutcome::error("dependency_missing", "cba_basis_incomplete");
+            return KernelGateOutcome::error("dependency_missing", "cbs_basis_incomplete");
         };
         if graph
             .insert(
@@ -312,14 +312,14 @@ fn reduce_cba_bundle(input: &KernelGateInput) -> KernelGateOutcome {
             )
             .is_some()
         {
-            return KernelGateOutcome::error("dependency_missing", "cba_basis_incomplete");
+            return KernelGateOutcome::error("dependency_missing", "cbs_basis_incomplete");
         }
     }
     let Some((target_realm, _)) = graph.get(target) else {
-        return KernelGateOutcome::error("dependency_missing", "cba_basis_incomplete");
+        return KernelGateOutcome::error("dependency_missing", "cbs_basis_incomplete");
     };
     if graph.values().any(|(realm_id, _)| realm_id != target_realm) {
-        return KernelGateOutcome::error("dependency_missing", "cba_basis_incomplete");
+        return KernelGateOutcome::error("dependency_missing", "cbs_basis_incomplete");
     }
     let mut reachable = BTreeSet::new();
     let mut pending = vec![target.to_owned()];
@@ -337,7 +337,7 @@ fn reduce_cba_bundle(input: &KernelGateInput) -> KernelGateOutcome {
         }
     }
     if reachable.len() != graph.len() {
-        return KernelGateOutcome::error("dependency_missing", "cba_basis_incomplete");
+        return KernelGateOutcome::error("dependency_missing", "cbs_basis_incomplete");
     }
     KernelGateOutcome::projection(json!({"basis_complete": true}))
 }

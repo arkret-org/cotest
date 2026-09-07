@@ -18,7 +18,7 @@
 //   ✓ peer events query pulls peer pages and ingests missing local Events
 //   ✓ peer events frontier exposes deterministic Event ID coverage
 //   ✓ inbound RFC 9421 HTTP Message Signature rejects tampered batches
-//   ✓ reducer profile resolved from each Event's authenticated CBA
+//   ✓ reducer profile resolved from each Event's authenticated CBS
 //   ✓ §4.4 capability revoke fanout: revoking a peer's service delegation
 //     stops outbound federation push to that peer
 

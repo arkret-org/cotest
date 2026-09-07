@@ -12,7 +12,7 @@ import {
   listAuthzInvitesArkret,
 } from "../../helpers/contact-api";
 import type {
-  InviteDeliveryCbaProofBundle,
+  InviteDeliveryCbsProofBundle,
   InviteDeliveryRequestBodyBodyBody,
 } from "../../helpers/soland-api";
 import {
@@ -23,7 +23,7 @@ import {
   authHeaders,
   createRealmApi,
   dispatchSelfInviteApi,
-  inviteDeliveryCbaProofBundles,
+  inviteDeliveryCbsProofBundles,
   rawDispatchSelfInviteApi,
   rawSubmitPeerInviteDeliveryApi,
   REALM_AUTHORITY_ROOT_CELL,
@@ -93,7 +93,7 @@ type AcceptedInviteFixture = {
   acceptedEventId: string;
   // The accepted `ak.invite.create` envelope and the Seal basis it committed
   // to. §7 has the inviter-side Station read its own persisted canonical bytes
-  // rather than rebuild them, and step 4 keys the CBA closure on exactly these
+  // rather than rebuild them, and step 4 keys the CBS closure on exactly these
   // leaves.
   inviteEvent: Record<string, unknown>;
   sealBasis: Record<string, unknown>;
@@ -204,7 +204,7 @@ async function assertNoHolderPrivateWrite(
 // member.
 function peerDeliveryBody(
   fixture: AcceptedInviteFixture,
-  bundles: InviteDeliveryCbaProofBundle[],
+  bundles: InviteDeliveryCbsProofBundle[],
   label: string,
   inviteEvent: Record<string, unknown> = fixture.inviteEvent,
 ): InviteDeliveryRequestBodyBodyBody {
@@ -216,12 +216,12 @@ function peerDeliveryBody(
       inviteEvent as InviteDeliveryRequestBodyBodyBody["invite_event"],
     invite_address: fixture.inviteAddress,
     introduction_evidence: fixture.evidence,
-    cba_proof_bundles: bundles,
+    cbs_proof_bundles: bundles,
     idempotency_key: `cotest-peer-invite-${label}-${Date.now()}`,
   };
 }
 
-// RFC 9457 problem body plus the registered top-level members `cba-profiles.md`
+// RFC 9457 problem body plus the registered top-level members `cbs-profiles.md`
 // §5 requires a `dependency_missing` to carry.
 async function peerRejection(response: {
   status(): number;
@@ -303,7 +303,7 @@ test.describe("invite addressing", () => {
           fixture.inviteEvent as InviteDeliveryRequestBodyBodyBody["invite_event"],
         invite_address: fixture.inviteAddress,
         introduction_evidence: fixture.evidence,
-        cba_proof_bundles: await inviteDeliveryCbaProofBundles(
+        cbs_proof_bundles: await inviteDeliveryCbsProofBundles(
           request,
           fixture.inviterToken,
           fixture.realmId,
@@ -613,12 +613,12 @@ test.describe("invite addressing", () => {
     ).toBe(0);
   });
 
-  // ── §7 step 4: the Realm capability closure carried by cba_proof_bundles ──
+  // ── §7 step 4: the Realm capability closure carried by cbs_proof_bundles ──
   //
   // The receiving Station is by definition not yet a federation peer of the
   // inviting Realm, so `ak.peer.seals.read.*` fails closed for it and the
   // closure MUST travel inside the request. Step 4 is a function of
-  // `(invite_event, cba_proof_bundles)` alone and completes before step 5, so
+  // `(invite_event, cbs_proof_bundles)` alone and completes before step 5, so
   // every rejection below is a precise registered outcome — not a member of
   // the holder-indistinguishable class — and every one of them MUST leave the
   // holder untouched.
@@ -631,15 +631,15 @@ test.describe("invite addressing", () => {
     request,
   }) => {
     const fixture = await acceptedInviteFixture(request, "step4-no-bundle");
-    const bundles = await inviteDeliveryCbaProofBundles(
+    const bundles = await inviteDeliveryCbsProofBundles(
       request,
       fixture.inviterToken,
       fixture.realmId,
       fixture.sealBasis,
     );
-    // `cba_proof_bundles` is a required top-level member, so a body without it
+    // `cbs_proof_bundles` is a required top-level member, so a body without it
     // never reaches the closure evaluation: it fails the request schema.
-    const { cba_proof_bundles: _omitted, ...withoutBundles } = peerDeliveryBody(
+    const { cbs_proof_bundles: _omitted, ...withoutBundles } = peerDeliveryBody(
       fixture,
       bundles,
       "no-bundle",
@@ -685,7 +685,7 @@ test.describe("invite addressing", () => {
       canonicalJson(otherBasis),
       "the foreign Realm must have its own Seal basis",
     ).not.toBe(canonicalJson(fixture.sealBasis));
-    const foreignBundles = await inviteDeliveryCbaProofBundles(
+    const foreignBundles = await inviteDeliveryCbsProofBundles(
       request,
       fixture.inviterToken,
       otherRealmId,
@@ -715,7 +715,7 @@ test.describe("invite addressing", () => {
     // The successor invite Control Move's basis leaf has a predecessor, so the
     // closure is more than one Seal and a genuine hole can be opened in it.
     const successor = await acceptSuccessorInviteCreate(request, fixture);
-    const complete = await inviteDeliveryCbaProofBundles(
+    const complete = await inviteDeliveryCbsProofBundles(
       request,
       fixture.inviterToken,
       fixture.realmId,
@@ -737,10 +737,10 @@ test.describe("invite addressing", () => {
       "the successor leaf must have at least one predecessor Seal to withhold",
     ).toBeGreaterThan(0);
 
-    // cba-profiles.md §5: an incomplete closure is answered with the exact
+    // cbs-profiles.md §5: an incomplete closure is answered with the exact
     // Seals the sender still owes, never with an opaque authorization failure
     // and never by fetching the dependency from the inviting Realm.
-    const truncated: InviteDeliveryCbaProofBundle[] = [
+    const truncated: InviteDeliveryCbsProofBundle[] = [
       {
         ...complete[0]!,
         seals: complete[0]!.seals.filter(
@@ -803,7 +803,7 @@ test.describe("invite addressing", () => {
         ),
       },
     });
-    const bundles = await inviteDeliveryCbaProofBundles(
+    const bundles = await inviteDeliveryCbsProofBundles(
       request,
       fixture.inviterToken,
       fixture.realmId,

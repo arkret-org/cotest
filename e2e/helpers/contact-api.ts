@@ -30,7 +30,7 @@ import {
   canonicalTimestamp,
   currentActorIdApi,
   dispatchSelfInviteApi,
-  inviteDeliveryCbaProofBundles,
+  inviteDeliveryCbsProofBundles,
   selfInviteDispatchBody,
   expectJsonOk,
   principalControlRealmForId,
@@ -803,7 +803,7 @@ async function deliverInvite(
     // §7 step 4: the receiver cannot resolve the invite Realm's authority
     // closure itself, so it travels with the request — one bundle per
     // `seal_basis` leaf, read from the inviter side's own accepted Seals.
-    cba_proof_bundles: await inviteDeliveryCbaProofBundles(
+    cbs_proof_bundles: await inviteDeliveryCbsProofBundles(
       request,
       args.inviterToken,
       args.realmId,

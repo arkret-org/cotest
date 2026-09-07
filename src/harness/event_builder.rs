@@ -435,11 +435,11 @@ pub(crate) fn realm_bootstrap_event_batch_for_device(
 ///
 /// The `head_eq null` Control Move precondition every Realm genesis write
 /// carries: each of these cells is written exactly once, at genesis.
-fn head_eq_null_precondition(cell: &str) -> Result<arkret_wire::cba::Precondition> {
-    Ok(arkret_wire::cba::Precondition {
+fn head_eq_null_precondition(cell: &str) -> Result<arkret_wire::cbs::Precondition> {
+    Ok(arkret_wire::cbs::Precondition {
         cell_id: arkret_wire::CellRef::new(cell.to_owned())?,
-        predicate: arkret_wire::cba::Predicate {
-            op: arkret_wire::cba::PredicateOp::HeadEq,
+        predicate: arkret_wire::cbs::Predicate {
+            op: arkret_wire::cbs::PredicateOp::HeadEq,
             value: Some(Value::Null),
             values: None,
             predicate_id: None,
@@ -873,7 +873,7 @@ pub fn event_envelope(actor: &str, realm_id: &str, kind: &str, payload: Value) -
 
 /// The `head_eq` guard naming the complete settled value a Control Move
 /// replaces.
-pub fn head_eq_precondition(cell: &str, settled_value: Value) -> arkret_wire::cba::Precondition {
+pub fn head_eq_precondition(cell: &str, settled_value: Value) -> arkret_wire::cbs::Precondition {
     serde_json::from_value(json!({
         "cell_id": cell,
         "predicate": { "op": "head_eq", "value": settled_value },
@@ -1036,7 +1036,7 @@ fn harness_event_created_at() -> DateTime<Utc> {
 /// retype so no call site can spell it `ak:invite:`. A Move that derives no
 /// slot write (a third-party invite, or a `send_failed` revoke, both of which
 /// omit the account) owes nothing.
-fn invite_live_target_preconditions(event: &Event) -> Vec<arkret_wire::cba::Precondition> {
+fn invite_live_target_preconditions(event: &Event) -> Vec<arkret_wire::cbs::Precondition> {
     let Some(invitee) = event
         .payload
         .get("invitee_account_id")
@@ -1076,7 +1076,7 @@ fn event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
     verification_method: &DidUrl,
     station_id: Option<&DidCoreId>,
     causal_refs: Vec<String>,
-    preconditions: Vec<arkret_wire::cba::Precondition>,
+    preconditions: Vec<arkret_wire::cbs::Precondition>,
 ) -> Event {
     let unique_seq = NEXT_EVENT_SEQ.fetch_add(1, Ordering::Relaxed);
     let actor_seq = actor_seq.unwrap_or(unique_seq);
@@ -1584,7 +1584,7 @@ mod realm_bootstrap_tests {
         );
         assert_eq!(
             precondition.predicate.op,
-            arkret_wire::cba::PredicateOp::HeadEq
+            arkret_wire::cbs::PredicateOp::HeadEq
         );
         assert_eq!(precondition.predicate.value, Some(Value::Null));
         assert!(!membership.payload.contains_key("delivery_status"));

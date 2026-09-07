@@ -76,7 +76,7 @@ pub fn run_control_proposal_ack_suite() -> Result<()> {
             && fixture
                 .pointer("/runner/entrypoint")
                 .and_then(Value::as_str)
-                == Some("ak.suite.cba.control_proposal_ack.v1"),
+                == Some("ak.suite.cbs.control_proposal_ack.v1"),
         "Control Proposal Ack fixture metadata changed"
     );
     let cases = fixture

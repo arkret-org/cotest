@@ -34,7 +34,7 @@ import {
   alignSignedEventToActorFrontierApi,
   authHeaders,
   canonicalJson,
-  prepareSignedEventCbaApi,
+  prepareSignedEventCbsApi,
   refreshEventEnvelopeProof,
   resolveDefaultStrandId,
   signedEventEnvelope,
@@ -426,7 +426,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
           content: { kind: "ak.content.text", body },
         },
       });
-      await prepareSignedEventCbaApi(request, token, envelope);
+      await prepareSignedEventCbsApi(request, token, envelope);
       await alignSignedEventToActorFrontierApi(request, token, envelope);
       const eventId = String(envelope.event_id);
       const submitUrl = `${solandBaseUrl()}/_arkret/self/events`;
@@ -685,7 +685,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       const submitUrl = `${solandBaseUrl()}/_arkret/self/events`;
       // R1 — first request under the key executes and is cached.
       const b1 = messageEnvelope(`idem body ${stamp} v1`);
-      await prepareSignedEventCbaApi(request, token, b1);
+      await prepareSignedEventCbsApi(request, token, b1);
       await alignSignedEventToActorFrontierApi(request, token, b1);
       const r1 = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: { ...authHeaders(token, "POST", submitUrl), "idempotency-key": idempotencyKey, "content-type": "application/json" },
@@ -713,7 +713,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
 
       // R3 — same key + DIFFERENT canonical body (fresh event_id) → duplicate_conflict.
       const b2 = messageEnvelope(`idem body ${stamp} v2-divergent`);
-      await prepareSignedEventCbaApi(request, token, b2);
+      await prepareSignedEventCbsApi(request, token, b2);
       await alignSignedEventToActorFrontierApi(request, token, b2);
       const r3 = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: { ...authHeaders(token, "POST", submitUrl), "idempotency-key": idempotencyKey, "content-type": "application/json" },
@@ -765,7 +765,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
           content: { kind: "ak.content.text", body: "must not accept unknown feature" },
         },
       });
-      await prepareSignedEventCbaApi(request, token, envelope);
+      await prepareSignedEventCbsApi(request, token, envelope);
       await alignSignedEventToActorFrontierApi(request, token, envelope);
       (envelope.requirements as { features: string[] }).features = [undeclaredFeature];
       refreshEventEnvelopeProof(envelope);
@@ -813,7 +813,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
           },
         },
       });
-      await prepareSignedEventCbaApi(request, token, envelope);
+      await prepareSignedEventCbsApi(request, token, envelope);
       await alignSignedEventToActorFrontierApi(request, token, envelope);
       (
         envelope.requirements as {

@@ -25,7 +25,7 @@ pub const ALL_STATE_REDUCER_HARDENING_VECTOR_IDS: &[&str] = &[
 ];
 
 const STATE_REDUCER_HARDENING_FIXTURE_FILE: &str = "state-reducer-hardening-fixture.json";
-const STATE_REDUCER_HARDENING_PROFILE: &str = "ak.vector_group.cba_lattice.v1";
+const STATE_REDUCER_HARDENING_PROFILE: &str = "ak.vector_group.cbs_lattice.v1";
 const STATE_REDUCER_HARDENING_SUITE_ENTRYPOINT: &str = "ak.suite.reducer.hardening.v1";
 const STRAND_OBJECT_CELL_FAMILY: &str = arkret_wire::CellFamilyId::STRAND_OBJECT_V1;
 

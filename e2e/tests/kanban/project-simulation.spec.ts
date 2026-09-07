@@ -21,7 +21,7 @@ import {
   canonicalJson,
   canonicalTimestamp,
   createRealmApi,
-  prepareSignedEventCbaApi,
+  prepareSignedEventCbsApi,
   retypeEventDerivedId,
   sdkEventDerivedObjectId,
   sha256CanonicalJson,
@@ -502,7 +502,7 @@ test.describe("project simulation", () => {
         patch: { metadata: { fields: { status: "resolved" } } },
       },
     });
-    await prepareSignedEventCbaApi(request, aliceToken, forbiddenStatusEvent);
+    await prepareSignedEventCbsApi(request, aliceToken, forbiddenStatusEvent);
     await alignSignedEventToActorFrontierApi(
       request,
       aliceToken,

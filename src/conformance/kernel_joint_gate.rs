@@ -17,7 +17,7 @@ use arkret_wire::offline_publication::{
     AuthorizationLease, LeaseBasisRef, RiskTier,
 };
 use arkret_wire::{
-    ActorId, CapabilityActionId, CbaProofBundle, ControlProposalDecisionPolicy, Did, DidUrl,
+    ActorId, CapabilityActionId, CbsProofBundle, ControlProposalDecisionPolicy, Did, DidUrl,
     LatticeOp, LatticeOpType, NotarySig, NotaryValue, OperationKind, ProducerEventProof, SchemaId,
     ScopeRef, Seal, SealSignature,
 };
@@ -47,7 +47,7 @@ pub fn run_kernel_joint_gate_suite() -> Result<()> {
         "merge_safe_control",
         "exclusive_control_bottom",
         "security_barrier_quorum",
-        "cba_basis_completion",
+        "cbs_basis_completion",
         "expired_lease",
         "revoked_device_lease",
         "proposal_decision",
@@ -155,8 +155,8 @@ fn reduce_with_kernel(input: &KernelGateInput) -> KernelGateOutcome {
         "ak.capability.grant" => kernel_merge_safe(input),
         "ak.realm.policy" => kernel_exclusive_control(input),
         "ak.device.revoke" => kernel_security_barrier(input),
-        "ak.message.create" if input.payload.get("cba_proof_bundle").is_some() => {
-            kernel_cba_bundle(input)
+        "ak.message.create" if input.payload.get("cbs_proof_bundle").is_some() => {
+            kernel_cbs_bundle(input)
         }
         "ak.message.create" => kernel_offline_publication(input),
         "ak.self.authorization_leases.command.issue.v1" => kernel_lease_issue(input),
@@ -413,7 +413,7 @@ fn kernel_security_barrier(input: &KernelGateInput) -> KernelGateOutcome {
     projection(json!({"barrier": "accepted"}))
 }
 
-fn kernel_cba_bundle(input: &KernelGateInput) -> KernelGateOutcome {
+fn kernel_cbs_bundle(input: &KernelGateInput) -> KernelGateOutcome {
     let basis_known = input
         .basis
         .get("target_seal_known")
@@ -424,19 +424,19 @@ fn kernel_cba_bundle(input: &KernelGateInput) -> KernelGateOutcome {
     }
     let Some(bundle_input) = input
         .payload
-        .get("cba_proof_bundle")
+        .get("cbs_proof_bundle")
         .and_then(Value::as_object)
     else {
-        return error("dependency_missing", "cba_basis_incomplete");
+        return error("dependency_missing", "cbs_basis_incomplete");
     };
     let Some(target_ref) = bundle_input.get("target_seal_ref").and_then(Value::as_str) else {
-        return error("dependency_missing", "cba_basis_incomplete");
+        return error("dependency_missing", "cbs_basis_incomplete");
     };
     let Some(seal_inputs) = bundle_input.get("seals").and_then(Value::as_array) else {
-        return error("dependency_missing", "cba_basis_incomplete");
+        return error("dependency_missing", "cbs_basis_incomplete");
     };
     if seal_inputs.len() != 1 {
-        return error("dependency_missing", "cba_basis_incomplete");
+        return error("dependency_missing", "cbs_basis_incomplete");
     }
     let seal_input = &seal_inputs[0];
     if seal_input.get("seal_ref").and_then(Value::as_str) != Some(target_ref)
@@ -446,7 +446,7 @@ fn kernel_cba_bundle(input: &KernelGateInput) -> KernelGateOutcome {
             .is_none_or(|predecessors| !predecessors.is_empty())
         || seal_input.get("realm_id").and_then(Value::as_str) != Some(sample_realm().as_str())
     {
-        return error("dependency_missing", "cba_basis_incomplete");
+        return error("dependency_missing", "cbs_basis_incomplete");
     }
     let notary_seq = seal_input
         .get("notary_seq")
@@ -457,14 +457,14 @@ fn kernel_cba_bundle(input: &KernelGateInput) -> KernelGateOutcome {
         .and_then(Value::as_str)
         .and_then(digest_tail_byte)
     else {
-        return error("dependency_missing", "cba_basis_incomplete");
+        return error("dependency_missing", "cbs_basis_incomplete");
     };
     let seal = sample_seal(
         notary_seq,
         delta_byte,
         &crate::fixture_did_url("did:webvh:z6mkfixture:notary.example#key-1"),
     );
-    let bundle = CbaProofBundle {
+    let bundle = CbsProofBundle {
         target_seal_ref: seal.id.clone(),
         seals: vec![seal],
         control_moves: Vec::new(),
@@ -472,7 +472,7 @@ fn kernel_cba_bundle(input: &KernelGateInput) -> KernelGateOutcome {
         availability_proofs: Vec::new(),
     };
     if bundle.validate_structural().is_err() {
-        return error("dependency_missing", "cba_basis_incomplete");
+        return error("dependency_missing", "cbs_basis_incomplete");
     }
     projection(json!({"basis_complete": true}))
 }

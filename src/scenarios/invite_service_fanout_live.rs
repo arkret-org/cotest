@@ -34,7 +34,7 @@ use arkret_models_collaboration::sync_frames::account_sync::{
 };
 use arkret_models_identity::ServiceResolutionCarrier;
 use arkret_models_identity::account::{AccountDataList, AccountDataRow};
-use arkret_wire::cba::SealBasis;
+use arkret_wire::cbs::SealBasis;
 use arkret_wire::{
     AccountDataKey, AccountId, ActorId, ConsentScope, EventInitialSubmission, InviteReceiveAction,
 };

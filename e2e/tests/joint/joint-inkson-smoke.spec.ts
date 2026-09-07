@@ -8,7 +8,7 @@ import {
   accountActorId,
   canonicalJson,
   grantCapabilityEventApi,
-  prepareSignedEventCbaApi,
+  prepareSignedEventCbsApi,
   readRealmSealBasis,
   retypeEventDerivedId,
   signedEventEnvelope,
@@ -578,7 +578,7 @@ async function submitSignedEvent(
     payload,
     sealBasis,
   });
-  await prepareSignedEventCbaApi(request, session.grantJwt, envelope);
+  await prepareSignedEventCbsApi(request, session.grantJwt, envelope);
   const response = await request.post(url, {
     headers: {
       ...selfPathHeadersForDpopSession(session, "POST", url),

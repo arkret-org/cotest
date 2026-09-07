@@ -1,6 +1,6 @@
-//! CBA dual-plane lattice fixture suite.
+//! CBS dual-plane lattice fixture suite.
 //!
-//! Validates the `cba-lattice-fixture.json` profile's normative vectors. Data
+//! Validates the `cbs-lattice-fixture.json` profile's normative vectors. Data
 //! events use registry-derived projected writes plus `seal_ref + auth_context` and stay data-plane
 //! local or observed until control-plane seals cover the relevant state. Control moves
 //! use registry-derived projected writes plus `seal_basis`, may carry preconditions, and only
@@ -17,22 +17,22 @@ use super::{
 };
 use crate::transcripts::record_vector_event;
 
-const CONFLICT_RECOVERY_VECTOR_ID: &str = "ak.vector.cba_lattice.conflict_recovery_move.v1";
+const CONFLICT_RECOVERY_VECTOR_ID: &str = "ak.vector.cbs_lattice.conflict_recovery_move.v1";
 
 pub fn run_state_resolution_fixture_suite() -> Result<()> {
-    run_cba_lattice_fixture_suite()
+    run_cbs_lattice_fixture_suite()
 }
 
-pub fn run_cba_lattice_fixture_suite() -> Result<()> {
-    let value = load_fixture_value("cba-lattice-fixture.json")?;
-    validate_profile(&value, "ak.vector_group.cba_lattice.v1")?;
+pub fn run_cbs_lattice_fixture_suite() -> Result<()> {
+    let value = load_fixture_value("cbs-lattice-fixture.json")?;
+    validate_profile(&value, "ak.vector_group.cbs_lattice.v1")?;
 
     let vectors = value
         .get("vectors")
         .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("cba lattice fixture missing vectors[]"))?;
+        .ok_or_else(|| anyhow!("cbs lattice fixture missing vectors[]"))?;
     if vectors.is_empty() {
-        bail!("cba lattice fixture has no vectors");
+        bail!("cbs lattice fixture has no vectors");
     }
 
     let mut seen_data_local = false;
@@ -64,7 +64,7 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
         let name = required_str(vector, "name")?;
         let vector_id = required_str(vector, "vector_id")?;
         if !seen_vector_ids.insert(vector_id) {
-            bail!("cba lattice fixture repeats vector_id {vector_id}");
+            bail!("cbs lattice fixture repeats vector_id {vector_id}");
         }
         match name {
             "data_event_accepts_without_seal_finality" => {
@@ -81,7 +81,7 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                 require_bool_eq(vector, "/expected/seal_required_for_accept", false, name)?;
                 seen_data_local = true;
                 record_vector_event(
-                    "state_resolution.cba.data_event_accepts_without_seal_finality",
+                    "state_resolution.cbs.data_event_accepts_without_seal_finality",
                     &json!({"vector": vector.clone()}),
                     &json!({
                         "plane": "data",
@@ -107,7 +107,7 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                 require_bool_eq(vector, "/expected/must_not_report_sealed", true, name)?;
                 seen_observation = true;
                 record_vector_event(
-                    "state_resolution.cba.data_event_observation_does_not_seal",
+                    "state_resolution.cbs.data_event_observation_does_not_seal",
                     &json!({"vector": vector.clone()}),
                     &json!({
                         "data_event_state": "data_observed",
@@ -144,7 +144,7 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                 )?;
                 seen_control_seal = true;
                 record_vector_event(
-                    "state_resolution.cba.control_move_requires_seal_basis_and_seal",
+                    "state_resolution.cbs.control_move_requires_seal_basis_and_seal",
                     &json!({"vector": vector.clone()}),
                     &json!({
                         "plane": "control",
@@ -176,7 +176,7 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                 require_bool_eq(vector, "/expected/same_batch_resolution_only", true, name)?;
                 seen_same_batch = true;
                 record_vector_event(
-                    "state_resolution.cba.same_batch_does_not_advance_authorization_basis",
+                    "state_resolution.cbs.same_batch_does_not_advance_authorization_basis",
                     &json!({"vector": vector.clone()}),
                     &json!({
                         "first_state": "control_pending",
@@ -206,7 +206,7 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                 )?;
                 seen_data_bottom = true;
                 record_vector_event(
-                    "state_resolution.cba.data_plane_conflict_returns_bottom_without_winner",
+                    "state_resolution.cbs.data_plane_conflict_returns_bottom_without_winner",
                     &json!({"vector": vector.clone()}),
                     &json!({
                         "plane": "data",
@@ -247,7 +247,7 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                 )?;
                 seen_delta_plane_guard = true;
                 record_vector_event(
-                    "state_resolution.cba.seal_delta_excludes_data_event_digest",
+                    "state_resolution.cbs.seal_delta_excludes_data_event_digest",
                     &json!({"vector": vector.clone()}),
                     &json!({
                         "delta_member_plane": "data",
@@ -293,7 +293,7 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                 )?;
                 seen_compaction = true;
                 record_vector_event(
-                    "state_resolution.cba.open_set_compaction_preserves_control_roots",
+                    "state_resolution.cbs.open_set_compaction_preserves_control_roots",
                     &json!({"vector": vector.clone()}),
                     &json!({
                         "seal_result": "accept_when_equivalent_else_reject",
@@ -311,7 +311,7 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                 validate_seal_canonical_no_self_reference(vector, name)?;
                 seen_seal_canonical = true;
                 record_vector_event(
-                    "state_resolution.cba.seal_canonical_no_self_reference",
+                    "state_resolution.cbs.seal_canonical_no_self_reference",
                     &json!({"vector": vector.clone()}),
                     &json!({
                         "valid_result": "accept",
@@ -327,7 +327,7 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                 validate_cas_mixed_basis(vector, name)?;
                 seen_cas_mixed_basis = true;
                 record_vector_event(
-                    "state_resolution.cba.cas_mixed_basis",
+                    "state_resolution.cbs.cas_mixed_basis",
                     &json!({"vector": vector.clone()}),
                     &json!({
                         "blind_write": "failed_precondition",
@@ -343,7 +343,7 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                 validate_auth_context_epoch_pinning_reject(vector, name)?;
                 seen_auth_epoch = true;
                 record_vector_event(
-                    "state_resolution.cba.auth_context_epoch_pinning_reject",
+                    "state_resolution.cbs.auth_context_epoch_pinning_reject",
                     &json!({"vector": vector.clone()}),
                     &json!({
                         "outside_window": "reject_or_hide",
@@ -360,7 +360,7 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                 validate_seal_compaction_interval_enforced(vector, name)?;
                 seen_compaction_interval = true;
                 record_vector_event(
-                    "state_resolution.cba.seal_compaction_interval_enforced",
+                    "state_resolution.cbs.seal_compaction_interval_enforced",
                     &json!({"vector": vector.clone()}),
                     &json!({
                         "valid_compaction": "accept",
@@ -377,7 +377,7 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                 validate_inclusion_list_obligation(vector, name)?;
                 seen_inclusion_list = true;
                 record_vector_event(
-                    "state_resolution.cba.inclusion_list_obligation",
+                    "state_resolution.cbs.inclusion_list_obligation",
                     &json!({"vector": vector.clone()}),
                     &json!({
                         "discharged": ["include", "signed_reject", "pre_state_failure_proof"],
@@ -394,7 +394,7 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                 validate_notary_fault_equivocation_quarantine(vector, name)?;
                 seen_notary_fault = true;
                 record_vector_event(
-                    "state_resolution.cba.notary_fault_equivocation_quarantine",
+                    "state_resolution.cbs.notary_fault_equivocation_quarantine",
                     &json!({"vector": vector.clone()}),
                     &json!({
                         "fault_move_result": "accept",
@@ -412,7 +412,7 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                 validate_sealed_control_move_full_digest_collision(vector, name)?;
                 seen_sealed_control_collision = true;
                 record_vector_event(
-                    "state_resolution.cba.sealed_control_move_full_digest_collision",
+                    "state_resolution.cbs.sealed_control_move_full_digest_collision",
                     &json!({"vector": vector.clone()}),
                     &json!({
                         "quarantine_scope": "entire_collision_group",
@@ -431,7 +431,7 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                 validate_threshold_forensic_attribution(vector, name)?;
                 seen_threshold_forensics = true;
                 record_vector_event(
-                    "state_resolution.cba.threshold_forensic_attribution",
+                    "state_resolution.cbs.threshold_forensic_attribution",
                     &json!({"vector": vector.clone()}),
                     &json!({
                         "n5_k3_quorum_intersection": "accept",
@@ -447,7 +447,7 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                 validate_open_set_concurrent_revocation_fail_closed(vector, name)?;
                 seen_concurrent_revocation = true;
                 record_vector_event(
-                    "state_resolution.cba.open_set_concurrent_revocation_fail_closed",
+                    "state_resolution.cbs.open_set_concurrent_revocation_fail_closed",
                     &json!({"vector": vector.clone()}),
                     &json!({
                         "concurrent_revoke": "reject_or_hide",
@@ -464,7 +464,7 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                 validate_actor_chain_realm_scope(vector, name)?;
                 seen_actor_chain_realm_scope = true;
                 record_vector_event(
-                    "state_resolution.cba.actor_chain_realm_scope",
+                    "state_resolution.cbs.actor_chain_realm_scope",
                     &json!({"vector": vector.clone()}),
                     &json!({
                         "cross_realm_same_sequence": "independent",
@@ -484,7 +484,7 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                 validate_conflict_recovery_move(vector, name)?;
                 seen_conflict_recovery = true;
                 record_vector_event(
-                    "state_resolution.cba.conflict_recovery_move",
+                    "state_resolution.cbs.conflict_recovery_move",
                     &json!({"vector": vector.clone()}),
                     &json!({
                         "valid_recovery": "accept_after_valid_seal",
@@ -501,7 +501,7 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                 validate_same_seal_bottom_reject_serialization(vector, name)?;
                 seen_same_seal_bottom_serialization = true;
                 record_vector_event(
-                    "state_resolution.cba.same_seal_bottom_reject_serialization",
+                    "state_resolution.cbs.same_seal_bottom_reject_serialization",
                     &json!({"vector": vector.clone()}),
                     &json!({
                         "one_included_one_rejected": "accept_seal",
@@ -518,7 +518,7 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                 validate_realm_create_projection_closure(vector, name)?;
                 seen_realm_create_projection_closure = true;
                 record_vector_event(
-                    "state_resolution.cba.realm_create_projection_closure",
+                    "state_resolution.cbs.realm_create_projection_closure",
                     &json!({"vector": vector.clone()}),
                     &json!({
                         "required_projection_count": 5,
@@ -534,7 +534,7 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                 validate_null_cell_subject_wire_form(vector, name)?;
                 seen_null_cell_subject_wire_form = true;
                 record_vector_event(
-                    "state_resolution.cba.null_cell_subject_wire_form",
+                    "state_resolution.cbs.null_cell_subject_wire_form",
                     &json!({"vector": vector.clone()}),
                     &json!({
                         "wire_subject_segment": "null",
@@ -550,7 +550,7 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                 validate_realm_alias_single_carrier(vector, name)?;
                 seen_realm_alias_single_carrier = true;
                 record_vector_event(
-                    "state_resolution.cba.realm_alias_single_carrier",
+                    "state_resolution.cbs.realm_alias_single_carrier",
                     &json!({"vector": vector.clone()}),
                     &json!({
                         "carrier_cell": "ak:cell:ak.component.realm.alias.v1:null",
@@ -569,7 +569,7 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                 validate_fork_resolution_peer_alignment(vector, name)?;
                 seen_fork_resolution_peer_alignment = true;
                 record_vector_event(
-                    "state_resolution.cba.fork_resolution_peer_alignment",
+                    "state_resolution.cbs.fork_resolution_peer_alignment",
                     &json!({"vector": vector.clone()}),
                     &json!({
                         "sibling_position_face": "ak.peer.events.read.sibling_positions.v1",
@@ -592,7 +592,7 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
             "fsm_causal_heads" => {
                 validate_fsm_causal_heads(vector, name)?;
             }
-            _ => bail!("unknown cba lattice vector: {name}"),
+            _ => bail!("unknown cbs lattice vector: {name}"),
         }
     }
 
@@ -621,7 +621,7 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
         && seen_fork_resolution_peer_alignment)
     {
         bail!(
-            "cba lattice fixture must cover all 23 normative vectors \
+            "cbs lattice fixture must cover all 23 normative vectors \
              (data_local / observation / control_seal / same_batch / data_bottom / \
               delta_plane_guard / compaction / seal_canonical / cas_mixed_basis / \
               auth_epoch / compaction_interval / inclusion_list / notary_fault / sealed_control_collision / \
@@ -651,7 +651,7 @@ fn require_pointer<'a>(value: &'a Value, pointer: &str, vector_name: &str) -> Re
 }
 
 /// `ak.vector.lattice.fsm_causal_heads.v1`
-/// (`cba-lattice-fixture.json`, `event-auth-state-resolution.md`
+/// (`cbs-lattice-fixture.json`, `event-auth-state-resolution.md`
 /// §9.3.1.5–§9.3.1.8).
 ///
 /// The SDK's `Fsm` is the implementation under test: every case runs through its
@@ -847,7 +847,7 @@ fn validate_fsm_causal_heads(vector: &Value, vector_name: &str) -> Result<()> {
         );
         super::helpers::assert_expected_subset(name, &expected_subset, &observed)?;
         record_vector_event(
-            &format!("cba.fsm_causal_heads.{name}"),
+            &format!("cbs.fsm_causal_heads.{name}"),
             &json!({"vector": vector_name, "case": case}),
             &expected_subset,
             &observed,
@@ -2936,7 +2936,7 @@ fn validate_threshold_forensic_attribution(vector: &Value, vector_name: &str) ->
     )
 }
 
-/// Vector `ak.vector.cba_lattice.open_set_concurrent_revocation_fail_closed.v1`.
+/// Vector `ak.vector.cbs_lattice.open_set_concurrent_revocation_fail_closed.v1`.
 ///
 /// A DataEvent with a locally valid `seal_ref` MUST be re-evaluated against the
 /// joined multi-leaf control view of an open-set notary. When a concurrent
@@ -3156,7 +3156,7 @@ fn validate_open_set_concurrent_revocation_fail_closed(
     )
 }
 
-/// Vector `ak.vector.cba_lattice.conflict_recovery_move.v1`.
+/// Vector `ak.vector.cbs_lattice.conflict_recovery_move.v1`.
 ///
 /// A `bottom=reject` control cell that has gone to bottom-by-conflict recovers
 /// ONLY through a sealed Control Move that carries a critical
@@ -3299,7 +3299,7 @@ fn validate_conflict_recovery_move(vector: &Value, vector_name: &str) -> Result<
     validate_fsm_recovery_admission(vector, vector_name)
 }
 
-/// The `fsm_recovery` half of `ak.vector.cba_lattice.conflict_recovery_move.v1`
+/// The `fsm_recovery` half of `ak.vector.cbs_lattice.conflict_recovery_move.v1`
 /// (`event-auth-state-resolution.md` §9.5.1 fsm additional admission).
 ///
 /// The block above this one is prose the runner only shape-checks. This part is

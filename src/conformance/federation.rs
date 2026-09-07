@@ -144,14 +144,14 @@ pub fn run_federation_fixture_suite() -> Result<()> {
             "seal_prerequisite_partial_retry" => {
                 validate_seal_prerequisite_partial_retry_case(&case)?;
             }
-            "cba_dependency_resolve" => validate_cba_dependency_resolve_case(&case)?,
+            "cbs_dependency_resolve" => validate_cbs_dependency_resolve_case(&case)?,
             "agent_event_admission_receipt_handoff" => {
                 validate_agent_event_admission_receipt_handoff_case(&case)?
             }
             "frontier_mismatch_reduction_terminal_states" => {
                 validate_frontier_mismatch_reduction_terminal_states(&case)?
             }
-            "ordinary_event_uses_cba_reducer_profile_cell"
+            "ordinary_event_uses_cbs_reducer_profile_cell"
             | "settled_reducer_profile_not_implemented"
             | "upgrade_target_not_registered" => validate_reducer_profile_resolution_case(&case)?,
             "pull_authorization" => {
@@ -471,7 +471,7 @@ fn validate_seal_prerequisite_closure_case(case: &super::NamedCase) -> Result<()
         "single_realm": true,
         "event_count_range": [1, 500],
         "event_phase_order": ["control", "data"],
-        "cba_proof_bundle_count_range": [0, 64],
+        "cbs_proof_bundle_count_range": [0, 64],
         "per_bundle_limits": {
             "seals": 256,
             "control_moves": 1024,
@@ -575,8 +575,8 @@ fn validate_seal_prerequisite_partial_retry_case(case: &super::NamedCase) -> Res
     Ok(())
 }
 
-fn validate_cba_dependency_resolve_case(case: &super::NamedCase) -> Result<()> {
-    if case.vector_id.as_deref() != Some("ak.vector.federation.cba_dependency_resolve.v1") {
+fn validate_cbs_dependency_resolve_case(case: &super::NamedCase) -> Result<()> {
+    if case.vector_id.as_deref() != Some("ak.vector.federation.cbs_dependency_resolve.v1") {
         bail!("{} has the wrong vector_id", case.name);
     }
     let contract = case
@@ -718,7 +718,7 @@ fn validate_reducer_profile_resolution_case(case: &super::NamedCase) -> Result<(
         .and_then(Value::as_str)
         .ok_or_else(|| anyhow!("{} case lacks string expected", case.name))?;
     let actual = match case.name.as_str() {
-        "ordinary_event_uses_cba_reducer_profile_cell" => {
+        "ordinary_event_uses_cbs_reducer_profile_cell" => {
             let settled = input["settled_reducer_profile"]
                 .as_str()
                 .unwrap_or_default();

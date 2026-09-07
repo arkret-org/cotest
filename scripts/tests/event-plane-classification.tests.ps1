@@ -42,7 +42,7 @@ function Assert-NoRustMatch {
 
 Assert-NoRustMatch `
     -Name "raw Event plane equality" `
-    -Pattern 'cba_plane\(\)\s*(?:==|!=)' `
+    -Pattern 'cbs_plane\(\)\s*(?:==|!=)' `
     -Roots $sourceRoots
 Assert-NoRustMatch `
     -Name "exported Event descriptor plane access" `
@@ -55,7 +55,7 @@ Assert-NoRustMatch `
 
 $generatedKinds = Join-Path $WorkspaceRoot "arkret-rust-sdk\crates\wire\src\generated\event_kinds.rs"
 $generatedSource = Get-Content -Raw -LiteralPath $generatedKinds
-foreach ($helper in @("cba_plane", "is_data_plane", "is_control_plane")) {
+foreach ($helper in @("cbs_plane", "is_data_plane", "is_control_plane")) {
     if ($generatedSource -notmatch "pub fn $helper\(") {
         throw "generated EventKind is missing $helper()"
     }

@@ -12,7 +12,7 @@ import {
   authHeaders,
   canonicalJson,
   createRealmApi,
-  prepareSignedEventCbaApi,
+  prepareSignedEventCbsApi,
   signedEventEnvelope,
   submitSignedEventApi,
   wireErrCode,
@@ -418,7 +418,7 @@ test.describe("realm links", () => {
         });
       // Use T's public-to-its-member governance basis without granting Alice
       // any authority. The server must reach authorization, not wrapper parsing.
-      await prepareSignedEventCbaApi(request, bobToken, deniedEvent);
+      await prepareSignedEventCbsApi(request, bobToken, deniedEvent);
       // Bob reads Alice's selected frontier in T; Alice remains the signer and submitter.
       await alignSignedEventToActorFrontierApi(request, bobToken, deniedEvent);
       const submitUrl = `${solandBaseUrl()}/_arkret/self/events`;

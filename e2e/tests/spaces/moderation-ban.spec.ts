@@ -20,7 +20,7 @@ import {
   grantCapabilityEventApi,
   issueAuthorizationLeasesApi,
   prepareEventForAuthorizationLeaseApi,
-  prepareSignedEventCbaApi,
+  prepareSignedEventCbsApi,
   queryRealmEventsApi,
   readRealmSealBasis,
   refreshEventEnvelopeProof,
@@ -173,7 +173,7 @@ test.describe("moderation and ban", () => {
         reason: "non_moderator_attempt",
       },
     });
-    await prepareSignedEventCbaApi(request, bobToken, unauthorizedBanEvent);
+    await prepareSignedEventCbsApi(request, bobToken, unauthorizedBanEvent);
     await alignSignedEventToActorFrontierApi(
       request,
       bobToken,

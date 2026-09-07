@@ -66,7 +66,7 @@ const TARGETS = [
   },
   // The client-facing dispatch body is its own closed `$def`, not a projection
   // of the peer body: it carries `invite_event_id` instead of `invite_event`
-  // and deliberately carries no `cba_proof_bundles` (the inviter-side Station
+  // and deliberately carries no `cbs_proof_bundles` (the inviter-side Station
   // builds those from its own accepted state). Deriving it from the peer type
   // with `Omit` silently inherited every future peer-only member, so it is
   // generated from the spec node that actually defines it.

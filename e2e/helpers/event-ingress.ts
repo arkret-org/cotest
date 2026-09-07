@@ -24,7 +24,7 @@ export type IngressEvent = Record<string, unknown> & {
 export type IngressSubmission = {
   event: IngressEvent;
   authorization_lease?: Record<string, unknown>;
-  cba_proof_bundles?: unknown[];
+  cbs_proof_bundles?: unknown[];
   control_proposal_ack?: Record<string, unknown>;
 };
 

@@ -4,7 +4,7 @@
 //!
 //! Account lifecycle is **not** a Principal Control Realm finality domain. An
 //! `AccountStatusRecord` is not an Event: it never enters a Realm timeline, an
-//! actor frontier, a Seal, a CBA, a Control Proposal or a lattice reducer, and
+//! actor frontier, a Seal, a CBS, a Control Proposal or a lattice reducer, and
 //! neither a holder device nor a PCR notary can veto an Account Authority deny
 //! transition. Everything in this module drives the shared SDK types and the
 //! Station replica store, so a divergence here is a real divergence

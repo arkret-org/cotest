@@ -21,7 +21,7 @@ import {
   canonicalJson,
   canonicalTimestamp,
   createRealmApi,
-  prepareSignedEventCbaApi,
+  prepareSignedEventCbsApi,
   rawSubmitSignedEventApi,
   sdkEventDerivedObjectId,
   signedEventEnvelope,
@@ -439,8 +439,8 @@ test.describe("kanban end-to-end", () => {
         rank: "m",
       },
     });
-    await prepareSignedEventCbaApi(request, aliceToken, winnerMove);
-    await prepareSignedEventCbaApi(request, aliceToken, loserMove);
+    await prepareSignedEventCbsApi(request, aliceToken, winnerMove);
+    await prepareSignedEventCbsApi(request, aliceToken, loserMove);
     await alignSignedEventToActorFrontierApi(request, aliceToken, winnerMove);
     await alignSignedEventToActorFrontierApi(request, aliceToken, loserMove);
     // Winner is accepted (submitSignedEventApi asserts 200/201).
@@ -534,7 +534,7 @@ test.describe("kanban end-to-end", () => {
         }),
       },
     });
-    await prepareSignedEventCbaApi(request, aliceToken, crossRealm);
+    await prepareSignedEventCbsApi(request, aliceToken, crossRealm);
     await alignSignedEventToActorFrontierApi(
       request,
       aliceToken,
@@ -554,7 +554,7 @@ test.describe("kanban end-to-end", () => {
     // relation.md §4 fixes this as failed_precondition. The canonical HTTP
     // error-code-registry.json binds failed_precondition to HTTP 409. The
     // cross-Realm discriminator is carried as its reason_code; 412 is reserved
-    // for HTTP/CBA precondition failures.
+    // for HTTP/CBS precondition failures.
     expect(response.status(), JSON.stringify(responseBody)).toBe(409);
     expect(wireErrCode(responseBody), JSON.stringify(responseBody)).toBe(
       "failed_precondition",
@@ -619,14 +619,14 @@ test.describe("kanban end-to-end", () => {
         },
       },
     });
-    // Same shape as the cross-Realm rejection above: the registered CBA plane
+    // Same shape as the cross-Realm rejection above: the registered CBS plane
     // has to be on the envelope before it is signed-and-sent, and the body has
     // to be JCS bytes. Posting the bare object let Playwright serialise it in
     // insertion order, so the write was refused at wire validation
     // (422 schema_violation, "canonical JSON input is not byte-for-byte
     // canonical") and never reached the archived-Strand reducer this case is
     // about.
-    await prepareSignedEventCbaApi(request, aliceToken, trackWrite);
+    await prepareSignedEventCbsApi(request, aliceToken, trackWrite);
     await alignSignedEventToActorFrontierApi(
       request,
       aliceToken,

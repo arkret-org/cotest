@@ -28,7 +28,7 @@ fn consent_cell_id(mv: &Value, vector_name: &str) -> Result<String> {
 /// caller-minted cell `ak:cell:ak.component.consent.grant.v1:<consent_id>`.
 /// Each revoke Move issues a causal `or_set_remove` against a prior grant
 /// dot. The cell join is read by the downstream operation-admission gate;
-/// it is never copied into a cross-Realm CBA precondition.
+/// it is never copied into a cross-Realm CBS precondition.
 ///
 /// This validator replays the fixture's Move sequence per vector, tracking
 /// the or-set's active tags by their op_ids (Move ids). It enforces:
@@ -224,7 +224,7 @@ pub fn run_consent_fixture_suite() -> Result<()> {
                 _ => {
                     // Downstream operation (invite/message/call) carrying a
                     // fixture-local admission check. Resolve it against the
-                    // holder PCR consent projection, outside CBA.
+                    // holder PCR consent projection, outside CBS.
                     let admission_checks = mv
                         .get("admission_checks")
                         .and_then(Value::as_array)
