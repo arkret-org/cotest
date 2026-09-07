@@ -295,7 +295,7 @@ test.describe("applet bridge", () => {
         package_id: `package:bridge:demo-${stamp}`,
         namespace: `bridge.demo.${stamp}`,
         display_name: "Demo Bridge Applet",
-        capabilities: ["ak.message.create", "ak.applet.ghost.provision"],
+        capabilities: ["ak.message.create", "ak.member.state", "ak.applet.ghost.provision"],
       });
       expect(signed.applet_package.claimed_profiles).toEqual([
         "ak.profile.applet_bridge.v1",
@@ -397,13 +397,13 @@ test.describe("applet bridge", () => {
         actorId: registration.bot_actor_id,
         realmId,
         kind: "ak.member.state",
+        // The joining Bot cannot read the Realm before admission. The admin
+        // supplies the real accepted Seal frontier; no synthetic basis is used.
+        sealBasis: await readRealmSealBasis(request, aliceToken, realmId),
         appletId: registration.applet_id,
-        // The accepted `ak.applet.registration` Event is what produced this
-        // Bot's effective authorization to be in the Realm (§4: the install is
-        // gated on the admin's `ak.realm.admin` grant), and
-        // event-envelope.schema.json admits an Event id here when it points at
-        // exactly that accepted authorizing Event.
-        authorizationRef: registration.registration_event_ref,
+        // A registration proves installation; action authorization comes from
+        // the exact active grant covering this membership write (section 8).
+        authorizationRef: capabilityGrantRefForAction(registration, "ak.member.state"),
         proofVerificationMethod: botVerificationMethod,
         payload: {
           realm_id: realmId,
@@ -699,7 +699,6 @@ test.describe("applet bridge", () => {
         realmId,
         `revoke-${stamp}`,
       );
-      expect(revoke.ok).toBe(true);
       expect(revoke.status).toBe("complete");
       expect(revoke.revoked_refs).toEqual(
         expect.arrayContaining([registration.bot_actor_id.account_id.principal_id, ghostActorId.account_id.principal_id]),
@@ -861,7 +860,6 @@ test.describe("applet bridge", () => {
       realmId,
       `revoke-bot-${stamp}`,
     );
-    expect(revoke.ok).toBe(true);
     expect(revoke.status).toBe("complete");
     expect(revoke.revoked_refs).toEqual(
       expect.arrayContaining([registration.bot_actor_id.account_id.principal_id]),

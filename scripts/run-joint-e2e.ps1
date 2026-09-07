@@ -3379,6 +3379,10 @@ try {
                 -WorkingDirectory $repoRoot `
                 -LogDirectory $serviceLogDir
             $preparationTasks.Add([pscustomobject]@{ Name = "cotest-wire"; Service = $service; Started = $started; Artifact = $cotestWireBinary; AllowUnchangedArtifact = $true; RepositoryRoots = @($repoRoot, (Join-Path $workspaceRoot "arkret-rust-sdk")) })
+            # Both executables come from this one successful Cargo command.
+            # Validate and stamp each output so provisioning does not force a
+            # fresh build on every run merely because its stamp is absent.
+            $preparationTasks.Add([pscustomobject]@{ Name = "cotest-provision"; Service = $service; Started = $started; Artifact = $cotestProvisionBinary; AllowUnchangedArtifact = $true; RepositoryRoots = @($repoRoot, (Join-Path $workspaceRoot "arkret-rust-sdk")) })
         } else {
             $preparationTimings.Add([pscustomobject]@{ name = "cotest-wire"; status = "cache-hit"; duration_seconds = 0; detail = $wireFreshness.Detail })
         }
