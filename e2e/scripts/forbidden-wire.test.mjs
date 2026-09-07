@@ -6,6 +6,17 @@ import { forbiddenWireScanner } from "../helpers/forbidden-wire.ts";
 const artifacts = fileURLToPath(new URL("../../../arkret-spec/spec/v1/artifacts", import.meta.url));
 const scanner = forbiddenWireScanner(artifacts);
 
+test("Strand and Morph stage axes reject both progress patch paths", () => {
+  for (const kind of ["ak.strand.update", "ak.morph.update"]) {
+    for (const [path, value] of [["stage", "done"], ["stage_changed_at", "2026-09-07T00:00:00.000Z"]]) {
+      for (const patch of [{ [path]: value }, { [path]: { $op: "set", value } }]) {
+        assert.ok(scanner.scanEvent({ kind, payload: { patch } }).some(hit => hit.id === "patch:stage"));
+      }
+    }
+    assert.deepEqual(scanner.scanEvent({ kind, payload: { patch: { metadata: { title: "Updated" } } } }), []);
+  }
+});
+
 test("Message object and signed create payload have distinct field domains", () => {
   assert.equal(scanner.scan({ track_name: "discussion" }, "materialized_object", "message.schema.json")[0].id, "track_name");
   assert.deepEqual(scanner.scanEvent({ kind: "ak.message.create", payload: { track_name: "discussion", strand_id: "fixture", content: { kind: "ak.content.text", body: "hello" } } }), []);

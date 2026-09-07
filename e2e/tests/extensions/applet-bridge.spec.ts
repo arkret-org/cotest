@@ -356,7 +356,7 @@ test.describe("applet bridge", () => {
         proofVerificationMethod: botVerificationMethod,
         payload: {
           realm_id: realmId,
-          member_id: signed.applet_package.bot_actor_id.account_id.principal_id,
+          member_id: signed.applet_package.bot_actor_id,
           membership: "join",
         },
       });
@@ -1025,7 +1025,8 @@ test.describe("applet bridge", () => {
         registration_epoch_evidence: registrationEvidence, // stale-literal-allow
       }),
     });
-    expect(duplicateSibling.status()).toBe(400);
+    expect(duplicateSibling.status()).toBe(422);
+    expect(wireErrCode(await duplicateSibling.json())).toBe("schema_violation");
 
     const misplacedPackage = {
       ...signed.applet_package,
@@ -1043,7 +1044,8 @@ test.describe("applet bridge", () => {
         authoring_request_basis: prepared.basis,
       }),
     });
-    expect(misplaced.status()).toBe(400);
+    expect(misplaced.status()).toBe(422);
+    expect(wireErrCode(await misplaced.json())).toBe("schema_violation");
 
     const expectNestedEvidenceRejected = async (
       label: string,
@@ -1128,7 +1130,7 @@ test.describe("applet bridge", () => {
       realmId,
       `service-as-controller-${stamp}`,
     );
-    expect(denied.status()).toBe(400);
+    expect(denied.status()).toBe(422);
     expect(wireErrCode(await denied.json())).toBe("schema_violation");
   });
 
@@ -1168,7 +1170,7 @@ test.describe("applet bridge", () => {
       realmId,
       `tamper-body-${stamp}`,
     );
-    expect([400, 409]).toContain(denied.status());
+    expect(denied.status()).toBe(422);
     expect(wireErrCode(await denied.json())).toBe("schema_violation");
   });
 
@@ -1209,7 +1211,7 @@ test.describe("applet bridge", () => {
       realmId,
       `tamper-proof-${stamp}`,
     );
-    expect([400, 409]).toContain(denied.status());
+    expect(denied.status()).toBe(400);
     // `proof_invalid` is a registered reason code, not a top-level one.
     const deniedBody = (await denied.json()) as { reason_code?: unknown };
     expect(wireErrCode(deniedBody)).toBe("param_invalid");
@@ -2033,7 +2035,7 @@ async function rawInstallApplet(
       },
       data: canonicalJson(fifthRole),
     });
-    expect(fifthRoleResponse.status()).toBe(400);
+    expect(fifthRoleResponse.status()).toBe(422);
     expect(wireErrCode(await fifthRoleResponse.json())).toBe(
       "schema_violation",
     );
@@ -2535,7 +2537,7 @@ function authoringProofBinding(
     payload_digest: proof.payload_digest,
     verification_method: proof.verification_method,
     created_at: proof.created_at,
-    audience: proof.audience,
+    audience_id: proof.audience_id,
   };
 }
 
