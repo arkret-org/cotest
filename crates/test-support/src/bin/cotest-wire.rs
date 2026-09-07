@@ -18,6 +18,7 @@ fn main() -> Result<()> {
         "event-derived-id" => wire::event_derived_id(input)?,
         "event-envelope-parse" => wire::event_envelope_parse(input)?,
         "mimi-consent-proof" => wire::mimi_consent_proof(input)?,
+        "mimi-request-consent-proof" => wire::mimi_request_consent_proof(input)?,
         "invite-subject-proof" => wire::invite_subject_proof(input)?,
         "mls-keypackage-upload-entry" => wire::mls_keypackage_upload_entry(input)?,
         "principal-control-realm-id" => wire::principal_control_realm(input)?,

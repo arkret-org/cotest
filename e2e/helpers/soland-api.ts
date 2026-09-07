@@ -56,6 +56,7 @@ import {
   sdkEventDerivedObjectId,
   sdkEventEnvelopeProof,
   sdkMimiConsentProof,
+  sdkMimiRequestConsentProof,
   sha256CanonicalJson,
   stripUndefined,
 } from "./soland-api/wire-client";
@@ -75,6 +76,7 @@ export {
   sdkEventDerivedObjectId,
   sdkEventEnvelopeProof,
   sdkMimiConsentProof,
+  sdkMimiRequestConsentProof,
   sha256CanonicalJson,
   wireErrCode,
 };

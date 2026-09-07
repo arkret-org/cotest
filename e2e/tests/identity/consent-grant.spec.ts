@@ -15,8 +15,10 @@ import {
   prepareSignedEventSubmissionApi,
   principalControlRealmForId,
   registeredEventSigningSeedB64url,
+  registeredEventVerificationMethod,
   signedEventEnvelope,
   sdkMimiConsentProof,
+  sdkMimiRequestConsentProof,
   submitSignedEventApi,
   typedId,
 } from "../../helpers/soland-api";
@@ -472,8 +474,9 @@ test.describe("consent grant", () => {
       issueDevSession(request, charlie),
     ]);
     const aliceSigningSeed = registeredEventSigningSeedB64url(alice.id);
+    const bobSigningSeed = registeredEventSigningSeedB64url(bob.id);
     const charlieSigningSeed = registeredEventSigningSeedB64url(charlie.id);
-    if (!aliceSigningSeed || !charlieSigningSeed) {
+    if (!aliceSigningSeed || !bobSigningSeed || !charlieSigningSeed) {
       throw new Error("canonical provisioning omitted a MIMI consent device signer");
     }
     const describe = await expectJsonOk<{
@@ -484,6 +487,27 @@ test.describe("consent grant", () => {
       "MIMI consent destination describe",
     );
 
+    // `mimi_request_consent_request_body` names the requester by complete
+    // ActorId and the holder by complete AccountId — consent-model.md §6.1
+    // forbids falling back to a bare principal — and requires the requester
+    // operation proof over `ak.mimi_request_consent_request_proof.v1`.
+    const openUnsigned = {
+      requester_actor_id: accountActorId(bob.id),
+      holder_account_id: accountActorId(alice.id).account_id,
+      purpose: "direct_message",
+    };
+    const bobVerificationMethod = registeredEventVerificationMethod(bob.id);
+    if (!bobVerificationMethod) {
+      throw new Error("canonical provisioning omitted bob's device verification method");
+    }
+    const openProof = sdkMimiRequestConsentProof({
+      request: openUnsigned,
+      verificationMethod: bobVerificationMethod,
+      createdAt: canonicalTimestamp(),
+      domain: describe.trust_domain,
+      audience: describe.service_id,
+      signingSeedB64url: bobSigningSeed,
+    });
     const open = await request.post(
       `${solandBaseUrl()}/_arkret/open/mimi/consent/request`,
       {
@@ -491,11 +515,7 @@ test.describe("consent grant", () => {
           ...authHeaders(bobToken),
           "content-type": "application/json",
         },
-        data: canonicalJson({
-          requester_id: bob.id,
-          target: { kind: "did", id: alice.id },
-          purpose: "direct_message",
-        }),
+        data: canonicalJson({ ...openUnsigned, proofs: [openProof] }),
       },
     );
     const openText = await open.text();

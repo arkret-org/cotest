@@ -9,6 +9,7 @@ type CotestWireCommand =
   | "event-derived-id"
   | "invite-subject-proof"
   | "mimi-consent-proof"
+  | "mimi-request-consent-proof"
   | "mls-keypackage-upload-entry"
   | "principal-control-realm-id"
   | "webvh-placeholder-did"
@@ -140,6 +141,30 @@ export function sdkMimiConsentProof(args: {
 }): Record<string, unknown> {
   assertJsonTransportable(args.request, "$.request");
   return cotestWire<Record<string, unknown>>("mimi-consent-proof", {
+    request: args.request,
+    verification_method: args.verificationMethod,
+    created_at: args.createdAt,
+    domain: args.domain,
+    audience: args.audience,
+    signing_seed_b64url: args.signingSeedB64url,
+  });
+}
+
+/// The requester proof `mimi_request_consent_request_body.proofs[]` requires.
+///
+/// `request` is the unsigned body — `requester_actor_id`, `holder_account_id`,
+/// `purpose` and any optional members. The digest is taken over exactly that,
+/// so the proof never covers itself.
+export function sdkMimiRequestConsentProof(args: {
+  request: Record<string, unknown>;
+  verificationMethod: string;
+  createdAt: string;
+  domain: string;
+  audience: string;
+  signingSeedB64url?: string;
+}): Record<string, unknown> {
+  assertJsonTransportable(args.request, "$.request");
+  return cotestWire<Record<string, unknown>>("mimi-request-consent-proof", {
     request: args.request,
     verification_method: args.verificationMethod,
     created_at: args.createdAt,

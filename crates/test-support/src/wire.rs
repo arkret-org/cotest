@@ -21,7 +21,9 @@ use arkret_identifiers::{ConsentId, DeviceId, Did, DidCoreId, Hash, project_did_
 use arkret_models_collaboration::governance::membership_invite::{
     InviteClaimBindingProof, InviteSubjectProof, InviteSubjectProofBody,
 };
-use arkret_models_collaboration::http_bodies::{MimiConsentDecision, MimiUpdateConsentRequestBody};
+use arkret_models_collaboration::http_bodies::{
+    MimiConsentDecision, MimiRequestConsentRequestBody, MimiUpdateConsentRequestBody,
+};
 use arkret_wire::{
     AccountId, Audience, AuditReasonText, DidUrl, Event, EventInitialSubmission, NonEmptyString,
     PayloadProof, ProducerEventProof, SealBasis, SecurityClass, proof_kind,
@@ -1283,6 +1285,50 @@ pub fn mimi_consent_proof(input: Value) -> Result<Value> {
         arkret_signatures::proof::sign_ed25519_detached_jws(&signing_key, &binding)
             .map_err(|error| anyhow::anyhow!("sign MIMI consent proof: {error}"))?;
     serde_json::to_value(request.signature).context("serialize MIMI consent proof")
+}
+
+/// The requester operation proof over `ak.mimi_request_consent_request_proof.v1`.
+///
+/// `mimi_request_consent_request_body` requires `proofs[]`: consent-model.md
+/// section 5.1 mandates an actor proof for this operation, and the private
+/// correlation the call freezes is only as strong as the signature that froze
+/// it. The binding covers the requester's complete `ActorId`, the holder
+/// account, the purpose and the unsigned-body digest, so the caller cannot
+/// sign one correlation and submit another.
+pub fn mimi_request_consent_proof(input: Value) -> Result<Value> {
+    let input: MimiConsentProofInput =
+        serde_json::from_value(input).context("parse MIMI request-consent proof input")?;
+    let created_at = canonical::parse_timestamp_canonical(&input.created_at)
+        .with_context(|| format!("parse proof created_at {:?}", input.created_at))?;
+    let mut request: MimiRequestConsentRequestBody = serde_json::from_value(input.request.clone())
+        .context("parse MIMI request-consent body")?;
+    // The digest is over the body without `proofs`, so the proof being built
+    // never enters its own preimage.
+    request.proofs = Vec::new();
+    let mut proof = PayloadProof {
+        kind: proof_kind::DETACHED_JWS.to_owned(),
+        verification_method: input.verification_method.clone(),
+        payload_digest: request
+            .payload_digest()
+            .context("digest MIMI request-consent body")?,
+        created_at,
+        domain: Some(input.domain),
+        audience: Some(Audience::Single(input.audience)),
+        proof_purpose: None,
+        jws: "pending".to_owned(),
+    };
+    let binding = request
+        .proof_binding_bytes(&proof)
+        .context("encode MIMI request-consent proof binding")?;
+    let signing_key = match input.signing_seed_b64url.as_deref() {
+        Some(seed) => {
+            signing_key_from_seed(seed).context("parse MIMI request-consent signing seed")?
+        }
+        None => development_event_signing_key(&input.verification_method),
+    };
+    proof.jws = arkret_signatures::proof::sign_ed25519_detached_jws(&signing_key, &binding)
+        .map_err(|error| anyhow::anyhow!("sign MIMI request-consent proof: {error}"))?;
+    serde_json::to_value(proof).context("serialize MIMI request-consent proof")
 }
 
 /// The content-bound `event_id` of an envelope, derived the SDK way.
