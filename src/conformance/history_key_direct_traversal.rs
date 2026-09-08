@@ -29,7 +29,9 @@ use arkret_state::history_backup::{
 };
 use arkret_state::history_store::HistoryMaterialLedger;
 use arkret_state::lattice::{CasRegister, Lattice, SealedOp};
-use arkret_state::{BottomMode, CellState, LatticeKind, MemoryCellRegistry, compute_state_root};
+use arkret_state::{
+    CellState, EventCellBottom, LatticeKind, MemoryCellRegistry, compute_state_root,
+};
 use arkret_wire::event_envelope::ScopeRef;
 use arkret_wire::{
     AvailabilityReceipt, CellFamilyId, CellRef, Did, DidCoreId, DidUrl, EncryptionProfile, Event,
@@ -2002,12 +2004,12 @@ fn replay_registry() -> MemoryCellRegistry {
     registry.register(
         CellFamilyId::NOTARY_V1,
         LatticeKind::CasRegister,
-        BottomMode::Reject,
+        EventCellBottom::Reject,
     );
     registry.register(
         CellFamilyId::REALM_DIGEST_SUITE_V1,
         LatticeKind::CasRegister,
-        BottomMode::Reject,
+        EventCellBottom::Reject,
     );
     registry
 }

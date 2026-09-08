@@ -130,9 +130,9 @@ pub fn run_event_kind_lattice_dispatch_fixture_suite() -> Result<()> {
         if descriptor_lattice != lattice.as_wire_str()
             || descriptor_bottom
                 != match bottom {
-                    arkret_state::state::BottomMode::Reject => "reject",
-                    arkret_state::state::BottomMode::Expose => "expose",
-                    arkret_state::state::BottomMode::Inert => "inert",
+                    arkret_state::state::EventCellBottom::Reject => "reject",
+                    arkret_state::state::EventCellBottom::Expose => "expose",
+                    arkret_state::state::EventCellBottom::Inert => "inert",
                 }
         {
             bail!("SDK descriptor and executable lattice binding differ for {family}");
