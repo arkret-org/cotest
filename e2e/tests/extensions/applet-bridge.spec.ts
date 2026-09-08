@@ -39,7 +39,6 @@ import {
   currentActorIdApi,
   grantCapabilityEventApi,
   issueAuthorizationLeasesApi,
-  authorizationLeasesFromIssueOutcome,
   queryRealmEventsApi,
   registerEventSigner,
   plaintextVisibleServiceDeclarations,
@@ -195,6 +194,7 @@ async function revokeAppletRuntime(
   appletId: string,
   realmId: string,
   idempotencyKey: string,
+  onCommit?: () => void,
 ): Promise<Record<string, unknown>> {
   const effectiveScope = { kind: "realm" as const, realm_id: realmId };
   const reasonCode = "requested_by_admin";
@@ -250,6 +250,7 @@ async function revokeAppletRuntime(
       context: `prepare Applet revoke ${appletId}`,
     },
   );
+  onCommit?.();
   const response = await request.post(base, {
     headers: {
       ...authHeaders(token, "POST", base),
@@ -595,6 +596,16 @@ test.describe("applet bridge", () => {
       const acceptedEvents = Array.isArray(events.events)
         ? (events.events as Array<Record<string, unknown>>)
         : [];
+      const bridgedMessage = acceptedEvents.find((event) =>
+        event.kind === "ak.message.create" && JSON.stringify(event.payload).includes(text),
+      );
+      expect(bridgedMessage, "accepted external Ghost message").toBeDefined();
+      expect(bridgedMessage?.actor_id).toEqual(ghostActorId);
+      expect(bridgedMessage?.executed_by).toEqual(serviceActorId(String(signed.applet_package.service_id)));
+      const messageProofs = bridgedMessage?.proofs as Array<Record<string, unknown>>;
+      expect(messageProofs.map((proof) => proof.kind)).toEqual(["detached_jws", "station_admission"]);
+      expect(projectDidToCoreId(String(messageProofs[1].verification_method).split("#")[0])).toBe(solandServiceId());
+      expect(messageProofs[1].applet_installation_digest).toMatch(/^sha256:[0-9a-f]{64}$/);
       const ghostProfile = acceptedEvents.find(
         (event) =>
           event.kind === "ak.profile.create" &&
@@ -660,25 +671,11 @@ test.describe("applet bridge", () => {
       };
       directWrite.proofs = [
         appletEventProof(
-          signed.applet_package.service_id,
+          String(messageProofs[0].verification_method),
           directWrite,
           signed.service_signing_private_key,
         ),
       ];
-      const directLeaseResponse = await issueAuthorizationLeasesApi(
-        request,
-        appletServiceToken,
-        [directWrite],
-      );
-      const directLeaseText = await directLeaseResponse.text();
-      expect([200, 201], directLeaseText).toContain(
-        directLeaseResponse.status(),
-      );
-      const [directWriteLease] = authorizationLeasesFromIssueOutcome(
-        directLeaseText,
-        1,
-        "revoked Applet direct self-write negative",
-      );
       await alicePage.gotoTimelineRealm(realmId);
       await expect(alicePage.page.getByTestId("message-list")).toContainText(
         text,
@@ -733,12 +730,16 @@ test.describe("applet bridge", () => {
         },
         data: canonicalJson({
           event: directWrite,
-          authorization_lease: directWriteLease,
         }),
       });
       const directAfterRevokeBody = await directAfterRevoke.json();
       expect(directAfterRevoke.status()).toBe(403);
-      expect(wireErrCode(directAfterRevokeBody)).toBe("applet_revoked");
+      // A service bearer cannot impersonate the Ghost through the self rail.
+      // Online submissions carry no pre-issued authorization lease.
+      expect(wireErrCode(directAfterRevokeBody), JSON.stringify(directAfterRevokeBody))
+        .toBe("capability_denied");
+      expect(JSON.stringify(await queryRealmEventsApi(request, aliceToken, realmId)))
+        .not.toContain(`direct self write after revoke ${stamp}`);
 
       const pcrRealmId = String(provisionBody.principal_control_realm_id);
       const combinedFrontierUrl = `${solandBaseUrl()}/_arkret/self/events/frontier`;
@@ -1280,6 +1281,8 @@ test.describe("applet inbound transaction push — per-delivery source signature
     sourceServiceId?: string;
     realmId?: string;
     actorId?: ActorId;
+    actorSeq?: number;
+    prevRefs?: string[];
     appletId?: string;
     authorizationRef?: string;
     strandId?: string;
@@ -1307,10 +1310,10 @@ test.describe("applet inbound transaction push — per-delivery source signature
         realm_id: realmId,
       },
       actor_id: actorId,
-      actor_seq: 0,
+      actor_seq: args.actorSeq ?? 0,
       created_at: canonicalEventTimestamp(),
       hlc: hlcForStamp(args.stamp),
-      prev_refs: [],
+      prev_refs: args.prevRefs ?? [],
       refs: [],
       ...(args.sealRef
         ? {
@@ -1378,6 +1381,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
   test("valid applet service signature inbound transaction push → 200 accepted", async ({
     request,
   }) => {
+    test.setTimeout(300_000);
     const registryBase = requireMockAppletRegistry();
     const stamp = Date.now();
     const alice = uniqueUser(`applet-inbound-ok-${stamp}`);
@@ -1420,11 +1424,17 @@ test.describe("applet inbound transaction push — per-delivery source signature
     ).toBeTruthy();
 
     const idempotencyKey = `inbound-ok-${stamp}`;
+    const beforeInbound = await queryRealmEventsApi(request, token, realmId);
+    const botHead = (beforeInbound.events as Array<Record<string, unknown>>)
+      .filter((event) => canonicalJson(event.actor_id) === canonicalJson(registration.bot_actor_id))
+      .sort((left, right) => Number(right.actor_seq) - Number(left.actor_seq))[0];
     const body = transactionPushBody({
       stamp,
       sourceServiceId,
       realmId,
       actorId: registration.bot_actor_id,
+      actorSeq: Number(botHead?.actor_seq ?? -1) + 1,
+      prevRefs: botHead ? [String(botHead.event_id)] : [],
       appletId: registration.applet_id,
       authorizationRef: capabilityGrantRefForAction(
         registration,
@@ -1438,6 +1448,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
       signingKey: signed.service_signing_private_key,
     });
     const targetUri = `${solandBaseUrl()}${TRANSACTIONS_PATH}`;
+    const deliveryCreated = Math.floor(Date.now() / 1000);
     const resp = await request.post(targetUri, {
       headers: {
         ...authHeaders(token, "POST", targetUri),
@@ -1451,6 +1462,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
           ),
           destinationServiceId: solandServiceId(),
           idempotencyKey,
+          created: deliveryCreated,
           signingKey: signed.service_signing_private_key,
         }),
       },
@@ -1464,6 +1476,150 @@ test.describe("applet inbound transaction push — per-delivery source signature
     };
     expect(outcome.status, JSON.stringify(outcome.rejections ?? [])).toBe("accepted");
     expect(outcome.rejections ?? []).toEqual([]);
+    const timeline = await queryRealmEventsApi(request, token, realmId);
+    const accepted = (timeline.events as Array<Record<string, unknown>>).find(
+      (event) => event.event_id === body.events[0].event_id,
+    );
+    expect(accepted, "producer-only inbound is persisted as an accepted Event").toBeDefined();
+    expect(accepted?.actor_id).toEqual(registration.bot_actor_id);
+    expect(accepted?.executed_by).toEqual(serviceActorId(sourceServiceId));
+    const proofs = accepted?.proofs as Array<Record<string, unknown>>;
+    expect(proofs.map((proof) => proof.kind)).toEqual(["detached_jws", "station_admission"]);
+    expect(proofs[0]).toEqual(body.events[0].proofs[0]);
+    expect(projectDidToCoreId(String(proofs[1].verification_method).split("#")[0])).toBe(solandServiceId());
+    expect(proofs[1].applet_installation_digest).toMatch(/^sha256:[0-9a-f]{64}$/);
+
+    const dependenciesUri = `${solandBaseUrl()}/_arkret/self/seals/governance-dependencies`;
+    const dependencyResponse = await request.post(dependenciesUri, {
+      headers: { ...authHeaders(token, "POST", dependenciesUri), "content-type": "application/json" },
+      data: canonicalJson({
+        realm_id: realmId,
+        selectors: [{ kind: "applet_installation_authority", content_digest: proofs[1].applet_installation_digest }],
+        byte_limit: 8 * 1024 * 1024,
+      }),
+    });
+    expect(dependencyResponse.status(), await dependencyResponse.text()).toBe(200);
+    const dependencies = await dependencyResponse.json();
+    expect(dependencies.missing_selectors).toEqual([]);
+    expect(dependencies.items).toHaveLength(1);
+    const authority = dependencies.items[0].applet_installation_authority;
+    expect(authority.registration_event.payload.applet_id).toBe(registration.applet_id);
+    expect(authority.registration_event.scope_ref).toEqual(body.events[0].scope_ref);
+    expect(authority.registration_event.actor_id.account_id.station_id).toBe(solandServiceId());
+    expect(authority.capability_grant_event.payload.grant.subject).toEqual(serviceActorId(sourceServiceId));
+    expect(authority.registration_event.proofs.at(-1).kind).toBe("station_admission");
+    expect(authority.capability_grant_event.proofs.at(-1).kind).toBe("station_admission");
+
+    const deliver = async (payload: Record<string, unknown>, key: string) => request.post(targetUri, {
+      headers: signedAppletTransactionHeaders({
+        body: payload, targetUri, sourceServiceId,
+        keyId: String((signed.applet_package.webhook_auth as Record<string, unknown>).key_ref),
+        destinationServiceId: solandServiceId(), idempotencyKey: key,
+        created: key === idempotencyKey ? deliveryCreated : undefined,
+        signingKey: signed.service_signing_private_key,
+      }),
+      data: canonicalJson(payload),
+    });
+    const retry = await deliver(body, `inbound-event-retry-${stamp}`);
+    expect(retry.status(), await retry.text()).toBe(200);
+    expect((await retry.json()).status).toBe("accepted");
+    const transactionRetry = await deliver(body, idempotencyKey);
+    expect(transactionRetry.status(), await transactionRetry.text()).toBe(200);
+    expect(await transactionRetry.json()).toEqual(JSON.parse(responseText));
+    for (const [label, submittedProofs] of [
+      ["accepted", proofs],
+      ["duplicate-admission", [...proofs, proofs[1]]],
+      ["applet-admission", [proofs[0], { ...proofs[1], verification_method: (signed.applet_package.webhook_auth as Record<string, unknown>).key_ref }]],
+      ["replaced-producer", [{ ...proofs[0], jws: `${String(proofs[0].jws).slice(0, -8)}AAAAAAAA` }]],
+    ] as const) {
+      const forbidden = { ...body, events: [{ ...body.events[0], proofs: submittedProofs }] };
+      const rejected = await deliver(forbidden, `inbound-forbidden-${label}-${stamp}`);
+      const rejectedText = await rejected.text();
+      expect(rejected.status(), rejectedText).toBe(200);
+      expect(JSON.parse(rejectedText).status).toBe("rejected");
+    }
+    const after = await queryRealmEventsApi(request, token, realmId);
+    const retained = (after.events as Array<Record<string, unknown>>).filter((event) => event.event_id === body.events[0].event_id);
+    expect(retained).toHaveLength(1);
+    expect(retained[0].proofs).toEqual(proofs);
+
+    const { proofs: serviceDraftProofs, executed_by: delegatedExecutor, ...serviceDraft } = body.events[0];
+    const serviceHead = (after.events as Array<Record<string, unknown>>)
+      .filter((event) => canonicalJson(event.actor_id) === canonicalJson(delegatedExecutor))
+      .sort((left, right) => Number(right.actor_seq) - Number(left.actor_seq))[0];
+    const serviceUnsigned = {
+      ...serviceDraft, actor_id: delegatedExecutor,
+      actor_seq: Number(serviceHead?.actor_seq ?? -1) + 1,
+      prev_refs: serviceHead ? [String(serviceHead.event_id)] : [],
+      external_ref: { ...serviceDraft.external_ref, external_id: `ext-service-${stamp}` },
+    };
+    serviceUnsigned.event_id = sdkEventDerivedIds(serviceUnsigned).event_id;
+    const serviceEvent = { ...serviceUnsigned, proofs: [appletEventProof(String(serviceDraftProofs[0].verification_method), serviceUnsigned, signed.service_signing_private_key)] };
+    const serviceResponse = await deliver({ ...body, events: [serviceEvent] }, `inbound-service-self-${stamp}`);
+    expect(serviceResponse.status(), await serviceResponse.text()).toBe(200);
+    expect((await serviceResponse.json()).status).toBe("accepted");
+    const serviceHistory = await queryRealmEventsApi(request, token, realmId);
+    const acceptedService = (serviceHistory.events as Array<Record<string, unknown>>).find((event) => event.event_id === serviceEvent.event_id);
+    expect(acceptedService?.actor_id).toEqual(serviceActorId(sourceServiceId));
+    expect(acceptedService?.executed_by).toBeUndefined();
+    const serviceProofs = acceptedService?.proofs as Array<Record<string, unknown>>;
+    expect(serviceProofs[0]).toEqual(serviceEvent.proofs[0]);
+    expect(projectDidToCoreId(String(serviceProofs[1].verification_method).split("#")[0])).toBe(solandServiceId());
+
+    const { proofs: originalProducer, ...previousUnsigned } = body.events[0];
+    const nextUnsigned = {
+      ...previousUnsigned,
+      actor_seq: previousUnsigned.actor_seq + 1,
+      prev_refs: [previousUnsigned.event_id],
+      created_at: canonicalEventTimestamp(),
+      hlc: hlcForStamp(stamp + 1),
+      external_ref: { ...previousUnsigned.external_ref, external_id: `ext-race-${stamp}` },
+    };
+    nextUnsigned.event_id = sdkEventDerivedIds(nextUnsigned).event_id;
+    const next = { ...nextUnsigned, proofs: [appletEventProof(String(originalProducer[0].verification_method), nextUnsigned, signed.service_signing_private_key)] };
+    let racingDelivery: ReturnType<typeof deliver> | undefined;
+    const revoked = await revokeAppletRuntime(request, token, alice.id, registration.applet_id, realmId, `inbound-revoke-${stamp}`, () => {
+      racingDelivery = deliver({ ...body, events: [next] }, `inbound-revoke-race-${stamp}`);
+    });
+    expect(revoked.status).toBe("complete");
+    expect(racingDelivery).toBeDefined();
+    const raceResponse = await racingDelivery!;
+    const raceOutcome = await raceResponse.json();
+    const racedHistory = await queryRealmEventsApi(request, token, realmId);
+    const racedEvents = racedHistory.events as Array<Record<string, unknown>>;
+    const racedEvent = racedEvents.find((event) => event.event_id === next.event_id);
+    if (raceOutcome.status === "accepted") {
+      expect(racedEvent).toBeDefined();
+      expect(racedEvents.filter((event) => event.event_id === next.event_id)).toHaveLength(1);
+      expect((racedEvent!.proofs as Array<Record<string, unknown>>)[0]).toEqual(next.proofs[0]);
+    } else {
+      expect(racedEvent).toBeUndefined();
+    }
+    const fencedUnsigned = {
+      ...nextUnsigned,
+      actor_seq: racedEvent ? nextUnsigned.actor_seq + 1 : nextUnsigned.actor_seq,
+      prev_refs: [racedEvent ? next.event_id : previousUnsigned.event_id],
+      created_at: canonicalEventTimestamp(),
+      hlc: hlcForStamp(stamp + 2),
+      external_ref: { ...nextUnsigned.external_ref, external_id: `ext-fenced-${stamp}` },
+    };
+    fencedUnsigned.event_id = sdkEventDerivedIds(fencedUnsigned).event_id;
+    const fenced = { ...fencedUnsigned, proofs: [appletEventProof(String(originalProducer[0].verification_method), fencedUnsigned, signed.service_signing_private_key)] };
+    const afterRevoke = await deliver({ ...body, events: [fenced] }, `inbound-after-revoke-${stamp}`);
+    const afterRevokeBody = await afterRevoke.json();
+    expect(afterRevokeBody.status).not.toBe("accepted");
+    const historical = await queryRealmEventsApi(request, token, realmId);
+    const historicalEvents = historical.events as Array<Record<string, unknown>>;
+    expect(historicalEvents.find((event) => event.event_id === previousUnsigned.event_id)?.proofs).toEqual(proofs);
+    expect(historicalEvents.some((event) => event.event_id === fenced.event_id)).toBe(false);
+    const replicaReplay = await rawPushFederationEvents(request, [retained[0]], {
+      origin: solandServiceId(), destination: solandServiceId(), realmId,
+      idempotencyKey: `inbound-historical-peer-replay-${stamp}`,
+      acceptedSource: { token },
+    });
+    const replicaOutcome = await replicaReplay.json();
+    expect(replicaReplay.status(), JSON.stringify(replicaOutcome)).toBe(200);
+    expect([...(replicaOutcome.accepted ?? []), ...(replicaOutcome.duplicate ?? [])], JSON.stringify(replicaOutcome)).toContain(previousUnsigned.event_id);
   });
 
   test("missing Signature (bearer-only) inbound transaction push → 401 http_signature_required", async ({

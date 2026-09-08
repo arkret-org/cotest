@@ -1026,6 +1026,7 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         let mut event = authored.into_event();
         let producer = event.proofs[0].as_producer().context("producer proof")?;
         let mut admission = arkret_wire::StationAdmissionProof {
+        applet_installation_digest: None,
             kind: arkret_wire::StationAdmissionProofKind::StationAdmission,
             verification_method: authority_verification_method.clone(),
             event_digest: event.event_id.event_digest(),

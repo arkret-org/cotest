@@ -643,7 +643,6 @@ export type SpaceObject = {
   "id"?: string;
   "schema": "ak.schema.space.v1";
   "realm_id": string;
-  "default_realm_id"?: string;
   "scope_circle_id"?: string;
   "child_scope_policy"?: {
     "kind": "allow_any" | "require_e2ee" | "require_same_scope" | "require_scope_circle_id";
@@ -1030,6 +1029,7 @@ export type InviteDeliveryRequestBody = {
       "producer_signing_key_did": string;
       "producer_signer_resolution_evidence_ref"?: string;
       "signer_resolution_evidence_ref": string;
+      "applet_installation_digest"?: string;
       "accepted_at": string;
       "jws": string;
     }>;
@@ -2562,6 +2562,7 @@ export type EventFederationSubmission = {
       "producer_signing_key_did": string;
       "producer_signer_resolution_evidence_ref"?: string;
       "signer_resolution_evidence_ref": string;
+      "applet_installation_digest"?: string;
       "accepted_at": string;
       "jws": string;
     }>;

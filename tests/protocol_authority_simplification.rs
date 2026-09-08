@@ -67,6 +67,7 @@ fn accept(mut event: Event) -> Event {
         cotest::fixture_signer_evidence_ref("authority-simplification-admission");
     event.proofs.push(
         StationAdmissionProof {
+        applet_installation_digest: None,
             kind: StationAdmissionProofKind::StationAdmission,
             verification_method: DidUrl::new("did:web:principal.example#admission-1").unwrap(),
             event_digest: producer.event_digest.clone(),

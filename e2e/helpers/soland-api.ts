@@ -3592,13 +3592,16 @@ export async function rawPushFederationEvents(
     expireSignature?: boolean;
     relaySourceServiceId?: string;
     serviceBindingFrontier?: string[];
+    // Applet transactions accept Events outside the self-submit helper's
+    // publication cache. Resolve their original accepted bytes at this source.
+    acceptedSource?: { token: string; server?: SolandKey };
   },
 ) {
   const destination = opts.destination ?? solandServiceId(opts.server);
   const url = `${solandBaseUrl(opts.server)}/_arkret/peer/events`;
   const body = peerEventsSubmitBody(
     opts.realmId,
-    await federationEventWireBodies(request, events),
+    await federationEventWireBodies(request, events, opts.acceptedSource),
     {
       serviceBindingFrontier: opts.serviceBindingFrontier,
     },
@@ -3736,14 +3739,16 @@ export async function rawSubmitPeerInviteDeliveryApi(
 }
 
 async function federationEventWireBodies(
-  request: APIRequestContext,
-  events: Array<Record<string, unknown>>,
+    request: APIRequestContext,
+    events: Array<Record<string, unknown>>,
+    acceptedSource?: { token: string; server?: SolandKey },
 ): Promise<PublicationEvidence[]> {
   const groups = new Map<string, { token: string; server?: SolandKey; eventIds: string[] }>();
   const entries = events.map((event) => {
     const eventId = stringValue(event.event_id);
-    const evidence = eventId ? publicationEvidenceByEventId.get(eventId) : undefined;
-    const source = eventId ? publicationSourceByEventId.get(eventId) : undefined;
+    const evidence = (eventId ? publicationEvidenceByEventId.get(eventId) : undefined)
+      ?? (acceptedSource ? { event: event as PublicationEvidence["event"], ingress_receipts: [] } : undefined);
+    const source = (eventId ? publicationSourceByEventId.get(eventId) : undefined) ?? acceptedSource;
     if (!eventId || !evidence || !source) {
       throw new Error(`federation requires an accepted source Event and publication evidence: ${eventId ?? "<missing event_id>"}`);
     }

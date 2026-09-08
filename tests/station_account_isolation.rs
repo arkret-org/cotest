@@ -389,6 +389,7 @@ fn admit(event: Event, station: &str) -> Result<Event> {
     let proof = authored.proofs[0].as_producer().context("producer proof")?;
     let reference = cotest::fixture_signer_evidence_ref(station);
     let mut admission = StationAdmissionProof {
+        applet_installation_digest: None,
         kind: StationAdmissionProofKind::StationAdmission,
         verification_method: DidUrl::new(format!("did:web:{station}.example#admission"))
             .map_err(anyhow::Error::msg)?,

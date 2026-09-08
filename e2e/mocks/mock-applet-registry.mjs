@@ -1252,7 +1252,7 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
       return;
     }
     const outcome = JSON.parse(upstreamText);
-    if (!outcome.ok) {
+    if (outcome.status !== "accepted") {
       res.statusCode = 422;
       res.end(upstreamText);
       return;
