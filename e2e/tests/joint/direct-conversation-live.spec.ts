@@ -1,13 +1,15 @@
-import { test, expect, type JointRealmFixture } from "../../helpers/joint-fixture";
+import { test, expect, type JointUsersFixture } from "../../helpers/joint-fixture";
 import type { APIRequestContext } from "@playwright/test";
 import { requestContactArkret, respondContactArkret } from "../../helpers/contact-api";
 import { accountActorId, canonicalJson } from "../../helpers/soland-api";
 import { decodeEventIngressBody, ingressEvents } from "../../helpers/event-ingress";
 
 function directConversationCase(mode: "normal" | "interrupted" | "offline") {
-return async ({ jointRealm, request }: { jointRealm: JointRealmFixture; request: APIRequestContext }) => {
+return async ({ jointUsers, request }: { jointUsers: JointUsersFixture; request: APIRequestContext }) => {
   test.setTimeout(480_000);
-  const { alicePage, bobPage, aliceSession, bobSession } = jointRealm;
+  // A Contact pair must establish its own Direct Conversation without any
+  // pre-existing shared Realm. Exercise only the two account prerequisites.
+  const { alicePage, bobPage, aliceSession, bobSession } = jointUsers;
   const alice = alicePage.page;
   const bob = bobPage.page;
   const historyProofFailures: string[] = [];

@@ -176,13 +176,18 @@ test.describe("fresh-browser device entry paths @fully-implemented", () => {
     const foundingFlow = await openDpopUserPageFromSession(
       browser,
       foundingSession,
-      { prepareMlsDevice: false },
+      { prepareMlsDevice: false, autoCompleteRecoveryKeySetup: false },
     );
     expect(
       foundingFlow,
       "the founding device must be available to publish the genesis recovery policy",
     ).toBeTruthy();
-    await foundingFlow!.page.completeRecoveryKeySetupIfPrompted(120_000);
+    // The injected founding session carries no local recovery secret. Use the
+    // key the product actually publishes in its first recovery policy, not
+    // the separate mnemonic used to construct the registration fixture.
+    const activeRecoveryKey =
+      await foundingFlow!.page.completeRecoveryKeySetupIfPrompted(120_000);
+    expect(Boolean(activeRecoveryKey), "the policy key must be saved through the product UI").toBe(true);
 
     const replacement = await openFreshLoginBrowser(
       browser,
@@ -207,7 +212,7 @@ test.describe("fresh-browser device entry paths @fully-implemented", () => {
       );
       await recoveryPanel
         .locator("#root-recovery-words")
-        .fill(account.recoveryKey);
+        .fill(activeRecoveryKey!);
       await recoveryPanel
         .getByRole("button", { name: "Authorize this device" })
         .click();

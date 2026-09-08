@@ -11,7 +11,7 @@ import {
   openUserPage,
 } from "./users";
 
-export type JointRealmFixture = {
+export type JointUsersFixture = {
   alice: JointUser;
   bob: JointUser;
   /// Real `ak.session.grant` JWT (the bearer presented on `/_arkret/self/*`).
@@ -21,21 +21,33 @@ export type JointRealmFixture = {
   bobSession: DpopUserSession;
   alicePage: JointUserPage;
   bobPage: JointUserPage;
-  realmId: string;
 };
 
-export const test = base.extend<{ jointRealm: JointRealmFixture }>({
-  jointRealm: async ({ browser, request }, use, testInfo) => {
+export type JointRealmFixture = JointUsersFixture & { realmId: string };
+
+export const test = base.extend<{
+  jointUsers: JointUsersFixture;
+  jointRealm: JointRealmFixture;
+}>({
+  jointUsers: async ({ browser, request }, use, testInfo) => {
     testInfo.setTimeout(Math.max(testInfo.timeout, 360_000));
-    const jointRealm = await createJointTwoUserRealm(browser, request);
+    const users = await createJointTwoUsers(browser, request);
     try {
-      await use(jointRealm);
+      await use(users);
     } finally {
-      await Promise.allSettled([
-        jointRealm.bobPage.close(),
-        jointRealm.alicePage.close(),
-      ]);
+      await Promise.allSettled([users.bobPage.close(), users.alicePage.close()]);
     }
+  },
+  jointRealm: async ({ jointUsers }, use) => {
+    const realmId = await jointUsers.alicePage.createRealm({
+      title: `joint smoke ${Date.now()}`,
+      summary: "cotest joint harness smoke",
+      discoverability: "public",
+      joinRule: "invite",
+      historyAccess: "since_join",
+      encryptionProfile: "none",
+    });
+    await use({ ...jointUsers, realmId });
   },
 });
 
@@ -43,11 +55,10 @@ export { expect } from "./arkret-test";
 
 // The joint browser fixture uses real coauth-minted ak.session.grant material
 // and registers the same principal/device at soland before opening inkson.
-async function createJointTwoUserRealm(
+async function createJointTwoUsers(
   browser: Browser,
   request: APIRequestContext,
-): Promise<JointRealmFixture> {
-  const stamp = Date.now();
+): Promise<JointUsersFixture> {
   // Principal inception is lease-fenced by the local Coauth/Soland pair.
   // Starting two independent DID inception/handoff chains concurrently can
   // make each wait on the other's global identity-binding lease until the
@@ -84,14 +95,6 @@ async function createJointTwoUserRealm(
   ]);
   await Promise.all([alicePage.gotoHome(), bobPage.gotoHome()]);
 
-  const realmId = await alicePage.createRealm({
-    title: `joint smoke ${stamp}`,
-    summary: "cotest joint harness smoke",
-    discoverability: "public",
-    joinRule: "invite",
-    historyAccess: "since_join",
-    encryptionProfile: "none",
-  });
 
   return {
     alice,
@@ -102,6 +105,5 @@ async function createJointTwoUserRealm(
     bobSession,
     alicePage,
     bobPage,
-    realmId,
   };
 }
