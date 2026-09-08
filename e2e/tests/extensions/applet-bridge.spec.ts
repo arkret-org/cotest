@@ -605,7 +605,9 @@ test.describe("applet bridge", () => {
       const messageProofs = bridgedMessage?.proofs as Array<Record<string, unknown>>;
       expect(messageProofs.map((proof) => proof.kind)).toEqual(["detached_jws", "station_admission"]);
       expect(projectDidToCoreId(String(messageProofs[1].verification_method).split("#")[0])).toBe(solandServiceId());
-      expect(messageProofs[1].applet_installation_digest).toMatch(/^sha256:[0-9a-f]{64}$/);
+      expect(messageProofs[1].producer_proof_digest).toBe(canonicalHash(messageProofs[0]));
+      expect(messageProofs[1].event_digest).toBe(messageProofs[0].event_digest);
+      expect(messageProofs[1].producer_verification_method).toBe(messageProofs[0].verification_method);
       const ghostProfile = acceptedEvents.find(
         (event) =>
           event.kind === "ak.profile.create" &&
@@ -1487,28 +1489,9 @@ test.describe("applet inbound transaction push — per-delivery source signature
     expect(proofs.map((proof) => proof.kind)).toEqual(["detached_jws", "station_admission"]);
     expect(proofs[0]).toEqual(body.events[0].proofs[0]);
     expect(projectDidToCoreId(String(proofs[1].verification_method).split("#")[0])).toBe(solandServiceId());
-    expect(proofs[1].applet_installation_digest).toMatch(/^sha256:[0-9a-f]{64}$/);
-
-    const dependenciesUri = `${solandBaseUrl()}/_arkret/self/seals/governance-dependencies`;
-    const dependencyResponse = await request.post(dependenciesUri, {
-      headers: { ...authHeaders(token, "POST", dependenciesUri), "content-type": "application/json" },
-      data: canonicalJson({
-        realm_id: realmId,
-        selectors: [{ kind: "applet_installation_authority", content_digest: proofs[1].applet_installation_digest }],
-        byte_limit: 8 * 1024 * 1024,
-      }),
-    });
-    expect(dependencyResponse.status(), await dependencyResponse.text()).toBe(200);
-    const dependencies = await dependencyResponse.json();
-    expect(dependencies.missing_selectors).toEqual([]);
-    expect(dependencies.items).toHaveLength(1);
-    const authority = dependencies.items[0].applet_installation_authority;
-    expect(authority.registration_event.payload.applet_id).toBe(registration.applet_id);
-    expect(authority.registration_event.scope_ref).toEqual(body.events[0].scope_ref);
-    expect(authority.registration_event.actor_id.account_id.station_id).toBe(solandServiceId());
-    expect(authority.capability_grant_event.payload.grant.subject).toEqual(serviceActorId(sourceServiceId));
-    expect(authority.registration_event.proofs.at(-1).kind).toBe("station_admission");
-    expect(authority.capability_grant_event.proofs.at(-1).kind).toBe("station_admission");
+    expect(proofs[1].producer_proof_digest).toBe(canonicalHash(proofs[0]));
+    expect(proofs[1].event_digest).toBe(proofs[0].event_digest);
+    expect(proofs[1].producer_verification_method).toBe(proofs[0].verification_method);
 
     const deliver = async (payload: Record<string, unknown>, key: string) => request.post(targetUri, {
       headers: signedAppletTransactionHeaders({

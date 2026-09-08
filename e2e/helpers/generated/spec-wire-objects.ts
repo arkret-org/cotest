@@ -1029,7 +1029,6 @@ export type InviteDeliveryRequestBody = {
       "producer_signing_key_did": string;
       "producer_signer_resolution_evidence_ref"?: string;
       "signer_resolution_evidence_ref": string;
-      "applet_installation_digest"?: string;
       "accepted_at": string;
       "jws": string;
     }>;
@@ -2562,7 +2561,6 @@ export type EventFederationSubmission = {
       "producer_signing_key_did": string;
       "producer_signer_resolution_evidence_ref"?: string;
       "signer_resolution_evidence_ref": string;
-      "applet_installation_digest"?: string;
       "accepted_at": string;
       "jws": string;
     }>;

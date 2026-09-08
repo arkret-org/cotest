@@ -9,6 +9,7 @@ import {
 } from "../../helpers/arkret-test";
 import { readFile } from "node:fs/promises";
 import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
+import { grantInviteConsentArkret } from "../../helpers/contact-api";
 import {
   decodeIngressEvents,
   type IngressEvent,
@@ -115,6 +116,12 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
       // neither a controller nor an Agent and later proves the non-disclosure
       // boundary against a known Sidecar id.
       if (!lifecycleEvidenceOnly) {
+        await grantInviteConsentArkret(
+          request,
+          jointRealm.bobSession.grantJwt,
+          jointRealm.bob,
+          jointRealm.alice.id,
+        );
         await jointRealm.alicePage.inviteFromAdmin(
           jointRealm.realmId,
           jointRealm.bob.id,

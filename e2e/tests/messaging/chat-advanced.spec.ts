@@ -810,6 +810,13 @@ test.describe("chat advanced", () => {
         carolPage.acceptInvite(realmId),
       ]);
 
+      for (const member of [bobFlow, carolFlow]) {
+        await alicePage.grantRealmCapability(
+          realmId,
+          member.session.accountId,
+          "ak.message.create",
+        );
+      }
       await gotoChat(alicePage, realmId);
       await alicePage.page.getByTestId("open-poll-composer-button").click();
       await alicePage.page.getByTestId("poll-question-input").fill(question);
@@ -839,8 +846,8 @@ test.describe("chat advanced", () => {
         .filter({ hasText: optionA })
         .click();
       await expect(
-        bobPoll.getByTestId("poll-result-row").filter({ hasText: optionA }),
-      ).toContainText(/1/);
+        bobPoll.getByTestId("poll-result-row").filter({ hasText: optionA }).getByTestId("poll-vote-count"),
+      ).toHaveText("1");
 
       // Vote replacement: bob switches from optionA to optionB; optionA count
       // drops back to zero and optionB becomes bob's single vote.
@@ -849,11 +856,11 @@ test.describe("chat advanced", () => {
         .filter({ hasText: optionB })
         .click();
       await expect(
-        bobPoll.getByTestId("poll-result-row").filter({ hasText: optionA }),
-      ).toContainText(/0/);
+        bobPoll.getByTestId("poll-result-row").filter({ hasText: optionA }).getByTestId("poll-vote-count"),
+      ).toHaveText("0");
       await expect(
-        bobPoll.getByTestId("poll-result-row").filter({ hasText: optionB }),
-      ).toContainText(/1/);
+        bobPoll.getByTestId("poll-result-row").filter({ hasText: optionB }).getByTestId("poll-vote-count"),
+      ).toHaveText("1");
 
       await gotoChat(carolPage, realmId);
       const carolPoll = carolPage.page
@@ -865,8 +872,8 @@ test.describe("chat advanced", () => {
         .filter({ hasText: optionB })
         .click();
       await expect(
-        carolPoll.getByTestId("poll-result-row").filter({ hasText: optionB }),
-      ).toContainText(/2/);
+        carolPoll.getByTestId("poll-result-row").filter({ hasText: optionB }).getByTestId("poll-vote-count"),
+      ).toHaveText("2");
 
       await gotoChat(alicePage, realmId);
       await poll.getByTestId("poll-close-button").click();

@@ -256,7 +256,10 @@ test.describe("single-server triad collaboration", () => {
     browser,
     request,
   }, testInfo) => {
-    test.setTimeout(360_000);
+    // Three real logins, four sealed grants, three navigations per member,
+    // and the complete edit/redact flow share this budget. Each convergence
+    // assertion retains its own shorter bound.
+    test.setTimeout(540_000);
     const stamp = Date.now();
     const [aliceFlow, bobFlow, carolFlow] = await Promise.all([
       openDpopUserPage(browser, request, "s1-alice"),

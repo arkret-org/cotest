@@ -262,14 +262,9 @@ fn validate_realm_remark_registry() -> Result<()> {
     Ok(())
 }
 
-/// Founder derivation is the whole reason the cross-server creation race disappears, so it is
-/// checked as a conformance property rather than only in SDK unit tests.
-///
-/// The normal branch resolves to the **responder**, not the request issuer. That is normative: the
-/// authority is lit up by the responder's acceptance receipt, which proves the responder was online
-/// when it came into existence, while the requester may have gone offline days earlier. Base v1
-/// defines no fallback, so naming the possibly-absent party would leave the pair unable to ever
-/// create.
+/// Check deterministic founder selection for already-validated authority inputs.
+/// This covers the pure helper only: it does not prove cross-Station evidence agreement,
+/// receipt delivery, or atomic founding-unit uniqueness. Online status never changes the founder.
 fn validate_direct_conversation_founder_derivation() -> Result<()> {
     use arkret_models_collaboration::objects::direct_conversation::{
         DirectConversationFoundingAuthority, direct_conversation_founder,
@@ -288,11 +283,11 @@ fn validate_direct_conversation_founder_derivation() -> Result<()> {
 
     // A requests, B accepts -> B founds.
     let normal = DirectConversationFoundingAuthority::Normal {
-        request_issuer: alice.clone(),
+        request_author_actor_id: alice.clone(),
     };
     let founder = direct_conversation_founder([alice.clone(), bob.clone()], &normal)?;
     if founder != bob {
-        bail!("normal authority founder must be the responder, not the request issuer");
+        bail!("normal authority founder must be the responder, not the request author");
     }
     // Argument order must not matter: both sides compute the same answer independently.
     if direct_conversation_founder([bob.clone(), alice.clone()], &normal)? != bob {
@@ -300,15 +295,15 @@ fn validate_direct_conversation_founder_derivation() -> Result<()> {
     }
     // The non-founder may never author the founding unit, no matter how long it waits.
     if direct_conversation_may_found(&alice, [alice.clone(), bob.clone()], &normal)? {
-        bail!("the request issuer must not be able to found the conversation");
+        bail!("the request author must not be able to found the conversation");
     }
 
-    // Glare: no responder exists, so the requests[0] issuer founds.
+    // Glare: no responder exists, so the requests[0] request author founds.
     let glare = DirectConversationFoundingAuthority::Glare {
-        first_request_issuer: alice.clone(),
+        first_request_author_actor_id: alice.clone(),
     };
     if direct_conversation_founder([alice.clone(), bob.clone()], &glare)? != alice {
-        bail!("glare authority founder must be the requests[0] issuer");
+        bail!("glare authority founder must be the requests[0] request author");
     }
 
     // controller-to-own-Agent is fixed to the controller regardless of DID ordering, so an Agent
@@ -324,17 +319,17 @@ fn validate_direct_conversation_founder_derivation() -> Result<()> {
     if direct_conversation_founder(
         [alice.clone(), bob.clone()],
         &DirectConversationFoundingAuthority::Normal {
-            request_issuer: carol,
+            request_author_actor_id: carol,
         },
     )
     .is_ok()
     {
-        bail!("a request issuer outside the pair must not derive a founder");
+        bail!("a request author outside the pair must not derive a founder");
     }
     if direct_conversation_founder(
         [alice.clone(), alice.clone()],
         &DirectConversationFoundingAuthority::Normal {
-            request_issuer: alice,
+            request_author_actor_id: alice,
         },
     )
     .is_ok()
@@ -345,13 +340,13 @@ fn validate_direct_conversation_founder_derivation() -> Result<()> {
     record_vector_event(
         "private_chat_privacy.direct_conversation_founder_derivation",
         &json!({
-            "normal": {"request_issuer": "alice", "participants": ["alice", "bob"]},
-            "glare": {"first_request_issuer": "alice"},
+            "normal": {"request_author_actor_id": "alice", "participants": ["alice", "bob"]},
+            "glare": {"first_request_author_actor_id": "alice"},
             "controller_owned_agent": {"controller": "alice"}
         }),
         &json!({
             "normal_founder": "responder",
-            "glare_founder": "requests[0]_issuer",
+            "glare_founder": "requests[0]_author",
             "controller_owned_agent_founder": "controller",
             "non_founder_may_found": false,
             "timeout_grants_create_authority": false,

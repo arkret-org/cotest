@@ -147,12 +147,12 @@ export async function grantInviteConsentArkret(
   token: string,
   holder: JointUser,
   peerId: string,
-  opts: { server?: SolandKey } = {},
+  opts: { server?: SolandKey; peerStationId?: string } = {},
 ): Promise<InviteConsentGrant> {
   const consentId = `ak:consent:${uuidV7()}`;
   const peer = {
     kind: "actor",
-    actor_id: accountActorId(peerId, opts.server),
+    actor_id: accountActorId(peerId, opts.server, opts.peerStationId),
   };
   const envelope = signedEventEnvelope({
     actorId: holder.id,

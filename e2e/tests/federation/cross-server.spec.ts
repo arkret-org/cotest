@@ -47,7 +47,7 @@ import {
   pushFederationEvents,
   rawPushFederationEvents,
   queryRealmEventsApi,
-  readAcceptedSeal,
+  readAcceptedSealBundle,
   revokeCapabilityApi,
   sendMessageApi,
   selfInviteDispatchBody,
@@ -428,7 +428,7 @@ test.describe("cross-server federation", () => {
     const leaves = frontierBody.frontier?.seal_basis?.leaves as
       string[] | undefined;
     expect(leaves).toEqual([expect.stringMatching(/^ak:seal:/)]);
-    await readAcceptedSeal(
+    const inviteBasisBundle = await readAcceptedSealBundle(
       request,
       aliceToken,
       realmId,
@@ -498,11 +498,12 @@ test.describe("cross-server federation", () => {
       server: "server2",
       realmId,
       idempotencyKey: `${solandServiceId("server1")}#cotest-cross-server-smoke`,
+      cbsProofBundles: [inviteBasisBundle],
     });
+    expect(replay.rejections ?? [], "accepted invite replay must not be rejected").toEqual([]);
     expect([...(replay.accepted ?? []), ...(replay.duplicate ?? [])]).toContain(
       inviteEvent.event_id,
     );
-    expect(replay.rejections ?? []).toEqual([]);
 
     const pullBody = await queryPeerEventsApi(request, {
       server: "server2",

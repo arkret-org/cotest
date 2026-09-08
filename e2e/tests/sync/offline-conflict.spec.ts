@@ -3,6 +3,7 @@
 // Spec: sync/client-sync.md §2, sync/operations-sync.md §2-§2.1, authz/event-auth-state-resolution.md §2, §8.1
 
 import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
+import { grantInviteConsentArkret } from "../../helpers/contact-api";
 import {
   createSharedRealmViaApi,
   listRealmEventsViaApi,
@@ -255,6 +256,9 @@ test.describe("offline sync + conflict repair", () => {
     });
     const bobToken = await issueDevSession(request, bob, { server: "server2" });
 
+    await grantInviteConsentArkret(request, bobToken, bob, alice.id, {
+      server: "server2", peerStationId: solandServiceId("server1"),
+    });
     const realmId = await createRealmApi(
       request,
       aliceToken,

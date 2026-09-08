@@ -64,16 +64,12 @@
 
 ### Phase E — Poll
 
-18. alice 发一个 poll `M5`:
-    - `content_type = ak.content.poll`
-    - `options = [{ id: "p", label: "Pizza" }, { id: "q", label: "Poutine" }]`
-    - `max_selections = 1`,`closes_at = +1h`
-19. inkson `M5` 渲染投票按钮
-20. bob 点 "Pizza" → `ak.content.poll.response` event {poll_id: M5.event_id, choice: "p"}
-21. carol 点 "Poutine"
-22. alice 后改主意,先选 "Pizza" 再改 "Poutine"(只允许 1 个 active vote per actor)
-23. 断言:`M5` 卡片显示 `Pizza: 1, Poutine: 2`(alice 改后,Pizza 减 1 加给 Poutine)
-24. (可选)alice 点 "Close poll" → reducer 拒绝新 response;断言:迟到的 vote 被拒
+18. Alice 创建投票：标准 `ak.message.create` 的 Content Block 为 `ak.content.poll`，使用 `poll.answers[{id,text}]` 和 `poll.max_selections=1`；题目位于 fallback `body`。
+19. Bob、Carol 加入后，由 Alice 分别授予 `ak.message.create`。成员身份本身不授予发送或投票权限。
+20. Bob 发送标准 Message，Content Block 为 `ak.content.poll.response`，其中 `poll_response.poll_ref` 是原投票的 Message ID，`selections` 是 answer ID 数组。
+21. Bob 从选项 A 改选 B，Carol 选 B；精确断言 `poll-vote-count` 的 A=0、B=2，不匹配包含时间戳的选项整行。
+22. 创建和回复均遵守有效 scope 的加密下限；要求 E2EE 时复用普通消息的 MLS 发送管道，失败不得降级为明文或把乐观计数视为接受结果。
+23. 当前“Close poll”只关闭本地卡片控件。v1 没有关闭投票的 wire carrier；该 UI 操作不声称改变其他客户端或服务端的投票权限，也不以其拒绝迟到的合法 response。
 
 ### Phase F — Typing indicator (ephemeral)
 

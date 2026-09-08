@@ -2863,6 +2863,38 @@ export async function readAcceptedSeal(
   return seal;
 }
 
+// Receiver-relative CBS dependency closure (cbs-profiles.md section 5).
+// The caller must separately transport any control Events missing at the peer.
+export async function readAcceptedSealBundle(
+  request: APIRequestContext,
+  token: string,
+  realmId: string,
+  targetSealRef: string,
+  server?: SolandKey,
+): Promise<Record<string, unknown>> {
+  const seals = new Map<string, Record<string, unknown>>();
+  const pending = [targetSealRef];
+  while (pending.length > 0) {
+    const id = pending.pop()!;
+    if (seals.has(id)) continue;
+    if (seals.size >= 256) throw new Error("CBS Seal closure exceeds the v1 bound");
+    const seal = await readAcceptedSeal(request, token, realmId, id, server);
+    seals.set(id, seal);
+    for (const predecessor of (seal.predecessor_refs ?? []) as string[]) {
+      pending.push(predecessor);
+    }
+  }
+  return {
+    target_seal_ref: targetSealRef,
+    seals: [...seals.entries()]
+      .sort(([left], [right]) => Buffer.compare(Buffer.from(left), Buffer.from(right)))
+      .map(([, seal]) => seal),
+    control_moves: [],
+    inclusion_proofs: [],
+    availability_proofs: [],
+  };
+}
+
 async function resolveAcceptedSeal(
   request: APIRequestContext,
   token: string,
@@ -3564,6 +3596,7 @@ export async function pushFederationEvents(
     server?: SolandKey;
     idempotencyKey?: string;
     serviceBindingFrontier?: string[];
+    cbsProofBundles?: Array<Record<string, unknown>>;
   },
 ) {
   const response = await rawPushFederationEvents(request, events, opts);
@@ -3592,6 +3625,7 @@ export async function rawPushFederationEvents(
     expireSignature?: boolean;
     relaySourceServiceId?: string;
     serviceBindingFrontier?: string[];
+    cbsProofBundles?: Array<Record<string, unknown>>;
     // Applet transactions accept Events outside the self-submit helper's
     // publication cache. Resolve their original accepted bytes at this source.
     acceptedSource?: { token: string; server?: SolandKey };
@@ -3604,6 +3638,7 @@ export async function rawPushFederationEvents(
     await federationEventWireBodies(request, events, opts.acceptedSource),
     {
       serviceBindingFrontier: opts.serviceBindingFrontier,
+      cbsProofBundles: opts.cbsProofBundles,
     },
   );
   const sourceServiceId = opts.relaySourceServiceId ?? opts.origin;
@@ -4018,6 +4053,7 @@ function peerEventsSubmitBody(
   events: PublicationEvidence[],
   overrides: {
     serviceBindingFrontier?: string[];
+    cbsProofBundles?: Array<Record<string, unknown>>;
   } = {},
 ): Record<string, unknown> {
   const frontier =
@@ -4040,6 +4076,7 @@ function peerEventsSubmitBody(
       destination_kind: "station",
     },
     events,
+    cbs_proof_bundles: overrides.cbsProofBundles,
   }) as Record<string, unknown>;
 }
 

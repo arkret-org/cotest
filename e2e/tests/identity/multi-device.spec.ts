@@ -182,9 +182,8 @@ test.describe("fresh-browser device entry paths @fully-implemented", () => {
       foundingFlow,
       "the founding device must be available to publish the genesis recovery policy",
     ).toBeTruthy();
-    // The injected founding session carries no local recovery secret. Use the
-    // key the product actually publishes in its first recovery policy, not
-    // the separate mnemonic used to construct the registration fixture.
+    // Publish the accepted PCR recovery policy through the product UI.
+    // Its Recovery Key is independent of the registration DID control key.
     const activeRecoveryKey =
       await foundingFlow!.page.completeRecoveryKeySetupIfPrompted(120_000);
     expect(Boolean(activeRecoveryKey), "the policy key must be saved through the product UI").toBe(true);

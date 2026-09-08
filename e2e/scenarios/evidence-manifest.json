@@ -811,6 +811,26 @@
       ]
     },
     {
+      "scenario_key": "identity/registration-continuation",
+      "suite_kind": "joint-e2e",
+      "realism_level": "live-product",
+      "evidence_class": "live-product",
+      "real_services": [
+        "coauth",
+        "inkson",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "oauth_authorization_ui"
+      ],
+      "protocol_object_producers": [
+        "inkson_product_client"
+      ],
+      "declared_test_bypasses": [],
+      "claims_excluded": []
+    },
+    {
       "scenario_key": "invites/invite-addressing",
       "suite_kind": "joint-e2e",
       "realism_level": "server-contract",

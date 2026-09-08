@@ -38,9 +38,33 @@ try {
     )
     $stale = Test-ArtifactBuildStamp -ArtifactPath $artifact -RepositoryStates $advanced
     Assert-True (-not $stale.Matches) "a changed HEAD must invalidate an unchanged artifact timestamp"
+
+    # A normal cargo test can replace the conformance binary at the same HEAD.
+    # Preserve mtime too: only the artifact bytes prove this is a different build.
+    $originalMtime = (Get-Item -LiteralPath $artifact).LastWriteTimeUtc
+    Set-Content -LiteralPath $artifact -Value "different features" -Encoding UTF8
+    (Get-Item -LiteralPath $artifact).LastWriteTimeUtc = $originalMtime
+    $replaced = Test-ArtifactBuildStamp -ArtifactPath $artifact -RepositoryStates $states
+    Assert-True (-not $replaced.Matches) "replaced artifact bytes must invalidate a matching source stamp"
+
+    Write-ArtifactBuildStamp -ArtifactPath $artifact -RepositoryStates $states | Out-Null
+    $rebuilt = Test-ArtifactBuildStamp -ArtifactPath $artifact -RepositoryStates $states
+    Assert-True $rebuilt.Matches "a verified managed rebuild must refresh the artifact identity"
+
+    $stampPath = Get-ArtifactBuildStampPath -ArtifactPath $artifact
+    $stamp = Get-Content -Raw -LiteralPath $stampPath | ConvertFrom-Json
+    $stamp.PSObject.Properties.Remove("artifact_sha256")
+    $stamp | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $stampPath -Encoding UTF8
+    $unbound = Test-ArtifactBuildStamp -ArtifactPath $artifact -RepositoryStates $states
+    Assert-True (-not $unbound.Matches) "a source-only stamp cannot certify the artifact build"
 }
 finally {
     if (Test-Path -LiteralPath $testRoot) {
+        $resolvedTestRoot = [System.IO.Path]::GetFullPath($testRoot)
+        $tempRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
+        if (-not $resolvedTestRoot.StartsWith($tempRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "Test cleanup path is outside the temporary directory"
+        }
         Remove-Item -LiteralPath $testRoot -Recurse -Force
     }
 }

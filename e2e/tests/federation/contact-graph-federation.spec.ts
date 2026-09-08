@@ -229,18 +229,39 @@ test.describe("contact graph federation (server1/server2)", () => {
         },
       }),
     };
-    const founderResolved = await request.post(
-      `${solandBaseUrl("server2")}/_arkret/self/direct-conversations/resolve`,
-      founderRequest,
-    );
-    expect(founderResolved.ok(), await founderResolved.text()).toBeTruthy();
-    const founderBody = await founderResolved.json();
-    expect(founderBody.state).toBe("creation_required");
+    // The mirror row may arrive before the reverse current-proof receipt.
+    // Wait for complete authoring material, never accept a partial round.
+    let founderBody: Awaited<ReturnType<typeof resolved.json>>;
+    await expect.poll(async () => {
+      const founderResolved = await request.post(
+        `${solandBaseUrl("server2")}/_arkret/self/direct-conversations/resolve`,
+        founderRequest,
+      );
+      expect(founderResolved.ok(), await founderResolved.text()).toBeTruthy();
+      founderBody = await founderResolved.json();
+      return founderBody.state;
+    }, { timeout: 30_000, intervals: [250, 500, 1000] }).toBe("creation_required");
     expect(founderBody.coordinates).toBeUndefined();
     const evidence = founderBody.next_founding_input.founding_authority_evidence;
     expect(evidence.kind).toBe("human");
     expect(evidence.contact_round_evidence.current_proofs).toHaveLength(2);
     expect(evidence.contact_round_evidence.normal_response_receipt).toBeTruthy();
+    const bundle = evidence.contact_round_evidence;
+    const expectedProofs = new Map([
+      [canonicalJson({ principal_id: alice.id, station_id: solandServiceId("server1") }),
+        [bundle.normal_response_receipt.response_event_ref, solandServiceId("server2")]],
+      [canonicalJson({ principal_id: bob.id, station_id: solandServiceId("server2") }),
+        [bundle.contact_round.request_event_ref, solandServiceId("server1")]],
+    ]);
+    const directions = new Set<string>();
+    for (const proof of bundle.current_proofs) {
+      directions.add(canonicalJson(proof.peer.account_id));
+      expect([proof.head_event_ref, proof.issuer_id]).toEqual(
+        expectedProofs.get(canonicalJson(proof.peer.account_id)),
+      );
+    }
+
+    expect([...directions].sort()).toEqual([...expectedProofs.keys()].sort());
 
     const retry = await request.post(
       `${solandBaseUrl("server2")}/_arkret/self/direct-conversations/resolve`,

@@ -29,6 +29,7 @@ This static inventory does not claim runtime verification; use an Arkret Joint P
 | identity/passkey-login-flow | domain-fallback | 1 | 1 | 0 |
 | identity/recovery | domain-fallback | 4 | 4 | 0 |
 | identity/recovery-key-to-encrypted-realm | domain-fallback | 1 | 1 | 0 |
+| identity/registration-continuation | domain-fallback | 0 | 0 | 0 |
 
 ## UJ-B - Workspace creation, invites, and archive visibility
 
