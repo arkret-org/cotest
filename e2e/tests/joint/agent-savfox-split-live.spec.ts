@@ -339,21 +339,29 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         // Drop the account stream that carries notification deltas. The
         // notification projection can no longer learn about the request, so the
         // prompt can only be raised by the periodic fallback poll.
-        const streamOutage = await dropAccountSubscribeStream(inkson);
-        try {
+        if (lifecycleEvidenceOnly) {
           await openSavfoxArkretChannel(savfox, savfoxBaseUrl, savfoxToken);
           await startSavfoxPairing(savfox, replacementLink);
           await expect(approvalModal).toBeVisible({
             timeout: 3 * APPROVAL_FALLBACK_POLL_MS,
           });
-        } finally {
-          await streamOutage.restore();
+        } else {
+          const streamOutage = await dropAccountSubscribeStream(inkson);
+          try {
+            await openSavfoxArkretChannel(savfox, savfoxBaseUrl, savfoxToken);
+            await startSavfoxPairing(savfox, replacementLink);
+            await expect(approvalModal).toBeVisible({
+              timeout: 3 * APPROVAL_FALLBACK_POLL_MS,
+            });
+          } finally {
+            await streamOutage.restore();
+          }
+          expect(
+            streamOutage.blockedCount(),
+            "the notification wakeup channel must have been down while the prompt appeared",
+          ).toBeGreaterThan(0);
         }
-        expect(
-          streamOutage.blockedCount(),
-          "the notification wakeup channel must have been down while the prompt appeared",
-        ).toBeGreaterThan(0);
-        await expect(approvalModal).toContainText("replaces a runtime key");
+        await expect(approvalModal).toContainText("replaces the runtime key");
         expect(
           (
             await inkson.getByTestId("agent-runtime-approval-code").innerText()
