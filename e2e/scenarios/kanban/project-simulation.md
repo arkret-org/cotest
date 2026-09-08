@@ -88,10 +88,10 @@ kanban/end-to-end 的多用户进阶版:三个用户(alice 项目经理 + bob/ca
 
 ### Phase H — Board archive
 
-30. sprint 结束,alice 在 board 视图点 "Archive board"
-31. inkson 提交 `ak.space.update`:`fields.state = "archived"`(或 cascade Move)
-32. 断言:board 主视图不再列出 Sprint 24 board;archive view 中能找到
-33. 断言:archived board 内的 cards / lists 仍然存在但 read-only(spec §4.4 cascade rules)
+30. sprint 结束,alice 通过 API 归档 board Space
+31. 提交独立的 `ak.space.archive`，不为子列表或卡片提交归档事件
+32. 断言:board Space 为 archived，子列表和卡片仍为 active
+33. 断言:子卡片仍可正常更新（realm-and-space §3.4 不级联）；UI 的整板批量归档另由 sprint-planning 覆盖，每个子对象都有独立授权事件
 
 ## Observable assertions(合并)
 
@@ -114,7 +114,7 @@ kanban/end-to-end 的多用户进阶版:三个用户(alice 项目经理 + bob/ca
 
 ## Implementation notes
 
-- **soland 缺口**:`ak.relation.create assigned_to`、`ak.space.update state=archived`、cascade rules — 多数 partial。Strand `fields.status` FSM 已由 `ak.strand.update` reducer preflight 覆盖(todo → in_progress → done、investigating → mitigated → resolved)
+- **Space 生命周期**:使用 `ak.space.archive`，父归档不隐式改变子列表或卡片生命周期。Strand `fields.status` FSM 已由 `ak.strand.update` reducer preflight 覆盖(todo → in_progress → done、investigating → mitigated → resolved)
 - **inkson 缺口**:assignment UI、due date picker、archive board 按钮、逾期红色标记、`assigned-to-actor` testid
 - **测试侧难点**:Phase G 需要并发提交,Playwright 的 single-context 比较难;可能要用 fetch API 直接打 soland 模拟双设备
 
