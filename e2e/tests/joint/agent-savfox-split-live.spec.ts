@@ -1904,7 +1904,27 @@ async function cutFirstMlsTransactionSubmission(page: Page): Promise<{
   };
   await page.route(isEventsSubmit, handler);
   return {
-    waitForCutSubmission: () => cutObserved,
+    waitForCutSubmission: async () => {
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      try {
+        return await Promise.race([
+          cutObserved,
+          new Promise<string[]>((_, reject) => {
+            timeout = setTimeout(
+              () =>
+                reject(
+                  new Error(
+                    "timed out waiting for the first signed MLS Commit / Welcome submission",
+                  ),
+                ),
+              180_000,
+            );
+          }),
+        ]);
+      } finally {
+        if (timeout !== undefined) clearTimeout(timeout);
+      }
+    },
     restore: async () => {
       await page.unroute(isEventsSubmit, handler);
     },
