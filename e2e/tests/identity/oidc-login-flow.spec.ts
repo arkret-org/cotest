@@ -137,6 +137,36 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
         .fill(recoveryKey);
 
       let interruptedBootstrapSeal = false;
+      const challengeAttempts: Array<{ body: string; at: number }> = [];
+      const challengeRetryAfterMs = 1_000;
+      await page.route("**/_arkret/gate/account/identity-binding-challenges", async (route) => {
+        if (route.request().method() !== "POST") {
+          await route.continue();
+          return;
+        }
+        challengeAttempts.push({ body: route.request().postData() ?? "", at: Date.now() });
+        if (challengeAttempts.length === 1) {
+          await route.fulfill({
+            status: 429,
+            contentType: "application/problem+json",
+            headers: {
+              "access-control-allow-origin": new URL(page.url()).origin,
+              "access-control-allow-credentials": "true",
+              "retry-after": "1",
+            },
+            json: {
+              type: "https://arkret.org/problems/rate_limited",
+              title: "Rate limited",
+              status: 429,
+              detail: "identity-creation lease renewal is rate limited",
+              instance: JSON.parse(challengeAttempts[0].body).request_id,
+              retry_after_ms: challengeRetryAfterMs,
+            },
+          });
+          return;
+        }
+        await route.continue();
+      });
       const interruptFirstBootstrapSeal = async (
         route: import("@playwright/test").Route,
       ) => {
@@ -156,6 +186,8 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
       );
       await page.getByTestId("onboarding-bind-identity").click();
 
+      await expect(page.getByText(/The Account Authority asked this device to wait/)).toBeVisible();
+
       await expect(
         page.getByTestId("onboarding-resume-diagnostics"),
       ).toBeVisible({ timeout: 240_000 });
@@ -164,6 +196,13 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
         interruptedBootstrapSeal,
         "the test must interrupt the recovery-material gate after account acceptance",
       ).toBe(true);
+      expect(challengeAttempts.length).toBeGreaterThanOrEqual(2);
+      expect(challengeAttempts[0].body.length).toBeGreaterThan(0);
+      expect(
+        challengeAttempts.every((attempt) => attempt.body === challengeAttempts[0].body),
+        "429 retries must retain the exact challenge request and device binding",
+      ).toBe(true);
+      expect(challengeAttempts[1].at - challengeAttempts[0].at).toBeGreaterThanOrEqual(challengeRetryAfterMs);
       const creationRequestCountAtInterruption =
         identityCreationRequests.length;
 
