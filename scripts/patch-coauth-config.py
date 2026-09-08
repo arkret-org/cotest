@@ -269,7 +269,6 @@ def main() -> int:
         "  principal_method: \"did:webvh\"\n"
         "  trust_domain: ak:trust_domain:local.host\n"
         f"  admin_audience: {yaml_string(admin_audience)}\n"
-        "  password_login_session_grants_enabled: true\n"
     )
     src = replace_top_level_section(src, "arkret", arkret)
 

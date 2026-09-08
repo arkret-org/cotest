@@ -250,7 +250,7 @@
   ],
   "pending_migration_note": "API-only Playwright specs not migrated yet. The gate treats this as a CLOSED set: each source must still exist and must still be API-only, and any API-only spec in neither this list nor specialized_api_lanes fails the gate, so new browserless Playwright coverage cannot be added. Tracked by arkret-work/work/active/2026-09-05-1311-cotest-services-live-lane-and-joint-runner-dead-switch-cleanup.md.",
   "pending_migration": [
-    { "source": "cotest/e2e/tests/identity/oidc-login-chain.spec.ts", "needs": "Rust joint bootstrap must set soland's SOLAND_OAUTH_CLIENT_ID and spawn coauth with the password-bootstrap feature and its insecure-dev flags before the describe client_id and DPoP self-path contracts can be asserted from Rust." },
+    { "source": "cotest/e2e/tests/identity/oidc-login-chain.spec.ts", "needs": "Rust joint bootstrap must set soland's SOLAND_OAUTH_CLIENT_ID, establish the Coauth browser session, and complete the proof-bound OIDC/passkey exchange before the describe client_id and DPoP self-path contracts can be asserted from Rust." },
     { "source": "cotest/e2e/tests/sync/account-stream-device-message.spec.ts", "needs": "Needs an SDK account-stream subscribe client; the spec drives the long-poll surface directly." },
     { "source": "cotest/e2e/tests/events/batch-realm-bootstrap.spec.ts", "needs": "Needs the canonical bootstrap-unit builder exposed to Rust scenarios so the batch genesis is not hand-rolled." },
     { "source": "cotest/e2e/tests/sync/transport-negotiation.spec.ts", "needs": "Needs transport negotiation in the Rust harness; the spec also captures screenshots, so its evidence must move to a Rust transcript artifact." },

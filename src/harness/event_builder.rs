@@ -1011,17 +1011,9 @@ fn event_envelope_with_chain_and_signing_identity_and_causal_refs(
 /// Events built inside one millisecond would otherwise tie while one names the
 /// other.
 fn harness_event_created_at() -> DateTime<Utc> {
-    static LAST_ISSUED: Mutex<Option<DateTime<Utc>>> = Mutex::new(None);
-    let mut last_issued = LAST_ISSUED
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let now = Utc::now();
-    let issued = match *last_issued {
-        Some(previous) if now <= previous => previous + chrono::Duration::milliseconds(1),
-        _ => now,
-    };
-    *last_issued = Some(issued);
-    issued
+    static CLOCK: std::sync::LazyLock<arkret_test_kit::FixtureClock> =
+        std::sync::LazyLock::new(|| Box::new(arkret_test_kit::monotonic_floor_clock()));
+    CLOCK()
 }
 
 /// Preconditions are signed content, so a Control Move that needs one has to
@@ -1098,7 +1090,6 @@ fn event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
     // The `suffix` is no longer an id: spec encoding.md section 4.0 derives
     // `event_id` from the Event's own content, so the harness builds with the
     // derived constructor and callers read the id back off the built Event.
-    let _ = &suffix;
     let mut event = arkret_wire::test_support::raw_event_at(
         kind,
         // A Realm genesis carries the closed genesis scope and no realm_id;
@@ -1114,8 +1105,7 @@ fn event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
         actor_id.clone(),
         station_id,
         actor_seq,
-        arkret_identifiers::Hlc::new(format!("01970e589d21-{hlc_logical:04x}-a13f9c2e"))
-            .expect("cotest HLC"),
+        arkret_test_kit::pinned_hlc(u16::try_from(hlc_logical).expect("masked HLC counter")),
         payload,
         created_at,
     )
@@ -1151,25 +1141,14 @@ fn event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
         "local_operation_idempotency_alias".to_owned(),
         json!(format!("ak:operation:{suffix}")),
     );
-    let signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
+    let signer = arkret_test_kit::seeded_signer_for_seed(
         signing_seed,
         actor_did,
         verification_method.to_owned(),
     );
-    let mut event = arkret_wire::AuthoredEvent::finalize_with_digest_suite(
-        event,
-        arkret::canonical::DigestSuite::Sha256,
-    )
-    .expect("cotest fixture envelope finalizes");
-    arkret::signatures::sign_event(
-        &mut event,
-        &signer,
-        verification_method,
-        arkret::signatures::SignEventOptions::new().with_created_at(created_at),
-    )
-    .expect("SDK Event signer accepts cotest envelope");
-
-    event.into_event()
+    arkret_test_kit::sign_verifiable_event(event, &signer, arkret::canonical::DigestSuite::Sha256)
+        .expect("SDK Event signer accepts cotest envelope")
+        .expect_verifiable()
 }
 
 pub(crate) fn event_envelope_with_chain(

@@ -1894,7 +1894,7 @@ fn exchange_event_id(suffix: u32) -> Result<EventId> {
 }
 
 fn exchange_hlc(counter: u32) -> Result<Hlc> {
-    Ok(Hlc::new(format!("01970e589d21-{counter:04x}-a13f9c2e"))?)
+    Ok(arkret_test_kit::pinned_hlc(u16::try_from(counter)?))
 }
 
 fn exchange_controller() -> Result<DidCoreId> {

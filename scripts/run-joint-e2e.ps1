@@ -3996,11 +3996,6 @@ try {
         # so set it here too — otherwise coauth panics on boot and the whole MLS
         # joint suite (which needs DPoP session-grant login) silently `test.skip`s.
         #
-        # The generated config likewise enables `arkret.password_login_session_grants_enabled`
-        # so the headless password-bootstrap login path works. coauth's validator fails
-        # closed on that one too and demands `COAUTH_ALLOW_INSECURE_PASSWORD_BOOTSTRAP`;
-        # without it coauth panics on boot ("password-bootstrap scaffold is for dev/test
-        # only") and the whole joint suite never starts.
         # Coauth's production client is HTTPS/public-egress only. The joint
         # services still bind plain loopback listeners behind the TLS proxy, so
         # enable the debug-only, loopback-only transport seam alongside test
@@ -4011,16 +4006,16 @@ try {
         if ($coauthPublicHost -and $jointTlsAssets) {
             $coauthCaPrefix = "`$env:SSL_CERT_FILE=$(Quote-PsLiteral $jointTlsAssets.CaPemPath); "
         }
-        $CoauthCommand = "$coauthCaPrefix& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-loopback-http --allow-insecure-dev-email-bypass --allow-insecure-password-bootstrap server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthConfigPath)
+        $CoauthCommand = "$coauthCaPrefix& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-loopback-http --allow-insecure-dev-email-bypass server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthConfigPath)
         $CoauthHealthUrl = "$($CoauthBaseUrl.TrimEnd('/'))/health"
         if ($coauthServer2ConfigPath) {
-            $CoauthServer2Command = "$coauthCaPrefix& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-loopback-http --allow-insecure-dev-email-bypass --allow-insecure-password-bootstrap server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthServer2ConfigPath)
+            $CoauthServer2Command = "$coauthCaPrefix& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-loopback-http --allow-insecure-dev-email-bypass server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthServer2ConfigPath)
         }
         foreach ($server in $additionalServers) {
-            $server.CoauthCommand = "$coauthCaPrefix& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-loopback-http --allow-insecure-dev-email-bypass --allow-insecure-password-bootstrap server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $server.CoauthConfigPath)
+            $server.CoauthCommand = "$coauthCaPrefix& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-loopback-http --allow-insecure-dev-email-bypass server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $server.CoauthConfigPath)
         }
         if ($DualCoauth) {
-            $CoauthSecondaryCommand = "$coauthCaPrefix& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-loopback-http --allow-insecure-dev-email-bypass --allow-insecure-password-bootstrap server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthSecondaryConfigPath)
+            $CoauthSecondaryCommand = "$coauthCaPrefix& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-loopback-http --allow-insecure-dev-email-bypass server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthSecondaryConfigPath)
         }
     }
 

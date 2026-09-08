@@ -55,7 +55,7 @@ class PatchCoauthConfigTests(unittest.TestCase):
                 'resolver: "https://station.test/_arkret/root/identity/resolve"',
                 arkret,
             )
-            self.assertIn("password_login_session_grants_enabled: true", arkret)
+            self.assertNotIn("password_login_session_grants_enabled:", arkret)
             indexed_arguments = [value for value in arguments if value not in (
                 "--soland-base-url", "https://station.test"
             )]
