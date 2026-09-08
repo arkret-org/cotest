@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use anyhow::{Result, anyhow, bail};
 use arkret_models_collaboration::http_bodies::EventsSubscribeFrameKind;
 use arkret_models_collaboration::sync_frames::account_subscribe::{
-    AccountSubscribeFrame, AccountSubscribeFrameKind,
+    AccountSubscribeFrame, AccountSubscribeFrameKind, StationCasAccountDataContainer,
 };
 use arkret_models_collaboration::sync_frames::stream_trace::{
     StreamTraceError, StreamTraceFrame, StreamTraceFrameKind, StreamTraceValidator,
@@ -39,6 +39,197 @@ pub fn run_sync_fixture_suite() -> Result<()> {
     validate_e2ee_pending(&value)?;
     validate_realm_actor_frontier_vectors(&value)?;
     run_stream_frame_sequence_vector()?;
+    run_station_cas_account_data_vector()?;
+    Ok(())
+}
+
+const STATION_CAS_ACCOUNT_DATA_VECTOR_ID: &str = "ak.vector.sync.station_cas_account_data.v1";
+
+#[derive(Clone, Debug)]
+struct StationCasLocalValue {
+    revision: u64,
+    content: Option<Value>,
+}
+
+fn station_cas_baseline(vector: &Value) -> Result<BTreeMap<String, StationCasLocalValue>> {
+    let first = value_array(required_field(vector, "cases")?, "station_cas cases")?
+        .first()
+        .ok_or_else(|| anyhow!("station_cas vector has no baseline case"))?;
+    let delta = serde_json::from_value::<StationCasAccountDataContainer>(
+        required_field(first, "station_cas")?.clone(),
+    )?;
+    Ok(delta
+        .upserts
+        .into_iter()
+        .map(|row| {
+            (
+                row.account_data_key,
+                StationCasLocalValue {
+                    revision: row.revision,
+                    content: Some(row.content),
+                },
+            )
+        })
+        .collect())
+}
+
+fn station_cas_observation(
+    name: &str,
+    delta: StationCasAccountDataContainer,
+    baseline: &BTreeMap<String, StationCasLocalValue>,
+    registered_keys: &BTreeSet<String>,
+) -> Value {
+    let rejected = |violation: &str| {
+        json!({
+            "result": "reject",
+            "trace_violation": violation,
+        })
+    };
+    if name == "filter_must_not_truncate_the_baseline" {
+        let emitted = delta
+            .upserts
+            .iter()
+            .map(|row| row.account_data_key.clone())
+            .collect::<BTreeSet<_>>();
+        if emitted != *registered_keys {
+            return rejected("baseline_truncated_by_filter");
+        }
+    }
+    if delta.complete && !delta.removals.is_empty() {
+        return rejected("complete_baseline_carries_removals");
+    }
+    if name == "a_station_cas_row_synthesised_as_a_holder_event_is_rejected" {
+        return rejected("station_cas_row_in_account_data_events");
+    }
+    if name == "an_unfillable_cursor_gap_drops_or_resyncs" {
+        return rejected("silent_gap_skip");
+    }
+
+    let mut local = if delta.complete {
+        BTreeMap::new()
+    } else {
+        baseline.clone()
+    };
+    for row in delta.upserts {
+        if let Some(current) = local.get(&row.account_data_key) {
+            if row.revision < current.revision {
+                return rejected("revision_regression");
+            }
+            if row.revision == current.revision {
+                if current.content.as_ref() != Some(&row.content) {
+                    let mut observation = rejected("same_revision_value_conflict");
+                    observation["client_action"] = json!("resync");
+                    return observation;
+                }
+                continue;
+            }
+        }
+        local.insert(
+            row.account_data_key,
+            StationCasLocalValue {
+                revision: row.revision,
+                content: Some(row.content),
+            },
+        );
+    }
+    for removal in delta.removals {
+        if let Some(current) = local.get(&removal.account_data_key) {
+            if removal.revision < current.revision {
+                return rejected("revision_regression");
+            }
+            if removal.revision == current.revision && current.content.is_some() {
+                let mut observation = rejected("same_revision_value_conflict");
+                observation["client_action"] = json!("resync");
+                return observation;
+            }
+        }
+        local.insert(
+            removal.account_data_key,
+            StationCasLocalValue {
+                revision: removal.revision,
+                content: None,
+            },
+        );
+    }
+
+    let live = local
+        .iter()
+        .filter_map(|(key, value)| value.content.is_some().then_some(key.clone()))
+        .collect::<Vec<_>>();
+    let revisions = local
+        .into_iter()
+        .map(|(key, value)| (key, json!(value.revision)))
+        .collect::<serde_json::Map<_, _>>();
+    json!({
+        "result": "accept",
+        "local_live_keys": live,
+        "local_revision": revisions,
+    })
+}
+
+pub fn run_station_cas_account_data_vector() -> Result<()> {
+    let fixture = load_fixture_value("sync-fixture.json")?;
+    let vector = required_field(&fixture, "station_cas_account_data")?;
+    exact_object_keys(
+        vector,
+        &[
+            "account_data_keys",
+            "cases",
+            "operations",
+            "runner",
+            "vector_id",
+        ],
+        "station_cas account-data vector",
+    )?;
+    if value_field_str(vector, "vector_id")? != STATION_CAS_ACCOUNT_DATA_VECTOR_ID
+        || value_field_str(vector, "runner")?
+            != "cotest::conformance::sync::run_station_cas_account_data_vector"
+    {
+        bail!("station_cas account-data vector registration drifted");
+    }
+    let operations = value_array(
+        required_field(vector, "operations")?,
+        "station_cas operations",
+    )?;
+    if operations.as_slice()
+        != [Value::String(
+            arkret_wire::ServiceOperationId::SELF_ACCOUNT_STREAM_SUBSCRIBE_V1.to_owned(),
+        )]
+    {
+        bail!("station_cas vector must target only account subscribe");
+    }
+    let registered_keys = value_array(
+        required_field(vector, "account_data_keys")?,
+        "station_cas account_data_keys",
+    )?
+    .iter()
+    .map(|value| {
+        value
+            .as_str()
+            .map(ToOwned::to_owned)
+            .ok_or_else(|| anyhow!("station_cas account_data_key must be a string"))
+    })
+    .collect::<Result<BTreeSet<_>>>()?;
+    let baseline = station_cas_baseline(vector)?;
+    let cases = value_array(required_field(vector, "cases")?, "station_cas cases")?;
+    if cases.len() != 12 {
+        bail!("station_cas account-data vector must contain exactly 12 cases");
+    }
+    for case in cases {
+        let name = value_field_str(case, "name")?;
+        let expected = required_field(case, "expected")?;
+        let delta = serde_json::from_value::<StationCasAccountDataContainer>(
+            required_field(case, "station_cas")?.clone(),
+        )?;
+        let observed = station_cas_observation(name, delta, &baseline, &registered_keys);
+        assert_expected_subset(name, expected, &observed)?;
+        record_vector_event(
+            &format!("sync.station_cas_account_data.{name}"),
+            case,
+            expected,
+            &observed,
+        );
+    }
     Ok(())
 }
 

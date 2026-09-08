@@ -429,7 +429,9 @@ pub use station_certification::{
     StationCertificationStatus, run_station_certification_gate_suite,
     validate_station_certification,
 };
-pub use sync::{run_stream_frame_sequence_vector, run_sync_fixture_suite};
+pub use sync::{
+    run_station_cas_account_data_vector, run_stream_frame_sequence_vector, run_sync_fixture_suite,
+};
 pub use vector_registry_gate::{
     VectorRegistryGateEntry, VectorRegistryGateMode, VectorRegistryGateReport,
     VectorRegistryGateStatus, build_vector_registry_gate_report,
