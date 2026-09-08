@@ -205,13 +205,13 @@ test.describe("contact graph federation (server1/server2)", () => {
     const resolved = await request.post(
       `${solandBaseUrl("server1")}/_arkret/self/direct-conversations/resolve`,
       {
-        headers: authHeaders(aliceToken),
-        data: {
+        headers: { ...authHeaders(aliceToken), "content-type": "application/json" },
+        data: canonicalJson({
           peer: {
             kind: "human",
             account_id: { principal_id: bob.id, station_id: solandServiceId("server2") },
           },
-        },
+        }),
       },
     );
     expect(resolved.ok(), await resolved.text()).toBeTruthy();
@@ -221,13 +221,13 @@ test.describe("contact graph federation (server1/server2)", () => {
     expect(body.next_founding_input).toBeUndefined();
 
     const founderRequest = {
-      headers: authHeaders(bobToken),
-      data: {
+      headers: { ...authHeaders(bobToken), "content-type": "application/json" },
+      data: canonicalJson({
         peer: {
           kind: "human",
           account_id: { principal_id: alice.id, station_id: solandServiceId("server1") },
         },
-      },
+      }),
     };
     const founderResolved = await request.post(
       `${solandBaseUrl("server2")}/_arkret/self/direct-conversations/resolve`,

@@ -11,6 +11,7 @@ import {
   accountSubscribeDeltaApi,
   accountSubscribeFramesApi,
   authHeaders,
+  canonicalJson,
   createRealmApi,
   grantCapabilityEventApi,
   replaceAccountDataApi,
@@ -426,19 +427,19 @@ test.describe("personal blocklist", () => {
     const registerDevice = await request.post(
       `${solandBaseUrl()}/_arkret/edge/push/register-device`,
       {
-        headers: authHeaders(aliceToken),
-        data: {
+        headers: { ...authHeaders(aliceToken), "content-type": "application/json" },
+        data: canonicalJson({
           device_id: alice.deviceId,
           push_gateway_url: "https://push.example",
           push_key: `s31e112-${stamp}`,
           platform: "desktop",
           app_id: "inkson",
-        },
+        }),
       },
     );
-    expect(registerDevice.status()).toBe(200);
+    expect(registerDevice.status(), await registerDevice.text()).toBe(200);
     const registeredDevice = await registerDevice.json();
-    const pushTargetId = registeredDevice.registration_id;
+    const pushTargetId = registeredDevice.push_target_id;
     expect(pushTargetId).toBeTruthy();
 
     await replaceAccountDataApi(
@@ -464,14 +465,15 @@ test.describe("personal blocklist", () => {
     const notify = await request.post(
       `${solandBaseUrl()}/_arkret/edge/push/notify`,
       {
-        data: {
+        headers: { "content-type": "application/json" },
+        data: canonicalJson({
           notification: {
             push_target_id: pushTargetId,
             wakeup_kind: "message",
             timing_profile_hint: "default",
             devices: [{ device_id: alice.deviceId }],
           },
-        },
+        }),
       },
     );
     expect(notify.status()).toBe(200);

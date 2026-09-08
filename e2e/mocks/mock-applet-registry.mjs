@@ -57,6 +57,7 @@ import { createEd25519KeyPair } from "./_shared/keypairs.mjs";
 import { handleInspect } from "./_shared/inspect.mjs";
 import { canonicalJson, readJson } from "./_shared/http.mjs";
 import { replaceStateFileSync } from "./_shared/atomic-state.mjs";
+import { isolateRequestFailure } from "./_shared/request-handler.mjs";
 
 const port = parseInt(process.env.MOCK_APPLET_REGISTRY_PORT ?? "0", 10);
 const durableStateFile = process.env.MOCK_APPLET_REGISTRY_STATE_FILE;
@@ -564,7 +565,7 @@ function signedGhostMessageEvent({
     applet_id: packageInfo.appletId,
     seal_ref: sealRef,
     auth_context: {
-      key_id: packageInfo.verificationMethod,
+      key_id: packageInfo.verificationMethod.split("#").at(-1).replace(/^ak:/, ""),
       key_epoch: 0,
     },
     external_ref: {
@@ -929,7 +930,7 @@ function signedPackage(body) {
   };
 }
 
-const server = createServer(async (req, res) => {
+const server = createServer(isolateRequestFailure(async (req, res) => {
   const url = new URL(req.url, "http://127.0.0.1");
   res.setHeader("content-type", "application/json");
 
@@ -1274,7 +1275,7 @@ const server = createServer(async (req, res) => {
 
   res.statusCode = 404;
   res.end(JSON.stringify({ error: "not_found" }));
-});
+}));
 
 server.listen(port, "127.0.0.1", () => {
   const actual = server.address();
