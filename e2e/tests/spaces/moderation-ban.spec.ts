@@ -240,6 +240,10 @@ test.describe("moderation and ban", () => {
         },
       },
     });
+    // Cite the accepted post-ban governance state with a valid DataEvent.
+    // The owner can read that state; the Event and request remain Mallory's.
+    // A malformed wrapper would only test schema rejection, not the ban gate.
+    await prepareSignedEventCbsApi(request, aliceToken, bannedWriteEnvelope);
     const bannedWrite = await request.post(bannedWriteUrl, {
       headers: {
         ...authHeaders(malloryToken, "POST", bannedWriteUrl),
