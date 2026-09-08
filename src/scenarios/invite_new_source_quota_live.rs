@@ -487,16 +487,9 @@ pub async fn consent_request_quarantine_branch_run() -> Result<()> {
 /// entry would put a second parallel review carrier in front of the same fact
 /// and let it fight the Contact state machine.
 ///
-/// The billing half -- that the same first contact consumes one shared
-/// new-source slot -- is asserted offline by
-/// `conformance::invite_new_source_quota` against
-/// `chokepoint_contract.contact_delivery_consumes_a_new_source_slot`. It is not
-/// asserted live here because both actors share one Station in this harness,
-/// and soland stores a same-Station Contact pair as a single directional record
-/// whose establishment cannot be dropped for the holder alone without also
-/// erasing the requester's own `pending_outgoing` view. See
-/// `arkret-work/work/active/
-/// 2026-09-05-1450-soland-same-station-contact-request-bypasses-the-shared-new-source-quota.md`.
+/// The billing half is live as well: Contact consumes the first slot, an invite
+/// consumes the second, and a third source's Contact request is hidden from the
+/// holder while its requester-local `pending_outgoing` head remains durable.
 pub async fn contact_first_contact_bills_the_shared_quota_run() -> Result<()> {
     let case = canonical_admission_case(REPLAYABLE_ADMISSION_CASE)?;
     let server = spawn_under_canonical_ceiling("contact-shared-quota", &case).await?;
@@ -538,6 +531,34 @@ pub async fn contact_first_contact_bills_the_shared_quota_run() -> Result<()> {
                 .await?
                 .is_empty(),
         "invite delivery writes the invite_delivery branch while Contact writes nothing here"
+    );
+
+    // The Contact and invite above exhaust the canonical short-window ceiling.
+    // A third source receives the ordinary requester-side outcome and retains
+    // its pending_outgoing head, but the holder must not receive a corresponding
+    // pending_incoming head.
+    let over_quota = inviter(&server, "alice-contact-shared-quota-dropped", 0xf7).await?;
+    over_quota
+        .request_contact(&holder.actor)
+        .await
+        .context("an over-quota same-Station Contact request")?;
+    let holder_contacts = expect_json(holder.get("/_arkret/self/contacts"), StatusCode::OK).await?;
+    ensure!(
+        !serde_json::to_string(&holder_contacts)?.contains(&actor_core_id(&over_quota.actor)?),
+        "an over-quota Contact request established a holder-visible pending_incoming head: {holder_contacts}"
+    );
+    let requester_contacts =
+        expect_json(over_quota.get("/_arkret/self/contacts"), StatusCode::OK).await?;
+    ensure!(
+        serde_json::to_string(&requester_contacts)?.contains(&actor_core_id(&holder.actor)?),
+        "dropping the holder's pending_incoming head also erased the requester's pending_outgoing head: {requester_contacts}"
+    );
+    ensure!(
+        quarantine_entries_of(&holder, "invite_delivery")
+            .await?
+            .len()
+            == 1,
+        "the over-quota Contact request must not create or evict a quarantine entry"
     );
     Ok(())
 }
