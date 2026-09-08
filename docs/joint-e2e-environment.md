@@ -10,9 +10,15 @@ The only test entry is `scripts/run-joint-e2e.ps1`. It always invokes the enviro
 pwsh -NoProfile -File scripts/run-joint-e2e.ps1 -RunProfile joint-smoke -ServerCount 1 -StartCoauth
 pwsh -NoProfile -File scripts/run-joint-e2e.ps1 -RunProfile joint-full -ServerCount 1 -StartCoauth
 pwsh -NoProfile -File scripts/run-joint-e2e.ps1 -RunProfile joint-full -ServerCount 3 -StartCoauth
+pwsh -NoProfile -File scripts/run-joint-e2e.ps1 -RunProfile joint-api -ServerCount 1 -StartCoauth
 ```
 
-Every invocation attempts to install missing packages, local npm dependencies, Playwright Chromium, and required Docker images. Most of these operations can succeed as a standard user. If an installation command is denied or otherwise fails, the run stops before preparation and tells the user to retry from an elevated PowerShell. Hosts ACL initialization is the only operation that is deliberately never attempted without administrator rights:
+`joint-api` is the browserless Garth lane. It selects the closed API-only
+manifest, forces the Garth client journey, and neither builds nor starts
+Inkson. Passing `-ClientKind inkson` or any Inkson-specific argument with this
+profile fails before preparation.
+
+Every invocation attempts to install missing packages, local npm dependencies, and required Docker images. Browser profiles also install Playwright Chromium; `joint-api` does not need or check the browser payload. Most of these operations can succeed as a standard user. If an installation command is denied or otherwise fails, the run stops before preparation and tells the user to retry from an elevated PowerShell. Hosts ACL initialization is the only operation that is deliberately never attempted without administrator rights:
 
 ```powershell
 pwsh -NoProfile -File scripts/initialize-joint-e2e-environment.ps1 -ServerCount 3 -StartCoauth -RequireDocker -TestUser "DOMAIN\developer"

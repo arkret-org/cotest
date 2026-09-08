@@ -3,7 +3,7 @@
     Drives a joint-services Playwright run for the cotest harness.
 
 .DESCRIPTION
-    Supports two run profiles via -RunProfile:
+    Supports three run profiles via -RunProfile:
 
     joint-smoke (PR gate)
       - Runs only describe blocks tagged @fully-implemented.
@@ -15,6 +15,10 @@
       - Runs every regular joint spec discovered by Playwright. Provider-backed
         @platform-live tests remain in the protected controlled lane. The
         retained, fully attributed fixme tests exit as skipped via test.fixme().
+
+    joint-api (browserless)
+      - Runs the closed API-only Playwright selection and the Garth client
+        journey without building, serving, or importing Inkson at runtime.
 
     Both profiles share the same service-startup, preflight, and reporting
     code paths. Only the Playwright invocation step branches on the profile.
@@ -259,6 +263,27 @@ function Resolve-PlaywrightProjects {
         return @("chrome")
     }
     return $projects
+}
+
+# `joint-api` is the Garth/browserless lane. Resolve this before preparation so
+# its summary and exported environment cannot accidentally claim it measured
+# Inkson. An explicit contradiction is an error; the omitted default is
+# rewritten to Garth so the ordinary `-RunProfile joint-api` invocation is the
+# useful one.
+function Resolve-ClientKind {
+    param(
+        [string[]]$PlaywrightProjects,
+        [string]$ClientKind,
+        [bool]$ClientKindWasExplicit
+    )
+
+    if ($PlaywrightProjects -contains "joint-api") {
+        if ($ClientKindWasExplicit -and $ClientKind -ne "garth") {
+            throw "the joint-api project does not run Inkson; remove -ClientKind or select garth."
+        }
+        return "garth"
+    }
+    return $ClientKind
 }
 
 # Whether this selection needs an Inkson bundle, static server and browser.
@@ -831,13 +856,17 @@ function Invoke-JointE2ePreflight {
                 Add-PreflightResult $results "playwright projects" "fail" $listOutput
             }
 
-            $browserListOutput = Invoke-NativeCapture -FilePath $playwrightCli.FilePath -Arguments ($playwrightBaseArgs + @("install", "--list"))
-            $browserListExitCode = $LASTEXITCODE
-            $browserList = $browserListOutput -join "`n"
-            if ($browserListExitCode -eq 0) {
-                Add-PreflightResult $results "playwright browsers" "pass" "browser registry readable"
+            if ($RequiresInkson) {
+                $browserListOutput = Invoke-NativeCapture -FilePath $playwrightCli.FilePath -Arguments ($playwrightBaseArgs + @("install", "--list"))
+                $browserListExitCode = $LASTEXITCODE
+                $browserList = $browserListOutput -join "`n"
+                if ($browserListExitCode -eq 0) {
+                    Add-PreflightResult $results "playwright browsers" "pass" "browser registry readable"
+                } else {
+                    Add-PreflightResult $results "playwright browsers" "fail" $browserList
+                }
             } else {
-                Add-PreflightResult $results "playwright browsers" "fail" $browserList
+                Add-PreflightResult $results "playwright browsers" "pass" "not required by the selected browserless project"
             }
         }
         finally {
@@ -2759,6 +2788,10 @@ $playwrightProjects = Resolve-PlaywrightProjects `
     -RunProfile $RunProfile `
     -PlaywrightProject $PlaywrightProject `
     -PlaywrightProjectWasExplicit ($PSBoundParameters.ContainsKey("PlaywrightProject"))
+$ClientKind = Resolve-ClientKind `
+    -PlaywrightProjects $playwrightProjects `
+    -ClientKind $ClientKind `
+    -ClientKindWasExplicit ($PSBoundParameters.ContainsKey("ClientKind"))
 $inksonArguments = @{}
 foreach ($name in "InksonRoot", "InksonBaseUrl", "InksonServer2BaseUrl", "InksonCommand", "InksonServer2Command") {
     if ($PSBoundParameters.ContainsKey($name)) {
@@ -2827,6 +2860,7 @@ $environmentArgs = @(
 $environmentPostgresImages = @($SolandPostgresImage, $CoauthPostgresImage) | Sort-Object -Unique
 $environmentArgs += $environmentPostgresImages
 if ($StartCoauth) { $environmentArgs += "-StartCoauth" }
+if ($requiresInkson) { $environmentArgs += "-RequireBrowser" }
 if ($requiresDocker) { $environmentArgs += "-RequireDocker" }
 & (Get-Process -Id $PID).Path @environmentArgs
 $environmentExit = $LASTEXITCODE

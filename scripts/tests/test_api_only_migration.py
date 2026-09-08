@@ -86,6 +86,21 @@ class ApiOnlyMigrationTests(unittest.TestCase):
         errors = migration.validation_errors(self.root)
         self.assertTrue(any("replacement symbol 'missing' is missing" in item for item in errors))
 
+    def test_rejects_a_specialized_lane_that_drives_a_browser(self) -> None:
+        source = self.manifest["specialized_api_lanes"][0]
+        self.write(
+            source,
+            # Merely declaring this fixture launches the browser before a
+            # runtime client-kind branch could choose a headless path.
+            "test('not API only', async ({ browser }) => { expect(true).toBe(true); });\n",
+        )
+        errors = migration.validation_errors(self.root)
+        self.assertIn(
+            "specialized API lane drives a browser — it cannot run in joint-api: "
+            f"{source}",
+            errors,
+        )
+
     def test_prose_and_json_ld_do_not_count_as_browser_coverage(self) -> None:
         # The former signal matched the bare words `page`, `browser` and
         # `context`, so a comment about a result page or a JSON-LD `@context`

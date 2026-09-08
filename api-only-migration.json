@@ -6,7 +6,7 @@
     "cotest/e2e/tests/harness/mocks-selftest.spec.ts",
     "cotest/e2e/tests/harness/provisioning-bridge.spec.ts",
     "cotest/e2e/tests/harness/provisioning-dual-run.spec.ts",
-    "cotest/e2e/tests/harness/test-client-parity.spec.ts"
+    "cotest/e2e/tests/harness/garth-client.spec.ts"
   ],
   "candidates": [
     {

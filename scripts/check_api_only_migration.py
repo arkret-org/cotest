@@ -5,7 +5,8 @@ Three lists partition every Playwright spec that never reaches a browser:
 
 * ``candidates``          — migrated or deleted; the source must be gone and a
                             named Rust symbol must have taken it over.
-* ``specialized_api_lanes`` — mock/platform lanes that stay in Playwright.
+* ``specialized_api_lanes`` — browserless mock/platform/client lanes that stay
+                              in Playwright.
 * ``pending_migration``   — not migrated yet; the source must still exist, must
                             still be API-only, and must say what it needs.
 
@@ -46,6 +47,9 @@ BROWSER_ENTRY_HELPERS = (
     "pairAcceptedSiblingDevice",
 )
 BROWSER_SIGNAL = re.compile(
+    # Declaring the fixture is enough: Playwright resolves it before the test
+    # body runs, even when a runtime branch never reads it.
+    r"async\s*\(\s*\{[^}]*\bbrowser\b|"
     r"\bpage\s*[.,:})]|"
     r"\bpage\b\s*=>|"
     r"\.newPage\(|"
@@ -131,8 +135,14 @@ def validation_errors(
         return errors + ["specialized_api_lanes must be a string array"]
     specialized_set = set(specialized)
     for path_string in sorted(specialized_set):
-        if not (workspace_root / path_string).is_file():
+        path = workspace_root / path_string
+        if not path.is_file():
             errors.append(f"specialized API lane is missing: {path_string}")
+            continue
+        if BROWSER_SIGNAL.search(path.read_text(encoding="utf-8", errors="replace")):
+            errors.append(
+                f"specialized API lane drives a browser — it cannot run in joint-api: {path_string}"
+            )
 
     pending = manifest.get("pending_migration", [])
     if not isinstance(pending, list):

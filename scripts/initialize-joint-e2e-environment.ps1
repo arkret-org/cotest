@@ -10,6 +10,9 @@ Failed commands are reported with an instruction to retry from an elevated shell
 param(
     [ValidateRange(1, 32)][int]$ServerCount = 1,
     [switch]$StartCoauth,
+    # Browserless profiles still use Playwright's test runner, but do not need
+    # its multi-hundred-megabyte Chromium payload.
+    [switch]$RequireBrowser,
     [switch]$RequireDocker,
     [string[]]$PostgresImage = @("postgres:18.6-alpine"),
     [string]$OutputDirectory,
@@ -322,7 +325,7 @@ if ($npm -and -not (Test-Path -LiteralPath $packagePath)) {
     $null = Invoke-CotestPackageCommand -Name "e2e npm dependencies" -FilePath $npm.Source -Arguments @("--prefix", $e2eRoot, "ci")
 }
 $npx = Get-Command npx -ErrorAction SilentlyContinue
-if ($npx -and (Test-Path -LiteralPath $packagePath) -and -not (Test-CotestPlaywrightChromium)) {
+if ($RequireBrowser -and $npx -and (Test-Path -LiteralPath $packagePath) -and -not (Test-CotestPlaywrightChromium)) {
     $null = Invoke-CotestPackageCommand -Name "Playwright Chromium" -FilePath $npx.Source -Arguments @("--prefix", $e2eRoot, "playwright", "install", "chromium")
 }
 
@@ -382,7 +385,9 @@ $playwrightPackage = Join-Path $e2eRoot "node_modules\@playwright\test\package.j
 if (Test-Path -LiteralPath $playwrightPackage) {
     $package = Get-Content -Raw -LiteralPath $playwrightPackage | ConvertFrom-Json
     Add-Check "playwright package" "pass" "path=$playwrightPackage; version=$($package.version)"
-    if (Test-CotestPlaywrightChromium) {
+    if (-not $RequireBrowser) {
+        Add-Check "playwright chromium" "pass" "not required by the selected browserless profile"
+    } elseif (Test-CotestPlaywrightChromium) {
         Add-Check "playwright chromium" "pass" "bundled Chromium executable is installed"
     } else {
         Add-Check "playwright chromium" "fail" "bundled Chromium executable is missing after installation was attempted" @("Retry this initializer from an elevated PowerShell.")

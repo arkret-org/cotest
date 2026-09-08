@@ -86,6 +86,8 @@ Assert-True ($runnerScript -match '-Hosts \(@\(\$jointTlsHostNames\) \+ @\(\$joi
 $initializerScript = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot "..\initialize-joint-e2e-environment.ps1")
 Assert-True ($initializerScript -match 'Test-CotestAdministrator' -and $initializerScript -match 'if \(\$isAdministrator\)') "initializer must branch on administrator identity"
 Assert-True ($initializerScript -match 'mode = "install-and-check"') "dependency installation must be attempted by default"
+Assert-True ($initializerScript -match 'if \(\$RequireBrowser -and \$npx' -and $runnerScript -match 'if \(\$requiresInkson\) \{ \$environmentArgs \+= "-RequireBrowser" \}') "browserless joint-api must not install Chromium"
+Assert-True ($runnerScript -match 'if \(\$RequiresInkson\) \{\s*\$browserListOutput') "browserless preflight must not require the Playwright browser registry"
 Assert-True ($initializerScript -match 'if \(\$isAdministrator\) \{\s*\$null = Initialize-CotestWindowsHostsAccess') "only the hosts ACL initializer must be administrator-gated"
 Assert-True ($initializerScript.IndexOf('if ($platform.os -eq "windows")') -lt $initializerScript.LastIndexOf('if ($isAdministrator)')) "package installation must run before the administrator-only hosts branch"
 Assert-True ($initializerScript -notmatch 'standard user: read-only check|mode = .*check-only') "standard-user dependency handling must not regress to check-only"
