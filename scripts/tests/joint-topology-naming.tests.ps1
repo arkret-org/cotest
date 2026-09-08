@@ -19,4 +19,37 @@ foreach ($relative in $topologyFiles) {
     }
 }
 if ($violations.Count -gt 0) { throw "Forbidden fixed topology naming found:`n$($violations -join "`n")" }
+
+$tokens = $null
+$parseErrors = $null
+$runnerPath = Join-Path $repoRoot "scripts\run-joint-e2e.ps1"
+$ast = [System.Management.Automation.Language.Parser]::ParseFile($runnerPath, [ref]$tokens, [ref]$parseErrors)
+if ($parseErrors.Count -gt 0) { throw "Joint runner has PowerShell parse errors" }
+$layoutFunction = $ast.FindAll({
+    param($node)
+    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+        $node.Name -eq "Get-JointServerArtifactLayout"
+}, $true)
+if ($layoutFunction.Count -ne 1) { throw "Expected one generic joint server artifact layout function" }
+Invoke-Expression $layoutFunction[0].Extent.Text
+
+$jointDirectory = Join-Path ([System.IO.Path]::GetTempPath()) "cotest-layout"
+foreach ($serverIndex in 1..3) {
+    $serverName = "server$serverIndex"
+    $layout = Get-JointServerArtifactLayout -JointDirectory $jointDirectory -ServerName $serverName
+    $expected = @{
+        CoauthDirectory = Join-Path $jointDirectory "coauth-$serverName"
+        SolandConfigPath = Join-Path $jointDirectory "soland-$serverName.env"
+        SolandObjectsRoot = Join-Path $jointDirectory "soland-$serverName-objects"
+        SolandStateRoot = Join-Path $jointDirectory "soland-$serverName-state"
+        SolandChaosControlPath = Join-Path $jointDirectory "soland-$serverName-decision-chaos.json"
+        CoauthStoreDumpName = "coauth-$serverName-postgres.sql"
+        SolandStoreDumpName = "soland-$serverName-postgres.sql"
+    }
+    foreach ($property in $expected.Keys) {
+        if ($layout.$property -ne $expected[$property]) {
+            throw "$serverName artifact layout mismatch for ${property}: $($layout.$property)"
+        }
+    }
+}
 Write-Host "joint-topology-naming.tests.ps1: PASS"

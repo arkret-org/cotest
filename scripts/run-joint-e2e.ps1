@@ -3,7 +3,7 @@
     Drives a joint-services Playwright run for the cotest harness.
 
 .DESCRIPTION
-    Supports two run profiles via -RunProfile:
+    Supports three run profiles via -RunProfile:
 
     joint-smoke (PR gate)
       - Runs only describe blocks tagged @fully-implemented.
@@ -15,6 +15,10 @@
       - Runs every regular joint spec discovered by Playwright. Provider-backed
         @platform-live tests remain in the protected controlled lane. The
         retained, fully attributed fixme tests exit as skipped via test.fixme().
+
+    joint-api (browserless)
+      - Runs the closed API-only Playwright selection and the Garth client
+        journey without building, serving, or importing Inkson at runtime.
 
     Both profiles share the same service-startup, preflight, and reporting
     code paths. Only the Playwright invocation step branches on the profile.
@@ -259,6 +263,27 @@ function Resolve-PlaywrightProjects {
         return @("chrome")
     }
     return $projects
+}
+
+# `joint-api` is the Garth/browserless lane. Resolve this before preparation so
+# its summary and exported environment cannot accidentally claim it measured
+# Inkson. An explicit contradiction is an error; the omitted default is
+# rewritten to Garth so the ordinary `-RunProfile joint-api` invocation is the
+# useful one.
+function Resolve-ClientKind {
+    param(
+        [string[]]$PlaywrightProjects,
+        [string]$ClientKind,
+        [bool]$ClientKindWasExplicit
+    )
+
+    if ($PlaywrightProjects -contains "joint-api") {
+        if ($ClientKindWasExplicit -and $ClientKind -ne "garth") {
+            throw "the joint-api project does not run Inkson; remove -ClientKind or select garth."
+        }
+        return "garth"
+    }
+    return $ClientKind
 }
 
 # Whether this selection needs an Inkson bundle, static server and browser.
@@ -831,13 +856,17 @@ function Invoke-JointE2ePreflight {
                 Add-PreflightResult $results "playwright projects" "fail" $listOutput
             }
 
-            $browserListOutput = Invoke-NativeCapture -FilePath $playwrightCli.FilePath -Arguments ($playwrightBaseArgs + @("install", "--list"))
-            $browserListExitCode = $LASTEXITCODE
-            $browserList = $browserListOutput -join "`n"
-            if ($browserListExitCode -eq 0) {
-                Add-PreflightResult $results "playwright browsers" "pass" "browser registry readable"
+            if ($RequiresInkson) {
+                $browserListOutput = Invoke-NativeCapture -FilePath $playwrightCli.FilePath -Arguments ($playwrightBaseArgs + @("install", "--list"))
+                $browserListExitCode = $LASTEXITCODE
+                $browserList = $browserListOutput -join "`n"
+                if ($browserListExitCode -eq 0) {
+                    Add-PreflightResult $results "playwright browsers" "pass" "browser registry readable"
+                } else {
+                    Add-PreflightResult $results "playwright browsers" "fail" $browserList
+                }
             } else {
-                Add-PreflightResult $results "playwright browsers" "fail" $browserList
+                Add-PreflightResult $results "playwright browsers" "pass" "not required by the selected browserless project"
             }
         }
         finally {
@@ -2776,6 +2805,10 @@ $playwrightProjects = Resolve-PlaywrightProjects `
     -RunProfile $RunProfile `
     -PlaywrightProject $PlaywrightProject `
     -PlaywrightProjectWasExplicit ($PSBoundParameters.ContainsKey("PlaywrightProject"))
+$ClientKind = Resolve-ClientKind `
+    -PlaywrightProjects $playwrightProjects `
+    -ClientKind $ClientKind `
+    -ClientKindWasExplicit ($PSBoundParameters.ContainsKey("ClientKind"))
 $inksonArguments = @{}
 foreach ($name in "InksonRoot", "InksonBaseUrl", "InksonServer2BaseUrl", "InksonCommand", "InksonServer2Command") {
     if ($PSBoundParameters.ContainsKey($name)) {
@@ -2852,6 +2885,7 @@ $environmentArgs = @(
 $environmentPostgresImages = @($SolandPostgresImage, $CoauthPostgresImage) | Sort-Object -Unique
 $environmentArgs += $environmentPostgresImages
 if ($StartCoauth) { $environmentArgs += "-StartCoauth" }
+if ($requiresInkson) { $environmentArgs += "-RequireBrowser" }
 if ($requiresDocker) { $environmentArgs += "-RequireDocker" }
 & (Get-Process -Id $PID).Path @environmentArgs
 $environmentExit = $LASTEXITCODE
@@ -2893,6 +2927,25 @@ $SavfoxRoot = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromP
 #   <OutputRoot>/runs/joint-e2e/<timestamp>-<profile>/ — authoritative outputs
 #   <OutputRoot>/latest/joint-e2e/                     — latest non-targeted suite
 # With -JointDir the caller owns the run directory and both are skipped.
+function Get-JointServerArtifactLayout {
+    param(
+        [Parameter(Mandatory = $true)][string]$JointDirectory,
+        [Parameter(Mandatory = $true)][ValidatePattern('^server[1-9][0-9]*$')][string]$ServerName
+    )
+
+    $solandName = "soland-$ServerName"
+    return [pscustomobject]@{
+        ServerName = $ServerName
+        CoauthDirectory = Join-Path $JointDirectory "coauth-$ServerName"
+        SolandConfigPath = Join-Path $JointDirectory "$solandName.env"
+        SolandObjectsRoot = Join-Path $JointDirectory "$solandName-objects"
+        SolandStateRoot = Join-Path $JointDirectory "$solandName-state"
+        SolandChaosControlPath = Join-Path $JointDirectory "$solandName-decision-chaos.json"
+        CoauthStoreDumpName = "coauth-$ServerName-postgres.sql"
+        SolandStoreDumpName = "$solandName-postgres.sql"
+    }
+}
+
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 if ($JointDir) {
     $jointDir = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($JointDir)
@@ -2913,16 +2966,18 @@ if ($JointDir) {
 $serviceLogDir = Join-Path $jointDir "services"
 $screenshotDir = Join-Path $jointDir "screenshots"
 $visualBaselineDir = Join-Path $jointDir "visual-baselines"
-$solandChaosControlFile = Join-Path $jointDir "soland-decision-chaos.json"
 $null = New-Item -ItemType Directory -Force -Path $serviceLogDir
 $null = New-Item -ItemType Directory -Force -Path $screenshotDir
 $null = New-Item -ItemType Directory -Force -Path $visualBaselineDir
 $serverServiceLogDirs = @{}
+$serverArtifactLayouts = @{}
 for ($serverIndex = 1; $serverIndex -le $ServerCount; $serverIndex++) {
     $serverName = "server$serverIndex"
     $serverServiceLogDirs[$serverName] = Join-Path $serviceLogDir $serverName
+    $serverArtifactLayouts[$serverName] = Get-JointServerArtifactLayout -JointDirectory $jointDir -ServerName $serverName
     $null = New-Item -ItemType Directory -Force -Path $serverServiceLogDirs[$serverName]
 }
+$solandChaosControlFile = $serverArtifactLayouts["server1"].SolandChaosControlPath
 
 # 0530-C: decide the public-identity topology before any base URL is minted.
 # Runner-owned process-mode services keep plain loopback listeners but publish
@@ -3860,10 +3915,11 @@ try {
             $ephemeralCoauthServer1Postgres = Start-EphemeralPostgres -Image $CoauthPostgresImage -NamePrefix "cotest-coauth-$timestamp" -TimeoutSeconds $StartupTimeoutSeconds
             $coauthPostgresDsn = $ephemeralCoauthServer1Postgres.Url
         }
+        $coauthServer1Dir = $serverArtifactLayouts["server1"].CoauthDirectory
         $coauthConfigPath = New-CoauthJointConfig `
             -CoauthBinary $coauthBinary `
             -RepoRoot $repoRoot `
-            -JointDir $jointDir `
+            -JointDir $coauthServer1Dir `
             -PostgresUrl $coauthPostgresDsn `
             -CoauthBaseUrl $CoauthBaseUrl `
             -CoauthBind "127.0.0.1:$coauthPort" `
@@ -3882,7 +3938,7 @@ try {
             # Each Station owns a separate Account Authority and durable account
             # store. DualCoauth remains a replica of Server1, not Server2's authority.
             $ephemeralCoauthServer2Postgres = Start-EphemeralPostgres -Image $CoauthPostgresImage -NamePrefix "cotest-coauth-server2-$timestamp" -TimeoutSeconds $StartupTimeoutSeconds
-            $coauthServer2Dir = Join-Path $jointDir "coauth-server2"
+            $coauthServer2Dir = $serverArtifactLayouts["server2"].CoauthDirectory
             $coauthServer2ConfigPath = New-CoauthJointConfig `
                 -CoauthBinary $coauthBinary -RepoRoot $repoRoot -JointDir $coauthServer2Dir `
                 -PostgresUrl $ephemeralCoauthServer2Postgres.Url `
@@ -3898,7 +3954,7 @@ try {
         foreach ($server in $additionalServers) {
             $server.CoauthDatabase = Start-EphemeralPostgres -Image $CoauthPostgresImage -NamePrefix "cotest-$($server.CoauthName)-$timestamp" -TimeoutSeconds $StartupTimeoutSeconds
             $additionalPostgresContainers.Add($server.CoauthDatabase)
-            $coauthServerDir = Join-Path $jointDir $server.CoauthName
+            $coauthServerDir = $serverArtifactLayouts[$server.Name].CoauthDirectory
             $server.CoauthConfigPath = New-CoauthJointConfig `
                 -CoauthBinary $coauthBinary -RepoRoot $repoRoot -JointDir $coauthServerDir `
                 -PostgresUrl $server.CoauthDatabase.Url -CoauthBaseUrl $server.CoauthBaseUrl `
@@ -3912,7 +3968,7 @@ try {
             Invoke-CoauthMigrations -CoauthBinary $coauthBinary -ConfigPath $server.CoauthConfigPath -LogDirectory $coauthServerDir -TimeoutSeconds $StartupTimeoutSeconds
         }
         if ($DualCoauth) {
-            $coauthSecondaryConfigPath = Join-Path $jointDir "coauth-secondary.yaml"
+            $coauthSecondaryConfigPath = Join-Path $coauthServer1Dir "coauth-secondary.yaml"
             $primaryBind = "address: `"127.0.0.1:$coauthPort`""
             $secondaryBind = "address: `"127.0.0.1:$coauthSecondaryPort`""
             $primaryConfig = Get-Content -LiteralPath $coauthConfigPath -Raw
@@ -3922,7 +3978,7 @@ try {
             $primaryConfig.Replace($primaryBind, $secondaryBind) |
                 Set-Content -LiteralPath $coauthSecondaryConfigPath -Encoding UTF8
         }
-        Invoke-CoauthMigrations -CoauthBinary $coauthBinary -ConfigPath $coauthConfigPath -LogDirectory $serviceLogDir -TimeoutSeconds $StartupTimeoutSeconds
+        Invoke-CoauthMigrations -CoauthBinary $coauthBinary -ConfigPath $coauthConfigPath -LogDirectory $coauthServer1Dir -TimeoutSeconds $StartupTimeoutSeconds
         # Enable the cotest-only debug seam (`/api/v1/test/debug/issue-dpop-grant`)
         # so the joint harness can mint real DPoP-bound ak.session.grants instead
         # of dev-login bearers (see helpers/session-grant-dpop.ts mintDpopBoundGrant).
@@ -4230,11 +4286,11 @@ try {
         $solandMetricsBaseUrl = "http://127.0.0.1:$solandMetricsPort"
         $solandProcessArguments = @{
             BinaryPath = $solandBinary
-            ConfigPath = (Join-Path $jointDir "soland.env")
+            ConfigPath = $serverArtifactLayouts["server1"].SolandConfigPath
             BaseUrl = $SolandBaseUrl
             DatabaseUrl = $solandDatabaseDsn
-            ObjectsRoot = (Join-Path $jointDir "soland-objects")
-            StateRoot = (Join-Path $jointDir "soland-state")
+            ObjectsRoot = $serverArtifactLayouts["server1"].SolandObjectsRoot
+            StateRoot = $serverArtifactLayouts["server1"].SolandStateRoot
             Port = $solandPort
             MetricsPort = $solandMetricsPort
             LogFile = $solandTraceFile
@@ -4281,8 +4337,8 @@ try {
             Image = $SolandImage
             HostPort = $solandPort
             ContainerPort = $SolandContainerPort
-            ObjectsRoot = (Join-Path $jointDir "soland-objects")
-            StateRoot = (Join-Path $jointDir "soland-state")
+            ObjectsRoot = $serverArtifactLayouts["server1"].SolandObjectsRoot
+            StateRoot = $serverArtifactLayouts["server1"].SolandStateRoot
             LogDirectory = $serverServiceLogDirs["server1"]
             Environment = $solandDockerEnv
         }
@@ -4321,8 +4377,8 @@ try {
                 Image = $SolandImage
                 HostPort = $solandServer2Port
                 ContainerPort = $SolandContainerPort
-                ObjectsRoot = (Join-Path $jointDir "soland-server2-objects")
-                StateRoot = (Join-Path $jointDir "soland-server2-state")
+                ObjectsRoot = $serverArtifactLayouts["server2"].SolandObjectsRoot
+                StateRoot = $serverArtifactLayouts["server2"].SolandStateRoot
                 LogDirectory = $serverServiceLogDirs["server2"]
                 Environment = $solandServer2DockerEnv
             }
@@ -4338,11 +4394,11 @@ try {
         } else {
             $solandServer2ProcessArguments = @{
                 BinaryPath = $solandBinary
-                ConfigPath = (Join-Path $jointDir "soland-server2.env")
+                ConfigPath = $serverArtifactLayouts["server2"].SolandConfigPath
                 BaseUrl = $solandServer2BaseUrl
                 DatabaseUrl = $solandServer2DatabaseDsn
-                ObjectsRoot = (Join-Path $jointDir "soland-server2-objects")
-                StateRoot = (Join-Path $jointDir "soland-server2-state")
+                ObjectsRoot = $serverArtifactLayouts["server2"].SolandObjectsRoot
+                StateRoot = $serverArtifactLayouts["server2"].SolandStateRoot
                 Port = $solandServer2Port
                 MetricsPort = $solandServer2MetricsPort
                 LogFile = $solandServer2TraceFile
@@ -4391,8 +4447,8 @@ try {
                 Image = $SolandImage
                 HostPort = $server.SolandPort
                 ContainerPort = $SolandContainerPort
-                ObjectsRoot = (Join-Path $jointDir "$($server.SolandName)-objects")
-                StateRoot = (Join-Path $jointDir "$($server.SolandName)-state")
+                ObjectsRoot = $serverArtifactLayouts[$server.Name].SolandObjectsRoot
+                StateRoot = $serverArtifactLayouts[$server.Name].SolandStateRoot
                 LogDirectory = $serverServiceLogDirs[$server.Name]
                 Environment = $dockerEnvironment
             }
@@ -4403,9 +4459,9 @@ try {
             }
         } else {
             $configArguments.BinaryPath = $solandBinary
-            $configArguments.ConfigPath = Join-Path $jointDir "$($server.SolandName).env"
-            $configArguments.ObjectsRoot = Join-Path $jointDir "$($server.SolandName)-objects"
-            $configArguments.StateRoot = Join-Path $jointDir "$($server.SolandName)-state"
+            $configArguments.ConfigPath = $serverArtifactLayouts[$server.Name].SolandConfigPath
+            $configArguments.ObjectsRoot = $serverArtifactLayouts[$server.Name].SolandObjectsRoot
+            $configArguments.StateRoot = $serverArtifactLayouts[$server.Name].SolandStateRoot
             $configArguments.Port = $server.SolandPort
             $configArguments.LogFile = $traceFile
             $command = Build-SolandCommand @configArguments
@@ -4468,7 +4524,7 @@ try {
         if ($DualCoauth) {
             Set-CoauthStationServiceIds -ConfigPath $coauthSecondaryConfigPath -StationServiceIds $stationServiceIds
         }
-        Invoke-CoauthConfigSync -CoauthBinary $coauthBinary -ConfigPath $coauthConfigPath -LogDirectory $serviceLogDir
+        Invoke-CoauthConfigSync -CoauthBinary $coauthBinary -ConfigPath $coauthConfigPath -LogDirectory $coauthServer1Dir
         if ($coauthServer2ConfigPath) {
             Set-CoauthStationServiceIds -ConfigPath $coauthServer2ConfigPath -StationServiceIds $stationServiceIds
             Invoke-CoauthConfigSync -CoauthBinary $coauthBinary -ConfigPath $coauthServer2ConfigPath -LogDirectory (Split-Path -Parent $coauthServer2ConfigPath)
@@ -5105,7 +5161,7 @@ finally {
             # the finding.
             $postgresDump = Export-EphemeralPostgresDump `
                 -ContainerName $ephemeralCoauthServer1Postgres.ContainerName `
-                -OutputPath (Join-Path $storeDumpDir "coauth-postgres.sql")
+                -OutputPath (Join-Path $storeDumpDir $serverArtifactLayouts["server1"].CoauthStoreDumpName)
             if ($postgresDump) {
                 Write-Host "postgres dump: $postgresDump"
             } else {
@@ -5116,7 +5172,7 @@ finally {
         if ($ephemeralCoauthServer2Postgres) {
             $postgresDump = Export-EphemeralPostgresDump `
                 -ContainerName $ephemeralCoauthServer2Postgres.ContainerName `
-                -OutputPath (Join-Path $storeDumpDir "coauth-server2-postgres.sql")
+                -OutputPath (Join-Path $storeDumpDir $serverArtifactLayouts["server2"].CoauthStoreDumpName)
             if ($postgresDump) {
                 Write-Host "postgres dump: $postgresDump"
             } else {
@@ -5127,7 +5183,7 @@ finally {
         if ($ephemeralSolandPostgres) {
             $postgresDump = Export-EphemeralPostgresDump `
                 -ContainerName $ephemeralSolandPostgres.ContainerName `
-                -OutputPath (Join-Path $storeDumpDir "soland-postgres.sql")
+                -OutputPath (Join-Path $storeDumpDir $serverArtifactLayouts["server1"].SolandStoreDumpName)
             if ($postgresDump) {
                 Write-Host "postgres dump: $postgresDump"
             } else {
@@ -5138,7 +5194,7 @@ finally {
         if ($ephemeralSolandServer2Postgres) {
             $postgresDump = Export-EphemeralPostgresDump `
                 -ContainerName $ephemeralSolandServer2Postgres.ContainerName `
-                -OutputPath (Join-Path $storeDumpDir "soland-server2-postgres.sql")
+                -OutputPath (Join-Path $storeDumpDir $serverArtifactLayouts["server2"].SolandStoreDumpName)
             if ($postgresDump) {
                 Write-Host "postgres dump: $postgresDump"
             } else {
@@ -5148,8 +5204,8 @@ finally {
         }
         foreach ($server in $additionalServers) {
             foreach ($store in @(
-                [pscustomobject]@{ Database = $server.CoauthDatabase; File = "$($server.CoauthName)-postgres.sql" },
-                [pscustomobject]@{ Database = $server.SolandDatabase; File = "$($server.SolandName)-postgres.sql" }
+                [pscustomobject]@{ Database = $server.CoauthDatabase; File = $serverArtifactLayouts[$server.Name].CoauthStoreDumpName },
+                [pscustomobject]@{ Database = $server.SolandDatabase; File = $serverArtifactLayouts[$server.Name].SolandStoreDumpName }
             )) {
                 if ($store.Database) {
                     $postgresDump = Export-EphemeralPostgresDump -ContainerName $store.Database.ContainerName -OutputPath (Join-Path $storeDumpDir $store.File)

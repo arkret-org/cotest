@@ -265,8 +265,10 @@ npm run test:headed      # watch it click
 Evidence lands in `artifacts/runs/joint-e2e/<ts>-<profile>/`:
 `playwright-report/` (HTML with trace/video/failure screenshot),
 `screenshots/` (your `stepShot` captures), and `diagnostics/` (console +
-network HAR). Open a failure's trace for a step-by-step replay of DOM, network,
-and screenshots:
+network HAR). Runner-owned service data uses explicit topology names: each
+Coauth authority has a `coauth-serverN/` directory, while Soland configuration,
+object, state, and store-dump artifacts use `soland-serverN-*` names. Open a
+failure's trace for a step-by-step replay of DOM, network, and screenshots:
 
 ```powershell
 npx playwright show-trace artifacts\latest\joint-e2e\playwright-report\<...>\trace.zip
