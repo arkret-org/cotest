@@ -3,7 +3,7 @@
 // Spec refs:
 //   - models/realm-and-space.md §4 (Space container), §3 (Join Policy)
 //   - models/strand-and-message.md §3 (Strand fields)
-//   - models/relation.md §3.2 (assigned_to), §5 (RelationProfile), §6 (conflict resolution)
+//   - models/relation.md §3.2 (assigned_to), §5 (relation records and application rule boundaries), §6 (conflict resolution)
 
 import {
   expect,
@@ -771,14 +771,11 @@ test.describe("project simulation", () => {
     ).toBe(false);
   });
 
-  test("alice archives the entire board; archived board's cards become read-only; archive list view shows the board", async ({
+  test("alice archives the board; child lists and cards stay active and writable", async ({
     request,
   }) => {
-    // spec: realm-and-space.md §4.4 lifecycle/cascade. ak.space.archive on the
-    // board cascades to contained Lists and Cards (soland
-    // cascade_space_container_lifecycle): Cards flip to Archived (read-only —
-    // further writes 412 strand_not_active) and the board itself stays listed
-    // in the spaces projection with state=archived (the "archive list view").
+    // realm-and-space.md section 3.4: Space archive changes only that
+    // container. Child Spaces and contained Strands keep their lifecycle.
     const stamp = Date.now();
     const alice = uniqueUser("s16-archive-alice");
     await ensureRegistered(request, alice);
@@ -812,29 +809,26 @@ test.describe("project simulation", () => {
         actorId: alice.id,
         realmId,
         kind: "ak.space.archive",
-        payload: { space_id: boardId, sender: alice.id },
+        payload: { space_id: boardId },
       }),
       { context: "archive board" },
     );
 
-    // Cascade: board + list archived in the spaces projection.
+    // Only the board is archived in the spaces projection.
     const boardRow = await readSpaceRow(request, aliceToken, realmId, boardId);
     expect(boardRow?.state).toBe("archived");
     const listRow = await readSpaceRow(request, aliceToken, realmId, listId);
-    expect(listRow?.state).toBe("archived");
+    expect(listRow?.state).toBe("active");
 
-    // Cascade: the Card is archived (read-only). Archived is reversible rather
-    // than terminal, so the default projection continues to surface it for the
-    // archive list view; include_terminal only controls redacted rows.
-    const archivedCard = await readStrandRow(
+    const cardAfterArchive = await readStrandRow(
       request,
       aliceToken,
       realmId,
       cardId,
     );
-    expect(archivedCard?.state).toBe("archived");
+    expect(cardAfterArchive?.state).toBe("active");
 
-    // Read-only: a write to the archived Card is rejected (strand_not_active).
+    // The active Card remains writable under the same capability.
     const writeEnvelope = signedEventEnvelope({
       actorId: alice.id,
       realmId,
@@ -844,16 +838,8 @@ test.describe("project simulation", () => {
         patch: { metadata: { title: `renamed ${stamp}` } },
       },
     });
-    await alignSignedEventToActorFrontierApi(
-      request,
-      aliceToken,
-      writeEnvelope,
-    );
-    const write = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
-      headers: authHeaders(aliceToken),
-      data: { event: writeEnvelope },
+    await submitSignedEventApi(request, aliceToken, writeEnvelope, {
+      context: "update active card after parent board archive",
     });
-    expect(write.status()).toBe(422);
-    expect(wireErrCode(await write.json())).toBe("strand_not_active");
   });
 });

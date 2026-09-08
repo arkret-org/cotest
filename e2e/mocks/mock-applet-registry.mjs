@@ -543,7 +543,7 @@ function signedGhostMessageEvent({
   authorizationRef,
   realmId,
   strandId,
-  sealBasis,
+  sealRef,
   externalId,
   displayName,
   text,
@@ -562,7 +562,11 @@ function signedGhostMessageEvent({
     executed_by: { kind: "service", service_id: packageInfo.serviceId },
     authorization_ref: authorizationRef,
     applet_id: packageInfo.appletId,
-    seal_basis: sealBasis,
+    seal_ref: sealRef,
+    auth_context: {
+      key_id: packageInfo.verificationMethod,
+      key_epoch: 0,
+    },
     external_ref: {
       protocol: "bridge",
       instance_id: "joint-e2e",
@@ -1201,10 +1205,10 @@ const server = createServer(async (req, res) => {
       res.end(JSON.stringify({ error: "missing_strand_id" }));
       return;
     }
-    const sealBasis = body.seal_basis;
-    if (!Array.isArray(sealBasis?.leaves) || sealBasis.leaves.length === 0) {
+    const sealRef = body.seal_ref;
+    if (typeof sealRef !== "string" || !sealRef.startsWith("ak:seal:")) {
       res.statusCode = 400;
-      res.end(JSON.stringify({ error: "missing_accepted_realm_seal_basis" }));
+      res.end(JSON.stringify({ error: "missing_accepted_realm_seal_ref" }));
       return;
     }
     const signed = signedGhostMessageEvent({
@@ -1213,7 +1217,7 @@ const server = createServer(async (req, res) => {
       authorizationRef: body.authorization_ref ?? provision.authorization_ref,
       realmId: body.realm_id,
       strandId: body.strand_id,
-      sealBasis,
+      sealRef,
       externalId,
       displayName,
       text: body.payload.text,

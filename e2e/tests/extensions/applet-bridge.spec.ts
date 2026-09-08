@@ -74,6 +74,19 @@ import {
 
 import type { ActorId, CapabilityGrantObject } from "../../helpers/generated/spec-wire-objects";
 
+async function readAppletMessageSealRef(
+  request: APIRequestContext,
+  token: string,
+  realmId: string,
+): Promise<string> {
+  await waitForRealmControlIdleApi(request, token, realmId);
+  const { leaves } = await readRealmSealBasis(request, token, realmId);
+  if (!Array.isArray(leaves) || leaves.length !== 1 || typeof leaves[0] !== "string") {
+    throw new Error("Applet messages require one accepted control Seal");
+  }
+  return leaves[0];
+}
+
 // Each case provisions its own identities and Realm; a failed case must not
 // skip the remaining independent admission and replay checks.
 test.describe.configure({ mode: "default" });
@@ -567,7 +580,7 @@ test.describe("applet bridge", () => {
           provision_authorization_ref: provisionGrantRef,
           external_user: externalUser,
           ghost_creation: ghostCreation,
-          seal_basis: await readRealmSealBasis(request, aliceToken, realmId),
+          seal_ref: await readAppletMessageSealRef(request, aliceToken, realmId),
           payload: { kind: "message", text },
         },
       });
@@ -700,7 +713,7 @@ test.describe("applet bridge", () => {
           provision_authorization_ref: provisionGrantRef,
           external_user: externalUser,
           ghost_creation: ghostCreation,
-          seal_basis: await readRealmSealBasis(request, aliceToken, realmId),
+          seal_ref: await readAppletMessageSealRef(request, aliceToken, realmId),
           payload: { kind: "message", text: afterRevokeText },
         },
       });

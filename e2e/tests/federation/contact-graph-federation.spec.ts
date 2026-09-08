@@ -214,7 +214,7 @@ test.describe("contact graph federation (server1/server2)", () => {
         },
       },
     );
-    expect(resolved.ok()).toBeTruthy();
+    expect(resolved.ok(), await resolved.text()).toBeTruthy();
     const body = await resolved.json();
     expect(body.state).toBe("awaiting_founder");
     expect(body.coordinates).toBeUndefined();
@@ -233,7 +233,7 @@ test.describe("contact graph federation (server1/server2)", () => {
       `${solandBaseUrl("server2")}/_arkret/self/direct-conversations/resolve`,
       founderRequest,
     );
-    expect(founderResolved.ok()).toBeTruthy();
+    expect(founderResolved.ok(), await founderResolved.text()).toBeTruthy();
     const founderBody = await founderResolved.json();
     expect(founderBody.state).toBe("creation_required");
     expect(founderBody.coordinates).toBeUndefined();
@@ -246,7 +246,7 @@ test.describe("contact graph federation (server1/server2)", () => {
       `${solandBaseUrl("server2")}/_arkret/self/direct-conversations/resolve`,
       founderRequest,
     );
-    expect(retry.ok()).toBeTruthy();
+    expect(retry.ok(), await retry.text()).toBeTruthy();
     const retried = await retry.json();
     expect(retried.state).toBe("creation_required");
     expect(retried.coordinates).toBeUndefined();

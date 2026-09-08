@@ -430,19 +430,12 @@ test.describe("core object invariants", () => {
   });
 
   // ── Phase C — Cascade / archive / delete.
-  // Retained as fixme: this asserts the spec §3.4 "archive does NOT cascade"
-  // shape, but soland deliberately DOES cascade archive/restore to child
-  // Spaces + contained Strands (reducer/apply_space_container.rs
-  // `cascade_space_container_lifecycle`, tracked via `cascade_archived_by`),
-  // because the kanban product UX relies on archiving a List hiding its
-  // cards. Reversing that is a behavioural change owned by the kanban surface
-  // (its own tests depend on the cascade) and is out of scope here.
-  // Separately, `ak.space.tombstone` does not yet enforce a
+  // Non-cascading archive/restore is covered by project-simulation and the
+  // domain lifecycle regressions. `ak.space.tombstone` still lacks a
   // `space_has_live_dependents` precondition (apply_space_container.rs only
   // checks the source lifecycle state → `space_already_terminal`), so the
-  // live-dependents refusal is also not wired. Both halves require reducer
-  // changes that cannot be validated without breaking the existing,
-  // separately-owned tombstone/archive flows.
+  // live-dependents refusal is not yet wired. This remains an implementation
+  // gap against realm-and-space section 3.4, not a product exception.
   test.fixme(// @blocking-on: soland#space-lifecycle-spec-convergence
   // @user-promise: e2e/scenarios/models/core-object-invariants.md (Phase C)
   // @expected-live-by: 2026Q3
@@ -484,8 +477,7 @@ test.describe("core object invariants", () => {
       "space",
     );
 
-    // Archiving the parent MUST NOT cascade to the child per spec §3.4;
-    // soland's cascade behaviour means this assertion does not yet hold.
+    // Archiving the parent leaves independently owned child lifecycle intact.
     const archiveRes = await request.post(
       `${solandBaseUrl()}/_arkret/self/events`,
       {

@@ -15,14 +15,16 @@ return async ({ jointUsers, request }: { jointUsers: JointUsersFixture; request:
   const historyProofFailures: string[] = [];
   const missingRetainedSeals: string[] = [];
   const historyChunkDigests = new Set<string>();
-  const installedHistoryDigests = new Set<string>();
+  const processedHistoryDigests = new Set<string>();
   const rejectedHistoryDigests = new Set<string>();
   for (const page of [alice, bob]) {
     page.on("response", async response => {
       if (new URL(response.url()).pathname === "/_arkret/self/history-key-responses/ack" && response.ok()) {
         const body = response.request().postDataJSON() as { entries: { kind: string; status: string; record_digest: string }[] };
         for (const entry of body.entries.filter(entry => entry.kind === "record")) {
-          if (entry.status === "installed") installedHistoryDigests.add(entry.record_digest);
+          if (entry.status === "installed" || entry.status === "superseded_duplicate") {
+            processedHistoryDigests.add(entry.record_digest);
+          }
           if (entry.status === "cryptographically_rejected") rejectedHistoryDigests.add(entry.record_digest);
         }
         return;
@@ -221,12 +223,14 @@ return async ({ jointUsers, request }: { jointUsers: JointUsersFixture; request:
   }
   expect(historyProofFailures, "background history recovery must use verifiable source proofs").toEqual([]);
   expect(missingRetainedSeals, "an accepted receipt must resolve its exact retained Seal cut").toEqual([]);
-  if (interruptPreparation) {
-    await expect.poll(() => [...historyChunkDigests].filter(digest => installedHistoryDigests.has(digest)).length, {
-      message: "history recovery must verify, install and acknowledge a secret chunk",
-      timeout: 90_000,
-    }).toBeGreaterThan(0);
-  }
+  // Aborting consume does not remove the recipient's durable Welcome/state.
+  // Encryption spec section 6 permits recovery from that state without a
+  // history transfer. Any chunks actually received still require durable ack
+  // (history-visibility section 6), including already installed duplicates.
+  await expect.poll(() => [...historyChunkDigests].filter(digest => !processedHistoryDigests.has(digest)), {
+    message: "received history chunks must reach a successful durable disposition",
+    timeout: 90_000,
+  }).toEqual([]);
   expect([...rejectedHistoryDigests], "valid history responses must not be cryptographically rejected").toEqual([]);
 };
 }

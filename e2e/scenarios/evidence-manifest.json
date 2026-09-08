@@ -433,6 +433,27 @@
       ]
     },
     {
+      "scenario_key": "harness/garth-client",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "soland"
+      ],
+      "mocks": [
+        "email"
+      ],
+      "identity_establishment": [
+        "fixture_or_not_applicable"
+      ],
+      "protocol_object_producers": [
+        "fixture_or_not_applicable"
+      ],
+      "declared_test_bypasses": [],
+      "claims_excluded": []
+    },
+    {
       "scenario_key": "harness/mocks-selftest",
       "suite_kind": "joint-e2e",
       "realism_level": "fixture-only",

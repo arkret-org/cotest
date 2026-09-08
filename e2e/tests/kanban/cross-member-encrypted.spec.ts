@@ -302,17 +302,21 @@ async function addEncryptedDescription(
 
   const responseDeadline = Date.now() + 120_000;
   let response: Awaited<ReturnType<Page["waitForResponse"]>> | undefined;
+  // Keep one observer through checkpoint recovery so an asynchronous save
+  // cannot fall between short-lived response listeners.
+  const strandUpdate = page.waitForResponse(
+    (candidate) =>
+      candidate.url().includes("/_arkret/self/events") &&
+      candidate.request().method() === "POST" &&
+      (candidate.request().postData() ?? "").includes("ak.strand.update"),
+    { timeout: 120_000 },
+  ).catch(() => undefined);
+  await page.getByTestId("card-detail-save-button").click();
   while (Date.now() < responseDeadline) {
-    const strandUpdate = page.waitForResponse(
-      (candidate) =>
-        candidate.url().includes("/_arkret/self/events") &&
-        candidate.request().method() === "POST" &&
-        (candidate.request().postData() ?? "").includes("ak.strand.update"),
-      { timeout: 10_000 },
-    );
-    await page.getByTestId("card-detail-save-button").click();
-
-    response = await strandUpdate.catch(() => undefined);
+    response = await Promise.race([
+      strandUpdate,
+      page.waitForTimeout(Math.min(10_000, responseDeadline - Date.now())).then(() => undefined),
+    ]);
     if (response) break;
 
     const status =
@@ -324,9 +328,13 @@ async function addEncryptedDescription(
       "description save produced neither ak.strand.update nor a visible failure status",
     ).not.toBe("");
     expect(
-      status.includes("encryption_transition_pending"),
+      status.includes("encryption_transition_pending")
+        || status === "Restoring encrypted Realm state before saving...",
       `description save failed before submission: ${status}`,
     ).toBe(true);
+    if (status.includes("encryption_transition_pending") && Date.now() < responseDeadline) {
+      await page.getByTestId("card-detail-save-button").click();
+    }
   }
   expect(
     response,
