@@ -1973,45 +1973,13 @@ export async function submitSignedEventApi(
 ) {
   const context = opts.context ?? `submit ${String(envelope.kind)}`;
   await applyRegisteredCbsPlane(request, token, envelope, opts.server);
+  await advanceEnvelopeToActorFrontier(request, token, envelope, opts.server);
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    const leaseResponse = await issueAuthorizationLeasesApi(
-      request,
-      token,
-      [envelope],
-      opts.server,
-    );
-    const leaseText = await leaseResponse.text();
-    if (![200, 201].includes(leaseResponse.status())) {
-      const leaseBody = parseJsonOrRaw(leaseText);
-      const actorFrontierRefreshRequired = requiresActorFrontierRefresh(
-        leaseResponse.status(),
-        leaseBody,
-        leaseText,
-      );
-      if (!actorFrontierRefreshRequired || attempt === 2) {
-        expect(
-          [200, 201],
-          `${context} lease issuance returned ${leaseResponse.status()}: ${leaseText}`,
-        ).toContain(leaseResponse.status());
-      }
-      await advanceEnvelopeToActorFrontier(
-        request,
-        token,
-        envelope,
-        opts.server,
-      );
-      continue;
-    }
-    const authorizationLease = authorizationLeasesFromIssueOutcome(
-      leaseText,
-      1,
-      context,
-    )[0];
     const controlControlProposalAck = await issueControlProposalAckApi(
       request,
       token,
       envelope,
-      authorizationLease,
+      undefined,
       opts.server,
       context,
     );
@@ -2036,7 +2004,6 @@ export async function submitSignedEventApi(
       },
       data: canonicalJson({
         event: envelope,
-        authorization_lease: authorizationLease,
         ...(controlControlProposalAck
           ? { control_proposal_ack: controlControlProposalAck }
           : {}),
@@ -2045,7 +2012,7 @@ export async function submitSignedEventApi(
     const text = await response.text();
     if ([200, 201].includes(response.status())) {
       const outcome = JSON.parse(text) as Record<string, unknown>;
-      rememberPublicationEvidence([envelope], [authorizationLease], outcome,
+      rememberPublicationEvidence([envelope], [], outcome,
         { token: opts.controlObserverToken ?? token, server: opts.server }, [controlControlProposalAck]);
       if (realmId && previousControlRoot) {
         // A successful leave may immediately remove the author from the
@@ -2488,7 +2455,7 @@ async function issueControlProposalAckApi(
   request: APIRequestContext,
   token: string,
   event: Record<string, unknown>,
-  authorizationLease: Record<string, unknown>,
+  authorizationLease: Record<string, unknown> | undefined,
   server: SolandKey | undefined,
   context: string,
 ): Promise<Record<string, unknown> | undefined> {
@@ -2512,7 +2479,8 @@ async function issueControlProposalAckApi(
     },
     data: canonicalJson({
       event,
-      authorization_lease: authorizationLease,
+      publication_mode: authorizationLease ? "delayed" : "online",
+      ...(authorizationLease ? { authorization_lease: authorizationLease } : {}),
     }),
   });
   const text = await response.text();
@@ -2644,7 +2612,7 @@ function rememberPublicationEvidence(
   const receipts = Array.isArray(outcome.ingress_receipts)
     ? (outcome.ingress_receipts as Array<Record<string, unknown>>)
     : [];
-  if (receipts.length !== events.length) {
+  if (receipts.length !== 0 && receipts.length !== events.length) {
     throw new Error(
       `publication returned ${receipts.length} ingress receipts for ${events.length} Events: ${JSON.stringify({
         status: outcome.status,
@@ -2668,12 +2636,16 @@ function rememberPublicationEvidence(
     }
     publicationEvidenceByEventId.set(eventId, {
       event: stripUndefined(event) as PublicationEvidence["event"],
-      authorization_lease: leases[
-        index
-      ] as PublicationEvidence["authorization_lease"],
-      ingress_receipts: [
-        receipts[index],
-      ] as PublicationEvidence["ingress_receipts"],
+      ...(leases[index]
+        ? {
+            authorization_lease: leases[
+              index
+            ] as PublicationEvidence["authorization_lease"],
+          }
+        : {}),
+      ingress_receipts: (receipts[index]
+        ? [receipts[index]]
+        : []) as PublicationEvidence["ingress_receipts"],
       ...(controlProposalAcks[index] ? {
         control_proposal_ack: controlProposalAcks[index] as PublicationEvidence["control_proposal_ack"],
       } : {}),
