@@ -1045,6 +1045,7 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
                 "ak:signer_evidence:{}",
                 hash_byte(0x72)?
             ))?,
+            applet_installation_digest: None,
             accepted_at: issued_at,
             jws: String::new(),
         };

@@ -2002,12 +2002,12 @@ fn replay_registry() -> MemoryCellRegistry {
     registry.register(
         CellFamilyId::NOTARY_V1,
         LatticeKind::CasRegister,
-        arkret_state::state::BottomMode::Reject,
+        arkret_wire::EventCellBottom::Reject,
     );
     registry.register(
         CellFamilyId::REALM_DIGEST_SUITE_V1,
         LatticeKind::CasRegister,
-        arkret_state::state::BottomMode::Reject,
+        arkret_wire::EventCellBottom::Reject,
     );
     registry
 }
