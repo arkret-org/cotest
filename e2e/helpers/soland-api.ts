@@ -727,17 +727,17 @@ export function plaintextVisibleServiceDeclarations(serviceIds: string[]) {
 }
 
 // `identity-resolution.schema.json#/$defs/service_resolution_carrier` pins
-// `current_record_url` to `https://`, and invite-addressing.md §6 requires the
+// `resolution_url` to `https://`, and invite-addressing.md §6 requires the
 // durable `invite_delivery_target.service_resolution` and the delivery
 // `invite_address.service_resolution` to be byte-for-byte equal (§7 step 6
 // re-checks it on the receiving side). Both producers therefore go through this
 // single normalizer instead of hand-rolling the scheme per call site.
 export function canonicalServiceResolution(server?: SolandKey): {
-  current_record_url: string;
+  resolution_url: string;
 } {
-  const { current_record_url } = solandServiceResolution(server);
+  const { resolution_url } = solandServiceResolution(server);
   return {
-    current_record_url: current_record_url.replace(/^http:\/\//, "https://"),
+    resolution_url: resolution_url.replace(/^http:\/\//, "https://"),
   };
 }
 
@@ -3629,117 +3629,6 @@ export async function rawPushFederationEvents(
 // the schema actually requires.
 export type InviteDeliveryRequestBodyBodyBody = InviteDeliveryRequestBody;
 export type { SelfInviteDispatchRequestBody };
-export type InviteDeliveryCbsProofBundle =
-  InviteDeliveryRequestBodyBodyBody["cbs_proof_bundles"][number];
-
-// invite-addressing.md §7 step 4: the receiving Station is by definition not
-// yet a federation peer of the invite's Realm, so it MUST NOT fetch the
-// authority closure — the closure travels with the request. Exactly one bundle
-// per `invite_event.seal_basis.leaves` entry, keyed on that leaf, and every
-// leaf covered.
-//
-// The closure is each leaf Seal plus its transitive `predecessor_refs`, from
-// `ak.self.seals.read.resolve.v1`.
-//
-// `control_moves` stays EMPTY. `capabilities.md` §3.2 admits exactly one
-// authority source and fixes its evidence: the authority-root cell's
-// registered inclusion proof under the same Seal basis. Replaying the Control
-// Move that writes that cell is not an alternative — that Event is
-// `ak.realm.create`, a `seal_basis`-exempt anchor unit, and
-// `cbs-proof-bundle.schema.json` requires `control_moves[]` to reject anchor
-// units outright.
-//
-// `inclusion_proofs` is the gap this helper cannot close. Building the branch
-// needs every governance leaf under the target Seal, which a member client
-// does not hold; the Station-side builder
-// (`soland/crates/http/src/routing/invites/capability_closure.rs`) reads them
-// locally. Until this helper can get them — `ak.self.realm_state_snapshot.read.manifest_head`
-// plus a `cotest-wire` branch command is the plausible route — step 4 answers
-// these peer-direct cases with `realm_authority_root_missing`. The product path
-// is unaffected: real deliveries are built by the inviting Station.
-export async function inviteDeliveryCbsProofBundles(
-  request: APIRequestContext,
-  token: string,
-  realmId: string,
-  sealBasis: { leaves?: unknown } | Record<string, unknown>,
-  opts: { server?: SolandKey } = {},
-): Promise<InviteDeliveryCbsProofBundle[]> {
-  const leaves = (sealBasis as { leaves?: unknown }).leaves;
-  if (!Array.isArray(leaves) || leaves.length === 0) {
-    throw new Error(
-      `invite_event.seal_basis.leaves is required to build the delivery CBS bundles, got ${JSON.stringify(sealBasis)}`,
-    );
-  }
-  const sealRefs = Array.from(
-    new Set(
-      leaves.map((leaf) => {
-        if (typeof leaf !== "string") {
-          throw new Error(
-            `seal_basis.leaves entry is not a Seal ref: ${JSON.stringify(leaf)}`,
-          );
-        }
-        return leaf;
-      }),
-    ),
-  ).sort();
-  const bundles: InviteDeliveryCbsProofBundle[] = [];
-  for (const sealRef of sealRefs) {
-    const seals = await sealPredecessorClosure(
-      request,
-      token,
-      realmId,
-      sealRef,
-      opts,
-    );
-    bundles.push({
-      target_seal_ref: sealRef,
-      seals,
-      control_moves: [],
-      inclusion_proofs: [],
-      availability_proofs: [],
-    });
-  }
-  // `cbs-profiles.md` §5 canonical order: bundles strictly sorted by target.
-  return bundles;
-}
-
-// The target Seal and every Seal reachable through `predecessor_refs`, in
-// canonical id order. A predecessor the sender leaves out is exactly what
-// `dependency_missing.missing_seal_refs[]` reports, so the walk is transitive.
-async function sealPredecessorClosure(
-  request: APIRequestContext,
-  token: string,
-  realmId: string,
-  targetSealRef: string,
-  opts: { server?: SolandKey } = {},
-): Promise<InviteDeliveryCbsProofBundle["seals"]> {
-  const byId = new Map<string, Record<string, unknown>>();
-  const pending = [targetSealRef];
-  while (pending.length > 0) {
-    const sealId = pending.pop()!;
-    if (byId.has(sealId)) continue;
-    const seal = await readAcceptedSeal(
-      request,
-      token,
-      realmId,
-      sealId,
-      opts.server,
-    );
-    byId.set(sealId, seal);
-    const predecessors = seal.predecessor_refs;
-    if (Array.isArray(predecessors)) {
-      for (const predecessor of predecessors) {
-        if (typeof predecessor === "string") pending.push(predecessor);
-      }
-    }
-  }
-  return Array.from(byId.keys())
-    .sort()
-    // `readAcceptedSeal` returns the resolved Seal verbatim; wiring the Seal
-    // itself to a generated type is the same open item as the Event envelope.
-    .map((sealId) => byId.get(sealId) as InviteDeliveryCbsProofBundle["seals"][number]);
-}
-
 // The closed `invite_delivery_outcome`
 // (`invite-delivery-request.schema.json#/$defs/invite_delivery_outcome`).
 // `disclosed_outcome` is closed to `delivered | blocked` and, per
@@ -3826,7 +3715,7 @@ export async function submitPeerInviteDeliveryApi(
     "submit peer invite delivery",
   );
 }
-// Same peer submission without the 2xx expectation, so a §7 step-4 rejection
+// Same peer submission without the 2xx expectation, so a notification rejection
 // can be read as a status plus a registered wire code.
 export async function rawSubmitPeerInviteDeliveryApi(
   request: APIRequestContext,

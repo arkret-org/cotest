@@ -101,12 +101,11 @@ async fn dispatch_invite(
     // This carrier is byte-for-byte the one `invite_create_payload` commits to
     // in the invite payload (§7 step 6 equality), so both sides read the same
     // normalizer.
-    let service_resolution = ServiceResolutionCarrier::CurrentRecordUrl {
-        current_record_url: format!(
+    let service_resolution = ServiceResolutionCarrier::ResolutionUrl {
+        resolution_url: format!(
             "https://cotest.invalid{}",
-            arkret_models_identity::canonical_service_current_record_path(&service_id)
+            arkret_models_identity::canonical_service_resolution_path(&service_id)
         ),
-        pinned_record_digest: None,
     };
     let invitee_core = arkret_identifiers::DidCoreId::new(actor_core_id(&invitee.actor)?)?;
     let delivery = SelfInviteDispatchRequestBody {

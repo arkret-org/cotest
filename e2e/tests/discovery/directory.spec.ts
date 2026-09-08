@@ -3,9 +3,9 @@
 // Spec: discovery/discovery-directory.md, discovery/profiles-presence.md, identity/identity-handles.md
 
 import { expect, test } from "../../helpers/arkret-test";
-import { cssStringEscape } from "../../helpers/dom";
 import { solandBaseUrl } from "../../helpers/env";
 import {
+  contactRow,
   requestContactArkret,
   respondContactArkret,
 } from "../../helpers/contact-api";
@@ -395,16 +395,19 @@ test.describe("discovery", () => {
       // verified post-admission group state.
       await Promise.all([
         expect(
-          alicePage.page.getByTestId("epoch-update-required-banner"),
-        ).toHaveCount(0, { timeout: 120_000 }),
+          alicePage.page.getByTestId("send-chat-button"),
+        ).toBeEnabled({ timeout: 120_000 }),
         expect(
-          bobPage.page.getByTestId("epoch-update-required-banner"),
-        ).toHaveCount(0, { timeout: 120_000 }),
+          bobPage.page.getByTestId("send-chat-button"),
+        ).toBeEnabled({ timeout: 120_000 }),
       ]);
       // Alice's subscription is now established. Re-enter Bob's timeline so
       // the browser emits a fresh heartbeat after that subscription instead of
       // relying on a background-tab refresh timer.
       await bobPage.gotoTimelineRealm(presenceRealmId);
+      await expect(bobPage.page.getByTestId("send-chat-button")).toBeEnabled({
+        timeout: 120_000,
+      });
 
       // A structurally valid encrypted Signal with a cryptographically invalid
       // detached signature must fail closed. Exact presence kind/state remain
@@ -453,7 +456,7 @@ test.describe("discovery", () => {
       ).toBe("proof_invalid");
 
       const bobPresenceRow = alicePage.page.locator(
-        `[data-testid="presence-row"][data-actor-id="${cssStringEscape(bob.id)}"]`,
+        `[data-testid="presence-row"][data-actor-id=${JSON.stringify(canonicalJson(accountActorId(bob.id)))}]`,
       );
       await expect(bobPresenceRow).toHaveAttribute(
         "data-presence-state",
@@ -486,16 +489,11 @@ test.describe("discovery", () => {
     }
   });
 
-  test("E24.2 reject contact: alice's request rejected by bob → status=rejected; alice cannot re-request until cooldown", async ({
+  test("E24.2 reject contact: rejection terminates the request; recontact creates a new request receipt", async ({
     request,
   }) => {
-    // spec: identity/account-lifecycle.md (contacts) — once a contact request
-    // is rejected, alice's subsequent `POST /_arkret/self/contacts/request` for the
-    // same target MUST NOT open a fresh pending row. The server's cooldown
-    // implementation today is "return the existing rejected record" rather
-    // than a fresh 4xx — that satisfies the spec invariant (no new pending
-    // state surfaces to bob) while leaving room for a stricter timed
-    // cooldown later.
+    // contact-and-direct-conversation.md §3: a rejected request is terminal;
+    // recontact creates a new request receipt instead of reviving that request.
     const stamp = Date.now();
     const alice = uniqueUser(`s24-rj-alice-${stamp}`);
     const bob = uniqueUser(`s24-rj-bob-${stamp}`);
@@ -522,16 +520,26 @@ test.describe("discovery", () => {
       action: "reject",
     });
     expect(bobBody.state).toBe("rejected");
+    await expect.poll(async () =>
+      (await contactRow(request, bobToken, alice.id))?.state,
+    ).toBe("rejected");
 
-    // alice retries her contact request — must NOT open a fresh pending row.
-    // The server returns the same record with status=rejected (cooldown).
+    // A fresh command must allocate a distinct request and receipt.
     const { outcome: retryBody } = await requestContactArkret(
       request,
       aliceToken,
       bob.id,
       { requestedScopes: ["direct_message"] },
     );
-    expect(retryBody.state).toBe("rejected");
+    expect(retryBody.state).toBe("pending_outgoing");
+    expect(retryBody.request_event_ref).not.toBe(aliceReqBody.request_event_ref);
+    expect(retryBody.request_acceptance_receipt).not.toEqual(
+      aliceReqBody.request_acceptance_receipt,
+    );
+    await expect.poll(async () => {
+      const incoming = await contactRow(request, bobToken, alice.id);
+      return { state: incoming?.state, request: incoming?.request_event_ref };
+    }).toEqual({ state: "pending_incoming", request: retryBody.request_event_ref });
   });
 
   test("organization search: tab-organizations returns at least one organization with display_name + freshness", async ({

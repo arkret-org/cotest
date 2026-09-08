@@ -27,6 +27,7 @@ import {
   retypeEventDerivedId,
   signedEventEnvelope,
   submitSignedEventApi,
+  waitForRealmControlIdleApi,
   wireErrCode,
 } from "../../helpers/soland-api";
 import {
@@ -142,7 +143,7 @@ async function submitSelfEvent(
     `${solandBaseUrl()}/_arkret/self/events`,
     {
       headers: { ...authHeaders(token), "content-type": "application/json" },
-      data: canonicalJson(envelope),
+      data: canonicalJson({ event: envelope }),
     },
   );
   const text = await response.text();
@@ -250,6 +251,7 @@ async function submitThirdPartyInvite(
   });
   const outcome = await submitSelfEvent(request, token, envelope);
   if (outcome.accepted.length > 0) {
+    await waitForRealmControlIdleApi(request, token, cell.realmId);
     // Event-derived-id contract: the Invite id is a retype of the accepted
     // Event id (apply_invites.rs InviteId::from_event_id) and is never
     // carried in the payload, so the cell learns it only now.
@@ -272,6 +274,7 @@ async function submitClaim(
   // basis obtained by an existing member as part of the out-of-band claim
   // flow; the claimant's self surface cannot discover membership-private
   // Realm state before the claim succeeds.
+  await waitForRealmControlIdleApi(request, realmMemberToken, cell.realmId);
   const sealBasis = await readRealmSealBasis(
     request,
     realmMemberToken,
@@ -560,8 +563,8 @@ test.describe("third-party invite", () => {
   test("E3.1 expired token: claim failure is wire-indistinguishable", async ({
     request,
   }) => {
-    // third-party-invites.md §4.3 step 2 / §6.1 — an invite past expires_at
-    // is force-expired and any claim is refused.
+    // third-party-invites.md §4.3 step 2 / §6.1: a claim signed after
+    // expires_at is refused without changing shared invite state.
     const ctx = await setupPendingInvite(request, {
       fixtureNonce: "s3-expired",
       expiresInMs: 4_000,
@@ -575,9 +578,8 @@ test.describe("third-party invite", () => {
     );
     expect(issued.rejected).toHaveLength(0);
 
-    // Let the invite cross expires_at before claiming. The reducer
-    // force-expires the cell (third-party-invites.md §4.3 step 2) before any
-    // binding/subject proof is even inspected.
+    // Sign the claim after expires_at. The reducer compares the signed Event
+    // timestamp, not its local receive time, before binding/subject proofs.
     await new Promise((resolve) => setTimeout(resolve, 6_000));
 
     const claimNonce = `claim-${randomUUID()}`;
@@ -756,6 +758,7 @@ test.describe("third-party invite", () => {
       firstClaim.rejected,
       `first claim rejected: ${JSON.stringify(firstClaim.rejected)}`,
     ).toHaveLength(0);
+    expect(firstClaim.accepted, "the first claim must actually be accepted").toHaveLength(1);
 
     // Second claim of the same already-consumed token (fresh nonce) — the
     // invite cell is now `claimed`, so the reducer refuses re-claim.

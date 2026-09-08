@@ -221,7 +221,8 @@ test.describe("key backup + restore", () => {
     const sessionsToClose: JointUserPage[] = [deviceA];
     const keyBackupPuts = collectKeyBackupPuts(deviceA.page);
     const protocolFailures: string[] = [];
-    collectA1ProtocolFailures(deviceA.page, protocolFailures);
+    let deviceAReloading = false;
+    collectA1ProtocolFailures(deviceA.page, protocolFailures, () => deviceAReloading);
 
     try {
       await deviceA.gotoHome();
@@ -296,7 +297,12 @@ test.describe("key backup + restore", () => {
       if (await restoreMlsHistoryIfPrompted(deviceA.page, recoveryKey)) {
         await deviceA.gotoTimelineRealm(realmId);
       }
-      await deviceA.page.reload({ waitUntil: "domcontentloaded" });
+      deviceAReloading = true;
+      try {
+        await deviceA.page.reload({ waitUntil: "domcontentloaded" });
+      } finally {
+        deviceAReloading = false;
+      }
       await expect(deviceA.timelineEvent(deviceBCard)).toBeVisible({
         timeout: 90_000,
       });
@@ -558,6 +564,13 @@ test.describe("key backup + restore", () => {
         boardTitle,
         listTitle,
         cardTitle,
+      );
+      // Board/List/Strand creation is structural. Write encrypted content
+      // before requiring the after-encrypted-write history backup trigger.
+      await updateCardDescription(
+        deviceA.page,
+        cardTitle,
+        `A2 original encrypted detail ${stamp}`,
       );
       await expect
         .poll(
@@ -976,7 +989,11 @@ async function expectSuccessfulUnlockWithHolderProof(
   )!;
 }
 
-function collectA1ProtocolFailures(page: Page, failures: string[]) {
+function collectA1ProtocolFailures(
+  page: Page,
+  failures: string[],
+  isIntentionalReload: () => boolean = () => false,
+) {
   page.on("console", (message) => {
     const text = message.text();
     if (/MLS runtime|SnapshotDecryptFailed/.test(text)) {
@@ -989,6 +1006,14 @@ function collectA1ProtocolFailures(page: Page, failures: string[]) {
   page.on("requestfailed", (request) => {
     const url = request.url();
     const errorText = request.failure()?.errorText ?? "";
+    if (
+      isIntentionalReload() &&
+      request.method() === "QUERY" &&
+      new URL(url).pathname === "/_arkret/self/events" &&
+      /ERR_ABORTED|NS_BINDING_ABORTED|aborted|cancel/i.test(errorText)
+    ) {
+      return;
+    }
     if (
       request.method() === "GET" &&
       /\/(?:api\/v1|_arkret\/self)\/(account\/subscribe|subscribe|events\/subscribe|events\/describe|describe)(?:\?|$)/.test(

@@ -193,6 +193,13 @@ def discover_layer_sources(workspace_root: Path = WORKSPACE_ROOT) -> tuple[Layer
         for path in root.rglob("*.rs")
         if source_file(path)
     }
+    cotest_crates = cotest / "crates"
+    if cotest_crates.is_dir():
+        cotest_rust.update(
+            path for path in cotest_crates.rglob("*.rs")
+            if source_file(path)
+            and rust_test_like(path, path.read_text(encoding="utf-8", errors="replace"))
+        )
     cotest_e2e = {
         path
         for path in (cotest / "e2e").rglob("*.ts")

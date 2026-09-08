@@ -547,7 +547,7 @@ test.describe("kanban end-to-end", () => {
           ...authHeaders(aliceToken),
           "content-type": "application/json",
         },
-        data: canonicalJson(crossRealm),
+        data: canonicalJson({ event: crossRealm }),
       },
     );
     const responseBody = await response.json();
@@ -639,7 +639,7 @@ test.describe("kanban end-to-end", () => {
           ...authHeaders(aliceToken),
           "content-type": "application/json",
         },
-        data: canonicalJson(trackWrite),
+        data: canonicalJson({ event: trackWrite }),
       },
     );
     const responseBody = await response.json();
@@ -701,27 +701,23 @@ test.describe("kanban end-to-end", () => {
       const thirdColumn = alicePage.page.getByTestId("kanban-column").filter({ hasText: third });
       await expect(firstColumn.getByTestId("column-drop-target-before")).toHaveCount(1);
       await expect(thirdColumn.getByTestId("column-drag-handle")).toBeVisible();
+      await expect(thirdColumn.getByTestId("column-drag-handle")).toBeEnabled({ timeout: 45_000 });
 
       await thirdColumn
         .getByTestId("column-drag-handle")
         .dragTo(firstColumn.getByTestId("column-drop-target-before"), { force: true });
       await stepShot(alicePage.page, testInfo, "column-handles-reordered");
 
-      const labels = await alicePage.page.getByTestId("kanban-column-title").allTextContents();
-      const firstIndex = labels.findIndex((label) => label.includes(first));
-      const secondIndex = labels.findIndex((label) => label.includes(second));
-      const thirdIndex = labels.findIndex((label) => label.includes(third));
-      expect(thirdIndex).toBeGreaterThanOrEqual(0);
-      expect(firstIndex).toBeGreaterThanOrEqual(0);
-      expect(secondIndex).toBeGreaterThanOrEqual(0);
-      expect(thirdIndex).toBeLessThan(firstIndex);
-      expect(firstIndex).toBeLessThan(secondIndex);
+      await expect(alicePage.page.getByTestId("kanban-column-title")).toHaveText(
+        [third, first, second],
+        { timeout: 30_000 },
+      );
     } finally {
       await alicePage.close();
     }
   });
 
-  test("reordering lists (drag column) updates board's child_order cell", async ({
+  test("reordering lists persists canonical Space ranks", async ({
     browser,
     request,
   }, testInfo) => {
@@ -773,53 +769,39 @@ test.describe("kanban end-to-end", () => {
 
       const firstColumn = alicePage.page.getByTestId("kanban-column").filter({ hasText: first });
       const thirdColumn = alicePage.page.getByTestId("kanban-column").filter({ hasText: third });
+      await expect(thirdColumn.getByTestId("column-drag-handle")).toBeEnabled({ timeout: 45_000 });
       await thirdColumn.getByTestId("column-drag-handle").dragTo(
         firstColumn.getByTestId("column-drop-target-before"),
         { force: true },
       );
       await stepShot(alicePage.page, testInfo, "columns-reordered");
 
-      const labels = await alicePage.page.getByTestId("kanban-column-title").allTextContents();
-      const firstIndex = labels.findIndex((label) => label.includes(first));
-      const secondIndex = labels.findIndex((label) => label.includes(second));
-      const thirdIndex = labels.findIndex((label) => label.includes(third));
-      expect(thirdIndex).toBeGreaterThanOrEqual(0);
-      expect(firstIndex).toBeGreaterThanOrEqual(0);
-      expect(secondIndex).toBeGreaterThanOrEqual(0);
-      expect(thirdIndex).toBeLessThan(firstIndex);
-      expect(firstIndex).toBeLessThan(secondIndex);
-
-      await expect
-        .poll(
-          async () => {
-            const cellResp = await request.get(
-              `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(boardId)}/cells/ak.component.child_order.v1`,
-              {
-                headers: selfPathHeadersForDpopSession(
-                  aliceFlow.session,
-                  "GET",
-                  `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(boardId)}/cells/ak.component.child_order.v1`,
-                ),
-              },
-            );
-            if (cellResp.status() !== 200) {
-              return false;
-            }
-            const cellText = JSON.stringify(await cellResp.json());
-            const thirdServerIndex = cellText.indexOf(third);
-            const firstServerIndex = cellText.indexOf(first);
-            const secondServerIndex = cellText.indexOf(second);
-            return (
-              thirdServerIndex >= 0 &&
-              firstServerIndex >= 0 &&
-              secondServerIndex >= 0 &&
-              thirdServerIndex < firstServerIndex &&
-              firstServerIndex < secondServerIndex
-            );
+      await expect(alicePage.page.getByTestId("kanban-column-title")).toHaveText(
+        [third, first, second], { timeout: 30_000 },
+      );
+      const spacesUrl = `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/spaces`;
+      await expect.poll(async () => {
+        const response = await request.get(spacesUrl, {
+          headers: {
+            ...selfPathHeadersForDpopSession(aliceFlow.session, "GET", spacesUrl),
+            "Arkret-Operation": "ak.self.space.read.list.v1",
           },
-          { timeout: 30_000 },
-        )
-        .toBe(true);
+        });
+        expect(response.status()).toBe(200);
+        const body = await response.json() as {
+          has_more: boolean;
+          spaces: Array<{ title: string; parent_space_id?: string; rank?: string; state: string }>;
+        };
+        expect(body.has_more).toBe(false);
+        return body.spaces
+          .filter((space) => space.parent_space_id === boardId && space.state === "active")
+          .sort((a, b) => (a.rank ?? "") < (b.rank ?? "") ? -1 : (a.rank ?? "") > (b.rank ?? "") ? 1 : 0)
+          .map((space) => space.title);
+      }, { timeout: 30_000 }).toEqual([third, first, second]);
+      await alicePage.page.reload({ waitUntil: "domcontentloaded" });
+      await expect(alicePage.page.getByTestId("kanban-column-title")).toHaveText(
+        [third, first, second], { timeout: 60_000 },
+      );
     } finally {
       await alicePage.close();
     }

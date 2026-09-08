@@ -245,7 +245,7 @@ test.describe("moderation and ban", () => {
         ...authHeaders(malloryToken, "POST", bannedWriteUrl),
         "content-type": "application/json",
       },
-      data: canonicalJson(bannedWriteEnvelope),
+      data: canonicalJson({ event: bannedWriteEnvelope }),
     });
     const bannedWriteText = await bannedWrite.text();
     expect(bannedWrite.status(), bannedWriteText).toBe(403);

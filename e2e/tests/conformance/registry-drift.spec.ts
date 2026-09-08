@@ -325,7 +325,7 @@ test.describe("conformance registry drift @fully-implemented", () => {
     });
     const resp = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
       headers: { authorization: `Bearer ${token}` },
-      data: envelope,
+      data: { event: envelope },
     });
     expect(resp.status()).toBeGreaterThanOrEqual(400);
     const body = await resp.json();
@@ -362,12 +362,12 @@ test.describe("conformance registry drift @fully-implemented", () => {
     // Submit a benign event so the write receipt is part of the scan surface.
     const submitReceipt = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
       headers: auth,
-      data: signedEventEnvelope({
+      data: { event: signedEventEnvelope({
         actorId: alice.id,
         realmId: "ak:realm:AV1vAwt2NWgRW6lXhHcPfu4l8U3dkzSjWbQ_xXTw370Q",
         kind: "ak.read_cursor.advance",
         payload: {},
-      }),
+      }) },
     });
 
     const surfaces: Array<{ name: string; response: APIResponse; requireOk?: boolean }> = [

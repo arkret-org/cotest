@@ -40,7 +40,6 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
-  renameSync,
   writeFileSync,
 } from "node:fs";
 import { dirname } from "node:path";
@@ -57,6 +56,7 @@ import {
 import { createEd25519KeyPair } from "./_shared/keypairs.mjs";
 import { handleInspect } from "./_shared/inspect.mjs";
 import { canonicalJson, readJson } from "./_shared/http.mjs";
+import { replaceStateFileSync } from "./_shared/atomic-state.mjs";
 
 const port = parseInt(process.env.MOCK_APPLET_REGISTRY_PORT ?? "0", 10);
 const durableStateFile = process.env.MOCK_APPLET_REGISTRY_STATE_FILE;
@@ -234,9 +234,9 @@ function persistDurableAuthoringState() {
   writeFileSync(
     temporary,
     canonicalJson(encryptDurableState(state, durableStateKey)),
-    { mode: 0o600 },
+    { mode: 0o600, flush: true },
   );
-  renameSync(temporary, durableStateFile);
+  replaceStateFileSync(temporary, durableStateFile);
 }
 
 function reloadDurableAuthoringState() {

@@ -589,7 +589,7 @@ fn execute_controller_gate_case(name: &str, case: &Value) -> Result<OutcomeClass
     match name {
         "producer_fetches_controller_gate_from_account_authority" => {
             let required_true = [
-                "current_signed_service_resolution_record_verified",
+                "current_service_method_evidence_verified",
                 "method_history_evidence_verified",
                 "normalized_document_digest_verified",
                 "rfc9421_covers_method_path_digest_source_destination_operation_request",

@@ -217,8 +217,8 @@ test.describe("holder device key lifecycle separation @fully-implemented", () =>
           refreshedGrant.jkt,
           "soft refresh must keep the same grant-binding DPoP key",
         ).toBe(activeGrant.jkt);
-        await grants.waitForDifferentAfter(activeGrant.jwt, refreshStartIndex);
         const signerAfterRefresh = await currentSettingsSignerDid(page);
+        await grants.waitForDifferentAfter(activeGrant.jwt, refreshStartIndex);
         expect(
           signerAfterRefresh,
           "soft refresh must not rotate the device event signer",
@@ -318,7 +318,7 @@ function observeSessionGrants(page: Page) {
       .then((headers) => {
         const jwt = headers.authorization?.match(/^DPoP\s+(.+)$/i)?.[1];
         if (!jwt) return;
-        const jkt = grantJkt(jwt);
+        const jkt = dpopProofJkt(headers.dpop);
         if (!jkt) return;
         if (seen.at(-1)?.jwt !== jwt) {
           seen.push({ jwt, jkt });
@@ -368,16 +368,11 @@ function observeSessionGrantRefreshes(page: Page) {
     }
     void response
       .json()
-      .then((body) => {
+      .then(async (body) => {
         const jwt =
           typeof body?.session_grant === "string" ? body.session_grant : "";
-        const sessionPublicKey = body?.session_public_key;
-        const jkt =
-          sessionPublicKey?.kty === "OKP" &&
-          sessionPublicKey?.crv === "Ed25519" &&
-          typeof sessionPublicKey?.x === "string"
-            ? jwkThumbprintEd25519(sessionPublicKey.x)
-            : grantJkt(jwt);
+        const headers = await response.request().allHeaders();
+        const jkt = dpopProofJkt(headers.dpop);
         if (jwt && jkt && seen.at(-1)?.jwt !== jwt) {
           seen.push({ jwt, jkt });
         }
@@ -394,15 +389,17 @@ function observeSessionGrantRefreshes(page: Page) {
   };
 }
 
-function grantJkt(jwt: string): string | undefined {
-  const parts = jwt.split(".");
-  if (parts.length < 2) return undefined;
+function dpopProofJkt(proof: string | undefined): string | undefined {
+  if (!proof) return undefined;
+  const parts = proof.split(".");
+  if (parts.length !== 3) return undefined;
   try {
-    const payload = JSON.parse(
-      Buffer.from(parts[1], "base64url").toString("utf8"),
+    // The RFC 9449 proof declares the actual request signer. SessionGrant
+    // internals are issuer-owned and are not a client-side key discovery API.
+    const header = JSON.parse(
+      Buffer.from(parts[0], "base64url").toString("utf8"),
     );
-    const encoded = payload?.session_public_key;
-    const jwk = typeof encoded === "string" ? JSON.parse(encoded) : encoded;
+    const jwk = header?.jwk;
     return jwk?.kty === "OKP" &&
       jwk?.crv === "Ed25519" &&
       typeof jwk?.x === "string"
@@ -520,11 +517,12 @@ async function addEncryptedDescription(
   cardTitle: string,
   description: string,
 ): Promise<void> {
-  await page
+  const card = page
     .getByTestId("kanban-card")
     .filter({ hasText: cardTitle })
-    .first()
-    .click();
+    .first();
+  await expect(card).toHaveAttribute("data-card-draft", "false", { timeout: 45_000 });
+  await card.click();
   await expect(page.getByTestId("card-detail-modal")).toBeVisible({
     timeout: 45_000,
   });

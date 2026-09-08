@@ -609,7 +609,7 @@ test.describe("single-server triad collaboration", () => {
       const afterLeaveBody = `after leave rejected ${stamp}`;
       const rejected = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(bobToken),
-        data: signedEventEnvelope({
+        data: { event: signedEventEnvelope({
           actorId: bob.id,
           realmId,
           kind: "ak.message.create",
@@ -618,7 +618,7 @@ test.describe("single-server triad collaboration", () => {
             track_name: "discussion",
             content: { kind: "ak.content.text", body: afterLeaveBody },
           },
-        }),
+        }) },
       });
       expect(
         rejected.status(),

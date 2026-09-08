@@ -14,6 +14,7 @@ import {
   createRealmApi,
   grantCapabilityEventApi,
   replaceAccountDataApi,
+  resolveDefaultStrandId,
   queryRealmEventsApi,
   sendMessageApi,
   signedEventEnvelope,
@@ -37,9 +38,9 @@ type BlocklistEntry = {
     kind: "actor";
     actor_id: ReturnType<typeof accountActorId>;
   };
-  kind?: string;
-  mode?: string;
-  created_at?: string;
+  mode: "block";
+  applies_to: ["messages", "notifications"];
+  created_at: string;
 };
 
 type AccountSubscribeOpts = NonNullable<
@@ -332,6 +333,7 @@ test.describe("personal blocklist", () => {
     });
     await addRealmMemberApi(request, aliceToken, realmId, bob.id);
     await addRealmMemberApi(request, aliceToken, realmId, carol.id);
+    await resolveDefaultStrandId(request, aliceToken, realmId, { authorityRootController: alice.id });
     await grantCapabilityEventApi(request, aliceToken, {
       ownerId: alice.id,
       realmId,
@@ -369,7 +371,7 @@ test.describe("personal blocklist", () => {
       realmId,
       kind: "ak.message.redact",
       payload: {
-        target_event_id: sent.event_id,
+        message_id: sent.event_id.replace(/^ak:event:/, "ak:message:"),
         reason: "moderation_quarantine_equivalent",
       },
     });
@@ -411,6 +413,11 @@ test.describe("personal blocklist", () => {
     await addRealmMemberApi(request, aliceToken, realmId, bob.id);
 
     const mutedVisible = `S31 E11.2 muted-visible ${stamp}`;
+    await resolveDefaultStrandId(request, aliceToken, realmId, { authorityRootController: alice.id });
+    await grantCapabilityEventApi(request, aliceToken, {
+      ownerId: alice.id, realmId, subjectId: bob.id,
+      actions: ["ak.strand.create", "ak.message.create"],
+    });
     await sendMessageApi(request, bobToken, realmId, mutedVisible);
     expect(
       eventsText(await queryRealmEventsApi(request, aliceToken, realmId)),
@@ -506,6 +513,11 @@ test.describe("personal blocklist", () => {
     ]);
 
     const body = `S31 E11.3 bob own message ${stamp}`;
+    await resolveDefaultStrandId(request, aliceToken, realmId, { authorityRootController: alice.id });
+    await grantCapabilityEventApi(request, aliceToken, {
+      ownerId: alice.id, realmId, subjectId: bob.id,
+      actions: ["ak.strand.create", "ak.message.create"],
+    });
     await sendMessageApi(request, bobToken, realmId, body);
 
     expect(
@@ -531,6 +543,7 @@ function canonicalActorBlockEntry(principalId: string): BlocklistEntry {
   return {
     target: { kind: "actor", actor_id: accountActorId(principalId) },
     mode: "block",
+    applies_to: ["messages", "notifications"],
     created_at: new Date().toISOString(),
   };
 }
@@ -546,7 +559,7 @@ async function putBlocklist(
     token,
     actorId,
     BLOCKLIST_DATA_TYPE,
-    { entries },
+    { version: 1, entries },
     0,
     { context: `set ${BLOCKLIST_DATA_TYPE}` },
   );

@@ -74,7 +74,7 @@
 ## Edge cases
 
 - **E24.1 搜索 handle 含特殊字符**:`@bob_2.0` → 编码/解码无误
-- **E24.2 reject contact**:alice 请求后被 bob 拒 → status = `rejected`;alice 不能再发(直到某 cooldown)
+- **E24.2 reject contact**：alice 请求被 bob 拒绝后，该请求永久终止；重新联系必须生成不同的 request Event 与 acceptance receipt，bob 收到新请求。依据 `identity/contact-and-direct-conversation.md` §3，不复活旧请求。
 - **E24.3 隐私级别**:bob 设置 profile.privacy=private → directory 搜空,但联系人可见
 - **E24.4 presence 隐私**:bob 关 presence broadcast → 显示 unknown
 

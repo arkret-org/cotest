@@ -119,10 +119,10 @@ export function solandServiceDid(key: SolandKey = "default"): string {
 
 export function solandServiceResolution(
   key: SolandKey = "default",
-): { current_record_url: string } {
+): { resolution_url: string } {
   const serviceId = solandServiceId(key);
   return {
-    current_record_url: `${solandBaseUrl(key)}/_arkret/open/services/${encodeURIComponent(serviceId)}/resolution`,
+    resolution_url: `${solandBaseUrl(key)}/_arkret/open/services/${encodeURIComponent(serviceId)}/resolution`,
   };
 }
 

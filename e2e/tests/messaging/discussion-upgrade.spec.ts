@@ -525,7 +525,7 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
           ...authHeaders(fixture.aliceToken),
           "content-type": "application/json",
         },
-        data: canonicalJson(envelope),
+        data: canonicalJson({ event: envelope }),
       },
     );
     const body = await response.text();

@@ -24,12 +24,14 @@ import {
   issueDevSession,
   openDpopUserPage,
   openDpopUserPageForAccount,
+  openUserPage,
   selfPathHeadersForDpopSession,
   uniqueUser,
 } from "../../helpers/users";
 import { selectDxcOption } from "../../helpers/dxc-select";
 import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
 import { registerCoauthPasswordAccount } from "../../helpers/coauth-register";
+import { serverLoginViaCoauth, submitCoauthPasswordCredentials } from "../../helpers/real-oidc-login";
 
 test.describe.configure({ mode: "serial" });
 
@@ -530,39 +532,45 @@ test.describe("notifications", () => {
       `s23-crossdev-bob-${stamp}-d1`,
       bobAccount,
     );
-    const bobDevice2Session = await openDpopUserPageForAccount(
-      browser,
-      request,
-      `s23-crossdev-bob-${stamp}-d2`,
-      bobAccount,
-    );
-    if (!bobDevice1Session || !bobDevice2Session) {
+    if (!bobDevice1Session) {
       assertJointStackNotRequired("notifications cross-device browser login");
       test.skip(true, "coauth DPoP session-grant login is unavailable");
       return;
     }
     const bob = bobDevice1Session.user;
-    expect(bobDevice2Session.user.id).toBe(bob.id);
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
     const bobDevice1 = bobDevice1Session.page;
-    const bobDevice2Page = bobDevice2Session.page;
+    const bobDevice2Page = await openUserPage(
+      browser,
+      uniqueUser(`s23-crossdev-bob-${stamp}-d2`),
+      { neutralLoginConfig: true, autoCompleteRecoveryKeySetup: false },
+    );
 
     try {
       // A password/OIDC handoff identifies the fresh browser but does not make
       // it an authorized event author. Complete the spec-required same-account
       // pairing before device 2 advances the durable read cursor.
       await bobDevice1.gotoHome();
-      await bobDevice2Page.page.goto("/settings/devices/pair", {
+      await bobDevice2Page.page.goto("/login", {
         waitUntil: "domcontentloaded",
       });
-      await bobDevice2Page.page.getByTestId("pair-device-start-button").click();
-      const pairingCode = bobDevice2Page.page.getByTestId("pair-device-code");
+      await bobDevice2Page.page.getByTestId("login-server-url").fill(solandBaseUrl());
+      await bobDevice2Page.page.getByTestId("start-server-login-button").click();
+      await submitCoauthPasswordCredentials(bobDevice2Page.page, bobAccount);
+      const approve = bobDevice2Page.page.getByTestId("coauth-oauth-approve");
+      if (await approve.waitFor({ state: "visible", timeout: 20_000 }).then(() => true).catch(() => false)) {
+        await approve.click();
+      }
+      await expect(bobDevice2Page.page.getByTestId("device-setup-required")).toBeVisible({ timeout: 120_000 });
+      await expect(bobDevice2Page.page.getByTestId("client-shell")).toHaveCount(0);
+      await bobDevice2Page.page.getByTestId("device-setup-pairing-start").click();
+      const pairingCode = bobDevice2Page.page.getByTestId("device-setup-pairing-code");
       await expect(pairingCode).toBeVisible({ timeout: 30_000 });
       const code = (await pairingCode.textContent())?.trim() ?? "";
       expect(code).not.toBe("");
       const pairingLink = await bobDevice2Page.page
-        .getByTestId("pair-device-secret")
+        .getByTestId("device-setup-pairing-link")
         .inputValue();
       await approvePairingLinkOnAuthorizedDevice(
         bobDevice1,
@@ -570,32 +578,22 @@ test.describe("notifications", () => {
         code,
       );
 
-      const viewerUrl = `${solandBaseUrl()}/_arkret/self/account/viewer`;
-      await expect
-        .poll(
-          async () => {
-            const response = await request.get(viewerUrl, {
-              headers: selfPathHeadersForDpopSession(
-                bobDevice2Session.session,
-                "GET",
-                viewerUrl,
-              ),
-            });
-            if (!response.ok()) {
-              return `http-${response.status()}`;
-            }
-            const body = await response.json();
-            const devices = Array.isArray(body?.devices) ? body.devices : [];
-            return (
-              devices.find(
-                (device: any) =>
-                  device?.device_id === bobDevice2Session.user.deviceId,
-              )?.status ?? "missing"
-            );
-          },
-          { timeout: 60_000, intervals: [1_000, 2_000, 5_000] },
-        )
-        .toBe("active");
+      await bobDevice2Page.page.getByTestId("device-setup-pairing-status").click();
+      await expect(bobDevice2Page.page.getByTestId("device-setup-status")).toContainText(
+        "Device authorization is accepted", { timeout: 90_000 },
+      );
+      await bobDevice2Page.page.getByRole("link", { name: "Sign in again after approval" }).click();
+      await serverLoginViaCoauth(bobDevice2Page.page, bobAccount);
+      await expect(bobDevice2Page.page.getByTestId("client-shell")).toBeVisible({ timeout: 120_000 });
+      await bobDevice2Page.completeRecoveryKeySetupIfPrompted();
+      const unlockPrompt = bobDevice2Page.page.locator(
+        '[data-testid="mls-unlock-modal"], [data-testid="mls-unlock-banner"]',
+      ).last();
+      if (await unlockPrompt.isVisible()) {
+        const recoveryKey = bobDevice1Session.session.recoveryKey;
+        if (!recoveryKey) throw new Error("paired notification device requires the account recovery key");
+        await bobDevice2Page.unlockMlsAccountSecret(recoveryKey);
+      }
 
       const realmId = await createRealmApi(request, aliceToken, {
         title: `S23 Cross Device ${stamp}`,
@@ -623,13 +621,15 @@ test.describe("notifications", () => {
         .getByTestId("notification-item")
         .filter({ hasText: msg });
       await expect(device2Row).toBeVisible({ timeout: 30_000 });
-      await bobDevice2Page.page.getByTestId("mark-all-read-button").click();
+      await bobDevice2Page.clickWithPassivePromptRetry(
+        bobDevice2Page.page.getByTestId("mark-all-read-button"),
+      );
       await expect(device2Row.getByTestId("mark-unread-button")).toBeVisible({
         timeout: 30_000,
       });
       await expect(
         bobDevice2Page.page.getByTestId("notifications-status"),
-      ).toContainText(/syncing|synced \d+ read cursor/i, { timeout: 30_000 });
+      ).toContainText(/synced \d+ read cursor/i, { timeout: 30_000 });
 
       // The success toast is transient and may be cleared by the refresh that
       // applies the new cursor. Device 1 is the authoritative cross-device

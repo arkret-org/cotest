@@ -47,17 +47,13 @@ import {
   uniqueUser,
 } from "../../helpers/users";
 
-// ── Shared strand factory used by the promoted phases below. Mirrors the
-// live kanban/end-to-end ak.strand.create payload (full `object` with
-// metadata.fields.status) so the strand projects with a readable
-// `fields.status`.
+// Shared Strand factory with its registered stage independent of metadata.
 async function createStrandApi(
   request: APIRequestContext,
   token: string,
   actorId: string,
   realmId: string,
   title: string,
-  fields: Record<string, unknown> = { status: "open" },
 ): Promise<string> {
   const createdAt = canonicalTimestamp();
   // `ak.strand.create` derives the object id from the create Event, so the
@@ -72,7 +68,7 @@ async function createStrandApi(
       object: {
         schema: "ak.schema.strand.v1",
         realm_id: realmId,
-        metadata: { title, fields },
+        metadata: { title },
         stage: "planned",
         tracks: { discussion: { enabled: true, is_primary: true } },
         created_by: accountActorId(actorId),
@@ -315,7 +311,6 @@ test.describe("core object invariants", () => {
       alice.id,
       realmId,
       `core-invariants strand ${stamp}`,
-      { status: "open" },
     );
     const boardSpaceId = typedId("space");
     const sourceListId = typedId("space");
@@ -396,7 +391,7 @@ test.describe("core object invariants", () => {
       `${solandBaseUrl()}/_arkret/self/events`,
       {
         headers: authHeaders(aliceToken),
-        data: staleMoveEnvelope,
+        data: { event: staleMoveEnvelope },
       },
     );
     expect(staleMove.status()).toBe(409);
@@ -495,12 +490,12 @@ test.describe("core object invariants", () => {
       `${solandBaseUrl()}/_arkret/self/events`,
       {
         headers: authHeaders(aliceToken),
-        data: signedEventEnvelope({
+        data: { event: signedEventEnvelope({
           actorId: alice.id,
           realmId,
           kind: "ak.space.archive",
           payload: { space_id: parentSpaceId },
-        }),
+        }) },
       },
     );
     expect(archiveRes.ok()).toBeTruthy();
@@ -511,12 +506,12 @@ test.describe("core object invariants", () => {
       `${solandBaseUrl()}/_arkret/self/events`,
       {
         headers: authHeaders(aliceToken),
-        data: signedEventEnvelope({
+        data: { event: signedEventEnvelope({
           actorId: alice.id,
           realmId,
           kind: "ak.space.tombstone",
           payload: { space_id: parentSpaceId },
-        }),
+        }) },
       },
     );
     expect(tombFail.status()).toBeGreaterThanOrEqual(400);

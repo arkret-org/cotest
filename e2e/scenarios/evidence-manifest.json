@@ -96,6 +96,7 @@
       ],
       "mocks": [],
       "identity_establishment": [
+        "oauth_authorization_ui",
         "session_injection"
       ],
       "protocol_object_producers": [

@@ -20,7 +20,7 @@ async function addCard(column: Locator, title: string): Promise<void> {
   await column.getByTestId("save-card-button").click();
   await expect(
     column.getByTestId("kanban-card").filter({ hasText: title }).first(),
-  ).toBeVisible({ timeout: 45_000 });
+  ).toHaveAttribute("data-card-draft", "false", { timeout: 45_000 });
 }
 
 test("@fully-implemented calendar schedule and RSVP survive the canonical Strand event flow", async ({
@@ -116,17 +116,14 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
       response.url().includes("/_arkret/self/events") &&
       response.request().method() === "POST" &&
       (response.request().postData() ?? "").includes("ak.strand.update");
-    let scheduled: Response | undefined;
-    for (let attempt = 0; attempt < 18 && !scheduled; attempt += 1) {
-      const scheduleWrite = page.page
-        .waitForResponse(schedulePredicate, { timeout: 5_000 })
-        .catch(() => undefined);
-      await editor.getByTestId("card-detail-save-button").click();
-      scheduled = await scheduleWrite;
-      if (!scheduled) {
-        await page.page.waitForTimeout(1_000);
-      }
-    }
+    // Saving queues the write and closes the editor before encrypted submission
+    // necessarily reaches the network. Observe that one write instead of
+    // clicking an already-closed editor again after a short response timeout.
+    const scheduleWrite = page.page
+      .waitForResponse(schedulePredicate, { timeout: 90_000 })
+      .catch(() => undefined);
+    await editor.getByTestId("card-detail-save-button").click();
+    const scheduled = await scheduleWrite;
     const scheduleStatus = await editor
       .getByTestId("card-detail-edit-status")
       .textContent({ timeout: 1_000 })

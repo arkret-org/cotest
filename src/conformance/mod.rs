@@ -85,8 +85,6 @@ mod security_negative;
 mod security_transaction_resilience;
 mod security_transaction_resilience_reference;
 mod service_closure_hardening;
-mod service_route_handover_mirror;
-mod service_route_handover_mirror_production;
 mod session_grant_issuer_ledger;
 mod sidecar_vectors;
 mod signal_federation;
@@ -398,8 +396,6 @@ pub use service_closure_hardening::{
     run_projection_pagination_shape_vector, run_push_wakeup_policy_vector,
     run_service_closure_hardening_fixture_suite, run_signal_class_ttl_vector,
 };
-pub use service_route_handover_mirror::run_service_route_handover_mirror_fixture_suite;
-pub use service_route_handover_mirror_production::run_service_route_handover_mirror_production_suite;
 pub use session_grant_issuer_ledger::{
     run_session_grant_issuance_kat_suite, run_session_grant_issuer_ledger_reference_model_suite,
     run_session_grant_issuer_ledger_suite,
@@ -703,3 +699,6 @@ pub(crate) fn validate_rank(rank: &str, max_length: usize) -> Result<()> {
     }
     Ok(())
 }
+
+mod service_did_routes;
+pub use service_did_routes::run_service_did_routes_suite;

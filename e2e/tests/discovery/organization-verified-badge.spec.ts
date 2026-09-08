@@ -59,13 +59,13 @@ async function submitOrganizationStatement(
   };
   return request.post(`${solandBaseUrl()}/_arkret/self/events`, {
     headers: authHeaders(token),
-    data: signedEventEnvelope({
+    data: { event: signedEventEnvelope({
       actorId,
       realmId,
       kind: "ak.realm.organization",
       schemaId: "ak.schema.event_payload.v1",
       payload: statement,
-    }),
+    }) },
   });
 }
 
@@ -195,7 +195,7 @@ test.describe("directory verified organization badge", () => {
       const activeStatementId = `org-stmt-${uuidV7()}`;
       const active = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(token),
-        data: signedEventEnvelope({
+        data: { event: signedEventEnvelope({
           actorId: alice.id,
           realmId,
           kind: "ak.realm.organization",
@@ -216,7 +216,7 @@ test.describe("directory verified organization badge", () => {
               proof: "c2ln",
             },
           },
-        }),
+        }) },
       });
       expect(active.ok()).toBeTruthy();
 

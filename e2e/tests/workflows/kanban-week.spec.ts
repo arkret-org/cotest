@@ -304,6 +304,7 @@ test.describe("workflow: kanban week-in-review", () => {
       const archiveWrite = patPage.page.waitForResponse(
         (response) =>
           new URL(response.url()).pathname === "/_arkret/self/events" &&
+          response.request().method() === "POST" &&
           decodeIngressEvents(response.request().postData()).some(
             (event) => event.kind === "ak.space.archive",
           ),
@@ -320,6 +321,7 @@ test.describe("workflow: kanban week-in-review", () => {
       const restoreWrite = patPage.page.waitForResponse(
         (response) =>
           new URL(response.url()).pathname === "/_arkret/self/events" &&
+          response.request().method() === "POST" &&
           decodeIngressEvents(response.request().postData()).some(
             (event) => event.kind === "ak.space.restore",
           ),

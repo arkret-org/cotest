@@ -77,7 +77,6 @@ fn build_realm(
         created_at: chrono::Utc::now(),
         updated_by: None,
         updated_at: None,
-        relation_profiles: Vec::new(),
         availability_policy: None,
         audit_policy: None,
         notary: crate::fixture_single_signer_notary(principal.clone()),

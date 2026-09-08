@@ -1092,7 +1092,7 @@ export class JointUserPage {
           station_id: service.service_id,
         },
         service_resolution: {
-          current_record_url: resolutionUrl.replace(/^http:/, "https:"),
+          resolution_url: resolutionUrl.replace(/^http:/, "https:"),
         },
       });
     }

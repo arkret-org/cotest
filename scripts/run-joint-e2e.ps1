@@ -2544,21 +2544,38 @@ function Stop-ProcessTree {
 }
 
 function Open-ExclusiveRunnerLock {
-    param([Parameter(Mandatory = $true)][string]$Path)
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [switch]$Wait
+    )
 
     $lockPath = [System.IO.Path]::GetFullPath($Path)
     $lockParent = Split-Path -Parent $lockPath
     $null = New-Item -ItemType Directory -Path $lockParent -Force
-    try {
-        $stream = [System.IO.File]::Open(
-            $lockPath,
-            [System.IO.FileMode]::OpenOrCreate,
-            [System.IO.FileAccess]::ReadWrite,
-            [System.IO.FileShare]::None
-        )
-    }
-    catch [System.IO.IOException] {
-        throw "another joint-e2e runner owns the shared workspace build outputs (lock: $lockPath)"
+    $waitingAnnounced = $false
+    while ($true) {
+        try {
+            $stream = [System.IO.File]::Open(
+                $lockPath,
+                [System.IO.FileMode]::OpenOrCreate,
+                [System.IO.FileAccess]::ReadWrite,
+                [System.IO.FileShare]::None
+            )
+            break
+        }
+        catch [System.IO.IOException] {
+            if (-not $Wait) {
+                throw "another joint-e2e runner owns the shared workspace build outputs (lock: $lockPath)"
+            }
+            if (($_.Exception.HResult -band 0xffff) -notin @(11, 32, 33)) {
+                throw
+            }
+            if (-not $waitingAnnounced) {
+                Write-Host "Waiting for another joint-e2e runner to release the machine's hosts and build resources."
+                $waitingAnnounced = $true
+            }
+            Start-Sleep -Milliseconds 500
+        }
     }
 
     $owner = [System.Text.Encoding]::UTF8.GetBytes(
@@ -2811,6 +2828,14 @@ if ($offlineGateFailures.Count -gt 0) {
         [Environment]::NewLine, ($offlineGateFailures -join [Environment]::NewLine))
 }
 
+$runnerLockRoot = if ($IsWindows) {
+    [Environment]::GetFolderPath([Environment+SpecialFolder]::CommonApplicationData)
+} else {
+    [System.IO.Path]::GetTempPath()
+}
+$jointRunnerLock = Open-ExclusiveRunnerLock `
+    -Path (Join-Path $runnerLockRoot "cotest/joint-e2e-run.lock") -Wait
+try {
 $environmentOutputDirectory = if ($JointDir) {
     Join-Path ([System.IO.Path]::GetFullPath($JointDir)) "environment"
 } else {
@@ -2840,8 +2865,6 @@ if ($IsWindows) {
     $env:PATH = @($machinePath, $userPath) | Where-Object { $_ } | Join-String -Separator ";"
 }
 
-$jointRunnerLock = Open-ExclusiveRunnerLock `
-    -Path (Join-Path $repoRoot "artifacts\.joint-e2e-run.lock")
 if (-not $OutputRoot) {
     $OutputRoot = Join-Path $repoRoot "artifacts"
 }
@@ -6166,5 +6189,8 @@ if ($isStandaloneJointSuite) {
     Write-Host "  latest      : $(Join-Path $OutputRoot 'latest\joint-e2e')"
 }
 
-$jointRunnerLock.Dispose()
 exit $exitCode
+}
+finally {
+    $jointRunnerLock.Dispose()
+}

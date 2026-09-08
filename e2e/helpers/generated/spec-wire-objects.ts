@@ -348,20 +348,6 @@ export type RealmObject = {
     "collaboration_role"?: "direct_conversation";
     [key: string]: unknown;
   };
-  "relation_profiles"?: Array<{
-    "relation_kind": string;
-    "from_kind"?: string;
-    "to_kind"?: string;
-    "relation_scope"?: "realm" | "space" | "board";
-    "cardinality": "one_to_one" | "one_to_many" | "many_to_one" | "many_to_many";
-    "dedupe_key"?: string[];
-    "max_to_per_from"?: number;
-    "max_from_per_to"?: number;
-    "multi_edge"?: boolean;
-    "rank_field"?: string;
-    "on_conflict"?: "reject" | "close_previous" | "require_review";
-    [key: string]: unknown;
-  }>;
   "policy_id"?: string;
   "preview_policy_id"?: string;
   "default_strand_id"?: string | null;
@@ -1069,33 +1055,257 @@ export type InviteDeliveryRequestBody = {
     };
     "service_resolution": {
       "inline": {
-        "record": {
-          "service_id": string;
-          "service_kind": string;
-          "did": string;
-          "method_history_head": string;
-          "version_id": string;
-          "resolution_event_ref": string;
-          "record_sequence": number;
-          "previous_record_digest": string | null;
-          "current_record_url": string;
-          "base_url": string;
-          "describe_digest": string;
-          "issued_at": string;
-          "refresh_after": string;
-          "expires_at": string;
+        "service_id": string;
+        "service_kind": string;
+        "method_history_evidence": {
+          "evidence_kind": "webvh_log";
+          "boundary": {
+            "from_method_history_head": string;
+            "from_version_id": string;
+            "to_method_history_head": string;
+            "to_version_id": string;
+          };
+          "evidence": {
+            "kind": "ak.did.binding_evidence.v1";
+            "method": string;
+            "document_digest": string;
+            "method_proofs": Array<{
+              "kind": "webvh_log";
+              "history_head": string;
+              "witnesses": Array<{
+                "witness_did": string;
+                "controlling_organization_did": string;
+              }>;
+              "witness_proofs_digest": string;
+            }>;
+          };
+          "log_entries": Array<Record<string, unknown>>;
+          "witness_records": Array<Record<string, unknown>>;
+        } | {
+          "evidence_kind": "did_web_document";
+          "boundary": {
+            "from_method_history_head": string;
+            "from_version_id": string;
+            "to_method_history_head": string;
+            "to_version_id": string;
+          };
+          "evidence": {
+            "kind": "ak.did.binding_evidence.v1";
+            "method": string;
+            "document_digest": string;
+            "method_proofs": Array<{
+              "kind": "webvh_log";
+              "history_head": string;
+              "witnesses": Array<{
+                "witness_did": string;
+                "controlling_organization_did": string;
+              }>;
+              "witness_proofs_digest": string;
+            }>;
+          };
+        } | {
+          "evidence_kind": "did_key_expansion";
+          "boundary": {
+            "from_method_history_head": string;
+            "from_version_id": string;
+            "to_method_history_head": string;
+            "to_version_id": string;
+          };
+          "evidence": {
+            "kind": "ak.did.binding_evidence.v1";
+            "method": string;
+            "document_digest": string;
+            "method_proofs": Array<{
+              "kind": "webvh_log";
+              "history_head": string;
+              "witnesses": Array<{
+                "witness_did": string;
+                "controlling_organization_did": string;
+              }>;
+              "witness_proofs_digest": string;
+            }>;
+          };
         };
-        "proof": {
-          "verification_method": string;
-          "created_at": string;
-          "jws": string;
+        "normalized_did_document": {
+          "did": string;
+          "contexts": Array<string | Record<string, unknown>>;
+          "controller_dids": string[];
+          "also_known_as": string[];
+          "verification_methods": Array<{
+            "verification_method": string;
+            "controller_did": string;
+            "verification_method_suite": string;
+            "public_key_material": Record<string, unknown>;
+            "extensions": Array<{
+              "name": string;
+              "value": unknown;
+            }>;
+          }>;
+          "authentication": Array<{
+            "verification_method": string;
+          }>;
+          "assertion_methods": Array<{
+            "verification_method": string;
+          }>;
+          "key_agreements": Array<{
+            "verification_method": string;
+          }>;
+          "capability_invocations": Array<{
+            "verification_method": string;
+          }>;
+          "capability_delegations": Array<{
+            "verification_method": string;
+          }>;
+          "services": Array<{
+            "uri": string;
+            "protocol_names": string[];
+            "endpoint": unknown;
+            "extensions": Array<{
+              "name": string;
+              "value": unknown;
+            }>;
+          }>;
+          "metadata": {
+            "primary_handle"?: string;
+          };
+          "extensions": Array<{
+            "name": string;
+            "value": unknown;
+          }>;
         };
       };
     } | {
-      "current_record_url": string;
-      "pinned_record_digest"?: string;
+      "resolution_url": string;
     };
-    "route_assistance"?: unknown;
+    "route_assistance"?: {
+      "mirror_hints": Array<{
+        "mirror_id": string;
+        "service_resolution": {
+          "inline": {
+            "service_id": string;
+            "service_kind": string;
+            "method_history_evidence": {
+              "evidence_kind": "webvh_log";
+              "boundary": {
+                "from_method_history_head": string;
+                "from_version_id": string;
+                "to_method_history_head": string;
+                "to_version_id": string;
+              };
+              "evidence": {
+                "kind": "ak.did.binding_evidence.v1";
+                "method": string;
+                "document_digest": string;
+                "method_proofs": Array<{
+                  "kind": "webvh_log";
+                  "history_head": string;
+                  "witnesses": Array<{
+                    "witness_did": string;
+                    "controlling_organization_did": string;
+                  }>;
+                  "witness_proofs_digest": string;
+                }>;
+              };
+              "log_entries": Array<Record<string, unknown>>;
+              "witness_records": Array<Record<string, unknown>>;
+            } | {
+              "evidence_kind": "did_web_document";
+              "boundary": {
+                "from_method_history_head": string;
+                "from_version_id": string;
+                "to_method_history_head": string;
+                "to_version_id": string;
+              };
+              "evidence": {
+                "kind": "ak.did.binding_evidence.v1";
+                "method": string;
+                "document_digest": string;
+                "method_proofs": Array<{
+                  "kind": "webvh_log";
+                  "history_head": string;
+                  "witnesses": Array<{
+                    "witness_did": string;
+                    "controlling_organization_did": string;
+                  }>;
+                  "witness_proofs_digest": string;
+                }>;
+              };
+            } | {
+              "evidence_kind": "did_key_expansion";
+              "boundary": {
+                "from_method_history_head": string;
+                "from_version_id": string;
+                "to_method_history_head": string;
+                "to_version_id": string;
+              };
+              "evidence": {
+                "kind": "ak.did.binding_evidence.v1";
+                "method": string;
+                "document_digest": string;
+                "method_proofs": Array<{
+                  "kind": "webvh_log";
+                  "history_head": string;
+                  "witnesses": Array<{
+                    "witness_did": string;
+                    "controlling_organization_did": string;
+                  }>;
+                  "witness_proofs_digest": string;
+                }>;
+              };
+            };
+            "normalized_did_document": {
+              "did": string;
+              "contexts": Array<string | Record<string, unknown>>;
+              "controller_dids": string[];
+              "also_known_as": string[];
+              "verification_methods": Array<{
+                "verification_method": string;
+                "controller_did": string;
+                "verification_method_suite": string;
+                "public_key_material": Record<string, unknown>;
+                "extensions": Array<{
+                  "name": string;
+                  "value": unknown;
+                }>;
+              }>;
+              "authentication": Array<{
+                "verification_method": string;
+              }>;
+              "assertion_methods": Array<{
+                "verification_method": string;
+              }>;
+              "key_agreements": Array<{
+                "verification_method": string;
+              }>;
+              "capability_invocations": Array<{
+                "verification_method": string;
+              }>;
+              "capability_delegations": Array<{
+                "verification_method": string;
+              }>;
+              "services": Array<{
+                "uri": string;
+                "protocol_names": string[];
+                "endpoint": unknown;
+                "extensions": Array<{
+                  "name": string;
+                  "value": unknown;
+                }>;
+              }>;
+              "metadata": {
+                "primary_handle"?: string;
+              };
+              "extensions": Array<{
+                "name": string;
+                "value": unknown;
+              }>;
+            };
+          };
+        } | {
+          "resolution_url": string;
+        };
+      }>;
+    };
   };
   "introduction_evidence": {
     "kind": "locator_ref";
@@ -1107,33 +1317,257 @@ export type InviteDeliveryRequestBody = {
       };
       "service_resolution": {
         "inline": {
-          "record": {
-            "service_id": string;
-            "service_kind": string;
-            "did": string;
-            "method_history_head": string;
-            "version_id": string;
-            "resolution_event_ref": string;
-            "record_sequence": number;
-            "previous_record_digest": string | null;
-            "current_record_url": string;
-            "base_url": string;
-            "describe_digest": string;
-            "issued_at": string;
-            "refresh_after": string;
-            "expires_at": string;
+          "service_id": string;
+          "service_kind": string;
+          "method_history_evidence": {
+            "evidence_kind": "webvh_log";
+            "boundary": {
+              "from_method_history_head": string;
+              "from_version_id": string;
+              "to_method_history_head": string;
+              "to_version_id": string;
+            };
+            "evidence": {
+              "kind": "ak.did.binding_evidence.v1";
+              "method": string;
+              "document_digest": string;
+              "method_proofs": Array<{
+                "kind": "webvh_log";
+                "history_head": string;
+                "witnesses": Array<{
+                  "witness_did": string;
+                  "controlling_organization_did": string;
+                }>;
+                "witness_proofs_digest": string;
+              }>;
+            };
+            "log_entries": Array<Record<string, unknown>>;
+            "witness_records": Array<Record<string, unknown>>;
+          } | {
+            "evidence_kind": "did_web_document";
+            "boundary": {
+              "from_method_history_head": string;
+              "from_version_id": string;
+              "to_method_history_head": string;
+              "to_version_id": string;
+            };
+            "evidence": {
+              "kind": "ak.did.binding_evidence.v1";
+              "method": string;
+              "document_digest": string;
+              "method_proofs": Array<{
+                "kind": "webvh_log";
+                "history_head": string;
+                "witnesses": Array<{
+                  "witness_did": string;
+                  "controlling_organization_did": string;
+                }>;
+                "witness_proofs_digest": string;
+              }>;
+            };
+          } | {
+            "evidence_kind": "did_key_expansion";
+            "boundary": {
+              "from_method_history_head": string;
+              "from_version_id": string;
+              "to_method_history_head": string;
+              "to_version_id": string;
+            };
+            "evidence": {
+              "kind": "ak.did.binding_evidence.v1";
+              "method": string;
+              "document_digest": string;
+              "method_proofs": Array<{
+                "kind": "webvh_log";
+                "history_head": string;
+                "witnesses": Array<{
+                  "witness_did": string;
+                  "controlling_organization_did": string;
+                }>;
+                "witness_proofs_digest": string;
+              }>;
+            };
           };
-          "proof": {
-            "verification_method": string;
-            "created_at": string;
-            "jws": string;
+          "normalized_did_document": {
+            "did": string;
+            "contexts": Array<string | Record<string, unknown>>;
+            "controller_dids": string[];
+            "also_known_as": string[];
+            "verification_methods": Array<{
+              "verification_method": string;
+              "controller_did": string;
+              "verification_method_suite": string;
+              "public_key_material": Record<string, unknown>;
+              "extensions": Array<{
+                "name": string;
+                "value": unknown;
+              }>;
+            }>;
+            "authentication": Array<{
+              "verification_method": string;
+            }>;
+            "assertion_methods": Array<{
+              "verification_method": string;
+            }>;
+            "key_agreements": Array<{
+              "verification_method": string;
+            }>;
+            "capability_invocations": Array<{
+              "verification_method": string;
+            }>;
+            "capability_delegations": Array<{
+              "verification_method": string;
+            }>;
+            "services": Array<{
+              "uri": string;
+              "protocol_names": string[];
+              "endpoint": unknown;
+              "extensions": Array<{
+                "name": string;
+                "value": unknown;
+              }>;
+            }>;
+            "metadata": {
+              "primary_handle"?: string;
+            };
+            "extensions": Array<{
+              "name": string;
+              "value": unknown;
+            }>;
           };
         };
       } | {
-        "current_record_url": string;
-        "pinned_record_digest"?: string;
+        "resolution_url": string;
       };
-      "route_assistance"?: unknown;
+      "route_assistance"?: {
+        "mirror_hints": Array<{
+          "mirror_id": string;
+          "service_resolution": {
+            "inline": {
+              "service_id": string;
+              "service_kind": string;
+              "method_history_evidence": {
+                "evidence_kind": "webvh_log";
+                "boundary": {
+                  "from_method_history_head": string;
+                  "from_version_id": string;
+                  "to_method_history_head": string;
+                  "to_version_id": string;
+                };
+                "evidence": {
+                  "kind": "ak.did.binding_evidence.v1";
+                  "method": string;
+                  "document_digest": string;
+                  "method_proofs": Array<{
+                    "kind": "webvh_log";
+                    "history_head": string;
+                    "witnesses": Array<{
+                      "witness_did": string;
+                      "controlling_organization_did": string;
+                    }>;
+                    "witness_proofs_digest": string;
+                  }>;
+                };
+                "log_entries": Array<Record<string, unknown>>;
+                "witness_records": Array<Record<string, unknown>>;
+              } | {
+                "evidence_kind": "did_web_document";
+                "boundary": {
+                  "from_method_history_head": string;
+                  "from_version_id": string;
+                  "to_method_history_head": string;
+                  "to_version_id": string;
+                };
+                "evidence": {
+                  "kind": "ak.did.binding_evidence.v1";
+                  "method": string;
+                  "document_digest": string;
+                  "method_proofs": Array<{
+                    "kind": "webvh_log";
+                    "history_head": string;
+                    "witnesses": Array<{
+                      "witness_did": string;
+                      "controlling_organization_did": string;
+                    }>;
+                    "witness_proofs_digest": string;
+                  }>;
+                };
+              } | {
+                "evidence_kind": "did_key_expansion";
+                "boundary": {
+                  "from_method_history_head": string;
+                  "from_version_id": string;
+                  "to_method_history_head": string;
+                  "to_version_id": string;
+                };
+                "evidence": {
+                  "kind": "ak.did.binding_evidence.v1";
+                  "method": string;
+                  "document_digest": string;
+                  "method_proofs": Array<{
+                    "kind": "webvh_log";
+                    "history_head": string;
+                    "witnesses": Array<{
+                      "witness_did": string;
+                      "controlling_organization_did": string;
+                    }>;
+                    "witness_proofs_digest": string;
+                  }>;
+                };
+              };
+              "normalized_did_document": {
+                "did": string;
+                "contexts": Array<string | Record<string, unknown>>;
+                "controller_dids": string[];
+                "also_known_as": string[];
+                "verification_methods": Array<{
+                  "verification_method": string;
+                  "controller_did": string;
+                  "verification_method_suite": string;
+                  "public_key_material": Record<string, unknown>;
+                  "extensions": Array<{
+                    "name": string;
+                    "value": unknown;
+                  }>;
+                }>;
+                "authentication": Array<{
+                  "verification_method": string;
+                }>;
+                "assertion_methods": Array<{
+                  "verification_method": string;
+                }>;
+                "key_agreements": Array<{
+                  "verification_method": string;
+                }>;
+                "capability_invocations": Array<{
+                  "verification_method": string;
+                }>;
+                "capability_delegations": Array<{
+                  "verification_method": string;
+                }>;
+                "services": Array<{
+                  "uri": string;
+                  "protocol_names": string[];
+                  "endpoint": unknown;
+                  "extensions": Array<{
+                    "name": string;
+                    "value": unknown;
+                  }>;
+                }>;
+                "metadata": {
+                  "primary_handle"?: string;
+                };
+                "extensions": Array<{
+                  "name": string;
+                  "value": unknown;
+                }>;
+              };
+            };
+          } | {
+            "resolution_url": string;
+          };
+        }>;
+      };
       "issued_at": string;
       "expires_at": string;
       "locator_ref_digest": string;
@@ -1245,201 +1679,6 @@ export type InviteDeliveryRequestBody = {
   } | {
     "kind": "explicit_address";
   };
-  "cbs_proof_bundles": Array<{
-    "target_seal_ref": string;
-    "seals": Array<{
-      "id": string;
-      "realm_id": string;
-      "predecessor_refs": string[];
-      "delta": string[];
-      "control_event_set_root": string;
-      "state_root": string;
-      "completeness_root": string;
-      "notary_seq": number;
-      "data_view_root"?: string;
-      "data_event_set_root"?: string;
-      "availability_receipt_digests": string[];
-      "covered_event_digests"?: string[];
-      "previous_state_root"?: string;
-      "previous_digest_algorithm"?: "sha256" | "blake3";
-      "notary_signature": {
-        "verification_method": string;
-        "payload_digest": string;
-        "jws": string;
-      } | {
-        "kind": "multi_sig";
-        "signatures": Array<{
-          "verification_method": string;
-          "payload_digest": string;
-          "jws": string;
-        }>;
-      };
-      "sealed_at": string;
-      "hlc": string;
-    }>;
-    "control_moves": Array<{
-      "event_id": string;
-      "kind": string;
-      "realm_id"?: string;
-      "scope_ref": {
-        "kind": "realm";
-        "realm_id": string;
-      } | {
-        "kind": "circle";
-        "realm_id": string;
-        "circle_id": string;
-      } | {
-        "kind": "sidecar";
-        "realm_id": string;
-        "sidecar_id": string;
-      } | {
-        "kind": "realm_genesis";
-      };
-      "actor_id": {
-        "kind": "account";
-        "account_id": {
-          "principal_id": string;
-          "station_id": string;
-        };
-      } | {
-        "kind": "service";
-        "service_id": string;
-      };
-      "executed_by"?: {
-        "kind": "account";
-        "account_id": {
-          "principal_id": string;
-          "station_id": string;
-        };
-      } | {
-        "kind": "service";
-        "service_id": string;
-      };
-      "authorization_ref"?: string | "ak:cell:ak.component.realm.authority_root.v1:null" | "ak.authority.direct_conversation_participant.v1" | "ak.authority.direct_conversation_bootstrap_participant.v1";
-      "applet_id"?: string;
-      "external_ref"?: {
-        "schema"?: string;
-        "protocol"?: string;
-        "network_id"?: string;
-        "instance_id"?: string;
-        "user_id"?: string;
-        "location_id"?: string;
-        "event_id"?: string;
-        "external_id"?: string;
-        "uri"?: string;
-        [key: string]: unknown;
-      };
-      "actor_kind"?: "user" | "organization" | "team" | "agent" | "bot" | "service" | "integration";
-      "actor_seq": number;
-      "created_at": string;
-      "hlc"?: string;
-      "prev_refs": string[];
-      "refs": Array<{
-        "id": string;
-        "role": "state_witness" | "inclusion_proof";
-        "critical": true;
-        "proof": {
-          "kind": "rfc6962_merkle";
-          "root_field": "state_root" | "control_event_set_root";
-          "root_digest": string;
-          "leaf_canonical_preimage_b64u": string;
-          "leaf_digest": string;
-          "audit_path": string[];
-          "leaf_index": number;
-          "leaf_count": number;
-        };
-      } | {
-        "id": string;
-        "role": "authorized_by" | "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "did_inception" | "did_recovery_anchor" | "accountability";
-        "critical": boolean;
-      }>;
-      "causal_refs"?: string[];
-      "preconditions"?: Array<{
-        "cell_id": string;
-        "predicate": {
-          "op": "head_eq" | "head_in" | "satisfies" | "contains";
-          "value"?: unknown;
-          "values"?: unknown[];
-          "predicate_id"?: string;
-        };
-      }>;
-      "seal_ref"?: string;
-      "auth_context"?: {
-        "key_id": string;
-        "key_epoch": number;
-        "credential_epoch"?: number;
-      };
-      "seal_basis"?: {
-        "leaves": string[];
-      };
-      "payload": Record<string, unknown>;
-      "unsigned"?: Record<string, unknown>;
-      "proofs": Array<{
-        "kind": "detached_jws";
-        "verification_method": string;
-        "event_digest": string;
-        "created_at": string;
-        "signer_resolution_evidence_ref"?: string;
-        "domain"?: string;
-        "audience"?: string | string[];
-        "proof_purpose"?: "issuer_attestation" | "holder_acceptance";
-        "jws": string;
-      } | {
-        "kind": "station_admission";
-        "verification_method": string;
-        "event_digest": string;
-        "producer_proof_digest": string;
-        "producer_verification_method": string;
-        "producer_signing_key_did": string;
-        "producer_signer_resolution_evidence_ref"?: string;
-        "signer_resolution_evidence_ref": string;
-        "accepted_at": string;
-        "jws": string;
-      }>;
-      "requirements"?: {
-        "schema"?: string[];
-        "features"?: string[];
-        "critical_extensions"?: Array<{
-          "id": string;
-          "extension_scope": "event" | "payload" | "proof" | "authz" | "reducer" | "projection" | "encryption";
-          "schema_ref"?: string;
-          "profile_ref"?: string;
-          "parameters"?: Record<string, unknown>;
-          "material_digest"?: string;
-          "evidence_ref"?: string;
-          "fail_closed": true;
-        }>;
-      };
-    }>;
-    "inclusion_proofs": Array<{
-      "kind": "rfc6962_merkle";
-      "root_field": "state_root" | "control_event_set_root";
-      "root_digest": string;
-      "leaf_canonical_preimage_b64u": string;
-      "leaf_digest": string;
-      "audit_path": string[];
-      "leaf_index": number;
-      "leaf_count": number;
-    }>;
-    "availability_proofs": Array<{
-      "realm_id": string;
-      "event_id": string;
-      "bytes_digest": string;
-      "holder_service_id": string;
-      "retention_expires_at": string;
-      "holder_signer_evidence_ref": string;
-      "signature": {
-        "kind": "detached_jws";
-        "verification_method": string;
-        "payload_digest": string;
-        "created_at": string;
-        "domain"?: string;
-        "audience"?: string | string[];
-        "proof_purpose"?: "issuer_attestation" | "holder_acceptance" | "status_attestation" | "revocation_authorization" | "governance_authorization";
-        "jws": string;
-      };
-    }>;
-  }>;
   "idempotency_key": string;
 };
 
@@ -1454,33 +1693,257 @@ export type SelfInviteDispatchRequestBody = {
     };
     "service_resolution": {
       "inline": {
-        "record": {
-          "service_id": string;
-          "service_kind": string;
-          "did": string;
-          "method_history_head": string;
-          "version_id": string;
-          "resolution_event_ref": string;
-          "record_sequence": number;
-          "previous_record_digest": string | null;
-          "current_record_url": string;
-          "base_url": string;
-          "describe_digest": string;
-          "issued_at": string;
-          "refresh_after": string;
-          "expires_at": string;
+        "service_id": string;
+        "service_kind": string;
+        "method_history_evidence": {
+          "evidence_kind": "webvh_log";
+          "boundary": {
+            "from_method_history_head": string;
+            "from_version_id": string;
+            "to_method_history_head": string;
+            "to_version_id": string;
+          };
+          "evidence": {
+            "kind": "ak.did.binding_evidence.v1";
+            "method": string;
+            "document_digest": string;
+            "method_proofs": Array<{
+              "kind": "webvh_log";
+              "history_head": string;
+              "witnesses": Array<{
+                "witness_did": string;
+                "controlling_organization_did": string;
+              }>;
+              "witness_proofs_digest": string;
+            }>;
+          };
+          "log_entries": Array<Record<string, unknown>>;
+          "witness_records": Array<Record<string, unknown>>;
+        } | {
+          "evidence_kind": "did_web_document";
+          "boundary": {
+            "from_method_history_head": string;
+            "from_version_id": string;
+            "to_method_history_head": string;
+            "to_version_id": string;
+          };
+          "evidence": {
+            "kind": "ak.did.binding_evidence.v1";
+            "method": string;
+            "document_digest": string;
+            "method_proofs": Array<{
+              "kind": "webvh_log";
+              "history_head": string;
+              "witnesses": Array<{
+                "witness_did": string;
+                "controlling_organization_did": string;
+              }>;
+              "witness_proofs_digest": string;
+            }>;
+          };
+        } | {
+          "evidence_kind": "did_key_expansion";
+          "boundary": {
+            "from_method_history_head": string;
+            "from_version_id": string;
+            "to_method_history_head": string;
+            "to_version_id": string;
+          };
+          "evidence": {
+            "kind": "ak.did.binding_evidence.v1";
+            "method": string;
+            "document_digest": string;
+            "method_proofs": Array<{
+              "kind": "webvh_log";
+              "history_head": string;
+              "witnesses": Array<{
+                "witness_did": string;
+                "controlling_organization_did": string;
+              }>;
+              "witness_proofs_digest": string;
+            }>;
+          };
         };
-        "proof": {
-          "verification_method": string;
-          "created_at": string;
-          "jws": string;
+        "normalized_did_document": {
+          "did": string;
+          "contexts": Array<string | Record<string, unknown>>;
+          "controller_dids": string[];
+          "also_known_as": string[];
+          "verification_methods": Array<{
+            "verification_method": string;
+            "controller_did": string;
+            "verification_method_suite": string;
+            "public_key_material": Record<string, unknown>;
+            "extensions": Array<{
+              "name": string;
+              "value": unknown;
+            }>;
+          }>;
+          "authentication": Array<{
+            "verification_method": string;
+          }>;
+          "assertion_methods": Array<{
+            "verification_method": string;
+          }>;
+          "key_agreements": Array<{
+            "verification_method": string;
+          }>;
+          "capability_invocations": Array<{
+            "verification_method": string;
+          }>;
+          "capability_delegations": Array<{
+            "verification_method": string;
+          }>;
+          "services": Array<{
+            "uri": string;
+            "protocol_names": string[];
+            "endpoint": unknown;
+            "extensions": Array<{
+              "name": string;
+              "value": unknown;
+            }>;
+          }>;
+          "metadata": {
+            "primary_handle"?: string;
+          };
+          "extensions": Array<{
+            "name": string;
+            "value": unknown;
+          }>;
         };
       };
     } | {
-      "current_record_url": string;
-      "pinned_record_digest"?: string;
+      "resolution_url": string;
     };
-    "route_assistance"?: unknown;
+    "route_assistance"?: {
+      "mirror_hints": Array<{
+        "mirror_id": string;
+        "service_resolution": {
+          "inline": {
+            "service_id": string;
+            "service_kind": string;
+            "method_history_evidence": {
+              "evidence_kind": "webvh_log";
+              "boundary": {
+                "from_method_history_head": string;
+                "from_version_id": string;
+                "to_method_history_head": string;
+                "to_version_id": string;
+              };
+              "evidence": {
+                "kind": "ak.did.binding_evidence.v1";
+                "method": string;
+                "document_digest": string;
+                "method_proofs": Array<{
+                  "kind": "webvh_log";
+                  "history_head": string;
+                  "witnesses": Array<{
+                    "witness_did": string;
+                    "controlling_organization_did": string;
+                  }>;
+                  "witness_proofs_digest": string;
+                }>;
+              };
+              "log_entries": Array<Record<string, unknown>>;
+              "witness_records": Array<Record<string, unknown>>;
+            } | {
+              "evidence_kind": "did_web_document";
+              "boundary": {
+                "from_method_history_head": string;
+                "from_version_id": string;
+                "to_method_history_head": string;
+                "to_version_id": string;
+              };
+              "evidence": {
+                "kind": "ak.did.binding_evidence.v1";
+                "method": string;
+                "document_digest": string;
+                "method_proofs": Array<{
+                  "kind": "webvh_log";
+                  "history_head": string;
+                  "witnesses": Array<{
+                    "witness_did": string;
+                    "controlling_organization_did": string;
+                  }>;
+                  "witness_proofs_digest": string;
+                }>;
+              };
+            } | {
+              "evidence_kind": "did_key_expansion";
+              "boundary": {
+                "from_method_history_head": string;
+                "from_version_id": string;
+                "to_method_history_head": string;
+                "to_version_id": string;
+              };
+              "evidence": {
+                "kind": "ak.did.binding_evidence.v1";
+                "method": string;
+                "document_digest": string;
+                "method_proofs": Array<{
+                  "kind": "webvh_log";
+                  "history_head": string;
+                  "witnesses": Array<{
+                    "witness_did": string;
+                    "controlling_organization_did": string;
+                  }>;
+                  "witness_proofs_digest": string;
+                }>;
+              };
+            };
+            "normalized_did_document": {
+              "did": string;
+              "contexts": Array<string | Record<string, unknown>>;
+              "controller_dids": string[];
+              "also_known_as": string[];
+              "verification_methods": Array<{
+                "verification_method": string;
+                "controller_did": string;
+                "verification_method_suite": string;
+                "public_key_material": Record<string, unknown>;
+                "extensions": Array<{
+                  "name": string;
+                  "value": unknown;
+                }>;
+              }>;
+              "authentication": Array<{
+                "verification_method": string;
+              }>;
+              "assertion_methods": Array<{
+                "verification_method": string;
+              }>;
+              "key_agreements": Array<{
+                "verification_method": string;
+              }>;
+              "capability_invocations": Array<{
+                "verification_method": string;
+              }>;
+              "capability_delegations": Array<{
+                "verification_method": string;
+              }>;
+              "services": Array<{
+                "uri": string;
+                "protocol_names": string[];
+                "endpoint": unknown;
+                "extensions": Array<{
+                  "name": string;
+                  "value": unknown;
+                }>;
+              }>;
+              "metadata": {
+                "primary_handle"?: string;
+              };
+              "extensions": Array<{
+                "name": string;
+                "value": unknown;
+              }>;
+            };
+          };
+        } | {
+          "resolution_url": string;
+        };
+      }>;
+    };
   };
   "introduction_evidence": {
     "kind": "locator_ref";
@@ -1492,33 +1955,257 @@ export type SelfInviteDispatchRequestBody = {
       };
       "service_resolution": {
         "inline": {
-          "record": {
-            "service_id": string;
-            "service_kind": string;
-            "did": string;
-            "method_history_head": string;
-            "version_id": string;
-            "resolution_event_ref": string;
-            "record_sequence": number;
-            "previous_record_digest": string | null;
-            "current_record_url": string;
-            "base_url": string;
-            "describe_digest": string;
-            "issued_at": string;
-            "refresh_after": string;
-            "expires_at": string;
+          "service_id": string;
+          "service_kind": string;
+          "method_history_evidence": {
+            "evidence_kind": "webvh_log";
+            "boundary": {
+              "from_method_history_head": string;
+              "from_version_id": string;
+              "to_method_history_head": string;
+              "to_version_id": string;
+            };
+            "evidence": {
+              "kind": "ak.did.binding_evidence.v1";
+              "method": string;
+              "document_digest": string;
+              "method_proofs": Array<{
+                "kind": "webvh_log";
+                "history_head": string;
+                "witnesses": Array<{
+                  "witness_did": string;
+                  "controlling_organization_did": string;
+                }>;
+                "witness_proofs_digest": string;
+              }>;
+            };
+            "log_entries": Array<Record<string, unknown>>;
+            "witness_records": Array<Record<string, unknown>>;
+          } | {
+            "evidence_kind": "did_web_document";
+            "boundary": {
+              "from_method_history_head": string;
+              "from_version_id": string;
+              "to_method_history_head": string;
+              "to_version_id": string;
+            };
+            "evidence": {
+              "kind": "ak.did.binding_evidence.v1";
+              "method": string;
+              "document_digest": string;
+              "method_proofs": Array<{
+                "kind": "webvh_log";
+                "history_head": string;
+                "witnesses": Array<{
+                  "witness_did": string;
+                  "controlling_organization_did": string;
+                }>;
+                "witness_proofs_digest": string;
+              }>;
+            };
+          } | {
+            "evidence_kind": "did_key_expansion";
+            "boundary": {
+              "from_method_history_head": string;
+              "from_version_id": string;
+              "to_method_history_head": string;
+              "to_version_id": string;
+            };
+            "evidence": {
+              "kind": "ak.did.binding_evidence.v1";
+              "method": string;
+              "document_digest": string;
+              "method_proofs": Array<{
+                "kind": "webvh_log";
+                "history_head": string;
+                "witnesses": Array<{
+                  "witness_did": string;
+                  "controlling_organization_did": string;
+                }>;
+                "witness_proofs_digest": string;
+              }>;
+            };
           };
-          "proof": {
-            "verification_method": string;
-            "created_at": string;
-            "jws": string;
+          "normalized_did_document": {
+            "did": string;
+            "contexts": Array<string | Record<string, unknown>>;
+            "controller_dids": string[];
+            "also_known_as": string[];
+            "verification_methods": Array<{
+              "verification_method": string;
+              "controller_did": string;
+              "verification_method_suite": string;
+              "public_key_material": Record<string, unknown>;
+              "extensions": Array<{
+                "name": string;
+                "value": unknown;
+              }>;
+            }>;
+            "authentication": Array<{
+              "verification_method": string;
+            }>;
+            "assertion_methods": Array<{
+              "verification_method": string;
+            }>;
+            "key_agreements": Array<{
+              "verification_method": string;
+            }>;
+            "capability_invocations": Array<{
+              "verification_method": string;
+            }>;
+            "capability_delegations": Array<{
+              "verification_method": string;
+            }>;
+            "services": Array<{
+              "uri": string;
+              "protocol_names": string[];
+              "endpoint": unknown;
+              "extensions": Array<{
+                "name": string;
+                "value": unknown;
+              }>;
+            }>;
+            "metadata": {
+              "primary_handle"?: string;
+            };
+            "extensions": Array<{
+              "name": string;
+              "value": unknown;
+            }>;
           };
         };
       } | {
-        "current_record_url": string;
-        "pinned_record_digest"?: string;
+        "resolution_url": string;
       };
-      "route_assistance"?: unknown;
+      "route_assistance"?: {
+        "mirror_hints": Array<{
+          "mirror_id": string;
+          "service_resolution": {
+            "inline": {
+              "service_id": string;
+              "service_kind": string;
+              "method_history_evidence": {
+                "evidence_kind": "webvh_log";
+                "boundary": {
+                  "from_method_history_head": string;
+                  "from_version_id": string;
+                  "to_method_history_head": string;
+                  "to_version_id": string;
+                };
+                "evidence": {
+                  "kind": "ak.did.binding_evidence.v1";
+                  "method": string;
+                  "document_digest": string;
+                  "method_proofs": Array<{
+                    "kind": "webvh_log";
+                    "history_head": string;
+                    "witnesses": Array<{
+                      "witness_did": string;
+                      "controlling_organization_did": string;
+                    }>;
+                    "witness_proofs_digest": string;
+                  }>;
+                };
+                "log_entries": Array<Record<string, unknown>>;
+                "witness_records": Array<Record<string, unknown>>;
+              } | {
+                "evidence_kind": "did_web_document";
+                "boundary": {
+                  "from_method_history_head": string;
+                  "from_version_id": string;
+                  "to_method_history_head": string;
+                  "to_version_id": string;
+                };
+                "evidence": {
+                  "kind": "ak.did.binding_evidence.v1";
+                  "method": string;
+                  "document_digest": string;
+                  "method_proofs": Array<{
+                    "kind": "webvh_log";
+                    "history_head": string;
+                    "witnesses": Array<{
+                      "witness_did": string;
+                      "controlling_organization_did": string;
+                    }>;
+                    "witness_proofs_digest": string;
+                  }>;
+                };
+              } | {
+                "evidence_kind": "did_key_expansion";
+                "boundary": {
+                  "from_method_history_head": string;
+                  "from_version_id": string;
+                  "to_method_history_head": string;
+                  "to_version_id": string;
+                };
+                "evidence": {
+                  "kind": "ak.did.binding_evidence.v1";
+                  "method": string;
+                  "document_digest": string;
+                  "method_proofs": Array<{
+                    "kind": "webvh_log";
+                    "history_head": string;
+                    "witnesses": Array<{
+                      "witness_did": string;
+                      "controlling_organization_did": string;
+                    }>;
+                    "witness_proofs_digest": string;
+                  }>;
+                };
+              };
+              "normalized_did_document": {
+                "did": string;
+                "contexts": Array<string | Record<string, unknown>>;
+                "controller_dids": string[];
+                "also_known_as": string[];
+                "verification_methods": Array<{
+                  "verification_method": string;
+                  "controller_did": string;
+                  "verification_method_suite": string;
+                  "public_key_material": Record<string, unknown>;
+                  "extensions": Array<{
+                    "name": string;
+                    "value": unknown;
+                  }>;
+                }>;
+                "authentication": Array<{
+                  "verification_method": string;
+                }>;
+                "assertion_methods": Array<{
+                  "verification_method": string;
+                }>;
+                "key_agreements": Array<{
+                  "verification_method": string;
+                }>;
+                "capability_invocations": Array<{
+                  "verification_method": string;
+                }>;
+                "capability_delegations": Array<{
+                  "verification_method": string;
+                }>;
+                "services": Array<{
+                  "uri": string;
+                  "protocol_names": string[];
+                  "endpoint": unknown;
+                  "extensions": Array<{
+                    "name": string;
+                    "value": unknown;
+                  }>;
+                }>;
+                "metadata": {
+                  "primary_handle"?: string;
+                };
+                "extensions": Array<{
+                  "name": string;
+                  "value": unknown;
+                }>;
+              };
+            };
+          } | {
+            "resolution_url": string;
+          };
+        }>;
+      };
       "issued_at": string;
       "expires_at": string;
       "locator_ref_digest": string;

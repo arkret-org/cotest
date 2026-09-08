@@ -522,44 +522,11 @@ test.describe("applet bridge", () => {
         [ghostCreation.managed_actor_bundle.pcr_genesis_event],
       );
       const leaseText = await leaseResponse.text();
-      expect([200, 201], leaseText).toContain(leaseResponse.status());
-      const [pcrLease] = authorizationLeasesFromIssueOutcome(
-        leaseText,
-        1,
-        "ordinary Applet PCR injection negative",
-      );
-      const ordinaryEventsUrl = `${solandBaseUrl()}/_arkret/self/events`;
-      const ordinaryPcrInjection = await request.post(ordinaryEventsUrl, {
-        headers: {
-          ...authHeaders(aliceToken, "POST", ordinaryEventsUrl),
-          "content-type": "application/json",
-        },
-        data: canonicalJson({
-          event: ghostCreation.managed_actor_bundle.pcr_genesis_event,
-          authorization_lease: pcrLease,
-        }),
-      });
-      const ordinaryPcrBody = await ordinaryPcrInjection.json();
-      expect(ordinaryPcrInjection.status()).toBe(403);
-      expect(wireErrCode(ordinaryPcrBody)).toBe(
-        "applet_managed_pcr_genesis_requires_closed_aggregate",
-      );
-
-      const peerPcrInjection = await rawPushFederationEvents(
-        request,
-        [ghostCreation.managed_actor_bundle.pcr_genesis_event],
-        {
-          origin: solandServiceId(),
-          destination: solandServiceId(),
-          realmId: String(ghostCreation.managed_actor_bundle.pcr_genesis_event.realm_id),
-          idempotencyKey: `applet-pcr-peer-negative-${stamp}`,
-        },
-      );
-      const peerPcrBody = await peerPcrInjection.json();
-      expect(peerPcrInjection.status()).toBe(403);
-      expect(wireErrCode(peerPcrBody)).toBe(
-        "applet_managed_pcr_genesis_requires_closed_aggregate",
-      );
+      // Managed PCR founding is one closed aggregate. A standalone create
+      // cannot obtain an ordinary lease or become a federatable accepted Event.
+      expect(leaseResponse.status(), leaseText).toBe(422);
+      expect(wireErrCode(JSON.parse(leaseText))).toBe("schema_violation");
+      expect(JSON.parse(leaseText).detail).toContain("not_ordinary_realm_bootstrap");
       const provision = await request.post(`${registryBase}/external-event`, {
         headers: authHeaders(aliceToken),
         data: {
@@ -599,6 +566,7 @@ test.describe("applet bridge", () => {
           authorization_ref: messageGrantRef,
           provision_authorization_ref: provisionGrantRef,
           external_user: externalUser,
+          ghost_creation: ghostCreation,
           seal_basis: await readRealmSealBasis(request, aliceToken, realmId),
           payload: { kind: "message", text },
         },
@@ -731,6 +699,7 @@ test.describe("applet bridge", () => {
           authorization_ref: messageGrantRef,
           provision_authorization_ref: provisionGrantRef,
           external_user: externalUser,
+          ghost_creation: ghostCreation,
           seal_basis: await readRealmSealBasis(request, aliceToken, realmId),
           payload: { kind: "message", text: afterRevokeText },
         },
@@ -1334,7 +1303,6 @@ test.describe("applet inbound transaction push — per-delivery source signature
         ? {
             seal_ref: args.sealRef,
             auth_context: {
-              actor_id: serviceActorId(sourceServiceId),
               key_id: authKeyId,
               key_epoch: 0,
             },
@@ -1425,6 +1393,10 @@ test.describe("applet inbound transaction push — per-delivery source signature
       `inbound-install-${stamp}`,
     );
     await addRealmMemberApi(request, token, realmId, registration.bot_actor_id);
+    const strandId = await resolveDefaultStrandId(request, token, realmId);
+    // Freeze the DataEvent basis only after installation grants, membership,
+    // and the target Strand have reached accepted control finality.
+    await waitForRealmControlIdleApi(request, token, realmId);
     const sealBasis = await readRealmSealBasis(request, token, realmId);
     const sealRef = Array.isArray(sealBasis.leaves)
       ? sealBasis.leaves[0]
@@ -1445,7 +1417,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
         registration,
         "ak.message.create",
       ),
-      strandId: await resolveDefaultStrandId(request, token, realmId),
+      strandId,
       sealRef: String(sealRef),
       verificationMethod: String(
         (signed.applet_package.webhook_auth as Record<string, unknown>).key_ref,
@@ -1474,10 +1446,10 @@ test.describe("applet inbound transaction push — per-delivery source signature
     const responseText = await resp.text();
     expect(resp.status(), responseText).toBe(200);
     const outcome = JSON.parse(responseText) as {
-      ok?: boolean;
+      status: "accepted" | "partial" | "rejected";
       rejections?: unknown[];
     };
-    expect(outcome.ok).toBe(true);
+    expect(outcome.status, JSON.stringify(outcome.rejections ?? [])).toBe("accepted");
     expect(outcome.rejections ?? []).toEqual([]);
   });
 
@@ -1699,7 +1671,7 @@ async function signPackage(
       ...data,
       actor_namespace_pattern:
         data.actor_namespace_pattern ??
-        `did:webvh:*:*:ghost-${ghostNamespaceToken}:*`,
+        `did:webvh:*:*:webvh:ghost-${ghostNamespaceToken}:*`,
       bot_actor_id: accountActorId(projectDidToCoreId(botBuilt.did)),
       service_id: projectDidToCoreId(built.did),
       service_id_document: built.didDocument,

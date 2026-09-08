@@ -6,7 +6,7 @@ This static inventory does not claim runtime verification; use an Arkret Joint P
 | Journey | Implemented | Promised | Coverage | Blocking fixme |
 |---|---:|---:|---:|---:|
 | UJ-A - First login and multi-device recovery | 35 | 35 | 100.0% | 0 |
-| UJ-B - Workspace creation, invites, and archive visibility | 19 | 19 | 100.0% | 0 |
+| UJ-B - Workspace creation, invites, and archive visibility | 17 | 17 | 100.0% | 0 |
 | UJ-C - Daily messaging, edits, reactions, receipts, and mentions | 41 | 41 | 100.0% | 0 |
 | UJ-D - Encrypted realm lifecycle and cross-device decrypt | 7 | 7 | 100.0% | 0 |
 | UJ-E - Federation and cross-domain collaboration | 20 | 20 | 100.0% | 0 |
@@ -34,7 +34,7 @@ This static inventory does not claim runtime verification; use an Arkret Joint P
 
 | spec | mapping | implemented | promised | blocking |
 |---|---|---:|---:|---:|
-| invites/invite-addressing | domain-fallback | 8 | 8 | 0 |
+| invites/invite-addressing | domain-fallback | 6 | 6 | 0 |
 | invites/third-party | domain-fallback | 6 | 6 | 0 |
 | spaces/admin-section-route | domain-fallback | 1 | 1 | 0 |
 | spaces/moderation-ban | domain-fallback | 3 | 3 | 0 |

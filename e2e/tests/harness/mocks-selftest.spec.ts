@@ -22,7 +22,7 @@ import {
 } from "../../helpers/env";
 import { createDidHostClient } from "../../helpers/did-host";
 import { createMimiFacadeClient } from "../../helpers/mimi-facade";
-import { projectDidToCoreId } from "../../helpers/soland-api";
+import { accountActorId, projectDidToCoreId } from "../../helpers/soland-api";
 
 function b64url(buf: Buffer): string {
   return buf.toString("base64url");
@@ -318,9 +318,11 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     test.skip(!baseUrl, "mock-applet-registry not started for this run");
 
     const namespace = `selftest-${Date.now()}`;
+    const botActorId = accountActorId(`ak:did_core:web:bot-${namespace}.invalid`);
     const signed = await request.post(`${baseUrl}/sign-package`, {
       data: {
         namespace,
+        bot_actor_id: botActorId,
         requested_scopes: ["ak.message.create", "ak.applet.ghost.provision"],
       },
     });
@@ -328,11 +330,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     const body = await signed.json();
     expect(body.package_digest).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(body.applet_package.schema).toBe("ak.schema.applet_package.v1");
-    expect(
-      body.applet_package.bot_actor_id.startsWith(
-        `ak:did_core:web:bot-${namespace}`,
-      ),
-    ).toBe(true);
+    expect(body.applet_package.bot_actor_id).toEqual(botActorId);
     expect(body.applet_package.requested_scopes).toContain("ak.message.create");
     expect(Array.isArray(body.applet_package.endpoint_policy?.endpoints)).toBe(true);
     expect(body.applet_package.endpoint_policy.endpoints).toContainEqual({

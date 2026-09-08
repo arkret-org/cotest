@@ -517,7 +517,7 @@ pub fn run_resolve_target_common_fields_vector() -> Result<()> {
                 "realm_id": format!("ak:realm:{R}"),
                 "service_id": "ak:did_core:web:relay.example",
                 "service_resolution": {
-                    "current_record_url": "https://relay.example/_arkret/open/services/ak%3Adid_core%3Aweb%3Arelay.example/resolution"
+                    "resolution_url": "https://relay.example/_arkret/open/services/ak%3Adid_core%3Aweb%3Arelay.example/resolution"
                 },
                 "service_kind": "station",
                 "role": "joined_member_station",
@@ -538,7 +538,7 @@ pub fn run_resolve_target_common_fields_vector() -> Result<()> {
                 "realm_id": format!("ak:realm:{R}"),
                 "service_id": "ak:did_core:web:teabay.example",
                 "service_resolution": {
-                    "current_record_url": "https://teabay.example/_arkret/open/services/ak%3Adid_core%3Aweb%3Ateabay.example/resolution"
+                    "resolution_url": "https://teabay.example/_arkret/open/services/ak%3Adid_core%3Aweb%3Ateabay.example/resolution"
                 },
                 "service_kind": "station",
                 "role": "joined_member_station",

@@ -21,6 +21,7 @@ import {
   accountActorId,
   addRealmMemberApi,
   accountSubscribeFramesApi,
+  canonicalJson,
   createRealmApi,
   eventPrincipalId,
   grantCapabilityEventApi,
@@ -528,22 +529,24 @@ test.describe("chat advanced", () => {
     );
     const alicePage = aliceFlow.page;
     try {
+      const defaultStrandId = await resolveDefaultStrandId(request, aliceToken, realmId);
       await gotoChat(alicePage, realmId);
       await expect(
         alicePage.page.getByTestId("channel-item").first(),
-      ).toContainText(/Discussion|Default Strand/);
+      ).toContainText(defaultStrandId);
     } finally {
       await alicePage.close();
     }
   });
 
-  // Direct `/chat/:realm_id` channel hydration is covered live above. The
-  // remaining browser-driven chat workflows stay fixme until their owning
-  // server/client projections are closed.
   test("reactions converge (OR-Set) and replies render with reply indicator", async ({
     browser,
     request,
   }, testInfo) => {
+    // This chain includes three real logins, two invitations and four sealed
+    // grants before any reaction is authored. Keep the individual convergence
+    // assertions bounded while allowing the complete setup and UI flow to run.
+    test.setTimeout(360_000);
     const stamp = Date.now();
     const [aliceFlow, bobFlow, carolFlow] = await Promise.all([
       openDpopUserPage(browser, request, `s14-alice-${stamp}`),
@@ -975,7 +978,7 @@ test.describe("chat advanced", () => {
       ]);
 
       const bobPresenceRow = alicePage.page.locator(
-        `[data-testid="presence-row"][data-actor-id="${cssStringEscape(bob.id)}"]`,
+        `[data-testid="presence-row"][data-actor-id=${JSON.stringify(canonicalJson(accountActorId(bob.id)))}]`,
       );
       await expect(bobPresenceRow).toContainText(/online/i, { timeout: 30_000 });
       await stepShot(alicePage.page, testInfo, "presence-online");

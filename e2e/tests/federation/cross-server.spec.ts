@@ -30,6 +30,7 @@ import {
   solandServiceId,
 } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
+import type { InviteDeliveryRequestBody } from "../../helpers/generated/spec-wire-objects";
 import {
   acceptInviteApi,
   accountActorId,
@@ -38,6 +39,7 @@ import {
   canonicalJson,
   queryPeerEventsApi,
   createRealmApi,
+  dispatchSelfInviteApi,
   grantServiceCapabilityApi,
   listInvitesApi,
   makeFederationEvent,
@@ -48,6 +50,8 @@ import {
   readAcceptedSeal,
   revokeCapabilityApi,
   sendMessageApi,
+  selfInviteDispatchBody,
+  sha256CanonicalJson,
   signedEventEnvelope,
   submitSignedEventApi,
   typedId,
@@ -424,33 +428,32 @@ test.describe("cross-server federation", () => {
     const leaves = frontierBody.frontier?.seal_basis?.leaves as
       string[] | undefined;
     expect(leaves).toEqual([expect.stringMatching(/^ak:seal:/)]);
-    const acceptedSeal = await readAcceptedSeal(
+    await readAcceptedSeal(
       request,
       aliceToken,
       realmId,
       leaves![0],
       "server1",
     );
-    const inviteId = typedId("invite");
+    const locatorToken = await issueInviteLocatorToken(request, bobToken, "server2");
+    const locatorResponse = await request.post(
+      `${solandBaseUrl("server2")}/_arkret/open/invite-locators/resolve`,
+      { data: { locator_token: locatorToken } },
+    );
+    expect(locatorResponse.status(), await locatorResponse.text()).toBe(200);
+    type LocatorEvidence = Extract<InviteDeliveryRequestBody["introduction_evidence"], { kind: "locator_ref" }>;
+    const locator = await locatorResponse.json() as LocatorEvidence["principal_locator"];
+    const evidence: LocatorEvidence = { kind: "locator_ref", principal_locator: locator };
     const inviteEvent = makeFederationEvent({
       realmId,
       kind: "ak.invite.create",
       actorId: alice.id,
       sealBasis: {
         leaves: [leaves![0]],
-        control_event_set_root: String(acceptedSeal.control_event_set_root),
-        state_root: String(acceptedSeal.state_root),
       },
       payload: {
-        invite_id: inviteId,
-        invitee_id: bob.id,
-        invite_delivery_target: {
-          account_id: {
-            principal_id: bob.id,
-            station_id: solandServiceId("server2"),
-          },
-        },
-        introduction_evidence_digest: `sha256:${"ab".repeat(32)}`,
+        invitee_account_id: locator.account_id,
+        introduction_evidence_digest: `sha256:${sha256CanonicalJson(evidence)}`,
         expires_at: new Date(Date.now() + 86_400_000).toISOString(),
       },
     });
@@ -464,6 +467,16 @@ test.describe("cross-server federation", () => {
       server: "server1",
       context: "submit server1 invite for federated Seal-closure delivery",
     });
+    const delivery = await dispatchSelfInviteApi(request, aliceToken, selfInviteDispatchBody({
+      eventId: String(inviteEvent.event_id),
+      inviteAddress: {
+        account_id: locator.account_id,
+        service_resolution: locator.service_resolution,
+        ...(locator.route_assistance ? { route_assistance: locator.route_assistance } : {}),
+      },
+      evidence,
+    }), { server: "server1" });
+    expect(delivery.status).toBe("accepted");
 
     await expect
       .poll(
@@ -525,7 +538,10 @@ test.describe("cross-server federation", () => {
       { headers: authHeaders(bobToken) },
     );
     expect(server2Space.ok()).toBeTruthy();
-    expect((await server2Space.json()).member_ids ?? []).toContain(bob.id);
+    const realm = await server2Space.json() as { member_roster_entries?: Array<{ actor_id: unknown; membership: string }> };
+    expect(realm.member_roster_entries?.some((member) =>
+      member.membership === "join" && accountActorRoutesThrough(member.actor_id, solandServiceId("server2"), bob.id),
+    )).toBe(true);
   });
 
   test("server1 invite UI event fans out to server2 and standard peer Events propagates server2 acceptance back to server1", async ({

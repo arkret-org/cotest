@@ -128,12 +128,11 @@ pub(crate) async fn prepare_explicit_invite(
         .await?;
     let event_id = crate::harness::submitted_event_id(&accepted)?;
     let service_id = DidCoreId::new(inviter.service_id().to_owned())?;
-    let service_resolution = ServiceResolutionCarrier::CurrentRecordUrl {
-        current_record_url: format!(
+    let service_resolution = ServiceResolutionCarrier::ResolutionUrl {
+        resolution_url: format!(
             "https://cotest.invalid{}",
-            arkret_models_identity::canonical_service_current_record_path(&service_id)
+            arkret_models_identity::canonical_service_resolution_path(&service_id)
         ),
-        pinned_record_digest: None,
     };
     let request = SelfInviteDispatchRequestBody {
         schema: arkret_wire::SchemaId::INVITE_DELIVERY_REQUEST_V1.to_owned(),

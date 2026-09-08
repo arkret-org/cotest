@@ -149,10 +149,9 @@ test.describe("contact graph federation (server1/server2)", () => {
     expect(aliceRow?.next_prepare_input).toBeTruthy();
   });
 
-  // S3-fed: cross-PS creation begins with an immutable participant-authorized
-  // remote KeyPackage claim draft. The server must not claim a package or
-  // materialize a one-sided Realm before the client signs this draft.
-  test("S3-fed cross-PS direct conversation returns remote KeyPackage claim authoring", async ({
+  // S3-fed: a normal Contact round selects its responder as founder. Resolving
+  // either side is read-only and cannot allocate a Realm or replace that founder.
+  test("S3-fed cross-PS resolver gives only the responder founding authority", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -207,39 +206,52 @@ test.describe("contact graph federation (server1/server2)", () => {
       `${solandBaseUrl("server1")}/_arkret/self/direct-conversations/resolve`,
       {
         headers: authHeaders(aliceToken),
-        data: { peer: bob.id, create: true },
+        data: {
+          peer: {
+            kind: "human",
+            account_id: { principal_id: bob.id, station_id: solandServiceId("server2") },
+          },
+        },
       },
     );
     expect(resolved.ok()).toBeTruthy();
     const body = await resolved.json();
-    expect(body.state).toBe("authoring_required");
-    expect(body.created).toBe(false);
-    expect(body.authoring_kind).toBe("remote_keypackage_claim");
-    expect(body.realm_id).toMatch(/^ak:realm:/);
-    expect(body.main_strand_id).toMatch(/^ak:strand:/);
-    expect(body.materialization_draft).toBeUndefined();
-    const draft = body.claim_authorization_draft;
-    expect(draft?.request?.requester).toBe(alice.id);
-    expect(draft?.request?.target_principal_id).toBe(bob.id);
-    expect(draft?.request?.intended_realm_id).toBe(body.realm_id);
-    expect(draft?.request?.strand_id).toBe(body.main_strand_id);
-    expect(draft?.request?.claim_purpose).toBe("direct_conversation");
-    expect(draft?.transport_binding?.source_id).toBe(
-      solandServiceId("server1"),
+    expect(body.state).toBe("awaiting_founder");
+    expect(body.coordinates).toBeUndefined();
+    expect(body.next_founding_input).toBeUndefined();
+
+    const founderRequest = {
+      headers: authHeaders(bobToken),
+      data: {
+        peer: {
+          kind: "human",
+          account_id: { principal_id: alice.id, station_id: solandServiceId("server1") },
+        },
+      },
+    };
+    const founderResolved = await request.post(
+      `${solandBaseUrl("server2")}/_arkret/self/direct-conversations/resolve`,
+      founderRequest,
     );
-    expect(draft?.transport_binding?.destination_id).toBe(
-      bobLocator.recipient_id,
-    );
+    expect(founderResolved.ok()).toBeTruthy();
+    const founderBody = await founderResolved.json();
+    expect(founderBody.state).toBe("creation_required");
+    expect(founderBody.coordinates).toBeUndefined();
+    const evidence = founderBody.next_founding_input.founding_authority_evidence;
+    expect(evidence.kind).toBe("human");
+    expect(evidence.contact_round_evidence.current_proofs).toHaveLength(2);
+    expect(evidence.contact_round_evidence.normal_response_receipt).toBeTruthy();
 
     const retry = await request.post(
-      `${solandBaseUrl("server1")}/_arkret/self/direct-conversations/resolve`,
-      {
-        headers: authHeaders(aliceToken),
-        data: { peer: bob.id, create: true },
-      },
+      `${solandBaseUrl("server2")}/_arkret/self/direct-conversations/resolve`,
+      founderRequest,
     );
     expect(retry.ok()).toBeTruthy();
-    expect((await retry.json()).claim_authorization_draft).toEqual(draft);
+    const retried = await retry.json();
+    expect(retried.state).toBe("creation_required");
+    expect(retried.coordinates).toBeUndefined();
+    expect(retried.next_founding_input.founding_authority_evidence.contact_round_evidence.contact_round_id)
+      .toBe(evidence.contact_round_evidence.contact_round_id);
   });
 
   test("S3-live cross-PS Inkson materializes one MLS Realm and exchanges encrypted messages", async ({

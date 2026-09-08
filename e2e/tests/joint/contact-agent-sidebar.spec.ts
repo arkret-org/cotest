@@ -6,6 +6,7 @@ import {
 } from "../../helpers/contact-api";
 import { solandBaseUrl } from "../../helpers/env";
 import { test as jointTest } from "../../helpers/joint-fixture";
+import { publicRequestFailure } from "../../helpers/secret-safe";
 import { accountActorId, canonicalJson } from "../../helpers/soland-api";
 import {
   selfPathHeadersForDpopSession,
@@ -117,7 +118,9 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
             await route.continue();
             return;
           }
-          const upstream = await route.fetch();
+          const upstream = await route.fetch().catch((error: unknown) => {
+            throw publicRequestFailure(error, "GET", "ak.self.contact.read.list.v1");
+          });
           const body = (await upstream.json()) as {
             contacts?: Array<Record<string, unknown>>;
           };
@@ -141,39 +144,44 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
           });
         },
       );
-      await bobPage.reload();
-      await bobPage.getByTestId("realm-sidebar-tab-direct").click();
-      const bobGroups = bobPage.locator(".contact-sidebar-group");
-      await expect(bobGroups.first()).toHaveAttribute(
-        "data-testid",
-        "contact-sidebar-self-group",
-      );
-      const aliceContact = bobPage.getByTestId("direct-conversation-row").first();
-      await expect(aliceContact).toBeVisible({ timeout: 30_000 });
-      await expect(aliceContact).toHaveAttribute(
-        "data-peer",
-        canonicalJson(accountActorId(jointRealm.alice.id)),
-      );
-      const aliceGroup = bobPage
-        .locator(".contact-sidebar-group")
-        .filter({ has: aliceContact });
-      const toggle = aliceGroup.getByTestId("contact-sidebar-agent-toggle");
-      await expect(toggle).toContainText("Agents 1");
-      await toggle.click();
-      const allowedAgentRow = aliceGroup
-        .getByTestId("contact-sidebar-agent-row")
-        .filter({ hasText: allowedAgent.display_name });
-      await expect(allowedAgentRow).toBeVisible();
-      await expect(allowedAgentRow).toHaveAttribute(
-        "data-controller",
-        canonicalJson(jointRealm.aliceSession.accountId),
-      );
-      await allowedAgentRow.click();
-      await expect
-        .poll(() => new URL(bobPage.url()).pathname)
-        .toBe(
-          `/direct/${allowedAgent.direct_conversation.realm_id}/${allowedAgent.direct_conversation.main_strand_id}`,
+      try {
+        await bobPage.reload();
+        await bobPage.getByTestId("realm-sidebar-tab-direct").click();
+        const bobGroups = bobPage.locator(".contact-sidebar-group");
+        await expect(bobGroups.first()).toHaveAttribute(
+          "data-testid",
+          "contact-sidebar-self-group",
         );
+        const aliceContact = bobPage.getByTestId("direct-conversation-row").first();
+        await expect(aliceContact).toBeVisible({ timeout: 30_000 });
+        await expect(aliceContact).toHaveAttribute(
+          "data-peer",
+          canonicalJson(accountActorId(jointRealm.alice.id)),
+        );
+        const aliceGroup = bobPage
+          .locator(".contact-sidebar-group")
+          .filter({ has: aliceContact });
+        const toggle = aliceGroup.getByTestId("contact-sidebar-agent-toggle");
+        await expect(toggle).toContainText("Agents 1");
+        await toggle.click();
+        const allowedAgentRow = aliceGroup
+          .getByTestId("contact-sidebar-agent-row")
+          .filter({ hasText: allowedAgent.display_name });
+        await expect(allowedAgentRow).toBeVisible();
+        await expect(allowedAgentRow).toHaveAttribute(
+          "data-controller",
+          canonicalJson(jointRealm.aliceSession.accountId),
+        );
+        await allowedAgentRow.click();
+        await expect
+          .poll(() => new URL(bobPage.url()).pathname)
+          .toBe(
+            `/direct/${allowedAgent.direct_conversation.realm_id}/${allowedAgent.direct_conversation.main_strand_id}`,
+          );
+        } finally {
+        // Drain intercepted requests before fixture teardown closes the context.
+        await bobPage.unrouteAll({ behavior: "wait" });
+      }
     },
   );
 });

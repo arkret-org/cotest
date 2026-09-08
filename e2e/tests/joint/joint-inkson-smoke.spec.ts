@@ -584,7 +584,7 @@ async function submitSignedEvent(
       ...selfPathHeadersForDpopSession(session, "POST", url),
       "content-type": "application/json",
     },
-    data: canonicalJson(envelope),
+    data: canonicalJson({ event: envelope }),
   });
   const text = await response.text();
   expect(

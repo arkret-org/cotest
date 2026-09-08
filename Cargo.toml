@@ -76,7 +76,7 @@ fs2 = "0.4.3"
 # a headless Garth client host is composed from. Without it cotest can only
 # reach Garth's pure builders, which is how the client runtime ended up with
 # inkson's browser as its only consumer.
-garth = { path = "../garth", features = ["native"] }
+garth = { path = "../garth", features = ["native", "route-material-test-support"] }
 hex = "0.4.3"
 hkdf = "0.13.0"
 hmac = "0.13.0"
