@@ -882,6 +882,7 @@
         "session_injection"
       ],
       "protocol_object_producers": [
+        "cotest_wire_oracle",
         "inkson_product_client",
         "raw_http_fixture"
       ],

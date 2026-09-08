@@ -147,6 +147,9 @@ def main() -> int:
         stations_by_name.append((name, trailing_slash(endpoint)))
     if args.owning_station not in {name for name, _ in stations_by_name}:
         raise SystemExit("FATAL: owning Station is not present in --station values")
+    owning_station_url = next(
+        endpoint for name, endpoint in stations_by_name if name == args.owning_station
+    )
     inkson_urls = list(args.inkson_base_url)
     if args.inkson_server2_base_url:
         inkson_urls.append(args.inkson_server2_base_url)
@@ -258,6 +261,10 @@ def main() -> int:
         f"  owning_station: {args.owning_station}\n"
         "  stations:\n"
         f"{stations}"
+        "  identity_registry:\n"
+        "    resolver: "
+        f"{yaml_string(owning_station_url + '_arkret/root/identity/resolve')}\n"
+        "    proof_required_for_pairwise: false\n"
         "  deployment_profile: organization\n"
         "  principal_method: \"did:webvh\"\n"
         "  trust_domain: ak:trust_domain:local.host\n"

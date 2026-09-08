@@ -17,6 +17,7 @@ import {
   test as jointTest,
   type JointRealmFixture,
 } from "../../helpers/joint-fixture";
+import { canonicalJson } from "../../helpers/soland-api";
 import {
   approvePairingLinkOnAuthorizedDevice,
   createDpopUserSessionForAccount,
@@ -107,15 +108,19 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
       const inkson = jointRealm.alicePage.page;
       const approvalModal = inkson.getByTestId("agent-runtime-approval-modal");
       const agentSlug = `savfox-live-${Date.now().toString(36)}`;
+      const lifecycleEvidenceOnly =
+        process.env.COTEST_AGENT_LIFECYCLE_EVIDENCE_ONLY === "1";
 
       // Bob is a real ordinary member of the source Realm. He is deliberately
       // neither a controller nor an Agent and later proves the non-disclosure
       // boundary against a known Sidecar id.
-      await jointRealm.alicePage.inviteFromAdmin(
-        jointRealm.realmId,
-        jointRealm.bob.id,
-      );
-      await jointRealm.bobPage.acceptInvite(jointRealm.realmId);
+      if (!lifecycleEvidenceOnly) {
+        await jointRealm.alicePage.inviteFromAdmin(
+          jointRealm.realmId,
+          jointRealm.bob.id,
+        );
+        await jointRealm.bobPage.acceptInvite(jointRealm.realmId);
+      }
 
       // ── Phase 1: provision the Agent and capture its first pairing handle ──
       await jointRealm.alicePage.gotoSettings();
@@ -128,14 +133,18 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
       await expect(
         inkson.getByTestId("agent-admin-provision-button"),
       ).toBeEnabled();
-      const commitResponsePromise = inkson.waitForResponse((response) => {
-        const outgoing = response.request();
-        return (
-          outgoing.method() === "POST" &&
-          new URL(outgoing.url()).pathname === AGENT_LIST_PATH &&
-          (outgoing.postDataJSON() as { phase?: string }).phase === "commit"
-        );
-      });
+      const commitResponsePromise = inkson.waitForResponse(
+        (response) => {
+          const outgoing = response.request();
+          return (
+            response.status() === 201 &&
+            outgoing.method() === "POST" &&
+            new URL(outgoing.url()).pathname === AGENT_LIST_PATH &&
+            (outgoing.postDataJSON() as { phase?: string }).phase === "commit"
+          );
+        },
+        { timeout: 180_000 },
+      );
       await inkson.getByTestId("agent-admin-provision-button").click();
       const commitResponse = await commitResponsePromise;
       const commitText = await commitResponse.text();
@@ -184,12 +193,17 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         // the whole window: whether or not a poll tick lands inside it, the
         // fallback cannot discover the request, so a prompt that appears here
         // can only have come from the notification projection.
-        const listOutage = await failAgentListQuery(inkson);
-        try {
+        if (lifecycleEvidenceOnly) {
           await startSavfoxPairing(savfox, pairingLink);
           await expect(approvalModal).toBeVisible({ timeout: 120_000 });
-        } finally {
-          await listOutage.restore();
+        } else {
+          const listOutage = await failAgentListQuery(inkson);
+          try {
+            await startSavfoxPairing(savfox, pairingLink);
+            await expect(approvalModal).toBeVisible({ timeout: 120_000 });
+          } finally {
+            await listOutage.restore();
+          }
         }
 
         const inksonCode = (
@@ -208,7 +222,9 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
 
         // ── Phase 3: approve and record the first authorized binding ──
         await inkson.getByTestId("agent-runtime-approval-approve").click();
-        await expect(approvalModal).toHaveCount(0, { timeout: 180_000 });
+        await expect(approvalModal).toHaveCount(0, {
+          timeout: 180_000,
+        });
         await expect(
           savfox.getByText("Agent paired and channel saved.", { exact: true }),
         ).toBeVisible({ timeout: 180_000 });
@@ -458,6 +474,93 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         await expect(
           pongMessage.getByTestId("crypto-status-needs-verification"),
         ).toHaveCount(0);
+
+        if (lifecycleEvidenceOnly) {
+          const directConversationUrl = inkson.url();
+          const responseEventId = await eventIdFromMessage(pongMessage);
+          expect(responseEventId).toMatch(/^ak:event:/);
+
+          const openAgentDetails = async () => {
+            await inkson.goto("/settings/agents", {
+              waitUntil: "domcontentloaded",
+            });
+            const row = inkson
+              .getByTestId("agent-admin-row")
+              .filter({ hasText: agentSlug })
+              .first();
+            await expect(row).toBeVisible({ timeout: 120_000 });
+            await row.click();
+          };
+          const assertFrozenHistoricalEvent = async () => {
+            await inkson.goto(directConversationUrl, {
+              waitUntil: "domcontentloaded",
+            });
+            const historicalMessage = inkson
+              .getByTestId("chat-message")
+              .filter({ has: inkson.getByTestId("content-block-text").filter({ hasText: /^pong(?:\r?\n|$)/ }) })
+              .last();
+            await expect(historicalMessage).toBeVisible({ timeout: 180_000 });
+            expect(await eventIdFromMessage(historicalMessage)).toBe(responseEventId);
+            await expect(
+              historicalMessage.getByTestId("member-badge-agent"),
+            ).toBeVisible();
+            await expect(
+              historicalMessage.getByTestId("crypto-status-needs-verification"),
+            ).toHaveCount(0);
+          };
+
+          await openAgentDetails();
+          await inkson.getByTestId("agent-admin-enabled-switch").click();
+          await expect(inkson.getByTestId("agent-admin-last-op")).toContainText(
+            "Paused. Status: paused.",
+            { timeout: 180_000 },
+          );
+          await assertFrozenHistoricalEvent();
+
+          await openAgentDetails();
+          await inkson.getByTestId("agent-admin-enabled-switch").click();
+          await expect(inkson.getByTestId("agent-admin-last-op")).toContainText(
+            "Resumed. Status: active.",
+            { timeout: 180_000 },
+          );
+          await assertFrozenHistoricalEvent();
+
+          await openAgentDetails();
+          await inkson.getByTestId("agent-admin-deactivate-button").click();
+          await inkson
+            .getByTestId("agent-admin-deactivate-confirm-input")
+            .fill("DEACTIVATE");
+          await inkson
+            .getByTestId("agent-admin-deactivate-confirm-button")
+            .click();
+          await expect(inkson.getByTestId("agent-admin-last-op")).toContainText(
+            "Agent deactivated permanently.",
+            { timeout: 180_000 },
+          );
+          await assertFrozenHistoricalEvent();
+
+          await testInfo.attach("agent-lifecycle-evidence-live", {
+            body: Buffer.from(
+              JSON.stringify(
+                {
+                  schema: "cotest.agent_lifecycle_evidence_live.v1",
+                  agent_id: firstPairing.agentId,
+                  response_event_id: responseEventId,
+                  verified_after_lifecycle_states: [
+                    "paused",
+                    "active",
+                    "deactivated",
+                  ],
+                  historical_event_identity_preserved: true,
+                },
+                null,
+                2,
+              ),
+            ),
+            contentType: "application/json",
+          });
+          return;
+        }
 
         // A distinct second device for the same controller is paired before
         // Sidecar creation. It remains on the account home surface while
@@ -1028,14 +1131,18 @@ async function provisionAgent(
   });
   await inkson.getByTestId("agent-admin-create-open-button").click();
   await inkson.getByTestId("agent-admin-provision-agent-slug").fill(agentSlug);
-  const commitResponsePromise = inkson.waitForResponse((response) => {
-    const outgoing = response.request();
-    return (
-      outgoing.method() === "POST" &&
-      new URL(outgoing.url()).pathname === AGENT_LIST_PATH &&
-      (outgoing.postDataJSON() as { phase?: string }).phase === "commit"
-    );
-  });
+  const commitResponsePromise = inkson.waitForResponse(
+    (response) => {
+      const outgoing = response.request();
+      return (
+        response.status() === 201 &&
+        outgoing.method() === "POST" &&
+        new URL(outgoing.url()).pathname === AGENT_LIST_PATH &&
+        (outgoing.postDataJSON() as { phase?: string }).phase === "commit"
+      );
+    },
+    { timeout: 180_000 },
+  );
   await inkson.getByTestId("agent-admin-provision-button").click();
   const response = await commitResponsePromise;
   const text = await response.text();
@@ -1584,11 +1691,12 @@ async function runtimeKeyRequestStatus(
   const response = await request.post(
     `${solandBaseUrl()}${RUNTIME_KEY_REQUEST_STATUS_PATH}`,
     {
-      data: {
+      headers: { "content-type": "application/json" },
+      data: canonicalJson({
         pairing_request_id: pairing.pairingRequestId,
         pairing_code: pairing.pairingCode,
         agent_id: pairing.agentId,
-      },
+      }),
     },
   );
   const text = await response.text();

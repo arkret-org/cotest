@@ -643,12 +643,18 @@ function Start-ManagedSavfoxGateway {
         [Parameter(Mandatory = $true)][string]$WorkingDirectory,
         [Parameter(Mandatory = $true)][string]$LogDirectory,
         [Parameter(Mandatory = $true)][int]$TimeoutSeconds,
-        [Parameter(Mandatory = $true)][System.Collections.IList]$ManagedServices
+        [Parameter(Mandatory = $true)][System.Collections.IList]$ManagedServices,
+        [string]$TrustedCaFile
     )
 
-    $command = (
-        "`$env:SAVFOX_HOME={0}; `$env:RUST_LOG='info'; & {1} gateway --host 127.0.0.1 --port {2} --token {3}"
-    ) -f (Quote-PsLiteral $Probe.Home), (Quote-PsLiteral $Binary), $Probe.Port, (Quote-PsLiteral $Probe.Token)
+    $caPrefix = if ($TrustedCaFile) {
+        "`$env:SSL_CERT_FILE={0}; " -f (Quote-PsLiteral $TrustedCaFile)
+    } else {
+        ""
+    }
+    $command = $caPrefix + ((
+            "`$env:SAVFOX_HOME={0}; `$env:RUST_LOG='info'; & {1} gateway --host 127.0.0.1 --port {2} --token {3}"
+        ) -f (Quote-PsLiteral $Probe.Home), (Quote-PsLiteral $Binary), $Probe.Port, (Quote-PsLiteral $Probe.Token))
     $service = Start-ManagedCommand `
         -Name $Probe.Name `
         -Command $command `
@@ -4069,7 +4075,8 @@ try {
                 -WorkingDirectory $SavfoxRoot `
                 -LogDirectory $serviceLogDir `
                 -TimeoutSeconds $StartupTimeoutSeconds `
-                -ManagedServices $managedServices | Out-Null
+                -ManagedServices $managedServices `
+                -TrustedCaFile $(if ($jointTlsAssets) { $jointTlsAssets.CaPemPath } else { $null }) | Out-Null
         }
     }
 

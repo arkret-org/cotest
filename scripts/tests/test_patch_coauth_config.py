@@ -51,6 +51,10 @@ class PatchCoauthConfigTests(unittest.TestCase):
             for retired in ["identity_provider:", "identity_services:", "service_id:"]:
                 self.assertNotIn(retired, arkret)
             self.assertIn('endpoint: "https://station.test/"', arkret)
+            self.assertIn(
+                'resolver: "https://station.test/_arkret/root/identity/resolve"',
+                arkret,
+            )
             self.assertIn("password_login_session_grants_enabled: true", arkret)
             indexed_arguments = [value for value in arguments if value not in (
                 "--soland-base-url", "https://station.test"
@@ -66,6 +70,10 @@ class PatchCoauthConfigTests(unittest.TestCase):
             indexed = output.read_text(encoding="utf-8")
             self.assertIn("owning_station: server2", indexed)
             self.assertIn('endpoint: "https://station-server3.test/"', indexed)
+            self.assertIn(
+                'resolver: "https://station-server2.test/_arkret/root/identity/resolve"',
+                indexed,
+            )
             self.assertIn('"https://inkson-server2.test/auth/callback"', indexed)
             self.assertIn('"https://inkson.test/auth/callback"', indexed)
 
