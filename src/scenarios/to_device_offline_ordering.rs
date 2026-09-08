@@ -3,34 +3,35 @@
 //! Spec:
 //!   - `arkret-spec/spec/v1/zh/sync/client-sync.md` §2 — `to_device` cursor / position progresses
 //!     monotonically per (actor, device).
-//!   - `arkret-spec/spec/v1/zh/sync/operations-sync.md` §2.1 — queued to-device messages preserve
-//!     send order across disconnect / reconnect; cursor-acked eviction ensures no replay or skip.
+//!   - `arkret-spec/spec/v1/zh/sync/client-sync.md` §10.1 — explicit acknowledgement prunes
+//!     delivered messages; pagination cursors never delete queue entries.
 //!
 //! Scenario walk-through:
 //!   1. Alice and Bob log in with verified dev devices.
 //!   2. Alice sends message 1 to dev_bob_a (POST /_arkret/self/device_messages with
 //!      `Idempotency-Key: msg-1`).
-//!   3. Bob's device polls (GET /_arkret/self/device_messages) — receives msg 1. We retain the
-//!      returned `next_cursor` cursor.
+//!   3. Bob's device polls and receives msg 1 without acknowledging delivery.
 //!   4. "Disconnect": bob does NOT poll between steps 4 and 7.
 //!   5. Alice sends message 2 (Idempotency-Key: msg-2).
 //!   6. Alice sends message 3 (Idempotency-Key: msg-3).
-//!   7. Bob "reconnects" by polling GET /_arkret/self/device_messages without acking the cursor
-//!      from step 3 — should still see msg 2 and msg 3 in send order (positions strictly
-//!      increasing).
+//!   7. Bob reconnects and polls from the start: all three unacknowledged messages remain.
 //!   8. Bob acks the latest delivery token → next poll returns no messages.
 //!   9. Assert: msg 1 < msg 2 < msg 3 in the returned message order.
-//!   10. Also assert idempotency: re-sending msg-2 with the same Idempotency-Key delivers nothing
-//!       new (defends against reconnect-time duplicate-fan-out at the sender side).
+//!   10. Also assert idempotency: re-sending msg-2 with a new HTTP key but the same logical ID
+//!       delivers nothing new (defends against reconnect-time duplicate-fan-out at the sender
+//!       side).
 //!
 //! ──────────────────────────────────────────────────────────────────────────
 //! Status: real test, runs against the in-process soland harness.
 //!
-//! No external prerequisites — soland's `/_arkret/self/device_messages` POST and
-//! GET endpoints are wired in dev mode and the harness typed bootstrap issues
-//! per-device-id sessions, so multi-device wiring is straightforward.
+//! Uses the normal Soland harness prerequisites and authorized device bootstrap.
+//! Additional probes cover read-only pagination, cumulative and cross-bound
+//! acknowledgements, concurrent retry and logical message target conflicts.
 
 use anyhow::{Result, anyhow, bail};
+use arkret_models_collaboration::sync_frames::account_sync::{
+    DeviceMessagesAckRequestBody, DeviceMessagesSendRequestBody,
+};
 use reqwest::StatusCode;
 use serde_json::Value;
 
@@ -53,6 +54,7 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
     let bob_device = "ak:device:01904100-0000-7000-8000-0000000000ba";
     let bob = server.demo_client(&bob_did, bob_device).await?;
     let bob_token = bob.expect_dev_bearer().to_owned();
+    let expires_at = queue_expiry()?;
     // ── Step 2: alice sends msg 1 to bob's device.
     send_to_device(
         &server,
@@ -64,6 +66,7 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
             idempotency_key: "ct10-msg-1",
             ciphertext: "ciphertext-msg-1",
             expect_delivery: true,
+            expires_at,
         },
     )
     .await?;
@@ -78,10 +81,8 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
         bail!("expected exactly 1 event in first poll, got {events1:?}");
     }
     assert_message_ciphertext(&events1[0], "ciphertext-msg-1")?;
-    // Cursor captured here would be `first_poll["next_cursor"]`, but we
-    // intentionally do NOT pass it back on the reconnect poll — that is
-    // what the spec calls "no premature ack on disconnect", protecting
-    // against silent drops if the device crashes before persisting.
+    // The next poll starts at the queue beginning to prove msg 1 remains
+    // unacknowledged. Passing after would also be read-only; it is not an ack.
 
     // ── Step 4-6: "disconnect": no polling, alice sends msg 2 then msg 3.
     send_to_device(
@@ -94,6 +95,7 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
             idempotency_key: "ct10-msg-2",
             ciphertext: "ciphertext-msg-2",
             expect_delivery: true,
+            expires_at,
         },
     )
     .await?;
@@ -107,6 +109,7 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
             idempotency_key: "ct10-msg-3",
             ciphertext: "ciphertext-msg-3",
             expect_delivery: true,
+            expires_at,
         },
     )
     .await?;
@@ -114,7 +117,7 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
     // ── Step 7: bob reconnects, polls WITHOUT acking the step-3 cursor.
     // Soland's GET /_arkret/self/device_messages without `?after=` defaults to
     // ack_position=0, returning all queued events. msg 1 may still be in
-    // the queue (un-acked); msg 2 and 3 are definitely there.
+    // the queue until explicit ack; msg 2 and 3 follow it.
     let reconnect = poll_to_device(&server, &bob_token, None).await?;
     let events_after = reconnect["messages"]
         .as_array()
@@ -147,7 +150,7 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
     }
 
     // ── Step 10: idempotency on resend — alice retries msg-2 with the
-    // SAME Idempotency-Key; soland MUST NOT deliver a duplicate.
+    // same logical ID and a NEW HTTP key; soland MUST NOT deliver a duplicate.
     send_to_device(
         &server,
         &alice_token,
@@ -158,6 +161,7 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
             idempotency_key: "ct10-msg-2-replay",
             ciphertext: "ciphertext-msg-2",
             expect_delivery: true,
+            expires_at,
         },
     )
     .await?;
@@ -176,8 +180,7 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
         "ak:device_message:0196419b-0000-7000-8000-00000000c102",
         "ak.mls.application",
         encrypted_envelope("ak.mls.application", "ciphertext-msg-2-conflict"),
-        chrono::DateTime::parse_from_rfc3339("2026-12-31T00:00:00.000Z")?
-            .with_timezone(&chrono::Utc),
+        expires_at,
     )?;
     expect_api_error(
         server
@@ -201,6 +204,7 @@ struct DeviceMessageRequest<'a> {
     idempotency_key: &'a str,
     ciphertext: &'a str,
     expect_delivery: bool,
+    expires_at: chrono::DateTime<chrono::Utc>,
 }
 
 async fn send_to_device(
@@ -215,6 +219,7 @@ async fn send_to_device(
         idempotency_key,
         ciphertext,
         expect_delivery,
+        expires_at,
     } = request;
     let body = device_message_send_request(
         recipient,
@@ -222,8 +227,7 @@ async fn send_to_device(
         device_message_id,
         "ak.mls.application",
         encrypted_envelope("ak.mls.application", ciphertext),
-        chrono::DateTime::parse_from_rfc3339("2026-12-31T00:00:00.000Z")?
-            .with_timezone(&chrono::Utc),
+        expires_at,
     )?;
     let response = expect_json(
         server
@@ -279,14 +283,14 @@ async fn ack_to_device(
 async fn poll_to_device(
     server: &ArkretServer,
     recipient_token: &str,
-    from: Option<&str>,
+    after: Option<&str>,
 ) -> Result<Value> {
     let mut req = server
         .http()
         .get(server.url("/_arkret/self/device_messages"))
         .bearer_auth(recipient_token);
-    if let Some(cursor) = from {
-        req = req.query(&[("from", cursor)]);
+    if let Some(cursor) = after {
+        req = req.query(&[("after", cursor)]);
     }
     expect_json(req, StatusCode::OK).await
 }
@@ -298,5 +302,343 @@ fn assert_message_ciphertext(event: &Value, expected: &str) -> Result<()> {
     if actual != expected {
         bail!("expected ciphertext {expected}, got {actual} (event {event})");
     }
+    Ok(())
+}
+
+// Complement: csapi/to_device_test.go and federation_to_device_test.go.
+// Arkret deliberately uses explicit acknowledgement instead of Matrix's
+// implicit sync acknowledgement: client-sync §10.1 and device-lifecycle §7.
+pub async fn device_message_pagination_is_read_only_and_ack_is_cumulative() -> Result<()> {
+    let server = ArkretServer::spawn("device-ack-pagination").await?;
+    let did = actor_did_for_service_did(server.service_did(), "device-ack-owner")?;
+    let device = "ak:device:01904100-0000-7000-8000-0000000000a1";
+    let owner = server.demo_client(&did, device).await?;
+    let token = owner.expect_dev_bearer();
+    let mut ids = Vec::new();
+    for index in 0..3 {
+        let id = format!("ak:device_message:0196419b-0000-7000-8000-00000000d3{index:02}");
+        send_exact_message(
+            &owner,
+            &queue_request(&did, device, &id)?,
+            &format!("page-{index}"),
+        )
+        .await?;
+        ids.push(id);
+    }
+
+    let first = expect_json(
+        owner
+            .get("/_arkret/self/device_messages")
+            .query(&[("limit", 1)]),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(queue_ids(&first)?, ids[..1]);
+    assert_eq!(first["has_more"], true);
+    let old_ack = delivery_token(&first)?;
+    let mut cursor = first["next_cursor"]
+        .as_str()
+        .ok_or_else(|| anyhow!("limited page omitted next_cursor"))?
+        .to_owned();
+    for (index, expected_id) in ids.iter().enumerate().skip(1) {
+        let page = expect_json(
+            owner
+                .get("/_arkret/self/device_messages")
+                .query(&[("limit", "1"), ("after", cursor.as_str())]),
+            StatusCode::OK,
+        )
+        .await?;
+        assert_eq!(queue_ids(&page)?, vec![expected_id.clone()]);
+        assert_eq!(page["has_more"], index < 2);
+        if index < 2 {
+            cursor = page["next_cursor"]
+                .as_str()
+                .ok_or_else(|| anyhow!("nonterminal page omitted next_cursor"))?
+                .to_owned();
+        }
+    }
+    let all = poll_to_device(&server, token, None).await?;
+    assert_eq!(
+        queue_ids(&all)?,
+        ids,
+        "after must not delete unacknowledged messages"
+    );
+    let latest_ack = delivery_token(&all)?;
+    assert_eq!(ack_count(&owner, &old_ack).await?, 1);
+    assert_eq!(
+        queue_ids(&poll_to_device(&server, token, None).await?)?,
+        ids[1..]
+    );
+    assert_eq!(ack_count(&owner, &old_ack).await?, 0);
+
+    let tail_id = "ak:device_message:0196419b-0000-7000-8000-00000000d399";
+    send_exact_message(
+        &owner,
+        &queue_request(&did, device, tail_id)?,
+        "tail-after-delivery",
+    )
+    .await?;
+    assert_eq!(
+        ack_count(&owner, &latest_ack).await?,
+        2,
+        "old delivery token must not acknowledge a later enqueue"
+    );
+    assert_eq!(
+        ack_count(&owner, &old_ack).await?,
+        0,
+        "old ack must not regress the high-water mark"
+    );
+    let tail = poll_to_device(&server, token, None).await?;
+    assert_eq!(queue_ids(&tail)?, vec![tail_id]);
+    assert_eq!(ack_count(&owner, &delivery_token(&tail)?).await?, 1);
+    assert_eq!(ack_count(&owner, &latest_ack).await?, 0);
+    assert!(queue_ids(&poll_to_device(&server, token, None).await?)?.is_empty());
+    Ok(())
+}
+
+pub async fn device_ack_rejects_cross_binding_without_pruning(same_account: bool) -> Result<()> {
+    let server = ArkretServer::spawn(if same_account {
+        "device-ack-device-binding"
+    } else {
+        "device-ack-account-binding"
+    })
+    .await?;
+    let did = actor_did_for_service_did(server.service_did(), "ack-recipient")?;
+    let other_did = if same_account {
+        did.clone()
+    } else {
+        actor_did_for_service_did(server.service_did(), "ack-other-account")?
+    };
+    let first_device = "ak:device:01904100-0000-7000-8000-0000000000a1";
+    let other_device = "ak:device:01904100-0000-7000-8000-0000000000b1";
+    let first = server.demo_client(&did, first_device).await?;
+    let other = server.demo_client(&other_did, other_device).await?;
+    acknowledge_bootstrap_messages(&first).await?;
+    acknowledge_bootstrap_messages(&other).await?;
+    let first_id = "ak:device_message:0196419b-0000-7000-8000-00000000d401";
+    let other_id = "ak:device_message:0196419b-0000-7000-8000-00000000d402";
+    send_exact_message(
+        &first,
+        &queue_request(&did, first_device, first_id)?,
+        "first-device",
+    )
+    .await?;
+    send_exact_message(
+        &other,
+        &queue_request(&other_did, other_device, other_id)?,
+        "other-device",
+    )
+    .await?;
+    let first_page = poll_to_device(&server, first.expect_dev_bearer(), None).await?;
+    let other_page = poll_to_device(&server, other.expect_dev_bearer(), None).await?;
+    assert_eq!(queue_ids(&first_page)?, vec![first_id]);
+    assert_eq!(queue_ids(&other_page)?, vec![other_id]);
+    let first_ack = delivery_token(&first_page)?;
+    let denied = expect_json(
+        other
+            .post("/_arkret/self/device_messages/ack")
+            .json(&DeviceMessagesAckRequestBody {
+                ack_token: first_ack.clone(),
+            }),
+        StatusCode::BAD_REQUEST,
+    )
+    .await?;
+    assert_eq!(denied["type"], "https://arkret.org/problems/param_invalid");
+    assert_eq!(denied["reason_code"], "invalid_ack_token");
+    assert_eq!(
+        queue_ids(&poll_to_device(&server, first.expect_dev_bearer(), None).await?)?,
+        vec![first_id]
+    );
+    assert_eq!(
+        queue_ids(&poll_to_device(&server, other.expect_dev_bearer(), None).await?)?,
+        vec![other_id]
+    );
+    assert_eq!(ack_count(&first, &first_ack).await?, 1);
+    assert_eq!(ack_count(&other, &delivery_token(&other_page)?).await?, 1);
+    Ok(())
+}
+
+pub async fn concurrent_device_message_retries_enqueue_once() -> Result<()> {
+    let server = ArkretServer::spawn("device-message-concurrent-replay").await?;
+    let did = actor_did_for_service_did(server.service_did(), "device-concurrent")?;
+    let device = "ak:device:01904100-0000-7000-8000-0000000000a1";
+    let owner = server.demo_client(&did, device).await?;
+    let id = "ak:device_message:0196419b-0000-7000-8000-00000000d501";
+    let body = queue_request(&did, device, id)?;
+    let (first, second) = tokio::join!(
+        send_exact_message(&owner, &body, "concurrent"),
+        send_exact_message(&owner, &body, "concurrent")
+    );
+    assert_eq!(
+        first?, second?,
+        "same HTTP key and body must replay the outcome"
+    );
+    let page = poll_to_device(&server, owner.expect_dev_bearer(), None).await?;
+    assert_eq!(queue_ids(&page)?, vec![id]);
+    assert_eq!(ack_count(&owner, &delivery_token(&page)?).await?, 1);
+    send_exact_message(&owner, &body, "different-http-key-same-message").await?;
+    assert!(
+        queue_ids(&poll_to_device(&server, owner.expect_dev_bearer(), None).await?)?.is_empty(),
+        "logical replay after ack must not redeliver"
+    );
+    Ok(())
+}
+
+pub async fn device_message_id_conflict_cannot_redirect_delivery() -> Result<()> {
+    let server = ArkretServer::spawn("device-message-target-conflict").await?;
+    let did = actor_did_for_service_did(server.service_did(), "target-conflict")?;
+    let first_device = "ak:device:01904100-0000-7000-8000-0000000000a1";
+    let second_device = "ak:device:01904100-0000-7000-8000-0000000000b1";
+    let first = server.demo_client(&did, first_device).await?;
+    let second = server.demo_client(&did, second_device).await?;
+    acknowledge_bootstrap_messages(&first).await?;
+    acknowledge_bootstrap_messages(&second).await?;
+    let id = "ak:device_message:0196419b-0000-7000-8000-00000000d601";
+    let body = queue_request(&did, first_device, id)?;
+    send_exact_message(&first, &body, "target-original").await?;
+    let mut redirected = body.clone();
+    let targets = redirected
+        .messages
+        .values_mut()
+        .next()
+        .ok_or_else(|| anyhow!("missing target map"))?;
+    let target = targets
+        .remove(&arkret_wire::DeviceId::new(first_device)?)
+        .ok_or_else(|| anyhow!("missing first target"))?;
+    targets.insert(arkret_wire::DeviceId::new(second_device)?, target);
+    let denied = expect_json(
+        first
+            .post("/_arkret/self/device_messages")
+            .header("Idempotency-Key", "target-conflict")
+            .json(&redirected),
+        StatusCode::CONFLICT,
+    )
+    .await?;
+    assert_eq!(
+        denied["type"],
+        "https://arkret.org/problems/duplicate_conflict"
+    );
+    assert_eq!(denied["reason_code"], "device_message_id_conflict");
+    assert_eq!(
+        queue_ids(&poll_to_device(&server, first.expect_dev_bearer(), None).await?)?,
+        vec![id]
+    );
+    assert!(
+        queue_ids(&poll_to_device(&server, second.expect_dev_bearer(), None).await?)?.is_empty()
+    );
+    let sentinel = "ak:device_message:0196419b-0000-7000-8000-00000000d602";
+    send_exact_message(
+        &first,
+        &queue_request(&did, second_device, sentinel)?,
+        "target-positive",
+    )
+    .await?;
+    assert_eq!(
+        queue_ids(&poll_to_device(&server, second.expect_dev_bearer(), None).await?)?,
+        vec![sentinel]
+    );
+    Ok(())
+}
+
+fn queue_request(recipient: &str, device: &str, id: &str) -> Result<DeviceMessagesSendRequestBody> {
+    device_message_send_request(
+        recipient,
+        device,
+        id,
+        "ak.mls.application",
+        encrypted_envelope("ak.mls.application", "b3BhcXVl"),
+        queue_expiry()?,
+    )
+}
+
+fn queue_expiry() -> Result<chrono::DateTime<chrono::Utc>> {
+    chrono::DateTime::from_timestamp_millis(
+        (chrono::Utc::now() + chrono::Duration::minutes(10)).timestamp_millis(),
+    )
+    .ok_or_else(|| anyhow!("expiry outside timestamp range"))
+}
+
+async fn send_exact_message(
+    client: &crate::harness::TestActorClient,
+    body: &DeviceMessagesSendRequestBody,
+    key: &str,
+) -> Result<Value> {
+    let outcome = expect_json(
+        client
+            .post("/_arkret/self/device_messages")
+            .header("Idempotency-Key", key)
+            .json(body),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(outcome["unknown_devices"], serde_json::json!({}));
+    for (recipient, targets) in &body.messages {
+        for device in targets.keys() {
+            assert!(
+                outcome["delivered"][recipient.as_str()]
+                    .as_array()
+                    .is_some_and(|devices| devices
+                        .iter()
+                        .any(|value| value.as_str() == Some(device.as_str()))),
+                "valid target was not delivered"
+            );
+        }
+    }
+    Ok(outcome)
+}
+
+fn queue_ids(page: &Value) -> Result<Vec<String>> {
+    page["messages"]
+        .as_array()
+        .ok_or_else(|| anyhow!("device queue omitted messages"))?
+        .iter()
+        .map(|message| {
+            message["device_message_id"]
+                .as_str()
+                .map(ToOwned::to_owned)
+                .ok_or_else(|| anyhow!("message omitted device_message_id"))
+        })
+        .collect()
+}
+
+fn delivery_token(page: &Value) -> Result<String> {
+    page["ack_token"]
+        .as_str()
+        .map(ToOwned::to_owned)
+        .ok_or_else(|| anyhow!("nonempty queue omitted ack_token"))
+}
+
+async fn ack_count(client: &crate::harness::TestActorClient, token: &str) -> Result<u64> {
+    let outcome = expect_json(
+        client
+            .post("/_arkret/self/device_messages/ack")
+            .json(&DeviceMessagesAckRequestBody {
+                ack_token: token.to_owned(),
+            }),
+        StatusCode::OK,
+    )
+    .await?;
+    outcome["pruned_count"]
+        .as_u64()
+        .ok_or_else(|| anyhow!("ack omitted pruned_count"))
+}
+
+async fn acknowledge_bootstrap_messages(client: &crate::harness::TestActorClient) -> Result<()> {
+    // Pairing can enqueue actor-private device updates before the queue under
+    // test is seeded. Consume them through the same explicit ack contract.
+    let page = expect_json(client.get("/_arkret/self/device_messages"), StatusCode::OK).await?;
+    let count = queue_ids(&page)?.len();
+    if count > 0 {
+        assert_eq!(
+            ack_count(client, &delivery_token(&page)?).await?,
+            count as u64
+        );
+    }
+    assert!(
+        queue_ids(
+            &expect_json(client.get("/_arkret/self/device_messages"), StatusCode::OK).await?
+        )?
+        .is_empty()
+    );
     Ok(())
 }

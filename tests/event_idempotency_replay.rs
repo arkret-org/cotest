@@ -13,3 +13,15 @@ async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
     cotest::scenarios::event_idempotency_replay::duplicate_edit_and_redaction_replay_project_once()
         .await
 }
+
+#[tokio::test]
+#[serial]
+async fn concurrent_event_retransmission_accepts_once_and_allows_the_next_write() -> Result<()> {
+    cotest::scenarios::event_idempotency_replay::concurrent_event_retransmission_accepts_once_and_allows_the_next_write().await
+}
+
+#[tokio::test]
+#[serial]
+async fn idempotency_keys_are_isolated_between_authenticated_actors() -> Result<()> {
+    cotest::scenarios::event_idempotency_replay::idempotency_keys_are_isolated_between_authenticated_actors().await
+}

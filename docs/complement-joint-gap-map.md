@@ -1,5 +1,7 @@
 # Matrix Complement to Arkret joint coverage map
 
+2026-09-08 扩展复核见 [Complement 全域测试价值与补测设计](complement-coverage-review.md)。本页保留原三站 P0 专项的设计状态；`covered` 表示源码存在断言，不代表当前工作区实测通过。新复核同时检查 Rust 替代入口，不能把已迁移的 Playwright 文件当作覆盖消失。
+
 Baseline: Matrix Complement commit `0116400a24dfaeb5e7eb9d19f270c94b7d134122`. This map borrows topology and fault-control invariants only. Matrix rooms, ACLs, EDUs, device APIs, and restricted-room semantics are not Arkret protocol contracts.
 
 | Complement area | Arkret classification and normative basis | Existing/new evidence | Status | Priority |

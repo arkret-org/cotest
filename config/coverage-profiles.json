@@ -12,7 +12,7 @@
         { "name": "actor_seq monotonicity", "status": "implemented", "sources": ["conformance_event_envelope"], "tests": ["event_envelope_fixture_suite_matches_reference_semantics"] },
         { "name": "prev_refs / refs constraints", "status": "implemented", "sources": ["conformance_event_envelope"], "tests": ["event_envelope_fixture_suite_matches_reference_semantics"] },
         { "name": "Event submit / fetch / batch-get / backfill / frontier", "status": "partial", "sources": ["events_backfill", "protocol_payloads", "federation_contract"], "tests": ["backfill_pages_recover_messages_missing_from_limited_client_page"] },
-        { "name": "idempotent duplicate handling", "status": "implemented", "sources": ["delivery_media", "federation_contract"], "tests": [] },
+        { "name": "idempotent duplicate handling", "status": "implemented", "sources": ["delivery_media", "federation_contract", "event_idempotency_replay", "to_device_offline_ordering"], "tests": ["concurrent_event_retransmission_accepts_once_and_allows_the_next_write", "idempotency_keys_are_isolated_between_authenticated_actors", "concurrent_device_message_retries_enqueue_once", "device_message_id_conflict_cannot_redirect_delivery"] },
         { "name": "standard error envelope", "status": "implemented", "sources": ["api_contracts_auth", "federation_contract"], "tests": ["framework_errors_and_invalid_json_use_arkret_envelopes"] }
       ]
     },
@@ -67,7 +67,7 @@
         { "name": "subscribe / sync stream", "status": "implemented", "sources": ["interaction_models", "collaboration_workflow"], "tests": ["collaboration_workflow_supports_space_message_and_sync"] },
         { "name": "backfill", "status": "implemented", "sources": ["events_backfill", "collaboration_workflow"], "tests": ["backfill_pages_recover_messages_missing_from_limited_client_page"] },
         { "name": "client sync", "status": "implemented", "sources": ["collaboration_workflow", "federation_contract", "conformance_sync"], "tests": ["sync_fixture_suite_matches_reference_semantics"] },
-        { "name": "cursor stability", "status": "partial", "sources": ["conformance_sync"], "tests": ["sync_fixture_suite_matches_reference_semantics"] },
+        { "name": "cursor stability", "status": "partial", "sources": ["conformance_sync", "events_backfill", "to_device_offline_ordering"], "tests": ["sync_fixture_suite_matches_reference_semantics", "backfill_remains_gap_free_while_new_events_arrive", "event_cursor_allows_page_size_change_without_replaying_the_boundary", "event_cursor_rejects_different_order", "event_cursor_rejects_different_realm_selector", "event_cursor_normalizes_selector_order", "event_cursor_cannot_be_reused_by_another_authorized_member", "event_scan_rejects_barrier_and_stream_cursor_role_confusion", "device_message_pagination_is_read_only_and_ack_is_cumulative", "device_ack_rejects_another_device_of_the_same_account", "device_ack_rejects_another_account"] },
         { "name": "duplicate suppression", "status": "implemented", "sources": ["delivery_media", "federation_contract"], "tests": [] },
         { "name": "encrypted payload forwarding", "status": "partial", "sources": ["protocol_payloads", "conformance_privacy_security"], "tests": ["privacy_security_fixture_suite_matches_reference_semantics"] },
         { "name": "service describe / profile discovery", "status": "implemented", "sources": ["service_surface"], "tests": ["server_exposes_core_service_surface"] },

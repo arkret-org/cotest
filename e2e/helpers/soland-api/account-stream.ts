@@ -36,7 +36,11 @@ export async function accountSubscribeFramesApi(
     url.searchParams.set("catchup", "true");
   }
   if (opts.filter) {
-    url.searchParams.set("filter", JSON.stringify(opts.filter));
+    for (const [field, value] of Object.entries(opts.filter)) {
+      for (const item of Array.isArray(value) ? value : [value]) {
+        url.searchParams.append(`filter.${field}`, String(item));
+      }
+    }
   }
   if (opts.after) {
     url.searchParams.set("after", opts.after);
@@ -54,7 +58,7 @@ export async function accountSubscribeFramesApi(
   try {
     const response = await fetch(url, {
       headers: {
-        ...(opts.headers ?? authHeaders(token)),
+        ...(opts.headers ?? authHeaders(token, "GET", url.toString())),
         accept: "application/x-ndjson",
         "Arkret-Operation": "ak.self.account.stream.subscribe.v1",
       },

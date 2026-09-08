@@ -1442,21 +1442,26 @@
     {
       "scenario_key": "sync/account-stream-device-message",
       "suite_kind": "joint-e2e",
-      "realism_level": "fixture-only",
-      "evidence_class": "fixture-only",
-      "real_services": [],
+      "realism_level": "server-contract",
+      "evidence_class": "server-contract",
+      "real_services": [
+        "coauth",
+        "soland"
+      ],
       "mocks": [],
       "identity_establishment": [
         "session_injection"
       ],
       "protocol_object_producers": [
-        "fixture_or_not_applicable"
+        "raw_http_fixture"
       ],
       "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
         "session_injection"
       ],
       "claims_excluded": [
-        "registration_login_authorization"
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
       ]
     },
     {

@@ -26,7 +26,7 @@ pub async fn duplicate_event_submit_is_idempotent_and_projects_once() -> Result<
             &realm_id,
             "ak.message.create",
             message_create_text_payload_for_strand(
-                parse_strand_id("ak:strand:AfkYrmvXKOcZ35LtMRF3a6ChsEVcSVo3oRdQEsL9Sra2")?,
+                parse_strand_id(&alice.default_strand_id(&realm_id)?)?,
                 "idempotent replay body",
             )?,
         )
@@ -75,6 +75,132 @@ pub async fn duplicate_event_submit_is_idempotent_and_projects_once() -> Result<
     Ok(())
 }
 
+// Complement's transaction retry tests adapted to Arkret's content-addressed
+// Event identity. Concurrent retransmission must not fork the actor chain.
+pub async fn concurrent_event_retransmission_accepts_once_and_allows_the_next_write() -> Result<()>
+{
+    let group = TestServerGroup::single("concurrent-event-retransmission").await?;
+    let server = group.server(0);
+    let did = actor_did_for_service_did(server.service_did(), "concurrent-retransmission")?;
+    let alice = server
+        .demo_client(&did, "ak:device:01904100-0000-7000-8000-0000000000a1")
+        .await?;
+    let realm = alice
+        .create_realm("Concurrent Event Retransmission")
+        .await?;
+    let strand = alice.default_strand_id(&realm)?;
+    let event = alice
+        .author_event(
+            &realm,
+            "ak.message.create",
+            message_create_text_payload_for_strand(parse_strand_id(&strand)?, "concurrent Event")?,
+        )
+        .await?;
+    let body = crate::publication::initial_submission(event.clone(), "")?;
+    let submit = || {
+        expect_json(
+            alice.post("/_arkret/self/events").json(&body),
+            StatusCode::OK,
+        )
+    };
+    let (one, two, three) = tokio::join!(submit(), submit(), submit());
+    let outcomes = [one?, two?, three?];
+    assert_eq!(
+        outcomes
+            .iter()
+            .filter(|item| item["status"] == "accepted")
+            .count(),
+        1
+    );
+    assert_eq!(
+        outcomes
+            .iter()
+            .filter(|item| item["status"] == "duplicate")
+            .count(),
+        2
+    );
+    for outcome in &outcomes {
+        assert_eq!(submitted_event_id(outcome), Some(event.event_id.as_str()));
+    }
+    let accepted = outcomes
+        .iter()
+        .find(|item| item["status"] == "accepted")
+        .ok_or_else(|| anyhow!("no accepted outcome"))?;
+    assert_projected_event_count(
+        &alice,
+        &realm,
+        event.event_id.as_str(),
+        1,
+        submission_barrier(accepted)?,
+    )
+    .await?;
+    let successor = alice
+        .send_message(&realm, &strand, "after concurrent retransmission")
+        .await?;
+    let successor_id =
+        submitted_event_id(&successor).ok_or_else(|| anyhow!("successor omitted Event ID"))?;
+    let listed = list_realm_events_after(&alice, &realm, submission_barrier(&successor)?).await?;
+    assert_eq!(event_count(&listed, event.event_id.as_str())?, 1);
+    assert_eq!(event_count(&listed, successor_id)?, 1);
+    assert_eq!(event_kind_count(&listed, "ak.message.create")?, 2);
+    Ok(())
+}
+
+// api-conventions §6 scopes Idempotency-Key by authenticated actor. Two
+// independent writers may legitimately choose the same human-readable key.
+pub async fn idempotency_keys_are_isolated_between_authenticated_actors() -> Result<()> {
+    let group = TestServerGroup::single("idempotency-actor-scope").await?;
+    let server = group.server(0);
+    let alice_did = actor_did_for_service_did(server.service_did(), "key-scope-alice")?;
+    let bob_did = actor_did_for_service_did(server.service_did(), "key-scope-bob")?;
+    let alice = server
+        .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
+        .await?;
+    let bob = server
+        .demo_client(&bob_did, "ak:device:01904100-0000-7000-8000-0000000000b1")
+        .await?;
+    let realm_a = alice.create_realm("Alice key scope").await?;
+    let realm_b = bob.create_realm("Bob key scope").await?;
+    for (actor, realm) in [(&alice, &realm_a), (&bob, &realm_b)] {
+        let strand = actor.default_strand_id(realm)?;
+        let event = actor
+            .author_event(
+                realm,
+                "ak.message.create",
+                message_create_text_payload_for_strand(
+                    parse_strand_id(&strand)?,
+                    "actor-scoped retry",
+                )?,
+            )
+            .await?;
+        let body = crate::publication::initial_submission(event.clone(), "")?;
+        let send = || {
+            expect_json(
+                actor
+                    .post("/_arkret/self/events")
+                    .header("Idempotency-Key", "same-key-two-actors")
+                    .json(&body),
+                StatusCode::OK,
+            )
+        };
+        let first = send().await?;
+        assert_eq!(first["status"], "accepted");
+        assert_eq!(submitted_event_id(&first), Some(event.event_id.as_str()));
+        let replay = send().await?;
+        assert_eq!(submitted_event_id(&replay), Some(event.event_id.as_str()));
+        assert!(replay["status"] == "accepted" || replay["status"] == "duplicate");
+        assert_projected_event_count(
+            actor,
+            realm,
+            event.event_id.as_str(),
+            1,
+            submission_barrier(&first)?,
+        )
+        .await?;
+    }
+    Ok(())
+}
+
 pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
     let group = TestServerGroup::single("event-idempotency-edit-redact").await?;
     let server = group.server(0);
@@ -88,7 +214,7 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
             &realm_id,
             "ak.message.create",
             message_create_text_payload_for_strand(
-                parse_strand_id("ak:strand:AfkYrmvXKOcZ35LtMRF3a6ChsEVcSVo3oRdQEsL9Sra2")?,
+                parse_strand_id(&alice.default_strand_id(&realm_id)?)?,
                 "message before edit/redact replay",
             )?,
         )
