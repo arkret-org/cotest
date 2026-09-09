@@ -4101,7 +4101,6 @@ try {
     function Build-SolandDockerEnvironment {
         param(
             [string]$AccountAuthorityBaseUrl = $CoauthBaseUrl,
-            [string]$AccountAuthorityServiceId = $CoauthServiceId,
             [Parameter(Mandatory = $true)][string]$BaseUrl,
             [Parameter(Mandatory = $true)][string]$DatabaseUrl,
             [Parameter(Mandatory = $true)][int]$MetricsPort,
@@ -4149,11 +4148,10 @@ try {
                 $map.SOLAND_ACCOUNT_AUTHORITY_URL = $AccountAuthorityBaseUrl.TrimEnd("/")
             }
         }
-        if ($AccountAuthorityBaseUrl -and $AccountAuthorityServiceId) {
+        if ($AccountAuthorityBaseUrl) {
             $coauthPublic = $AccountAuthorityBaseUrl.TrimEnd("/")
             $coauthContainer = (Convert-ToContainerReachableUrl $coauthPublic).TrimEnd("/")
             $map.SOLAND_ACCOUNT_AUTHORITY_URL = $coauthPublic
-            $map.SOLAND_ACCOUNT_AUTHORITY_SERVICE_ID = $AccountAuthorityServiceId
             $map.SOLAND_SESSION_GRANT_INTROSPECTION_URL = "$coauthContainer/_arkret/gate/account/session-grants/introspect"
             $map.SOLAND_AUTH_SESSION_LOGOUT_URL = "$coauthContainer/_arkret/gate/account/auth-sessions/logout"
             $map.SOLAND_SESSION_GRANT_INTROSPECTION_BEARER = $CoauthSessionGrantIntrospectionBearer
@@ -4176,7 +4174,6 @@ try {
     function Build-SolandCommand {
         param(
             [string]$AccountAuthorityBaseUrl = $CoauthBaseUrl,
-            [string]$AccountAuthorityServiceId = $CoauthServiceId,
             [Parameter(Mandatory = $true)][string]$BinaryPath,
             [Parameter(Mandatory = $true)][string]$ConfigPath,
             [Parameter(Mandatory = $true)][string]$BaseUrl,
@@ -4222,10 +4219,9 @@ try {
                 $values.SOLAND_ACCOUNT_AUTHORITY_URL = $AccountAuthorityBaseUrl.TrimEnd("/")
             }
         }
-        if ($AccountAuthorityBaseUrl -and $AccountAuthorityServiceId) {
+        if ($AccountAuthorityBaseUrl) {
             $coauthTrimmed = $AccountAuthorityBaseUrl.TrimEnd("/")
             $values.SOLAND_ACCOUNT_AUTHORITY_URL = $coauthTrimmed
-            $values.SOLAND_ACCOUNT_AUTHORITY_SERVICE_ID = $AccountAuthorityServiceId
             $values.SOLAND_SESSION_GRANT_INTROSPECTION_URL = "$coauthTrimmed/_arkret/gate/account/session-grants/introspect"
             $values.SOLAND_AUTH_SESSION_LOGOUT_URL = "$coauthTrimmed/_arkret/gate/account/auth-sessions/logout"
             $values.SOLAND_SESSION_GRANT_INTROSPECTION_BEARER = $CoauthSessionGrantIntrospectionBearer
@@ -4480,6 +4476,9 @@ try {
         $server.SolandServiceDid = Get-DescribedServiceDid -BaseUrl $server.SolandBaseUrl -ServiceName $server.SolandName
     }
 
+    if ($CoauthBaseUrl -and -not $StartCoauth -and $CoauthServiceId -ne $SolandServiceId) {
+        throw "Caller-owned Coauth owning Station identity must equal the described Soland identity"
+    }
     if ($needsAuthorityBootstrap) {
         $CoauthServiceId = $SolandServiceId
         foreach ($plan in $solandRestartPlans) {
@@ -4488,7 +4487,6 @@ try {
             [void]$managedServices.Remove($plan.Service)
             $configArguments = $plan.ConfigArguments
             if ($StartCoauth) {
-                $configArguments.AccountAuthorityServiceId = $expectedStationId
                 if ($plan.BaseUrl -eq $SolandBaseUrl) {
                     $configArguments.AccountAuthorityBaseUrl = $CoauthBaseUrl
                 } elseif ($plan.BaseUrl -eq $solandServer2BaseUrl) {

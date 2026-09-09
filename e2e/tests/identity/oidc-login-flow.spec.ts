@@ -52,215 +52,227 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
   const coauth = coauthBaseUrl();
   const optIn = optionalEnv("COTEST_REAL_OIDC_LOGIN");
 
-  test("unbound account completes Recovery Key onboarding through the real UI @onboarding-recovery-gate @onboarding-resume-gate", async ({
-    browser,
-    request,
-  }) => {
-    // A cold joint stack may compile/load WASM and materialize the first PCR
-    // successor Seal. Keep the test-level deadline above its longest explicit
-    // assertion so Playwright cannot abort a healthy flow at the global 180s
-    // default while that assertion is still waiting.
-    test.setTimeout(360_000);
-    test.skip(!coauth, "coauth not started for this run");
-    if (!optIn) {
-      assertJointStackNotRequired("Recovery Key onboarding UI lifecycle");
-      test.skip(
-        true,
-        "set COTEST_REAL_OIDC_LOGIN=1 to opt into the real browser onboarding ceremony",
-      );
-    }
-
-    const browserUser = uniqueUser("onboarding-ui");
-    const account = await registerUnboundCoauthPasswordAccount(
+  for (const injectChallengeRateLimit of [false, true]) {
+    test(`unbound account completes Recovery Key onboarding through the real UI ${injectChallengeRateLimit ? "@identity-challenge-rate-limit" : "@identity-challenge-direct"} @onboarding-recovery-gate @onboarding-resume-gate`, async ({
+      browser,
       request,
-      coauth!,
-      {
-        handle: browserUser.name,
-      },
-    );
-    const jointPage = await openUserPage(browser, browserUser, {
-      neutralLoginConfig: true,
-      autoCompleteRecoveryKeySetup: false,
-    });
-    const page = jointPage.page;
-    const onboardingResponses: Array<{ url: string; status: number }> = [];
-    const identityCreationRequests: string[] = [];
-    page.on("response", (response) => {
-      const url = new URL(response.url());
-      if (url.pathname === "/_arkret/gate/account/onboarding") {
-        onboardingResponses.push({
-          url: response.url(),
-          status: response.status(),
-        });
-      }
-    });
-    page.on("request", (request) => {
-      const url = request.url();
-      if (
-        url.includes("/_arkret/gate/account/identity-binding-challenges") ||
-        url.includes("/_arkret/gate/account/register") ||
-        url.includes("submit-did-operation")
-      ) {
-        identityCreationRequests.push(url);
-      }
-    });
-    try {
-      await jointPage.gotoLogin();
-      await page.getByTestId("login-server-url").fill(solandBaseUrl());
-      await page.getByTestId("start-server-login-button").click();
-      await submitCoauthPasswordCredentials(page, account);
-      const approve = page.getByTestId("coauth-oauth-approve");
-      if (
-        await approve
-          .waitFor({ state: "visible", timeout: 20_000 })
-          .then(() => true)
-          .catch(() => false)
-      ) {
-        await approve.click();
+    }) => {
+      // A cold joint stack may compile/load WASM and materialize the first PCR
+      // successor Seal. Keep the test-level deadline above its longest explicit
+      // assertion so Playwright cannot abort a healthy flow at the global 180s
+      // default while that assertion is still waiting.
+      test.setTimeout(360_000);
+      test.skip(!coauth, "coauth not started for this run");
+      if (!optIn) {
+        assertJointStackNotRequired("Recovery Key onboarding UI lifecycle");
+        test.skip(
+          true,
+          "set COTEST_REAL_OIDC_LOGIN=1 to opt into the real browser onboarding ceremony",
+        );
       }
 
-      await page.getByTestId("choose-new-identity").click().catch(async (error) => {
-        const status = await page.getByTestId("auth-status").textContent().catch(() => null);
-        const stage = status?.match(/(?:Account handoff outcome failed validation|Persist account handoff credential failed|Persist account handoff checkpoint failed|Account Authority handoff failed|Account handoff request failed):[^\n]*/)?.[0];
-        throw new Error(`Onboarding was not reached: ${stage?.replace(/[A-Za-z0-9_-]{32,}/g, "[redacted]") ?? "no recognized authentication failure"}`, { cause: error });
+      const browserUser = uniqueUser("onboarding-ui");
+      const account = await registerUnboundCoauthPasswordAccount(
+        request,
+        coauth!,
+        {
+          handle: browserUser.name,
+        },
+      );
+      const jointPage = await openUserPage(browser, browserUser, {
+        neutralLoginConfig: true,
+        autoCompleteRecoveryKeySetup: false,
       });
-      const displayedWords = page
-        .getByTestId("onboarding-recovery-key-display")
-        .locator("li");
-      await expect(displayedWords).toHaveCount(24, { timeout: 120_000 });
-      const recoveryKey = (await displayedWords.allTextContents())
-        .map((word) => word.trim())
-        .join(" ");
-      expect(recoveryKey.split(/\s+/)).toHaveLength(24);
-      await page
-        .getByTestId("onboarding-recovery-key-confirm")
-        .fill(recoveryKey);
-
-      let interruptedBootstrapSeal = false;
-      const challengeAttempts: Array<{ body: string; at: number }> = [];
-      const challengeRetryAfterMs = 1_000;
-      await page.route("**/_arkret/gate/account/identity-binding-challenges", async (route) => {
-        if (route.request().method() !== "POST") {
-          await route.continue();
-          return;
-        }
-        challengeAttempts.push({ body: route.request().postData() ?? "", at: Date.now() });
-        if (challengeAttempts.length === 1) {
-          await route.fulfill({
-            status: 429,
-            contentType: "application/problem+json",
-            headers: {
-              "access-control-allow-origin": new URL(page.url()).origin,
-              "access-control-allow-credentials": "true",
-              "retry-after": "1",
-            },
-            json: {
-              type: "https://arkret.org/problems/rate_limited",
-              title: "Rate limited",
-              status: 429,
-              detail: "identity-creation lease renewal is rate limited",
-              instance: JSON.parse(challengeAttempts[0].body).request_id,
-              retry_after_ms: challengeRetryAfterMs,
-            },
+      const page = jointPage.page;
+      const onboardingResponses: Array<{ url: string; status: number }> = [];
+      const identityCreationRequests: string[] = [];
+      page.on("response", (response) => {
+        const url = new URL(response.url());
+        if (url.pathname === "/_arkret/gate/account/onboarding") {
+          onboardingResponses.push({
+            url: response.url(),
+            status: response.status(),
           });
-          return;
         }
-        await route.continue();
       });
-      const interruptFirstBootstrapSeal = async (
-        route: import("@playwright/test").Route,
-      ) => {
+      page.on("request", (request) => {
+        const url = request.url();
         if (
-          !interruptedBootstrapSeal &&
-          route.request().method() === "POST"
+          url.includes("/_arkret/gate/account/identity-binding-challenges") ||
+          url.includes("/_arkret/gate/account/register") ||
+          url.includes("submit-did-operation")
         ) {
-          interruptedBootstrapSeal = true;
-          await route.abort("connectionfailed");
-          return;
-        }
-        await route.continue();
-      };
-      await page.route(
-        "**/_arkret/self/seals",
-        interruptFirstBootstrapSeal,
-      );
-      await page.getByTestId("onboarding-bind-identity").click();
-
-      await expect(page.getByText(/The Account Authority asked this device to wait/)).toBeVisible();
-
-      await expect(
-        page.getByTestId("onboarding-resume-diagnostics"),
-      ).toBeVisible({ timeout: 240_000 });
-      await expect(page.getByTestId("retry-onboarding-resume")).toBeVisible();
-      expect(
-        interruptedBootstrapSeal,
-        "the test must interrupt the recovery-material gate after account acceptance",
-      ).toBe(true);
-      expect(challengeAttempts.length).toBeGreaterThanOrEqual(2);
-      expect(challengeAttempts[0].body.length).toBeGreaterThan(0);
-      expect(
-        challengeAttempts.every((attempt) => attempt.body === challengeAttempts[0].body),
-        "429 retries must retain the exact challenge request and device binding",
-      ).toBe(true);
-      expect(challengeAttempts[1].at - challengeAttempts[0].at).toBeGreaterThanOrEqual(challengeRetryAfterMs);
-      const creationRequestCountAtInterruption =
-        identityCreationRequests.length;
-
-      await page.unroute(
-        "**/_arkret/self/seals",
-        interruptFirstBootstrapSeal,
-      );
-      await page.reload({ waitUntil: "domcontentloaded" });
-      await expect(
-        page.getByTestId("onboarding-recovery-key-display").locator("li"),
-      ).toHaveCount(24, { timeout: 120_000 });
-      await page
-        .getByTestId("onboarding-recovery-key-confirm")
-        .fill(recoveryKey);
-      const postConfirmationNavigations: string[] = [];
-      page.on("framenavigated", (frame) => {
-        if (frame === page.mainFrame()) {
-          postConfirmationNavigations.push(frame.url());
+          identityCreationRequests.push(url);
         }
       });
-      await page.getByTestId("onboarding-bind-identity").click();
+      try {
+        await jointPage.gotoLogin();
+        await page.getByTestId("login-server-url").fill(solandBaseUrl());
+        await page.getByTestId("start-server-login-button").click();
+        await submitCoauthPasswordCredentials(page, account);
+        const approve = page.getByTestId("coauth-oauth-approve");
+        if (
+          await approve
+            .waitFor({ state: "visible", timeout: 20_000 })
+            .then(() => true)
+            .catch(() => false)
+        ) {
+          await approve.click();
+        }
 
-      await expect(page.getByTestId("onboarding-complete")).toContainText(
-        "Identity ready",
-        { timeout: 240_000 },
-      );
-      expect(
-        onboardingResponses.length,
-        "the UI must reconcile onboarding through the Account Authority",
-      ).toBeGreaterThan(0);
-      for (const response of onboardingResponses) {
-        expect(new URL(response.url).origin).toBe(new URL(coauth!).origin);
-        expect(response.status).not.toBe(401);
-        expect(response.status).not.toBe(404);
+        await page.getByTestId("choose-new-identity").click().catch(async (error) => {
+          const status = await page.getByTestId("auth-status").textContent().catch(() => null);
+          const stage = status?.match(/(?:Account handoff outcome failed validation|Persist account handoff credential failed|Persist account handoff checkpoint failed|Account Authority handoff failed|Account handoff request failed):[^\n]*/)?.[0];
+          throw new Error(`Onboarding was not reached: ${stage?.replace(/[A-Za-z0-9_-]{32,}/g, "[redacted]") ?? "no recognized authentication failure"}`, { cause: error });
+        });
+        const displayedWords = page
+          .getByTestId("onboarding-recovery-key-display")
+          .locator("li");
+        await expect(displayedWords).toHaveCount(24, { timeout: 120_000 });
+        const recoveryKey = (await displayedWords.allTextContents())
+          .map((word) => word.trim())
+          .join(" ");
+        expect(recoveryKey.split(/\s+/)).toHaveLength(24);
+        expect(identityCreationRequests).toHaveLength(0);
+        await page
+          .getByTestId("onboarding-recovery-key-confirm")
+          .fill(recoveryKey);
+
+        let interruptedBootstrapSeal = false;
+        const challengeAttempts: Array<{ body: string; at: number }> = [];
+        const challengeRetryAfterMs = 1_000;
+        await page.route("**/_arkret/gate/account/identity-binding-challenges", async (route) => {
+          if (route.request().method() !== "POST") {
+            await route.continue();
+            return;
+          }
+          challengeAttempts.push({ body: route.request().postData() ?? "", at: Date.now() });
+          if (injectChallengeRateLimit && challengeAttempts.length === 1) {
+            await route.fulfill({
+              status: 429,
+              contentType: "application/problem+json",
+              headers: {
+                "access-control-allow-origin": new URL(page.url()).origin,
+                "access-control-allow-credentials": "true",
+                "retry-after": "1",
+              },
+              json: {
+                type: "https://arkret.org/problems/rate_limited",
+                title: "Rate limited",
+                status: 429,
+                detail: "identity-binding challenge issuance is rate limited",
+                instance: JSON.parse(challengeAttempts[0].body).request_id,
+                retry_after_ms: challengeRetryAfterMs,
+              },
+            });
+            return;
+          }
+          await route.continue();
+        });
+        const interruptFirstBootstrapSeal = async (
+          route: import("@playwright/test").Route,
+        ) => {
+          if (
+            !interruptedBootstrapSeal &&
+            route.request().method() === "POST"
+          ) {
+            interruptedBootstrapSeal = true;
+            await route.abort("connectionfailed");
+            return;
+          }
+          await route.continue();
+        };
+        await page.route(
+          "**/_arkret/self/seals",
+          interruptFirstBootstrapSeal,
+        );
+        await page.getByTestId("onboarding-bind-identity").click();
+
+        if (injectChallengeRateLimit) {
+          await expect(page.getByText(/The Account Authority asked this device to wait/)).toBeVisible();
+        }
+
+        await expect(
+          page.getByTestId("onboarding-resume-diagnostics"),
+        ).toBeVisible({ timeout: 240_000 });
+        await expect(page.getByTestId("retry-onboarding-resume")).toBeVisible();
+        expect(
+          interruptedBootstrapSeal,
+          "the test must interrupt the recovery-material gate after account acceptance",
+        ).toBe(true);
+        if (injectChallengeRateLimit) {
+          expect(challengeAttempts.length).toBeGreaterThanOrEqual(2);
+        } else {
+          expect(challengeAttempts).toHaveLength(1);
+        }
+        expect(challengeAttempts[0].body.length).toBeGreaterThan(0);
+        expect(
+          challengeAttempts.every((attempt) => attempt.body === challengeAttempts[0].body),
+          "429 retries must retain the exact challenge request and device binding",
+        ).toBe(true);
+        if (injectChallengeRateLimit) {
+          expect(challengeAttempts[1].at - challengeAttempts[0].at).toBeGreaterThanOrEqual(challengeRetryAfterMs);
+        }
+        const creationRequestCountAtInterruption =
+          identityCreationRequests.length;
+
+        await page.unroute(
+          "**/_arkret/self/seals",
+          interruptFirstBootstrapSeal,
+        );
+        await page.reload({ waitUntil: "domcontentloaded" });
+        await expect(
+          page.getByTestId("onboarding-recovery-key-display").locator("li"),
+        ).toHaveCount(24, { timeout: 120_000 });
+        await page
+          .getByTestId("onboarding-recovery-key-confirm")
+          .fill(recoveryKey);
+        const postConfirmationNavigations: string[] = [];
+        page.on("framenavigated", (frame) => {
+          if (frame === page.mainFrame()) {
+            postConfirmationNavigations.push(frame.url());
+          }
+        });
+        await page.getByTestId("onboarding-bind-identity").click();
+
+        await expect(page.getByTestId("onboarding-complete")).toContainText(
+          "Identity ready",
+          { timeout: 240_000 },
+        );
+        expect(
+          onboardingResponses.length,
+          "the UI must reconcile onboarding through the Account Authority",
+        ).toBeGreaterThan(0);
+        for (const response of onboardingResponses) {
+          expect(new URL(response.url).origin).toBe(new URL(coauth!).origin);
+          expect(response.status).not.toBe(401);
+          expect(response.status).not.toBe(404);
+        }
+        expect(
+          identityCreationRequests.length,
+          "resuming an accepted setup must not create another identity or device",
+        ).toBe(creationRequestCountAtInterruption);
+
+        await page
+          .getByTestId("onboarding-complete")
+          .getByRole("link", {
+            name: "Continue",
+          })
+          .click();
+        await expect(page.getByTestId("client-shell")).toBeVisible({
+          timeout: 120_000,
+        });
+        await expect(page.getByTestId("login-panel")).toHaveCount(0);
+        expect(
+          postConfirmationNavigations.map((url) => new URL(url).pathname),
+          "accepted Recovery Key confirmation must never transit through /login",
+        ).not.toContain("/login");
+      } finally {
+        await jointPage.close();
       }
-      expect(
-        identityCreationRequests.length,
-        "resuming an accepted setup must not create another identity or device",
-      ).toBe(creationRequestCountAtInterruption);
+    });
 
-      await page
-        .getByTestId("onboarding-complete")
-        .getByRole("link", {
-          name: "Continue",
-        })
-        .click();
-      await expect(page.getByTestId("client-shell")).toBeVisible({
-        timeout: 120_000,
-      });
-      await expect(page.getByTestId("login-panel")).toHaveCount(0);
-      expect(
-        postConfirmationNavigations.map((url) => new URL(url).pathname),
-        "accepted Recovery Key confirmation must never transit through /login",
-      ).not.toContain("/login");
-    } finally {
-      await jointPage.close();
-    }
-  });
+  }
 
   test("register → login → reload persists → logout → returning login @returning-login-gate", async ({
     browser,

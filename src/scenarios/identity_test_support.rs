@@ -40,20 +40,16 @@ use arkret_signatures::http_signature::{
     parse_signature_input, sign_message,
 };
 use arkret_signatures::webvh::{
-    PreparedInception, PreparedPrincipalInception, PrincipalInceptionInput,
-    ServiceRegistrationInceptionInput, prepare_principal_inception,
-    prepare_service_registration_inception_with_did_key_seed, sign_identity_creation_control_proof,
-    sign_registration_did_evidence_draft, validate_principal_inception_operation,
+    PreparedPrincipalInception, PrincipalInceptionInput, prepare_principal_inception,
+    sign_identity_creation_control_proof, sign_registration_did_evidence_draft,
+    validate_principal_inception_operation,
 };
 use arkret_wire::{
-    Base64UrlString, EventRef, Hash, IdempotencyKey, NonEmptyString, ServiceKind,
-    ServiceOperationId,
+    Base64UrlString, EventRef, Hash, IdempotencyKey, NonEmptyString, ServiceOperationId,
 };
 use base64::Engine;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use ed25519_dalek::{Signer, SigningKey};
-use rand_chacha::ChaCha20Rng;
-use rand_chacha::rand_core::SeedableRng;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -67,72 +63,22 @@ use crate::harness::{
 
 pub(crate) const HARNESS_ACCOUNT_AUTHORITY_KEY_SEED: [u8; 32] = [0xac; 32];
 pub(crate) const HARNESS_ACCOUNT_AUTHORITY_ORIGIN: &str = "https://account-authority.cotest.local";
-const HARNESS_ACCOUNT_AUTHORITY_UPDATE_SEED: [u8; 32] = [0xad; 32];
-const HARNESS_ACCOUNT_AUTHORITY_VERSION_TIME: &str = "2026-08-01T00:00:00Z";
-const HARNESS_ACCOUNT_AUTHORITY_KEY_FRAGMENT: &str = "federation-fanout-key";
-
-fn harness_account_authority_registration_key()
--> arkret_models_identity::service_identity::ServiceRegistrationKey {
-    arkret_models_identity::service_identity::ServiceRegistrationKey::new(
-        ServiceKind::Station,
-        arkret_models_identity::service_identity::CanonicalServiceUrl::canonicalize(
-            HARNESS_ACCOUNT_AUTHORITY_ORIGIN,
-        )
-        .expect("deterministic Account Authority origin"),
-    )
-    .expect("deterministic Account Authority registration key")
-}
-
-fn harness_account_authority_registration() -> PreparedInception {
-    let mut rng = ChaCha20Rng::from_seed(HARNESS_ACCOUNT_AUTHORITY_UPDATE_SEED);
-    let provider_endpoint =
-        Url::parse(HARNESS_ACCOUNT_AUTHORITY_ORIGIN).expect("deterministic Account Authority URL");
-    let registration_key = harness_account_authority_registration_key();
-    prepare_service_registration_inception_with_did_key_seed(
-        &mut rng,
-        &ServiceRegistrationInceptionInput {
-            provider_endpoint: &provider_endpoint,
-            registration_key: &registration_key,
-            also_known_as: &[],
-            version_time: HARNESS_ACCOUNT_AUTHORITY_VERSION_TIME
-                .parse()
-                .expect("deterministic Account Authority version time"),
-            did_key_fragment: Some(HARNESS_ACCOUNT_AUTHORITY_KEY_FRAGMENT),
-        },
-        &HARNESS_ACCOUNT_AUTHORITY_KEY_SEED,
-    )
-    .expect("deterministic Account Authority service inception")
-}
-
-pub(crate) fn harness_account_authority_did() -> Did {
-    Did::new(harness_account_authority_registration().did.clone())
-        .expect("deterministic Account Authority DID")
-}
-
-pub(crate) fn harness_account_authority_id() -> DidCoreId {
-    project_did_to_core_id(&harness_account_authority_did())
-        .expect("deterministic account authority core id")
-}
-
 pub(crate) fn harness_account_authority_public_key_multibase() -> String {
-    harness_account_authority_registration()
-        .did_public_key_multibase
-        .clone()
+    ed25519_pubkey_to_did_key_multibase(
+        &SigningKey::from_bytes(&HARNESS_ACCOUNT_AUTHORITY_KEY_SEED)
+            .verifying_key()
+            .to_bytes(),
+    )
 }
 
 pub async fn spawn_with_harness_account_authority(
     name: &str,
     extra_env: &[(&str, &str)],
 ) -> Result<ArkretServer> {
-    let account_authority_id = harness_account_authority_id().to_string();
-    let mut env = Vec::with_capacity(extra_env.len() + 2);
+    let mut env = Vec::with_capacity(extra_env.len() + 1);
     env.push((
         "SOLAND_ACCOUNT_AUTHORITY_URL",
         HARNESS_ACCOUNT_AUTHORITY_ORIGIN,
-    ));
-    env.push((
-        "SOLAND_ACCOUNT_AUTHORITY_SERVICE_ID",
-        account_authority_id.as_str(),
     ));
     env.extend_from_slice(extra_env);
     ArkretServer::spawn_with_env(name, &env).await
@@ -274,7 +220,6 @@ pub async fn bootstrap_registered_actor(
     device_id: &str,
     registration: ActorBootstrapRegistration<'_>,
 ) -> Result<(ProvisionedTestPrincipal, String)> {
-    ensure_harness_account_authority_registration(server).await?;
     let device_id = canonical_device_id(device_id);
     let device_key = founding_device_signing_key(actor, &device_id);
     let device_method = crate::fixture_did_url(format!("{actor}#{device_id}"));
@@ -411,32 +356,6 @@ pub async fn bootstrap_registered_actor(
             },
         );
     Ok((principal, token))
-}
-
-async fn ensure_harness_account_authority_registration(server: &ArkretServer) -> Result<()> {
-    let prepared = harness_account_authority_registration();
-    let request =
-        arkret_models_identity::service_identity::ServiceRegistrationEnsureRequestBody::new(
-            harness_account_authority_registration_key(),
-            prepared
-                .service_registration_operation()
-                .context("deterministic Account Authority inception is not service-shaped")?,
-            "cotest-harness-account-authority",
-            None,
-        )?;
-    let value = expect_json(
-        server.service_registration_ensure_request().json(&request),
-        StatusCode::OK,
-    )
-    .await?;
-    let outcome: arkret_models_identity::service_identity::ServiceRegistrationOutcome =
-        serde_json::from_value(value).context("decode harness Account Authority registration")?;
-    outcome.validate_ensure_response(&request)?;
-    anyhow::ensure!(
-        outcome.service_id() == &harness_account_authority_id(),
-        "harness Account Authority registration returned an unexpected service identity"
-    );
-    Ok(())
 }
 
 /// Admit an additional device of an already-provisioned principal into its PCR
@@ -1077,7 +996,7 @@ async fn bootstrap_test_device_authorization(
     // separator and bind the fixture subject to its stable local account id.
     let mut account_subject_preimage = b"ak.account-subject.v1\n".to_vec();
     account_subject_preimage.extend(canonical_json_bytes(&serde_json::json!({
-        "account_authority_id": harness_account_authority_id(),
+        "account_authority_id": server.service_id(),
         "account_local_id": local_id,
     }))?);
     let account_subject = Hash::new(arkret_canonical::canonical::sha256_digest(
@@ -1120,7 +1039,7 @@ async fn bootstrap_test_device_authorization(
     let idempotency_key = IdempotencyKey::new(format!("cotest-pcr-genesis-{local_id}"))
         .map_err(anyhow::Error::msg)?;
     let request = arkret_models_collaboration::principal_operations::PcrGenesisSubmitRequestBody {
-        account_authority_id: harness_account_authority_id(),
+        account_authority_id: server.service_id().clone(),
         principal_id: principal_core_id,
         did: principal,
         pcr_realm_id: realm_id,
@@ -1182,7 +1101,7 @@ async fn submit_harness_pcr_genesis(
 ) -> Result<arkret_models_collaboration::principal_operations::PcrGenesisSubmitOutcome> {
     let body = canonical_json_bytes(request)?;
     let content_digest = format!("sha-256=:{}:", STANDARD.encode(Sha256::digest(&body)));
-    let source_id = harness_account_authority_id().to_string();
+    let source_id = server.service_id().to_string();
     let destination_id = server.service_id().to_string();
     let operation = ServiceOperationId::PEER_PRINCIPAL_GENESIS_COMMAND_SUBMIT_V1;
     let source_trust_domain = server.trust_domain().as_str().to_owned();
@@ -1225,10 +1144,7 @@ async fn submit_harness_pcr_genesis(
     ];
     let created = chrono::Utc::now().timestamp();
     let expires = created + 120;
-    let key_id = format!(
-        "{}#{HARNESS_ACCOUNT_AUTHORITY_KEY_FRAGMENT}",
-        harness_account_authority_did()
-    );
+    let key_id = format!("{}#account-authority", server.service_did());
     let signature_input = format!(
         "{};created={created};expires={expires};keyid=\"{key_id}\";alg=\"ed25519\"",
         format_signature_input_component_list("sig1", &components)?

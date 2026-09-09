@@ -13,8 +13,7 @@ use arkret_models_collaboration::history_key::{
     AuthorizationIncarnation, HistoryCandidateOriginAttribution, HistoryGovernanceTraversalIntent,
     HistoryGovernanceTraversalRetention, HistoryKeyResponseAckRequest,
     HistoryKeyResponseListOutcome, HistoryKeyResponseSendReceipt, HistoryKeyResponseSendRequest,
-    HistoryKeyResponseSigningInput, HistoryResponseId, HistorySourceAgentObservationInput,
-    HistorySourceSendDisposition, OrganizationRecoveryArchiveListOutcome,
+    HistoryResponseId, HistorySourceSendDisposition, OrganizationRecoveryArchiveListOutcome,
     OrganizationRecoveryArchiveListQuery, OrganizationRecoveryArchiveReplica,
     OrganizationRecoveryArchiveReplicaOutcome, PeerHistoryTraversalAccess, ResponseSenderOriginRef,
     ResponseSenderQuotaDomain, SelfHistoryTraversalAccess, response_capability_commitment,
@@ -68,7 +67,6 @@ struct HistoryKeyRecoveryFixture {
     streaming_direct_traversal_scale_kats: Vec<Value>,
     streaming_direct_traversal_scale_negative_kats: Vec<Value>,
     direct_traversal_scale_generator_contract: Value,
-    history_source_agent_observation_digest_kat: Value,
     response_stream_cases: Value,
     history_response_capability_kat: Value,
     direct_traversal_replay_kat: Value,
@@ -89,9 +87,6 @@ pub async fn run_history_key_direct_traversal_suite() -> Result<()> {
             .streaming_direct_traversal_scale_negative_kats
             .is_empty()
         || fixture.direct_traversal_scale_generator_contract.is_null()
-        || fixture
-            .history_source_agent_observation_digest_kat
-            .is_null()
         || fixture.history_response_capability_kat.is_null()
     {
         bail!("history-key recovery fixture metadata drifted");
@@ -1064,35 +1059,6 @@ fn verify_history_digest_and_sender_kats(fixture: &HistoryKeyRecoveryFixture) ->
         }
     }
 
-    let observation_kat = &fixture.history_source_agent_observation_digest_kat;
-    let input: HistorySourceAgentObservationInput =
-        serde_json::from_value(observation_kat["preimage"].clone())?;
-    input.validate()?;
-    let expected_observation = observation_kat["expected_digest"]
-        .as_str()
-        .context("source Agent observation KAT omits expected_digest")?;
-    if input.history_source_agent_observation_digest()?.as_str() != expected_observation {
-        bail!("history source Agent observation digest drifted");
-    }
-    for branch in ["signing_input_a", "signing_input_b"] {
-        let signing_input: HistoryKeyResponseSigningInput =
-            serde_json::from_value(observation_kat[branch].clone())?;
-        signing_input.validate()?;
-        if signing_input
-            .history_source_agent_observation_digest()?
-            .as_str()
-            != expected_observation
-        {
-            bail!("history signer evidence coordinates leaked into the observation digest");
-        }
-    }
-    let mut mutated_content = observation_kat["preimage"].clone();
-    mutated_content["content"]["chunks"][0]["chunk_response_id"] =
-        json!("ak:history_response:019c0000-0000-7000-8000-000000000003");
-    let mutated: HistorySourceAgentObservationInput = serde_json::from_value(mutated_content)?;
-    if mutated.history_source_agent_observation_digest()?.as_str() == expected_observation {
-        bail!("history source Agent observation digest ignored response content");
-    }
     Ok(())
 }
 

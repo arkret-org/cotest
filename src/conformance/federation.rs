@@ -359,7 +359,7 @@ fn validate_agent_event_admission_receipt_handoff_case(case: &super::NamedCase) 
         .as_ref()
         .ok_or_else(|| anyhow!("{} lacks request_contract", case.name))?;
     let required_contract = json!({
-        "outcome_field": "agent_event_admission_receipts",
+        "outcome_field": "agent_event_admissions",
         "receipt_schema": SchemaId::AGENT_SIGNER_ADMISSION_RECEIPT_V1,
         "receipt_proof_domain": DomainSeparationId::AGENT_SIGNER_ADMISSION_RECEIPT_V1,
         "receipted_outcome_classes": ["accepted", "duplicate"],

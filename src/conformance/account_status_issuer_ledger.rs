@@ -61,11 +61,11 @@ use super::security_closure::SecurityClosureFixture;
 pub const VECTOR_ID_ACCOUNT_STATUS_ISSUER_LEDGER: &str =
     "ak.vector.account_status.issuer_ledger.v1";
 
-const AUTHORITY_ID: &str = "ak:did_core:web:coauth.example";
-const AUTHORITY_METHOD: &str = "did:web:coauth.example#account-status-key";
+const AUTHORITY_ID: &str = "ak:did_core:web:soland.example";
+const AUTHORITY_METHOD: &str = "did:web:soland.example#account-status-key";
 /// Successor service key after an Account Authority key rotation. Same
 /// controller, different key reference.
-const AUTHORITY_ROTATED_METHOD: &str = "did:web:coauth.example#account-status-key-2";
+const AUTHORITY_ROTATED_METHOD: &str = "did:web:soland.example#account-status-key-2";
 
 fn sign_account_status_record(
     unsigned: UnsignedAccountStatusRecord,

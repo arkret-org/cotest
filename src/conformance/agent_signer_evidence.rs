@@ -8,9 +8,8 @@ use anyhow::{Context, Result, anyhow, bail};
 use arkret_models_identity::agent_signer_evidence::{
     AGENT_KEY_COMPONENT, AGENT_STATUS_COMPONENT, AgentAdmissionEvidence, AgentAuthorityState,
     AgentAuthorityStateEvidence, AgentAuthorityStateLease, AgentAuthorizationEvidence,
-    AgentAuthorizationStateWitness, AgentAuthorizationStatus, AgentCurrentObservation,
-    AgentDetachedJws, AgentEventAdmissionReceipt, AgentEvidenceOuterAttestation,
-    AgentHistoricalEvidenceOuterAttestation, AgentKeyCellEntry, AgentLifecycleProvenance,
+    AgentAuthorizationStateWitness, AgentAuthorizationStatus, AgentDetachedJws,
+    AgentEventAdmission, AgentEventAdmissionReceipt, AgentKeyCellEntry, AgentLifecycleProvenance,
     AgentLifecycleStatus, AgentLifecycleWitness, AgentSignerEvidence, AgentSigningPublicKey,
     ControllerAccountEligibility, ControllerAccountGateAttestation, ControllerAccountGateBasis,
     ControllerAccountStatus,
@@ -27,9 +26,9 @@ use arkret_signatures::agent_evidence::{
 };
 use arkret_signatures::{PublicKeyMaterial, sign_ed25519_detached_jws};
 use arkret_wire::{
-    AccountId, ActorId, Base64UrlString, Did, DidCoreId, DidUrl, DomainSeparationId, EventId,
-    EventKind, Hash, Hlc, NonEmptyString, NotarySig, ProtocolOperationId, RealmId, SchemaId,
-    ScopeRef, Seal, SealId, SealSignature, SignerEvidenceRef, project_did_to_core_id,
+    AccountId, ActorId, Base64UrlString, Did, DidCoreId, DidUrl, EventId, EventKind, Hash, Hlc,
+    NonEmptyString, NotarySig, RealmId, SchemaId, ScopeRef, Seal, SealId, SealSignature,
+    SignerEvidenceRef, project_did_to_core_id,
 };
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use ed25519_dalek::{Signer, SigningKey};
@@ -55,10 +54,6 @@ struct AgentSignerEvidenceFixture {
 
 pub const ALL_AGENT_SIGNER_EVIDENCE_CASES: &[&str] = &[
     "query_success_returns_cas_frozen_authenticated_root",
-    "current_exact_request_and_three_active_gates_verified",
-    "current_cross_verifier_replay_rejected",
-    "current_request_or_challenge_replay_rejected",
-    "current_authority_state_digest_mix_and_match_rejected",
     "current_stale_lease_is_unresolved",
     "current_paused_agent_rejected",
     "current_inactive_controller_account_rejected",
@@ -73,10 +68,6 @@ pub const ALL_AGENT_SIGNER_EVIDENCE_CASES: &[&str] = &[
     "historical_materialization_other_receiver_service_is_a_distinct_branch",
     "historical_materialization_incomplete_dependency_closure_publishes_no_root",
     "historical_materialization_lost_receipt_is_never_reminted",
-    "historical_outer_attestation_verifies_long_after_attested_at",
-    "historical_branch_carrying_current_outer_attestation_rejected",
-    "authority_key_rotation_after_attested_at_preserves_historical_root",
-    "authority_method_inactive_at_attested_at_rejected",
     "receiver_key_rotation_after_accepted_at_preserves_receipt",
     "receiver_dependency_resolved_from_current_service_record_rejected",
     "receiver_key_revoked_after_accepted_at_does_not_retroact",
@@ -91,10 +82,24 @@ pub const ALL_AGENT_SIGNER_EVIDENCE_CASES: &[&str] = &[
     "organization_pcr_cannot_materialize_agent_active",
     "state_witness_uses_canonical_event_dot",
     "bare_event_id_state_tag_rejected",
-    "outer_attestation_prevents_mode_splice",
     "historical_mls_leaf_cross_binding_verified",
     "duplicate_or_mismatched_mls_leaf_rejected",
     "minimal_metadata_forbids_agent_evidence_query",
+    "current_valid_relation_reuses_signed_state_across_signals",
+    "current_shared_state_does_not_share_device_verification",
+    "current_reconnect_and_trusted_restore_do_not_renew_state",
+    "current_delta_hydrates_same_canonical_root",
+    "current_delta_missing_state_or_dependency_unresolved",
+    "current_state_substitution_rejected",
+    "current_cross_account_station_or_scope_rejected",
+    "current_state_age_cannot_exceed_300_seconds",
+    "current_repackaging_does_not_extend_original_deadline",
+    "current_gate_expiry_shortens_effective_deadline",
+    "current_known_revocation_invalidates_before_deadline",
+    "historical_same_station_uses_original_admission",
+    "historical_same_station_second_receipt_rejected",
+    "historical_other_receiver_requires_own_receipt",
+    "historical_original_lease_survives_later_authority_rotation",
 ];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -148,11 +153,6 @@ struct ExecutableEvidence {
     authority_public_key: [u8; 32],
     account_authority_public_key: [u8; 32],
     receiver_public_key: [u8; 32],
-    operation_id: ProtocolOperationId,
-    request_digest: Hash,
-    verifier_id: DidCoreId,
-    audience: DidCoreId,
-    challenge: NonEmptyString,
     event_id: EventId,
     realm_id: RealmId,
     producer_accepted_at: DateTime<Utc>,
@@ -213,37 +213,7 @@ fn service_id(value: &str) -> Result<DidCoreId> {
 fn execute_case(name: &str, case: &Value) -> Result<OutcomeClass> {
     match name {
         "query_success_returns_cas_frozen_authenticated_root" => {
-            current_outcome(&build_evidence(EvidenceConfig::default())?, None)
-        }
-        "current_exact_request_and_three_active_gates_verified" => {
-            current_outcome(&build_evidence(EvidenceConfig::default())?, None)
-        }
-        "current_cross_verifier_replay_rejected" => {
-            let fixture = build_evidence(EvidenceConfig::default())?;
-            current_outcome(
-                &fixture,
-                Some(CurrentOverride::Verifier(service_id(
-                    "did:webvh:z6mkother:verifier.example",
-                )?)),
-            )
-        }
-        "current_request_or_challenge_replay_rejected" => {
-            let fixture = build_evidence(EvidenceConfig::default())?;
-            current_outcome(
-                &fixture,
-                Some(CurrentOverride::RequestDigest(hash_byte(0xa7)?)),
-            )
-        }
-        "current_authority_state_digest_mix_and_match_rejected" => {
-            let mut fixture = build_evidence(EvidenceConfig::default())?;
-            if let AgentSignerEvidence::CurrentAdmission {
-                current_observation,
-                ..
-            } = &mut fixture.current
-            {
-                current_observation.agent_authority_state_digest = hash_byte(0xa8)?;
-            }
-            current_outcome(&fixture, None)
+            current_outcome(&build_evidence(EvidenceConfig::default())?)
         }
         "current_stale_lease_is_unresolved" => {
             let fixture = build_evidence(EvidenceConfig {
@@ -252,28 +222,23 @@ fn execute_case(name: &str, case: &Value) -> Result<OutcomeClass> {
             })?;
             current_stale_outcome(&fixture)
         }
-        "current_paused_agent_rejected" => current_outcome(
-            &build_evidence(EvidenceConfig {
-                lifecycle_status: AgentLifecycleStatus::Paused,
-                ..EvidenceConfig::default()
-            })?,
-            None,
-        ),
-        "current_inactive_controller_account_rejected" => current_outcome(
-            &build_evidence(EvidenceConfig {
+        "current_paused_agent_rejected" => current_outcome(&build_evidence(EvidenceConfig {
+            lifecycle_status: AgentLifecycleStatus::Paused,
+            ..EvidenceConfig::default()
+        })?),
+        "current_inactive_controller_account_rejected" => {
+            current_outcome(&build_evidence(EvidenceConfig {
                 controller_eligibility: ControllerAccountEligibility::Inactive,
                 controller_status: ControllerAccountStatus::Suspended,
                 ..EvidenceConfig::default()
-            })?,
-            None,
-        ),
-        "current_revoked_or_superseded_key_rejected" => current_outcome(
-            &build_evidence(EvidenceConfig {
+            })?)
+        }
+        "current_revoked_or_superseded_key_rejected" => {
+            current_outcome(&build_evidence(EvidenceConfig {
                 authorization_status: AgentAuthorizationStatus::Revoked,
                 ..EvidenceConfig::default()
-            })?,
-            None,
-        ),
+            })?)
+        }
         "historical_destination_receipt_preserves_admission" => {
             historical_outcome(&build_evidence(EvidenceConfig::default())?, None, false)
         }
@@ -305,38 +270,6 @@ fn execute_case(name: &str, case: &Value) -> Result<OutcomeClass> {
         | "historical_materialization_incomplete_dependency_closure_publishes_no_root"
         | "historical_materialization_lost_receipt_is_never_reminted" => {
             execute_historical_materialization_case(name, case)
-        }
-        "historical_outer_attestation_verifies_long_after_attested_at" => {
-            validate_historical_materialization_case(case)?;
-            require_case_str(case, "outer_attestation_branch", "historical")?;
-            require_case_bool(case, "outer_attestation_carries_expires_at", false)?;
-            require_case_bool(case, "verifier_now_far_after_attested_at", true)?;
-            require_case_str(case, "authority_method_resolved_at", "attested_at")?;
-            historical_outcome(&build_evidence(EvidenceConfig::default())?, None, false)
-        }
-        "historical_branch_carrying_current_outer_attestation_rejected" => {
-            validate_historical_materialization_case(case)?;
-            require_case_str(case, "outer_attestation_branch", "current")?;
-            require_case_bool(case, "outer_attestation_carries_expires_at", true)?;
-            let fixture = build_evidence(EvidenceConfig::default())?;
-            historical_outcome_with(&fixture, Some(&fixture.current), None, false)
-        }
-        "authority_key_rotation_after_attested_at_preserves_historical_root" => {
-            validate_historical_materialization_case(case)?;
-            require_case_bool(
-                case,
-                "authority_signing_key_rotated_after_attested_at",
-                true,
-            )?;
-            require_case_str(case, "authority_method_resolved_at", "attested_at")?;
-            historical_outcome(&build_evidence(EvidenceConfig::default())?, None, false)
-        }
-        "authority_method_inactive_at_attested_at_rejected" => {
-            validate_historical_materialization_case(case)?;
-            require_case_bool(case, "authority_method_active_at_attested_at", false)?;
-            let mut fixture = build_evidence(EvidenceConfig::default())?;
-            fixture.authority_public_key = [99; 32];
-            historical_outcome(&fixture, None, false)
         }
         "receiver_key_rotation_after_accepted_at_preserves_receipt" => {
             validate_historical_materialization_case(case)?;
@@ -375,7 +308,7 @@ fn execute_case(name: &str, case: &Value) -> Result<OutcomeClass> {
             if contains_forbidden_local_identity(&serialized) {
                 bail!("portable account gate disclosed service-local identity");
             }
-            current_outcome(&fixture, None)
+            current_outcome(&fixture)
         }
         "producer_fetches_controller_gate_from_account_authority"
         | "controller_gate_exact_request_replay_is_byte_identical"
@@ -395,7 +328,7 @@ fn execute_case(name: &str, case: &Value) -> Result<OutcomeClass> {
             {
                 bail!("active Agent witness does not bind its admitted genesis");
             }
-            current_outcome(&fixture, None)
+            current_outcome(&fixture)
         }
         "organization_pcr_cannot_materialize_agent_active" => {
             let fixture = build_evidence(EvidenceConfig::default())?;
@@ -414,29 +347,13 @@ fn execute_case(name: &str, case: &Value) -> Result<OutcomeClass> {
             })?;
             state_outcome_with_policy(&fixture, &|_| Ok(()))
         }
-        "outer_attestation_prevents_mode_splice" => {
-            let mut fixture = build_evidence(EvidenceConfig::default())?;
-            let current_core_digest = match &fixture.current {
-                AgentSignerEvidence::CurrentAdmission {
-                    outer_attestation, ..
-                } => outer_attestation.core_digest.clone(),
-                AgentSignerEvidence::HistoricalEvent { .. } => unreachable!(),
-            };
-            if let AgentSignerEvidence::HistoricalEvent {
-                outer_attestation, ..
-            } = &mut fixture.historical
-            {
-                outer_attestation.core_digest = current_core_digest;
-            }
-            historical_outcome(&fixture, None, false)
-        }
         "historical_mls_leaf_cross_binding_verified" => {
             historical_outcome(&build_evidence(EvidenceConfig::default())?, None, false)
         }
         "duplicate_or_mismatched_mls_leaf_rejected" => {
             let mut fixture = build_evidence(EvidenceConfig::default())?;
             if let AgentSignerEvidence::HistoricalEvent {
-                event_admission_receipt,
+                event_admission: AgentEventAdmission::ReceiverReceipt { receipt },
                 ..
             } = &mut fixture.historical
             {
@@ -446,7 +363,7 @@ fn execute_case(name: &str, case: &Value) -> Result<OutcomeClass> {
                     .split_once('#')
                     .map(|(controller, _)| controller)
                     .context("fixture verification method has no controller")?;
-                event_admission_receipt.verification_method =
+                receipt.verification_method =
                     DidUrl::new(format!("{controller}#mismatched-mls-leaf"))
                         .map_err(anyhow::Error::msg)?;
             }
@@ -462,7 +379,7 @@ fn execute_case(name: &str, case: &Value) -> Result<OutcomeClass> {
                 Ok(OutcomeClass::Rejected)
             }
         }
-        other => bail!("unimplemented Agent signer-evidence case {other}"),
+        other => execute_reuse_case(other),
     }
 }
 
@@ -570,11 +487,6 @@ fn execute_historical_materialization_case(name: &str, case: &Value) -> Result<O
     }
 }
 
-enum CurrentOverride {
-    Verifier(DidCoreId),
-    RequestDigest(Hash),
-}
-
 fn execute_controller_gate_case(name: &str, case: &Value) -> Result<OutcomeClass> {
     let bool_field = |field: &str| {
         case.get(field)
@@ -678,10 +590,7 @@ fn execute_controller_gate_case(name: &str, case: &Value) -> Result<OutcomeClass
     }
 }
 
-fn current_outcome(
-    fixture: &ExecutableEvidence,
-    override_value: Option<CurrentOverride>,
-) -> Result<OutcomeClass> {
+fn current_outcome(fixture: &ExecutableEvidence) -> Result<OutcomeClass> {
     let verified_state = match verified_state(fixture, &fixture.current, &|_| Ok(())) {
         Ok(state) => state,
         Err(_) => return Ok(OutcomeClass::Rejected),
@@ -696,32 +605,9 @@ fn current_outcome(
         &authority_key,
         &account_key,
     );
-    let alternate_verifier;
-    let alternate_digest;
-    let verifier_id = match &override_value {
-        Some(CurrentOverride::Verifier(value)) => {
-            alternate_verifier = value;
-            alternate_verifier
-        }
-        _ => &fixture.verifier_id,
-    };
-    let request_digest = match &override_value {
-        Some(CurrentOverride::RequestDigest(value)) => {
-            alternate_digest = value;
-            alternate_digest
-        }
-        _ => &fixture.request_digest,
-    };
     Ok(verdict_class(validate_current_agent_signer_evidence(
         Some(&fixture.current),
-        &CurrentAgentSignerEvidenceValidationContext {
-            common,
-            operation_id: &fixture.operation_id,
-            request_digest,
-            verifier_id,
-            audience: &fixture.audience,
-            challenge: &fixture.challenge,
-        },
+        &CurrentAgentSignerEvidenceValidationContext { common },
     )))
 }
 
@@ -740,11 +626,6 @@ fn current_stale_outcome(fixture: &ExecutableEvidence) -> Result<OutcomeClass> {
                 &authority_key,
                 &account_key,
             ),
-            operation_id: &fixture.operation_id,
-            request_digest: &fixture.request_digest,
-            verifier_id: &fixture.verifier_id,
-            audience: &fixture.audience,
-            challenge: &fixture.challenge,
         },
     );
     match verdict {
@@ -752,6 +633,24 @@ fn current_stale_outcome(fixture: &ExecutableEvidence) -> Result<OutcomeClass> {
             arkret_signatures::agent_evidence::AgentEvidenceUnresolvedReason::Stale,
         ) => Ok(OutcomeClass::Unresolved),
         other => bail!("expired signed current snapshot lease returned {other:?}"),
+    }
+}
+
+fn current_verified_key(
+    fixture: &ExecutableEvidence,
+) -> Result<arkret_signatures::agent_evidence::VerifiedAgentSigningKey> {
+    let state = verified_state(fixture, &fixture.current, &|_| Ok(()))?;
+    let controller = public_key(fixture.controller_public_key);
+    let authority = public_key(fixture.authority_public_key);
+    let account = public_key(fixture.account_authority_public_key);
+    match validate_current_agent_signer_evidence(
+        Some(&fixture.current),
+        &CurrentAgentSignerEvidenceValidationContext {
+            common: common_context(fixture, &state, &controller, &authority, &account),
+        },
+    ) {
+        AgentSignerEvidenceVerdict::Verified(key) => Ok(key),
+        other => bail!("current verification returned {other:?}"),
     }
 }
 
@@ -800,6 +699,7 @@ fn historical_outcome_with(
             event_id: &fixture.event_id,
             realm_id: &fixture.realm_id,
             producer_accepted_at: fixture.producer_accepted_at,
+            producer_station_id: &fixture.authority_id,
             producer_signer_resolution_evidence_ref: &fixture
                 .producer_signer_resolution_evidence_ref,
             receiver_id,
@@ -928,10 +828,10 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         .with_ymd_and_hms(2026, 8, 3, 0, 0, 0)
         .single()
         .context("fixed timestamp")?;
-    let now = issued_at + Duration::minutes(20);
-    let expires_at = issued_at + Duration::hours(2);
+    let now = issued_at + Duration::minutes(1);
+    let expires_at = issued_at + Duration::seconds(300);
     let authority_state_lease_expires_at = if config.stale_authority_state_lease {
-        now - Duration::minutes(1)
+        now - Duration::seconds(1)
     } else {
         expires_at
     };
@@ -944,8 +844,7 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
     let signer_did = Did::new("did:webvh:z6mkagent:agent.example")?;
     let controller_did = Did::new("did:webvh:z6mkcontroller:controller.example")?;
     let authority_service_did = Did::new("did:webvh:z6mkauthority:authority.example")?;
-    let account_authority_service_did =
-        Did::new("did:webvh:z6mkaccount:account-authority.example")?;
+    let account_authority_service_did = authority_service_did.clone();
     let receiver_service_did = Did::new("did:webvh:z6mkreceiver:receiver.example")?;
     let signer_id = project_did_to_core_id(&signer_did)?;
     let controller_principal_id = project_did_to_core_id(&controller_did)?;
@@ -964,7 +863,7 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
     let authority_verification_method =
         DidUrl::new(format!("{authority_service_did}#assertion-1")).map_err(anyhow::Error::msg)?;
     let account_authority_verification_method =
-        DidUrl::new(format!("{account_authority_service_did}#assertion-1"))
+        DidUrl::new(format!("{account_authority_service_did}#account-authority"))
             .map_err(anyhow::Error::msg)?;
     let receiver_verification_method =
         DidUrl::new(format!("{receiver_service_did}#assertion-1")).map_err(anyhow::Error::msg)?;
@@ -1254,11 +1153,9 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
             proof: pending_proof()?,
         },
     };
-    authority_state_evidence.lease.proof = sign_domain(
-        DomainSeparationId::AGENT_AUTHORITY_STATE_EVIDENCE_V1,
-        &authority_state_evidence.lease,
+    arkret_signatures::agent_evidence::sign_agent_authority_state_lease(
+        &mut authority_state_evidence.lease,
         &authority_signing,
-        None,
     )?;
 
     let basis = ControllerAccountGateBasis::AccountBindingDefault {
@@ -1278,13 +1175,10 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         expires_at,
         proof: pending_proof()?,
     };
-    gate.proof = sign_domain(
-        DomainSeparationId::CONTROLLER_ACCOUNT_GATE_V1,
-        &gate,
+    arkret_signatures::agent_evidence::sign_controller_account_gate_attestation(
+        &mut gate,
         &account_signing,
-        None,
     )?;
-    let gate_digest = canonical_hash(&gate)?;
     let admission_evidence_digest = canonical_hash(&serde_json::json!({
         "agent_authority_state_evidence": authority_state_evidence,
         "controller_account_gate_attestation": gate,
@@ -1295,48 +1189,11 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         admission_evidence_digest: admission_evidence_digest.clone(),
     };
 
-    let operation_id = ProtocolOperationId::new("ak:operation:cotest.agent-evidence")
-        .map_err(anyhow::Error::msg)?;
-    let request_digest = hash_byte(0x41)?;
-    let verifier_id = service_id("did:webvh:z6mkverifier:verifier.example")?;
-    let audience = service_id("did:webvh:z6mkaudience:audience.example")?;
-    let challenge = nes("cotest-agent-evidence-challenge-0001")?;
-    let observation = AgentCurrentObservation {
-        operation_id: operation_id.clone(),
-        request_digest: request_digest.clone(),
-        verifier_id: verifier_id.clone(),
-        audience_id: audience.clone(),
-        challenge: challenge.clone(),
-        agent_authority_state_digest: state_digest.clone(),
-        agent_key_seal_id: admission
-            .agent_authority_state_evidence
-            .state
-            .key_state_witness
-            .seal_id
-            .clone(),
-        agent_status_seal_id: admission
-            .agent_authority_state_evidence
-            .state
-            .agent_lifecycle_witness
-            .seal_id
-            .clone(),
-        controller_gate_attestation_digest: gate_digest.clone(),
-        evaluated_at: now,
-        expires_at: now + Duration::minutes(10),
-    };
-    let mut current = AgentSignerEvidence::CurrentAdmission {
+    let current = AgentSignerEvidence::CurrentAdmission {
         schema: nes(SchemaId::AGENT_SIGNER_EVIDENCE_V1)?,
         admission_evidence: admission.clone(),
-        current_observation: observation,
-        outer_attestation: pending_outer(
-            &authority_id,
-            &authority_verification_method,
-            issued_at,
-            expires_at,
-        )?,
         transparency: None,
     };
-    sign_outer(&mut current, &authority_signing)?;
 
     let event_id = event_id(3)?;
     let producer_accepted_at = now - Duration::seconds(1);
@@ -1356,24 +1213,17 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         receiver_id: receiver_id.clone(),
         proof: pending_proof()?,
     };
-    receipt.proof = sign_domain(
-        DomainSeparationId::AGENT_SIGNER_ADMISSION_RECEIPT_V1,
-        &receipt,
+    arkret_signatures::agent_evidence::sign_agent_event_admission_receipt(
+        &mut receipt,
+        &receiver_verification_method,
         &receiver_signing,
-        Some(&receiver_verification_method),
     )?;
-    let mut historical = AgentSignerEvidence::HistoricalEvent {
+    let historical = AgentSignerEvidence::HistoricalEvent {
         schema: nes(SchemaId::AGENT_SIGNER_EVIDENCE_V1)?,
         admission_evidence: admission,
-        event_admission_receipt: receipt,
-        outer_attestation: pending_historical_outer(
-            &authority_id,
-            &authority_verification_method,
-            now,
-        )?,
+        event_admission: AgentEventAdmission::ReceiverReceipt { receipt },
         transparency: None,
     };
-    sign_outer(&mut historical, &authority_signing)?;
 
     Ok(ExecutableEvidence {
         current,
@@ -1396,11 +1246,6 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         authority_public_key: authority_signing.verifying_key().to_bytes(),
         account_authority_public_key: account_signing.verifying_key().to_bytes(),
         receiver_public_key: receiver_signing.verifying_key().to_bytes(),
-        operation_id,
-        request_digest,
-        verifier_id,
-        audience,
-        challenge,
         event_id,
         realm_id,
         producer_accepted_at,
@@ -1454,113 +1299,6 @@ fn sign_fixture_seal(seal: &mut Seal) -> Result<()> {
     signature.jws = sign_ed25519_detached_jws(&SigningKey::from_bytes(&[11; 32]), &bytes)?;
     seal.id = seal.derive_id(arkret_canonical::DigestSuite::Sha256)?;
     Ok(())
-}
-
-fn sign_outer(evidence: &mut AgentSignerEvidence, signing_key: &SigningKey) -> Result<()> {
-    let mut core = serde_json::to_value(&*evidence)?;
-    core.as_object_mut()
-        .and_then(|object| object.remove("outer_attestation"))
-        .context("outer attestation missing")?;
-    let core_digest = canonical_hash(&core)?;
-    match evidence {
-        AgentSignerEvidence::CurrentAdmission {
-            outer_attestation, ..
-        } => {
-            outer_attestation.core_digest = core_digest;
-            outer_attestation.proof = sign_domain(
-                DomainSeparationId::AGENT_SIGNER_EVIDENCE_V1,
-                outer_attestation,
-                signing_key,
-                None,
-            )?;
-        }
-        AgentSignerEvidence::HistoricalEvent {
-            outer_attestation, ..
-        } => {
-            outer_attestation.core_digest = core_digest;
-            outer_attestation.proof = sign_domain(
-                DomainSeparationId::AGENT_SIGNER_EVIDENCE_V1,
-                outer_attestation,
-                signing_key,
-                None,
-            )?;
-        }
-    }
-    Ok(())
-}
-
-fn pending_historical_outer(
-    service_id: &DidCoreId,
-    method: &DidUrl,
-    attested_at: DateTime<Utc>,
-) -> Result<AgentHistoricalEvidenceOuterAttestation> {
-    Ok(AgentHistoricalEvidenceOuterAttestation {
-        domain: nes(DomainSeparationId::AGENT_SIGNER_EVIDENCE_V1)?,
-        core_digest: hash_byte(0)?,
-        source_id: service_id.clone(),
-        verification_method: method.clone(),
-        attested_at,
-        proof: pending_proof()?,
-    })
-}
-
-fn pending_outer(
-    service_id: &DidCoreId,
-    method: &DidUrl,
-    issued_at: DateTime<Utc>,
-    expires_at: DateTime<Utc>,
-) -> Result<AgentEvidenceOuterAttestation> {
-    Ok(AgentEvidenceOuterAttestation {
-        domain: nes(DomainSeparationId::AGENT_SIGNER_EVIDENCE_V1)?,
-        core_digest: hash_byte(0)?,
-        source_id: service_id.clone(),
-        verification_method: method.clone(),
-        issued_at,
-        expires_at,
-        proof: pending_proof()?,
-    })
-}
-
-fn sign_domain(
-    domain: &str,
-    value: &impl Serialize,
-    signing_key: &SigningKey,
-    protected_kid: Option<&DidUrl>,
-) -> Result<AgentDetachedJws> {
-    let mut unsigned = serde_json::to_value(value)?;
-    unsigned
-        .as_object_mut()
-        .and_then(|object| object.get_mut("proof"))
-        .and_then(Value::as_object_mut)
-        .and_then(|proof| proof.remove("jws"))
-        .context("signed evidence object missing proof.jws")?;
-    let canonical = arkret_canonical::canonical_json_bytes(&unsigned)?;
-    let mut signing_bytes = format!("{domain}\n").into_bytes();
-    signing_bytes.extend(canonical);
-    let jws = match protected_kid {
-        Some(kid) => detached_jws_with_kid(signing_key, &signing_bytes, kid)?,
-        None => sign_ed25519_detached_jws(signing_key, &signing_bytes)
-            .map_err(|error| anyhow!(error.to_string()))?,
-    };
-    Ok(AgentDetachedJws {
-        kind: nes("detached_jws")?,
-        jws: nes(&jws)?,
-    })
-}
-
-fn detached_jws_with_kid(key: &SigningKey, payload: &[u8], kid: &DidUrl) -> Result<String> {
-    let protected = arkret_canonical::canonical_json_bytes(&serde_json::json!({
-        "alg": "Ed25519",
-        "kid": kid,
-    }))?;
-    let protected = arkret_canonical::base64url_encode(protected);
-    let payload = arkret_canonical::base64url_encode(payload);
-    let signing_input = format!("{protected}.{payload}");
-    let signature = key.sign(signing_input.as_bytes());
-    Ok(format!(
-        "{protected}..{}",
-        arkret_canonical::base64url_encode(signature.to_bytes())
-    ))
 }
 
 fn pending_proof() -> Result<AgentDetachedJws> {
@@ -1680,6 +1418,141 @@ mod lifecycle_regressions {
     use super::*;
 
     #[test]
+    fn another_station_valid_gate_cannot_substitute_controller_account_authority() {
+        let mut fixture = build_evidence(EvidenceConfig::default()).unwrap();
+        let other = Did::new("did:webvh:zother:other.example").unwrap();
+        fixture.account_authority_id = project_did_to_core_id(&other).unwrap();
+        fixture.account_authority_verification_method =
+            DidUrl::new(format!("{other}#account-authority")).unwrap();
+        let AgentSignerEvidence::CurrentAdmission {
+            admission_evidence, ..
+        } = &mut fixture.current
+        else {
+            unreachable!()
+        };
+        let gate = &mut admission_evidence.controller_account_gate_attestation;
+        gate.authority_id = fixture.account_authority_id.clone();
+        gate.verification_method = fixture.account_authority_verification_method.clone();
+        arkret_signatures::agent_evidence::sign_controller_account_gate_attestation(
+            gate,
+            &SigningKey::from_bytes(&[14; 32]),
+        )
+        .unwrap();
+        admission_evidence.admission_evidence_digest =
+            arkret_signatures::agent_evidence::agent_admission_evidence_digest(
+                &admission_evidence.agent_authority_state_evidence,
+                &admission_evidence.controller_account_gate_attestation,
+            )
+            .unwrap();
+        assert_eq!(current_outcome(&fixture).unwrap(), OutcomeClass::Rejected);
+    }
+
+    #[test]
+    fn current_refresh_reuses_only_verified_unchanged_state_and_checks_new_signatures() {
+        use arkret_signatures::agent_evidence::{
+            refresh_current_agent_signer_evidence, sign_agent_authority_state_lease,
+            sign_controller_account_gate_attestation,
+        };
+        let fixture = build_evidence(EvidenceConfig::default()).unwrap();
+        let previous = current_verified_key(&fixture).unwrap();
+        let controller = public_key(fixture.controller_public_key);
+        let authority = public_key(fixture.authority_public_key);
+        let account = public_key(fixture.account_authority_public_key);
+        let context = CurrentAgentSignerEvidenceValidationContext {
+            common: common_context(
+                &fixture,
+                previous.verified_state(),
+                &controller,
+                &authority,
+                &account,
+            ),
+        };
+        let mut refreshed = fixture.current.clone();
+        let AgentSignerEvidence::CurrentAdmission {
+            admission_evidence, ..
+        } = &mut refreshed
+        else {
+            unreachable!()
+        };
+        admission_evidence
+            .agent_authority_state_evidence
+            .lease
+            .issued_at += Duration::seconds(30);
+        admission_evidence
+            .agent_authority_state_evidence
+            .lease
+            .expires_at += Duration::seconds(30);
+        sign_agent_authority_state_lease(
+            &mut admission_evidence.agent_authority_state_evidence.lease,
+            &SigningKey::from_bytes(&[13; 32]),
+        )
+        .unwrap();
+        admission_evidence
+            .controller_account_gate_attestation
+            .issued_at += Duration::seconds(30);
+        admission_evidence
+            .controller_account_gate_attestation
+            .expires_at += Duration::seconds(30);
+        sign_controller_account_gate_attestation(
+            &mut admission_evidence.controller_account_gate_attestation,
+            &SigningKey::from_bytes(&[14; 32]),
+        )
+        .unwrap();
+        admission_evidence.admission_evidence_digest =
+            arkret_signatures::agent_evidence::agent_admission_evidence_digest(
+                &admission_evidence.agent_authority_state_evidence,
+                &admission_evidence.controller_account_gate_attestation,
+            )
+            .unwrap();
+        let AgentSignerEvidenceVerdict::Verified(next) =
+            refresh_current_agent_signer_evidence(Some(&refreshed), &context, Some(&previous))
+        else {
+            panic!("legitimate signed lease/gate refresh rejected unchanged verified state");
+        };
+        assert_eq!(previous.state_digest(), next.state_digest());
+        assert_ne!(
+            previous.admission_evidence_digest(),
+            next.admission_evidence_digest()
+        );
+        assert_eq!(previous.expires_at(), next.expires_at());
+        for mutation in 0..3 {
+            let mut changed = refreshed.clone();
+            let AgentSignerEvidence::CurrentAdmission {
+                admission_evidence, ..
+            } = &mut changed
+            else {
+                unreachable!()
+            };
+            if mutation == 0 {
+                sign_controller_account_gate_attestation(
+                    &mut admission_evidence.controller_account_gate_attestation,
+                    &SigningKey::from_bytes(&[99; 32]),
+                )
+                .unwrap();
+            } else if mutation == 1 {
+                admission_evidence
+                    .agent_authority_state_evidence
+                    .state_digest = hash_byte(0x77).unwrap();
+            } else {
+                let gate = &mut admission_evidence.controller_account_gate_attestation;
+                gate.expires_at = gate.issued_at + Duration::seconds(301);
+                sign_controller_account_gate_attestation(gate, &SigningKey::from_bytes(&[14; 32]))
+                    .unwrap();
+            }
+            admission_evidence.admission_evidence_digest =
+                arkret_signatures::agent_evidence::agent_admission_evidence_digest(
+                    &admission_evidence.agent_authority_state_evidence,
+                    &admission_evidence.controller_account_gate_attestation,
+                )
+                .unwrap();
+            assert!(matches!(
+                refresh_current_agent_signer_evidence(Some(&changed), &context, Some(&previous)),
+                AgentSignerEvidenceVerdict::Rejected(_)
+            ));
+        }
+    }
+
+    #[test]
     fn lifecycle_witness_has_no_derived_status_field() {
         let fixture = build_evidence(EvidenceConfig::default()).unwrap();
         let witness = &admission(&fixture.current)
@@ -1758,4 +1631,294 @@ mod lifecycle_regressions {
             );
         }
     }
+}
+
+fn evidence_ref(byte: u8) -> Result<SignerEvidenceRef> {
+    Ok(SignerEvidenceRef::new(format!(
+        "ak:signer_evidence:{}",
+        hash_byte(byte)?
+    ))?)
+}
+
+fn execute_reuse_case(name: &str) -> Result<OutcomeClass> {
+    match name {
+        "current_valid_relation_reuses_signed_state_across_signals" => {
+            let fixture = build_evidence(EvidenceConfig::default())?;
+            let verified = current_verified_key(&fixture)?;
+            let original = canonical_hash(&fixture.current)?;
+            let key = SigningKey::from_bytes(&[12; 32]);
+            let verifying = ed25519_dalek::VerifyingKey::from_bytes(verified.key())?;
+            for sequence in 0..100 {
+                let message = format!("relation-message-{sequence}");
+                if !verified.permits(
+                    &fixture.signer_actor_id,
+                    &fixture.verification_method,
+                    fixture.now,
+                ) {
+                    bail!("verified relation did not permit the actual sender");
+                }
+                verifying.verify_strict(message.as_bytes(), &key.sign(message.as_bytes()))?;
+            }
+            if original != canonical_hash(&fixture.current)? {
+                bail!("message processing changed shared evidence");
+            }
+            Ok(OutcomeClass::Verified)
+        }
+        "current_shared_state_does_not_share_device_verification" => {
+            let fixture = build_evidence(EvidenceConfig::default())?;
+            for _ in 0..2 {
+                if current_outcome(&fixture)? != OutcomeClass::Verified {
+                    return Ok(OutcomeClass::Rejected);
+                }
+            }
+            Ok(OutcomeClass::Verified)
+        }
+        "current_reconnect_and_trusted_restore_do_not_renew_state" => {
+            let mut fixture = build_evidence(EvidenceConfig::default())?;
+            let bytes = arkret_canonical::canonical_json_bytes(&fixture.current)?;
+            for _ in 0..3 {
+                fixture.current = serde_json::from_slice(&bytes)?;
+                if current_outcome(&fixture)? != OutcomeClass::Verified {
+                    return Ok(OutcomeClass::Rejected);
+                }
+            }
+            if bytes != arkret_canonical::canonical_json_bytes(&fixture.current)? {
+                bail!("restore renewed evidence");
+            }
+            Ok(OutcomeClass::Verified)
+        }
+        "current_delta_hydrates_same_canonical_root"
+        | "current_delta_missing_state_or_dependency_unresolved" => {
+            use arkret_models_collaboration::current_signer_evidence::CompactAgentSignerResolutionEvidence;
+            let fixture = build_evidence(EvidenceConfig::default())?;
+            let state = &admission(&fixture.current).agent_authority_state_evidence;
+            let root = arkret_models_identity::AuthenticatedSignerResolutionEvidence::Agent {
+                signer_id: fixture.signer_id.clone(),
+                verification_method: fixture.verification_method.clone(),
+                agent_signer_evidence: Box::new(fixture.current.clone()),
+                attester_signer_evidence_ref: evidence_ref(0x81)?,
+                controller_signer_evidence_ref: evidence_ref(0x82)?,
+                account_authority_signer_evidence_ref: evidence_ref(0x83)?,
+                receiver_signer_evidence_ref: None,
+            };
+            let compact = CompactAgentSignerResolutionEvidence::from_full(
+                &root,
+                &[state.state_digest.clone()],
+            )?;
+            let mut states = std::collections::BTreeMap::new();
+            if name == "current_delta_missing_state_or_dependency_unresolved" {
+                if compact.hydrate(&states).is_ok() {
+                    bail!("missing state became usable");
+                }
+                return Ok(OutcomeClass::Unresolved);
+            }
+            states.insert(state.state_digest.clone(), state.state.clone());
+            if compact.hydrate(&states)? != root {
+                bail!("hydration changed canonical root");
+            }
+            Ok(OutcomeClass::Verified)
+        }
+        "current_state_substitution_rejected" => {
+            let mut fixture = build_evidence(EvidenceConfig::default())?;
+            let AgentSignerEvidence::CurrentAdmission {
+                admission_evidence, ..
+            } = &mut fixture.current
+            else {
+                unreachable!()
+            };
+            admission_evidence
+                .agent_authority_state_evidence
+                .state_digest = hash_byte(0xa8)?;
+            current_outcome(&fixture)
+        }
+        "current_cross_account_station_or_scope_rejected" => {
+            let mut fixture = build_evidence(EvidenceConfig::default())?;
+            let key = current_verified_key(&fixture)?;
+            let wrong_station = service_id("did:webvh:zother:other.example")?;
+            for actor in [
+                ActorId::account(AccountId::new(
+                    fixture.signer_id.clone(),
+                    wrong_station.clone(),
+                )),
+                ActorId::account(AccountId::new(
+                    fixture.controller_principal_id.clone(),
+                    fixture.authority_id.clone(),
+                )),
+            ] {
+                if key.permits(&actor, &fixture.verification_method, fixture.now) {
+                    bail!("cached key crossed account binding");
+                }
+            }
+            let wrong_method = DidUrl::new(format!(
+                "{}#other-key",
+                fixture
+                    .verification_method
+                    .as_str()
+                    .split_once('#')
+                    .context("method")?
+                    .0
+            ))
+            .map_err(anyhow::Error::msg)?;
+            if key.permits(&fixture.signer_actor_id, &wrong_method, fixture.now) {
+                bail!("cached key crossed method binding");
+            }
+            fixture.authority_id = service_id("did:webvh:zother:other.example")?;
+            current_outcome(&fixture)
+        }
+        "current_state_age_cannot_exceed_300_seconds"
+        | "current_repackaging_does_not_extend_original_deadline" => {
+            let mut fixture = build_evidence(EvidenceConfig::default())?;
+            fixture.now = admission(&fixture.current)
+                .agent_authority_state_evidence
+                .lease
+                .issued_at
+                + Duration::seconds(301);
+            current_stale_outcome(&fixture)
+        }
+        "current_gate_expiry_shortens_effective_deadline" => {
+            let mut fixture = build_evidence(EvidenceConfig::default())?;
+            let now = fixture.now;
+            let AgentSignerEvidence::CurrentAdmission {
+                admission_evidence, ..
+            } = &mut fixture.current
+            else {
+                unreachable!()
+            };
+            admission_evidence
+                .controller_account_gate_attestation
+                .expires_at = now;
+            arkret_signatures::agent_evidence::sign_controller_account_gate_attestation(
+                &mut admission_evidence.controller_account_gate_attestation,
+                &SigningKey::from_bytes(&[14; 32]),
+            )?;
+            admission_evidence.admission_evidence_digest =
+                arkret_signatures::agent_evidence::agent_admission_evidence_digest(
+                    &admission_evidence.agent_authority_state_evidence,
+                    &admission_evidence.controller_account_gate_attestation,
+                )?;
+            current_stale_outcome(&fixture)
+        }
+        "current_known_revocation_invalidates_before_deadline" => {
+            current_outcome(&build_evidence(EvidenceConfig {
+                authorization_status: AgentAuthorizationStatus::Revoked,
+                ..EvidenceConfig::default()
+            })?)
+        }
+        "historical_original_lease_survives_later_authority_rotation" => {
+            let mut fixture = build_evidence(EvidenceConfig::default())?;
+            fixture.now += Duration::days(365);
+            historical_outcome(&fixture, None, false)
+        }
+        "historical_same_station_uses_original_admission"
+        | "historical_other_receiver_requires_own_receipt" => {
+            let mut fixture = build_evidence(EvidenceConfig::default())?;
+            install_original_station_admission(&mut fixture)?;
+            let receiver = (name == "historical_other_receiver_requires_own_receipt")
+                .then(|| service_id("did:webvh:zother:other.example"))
+                .transpose()?;
+            historical_outcome(&fixture, receiver, false)
+        }
+        "historical_same_station_second_receipt_rejected" => {
+            let mut fixture = build_evidence(EvidenceConfig::default())?;
+            fixture.receiver_id = fixture.authority_id.clone();
+            fixture.receiver_verification_method = fixture.authority_verification_method.clone();
+            fixture.receiver_public_key = fixture.authority_public_key;
+            let AgentSignerEvidence::HistoricalEvent {
+                event_admission: AgentEventAdmission::ReceiverReceipt { receipt },
+                ..
+            } = &mut fixture.historical
+            else {
+                unreachable!()
+            };
+            receipt.receiver_id = fixture.receiver_id.clone();
+            receipt.accepted_at = fixture.producer_accepted_at;
+            arkret_signatures::agent_evidence::sign_agent_event_admission_receipt(
+                receipt,
+                &fixture.receiver_verification_method,
+                &SigningKey::from_bytes(&[13; 32]),
+            )?;
+            historical_outcome(&fixture, None, false)
+        }
+        _ => bail!("unimplemented Agent reuse case {name}"),
+    }
+}
+
+fn install_original_station_admission(fixture: &mut ExecutableEvidence) -> Result<()> {
+    let agent_key = SigningKey::from_bytes(&[12; 32]);
+    let authority_key = SigningKey::from_bytes(&[13; 32]);
+    let did = Did::new(
+        fixture
+            .verification_method
+            .as_str()
+            .split_once('#')
+            .context("Agent method")?
+            .0,
+    )?;
+    let event = arkret_wire::test_support::raw_event_at(
+        EventKind::SelfAgentPause.as_str(),
+        ScopeRef::Realm {
+            realm_id: fixture.realm_id.clone(),
+        },
+        fixture.signer_id.clone(),
+        fixture.authority_id.clone(),
+        4,
+        Hlc::new("01970e589d21-0004-a13f9c2e")?,
+        serde_json::json!({"transition":"pause"}),
+        fixture.producer_accepted_at,
+    )?;
+    let mut authored = arkret_wire::AuthoredEvent::finalize_with_digest_suite(
+        event,
+        arkret_canonical::DigestSuite::Sha256,
+    )?;
+    let signer = arkret_signatures::Ed25519PayloadSigner::new(
+        agent_key.clone(),
+        did,
+        fixture.verification_method.clone(),
+    );
+    arkret_signatures::sign_event(
+        &mut authored,
+        &signer,
+        &fixture.verification_method,
+        arkret_signatures::SignEventOptions::new().with_created_at(fixture.producer_accepted_at),
+    )?;
+    let mut event = authored.into_event();
+    let producer = event.proofs[0].as_producer().context("producer")?;
+    let mut proof = arkret_wire::StationAdmissionProof {
+        kind: arkret_wire::StationAdmissionProofKind::StationAdmission,
+        verification_method: fixture.authority_verification_method.clone(),
+        event_digest: event.event_id.event_digest(),
+        producer_proof_digest: arkret_wire::StationAdmissionProof::producer_proof_digest(producer)?,
+        producer_verification_method: fixture.verification_method.clone(),
+        producer_signing_key_did: arkret_wire::DidKey::new(format!(
+            "did:key:{}",
+            arkret_canonical::ed25519_pubkey_to_did_key_multibase(
+                &agent_key.verifying_key().to_bytes()
+            )
+        ))?,
+        producer_signer_resolution_evidence_ref: Some(
+            fixture.producer_signer_resolution_evidence_ref.clone(),
+        ),
+        signer_resolution_evidence_ref: evidence_ref(0x84)?,
+        applet_installation_digest: None,
+        accepted_at: fixture.producer_accepted_at,
+        jws: String::new(),
+    };
+    proof.jws = sign_ed25519_detached_jws(&authority_key, &proof.canonical_binding_bytes()?)?;
+    event
+        .proofs
+        .push(arkret_wire::EventProof::StationAdmission(proof));
+    fixture.event_id = event.event_id.clone();
+    fixture.receiver_id = fixture.authority_id.clone();
+    fixture.receiver_verification_method = fixture.authority_verification_method.clone();
+    fixture.receiver_public_key = fixture.authority_public_key;
+    let AgentSignerEvidence::HistoricalEvent {
+        event_admission, ..
+    } = &mut fixture.historical
+    else {
+        unreachable!()
+    };
+    *event_admission = AgentEventAdmission::StationAdmission {
+        accepted_event: event,
+    };
+    Ok(())
 }

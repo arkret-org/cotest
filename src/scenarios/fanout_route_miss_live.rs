@@ -17,9 +17,9 @@ use arkret_models_collaboration::{
     CurrentSignerEvidenceItem, CurrentSignerEvidenceQueryRequestBody, CurrentSignerEvidenceSelector,
 };
 use arkret_wire::{
-    AccountId, ActorId, Did, DidCoreId, DidUrl, Event, EventId, EventKind, Hash, NonEmptyString,
-    RealmId, RequestId, ScopeRef, SealId, ServiceOperationId, SignalClass, SignalEncryptedPayload,
-    SignalEnvelope, SignalKeyRef, SignalProof,
+    AccountId, ActorId, Did, DidCoreId, DidUrl, Event, EventId, EventKind, Hash, RealmId,
+    RequestId, ScopeRef, SealId, SignalClass, SignalEncryptedPayload, SignalEnvelope, SignalKeyRef,
+    SignalProof,
 };
 use chrono::Utc;
 use reqwest::StatusCode;
@@ -27,7 +27,7 @@ use serde_json::json;
 
 use crate::harness::{TestActorClient, TestServerGroup, expect_json};
 use crate::scenarios::identity_test_support::{
-    HARNESS_ACCOUNT_AUTHORITY_ORIGIN, actor_did_for_service_did, harness_account_authority_id,
+    HARNESS_ACCOUNT_AUTHORITY_ORIGIN, actor_did_for_service_did,
 };
 
 const INSTALL_PATH: &str = "/_arkret/_conformance/realm-fixture/install";
@@ -79,7 +79,6 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
     };
     let target_database_is_harness_owned = target_ephemeral.is_some()
         || std::env::var("COTEST_FANOUT_TARGET_DATABASE_EPHEMERAL").as_deref() == Ok("1");
-    let account_authority_id = harness_account_authority_id().to_string();
     let node_envs = vec![
         vec![
             ("DATABASE_URL".to_owned(), source_database_url.clone()),
@@ -92,10 +91,6 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
                 "SOLAND_ACCOUNT_AUTHORITY_URL".to_owned(),
                 HARNESS_ACCOUNT_AUTHORITY_ORIGIN.to_owned(),
             ),
-            (
-                "SOLAND_ACCOUNT_AUTHORITY_SERVICE_ID".to_owned(),
-                account_authority_id.clone(),
-            ),
         ],
         vec![
             ("DATABASE_URL".to_owned(), target_database_url.clone()),
@@ -107,10 +102,6 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
             (
                 "SOLAND_ACCOUNT_AUTHORITY_URL".to_owned(),
                 HARNESS_ACCOUNT_AUTHORITY_ORIGIN.to_owned(),
-            ),
-            (
-                "SOLAND_ACCOUNT_AUTHORITY_SERVICE_ID".to_owned(),
-                account_authority_id,
             ),
         ],
     ];
@@ -792,7 +783,6 @@ pub async fn run_current_signer_evidence_live() -> Result<()> {
             (database.connect_url.clone(), target_ephemeral)
         }
     };
-    let account_authority_id = harness_account_authority_id().to_string();
     let node_envs = vec![
         vec![
             ("DATABASE_URL".to_owned(), source_database_url),
@@ -801,10 +791,6 @@ pub async fn run_current_signer_evidence_live() -> Result<()> {
                 "SOLAND_ACCOUNT_AUTHORITY_URL".to_owned(),
                 HARNESS_ACCOUNT_AUTHORITY_ORIGIN.to_owned(),
             ),
-            (
-                "SOLAND_ACCOUNT_AUTHORITY_SERVICE_ID".to_owned(),
-                account_authority_id.clone(),
-            ),
         ],
         vec![
             ("DATABASE_URL".to_owned(), target_database_url),
@@ -812,10 +798,6 @@ pub async fn run_current_signer_evidence_live() -> Result<()> {
             (
                 "SOLAND_ACCOUNT_AUTHORITY_URL".to_owned(),
                 HARNESS_ACCOUNT_AUTHORITY_ORIGIN.to_owned(),
-            ),
-            (
-                "SOLAND_ACCOUNT_AUTHORITY_SERVICE_ID".to_owned(),
-                account_authority_id,
             ),
         ],
     ];
@@ -898,17 +880,12 @@ pub async fn run_current_signer_evidence_live() -> Result<()> {
         ))
         .map_err(anyhow::Error::msg)?,
     )?;
-    let request_digest = Hash::new(arkret_canonical::sha256_digest(
-        arkret_canonical::canonical_json_bytes(&envelope)?,
-    ))?;
     let request = CurrentSignerEvidenceQueryRequestBody {
         request_id: RequestId::new("ak:request:019b0000-0000-7000-8000-000000000101")?,
         realm_id: envelope.realm_id.clone(),
-        operation_id: ServiceOperationId::SelfSignalCommandSendV1,
-        request_digest,
         recipient_account_id: bob_account.clone(),
-        challenge: NonEmptyString::new(format!("ak.challenge:{}", "A".repeat(32)))
-            .map_err(anyhow::Error::msg)?,
+        known_agent_state_digests: Vec::new(),
+        known_signer_evidence_refs: Vec::new(),
         queries: vec![CurrentSignerEvidenceSelector::AccountDevice {
             account_id: alice_account.clone(),
             device_id: alice_principal.device_id.clone(),
@@ -923,8 +900,7 @@ pub async fn run_current_signer_evidence_live() -> Result<()> {
         outcome.response.evidences.len() == 1,
         "cold ordinary sender did not resolve exactly one evidence item"
     );
-    ensure!(outcome.response.issuer_id == *group.server(0).service_id());
-    ensure!(outcome.response.verifier_id == *group.server(1).service_id());
+    outcome.validate_for_request(&request, Utc::now())?;
     let CurrentSignerEvidenceItem::AccountDevice {
         // This scenario asserts on the resolved account/device and the
         // attestation only. The ref is named rather than swallowed by `..` so
@@ -952,8 +928,8 @@ pub async fn run_current_signer_evidence_live() -> Result<()> {
         )?
         .as_slice(),
     )?)?;
-    arkret_signatures::current_signer_evidence::verify_current_signer_evidence_outcome(
-        &outcome,
+    arkret_signatures::device_projection::verify_device_projection_attestation(
+        device_projection_attestation,
         &issuer_key,
         Utc::now(),
     )?;
@@ -965,8 +941,6 @@ pub async fn run_current_signer_evidence_live() -> Result<()> {
 
     let mut wrong_station = request.clone();
     wrong_station.request_id = RequestId::new("ak:request:019b0000-0000-7000-8000-000000000102")?;
-    wrong_station.challenge = NonEmptyString::new(format!("ak.challenge:{}", "B".repeat(32)))
-        .map_err(anyhow::Error::msg)?;
     let CurrentSignerEvidenceSelector::AccountDevice { account_id, .. } =
         &mut wrong_station.queries[0]
     else {
@@ -981,24 +955,14 @@ pub async fn run_current_signer_evidence_live() -> Result<()> {
         wrong_outcome.response.evidences.is_empty(),
         "wrong authority Station did not return opaque empty evidence"
     );
-    let wrong_issuer_key = ed25519_dalek::VerifyingKey::from_bytes(&<[u8; 32]>::try_from(
-        arkret_canonical::base64url_decode(
-            &group
-                .server(1)
-                .service_notary_signer()
-                .frozen_public_key_b64u,
-        )?
-        .as_slice(),
-    )?)?;
-    arkret_signatures::current_signer_evidence::verify_current_signer_evidence_outcome(
-        &wrong_outcome,
-        &wrong_issuer_key,
-        Utc::now(),
-    )?;
+    wrong_outcome.validate_for_request(&wrong_station, Utc::now())?;
 
     ensure!(
         outcome
-            .validate_for_request(&request, outcome.response.expires_at)
+            .validate_for_request(
+                &request,
+                device_projection_attestation.attestation.expires_at
+            )
             .is_err(),
         "stale current-signer evidence remained usable"
     );

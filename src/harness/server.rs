@@ -27,7 +27,7 @@ use super::principal::ProvisionedTestPrincipal;
 use crate::scenarios::_helpers::coauth_bootstrap::{EphemeralPg, spawn_ephemeral_postgres_for};
 use crate::scenarios::identity_test_support::{
     ActorBootstrapRegistration, HARNESS_ACCOUNT_AUTHORITY_ORIGIN, bootstrap_registered_actor,
-    harness_account_authority_id, harness_account_authority_public_key_multibase,
+    harness_account_authority_public_key_multibase,
 };
 
 const EMBEDDED_WEBVH_REGISTRATION_BEARER: &str = "cotest-embedded-webvh-registration";
@@ -340,7 +340,7 @@ fn test_service_notary_signer(
     Ok(descriptor)
 }
 
-/// Every cotest SUT trusts the harness-owned Account Authority identity so the
+/// Every cotest SUT delegates its Account Authority assertion key to the harness so the
 /// canonical actor bootstrap can relay PCR genesis units no matter which spawn
 /// path produced the process. Callers that wire a real Account Authority
 /// (joint stack, durable federation lives) keep their own values.
@@ -350,12 +350,6 @@ fn harness_account_authority_env(has: impl Fn(&str) -> bool) -> Vec<(String, Str
         env.push((
             "SOLAND_ACCOUNT_AUTHORITY_URL".to_owned(),
             HARNESS_ACCOUNT_AUTHORITY_ORIGIN.to_owned(),
-        ));
-    }
-    if !has("SOLAND_ACCOUNT_AUTHORITY_SERVICE_ID") {
-        env.push((
-            "SOLAND_ACCOUNT_AUTHORITY_SERVICE_ID".to_owned(),
-            harness_account_authority_id().to_string(),
         ));
     }
     if !has("SOLAND_ACCOUNT_AUTHORITY_PUBLIC_KEY_MULTIBASE") {

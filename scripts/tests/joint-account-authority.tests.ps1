@@ -87,29 +87,28 @@ try {
     $CoauthServiceId = "ak:did_core:web:station.joint.example"
     Build-SolandCommand @processArguments | Out-Null
     $boundConfig = Get-Content -LiteralPath $configPath -Raw
-    if ($boundConfig -notmatch [regex]::Escape("SOLAND_ACCOUNT_AUTHORITY_SERVICE_ID=`"$CoauthServiceId`"")) {
-        throw "Process config must pin the actual owning Station identity"
+    if ($boundConfig -match "SOLAND_ACCOUNT_AUTHORITY_SERVICE_ID=") {
+        throw "Process config must use the Station's own identity without an authority override"
     }
     if ($boundConfig -notmatch 'SOLAND_ACCOUNT_AUTHORITY_URL="https://coauth.joint.example"') {
         throw "Bound process config must advertise the Account Authority endpoint"
     }
     $boundDocker = Build-SolandDockerEnvironment @dockerArguments
-    if ($boundDocker.SOLAND_ACCOUNT_AUTHORITY_SERVICE_ID -ne $CoauthServiceId) {
-        throw "Docker config must use the same owning Station identity"
+    if ($boundDocker.Contains("SOLAND_ACCOUNT_AUTHORITY_SERVICE_ID")) {
+        throw "Docker config must use the Station's own identity without an authority override"
     }
     if ($boundConfig -match "ENROLLMENT_DID" -or $boundDocker.Contains("SOLAND_ACCOUNT_AUTHORITY_ENROLLMENT_DID")) {
         throw "Retired independent enrollment identity must not be emitted"
     }
     $betaAuthorityUrl = "https://coauth-beta.joint.example"
-    $betaStationId = "ak:did_core:web:station-beta.joint.example"
-    Build-SolandCommand @processArguments -AccountAuthorityBaseUrl $betaAuthorityUrl -AccountAuthorityServiceId $betaStationId | Out-Null
+    Build-SolandCommand @processArguments -AccountAuthorityBaseUrl $betaAuthorityUrl | Out-Null
     $betaConfig = Get-Content -LiteralPath $configPath -Raw
-    if ($betaConfig -notmatch [regex]::Escape("SOLAND_ACCOUNT_AUTHORITY_SERVICE_ID=`"$betaStationId`"") -or
+    if ($betaConfig -match "SOLAND_ACCOUNT_AUTHORITY_SERVICE_ID=" -or
         $betaConfig -notmatch [regex]::Escape("SOLAND_ACCOUNT_AUTHORITY_URL=`"$betaAuthorityUrl`"")) {
         throw "Beta must use its own Station identity and Account Authority endpoint"
     }
-    $betaDocker = Build-SolandDockerEnvironment @dockerArguments -AccountAuthorityBaseUrl $betaAuthorityUrl -AccountAuthorityServiceId $betaStationId
-    if ($betaDocker.SOLAND_ACCOUNT_AUTHORITY_SERVICE_ID -ne $betaStationId -or $betaDocker.SOLAND_ACCOUNT_AUTHORITY_URL -ne $betaAuthorityUrl) {
+    $betaDocker = Build-SolandDockerEnvironment @dockerArguments -AccountAuthorityBaseUrl $betaAuthorityUrl
+    if ($betaDocker.Contains("SOLAND_ACCOUNT_AUTHORITY_SERVICE_ID") -or $betaDocker.SOLAND_ACCOUNT_AUTHORITY_URL -ne $betaAuthorityUrl) {
         throw "Docker Beta authority must remain independent from Alpha"
     }
 
