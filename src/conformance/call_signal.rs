@@ -399,7 +399,6 @@ fn signed_call_signal_envelope(
                 "did:web:alice.example.com#{device_id}"
             )),
             envelope_digest: Hash::new(format!("sha256:{}", "0".repeat(64)))?,
-            created_at: sent_at(),
             domain: None,
             audience: None,
             jws: String::new(),

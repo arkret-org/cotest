@@ -59,7 +59,6 @@ pub(super) fn envelope() -> Result<SignalEnvelope> {
                 "did:web:alice.example", "ak:device:01904100-0000-7000-8000-bbbbbbbbbbbb"
             )),
             envelope_digest: Hash::new(format!("sha256:{}", "0".repeat(64)))?,
-            created_at: sent_at,
             domain: None,
             audience: None,
             jws: "a..b".to_owned(),
