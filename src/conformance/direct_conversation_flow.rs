@@ -336,7 +336,8 @@ fn validate_bilateral_continuity_checkpoint_fixture() -> Result<()> {
         "wrong_root_pair_accumulator_or_single_signature_is_invalid",
         "temporarily_missing_portable_material_is_unavailable",
         "migrated_holder_imports_checkpoint_without_skipping_tail",
-        "new_lineage_does_not_inherit_old_audit_identity",
+        "same_exact_pair_cannot_restart_root_when_tail_is_full",
+        "different_exact_pair_explicit_first_contact_has_independent_root",
     ] {
         if !cases
             .iter()
@@ -372,12 +373,33 @@ fn validate_bilateral_continuity_checkpoint_fixture() -> Result<()> {
     {
         bail!("missing continuity material is no longer retryable after exact import");
     }
-    let new_lineage = cases
+    let same_pair = cases
         .iter()
-        .find(|case| case["name"] == "new_lineage_does_not_inherit_old_audit_identity")
+        .find(|case| case["name"] == "same_exact_pair_cannot_restart_root_when_tail_is_full")
         .unwrap();
-    if new_lineage["inherits_history"] != false || new_lineage["expected"] != "independent_root" {
-        bail!("new Contact lineage silently inherited compacted history");
+    if same_pair["same_trust_domain"] != true
+        || same_pair["same_actor_pair"] != true
+        || same_pair["expected_error"] != "continuity_evidence_unavailable"
+        || same_pair["may_restart_root"] != false
+    {
+        bail!("the same exact Contact pair may not reset a blocked lineage");
+    }
+    let new_pair = cases
+        .iter()
+        .find(|case| {
+            case["name"] == "different_exact_pair_explicit_first_contact_has_independent_root"
+        })
+        .unwrap();
+    if new_pair["same_actor_pair"] != false
+        || new_pair["explicit_user_action"] != true
+        || new_pair["inherits_history"] != false
+        || new_pair["inherits_direct_conversation"] != false
+        || new_pair["inherits_mls_state"] != false
+        || new_pair["expected"] != "independent_root"
+    {
+        bail!(
+            "new Contact pair must be explicitly initiated without inherited history, DM or MLS state"
+        );
     }
     let registry = load_artifact_json("registry/operation-registry.json")?;
     let operations = registry["operations"]
