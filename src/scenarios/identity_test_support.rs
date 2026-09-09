@@ -514,39 +514,62 @@ pub async fn seal_principal_control_frontier_with_pending_events(
         .context("client has no provisioned Principal Control Realm")?;
     let realm_id = provisioned.pcr_realm_id.clone();
     for event in caller_pending_events {
-        anyhow::ensure!(event.realm_id == realm_id && event.kind.is_control_plane(), "caller pending Event is outside its PCR signing intent");
+        anyhow::ensure!(
+            event.realm_id == realm_id && event.kind.is_control_plane(),
+            "caller pending Event is outside its PCR signing intent"
+        );
     }
     let signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
-        device_signing_key.to_bytes(), principal,
+        device_signing_key.to_bytes(),
+        principal,
         crate::fixture_did_url(format!("{}#{}", client.actor, client.device_id)),
     );
     let sdk = client.sdk();
     for index in 0..64 {
         let frontier = sdk.seals_frontier(realm_id.clone()).await?.frontier;
         let leaf = frontier.sole_leaf()?.clone();
-        let pending = sdk.pcr_pending_control(&arkret_models_collaboration::governance_dependencies::PcrPendingControlRequest {
-            realm_id: realm_id.clone(), predecessor_refs: frontier.seal_basis.leaves.clone(), limit: 1,
-        }).await?;
+        let pending = sdk
+            .pcr_pending_control(
+                &arkret_models_collaboration::governance_dependencies::PcrPendingControlRequest {
+                    realm_id: realm_id.clone(),
+                    predecessor_refs: frontier.seal_basis.leaves.clone(),
+                    limit: 1,
+                },
+            )
+            .await?;
         if pending.event_digests.is_empty() {
             for event in caller_pending_events {
-                let outcome = sdk.read_control_proposal_decision(&arkret_wire::ControlProposalDecisionReadRequestBody {
-                    realm_id: realm_id.clone(), proposal_digest: event.event_id.event_digest(),
-                }).await?;
-                anyhow::ensure!(outcome.accepted_seal_id.is_some(), "caller-authored PCR Event has not been sealed");
+                let outcome = sdk
+                    .read_control_proposal_decision(
+                        &arkret_wire::ControlProposalDecisionReadRequestBody {
+                            realm_id: realm_id.clone(),
+                            proposal_digest: event.event_id.event_digest(),
+                        },
+                    )
+                    .await?;
+                anyhow::ensure!(
+                    outcome.accepted_seal_id.is_some(),
+                    "caller-authored PCR Event has not been sealed"
+                );
             }
             return Ok(leaf);
         }
         let physical_millis = chrono::Utc::now().timestamp_millis();
         let request = arkret_models_collaboration::governance_dependencies::SealPrepareRequest {
-            realm_id: realm_id.clone(), predecessor_refs: frontier.seal_basis.leaves,
+            realm_id: realm_id.clone(),
+            predecessor_refs: frontier.seal_basis.leaves,
             event_digests: pending.event_digests,
             hlc: Hlc::new(format!("{physical_millis:012x}-{index:04x}-a13f9c2e"))?,
         };
         let prepared = sdk.seals_prepare(&request).await?;
         let seal = prepared.sign(&request, &signer)?;
         let outcome = sdk.events_submit_seal(&seal).await?;
-        anyhow::ensure!(outcome.seal_id == seal.id && outcome.accepted_event_digests == seal.delta
-            && outcome.post_state_root == seal.state_root, "Station returned a mismatched PCR successor Seal outcome");
+        anyhow::ensure!(
+            outcome.seal_id == seal.id
+                && outcome.accepted_event_digests == seal.delta
+                && outcome.post_state_root == seal.state_root,
+            "Station returned a mismatched PCR successor Seal outcome"
+        );
     }
     anyhow::bail!("PCR signing still has pending work after the bounded test pass")
 }

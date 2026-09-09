@@ -452,7 +452,7 @@ pub fn run_cbs_lattice_fixture_suite() -> Result<()> {
                     &json!({
                         "concurrent_revoke": "reject_or_hide",
                         "authorization_cell_bottom": "fail_closed",
-                        "light_client": "pending_or_fail_closed",
+                        "server_without_joined_view": "pending_or_fail_closed",
                     }),
                     &json!({
                         "notary_kind": pointer_str(vector, "/notary_kind"),
@@ -2999,7 +2999,7 @@ fn validate_open_set_concurrent_revocation_fail_closed(
                     vector_name,
                 )?;
             }
-            "light_client_without_joined_view" => {
+            "server_without_joined_view" => {
                 require_bool_eq(case, "/verifiable_joined_view", false, vector_name)?;
                 require_str_eq(
                     case,
@@ -3150,7 +3150,7 @@ fn validate_open_set_concurrent_revocation_fail_closed(
         &[
             "concurrent_revoke_branch",
             "authorization_cell_bottom",
-            "light_client_without_joined_view",
+            "server_without_joined_view",
             "late_revocation_leaf_retroactive_removal",
         ],
     )
