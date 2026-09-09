@@ -104,7 +104,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         bob_core_id.as_str()
     );
     seal_current_principal_control_frontier(&alice, &alice_device_key).await?;
-    bob.accept_contact(request_receipt).await?;
+    bob.accept_contact(&alice).await?;
     seal_current_principal_control_frontier(&bob, &bob_device_key).await?;
 
     let visible_bob = expect_json(

@@ -9,7 +9,7 @@ use super::load_artifact_json;
 use crate::transcripts::record_vector_event;
 
 const FOUNDER_LOSS_VECTOR: &str = "ak.vector.direct_conversation.founder_loss_terminality.v1";
-const CONTACT_MIRROR_VECTOR: &str = "ak.vector.contact.pending_incoming_request_receipt.v1";
+const CONTACT_PREPARE_VECTOR: &str = "ak.vector.contact.pending_incoming_prepare.v1";
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -165,51 +165,51 @@ fn validate_founder_loss_terminality(fixture: &DirectConversationFixture) -> Res
     Ok(())
 }
 
-fn validate_contact_verified_mirror_contract(fixture: &DirectConversationFixture) -> Result<()> {
+fn validate_contact_server_prepare_contract(fixture: &DirectConversationFixture) -> Result<()> {
     let covered = &fixture.covers_vectors;
-    if !covered.iter().any(|value| value == CONTACT_MIRROR_VECTOR) {
-        bail!("Direct Conversation fixture does not cover {CONTACT_MIRROR_VECTOR}");
+    if !covered.iter().any(|value| value == CONTACT_PREPARE_VECTOR) {
+        bail!("Direct Conversation fixture does not cover {CONTACT_PREPARE_VECTOR}");
     }
     let expected = [
         (
-            "contact_mirror_branch_returns_exact_event_without_seal",
+            "contact_incoming_prepared_from_server_evidence",
             "accept",
-            ["exact signed Event", "no seals member", "no Event other"],
-        ),
-        (
-            "contact_mirror_branch_has_no_seal_selector_and_refuses_unverified_rows",
-            "reject",
             [
-                "rejects a seal_refs member",
-                "unverified local row",
-                "does not reveal",
+                "exact request reference",
+                "no Event resolve",
+                "atomically validates",
             ],
         ),
         (
-            "contact_mirror_visibility_closes_on_terminal_round",
+            "contact_incoming_prepare_binding_and_terminal",
+            "reject",
+            ["No writes", "Glare remains", "client rejects"],
+        ),
+        (
+            "contact_mirror_not_exposed",
             "reject",
             [
-                "clears request_receipt",
-                "accounted into missing",
-                "local audit",
+                "grants no Event access",
+                "reveals no private",
+                "Unverified ingest",
             ],
         ),
     ];
     for (name, outcome, required_assertions) in expected {
         let case = semantic_case(fixture, name)?;
-        if case["vector_id"] != CONTACT_MIRROR_VECTOR || case["semantic_outcome"] != outcome {
-            bail!("Contact mirror case {name} has the wrong vector or outcome");
+        if case["vector_id"] != CONTACT_PREPARE_VECTOR || case["semantic_outcome"] != outcome {
+            bail!("Contact prepare case {name} has the wrong vector or outcome");
         }
         let assertions = case["assertions"]
             .as_array()
-            .ok_or_else(|| anyhow!("Contact mirror case {name} omits assertions[]"))?;
+            .ok_or_else(|| anyhow!("Contact prepare case {name} omits assertions[]"))?;
         for required in required_assertions {
             if !assertions
                 .iter()
                 .filter_map(Value::as_str)
                 .any(|assertion| assertion.contains(required))
             {
-                bail!("Contact mirror case {name} omits assertion `{required}`");
+                bail!("Contact prepare case {name} omits assertion `{required}`");
             }
         }
     }
@@ -436,7 +436,7 @@ pub fn run_direct_conversation_flow_suite() -> Result<()> {
     validate_event_id_digest_mirror_removal(&fixture)?;
     validate_founding_and_crash_replay(&fixture)?;
     validate_bilateral_continuity_checkpoint_fixture()?;
-    validate_contact_verified_mirror_contract(&fixture)?;
+    validate_contact_server_prepare_contract(&fixture)?;
     validate_founder_loss_terminality(&fixture)?;
     validate_commit_welcome_fences()?;
     record_vector_event(

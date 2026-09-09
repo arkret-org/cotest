@@ -102,7 +102,6 @@ impl TestActorClient {
                 },
                 granted_to_peer_scopes: vec![ContactScope::DirectMessage],
                 introduction_evidence: ContactIntroductionEvidence::ExplicitAddress,
-                previous_terminal_contact_round_id: None,
                 continuity_evidence: None,
                 message: None,
             },
@@ -183,7 +182,25 @@ impl TestActorClient {
         }
     }
 
-    pub async fn accept_contact(&self, request_receipt: RequestAcceptanceReceipt) -> Result<()> {
+    pub async fn accept_contact(&self, requester: &TestActorClient) -> Result<()> {
+        let requester = ActorId::account(AccountId::new(
+            DidCoreId::new(requester.actor.clone())?,
+            DidCoreId::new(requester.service_id.clone())?,
+        ));
+        let row = self
+            .sdk
+            .contacts_list()
+            .await?
+            .contacts
+            .into_iter()
+            .find(|row| {
+                row.state == arkret::ContactState::PendingIncoming
+                    && row.peer.contact_actor_id() == requester
+            })
+            .ok_or_else(|| anyhow!("no pending incoming Contact for requester"))?;
+        let request_event_ref = row
+            .request_event_ref
+            .ok_or_else(|| anyhow!("pending Contact omitted request_event_ref"))?;
         let operation_id =
             ProtocolOperationId::new(next_typed_id("operation")).map_err(anyhow::Error::msg)?;
         let idempotency_key =
@@ -192,7 +209,8 @@ impl TestActorClient {
             phase: ContactPreparePhase::Prepare,
             operation_id: operation_id.clone(),
             idempotency_key: idempotency_key.clone(),
-            request_receipt,
+            peer: row.peer,
+            request_event_ref,
             action: ContactAcceptAction::Accept,
             granted_to_peer_scopes: vec![ContactScope::DirectMessage],
         });

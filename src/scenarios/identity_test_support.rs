@@ -4,8 +4,7 @@ use std::sync::{LazyLock, Mutex};
 use anyhow::{Context, Result};
 use arkret_bootstrap::{
     DID_INCEPTION_REF_ROLE, SelfPrincipalPcrCreateInput, build_self_principal_bootstrap_seal,
-    build_self_principal_linear_successor_seal, build_self_principal_pcr_create,
-    build_self_principal_pcr_genesis_unit,
+    build_self_principal_pcr_create, build_self_principal_pcr_genesis_unit,
 };
 use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_canonical::{canonical_json_bytes, canonical_sha256};
@@ -514,228 +513,42 @@ pub async fn seal_principal_control_frontier_with_pending_events(
         .as_ref()
         .context("client has no provisioned Principal Control Realm")?;
     let realm_id = provisioned.pcr_realm_id.clone();
-    let mut events = client
-        .sdk()
-        .events_read_all_pages(realm_id.as_str())
-        .await?
-        .events
-        .into_iter()
-        .enumerate()
-        .map(|(index, row)| {
-            row.into_event().ok_or_else(|| {
-                anyhow::anyhow!(
-                    "Principal Control Realm history requires complete Events; row {index} for {realm_id} is redacted or reference-locked"
-                )
-            })
-        })
-        .collect::<Result<Vec<_>>>()?;
-    for pending in caller_pending_events {
-        if let Some(existing) = events
-            .iter()
-            .find(|event| event.actor_seq == pending.actor_seq)
-        {
-            anyhow::ensure!(
-                existing.event_id == pending.event_id,
-                "PCR history conflicts with caller-authored pending Event at actor_seq {}",
-                pending.actor_seq
-            );
-        } else {
-            events.push(pending.clone());
-        }
+    for event in caller_pending_events {
+        anyhow::ensure!(event.realm_id == realm_id && event.kind.is_control_plane(), "caller pending Event is outside its PCR signing intent");
     }
-    events.sort_by_key(|event| event.actor_seq);
-    let frontier_state = serde_json::from_value::<
-        arkret_models_collaboration::event_sync::SealFrontierState,
-    >(client.realm_seal_frontier(realm_id.as_str()).await?)?;
-    let frontier = frontier_state.frontier;
-    // The successor Seal binds the predecessor's own signed roots, so the
-    // frontier's single accepted leaf is resolved instead of trusting the
-    // service view.
-    let leaf = frontier.sole_leaf()?.clone();
-    let resolve: arkret_models_collaboration::http_bodies::SealResolveOutcome =
-        serde_json::from_value(
-            expect_json(
-                client.query("/_arkret/self/seals/resolve").json(
-                    &arkret_models_collaboration::http_bodies::SelfSealResolveRequestBody {
-                        realm_id: realm_id.clone(),
-                        seal_refs: vec![leaf.clone()],
-                        history_traversal_access: None,
-                    },
-                ),
-                StatusCode::OK,
-            )
-            .await?,
-        )?;
-    let mut predecessor = resolve
-        .seals
-        .into_iter()
-        .find(|seal| seal.id == leaf)
-        .context("accepted PCR Realm Seal frontier leaf did not resolve")?;
-    let prior_events: arkret_models_collaboration::http_bodies::EventsResolveOutcome =
-        serde_json::from_value(
-            expect_json(
-                client.query("/_arkret/self/events/resolve").json(
-                    &arkret_models_collaboration::http_bodies::EventsResolveRequestBody {
-                        event_ids: Vec::new(),
-                        event_digests: if predecessor.covered_event_digests.is_empty() {
-                            predecessor.delta.clone()
-                        } else {
-                            predecessor.covered_event_digests.clone()
-                        },
-                        include_payload: Some(true),
-                        history_traversal_access: None,
-                        max_response_bytes: None,
-                    },
-                ),
-                StatusCode::OK,
-            )
-            .await?,
-        )?;
-    anyhow::ensure!(
-        prior_events.missing.is_empty() && prior_events.unauthorized.is_empty(),
-        "accepted PCR predecessor Seal delta did not fully resolve"
-    );
-    let prior_event_rows = prior_events.events;
-    let mut known_event_ids = prior_event_rows
-        .iter()
-        .chain(&events)
-        .map(|event| event.event_id.clone())
-        .collect::<std::collections::BTreeSet<_>>();
-    loop {
-        let unresolved = events
-            .iter()
-            .flat_map(|event| event.prev_refs.iter().cloned())
-            .filter(|event_id| !known_event_ids.contains(event_id))
-            .collect::<std::collections::BTreeSet<_>>();
-        if unresolved.is_empty() {
-            break;
-        }
-        let resolved: arkret_models_collaboration::http_bodies::EventsResolveOutcome =
-            serde_json::from_value(
-                expect_json(
-                    client.query("/_arkret/self/events/resolve").json(
-                        &arkret_models_collaboration::http_bodies::EventsResolveRequestBody {
-                            event_ids: unresolved.into_iter().collect(),
-                            event_digests: Vec::new(),
-                            include_payload: Some(true),
-                            history_traversal_access: None,
-                            max_response_bytes: None,
-                        },
-                    ),
-                    StatusCode::OK,
-                )
-                .await?,
-            )?;
-        anyhow::ensure!(
-            resolved.missing.is_empty() && resolved.unauthorized.is_empty(),
-            "caller-authored PCR Event predecessor closure did not fully resolve"
-        );
-        anyhow::ensure!(
-            !resolved.events.is_empty(),
-            "caller-authored PCR Event predecessor resolution made no progress"
-        );
-        for event in resolved.events {
-            if known_event_ids.insert(event.event_id.clone()) {
-                events.push(event);
-            }
-        }
-    }
-    events.sort_by_key(|event| event.actor_seq);
-
-    let mut history_by_sequence = BTreeMap::new();
-    for event in prior_event_rows {
-        history_by_sequence.insert(event.actor_seq, event);
-    }
-    let mut pending_events = Vec::new();
-    for event in events {
-        if let Some(prior) = history_by_sequence.get(&event.actor_seq) {
-            anyhow::ensure!(
-                prior.event_id == event.event_id,
-                "PCR history contains conflicting Events at actor_seq {}",
-                event.actor_seq
-            );
-        } else {
-            pending_events.push(event);
-        }
-    }
-    // A caller may already have an up-to-date accepted Seal. The verified
-    // predecessor closure above is sufficient; never fabricate an empty
-    // successor just to make an idempotent ensure-sealed call do work.
-    if pending_events.is_empty() {
-        return Ok(leaf);
-    }
-    pending_events.sort_by_key(|event| event.actor_seq);
-    let mut history = history_by_sequence.into_values().collect::<Vec<_>>();
-    let device_method = crate::fixture_did_url(format!("{}#{}", client.actor, client.device_id));
     let signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
-        device_signing_key.to_bytes(),
-        principal,
-        device_method,
+        device_signing_key.to_bytes(), principal,
+        crate::fixture_did_url(format!("{}#{}", client.actor, client.device_id)),
     );
-    let physical_millis = chrono::Utc::now().timestamp_millis();
-    for (index, event) in pending_events.into_iter().enumerate() {
-        let event_digest = Hash::new(
-            event.event_digest_with_digest_suite(arkret_canonical::DigestSuite::Sha256)?,
-        )?;
-        history.push(event);
-        let availability_request =
-            arkret_models_collaboration::governance_dependencies::SealAvailabilityReceiptIssueRequest {
-                realm_id: predecessor.realm_id.clone(),
-                predecessor_refs: vec![predecessor.id.clone()],
-                event_digests: vec![event_digest],
-            };
-        let availability = serde_json::from_value::<
-            arkret_models_collaboration::governance_dependencies::SealAvailabilityReceiptIssueOutcome,
-        >(
-            expect_json(
-                client
-                    .post("/_arkret/self/seals/availability-receipts")
-                    .json(&availability_request),
-                StatusCode::OK,
-            )
-            .await?,
-        )?;
-        let seal = build_self_principal_linear_successor_seal(
-            &history,
-            &predecessor,
-            &availability,
-            Hlc::new(format!("{physical_millis:012x}-{index:04x}-a13f9c2e"))?,
-            &signer,
-            &crate::publication::project_cells,
-        )
-        .with_context(|| {
-            let coordinates = history
-                .iter()
-                .map(|item| {
-                    format!(
-                        "{}:{}:{}",
-                        item.actor_id,
-                        item.actor_seq,
-                        item.kind.as_str()
-                    )
-                })
-                .collect::<Vec<_>>()
-                .join(", ");
-            format!("build PCR successor Seal from history [{coordinates}]")
-        })?;
-        let outcome = serde_json::from_value::<
-            arkret_models_collaboration::http_bodies::EventSealSubmitOutcome,
-        >(
-            expect_json(
-                client.post("/_arkret/self/seals").json(&seal),
-                StatusCode::OK,
-            )
-            .await?,
-        )?;
-        anyhow::ensure!(
-            outcome.seal_id == seal.id
-                && outcome.accepted_event_digests == seal.delta
-                && outcome.post_state_root == seal.state_root,
-            "Station returned a mismatched PCR successor Seal outcome"
-        );
-        predecessor = seal;
+    let sdk = client.sdk();
+    for index in 0..64 {
+        let frontier = sdk.seals_frontier(realm_id.clone()).await?.frontier;
+        let leaf = frontier.sole_leaf()?.clone();
+        let pending = sdk.pcr_pending_control(&arkret_models_collaboration::governance_dependencies::PcrPendingControlRequest {
+            realm_id: realm_id.clone(), predecessor_refs: frontier.seal_basis.leaves.clone(), limit: 1,
+        }).await?;
+        if pending.event_digests.is_empty() {
+            for event in caller_pending_events {
+                let outcome = sdk.read_control_proposal_decision(&arkret_wire::ControlProposalDecisionReadRequestBody {
+                    realm_id: realm_id.clone(), proposal_digest: event.event_id.event_digest(),
+                }).await?;
+                anyhow::ensure!(outcome.accepted_seal_id.is_some(), "caller-authored PCR Event has not been sealed");
+            }
+            return Ok(leaf);
+        }
+        let physical_millis = chrono::Utc::now().timestamp_millis();
+        let request = arkret_models_collaboration::governance_dependencies::SealPrepareRequest {
+            realm_id: realm_id.clone(), predecessor_refs: frontier.seal_basis.leaves,
+            event_digests: pending.event_digests,
+            hlc: Hlc::new(format!("{physical_millis:012x}-{index:04x}-a13f9c2e"))?,
+        };
+        let prepared = sdk.seals_prepare(&request).await?;
+        let seal = prepared.sign(&request, &signer)?;
+        let outcome = sdk.events_submit_seal(&seal).await?;
+        anyhow::ensure!(outcome.seal_id == seal.id && outcome.accepted_event_digests == seal.delta
+            && outcome.post_state_root == seal.state_root, "Station returned a mismatched PCR successor Seal outcome");
     }
-    Ok(predecessor.id)
+    anyhow::bail!("PCR signing still has pending work after the bounded test pass")
 }
 
 pub(crate) fn signed_keys_upload_body(

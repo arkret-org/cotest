@@ -354,65 +354,6 @@ export async function submitPrincipalSuccessorSealApi(
   if (events.some((known) => known.event_id === event.event_id)) {
     return;
   }
-  const historyUrl = `${solandBaseUrl(opts.server)}/_arkret/self/events`;
-  const acceptedHistoryPage = await expectJsonOk<{
-    events: Array<Record<string, unknown>>;
-    has_more: boolean;
-  }>(
-    await request.fetch(historyUrl, {
-      method: "QUERY",
-      headers: {
-        ...authHeaders(token, "QUERY", historyUrl),
-        "content-type": "application/json",
-      },
-      data: canonicalJson({
-        realm_ids: [realmId],
-        order: "ascending",
-        limit: 100,
-      }),
-    }),
-    `read accepted principal Event history for ${actorId}`,
-  );
-  if (acceptedHistoryPage.has_more) {
-    throw new Error(
-      `principal Event history for ${actorId} exceeds one canonical page`,
-    );
-  }
-  const visibleAcceptedHistory = acceptedHistoryPage.events.filter(
-    (candidate) =>
-      candidate.realm_id === realmId && eventPrincipalId(candidate) === actorId,
-  );
-  const acceptedHistoryById = new Map<string, Record<string, unknown>>();
-  // Contact commits place the caller-signed Control Move in the pending
-  // Control index. It cannot appear in accepted history until this successor
-  // Seal covers it, so the exact locally held Event is the final history item.
-  for (const candidate of [...events, ...visibleAcceptedHistory, event]) {
-    if (typeof candidate.event_id === "string") {
-      acceptedHistoryById.set(candidate.event_id, candidate);
-    }
-  }
-  const acceptedHistory = [...acceptedHistoryById.values()].sort(
-    (left, right) => Number(left.actor_seq) - Number(right.actor_seq),
-  );
-  if (
-    !acceptedHistory.some(
-      (candidate) => candidate.event_id === event.event_id,
-    )
-  ) {
-    throw new Error(
-      `accepted principal Event history for ${actorId} omits ${String(event.event_id)}`,
-    );
-  }
-  if (
-    acceptedHistory[0]?.kind !== "ak.realm.create" ||
-    acceptedHistory.some(
-      (candidate, index) => Number(candidate.actor_seq) !== index,
-    )
-  ) {
-    throw new Error(
-      `accepted principal Event history for ${actorId} is not a contiguous PCR history`,
-    );
-  }
   const frontierUrl = `${solandBaseUrl(opts.server)}/_arkret/self/seals/frontier`;
   const frontierResponse = await request.fetch(frontierUrl, {
     method: "QUERY",
@@ -435,38 +376,29 @@ export async function submitPrincipalSuccessorSealApi(
       `principal Seal frontier for ${actorId} is not a single accepted leaf`,
     );
   }
-  const predecessorSeal = await readAcceptedSeal(
-    request,
-    token,
-    realmId,
-    leaves[0],
-    opts.server,
-  );
   const eventDigest = (
     event.proofs as Array<Record<string, unknown>> | undefined
   )?.[0]?.event_digest;
   if (typeof eventDigest !== "string") {
     throw new Error("principal successor Event proof omits event_digest");
   }
-  const availabilityUrl = `${solandBaseUrl(opts.server)}/_arkret/self/seals/availability-receipts`;
-  const availability = await expectJsonOk<Record<string, unknown>>(
-    await request.post(availabilityUrl, {
-      headers: {
-        ...authHeaders(token, "POST", availabilityUrl),
-        "content-type": "application/json",
-      },
-      data: canonicalJson({
-        realm_id: realmId,
-        predecessor_refs: [leaves[0]],
-        event_digests: [eventDigest],
-      }),
-    }),
-    `issue principal successor availability receipts for ${actorId}`,
+  const prepareUrl = `${solandBaseUrl(opts.server)}/_arkret/self/seals/prepare`;
+  const prepareRequest = {
+    realm_id: realmId,
+    predecessor_refs: [leaves[0]],
+    event_digests: [eventDigest],
+    hlc: nextEnvelopeHlc(realmId, new Date().toISOString()),
+  };
+  const outcome = await expectJsonOk<Record<string, unknown>>(
+    await request.post(prepareUrl, {
+      headers: { ...authHeaders(token, "POST", prepareUrl), "content-type": "application/json" },
+      data: canonicalJson(prepareRequest),
+    }), `prepare principal successor Seal for ${actorId}`,
   );
   const seal = cotestWire<Record<string, unknown>>("principal-successor-seal", {
-    events: acceptedHistory,
-    predecessor_seal: predecessorSeal,
-    availability_receipt_issue_outcome: availability,
+    request: prepareRequest, outcome,
+    signer_did: signer.verificationMethod.split("#", 1)[0],
+    verification_method: signer.verificationMethod,
     device_signing_seed_b64url: signer.signingSeedB64url,
   });
   const sealUrl = `${solandBaseUrl(opts.server)}/_arkret/self/seals`;
@@ -480,14 +412,7 @@ export async function submitPrincipalSuccessorSealApi(
     }),
     `submit principal successor Seal for ${actorId}`,
   );
-  events.splice(
-    0,
-    events.length,
-    ...acceptedHistory.map(
-      (acceptedEvent) =>
-        JSON.parse(canonicalJson(acceptedEvent)) as Record<string, unknown>,
-    ),
-  );
+  events.push(JSON.parse(canonicalJson(event)) as Record<string, unknown>);
 }
 
 export function principalControlRealmForId(principalId: string): string {

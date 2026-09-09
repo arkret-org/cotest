@@ -216,9 +216,9 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     ));
     assert_eq!(bob_self["actors"][0]["actor_id"], json!(bob_actor));
 
-    let request_receipt = alice.request_contact(&bob.actor).await?;
+    alice.request_contact(&bob.actor).await?;
     seal_current_principal_control_frontier(&alice, &alice_device_key).await?;
-    bob.accept_contact(request_receipt).await?;
+    bob.accept_contact(&alice).await?;
     seal_current_principal_control_frontier(&bob, &bob_device_key).await?;
 
     let alice_after_contact = expect_json(

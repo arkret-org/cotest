@@ -41,9 +41,9 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         .device_signing_key
         .clone();
 
-    let request_receipt = alice.request_contact(&bob.actor).await?;
+    alice.request_contact(&bob.actor).await?;
     seal_current_principal_control_frontier(&alice, &alice_device_key).await?;
-    bob.accept_contact(request_receipt).await?;
+    bob.accept_contact(&alice).await?;
     seal_current_principal_control_frontier(&bob, &bob_device_key).await?;
 
     let contacts = expect_json(bob.get("/_arkret/self/contacts"), StatusCode::OK).await?;

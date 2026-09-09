@@ -153,9 +153,10 @@ struct PrincipalBootstrapSealInput {
 
 #[derive(Debug, Deserialize)]
 struct PrincipalSuccessorSealInput {
-    events: Vec<Value>,
-    predecessor_seal: Value,
-    availability_receipt_issue_outcome: Value,
+    request: arkret_models_collaboration::governance_dependencies::SealPrepareRequest,
+    outcome: arkret_models_collaboration::governance_dependencies::SealPrepareOutcome,
+    signer_did: arkret_wire::Did,
+    verification_method: arkret_wire::DidUrl,
     device_signing_seed_b64url: String,
 }
 
@@ -1078,55 +1079,16 @@ pub fn principal_bootstrap_seal(input: Value) -> Result<Value> {
 pub fn principal_successor_seal(input: Value) -> Result<Value> {
     let input: PrincipalSuccessorSealInput =
         serde_json::from_value(input).context("parse principal successor Seal input")?;
-    let events = input
-        .events
-        .into_iter()
-        .map(|event| serde_json::from_value(event).context("parse principal control Event"))
-        .collect::<Result<Vec<Event>>>()?;
-    let create = events
-        .first()
-        .context("principal successor Seal history is empty")?;
-    let create_payload = create
-        .typed_payload::<arkret::event_spec::RealmCreate>()
-        .context("parse PCR create payload")?;
-    let descriptor = create_payload
-        .object
-        .founding_device_descriptor
-        .context("PCR create omits founding device descriptor")?;
-    let founding_authorize = events
-        .get(1)
-        .context("principal successor Seal history omits founding DeviceAuthorize")?;
-    if founding_authorize.actor_id != create.actor_id {
-        bail!("founding DeviceAuthorize actor does not match PCR create actor");
-    }
-    let predecessor: arkret_wire::Seal = serde_json::from_value(input.predecessor_seal)
-        .context("parse resolved principal predecessor Seal")?;
-    let availability = serde_json::from_value(input.availability_receipt_issue_outcome)
-        .context("parse principal successor availability receipt issue outcome")?;
     let seed = signing_key_from_seed(&input.device_signing_seed_b64url)?.to_bytes();
-    let (signer_did, verification_method) = trusted_actor_signer_material(founding_authorize)?;
-    let signer =
-        arkret::Ed25519PayloadSigner::from_did_key_seed(seed, signer_did, verification_method);
-    let mut hlc = arkret_hlc::HlcGenerator::new(
-        create.realm_id.as_str(),
-        descriptor.device_id.as_str(),
-        &seed,
+    let signer = arkret::Ed25519PayloadSigner::from_did_key_seed(
+        seed,
+        input.signer_did,
+        input.verification_method,
     );
-    let seal = arkret_bootstrap::build_self_principal_linear_successor_seal(
-        &events,
-        &predecessor,
-        &availability,
-        hlc.generate(),
-        &signer,
-        &|event| {
-            arkret_schema::project_registered_cell_writes(
-                event,
-                arkret_canonical::DigestSuite::Sha256,
-            )
-            .map_err(|error| error.to_string())
-        },
-    )
-    .context("build self-principal successor Seal")?;
+    let seal = input
+        .outcome
+        .sign(&input.request, &signer)
+        .context("sign Station-prepared principal Seal")?;
     serde_json::to_value(seal).context("serialize self-principal successor Seal")
 }
 
