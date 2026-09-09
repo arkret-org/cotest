@@ -80,3 +80,11 @@
 每项都必须完成双方私密正文解密、Bob 刷新重读、本地存储与 wire 无明文检查；观察到的目标
 EventId 必须保持唯一且等于断点前原 ID。仅重试请求或只见到 epoch/Welcome 不算通过。
 此矩阵不替代多个接收端中仅部分 Welcome 已 durable 的独立验收。
+
+## 加入前历史恢复分支
+
+`bob joins a shared-history MLS realm after alice's encrypted card` 使用
+`all_history_for_current_members`，由产品选择 exporter content scheme。Alice 先创建加密正文，
+再使用 Bob 主动签发的标准 locator 发出邀请；单独预置 consent 不会把未出示证据的裸地址提升为高信任。
+Bob 首次开启浏览器并接受邀请后，必须通过实际历史密钥交付解密加入前正文，刷新后仍能读取，
+原始 Event 中仍不得出现明文。它与上面的 since-join 分支分别验收，不能只断言看见卡片标题。

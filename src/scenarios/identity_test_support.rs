@@ -9,9 +9,7 @@ use arkret_bootstrap::{
 };
 use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_canonical::{canonical_json_bytes, canonical_sha256};
-use arkret_identifiers::{
-    DeviceId, Did, DidCoreId, Hlc, RealmId, WebOrigin, project_did_to_core_id,
-};
+use arkret_identifiers::{DeviceId, Did, Hlc, RealmId, WebOrigin, project_did_to_core_id};
 use arkret_models_collaboration::events_payloads::{
     DeviceAuthorizationBindingKind, DeviceAuthorizePayload, DeviceOrPrincipalRef,
     FoundingDeviceDescriptor, FoundingDeviceHpkeKeyAlgorithm, FoundingDeviceKeyAlgorithm,

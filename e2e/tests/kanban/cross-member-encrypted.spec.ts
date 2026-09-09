@@ -913,7 +913,15 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
 
       // 3) Alice invites Bob only after the encrypted content already exists,
       // while Bob still has no browser-published KeyPackage.
-      const inviteStatus = await alicePage.inviteFromAdmin(realmId, bob.id);
+      // Present holder-issued introduction evidence: a raw address remains
+      // low-trust even when a separate consent grant exists in Bob's PCR.
+      const bobLocatorToken = await issueInviteLocatorToken(request, bobSession.grantJwt);
+      const inviteStatus = await alicePage.inviteFromAdmin(
+        realmId,
+        bob.id,
+        undefined,
+        { token: bobLocatorToken },
+      );
       expect(inviteStatus).toContain("invited");
       expect(inviteStatus).not.toContain("MLS Welcome queued");
 

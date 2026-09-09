@@ -138,9 +138,8 @@ fn event_fixture_label(event: &Value) -> String {
 /// [`arkret_wire::SignalEnvelope::proof_binding_bytes`] and the JWS wire form
 /// from the SDK signer, so this helper cannot drift from the verifier.
 ///
-/// `aad_digest` is recomputed from the immutable outer header and
-/// `proof.created_at` is set to `sent_at`, both of which
-/// `SignalEnvelope::validate_structural` requires.
+/// `aad_digest` is recomputed from the immutable outer header as required by
+/// `SignalEnvelope::validate_structural`; the signed envelope carries `sent_at`.
 pub fn attach_signal_proof(
     envelope: &mut arkret_wire::SignalEnvelope,
     signing_key: &ed25519_dalek::SigningKey,
@@ -148,7 +147,6 @@ pub fn attach_signal_proof(
     envelope.encrypted_payload.aad_digest = envelope
         .expected_aad_digest()
         .expect("signal envelope header is canonicalizable");
-    envelope.proof.created_at = envelope.sent_at;
     envelope.proof.envelope_digest = envelope
         .envelope_digest()
         .expect("signal envelope is canonicalizable");

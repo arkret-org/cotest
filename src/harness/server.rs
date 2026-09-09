@@ -11,7 +11,6 @@ use std::{fs, mem};
 use anyhow::{Context, Result, anyhow};
 use arkret::{Did, DidCoreId, TrustDomainId};
 use arkret_http_client::{Auth, Client as SdkClient};
-use arkret_models_identity::service_identity::SERVICE_REGISTRATION_ENSURE_PATH;
 use base64::Engine as _;
 use base64::engine::general_purpose::{STANDARD as BASE64_STANDARD, URL_SAFE_NO_PAD};
 use chrono::Utc;
@@ -868,14 +867,6 @@ impl ArkretServer {
     pub fn account_registration_request(&self) -> reqwest::RequestBuilder {
         self.http()
             .post(self.url("/_soland/self/account/register"))
-            .bearer_auth(EMBEDDED_WEBVH_REGISTRATION_BEARER)
-    }
-
-    /// Build an authenticated request to the embedded WebVH provider used by
-    /// Cotest's deterministic service-registration fixtures.
-    pub(crate) fn service_registration_ensure_request(&self) -> reqwest::RequestBuilder {
-        self.http()
-            .post(self.url(SERVICE_REGISTRATION_ENSURE_PATH))
             .bearer_auth(EMBEDDED_WEBVH_REGISTRATION_BEARER)
     }
 

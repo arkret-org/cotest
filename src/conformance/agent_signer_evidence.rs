@@ -1,8 +1,8 @@
 //! Executable current/historical Agent signer-evidence conformance.
 //!
-//! Fixture labels are only the closed registry. Every case below exercises the
-//! SDK-owned state verifier, current validator, historical validator, or signer
-//! regime dispatcher against cryptographically signed evidence.
+//! The closed fixture registry includes transport/materializer contract checks.
+//! Executable signer cases exercise the SDK-owned state verifier, current and
+//! historical validators, and regime dispatcher against signed evidence.
 
 use anyhow::{Context, Result, anyhow, bail};
 use arkret_models_identity::agent_signer_evidence::{
@@ -18,10 +18,10 @@ use arkret_signatures::agent_evidence::{
     AgentEvidenceCommonContext, AgentEvidenceRejectedReason, AgentEvidenceStateVerificationContext,
     AgentSignerEvidenceVerdict, CurrentAgentSignerEvidenceValidationContext,
     HistoricalAgentSignerEvidenceValidationContext, SignerPrincipalKind, SignerRegime,
-    agent_authorization_cell_ref, agent_signing_key_binding_digest,
-    agent_signing_public_key_digest, agent_signing_public_key_runtime_request_digest,
-    dispatch_signer_regime, validate_current_agent_signer_evidence,
-    validate_historical_agent_signer_evidence, verify_agent_evidence_state,
+    agent_authorization_cell_ref, agent_signing_public_key_digest,
+    agent_signing_public_key_runtime_request_digest, dispatch_signer_regime,
+    validate_current_agent_signer_evidence, validate_historical_agent_signer_evidence,
+    verify_agent_evidence_state,
 };
 use arkret_signatures::{PublicKeyMaterial, sign_ed25519_detached_jws};
 use arkret_wire::{
@@ -187,14 +187,23 @@ pub fn run_agent_signer_evidence_vector_suite() -> Result<()> {
         bail!("Agent signer-evidence case registry drifted");
     }
 
+    let mut failures = Vec::new();
     for case in cases {
         let name = case["name"].as_str().context("case name missing")?;
         let expected = expected_class(case["expected"].as_str().context("expected missing")?)?;
-        let observed = execute_case(name, case)
-            .with_context(|| format!("Agent signer-evidence case {name}"))?;
-        if observed != expected {
-            bail!("Agent signer-evidence case {name} expected {expected:?}, observed {observed:?}");
+        match execute_case(name, case) {
+            Ok(observed) if observed == expected => {}
+            Ok(observed) => failures.push(format!(
+                "{name}: expected {expected:?}, observed {observed:?}"
+            )),
+            Err(error) => failures.push(format!("{name}: {error:#}")),
         }
+    }
+    if !failures.is_empty() {
+        bail!(
+            "Agent signer-evidence cases failed:\n{}",
+            failures.join("\n")
+        );
     }
     Ok(())
 }
@@ -435,7 +444,7 @@ fn execute_historical_materialization_case(name: &str, case: &Value) -> Result<O
             require_case_bool(case, "same_canonical_historical_root", true)?;
             require_case_bool(
                 case,
-                "materializer_reads_selector_tuple_before_signing_a_new_root",
+                "materializer_reads_selector_tuple_before_publishing_root",
                 true,
             )?;
             require_zero_additional_roots(case)?;
@@ -894,7 +903,8 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         DidUrl::new(format!("{receiver_service_did}#assertion-1")).map_err(anyhow::Error::msg)?;
     let agent_key_id = nes("runtime-1")?;
     let agent_key = agent_signing.verifying_key().to_bytes();
-    let pcr_notary_verification_method = DidUrl::new(format!("{signer_did}#root"))?;
+    let pcr_notary_verification_method =
+        DidUrl::new(format!("{signer_did}#root")).map_err(anyhow::Error::msg)?;
     let pcr_notary_public_key = SigningKey::from_bytes(&[16; 32]).verifying_key().to_bytes();
     let create_payload = arkret_bootstrap::build_agent_pcr_create_payload(
         arkret_bootstrap::AgentPcrCreatePayloadInput {
@@ -1033,7 +1043,8 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         kty: nes("OKP")?,
         kid: nes(verification_method.as_str())?,
         algorithm: nes("Ed25519")?,
-        key: Base64UrlString::new(arkret_canonical::base64url_encode(agent_key))?,
+        key: Base64UrlString::new(arkret_canonical::base64url_encode(agent_key))
+            .map_err(anyhow::Error::msg)?,
         key_digest: None,
     };
     let core = arkret_signatures::agent_evidence::prepare_agent_signing_key_binding_core(
@@ -1073,7 +1084,9 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
             kind: AgentKeyApprovalEvidenceKind::PairingRequest,
             evidence_ref: None,
             request_canonical_digest: Some(hash_byte(0x51)?),
-            pairing_request_id: Some(arkret_wire::OpaqueLocalId::new("fixture-pairing")?),
+            pairing_request_id: Some(
+                arkret_wire::OpaqueLocalId::new("fixture-pairing").map_err(anyhow::Error::msg)?,
+            ),
             approved_by: Some(controller_principal_id.clone()),
         },
         supersedes: Vec::new(),
@@ -1929,7 +1942,8 @@ fn execute_reuse_case(name: &str) -> Result<OutcomeClass> {
                 arkret_signatures::agent_evidence::agent_admission_evidence_digest(
                     &admission_evidence.agent_authority_state_evidence,
                     &admission_evidence.controller_account_gate_attestation,
-                )?;
+                )
+                .map_err(|error| anyhow!("admission digest rejected: {error:?}"))?;
             current_stale_outcome(&fixture)
         }
         "current_known_revocation_invalidates_before_deadline" => {
@@ -1979,7 +1993,8 @@ fn execute_reuse_case(name: &str) -> Result<OutcomeClass> {
                 arkret_canonical::ed25519_pubkey_to_did_key_multibase(
                     &SigningKey::from_bytes(&[99; 32]).verifying_key().to_bytes()
                 )
-            ))?;
+            ))
+            .map_err(anyhow::Error::msg)?;
             proof.jws = sign_ed25519_detached_jws(
                 &SigningKey::from_bytes(&[13; 32]),
                 &proof.canonical_binding_bytes()?,
@@ -2089,7 +2104,8 @@ fn install_original_station_admission(fixture: &mut ExecutableEvidence) -> Resul
             arkret_canonical::ed25519_pubkey_to_did_key_multibase(
                 &agent_key.verifying_key().to_bytes()
             )
-        ))?,
+        ))
+        .map_err(anyhow::Error::msg)?,
         producer_signer_resolution_evidence_ref: Some(
             fixture.producer_signer_resolution_evidence_ref.clone(),
         ),

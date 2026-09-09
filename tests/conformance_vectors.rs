@@ -316,7 +316,15 @@ fn agent_vector_suite_runs_clean() {
 
 #[test]
 fn agent_signer_evidence_vector_suite_runs_clean() {
-    run_agent_signer_evidence_vector_suite()
+    // The debug fixture match holds several complete signed evidence values.
+    // Keep its stack requirement local to this test, not the verifier runtime.
+    std::thread::Builder::new()
+        .name("agent-signer-evidence-fixtures".to_owned())
+        .stack_size(32 * 1024 * 1024)
+        .spawn(run_agent_signer_evidence_vector_suite)
+        .expect("Agent signer-evidence fixture worker must start")
+        .join()
+        .expect("Agent signer-evidence fixture worker must finish")
         .expect("Agent signer-evidence vectors must execute and pass");
     assert_eq!(ALL_AGENT_SIGNER_EVIDENCE_CASES.len(), 49);
 }
