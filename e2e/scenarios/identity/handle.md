@@ -32,14 +32,15 @@
    - handle 格式合法
    - handle 未被占用
    - alice 有权(自己持有)
-5. 断言:`/_arkret/self/actors/<alice.did>/profile.handle = "@alice-pretty"`
+5. 断言 handle claim viewer / handle resolve 返回 Alice 当前 primary handle `@alice-pretty`；handle 不是
+   Actor Profile 的子字段，不通过 profile resolve 读取
 6. 断言:directory 搜 `@alice-pretty` → 找到 alice
 
 ### Phase B — Handle 冲突
 
 7. mallory 试 `ak.handle.claim { handle: "@alice-pretty" }`
 8. soland reducer 拒,reason `handle_already_claimed`
-9. 断言:mallory 的 inkson UI 显示错误;profile.handle 未变
+9. 断言:mallory 的 inkson UI 显示错误；其 primary handle 未变
 
 ### Phase C — alice 转移 handle 给 bob
 
@@ -49,8 +50,8 @@
 13. soland reducer:
     - 校验 alice 是当前 holder
     - 把 handle 绑定改到 bob.did
-    - alice 的 profile.handle 退到 fallback 或重新拿
-14. 断言:bob.profile.handle = `@alice-pretty`
+    - alice 的 primary handle 退到 fallback 或重新申领
+14. 断言 Bob 的 handle claim viewer / resolve 返回 primary handle `@alice-pretty`
 15. 断言:alice 不再用 `@alice-pretty`
 16. 断言:directory 搜 `@alice-pretty` 现在指向 bob
 

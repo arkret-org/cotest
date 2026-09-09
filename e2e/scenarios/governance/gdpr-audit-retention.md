@@ -63,7 +63,9 @@ alice 触发 GDPR 数据导出 → 拿到完整个人数据 JSON;触发 erasure 
 ### Phase D — bob 视角验证 erasure
 
 13. bob 同步 `S` → timeline 中 alice 的消息显示 `[user erased]` tombstone
-14. bob `GET /_arkret/self/actors/<alice.did>/profile` → 返回 anonymized / 404
+14. bob 以完整 `ActorId` 调用 `ak.self.actor_profile.read.resolve.v1`
+    （`POST /_arkret/self/actor-profiles/query`）→ 返回统一 `profile_unavailable`，不以 anonymized body、404
+    或差异化错误泄漏账号 / membership
 15. bob 在 directory 搜 alice handle → 不再找到
 
 ### Phase E — Audit log entries

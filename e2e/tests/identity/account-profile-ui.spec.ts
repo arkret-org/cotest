@@ -41,6 +41,47 @@ test("@fully-implemented account owner uploads and clears the canonical profile 
       timeout: 60_000,
     });
 
+    const displayName = `Profile ${Date.now()}`;
+    const bio = `Bio ${Date.now()}`;
+    await page.page.getByTestId("settings-profile-display-name").fill(displayName);
+    await page.page.getByTestId("settings-profile-bio").fill(bio);
+    const savedTextProfile = page.page.waitForResponse(
+      (response) =>
+        response.url() === profileUrl &&
+        response.request().method() === "POST" &&
+        response.status() === 200,
+      { timeout: 90_000 },
+    );
+    await page.page.getByTestId("settings-profile-save").click();
+    const savedText = await savedTextProfile;
+    expect(savedText.request().postData() ?? "").toMatch(
+      /ak\.profile\.(?:create|update)/,
+    );
+    await expect(page.page.getByTestId("settings-profile-status")).toContainText(
+      /saved|已保存/i,
+    );
+    await expect
+      .poll(
+        async () => {
+          const response = await request.get(viewerUrl, {
+            headers: selfPathHeadersForDpopSession(session, "GET", viewerUrl),
+          });
+          if (!response.ok()) return {};
+          const body = (await response.json()) as {
+            profile?: {
+              display_name?: string;
+              profile_fields?: { bio?: string };
+            };
+          };
+          return {
+            displayName: body.profile?.display_name,
+            bio: body.profile?.profile_fields?.bio,
+          };
+        },
+        { timeout: 60_000, intervals: [250, 500, 1_000, 2_000] },
+      )
+      .toEqual({ displayName, bio });
+
     await page.page.getByTestId("settings-avatar-input").setInputFiles({
       name: "avatar.png",
       mimeType: "image/png",
@@ -61,9 +102,7 @@ test("@fully-implemented account owner uploads and clears the canonical profile 
     const published = await publishedProfile;
     const publishedText = await published.text();
     expect(published.status(), publishedText).toBe(200);
-    expect(published.request().postData() ?? "").toMatch(
-      /ak\.profile\.(?:create|update)/,
-    );
+    expect(published.request().postData() ?? "").toContain("ak.profile.update");
 
     let avatarBlobRef = "";
     await expect
@@ -128,6 +167,11 @@ test("@fully-implemented account owner uploads and clears the canonical profile 
     await expect(page.page.getByTestId("settings-avatar-card")).toBeVisible({
       timeout: 60_000,
     });
+    await expect(page.page.getByTestId("settings-profile-display-name")).toHaveValue(
+      displayName,
+      { timeout: 60_000 },
+    );
+    await expect(page.page.getByTestId("settings-profile-bio")).toHaveValue(bio);
     await expect(page.page.getByTestId("settings-avatar-clear")).toHaveCount(0);
   } finally {
     await page.close();
