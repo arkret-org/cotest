@@ -555,12 +555,13 @@ pub async fn seal_principal_control_frontier_with_pending_events(
             return Ok(leaf);
         }
         let physical_millis = chrono::Utc::now().timestamp_millis();
-        let request = arkret_models_collaboration::governance_dependencies::SealPrepareRequestBody {
-            realm_id: realm_id.clone(),
-            predecessor_refs: frontier.seal_basis.leaves,
-            event_digests: pending.event_digests,
-            hlc: Hlc::new(format!("{physical_millis:012x}-{index:04x}-a13f9c2e"))?,
-        };
+        let request =
+            arkret_models_collaboration::governance_dependencies::SealPrepareRequestBody {
+                realm_id: realm_id.clone(),
+                predecessor_refs: frontier.seal_basis.leaves,
+                event_digests: pending.event_digests,
+                hlc: Hlc::new(format!("{physical_millis:012x}-{index:04x}-a13f9c2e"))?,
+            };
         let prepared = sdk.seals_prepare(&request).await?;
         let seal = prepared.sign(&request, &signer)?;
         let outcome = sdk.events_submit_seal(&seal).await?;

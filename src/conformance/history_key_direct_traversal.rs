@@ -12,11 +12,12 @@ use arkret_models_collaboration::governance_dependencies::GovernanceDependencyRe
 use arkret_models_collaboration::history_key::{
     AuthorizationIncarnation, HistoryCandidateOriginAttribution, HistoryGovernanceTraversalIntent,
     HistoryGovernanceTraversalRetention, HistoryKeyResponseAckRequestBody,
-    HistoryKeyResponseListOutcome, HistoryKeyResponseSendReceipt, HistoryKeyResponseSendRequestBody,
-    HistoryResponseId, HistorySourceSendDisposition, OrganizationRecoveryArchiveListOutcome,
-    OrganizationRecoveryArchiveListQuery, OrganizationRecoveryArchiveReplica,
-    OrganizationRecoveryArchiveReplicaOutcome, PeerHistoryTraversalAccess, ResponseSenderOriginRef,
-    ResponseSenderQuotaDomain, SelfHistoryTraversalAccess, response_capability_commitment,
+    HistoryKeyResponseListOutcome, HistoryKeyResponseSendReceipt,
+    HistoryKeyResponseSendRequestBody, HistoryResponseId, HistorySourceSendDisposition,
+    OrganizationRecoveryArchiveListOutcome, OrganizationRecoveryArchiveListQuery,
+    OrganizationRecoveryArchiveReplica, OrganizationRecoveryArchiveReplicaOutcome,
+    PeerHistoryTraversalAccess, ResponseSenderOriginRef, ResponseSenderQuotaDomain,
+    SelfHistoryTraversalAccess, response_capability_commitment,
 };
 use arkret_models_identity::AuthenticatedSignerResolutionEvidence;
 use arkret_state::direct_traversal::{
