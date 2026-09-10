@@ -38,7 +38,7 @@ use arkret::{
     AgentSidecarExchangeStatus, AgentSidecarMlsContext, AgentSidecarProjectionProvenance,
     AgentSidecarSchema, AgentSidecarSourceTrackRef, AgentSidecarState, AgentSidecarView, Did,
     DidCoreId, DidUrl, Event, EventId, EventRef, Hash, Hlc, MessageMetadata,
-    MlsGovernanceBindingPayload, NonEmptyString, PendingSidecarAccessReconciliationItem,
+    MlsGovernanceBindingPayload, NonEmptyString, PendingSidecarAccessReconciliation,
     PendingSidecarAccessReconciliationStage, PreparedEventDraft, RealmId, ScopeRef, SidecarId,
     SidecarMlsBinding, StrandId, agent_sidecar_exchange_event_set_digest,
     agent_sidecar_participant_authority_digest, recover_agent_sidecar_context_locators,
@@ -292,7 +292,7 @@ pub fn run_sidecar_mls_effective_access_vector() -> Result<()> {
             "Sidecar removal must stop delivery and create only a client-authored MLS obligation"
         );
     }
-    let removal = PendingSidecarAccessReconciliationItem {
+    let removal = PendingSidecarAccessReconciliation {
         agent_id: DidCoreId::new("ak:did_core:web:assistant.agents.example")?,
         provisioning_phase: PendingSidecarAccessReconciliationStage::MlsRemove,
         membership_frontier: Some(vec![EventId::new(

@@ -13,9 +13,10 @@ use arkret_models_collaboration::http_bodies::{
     EventDeliveryStatusOutcome, EventDeliveryStatusRequestBody, EventDeliveryTargetState,
     EventsResolveOutcome, EventsResolveRequestBody, EventsSubmitOutcome,
 };
-use arkret_models_collaboration::{
-    CurrentSignerEvidenceSelector, SelfCurrentSignerEvidenceQueryRequestBody,
-    SelfCurrentSignerEvidenceResult,
+use arkret_models_identity::{
+    AccountDeviceSenderKind, CurrentAccountDeviceSelector, CurrentAdmissionMode,
+    CurrentSignerKeyOutcome, SignerKeyQueryOutcome, SignerKeyQuerySelector,
+    SignerKeysQueryRequestBody,
 };
 use arkret_wire::{
     AccountId, ActorId, Did, DidCoreId, DidUrl, Event, EventId, EventKind, Hash, RealmId,
@@ -881,26 +882,32 @@ pub async fn run_current_signer_evidence_live() -> Result<()> {
         ))
         .map_err(anyhow::Error::msg)?,
     )?;
-    let request = SelfCurrentSignerEvidenceQueryRequestBody {
+    let request = SignerKeysQueryRequestBody {
         request_id: RequestId::new("ak:request:019b0000-0000-7000-8000-000000000101")?,
         realm_id: envelope.realm_id.clone(),
         recipient_account_id: bob_account.clone(),
-        queries: vec![CurrentSignerEvidenceSelector::AccountDevice {
-            account_id: alice_account.clone(),
-            device_id: alice_principal.device_id.clone(),
-        }],
+        queries: vec![SignerKeyQuerySelector::CurrentAccountDevice(
+            CurrentAccountDeviceSelector {
+                verification_mode: CurrentAdmissionMode::CurrentAdmission,
+                sender_kind: AccountDeviceSenderKind::AccountDevice,
+                actor: envelope.sender_actor_id.clone(),
+                device_id: alice_principal.device_id.clone(),
+                verification_method: envelope.proof.verification_method.clone(),
+            },
+        )],
     };
     request.validate()?;
 
     // The only acquisition is Bob@Station-B -> self proxy -> peer authority
     // Station-A. Bob has never queried or cached Alice's signer beforehand.
-    let outcome = bob.sdk().current_signer_evidence_query(&request).await?;
+    let outcome = bob.sdk().signer_keys_query(&request).await?;
     outcome.validate_for_request(&request)?;
     ensure!(
         outcome.results.len() == 1,
         "cold sender omitted its current result"
     );
-    let SelfCurrentSignerEvidenceResult::Resolved { selector, key, .. } = &outcome.results[0]
+    let SignerKeyQueryOutcome::Current(CurrentSignerKeyOutcome { selector, key, .. }) =
+        &outcome.results[0]
     else {
         bail!("origin Station did not resolve the current sender");
     };
@@ -914,26 +921,29 @@ pub async fn run_current_signer_evidence_live() -> Result<()> {
 
     let mut wrong_station = request.clone();
     wrong_station.request_id = RequestId::new("ak:request:019b0000-0000-7000-8000-000000000102")?;
-    let CurrentSignerEvidenceSelector::AccountDevice { account_id, .. } =
-        &mut wrong_station.queries[0]
+    let SignerKeyQuerySelector::CurrentAccountDevice(CurrentAccountDeviceSelector {
+        actor, ..
+    }) = &mut wrong_station.queries[0]
     else {
         unreachable!()
     };
+    let ActorId::Account { account_id } = actor else {
+        unreachable!("account-device selector keeps an account ActorId");
+    };
     account_id.station_id = group.server(1).service_id().clone();
-    let wrong_outcome = bob
-        .sdk()
-        .current_signer_evidence_query(&wrong_station)
-        .await?;
+    let wrong_outcome = bob.sdk().signer_keys_query(&wrong_station).await?;
     wrong_outcome.validate_for_request(&wrong_station)?;
     ensure!(
         matches!(
             &wrong_outcome.results[0],
-            SelfCurrentSignerEvidenceResult::Unavailable { .. }
+            SignerKeyQueryOutcome::Unavailable(_)
         ),
         "wrong authority Station did not return unavailable"
     );
     let mut misbound = outcome.clone();
-    let SelfCurrentSignerEvidenceResult::Resolved { key, .. } = &mut misbound.results[0] else {
+    let SignerKeyQueryOutcome::Current(CurrentSignerKeyOutcome { key, .. }) =
+        &mut misbound.results[0]
+    else {
         unreachable!();
     };
     key.actor = ActorId::account(bob_account);

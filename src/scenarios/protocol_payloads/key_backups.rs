@@ -23,7 +23,7 @@ use arkret_identifiers::{
 };
 use arkret_models_crypto::{
     BackupKind, HistorySecretRangeIndex, HistorySecretRangesItemKind, KeyBackup, KeyBackupAead,
-    KeyBackupAeadName, KeyBackupContentItem, KeyBackupDomainSeparation, KeyBackupEncryption,
+    KeyBackupAeadName, KeyBackupContentIndex, KeyBackupDomainSeparation, KeyBackupEncryption,
     KeyBackupRecipientMethod, KeyBackupRetention, KeyBackupSignatureAlgorithm,
     KeyBackupUnlockProof, KeysBackupsUnlockRequestBody, ProofKind, UnsignedKeyBackup,
     UnsignedKeyBackupAuthData, UnsignedKeyBackupUnlockProof, UnsignedKeyBackupUnlockProofAuthData,
@@ -129,7 +129,7 @@ fn signed_backup_envelope(actor_id: &str, station_id: &DidCoreId) -> Result<KeyB
             subdomain: "test".to_owned(),
             aead_aad_extensions: Default::default(),
         },
-        contents: vec![KeyBackupContentItem::HistorySecretRanges(
+        contents: vec![KeyBackupContentIndex::HistorySecretRanges(
             HistorySecretRangeIndex {
                 item_kind: HistorySecretRangesItemKind::Value,
                 effective_scope: history_scope,
