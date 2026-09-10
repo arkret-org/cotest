@@ -14,7 +14,8 @@ use arkret_models_collaboration::http_bodies::{
     EventsResolveOutcome, EventsResolveRequestBody, EventsSubmitOutcome,
 };
 use arkret_models_collaboration::{
-    CurrentSignerEvidenceItem, CurrentSignerEvidenceQueryRequestBody, CurrentSignerEvidenceSelector,
+    CurrentSignerEvidenceSelector, SelfCurrentSignerEvidenceQueryRequestBody,
+    SelfCurrentSignerEvidenceResult,
 };
 use arkret_wire::{
     AccountId, ActorId, Did, DidCoreId, DidUrl, Event, EventId, EventKind, Hash, RealmId,
@@ -880,64 +881,36 @@ pub async fn run_current_signer_evidence_live() -> Result<()> {
         ))
         .map_err(anyhow::Error::msg)?,
     )?;
-    let request = CurrentSignerEvidenceQueryRequestBody {
+    let request = SelfCurrentSignerEvidenceQueryRequestBody {
         request_id: RequestId::new("ak:request:019b0000-0000-7000-8000-000000000101")?,
         realm_id: envelope.realm_id.clone(),
         recipient_account_id: bob_account.clone(),
-        known_agent_state_digests: Vec::new(),
-        known_signer_evidence_refs: Vec::new(),
         queries: vec![CurrentSignerEvidenceSelector::AccountDevice {
             account_id: alice_account.clone(),
             device_id: alice_principal.device_id.clone(),
         }],
     };
-    request.validate_for_envelope(&envelope)?;
+    request.validate()?;
 
     // The only acquisition is Bob@Station-B -> self proxy -> peer authority
     // Station-A. Bob has never queried or cached Alice's signer beforehand.
     let outcome = bob.sdk().current_signer_evidence_query(&request).await?;
+    outcome.validate_for_request(&request)?;
     ensure!(
-        outcome.response.evidences.len() == 1,
-        "cold ordinary sender did not resolve exactly one evidence item"
+        outcome.results.len() == 1,
+        "cold sender omitted its current result"
     );
-    outcome.validate_for_request(&request, Utc::now())?;
-    let CurrentSignerEvidenceItem::AccountDevice {
-        // This scenario asserts on the resolved account/device and the
-        // attestation only. The ref is named rather than swallowed by `..` so
-        // that a future variant field fails the build here instead of being
-        // silently dropped; asserting on it is left to whoever added it.
-        signer_evidence_ref: _,
-        account_id,
-        device_id,
-        device_projection_attestation,
-    } = outcome
-        .response
-        .evidences
-        .first()
-        .context("origin Station omitted current device evidence")?
+    let SelfCurrentSignerEvidenceResult::Resolved { selector, key, .. } = &outcome.results[0]
     else {
-        bail!("origin Station returned the wrong current evidence branch");
+        bail!("origin Station did not resolve the current sender");
     };
-    ensure!(account_id == &alice_account && device_id == &alice_principal.device_id);
-    let issuer_key = ed25519_dalek::VerifyingKey::from_bytes(&<[u8; 32]>::try_from(
-        arkret_canonical::base64url_decode(
-            &group
-                .server(0)
-                .service_notary_signer()
-                .frozen_public_key_b64u,
-        )?
-        .as_slice(),
-    )?)?;
-    arkret_signatures::device_projection::verify_device_projection_attestation(
-        device_projection_attestation,
-        &issuer_key,
-        Utc::now(),
-    )?;
-    let displayed = format!(
-        "{} / {} / {}",
-        account_id, device_id, device_projection_attestation.proof.verification_method
-    );
-    ensure!(displayed.contains(group.server(0).service_id().as_str()));
+    ensure!(selector == &request.queries[0]);
+    ensure!(key.actor == envelope.sender_actor_id);
+    ensure!(key.verification_method == envelope.proof.verification_method);
+    // The self result is the recipient Station's authority decision. Actual
+    // producer signatures still require this exact key, without replaying its
+    // peer attestation or governance dependency closure on the client.
+    key.validate()?;
 
     let mut wrong_station = request.clone();
     wrong_station.request_id = RequestId::new("ak:request:019b0000-0000-7000-8000-000000000102")?;
@@ -951,34 +924,22 @@ pub async fn run_current_signer_evidence_live() -> Result<()> {
         .sdk()
         .current_signer_evidence_query(&wrong_station)
         .await?;
+    wrong_outcome.validate_for_request(&wrong_station)?;
     ensure!(
-        wrong_outcome.response.evidences.is_empty(),
-        "wrong authority Station did not return opaque empty evidence"
+        matches!(
+            &wrong_outcome.results[0],
+            SelfCurrentSignerEvidenceResult::Unavailable { .. }
+        ),
+        "wrong authority Station did not return unavailable"
     );
-    wrong_outcome.validate_for_request(&wrong_station, Utc::now())?;
-
-    ensure!(
-        outcome
-            .validate_for_request(
-                &request,
-                device_projection_attestation.attestation.expires_at
-            )
-            .is_err(),
-        "stale current-signer evidence remained usable"
-    );
-    let mut revoked = outcome.clone();
-    let CurrentSignerEvidenceItem::AccountDevice {
-        device_projection_attestation,
-        ..
-    } = &mut revoked.response.evidences[0]
-    else {
-        unreachable!()
+    let mut misbound = outcome.clone();
+    let SelfCurrentSignerEvidenceResult::Resolved { key, .. } = &mut misbound.results[0] else {
+        unreachable!();
     };
-    device_projection_attestation.attestation.device_status =
-        arkret_models_crypto::DeviceStatus::Revoked;
+    key.actor = ActorId::account(bob_account);
     ensure!(
-        revoked.validate_for_request(&request, Utc::now()).is_err(),
-        "revoked device evidence remained usable"
+        misbound.validate_for_request(&request).is_err(),
+        "current key for another Actor remained usable"
     );
     Ok(())
 }

@@ -530,7 +530,7 @@ pub async fn seal_principal_control_frontier_with_pending_events(
         let leaf = frontier.sole_leaf()?.clone();
         let pending = sdk
             .pcr_pending_control(
-                &arkret_models_collaboration::governance_dependencies::PcrPendingControlRequest {
+                &arkret_models_collaboration::governance_dependencies::PcrPendingControlRequestBody {
                     realm_id: realm_id.clone(),
                     predecessor_refs: frontier.seal_basis.leaves.clone(),
                     limit: 1,
@@ -555,7 +555,7 @@ pub async fn seal_principal_control_frontier_with_pending_events(
             return Ok(leaf);
         }
         let physical_millis = chrono::Utc::now().timestamp_millis();
-        let request = arkret_models_collaboration::governance_dependencies::SealPrepareRequest {
+        let request = arkret_models_collaboration::governance_dependencies::SealPrepareRequestBody {
             realm_id: realm_id.clone(),
             predecessor_refs: frontier.seal_basis.leaves,
             event_digests: pending.event_digests,

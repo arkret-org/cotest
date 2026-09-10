@@ -153,7 +153,7 @@ struct PrincipalBootstrapSealInput {
 
 #[derive(Debug, Deserialize)]
 struct PrincipalSuccessorSealInput {
-    request: arkret_models_collaboration::governance_dependencies::SealPrepareRequest,
+    request: arkret_models_collaboration::governance_dependencies::SealPrepareRequestBody,
     outcome: arkret_models_collaboration::governance_dependencies::SealPrepareOutcome,
     signer_did: arkret_wire::Did,
     verification_method: arkret_wire::DidUrl,

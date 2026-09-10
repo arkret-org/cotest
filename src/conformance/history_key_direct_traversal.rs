@@ -11,8 +11,8 @@ use arkret_models_collaboration::governance::realm_lifecycle::HistoryAccessPaylo
 use arkret_models_collaboration::governance_dependencies::GovernanceDependencyResolveOutcome;
 use arkret_models_collaboration::history_key::{
     AuthorizationIncarnation, HistoryCandidateOriginAttribution, HistoryGovernanceTraversalIntent,
-    HistoryGovernanceTraversalRetention, HistoryKeyResponseAckRequest,
-    HistoryKeyResponseListOutcome, HistoryKeyResponseSendReceipt, HistoryKeyResponseSendRequest,
+    HistoryGovernanceTraversalRetention, HistoryKeyResponseAckRequestBody,
+    HistoryKeyResponseListOutcome, HistoryKeyResponseSendReceipt, HistoryKeyResponseSendRequestBody,
     HistoryResponseId, HistorySourceSendDisposition, OrganizationRecoveryArchiveListOutcome,
     OrganizationRecoveryArchiveListQuery, OrganizationRecoveryArchiveReplica,
     OrganizationRecoveryArchiveReplicaOutcome, PeerHistoryTraversalAccess, ResponseSenderOriginRef,
@@ -652,7 +652,7 @@ fn verify_rhrk_durable_before_gc(fixture: &HistoryKeyRecoveryFixture) -> Result<
 
 fn verify_response_stream_fixture(fixture: &HistoryKeyRecoveryFixture) -> Result<()> {
     let kat = &fixture.response_stream_cases;
-    let send: HistoryKeyResponseSendRequest = serde_json::from_value(
+    let send: HistoryKeyResponseSendRequestBody = serde_json::from_value(
         kat.pointer("/wire_instances/manifest_send")
             .cloned()
             .context("response stream KAT omits manifest_send")?,
@@ -673,7 +673,7 @@ fn verify_response_stream_fixture(fixture: &HistoryKeyRecoveryFixture) -> Result
             .context("response stream KAT omits sequence_ordered_list")?,
     )?;
     list.validate()?;
-    let ack: HistoryKeyResponseAckRequest = serde_json::from_value(
+    let ack: HistoryKeyResponseAckRequestBody = serde_json::from_value(
         kat.pointer("/wire_instances/ack_request")
             .cloned()
             .context("response stream KAT omits ack_request")?,
@@ -696,7 +696,7 @@ fn verify_response_stream_fixture(fixture: &HistoryKeyRecoveryFixture) -> Result
         bail!("response stream exact retry receipt is not byte-identical");
     }
 
-    let out_of_order: HistoryKeyResponseAckRequest = serde_json::from_value(
+    let out_of_order: HistoryKeyResponseAckRequestBody = serde_json::from_value(
         kat.pointer("/negative_cases/2/input")
             .cloned()
             .context("response stream KAT omits out-of-order ack")?,
