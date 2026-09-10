@@ -264,6 +264,7 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
     let hpke_key = non_empty("z6LSCotestPcrGenesisHpkeKey")?;
     let algorithms = vec![non_empty("ak.hpke_x25519_aead_chacha20poly1305.v1")?];
     let mut authorize_payload = DeviceAuthorizePayload {
+        pairing_challenge_transcript_digest: None,
         device_id: device_id.clone(),
         device_public_key_did: device_public_key.clone(),
         hpke_key: hpke_key.clone(),

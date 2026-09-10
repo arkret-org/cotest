@@ -123,7 +123,7 @@ async fn seed(store: &dyn PersistenceStore, station: &str) -> Result<AccountFixt
         .await?;
     let queue = store
         .device_messages()
-        .list_after(account.principal_id.as_str(), DEVICE, 0)
+        .list_after(account.principal_id.as_str(), DEVICE, 0, 100)
         .await?;
     ensure!(queue.len() == 1);
     let ack = store
@@ -311,7 +311,7 @@ async fn verify_isolation(
         );
         let queue = own
             .device_messages()
-            .list_after(principal, DEVICE, 0)
+            .list_after(principal, DEVICE, 0, 100)
             .await?;
         ensure!(queue.len() == 1 && queue[0].content["station"] == label);
         ensure!(
@@ -346,7 +346,7 @@ async fn verify_isolation(
     );
     ensure!(
         left.device_messages()
-            .list_after(principal, DEVICE, 0)
+            .list_after(principal, DEVICE, 0, 100)
             .await?
             .len()
             == 1
@@ -403,6 +403,7 @@ fn admit(event: Event, station: &str) -> Result<Event> {
         ))
         .map_err(anyhow::Error::msg)?,
         producer_signer_resolution_evidence_ref: None,
+        applet_installation_digest: None,
         signer_resolution_evidence_ref: reference,
         accepted_at: now,
         jws: String::new(),

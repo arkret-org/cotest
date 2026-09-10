@@ -145,7 +145,6 @@ struct ExecutableEvidence {
     verification_method: DidUrl,
     authorize_event_id: EventId,
     authorize_public_key_digest: Hash,
-    binding_digest: Hash,
     authority_id: DidCoreId,
     authority_verification_method: DidUrl,
     account_authority_id: DidCoreId,
@@ -811,7 +810,6 @@ fn verified_state<'a>(
             controller_principal_id: &fixture.controller_principal_id,
             agent_key_authorize_event_id: &fixture.authorize_event_id,
             authorize_public_key_digest: &fixture.authorize_public_key_digest,
-            authorize_signing_key_binding_digest: &fixture.binding_digest,
             verify_seal_signature: &seal_policy,
             verify_control_event_signature: &signature_policy,
         },
@@ -833,7 +831,6 @@ fn common_context<'a>(
         verification_method: &fixture.verification_method,
         agent_key_authorize_event_id: &fixture.authorize_event_id,
         authorize_public_key_digest: &fixture.authorize_public_key_digest,
-        authorize_signing_key_binding_digest: &fixture.binding_digest,
         expected_authority_id: &fixture.authority_id,
         expected_authority_verification_method: &fixture.authority_verification_method,
         expected_account_authority_id: &fixture.account_authority_id,
@@ -1047,20 +1044,11 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
             .map_err(anyhow::Error::msg)?,
         key_digest: None,
     };
-    let core = arkret_signatures::agent_evidence::prepare_agent_signing_key_binding_core(
-        signer_id.clone(),
-        agent_key_id.clone(),
-        verification_method.clone(),
+    let authorize_public_key_digest = arkret_signatures::agent::validate_agent_runtime_public_key(
         &runtime_public_key,
-        issued_at,
-        Some(expires_at),
-        controller_principal_id.clone(),
-    )
-    .map_err(|reason| anyhow!("binding: {reason:?}"))?;
-    let authorize_public_key_digest = core.public_key_digest.clone();
-    let binding_digest =
-        arkret_signatures::agent_evidence::agent_signing_key_binding_core_digest(&core)
-            .map_err(|reason| anyhow!("{reason:?}"))?;
+        &verification_method,
+    )?
+    .authorization_digest;
     use arkret_models_collaboration::events_payloads::agent::{
         AgentKeyApprovalEvidence, AgentKeyApprovalEvidenceKind, AgentKeyAuthorizePayload,
         AgentKeyScope,
@@ -1069,8 +1057,7 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         agent_id: signer_id.clone(),
         key_id: agent_key_id.clone(),
         verification_method: verification_method.clone(),
-        public_key_digest: authorize_public_key_digest.clone(),
-        signing_key_binding_digest: binding_digest.clone(),
+        public_key: runtime_public_key,
         accountable_principal_id: controller_principal_id.clone(),
         agent_key_scope: AgentKeyScope {
             actions: vec!["read".to_owned()],
@@ -1110,25 +1097,6 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
     key_authorization.authorization_ref = Some(controller_verification_method.clone().into());
     let key_authorization = sign_lifecycle(key_authorization)?;
     let authorize_event_id = key_authorization.event_id.clone();
-    let binding_to_sign = arkret_signatures::agent_evidence::materialize_agent_signing_key_binding(
-        core,
-        authorize_event_id.clone(),
-        controller_verification_method,
-    )
-    .map_err(|reason| anyhow!("{reason:?}"))?;
-    let binding_jws = sign_ed25519_detached_jws(
-        &controller_signing,
-        &arkret_signatures::agent_evidence::agent_signing_key_binding_to_sign_bytes(
-            &binding_to_sign,
-        )
-        .map_err(|reason| anyhow!("{reason:?}"))?,
-    )?;
-    let binding = arkret_signatures::agent_evidence::finish_agent_signing_key_binding(
-        binding_to_sign,
-        &binding_jws,
-    )
-    .map_err(|reason| anyhow!("{reason:?}"))?;
-
     let tag = if config.bare_authorization_tag {
         authorize_event_id.to_string()
     } else {
@@ -1243,7 +1211,6 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         key_authorization_event: key_authorization,
         frontier_seal_id: lifecycle_seal.id.clone(),
         frontier_state_root: lifecycle_seal.state_root.clone(),
-        signing_key_binding: binding,
         authorization,
         key_state_witness,
         key_transition_witness: None,
@@ -1347,7 +1314,6 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         verification_method,
         authorize_event_id,
         authorize_public_key_digest,
-        binding_digest,
         authority_id,
         authority_verification_method,
         account_authority_id,
@@ -1457,9 +1423,9 @@ fn validate_binding_requirements(fixture: &AgentSignerEvidenceFixture) -> Result
         .and_then(Value::as_array)
         .context("binding_vector.requirements missing")?;
     let expected = [
-        "recompute_controller_proof_transcript",
+        "verify_authorize_event_controller_producer_proof",
         "recompute_public_key_digest",
-        "match_authorize_event_commitment",
+        "match_authorize_event_inline_public_key",
         "match_agent_and_controller",
     ];
     if requirements

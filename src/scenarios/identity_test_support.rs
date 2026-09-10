@@ -17,8 +17,7 @@ use arkret_models_collaboration::events_payloads::{
 use arkret_models_collaboration::governance::agent_artifacts::PublicKey;
 use arkret_models_collaboration::http_bodies::{
     AccountDevicePairOutcome, AccountDevicePairRequestBody, DevicePairingNonce,
-    DevicePairingStageOutcome, DevicePairingStageRequestBody,
-    UnsignedDevicePairingTargetAttestation,
+    DevicePairingStageOutcome, DevicePairingStageRequestBody, UnsignedDevicePairingTargetProof,
 };
 use arkret_models_crypto::{
     AlgorithmKeyRecords, KeyOperationSignature, KeysUploadRequestBody, KeysUploadUnsignedRequest,
@@ -29,8 +28,8 @@ use arkret_models_identity::{
     UnsignedIdentityCreationControlProofBody,
 };
 use arkret_signatures::device_pairing::{
-    ServerDevicePairingChallenge, sign_device_pairing_target_attestation,
-    sign_server_device_pairing_challenge,
+    ServerDevicePairingChallenge, server_device_pairing_transcript,
+    sign_device_pairing_target_proof,
 };
 use arkret_signatures::http_signature::{
     Component, SignedRequestParts, canonical_message, format_signature_input_component_list,
@@ -416,25 +415,33 @@ async fn authorize_additional_principal_device(
 
     // §2.1.2: the candidate proves possession of its fresh key over the exact
     // server-mediated challenge transcript.
-    let challenge = ServerDevicePairingChallenge::from_stage(client_nonce, &stage);
-    let challenge_proof =
-        sign_server_device_pairing_challenge(&new_device_pubkey, &challenge, device_signing_key)?;
+    let challenge = ServerDevicePairingChallenge::from_stage(
+        &DevicePairingStageRequestBody {
+            new_device_pubkey: new_device_pubkey.clone(),
+            client_nonce,
+            display_name: None,
+            device_metadata: None,
+        },
+        &stage,
+    );
+    let (_, transcript_digest) = server_device_pairing_transcript(&new_device_pubkey, &challenge)?;
 
     // §5.2.2: the accepted-device possession attestation binds only the
     // target's own key material and the challenge transcript digest; the
     // authorizing device's Event proof carries the remaining payload fields.
-    let attestation = sign_device_pairing_target_attestation(
-        UnsignedDevicePairingTargetAttestation::new(
+    let attestation = sign_device_pairing_target_proof(
+        UnsignedDevicePairingTargetProof::new(
             new_device_id.clone(),
             arkret_wire::DidKey::new(device_public_key.as_str().to_owned())
                 .map_err(anyhow::Error::msg)?,
             hpke_key.clone(),
             algorithms.clone(),
-            challenge_proof.transcript_digest.clone(),
+            transcript_digest.clone(),
         )?,
         device_signing_key,
     )?;
     let payload = DeviceAuthorizePayload {
+        pairing_challenge_transcript_digest: Some(transcript_digest),
         device_id: new_device_id,
         device_public_key_did: device_public_key,
         hpke_key: hpke_key.clone(),
@@ -473,7 +480,6 @@ async fn authorize_additional_principal_device(
                 .json(&AccountDevicePairRequestBody {
                     pairing_code: stage.pairing_code.clone(),
                     new_device_pubkey,
-                    challenge_proof,
                     authorize_event: crate::publication::initial_submission(authorize_event, "")?,
                     display_name: None,
                     device_metadata: None,
@@ -691,6 +697,7 @@ async fn bootstrap_test_device_authorization(
             .map_err(anyhow::Error::msg)?,
     ];
     let mut payload = DeviceAuthorizePayload {
+        pairing_challenge_transcript_digest: None,
         device_id: device_id.clone(),
         device_public_key_did: device_public_key.clone(),
         hpke_key: hpke_key.clone(),

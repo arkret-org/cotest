@@ -431,6 +431,15 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
         .get("pairing_request_id")
         .and_then(Value::as_str)
         .ok_or_else(|| anyhow!("pairing_request_id missing"))?;
+    let approval_request_id = arkret_wire::OpaqueLocalId::new(
+        pairing
+            .get("approval_request_id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("approval_request_id missing"))?,
+    )
+    .map_err(anyhow::Error::msg)?;
+    let typed_pairing_request_id =
+        arkret_wire::OpaqueLocalId::new(pairing_request_id).map_err(anyhow::Error::msg)?;
     let pairing_code = pairing
         .get("pairing_code")
         .and_then(Value::as_str)
@@ -462,19 +471,20 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
         .get("expected_possession_transcript_digest")
         .and_then(Value::as_str)
         .ok_or_else(|| anyhow!("expected possession transcript digest missing"))?;
-    let expected_proof_digest = case
-        .get("expected_proof_of_possession_digest")
-        .and_then(Value::as_str)
-        .ok_or_else(|| anyhow!("expected proof digest missing"))?;
-    let actual_proof_digest = proof.wire_digest()?;
-    if proof.transcript_digest.as_str() != expected_transcript_digest
-        || actual_proof_digest.as_str() != expected_proof_digest
-    {
+    if proof.transcript_digest.as_str() != expected_transcript_digest {
         bail!(
-            "runtime possession proof digest drifted: transcript expected {expected_transcript_digest}, actual {}; proof expected {expected_proof_digest}, actual {}",
-            proof.transcript_digest,
-            actual_proof_digest
+            "runtime possession transcript digest drifted: {}",
+            proof.transcript_digest
         );
+    }
+    // PoP freshness is checked separately. Its wire digest is not approval identity.
+    let mut refreshed_proof = proof.clone();
+    refreshed_proof.created_at += chrono::Duration::seconds(1);
+    refreshed_proof.transcript_digest = arkret_wire::Hash::new(arkret_canonical::sha256_digest(
+        &refreshed_proof.canonical_transcript_bytes(pairing_code)?,
+    ))?;
+    if refreshed_proof.wire_digest()? == proof.wire_digest()? {
+        bail!("PoP refresh did not change the proof material");
     }
     let canonical_pairing_binding = serde_json::json!({
         "agent_id": pairing_agent_id,
@@ -483,9 +493,8 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
         "expires_at": canonical_pairing_expires_at,
         "kind": "ak.agent.key_pairing_request_binding.v1",
         "operation_id": arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY_V1,
-        "pairing_code": pairing_code,
         "pairing_request_id": pairing_request_id,
-        "proof_of_possession_digest": proof.wire_digest()?,
+        "approval_request_id": approval_request_id,
         "runtime_key_binding_digest": binding,
     });
     let canonical_pairing_binding = String::from_utf8(arkret_canonical::canonical_json_bytes(
@@ -507,19 +516,70 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
             arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY_V1,
             &controller_principal_id,
             &pairing_agent_id,
-            &arkret_wire::OpaqueLocalId::new(pairing_request_id)
-                .map_err(|error| anyhow!(error))?,
-            pairing_code,
+            &typed_pairing_request_id,
+            &approval_request_id,
             expires_at.parse()?,
             &DidCoreId::new(audience)?,
             &binding,
-            &proof,
         )?;
         if digest.as_str() != expected_pairing_digest {
             bail!(
                 "pairing request binding timestamp normalization drifted for {expires_at}: {}",
                 digest.as_str()
             );
+        }
+    }
+    // A new handle or approval popup is a different authorization instance even
+    // when the runtime key is unchanged. Both must invalidate the old approval.
+    let renewed_handle = arkret_wire::OpaqueLocalId::new(format!("{pairing_request_id}-renewed"))
+        .map_err(anyhow::Error::msg)?;
+    let other_approval = arkret_wire::OpaqueLocalId::new(format!("{approval_request_id}-other"))
+        .map_err(anyhow::Error::msg)?;
+    for (handle, approval) in [
+        (&renewed_handle, &approval_request_id),
+        (&typed_pairing_request_id, &other_approval),
+    ] {
+        let changed = arkret_models_collaboration::agent_operations::agent_key_pairing_request_binding_digest(
+            arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY_V1,
+            &controller_principal_id, &pairing_agent_id, handle, approval,
+            canonical_pairing_expires_at.parse()?, &DidCoreId::new(audience)?, &binding,
+        )?;
+        if changed.as_str() == expected_pairing_digest {
+            bail!("changed pairing handle or approval instance retained the old approval digest");
+        }
+    }
+    // The approval popup is a closed candidate projection. Scope belongs to the
+    // controller-signed authorize Event and private disclosure (pinned by the
+    // provision vector); it cannot be smuggled into this candidate identity.
+    let projection = serde_json::json!({
+        "pairing_request_id": typed_pairing_request_id,
+        "approval_request_id": approval_request_id,
+        "agent_id": pairing_agent_id,
+        "verification_method": typed_verification_method,
+        "public_key": typed_public_key,
+        "runtime_key_binding_digest": binding,
+    });
+    let _: arkret_models_collaboration::agent_operations::AgentRuntimeApprovalControllerProjection =
+        serde_json::from_value(projection.clone())?;
+    for (field, value) in [
+        ("pairing_code", serde_json::json!(pairing_code)),
+        (
+            "proof_of_possession",
+            serde_json::to_value(&refreshed_proof)?,
+        ),
+        (
+            "requested_scope",
+            serde_json::json!({"actions": ["ak.event.read"]}),
+        ),
+    ] {
+        let mut changed = projection.clone();
+        changed[field] = value;
+        if serde_json::from_value::<
+            arkret_models_collaboration::agent_operations::AgentRuntimeApprovalControllerProjection,
+        >(changed)
+        .is_ok()
+        {
+            bail!("controller candidate projection accepted forbidden field {field}");
         }
     }
     for expires_at in rejected_expiry_inputs {
@@ -532,7 +592,7 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
     }
 
     let first_ids = (
-        "approval-1",
+        approval_request_id.as_str(),
         "ak:notification:01964137-0000-7000-8000-000000000001",
     );
     let restart_binding = arkret_signatures::agent::agent_runtime_key_binding_digest(
@@ -768,8 +828,11 @@ pub fn run_agent_longevity_no_expiry_vector() -> Result<()> {
         "agent_id": "ak:did_core:web:agent.example",
         "key_id": "ak:agent_key:0199000000007000800000000000aa01",
         "verification_method": "did:web:agent.example#runtime-key-1",
-        "public_key_digest": format!("sha256:{}", "1".repeat(64)),
-        "signing_key_binding_digest": format!("sha256:{}", "2".repeat(64)),
+        "public_key": {
+            "kty": "OKP", "algorithm": "Ed25519",
+            "kid": "did:web:agent.example#runtime-key-1",
+            "key": arkret_canonical::base64url_encode([1u8; 32])
+        },
         "accountable_principal_id": "ak:did_core:web:alice.example",
         "agent_key_scope": {
             "actions": ["ak.event.read"],

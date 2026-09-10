@@ -18,14 +18,14 @@ use std::collections::BTreeMap;
 use anyhow::{Context as _, Result, anyhow};
 use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_identifiers::{
-    BackupId, BackupSeriesId, DeviceId, Did, DidCoreId, EventId, Hash, RecoverySessionId,
-    project_did_to_core_id,
+    BackupId, BackupSeriesId, DeviceId, Did, DidCoreId, EventId, Hash, project_did_to_core_id,
 };
 use arkret_models_crypto::{
     BackupKind, HistorySecretRangeIndex, HistorySecretRangesItemKind, KeyBackup, KeyBackupAead,
     KeyBackupAeadName, KeyBackupContentIndex, KeyBackupDomainSeparation, KeyBackupEncryption,
     KeyBackupRecipientMethod, KeyBackupRetention, KeyBackupSignatureAlgorithm,
-    KeyBackupUnlockProof, KeysBackupsUnlockRequestBody, ProofKind, UnsignedKeyBackup,
+    KeyBackupUnlockAuthority, KeyBackupUnlockProof, KeysBackupsIssueUnlockChallengeRequestBody,
+    KeysBackupsUnlockChallenge, KeysBackupsUnlockRequestBody, UnsignedKeyBackup,
     UnsignedKeyBackupAuthData, UnsignedKeyBackupUnlockProof, UnsignedKeyBackupUnlockProofAuthData,
 };
 use arkret_wire::{
@@ -198,6 +198,7 @@ async fn describe_backup_operations(server: &ArkretServer) -> Result<()> {
         "ak.self.keys.backups.resource.replace.v1",
         "ak.self.keys.backups.read.list.v1",
         "ak.self.keys.backups.command.unlock.v1",
+        "ak.self.keys.backups.command.issue_unlock_challenge.v1",
         "ak.self.keys.backups.resource.delete.v1",
     ] {
         assert!(
@@ -219,7 +220,7 @@ async fn unlock_backup_requires_body_proof(
     actor_id: &str,
 ) -> Result<()> {
     let baseline = KeysBackupsUnlockRequestBody {
-        proof: unlock_proof(actor_id, server.service_id())?,
+        proof: unlock_proof(server, token, actor_id).await?,
     };
     crate::harness::expect_api_error(
         server
@@ -256,7 +257,7 @@ async fn current_device_unlock_reaches_trust_anchor(
             .post(server.url(&format!("/_arkret/self/keys/backups/{BACKUP_ID}/unlock")))
             .bearer_auth(token)
             .json(&KeysBackupsUnlockRequestBody {
-                proof: unlock_proof(actor_id, server.service_id())?,
+                proof: unlock_proof(server, token, actor_id).await?,
             }),
         StatusCode::UNAUTHORIZED,
         "signature_invalid",
@@ -278,10 +279,39 @@ async fn current_device_unlock_reaches_trust_anchor(
 /// JSON transcript bound to the stored envelope, signed by an Ed25519 device
 /// key whose `verification_method` resolves via `did:key`.
 ///
-/// No durable recovery-session record exists for this synthetic session id.
-/// `current_device` reaches the trust-anchor check without claiming a bound
-/// recovery ceremony.
-fn unlock_proof(actor_id: &str, station_id: &DidCoreId) -> Result<KeyBackupUnlockProof> {
+/// Ordinary device proofs use the exact Station-issued challenge and never
+/// claim a synthetic recovery session or a second proof digest.
+async fn unlock_proof(
+    server: &ArkretServer,
+    token: &str,
+    actor_id: &str,
+) -> Result<KeyBackupUnlockProof> {
+    let request = KeysBackupsIssueUnlockChallengeRequestBody {
+        request_id: Base64UrlString::new("cHJvdG9jb2wtdW5sb2NrLXJlcXVlc3Q")
+            .map_err(|error| anyhow!(error))?,
+    };
+    let challenge: KeysBackupsUnlockChallenge = serde_json::from_value(
+        expect_json(
+            server
+                .http()
+                .post(server.url(&format!(
+                    "/_arkret/self/keys/backups/{BACKUP_ID}/unlock-challenge"
+                )))
+                .bearer_auth(token)
+                .json(&request),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    anyhow::ensure!(
+        challenge.account_id == AccountId::new(did(actor_id)?, server.service_id().clone()),
+        "unlock challenge account mismatch"
+    );
+    anyhow::ensure!(
+        challenge.requesting_device_id.as_str() == DEVICE_ID
+            && challenge.backup_id.as_str() == BACKUP_ID,
+        "unlock challenge target mismatch"
+    );
     let signing_key = device_signing_key();
     let multibase = ed25519_pubkey_to_did_key_multibase(signing_key.verifying_key().as_bytes());
     let verification_method = format!("did:key:{multibase}#{multibase}");
@@ -290,17 +320,21 @@ fn unlock_proof(actor_id: &str, station_id: &DidCoreId) -> Result<KeyBackupUnloc
         KeyBackupSignatureAlgorithm::Ed25519,
     )?;
     let unsigned = UnsignedKeyBackupUnlockProof::new(
-        RecoverySessionId::new("ak:recovery_session:01964137-0000-7000-8000-0000000000aa")?,
-        AccountId::new(did(actor_id)?, station_id.clone()),
-        DeviceId::new(DEVICE_ID.to_owned())?,
-        backup_id(BACKUP_ID)?,
+        KeyBackupUnlockAuthority::CurrentDevice {
+            challenge_id: challenge.challenge_id,
+            nonce: challenge.nonce,
+        },
+        challenge.account_id,
+        challenge.requesting_device_id,
+        challenge.backup_id,
         BackupKind::MlsHistory,
-        backup_series_id(SERIES_ID)?,
-        Hash::new(CIPHERTEXT_DIGEST)?,
-        ProofKind::CurrentDevice,
-        Hash::new("sha256:84a51084210842108421084210842108421084210842108421084210842108aa")?,
-        None,
-        ts("2026-04-26T00:00:00.000Z")?,
+        challenge.series_id,
+        challenge.ciphertext_digest,
+        challenge.challenge,
+        challenge.service_id,
+        challenge.audience,
+        challenge.issued_at,
+        challenge.expires_at,
         auth_data,
     )?;
     let signature = signing_key.sign(&unsigned.signing_payload_bytes()?);

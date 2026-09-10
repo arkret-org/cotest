@@ -9,7 +9,7 @@ use arkret::{AeadNonceReplayTracker, AuthorLeafCredential};
 use arkret_signatures::PublicKeyMaterial;
 use arkret_wire::{
     AccountId, ActorId, Base64UrlString, DeviceId, DidCoreId, DidUrl, EncryptedPayloadScheme,
-    EventId, NonEmptyString, SignalEnvelope,
+    EventId, NonEmptyString, SignalDeliveryAuthority, SignalEnvelope, StationSigningKey,
 };
 use ed25519_dalek::SigningKey;
 use garth::signal::{
@@ -67,6 +67,7 @@ struct Fixture {
     recipient: Recipient,
     template: SignalEnvelope,
     authorization: EventId,
+    recipient_account: AccountId,
 }
 
 impl Fixture {
@@ -162,6 +163,7 @@ impl Fixture {
             },
             template,
             authorization,
+            recipient_account: bob_actor.as_account_id().unwrap().clone(),
         }
     }
 
@@ -204,6 +206,44 @@ impl Fixture {
     }
 }
 
+fn delivery_authority(
+    signal: &SignalEnvelope,
+    seed: [u8; 32],
+    authorization: EventId,
+    recipient: AccountId,
+) -> SignalDeliveryAuthority {
+    let authority = SignalDeliveryAuthority {
+        recipient_account_id: recipient,
+        key: StationSigningKey {
+            actor: signal.sender_actor_id.clone(),
+            verification_method: signal.proof.verification_method.clone(),
+            public_key_b64u: Base64UrlString::new(arkret_canonical::base64url_encode(
+                SigningKey::from_bytes(&seed).verifying_key().to_bytes(),
+            ))
+            .unwrap(),
+            authorization_ref: authorization,
+        },
+    };
+    authority.validate_for_envelope(signal).unwrap();
+    authority
+}
+
+fn bound_resolver(
+    evidence: Option<VerifiedSignalSenderKey>,
+    expected: SignalDeliveryAuthority,
+    recipient: AccountId,
+) -> impl Fn(&SignalEnvelope, &SignalDeliveryAuthority) -> Option<VerifiedSignalSenderKey> {
+    move |signal, authority| {
+        if authority != &expected
+            || authority.recipient_account_id != recipient
+            || authority.validate_for_envelope(signal).is_err()
+        {
+            return None;
+        }
+        evidence.clone()
+    }
+}
+
 #[tokio::test]
 async fn signal_recipient_real_mls_rejects_forged_proof_without_poisoning_sequence() {
     let mut fixture = Fixture::new();
@@ -225,22 +265,58 @@ async fn signal_recipient_real_mls_rejects_forged_proof_without_poisoning_sequen
         )
         .unwrap();
     let evidence = fixture.evidence(&forged, ALICE_SEED, fixture.authorization.clone());
-    let resolver = |_: &SignalEnvelope| Some(evidence.clone());
+    let delivery = delivery_authority(
+        &forged,
+        ALICE_SEED,
+        fixture.authorization.clone(),
+        fixture.recipient_account.clone(),
+    );
+    let resolver = bound_resolver(
+        Some(evidence),
+        delivery.clone(),
+        fixture.recipient_account.clone(),
+    );
     let mut receiver = SignalReceiver::new();
     assert!(
         receiver
-            .accept(&forged, &resolver, &fixture.recipient, forged.sent_at)
+            .accept(
+                &forged,
+                &delivery,
+                &resolver,
+                &fixture.recipient,
+                forged.sent_at
+            )
             .await
             .is_err()
     );
     let valid = fixture.seal(1);
     assert_eq!(
         receiver
-            .accept(&valid, &resolver, &fixture.recipient, valid.sent_at)
+            .accept(
+                &valid,
+                &delivery,
+                &resolver,
+                &fixture.recipient,
+                valid.sent_at
+            )
             .await
             .unwrap()
             .payload_sequence,
         1
+    );
+    let replay = receiver
+        .accept(
+            &valid,
+            &delivery,
+            &resolver,
+            &fixture.recipient,
+            valid.sent_at,
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        replay.to_string().contains("signal_exact_envelope_replay"),
+        "{replay}"
     );
 }
 
@@ -248,6 +324,7 @@ async fn signal_recipient_real_mls_rejects_forged_proof_without_poisoning_sequen
 async fn signal_recipient_requires_exact_account_leaf_key_authorization_and_winner() {
     for mutation in [
         "station",
+        "recipient",
         "key",
         "authorization",
         "winner",
@@ -280,11 +357,21 @@ async fn signal_recipient_requires_exact_account_leaf_key_authorization_and_winn
                 fixture.recipient.winner =
                     crate::fixture_event_id("nonwinning-mls-state").to_string()
             }
-            "missing_trust" | "expired" => {}
+            "recipient" | "missing_trust" | "expired" => {}
             _ => unreachable!(),
         }
-        let evidence = fixture.evidence(&candidate, seed, authorization);
-        let resolver = |_: &SignalEnvelope| (mutation != "missing_trust").then(|| evidence.clone());
+        let evidence = fixture.evidence(&candidate, seed, authorization.clone());
+        let recipient = if mutation == "recipient" {
+            candidate.sender_actor_id.as_account_id().unwrap().clone()
+        } else {
+            fixture.recipient_account.clone()
+        };
+        let delivery = delivery_authority(&candidate, seed, authorization, recipient);
+        let resolver = bound_resolver(
+            (mutation != "missing_trust").then_some(evidence),
+            delivery.clone(),
+            fixture.recipient_account.clone(),
+        );
         let now = if mutation == "expired" {
             candidate.expires_at
         } else {
@@ -292,7 +379,7 @@ async fn signal_recipient_requires_exact_account_leaf_key_authorization_and_winn
         };
         let mut receiver = SignalReceiver::new();
         let error = receiver
-            .accept(&candidate, &resolver, &fixture.recipient, now)
+            .accept(&candidate, &delivery, &resolver, &fixture.recipient, now)
             .await
             .unwrap_err()
             .to_string();
@@ -302,7 +389,7 @@ async fn signal_recipient_requires_exact_account_leaf_key_authorization_and_winn
                 "current endpoint authority differs from the accepted MLS leaf"
             }
             "winner" => "not the accepted winning state",
-            "missing_trust" => "lacks exact-authority verified state",
+            "recipient" | "missing_trust" => "lacks exact-authority verified state",
             "expired" => "already expired",
             _ => unreachable!(),
         };
@@ -315,10 +402,26 @@ async fn signal_recipient_requires_exact_account_leaf_key_authorization_and_winn
             .clone();
         let valid = fixture.seal(1);
         let current = fixture.evidence(&valid, ALICE_SEED, fixture.authorization.clone());
-        let current_resolver = |_: &SignalEnvelope| Some(current.clone());
+        let current_delivery = delivery_authority(
+            &valid,
+            ALICE_SEED,
+            fixture.authorization.clone(),
+            fixture.recipient_account.clone(),
+        );
+        let current_resolver = bound_resolver(
+            Some(current),
+            current_delivery.clone(),
+            fixture.recipient_account.clone(),
+        );
         assert_eq!(
             receiver
-                .accept(&valid, &current_resolver, &fixture.recipient, valid.sent_at)
+                .accept(
+                    &valid,
+                    &current_delivery,
+                    &current_resolver,
+                    &fixture.recipient,
+                    valid.sent_at
+                )
                 .await
                 .unwrap()
                 .payload_sequence,
@@ -432,16 +535,23 @@ async fn signal_recipient_accepts_a_real_agent_leaf_without_a_synthetic_device()
         },
         signal.sender_actor_id.clone(),
         signal.proof.verification_method.clone(),
-        authorization,
+        authorization.clone(),
     )
     .unwrap();
-    let resolver = |_: &SignalEnvelope| Some(evidence.clone());
+    let recipient_account = bob_actor.as_account_id().unwrap().clone();
+    let delivery = delivery_authority(
+        &signal,
+        ALICE_SEED,
+        authorization,
+        recipient_account.clone(),
+    );
+    let resolver = bound_resolver(Some(evidence), delivery.clone(), recipient_account);
     let recipient = Recipient {
         state: Mutex::new((recipient_group, AeadNonceReplayTracker::default())),
         winner: signal.encrypted_payload.key_ref.group_state_ref.clone(),
     };
     let accepted = SignalReceiver::new()
-        .accept(&signal, &resolver, &recipient, signal.sent_at)
+        .accept(&signal, &delivery, &resolver, &recipient, signal.sent_at)
         .await
         .unwrap();
     assert_eq!(accepted.payload_sequence, 0);

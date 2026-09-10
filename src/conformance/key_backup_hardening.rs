@@ -1,8 +1,11 @@
 //! Key-backup KDF floor and unlock-proof conformance vectors.
 
 use anyhow::{Context, Result, anyhow, bail};
-use arkret_models_crypto::{BackupKind, KeyBackupKeybag, KeyBackupPlaintext, KeyBackupUnlockProof};
+use arkret_models_crypto::{
+    BackupKind, KeyBackupKeybag, KeyBackupPlaintext, KeyBackupUnlockAuthority, KeyBackupUnlockProof,
+};
 use arkret_wire::{ActorId, ProfileId};
+use base64::Engine as _;
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -93,11 +96,19 @@ fn encryption_sample(value: &Value) -> Value {
     sample
 }
 
-struct RecoverySessionState {
+#[derive(Clone)]
+struct FrozenUnlockSession {
     recovery_session_id: String,
     account_id: arkret_wire::AccountId,
     requesting_device_id: String,
-    proof_digest: String,
+    challenge: String,
+    service_id: arkret_wire::DidCoreId,
+    audience: String,
+    state: String,
+    created_at: chrono::DateTime<chrono::Utc>,
+    observed_at: chrono::DateTime<chrono::Utc>,
+    expires_at: chrono::DateTime<chrono::Utc>,
+    requesting_device_public_key_did: String,
     fresh_device_proof: bool,
 }
 
@@ -110,8 +121,8 @@ struct BackupEnvelopeState {
     ciphertext_digest: String,
 }
 
-fn recovery_session_state(value: &Value) -> Result<RecoverySessionState> {
-    Ok(RecoverySessionState {
+fn recovery_session_state(value: &Value) -> Result<FrozenUnlockSession> {
+    Ok(FrozenUnlockSession {
         recovery_session_id: required_str(value, "recovery_session_id")?.to_owned(),
         account_id: serde_json::from_value(
             value
@@ -120,7 +131,24 @@ fn recovery_session_state(value: &Value) -> Result<RecoverySessionState> {
                 .context("missing account_id")?,
         )?,
         requesting_device_id: required_str(value, "requesting_device_id")?.to_owned(),
-        proof_digest: required_str(value, "proof_digest")?.to_owned(),
+        challenge: required_str(value, "challenge")?.to_owned(),
+        service_id: arkret_wire::DidCoreId::new(required_str(value, "service_id")?)?,
+        audience: required_str(value, "audience")?.to_owned(),
+        state: required_str(value, "state")?.to_owned(),
+        created_at: arkret_canonical::parse_timestamp_canonical(required_str(
+            value,
+            "created_at",
+        )?)?,
+        observed_at: arkret_canonical::parse_timestamp_canonical(required_str(
+            value,
+            "observed_at",
+        )?)?,
+        expires_at: arkret_canonical::parse_timestamp_canonical(required_str(
+            value,
+            "expires_at",
+        )?)?,
+        requesting_device_public_key_did: required_str(value, "requesting_device_public_key_did")?
+            .to_owned(),
         fresh_device_proof: value
             .get("fresh_device_proof")
             .and_then(Value::as_bool)
@@ -147,10 +175,6 @@ fn backup_envelope_state(value: &Value) -> Result<BackupEnvelopeState> {
     })
 }
 
-fn proof_digest_str(proof: &KeyBackupUnlockProof) -> Result<&str> {
-    Ok(proof.proof_digest.as_str())
-}
-
 fn backup_class_str(backup_kind: BackupKind) -> &'static str {
     match backup_kind {
         BackupKind::SecretStorage => "secret_storage",
@@ -162,7 +186,7 @@ fn authorize_unlock(
     path_backup_id: &str,
     caller: &ActorId,
     proof: Option<&KeyBackupUnlockProof>,
-    session: &RecoverySessionState,
+    session: &FrozenUnlockSession,
     envelope: &BackupEnvelopeState,
 ) -> std::result::Result<(), &'static str> {
     if !session.fresh_device_proof {
@@ -176,18 +200,47 @@ fn authorize_unlock(
     };
     if path_backup_id != proof.backup_id.as_str()
         || path_backup_id != envelope.backup_id
-        || proof.recovery_session_id.as_str() != session.recovery_session_id
+        || !matches!(&proof.authority, KeyBackupUnlockAuthority::RecoverySession { recovery_session_id } if recovery_session_id.as_str()==session.recovery_session_id)
         || proof.account_id != session.account_id
         || proof.requesting_device_id.as_str() != session.requesting_device_id
         || backup_class_str(proof.backup_kind) != envelope.backup_kind
         || proof.series_id.as_str() != envelope.series_id
         || proof.ciphertext_digest.as_str() != envelope.ciphertext_digest
-        || proof_digest_str(proof)
-            .map_err(|_| arkret_wire::ReasonCode::RECOVERY_EVIDENCE_UNBOUND)?
-            != session.proof_digest
+        || proof.challenge.as_str() != session.challenge
+        || proof.service_id != session.service_id
+        || proof.audience.as_str() != session.audience
+        || proof.expires_at != session.expires_at
+        || proof.issued_at < session.created_at
+        || proof.issued_at > session.observed_at
+        || session.expires_at <= session.observed_at
+        || session.state != "verified"
     {
         return Err(arkret_wire::ReasonCode::RECOVERY_EVIDENCE_UNBOUND);
     }
+    let key = session
+        .requesting_device_public_key_did
+        .strip_prefix("did:key:")
+        .ok_or(arkret_wire::ErrorCode::SIGNATURE_INVALID)?;
+    if proof.auth_data.verification_method.as_str() != format!("did:key:{key}#{key}") {
+        return Err(arkret_wire::ErrorCode::SIGNATURE_INVALID);
+    }
+    let raw_key = arkret_canonical::multibase::decode_ed25519_multibase(key)
+        .map_err(|_| arkret_wire::ErrorCode::SIGNATURE_INVALID)?;
+    let verifying = ed25519_dalek::VerifyingKey::from_bytes(&raw_key)
+        .map_err(|_| arkret_wire::ErrorCode::SIGNATURE_INVALID)?;
+    let signature = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(proof.auth_data.signature.as_str())
+        .map_err(|_| arkret_wire::ErrorCode::SIGNATURE_INVALID)?;
+    let signature = ed25519_dalek::Signature::from_slice(&signature)
+        .map_err(|_| arkret_wire::ErrorCode::SIGNATURE_INVALID)?;
+    verifying
+        .verify_strict(
+            &proof
+                .signing_payload_bytes()
+                .map_err(|_| arkret_wire::ErrorCode::SIGNATURE_INVALID)?,
+            &signature,
+        )
+        .map_err(|_| arkret_wire::ErrorCode::SIGNATURE_INVALID)?;
     Ok(())
 }
 
@@ -292,13 +345,43 @@ pub fn run_key_backup_unlock_proof_vector() -> Result<()> {
         bail!("ciphertext-bound unlock proof mismatch was not rejected");
     }
 
-    let mut bearer_session = RecoverySessionState {
-        recovery_session_id: session.recovery_session_id.clone(),
-        account_id: session.account_id.clone(),
-        requesting_device_id: session.requesting_device_id.clone(),
-        proof_digest: session.proof_digest.clone(),
-        fresh_device_proof: false,
-    };
+    let mut wrong_key_session = session.clone();
+    let wrong_key = ed25519_dalek::SigningKey::from_bytes(&[10; 32]).verifying_key();
+    wrong_key_session.requesting_device_public_key_did = format!(
+        "did:key:{}",
+        arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase(wrong_key.as_bytes())
+    );
+    if authorize_unlock(
+        &envelope.backup_id,
+        &envelope.actor_id,
+        Some(&proof),
+        &wrong_key_session,
+        &envelope,
+    )
+    .err()
+        != Some(expected_str(vector, "wrong_replacement_key_reason")?)
+    {
+        bail!("wrong replacement key was accepted");
+    }
+    let mut bad_signature = proof.clone();
+    bad_signature.auth_data.signature = arkret_wire::Base64UrlString::new(
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode([0u8; 64]),
+    )
+    .map_err(anyhow::Error::msg)?;
+    if authorize_unlock(
+        &envelope.backup_id,
+        &envelope.actor_id,
+        Some(&bad_signature),
+        &session,
+        &envelope,
+    )
+    .err()
+        != Some(expected_str(vector, "signature_mutation_reason")?)
+    {
+        bail!("altered unlock signature was accepted");
+    }
+    let mut bearer_session = session.clone();
+    bearer_session.fresh_device_proof = false;
     if authorize_unlock(
         &envelope.backup_id,
         &envelope.actor_id,

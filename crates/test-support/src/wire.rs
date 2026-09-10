@@ -676,6 +676,7 @@ fn build_pcr_genesis_unit(
     let algorithms = vec![non_empty("ak.hpke_x25519_aead_chacha20poly1305.v1")?];
     let mut authorize_payload =
         arkret_models_collaboration::events_payloads::DeviceAuthorizePayload {
+            pairing_challenge_transcript_digest: None,
             device_id: principal_device_id.clone(),
             device_public_key_did: device_public_key.clone(),
             hpke_key: hpke_key.clone(),

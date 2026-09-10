@@ -82,7 +82,7 @@ pub async fn identity_surface_and_receipts_work() -> Result<()> {
     .await?;
     assert_eq!(
         resolved_after_submit["key_log_head"],
-        submitted["head_event_digest"]
+        arkret_canonical::canonical_sha256(&prepared.log_entry)?
     );
     assert_eq!(resolved_after_submit["seq"], 1);
     assert_eq!(resolved_after_submit["did_document"]["id"], actor_id);
@@ -101,14 +101,23 @@ pub async fn identity_surface_and_receipts_work() -> Result<()> {
     assert_eq!(log_after_submit["entries"].as_array().unwrap().len(), 1);
     assert_eq!(log_after_submit["entries"][0], prepared.log_entry);
 
-    let submitted_head = submitted["head_event_digest"]
-        .as_str()
-        .context("accepted DID operation response is missing head_event_digest")?;
+    assert_eq!(
+        submitted["operation_ref"],
+        format!(
+            "{}?versionId={}",
+            actor_id,
+            prepared.log_entry["versionId"].as_str().unwrap()
+        )
+    );
+    let submitted_head = arkret_canonical::canonical_sha256(&prepared.log_entry)?;
     let receipts = expect_json(
         server
             .http()
             .get(server.url("/_arkret/root/identity/receipts"))
-            .query(&[("did", actor_id.as_str()), ("head", submitted_head)]),
+            .query(&[
+                ("did", actor_id.as_str()),
+                ("head", submitted_head.as_str()),
+            ]),
         StatusCode::OK,
     )
     .await?;

@@ -74,6 +74,7 @@ fn accept(mut event: Event) -> Event {
             producer_verification_method: producer.verification_method.clone(),
             producer_signing_key_did: DidKey::new("did:key:z6MkhFixtureDeviceKey").unwrap(),
             producer_signer_resolution_evidence_ref: None,
+            applet_installation_digest: None,
             signer_resolution_evidence_ref,
             accepted_at: event.created_at,
             jws: "header..admission-signature".to_owned(),
