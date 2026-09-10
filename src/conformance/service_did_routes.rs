@@ -26,7 +26,7 @@ pub fn run_service_did_routes_suite() -> Result<()> {
             at,
         )?);
         let route = evaluator.resolve(&fixture.service_id, "station", at, &mut source)?;
-        ensure!(route.route().base_url == "https://routes.example/");
+        ensure!(route.route().base_url() == "https://routes.example/");
         evaluator = ServiceRouteEvaluator::new(evaluator.store().clone(), Duration::minutes(1))?;
     }
     ensure!(
