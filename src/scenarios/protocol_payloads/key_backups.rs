@@ -64,7 +64,7 @@ pub async fn run(server: &ArkretServer, token: &str, actor_id: &str) -> Result<(
     list_backups(server, token).await?;
     describe_backup_operations(server).await?;
     unlock_backup_requires_body_proof(server, token, actor_id).await?;
-    principal_signing_unlock_reaches_trust_anchor(server, token, actor_id).await?;
+    current_device_unlock_reaches_trust_anchor(server, token, actor_id).await?;
     Ok(())
 }
 
@@ -242,7 +242,7 @@ async fn unlock_backup_requires_body_proof(
     Ok(())
 }
 
-async fn principal_signing_unlock_reaches_trust_anchor(
+async fn current_device_unlock_reaches_trust_anchor(
     server: &ArkretServer,
     token: &str,
     actor_id: &str,
@@ -279,8 +279,8 @@ async fn principal_signing_unlock_reaches_trust_anchor(
 /// key whose `verification_method` resolves via `did:key`.
 ///
 /// No durable recovery-session record exists for this synthetic session id.
-/// `principal_signing` is the compatibility proof kind that may still reach
-/// the trust-anchor check without a bound recovery ceremony.
+/// `current_device` reaches the trust-anchor check without claiming a bound
+/// recovery ceremony.
 fn unlock_proof(actor_id: &str, station_id: &DidCoreId) -> Result<KeyBackupUnlockProof> {
     let signing_key = device_signing_key();
     let multibase = ed25519_pubkey_to_did_key_multibase(signing_key.verifying_key().as_bytes());
@@ -297,7 +297,7 @@ fn unlock_proof(actor_id: &str, station_id: &DidCoreId) -> Result<KeyBackupUnloc
         BackupKind::MlsHistory,
         backup_series_id(SERIES_ID)?,
         Hash::new(CIPHERTEXT_DIGEST)?,
-        ProofKind::PrincipalSigning,
+        ProofKind::CurrentDevice,
         Hash::new("sha256:84a51084210842108421084210842108421084210842108421084210842108aa")?,
         None,
         ts("2026-04-26T00:00:00.000Z")?,

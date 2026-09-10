@@ -2,16 +2,14 @@
 //!
 //! §7.8.1 made this a high-risk authority: the service issues a durable
 //! single-use challenge, and the client signs the canonical delete-intent
-//! transcript with a principal control key, a device quorum or a trusted
-//! recovery service. There is no development ownership string any more, so the
-//! scenario drives the real two-call flow and verifies that a synthetic key
-//! outside the exact AccountId fails closed.
+//! transcript with a recovery-unlock key, a device quorum or a trusted recovery
+//! service. The scenario drives the real two-call flow and verifies that the
+//! ordinary single-device branch is rejected by the closed wire contract.
 
 use anyhow::{Result, anyhow};
 use arkret_canonical::canonical::canonical_json_bytes;
 use arkret_models_crypto::{
-    KeyBackupDeleteProof, KeysBackupsDeleteChallenge, KeysBackupsDeleteRequestBody,
-    KeysBackupsIssueDeleteChallengeRequestBody,
+    KeysBackupsDeleteChallenge, KeysBackupsIssueDeleteChallengeRequestBody,
 };
 use arkret_wire::{
     AuditReasonText, Base64UrlString, PayloadProof, PayloadProofPurpose, proof_kind,
@@ -46,7 +44,8 @@ pub async fn run(server: &ArkretServer, token: &str, actor_id: &str) -> Result<(
     .await?;
     let challenge: KeysBackupsDeleteChallenge = serde_json::from_value(challenge)?;
 
-    // 2. Sign the one canonical delete-intent transcript with the principal control key.
+    // 2. A valid signature from one ordinary endpoint still does not carry the recovery authority
+    //    required to delete an active-series tail.
     let (verification_method, root_key_seed) = test_principal_root_signing_authority(actor_id)?;
     let transcript = challenge.delete_intent_transcript(Some(reason.as_str()));
     let canonical = canonical_json_bytes(&transcript)
@@ -68,12 +67,15 @@ pub async fn run(server: &ArkretServer, token: &str, actor_id: &str) -> Result<(
         jws,
     };
 
-    let body = KeysBackupsDeleteRequestBody {
-        request_id,
-        challenge_id: challenge.challenge_id.clone(),
-        proof: KeyBackupDeleteProof::PrincipalSigning { proof },
-        reason: Some(reason),
-    };
+    let body = serde_json::json!({
+        "request_id": request_id,
+        "challenge_id": challenge.challenge_id,
+        "proof": {
+            "kind": "current_device",
+            "proof": proof,
+        },
+        "reason": reason,
+    });
     expect_api_error(
         server
             .http()
@@ -81,8 +83,8 @@ pub async fn run(server: &ArkretServer, token: &str, actor_id: &str) -> Result<(
             .bearer_auth(token)
             .header("Idempotency-Key", "protocol-payloads-key-backup-delete")
             .json(&body),
-        StatusCode::FORBIDDEN,
-        "capability_denied",
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "schema_violation",
     )
     .await?;
 

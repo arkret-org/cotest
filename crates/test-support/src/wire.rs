@@ -1564,7 +1564,7 @@ mod tests {
             actor_id.clone(),
             DidCoreId::new("ak:did_core:web:principal.example").unwrap(),
         ));
-        let verification_method = format!("{actor_did}#principal-signing-key");
+        let verification_method = format!("{actor_did}#device-signing-key");
         let seed = [42u8; 32];
         let signing_key = SigningKey::from_bytes(&seed);
         let event = json!({

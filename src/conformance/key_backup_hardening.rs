@@ -508,7 +508,7 @@ pub fn run_key_backup_delete_authority_vector() -> Result<()> {
     let request_digest = arkret_canonical::canonical_sha256(&json!({
         "request_id": challenge.request_id,
         "challenge_id": challenge.challenge_id,
-        "proof": {"kind": "principal_signing", "digest": baseline},
+        "proof": {"kind": "recovery_unlock", "digest": baseline},
         "reason": reason
     }))?;
     let terminal = br#"{"deleted":true}"#.to_vec();
@@ -527,7 +527,7 @@ pub fn run_key_backup_delete_authority_vector() -> Result<()> {
     let conflicting_digest = arkret_canonical::canonical_sha256(&json!({
         "request_id": challenge.request_id,
         "challenge_id": challenge.challenge_id,
-        "proof": {"kind": "principal_signing", "digest": baseline},
+        "proof": {"kind": "recovery_unlock", "digest": baseline},
         "reason": "changed"
     }))?;
     if conflicting_digest == replay.0 {
