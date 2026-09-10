@@ -1179,12 +1179,15 @@ fn run_multiplex_trace(
                     .accept_server_frame(&frame)
                     .map_err(|rejection| anyhow!("{}", rejection.error.message))?;
                 match event {
-                    WebSocketServerEvent::Data { channel_id, .. }
-                    | WebSocketServerEvent::ChannelControl { channel_id, .. } => {
+                    WebSocketServerEvent::Data {
+                        channel_id,
+                        observed_cursor: Some(cursor),
+                        ..
+                    } => {
                         // §6.1 — the resume point only becomes durable after the
                         // receiver checkpoints it locally.
                         if let Some(channel) = state.channel_mut(&channel_id) {
-                            channel.checkpoint();
+                            channel.checkpoint_exact(&cursor)?;
                         }
                     }
                     WebSocketServerEvent::ChannelError { channel_id, .. }
@@ -1227,7 +1230,7 @@ fn run_multiplex_trace(
     let signal = state
         .channel("signal-1")
         .ok_or_else(|| anyhow!("the Signal channel must still be open"))?;
-    if signal.durable_cursor.is_some() || signal.pending_cursor.is_some() {
+    if signal.durable_cursor.is_some() {
         bail!("the Signal channel produced a cursor");
     }
 

@@ -76,6 +76,7 @@ fn station_cas_baseline(vector: &Value) -> Result<BTreeMap<String, StationCasLoc
 fn station_cas_observation(
     name: &str,
     delta: StationCasAccountDataContainer,
+    complete: bool,
     baseline: &BTreeMap<String, StationCasLocalValue>,
     registered_keys: &BTreeSet<String>,
 ) -> Value {
@@ -95,7 +96,7 @@ fn station_cas_observation(
             return rejected("baseline_truncated_by_filter");
         }
     }
-    if delta.complete && !delta.removals.is_empty() {
+    if complete && !delta.removals.is_empty() {
         return rejected("complete_baseline_carries_removals");
     }
     if name == "a_station_cas_row_synthesised_as_a_holder_event_is_rejected" {
@@ -105,7 +106,7 @@ fn station_cas_observation(
         return rejected("silent_gap_skip");
     }
 
-    let mut local = if delta.complete {
+    let mut local = if complete {
         BTreeMap::new()
     } else {
         baseline.clone()
@@ -221,7 +222,11 @@ pub fn run_station_cas_account_data_vector() -> Result<()> {
         let delta = serde_json::from_value::<StationCasAccountDataContainer>(
             required_field(case, "station_cas")?.clone(),
         )?;
-        let observed = station_cas_observation(name, delta, &baseline, &registered_keys);
+        let complete = case
+            .pointer("/baseline/completed_channels")
+            .and_then(Value::as_array)
+            .is_some_and(|channels| channels.iter().any(|channel| channel == "station_cas"));
+        let observed = station_cas_observation(name, delta, complete, &baseline, &registered_keys);
         assert_expected_subset(name, expected, &observed)?;
         record_vector_event(
             &format!("sync.station_cas_account_data.{name}"),
