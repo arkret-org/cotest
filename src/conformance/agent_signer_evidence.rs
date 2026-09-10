@@ -926,6 +926,7 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
                 &[0x31; 32],
             ))?,
             trust_domain: arkret_wire::TrustDomainId::new("ak:trust_domain:agent.example")?,
+            digest_suite: arkret_canonical::DigestSuite::Sha256,
             created_at: issued_at,
         },
     )?;

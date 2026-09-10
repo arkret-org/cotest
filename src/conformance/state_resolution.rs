@@ -58,6 +58,9 @@ pub fn run_cbs_lattice_fixture_suite() -> Result<()> {
     let mut seen_null_cell_subject_wire_form = false;
     let mut seen_realm_alias_single_carrier = false;
     let mut seen_fork_resolution_peer_alignment = false;
+    let mut seen_apply_patch_base = false;
+    let mut seen_accountability_record_sources = false;
+    let mut seen_seal_delta_concurrency_class = false;
     let mut seen_vector_ids = BTreeSet::new();
 
     for vector in vectors {
@@ -592,6 +595,18 @@ pub fn run_cbs_lattice_fixture_suite() -> Result<()> {
             "fsm_causal_heads" => {
                 validate_fsm_causal_heads(vector, name)?;
             }
+            "apply_patch_base" => {
+                validate_apply_patch_base(vector, name)?;
+                seen_apply_patch_base = true;
+            }
+            "accountability_record_sources" => {
+                validate_accountability_record_sources(vector, name)?;
+                seen_accountability_record_sources = true;
+            }
+            "seal_delta_concurrency_class" => {
+                validate_seal_delta_concurrency_class(vector, name)?;
+                seen_seal_delta_concurrency_class = true;
+            }
             _ => bail!("unknown cbs lattice vector: {name}"),
         }
     }
@@ -618,17 +633,21 @@ pub fn run_cbs_lattice_fixture_suite() -> Result<()> {
         && seen_realm_create_projection_closure
         && seen_null_cell_subject_wire_form
         && seen_realm_alias_single_carrier
-        && seen_fork_resolution_peer_alignment)
+        && seen_fork_resolution_peer_alignment
+        && seen_apply_patch_base
+        && seen_accountability_record_sources
+        && seen_seal_delta_concurrency_class)
     {
         bail!(
-            "cbs lattice fixture must cover all 23 normative vectors \
+            "cbs lattice fixture must cover all 26 normative vectors \
              (data_local / observation / control_seal / same_batch / data_bottom / \
               delta_plane_guard / compaction / seal_canonical / cas_mixed_basis / \
               auth_epoch / compaction_interval / inclusion_list / notary_fault / sealed_control_collision / \
               threshold_forensics / concurrent_revocation / actor_chain_realm_scope / \
               conflict_recovery / same_seal_bottom_serialization / realm_create_projection_closure / \
               null_cell_subject_wire_form / realm_alias_single_carrier / \
-              fork_resolution_peer_alignment)"
+              fork_resolution_peer_alignment / apply_patch_base / \
+              accountability_record_sources / seal_delta_concurrency_class)"
         );
     }
 
@@ -643,6 +662,249 @@ pub fn run_cbs_lattice_fixture_suite() -> Result<()> {
 /// hold too; and a disclosure that contradicts the verdict keeps the peer stale
 /// rather than becoming new fork evidence. An undisclosed position is a
 /// fail-closed answer, not a peer failure.
+/// One cell family named by a fixture case, checked against the generated
+/// registry rather than accepted as prose.
+fn require_registered_cell_family(
+    case: &Value,
+    pointer: &str,
+    vector_name: &str,
+) -> Result<String> {
+    let family = required_pointer_str(case, pointer, vector_name)?;
+    if !arkret_wire::generated::event_kinds::CELL_FAMILY_PLANE_DESCRIPTORS
+        .iter()
+        .any(|descriptor| descriptor.cell_family == family)
+    {
+        bail!("vector {vector_name} names unregistered cell family {family}");
+    }
+    Ok(family.to_owned())
+}
+
+/// Vector `ak.vector.lattice.apply_patch_base.v1`.
+///
+/// `event-auth-state-resolution.md` section 9.3.1.2: an `apply_patch` composes
+/// onto a real object base written by a registered set on the same family and
+/// subject. A family may not declare an `initial_value`, so an unwritten cell
+/// reads `null` and the first patch can never become the object definition.
+/// The executed part is the family lookup and the unwritten-cell rule: every
+/// case whose cell is unwritten (or already terminal) must expect
+/// `failed_precondition`, which is exactly what an implicit initialization
+/// would break.
+fn validate_apply_patch_base(vector: &Value, vector_name: &str) -> Result<()> {
+    let mut seen = BTreeSet::new();
+    for case in required_array(vector, "/cases", vector_name)? {
+        let case_name = required_pointer_str(case, "/name", vector_name)?.to_owned();
+        require_registered_cell_family(case, "/family", vector_name)?;
+        let expected = required_object(case, "/expected", vector_name)?;
+        if expected.is_empty() {
+            bail!("vector {vector_name} case {case_name} declares no expectation");
+        }
+        if let Some(before) = case.pointer("/cell_state_before").and_then(Value::as_str) {
+            if !matches!(before, "unwritten" | "tombstoned") {
+                bail!(
+                    "vector {vector_name} case {case_name} declares unknown \
+                     cell_state_before {before}"
+                );
+            }
+            require_str_eq(case, "/expected/result", "failed_precondition", vector_name)?;
+        }
+        if !seen.insert(case_name.clone()) {
+            bail!("vector {vector_name} repeats case {case_name}");
+        }
+    }
+    require_seen(
+        vector_name,
+        &seen,
+        &[
+            "create_then_first_patch_keeps_untouched_fields",
+            "patch_without_a_create_is_refused",
+            "patch_on_a_different_subject_is_a_different_object",
+            "patch_from_another_realm_is_refused",
+            "circle_create_writes_metadata_atomically_with_its_governance_effects",
+            "circle_update_before_create_is_refused",
+            "strand_update_and_tracks_update_share_one_base",
+            "concurrent_metadata_and_track_patches_expose_mv_heads",
+            "reordered_replay_reaches_the_same_state",
+            "view_update_cannot_create_a_view",
+            "view_reconcile_cannot_create_a_view",
+            "view_cell_stores_no_self_reported_id",
+            "view_reconcile_preserves_identity_and_privacy",
+            "view_reconcile_cannot_cross_the_terminal_gate",
+            "view_reconcile_supersedes_only_observed_heads",
+        ],
+    )
+}
+
+/// Vector `ak.vector.identity.accountability_record_sources.v1`.
+///
+/// `ak.component.identity.accountability.v1` has two registered writers and
+/// one closed value. The executed part is the value shape: the canonical
+/// members MUST NOT include the writing Event, its proof or its origin —
+/// otherwise the same endorsement from either source would differ only by
+/// provenance and drive a `bottom=reject` cell into conflict.
+fn validate_accountability_record_sources(vector: &Value, vector_name: &str) -> Result<()> {
+    required_pointer_str(vector, "/cell_subject", vector_name)?;
+    let members = string_vec_at(vector, "/canonical_value_members", vector_name)?;
+    let expected_members = [
+        "issuer_id",
+        "subject_id",
+        "accountability_scope",
+        "not_before",
+        "expires_at?",
+        "grant_status",
+    ];
+    if members != expected_members {
+        bail!(
+            "vector {vector_name} canonical value members are {members:?}, \
+             not the closed record {expected_members:?}"
+        );
+    }
+    for member in &members {
+        if member.contains("event") || member.contains("proof") || member.contains("origin") {
+            bail!(
+                "vector {vector_name} puts writer provenance ({member}) into the \
+                 shared record value"
+            );
+        }
+    }
+    let mut seen = BTreeSet::new();
+    for case in required_array(vector, "/cases", vector_name)? {
+        let case_name = required_pointer_str(case, "/name", vector_name)?.to_owned();
+        if required_object(case, "/expected", vector_name)?.is_empty() {
+            bail!("vector {vector_name} case {case_name} declares no expectation");
+        }
+        if !seen.insert(case_name.clone()) {
+            bail!("vector {vector_name} repeats case {case_name}");
+        }
+    }
+    require_seen(
+        vector_name,
+        &seen,
+        &[
+            "both_sources_address_one_cell",
+            "equivalent_scope_spellings_are_one_cell",
+            "same_decision_from_either_source_is_one_value",
+            "provision_derives_not_before_from_the_envelope",
+            "provision_payload_created_at_must_match_the_envelope",
+            "a_later_grant_revokes_the_provisioned_record",
+            "a_grant_in_another_realm_is_another_record",
+            "same_principal_different_station_is_not_the_same_account",
+            "provision_replay_does_not_resurrect_a_revoked_record",
+            "actor_profile_accepts_both_sources_as_endorsement",
+        ],
+    )
+}
+
+/// The registered concurrency class of an Event kind named at the head of a
+/// fixture delta line, or `None` when the line names no registered kind.
+fn registered_delta_concurrency_class(entry: &str) -> Option<&'static str> {
+    let kind = entry.split_whitespace().next()?;
+    arkret_wire::generated::event_kinds::EVENT_KIND_DESCRIPTORS
+        .iter()
+        .find(|descriptor| descriptor.kind == kind)
+        .map(|descriptor| descriptor.concurrency_class.unwrap_or("exclusive"))
+}
+
+/// Vector `ak.vector.cbs_lattice.seal_delta_concurrency_class.v1`.
+///
+/// A control delta is exactly one `security_barrier` transaction, or a set of
+/// non-barrier writes on pairwise disjoint cells — never a mixture. The class
+/// is read from the registry, never switched per request, so the barrier /
+/// non-barrier split of every named kind here comes from
+/// `EVENT_KIND_DESCRIPTORS`: a registry edit that reclassified
+/// `ak.moderation.decision` would fail this vector rather than quietly make
+/// the dangerous batch legal.
+fn validate_seal_delta_concurrency_class(vector: &Value, vector_name: &str) -> Result<()> {
+    const BARRIER: &str = "security_barrier";
+    let mut seen = BTreeSet::new();
+    for case in required_array(vector, "/cases", vector_name)? {
+        let case_name = required_pointer_str(case, "/name", vector_name)?.to_owned();
+        let classes = match case.pointer("/delta") {
+            Some(_) => string_vec_at(case, "/delta", vector_name)?
+                .into_iter()
+                .filter_map(registered_delta_concurrency_class)
+                .collect::<Vec<_>>(),
+            None => Vec::new(),
+        };
+        let barriers = classes.iter().filter(|class| **class == BARRIER).count();
+        let ordinary = classes.len() - barriers;
+        // Two cases pin a head-identity / rollback property instead of a Seal
+        // verdict, so `expected.result` is legitimately absent there.
+        match case.pointer("/expected/result").and_then(Value::as_str) {
+            Some("accept") => {
+                if barriers > 1 || (barriers == 1 && ordinary > 0) {
+                    bail!(
+                        "vector {vector_name} case {case_name} accepts a delta that mixes \
+                         {barriers} barrier(s) with {ordinary} ordinary write(s)"
+                    );
+                }
+            }
+            Some("rejected_seal") | Some("first_accepted_second_refused") => {}
+            Some(other) => {
+                bail!("vector {vector_name} case {case_name} declares unknown result {other}")
+            }
+            None => {
+                if required_object(case, "/expected", vector_name)?.is_empty() {
+                    bail!("vector {vector_name} case {case_name} declares no expectation");
+                }
+            }
+        }
+        match case_name.as_str() {
+            "two_barrier_transactions_in_one_seal_are_refused" => {
+                if barriers < 2 {
+                    bail!(
+                        "vector {vector_name} case {case_name} must name two registered \
+                         security_barrier kinds"
+                    );
+                }
+            }
+            "barrier_mixed_with_an_ordinary_write_is_refused"
+            | "class_is_read_from_the_registry_not_from_the_request" => {
+                if case.pointer("/delta").is_some() && (barriers != 1 || ordinary != 1) {
+                    bail!(
+                        "vector {vector_name} case {case_name} must name exactly one barrier \
+                         and one ordinary write"
+                    );
+                }
+            }
+            "non_barrier_writes_on_one_cell_are_refused" => {
+                if barriers != 0 || ordinary < 2 {
+                    bail!(
+                        "vector {vector_name} case {case_name} must name two non-barrier \
+                         writes on one cell"
+                    );
+                }
+            }
+            _ => {}
+        }
+        if !seen.insert(case_name.clone()) {
+            bail!("vector {vector_name} repeats case {case_name}");
+        }
+    }
+    // `ak.moderation.decision` is the kind the "read the registry, not the
+    // request" case is about, so its registered class is asserted directly.
+    if registered_delta_concurrency_class("ak.moderation.decision") != Some(BARRIER) {
+        bail!("vector {vector_name} assumes ak.moderation.decision is a registered security_barrier");
+    }
+    require_seen(
+        vector_name,
+        &seen,
+        &[
+            "one_barrier_transaction_alone_is_accepted",
+            "registered_atomic_unit_counts_as_the_one_barrier_transaction",
+            "disjoint_non_barrier_writes_batch",
+            "barrier_mixed_with_an_ordinary_write_is_refused",
+            "two_barrier_transactions_in_one_seal_are_refused",
+            "non_barrier_writes_on_one_cell_are_refused",
+            "class_is_read_from_the_registry_not_from_the_request",
+            "cyclic_read_write_dependency_between_two_moderators",
+            "the_same_pair_across_two_seals_is_legal_in_either_order",
+            "lift_restores_the_author_for_a_later_seal",
+            "add_lift_add_does_not_reuse_a_head_identity",
+            "a_refused_seal_rolls_back_whole",
+        ],
+    )
+}
+
 /// `value.pointer(pointer)` with the vector name in the error.
 fn require_pointer<'a>(value: &'a Value, pointer: &str, vector_name: &str) -> Result<&'a Value> {
     value
@@ -870,6 +1132,69 @@ fn validate_fsm_causal_heads(vector: &Value, vector_name: &str) -> Result<()> {
     Ok(())
 }
 
+/// One settled-subject case of `ak.vector.cbs_lattice.fork_resolution_peer_alignment.v1`.
+///
+/// The history is executed as the state machine section 6.3.2 fixes it: the
+/// first adjudication is accepted, and a second one on the same subject is
+/// refused unless it is the exact same Event, which dedupes by EventId before
+/// the `head_eq: null` precondition is ever evaluated. Either way the cell
+/// value MUST NOT move.
+fn validate_fork_resolution_readjudication(
+    case: &Value,
+    case_name: &str,
+    vector_name: &str,
+) -> Result<()> {
+    let history = required_array(case, "/adjudication_history", vector_name)?;
+    let [first, second] = history.as_slice() else {
+        bail!(
+            "vector {vector_name} case {case_name} must carry exactly the accepted adjudication \
+             and the second attempt"
+        );
+    };
+    require_bool_eq(first, "/accepted", true, vector_name)?;
+    required_pointer_str(first, "/verdict/kind", vector_name)?;
+
+    let replay = second
+        .get("same_event_id_as_prior")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    require_bool_eq(second, "/accepted", replay, vector_name)?;
+    require_str_eq(case, "/expected/cell_value", "unchanged", vector_name)?;
+    if replay {
+        require_str_eq(case, "/expected/second_resolution", "idempotent", vector_name)?;
+        if second.get("verdict").is_some() {
+            bail!(
+                "vector {vector_name} case {case_name} replays an EventId, so it must not \
+                 restate a verdict that could differ from the accepted one"
+            );
+        }
+        return Ok(());
+    }
+    require_str_eq(
+        case,
+        "/expected/second_resolution",
+        "failed_precondition",
+        vector_name,
+    )?;
+    // A successor whose basis already contains the accepted resolution
+    // satisfies the complete-heads guard, so the refusal must come from
+    // `head_eq: null` alone. A case that omits this flag would pass for the
+    // wrong reason.
+    require_bool_eq(second, "/basis_contains_prior_resolution", true, vector_name)?;
+    let first_kind = required_pointer_str(first, "/verdict/kind", vector_name)?;
+    let second_kind = required_pointer_str(second, "/verdict/kind", vector_name)?;
+    if first_kind == second_kind {
+        bail!(
+            "vector {vector_name} case {case_name} must attempt the opposite verdict direction, \
+             otherwise it only repeats the accepted adjudication"
+        );
+    }
+    if first_kind == "void_all" {
+        require_str_eq(case, "/expected/voided_position", "stays_void", vector_name)?;
+    }
+    Ok(())
+}
+
 fn validate_fork_resolution_peer_alignment(vector: &Value, vector_name: &str) -> Result<()> {
     require_str_eq(
         vector,
@@ -892,8 +1217,18 @@ fn validate_fork_resolution_peer_alignment(vector: &Value, vector_name: &str) ->
     let cases = required_array(vector, "/cases", vector_name)?;
     let mut aligned = BTreeSet::new();
     let mut not_aligned = BTreeSet::new();
+    let mut readjudication = BTreeSet::new();
     for case in cases {
         let case_name = required_str(case, "name")?;
+        // A case carrying `adjudication_history` is about a settled subject,
+        // not about a peer disclosure: it fixes what a SECOND
+        // `ak.fork.resolution` on the same subject does. Those cases have no
+        // peer face and therefore no `expected.alignment` to classify.
+        if case.get("adjudication_history").is_some() {
+            validate_fork_resolution_readjudication(case, case_name, vector_name)?;
+            readjudication.insert(case_name.to_owned());
+            continue;
+        }
         let alignment = case
             .pointer("/expected/alignment")
             .and_then(Value::as_str)
@@ -954,6 +1289,15 @@ fn validate_fork_resolution_peer_alignment(vector: &Value, vector_name: &str) ->
         "actor_wide_scan_page_is_not_an_alignment_face",
         "another_peer_alignment_does_not_clear_this_peer",
     ];
+    // `event-auth-state-resolution.md` section 6.3.2: `ak.fork.resolution`
+    // carries `head_eq: null` for its target cell, so a causal successor
+    // MUST NOT re-adjudicate a settled subject, while an exact replay of the
+    // accepted resolution stays idempotent by EventId.
+    const REQUIRED_READJUDICATION: &[&str] = &[
+        "settled_subject_refuses_a_second_resolution",
+        "settled_void_all_cannot_be_reopened",
+        "exact_replay_of_the_accepted_resolution_is_idempotent",
+    ];
     for required in REQUIRED_ALIGNED {
         if !aligned.contains(*required) {
             bail!("vector {vector_name} must cover the aligning case {required}");
@@ -962,6 +1306,11 @@ fn validate_fork_resolution_peer_alignment(vector: &Value, vector_name: &str) ->
     for required in REQUIRED_NOT_ALIGNED {
         if !not_aligned.contains(*required) {
             bail!("vector {vector_name} must cover the non-aligning case {required}");
+        }
+    }
+    for required in REQUIRED_READJUDICATION {
+        if !readjudication.contains(*required) {
+            bail!("vector {vector_name} must cover the re-adjudication case {required}");
         }
     }
     // The two lists MUST name every registered case. A case the lists omit can
@@ -976,6 +1325,11 @@ fn validate_fork_resolution_peer_alignment(vector: &Value, vector_name: &str) ->
             not_aligned
                 .iter()
                 .filter(|name| !REQUIRED_NOT_ALIGNED.contains(&name.as_str())),
+        )
+        .chain(
+            readjudication
+                .iter()
+                .filter(|name| !REQUIRED_READJUDICATION.contains(&name.as_str())),
         )
         .cloned()
         .collect::<Vec<_>>();
@@ -3278,6 +3632,74 @@ fn validate_conflict_recovery_move(vector: &Value, vector_name: &str) -> Result<
                     vector_name,
                 )?;
             }
+            // Section 9.3.1.4 layering. `sole_recovery_families` says where
+            // recovery is the ONLY exit; it is never a filter on what a
+            // recovery may target. Membership is read from the SDK's
+            // generated registry constant, so a registry edit fails here.
+            "ordinary_write_heals_a_family_outside_sole_recovery" => {
+                require_bottom_target_family(case, vector_name, false)?;
+                require_ordinary_write_operation(case, vector_name)?;
+                require_bool_eq(case, "/writer_holds_action_authority", true, vector_name)?;
+                require_bool_eq(
+                    case,
+                    "/write_precondition_reads_target_cell",
+                    false,
+                    vector_name,
+                )?;
+                require_str_eq(
+                    case,
+                    "/expected/result",
+                    "accept_after_valid_seal",
+                    vector_name,
+                )?;
+                require_str_eq(case, "/expected/cell_status", "value", vector_name)?;
+                require_str_eq(
+                    case,
+                    "/expected/supersedes",
+                    "all_divergent_heads",
+                    vector_name,
+                )?;
+            }
+            "unauthorized_ordinary_write_still_cannot_heal" => {
+                require_bottom_target_family(case, vector_name, false)?;
+                require_ordinary_write_operation(case, vector_name)?;
+                require_bool_eq(case, "/writer_holds_action_authority", false, vector_name)?;
+                require_str_eq(case, "/expected/result", "failed_precondition", vector_name)?;
+                require_str_eq(case, "/expected/cell_remains", "bottom", vector_name)?;
+            }
+            "ordinary_write_cannot_heal_a_sole_recovery_family" => {
+                require_bottom_target_family(case, vector_name, true)?;
+                require_ordinary_write_operation(case, vector_name)?;
+                require_bool_eq(case, "/writer_holds_action_authority", true, vector_name)?;
+                require_str_eq(case, "/expected/result", "failed_bottom", vector_name)?;
+                require_str_eq(case, "/expected/cell_remains", "bottom", vector_name)?;
+            }
+            "recovery_targets_a_family_outside_the_list" => {
+                require_bottom_target_family(case, vector_name, false)?;
+                require_str_eq(case, "/operation", "ak.conflict.recovery", vector_name)?;
+                require_str_eq(
+                    case,
+                    "/expected/result",
+                    "accept_after_valid_seal",
+                    vector_name,
+                )?;
+                require_str_eq(case, "/expected/cell_status", "value", vector_name)?;
+            }
+            // The notary cell is constructively unrecoverable and is
+            // deliberately absent from the list: listing it would announce an
+            // exit that does not exist.
+            "notary_cell_has_no_recovery_at_all" => {
+                require_bottom_target_family(case, vector_name, false)?;
+                require_str_eq(
+                    case,
+                    "/target_cell_family",
+                    arkret_wire::CellFamilyId::NOTARY_V1,
+                    vector_name,
+                )?;
+                require_str_eq(case, "/operation", "ak.conflict.recovery", vector_name)?;
+                require_str_eq(case, "/expected/result", "no_acceptable_seal", vector_name)?;
+                require_str_eq(case, "/expected/cell_remains", "bottom", vector_name)?;
+            }
             other => bail!("vector {vector_name} unknown conflict recovery case {other}"),
         }
     }
@@ -3294,9 +3716,52 @@ fn validate_conflict_recovery_move(vector: &Value, vector_name: &str) -> Result<
             "reset_on_a_cell_not_in_bottom",
             "target_cell_mismatch",
             "ordinary_mls_commit_cannot_recover_bottom",
+            "ordinary_write_heals_a_family_outside_sole_recovery",
+            "unauthorized_ordinary_write_still_cannot_heal",
+            "ordinary_write_cannot_heal_a_sole_recovery_family",
+            "recovery_targets_a_family_outside_the_list",
+            "notary_cell_has_no_recovery_at_all",
         ],
     )?;
     validate_fsm_recovery_admission(vector, vector_name)
+}
+
+/// Assert that a self-healing case is driven by an ordinary write.
+///
+/// The whole point of section 9.3.1.4 is that self-healing needs no separate
+/// reset channel, so a case that reached for `ak.conflict.recovery` would be
+/// proving the opposite of what it claims.
+fn require_ordinary_write_operation(case: &Value, vector_name: &str) -> Result<()> {
+    let operation = required_pointer_str(case, "/operation", vector_name)?;
+    if operation == "ak.conflict.recovery" {
+        let case_name = required_pointer_str(case, "/name", vector_name)?;
+        bail!("vector {vector_name} case {case_name} must heal through an ordinary write");
+    }
+    Ok(())
+}
+
+/// Assert one Bottom case's `target_cell_family` and its registered
+/// `sole_recovery_families` membership.
+///
+/// Membership comes from the SDK constant generated out of the contract
+/// registry, so the fixture and the implementation cannot drift apart in
+/// silence.
+fn require_bottom_target_family(
+    case: &Value,
+    vector_name: &str,
+    sole_recovery: bool,
+) -> Result<()> {
+    require_str_eq(case, "/cell_status_before", "bottom", vector_name)?;
+    let family = required_pointer_str(case, "/target_cell_family", vector_name)?;
+    let registered = arkret_state::is_sole_recovery_cell(&format!("ak:cell:{family}:null"));
+    if registered != sole_recovery {
+        let case_name = required_pointer_str(case, "/name", vector_name)?;
+        bail!(
+            "vector {vector_name} case {case_name} expects {family} sole_recovery={sole_recovery} \
+             but the registry says {registered}"
+        );
+    }
+    Ok(())
 }
 
 /// The `fsm_recovery` half of `ak.vector.cbs_lattice.conflict_recovery_move.v1`

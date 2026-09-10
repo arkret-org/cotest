@@ -273,18 +273,16 @@ test.describe("account recovery", () => {
     }
   });
 
-  test("E8.5 trusted recovery service: recovery policy can gate backup decrypt on attestation validity", async ({
+  test("E8.5 recovery policy read surface is fail-closed before any policy is accepted", async ({
     request,
   }) => {
-    // spec: key-management.md §3.3 + §8 + §8.1
-    // soland's recovery-session proof path already implements the
-    // trusted_recovery_service attestation gate
-    // (`recovery_policy_requires_trusted_service_attestation`): a policy that
-    // declares `attestation_required=true` MUST cause a trusted-service
-    // recovery proof without `attestation_ref` to fail closed. We assert the
-    // policy publish surface accepts an attestation-gated policy shape and the
-    // active read-back reflects it, which is the server-side half of E8.5 that
-    // is reachable without the (unwired) full client reconstruction flow.
+    // spec: key-management.md §7.11 + §8.1
+    // The v1 recovery methods are the closed four (did_root, recovery_unlock,
+    // device_quorum, trusted_recovery_service); there is no configurable
+    // attestation gate. What stays observable here is the fail-closed default:
+    // the routed recovery-policy read MUST report no accepted policy for a
+    // brand-new principal, so the §7.11 recovery gate cannot be satisfied by an
+    // absent policy.
     const alice = uniqueUser("recovery-e8-5");
     await ensureRegistered(request, alice);
     const token = await issueDevSession(request, alice);

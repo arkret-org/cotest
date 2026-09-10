@@ -98,7 +98,6 @@ fn completion_vector() -> Result<CompletionVector> {
                 kind: RecoveryProofKind::RecoveryUnlock,
                 proof_digest: hash('4').parse()?,
                 quorum_participant_count: None,
-                share_ids: None,
             },
             unlocked_backups: Vec::new(),
             welcome_count: 0,
