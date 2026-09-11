@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 
 import {
+  hasServerCount,
   solandBaseUrl,
   solandServiceDid,
   solandServiceId,
@@ -577,6 +578,10 @@ test.describe("invite addressing", () => {
   });
 
   test("first-contact Station handles a signed notification without Realm history", async ({ request }) => {
+    test.skip(
+      !hasServerCount(2),
+      "requires two-server topology — pass -ServerCount 2 to scripts/run-joint-e2e.ps1",
+    );
     const fixture = await acceptedInviteFixture(request, "foreign-notification", "server2");
     await assertNoHolderPrivateWrite(request, fixture, "before delivery", { server: "server2" });
     const delivered = await submitPeerInviteDeliveryApi(request, peerDeliveryBody(fixture, "foreign"), {
@@ -590,6 +595,10 @@ test.describe("invite addressing", () => {
 
   for (const proofIndex of [0, 1]) {
     test("notification rejects an invalid " + (proofIndex === 0 ? "producer" : "Station admission") + " signature", async ({ request }) => {
+      test.skip(
+        !hasServerCount(2),
+        "requires two-server topology — pass -ServerCount 2 to scripts/run-joint-e2e.ps1",
+      );
       const fixture = await acceptedInviteFixture(request, "signature-" + proofIndex, "server2");
       const event = structuredClone(fixture.inviteEvent);
       const proofs = event.proofs as Array<Record<string, unknown>>;

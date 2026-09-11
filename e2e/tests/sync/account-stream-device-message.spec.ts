@@ -68,7 +68,7 @@ test.describe("account stream + device-message convergence", () => {
       title: `long-poll scope ${Date.now()}`,
       ownerId: user.id,
     });
-    const filter = { realms: [realmId] };
+    const filter = { realm_ids: [realmId] };
 
     const baseline = await accountSubscribeFramesApi(request, token, { filter });
     const baselineCursor = latestCursor(baseline);
@@ -122,7 +122,8 @@ test.describe("account stream + device-message convergence", () => {
     const { user, token } = await accountSession(request, "account-replay");
     const realmId = await createRealmApi(request, token, { title: "account replay", ownerId: user.id });
     const old = await sendMessageApi(request, token, realmId, "before saved cursor");
-    const baseline = await accountSubscribeFramesApi(request, token);
+    const filter = { realm_ids: [realmId] };
+    const baseline = await accountSubscribeFramesApi(request, token, { filter });
     expectCatchup(baseline);
     expect(messageIds(baseline, realmId)).toEqual([old.event_id]);
     const after = latestCursor(baseline);
@@ -132,17 +133,20 @@ test.describe("account stream + device-message convergence", () => {
     for (let i = 0; i < 3; i++) {
       expected.push((await sendMessageApi(request, token, realmId, `offline message ${i}`)).event_id);
     }
-    const resumed = await accountSubscribeFramesApi(request, token, { after });
+    const resumed = await accountSubscribeFramesApi(request, token, { after, filter });
     expectCatchup(resumed);
     expect(messageIds(resumed, realmId)).toEqual([...expected].sort());
 
     // Losing the response before persisting its cursor must remain retryable.
-    const replay = await accountSubscribeFramesApi(request, token, { after });
+    const replay = await accountSubscribeFramesApi(request, token, { after, filter });
     expectCatchup(replay);
     expect(messageIds(replay, realmId)).toEqual([...expected].sort());
 
     const sentinel = await sendMessageApi(request, token, realmId, "after persisted catch-up");
-    const next = await accountSubscribeFramesApi(request, token, { after: latestCursor(resumed) });
+    const next = await accountSubscribeFramesApi(request, token, {
+      after: latestCursor(resumed),
+      filter,
+    });
     expectCatchup(next);
     expect(messageIds(next, realmId)).toEqual([sentinel.event_id]);
   });
@@ -155,12 +159,16 @@ test.describe("account stream + device-message convergence", () => {
     const included = await sendMessageApi(request, owner.token, first, "selected private message");
     const excluded = await sendMessageApi(request, owner.token, second, "excluded private message");
 
-    const baseline = await accountSubscribeFramesApi(request, owner.token);
+    const baseline = await accountSubscribeFramesApi(request, owner.token, {
+      filter: { realm_ids: [first, second] },
+    });
     expectCatchup(baseline);
     expect(messageIds(baseline, first)).toEqual([included.event_id]);
     expect(messageIds(baseline, second)).toEqual([excluded.event_id]);
 
-    const filtered = await accountSubscribeFramesApi(request, owner.token, { filter: { realms: [first] } });
+    const filtered = await accountSubscribeFramesApi(request, owner.token, {
+      filter: { realm_ids: [first] },
+    });
     expectCatchup(filtered);
     expect(realmBuckets(filtered).map(([id]) => id)).toEqual([first]);
     expect(messageIds(filtered, first)).toEqual([included.event_id]);
@@ -175,10 +183,14 @@ test.describe("account stream + device-message convergence", () => {
     for (let index = 0; index < 5; index++) {
       ids.push((await sendMessageApi(request, token, realmId, `limited message ${index}`)).event_id);
     }
-    const complete = await accountSubscribeFramesApi(request, token);
+    const complete = await accountSubscribeFramesApi(request, token, {
+      filter: { realm_ids: [realmId] },
+    });
     expectCatchup(complete);
     expect(messageIds(complete, realmId)).toEqual([...ids].sort());
-    const limited = await accountSubscribeFramesApi(request, token, { filter: { timeline_limit: 2 } });
+    const limited = await accountSubscribeFramesApi(request, token, {
+      filter: { realm_ids: [realmId], timeline_limit: 2 },
+    });
     expectCatchup(limited);
     const buckets = realmBuckets(limited).filter(([id]) => id === realmId);
     expect(buckets.length, "the selected Realm must still be present").toBeGreaterThan(0);
@@ -203,20 +215,28 @@ test.describe("account stream + device-message convergence", () => {
     const { user, token } = await accountSession(request, "account-kind-filter");
     const realmId = await createRealmApi(request, token, { title: "kind filter", ownerId: user.id });
     const sent = await sendMessageApi(request, token, realmId, "kind-filter sentinel");
-    const included = await accountSubscribeFramesApi(request, token, { filter: { event_kinds: ["ak.message.create"] } });
+    const included = await accountSubscribeFramesApi(request, token, {
+      filter: { realm_ids: [realmId], event_kinds: ["ak.message.create"] },
+    });
     expectCatchup(included);
     expect(messageIds(included, realmId)).toEqual([sent.event_id]);
-    const excluded = await accountSubscribeFramesApi(request, token, { filter: { not_event_kinds: ["ak.message.create"] } });
+    const excluded = await accountSubscribeFramesApi(request, token, {
+      filter: { realm_ids: [realmId], not_event_kinds: ["ak.message.create"] },
+    });
     expectCatchup(excluded);
     expect(realmBuckets(excluded).some(([id]) => id === realmId), "timeline filter must not erase current Realm metadata").toBe(true);
     expect(messageIds(excluded, realmId)).toEqual([]);
     const otherKind = await accountSubscribeFramesApi(request, token, {
-      filter: { event_kinds: ["ak.reaction.add"] },
+      filter: { realm_ids: [realmId], event_kinds: ["ak.reaction.add"] },
     });
     expectCatchup(otherKind);
     expect(messageIds(otherKind, realmId)).toEqual([]);
     const deniedWins = await accountSubscribeFramesApi(request, token, {
-      filter: { event_kinds: ["ak.message.create"], not_event_kinds: ["ak.message.create"] },
+      filter: {
+        realm_ids: [realmId],
+        event_kinds: ["ak.message.create"],
+        not_event_kinds: ["ak.message.create"],
+      },
     });
     expectCatchup(deniedWins);
     expect(messageIds(deniedWins, realmId)).toEqual([]);
@@ -227,13 +247,13 @@ test.describe("account stream + device-message convergence", () => {
     const first = await createRealmApi(request, token, { title: "filter set first", ownerId: user.id });
     const second = await createRealmApi(request, token, { title: "filter set second", ownerId: user.id });
     const baseline = await accountSubscribeFramesApi(request, token, {
-      filter: { realms: [second, first, first], event_kinds: ["ak.reaction.add", "ak.message.create", "ak.message.create"] },
+      filter: { realm_ids: [second, first, first], event_kinds: ["ak.reaction.add", "ak.message.create", "ak.message.create"] },
     });
     expectCatchup(baseline);
     const sent = await sendMessageApi(request, token, first, "equivalent filter sentinel");
     const resumed = await accountSubscribeFramesApi(request, token, {
       after: latestCursor(baseline),
-      filter: { realms: [first, second], event_kinds: ["ak.message.create", "ak.reaction.add"] },
+      filter: { realm_ids: [first, second], event_kinds: ["ak.message.create", "ak.reaction.add"] },
     });
     expectCatchup(resumed);
     expect(messageIds(resumed, first)).toEqual([sent.event_id]);
@@ -261,7 +281,9 @@ test.describe("account stream + device-message convergence", () => {
     const outsider = await accountSession(request, "account-private-outsider");
     const realmId = await createRealmApi(request, owner.token, { title: "private sync sentinel", ownerId: owner.user.id });
     const included = await sendMessageApi(request, owner.token, realmId, "private account sentinel");
-    const baseline = await accountSubscribeFramesApi(request, owner.token);
+    const baseline = await accountSubscribeFramesApi(request, owner.token, {
+      filter: { realm_ids: [realmId] },
+    });
     expectCatchup(baseline);
     expect(messageIds(baseline, realmId)).toEqual([included.event_id]);
 
@@ -279,14 +301,20 @@ test.describe("account stream + device-message convergence", () => {
       const owner = await accountSession(request, `cursor-${binding}-owner`);
       const other = binding === "account" ? await accountSession(request, "cursor-other") : owner;
       const realmId = await createRealmApi(request, owner.token, { title: `cursor ${binding}`, ownerId: owner.user.id });
-      const filter = { timeline_limit: 100 };
+      const filter = { realm_ids: [realmId], timeline_limit: 100 };
       const baseline = await accountSubscribeFramesApi(request, owner.token, { filter });
       expectCatchup(baseline);
       const after = latestCursor(baseline);
       const url = new URL(`${solandBaseUrl()}/_arkret/self/account/subscribe`);
       url.searchParams.set("catchup", "true");
       url.searchParams.set("after", after);
-      url.searchParams.set("filter.timeline_limit", String(binding === "filter" ? 99 : filter.timeline_limit));
+      url.searchParams.set(
+        "filter",
+        JSON.stringify({
+          ...filter,
+          timeline_limit: binding === "filter" ? 99 : filter.timeline_limit,
+        }),
+      );
       const response = await request.get(url.toString(), {
         headers: authHeaders(other.token, "GET", url.toString()),
         timeout: 10_000,

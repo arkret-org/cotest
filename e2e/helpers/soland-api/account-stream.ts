@@ -2,6 +2,7 @@ import { expect, type APIRequestContext } from "@playwright/test";
 
 import { type SolandKey, solandBaseUrl } from "../env";
 import { authHeaders } from "./request";
+import { canonicalJson } from "./wire-client";
 
 type AccountSubscribeOptions = {
   server?: SolandKey;
@@ -36,11 +37,7 @@ export async function accountSubscribeFramesApi(
     url.searchParams.set("catchup", "true");
   }
   if (opts.filter) {
-    for (const [field, value] of Object.entries(opts.filter)) {
-      for (const item of Array.isArray(value) ? value : [value]) {
-        url.searchParams.append(`filter.${field}`, String(item));
-      }
-    }
+    url.searchParams.set("filter", canonicalJson(opts.filter));
   }
   if (opts.after) {
     url.searchParams.set("after", opts.after);
