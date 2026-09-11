@@ -186,7 +186,7 @@ test.describe("moderation and ban", () => {
         "content-type": "application/json",
         "idempotency-key": `cotest-unauthorized-ban-${unauthorizedBanEvent.event_id}`,
       },
-      data: canonicalJson({ events: [unauthorizedBanEvent] }),
+      data: canonicalJson({ submissions: [{ event: unauthorizedBanEvent }] }),
     });
     // Lease issuance runs the same read-only admission as final submission;
     // it may narrow existing authority but must never mint Realm admin rights.

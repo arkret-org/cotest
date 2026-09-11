@@ -2460,7 +2460,9 @@ export async function issueAuthorizationLeasesApi(
   events: Array<Record<string, unknown>>,
   server?: SolandKey,
 ): Promise<APIResponse> {
-  const requestBody = { events };
+  const requestBody = {
+    submissions: events.map((event) => ({ event })),
+  };
   const requestDigest = sha256CanonicalJson(requestBody);
   const url = `${solandBaseUrl(server)}/_arkret/self/authorization-leases`;
   return await request.post(url, {
