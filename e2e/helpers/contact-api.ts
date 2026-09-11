@@ -350,14 +350,35 @@ export async function respondContactArkret(
     requesterServiceId?: string;
   },
 ): Promise<ContactRespondOutcome> {
-  const rows = await listContactsArkret(request, token, {
-    server: opts.server,
-  });
-  const matches = rows.filter(candidate => candidate.peer === opts.requesterId &&
-    (!opts.requesterServiceId || (candidate.peerIdentity.kind === "human" &&
-      candidate.peerIdentity.account_id.station_id === opts.requesterServiceId)));
-  if (matches.length > 1) throw new Error("Contact response requires an exact AccountId");
-  const row = matches[0];
+  let row: ContactListRow | undefined;
+  await expect
+    .poll(
+      async () => {
+        const rows = await listContactsArkret(request, token, {
+          server: opts.server,
+        });
+        const matches = rows.filter(
+          (candidate) =>
+            candidate.peer === opts.requesterId &&
+            candidate.request_event_ref === opts.requestId &&
+            (!opts.requesterServiceId ||
+              (candidate.peerIdentity.kind === "human" &&
+                candidate.peerIdentity.account_id.station_id ===
+                  opts.requesterServiceId)),
+        );
+        if (matches.length > 1) {
+          throw new Error("Contact response requires an exact AccountId");
+        }
+        row = matches[0];
+        return Boolean(row?.request_receipt);
+      },
+      {
+        message: `contact ${opts.requesterId} exposes its accepted request receipt`,
+        timeout: 30_000,
+        intervals: [250, 500, 1_000, 2_000],
+      },
+    )
+    .toBe(true);
   if (!row?.request_receipt) {
     throw new Error(`contact ${opts.requesterId} exposes no request_receipt`);
   }
