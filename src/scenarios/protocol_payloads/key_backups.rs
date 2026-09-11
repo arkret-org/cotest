@@ -18,7 +18,7 @@ use std::collections::BTreeMap;
 use anyhow::{Context as _, Result, anyhow};
 use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_identifiers::{
-    BackupId, BackupSeriesId, DeviceId, Did, DidCoreId, EventId, Hash, project_did_to_core_id,
+    BackupId, BackupSeriesId, DeviceId, Did, DidCoreId, EventId, project_did_to_core_id,
 };
 use arkret_models_crypto::{
     BackupKind, HistorySecretRangeIndex, HistorySecretRangesItemKind, KeyBackup, KeyBackupAead,

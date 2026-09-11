@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use reqwest::StatusCode;
 
 use crate::harness::{ArkretServer, expect_json};

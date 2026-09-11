@@ -883,7 +883,9 @@ fn validate_seal_delta_concurrency_class(vector: &Value, vector_name: &str) -> R
     // `ak.moderation.decision` is the kind the "read the registry, not the
     // request" case is about, so its registered class is asserted directly.
     if registered_delta_concurrency_class("ak.moderation.decision") != Some(BARRIER) {
-        bail!("vector {vector_name} assumes ak.moderation.decision is a registered security_barrier");
+        bail!(
+            "vector {vector_name} assumes ak.moderation.decision is a registered security_barrier"
+        );
     }
     require_seen(
         vector_name,
@@ -1161,7 +1163,12 @@ fn validate_fork_resolution_readjudication(
     require_bool_eq(second, "/accepted", replay, vector_name)?;
     require_str_eq(case, "/expected/cell_value", "unchanged", vector_name)?;
     if replay {
-        require_str_eq(case, "/expected/second_resolution", "idempotent", vector_name)?;
+        require_str_eq(
+            case,
+            "/expected/second_resolution",
+            "idempotent",
+            vector_name,
+        )?;
         if second.get("verdict").is_some() {
             bail!(
                 "vector {vector_name} case {case_name} replays an EventId, so it must not \
@@ -1180,7 +1187,12 @@ fn validate_fork_resolution_readjudication(
     // satisfies the complete-heads guard, so the refusal must come from
     // `head_eq: null` alone. A case that omits this flag would pass for the
     // wrong reason.
-    require_bool_eq(second, "/basis_contains_prior_resolution", true, vector_name)?;
+    require_bool_eq(
+        second,
+        "/basis_contains_prior_resolution",
+        true,
+        vector_name,
+    )?;
     let first_kind = required_pointer_str(first, "/verdict/kind", vector_name)?;
     let second_kind = required_pointer_str(second, "/verdict/kind", vector_name)?;
     if first_kind == second_kind {
