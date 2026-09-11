@@ -216,9 +216,20 @@ test.describe("fresh-browser device entry paths @fully-implemented", () => {
         .getByRole("button", { name: "Authorize this device" })
         .click();
 
-      await expect(replacement.page.getByTestId("client-shell")).toBeVisible({
-        timeout: 300_000,
-      });
+      const shell = replacement.page.getByTestId("client-shell");
+      const terminalFailure = recoveryPanel
+        .getByRole("status")
+        .filter({ hasText: "Recovery could not finish:" });
+      await Promise.race([
+        expect(shell).toBeVisible({ timeout: 300_000 }),
+        expect(terminalFailure)
+          .toBeVisible({ timeout: 300_000 })
+          .then(async () => {
+            throw new Error(
+              `${await terminalFailure.textContent()}; observed ${JSON.stringify(responses)}`,
+            );
+          }),
+      ]);
       await expect(replacement.page.getByTestId("onboarding-panel")).toHaveCount(
         0,
       );
