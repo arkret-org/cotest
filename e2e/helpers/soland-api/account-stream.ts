@@ -9,6 +9,7 @@ type AccountSubscribeOptions = {
   filter?: Record<string, unknown>;
   catchup?: boolean;
   after?: string;
+  waitFor?: string;
   timeoutMs?: number;
   headers?: Record<string, string>;
 };
@@ -55,7 +56,9 @@ export async function accountSubscribeFramesApi(
   try {
     const response = await fetch(url, {
       headers: {
-        ...(opts.headers ?? authHeaders(token, "GET", url.toString())),
+        ...authHeaders(token, "GET", url.toString()),
+        ...opts.headers,
+        ...(opts.waitFor ? { "X-Arkret-Wait-For": opts.waitFor } : {}),
         accept: "application/x-ndjson",
         "Arkret-Operation": "ak.self.account.stream.subscribe.v1",
       },

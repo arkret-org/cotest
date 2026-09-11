@@ -1488,7 +1488,7 @@ export async function sendMessageApi(
   if (opts.actorSeq === undefined) {
     await advanceEnvelopeToActorFrontier(request, token, envelope, opts.server);
   }
-  await submitSignedEventApi(request, token, envelope, {
+  const submission = await submitSignedEventApi(request, token, envelope, {
     server: opts.server,
     context: `send message to ${realmId}`,
   });
@@ -1498,6 +1498,8 @@ export async function sendMessageApi(
     actor_id: actorId,
     actor_seq: Number(envelope.actor_seq),
     prev_refs: [...(envelope.prev_refs as string[])],
+    cursor:
+      typeof submission.cursor === "string" ? submission.cursor : undefined,
   };
 }
 
