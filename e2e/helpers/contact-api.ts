@@ -1,16 +1,7 @@
-// Contact-graph protocol-face helpers (`/_arkret/self/contacts/*`,
-// `/_arkret/self/direct-conversations/resolve`,
-// `/_arkret/self/invite-receive-policy`, and the private invite-delivery path
-// `/_arkret/self/invites/dispatch`, which falls back to `/_arkret/peer/invites`
-// only for the cross-server receive-side scenarios).
-//
-// These target the `/_arkret` contract with `requested_scopes:[...]`, distinct
-// from the `/_soland/self/contacts/request` + `scope` helper used by other
-// specs (helpers/soland-api.ts + consent-grant.spec.ts). Do not route new
-// contact-graph coverage through the `/_soland` surface.
-//
-// Wire shapes mirror arkret-rust-sdk core::http + core::model::invite_addressing
-// and soland src/routing/identity/account.rs + src/routing/invites.rs.
+// Standard Contact, Direct Conversation, and invite protocol helpers.
+// Contact prepare uses the exact peer and request Event reference from the
+// Station's pending projection. The Station resolves its retained acceptance
+// evidence; clients sign the returned draft with their registered Event signer.
 
 import { createHash } from "node:crypto";
 import {
@@ -94,7 +85,6 @@ export type ContactListRow = {
   direct_conversation?: DirectConversationSummary;
   agents?: ContactAgentProjection[];
   contact_agents?: ContactAgentProjection[];
-  request_receipt?: Record<string, unknown>;
 };
 type ContactRequestOutcome = {
   request_event_ref: string;
@@ -370,17 +360,17 @@ export async function respondContactArkret(
           throw new Error("Contact response requires an exact AccountId");
         }
         row = matches[0];
-        return Boolean(row?.request_receipt);
+        return row?.state === "pending_incoming";
       },
       {
-        message: `contact ${opts.requesterId} exposes its accepted request receipt`,
+        message: `contact ${opts.requesterId} exposes the exact pending incoming request`,
         timeout: 30_000,
         intervals: [250, 500, 1_000, 2_000],
       },
     )
     .toBe(true);
-  if (!row?.request_receipt) {
-    throw new Error(`contact ${opts.requesterId} exposes no request_receipt`);
+  if (!row || row.state !== "pending_incoming" || !row.request_event_ref) {
+    throw new Error(`contact ${opts.requesterId} exposes no pending incoming request`);
   }
   const nonce = uuidV7();
   const operationId = `ak:operation:contact.${opts.action}.${nonce}`;
@@ -389,7 +379,8 @@ export async function respondContactArkret(
     phase: "prepare",
     operation_id: operationId,
     idempotency_key: nonce,
-    request_receipt: row.request_receipt,
+    peer: row.peerIdentity,
+    request_event_ref: row.request_event_ref,
     action: opts.action,
     ...(opts.action === "accept"
       ? { granted_to_peer_scopes: opts.grantedScopes ?? [] }
