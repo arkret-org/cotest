@@ -196,7 +196,6 @@ mod tests {
             "created_at": "2026-07-07T00:00:00.000Z",
             "hlc": "019f3b1c76c8-0000-ac7eadec",
             "prev_refs": [],
-            "refs": [],
             "requirements": {
                 "features": [],
                 "critical_extensions": []

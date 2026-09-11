@@ -167,7 +167,6 @@ fn run_error_code_vocabulary_unregistered_spelling_vector() -> Result<()> {
             "stale_peer_state_unavailable",
             "peer_state_stale_unavailable",
         ),
-        ("stale_seal_ref", "seal_ref_stale"),
         ("unknown_did", "did_unknown"),
         ("verifier_not_authorized", "verifier_unauthorized"),
     ];

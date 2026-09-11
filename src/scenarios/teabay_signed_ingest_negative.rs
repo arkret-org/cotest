@@ -35,7 +35,6 @@ pub async fn teabay_signed_ingest_negative_run() -> Result<()> {
             "actor_seq": 1,
             "created_at": "2026-05-18T00:00:00.000Z",
             "prev_refs": [],
-            "refs": [],
             "payload": {
                 "resource_id": "ak:did_core:key:z6MkrJVnaZkeFzdQyRo91my9QRBqmbW4cSUCQY4fVn4N1",
                 "value": {

@@ -247,7 +247,7 @@ export type InviteObject = {
   "introduction_evidence_digest"?: string;
   "third_party_invite"?: {
     "display_name_hint"?: string;
-    "token_commitment"?: string;
+    "token_commitment": string;
     "token_salt_id"?: string;
     "lookup_table_ref"?: string;
     "pepper_id"?: string;
@@ -594,7 +594,6 @@ export type RealmObject = {
     "controller_organization_id"?: string;
     "recovery_controller_organization_ids"?: string[];
   };
-  "revocation_freshness_window_ms"?: number;
   "recovery_witness_freshness_window_ms"?: number;
   "proposal_intake_sla_ms"?: number;
   "proposal_decision_window_ms"?: number;
@@ -965,12 +964,11 @@ export type InviteDeliveryRequestBody = {
       "uri"?: string;
       [key: string]: unknown;
     };
-    "actor_kind"?: "user" | "organization" | "team" | "agent" | "bot" | "service" | "integration";
     "actor_seq": number;
     "created_at": string;
     "hlc"?: string;
     "prev_refs": string[];
-    "refs": Array<{
+    "refs"?: Array<{
       "id": string;
       "role": "state_witness" | "inclusion_proof";
       "critical": true;
@@ -2327,6 +2325,7 @@ export type RealmSealFrontierView = {
   "seal_basis": {
     "leaves": string[];
   };
+  "live_digest_suite": "sha256" | "blake3";
   "governance_health": {
     "status": "healthy" | "degraded";
     "pending_proposals": Array<{
@@ -2498,12 +2497,11 @@ export type EventFederationSubmission = {
       "uri"?: string;
       [key: string]: unknown;
     };
-    "actor_kind"?: "user" | "organization" | "team" | "agent" | "bot" | "service" | "integration";
     "actor_seq": number;
     "created_at": string;
     "hlc"?: string;
     "prev_refs": string[];
-    "refs": Array<{
+    "refs"?: Array<{
       "id": string;
       "role": "state_witness" | "inclusion_proof";
       "critical": true;
@@ -2581,6 +2579,20 @@ export type EventFederationSubmission = {
       }>;
     };
   };
+  "mls_frontier_leaves"?: Array<{
+    "leaf_index": number;
+    "actor_id": {
+      "kind": "account";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    } | {
+      "kind": "service";
+      "service_id": string;
+    };
+    "credential_ref": string;
+  }>;
   "authorization_lease"?: {
     "authorization_lease_id": string;
     "basis_ref": string | {

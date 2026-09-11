@@ -47,7 +47,6 @@ fn mimi_report_requires_closed_exact_actor_authority() {
                 "actor_seq": 1,
                 "created_at": "2026-09-01T00:00:00.000Z",
                 "prev_refs": [],
-                "refs": [],
                 "requirements": {},
                 "payload": {
                     "realm_id": "ak:realm:AY789mrKRCQEVlbVgiTgLdjVO5oCMJiUCrF-D-JlRNxI",

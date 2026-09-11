@@ -100,7 +100,6 @@ pub async fn teabay_rejects_unsigned_ingest_run() -> Result<()> {
             authorization_ref: None,
             applet_id: None,
             external_ref: None,
-            actor_kind: None,
             actor_seq: 1,
             created_at: arkret_canonical::parse_timestamp_canonical("2026-05-18T00:00:00.000Z")?,
             hlc: None,

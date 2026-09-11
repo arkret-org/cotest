@@ -418,7 +418,6 @@ fn assert_event_target_does_not_drive_object_state() -> Result<()> {
                 authorization_ref: None,
                 applet_id: None,
                 external_ref: None,
-                actor_kind: None,
                 unsigned: Default::default(),
                 causal_refs: Vec::new(),
                 proofs: vec![],

@@ -349,12 +349,11 @@ pub fn run_cbs_lattice_fixture_suite() -> Result<()> {
                     "state_resolution.cbs.auth_context_epoch_pinning_reject",
                     &json!({"vector": vector.clone()}),
                     &json!({
-                        "outside_window": "reject_or_hide",
-                        "inside_window_grade": "stale",
-                        "epoch_mismatch": "failed_precondition",
+                        "admit_before_revoke": "accept_and_retain",
+                        "revoke_before_admit": "failed_precondition",
+                        "late_delivery": "accept_and_retain",
                     }),
                     &json!({
-                        "window_ms": pointer_u64(vector, "/revocation_freshness_window_ms"),
                         "case_count": required_array(vector, "/cases", name)?.len(),
                     }),
                 );
@@ -1722,7 +1721,7 @@ fn validate_sealed_control_move_full_digest_collision(
     )?;
     require_str_eq(
         admit_case,
-        "/expected_receiver_state_after/proofs_actor_kind_and_unsigned",
+        "/expected_receiver_state_after/proofs_and_unsigned",
         "reused_from_the_already_verified_local_event",
         vector_name,
     )?;
@@ -2807,101 +2806,85 @@ fn validate_cas_mixed_basis(vector: &Value, vector_name: &str) -> Result<()> {
 }
 
 fn validate_auth_context_epoch_pinning_reject(vector: &Value, vector_name: &str) -> Result<()> {
-    let window = required_u64(vector, "/revocation_freshness_window_ms", vector_name)?;
     let mut seen = BTreeSet::new();
     for case in required_array(vector, "/cases", vector_name)? {
         let case_name = required_pointer_str(case, "/name", vector_name)?;
         seen.insert(case_name.to_owned());
         match case_name {
-            "revoked_key_old_seal_ref_outside_window" => {
-                let distance = required_u64(case, "/seal_ref_distance_ms", vector_name)?;
-                if distance <= window {
-                    bail!("vector {vector_name} outside-window case must exceed freshness window");
-                }
-                require_str_eq(case, "/expected/result", "reject_or_hide", vector_name)?;
-                require_str_eq(case, "/expected/reason", "seal_ref_stale", vector_name)?;
-            }
-            "revoked_key_within_freshness_window" | "revoked_key_at_freshness_window_boundary" => {
-                let distance = required_u64(case, "/seal_ref_distance_ms", vector_name)?;
-                if distance > window {
-                    bail!("vector {vector_name} within-window case exceeds freshness window");
-                }
-                if case_name == "revoked_key_at_freshness_window_boundary" && distance != window {
-                    bail!("vector {vector_name} boundary case must equal freshness window");
-                }
-                require_str_eq(case, "/expected/result", "accept", vector_name)?;
+            "admission_before_key_revocation_is_retained" => {
+                require_str_eq(
+                    case,
+                    "/serialization_order/0",
+                    "station_admission",
+                    vector_name,
+                )?;
+                require_str_eq(
+                    case,
+                    "/serialization_order/1",
+                    "key_revocation",
+                    vector_name,
+                )?;
+                require_str_eq(case, "/expected/result", "accept_and_retain", vector_name)?;
+                require_bool_eq(case, "/expected/station_admission_valid", true, vector_name)?;
                 require_bool_eq(
                     case,
-                    "/expected/included_in_data_cell_join",
+                    "/expected/retroactive_removal_forbidden",
                     true,
                     vector_name,
                 )?;
             }
-            "rejecting_revoked_key_within_freshness_window_is_nonconformant" => {
-                let distance = required_u64(case, "/seal_ref_distance_ms", vector_name)?;
-                if distance > window {
-                    bail!("vector {vector_name} nonconformance control exceeds freshness window");
-                }
-                require_str_eq(case, "/implementation_result", "reject", vector_name)?;
-                require_str_eq(case, "/expected/conformance", "fail", vector_name)?;
-                require_str_eq(case, "/expected/required_result", "accept", vector_name)?;
+            "key_revocation_before_admission_blocks" => {
+                require_str_eq(
+                    case,
+                    "/serialization_order/0",
+                    "key_revocation",
+                    vector_name,
+                )?;
+                require_str_eq(
+                    case,
+                    "/serialization_order/1",
+                    "station_admission",
+                    vector_name,
+                )?;
+                require_str_eq(case, "/expected/result", "failed_precondition", vector_name)?;
                 require_bool_eq(
                     case,
-                    "/expected/required_included_in_data_cell_join",
-                    true,
+                    "/expected/station_admission_appended",
+                    false,
                     vector_name,
                 )?;
             }
-            "first_delivery_thirty_days_after_revocation_keeps_same_historical_grace_result" => {
-                require_str_eq(case, "/risk_tier", "medium", vector_name)?;
-                let distance = required_u64(case, "/seal_ref_distance_ms", vector_name)?;
-                if distance > window {
-                    bail!("vector {vector_name} delayed-delivery case exceeds freshness window");
-                }
-                let basis_committed_at =
-                    required_pointer_str(case, "/basis_seal_committed_at", vector_name)?
+            "late_delivery_uses_frozen_admission" => {
+                let admitted_at =
+                    required_pointer_str(case, "/station_admission_appended_at", vector_name)?
                         .parse::<chrono::DateTime<chrono::Utc>>()?;
-                let revocation_committed_at =
-                    required_pointer_str(case, "/revocation_seal_committed_at", vector_name)?
-                        .parse::<chrono::DateTime<chrono::Utc>>()?;
-                let first_delivery_at =
-                    required_pointer_str(case, "/first_delivery_at", vector_name)?
-                        .parse::<chrono::DateTime<chrono::Utc>>()?;
-                let committed_distance =
-                    (revocation_committed_at - basis_committed_at).num_milliseconds();
-                if committed_distance < 0 || committed_distance as u64 != distance {
-                    bail!(
-                        "vector {vector_name} delayed-delivery distance must come from the two Seal commit times"
-                    );
+                let revoked_at = required_pointer_str(case, "/key_revoked_at", vector_name)?
+                    .parse::<chrono::DateTime<chrono::Utc>>()?;
+                let delivered_at = required_pointer_str(case, "/first_delivery_at", vector_name)?
+                    .parse::<chrono::DateTime<chrono::Utc>>()?;
+                if !(admitted_at < revoked_at && revoked_at < delivered_at) {
+                    bail!("vector {vector_name} late-delivery order is not monotonic");
                 }
-                if first_delivery_at <= revocation_committed_at {
-                    bail!(
-                        "vector {vector_name} delayed-delivery control must arrive after revocation"
-                    );
-                }
-                require_str_eq(case, "/expected/result", "accept", vector_name)?;
+                require_str_eq(case, "/expected/result", "accept_and_retain", vector_name)?;
                 for pointer in [
-                    "/expected/same_as_immediate_delivery",
+                    "/expected/peer_rechecks_current_revocation",
                     "/expected/same_across_receivers",
-                    "/expected/same_under_offline_replay",
-                    "/expected/first_delivery_at_is_not_an_input",
                 ] {
-                    require_bool_eq(case, pointer, true, vector_name)?;
+                    require_bool_eq(
+                        case,
+                        pointer,
+                        pointer.ends_with("same_across_receivers"),
+                        vector_name,
+                    )?;
                 }
             }
-            "high_risk_has_zero_historical_grace_even_on_immediate_delivery" => {
-                require_str_eq(case, "/risk_tier", "high", vector_name)?;
-                let distance = required_u64(case, "/seal_ref_distance_ms", vector_name)?;
-                if distance == 0 {
-                    bail!("vector {vector_name} high-risk control must use an older basis Seal");
-                }
-                require_str_eq(case, "/expected/result", "reject_or_hide", vector_name)?;
-                require_str_eq(case, "/expected/reason", "seal_ref_stale", vector_name)?;
-                if required_u64(case, "/expected/effective_window_ms", vector_name)? != 0 {
-                    bail!("vector {vector_name} high-risk effective freshness window must be zero");
-                }
-            }
-            "epoch_not_valid_at_seal_ref" => {
+            "epoch_not_valid_at_origin_admission_gate" => {
+                require_bool_eq(
+                    case,
+                    "/origin_control_state_contains_epoch",
+                    false,
+                    vector_name,
+                )?;
                 require_bool_eq(
                     case,
                     "/current_did_document_contains_key",
@@ -2909,6 +2892,12 @@ fn validate_auth_context_epoch_pinning_reject(vector: &Value, vector_name: &str)
                     vector_name,
                 )?;
                 require_str_eq(case, "/expected/result", "failed_precondition", vector_name)?;
+                require_bool_eq(
+                    case,
+                    "/expected/station_admission_appended",
+                    false,
+                    vector_name,
+                )?;
                 require_bool_eq(
                     case,
                     "/expected/must_not_use_current_did_document_fallback",
@@ -2923,13 +2912,10 @@ fn validate_auth_context_epoch_pinning_reject(vector: &Value, vector_name: &str)
         vector_name,
         &seen,
         &[
-            "revoked_key_old_seal_ref_outside_window",
-            "revoked_key_within_freshness_window",
-            "revoked_key_at_freshness_window_boundary",
-            "rejecting_revoked_key_within_freshness_window_is_nonconformant",
-            "first_delivery_thirty_days_after_revocation_keeps_same_historical_grace_result",
-            "high_risk_has_zero_historical_grace_even_on_immediate_delivery",
-            "epoch_not_valid_at_seal_ref",
+            "admission_before_key_revocation_is_retained",
+            "key_revocation_before_admission_blocks",
+            "late_delivery_uses_frozen_admission",
+            "epoch_not_valid_at_origin_admission_gate",
         ],
     )
 }
@@ -3304,12 +3290,9 @@ fn validate_threshold_forensic_attribution(vector: &Value, vector_name: &str) ->
 
 /// Vector `ak.vector.cbs_lattice.open_set_concurrent_revocation_fail_closed.v1`.
 ///
-/// A DataEvent with a locally valid `seal_ref` MUST be re-evaluated against the
-/// joined multi-leaf control view of an open-set notary. When a concurrent
-/// revocation branch is observed (capability no longer live, or the
-/// authorization cell is bottom) the event MUST fail closed / be hidden rather
-/// than trusting the lone seal_ref, and a light client that cannot verify the
-/// joined view MUST NOT fan out or treat the seal_ref as sufficient.
+/// The source admission gate evaluates a candidate against the joined
+/// multi-leaf control view. Once it appends `station_admission`, later
+/// revocation cannot remove the accepted Event or its dependents.
 fn validate_open_set_concurrent_revocation_fail_closed(
     vector: &Value,
     vector_name: &str,
@@ -3333,13 +3316,13 @@ fn validate_open_set_concurrent_revocation_fail_closed(
                 require_str_eq(
                     case,
                     "/expected/data_event_result",
-                    "reject_or_hide",
+                    "failed_precondition",
                     vector_name,
                 )?;
-                require_str_eq(case, "/expected/reason", "seal_ref_stale", vector_name)?;
+                require_str_eq(case, "/expected/reason", "capability_denied", vector_name)?;
                 require_bool_eq(
                     case,
-                    "/expected/freshness_window_applies",
+                    "/expected/station_admission_appended",
                     false,
                     vector_name,
                 )?;
@@ -3357,10 +3340,10 @@ fn validate_open_set_concurrent_revocation_fail_closed(
                     "fail_closed",
                     vector_name,
                 )?;
-                require_str_eq(case, "/expected/reason", "seal_ref_stale", vector_name)?;
+                require_str_eq(case, "/expected/reason", "failed_bottom", vector_name)?;
                 require_bool_eq(
                     case,
-                    "/expected/freshness_window_applies",
+                    "/expected/station_admission_appended",
                     false,
                     vector_name,
                 )?;
@@ -3381,7 +3364,7 @@ fn validate_open_set_concurrent_revocation_fail_closed(
                     vector_name,
                 )?;
             }
-            "late_revocation_leaf_retroactive_removal" => {
+            "late_revocation_leaf_preserves_admitted_history" => {
                 let source_event_id = required_pointer_str(vector, "/data_event/id", vector_name)?;
                 require_str_eq(case, "/dependent_data_event/plane", "data", vector_name)?;
                 require_str_eq(
@@ -3397,7 +3380,7 @@ fn validate_open_set_concurrent_revocation_fail_closed(
                     );
                 }
                 let accepted = &sequence[0];
-                require_str_eq(accepted, "/step", "accept_before_revocation", vector_name)?;
+                require_str_eq(accepted, "/step", "admit_before_revocation", vector_name)?;
                 require_str_eq(
                     accepted,
                     "/expected/data_event_result",
@@ -3433,76 +3416,59 @@ fn validate_open_set_concurrent_revocation_fail_closed(
                 require_str_eq(
                     revoked,
                     "/expected/data_event_result",
-                    "reject_or_hide",
+                    "accept_and_retain",
                     vector_name,
                 )?;
-                require_str_eq(revoked, "/expected/reason", "seal_ref_stale", vector_name)?;
                 require_bool_eq(
                     revoked,
-                    "/expected/data_cell_x_projection_retroactively_removed",
+                    "/expected/station_admission_still_valid",
+                    true,
+                    vector_name,
+                )?;
+                require_bool_eq(
+                    revoked,
+                    "/expected/data_cell_x_projection_retained",
                     true,
                     vector_name,
                 )?;
                 require_str_eq(
                     revoked,
                     "/expected/dependent_event_result",
-                    "pending",
-                    vector_name,
-                )?;
-                require_str_eq(
-                    revoked,
-                    "/expected/dependent_event_reason",
-                    "dependency_missing",
+                    "accept_and_retain",
                     vector_name,
                 )?;
                 for path in [
-                    "/expected/dependent_event_projection_retroactively_removed",
-                    "/expected/recursive_dependency_closure_revalidated",
-                    "/expected/projection_recomputed",
-                    "/expected/converges_with_from_start_joiner",
-                    "/expected/order_independent",
+                    "/expected/dependent_event_projection_retained",
+                    "/expected/new_admissions_using_revoked_grant_blocked",
                 ] {
                     require_bool_eq(revoked, path, true, vector_name)?;
                 }
+                require_bool_eq(
+                    revoked,
+                    "/expected/retroactive_authorization_recheck",
+                    false,
+                    vector_name,
+                )?;
 
                 require_str_eq(
                     case,
                     "/expected/final_data_event_result",
-                    "reject_or_hide",
-                    vector_name,
-                )?;
-                require_str_eq(
-                    case,
-                    "/expected/final_reason",
-                    "seal_ref_stale",
+                    "accept_and_retain",
                     vector_name,
                 )?;
                 require_str_eq(
                     case,
                     "/expected/dependent_event_final_result",
-                    "pending",
-                    vector_name,
-                )?;
-                require_str_eq(
-                    case,
-                    "/expected/dependent_event_final_reason",
-                    "dependency_missing",
+                    "accept_and_retain",
                     vector_name,
                 )?;
                 for path in [
-                    "/expected/data_cell_x_projection_retroactively_removed",
-                    "/expected/data_cell_y_dependent_projection_retroactively_removed",
-                    "/expected/accepted_set_is_authorized_dependency_closed",
-                    "/expected/order_independent",
+                    "/expected/data_cell_x_projection_retained",
+                    "/expected/data_cell_y_dependent_projection_retained",
+                    "/expected/retroactive_removal_forbidden",
+                    "/expected/revocation_blocks_only_new_admission",
                 ] {
                     require_bool_eq(case, path, true, vector_name)?;
-                }
-                if case.pointer("/expected/final_state_equals_from_start_joiner_of_leaf_set")
-                    != vector.pointer("/joined_leaf_set")
-                {
-                    bail!(
-                        "vector {vector_name} late-revocation final leaf set must equal the joined open-set view"
-                    );
                 }
             }
             other => {
@@ -3517,7 +3483,7 @@ fn validate_open_set_concurrent_revocation_fail_closed(
             "concurrent_revoke_branch",
             "authorization_cell_bottom",
             "server_without_joined_view",
-            "late_revocation_leaf_retroactive_removal",
+            "late_revocation_leaf_preserves_admitted_history",
         ],
     )
 }

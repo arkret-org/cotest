@@ -1344,7 +1344,7 @@ pub fn mimi_request_consent_proof(input: Value) -> Result<Value> {
 pub fn event_derived_id(event: Value) -> Result<Value> {
     let mut event = event;
     if let Value::Object(object) = &mut event {
-        for excluded in ["event_id", "proofs", "unsigned", "actor_kind"] {
+        for excluded in ["event_id", "proofs", "unsigned"] {
             object.remove(excluded);
         }
     }
@@ -1471,7 +1471,6 @@ mod tests {
             "created_at": "2026-07-07T05:45:49.000Z",
             "hlc": "019f3b1c76c8-0000-ac7eadec",
             "prev_refs": [],
-            "refs": [],
             "requirements": {
                 "schema": ["ak.schema.event_payload.v1"],
                 "features": [],
@@ -1484,7 +1483,6 @@ mod tests {
                 "reason": "invite_accept"
             },
             "unsigned": {"trace": "local"},
-            "actor_kind": arkret_wire::EnvelopeActorKind::User,
             "proofs": []
         });
 
@@ -1578,7 +1576,6 @@ mod tests {
             "created_at": "2026-07-07T05:45:49.000Z",
             "hlc": "019f3b1c76c8-0000-ac7eadec",
             "prev_refs": [],
-            "refs": [],
             "requirements": {
                 "schema": ["ak.schema.event_payload.v1"],
                 "features": [],

@@ -959,7 +959,6 @@ fn fixed_unsigned_sidecar_event(
         authorization_ref: None,
         applet_id: None,
         external_ref: None,
-        actor_kind: None,
         actor_seq,
         created_at: fixed_sidecar_time(),
         hlc: None,

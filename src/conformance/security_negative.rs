@@ -379,7 +379,6 @@ mod tests {
             "created_at": "2026-05-02T00:00:00.000Z",
             "hlc": "01970e589d21-0001-a13f9c2e",
             "prev_refs": [],
-            "refs": [],
             "payload": {
                 "strand_id": "ak:strand:01970e589d21-8000-8000-000000000010",
                 "track_name": "discussion",

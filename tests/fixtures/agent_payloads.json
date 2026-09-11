@@ -122,15 +122,15 @@
       "expect": "pass"
     },
     {
-      "name": "actor_kind_field_must_fail",
+      "name": "unknown_payload_field_must_fail",
       "event_kind": "ak.self.agent.pause",
       "payload_def_ref": "agent_pause_payload",
-      "reason": "actor_kind_reducer_managed",
+      "reason": "schema_violation",
       "payload": {
         "transition": "pause",
         "previous_status": "active",
         "status_changed_at": "2026-05-27T08:00:00.000Z",
-        "actor_kind": "agent"
+        "unexpected_classification": "agent"
       },
       "expect": "fail"
     }

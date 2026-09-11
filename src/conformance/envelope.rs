@@ -542,7 +542,6 @@ fn validate_event_envelope(
         "authorization_ref",
         "applet_id",
         "external_ref",
-        "actor_kind",
         "actor_seq",
         "created_at",
         "hlc",
@@ -610,10 +609,9 @@ fn validate_event_envelope(
 
     // Spec event-envelope.schema.json required fields:
     //   event_id, kind, realm_id, actor_id, actor_seq, created_at,
-    //   prev_refs, refs, payload, proofs
-    // `refs` MUST be present per spec — negative fixture
-    // `reject_missing_refs[role=authorized_by]` exercises this. `prev_refs`
-    // is also required.
+    //   prev_refs, payload, proofs. `refs` and `causal_refs` are optional but,
+    //   when present, must be non-empty. `prev_refs` is required and may be
+    //   empty.
     for field in [
         "event_id",
         "realm_id",
@@ -621,7 +619,6 @@ fn validate_event_envelope(
         "actor_seq",
         "created_at",
         "prev_refs",
-        "refs",
         "payload",
         "proofs",
     ] {
@@ -660,12 +657,27 @@ fn validate_event_envelope(
             .ok_or_else(|| anyhow!("event.prev_refs missing after required-field check"))?,
         "event.prev_refs",
     )?;
-    let extra_refs = value_array(
-        event
-            .get("refs")
-            .ok_or_else(|| anyhow!("event.refs missing after required-field check"))?,
-        "event.refs",
-    )?;
+    let extra_refs: &[Value] = if let Some(refs) = event.get("refs") {
+        let refs = value_array(refs, "event.refs")?;
+        if refs.is_empty() {
+            return Ok(EventEnvelopeDecision::reject(
+                "schema_violation",
+                "event.refs must be omitted when empty",
+            ));
+        }
+        refs
+    } else {
+        &[]
+    };
+    if let Some(causal_refs) = event.get("causal_refs") {
+        let causal_refs = value_array(causal_refs, "event.causal_refs")?;
+        if causal_refs.is_empty() {
+            return Ok(EventEnvelopeDecision::reject(
+                "schema_violation",
+                "event.causal_refs must be omitted when empty",
+            ));
+        }
+    }
     let content = event
         .get("payload")
         .ok_or_else(|| anyhow!("event.payload missing after required-field check"))?;

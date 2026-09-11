@@ -82,9 +82,7 @@ fn build_realm(
         notary: crate::fixture_single_signer_notary(principal.clone()),
         fields: Default::default(),
         // `max_anchor_staleness_ms` was retired by the dual-plane split
-        // without a direct replacement; revocation staleness is governed by
-        // `revocation_freshness_window_ms`.
-        revocation_freshness_window_ms: None,
+        // without a direct replacement.
         recovery_witness_freshness_window_ms: None,
         proposal_intake_sla_ms: None,
         proposal_decision_window_ms: None,
