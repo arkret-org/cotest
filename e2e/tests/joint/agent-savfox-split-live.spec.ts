@@ -1310,6 +1310,7 @@ async function openAndPairSecondController(
     eventSigningSeedB64url: session!.eventSigningSeedB64url,
     grantId: session!.grantId,
     accountId: session!.accountId,
+    principalControlRealmId: session!.principalControlRealmId,
     grantAudience: session!.grantAudience,
   });
   try {

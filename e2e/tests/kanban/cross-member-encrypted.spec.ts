@@ -540,6 +540,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
       eventSigningSeedB64url: creatorSession.eventSigningSeedB64url,
       grantId: creatorSession.grantId,
       accountId: creatorSession.accountId,
+      principalControlRealmId: creatorSession.principalControlRealmId,
       grantAudience: creatorSession.grantAudience,
       recoveryKey: creatorSession.recoveryKey,
       recoveryMaterialEvidence: creatorSession.recoveryMaterialEvidence,

@@ -114,6 +114,8 @@ type OpenUserOpts = {
   grantId?: string;
   /// Exact Station account that issued the injected grant.
   accountId?: { principal_id: string; station_id: string };
+  /// Exact principal-control Realm created by the accepted PCR genesis unit.
+  principalControlRealmId?: string;
   /// Audience the grant is bound to (the soland service DID).
   grantAudience?: string;
   recoveryKey?: string;
@@ -2067,6 +2069,7 @@ export async function openDpopUserPageFromSession(
     eventSigningSeedB64url: session.eventSigningSeedB64url,
     grantId: session.grantId,
     accountId: session.accountId,
+    principalControlRealmId: session.principalControlRealmId,
     grantAudience: session.grantAudience,
     recoveryKey: session.recoveryKey,
     recoveryMaterialEvidence: session.recoveryMaterialEvidence,
@@ -2111,9 +2114,13 @@ export async function openUser(
     sanitize(`${Date.now()}-${user.name}`),
   );
   fs.mkdirSync(diagnosticsDir, { recursive: true });
-  if (opts.grantJwt && opts.dpopSeedB64url && !opts.accountId) {
+  if (
+    opts.grantJwt &&
+    opts.dpopSeedB64url &&
+    (!opts.accountId || !opts.principalControlRealmId)
+  ) {
     throw new Error(
-      "Inkson test session injection requires the issuing account_id",
+      "Inkson test session injection requires account_id and principal_control_realm_id",
     );
   }
   const sessionInjection =
@@ -2170,6 +2177,7 @@ export async function openUser(
                 principal_id: user.id,
                 station_id: solandServiceId(opts.server),
               },
+              principal_control_realm_id: opts.principalControlRealmId,
               resolution,
               device_id: user.deviceId,
               server_url: serverUrl,

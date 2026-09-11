@@ -724,6 +724,7 @@ async function openDpopDeviceForAccount(
     recoveryMaterialEvidence: session.recoveryMaterialEvidence,
     grantId: session.grantId,
     accountId: session.accountId,
+    principalControlRealmId: session.principalControlRealmId,
     grantAudience: session.grantAudience,
     autoCompleteRecoveryKeySetup,
   });
