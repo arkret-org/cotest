@@ -713,7 +713,7 @@ fn build_pcr_genesis_unit(
         )?);
     let authorize_payload_value = serde_json::to_value(&authorize_payload)?;
     let founding_notary = arkret::NotaryValue::new(
-        vec![arkret::NotarySignerDescriptor {
+        arkret::NotarySignerDescriptor {
             actor_id: arkret::ActorId::account(arkret::AccountId::new(
                 principal_id.clone(),
                 station_id.clone(),
@@ -723,11 +723,7 @@ fn build_pcr_genesis_unit(
             key_kind: arkret::NotaryKeyKind::Ed25519Raw32,
             jose_algorithm: arkret::NotaryJoseAlgorithm::Ed25519,
             frozen_public_key_b64u: arkret::base64url_encode(device_public_key_bytes),
-            frozen_public_key_digest: arkret::Hash::new(
-                arkret_canonical::canonical::sha256_digest(device_public_key_bytes),
-            )?,
-        }],
-        0,
+        },
         0,
     )?;
     let descriptor = arkret_models_collaboration::events_payloads::FoundingDeviceDescriptor {

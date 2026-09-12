@@ -330,10 +330,6 @@ fn test_service_notary_signer(
         key_kind: arkret_wire::NotaryKeyKind::Ed25519Raw32,
         jose_algorithm: arkret_wire::NotaryJoseAlgorithm::Ed25519,
         frozen_public_key_b64u: URL_SAFE_NO_PAD.encode(public_key),
-        frozen_public_key_digest: arkret_wire::Hash::new(format!(
-            "sha256:{}",
-            hex::encode(Sha256::digest(public_key))
-        ))?,
     };
     descriptor.validate()?;
     Ok(descriptor)

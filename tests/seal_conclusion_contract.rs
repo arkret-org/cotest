@@ -68,18 +68,13 @@ fn conclusion_query_round_trips_through_the_sdk_resolve_contract() {
     );
     let public_key = key.verifying_key().to_bytes();
     let configuration = NotaryValue::new(
-        vec![NotarySignerDescriptor {
+        NotarySignerDescriptor {
             actor_id: ActorId::service(DidCoreId::new("ak:did_core:web:notary.example").unwrap()),
             verification_method,
             key_kind: NotaryKeyKind::Ed25519Raw32,
             jose_algorithm: NotaryJoseAlgorithm::Ed25519,
             frozen_public_key_b64u: arkret::base64url_encode(public_key),
-            frozen_public_key_digest: Hash::new(arkret_canonical::canonical::sha256_digest(
-                public_key,
-            ))
-            .unwrap(),
-        }],
-        0,
+        },
         0,
     )
     .unwrap();

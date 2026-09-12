@@ -318,7 +318,7 @@ pub fn realm_create_payload_with_notary(
         arkret_models_collaboration::governance::plaintext_visibility::PlaintextVisibleServicesPayload::new(services)
     });
 
-    let notary = arkret_wire::notary::NotaryValue::new(vec![notary_signer], 0, 0)?;
+    let notary = arkret_wire::notary::NotaryValue::new(notary_signer, 0)?;
     let genesis_salt = input
         .get("genesis_salt")
         .and_then(Value::as_str)

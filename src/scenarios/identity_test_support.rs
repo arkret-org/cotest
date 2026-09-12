@@ -749,7 +749,7 @@ async fn bootstrap_test_device_authorization(
             station_id: server.service_id().clone(),
             principal_did: principal.clone(),
             notary: arkret_wire::NotaryValue::new(
-                vec![arkret_wire::NotarySignerDescriptor {
+                arkret_wire::NotarySignerDescriptor {
                     actor_id: arkret_wire::ActorId::account(arkret_wire::AccountId::new(
                         principal_actor_id.clone(),
                         server.service_id().clone(),
@@ -759,13 +759,7 @@ async fn bootstrap_test_device_authorization(
                     jose_algorithm: arkret_wire::NotaryJoseAlgorithm::Ed25519,
                     frozen_public_key_b64u: URL_SAFE_NO_PAD
                         .encode(device_signing_key.verifying_key().as_bytes()),
-                    frozen_public_key_digest: Hash::new(
-                        arkret_canonical::canonical::sha256_digest(
-                            device_signing_key.verifying_key().as_bytes(),
-                        ),
-                    )?,
-                }],
-                0,
+                },
                 0,
             )?,
             initial_resolution: arkret_models_identity::ResolutionCommitment {
