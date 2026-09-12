@@ -46,6 +46,16 @@ pub fn run_cbs_lattice_fixture_suite() -> Result<()> {
             .and_then(Value::as_str)
             == Some("ak.suite.authz.cbs_lattice.v1")
     );
+    let notes = fixture
+        .get("notes")
+        .and_then(Value::as_array)
+        .context("CBS state model fixture omits notes[]")?;
+    ensure!(notes.iter().any(|note| {
+        note.as_str()
+            == Some(
+                "No ordinary Event requires a fresh Seal, origin countersignature or periodic lease.",
+            )
+    }));
     let vectors = fixture
         .get("vectors")
         .and_then(Value::as_array)

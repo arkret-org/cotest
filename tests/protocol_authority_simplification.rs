@@ -1,5 +1,6 @@
 use arkret_event_draft::TypedEventDraft;
 use arkret_models_collaboration::events_payloads::{ContentBlock, MessageCreatePayload};
+use arkret_schema::EventSchemaExt as _;
 use arkret_wire::{
     AccountId, ActorId, AuthContext, Did, DidCoreId, DidUrl, Event, Hash, Hlc, ProducerEventProof,
     RealmId, ScopeRef, SealId, StrandId, event_spec, project_did_to_core_id,
@@ -80,18 +81,29 @@ fn ordinary_event_is_producer_only_and_portably_authorized() {
     let event = producer_event();
     assert_eq!(event.proofs.len(), 1);
     assert!(event.seal_basis.is_none());
+    event.validate_for_submit().unwrap();
+    let wire = serde_json::to_value(&event).unwrap();
+    assert!(wire.get("seal_basis").is_none());
+    assert!(wire.get("seal_ref").is_none());
+    assert!(
+        wire["proofs"][0]
+            .get("signer_resolution_evidence_ref")
+            .is_some()
+    );
+    assert!(wire["proofs"][0].get("expires_at").is_none());
     event
         .validate_proof_bindings_with_digest_suite(arkret_canonical::DigestSuite::Sha256)
         .unwrap();
-    event.auth_context.as_ref().unwrap().validate().unwrap();
 
     let mut missing_evidence = event.clone();
     missing_evidence.proofs[0].signer_resolution_evidence_ref = None;
-    assert!(
-        missing_evidence
-            .validate_proof_bindings_with_digest_suite(arkret_canonical::DigestSuite::Sha256)
-            .is_err()
-    );
+    // The proof-only pass verifies the digest binding and intentionally has no
+    // submit-context policy. The complete SDK submit gate owns the ordinary
+    // Event requirement for portable signer evidence.
+    missing_evidence
+        .validate_proof_bindings_with_digest_suite(arkret_canonical::DigestSuite::Sha256)
+        .unwrap();
+    assert!(missing_evidence.validate_for_submit().is_err());
 
     let mut unsorted_authority = event;
     unsorted_authority
@@ -100,7 +112,7 @@ fn ordinary_event_is_producer_only_and_portably_authorized() {
         .unwrap()
         .authority_refs
         .reverse();
-    assert!(unsorted_authority.auth_context.unwrap().validate().is_err());
+    assert!(unsorted_authority.validate_for_submit().is_err());
 }
 
 #[test]
