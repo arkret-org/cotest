@@ -591,30 +591,21 @@ function serviceCoreIdToDid(serviceId: string): string {
   throw new Error(`no fixture DID is registered for service id ${serviceId}`);
 }
 
-// `realm.schema.json` notary: `kind` is the sole discriminator and every signer
-// is a frozen descriptor (exact verification method, key kind, JOSE alg and key
-// digest). The Realm names the Station's own notary key, so the
-// descriptor is derived from the same development seed soland freezes into
-// `service_notary_signer_descriptor()`. No controlling organization is derived
-// for the development deployment. The one-replica quorum has f=0.
-export function singleReplicaNotaryFromDid(
+// The Realm freezes its sole Station authority's exact signer descriptor.
+// Development fixtures derive the same notary key as the configured service.
+export function stationNotaryFromDid(
   did: string,
 ): RealmObject["notary"] {
   const actorId = projectDidToCoreId(did);
   const publicKey = serviceNotaryPublicKey(actorId);
   return {
-    kind: "quorum",
-    signers: [{
+    signer: {
       actor_id: serviceActorId(actorId),
       verification_method: `${did}#notary-key`,
       key_kind: "ed25519_raw32",
       jose_algorithm: "Ed25519",
       frozen_public_key_b64u: publicKey.toString("base64url"),
-      frozen_public_key_digest: `sha256:${createHash("sha256")
-        .update(publicKey)
-        .digest("hex")}`,
-    }],
-    fault_tolerance: 0,
+    },
     max_clock_error_ms: 1000,
   };
 }
@@ -740,7 +731,7 @@ export async function createRealmApi(
     // This helper creates Station-hosted collaboration Realms. The
     // service owns the notary key and confirms the Realm's security commands;
     // the principal remains the Realm creator and root authority-cell controller.
-    notary: singleReplicaNotaryFromDid(solandServiceDid(opts.server)),
+    notary: stationNotaryFromDid(solandServiceDid(opts.server)),
     // Create-locked (realm-and-space.md section 2.5): the reducer copies this
     // into the Realm authority-root cell, which is what gives the creator
     // effective `ak.realm.owner`. v1 issues no genesis self-grant.
@@ -2594,7 +2585,7 @@ async function issueControlProposalAckApi(
   authorizationLease: Record<string, unknown> | undefined,
   server: SolandKey | undefined,
   context: string,
-): Promise<Record<string, unknown> | undefined> {
+): Promise<EventFederationSubmission["control_proposal_ack"]> {
   // In the Standard submission context, seal_basis distinguishes an ordinary
   // non-genesis Control Move from an ordinary Event. Native PCR units are filtered by
   // their batch caller and must never enter this operation.
@@ -2625,23 +2616,16 @@ async function issueControlProposalAckApi(
     `${context} Control Proposal Ack issuance returned ${response.status()}: ${text}`,
   ).toContain(response.status());
   const body = parseJsonOrRaw(text) as Record<string, unknown>;
-  const member = body.authority_ack as Record<string, unknown> | undefined;
-  if (!member) {
+  const ack = body.authority_ack as EventFederationSubmission["control_proposal_ack"];
+  if (!ack) {
     throw new Error(
       `${context} Control Proposal Ack issuance omitted authority_ack`,
     );
   }
-  return {
-    kind: "signed_ack",
-    realm_id: member.realm_id,
-    proposal_digest: member.proposal_digest,
-    received_at: member.received_at,
-    decision_due_at: member.decision_due_at,
-    absolute_due_at: member.absolute_due_at,
-    defer_count: 0,
-    authority_set_ref: member.authority_set_ref,
-    authority_acks: [member],
-  };
+  expect(ack.kind, `${context} Ack kind`).toBe("signed_ack");
+  expect(ack.realm_id, `${context} Ack Realm`).toBe(event.realm_id);
+  expect(ack.signature, `${context} Ack signature`).toBeDefined();
+  return ack;
 }
 
 function isAuthorityAuthoredSelfPrincipalMove(
@@ -2931,7 +2915,7 @@ export async function readRealmSealBasis(
 }
 
 // Local projection of the registered `RealmSealFrontierView`: the single
-// accepted leaf of a single-replica quorum test Realm, plus the roots the caller
+// accepted leaf of a single-authority test Realm, plus the roots the caller
 // recomputes from that resolved leaf Seal, plus a flat pending-digest list.
 //
 // The view itself carries no root hint — `event-auth-state-resolution.md`

@@ -897,8 +897,7 @@ export type RealmObject = {
   };
   "digest_algorithm"?: "sha256" | "blake3";
   "notary": {
-    "kind": "quorum";
-    "signers": Array<{
+    "signer": {
       "actor_id": {
         "kind": "account";
         "account_id": {
@@ -913,7 +912,6 @@ export type RealmObject = {
       "key_kind": "ed25519_raw32";
       "jose_algorithm": "Ed25519";
       "frozen_public_key_b64u": string;
-      "frozen_public_key_digest": string;
     } | {
       "actor_id": {
         "kind": "account";
@@ -929,9 +927,7 @@ export type RealmObject = {
       "key_kind": "p256_sec1_compressed33";
       "jose_algorithm": "ES256";
       "frozen_public_key_b64u": string;
-      "frozen_public_key_digest": string;
-    }>;
-    "fault_tolerance": number;
+    };
     "max_clock_error_ms": number;
   };
   "proposal_intake_sla_ms"?: number;
@@ -2656,20 +2652,12 @@ export type RealmSealFrontierView = {
         "absolute_due_at": string;
         "defer_count": 0;
         "authority_set_ref": string;
-        "authority_acks": Array<{
-          "realm_id": string;
-          "proposal_digest": string;
-          "received_at": string;
-          "decision_due_at": string;
-          "absolute_due_at": string;
-          "authority_set_ref": string;
-          "signature": {
-            "verification_method": string;
-            "payload_digest": string;
-            "created_at": string;
-            "jws": string;
-          };
-        }>;
+        "signature": {
+          "verification_method": string;
+          "payload_digest": string;
+          "created_at": string;
+          "jws": string;
+        };
       };
       "decisions": Array<{
         "kind": "signed_defer";
@@ -2680,14 +2668,14 @@ export type RealmSealFrontierView = {
         "decision_due_at": string;
         "absolute_due_at": string;
         "defer_count": number;
-        "reason_code": string;
+        "reason_code": "dependency_missing" | "temporarily_unavailable";
         "authority_set_ref": string;
-        "proofs": Array<{
+        "proof": {
           "verification_method": string;
           "payload_digest": string;
           "created_at": string;
           "jws": string;
-        }>;
+        };
       }>;
       "decision_state": "pending" | "deferred" | "overdue";
       "fault_reason"?: "control_proposal_decision_overdue";
@@ -2712,20 +2700,12 @@ export type RealmSealFrontierView = {
           "absolute_due_at": string;
           "defer_count": 0;
           "authority_set_ref": string;
-          "authority_acks": Array<{
-            "realm_id": string;
-            "proposal_digest": string;
-            "received_at": string;
-            "decision_due_at": string;
-            "absolute_due_at": string;
-            "authority_set_ref": string;
-            "signature": {
-              "verification_method": string;
-              "payload_digest": string;
-              "created_at": string;
-              "jws": string;
-            };
-          }>;
+          "signature": {
+            "verification_method": string;
+            "payload_digest": string;
+            "created_at": string;
+            "jws": string;
+          };
         };
         "status": "revocation_pending";
         "decision_state": "pending" | "deferred" | "overdue";
@@ -2739,14 +2719,14 @@ export type RealmSealFrontierView = {
           "decision_due_at": string;
           "absolute_due_at": string;
           "defer_count": number;
-          "reason_code": string;
+          "reason_code": "dependency_missing" | "temporarily_unavailable";
           "authority_set_ref": string;
-          "proofs": Array<{
+          "proof": {
             "verification_method": string;
             "payload_digest": string;
             "created_at": string;
             "jws": string;
-          }>;
+          };
         }>;
         "fault_reason"?: "control_proposal_decision_overdue";
         [key: string]: unknown;
@@ -3005,20 +2985,12 @@ export type EventFederationSubmission = {
     "absolute_due_at": string;
     "defer_count": 0;
     "authority_set_ref": string;
-    "authority_acks": Array<{
-      "realm_id": string;
-      "proposal_digest": string;
-      "received_at": string;
-      "decision_due_at": string;
-      "absolute_due_at": string;
-      "authority_set_ref": string;
-      "signature": {
-        "verification_method": string;
-        "payload_digest": string;
-        "created_at": string;
-        "jws": string;
-      };
-    }>;
+    "signature": {
+      "verification_method": string;
+      "payload_digest": string;
+      "created_at": string;
+      "jws": string;
+    };
   };
   "ackless_self_principal_admission_evidence"?: {
     "device_id": string;

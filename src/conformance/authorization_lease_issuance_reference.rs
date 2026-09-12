@@ -49,7 +49,7 @@ struct Request {
     targets: Vec<String>,
     basis_kind: String,
     basis_current: bool,
-    authority_quorum_satisfied: bool,
+    frozen_authority_verified: bool,
 }
 
 #[derive(Serialize)]
@@ -76,7 +76,7 @@ impl Issuer {
                 Err("duplicate_conflict".to_owned())
             };
         }
-        if !request.basis_current || !request.authority_quorum_satisfied {
+        if !request.basis_current || !request.frozen_authority_verified {
             return Err("failed_precondition".to_owned());
         }
         if request.targets.is_empty() || request.targets.len() > 500 {
@@ -161,7 +161,7 @@ fn run_case(case: &Value) -> Result<ReferenceProjection, String> {
                 targets: (0..count).map(|index| format!("event-{index}")).collect(),
                 basis_kind: "seal".to_owned(),
                 basis_current: true,
-                authority_quorum_satisfied: true,
+                frozen_authority_verified: true,
             };
             let mut issuer = Issuer::default();
             let first = issuer.issue("idem-accepted", &request)?;
@@ -189,7 +189,7 @@ fn run_case(case: &Value) -> Result<ReferenceProjection, String> {
                 targets: vec!["event-a".to_owned()],
                 basis_kind: "seal".to_owned(),
                 basis_current: true,
-                authority_quorum_satisfied: true,
+                frozen_authority_verified: true,
             };
             issuer.issue("idem-conflict", &request)?;
             request.targets[0] = "event-b".to_owned();
@@ -210,7 +210,7 @@ fn run_case(case: &Value) -> Result<ReferenceProjection, String> {
                 targets: targets.clone(),
                 basis_kind: "anchor_unit".to_owned(),
                 basis_current: true,
-                authority_quorum_satisfied: true,
+                frozen_authority_verified: true,
             };
             let mut issuer = Issuer::default();
             let result = issuer.issue("idem-anchor", &request);
@@ -236,9 +236,9 @@ fn run_case(case: &Value) -> Result<ReferenceProjection, String> {
                 Ok(projection(name, "reject", Some("failed_precondition")))
             }
         }
-        "stale_basis_and_quorum_failure_fail_closed" => {
+        "stale_basis_and_authority_failure_fail_closed" => {
             let accepted =
-                boolean(case, "/basis_current")? && boolean(case, "/authority_quorum_satisfied")?;
+                boolean(case, "/basis_current")? && boolean(case, "/frozen_authority_verified")?;
             let decision = if accepted { "issue" } else { "reject" };
             if text(case, "/expected/decision")? != decision
                 || boolean(case, "/expected/network_submit_attempted")? != accepted
