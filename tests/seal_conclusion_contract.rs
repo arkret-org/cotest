@@ -1,9 +1,9 @@
 use arkret::{
     ActorId, CellRef, Did, DidCoreId, DidUrl, Ed25519PayloadSigner, EventId, Hash,
     NotaryJoseAlgorithm, NotaryKeyKind, NotarySignerDescriptor, NotaryValue,
-    PeerSealResolveRequestBody, RealmId, SealConclusionAncestryResult,
-    SealConclusionAncestrySelector, SealConclusionAncestrySelectorKind, SealConclusionQuery,
-    SealConclusionResult, SealConclusionSelector, SealConclusionSet, SealConclusionStatement,
+    PeerSealResolveRequestBody, RealmId, SealConclusionAncestryOutcome,
+    SealConclusionAncestrySelector, SealConclusionAncestrySelectorKind, SealConclusionOutcome,
+    SealConclusionQuery, SealConclusionSelector, SealConclusionSet, SealConclusionStatement,
     SealId, SealResolveOutcome, SealResolveSelection, sign_seal_conclusion,
     verify_seal_conclusion_set_quorum_chain,
 };
@@ -53,6 +53,9 @@ fn conclusion_query_round_trips_through_the_sdk_resolve_contract() {
     assert!(wire.get("seal_refs").is_none());
     let decoded: PeerSealResolveRequestBody = serde_json::from_value(wire).unwrap();
     assert_eq!(decoded, request);
+    let mut unknown = serde_json::to_value(&request).unwrap();
+    unknown["unregistered"] = json!(true);
+    assert!(serde_json::from_value::<PeerSealResolveRequestBody>(unknown).is_err());
 
     let configuration_ref =
         EventId::new("ak:event:AUf4Nwr-Lqj1RlqDi4awPbskicm37buT2CswWBfZbgLe").unwrap();
@@ -85,8 +88,8 @@ fn conclusion_query_round_trips_through_the_sdk_resolve_contract() {
         configuration_ref: configuration_ref.clone(),
         authority_seal_ref: seal('c'),
         target_seal_ref: seal('b'),
-        results: vec![SealConclusionResult::Ancestry(
-            SealConclusionAncestryResult {
+        results: vec![SealConclusionOutcome::Ancestry(
+            SealConclusionAncestryOutcome {
                 selector: SealConclusionAncestrySelector {
                     kind: SealConclusionAncestrySelectorKind::Ancestry,
                     ancestor_seal_ref: seal('a'),
@@ -112,6 +115,15 @@ fn conclusion_query_round_trips_through_the_sdk_resolve_contract() {
         missing_conclusion_queries: vec![],
     };
     outcome.validate_for_peer_request(&request).unwrap();
+    assert!(outcome.clone().into_seals().is_err());
+    let mut other_realm_request = request;
+    other_realm_request.realm_id =
+        RealmId::new("ak:realm:AdkQ-RmB1a8zyc52yl9GWAsodQ_EUle1WAVZqbO7pc19").unwrap();
+    assert!(
+        outcome
+            .validate_for_peer_request(&other_realm_request)
+            .is_err()
+    );
 }
 
 #[test]
@@ -122,6 +134,22 @@ fn conclusion_query_rejects_ambiguous_modes_and_invalid_ranges() {
         "conclusion_queries": [ancestry_query()]
     });
     assert!(serde_json::from_value::<PeerSealResolveRequestBody>(both_modes).is_err());
+    for invalid in [
+        json!({"realm_id": realm(), "seal_refs": null}),
+        json!({"realm_id": realm(), "conclusion_queries": null}),
+        json!({"realm_id": realm(), "seal_refs": [seal('a')], "conclusion_queries": null}),
+        json!({"realm_id": realm(), "seal_refs": [seal('a')], "history_traversal_access": null}),
+    ] {
+        assert!(serde_json::from_value::<PeerSealResolveRequestBody>(invalid).is_err());
+    }
+    let raw = json!({"realm_id": realm(), "seal_refs": [seal('a')]});
+    assert!(serde_json::from_value::<arkret::SelfSealResolveRequestBody>(raw.clone()).is_ok());
+    assert!(
+        serde_json::from_value::<arkret_models_collaboration::http_bodies::SealResolveRequestCore>(
+            raw
+        )
+        .is_ok()
+    );
 
     let empty = SealResolveOutcome::Conclusions {
         conclusion_set: None,
@@ -149,4 +177,35 @@ fn conclusion_query_rejects_ambiguous_modes_and_invalid_ranges() {
         upper_cell_id: upper,
     };
     assert!(invalid_range.validate_structural().is_err());
+}
+
+#[test]
+fn conclusion_request_enforces_the_complete_wire_byte_budget() {
+    let selectors = (0..64)
+        .map(|index| SealConclusionSelector::Cell {
+            cell_id: CellRef::new(format!(
+                "ak:cell:ak.component.call.state.v1:{index:02}{}",
+                "a".repeat(1024)
+            ))
+            .unwrap(),
+        })
+        .collect();
+    let request = PeerSealResolveRequestBody {
+        realm_id: realm(),
+        selection: SealResolveSelection::ConclusionQueries {
+            conclusion_queries: vec![SealConclusionQuery {
+                target_seal_ref: seal('a'),
+                selectors,
+                known_configuration_ref: None,
+            }],
+        },
+        history_traversal_access: None,
+    };
+    assert!(
+        request
+            .validate()
+            .unwrap_err()
+            .to_string()
+            .contains("limit_exceeded")
+    );
 }

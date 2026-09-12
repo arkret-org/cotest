@@ -279,16 +279,14 @@ impl TestActorClient {
             Did::new(self.actor.clone())?,
             verification_method.clone(),
         );
-        let event_id = event.event_id().clone();
+        let signer_evidence_ref =
+            crate::fixture_signer_evidence_ref(format!("contact:{}", event.event_id()));
         arkret_signatures::sign_event(
             &mut event,
             &signer,
             &verification_method,
-            arkret_signatures::SignEventOptions::new(crate::fixture_signer_evidence_ref(format!(
-                "contact:{}",
-                event_id
-            )))
-            .with_created_at(created_at),
+            arkret_signatures::SignEventOptions::new(signer_evidence_ref)
+                .with_created_at(created_at),
         )?;
         if Hash::new(event.event_digest_with_digest_suite(draft.event_digest.digest_suite()?)?)?
             != draft.event_digest
