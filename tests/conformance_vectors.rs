@@ -518,6 +518,44 @@ fn agent_payloads_fixture_loads_and_has_canonical_shape() {
     }
 }
 
+#[test]
+fn agent_approval_cannot_admit_a_payload_without_its_publication_event() {
+    let fixture = load_local_fixture_value("agent_payloads.json").unwrap();
+    let case = fixture["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|case| case["name"] == "agent_action_approve_missing_publication_event")
+        .unwrap();
+    assert_eq!(case["expect"], "fail");
+    assert_eq!(case["reducer_input"], true);
+    let approval = arkret_wire::Event::new(
+        "ak.agent.action_approve",
+        arkret_wire::ScopeRef::Realm {
+            realm_id: serde_json::from_value(case["payload"]["target"]["realm_id"].clone())
+                .unwrap(),
+        },
+        arkret_wire::ActorId::service(
+            arkret_wire::DidCoreId::new("ak:did_core:web:controller.example").unwrap(),
+        ),
+        1,
+        arkret_wire::Hlc::new("000000000001-0000-00000000").unwrap(),
+        case["payload"].clone(),
+    )
+    .unwrap();
+    let error = arkret_wire::event_submission::validate_approval_publication_event(
+        &approval,
+        None,
+        arkret_canonical::DigestSuite::Sha256,
+    )
+    .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("publication_event is required exactly")
+    );
+}
+
 // ─── P0 / TEST-4 — Cursor opaque round-trip + stateless-under-core reject ──
 
 #[test]

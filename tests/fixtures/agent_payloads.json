@@ -87,10 +87,10 @@
       "expect": "pass"
     },
     {
-      "name": "agent_action_approve_actor_private",
+      "name": "agent_action_approve_missing_publication_event",
       "event_kind": "ak.agent.action_approve",
       "payload_def_ref": "agent_action_approve_payload",
-      "reducer_input": false,
+      "reducer_input": true,
       "payload": {
         "approval_id": "ak:agent_draft:01999999-0000-7000-8000-00000000c004",
         "request_id": "ak:agent_draft:01999999-0000-7000-8000-00000000c002",
@@ -100,12 +100,13 @@
           "kind": "realm",
           "realm_id": "ak:realm:AbL8oOUkpZusQ-VqkYVKoKNNlWviopqGNtOPvbl98WW4"
         },
-        "approved_payload_digest": "sha256:2123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "approved_event_id": "ak:event:AbL8oOUkpZusQ-VqkYVKoKNNlWviopqGNtOPvbl98WW4",
         "approval_nonce": "agent-approval-nonce-1",
         "approved_at": "2026-05-27T07:02:00.000Z",
         "expires_at": "2026-05-27T07:12:00.000Z"
       },
-      "expect": "pass"
+      "expect": "fail",
+      "reason": "missing_publication_event"
     },
     {
       "name": "agent_action_reject_actor_private",
