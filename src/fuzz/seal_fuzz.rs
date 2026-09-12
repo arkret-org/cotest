@@ -12,6 +12,7 @@ use arbitrary::{Arbitrary, Unstructured};
 use arkret_wire::SchemaId;
 use serde_json::{Value, json};
 
+use super::envelope_fuzz::ArbValue;
 use super::panic_guard::catch;
 
 fn registry() -> arkret_schema::ProtocolSchemaRegistry {
@@ -30,17 +31,18 @@ pub struct FuzzSealDeepInput {
     pub realm_id: String,
     pub control_event_set_root: String,
     pub state_root: String,
-    pub completeness_root: String,
     pub notary_seq: u64,
     pub sealed_at: String,
     pub hlc: String,
     pub include_signature: bool,
-    pub sig_value: String,
-    pub sig_key: String,
     pub include_predecessor: bool,
     pub delta_count: u8,
     pub predecessor_template: String,
     pub delta_template: String,
+    pub availability_receipt_digests: Vec<String>,
+    pub configuration_ref: String,
+    pub command_results: ArbValue,
+    pub notary_signature: ArbValue,
 }
 
 impl FuzzSealDeepInput {
@@ -60,16 +62,15 @@ impl FuzzSealDeepInput {
             "delta": delta,
             "control_event_set_root": self.control_event_set_root,
             "state_root": self.state_root,
-            "completeness_root": self.completeness_root,
             "notary_seq": self.notary_seq,
+            "availability_receipt_digests": self.availability_receipt_digests,
             "sealed_at": self.sealed_at,
             "hlc": self.hlc,
+            "configuration_ref": self.configuration_ref,
+            "command_results": self.command_results.0,
         });
         if self.include_signature {
-            envelope["notary_signature"] = json!({
-                "value": self.sig_value,
-                "key": self.sig_key,
-            });
+            envelope["notary_signature"] = self.notary_signature.0.clone();
         }
         envelope
     }

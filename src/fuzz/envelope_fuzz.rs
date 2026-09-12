@@ -39,8 +39,9 @@ fn registry() -> &'static ProtocolSchemaRegistry {
 // ── Event envelope ──────────────────────────────────────────────────────────
 
 /// `arbitrary`-derived input that mirrors the `Event` wire shape.
-/// All free-form fields (`payload`, `unsigned`, `proofs`, `refs`) use
-/// `ArbValue` so the deserializer sees realistic JSON variety.
+/// Free-form payload, proof, authorization-context and reference members use
+/// bounded arbitrary JSON so the deserializer sees realistic malformed and
+/// well-shaped container variants.
 #[derive(Debug, Arbitrary)]
 pub struct FuzzEventInput {
     pub event_id: String,
@@ -54,6 +55,8 @@ pub struct FuzzEventInput {
     pub prev_refs: Vec<String>,
     pub refs: Vec<ArbRefValue>,
     pub payload: ArbValue,
+    pub proofs: Vec<ArbValue>,
+    pub auth_context: Option<ArbValue>,
     /// A signed `scope_ref` is required on every v1 Event; a Circle scope
     /// exercises the second variant of the enum.
     pub scope_circle_id: Option<String>,
@@ -99,8 +102,11 @@ impl FuzzEventInput {
                 "critical": r.critical,
             })).collect::<Vec<_>>(),
             "payload": self.payload.0,
-            "proofs": [],
+            "proofs": self.proofs.iter().map(|proof| proof.0.clone()).collect::<Vec<_>>(),
         });
+        if let Some(auth_context) = &self.auth_context {
+            envelope["auth_context"] = auth_context.0.clone();
+        }
         if let Some(basis) = &self.seal_basis {
             envelope["seal_basis"] = basis.0.clone();
         }
@@ -137,10 +143,9 @@ pub fn fuzz_event_envelope(data: &[u8]) -> Result<(), String> {
 /// `arbitrary`-derived input that mirrors the encrypted-only `SignalEnvelope`
 /// wire (`zh/sync/signal.md` §1).
 ///
-/// This replaced the retired standalone `Move` wire in the fuzz rotation: v1
-/// has no Move envelope (a Control Move is an Event with `seal_basis`, now
-/// covered by [`FuzzEventInput`]), while `SignalEnvelope` is a genuinely new
-/// parser reachable from untrusted network input.
+/// A Control Move is covered by [`FuzzEventInput`] because it is an Event with
+/// `seal_basis`. `SignalEnvelope` has its own parser reachable from untrusted
+/// network input, so it gets a separate input shape here.
 #[derive(Debug, Arbitrary)]
 pub struct FuzzSignalInput {
     pub realm_id: String,
@@ -260,10 +265,12 @@ pub struct FuzzSealInput {
     pub delta: Vec<String>,
     pub control_event_set_root: String,
     pub state_root: String,
-    pub completeness_root: String,
     pub notary_seq: u64,
+    pub availability_receipt_digests: Vec<String>,
     pub sealed_at: String,
     pub hlc: String,
+    pub configuration_ref: String,
+    pub command_results: ArbValue,
     pub notary_signature: ArbValue,
 }
 
@@ -276,11 +283,13 @@ impl FuzzSealInput {
             "delta": self.delta,
             "control_event_set_root": self.control_event_set_root,
             "state_root": self.state_root,
-            "completeness_root": self.completeness_root,
             "notary_seq": self.notary_seq,
+            "availability_receipt_digests": self.availability_receipt_digests,
             "notary_signature": self.notary_signature.0,
             "sealed_at": self.sealed_at,
             "hlc": self.hlc,
+            "configuration_ref": self.configuration_ref,
+            "command_results": self.command_results.0,
         })
     }
 }

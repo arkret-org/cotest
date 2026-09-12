@@ -70,7 +70,7 @@ pub struct TestActorClient {
         std::sync::Arc<std::sync::Mutex<std::collections::BTreeMap<String, String>>>,
     /// Grants issued to this actor, keyed by Realm. Membership derives read
     /// access only (`capabilities.md` line 700); every write action still needs
-    /// a covering grant, which a DataEvent names in `refs[role=authorized_by]`.
+    /// a covering grant, which an ordinary Event names in `refs[role=authorized_by]`.
     pub(super) held_grants: HeldGrants,
 }
 
@@ -472,8 +472,8 @@ impl TestActorClient {
         let event_digest = event_id.event_digest();
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
         // A frontier read can fail for reasons that have nothing to do with Seal
-        // coverage -- a governance cell in the bottom state makes this endpoint
-        // answer 409 forever. Swallowing that made a permanent server-side
+        // coverage -- an ordinary causal-register Bottom diagnostic can make
+        // this endpoint answer 409. Swallowing that made a permanent server-side
         // rejection look byte-for-byte like "the Seal has not caught up yet",
         // so the last error is kept and reported with the timeout.
         let mut last_frontier_error: Option<String> = None;
@@ -684,7 +684,7 @@ impl TestActorClient {
         )?;
         let event_response = bootstrap["event_response"].clone();
         let strand_id = self.create_default_strand(realm_id.as_str()).await?;
-        // A DataEvent that writes a cell has to name a covering authority in
+        // An ordinary Event that writes a cell has to name a covering authority in
         // `refs[role=authorized_by]` / `authorization_ref`. For the creator that
         // authority is the Realm authority-root cell the create contract wrote,
         // not a grant id: v1 genesis issues no capability grant at all.
@@ -736,7 +736,7 @@ impl TestActorClient {
     /// Submit only the Realm bootstrap control batch.
     ///
     /// Durable convergence scenarios use this entry point so they can wait
-    /// for the bootstrap Seal before authoring their first DataEvent, without
+    /// for the bootstrap Seal before authoring their first ordinary Event, without
     /// racing the convenience helper's default Discussion Strand.
     pub async fn create_realm_bootstrap_with(&self, body: Value) -> Result<Value> {
         let draft = realm_create_payload_with_notary(
@@ -805,10 +805,16 @@ impl TestActorClient {
     /// wrong: the root path deliberately skips the per-cell grant search, so an
     /// Event carrying it is judged only by whether `ak.realm.owner` covers the
     /// kind at all.
-    fn stamp_authority(&self, event: &mut Event, realm_id: &str, kind: &str, is_data_event: bool) {
+    fn stamp_authority(
+        &self,
+        event: &mut Event,
+        realm_id: &str,
+        kind: &str,
+        is_ordinary_event: bool,
+    ) {
         let covering = self.covering_grants_for(realm_id, kind);
         if !covering.is_empty() {
-            if is_data_event {
+            if is_ordinary_event {
                 event.refs = covering
                     .into_iter()
                     .map(|grant_id| {
@@ -1037,15 +1043,15 @@ impl TestActorClient {
                 .collect(),
             causal_refs,
         );
-        let is_data_event = arkret_wire::EventKind::from(kind).is_data_plane();
-        if is_data_event {
+        let is_ordinary_event = arkret_wire::EventKind::from(kind).is_data_plane();
+        if is_ordinary_event {
             let seal_frontier = self.realm_seal_frontier(realm_id).await?;
             let state: arkret_models_collaboration::event_sync::SealFrontierState =
                 serde_json::from_value(seal_frontier.clone()).map_err(|error| {
                     anyhow!("invalid Realm frontier response `{seal_frontier}`: {error}")
                 })?;
             let frontier = state.frontier;
-            // Capability coverage is per DataEvent: the reducer checks that a
+            // Capability coverage is per ordinary Event: the reducer checks that a
             // named grant actually covers this action on this target.
             event.auth_context = Some(AuthContext {
                 key_id: arkret_wire::OpaqueLocalId::new("cotest").expect("cotest key id"),
@@ -1144,8 +1150,8 @@ impl TestActorClient {
         event.preconditions = merged;
         let event_kind = arkret_wire::EventKind::from(kind);
         let is_control_move = event_kind.is_control_plane();
-        let is_data_event = event_kind.is_data_plane();
-        if is_control_move || is_data_event {
+        let is_ordinary_event = event_kind.is_data_plane();
+        if is_control_move || is_ordinary_event {
             let seal_frontier = self.realm_seal_frontier(realm_id).await?;
             let state: arkret_models_collaboration::event_sync::SealFrontierState =
                 serde_json::from_value(seal_frontier.clone()).map_err(|error| {
@@ -1168,7 +1174,7 @@ impl TestActorClient {
             // admission regime. The self endpoint forbids Realm authority or
             // grant attribution on the signed Event.
             if kind != arkret_wire::event_kind_str::SELF_MODERATION_REPORT {
-                self.stamp_authority(&mut event, realm_id, kind, is_data_event);
+                self.stamp_authority(&mut event, realm_id, kind, is_ordinary_event);
             }
         }
         let (signing_seed, _) = event_signing_identity_for_device(&self.actor, &self.device_id);

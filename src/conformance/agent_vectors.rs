@@ -12,7 +12,7 @@
 //!   - `ak.vector.agent.session_grant.replay.v1`
 //!   - `ak.vector.agent_auth.human_approval_required.v1`
 //!
-//! These are SDK-pure wire-shape pins. Live reducer paths (FSM bottom =
+//! These are SDK-pure wire-shape pins. Live reducer paths (sequenced-state
 //! reject, deactivate-terminal, session-grant agent-branch acceptance
 //! matrix, replay-cache) land in soland P2-impl; this suite hard-fails
 //! on any registry-side drift today.
@@ -788,8 +788,8 @@ pub fn run_agent_repairing_supersede_vector() -> Result<()> {
     if renew_pairing_gate("deactivated") != Err(arkret_wire::ReasonCode::AGENT_DEACTIVATED) {
         bail!("renewing a deactivated agent must fail with agent_deactivated");
     }
-    // Runtime replacement is not a state transition: the FSM has no edge for
-    // it, so the status set is unchanged by opening a handle.
+    // Runtime replacement is not a lifecycle transition, so the ordered
+    // status value is unchanged by opening a handle.
     // Supersede filter: every prior key except the freshly authorized one is
     // revoked; re-authorizing the SAME key id is the same-key
     // re-authorization override and revokes nothing.
@@ -881,10 +881,11 @@ pub fn run_agent_longevity_no_expiry_vector() -> Result<()> {
     Ok(())
 }
 
-// ─── VECT-AG-3 — controller_lifecycle (agent FSM) ──────────────────────────
+// ─── VECT-AG-3 — controller_lifecycle transition rules ─────────────────────
 
-/// Minimal in-memory FSM mirroring the `ak.agent.{pause,resume,deactivate}`
-/// reducer contract: bottom = `reject`, deactivate is terminal.
+/// Minimal ordered transition table mirroring the
+/// `ak.agent.{pause,resume,deactivate}` sequenced-state reducer contract;
+/// deactivate is terminal.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum AgentState {
     Active,
@@ -906,7 +907,7 @@ fn agent_transition(state: AgentState, op: &str) -> std::result::Result<AgentSta
 }
 
 pub fn run_agent_controller_lifecycle_vector() -> Result<()> {
-    // Verify FSM op-id spelling first.
+    // Verify lifecycle op-id spelling first.
     for op in [
         arkret_wire::ServiceOperationId::SELF_AGENT_COMMAND_PAUSE_V1,
         arkret_wire::ServiceOperationId::SELF_AGENT_COMMAND_RESUME_V1,

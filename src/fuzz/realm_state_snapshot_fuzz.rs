@@ -15,6 +15,7 @@ use arbitrary::{Arbitrary, Unstructured};
 use arkret_wire::SchemaId;
 use serde_json::{Value, json};
 
+use super::envelope_fuzz::ArbValue;
 use super::panic_guard::catch;
 
 fn registry() -> arkret_schema::ProtocolSchemaRegistry {
@@ -29,44 +30,47 @@ fn registry() -> arkret_schema::ProtocolSchemaRegistry {
 /// realistic structural shape, while values are random.
 #[derive(Debug, Arbitrary)]
 pub struct FuzzRealmStateSnapshotManifestInput {
-    pub realm_state_snapshot_id: String,
+    pub id: String,
     pub realm_id: String,
-    pub root_anchor_ref: String,
-    pub chunk_count: u32,
-    pub total_bytes: u64,
-    pub digest_algorithm: String,
-    pub digest_value: String,
-    pub hlc_physical_ms: u64,
-    pub hlc_logical: u32,
-    pub include_predecessor: bool,
-    pub predecessor_ref: String,
+    pub reducer_profile: String,
+    pub security_class: String,
+    pub schema_profile_refs: Vec<String>,
+    pub state_digest: String,
+    pub frontier: ArbValue,
+    pub event_set_commitment: ArbValue,
+    pub chunks: ArbValue,
+    pub created_by: String,
+    pub created_at: String,
+    pub authority_binding: ArbValue,
+    pub signature: ArbValue,
+    pub eligibility_context: ArbValue,
 }
 
 impl FuzzRealmStateSnapshotManifestInput {
     fn to_json(&self) -> Value {
-        let mut envelope = json!({
-            "realm_state_snapshot_id": self.realm_state_snapshot_id,
+        json!({
+            "id": self.id,
             "realm_id": self.realm_id,
-            "root_anchor_ref": self.root_anchor_ref,
-            "chunk_count": self.chunk_count,
-            "total_bytes": self.total_bytes,
-            "digest": format!("{}:{}", self.digest_algorithm, self.digest_value),
-            "hlc": {
-                "physical_ms": self.hlc_physical_ms,
-                "logical": self.hlc_logical,
-            },
-        });
-        if self.include_predecessor {
-            envelope["predecessor_ref"] = Value::String(self.predecessor_ref.clone());
-        }
-        envelope
+            "reducer_profile": self.reducer_profile,
+            "security_class": self.security_class,
+            "schema_profile_refs": self.schema_profile_refs,
+            "state_digest": self.state_digest,
+            "frontier": self.frontier.0,
+            "event_set_commitment": self.event_set_commitment.0,
+            "chunks": self.chunks.0,
+            "created_by": self.created_by,
+            "created_at": self.created_at,
+            "authority_binding": self.authority_binding.0,
+            "signature": self.signature.0,
+            "eligibility_context": self.eligibility_context.0,
+        })
     }
 }
 
 /// Fuzz the snapshot manifest envelope.
 pub fn fuzz_realm_state_snapshot_manifest(data: &[u8]) -> Result<(), String> {
     catch(|| {
-        let _ = serde_json::from_slice::<Value>(data);
+        let _ = serde_json::from_slice::<arkret_state::RealmStateSnapshotManifest>(data);
     })?;
     let mut unstructured = Unstructured::new(data);
     let Ok(input) = FuzzRealmStateSnapshotManifestInput::arbitrary(&mut unstructured) else {
@@ -77,7 +81,7 @@ pub fn fuzz_realm_state_snapshot_manifest(data: &[u8]) -> Result<(), String> {
         let _ = registry().validate_value(SchemaId::REALM_STATE_SNAPSHOT_V1, &value);
     })?;
     catch(|| {
-        let _ = serde_json::to_string(&value);
+        let _ = serde_json::from_value::<arkret_state::RealmStateSnapshotManifest>(value.clone());
     })
 }
 

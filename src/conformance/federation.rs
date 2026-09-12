@@ -478,7 +478,7 @@ fn validate_seal_prerequisite_closure_case(case: &super::NamedCase) -> Result<()
     const EXPECTED: &[(&str, &str)] = &[
         (
             "complete_control_seal_data_closure",
-            "control_and_basis_seals_resolved_topologically_then_data_events_verified",
+            "control_and_basis_seals_resolved_topologically_then_ordinary_events_verified",
         ),
         (
             "missing_control_seal_basis_leaf",
@@ -508,8 +508,8 @@ fn validate_seal_prerequisite_closure_case(case: &super::NamedCase) -> Result<()
             "request_schema_violation_without_receiver_reordering",
         ),
         (
-            "same_batch_unsealed_grant_then_data_event",
-            "grant_not_visible_for_data_event_authorization",
+            "same_batch_unsealed_grant_then_ordinary_event",
+            "grant_not_visible_for_ordinary_event_authorization",
         ),
         ("seal_transport", "no_actor_frontier_advance"),
     ];

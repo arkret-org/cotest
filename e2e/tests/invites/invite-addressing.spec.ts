@@ -113,7 +113,7 @@ async function readAcceptedInvite(
   const body = await response.json() as { events: Array<Record<string, unknown>> };
   const accepted = body.events.find(event => event.event_id === eventId);
   if (!accepted) throw new Error("source Station did not return the accepted invite Event");
-  expect(accepted.proofs, "producer proof followed by Station admission proof").toHaveLength(2);
+  expect(accepted.proofs, "exactly one portable producer proof").toHaveLength(1);
   return accepted;
 }
 
@@ -259,7 +259,7 @@ test.describe("invite addressing", () => {
   // reaches the same receive pipeline through
   // `ak.self.invites.command.dispatch.v1` (§7), covered below.
   test("peer invite delivery defers explicit_address evidence", async ({ request }) => {
-    // Use the source Station accepted Event with authentic producer/admission proofs.
+    // Use the source Station's accepted Event with its authentic producer proof.
     const fixture = await acceptedInviteFixture(request, "peer-explicit");
     const recipientServiceId = solandServiceId();
 
@@ -593,31 +593,25 @@ test.describe("invite addressing", () => {
     expect(realm.status(), "notification does not grant Realm read authority").toBe(404);
   });
 
-  for (const proofIndex of [0, 1]) {
-    test("notification rejects an invalid " + (proofIndex === 0 ? "producer" : "Station admission") + " signature", async ({ request }) => {
+  test("notification rejects an invalid producer signature", async ({ request }) => {
       test.skip(
         !hasServerCount(2),
         "requires two-server topology — pass -ServerCount 2 to scripts/run-joint-e2e.ps1",
       );
-      const fixture = await acceptedInviteFixture(request, "signature-" + proofIndex, "server2");
+      const fixture = await acceptedInviteFixture(request, "producer-signature", "server2");
       const event = structuredClone(fixture.inviteEvent);
       const proofs = event.proofs as Array<Record<string, unknown>>;
-      expect(proofs).toHaveLength(2);
-      const signature = proofs[proofIndex]!.jws as string;
+      expect(proofs).toHaveLength(1);
+      const signature = proofs[0]!.jws as string;
       const parts = signature.split(".");
       expect(parts).toHaveLength(3);
       parts[2] = (parts[2]![0] === "A" ? "B" : "A") + parts[2]!.slice(1);
-      proofs[proofIndex]!.jws = parts.join(".");
-      if (proofIndex === 0) {
-        // Preserve the structural binding so rejection reaches producer math verification.
-        proofs[1]!.producer_proof_digest = `sha256:${sha256CanonicalJson(proofs[0])}`;
-      }
+      proofs[0]!.jws = parts.join(".");
       const response = await rawSubmitPeerInviteDeliveryApi(
-        request, peerDeliveryBody(fixture, "bad-signature-" + proofIndex, event),
+        request, peerDeliveryBody(fixture, "bad-producer-signature", event),
         { origin: solandServiceId(), destination: solandServiceId("server2"), server: "server2" },
       );
       expect(await peerRejection(response)).toMatchObject({ status: 401, code: "signature_invalid" });
       await assertNoHolderPrivateWrite(request, fixture, "invalid notification signature", { server: "server2" });
     });
-  }
 });

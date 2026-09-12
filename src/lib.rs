@@ -270,7 +270,7 @@ pub fn fixture_notary_configuration(actor_id: arkret_wire::DidCoreId) -> arkret_
 }
 
 /// Build a deterministic content-addressed signer-evidence reference pair for
-/// Event fixtures that do not carry a Station admission proof.
+/// Event fixtures whose sole producer proof needs portable signer evidence.
 #[track_caller]
 pub fn fixture_signer_evidence_ref(label: impl AsRef<[u8]>) -> arkret_wire::SignerEvidenceRef {
     use sha2::{Digest, Sha256};

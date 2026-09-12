@@ -83,7 +83,6 @@ fn build_realm(
         fields: Default::default(),
         // `max_anchor_staleness_ms` was retired by the dual-plane split
         // without a direct replacement.
-        recovery_witness_freshness_window_ms: None,
         proposal_intake_sla_ms: None,
         proposal_decision_window_ms: None,
         proposal_absolute_deadline_ms: None,

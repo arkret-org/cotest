@@ -1410,7 +1410,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
     );
     await addRealmMemberApi(request, token, realmId, registration.bot_actor_id);
     const strandId = await resolveDefaultStrandId(request, token, realmId);
-    // Freeze the DataEvent basis only after installation grants, membership,
+    // Freeze the ordinary Event basis only after installation grants, membership,
     // and the target Strand have reached accepted control finality.
     await waitForRealmControlIdleApi(request, token, realmId);
     const sealBasis = await readRealmSealBasis(request, token, realmId);

@@ -1,7 +1,7 @@
 // Cross-server federation
 // Contract: e2e/scenarios/federation/cross-server.md
 // Spec refs:
-//   - sync/federation.md §2.1-§2.4 (trust roots, Anchor finality, profiles)
+//   - sync/federation.md §2.1-§2.4 (trust roots, Event verification, profiles)
 //   - §3.1-§3.2 DID server identity + RFC 9421 request signature
 //   - §4.1 push protocol, §4.1.0 push sequence
 //   - §4.2 pull / backfill, §4.5 fork detection / frontier exchange

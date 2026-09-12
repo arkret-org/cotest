@@ -2,7 +2,7 @@
 
 ## 目标
 
-验证在同一个 Station 上,三个 actor 完成「建 Realm → 邀请 → 接受 → 双向消息 → 编辑 / 撤回 / 反应 / 回复 → 晚到成员按 `history_access` 看到正确历史」的完整协作链路;过程中 anchor frontier 在所有成员之间收敛一致。
+验证在同一个 Station 上,三个 actor 完成「建 Realm → 邀请 → 接受 → 双向消息 → 编辑 / 撤回 / 反应 / 回复 → 晚到成员按 `history_access` 看到正确历史」的完整协作链路;过程中 accepted Event frontier 在所有成员之间收敛一致。
 
 不验证:跨服务器联邦 (见 federation/cross-server)、审核封禁 (见 spaces/moderation-ban)、第三方邮件邀请 (后续 invites/third-party)、设备授权 (后续 identity/account-device-auth)。
 
@@ -82,9 +82,9 @@
 17. **alice** 同步;原 `M2'` 卡片现在显示为 tombstone(不再显示原文)
 18. **carol** 不受影响 — 她本来就看不到 `M2'`
 
-### Phase E — 三方 anchor frontier 一致
+### Phase E — 三方 accepted Event frontier 一致
 
-19. 三方各调一次 `GET /_arkret/self/account/subscribe?catchup=true`(或读 `sync-cursor` testid),分别记录 anchor frontier
+19. 三方各调一次 `GET /_arkret/self/account/subscribe?catchup=true`(或读 `sync-cursor` testid),分别记录 accepted Event frontier
 20. 断言:三个 frontier 集合一致(忽略 carol 那侧因 history_access 被裁掉的部分,只比较 carol 可见的 `M3` 之后的 anchor 集合)
 
 ## Observable assertions (合并清单)
@@ -96,7 +96,7 @@
 - 步骤 13:carol 看不到加入前的消息(`timeline-event` 数 = 0 或仅 marker)
 - 步骤 15:carol 加入后的 `M3` 对所有三方可见
 - 步骤 17:redact 后 alice 看到 tombstone,carol 不受影响
-- 步骤 20:三方 anchor frontier 在可见集合上一致
+- 步骤 20:三方 accepted Event frontier 在可见集合上一致
 
 ## Edge cases / sub-tests
 

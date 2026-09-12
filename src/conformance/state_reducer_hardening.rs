@@ -6,7 +6,7 @@ use anyhow::{Result, anyhow, bail};
 use arkret_identifiers::{CellRef, EventId};
 use arkret_state::state::{EMPTY_STATE_ROOT, compute_state_root};
 use arkret_state::state_model::{ResolvedCellState, SequencedStateValue};
-use arkret_wire::{EventCellBottom, EventCellStateModel, EventKind};
+use arkret_wire::{CausalRegisterBottomPolicy, EventCellStateModel, EventKind};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -447,7 +447,7 @@ fn assert_strand_tracks_registry_binding() -> Result<()> {
             eventkind_strand_tracks_update = arkret_wire::event_kind_str::STRAND_TRACKS_UPDATE
         );
     }
-    if write.bottom != Some(EventCellBottom::Expose) {
+    if write.bottom != Some(CausalRegisterBottomPolicy::Expose) {
         bail!(
             "{eventkind_strand_tracks_update} bottom policy must remain expose",
             eventkind_strand_tracks_update = arkret_wire::event_kind_str::STRAND_TRACKS_UPDATE
@@ -547,9 +547,12 @@ fn cell_ref(raw: &str) -> Result<CellRef> {
 }
 
 fn revision_event_id(entry: &Value) -> Result<EventId> {
-    let digest = arkret_canonical::canonical_sha256(entry)?;
-    EventId::from_event_digest(&arkret_wire::Hash::new(digest)?)
-        .map_err(|error| anyhow!("fixture revision does not derive an Event id: {error}"))
+    let revision = entry
+        .get("revision_event_id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("state entry is missing its Event-identified revision_event_id"))?;
+    EventId::new(revision.to_owned())
+        .map_err(|error| anyhow!("fixture revision_event_id is invalid: {error}"))
 }
 
 fn is_tombstone_state(state: &ResolvedCellState) -> bool {

@@ -170,7 +170,7 @@ pub async fn two_ordinary_events_under_one_key_epoch_run() -> Result<()> {
     let (_, delta) = metrics
         .expect_no_additional_authority_calls(
             None,
-            "two ordinary DataEvents under one key epoch",
+            "two ordinary Events under one key epoch",
             || async {
                 alice
                     .send_message(&realm_id, &strand_id, "first ordinary Event")
@@ -183,10 +183,10 @@ pub async fn two_ordinary_events_under_one_key_epoch_run() -> Result<()> {
         )
         .await?;
 
-    assert_signature_counter_is_live(delta, "two ordinary DataEvents", 2)?;
+    assert_signature_counter_is_live(delta, "two ordinary Events", 2)?;
     if delta.signature_verify_count != 2 {
         bail!(
-            "two ordinary DataEvents: expected exactly 2 signature verifications \
+            "two ordinary Events: expected exactly 2 signature verifications \
              (one per Event, `verifier.rs` module doc), saw {}",
             delta.signature_verify_count
         );

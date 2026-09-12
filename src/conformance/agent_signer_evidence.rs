@@ -10,7 +10,7 @@ pub const AGENT_SIGNER_EVIDENCE_SUITE: &str = "ak.suite.agent.signer_evidence.v1
 
 pub const ALL_AGENT_SIGNER_EVIDENCE_CASES: &[&str] = &[
     "query_success_returns_cas_frozen_authenticated_root",
-    "current_stale_lease_is_unresolved",
+    "current_stale_attestation_is_unresolved",
     "current_paused_agent_rejected",
     "current_inactive_controller_account_rejected",
     "current_revoked_or_superseded_key_rejected",
@@ -40,7 +40,7 @@ pub const ALL_AGENT_SIGNER_EVIDENCE_CASES: &[&str] = &[
     "controller_device_binding_uses_authorization_event_admitted_key",
     "historical_portable_producer_evidence_at_any_receiver",
     "historical_missing_original_dependency",
-    "historical_cache_ttl_does_not_expire_unlimited_authority",
+    "historical_query_window_expiry_does_not_invalidate_evidence",
     "historical_applicable_closure_excludes_event",
     "historical_current_key_cannot_replace_original_key",
 ];
@@ -73,7 +73,14 @@ pub fn run_agent_signer_evidence_vector_suite() -> Result<()> {
     ensure!(names.iter().collect::<BTreeSet<_>>().len() == names.len());
 
     let encoded = arkret_canonical::canonical_json_bytes(&fixture)?;
-    for removed in [b"station_admission".as_slice(), b"original_admission"] {
+    for removed in [
+        b"station_admission".as_slice(),
+        b"original_admission",
+        b"current_stale_lease",
+        b"state_digest_matches_lease",
+        b"lease_remaining_seconds",
+        b"lease_cache_expired",
+    ] {
         if encoded
             .windows(removed.len())
             .any(|window| window == removed)
@@ -104,6 +111,17 @@ pub fn run_agent_signer_evidence_vector_suite() -> Result<()> {
     );
     let missing = case(cases, "historical_missing_original_dependency")?;
     ensure!(missing.get("expected").and_then(Value::as_str) == Some("unresolved"));
+    let expired_query_window = case(
+        cases,
+        "historical_query_window_expiry_does_not_invalidate_evidence",
+    )?;
+    ensure!(
+        expired_query_window
+            .get("attestation_query_window_expired")
+            .and_then(Value::as_bool)
+            == Some(true)
+            && expired_query_window.get("expected").and_then(Value::as_str) == Some("verified")
+    );
     let revocation = case(
         cases,
         "current_known_revocation_invalidates_before_deadline",

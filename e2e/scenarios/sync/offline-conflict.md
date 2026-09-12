@@ -54,7 +54,7 @@ bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending 
 ### Phase E — repair 区仍为只读
 
 15. 断言:inkson 不渲染 `prefer-safer-side-button`、`repair-target-cell-input`、`repair-winner-json-input`、`repair-submit-button`
-16. 断言:`GET /_soland/admin/realms/<S>/bottom` 仍为空,直到有标准 bottom producer 与 repair event kind 注册并被实现
+16. 断言:`GET /_soland/admin/realms/<S>/bottom` 仍为空；`sequenced_state` 永不产生 Bottom，该诊断面只可能列出 ordinary causal-register 冲突
 17. 备注:后续 AKP 注册 repair kind 后,本阶段再升级为提交标准 repair Move 并验证目标 cell 回到 active
 
 ### Phase F — Backfill via pull
@@ -65,16 +65,16 @@ bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending 
 ## Edge cases
 
 - **E26.1 outbox 满**:bob 长期离线,outbox 满;客户端 UI 显示 "Too many pending changes, please reconnect"
-- **E26.2 冲突未决期间再写**:仅跨不可达 Seal leaf 的真实并发可把该 `bottom=reject` cell 推入 `⊥`；之后普通写 fail closed,reason `cell_in_bottom_state`,UI 提示必须先走标准 conflict recovery
-- **E26.3 repair Move 被拒**:等待标准 repair event kind 注册后恢复;测试 harness 让 bob 提交 repair 但 `state_witness` 篡改 → reducer 拒,bottom 诊断保留
-- **E26.4 重连后冲突 + 排序**:多个 cell 同时 bottom_expose;bob 必须逐个 repair
+- **E26.2 旧 revision 再写**:同一 `sequenced_state` 的首条确认命令推进 revision；其余旧 revision 命令持久拒绝且不改变状态
+- **E26.3 重新 author**:客户端取得新 revision 后显式重建新 Event；旧签名 Event 本身不得被服务器改写或升级
+- **E26.4 ordinary causal 冲突**:只有注册为 `causal_register` 的 ordinary cell 可以产生并暴露 Bottom 诊断
 
 ## Implementation notes
 
-- **soland 已落地**:`ak.realm.profile` 完整值更新不产生 bottom diagnostics;admin bottom diagnostics 在没有标准 bottom producer 时返回空数组。
-- **inkson 已落地**:Realm admin repair 区当前不 mint 未注册的 `ak.conflict.repair`,无 bottom 时保持只读空态。
-- **测试侧已激活**:offline outbox / pending reconcile 在 `sync/offline-queue-replay` live 覆盖;本 scenario 覆盖因果有序 title update 的单值语义与 read-only repair surface。同 Seal sibling 的 `cas_conflict` / defer 义务由 control-state conformance vectors 覆盖。
-- **剩余边界**:outbox capacity、标准 bottom producer、bottom 状态下再写拒绝、篡改 witness 拒绝、多个 bottom cell 排序仍保留为后续边界 fixme。
+- **soland 已落地**:`ak.realm.profile` 的 sequenced-state 更新不产生 Bottom；admin diagnostics 对该 cell 返回空数组。
+- **inkson 已落地**:Realm admin repair 区不为 sequenced-state 拒绝伪造 repair Event，无 causal-register Bottom 时保持只读空态。
+- **测试侧已激活**:offline outbox / pending reconcile 在 `sync/offline-queue-replay` live 覆盖;本 scenario 覆盖 title update 的 causal-register 多 head 语义与 read-only repair surface。普通 Event sibling 保留各自 Event identity，不选隐式 winner；control `sequenced_state` 的竞争 predecessor 由 call-state conformance vectors 覆盖。
+- **剩余边界**:outbox capacity、旧 revision 持久拒绝、重新 author、多个 ordinary causal-register Bottom cell 排序仍保留为后续边界 fixme。
 
 ## 总耗时预估
 

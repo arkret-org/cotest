@@ -753,13 +753,13 @@ async fn submit_event_now(
     event.created_at = DateTime::parse_from_rfc3339(&created_at)?.with_timezone(&Utc);
     let event_kind = arkret_wire::EventKind::from(kind);
     let is_control_move = event_kind.is_control_plane();
-    let is_data_event = event_kind.is_data_plane();
-    if is_control_move || is_data_event {
+    let is_ordinary_event = event_kind.is_data_plane();
+    if is_control_move || is_ordinary_event {
         let seal_frontier = seal_source.realm_seal_frontier(realm_id).await?;
         let state: arkret_models_collaboration::event_sync::SealFrontierState =
             serde_json::from_value(seal_frontier)?;
         let frontier = state.frontier;
-        if is_data_event {
+        if is_ordinary_event {
             event.auth_context = Some(arkret_wire::AuthContext {
                 key_id: crate::harness::auth_context_key_id(
                     crate::harness::default_event_verification_method(&actor.actor).as_str(),

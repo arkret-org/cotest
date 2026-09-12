@@ -2,7 +2,7 @@
 
 ## 目标
 
-覆盖真实 SRE 事故处理流程:值班人创建 war room,后端同学诊断并回复,对外沟通同学发布脱敏进展,最后值班人沉淀最终摘要和 postmortem。该场景把消息 reply/edit、public-update hygiene、状态 FSM、文档 Morph 串成一条业务链路,避免只测单页 smoke。
+覆盖真实 SRE 事故处理流程:值班人创建 war room,后端同学诊断并回复,对外沟通同学发布脱敏进展,最后值班人沉淀最终摘要和 postmortem。该场景把消息 reply/edit、public-update hygiene、状态 transition、文档 Morph 串成一条业务链路,避免只测单页 smoke。
 
 ## Actors
 
@@ -23,13 +23,13 @@
 
 ## Edge cases
 
-- **E-incident.status**:状态 FSM 不允许 `investigating -> resolved` 跳过 `mitigated`;合法转移写 audit。
+- **E-incident.status**:状态 transition rule 不允许 `investigating -> resolved` 跳过 `mitigated`;合法转移写 audit。
 - **E-incident.priority**:`SEV-1` 公开更新在 E2EE Realm 中可发送且服务端不泄露明文;public-update guard 会阻止包含内部根因/token 等敏感细节的更新。
 - **E-incident.postmortem**:postmortem 文档 surface 与 incident Realm 建结构化 relation payload,并保留版本列表。
 
 ## Implementation notes
 
 - 主流程已是 live `test()`:覆盖三位 actor 的 war room、诊断、脱敏更新、mitigation 与最终摘要编辑。seed-member invite 投射和完整 push notification routing 由各自的专项 scenario 继续覆盖。
-- status FSM 已由 inkson `incident-status-*` 控件和 soland `incident.status.transition` audit 覆盖。
+- status transition 已由 inkson `incident-status-*` 控件和 soland `incident.status.transition` audit 覆盖。
 - sanitized public-update guard 与 E2EE no-plaintext-leak 检查已 live;完整 DnD override 属于 push notification 策略覆盖。
 - postmortem link controls 与本地版本列表已 live;完整 Document Morph 投影仍归 P2 文档链路。

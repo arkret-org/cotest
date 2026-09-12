@@ -124,7 +124,7 @@ test-with-containers = ["dep:testcontainers"]
 cotest-test-support = { workspace = true }
 # CT-19 — `arbitrary` powers the wire-envelope fuzz harness in
 # `cotest/src/fuzz/`. Lives in `[dependencies]` rather than
-# `[dev-dependencies]` so the harness types (FuzzEventInput / FuzzMoveInput /
+# `[dev-dependencies]` so the harness types (FuzzEventInput / FuzzSignalInput /
 # ...) and the `fuzz_*` entry points can live in `src/` and be invoked from
 # integration tests under `tests/`.
 # Real Ed25519 detached-JWS verification in the security-negative conformance
@@ -139,10 +139,9 @@ cotest-test-support = { workspace = true }
 # `tests/canonical_hash_convergence.rs` exercise the high-level
 # `EventProofBuilder` facade alongside the low-level canonical helpers
 # to pin that every Arkret service hashes payloads identically.
-# lattice round-trip vectors: cotest exercises the SDK's
-# `arkret_state::lattice` module directly to confirm CasRegister / OrSet /
-# Counter / Fsm / MvRegister / OrderedLog implementations match the spec's
-# normative join semantics.
+# state-model round-trip vectors: cotest exercises the SDK's public
+# `arkret_state::state_model` implementations for SequencedState,
+# CausalRegister, OrSet, OrderedLog, and Counter.
 # coauth_bootstrap / floria_bootstrap render generated YAML to disk
 # and need a Drop-managed temp file. Pinned to the version already in the
 # lockfile so `cargo test --locked` doesn't try to mutate Cargo.lock.

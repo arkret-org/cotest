@@ -2,13 +2,13 @@
 
 ## 目标
 
-验证「举报 → moderator 决策 → 封禁 → anchored moderation_state → 后续 Move 被拒」的完整三层 gate 链路:
+验证「举报 → moderator 决策 → 封禁命令由 Seal 确认 moderation_state → 后续 ordinary Event 被拒」的完整三层 gate 链路:
 
 1. **Capability** 层:owner 的 ban 动作必须先持有 `ak.moderation.decision` capability,否则直接 `missing_capability` 拒
-2. **Moderation Policy** 层:ban 决策 MUST anchored,写入 `ak.component.moderation_state.v1` cell,跨 peer 一致
+2. **Moderation Policy** 层：ban 是安全命令，MUST 由 confirmed Seal 的 `command_results` 执行并推进 `ak.component.moderation_state.v1` sequenced-state cell，跨 peer 一致
 3. **Personal Blocklist** 层:接收方本地 mute/block 不影响其他人的视图
 
-不验证:跨服务器同步 (见 federation/cross-server;但 spaces/moderation-ban 的 ban anchor 应当在 federation/cross-server 拓扑下也跨 peer 一致 — 可作为 federation/cross-server+spaces/moderation-ban 组合测试,本 scenario 先在单服务器跑)、E2EE franking (spec §3.4,需要 MLS,后续单独 scenario)。
+不验证：跨服务器同步（见 federation/cross-server；但 spaces/moderation-ban 的 confirmed Seal 与 moderation state 应当在 federation/cross-server 拓扑下也跨 peer 一致，可作为组合测试，本 scenario 先在单服务器跑）、E2EE franking（spec §3.4，需要 MLS，后续单独 scenario）。
 
 ## Spec 锚点
 
@@ -16,7 +16,7 @@
 - `arkret-spec/spec/v1/zh/governance/content-moderation.md` §2.2 — 屏蔽是本地行为
 - `arkret-spec/spec/v1/zh/governance/content-moderation.md` §2.3 — 举报留痕但不公开
 - `arkret-spec/spec/v1/zh/governance/content-moderation.md` §2.5.0 — Capability / Moderation / Personal Blocklist 三层判定 (流程图)
-- `arkret-spec/spec/v1/zh/governance/content-moderation.md` §2.5 — Moderation 决策 MUST Anchored
+- `arkret-spec/spec/v1/zh/governance/content-moderation.md` §2.5 — Moderation 安全命令与 confirmed Seal
 - `arkret-spec/spec/v1/zh/governance/content-moderation.md` §3.1 — `POST /_arkret/self/moderation/report` 字段
 - `arkret-spec/spec/v1/zh/governance/content-moderation.md` §3.2 — 举报原因枚举
 - `arkret-spec/spec/v1/zh/governance/content-moderation.md` §3.3 — 举报的处理 (只有 moderator 可见、被举报人不通知)
@@ -78,7 +78,7 @@
    - mallory 的 timeline 上 `M_bad` 没有任何"被举报"的标记
    - carol (旁观者) 同样看不到 report
 
-### Phase D — alice 处理:capability 检查 + anchored ban
+### Phase D — alice 处理：capability 检查 + Seal-confirmed ban
 
 10. **alice** 调用实现私有 `GET /_soland/admin/reports` → 能看到 bob 提交的这个 report
 11. **alice** 决定 ban mallory:
@@ -87,9 +87,9 @@
 12. 断言 Capability 层:
     - **sub-test E5.1**:bob (没有 moderate cap) 尝试同样的 ban Move → 被拒,reason_code = `missing_capability`
     - alice 的 ban Move → 被接受
-13. 断言 Anchored 层 (§2.5):
+13. 断言安全确认层（§2.5）：
     - 查 `ak.component.moderation_state.v1` cell:有针对 mallory.did 的 ban 状态条目
-    - 该 cell 的 Move 被 anchored (frontier 覆盖)
+    - 该命令出现在 confirmed Seal 的 `command_results` 中，cell 的 `revision_event_id` 等于成功命令 Event
     - 跨方读取(alice、bob、carol 各自从客户端读 cell):**三方读到一致状态**
 
 ### Phase E — Post-ban 拒绝路径 (§5.2)
@@ -120,7 +120,7 @@
 - Phase C 步骤 8:report 提交成功
 - Phase C 步骤 9 (隐私):mallory + carol 看不到 report
 - Phase D 步骤 12 (capability):bob 的 ban 被拒、alice 的 ban 被接受
-- Phase D 步骤 13 (anchored):三方查 moderation_state cell 一致
+- Phase D 步骤 13（Seal-confirmed）：三方查 moderation_state cell 的 revision 与值一致
 - Phase E 步骤 15-16:mallory post-ban 消息被拒,其他人看不到
 - Phase F 步骤 18:redact tombstone 三方一致
 - Phase F 步骤 19:bob redact 被拒
@@ -130,7 +130,7 @@
 
 - **E5.1**:无 capability 的 ban 尝试 → `missing_capability` (在 Phase D 步骤 12)
 - **E5.2**:无 capability 的 redact 尝试 → `missing_capability` (在 Phase F 步骤 19)
-- **E5.3 idempotent ban**:alice 连发两次同样的 ban Move,reducer 把第二次视为 no-op (state 已 ban) 或返回幂等接受;不重复写 cell
+- **E5.3 重复 ban**：alice 连发两条同样的 ban Control Move；首条确认后，第二条基于旧或同状态 revision，以 `failed_precondition/invalid_membership_transition` 持久拒绝且不重复写 cell。
 - **E5.4 unban + 重新加入**:alice 提交 `ak.member.state{membership="leave"}` 把 mallory 移出 ban(如果协议允许;§5.2 说 ban 后"无法重新加入",所以 unban 路径可能需要明确;查 spec `event-auth-state-resolution.md` §5)。若 spec 允许 unban,验证 mallory 重新被邀后能加入并发消息
 - **E5.5 hard_deny 模拟**:测 moderation policy 中 `action="deny_write"` 的语义 — alice 提交 `ak.space.moderation_policy` Move 把 mallory.did 标 `deny_write`,验证 mallory 在被正式 ban 之前就已经发不了消息 (capability 没 revoke,但 moderation policy 层 deny)
 
@@ -138,10 +138,10 @@
 
 - **soland report privacy**:`POST /_arkret/self/moderation/report` 是唯一标准 reporter 写入口;v1 没有注册 `GET /_arkret/self/moderation/reports`。dev-mode `GET /_soland/admin/reports` 是实现私有调试投影,只向 realm owner、配置的 admin principal 或持有 moderation review/decision 权限的 actor 返回 report;避免 reporter、被举报人或普通成员枚举 report。
 - **ban Move 权限**:`soland` 对 direct submit 的 `ak.member.state{membership="ban"}` 执行 owner/moderation gate;bob 这类非 moderator 被 `missing_capability` 拒绝,alice 作为 owner 可接受。
-- **inkson owner ban UI**:`/realms/:id/admin/members` 的 `member-row[data-member-did]` + `ban-member-button` 现在作为 live 路径,owner 点击后提交 canonical `ak.member.state` direct event,并从 server projection 中移除被封禁成员。
-- **idempotent ban**:重复 `ak.member.state{membership="ban"}` 通过 federation/service convergence 路径保持幂等,最终成员列表不重复、不恢复被 ban 成员。
+- **inkson owner ban UI**：`/realms/:id/admin/members` 的 `member-row[data-member-did]` + `ban-member-button` 现在作为 live 路径，owner 点击后提交 canonical `ak.member.state` Control Move；confirmed Seal 推进 membership revision 后，server projection 移除被封禁成员。
+- **重复 ban**：第二条 `ak.member.state{membership="ban"}` 基于旧或同状态 revision 时以 `failed_precondition/invalid_membership_transition` 持久拒绝且零写入，最终成员列表不重复，也不恢复被 ban 成员。
 - **remaining inkson UI 缺口**:举报入口、moderator 报告列表 — 当前 live 测试仍通过 soland HTTP API 直接驱动;后续 UI testid 可在 inkson 任务中补。
-- 测试侧需要直接读 `ak.component.moderation_state.v1` cell 来验证 anchored 状态 — soland 应当暴露 `GET /_arkret/self/events?realms=${realmId}&kinds=ak.moderation.decision` 或等价 projection endpoint
+- 测试侧需要直接读取 `ak.component.moderation_state.v1` 的 sequenced-state revision/value，并解析对应 confirmed Seal 的命令结果；只读 Event 列表不能证明安全确认。
 - 跨 peer 一致性的 frontier 比对在单服务器场景不需要;留到 federation/cross-server+spaces/moderation-ban 组合测试
 
 ## 总耗时预估

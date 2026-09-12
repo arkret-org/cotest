@@ -5,7 +5,7 @@
 //! the same read endpoint.
 
 /// The live product coordinator must seal the bootstrap/control path without
-/// any admin compaction or on-demand frontier signing.
+/// any privileged compaction or on-demand ordinary-Event signing.
 #[tokio::test(flavor = "multi_thread")]
 #[serial_test::serial]
 async fn calendar_rsvp_converges_across_concurrent_responses() {

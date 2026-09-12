@@ -2,7 +2,7 @@
 // Contract: e2e/scenarios/spaces/moderation-ban.md
 // Spec refs:
 //   - governance/content-moderation.md §2.5.0 (three-layer gate)
-//   - §2.5 Moderation MUST anchored
+//   - §2.5 Moderation safety commands advance confirmed sequenced state
 //   - §3 Report
 //   - §5.1 Redact requires ak.moderation.decision
 //   - §5.2 Ban via ak.member.state{membership="ban"}
@@ -240,7 +240,7 @@ test.describe("moderation and ban", () => {
         },
       },
     });
-    // Cite the accepted post-ban governance state with a valid DataEvent.
+    // Cite the accepted post-ban governance state with a valid ordinary Event.
     // The owner can read that state; the Event and request remain Mallory's.
     // A malformed wrapper would only test schema rejection, not the ban gate.
     await prepareSignedEventCbsApi(request, aliceToken, bannedWriteEnvelope);
@@ -299,7 +299,7 @@ test.describe("moderation and ban", () => {
     const aliceToken = await issueDevSession(request, alice);
 
     const realmId = await createRealmApi(request, aliceToken, {
-      title: `S5.3 Idempotent Ban API ${stamp}`,
+      title: `S5.3 Repeated Ban Rejection ${stamp}`,
       public: true,
       discoverability: "public",
       history_access: "all_history_for_current_members",
@@ -322,9 +322,9 @@ test.describe("moderation and ban", () => {
     await submitSignedEventApi(request, aliceToken, firstBan, {
       context: `first ban ${mallory.id}`,
     });
-    // common-fields.md §4.5: every same-state membership transition is
-    // illegal. Full lease pre-admission must reject ban -> ban before it can
-    // enter the governance cell and create a Bottom join.
+    // A same-state membership transition is illegal. Full lease pre-admission
+    // must reject ban -> ban against the current sequenced revision with zero
+    // governance-cell write.
     await prepareEventForAuthorizationLeaseApi(
       request,
       aliceToken,

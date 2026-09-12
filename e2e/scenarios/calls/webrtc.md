@@ -126,7 +126,7 @@ WebRTC 信令 + media 层的端到端:alice 主动 1:1 call bob → mute / scree
   capability guard、self-device filtering、ban 后 token 拒绝、LiveKit token
   claim;cotest 覆盖 `ak.call.signal` receiver vectors 与 `/_arkret/self/rtc/*`
   realtime policy guards。
-- **inkson 预期**:`/call` 的本地 renderer FSM 暴露
+- **inkson 预期**:`/call` 的本地 renderer lifecycle 暴露
   `call-status-ringing`、`call-status-connecting`、`call-status-active`、
   `call-status-ended`,并只通过 spec wire 发送
   `invite`/`answer`/`candidate`/`mute_state`/`media_state`/`hangup`。

@@ -738,8 +738,8 @@ export async function createRealmApi(
     security_class: "standard",
     digest_algorithm: "sha256",
     // This helper creates Station-hosted collaboration Realms. The
-    // service owns the notary key and materializes Event Seals; the principal
-    // remains the Realm creator and root authority-cell controller.
+    // service owns the notary key and confirms the Realm's security commands;
+    // the principal remains the Realm creator and root authority-cell controller.
     notary: singleReplicaNotaryFromDid(solandServiceDid(opts.server)),
     // Create-locked (realm-and-space.md section 2.5): the reducer copies this
     // into the Realm authority-root cell, which is what gives the creator
@@ -834,7 +834,7 @@ export async function createRealmApi(
     "ak:cell:ak.component.realm.history_access.v1:null",
     {
       // event-payload.schema.json#/$defs/history_access_payload models this
-      // facet as an explicit FSM transition. The ordinary Realm bootstrap is
+      // facet as an explicit sequenced-state transition. The ordinary Realm bootstrap is
       // the one legal initial transition, so it must author null -> value
       // rather than relying on the reducer to infer the missing predecessor.
       from: null,
@@ -1014,10 +1014,9 @@ export async function addRealmMemberApi(
 //
 // The cell is `sequenced_state`: every revision is a complete replacement and
 // must carry a `head_eq` guard over the exact current value. Preserve every
-// current component and change only `policy_revision` + `join_policy`; omitting
-// the guard admits concurrent candidates and correctly collapses the cell to
-// Bottom, while omitting current components can violate one-way policy
-// ratchets.
+// current component and change only `policy_revision` + `join_policy`; an
+// absent or stale guard is rejected as a sequenced-state precondition failure,
+// while omitting current components can violate one-way policy ratchets.
 export async function writeJoinPolicyApi(
   request: APIRequestContext,
   token: string,
@@ -2597,7 +2596,7 @@ async function issueControlProposalAckApi(
   context: string,
 ): Promise<Record<string, unknown> | undefined> {
   // In the Standard submission context, seal_basis distinguishes an ordinary
-  // non-genesis Control Move from a DataEvent. Anchor units are filtered by
+  // non-genesis Control Move from an ordinary Event. Native PCR units are filtered by
   // their batch caller and must never enter this operation.
   if (event.seal_basis == null) {
     return undefined;
@@ -3906,8 +3905,8 @@ async function federationEventWireBodies(
   });
   const accepted = new Map<string, PublicationEvidence["event"]>();
   for (const group of groups.values()) {
-    // The source Station owns its admission proof. Read its accepted Event;
-    // never forward the producer-only draft or synthesize a Station signature.
+    // Read the source Station's accepted canonical Event. Forward its sole
+    // producer proof unchanged and never synthesize a receiver signature.
     const url = `${solandBaseUrl(group.server)}/_arkret/self/events/resolve`;
     const response = await request.fetch(url, {
       method: "QUERY",

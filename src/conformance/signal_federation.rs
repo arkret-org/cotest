@@ -435,8 +435,8 @@ fn validate_agent_mutation_contract(case: &Value) -> Result<()> {
     Ok(())
 }
 
-/// Validate normative fixture expectations without mistaking them for live
-/// Station admission evidence. HTTP behavior is exercised in Soland's Signal
+/// Validate normative fixture expectations without inventing a second
+/// Station signature. HTTP behavior is exercised in Soland's Signal
 /// federation tests; real MLS/client composition is exercised in the sibling
 /// `signal_recipient` tests.
 fn validate_role_case_contract(case: &Value) -> Result<()> {

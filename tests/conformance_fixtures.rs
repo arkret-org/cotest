@@ -347,12 +347,6 @@ conformance_test!(
 );
 
 conformance_test!(
-    consent_fixture_suite_matches_reference_semantics,
-    "consent_fixture",
-    cotest::conformance::run_consent_fixture_suite,
-);
-
-conformance_test!(
     composite_state_subject_fixture_suite_matches_reference_semantics,
     "composite_state_subject_fixture",
     cotest::conformance::run_composite_state_subject_fixture_suite,
@@ -391,14 +385,6 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// C10.C M6 — multi-leaf Anchor effective_anchor_view + signed compaction
-    /// equivalence + bottom diagnostic preservation.
-    anchor_view_compaction_fixture_suite_matches_reference_semantics,
-    "anchor_view_compaction_fixture",
-    cotest::conformance::run_anchor_view_compaction_fixture_suite,
-);
-
-conformance_test!(
     /// MLS Security Frontier KAT plus orthogonality, active-leaf and
     /// Realm/Circle isolation checks through the public SDK projector.
     mls_security_frontier_fixture_suite_matches_reference_semantics,
@@ -416,7 +402,7 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// Notary/anchor payload-signing path driven through the live SDK
+    /// Notary payload-signing path driven through the live SDK
     /// `arkret_signatures::Ed25519PayloadSigner`: a configured seed produces a
     /// byte-deterministic detached JWS, an ephemeral seed does not, distinct
     /// seeds produce distinct signatures over identical bytes, the signature
@@ -431,9 +417,10 @@ conformance_test!(
 conformance_test!(
     /// Event-kind to StateModel dispatch consistency. Cross-checks
     /// the live event-kind-registry: every active reducer-input durable kind
-    /// with cell_family declares one core lattice, no cell_family appears in
-    /// two lattices, namespace is ak.component.*, bottom is in {reject, expose},
-    /// and the fixture's expected_cell_family_lattice_bindings exactly matches
+    /// with cell_family declares one core model, no cell_family appears in
+    /// two models, namespace is ak.component.*, causal-register Bottom (when
+    /// declared) is reject or expose, non-causal models declare no Bottom, and the fixture's
+    /// expected cell-family/model bindings exactly match
     /// the registry.
     event_kind_lattice_dispatch_fixture_suite_matches_reference_semantics,
     "event_kind_lattice_dispatch_fixture",
@@ -467,14 +454,6 @@ conformance_test!(
     composite_state_key_encoding_fixture_suite_matches_reference_semantics,
     "composite_state_key_encoding_fixture",
     cotest::conformance::run_composite_state_key_encoding_fixture_suite,
-);
-
-conformance_test!(
-    /// D1 — MLS / E2EE basic protocol (genesis, epoch advance, member
-    /// join/leave, covered_frontier accumulation, AAD digest pinning).
-    mls_e2ee_basic_fixture_suite_matches_reference_semantics,
-    "mlR_e2ee_basic_fixture",
-    cotest::conformance::run_mls_e2ee_basic_fixture_suite,
 );
 
 conformance_test!(
@@ -528,25 +507,10 @@ conformance_test!(
 conformance_test!(
     /// F-1 — recovery-ticket state-machine legality matrix (legal
     /// success / terminal paths accept; illegal transitions reject). Independent
-    /// of the recovery_bridge_full_chain fixture so the FSM stays self-validating.
+    /// of the recovery_bridge_full_chain fixture so the lifecycle stays self-validating.
     recovery_ticket_state_machine_round_26,
     "recovery_ticket_state_machine_round_26",
     cotest::conformance::run_recovery_ticket_state_machine_check,
-);
-
-conformance_test!(
-    /// E3 — Multi-Realm federation Per-Realm anchor isolation +
-    /// cross-Realm rejection.
-    multi_realm_federation_fixture_suite_matches_reference_semantics,
-    "multi_realm_federation_fixture",
-    cotest::conformance::run_multi_realm_federation_fixture_suite,
-);
-
-conformance_test!(
-    /// E5 — late-arriving anchor idempotency (no double-effect).
-    late_arriving_anchor_fixture_suite_matches_reference_semantics,
-    "late_arriving_anchor_fixture",
-    cotest::conformance::run_late_arriving_anchor_fixture_suite,
 );
 
 conformance_test!(
@@ -562,13 +526,6 @@ conformance_test!(
     restore_full_workflows_fixture_suite_matches_reference_semantics,
     "restore_full_workflows_fixture",
     cotest::conformance::run_restore_full_workflows_fixture_suite,
-);
-
-conformance_test!(
-    /// E5 — fixture-decoupled late-arriving-anchor idempotency primitive.
-    late_arriving_anchor_idempotency_round_27,
-    "late_arriving_anchor_idempotency_round_27",
-    cotest::conformance::run_late_arriving_anchor_idempotency_check,
 );
 
 conformance_test!(
@@ -619,8 +576,8 @@ conformance_test!(
 conformance_test!(
     /// Call-state core vectors promoted to spec artifacts. Asserts
     /// participant-binding admission maps semantic failures to
-    /// participant_binding_invalid and the call lifecycle FSM keeps initial,
-    /// transition, terminal, replay, and sibling-bottom behavior aligned.
+    /// participant_binding_invalid and the call lifecycle keeps initial,
+    /// transition, terminal, replay, and competing-predecessor behavior aligned.
     call_state_core_fixture_suite_matches_reference_semantics,
     "call_state_core_fixture",
     cotest::conformance::run_call_state_core_fixture_suite,
