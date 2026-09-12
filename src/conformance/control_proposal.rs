@@ -4,7 +4,7 @@ use anyhow::{Context, Result, anyhow, bail, ensure};
 use arkret_wire::notary::NotaryValue;
 use arkret_wire::{
     ControlProposalAck, ControlProposalAuthorityAck, ControlProposalDecision,
-    ControlProposalDecisionPolicy, ControlProposalRejectReason, DidUrl, Hash, PayloadSignature,
+    ControlProposalDecisionPolicy, ControlProposalDeferReason, DidUrl, Hash, PayloadSignature,
     RealmId,
 };
 use chrono::{DateTime, Utc};
@@ -62,9 +62,7 @@ pub fn run_control_proposal_bounded_decision_suite() -> Result<()> {
         || timestamp(late_instance, "decided_at")? <= decision_due_at
         || timestamp(late_instance, "absolute_due_at")? != absolute_due_at
     {
-        bail!(
-            "late decision vector must retain the fault while accepting the later valid Seal, without a terminal signed-reject contradiction"
-        );
+        bail!("late decision vector must retain the fault while accepting the later valid Seal");
     }
     Ok(())
 }
@@ -312,34 +310,43 @@ pub fn run_control_proposal_ack_suite() -> Result<()> {
             .as_str()
             .unwrap(),
     )?;
-    let mut decision = ControlProposalDecision::SignedReject {
+    let mut decision = ControlProposalDecision::SignedDefer {
         realm_id: ack.realm_id.clone(),
         proposal_digest: ack.proposal_digest.clone(),
         proposal_ack_digest: wrong_proposal_ack_digest,
-        decided_at: ack.received_at,
-        decision_due_at: ack.decision_due_at,
+        decided_at: ack.received_at + chrono::Duration::seconds(1),
+        decision_due_at: ack.decision_due_at + chrono::Duration::seconds(1),
         absolute_due_at: ack.absolute_due_at,
-        defer_count: 0,
-        reason_code: ControlProposalRejectReason::PolicyDenied,
+        defer_count: 1,
+        reason_code: ControlProposalDeferReason::QuorumUnreachable,
         authority_set_ref: ack.authority_set_ref.clone(),
         proofs: vec![PayloadSignature {
             verification_method: crate::fixture_did_url(
                 "did:webvh:z6mkfixture:authority-a.example#notary",
             ),
             payload_digest: hash('0'),
-            created_at: ack.received_at,
+            created_at: ack.received_at + chrono::Duration::seconds(1),
             jws: "a..b".to_owned(),
         }],
     };
     let digest = decision.decision_digest()?;
-    let ControlProposalDecision::SignedReject { proofs, .. } = &mut decision else {
-        unreachable!()
-    };
+    let ControlProposalDecision::SignedDefer { proofs, .. } = &mut decision;
     proofs[0].payload_digest = digest;
     ensure!(
         decision.validate_chain(&ack, &[], policy).is_err(),
         "decision proof crossed Ack sets"
     );
+    let ControlProposalDecision::SignedDefer {
+        proposal_ack_digest,
+        ..
+    } = &mut decision;
+    *proposal_ack_digest = ack.proposal_ack_digest()?;
+    let digest = decision.decision_digest()?;
+    let ControlProposalDecision::SignedDefer { proofs, .. } = &mut decision;
+    proofs[0].payload_digest = digest;
+    decision
+        .validate_chain(&ack, &[], policy)
+        .context("the same bounded defer must validate with its exact Ack binding")?;
 
     for name in [
         "proposal_decision_window_after_absolute_deadline_rejected",

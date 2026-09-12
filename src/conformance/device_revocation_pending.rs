@@ -29,9 +29,9 @@ const REQUIRED_CASES: [&str; 13] = [
     "sealed_and_pending_records_remain_jointly_visible",
     "gate_record_bound_is_closed_without_truncation",
     "gate_receipt_decision_shapes_and_proof_are_closed",
-    "only_exact_signed_reject_clears_last_pending",
+    "only_exact_rejected_command_outcome_clears_last_pending",
     "overdue_stays_blocked_and_alerts",
-    "reject_and_seal_terminal_race_is_serialized",
+    "command_outcome_is_unique_in_confirmed_sequence",
     "seal_makes_revocation_permanent_and_triggers_erasure",
 ];
 
@@ -93,8 +93,43 @@ fn validate_semantic_fixture() -> Result<()> {
             bail!("device revocation fixture is missing semantic case {required}");
         }
     }
-    if !names.contains("historical_admission_is_not_retroactively_invalidated") {
-        bail!("device revocation fixture lost the historical admission cutoff case");
+    // This verifies the fixture contract, not the server's classifier wiring.
+    let historical = cases
+        .iter()
+        .find(|case| case["name"] == "historical_eligibility_is_recomputed_from_confirmed_closures")
+        .context("device revocation historical eligibility case")?;
+    if historical["given"]
+        != "the same original Event and verified historical authorization instance"
+        || historical["expected"] != "classification_depends_on_exact_closure_membership"
+        || historical["classification_cases"]
+            != serde_json::json!([
+                {
+                    "closure_membership": "included_in_all_applicable_closures",
+                    "classification": "eligible"
+                },
+                {
+                    "closure_membership": "excluded_by_a_complete_applicable_closure",
+                    "classification": "quarantined"
+                },
+                {
+                    "closure_membership": "necessary_frontier_evidence_missing",
+                    "classification": "pending"
+                }
+            ])
+    {
+        bail!("historical fixture must classify the same Event from exact closure evidence");
+    }
+    let invariants = historical["invariants"]
+        .as_array()
+        .context("historical eligibility invariants")?;
+    for required in [
+        "Event identity and original evidence are unchanged across cases",
+        "receiver accepted_at and arrival order do not decide persistent eligibility",
+        "historical import does not repeat live side effects",
+    ] {
+        if !invariants.iter().any(|invariant| invariant == required) {
+            bail!("historical eligibility fixture is missing invariant: {required}");
+        }
     }
 
     let blocking = cases
