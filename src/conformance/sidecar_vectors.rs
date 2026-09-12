@@ -209,7 +209,6 @@ pub fn run_sidecar_mls_bootstrap_binding_vector() -> Result<()> {
     let binding = MlsGovernanceBindingPayload::sidecar(
         realm_id,
         sidecar_id,
-        "YXJrcmV0LXNpZGVjYXItZ3JvdXA",
         0,
         0,
         Hash::new(format!("sha256:{}", "1".repeat(64)))?,

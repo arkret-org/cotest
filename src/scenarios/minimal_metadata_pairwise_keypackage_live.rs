@@ -28,7 +28,7 @@ use arkret_models_collaboration::governance::membership_invite::{
 };
 use arkret_models_crypto::{MlsCommitPayload, MlsGovernanceBindingPayload};
 use arkret_wire::cbs::{Precondition, Predicate, PredicateOp};
-use arkret_wire::{AccountId, ActorId, Event, EventId, EventKind, Hash, MlsGroupId, ScopeRef};
+use arkret_wire::{AccountId, ActorId, Event, EventId, EventKind, Hash, ScopeRef};
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::Utc;
@@ -667,9 +667,8 @@ fn governance_binding(
     previous_epoch: u64,
     next_epoch: u64,
 ) -> Result<MlsGovernanceBindingPayload> {
-    MlsGovernanceBindingPayload::realm(
+    let binding = MlsGovernanceBindingPayload::realm(
         RealmId::new(realm_id.to_owned())?,
-        mls_group_id,
         previous_epoch,
         next_epoch,
         Hash::new(format!("sha256:{}", "2".repeat(64)))?,
@@ -678,7 +677,12 @@ fn governance_binding(
         arkret_wire::ProfileId::MLS_GOVERNANCE_BINDING_FULL_V1,
         arkret_wire::CORE_REDUCER_PROFILE,
     )
-    .map_err(anyhow::Error::from)
+    .map_err(anyhow::Error::from)?;
+    ensure!(
+        binding.mls_group_id() == mls_group_id,
+        "local MLS group differs from the canonical scope"
+    );
+    Ok(binding)
 }
 
 fn signed_device_claim(
@@ -834,7 +838,6 @@ async fn remove_pairwise_leaf(
         &binding,
     )?;
     let commit_payload = MlsCommitPayload::new(
-        base_epoch,
         base_transition.event_id.to_string(),
         Vec::new(),
         &removal.commit,
@@ -888,7 +891,6 @@ async fn accept_welcome_and_consume(
     );
 
     let commit_payload = MlsCommitPayload::new(
-        base_epoch,
         base_transition.event_id.to_string(),
         Vec::new(),
         &add.commit,
@@ -948,9 +950,12 @@ async fn accept_welcome_and_consume(
             URL_SAFE_NO_PAD.encode(envelope_signature),
         ))?,
     )?;
+    ensure!(
+        binding.mls_group_id() == requester_group.group_id()
+            && binding.next_epoch() == add.welcome.epoch,
+        "Welcome material differs from its governance binding"
+    );
     let welcome_payload = MlsWelcomePayload {
-        mls_group_id: wire_value(MlsGroupId::new(requester_group.group_id()))?,
-        epoch: add.welcome.epoch,
         recipient_principal_id: None,
         recipient: MlsWelcomeRecipient::MinimalMetadataPairwise {
             recipient_pairwise_actor_id: target.actor_id.clone(),

@@ -948,8 +948,6 @@ struct WelcomePayloadFixture<'a> {
 
 fn welcome_payload_value(fixture: WelcomePayloadFixture<'_>) -> Value {
     json!({
-        "mls_group_id": "mls-group-a",
-        "epoch": 1,
         "recipient_principal_id": "ak:did_core:web:alice.example",
         "recipient_device_id": "ak:device:0196419b-0000-7000-8000-000000000001",
         "keypackage_ref": fixture.keypackage_ref,
@@ -982,12 +980,10 @@ fn welcome_payload_value(fixture: WelcomePayloadFixture<'_>) -> Value {
         "governance_binding": {
             "binding_version": 1,
             "encoding_profile": "cbor-deterministic-rfc8949-v1",
-            "realm_id": fixture.intended_realm_id,
             "effective_scope": {
                 "kind": "realm",
                 "realm_id": fixture.intended_realm_id
             },
-            "mls_group_id": "mls-group-a",
             "previous_epoch": 0,
             "next_epoch": 1,
             "security_frontier_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
