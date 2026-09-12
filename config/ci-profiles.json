@@ -154,10 +154,6 @@
         },
         {
           "target": "conformance_fixtures",
-          "filter": "consent_fixture_suite_matches_reference_semantics"
-        },
-        {
-          "target": "conformance_fixtures",
           "filter": "composite_state_subject_fixture_suite_matches_reference_semantics"
         },
         {

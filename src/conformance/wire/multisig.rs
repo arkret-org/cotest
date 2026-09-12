@@ -4,9 +4,7 @@
 //! The fixture suites drive live SDK types: the payload-signing suite runs
 //! [`arkret_signatures::Ed25519PayloadSigner`] plus
 //! `verify_ed25519_payload_signature`. A structural-only validator would stay
-//! green after the contract it claims to pin disappears, which is exactly how
-//! the previous `Ed25519MoveSigner` / `AnchorerWorker` revision of this file
-//! outlived its subject.
+//! green after the contract it claims to pin disappears.
 
 use anyhow::{Result, anyhow, bail};
 use arkret_signatures::Ed25519PayloadSigner;

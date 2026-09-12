@@ -347,12 +347,6 @@ conformance_test!(
 );
 
 conformance_test!(
-    consent_fixture_suite_matches_reference_semantics,
-    "consent_fixture",
-    cotest::conformance::run_consent_fixture_suite,
-);
-
-conformance_test!(
     composite_state_subject_fixture_suite_matches_reference_semantics,
     "composite_state_subject_fixture",
     cotest::conformance::run_composite_state_subject_fixture_suite,
@@ -460,14 +454,6 @@ conformance_test!(
     composite_state_key_encoding_fixture_suite_matches_reference_semantics,
     "composite_state_key_encoding_fixture",
     cotest::conformance::run_composite_state_key_encoding_fixture_suite,
-);
-
-conformance_test!(
-    /// D1 — MLS / E2EE basic protocol (genesis, epoch advance, member
-    /// join/leave, covered_frontier accumulation, AAD digest pinning).
-    mls_e2ee_basic_fixture_suite_matches_reference_semantics,
-    "mlR_e2ee_basic_fixture",
-    cotest::conformance::run_mls_e2ee_basic_fixture_suite,
 );
 
 conformance_test!(

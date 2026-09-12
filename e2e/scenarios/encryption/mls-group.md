@@ -13,7 +13,7 @@
 - `crypto-media/encryption-and-audit.md` §2.2.1 — Welcome 通过 durable Event 发送
 - `crypto-media/encryption-and-audit.md` §2.3-§2.3.3 — Application data envelope + plaintext routing metadata
 - `crypto-media/encryption-and-audit.md` §2.4-§2.4.1 — Sync 与 epoch 窗口、`decryption_pending`/`epoch_update_required`
-- `crypto-media/encryption-and-audit.md` §2.5-§2.5.3 — Governance Binding(GroupContext extension `0xF1C0`、`covered_frontier_cell`)
+- `crypto-media/encryption-and-audit.md` §2.5-§2.5.3 — Governance Binding（GroupContext extension `0xF1C0`、`security_frontier_digest` 与 `proof_target_basis`）
 - `crypto-media/encryption-and-audit.md` §2.6 — KeyPackage 发布与索取
 - `crypto-media/encryption-and-audit.md` §5 — Proposal / Commit / epoch 进展
 - `crypto-media/device-lifecycle.md` §9 — `/_arkret/self/keys/keypackages/claim` API
@@ -110,7 +110,7 @@
 
 ## Edge cases / sub-tests
 
-- **E11.1 并发 commits**:alice 和 bob 同时提交 commit(竞态)→ `covered_frontier_cell` 返回 ⊥,clients 进入 `decryption_pending`,后续 commit 解决(spec §2.5.2)
+- **E11.1 竞争 commits**：alice 和 bob 基于同一 confirmed revision 同时提交 commit；Realm 安全序列只确认首个满足 revision 的命令，另一个以 stale rejection 持久结束且不产生 Bottom。尚未取得 winning Seal/epoch 的客户端进入 `decryption_pending`，同步确认序列后恢复（spec §2.5.2）。
 - **E11.2 Governance binding mismatch**:测试 harness 改 alice 提交的 `governance_binding.realm_policy_digest` → soland 拒绝整批,reducer reason `governance_binding_mismatch`
 - **E11.3 KeyPackage 不可用**:bob 没上传 KeyPackage → alice claim 失败,`POST /keypackages/claim` 返回 404 / `no_keypackage`
 - **E11.4 加入前已发消息 + history_access=all_history_for_current_members**:把 Phase D 改用 `history_access=all_history_for_current_members`；carol 成为当前成员后通过私有 history-key 恢复流程取得获准 epoch 的历史 secret。
@@ -121,7 +121,7 @@
 ## Implementation notes
 
 - **当前 live 覆盖**:`encryption_profile=mls_rfc9420` 创建路径、非成员 raw events 拒绝、`ak.mls.genesis`、KeyPackage claim CAS、durable `ak.mls.welcome` pending queue + 一次性 drain、`ak.mls.commit` epoch `0 -> 1`、stale commit `mls_epoch_skew`、加入后的 Bob 解密 Alice post-join timeline 密文且 raw event 不含明文、ban 后 inkson 显示 `epoch_update_required` 并禁用发送。
-- **剩余缺口**:双向 E2EE 消息交换、carol pre-join history、并发 commit 的 `decryption_pending`、governance binding mismatch 的精确拒绝路径。
+- **剩余缺口**：双向 E2EE 消息交换、carol pre-join history、竞争 commit 的 durable stale rejection 与 `decryption_pending` 恢复、governance binding mismatch 的精确拒绝路径。
 - **测试侧难点**:断言"服务端只见 ciphertext"需要 soland 暴露一个 raw event endpoint;若没有,可以从 service log 抓 + grep
 
 ## 风险

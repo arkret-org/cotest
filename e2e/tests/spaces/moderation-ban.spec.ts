@@ -2,7 +2,7 @@
 // Contract: e2e/scenarios/spaces/moderation-ban.md
 // Spec refs:
 //   - governance/content-moderation.md §2.5.0 (three-layer gate)
-//   - §2.5 Moderation MUST anchored
+//   - §2.5 Moderation safety commands advance confirmed sequenced state
 //   - §3 Report
 //   - §5.1 Redact requires ak.moderation.decision
 //   - §5.2 Ban via ak.member.state{membership="ban"}
@@ -299,7 +299,7 @@ test.describe("moderation and ban", () => {
     const aliceToken = await issueDevSession(request, alice);
 
     const realmId = await createRealmApi(request, aliceToken, {
-      title: `S5.3 Idempotent Ban API ${stamp}`,
+      title: `S5.3 Repeated Ban Rejection ${stamp}`,
       public: true,
       discoverability: "public",
       history_access: "all_history_for_current_members",

@@ -23,17 +23,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use ed25519_dalek::SigningKey;
 use serde_json::Value;
 
-const MLS_FIXTURE: &str = include_str!("fixtures/mls_e2ee_basic_fixture.json");
 const KEYPACKAGE_TRANSCRIPT_FIXTURE: &str = "fixtures/keypackage-write-transcript-fixture.json";
-
-#[test]
-fn mls_fixture_still_covers_member_join_and_aad_pinning() -> Result<()> {
-    let fixture = mls_fixture()?;
-    require_vector(&fixture, "member_join_via_commit")?;
-    require_vector(&fixture, "encryption_aad_digest_pinning")?;
-    require_negative_vector(&fixture, "aad_digest_mismatch_rejected")?;
-    Ok(())
-}
 
 #[test]
 fn keypackage_write_transcripts_match_the_embedded_spec_fixture() -> Result<()> {
@@ -188,31 +178,4 @@ fn decode_32(value: &Value, field: &str) -> Result<[u8; 32]> {
         )?
         .try_into()
         .map_err(|bytes: Vec<u8>| anyhow::anyhow!("{field} must be 32 bytes, got {}", bytes.len()))
-}
-
-fn mls_fixture() -> Result<Value> {
-    Ok(serde_json::from_str(MLS_FIXTURE)?)
-}
-
-fn require_vector(fixture: &Value, name: &str) -> Result<()> {
-    require_named_entry(fixture, "vectors", name)
-}
-
-fn require_negative_vector(fixture: &Value, name: &str) -> Result<()> {
-    require_named_entry(fixture, "negative_vectors", name)
-}
-
-fn require_named_entry(fixture: &Value, section: &str, name: &str) -> Result<()> {
-    let entries = fixture
-        .get(section)
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow::anyhow!("MLS fixture missing {section}[]"))?;
-    if entries
-        .iter()
-        .any(|entry| entry.get("name").and_then(Value::as_str) == Some(name))
-    {
-        Ok(())
-    } else {
-        bail!("MLS fixture {section}[] missing {name}")
-    }
 }

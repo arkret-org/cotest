@@ -107,7 +107,7 @@
       "source": "cotest/e2e/tests/encryption/mls-group.spec.ts",
       "disposition": "duplicate_removed",
       "replacements": [
-        { "file": "cotest/src/conformance/wire/e2ee.rs", "symbol": "run_mls_e2ee_basic_fixture_suite" },
+        { "file": "cotest/src/conformance/wire/security_frontier.rs", "symbol": "run_mls_security_frontier_fixture_suite" },
         { "file": "cotest/src/conformance/visibility_policy.rs", "symbol": "run_content_floor_downgrade_rejected_vector" }
       ]
     },

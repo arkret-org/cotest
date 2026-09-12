@@ -738,8 +738,8 @@ export async function createRealmApi(
     security_class: "standard",
     digest_algorithm: "sha256",
     // This helper creates Station-hosted collaboration Realms. The
-    // service owns the notary key and materializes Event Seals; the principal
-    // remains the Realm creator and root authority-cell controller.
+    // service owns the notary key and confirms the Realm's security commands;
+    // the principal remains the Realm creator and root authority-cell controller.
     notary: singleReplicaNotaryFromDid(solandServiceDid(opts.server)),
     // Create-locked (realm-and-space.md section 2.5): the reducer copies this
     // into the Realm authority-root cell, which is what gives the creator

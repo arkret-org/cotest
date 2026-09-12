@@ -742,10 +742,12 @@ pub async fn submit_event_with_signing_seed_and_verification_method(
 }
 
 /// Build the exact signed Event a submit helper would POST, bound to the live
-/// actor frontier and (for Control Moves / ordinary Events) the current Seal
-/// frontier, without submitting it. Callers that relay the Event through
-/// another admission surface — the device-pairing gate, for instance — wrap
-/// the result in `publication::initial_submission` themselves.
+/// actor frontier. A Control Move carries the current Seal basis; an ordinary
+/// Event carries signer authority references from the verified authority
+/// frontier, which production clients may retain for offline authoring.
+/// Callers that relay the Event through another admission surface — the
+/// device-pairing gate, for instance — wrap the result in
+/// `publication::initial_submission` themselves.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn prepare_event_submission_with_signing_identity(
     server: &ArkretServer,

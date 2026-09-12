@@ -25,7 +25,7 @@
 - `arkret-spec/spec/v1/zh/conformance/scalability-constraints.md`
   - §2 — 通用 wire 上限(envelope 1 MiB / 批量 1,000 / sync page 1,000 / prev_refs 128 / refs 128 / authorized_by 64 / fields 256 KiB / relation depth 32 / HLC logical 65,536)
   - §3 — Capability / authz 上限(delegation chain 4 / grant expansion 1,024 / constraint 64 / selector AST 16)
-  - §4 — Move / Anchor / Lattice 上限
+  - §4 — CBS / state-model 上限
   - §5 — Space / Relation / View 上限
   - §6 — E2EE 与设备上限
   - §7 — Retention / snapshot pruning / tombstone 上限

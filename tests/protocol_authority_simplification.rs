@@ -78,6 +78,7 @@ fn authority_pair_distinguishes_same_principal_at_different_servers() {
 fn ordinary_event_is_producer_only_and_portably_authorized() {
     let event = producer_event();
     assert_eq!(event.proofs.len(), 1);
+    assert!(event.seal_basis.is_none());
     event
         .validate_proof_bindings_with_digest_suite(arkret_canonical::DigestSuite::Sha256)
         .unwrap();
@@ -104,7 +105,12 @@ fn ordinary_event_is_producer_only_and_portably_authorized() {
 #[test]
 fn deleted_event_wire_members_are_hard_rejected() {
     let event = producer_event();
-    for removed in ["accepted_by", "seal_ref"] {
+    for removed in [
+        "accepted_by",
+        "seal_ref",
+        "station_admission",
+        "origin_station_admission",
+    ] {
         let mut value = serde_json::to_value(&event).unwrap();
         value[removed] = serde_json::json!(event.actor_id.route_service_id());
         assert!(serde_json::from_value::<Event>(value).is_err(), "{removed}");

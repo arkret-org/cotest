@@ -124,7 +124,7 @@ test-with-containers = ["dep:testcontainers"]
 cotest-test-support = { workspace = true }
 # CT-19 — `arbitrary` powers the wire-envelope fuzz harness in
 # `cotest/src/fuzz/`. Lives in `[dependencies]` rather than
-# `[dev-dependencies]` so the harness types (FuzzEventInput / FuzzMoveInput /
+# `[dev-dependencies]` so the harness types (FuzzEventInput / FuzzSignalInput /
 # ...) and the `fuzz_*` entry points can live in `src/` and be invoked from
 # integration tests under `tests/`.
 # Real Ed25519 detached-JWS verification in the security-negative conformance

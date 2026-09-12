@@ -58,7 +58,7 @@
 8. bob 客户端 `GET /_arkret/self/blob/get?blob_ref=<sha>` with `Authorization: Bearer <bob_token>`
 9. soland Blob Service 校验:
    - bob 是 `R_e2ee` 的当前成员
-   - `covered_frontier_cell` 包含必要的 governance frontier(若 E2EE Realm 要求)
+   - 当前 confirmed Seal 中的 membership 与 MLS sequenced state 授权 bob 读取该 epoch 的密文
 10. 返回 ciphertext bytes + `Content-Type: application/octet-stream` + `Cache-Control: private, no-store`(spec §5.1)
 11. bob 客户端用 plaintext attachments 里携带的 key_ref → 派生解密 key → 解 ciphertext → 拿到原始 `cat.png`
 12. inkson 渲染图片(lock icon + "Encrypted attachment, X KB")
