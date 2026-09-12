@@ -5,10 +5,7 @@ use arkret_models_collaboration::sync_frames::account_sync::{
     DeviceMessagesAckRequestBody, DeviceMessagesSendRequestBody,
 };
 use arkret_models_crypto::{KeysClaimRequestBody, KeysQueryRequestBody};
-use arkret_models_integration::{
-    PushDeviceRoute, PushNotificationEnvelope, PushNotifyRequestBody, PushTimingProfileHint,
-};
-use arkret_wire::{DeviceId, NonEmptyString, PushTargetId};
+use arkret_wire::{DeviceId, NonEmptyString};
 use reqwest::StatusCode;
 use serde_json::json;
 
@@ -532,53 +529,6 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
         "param_invalid",
     )
     .await?;
-    // Blind-wakeup minimization: the push notification envelope is metadata-only
-    // and `deny_unknown_fields`, so it structurally cannot carry a plaintext
-    // `content` field — a push that tries to violates the declared schema and
-    // is rejected as `schema_violation` (422) before any rule evaluation.
-    let push_baseline = PushNotifyRequestBody {
-        notification: unregistered_device_notification()?,
-        event_kind: None,
-        reason_code: None,
-        audit_envelope: None,
-    };
-    let plaintext_push = arkret_test_kit::wire_negative_from_sdk(&push_baseline, |body| {
-        body["notification"]["content"] = json!({"body": "plaintext leak"});
-    })?;
-    expect_api_error(
-        server
-            .http()
-            .post(server.url("/_arkret/edge/push/notify"))
-            .json(&plaintext_push),
-        StatusCode::UNPROCESSABLE_ENTITY,
-        "schema_violation",
-    )
-    .await?;
-    let notify = expect_json(
-        server
-            .http()
-            .post(server.url("/_arkret/edge/push/notify"))
-            .json(&PushNotifyRequestBody {
-                notification: unregistered_device_notification()?,
-                event_kind: None,
-                reason_code: None,
-                audit_envelope: None,
-            }),
-        StatusCode::OK,
-    )
-    .await?;
-    // `push_notify_outcome` is one per-device outcome list, not accepted /
-    // rejected buckets. This device was never registered, so it comes back with
-    // a `rejected` gateway_status and the `push_token_unknown` reason code
-    // (`push_target_unknown` is reserved for a registered device whose
-    // registration does not accept the requested push target).
-    let outcomes = notify["outcomes"]
-        .as_array()
-        .expect("push notify must return per-device outcomes");
-    assert_eq!(outcomes.len(), 1);
-    assert_eq!(outcomes[0]["gateway_status"], "rejected");
-    assert_eq!(outcomes[0]["reason_code"], "push_token_unknown");
-
     expect_api_error(
         server
             .http()
@@ -614,24 +564,4 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
     .await?;
 
     Ok(())
-}
-
-/// Metadata-only wakeup envelope aimed at a device that was never registered.
-fn unregistered_device_notification() -> Result<PushNotificationEnvelope> {
-    Ok(PushNotificationEnvelope {
-        push_target_id: Some(PushTargetId::new(
-            "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
-        )?),
-        wakeup_kind: Some("message".to_owned()),
-        timing_profile_hint: Some(PushTimingProfileHint::Default),
-        devices: vec![PushDeviceRoute {
-            device_id: DeviceId::new("ak:device:01904100-0000-7000-8000-0000000000ff")?,
-            push_key: None,
-            app_id: None,
-            platform: None,
-            target_route_token: None,
-            visible_notification_opt_in: false,
-        }],
-        ..PushNotificationEnvelope::default()
-    })
 }

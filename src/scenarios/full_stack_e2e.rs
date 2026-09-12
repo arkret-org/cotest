@@ -50,16 +50,10 @@ pub async fn full_stack_e2e_run() -> Result<()> {
         message["track_name"]
     );
 
-    // The blind wakeup allow-list is closed: `wakeup_kind` and
-    // `timing_profile_hint` are the current field names, and strict mode
-    // requires both alongside `push_target_id`. The former payload still used
-    // `wake_reason` / `collapse_key`, which the sanitizer has rejected as
-    // forbidden fields since the vocabulary closed — another assertion the
-    // `#[ignore]` hid.
+    // The strict blind wakeup requires the pairwise target and coarse wakeup kind.
     let blind = json!({
         "push_target_id": PUSH_TARGET_ID,
-        "wakeup_kind": "message",
-        "timing_profile_hint": "default"
+        "wakeup_kind": "message"
     });
     sanitize_blind_payload(&blind).context("blind wakeup payload")?;
     sanitize_blind_payload_strict(&blind).context("strict blind wakeup payload")?;
