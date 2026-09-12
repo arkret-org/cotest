@@ -35,6 +35,8 @@ import type {
   RealmObject,
   RealmSealFrontierView,
   SelfInviteDispatchRequestBody,
+  RealmJoinPrepareRequestBody,
+  MessagePrepareRequestBody,
 } from "./generated/spec-wire-objects";
 import {
   accountSubscribeDeltaApi,
@@ -1407,6 +1409,108 @@ export async function acceptInviteApi(
   }), { server: opts.server, context: `accept invite ${inviteId}` });
 }
 
+async function readOwnInviteDeliveryApi(
+  request: APIRequestContext,
+  token: string,
+  realmId: string,
+  opts: { server?: SolandKey },
+  inviteId?: string,
+) {
+  const dataUrl = `${solandBaseUrl(opts.server)}/_arkret/self/account_data`;
+  const holder = await expectJsonOk<{ account_data_entries: Array<{
+    account_data_key: string; content: { delivery_entries?: Array<{
+      invite_id: string; realm_id: string; invite_token: string;
+    }> };
+  }> }>(await request.get(dataUrl, {
+    headers: authHeaders(token, "GET", dataUrl),
+  }), "read own invite delivery");
+  return holder.account_data_entries
+    .find((entry) => entry.account_data_key === "ak.account.invite_delivery")
+    ?.content.delivery_entries?.find((entry) => (!inviteId || entry.invite_id === inviteId) && entry.realm_id === realmId);
+}
+
+export async function waitForInviteDeliveryApi(
+  request: APIRequestContext,
+  token: string,
+  inviteeId: string,
+  realmId: string,
+  server: SolandKey,
+) {
+  expect(await currentActorIdApi(request, token, { server })).toBe(inviteeId);
+  let delivery: Awaited<ReturnType<typeof readOwnInviteDeliveryApi>>;
+  await expect.poll(async () => {
+    delivery = await readOwnInviteDeliveryApi(request, token, realmId, { server });
+    return Boolean(delivery);
+  }, { message: "own protected invitation notification", timeout: 45_000, intervals: [1000, 2000, 5000] }).toBe(true);
+  return { id: delivery!.invite_id, realm_id: delivery!.realm_id };
+}
+
+/** Join through the applicant's own Station without reading foreign governance. */
+export async function acceptPreparedInviteApi(
+  request: APIRequestContext,
+  token: string,
+  actorId: string,
+  realmId: string,
+  inviteId: string,
+  opts: { server?: SolandKey; waitForStatus?: boolean } = {},
+) {
+  const account = accountActorId(actorId, opts.server).account_id;
+  const delivery = await readOwnInviteDeliveryApi(request, token, realmId, opts, inviteId);
+  expect(Boolean(delivery), "own invitation credential must be available").toBe(true);
+  const input: RealmJoinPrepareRequestBody = {
+    request_id: typedId("request"), account_id: account, realm_id: realmId,
+    intent: { intent: "invite_accept", invite_id: inviteId, invite_token: delivery!.invite_token },
+    created_at: canonicalTimestamp(),
+  };
+  const url = `${solandBaseUrl(opts.server)}/_arkret/self/realm-joins/prepare`;
+  const prepare = () => request.post(url, {
+    headers: { ...authHeaders(token, "POST", url), "content-type": "application/json" },
+    data: canonicalJson(input),
+  });
+  const prepared = await expectJsonOk<Record<string, any>>(await prepare(), "own-Station join prepare");
+  expect(await expectJsonOk(await prepare(), "exact join prepare replay")).toEqual(prepared);
+  expect(prepared.request_digest).toBe(`sha256:${createHash("sha256")
+    .update("ak.realm-join-prepare-request-v1\0", "utf8").update(canonicalJson(input)).digest("hex")}`);
+  const event = prepared.unsigned_event;
+  expect(event.kind).toBe("ak.invite.accept");
+  expect(event.realm_id).toBe(realmId);
+  expect(event.actor_id).toEqual(accountActorId(actorId, opts.server));
+  expect(event.scope_ref).toEqual({ kind: "realm", realm_id: realmId });
+  expect(event.created_at).toBe(input.created_at);
+  expect(event.hlc).toBeUndefined();
+  expect(event.payload).toEqual({ invite_id: inviteId, invitee_account_id: account });
+  expect(event.actor_seq).toBe(prepared.accepted_actor_frontier.next_actor_seq);
+  expect(event.prev_refs).toEqual(prepared.accepted_actor_frontier.frontier_event_ids);
+  expect(event.event_id).toBe(sdkEventDerivedIds(event).event_id);
+  event.proofs = [eventEnvelopeProof({ actorId, event })];
+  const submitUrl = `${solandBaseUrl(opts.server)}/_arkret/self/events`;
+  const signed = canonicalJson({ event });
+  const submit = () => request.post(submitUrl, {
+    headers: { ...authHeaders(token, "POST", submitUrl), "content-type": "application/json" },
+    data: signed,
+  });
+  const accepted = await expectJsonOk<Record<string, any>>(await submit(), "prepared join submit");
+  expect(accepted.accepted).toContain(event.event_id);
+  const replay = await expectJsonOk<Record<string, any>>(await submit(), "exact join submit replay");
+  expect(replay.duplicate).toContain(event.event_id);
+  if (opts.waitForStatus !== false) {
+    const statusUrl = `${solandBaseUrl(opts.server)}/_arkret/self/realm-joins/application-status`;
+    await expect.poll(async () => {
+      const response = await request.post(statusUrl, {
+        headers: { ...authHeaders(token, "POST", statusUrl), "content-type": "application/json" },
+        data: { request_id: typedId("request"), account_id: account, realm_id: realmId, event_id: event.event_id },
+      });
+      const status = await expectJsonOk<Record<string, any>>(response, "own join application status");
+      expect(status.account_id).toEqual(account);
+      expect(status.event_id).toBe(event.event_id);
+      if (status.realm_state !== "sealed") return status.realm_state ?? status.origin_state;
+      expect(status.accepted_seal_id).toMatch(/^ak:seal:/);
+      return "sealed";
+    }, { timeout: 120_000, intervals: [1000, 2000, 5000] }).toBe("sealed");
+  }
+  return event;
+}
+
 export async function listInvitesApi(
   request: APIRequestContext,
   token: string,
@@ -1426,6 +1530,108 @@ export async function listInvitesApi(
     invites?: InviteObject[];
   }>(response, "list invites");
   return body.invites ?? [];
+}
+
+/** Exercise prepare, exact replay and the ordinary submit without re-authoring. */
+export async function sendPreparedMessageApi(
+  request: APIRequestContext,
+  token: string,
+  realmId: string,
+  body: string,
+  opts: { server?: SolandKey } = {},
+) {
+  const principal = await currentActorIdApi(request, token, opts);
+  const actor = accountActorId(principal, opts.server);
+  const strandId = await resolveDefaultStrandId(request, token, realmId, opts);
+  const content = { kind: "ak.content.text" as const, body };
+  const intent: MessagePrepareRequestBody["intent"] = {
+    strand_id: strandId,
+    track_name: "discussion",
+    content: { kind: "plaintext", content },
+  };
+  const prepare: MessagePrepareRequestBody = {
+    request_id: typedId("request"),
+    account_id: actor.account_id,
+    realm_id: realmId,
+    intent,
+    created_at: canonicalTimestamp(),
+  };
+  const prepareUrl = `${solandBaseUrl(opts.server)}/_arkret/self/messages/prepare`;
+  const fetch = () => request.post(prepareUrl, {
+    headers: {
+      ...authHeaders(token, "POST", prepareUrl),
+      "content-type": "application/json",
+    },
+    data: canonicalJson(prepare),
+  });
+  const prepared = await expectJsonOk<Record<string, any>>(
+    await fetch(), "typed message prepare",
+  );
+  expect(await expectJsonOk(await fetch(), "exact prepare replay")).toEqual(prepared);
+  const conflicting = await request.post(prepareUrl, {
+    headers: {
+      ...authHeaders(token, "POST", prepareUrl),
+      "content-type": "application/json",
+    },
+    data: canonicalJson({
+      ...prepare,
+      intent: {
+        ...intent,
+        content: { kind: "plaintext", content: { ...content, body: `${body} changed` } },
+      },
+    }),
+  });
+  expect(conflicting.status()).toBe(409);
+  expect(wireErrCode(await conflicting.json())).toBe("duplicate_conflict");
+  expect(prepared.request_digest).toBe(`sha256:${sha256CanonicalJson(prepare)}`);
+  const unsigned = JSON.parse(
+    Buffer.from(prepared.draft.unsigned_event_bytes, "base64url").toString("utf8"),
+  );
+  expect(unsigned.kind).toBe("ak.message.create");
+  expect(unsigned.realm_id).toBe(realmId);
+  expect(unsigned.actor_id).toEqual(actor);
+  expect(unsigned.created_at).toBe(prepare.created_at);
+  expect(unsigned.scope_ref).toEqual({ kind: "realm", realm_id: realmId });
+  expect(unsigned.payload).toEqual({
+    strand_id: strandId, track_name: "discussion", content,
+  });
+  expect(unsigned.actor_seq).toBe(prepared.accepted_actor_frontier.next_actor_seq);
+  expect(unsigned.prev_refs).toEqual(prepared.accepted_actor_frontier.frontier_event_ids);
+  expect(unsigned.refs ?? []).toEqual([]);
+  expect(unsigned.causal_refs ?? []).toEqual([]);
+  expect(unsigned.preconditions ?? []).toEqual([]);
+  const derived = sdkEventDerivedIds(unsigned);
+  const event = { ...unsigned, event_id: derived.event_id };
+  expect(prepared.draft.event_digest).toBe(`sha256:${sha256CanonicalJson(unsigned)}`);
+  event.proofs = [eventEnvelopeProof({ actorId: principal, event })];
+  const url = `${solandBaseUrl(opts.server)}/_arkret/self/events`;
+  const submission = canonicalJson({ event });
+  const submit = () => request.post(url, {
+    headers: {
+      ...authHeaders(token, "POST", url),
+      "content-type": "application/json",
+    },
+    data: submission,
+  });
+  const outcome = await expectJsonOk<Record<string, unknown>>(
+    await submit(), "prepared message submit",
+  );
+  expect(outcome.status).toBe("accepted");
+  expect(outcome.accepted).toEqual([event.event_id]);
+  const replay = await expectJsonOk<Record<string, unknown>>(
+    await submit(), "exact signed submission replay",
+  );
+  expect(replay.status).toBe("duplicate");
+  expect(replay.duplicate).toEqual([event.event_id]);
+  expect(replay.frontiers).toEqual(outcome.frontiers);
+  expect(replay.ingress_receipts).toEqual(outcome.ingress_receipts);
+  return {
+    event_id: event.event_id,
+    realm_id: realmId,
+    actor_id: principal,
+    actor_seq: Number(event.actor_seq),
+    prev_refs: event.prev_refs,
+  };
 }
 
 export async function sendMessageApi(
@@ -1736,6 +1942,7 @@ export function signedEventEnvelope(
   // closed `realm_genesis` form. Sending either would be
   // `realm_id_not_event_derived`.
   const isRealmGenesis = args.kind === "ak.realm.create";
+  const preconditions = args.preconditions ?? inviteLiveTargetPreconditions(args.kind, payload);
   const unidentified = stripUndefined({
     kind: args.kind,
     realm_id: isRealmGenesis ? undefined : args.realmId,
@@ -1752,13 +1959,12 @@ export function signedEventEnvelope(
     created_at: createdAt,
     hlc,
     prev_refs: args.prevRefs ?? [],
-    refs: args.refs ?? [],
+    refs: args.refs?.length ? args.refs : undefined,
     // An invite Move that writes the live-target slot MUST carry that cell's
     // head_eq. Deriving it here keeps every harness-authored invite conformant
     // without each scenario re-spelling the cell; an explicit precondition list
     // still wins, which is how a negative case proves a wrong guard is refused.
-    preconditions: args.preconditions ??
-      inviteLiveTargetPreconditions(args.kind, payload),
+    preconditions: preconditions?.length ? preconditions : undefined,
     seal_ref: args.sealRef,
     seal_basis: args.sealBasis,
     auth_context: args.authContext,

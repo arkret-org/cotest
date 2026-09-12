@@ -8,6 +8,521 @@
 // literals with these types so an unregistered member is a `tsc` error rather
 // than a live-server rejection.
 
+/** `realm-join-intake.schema.json#/$defs/self_prepare_request_body` — closed object schema. */
+export type RealmJoinPrepareRequestBody = {
+  "request_id": string;
+  "account_id": {
+    "principal_id": string;
+    "station_id": string;
+  };
+  "realm_id": string;
+  "intent": {
+    "intent": "invite_accept";
+    "invite_id": string;
+    "invite_token": string;
+  } | {
+    "intent": "member_join";
+    "gate_proofs"?: Array<{
+      "gate_id": string;
+      "kind": "challenge_response" | "claim_required";
+      "realm_id": string;
+      "applicant_actor_id": {
+        "kind": "account";
+        "account_id": {
+          "principal_id": string;
+          "station_id": string;
+        };
+      } | {
+        "kind": "service";
+        "service_id": string;
+      };
+      "policy_digest": string;
+      "created_at": string;
+      "challenge_kind"?: "captcha" | "pow" | "attested_human" | "idp_oidc";
+      "challenge_id"?: string;
+      "issuer_id"?: string;
+      "claims"?: string[];
+      "proofs": Array<{
+        "kind": "detached_jws";
+        "verification_method": string;
+        "payload_digest": string;
+        "created_at": string;
+        "domain"?: string;
+        "audience"?: string | string[];
+        "proof_purpose"?: "issuer_attestation" | "holder_acceptance" | "status_attestation" | "revocation_authorization" | "governance_authorization";
+        "jws": string;
+      }>;
+    }>;
+  } | {
+    "intent": "knock";
+  };
+  "created_at": string;
+  "hlc"?: string;
+};
+
+/** `message-authoring.schema.json#/$defs/message_prepare_request_body` — closed object schema. */
+export type MessagePrepareRequestBody = {
+  "request_id": string;
+  "account_id": {
+    "principal_id": string;
+    "station_id": string;
+  };
+  "realm_id": string;
+  "intent": {
+    "strand_id": string;
+    "track_name": "discussion";
+    "content": {
+      "kind": "plaintext";
+      "content": {
+        "kind": string;
+        "body": string;
+        "format"?: "plain" | "markdown" | "prosemirror_json";
+        "formatted_body"?: string | Record<string, unknown>;
+        "parts"?: Array<{
+          "kind": string;
+          "body": string;
+          "format"?: "plain" | "markdown" | "prosemirror_json";
+          "formatted_body"?: string | Record<string, unknown>;
+          "parts"?: Array<{
+            "kind": string;
+            "body": string;
+            "format"?: "plain" | "markdown" | "prosemirror_json";
+            "formatted_body"?: string | Record<string, unknown>;
+            "parts"?: Array<{
+              "kind": string;
+              "body": string;
+              "format"?: "plain" | "markdown" | "prosemirror_json";
+              "formatted_body"?: string | Record<string, unknown>;
+              "parts"?: Array<{
+                "kind": string;
+                "body": string;
+                "format"?: "plain" | "markdown" | "prosemirror_json";
+                "formatted_body"?: string | Record<string, unknown>;
+                "parts"?: Array<{
+                  "kind": string;
+                  "body": string;
+                  "format"?: "plain" | "markdown" | "prosemirror_json";
+                  "formatted_body"?: string | Record<string, unknown>;
+                  "parts"?: Array<{
+                    "kind": string;
+                    "body": string;
+                    "format"?: "plain" | "markdown" | "prosemirror_json";
+                    "formatted_body"?: string | Record<string, unknown>;
+                    "parts"?: Array<{
+                      "kind": string;
+                      "body": string;
+                      "format"?: "plain" | "markdown" | "prosemirror_json";
+                      "formatted_body"?: string | Record<string, unknown>;
+                      "parts"?: Array<{
+                        "kind": unknown;
+                        "body": string;
+                        "format"?: "plain" | "markdown" | "prosemirror_json";
+                        "formatted_body"?: unknown;
+                        "parts"?: unknown[];
+                        "mentions"?: unknown[];
+                        "audience_mentions"?: unknown[];
+                        "attachments"?: unknown[];
+                        "reply_context"?: {
+                          "message_ref"?: unknown;
+                          "sender_actor_id"?: unknown;
+                          "excerpt"?: unknown;
+                          [key: string]: unknown;
+                        };
+                        [key: string]: unknown;
+                      }>;
+                      "mentions"?: Array<{
+                        "kind": "mention";
+                        "subject_account_id": unknown;
+                        "display_name_at_time"?: string;
+                        "handle_at_time"?: unknown;
+                        "controller_subject_account_id"?: unknown;
+                        "controller_handle_at_time"?: unknown;
+                        "agent_slug_at_time"?: unknown;
+                        "mention_text_original"?: string;
+                        "resolved_at"?: unknown;
+                      }>;
+                      "audience_mentions"?: Array<{
+                        "kind": "audience_mention";
+                        "audience": "effective_scope_members" | "strand_participants" | "strand_watchers" | "strand_engaged" | "assigned_actors";
+                        "mention_text_original"?: string;
+                        "resolved_at"?: unknown;
+                      }>;
+                      "attachments"?: Array<Record<string, unknown>>;
+                      "reply_context"?: {
+                        "message_ref"?: string;
+                        "sender_actor_id"?: {
+                          "kind": unknown;
+                          "account_id": unknown;
+                        } | {
+                          "kind": unknown;
+                          "service_id": unknown;
+                        };
+                        "excerpt"?: string;
+                        [key: string]: unknown;
+                      };
+                      [key: string]: unknown;
+                    }>;
+                    "mentions"?: Array<{
+                      "kind": "mention";
+                      "subject_account_id": {
+                        "principal_id": string;
+                        "station_id": string;
+                      };
+                      "display_name_at_time"?: string;
+                      "handle_at_time"?: string;
+                      "controller_subject_account_id"?: {
+                        "principal_id": string;
+                        "station_id": string;
+                      };
+                      "controller_handle_at_time"?: string;
+                      "agent_slug_at_time"?: string;
+                      "mention_text_original"?: string;
+                      "resolved_at"?: string;
+                    }>;
+                    "audience_mentions"?: Array<{
+                      "kind": "audience_mention";
+                      "audience": "effective_scope_members" | "strand_participants" | "strand_watchers" | "strand_engaged" | "assigned_actors";
+                      "mention_text_original"?: string;
+                      "resolved_at"?: string;
+                    }>;
+                    "attachments"?: Array<Record<string, unknown>>;
+                    "reply_context"?: {
+                      "message_ref"?: string;
+                      "sender_actor_id"?: {
+                        "kind": "account";
+                        "account_id": {
+                          "principal_id": unknown;
+                          "station_id": unknown;
+                        };
+                      } | {
+                        "kind": "service";
+                        "service_id": string;
+                      };
+                      "excerpt"?: string;
+                      [key: string]: unknown;
+                    };
+                    [key: string]: unknown;
+                  }>;
+                  "mentions"?: Array<{
+                    "kind": "mention";
+                    "subject_account_id": {
+                      "principal_id": string;
+                      "station_id": string;
+                    };
+                    "display_name_at_time"?: string;
+                    "handle_at_time"?: string;
+                    "controller_subject_account_id"?: {
+                      "principal_id": string;
+                      "station_id": string;
+                    };
+                    "controller_handle_at_time"?: string;
+                    "agent_slug_at_time"?: string;
+                    "mention_text_original"?: string;
+                    "resolved_at"?: string;
+                  }>;
+                  "audience_mentions"?: Array<{
+                    "kind": "audience_mention";
+                    "audience": "effective_scope_members" | "strand_participants" | "strand_watchers" | "strand_engaged" | "assigned_actors";
+                    "mention_text_original"?: string;
+                    "resolved_at"?: string;
+                  }>;
+                  "attachments"?: Array<Record<string, unknown>>;
+                  "reply_context"?: {
+                    "message_ref"?: string;
+                    "sender_actor_id"?: {
+                      "kind": "account";
+                      "account_id": {
+                        "principal_id": string;
+                        "station_id": string;
+                      };
+                    } | {
+                      "kind": "service";
+                      "service_id": string;
+                    };
+                    "excerpt"?: string;
+                    [key: string]: unknown;
+                  };
+                  [key: string]: unknown;
+                }>;
+                "mentions"?: Array<{
+                  "kind": "mention";
+                  "subject_account_id": {
+                    "principal_id": string;
+                    "station_id": string;
+                  };
+                  "display_name_at_time"?: string;
+                  "handle_at_time"?: string;
+                  "controller_subject_account_id"?: {
+                    "principal_id": string;
+                    "station_id": string;
+                  };
+                  "controller_handle_at_time"?: string;
+                  "agent_slug_at_time"?: string;
+                  "mention_text_original"?: string;
+                  "resolved_at"?: string;
+                }>;
+                "audience_mentions"?: Array<{
+                  "kind": "audience_mention";
+                  "audience": "effective_scope_members" | "strand_participants" | "strand_watchers" | "strand_engaged" | "assigned_actors";
+                  "mention_text_original"?: string;
+                  "resolved_at"?: string;
+                }>;
+                "attachments"?: Array<Record<string, unknown>>;
+                "reply_context"?: {
+                  "message_ref"?: string;
+                  "sender_actor_id"?: {
+                    "kind": "account";
+                    "account_id": {
+                      "principal_id": string;
+                      "station_id": string;
+                    };
+                  } | {
+                    "kind": "service";
+                    "service_id": string;
+                  };
+                  "excerpt"?: string;
+                  [key: string]: unknown;
+                };
+                [key: string]: unknown;
+              }>;
+              "mentions"?: Array<{
+                "kind": "mention";
+                "subject_account_id": {
+                  "principal_id": string;
+                  "station_id": string;
+                };
+                "display_name_at_time"?: string;
+                "handle_at_time"?: string;
+                "controller_subject_account_id"?: {
+                  "principal_id": string;
+                  "station_id": string;
+                };
+                "controller_handle_at_time"?: string;
+                "agent_slug_at_time"?: string;
+                "mention_text_original"?: string;
+                "resolved_at"?: string;
+              }>;
+              "audience_mentions"?: Array<{
+                "kind": "audience_mention";
+                "audience": "effective_scope_members" | "strand_participants" | "strand_watchers" | "strand_engaged" | "assigned_actors";
+                "mention_text_original"?: string;
+                "resolved_at"?: string;
+              }>;
+              "attachments"?: Array<Record<string, unknown>>;
+              "reply_context"?: {
+                "message_ref"?: string;
+                "sender_actor_id"?: {
+                  "kind": "account";
+                  "account_id": {
+                    "principal_id": string;
+                    "station_id": string;
+                  };
+                } | {
+                  "kind": "service";
+                  "service_id": string;
+                };
+                "excerpt"?: string;
+                [key: string]: unknown;
+              };
+              [key: string]: unknown;
+            }>;
+            "mentions"?: Array<{
+              "kind": "mention";
+              "subject_account_id": {
+                "principal_id": string;
+                "station_id": string;
+              };
+              "display_name_at_time"?: string;
+              "handle_at_time"?: string;
+              "controller_subject_account_id"?: {
+                "principal_id": string;
+                "station_id": string;
+              };
+              "controller_handle_at_time"?: string;
+              "agent_slug_at_time"?: string;
+              "mention_text_original"?: string;
+              "resolved_at"?: string;
+            }>;
+            "audience_mentions"?: Array<{
+              "kind": "audience_mention";
+              "audience": "effective_scope_members" | "strand_participants" | "strand_watchers" | "strand_engaged" | "assigned_actors";
+              "mention_text_original"?: string;
+              "resolved_at"?: string;
+            }>;
+            "attachments"?: Array<Record<string, unknown>>;
+            "reply_context"?: {
+              "message_ref"?: string;
+              "sender_actor_id"?: {
+                "kind": "account";
+                "account_id": {
+                  "principal_id": string;
+                  "station_id": string;
+                };
+              } | {
+                "kind": "service";
+                "service_id": string;
+              };
+              "excerpt"?: string;
+              [key: string]: unknown;
+            };
+            [key: string]: unknown;
+          }>;
+          "mentions"?: Array<{
+            "kind": "mention";
+            "subject_account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+            "display_name_at_time"?: string;
+            "handle_at_time"?: string;
+            "controller_subject_account_id"?: {
+              "principal_id": string;
+              "station_id": string;
+            };
+            "controller_handle_at_time"?: string;
+            "agent_slug_at_time"?: string;
+            "mention_text_original"?: string;
+            "resolved_at"?: string;
+          }>;
+          "audience_mentions"?: Array<{
+            "kind": "audience_mention";
+            "audience": "effective_scope_members" | "strand_participants" | "strand_watchers" | "strand_engaged" | "assigned_actors";
+            "mention_text_original"?: string;
+            "resolved_at"?: string;
+          }>;
+          "attachments"?: Array<Record<string, unknown>>;
+          "reply_context"?: {
+            "message_ref"?: string;
+            "sender_actor_id"?: {
+              "kind": "account";
+              "account_id": {
+                "principal_id": string;
+                "station_id": string;
+              };
+            } | {
+              "kind": "service";
+              "service_id": string;
+            };
+            "excerpt"?: string;
+            [key: string]: unknown;
+          };
+          [key: string]: unknown;
+        }>;
+        "mentions"?: Array<{
+          "kind": "mention";
+          "subject_account_id": {
+            "principal_id": string;
+            "station_id": string;
+          };
+          "display_name_at_time"?: string;
+          "handle_at_time"?: string;
+          "controller_subject_account_id"?: {
+            "principal_id": string;
+            "station_id": string;
+          };
+          "controller_handle_at_time"?: string;
+          "agent_slug_at_time"?: string;
+          "mention_text_original"?: string;
+          "resolved_at"?: string;
+        }>;
+        "audience_mentions"?: Array<{
+          "kind": "audience_mention";
+          "audience": "effective_scope_members" | "strand_participants" | "strand_watchers" | "strand_engaged" | "assigned_actors";
+          "mention_text_original"?: string;
+          "resolved_at"?: string;
+        }>;
+        "attachments"?: Array<Record<string, unknown>>;
+        "reply_context"?: {
+          "message_ref"?: string;
+          "sender_actor_id"?: {
+            "kind": "account";
+            "account_id": {
+              "principal_id": string;
+              "station_id": string;
+            };
+          } | {
+            "kind": "service";
+            "service_id": string;
+          };
+          "excerpt"?: string;
+          [key: string]: unknown;
+        };
+        [key: string]: unknown;
+      };
+      "metadata"?: {
+        "fields"?: Record<string, unknown>;
+        [key: string]: unknown;
+      };
+    } | {
+      "kind": "mls";
+      "encrypted_content": {
+        "version": "1.0";
+        "content_type": string;
+        "encryption_context": {
+          "epoch": number;
+          "group_state_ref": string;
+          "routing_context"?: {
+            "target_ref": string;
+            "routing_tag": string;
+          };
+        } | {
+          "epoch": number;
+          "group_state_ref": string;
+          "counter": number;
+          "routing_context"?: {
+            "target_ref": string;
+            "routing_tag": string;
+          };
+        };
+        "ciphertext": string;
+      };
+      "encrypted_metadata"?: {
+        "version": "1.0";
+        "content_type": string;
+        "encryption_context": {
+          "epoch": number;
+          "group_state_ref": string;
+          "routing_context"?: {
+            "target_ref": string;
+            "routing_tag": string;
+          };
+        } | {
+          "epoch": number;
+          "group_state_ref": string;
+          "counter": number;
+          "routing_context"?: {
+            "target_ref": string;
+            "routing_tag": string;
+          };
+        };
+        "ciphertext": string;
+      };
+      "encryption_context": {
+        "scheme": "mls_rfc9420" | "mls_exporter_aead_v1";
+        "effective_scope": {
+          "kind": "realm";
+          "realm_id": string;
+        } | {
+          "kind": "circle";
+          "realm_id": string;
+          "circle_id": string;
+        } | {
+          "kind": "sidecar";
+          "realm_id": string;
+          "sidecar_id": string;
+        } | {
+          "kind": "realm_genesis";
+        };
+        "sender_domain": string;
+      };
+    };
+    "blob_refs"?: string[];
+    "reply_to_id"?: string;
+  };
+  "created_at": string;
+  "hlc"?: string;
+};
+
 /** `identity-resolution.schema.json#/$defs/public_principal_resolution` — closed object schema. */
 export type PublicPrincipalResolution = {
   "account_id": {
@@ -984,7 +1499,7 @@ export type InviteDeliveryRequestBody = {
       };
     } | {
       "id": string;
-      "role": "authorized_by" | "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "did_inception" | "did_recovery_anchor" | "accountability";
+      "role": "authorized_by" | "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "did_inception" | "accountability";
       "critical": boolean;
     }>;
     "causal_refs"?: string[];
@@ -2447,7 +2962,7 @@ export type RealmSealFrontierView = {
 export type EventFederationSubmission = {
   "event": {
     "event_id": string;
-    "kind": string;
+    "kind": "ak.actor.discovery" | "ak.agent.key.authorize" | "ak.agent.key.revoke" | "ak.agent.provision" | "ak.agent.selector_claim" | "ak.agent.sidecar.exchange.control" | "ak.applet.bridge_error" | "ak.applet.discovery" | "ak.applet.managed_actor.provision" | "ak.applet.registration" | "ak.audit.accessed" | "ak.audit.applet_binding.create" | "ak.audit.applet_binding.state" | "ak.audit.erasure_receipt" | "ak.audit.release" | "ak.audit.ryw_receipt" | "ak.audit.session.authorize" | "ak.audit.session.close" | "ak.audit.session.notice" | "ak.audit.session.request" | "ak.call.create" | "ak.call.recording.start" | "ak.call.state" | "ak.call.summary" | "ak.capability.derived" | "ak.capability.grant" | "ak.capability.relinquish" | "ak.capability.revoke" | "ak.circle.archive" | "ak.circle.create" | "ak.circle.history_access" | "ak.circle.member.state" | "ak.circle.restore" | "ak.circle.seal_commit" | "ak.circle.tombstone" | "ak.circle.update" | "ak.conflict.recovery" | "ak.consent.grant" | "ak.consent.revoke" | "ak.contact.accepted" | "ak.contact.rejected" | "ak.contact.requested" | "ak.contact.scope.update" | "ak.contact.tombstone" | "ak.container.move_item" | "ak.container.rebalance" | "ak.device.authorize" | "ak.device.list_update" | "ak.device.reanchor" | "ak.device.revoke" | "ak.direct_conversation.bound" | "ak.fork.resolution" | "ak.handle.discovery" | "ak.identity.accountability_grant" | "ak.identity.disclosure_policy" | "ak.identity.disclosure_receipt" | "ak.identity.presentation_request" | "ak.identity.presentation_response" | "ak.identity.resolution.update" | "ak.invite.accept" | "ak.invite.cancel" | "ak.invite.claim" | "ak.invite.create" | "ak.invite.revoke" | "ak.invite.third_party" | "ak.key_backup.active_series" | "ak.member.identity.update" | "ak.member.state" | "ak.message.create" | "ak.message.redact" | "ak.message.revise" | "ak.mimi.room_binding" | "ak.mls.commit" | "ak.mls.commit_failed" | "ak.mls.genesis" | "ak.mls.keypackage" | "ak.mls.proposal" | "ak.mls.welcome" | "ak.moderation.decision" | "ak.moderation.decision.lift" | "ak.moderation.franking_proof" | "ak.morph.archive" | "ak.morph.create" | "ak.morph.restore" | "ak.morph.stage.set" | "ak.morph.update" | "ak.notary.fault.censorship" | "ak.notary.fault.equivocation" | "ak.organization.discovery" | "ak.organization.moderation_policy" | "ak.pin.add" | "ak.pin.remove" | "ak.pin.reorder" | "ak.policy.action" | "ak.policy.rule" | "ak.policy.set" | "ak.profile.create" | "ak.profile.realm_override" | "ak.profile.update" | "ak.reaction.add" | "ak.reaction.remove" | "ak.realm.alias" | "ak.realm.archive" | "ak.realm.asset_privacy_policy" | "ak.realm.authority.reset" | "ak.realm.create" | "ak.realm.destroy" | "ak.realm.digest_suite_transition" | "ak.realm.discovery" | "ak.realm.freeze" | "ak.realm.history_access" | "ak.realm.inheritance_policy" | "ak.realm.join_rule" | "ak.realm.link" | "ak.realm.media_service" | "ak.realm.notary" | "ak.realm.organization" | "ak.realm.organization_recovery_key.register" | "ak.realm.organization_recovery_key.rotate" | "ak.realm.owner.transfer" | "ak.realm.plaintext_visible_services" | "ak.realm.policy" | "ak.realm.policy_bundle" | "ak.realm.preview_policy" | "ak.realm.profile" | "ak.realm.read_receipt_policy" | "ak.realm.restore" | "ak.realm.schema" | "ak.realm.search_policy" | "ak.realm.set_default_strand" | "ak.realm.tombstone" | "ak.realm.unfreeze" | "ak.realm.upgrade" | "ak.redaction" | "ak.relation.create" | "ak.relation.resolve" | "ak.relation.tombstone" | "ak.relation.update" | "ak.rsvp.set" | "ak.schema.define" | "ak.self.agent.deactivate" | "ak.self.agent.pause" | "ak.self.agent.resume" | "ak.self.moderation.report" | "ak.sidecar.context.attach" | "ak.sidecar.create" | "ak.sovereign.did_policy" | "ak.space.archive" | "ak.space.create" | "ak.space.parent" | "ak.space.restore" | "ak.space.tombstone" | "ak.space.update" | "ak.strand.archive" | "ak.strand.create" | "ak.strand.move" | "ak.strand.reorder" | "ak.strand.restore" | "ak.strand.stage.set" | "ak.strand.tracks.update" | "ak.strand.update" | "ak.strand.watch.set" | "ak.view.create" | "ak.view.reconcile" | "ak.view.update";
     "realm_id"?: string;
     "scope_ref": {
       "kind": "realm";
@@ -2517,7 +3032,7 @@ export type EventFederationSubmission = {
       };
     } | {
       "id": string;
-      "role": "authorized_by" | "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "did_inception" | "did_recovery_anchor" | "accountability";
+      "role": "authorized_by" | "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "did_inception" | "accountability";
       "critical": boolean;
     }>;
     "causal_refs"?: string[];

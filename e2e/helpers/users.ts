@@ -2018,7 +2018,7 @@ export async function approvePairingLinkOnAuthorizedDevice(
   ).toContainText("Device paired", { timeout: 90_000 });
 }
 
-async function allowExplicitInviteNotifications(
+export async function allowExplicitInviteNotifications(
   request: APIRequestContext,
   session: DpopUserSession,
   server?: SolandKey,

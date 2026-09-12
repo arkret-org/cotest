@@ -9,7 +9,7 @@ This static inventory does not claim runtime verification; use an Arkret Joint P
 | UJ-B - Workspace creation, invites, and archive visibility | 17 | 17 | 100.0% | 0 |
 | UJ-C - Daily messaging, edits, reactions, receipts, and mentions | 41 | 41 | 100.0% | 0 |
 | UJ-D - Encrypted realm lifecycle and cross-device decrypt | 7 | 7 | 100.0% | 0 |
-| UJ-E - Federation and cross-domain collaboration | 20 | 20 | 100.0% | 0 |
+| UJ-E - Federation and cross-domain collaboration | 19 | 19 | 100.0% | 0 |
 | UJ-F - Kanban collaboration and concurrent work | 46 | 46 | 100.0% | 0 |
 | UJ-G - Privacy rights, governance, and GDPR | 19 | 19 | 100.0% | 0 |
 | UJ-H - Calls, push, and cross-platform sync | 5 | 5 | 100.0% | 0 |
@@ -64,7 +64,7 @@ This static inventory does not claim runtime verification; use an Arkret Joint P
 | spec | mapping | implemented | promised | blocking |
 |---|---|---:|---:|---:|
 | federation/contact-graph-federation | domain-fallback | 5 | 5 | 0 |
-| federation/cross-server | domain-fallback | 10 | 10 | 0 |
+| federation/cross-server | domain-fallback | 9 | 9 | 0 |
 | federation/three-server-p0 | domain-fallback | 5 | 5 | 0 |
 
 ## UJ-F - Kanban collaboration and concurrent work

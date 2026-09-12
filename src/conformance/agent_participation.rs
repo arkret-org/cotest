@@ -210,7 +210,10 @@ fn selector_claim(
 fn selector_outcome(claim: AgentSelectorClaim) -> Result<DirectoryAgentSelectorResolutionOutcome> {
     let outcome = DirectoryAgentSelectorResolutionOutcome {
         controller_subject_id: claim.controller_subject_id.clone(),
-        subject_account_id: claim.subject_account_id.clone().ok_or_else(|| anyhow!("unbound selector"))?,
+        subject_account_id: claim
+            .subject_account_id
+            .clone()
+            .ok_or_else(|| anyhow!("unbound selector"))?,
         agent_slug: claim.agent_slug.clone(),
         selector_claim: claim,
         source_refs: vec![arkret_wire::EventId::new(
