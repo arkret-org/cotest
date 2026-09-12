@@ -538,7 +538,7 @@ pub async fn seal_principal_control_frontier_with_pending_events(
             .pcr_pending_control(
                 &arkret_models_collaboration::governance_dependencies::PcrPendingControlRequestBody {
                     realm_id: realm_id.clone(),
-                    predecessor_ref: Some(leaf.clone()),
+                    predecessor_ref: leaf.clone(),
                     limit: 1,
                 },
             )
@@ -564,7 +564,7 @@ pub async fn seal_principal_control_frontier_with_pending_events(
         let request =
             arkret_models_collaboration::governance_dependencies::SealPrepareRequestBody {
                 realm_id: realm_id.clone(),
-                predecessor_ref: Some(leaf.clone()),
+                predecessor_ref: leaf.clone(),
                 event_digests: pending.event_digests,
                 hlc: Hlc::new(format!("{physical_millis:012x}-{index:04x}-a13f9c2e"))?,
             };

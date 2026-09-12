@@ -397,14 +397,14 @@ fn validate_reanchor_helpers() -> Result<()> {
     let delta = vec![reanchor_digest.clone(), authorize_digest.clone()];
     validate_device_reanchor_recovery_first_seal(
         &payload,
-        &[],
+        None,
         &delta,
         &reanchor_digest,
         &authorize_digest,
     )?;
     if validate_device_reanchor_recovery_first_seal(
         &payload,
-        &[],
+        None,
         &delta[..1],
         &reanchor_digest,
         &authorize_digest,

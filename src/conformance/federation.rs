@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use anyhow::{Result, anyhow, bail};
-use arkret_wire::{DomainSeparationId, SchemaId};
+use arkret_wire::SchemaId;
 use serde_json::{Value, json};
 
 use super::{FederationFixture, canonical_json, load_fixture, sha256_prefixed};
@@ -359,23 +359,22 @@ fn validate_agent_event_admission_receipt_handoff_case(case: &super::NamedCase) 
         .as_ref()
         .ok_or_else(|| anyhow!("{} lacks request_contract", case.name))?;
     let required_contract = json!({
-        "outcome_field": "agent_event_admissions",
-        "receipt_schema": SchemaId::AGENT_SIGNER_ADMISSION_RECEIPT_V1,
-        "receipt_proof_domain": DomainSeparationId::AGENT_SIGNER_ADMISSION_RECEIPT_V1,
-        "receipted_outcome_classes": ["accepted", "duplicate"],
-        "unreceipted_outcome_classes": ["rejected", "quarantine", "dependency_missing"],
-        "receipt_written_in_event_acceptance_transaction": true,
-        "self_submit_outcome_omits_receipts": true,
-        "receipt_binding_fields": [
-            "event_id",
-            "realm_id",
-            "producer_accepted_at",
-            "accepted_at",
-            "agent_id",
-            "verification_method",
-            "producer_signer_resolution_evidence_ref",
-            "receiver_id"
-        ]
+            "outcome_fields": [
+                    "accepted",
+                    "duplicate",
+                    "rejected",
+                    "quarantine"
+            ],
+            "producer_evidence_schema": SchemaId::AUTHENTICATED_SIGNER_RESOLUTION_EVIDENCE_V1,
+            "receiver_admission_receipt": false,
+            "retained_material": [
+                    "original_event",
+                    "producer_evidence",
+                    "recursive_dependencies"
+            ],
+            "acceptance_and_dependencies_atomic": true,
+            "exact_retry_reuses_canonical_bytes": true,
+            "successful_outcome_creates_authority": false
     });
     if contract != &required_contract {
         bail!("{} request_contract drifted", case.name);
@@ -383,67 +382,59 @@ fn validate_agent_event_admission_receipt_handoff_case(case: &super::NamedCase) 
     const EXPECTED: &[(&str, &str)] = &[
         (
             "accepted_agent_event",
-            "outcome_returns_one_receiver_signed_receipt_for_that_event",
+            "ordinary_per_event_accepted_without_receiver_receipt",
         ),
         (
             "accepted_non_agent_event",
-            "outcome_carries_no_receipt_for_that_event",
+            "same_per_event_outcome_contract",
         ),
         (
             "rejected_quarantined_or_dependency_missing_agent_event",
-            "no_receipt_signed_and_none_returned",
+            "no_successful_acknowledgement",
         ),
         (
-            "receipt_write_fails_inside_event_acceptance_transaction",
-            "event_acceptance_rolls_back_with_zero_receipt",
+            "dependency_write_fails_inside_event_acceptance_transaction",
+            "event_acceptance_rolls_back",
         ),
         (
             "two_receivers_accept_the_same_event",
-            "one_receipt_per_receiver_id_as_distinct_historical_branches",
+            "independent_local_persistence_without_new_authority",
         ),
         (
             "byte_identical_resubmission_of_an_accepted_event",
-            "duplicate_returns_the_first_stored_byte_identical_receipt",
-        ),
-        (
-            "duplicate_branch_mints_a_new_accepted_at_or_signing_method",
-            "nonconformant_receipt_replay",
+            "duplicate_reuses_original_event_and_evidence",
         ),
         (
             "carried_event_id_does_not_match_current_canonical_bytes",
-            "event_id_digest_mismatch_with_zero_receipt_and_zero_side_effect",
+            "event_id_digest_mismatch_before_dedup_or_side_effects",
         ),
         (
             "two_distinct_canonical_preimages_artificially_injected_with_the_same_recomputed_complete_event_id",
-            "witness_disagreement_quarantines_affected_scope_with_zero_receipt",
+            "witness_disagreement_quarantines_affected_scope",
         ),
         (
-            "receipt_set_matches_producer_evidence_pair_events_one_to_one",
-            "source_atomically_commits_receipt_and_materialization_obligation",
-        ),
-        (
-            "outcome_omits_a_receipt_for_one_such_event",
-            "handoff_incomplete_and_delivery_not_marked_complete",
-        ),
-        (
-            "outcome_returns_a_receipt_outside_accepted_and_duplicate",
-            "handoff_incomplete_and_delivery_not_marked_complete",
-        ),
-        (
-            "receipt_proof_unparsable_or_receiver_id_mismatch",
-            "handoff_incomplete_and_delivery_not_marked_complete",
-        ),
-        (
-            "receipt_producer_evidence_pair_differs_from_the_frozen_origin_pair",
-            "handoff_incomplete_and_delivery_not_marked_complete",
-        ),
-        (
-            "source_restarts_before_the_obligation_commit",
-            "same_outbox_row_replays_the_same_event_receiver_receipt_intent",
+            "outcome_omits_an_event_from_accepted_and_duplicate",
+            "outbox_obligation_remains_pending",
         ),
         (
             "response_transport_authentication_or_outcome_schema_invalid",
-            "outcome_discarded_before_any_receipt_consumption",
+            "outcome_discarded_before_delivery_completion",
+        ),
+        (
+            "destination_crashes_before_durable_commit",
+            "no_successful_acknowledgement",
+        ),
+        (
+            "destination_crashes_after_commit_before_response",
+            "same_event_retry_returns_duplicate",
+        ),
+        (
+            "source_restarts_before_delivery_completion_commit",
+            "same_outbox_event_and_evidence_retry_is_safe",
+        ),
+        (
+            "later_current_state_is_available_but_original_evidence_is_missing",
+            "dependency_missing_without_reconstructing_original_authority",
         ),
     ];
     validate_named_expectations(case, EXPECTED)?;

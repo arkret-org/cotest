@@ -1151,15 +1151,13 @@ fn sign_prepared_draft(
         arkret::canonical::DigestSuite::Sha256,
     )
     .map_err(|_| SidecarModelError::DraftMismatch)?;
+    let signer_evidence_ref =
+        crate::fixture_signer_evidence_ref(format!("sidecar:{}", event.event_id()));
     sign_event(
         &mut event,
         signer,
         verification_method,
-        SignEventOptions::new(crate::fixture_signer_evidence_ref(format!(
-            "sidecar:{}",
-            event.event_id()
-        )))
-        .with_created_at(fixed_sidecar_time()),
+        SignEventOptions::new(signer_evidence_ref).with_created_at(fixed_sidecar_time()),
     )
     .map_err(|_| SidecarModelError::ProofMismatch)?;
     let after = arkret_canonical::canonical_json_bytes(

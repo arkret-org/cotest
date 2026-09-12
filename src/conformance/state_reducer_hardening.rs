@@ -548,7 +548,7 @@ fn cell_ref(raw: &str) -> Result<CellRef> {
 
 fn revision_event_id(entry: &Value) -> Result<EventId> {
     let digest = arkret_canonical::canonical_sha256(entry)?;
-    EventId::from_event_digest(&digest)
+    EventId::from_event_digest(&arkret_wire::Hash::new(digest)?)
         .map_err(|error| anyhow!("fixture revision does not derive an Event id: {error}"))
 }
 

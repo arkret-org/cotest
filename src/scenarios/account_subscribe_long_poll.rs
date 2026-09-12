@@ -766,7 +766,7 @@ async fn submit_event_now(
                 ),
                 key_epoch: 0,
                 credential_epoch: None,
-                authority_refs: frontier.leaves,
+                authority_refs: frontier.seal_basis.leaves,
             });
             if actor.controls_realm_authority_root(realm_id) {
                 event.authorization_ref = Some(

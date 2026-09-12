@@ -91,7 +91,6 @@ fn build_realm(
         seal_compaction_max_interval_ms: None,
         max_authority_lifetime_ms: 86_400_000,
         bottom_escalation_after_ms: None,
-        cell_lattices: Vec::new(),
     })
 }
 
