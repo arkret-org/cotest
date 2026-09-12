@@ -3,9 +3,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Result, anyhow, bail};
-use arkret_identifiers::CellRef;
-use arkret_state::lattice::CellState;
+use arkret_identifiers::{CellRef, EventId};
 use arkret_state::state::{EMPTY_STATE_ROOT, compute_state_root};
+use arkret_state::state_model::{ResolvedCellState, SequencedStateValue};
 use arkret_wire::{EventCellBottom, EventCellStateModel, EventKind};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -463,7 +463,10 @@ fn assert_strand_tracks_registry_binding() -> Result<()> {
     Ok(())
 }
 
-fn cells_from_array(value: &Value, pointer: &str) -> Result<BTreeMap<CellRef, CellState>> {
+fn cells_from_array(
+    value: &Value,
+    pointer: &str,
+) -> Result<BTreeMap<CellRef, ResolvedCellState>> {
     let mut cells = BTreeMap::new();
     for entry in pointer_array(value, pointer)? {
         let cell_id = required_str(entry, "cell")?;
@@ -471,7 +474,13 @@ fn cells_from_array(value: &Value, pointer: &str) -> Result<BTreeMap<CellRef, Ce
             .get("value")
             .ok_or_else(|| anyhow!("cell entry {cell_id} missing value"))?
             .clone();
-        let previous = cells.insert(cell_ref(cell_id)?, CellState::Value(value));
+        let previous = cells.insert(
+            cell_ref(cell_id)?,
+            ResolvedCellState::Sequenced(SequencedStateValue {
+                revision_event_id: revision_event_id(entry)?,
+                value,
+            }),
+        );
         if previous.is_some() {
             bail!("duplicate state_root cell {cell_id}");
         }
@@ -480,24 +489,27 @@ fn cells_from_array(value: &Value, pointer: &str) -> Result<BTreeMap<CellRef, Ce
 }
 
 fn apply_delta_full(
-    base: &BTreeMap<CellRef, CellState>,
+    base: &BTreeMap<CellRef, ResolvedCellState>,
     delta: &[Value],
-) -> Result<BTreeMap<CellRef, CellState>> {
+) -> Result<BTreeMap<CellRef, ResolvedCellState>> {
     let mut cells = base.clone();
     apply_delta_entries(&mut cells, delta)?;
     Ok(cells)
 }
 
 fn apply_delta_incremental(
-    cached: &BTreeMap<CellRef, CellState>,
+    cached: &BTreeMap<CellRef, ResolvedCellState>,
     delta: &[Value],
-) -> Result<BTreeMap<CellRef, CellState>> {
+) -> Result<BTreeMap<CellRef, ResolvedCellState>> {
     let mut cells = cached.clone();
     apply_delta_entries(&mut cells, delta)?;
     Ok(cells)
 }
 
-fn apply_delta_entries(cells: &mut BTreeMap<CellRef, CellState>, delta: &[Value]) -> Result<()> {
+fn apply_delta_entries(
+    cells: &mut BTreeMap<CellRef, ResolvedCellState>,
+    delta: &[Value],
+) -> Result<()> {
     for entry in delta {
         let cell_id = required_str(entry, "cell")?;
         let op = required_str(entry, "op")?;
@@ -507,7 +519,13 @@ fn apply_delta_entries(cells: &mut BTreeMap<CellRef, CellState>, delta: &[Value]
             .clone();
         match op {
             "set" | "tombstone" => {
-                cells.insert(cell_ref(cell_id)?, CellState::Value(value));
+                cells.insert(
+                    cell_ref(cell_id)?,
+                    ResolvedCellState::Sequenced(SequencedStateValue {
+                        revision_event_id: revision_event_id(entry)?,
+                        value,
+                    }),
+                );
             }
             other => bail!("unsupported state_root delta op {other}"),
         }
@@ -515,15 +533,11 @@ fn apply_delta_entries(cells: &mut BTreeMap<CellRef, CellState>, delta: &[Value]
     Ok(())
 }
 
-/// The fixture's cells are declared as values, so this asks for the value-leaf
-/// shape explicitly.
-///
-/// `values_only` still runs the section 6.2.1 membership check, so a fixture
-/// cannot hash a value leaf for a cell whose state model requires another
-/// committed representation.
-fn compute_root_str(cells: &BTreeMap<CellRef, CellState>) -> Result<String> {
+/// Compute the Seal security root from sequenced state, including the
+/// Event-derived revision identity retained for each fixture write.
+fn compute_root_str(cells: &BTreeMap<CellRef, ResolvedCellState>) -> Result<String> {
     Ok(compute_state_root(
-        arkret_state::GovernanceView::values_only(cells),
+        arkret_state::GovernanceView::new(cells),
         arkret_canonical::DigestSuite::Sha256,
     )
     .map_err(|err| anyhow!("state_root compute failed: {err}"))?
@@ -535,13 +549,20 @@ fn cell_ref(raw: &str) -> Result<CellRef> {
     CellRef::new(raw.to_owned()).map_err(|err| anyhow!("invalid cell ref {raw}: {err}"))
 }
 
-fn is_tombstone_state(state: &CellState) -> bool {
+fn revision_event_id(entry: &Value) -> Result<EventId> {
+    let digest = arkret_canonical::canonical_sha256(entry)?;
+    EventId::from_event_digest(&digest)
+        .map_err(|error| anyhow!("fixture revision does not derive an Event id: {error}"))
+}
+
+fn is_tombstone_state(state: &ResolvedCellState) -> bool {
     match state {
-        CellState::Value(value) => value
+        ResolvedCellState::Sequenced(state) => state
+            .value
             .get("deleted")
             .and_then(Value::as_bool)
             .unwrap_or(false),
-        CellState::Bottom(_) => true,
+        _ => false,
     }
 }
 

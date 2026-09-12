@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, anyhow, bail, ensure};
-use arkret_wire::notary::{ForensicAttribution, NotaryValue};
+use arkret_wire::notary::NotaryValue;
 use arkret_wire::{
     ControlProposalAck, ControlProposalAuthorityAck, ControlProposalDecision,
     ControlProposalDecisionPolicy, ControlProposalRejectReason, DidUrl, Hash, PayloadSignature,
@@ -317,27 +317,6 @@ pub fn run_control_proposal_ack_suite() -> Result<()> {
 
 fn hash(byte: char) -> Hash {
     Hash::new(format!("sha256:{}", byte.to_string().repeat(64))).unwrap()
-}
-
-fn member_from_fixture(
-    value: &Value,
-    authority_set_ref: Hash,
-) -> Result<ControlProposalAuthorityAck> {
-    member(
-        value["verification_method"]
-            .as_str()
-            .ok_or_else(|| anyhow!("verification_method is missing"))?,
-        value["received_at"]
-            .as_str()
-            .ok_or_else(|| anyhow!("received_at is missing"))?,
-        value["decision_due_at"]
-            .as_str()
-            .ok_or_else(|| anyhow!("decision_due_at is missing"))?,
-        value["absolute_due_at"]
-            .as_str()
-            .ok_or_else(|| anyhow!("absolute_due_at is missing"))?,
-        authority_set_ref,
-    )
 }
 
 fn member(
