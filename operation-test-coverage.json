@@ -7,7 +7,7 @@
     "test_layers": {
       "soland_unit": {
         "source_file_count": 319,
-        "source_sha256": "ad956b17b25826465603a029b0a89022586410608055717b33297f47ae93e7a1",
+        "source_sha256": "60372da10dad7293712eaa11e9b1fdebdf6c1036da329fa92bb8d7343aab9154",
         "evidence_count": 331,
         "covered_operation_count": 173
       },
@@ -19,7 +19,7 @@
       },
       "cotest_rust": {
         "source_file_count": 311,
-        "source_sha256": "fcc8a4ca513ddfa460a0b2c0553e46e07d6914f8e1ec0f4fcc45de41f7f492aa",
+        "source_sha256": "f4f0c7a9d3b9694a48a68af8bbe9d7fe87173d24b2b913855f262cd288f9177e",
         "evidence_count": 122,
         "covered_operation_count": 68
       },
@@ -11822,8 +11822,8 @@
               164
             ],
             "protected_oracle": false,
-            "scope_sha256": "6dd9287344d67d503c61dab21be78f3089e5c72eaa58cb88a22fe285788d28fc",
-            "input_sha256": "c5fecc83cdcfee327dead4f2ebe5f91707c4b076650d96b7d93674024479ea57",
+            "scope_sha256": "1e7057a04abfdb6fa47fb2778ea4cfd9635a311b425ef1fc99479e17a36ef7b2",
+            "input_sha256": "d4c811521d4d3ae70a30147642ac9dc29fcb71519e2e3128de854345d7a4fffe",
             "assertion_sha256": "1444a2278f9b42e1fd468ab7f8b727b6c46fb83d699f6fb31253bca5e9015c4c",
             "input_preview": [
               "let database = crate::test_database::TestDatabase::lease().await;",
@@ -25708,11 +25708,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/notary.rs",
-            "line": 2201,
+            "line": 1957,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2201
+              1957
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
