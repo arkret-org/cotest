@@ -49,7 +49,7 @@ import {
   resolveDefaultStrandId,
   signedEventEnvelope,
   signedRealmGenesisEnvelope,
-  singleSignerNotaryFromDid,
+  singleReplicaNotaryFromDid,
   submitSignedEventApi,
   rawPushFederationEvents,
   typedId,

@@ -2200,6 +2200,14 @@ function Start-ManagedCommand {
         -WindowStyle Hidden `
         -PassThru
 
+    # Native and WASM targets can hold different Cargo locks while competing
+    # for the same memory. Prepare one workspace at a time; service processes
+    # remain asynchronous after preparation has completed.
+    if ($Name.StartsWith("prepare-", [System.StringComparison]::Ordinal)) {
+        $process.WaitForExit()
+        $process.Refresh()
+    }
+
     [pscustomobject]@{
         Kind = "process"
         Name = $Name
@@ -2711,6 +2719,14 @@ function Invoke-RunnerSelfTest {
             -Command "cmd /c exit 29" `
             -WorkingDirectory $tempRoot `
             -LogDirectory $tempRoot
+        $preparedFailure = Start-ManagedCommand `
+            -Name "prepare-self-test-failure" `
+            -Command "Start-Sleep -Milliseconds 30; exit 31" `
+            -WorkingDirectory $tempRoot `
+            -LogDirectory $tempRoot
+        if (-not $preparedFailure.Process.HasExited -or $preparedFailure.Process.ExitCode -ne 31) {
+            throw "preparation did not finish before the next workspace or lost its exit code"
+        }
         $wrappedFailure.Process.WaitForExit()
         $wrappedFailure.Process.Refresh()
         if ($wrappedFailure.Process.ExitCode -ne 29) {
@@ -3598,7 +3614,7 @@ try {
         $task.Service.Process.Refresh()
     }
     foreach ($task in $preparationTasks) {
-        $duration = [Math]::Round(((Get-Date) - $task.Started).TotalSeconds, 3)
+        $duration = [Math]::Round(($task.Service.Process.ExitTime - $task.Started).TotalSeconds, 3)
         $exitCode = $task.Service.Process.ExitCode
         $artifactExists = Test-Path -LiteralPath $task.Artifact -PathType Leaf
         $artifactUpdated = $artifactExists -and `

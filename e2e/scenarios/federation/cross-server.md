@@ -170,8 +170,27 @@
 
 - **已落地**:双 soland 拓扑、`peer events submit` / `peer events query` endpoint、server1→server2 invite 自动 push、server2→server1 invite-accept member join push、双向 message push、幂等 replay、网络分区恢复后的 pull/backfill operation frontier coverage、入站 RFC 9421 HTTP Message Signature 验证、key rotation hint、relay outer/inner signature 边界。
 - **仍待后续 GAP**：服务委托 revoke fanout。
-- **inkson invite accept UI** 仍可补强;当前 live 用 server2 的 authz invite API + canonical `ak.member.state{membership=join, reason=invite_accept}` 覆盖接受链路。
+- **当前加入链路仍待验收**：下面的 typed authoring / bootstrap 用例经申请人自己 Station prepare，使用正式 `ak.invite.accept`；旧 helper 和历史成员投影不能证明来源准入、受限状态与 covering Seal 导入已闭合。
 
 ## 总耗时预估
 
 单次跑约 3-5 分钟(双服务器启动、跨域 push 重试窗口、frontier 检查)。
+
+
+## 当前 typed authoring / bootstrap 验收（2026-09-12）
+
+`prepared authoring and join` 是 2214/2247 的当前验收入口；上文旧 invite helper 和历史通过记录不证明新链路可用。两个用例独立执行，失败不跳过另一个。
+
+1. 通过真实 Coauth/Station 注册两个来源的账户，受邀者先通过自己的正式接口设置通知接收策略。
+2. Alice 创建 Realm 并签署定向邀请；客户端请求自己 Station dispatch，接收通知仅建立私有邀请投影。
+3. Alice 用 closed message intent 调用消息 prepare，逐字段核对 unsigned Event、重新计算 EventId、仅附加设备 proof，通过原 self submit 提交；同 prepare 原样重放、同身份异请求冲突和原签名提交 duplicate 均独立断言。
+4. 历史用例额外加入并退出本地成员，再接受 18 条合计超过 8 MiB 的真实 schema Control Move。传输层合成大包不能替代此历史。
+5. Bob 从自己 Station 的受保护邀请通知读取 locator，调用自己的 Realm join prepare；不从客户端查询远端 Seal，也不伪造 peer 身份。
+6. Bob 核对完整 unsigned Event 并签名，经原 self submit 和来源耐久转发提交。受限 application-status 只报告正式状态；来源须取回并独立验证 covering Seal 后才能确认本地成员。
+7. 双方以 typed message prepare 发送消息，并验证对端可读及最终状态一致。
+
+上述用例使用允许的明文 Realm，验证网络 authoring / admission / bootstrap。真实 MLS 的加密、prepare 密文冻结、解密与重放负例另由 `crates/test-support/tests/message_prepare_crypto.rs` 验证；组合单元测试不能代替双 Station MLS 网络验收。当前 self/peer application-status 与来源/目标分阶段加入链的缺口记录于 arkret-work 1636；不得把 prepare 成功或通知到达当作整条链路完成。
+
+`20260912-094216-joint-full-selection` 实际完成前置 owner 消息与两种历史的 bootstrap/prepare。大历史原始缓存为两页，control payload 共 9,443,673 bytes，包含真实成员加入的覆盖 Seal 和退出；两条业务均在来源 self submit 的 `dependency_missing` 停止（本地 Realm digest-suite 未物化）。该结果是 7 项 provisioning 与 1 项 build-id 通过、2 条完整业务失败；不记为跨站加入或消息收敛通过。
+
+`20260912-100215-joint-full-selection` 使用修正下载持久进度后的新二进制复现相同断点；来源数据库已保存完整两页（24 Seals、31 Control Moves、24 治理依赖），bootstrap Realm 未进入来源 canonical Event/accepted Seal。PostgreSQL adapter 重建恢复回归另有 1 passed；完整业务仍为 2 failed。

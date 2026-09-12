@@ -64,6 +64,7 @@ url = { workspace = true }
 workspace = true
 
 [dev-dependencies]
+arkret-mls = { path = "../../../arkret-rust-sdk/crates/mls", features = ["test-utils"] }
 # The live provisioning check needs a runtime and the run-scoped CA loader.
 # The bridge test drives the binary as a child process, the way a Playwright
 # worker would.

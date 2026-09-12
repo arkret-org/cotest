@@ -49,6 +49,8 @@ export const OUTPUT_PATH = resolve(
  * CLI-command DTOs, the local signer bookkeeping) stay hand-written.
  */
 const TARGETS = [
+  { file: "realm-join-intake.schema.json", pointer: "#/$defs/self_prepare_request_body", typeName: "RealmJoinPrepareRequestBody" },
+  { file: "message-authoring.schema.json", pointer: "#/$defs/message_prepare_request_body", typeName: "MessagePrepareRequestBody" },
   { file: "identity-resolution.schema.json", pointer: "#/$defs/public_principal_resolution", typeName: "PublicPrincipalResolution" },
   { file: "circle-operations.schema.json", pointer: "#/$defs/circle_view", typeName: "CircleView" },
   { file: "circle-operations.schema.json", pointer: "#/$defs/circle_membership_outcome", typeName: "CircleMembershipOutcome" },

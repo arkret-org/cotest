@@ -13,7 +13,7 @@ use arkret_models_collaboration::governance::agent_participation::{
 };
 use arkret_models_discovery::DirectoryAgentSelectorResolutionOutcome;
 use arkret_models_identity::claim_presentation::AgentSelectorClaim;
-use arkret_models_identity::handle::{Handle, HandleBindingState, HandleVisibility};
+use arkret_models_identity::handle::{Handle, HandleVisibility};
 use arkret_wire::{
     AccountId, ActorId, Audience, PayloadProof, PayloadProofPurpose, ProfileId, SchemaId,
 };
@@ -180,10 +180,9 @@ fn selector_claim(
         schema: SchemaId::AGENT_SELECTOR_CLAIM_V1.to_owned(),
         controller_subject_id: did_field(case, "controller_subject")?,
         agent_slug: required_str(case, slug_field)?.to_owned(),
-        subject_account_id,
-        issuer_id: DidCoreId::new("ak:did_core:web:directory.acme.example")?,
+        subject_account_id: Some(subject_account_id),
+        issuer_id: did_field(case, "controller_subject")?,
         vouching_id: Some(DidCoreId::new("ak:did_core:web:directory.acme.example")?),
-        binding_state: HandleBindingState::Verified,
         visibility: HandleVisibility::Restricted,
         audience: Some("ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1".to_owned()),
         claim_scope: Default::default(),
@@ -211,7 +210,10 @@ fn selector_claim(
 fn selector_outcome(claim: AgentSelectorClaim) -> Result<DirectoryAgentSelectorResolutionOutcome> {
     let outcome = DirectoryAgentSelectorResolutionOutcome {
         controller_subject_id: claim.controller_subject_id.clone(),
-        subject_account_id: claim.subject_account_id.clone(),
+        subject_account_id: claim
+            .subject_account_id
+            .clone()
+            .ok_or_else(|| anyhow!("unbound selector"))?,
         agent_slug: claim.agent_slug.clone(),
         selector_claim: claim,
         source_refs: vec![arkret_wire::EventId::new(

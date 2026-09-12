@@ -33,6 +33,9 @@ import { stepShot } from "../../helpers/screenshots";
 import type { InviteDeliveryRequestBody } from "../../helpers/generated/spec-wire-objects";
 import {
   acceptInviteApi,
+  acceptPreparedInviteApi,
+  waitForInviteDeliveryApi,
+  waitForRealmControlIdleApi,
   accountActorId,
   advanceEnvelopeToActorFrontier,
   authHeaders,
@@ -50,6 +53,7 @@ import {
   readAcceptedSealBundle,
   revokeCapabilityApi,
   sendMessageApi,
+  sendPreparedMessageApi,
   selfInviteDispatchBody,
   sha256CanonicalJson,
   signedEventEnvelope,
@@ -59,6 +63,7 @@ import {
 } from "../../helpers/soland-api";
 import {
   createDpopUserSession,
+  allowExplicitInviteNotifications,
   ensureRegistered,
   issueInviteLocatorToken,
   issueDevSession,
@@ -68,8 +73,6 @@ import {
   selfPathHeadersForDpopSession,
   uniqueUser,
 } from "../../helpers/users";
-
-test.describe.configure({ mode: "serial" });
 
 test.beforeEach(() => {
   if (!hasServerCount(2)) {
@@ -140,15 +143,17 @@ async function waitForMember(
   await expect
     .poll(
       async () => {
-        const response = await request.get(
-          `${solandBaseUrl(server)}/_arkret/self/realms/${encodeURIComponent(realmId)}`,
-          { headers: authHeaders(token) },
-        );
+        const url = `${solandBaseUrl(server)}/_arkret/self/realms/${encodeURIComponent(realmId)}`;
+        const response = await request.get(url, { headers: authHeaders(token, "GET", url) });
         if (!response.ok()) {
           return false;
         }
         const body = await response.json();
-        return Array.isArray(body.member_ids) && body.member_ids.includes(memberId);
+        return Array.isArray(body.member_ids) && body.member_ids.some(
+          (member: unknown) => member !== null && typeof member === "object" &&
+            (member as { kind?: string }).kind === "account" &&
+            (member as { account_id?: { principal_id?: string } }).account_id?.principal_id === memberId,
+        );
       },
       { timeout: 45_000, intervals: [1_000, 2_000, 5_000] },
     )
@@ -200,6 +205,7 @@ function trustDomainFromServiceId(serviceId: string): string {
 }
 
 test.describe("cross-server federation", () => {
+  test.describe.configure({ mode: "serial" });
   test("both soland instances expose peer events submit and query endpoints", async ({
     request,
   }) => {
@@ -682,70 +688,6 @@ test.describe("cross-server federation", () => {
     }
   });
 
-  test("two-way timeline messaging: alice@server1 and bob@server2 exchange messages and both servers converge on identical effective state", async ({
-    request,
-  }) => {
-    const stamp = Date.now();
-    const alice = uniqueUser(`s2-msg-alice-${stamp}`, "server1");
-    const bob = uniqueUser(`s2-msg-bob-${stamp}`, "server2");
-    await ensureRegistered(request, alice, { server: "server1" });
-    await ensureRegistered(request, bob, { server: "server2" });
-    const aliceToken = await issueDevSession(request, alice, {
-      server: "server1",
-    });
-    const bobToken = await issueDevSession(request, bob, { server: "server2" });
-
-    const realmId = await createRealmApi(
-      request,
-      aliceToken,
-      {
-        title: `S2 two-way ${stamp}`,
-        discoverability: "listed",
-        history_access: "all_history_for_current_members",
-        invitees: [bob.id],
-        invitee_ids: { [bob.id]: solandServiceId("server2") },
-        ownerId: alice.id,
-        creator_id: solandServiceId("server1"),
-        plaintext_visible_services: [
-          solandServiceId("server1"),
-          solandServiceId("server2"),
-        ],
-      },
-      { server: "server1" },
-    );
-
-    const server2Invite = await waitForInvite(
-      request,
-      bobToken,
-      bob.id,
-      realmId,
-      "server2",
-    );
-    await acceptInviteApi(
-      request,
-      bobToken,
-      bob.id,
-      server2Invite.realm_id,
-      server2Invite.id,
-      {
-        server: "server2",
-      },
-    );
-    await waitForMember(request, aliceToken, bob.id, realmId, "server1");
-
-    const aliceBody = `alice from server1 ${stamp}`;
-    await sendMessageApi(request, aliceToken, realmId, aliceBody, {
-      server: "server1",
-    });
-    await waitForEventBody(request, bobToken, realmId, aliceBody, "server2");
-
-    const bobBody = `bob from server2 ${stamp}`;
-    await sendMessageApi(request, bobToken, realmId, bobBody, {
-      server: "server2",
-    });
-    await waitForEventBody(request, aliceToken, realmId, bobBody, "server1");
-  });
-
   test("peer query recovery: after a network partition, server2 fetches missing server1 events via QUERY /_arkret/peer/events", async ({
     request,
   }) => {
@@ -1068,3 +1010,130 @@ test.describe("cross-server federation", () => {
     expect(text).toContain("federation request authentication failed");
   });
 });
+
+test.describe("prepared authoring and join", () => {
+  test.describe.configure({ mode: "default" });
+  for (const largeHistory of [false, true]) {
+    test(`two-way timeline messaging${largeHistory ? " after paged governance history" : ""}: alice@server1 and bob@server2 exchange messages and both servers converge on identical effective state`, async ({
+      request,
+    }) => {
+      test.setTimeout(600_000);
+      const stamp = Date.now();
+      const aliceSession = await createDpopUserSession(request, `s2-msg-alice-${stamp}`, { server: "server1" });
+      const bobSession = await createDpopUserSession(request, `s2-msg-bob-${stamp}`, { server: "server2" });
+      if (!aliceSession || !bobSession) throw new Error("prepared authoring requires real Coauth sessions");
+      const charlieSession = largeHistory
+        ? await createDpopUserSession(request, `s2-history-charlie-${stamp}`, { server: "server1" })
+        : undefined;
+      if (largeHistory && !charlieSession) throw new Error("historical member requires a real Coauth session");
+      await allowExplicitInviteNotifications(request, bobSession, "server2");
+      if (charlieSession) await allowExplicitInviteNotifications(request, charlieSession, "server1");
+      const alice = aliceSession.user;
+      const bob = bobSession.user;
+      const charlie = charlieSession?.user;
+      const aliceToken = aliceSession.grantJwt;
+      const bobToken = bobSession.grantJwt;
+      const charlieToken = charlieSession?.grantJwt;
+
+      const realmId = await createRealmApi(
+        request,
+        aliceToken,
+        {
+          title: `S2 two-way ${stamp}`,
+          discoverability: "listed",
+          history_access: "all_history_for_current_members",
+          invitees: [bob.id, ...(charlie ? [charlie.id] : [])],
+          invitee_ids: {
+            [bob.id]: solandServiceId("server2"),
+            ...(charlie ? { [charlie.id]: solandServiceId("server1") } : {}),
+          },
+          ownerId: alice.id,
+          creator_id: solandServiceId("server1"),
+          plaintext_visible_services: [
+            solandServiceId("server1"),
+            solandServiceId("server2"),
+          ],
+        },
+        { server: "server1" },
+      );
+
+      await test.step("owner prepares, signs and exact-replays a message", async () => {
+        await sendPreparedMessageApi(request, aliceToken, realmId, `owner ready ${stamp}`, {
+          server: "server1",
+        });
+      });
+
+      if (charlie && charlieToken) {
+        const invitation = await waitForInviteDeliveryApi(request, charlieToken, charlie.id, realmId, "server1");
+        const beforeJoin = await waitForRealmControlIdleApi(request, aliceToken, realmId, { server: "server1" });
+        const joined = await acceptPreparedInviteApi(request, charlieToken, charlie.id, realmId, invitation.id, { server: "server1", waitForStatus: false });
+        const afterJoin = await waitForRealmControlIdleApi(request, aliceToken, realmId, {
+          server: "server1", afterControlEventSetRoot: String(beforeJoin.control_event_set_root),
+        });
+        const covering = await readAcceptedSealBundle(request, aliceToken, realmId, (afterJoin.leaves as string[])[0], "server1");
+        const joinDigest = joined.proofs[0].event_digest;
+        expect((covering.seals as Array<{ delta?: string[] }>).some((seal) => seal.delta?.includes(joinDigest))).toBe(true);
+        await waitForMember(request, aliceToken, charlie.id, realmId, "server1");
+        await submitSignedEventApi(request, charlieToken, signedEventEnvelope({
+          actorId: charlie.id,
+          realmId,
+          kind: "ak.member.state",
+          payload: { member_id: accountActorId(charlie.id, "server1"), membership: "leave" },
+        }), { server: "server1", controlObserverToken: aliceToken });
+
+        // Eighteen real accepted Schema definition Control Moves contribute
+        // more than 8 MiB before envelopes, Seals and signer evidence. The
+        // applicant's Station has not joined while this history is authored.
+        let historicalPayloadBytes = 0;
+        for (let index = 0; index < 18; index += 1) {
+          const payload = { value: {
+            $schema: "https://json-schema.org/draft/2020-12/schema",
+            $id: `ak.schema.bootstrap_history_${index}.v1`,
+            type: "object",
+            description: `Historical schema ${index}: ${"x".repeat(512 * 1024)}`,
+          } };
+          historicalPayloadBytes += Buffer.byteLength(canonicalJson(payload), "utf8");
+          await submitSignedEventApi(request, aliceToken, signedEventEnvelope({
+            actorId: alice.id, realmId, kind: "ak.schema.define", payload,
+            preconditions: [{
+              cell_id: `ak:cell:ak.component.schema.definition.v1:${payload.value.$id}`,
+              predicate: { op: "head_eq", value: null },
+            }],
+          }), { server: "server1", context: `accept historical schema ${index}` });
+        }
+        expect(historicalPayloadBytes).toBeGreaterThan(8 * 1024 * 1024);
+      }
+
+      const server2Invite = await waitForInviteDeliveryApi(
+        request,
+        bobToken,
+        bob.id,
+        realmId,
+        "server2",
+      );
+      await acceptPreparedInviteApi(
+        request,
+        bobToken,
+        bob.id,
+        server2Invite.realm_id,
+        server2Invite.id,
+        {
+          server: "server2",
+        },
+      );
+      await waitForMember(request, aliceToken, bob.id, realmId, "server1");
+
+      const aliceBody = `alice from server1 ${stamp}`;
+      await sendPreparedMessageApi(request, aliceToken, realmId, aliceBody, {
+        server: "server1",
+      });
+      await waitForEventBody(request, bobToken, realmId, aliceBody, "server2");
+
+      const bobBody = `bob from server2 ${stamp}`;
+      await sendPreparedMessageApi(request, bobToken, realmId, bobBody, {
+        server: "server2",
+      });
+      await waitForEventBody(request, aliceToken, realmId, bobBody, "server1");
+    });
+  }
+  });
