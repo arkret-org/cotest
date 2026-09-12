@@ -231,12 +231,7 @@ fn rebind_authored_event(event: &mut arkret_wire::Event, actor: &str) -> Result<
     if event.kind.is_control_plane() {
         event.auth_context = None;
     } else {
-        event.auth_context = Some(arkret_wire::AuthContext {
-            key_id: crate::harness::auth_context_key_id(&verification_method),
-            key_epoch: 0,
-            credential_epoch: None,
-            authority_refs,
-        });
+        event.auth_context = Some(arkret_wire::AuthContext { authority_refs });
     }
     event
         .proofs

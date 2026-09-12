@@ -761,11 +761,6 @@ async fn submit_event_now(
         let frontier = state.frontier;
         if is_ordinary_event {
             event.auth_context = Some(arkret_wire::AuthContext {
-                key_id: crate::harness::auth_context_key_id(
-                    crate::harness::default_event_verification_method(&actor.actor).as_str(),
-                ),
-                key_epoch: 0,
-                credential_epoch: None,
                 authority_refs: frontier.seal_basis.leaves,
             });
             if actor.controls_realm_authority_root(realm_id) {

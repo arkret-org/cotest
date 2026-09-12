@@ -1054,9 +1054,6 @@ impl TestActorClient {
             // Capability coverage is per ordinary Event: the reducer checks that a
             // named grant actually covers this action on this target.
             event.auth_context = Some(AuthContext {
-                key_id: arkret_wire::OpaqueLocalId::new("cotest").expect("cotest key id"),
-                key_epoch: 0,
-                credential_epoch: None,
                 authority_refs: frontier.seal_basis.leaves,
             });
             if capability_refs.is_empty() {
@@ -1164,9 +1161,6 @@ impl TestActorClient {
                 event.hlc = Some(Hlc::new(format!("{physical_millis:012x}-0000-a13f9c2e"))?);
             } else {
                 event.auth_context = Some(AuthContext {
-                    key_id: arkret_wire::OpaqueLocalId::new("cotest").expect("cotest key id"),
-                    key_epoch: 0,
-                    credential_epoch: None,
                     authority_refs: frontier.seal_basis.leaves,
                 });
             }

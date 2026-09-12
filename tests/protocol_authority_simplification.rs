@@ -24,9 +24,6 @@ fn producer_event() -> Event {
         ContentBlock::text("authority simplification"),
     );
     let auth_context = AuthContext {
-        key_id: arkret_wire::OpaqueLocalId::new("device-1").unwrap(),
-        key_epoch: 7,
-        credential_epoch: None,
         authority_refs: vec![authority_ref('1'), authority_ref('2')],
     };
     let mut event = TypedEventDraft::<event_spec::MessageCreate>::new(

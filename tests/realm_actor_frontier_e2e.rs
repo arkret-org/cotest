@@ -97,11 +97,6 @@ fn bind_authority_refs(
 ) -> Result<()> {
     ensure!(!basis.leaves.is_empty(), "Realm Seal frontier has no leaf");
     event.auth_context = Some(arkret_wire::AuthContext {
-        key_id: cotest::harness::auth_context_key_id(
-            default_event_verification_method(actor).as_str(),
-        ),
-        key_epoch: 0,
-        credential_epoch: None,
         authority_refs: basis.leaves.clone(),
     });
     event.authorization_ref = Some(

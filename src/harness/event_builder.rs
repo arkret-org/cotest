@@ -113,20 +113,6 @@ pub fn default_event_verification_method(actor: &str) -> DidUrl {
         .expect("cotest default Event signer verification method is a canonical device DID URL")
 }
 
-/// `auth_context.key_id` for one verification method.
-///
-/// `event-envelope.schema.json` closes the member over
-/// `^(?!ak:)[A-Za-z0-9._:-]{1,128}$`, so the DID URL contributes only its
-/// fragment and the fragment drops the `ak:` sigil: the member labels the
-/// signing key locally and MUST NOT borrow the typed-ID lexical space.
-pub fn auth_context_key_id(verification_method: &str) -> arkret_wire::OpaqueLocalId {
-    let fragment = verification_method
-        .split_once('#')
-        .map_or(verification_method, |(_, fragment)| fragment);
-    arkret_wire::OpaqueLocalId::new(fragment.strip_prefix("ak:").unwrap_or(fragment))
-        .expect("cotest auth_context key id is an opaque local id")
-}
-
 pub(crate) fn registered_event_signing_seed(
     signer: &str,
     verification_method: &DidUrl,
@@ -815,9 +801,6 @@ pub(crate) async fn prepare_event_submission_with_signing_identity(
             event.hlc = Some(Hlc::new(format!("{physical_millis:012x}-0000-a13f9c2e"))?);
         } else {
             event.auth_context = Some(AuthContext {
-                key_id: auth_context_key_id(verification_method.as_str()),
-                key_epoch: 0,
-                credential_epoch: None,
                 authority_refs: frontier.seal_basis.leaves,
             });
         }

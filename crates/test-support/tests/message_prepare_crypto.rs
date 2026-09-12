@@ -11,8 +11,8 @@ use arkret_models_collaboration::message_authoring::{
 };
 use arkret_models_crypto::{EventContentPreEncryptionHeader, EventContentRoutingContext};
 use arkret_wire::{
-    AccountId, ActorId, AuthContext, DeviceId, DidCoreId, EncryptedPayloadScheme, EventId,
-    OpaqueLocalId, RealmId, RequestId, ScopeRef, SealId, StrandId,
+    AccountId, ActorId, AuthContext, DeviceId, DidCoreId, EncryptedPayloadScheme, EventId, RealmId,
+    RequestId, ScopeRef, SealId, StrandId,
 };
 
 fn seal(hex: &str) -> SealId {
@@ -89,9 +89,6 @@ fn prepared_message_decrypts_at_the_other_mls_member_without_reencrypting() {
         hlc: None,
     };
     let auth = AuthContext {
-        key_id: OpaqueLocalId::new(device.as_str().strip_prefix("ak:").unwrap()).unwrap(),
-        key_epoch: 0,
-        credential_epoch: None,
         authority_refs: vec![seal("a")],
     };
     let frontier = RealmActorFrontierView::new(
