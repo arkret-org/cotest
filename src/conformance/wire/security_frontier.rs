@@ -1,4 +1,4 @@
-//! Near-current MLS governance-frontier conformance vectors.
+//! MLS governance-frontier conformance vectors from the formal spec artifact.
 
 use anyhow::{Context, Result, anyhow, bail};
 use arkret_models_crypto::mls_governance_proof::{
@@ -11,7 +11,7 @@ use crate::conformance::{load_fixture_value, validate_profile};
 const FIXTURE: &str = "mls-governance-proof-fixture.json";
 const PROFILE: &str = "ak.profile.mls_governance_binding.full.v1";
 
-/// Replays the canonical near-current fixture through the public DTO
+/// Replays the canonical fixture through the public DTO
 /// validators. Full state replay is covered by the SDK verifier tests; this
 /// cross-repository runner pins the exact query/outcome/page-digest contract.
 pub fn run_mls_security_frontier_fixture_suite() -> Result<()> {
