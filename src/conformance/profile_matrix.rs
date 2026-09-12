@@ -684,7 +684,7 @@ fn registry_id_set(
 }
 
 fn validate_server_claims_against_matrix(describe: &Value, matrix: &ProfileMatrix) -> Result<()> {
-    let claimed_profiles = string_set_field(describe, "supported_profiles")?;
+    let supported_profiles = string_set_field(describe, "supported_profiles")?;
     let operation_ids = operation_bundle_operation_id_set(describe)?;
     let supported_event_kinds = optional_string_set_field(describe, "supported_event_kinds")?;
     let supported_schemas = optional_string_set_field(describe, "supported_event_schemas")?;
@@ -696,13 +696,13 @@ fn validate_server_claims_against_matrix(describe: &Value, matrix: &ProfileMatri
     let supported_cells = optional_string_set_field(describe, "supported_cells")?;
     let verified_fixtures =
         optional_string_set_field_any(describe, &["verified_fixtures", "supported_fixtures"])?;
-    ensure_limited_profiles_are_not_supported(&claimed_profiles)?;
+    ensure_limited_profiles_are_not_supported(&supported_profiles)?;
     validate_explicit_unsupported_limited_profiles(describe)?;
-    validate_profile_dependency_claims(&claimed_profiles, matrix)?;
-    validate_mutually_exclusive_claims(&claimed_profiles, matrix)?;
+    validate_profile_dependency_claims(&supported_profiles, matrix)?;
+    validate_mutually_exclusive_claims(&supported_profiles, matrix)?;
 
     let mut expanded_claims = BTreeSet::new();
-    for profile in &claimed_profiles {
+    for profile in &supported_profiles {
         expand_profile_claim(profile, matrix, &mut expanded_claims)?;
     }
 
@@ -778,10 +778,10 @@ fn validate_server_claims_against_matrix(describe: &Value, matrix: &ProfileMatri
 }
 
 fn validate_profile_dependency_claims(
-    claimed_profiles: &BTreeSet<String>,
+    supported_profiles: &BTreeSet<String>,
     matrix: &ProfileMatrix,
 ) -> Result<()> {
-    for profile in claimed_profiles {
+    for profile in supported_profiles {
         if !matrix.declared_profiles.contains(profile) {
             continue;
         }
@@ -789,7 +789,7 @@ fn validate_profile_dependency_claims(
             continue;
         };
         for dependency in &requirement.depends_on_profiles {
-            if !claimed_profiles.contains(dependency) {
+            if !supported_profiles.contains(dependency) {
                 bail!("server claims profile {profile} without required dependency {dependency}");
             }
         }
@@ -798,15 +798,15 @@ fn validate_profile_dependency_claims(
 }
 
 fn validate_mutually_exclusive_claims(
-    claimed_profiles: &BTreeSet<String>,
+    supported_profiles: &BTreeSet<String>,
     matrix: &ProfileMatrix,
 ) -> Result<()> {
-    for profile in claimed_profiles {
+    for profile in supported_profiles {
         let Some(requirement) = matrix.requirements.get(profile) else {
             continue;
         };
         for incompatible in &requirement.mutually_exclusive_profiles {
-            if claimed_profiles.contains(incompatible) {
+            if supported_profiles.contains(incompatible) {
                 bail!("server claims mutually exclusive profiles {profile} and {incompatible}");
             }
         }
@@ -814,8 +814,8 @@ fn validate_mutually_exclusive_claims(
     Ok(())
 }
 
-fn ensure_limited_profiles_are_not_supported(claimed_profiles: &BTreeSet<String>) -> Result<()> {
-    for profile in claimed_profiles {
+fn ensure_limited_profiles_are_not_supported(supported_profiles: &BTreeSet<String>) -> Result<()> {
+    for profile in supported_profiles {
         if is_limited_profile(profile) {
             bail!(
                 "limited profile {profile} must be listed only under unsupported_profiles, not supported_profiles"

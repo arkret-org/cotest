@@ -4,44 +4,14 @@ use anyhow::{Result, anyhow, bail};
 use serde_json::Value;
 
 pub(super) fn profile_claims(describe: &Value) -> BTreeSet<String> {
-    let mut claims = BTreeSet::new();
-    for field in ["supported_profiles", "profiles", "claimed_profiles"] {
-        collect_profile_array(describe.get(field), &mut claims);
-    }
-    if let Some(claims_value) = describe.get("profile_claims") {
-        match claims_value {
-            Value::Array(_) => collect_profile_array(Some(claims_value), &mut claims),
-            Value::Object(object) => {
-                for (profile, value) in object {
-                    if value.as_bool().unwrap_or(true) {
-                        claims.insert(profile.to_owned());
-                    }
-                    collect_profile_array(Some(value), &mut claims);
-                }
-            }
-            _ => {}
-        }
-    }
-    claims
-}
-
-fn collect_profile_array(value: Option<&Value>, claims: &mut BTreeSet<String>) {
-    let Some(items) = value.and_then(Value::as_array) else {
-        return;
-    };
-    for item in items {
-        if let Some(profile) = item.as_str() {
-            claims.insert(profile.to_owned());
-            continue;
-        }
-        if let Some(profile) = item
-            .get("profile")
-            .or_else(|| item.get("id"))
-            .and_then(Value::as_str)
-        {
-            claims.insert(profile.to_owned());
-        }
-    }
+    describe
+        .get("supported_profiles")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(str::to_owned)
+        .collect()
 }
 
 /// Whether any object key anywhere under `value` is exactly `needle`.

@@ -69,7 +69,7 @@ pub async fn teabay_directory_service_profile_is_discoverable() -> Result<()> {
     );
     assert_array_contains(&describe, "accepted_resource_kinds", "space");
     assert_array_contains(&describe, "accepted_resource_kinds", "handle");
-    assert_array_contains(&describe, "ingest_modes", "push");
+    assert!(describe.get("ingest_modes").is_none());
 
     let openapi = get_json(&http, directory.url("/.well-known/arkret/openapi.json")).await?;
     for path in [
