@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use anyhow::{Result, anyhow};
+use anyhow::{Result, anyhow, ensure};
 use arkret_models_collaboration::event_query::SealFrontierRequestBody;
 use arkret_models_collaboration::event_sync::{
     EventsFrontierState, EventsFrontierView, SealFrontierState,

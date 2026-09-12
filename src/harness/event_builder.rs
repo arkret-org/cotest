@@ -818,7 +818,7 @@ pub(crate) async fn prepare_event_submission_with_signing_identity(
                 key_id: auth_context_key_id(verification_method.as_str()),
                 key_epoch: 0,
                 credential_epoch: None,
-                authority_refs: frontier.leaves,
+                authority_refs: frontier.seal_basis.leaves,
             });
         }
         refresh_typed_event_proof_with_signing_seed(&mut event, signing_seed)?;

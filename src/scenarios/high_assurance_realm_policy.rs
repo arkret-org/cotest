@@ -81,9 +81,6 @@ fn build_realm(
         audit_policy: None,
         notary: crate::fixture_notary_configuration(principal.clone()),
         fields: Default::default(),
-        // `max_anchor_staleness_ms` was retired by the dual-plane split
-        // without a direct replacement.
-        recovery_witness_freshness_window_ms: None,
         proposal_intake_sla_ms: None,
         proposal_decision_window_ms: None,
         proposal_absolute_deadline_ms: None,
@@ -91,7 +88,6 @@ fn build_realm(
         seal_compaction_max_interval_ms: None,
         max_authority_lifetime_ms: 86_400_000,
         bottom_escalation_after_ms: None,
-        cell_lattices: Vec::new(),
     })
 }
 

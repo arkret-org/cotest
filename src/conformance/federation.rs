@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 
 use anyhow::{Result, anyhow, bail};
-use arkret_wire::{DomainSeparationId, SchemaId};
 use serde_json::{Value, json};
 
 use super::{FederationFixture, canonical_json, load_fixture, sha256_prefixed};
@@ -360,8 +359,7 @@ fn validate_agent_event_admission_receipt_handoff_case(case: &super::NamedCase) 
         .ok_or_else(|| anyhow!("{} lacks request_contract", case.name))?;
     let required_contract = json!({
         "outcome_field": "agent_event_admissions",
-        "receipt_schema": SchemaId::AGENT_SIGNER_ADMISSION_RECEIPT_V1,
-        "receipt_proof_domain": DomainSeparationId::AGENT_SIGNER_ADMISSION_RECEIPT_V1,
+        "receipt_proof_domain": "ak.agent_signer_admission_receipt.v1",
         "receipted_outcome_classes": ["accepted", "duplicate"],
         "unreceipted_outcome_classes": ["rejected", "quarantine", "dependency_missing"],
         "receipt_written_in_event_acceptance_transaction": true,
@@ -375,7 +373,8 @@ fn validate_agent_event_admission_receipt_handoff_case(case: &super::NamedCase) 
             "verification_method",
             "producer_signer_resolution_evidence_ref",
             "receiver_id"
-        ]
+        ],
+        "producer_evidence_schema": "ak.schema.authenticated_signer_resolution_evidence.v1"
     });
     if contract != &required_contract {
         bail!("{} request_contract drifted", case.name);

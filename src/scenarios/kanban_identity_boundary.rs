@@ -93,7 +93,7 @@ pub async fn kanban_creates_keep_one_identity_across_receipt_backfill_and_retry(
     );
     let (card_event_id, _) = submit_operation(&alice, &realm_id, &card).await?;
     let card_strand_id = arkret::StrandId::from_event_id(&card_event_id).to_string();
-    let card_move = inkson::operation::ak_ops::strand_position_cas_update(
+    let card_move = inkson::operation::ak_ops::strand_position_update(
         &realm_id,
         &alice.actor,
         "ak.strand.move",

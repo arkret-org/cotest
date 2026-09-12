@@ -22,6 +22,12 @@ fn producer_event() -> Event {
         "discussion",
         ContentBlock::text("authority simplification"),
     );
+    let auth_context = AuthContext {
+        key_id: arkret_wire::OpaqueLocalId::new("device-1").unwrap(),
+        key_epoch: 7,
+        credential_epoch: None,
+        authority_refs: vec![authority_ref('1'), authority_ref('2')],
+    };
     let mut event = TypedEventDraft::<event_spec::MessageCreate>::new(
         ScopeRef::Realm {
             realm_id: RealmId::new("ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir")
@@ -31,6 +37,7 @@ fn producer_event() -> Event {
         payload,
     )
     .unwrap()
+    .with_auth_context(auth_context)
     .author_with_digest_suite(
         7,
         Hlc::new("01970e589d21-0001-a13f9c2e").unwrap(),
@@ -38,12 +45,6 @@ fn producer_event() -> Event {
         arkret_canonical::DigestSuite::Sha256,
     )
     .unwrap();
-    event.auth_context = Some(AuthContext {
-        key_id: arkret_wire::OpaqueLocalId::new("device-1").unwrap(),
-        key_epoch: 7,
-        credential_epoch: None,
-        authority_refs: vec![authority_ref('1'), authority_ref('2')],
-    });
     let digest = Hash::new(
         event
             .event_digest_with_digest_suite(arkret_canonical::DigestSuite::Sha256)
