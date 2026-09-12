@@ -434,6 +434,7 @@ test.describe("personal blocklist", () => {
           push_key: `s31e112-${stamp}`,
           platform: "desktop",
           app_id: "inkson",
+          visible_notification_opt_in: false,
         }),
       },
     );
@@ -470,13 +471,14 @@ test.describe("personal blocklist", () => {
           notification: {
             push_target_id: pushTargetId,
             wakeup_kind: "message",
-            timing_profile_hint: "default",
             devices: [{ device_id: alice.deviceId }],
           },
         }),
       },
     );
-    expect(notify.status()).toBe(200);
+    // Only a separately authenticated Push Gateway owns notify. The Station
+    // cannot report delivery or disclose private rules through this path.
+    expect(notify.status()).toBe(404);
     const notifyBody = await notify.json();
     expect(JSON.stringify(notifyBody)).not.toContain(`mute-${stamp}`);
 

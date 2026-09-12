@@ -411,13 +411,11 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     }
     const describe = await describeResp.json();
 
-    const claimedProfiles: Array<{ profile_id?: string }> = Array.isArray(
-      describe?.claimed_profiles,
-    )
-      ? describe.claimed_profiles
+    const supportedProfiles: string[] = Array.isArray(describe?.supported_profiles)
+      ? describe.supported_profiles
       : [];
-    const claimsConformanceHarness = claimedProfiles.some(
-      (entry) => entry?.profile_id === "ak.profile.conformance_harness.v1",
+    const claimsConformanceHarness = supportedProfiles.includes(
+      "ak.profile.conformance_harness.v1",
     );
 
     await testInfo.attach("describe-claims-conformance-harness", {

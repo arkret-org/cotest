@@ -154,9 +154,8 @@ function collectClaimedProfileIds(describe: unknown): Set<string> {
   if (!describe || typeof describe !== "object") return found;
   const d = describe as Record<string, unknown>;
   const topLevelArrays: Array<unknown> = [
-    d.claimed_profiles,
+    d.supported_profiles,
     d.verified_profiles,
-    d.self_claimed_profiles,
   ];
   for (const arr of topLevelArrays) {
     if (Array.isArray(arr)) {

@@ -1,6 +1,6 @@
 // Sync — Service Surface Contract (describe / errors / pagination / idempotency)
 // Contract: e2e/scenarios/sync/service-surface-contract.md
-// Spec: sync/service-surface.md §3, §3.0, §17 (canonical ServiceDescribe + claim-level partition)
+// Spec: sync/service-surface.md §3, §3.0, §17 (canonical ServiceDescribe + supported profiles and verification evidence)
 //       sync/api-conventions.md §4 (success envelope), §5/§5.1/§5.2 (error envelope, unknown path,
 //                                   method_not_allowed, unsupported_feature),
 //                                §6 (idempotency), §7/§7.1 (opaque cursor + list pagination),
@@ -9,7 +9,7 @@
 //
 // Both soland (`soland/src/routing/system/describe.rs` + `soland/src/wire.rs`) and coauth
 // (`coauth/crates/backend/src/handlers/arkret.rs::server_describe`) already serve
-// `GET /_arkret/describe` with the claim-level partition layer in place, so the two
+// `GET /_arkret/describe` with the supported profiles and verification evidence layer in place, so the two
 // describe probes are LIVE today. Phase A.E1 (claim_kind partition), Phase B
 // (error envelope), Phase E (unsupported_feature fail-closed), Phase C (opaque
 // list-pagination cursor on `ak.self.events.read.scan.v1`) and Phase D (generic
@@ -188,11 +188,11 @@ test.describe("describes soland surface @fully-implemented", () => {
   test("soland /_arkret/describe returns canonical ServiceDescribe shape", async ({
     request,
   }, testInfo) => {
-    // spec: service-surface.md §3 (canonical shape), §3.0 (claim-level partition),
+    // spec: service-surface.md §3 (canonical shape), §3.0 (supported profiles and verification evidence),
     //       §17 (line-level interop required fields); service-api-schema.mdx §2.
     //
     // Asserts the canonical fields are present, conformance claims remain
-    // partitioned, and dev-mode posture forces verified_profiles == [].
+    // bound to supported profiles, and dev-mode posture forces verified_profiles == [].
     const resp = await request.get(`${solandBaseUrl()}/_arkret/describe`);
     expect(resp.status()).toBe(200);
     expect(resp.headers()["content-type"] ?? "").toContain("application/json");
@@ -214,16 +214,11 @@ test.describe("describes soland surface @fully-implemented", () => {
     expect(body.plaintext_visibility, "plaintext_visibility present").toBeTruthy();
     expect(typeof body.development_mode, "development_mode boolean").toBe("boolean");
 
-    // §3.0 — claim-level partition
-    expect(Array.isArray(body.claimed_profiles), "claimed_profiles array").toBe(true);
+    // §3.0 — supported profiles and verification evidence
+    expect(body).not.toHaveProperty("claimed_profiles");
+    expect(body).not.toHaveProperty("ingest_modes");
     expect(Array.isArray(body.verified_profiles), "verified_profiles array").toBe(true);
     expect(Array.isArray(body.interop_surfaces), "interop_surfaces array").toBe(true);
-
-    // §3.0 — self-claim has claim_kind === "self_claimed"; conformance_verified MUST live
-    // only under verified_profiles, never copied into claimed_profiles.
-    for (const entry of body.claimed_profiles as Array<{ claim_kind?: string }>) {
-      expect(entry.claim_kind, "claimed_profiles[*].claim_kind").toBe("self_claimed");
-    }
 
     // §3.0 — when development_mode=true, verified_profiles MUST be empty.
     if (body.development_mode === true) {
@@ -315,7 +310,7 @@ test.describe("shared public describe binding @fully-implemented", () => {
 
 test.describe("service surface contract — error envelope, pagination, idempotency, fail-closed", () => {
   test(
-    "Phase A.E1: claim_kind partition does not leak between claimed_profiles and verified_profiles",
+    "Phase A.E1: verified profiles are evidence for the sole supported profile declaration",
     async ({ request }, testInfo) => {
       type ProfileClaim = {
         profile_id?: unknown;
@@ -330,23 +325,17 @@ test.describe("service surface contract — error envelope, pagination, idempote
       const resp = await request.get(`${solandBaseUrl()}/_arkret/describe`);
       expect(resp.status()).toBe(200);
       const body = await resp.json();
-      const claimed = (body.claimed_profiles ?? []) as ProfileClaim[];
-      const verified = (body.verified_profiles ?? []) as ProfileClaim[];
+      const supported = body.supported_profiles as string[];
+      expect(body).not.toHaveProperty("claimed_profiles");
+      const verified = body.verified_profiles as ProfileClaim[];
 
-      expect(Array.isArray(claimed), "claimed_profiles is array").toBe(true);
+      expect(Array.isArray(supported), "supported_profiles is array").toBe(true);
       expect(Array.isArray(verified), "verified_profiles is array").toBe(true);
-
-      const claimedIds = new Set<string>();
-      for (const entry of claimed) {
-        expect(typeof entry.profile_id, "claimed profile_id").toBe("string");
-        const profileId = entry.profile_id as string;
-        expect(profileId, "claimed profile_id is non-empty").not.toBe("");
-        expect(entry.claim_kind, `claimed ${profileId} claim_kind`).toBe("self_claimed");
-        expect(entry.claim_kind, `claimed ${profileId} must not be conformance_verified`).not.toBe(
-          "conformance_verified",
-        );
-        expect(claimedIds.has(profileId), `claimed ${profileId} appears once`).toBe(false);
-        claimedIds.add(profileId);
+      const supportedIds = new Set(supported);
+      expect(supportedIds.size, "supported profiles are unique").toBe(supported.length);
+      for (const profileId of supported) {
+        expect(typeof profileId, "supported profile ID").toBe("string");
+        expect(profileId).not.toBe("");
       }
 
       const verifiedIds = new Set<string>();
@@ -368,9 +357,9 @@ test.describe("service surface contract — error envelope, pagination, idempote
         expect(verifiedIds.has(profileId), `verified ${profileId} appears once`).toBe(false);
         verifiedIds.add(profileId);
         expect(
-          claimedIds.has(profileId),
-          `${profileId} must not appear in both claimed_profiles and verified_profiles`,
-        ).toBe(false);
+          supportedIds.has(profileId),
+          `${profileId} verification evidence must belong to a supported profile`,
+        ).toBe(true);
       }
 
       if (body.development_mode === true) {
