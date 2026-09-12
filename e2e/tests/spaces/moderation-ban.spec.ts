@@ -111,7 +111,6 @@ test.describe("moderation and ban", () => {
     const sealBasis = await readRealmSealBasis(request, bobToken, realmId);
     const sealRef = Array.isArray(sealBasis.leaves) ? sealBasis.leaves[0] : undefined;
     expect(typeof sealRef, "moderation report Seal reference").toBe("string");
-    reportEvent.seal_ref = sealRef;
     const proof = Array.isArray(reportEvent.proofs)
       ? (reportEvent.proofs[0] as Record<string, unknown> | undefined)
       : undefined;
@@ -122,6 +121,7 @@ test.describe("moderation and ban", () => {
         ? keyIdFragment.slice(3)
         : keyIdFragment,
       key_epoch: 0,
+      authority_refs: [sealRef],
     };
     refreshEventEnvelopeProof(reportEvent, verificationMethod);
     const reportUrl = `${solandBaseUrl()}/_arkret/self/moderation/report`;

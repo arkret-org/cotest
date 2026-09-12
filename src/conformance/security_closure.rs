@@ -1,7 +1,7 @@
 //! A2 — security-closure-fixture runner contract.
 //!
 //! Loads `arkret-spec/spec/v1/artifacts/fixtures/security-closure-fixture.json`
-//! (13 vector ids, runner contract introduced by spec commit
+//! (15 vector ids, runner contract introduced by spec commit
 //! `892c5d7 test: add security closure runner contract`) and verifies the
 //! wire-level shape every conformant implementer is expected to expose:
 //!
@@ -53,7 +53,7 @@ pub const REQUIRED_SECURITY_CLOSURE_VECTOR_IDS: &[&str] = &[
     "ak.vector.consent.scope_cascade.v1",
     "ak.vector.consent.cache_invalidation.v1",
     "ak.vector.sync.soft_fail_reconcile.v1",
-    "ak.vector.lattice.lww_open_set.v1",
+    "ak.vector.lattice.concurrent_heads_no_winner.v1",
     "ak.vector.e2ee_relaxed.window_exceeds_ceiling.v1",
     // 2026-08-17 — account lifecycle left the Event/PCR finality domain for the
     // Account Authority issuer ledger (`identity/account-lifecycle.md` §3.1).
@@ -61,6 +61,7 @@ pub const REQUIRED_SECURITY_CLOSURE_VECTOR_IDS: &[&str] = &[
     // receipted-fanout closure is cross-object and single-writer, so it is a
     // conformance vector rather than a schema case.
     crate::conformance::account_status_issuer_ledger::VECTOR_ID_ACCOUNT_STATUS_ISSUER_LEDGER,
+    "ak.vector.account.blocklist_projection.v1",
 ];
 
 /// Top-level fixture shape.
@@ -291,6 +292,24 @@ pub fn validate_security_closure_fixture(fixture: &SecurityClosureFixture) -> Re
         if !seen.contains(*required) {
             bail!("security-closure-fixture missing required vector_id `{required}`");
         }
+    }
+    let concurrent = fixture
+        .security_closure_fixture
+        .iter()
+        .find(|vector| vector.vector_id == "ak.vector.lattice.concurrent_heads_no_winner.v1")
+        .expect("required concurrent-head vector was checked above");
+    if concurrent.steps.len() != 1
+        || concurrent.steps[0].name != "input_order_independent_heads"
+        || concurrent.steps[0].runner.operation != "causal_register.join"
+        || concurrent.steps[0]
+            .input
+            .get("siblings")
+            .and_then(Value::as_array)
+            .is_none_or(|siblings| siblings.len() != 2)
+    {
+        bail!(
+            "concurrent causal-register vector must retain two Event-identified heads without an implicit winner"
+        );
     }
     Ok(())
 }

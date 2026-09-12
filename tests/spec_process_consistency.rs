@@ -22,7 +22,8 @@ fn invite_lifecycle_and_acceptance_membership_writes_are_exact() {
         serde_json::json!(["leave", "join"])
     );
     assert_eq!(
-        catalog["event_kind_registry"]["fsm_templates"]["ak.fsm.membership.v1"]["states"],
+        catalog["event_kind_registry"]["transition_templates"]["ak.domain_transition.membership.v1"]
+            ["states"],
         serde_json::json!(["join", "knock", "leave", "ban"])
     );
     for kind in [
@@ -122,15 +123,15 @@ fn invite_lifecycle_and_acceptance_membership_writes_are_exact() {
         Some("join")
     );
 
-    let membership_fsm = &catalog["event_kind_registry"]["fsm_templates"]["ak.fsm.membership.v1"];
-    let states = membership_fsm["states"]
+    let membership_transition = &catalog["event_kind_registry"]["transition_templates"]["ak.domain_transition.membership.v1"];
+    let states = membership_transition["states"]
         .as_array()
         .expect("membership states must be an array");
     assert!(
         states.iter().all(|state| state.as_str() != Some("invite")),
-        "Realm membership FSM must not invent an invite state"
+        "Realm membership transition contract must not invent an invite state"
     );
-    let transitions = membership_fsm["allowed_transitions"]
+    let transitions = membership_transition["allowed_transitions"]
         .as_array()
         .expect("membership transitions must be an array");
     assert!(
@@ -151,7 +152,6 @@ fn invite_lifecycle_and_acceptance_membership_writes_are_exact() {
             "cancel_rejected_leaves_member_cell_unchanged",
             "revoke_with_expired_reason_leaves_member_cell_unchanged",
             "third_party_create_and_revoke_write_no_member_state",
-            "bare_member_state_ban_from_leave_uses_membership_fsm",
             "direct_inviter_cancel_revoked_is_accepted",
             "direct_inviter_cancel_missing_or_mismatched_invitee_is_reducer_projection_failed",
             "token_invite_cancel_revoked_is_invite_kind_requires_revoke",
@@ -187,11 +187,11 @@ fn invite_live_target_uniqueness_is_carried_by_the_registered_slot() {
     // encoding.md section 4.1 forbids `realm_id` in a subject: the cell is
     // already located by the envelope's Realm.
     let claim = live_target_write(&contracts["ak.invite.create"], FAMILY);
-    assert_eq!(claim["lattice"].as_str(), Some("cas_register"));
-    assert_eq!(claim["bottom"].as_str(), Some("reject"));
+    assert_eq!(claim["state_model"].as_str(), Some("sequenced_state"));
+    assert_eq!(claim["execution"].as_str(), Some("security"));
     assert!(
         claim.get("initial_value").is_none(),
-        "event-auth-state-resolution.md section 9.3.1.2 deleted initial_value:          an unwritten cas_register cell reads null protocol-wide"
+        "an unwritten sequenced state cell reads null protocol-wide"
     );
     assert_eq!(
         claim

@@ -275,7 +275,7 @@ async fn garth_delivers_an_authored_event_and_the_station_keeps_it() -> Result<(
 
     let body = format!("garth-delivered-{stamp}");
     // Authored by the harness, not hand-rolled here. A data-plane Event has to
-    // anchor on the Realm Seal frontier with `seal_ref` + `auth_context` and
+    // bind its `auth_context.authority_refs` to the Realm authority state and
     // must not carry `seal_basis` — a bare envelope is refused 422, which is
     // exactly what happened when this built one itself. `author_event_with_causal_refs`
     // is the harness's own authoring path and stops short of submitting, which

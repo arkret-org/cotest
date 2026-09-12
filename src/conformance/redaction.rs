@@ -409,7 +409,6 @@ fn assert_event_target_does_not_drive_object_state() -> Result<()> {
                 prev_refs: vec![],
                 refs: vec![],
                 preconditions: vec![],
-                seal_ref: None,
                 auth_context: None,
                 seal_basis: None,
                 requirements: arkret_wire::EventRequirements::default(),

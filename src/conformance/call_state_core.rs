@@ -1,9 +1,9 @@
 //! Core call-state conformance vectors.
 //!
 //! Covers the six `ak.vector.call_state.*` vectors for participant binding
-//! admission and the base call lifecycle FSM. The fixture provides registry
+//! admission and the base call lifecycle transition contract. The fixture provides registry
 //! evidence; this runner exercises SDK signing / verification helpers and the
-//! core `Fsm` lattice directly.
+//! sequenced-state model with its domain transition validator.
 
 use anyhow::{Result, anyhow, bail};
 use arkret::{
@@ -17,8 +17,12 @@ use arkret_models_collaboration::objects::media::{
     CallMediaParticipantBinding, CallMediaTokenExchangeOutcome, CallMediaTokenExchangeRequestBody,
     MediaBackendKind, MediaBackendToken,
 };
-use arkret_state::lattice::{CellState, Fsm, Lattice, SealedOp};
-use arkret_wire::{AccountId, ActorId, BottomKind, LatticeOp, LatticeOpType, ProfileId};
+use arkret_state::state_model::{
+    DomainTransitionRule, ResolvedCellState, SequencedState, StateModel, StateWrite,
+};
+use arkret_wire::{
+    AccountId, ActorId, EventCellValueShape, LatticeOp, LatticeOpType, ProfileId,
+};
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use ed25519_dalek::{Signer, SigningKey};
 use serde_json::{Value, json};
@@ -30,8 +34,8 @@ pub const VECTOR_ID_INITIAL_STATE_ACCEPTS_ALLOWED: &str =
 pub const VECTOR_ID_TRANSITION_MATRIX: &str = "ak.vector.call_state.transition_matrix.v1";
 pub const VECTOR_ID_TERMINAL_ABSORBING: &str = "ak.vector.call_state.terminal_absorbing.v1";
 pub const VECTOR_ID_REPLAY_SAME_STATE_NOOP: &str = "ak.vector.call_state.replay_same_state_noop.v1";
-pub const VECTOR_ID_CONCURRENT_SIBLING_BOTTOM: &str =
-    "ak.vector.call_state.concurrent_sibling_bottom.v1";
+pub const VECTOR_ID_ORDERED_COMPETING_TRANSITIONS: &str =
+    "ak.vector.call_state.ordered_competing_transitions.v1";
 
 pub const ALL_CALL_STATE_CORE_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_PARTICIPANT_BINDING_INVALID,
@@ -39,7 +43,7 @@ pub const ALL_CALL_STATE_CORE_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_TRANSITION_MATRIX,
     VECTOR_ID_TERMINAL_ABSORBING,
     VECTOR_ID_REPLAY_SAME_STATE_NOOP,
-    VECTOR_ID_CONCURRENT_SIBLING_BOTTOM,
+    VECTOR_ID_ORDERED_COMPETING_TRANSITIONS,
 ];
 
 const CALL_STATE_CORE_FIXTURE_FILE: &str = "call-state-core-fixture.json";
@@ -310,8 +314,8 @@ fn op_transition(from: &str, to: &str) -> LatticeOp {
     }
 }
 
-fn call_state_fsm(initial: &str) -> Fsm {
-    Fsm::new(
+fn call_state_transition_rule(initial: &str) -> DomainTransitionRule {
+    DomainTransitionRule::new(
         ALLOWED_TRANSITIONS
             .iter()
             .map(|(from, to)| (json!(from), json!(to)))
@@ -337,16 +341,14 @@ fn classify_call_state_transition(from: &str, to: &str) -> std::result::Result<(
     }
 }
 
-fn assert_fsm_transition_value(from: &str, to: &str, suffix: &str) -> Result<()> {
-    let fsm = call_state_fsm(from);
-    let resolved = fsm.join(
+fn assert_sequenced_transition_value(from: &str, to: &str, suffix: &str) -> Result<()> {
+    let op = op_transition(from, to);
+    call_state_transition_rule(from).validate(Some(&json!(from)), &op)?;
+    let resolved = SequencedState::new(EventCellValueShape::Register).resolve(
         &cell(),
-        &[SealedOp::new(
-            issuer_digest(suffix),
-            op_transition(from, to),
-        )],
-    );
-    if resolved != CellState::Value(json!(to)) {
+        &[StateWrite::new(issuer_digest(suffix), op)],
+    )?;
+    if resolved.settled_value() != Some(&json!(to)) {
         bail!("expected call-state transition {from}->{to} to resolve to {to}, got {resolved:?}");
     }
     Ok(())
@@ -354,13 +356,13 @@ fn assert_fsm_transition_value(from: &str, to: &str, suffix: &str) -> Result<()>
 
 pub fn run_initial_state_accepts_allowed_vector() -> Result<()> {
     for state in INITIAL_STATES {
-        if !INITIAL_STATES.contains(state) {
-            bail!("initial state {state} should be accepted");
-        }
-        let resolved = call_state_fsm(state).join(&cell(), &[]);
-        if resolved != CellState::Value(json!(state)) {
-            bail!("initial call-state head {state} did not resolve cleanly: {resolved:?}");
-        }
+        initial_state_admission(state)
+            .map_err(|code| anyhow!("initial state {state} rejected with {code}"))?;
+        let first_target = ALLOWED_TRANSITIONS
+            .iter()
+            .find_map(|(from, to)| (*from == *state).then_some(*to))
+            .ok_or_else(|| anyhow!("initial state {state} has no registered outgoing edge"))?;
+        call_state_transition_rule(state).validate(None, &op_transition(state, first_target))?;
     }
 
     for state in ["active", "ended", "missed", "failed", "cancelled"] {
@@ -390,7 +392,7 @@ pub fn run_transition_matrix_vector() -> Result<()> {
     for (idx, (from, to)) in ALLOWED_TRANSITIONS.iter().enumerate() {
         classify_call_state_transition(from, to)
             .map_err(|code| anyhow!("legal edge {from}->{to} rejected with {code}"))?;
-        assert_fsm_transition_value(from, to, &format!("{:02x}", idx + 1))?;
+        assert_sequenced_transition_value(from, to, &format!("{:02x}", idx + 1))?;
     }
 
     for (from, to) in [
@@ -405,26 +407,11 @@ pub fn run_transition_matrix_vector() -> Result<()> {
                 "illegal non-terminal edge {from}->{to} must be call_state_transition_invalid, got {other:?}"
             ),
         }
-        let resolved = call_state_fsm(from).join(
-            &cell(),
-            &[SealedOp::new(
-                issuer_digest(
-                    &format!("f{from}{to}")
-                        .bytes()
-                        .fold(String::new(), |mut acc, b| {
-                            use std::fmt::Write as _;
-                            let _ = write!(&mut acc, "{:02x}", b);
-                            acc
-                        }),
-                ),
-                op_transition(from, to),
-            )],
-        );
-        match resolved {
-            CellState::Bottom(bottom) if bottom.kind == BottomKind::InvalidTransition => {}
-            other => bail!(
-                "illegal non-terminal edge {from}->{to} must Bottom invalid_transition, got {other:?}"
-            ),
+        if call_state_transition_rule(from)
+            .validate(Some(&json!(from)), &op_transition(from, to))
+            .is_ok()
+        {
+            bail!("illegal non-terminal edge {from}->{to} passed its domain transition rule");
         }
     }
 
@@ -453,14 +440,14 @@ pub fn run_terminal_absorbing_vector() -> Result<()> {
 }
 
 pub fn run_replay_same_state_noop_vector() -> Result<()> {
-    let resolved = call_state_fsm("ringing").join(
+    let op = op_transition("ringing", "connecting");
+    call_state_transition_rule("ringing").validate(Some(&json!("ringing")), &op)?;
+    let write = StateWrite::new(issuer_digest("aa"), op);
+    let resolved = SequencedState::new(EventCellValueShape::Register).resolve(
         &cell(),
-        &[
-            SealedOp::new(issuer_digest("aa"), op_transition("ringing", "connecting")),
-            SealedOp::new(issuer_digest("ab"), op_transition("ringing", "connecting")),
-        ],
-    );
-    if resolved != CellState::Value(json!("connecting")) {
+        &[write.clone(), write],
+    )?;
+    if resolved.settled_value() != Some(&json!("connecting")) {
         bail!("same transition replay must remain connecting, got {resolved:?}");
     }
     classify_call_state_transition("ringing", "connecting")
@@ -468,18 +455,22 @@ pub fn run_replay_same_state_noop_vector() -> Result<()> {
     Ok(())
 }
 
-pub fn run_concurrent_sibling_bottom_vector() -> Result<()> {
-    let resolved = call_state_fsm("ringing").join(
-        &cell(),
-        &[
-            SealedOp::new(issuer_digest("ba"), op_transition("ringing", "active")),
-            SealedOp::new(issuer_digest("bb"), op_transition("ringing", "missed")),
-        ],
-    );
-    match resolved {
-        CellState::Bottom(bottom) if bottom.kind == BottomKind::Conflict => Ok(()),
-        other => bail!("ringing sibling transitions must produce conflict Bottom, got {other:?}"),
+pub fn run_ordered_competing_transitions_vector() -> Result<()> {
+    let first = op_transition("ringing", "active");
+    let stale = op_transition("ringing", "missed");
+    let rule = call_state_transition_rule("ringing");
+    rule.validate(Some(&json!("ringing")), &first)?;
+    if rule.validate(Some(&json!("active")), &stale).is_ok() {
+        bail!("a stale competing transition was accepted after the confirmed revision advanced");
     }
+    let resolved = SequencedState::new(EventCellValueShape::Register)
+        .resolve(&cell(), &[StateWrite::new(issuer_digest("ba"), first)])?;
+    if !matches!(resolved, ResolvedCellState::Sequenced(_))
+        || resolved.settled_value() != Some(&json!("active"))
+    {
+        bail!("confirmed call-state transition did not remain the sequenced value: {resolved:?}");
+    }
+    Ok(())
 }
 
 pub fn run_call_state_core_fixture_suite() -> Result<()> {
@@ -495,7 +486,7 @@ pub fn run_call_state_core_fixture_suite() -> Result<()> {
     run_transition_matrix_vector()?;
     run_terminal_absorbing_vector()?;
     run_replay_same_state_noop_vector()?;
-    run_concurrent_sibling_bottom_vector()?;
+    run_ordered_competing_transitions_vector()?;
     Ok(())
 }
 

@@ -90,22 +90,19 @@ async fn seal_basis(
     Ok(state.frontier.seal_basis())
 }
 
-fn bind_seal_ref(
+fn bind_authority_refs(
     event: &mut arkret_wire::Event,
     actor: &str,
     basis: &arkret_wire::SealBasis,
 ) -> Result<()> {
-    let seal_ref = basis
-        .leaves
-        .first()
-        .ok_or_else(|| anyhow!("Realm Seal frontier has no leaf"))?;
-    event.seal_ref = Some(seal_ref.clone());
+    ensure!(!basis.leaves.is_empty(), "Realm Seal frontier has no leaf");
     event.auth_context = Some(arkret_wire::AuthContext {
         key_id: cotest::harness::auth_context_key_id(
             default_event_verification_method(actor).as_str(),
         ),
         key_epoch: 0,
         credential_epoch: None,
+        authority_refs: basis.leaves.clone(),
     });
     event.authorization_ref = Some(
         arkret_wire::AuthorizationRef::new(arkret_wire::REALM_AUTHORITY_ROOT_CELL)
@@ -235,8 +232,8 @@ async fn realm_scoped_siblings_lost_response_and_cas_reauthor_are_live() -> Resu
         basis_a.frontier_event_ids.clone(),
         signing_seed(actor),
     );
-    bind_seal_ref(&mut sibling_a, actor, &current_seal_basis)?;
-    bind_seal_ref(&mut sibling_b, actor, &current_seal_basis)?;
+    bind_authority_refs(&mut sibling_a, actor, &current_seal_basis)?;
+    bind_authority_refs(&mut sibling_b, actor, &current_seal_basis)?;
     for event in [&sibling_b, &sibling_a] {
         let response = submit_bytes(&server, &token, submission_bytes(event)?).await?;
         assert_eq!(
@@ -268,7 +265,7 @@ async fn realm_scoped_siblings_lost_response_and_cas_reauthor_are_live() -> Resu
         siblings.frontier_event_ids.clone(),
         signing_seed(actor),
     );
-    bind_seal_ref(
+    bind_authority_refs(
         &mut merge,
         actor,
         &seal_basis(&server, &token, &realm_a).await?,
@@ -317,7 +314,7 @@ async fn realm_scoped_siblings_lost_response_and_cas_reauthor_are_live() -> Resu
         basis_a.frontier_event_ids,
         signing_seed(actor),
     );
-    bind_seal_ref(
+    bind_authority_refs(
         &mut stale,
         actor,
         &seal_basis(&server, &token, &realm_a).await?,
@@ -351,7 +348,7 @@ async fn realm_scoped_siblings_lost_response_and_cas_reauthor_are_live() -> Resu
         current.frontier_event_ids,
         signing_seed(actor),
     );
-    bind_seal_ref(
+    bind_authority_refs(
         &mut replacement,
         actor,
         &seal_basis(&server, &token, &realm_a).await?,

@@ -318,18 +318,7 @@ pub fn realm_create_payload_with_notary(
         arkret_models_collaboration::governance::plaintext_visibility::PlaintextVisibleServicesPayload::new(services)
     });
 
-    let notary = arkret_wire::notary::NotaryValue::SingleSigner {
-        signer: notary_signer,
-        recovery_signers: vec![crate::fixture_notary_signer(
-            arkret_identifiers::DidCoreId::new("ak:did_core:web:recovery.soland.local")?,
-        )],
-        controller_organization_id: Some(arkret_identifiers::DidCoreId::new(
-            "ak:did_core:web:organization.primary.soland.local",
-        )?),
-        recovery_controller_organization_ids: vec![arkret_identifiers::DidCoreId::new(
-            "ak:did_core:web:organization.recovery.soland.local",
-        )?],
-    };
+    let notary = arkret_wire::notary::NotaryValue::new(vec![notary_signer], 0, 0)?;
     let genesis_salt = input
         .get("genesis_salt")
         .and_then(Value::as_str)

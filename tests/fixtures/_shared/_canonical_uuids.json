@@ -11,7 +11,7 @@
     "anchor_abc123": "ak:anchor:sha256:abc123",
     "anchor_def456": "ak:anchor:sha256:def456",
     "anchor_ghi789": "ak:anchor:sha256:ghi789",
-    "comment": "Symbolic SHA256 anchors used by state_resolution_quarantine_fixture for head_in chains."
+    "comment": "Symbolic SHA256 anchors used by state-model conformance vectors."
   },
   "event_id_prefix": {
     "value": "ak:event:Ab8fF-_JIKTb1BX6GXVZLOEoeeVFftSuQTq3Y8wtAvJT",

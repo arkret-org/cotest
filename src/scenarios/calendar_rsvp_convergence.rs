@@ -368,8 +368,7 @@ async fn submit_prepared_event(
     .await?;
     event
         .proofs
-        .iter()
-        .find_map(arkret_wire::EventProof::as_producer)
+        .first()
         .map(|proof| proof.event_digest.to_string())
         .ok_or_else(|| anyhow!("prepared Event carries no event digest"))
 }

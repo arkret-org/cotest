@@ -42,12 +42,8 @@ mod history_key_direct_traversal;
 mod identity_root;
 mod inkson_client;
 mod invite_new_source_quota;
-mod kernel_joint_gate;
-mod kernel_reference;
 mod key_backup_hardening;
 mod keypackage_lifecycle;
-mod lattice_mixed_kinds;
-mod lattice_round_trip;
 mod list_handles_for_subject_vectors;
 mod long_text_content;
 mod media_binding;
@@ -92,6 +88,7 @@ mod signal_federation;
 mod signal_recipient;
 mod signal_sequence_high_water;
 mod spec_business_flow;
+mod state_model_round_trip;
 mod state_reducer_hardening;
 mod state_resolution;
 mod station_certification;
@@ -169,7 +166,7 @@ pub use call_signal::{
 };
 pub use call_state_core::{
     ALL_CALL_STATE_CORE_VECTOR_IDS, run_call_state_core_fixture_suite,
-    run_concurrent_sibling_bottom_vector, run_initial_state_accepts_allowed_vector,
+    run_initial_state_accepts_allowed_vector, run_ordered_competing_transitions_vector,
     run_participant_binding_invalid_vector, run_replay_same_state_noop_vector,
     run_terminal_absorbing_vector, run_transition_matrix_vector,
 };
@@ -248,7 +245,6 @@ pub use invite_new_source_quota::{
     VECTOR_ID_NEW_SOURCE_QUOTA_HOLDER_ADMISSION, canonical_admission_case,
     run_invite_new_source_quota_suite,
 };
-pub use kernel_joint_gate::{KERNEL_JOINT_GATE_FIXTURE, run_kernel_joint_gate_suite};
 pub use key_backup_hardening::{
     ALL_KEY_BACKUP_HARDENING_VECTOR_IDS, VECTOR_ID_KEY_BACKUP_DELETE_AUTHORITY,
     run_key_backup_delete_authority_vector, run_key_backup_hardening_fixture_suite,
@@ -262,11 +258,6 @@ pub use keypackage_lifecycle::{
     run_keypackage_last_resort_forced_rotation_vector, run_keypackage_lifecycle_fixture_suite,
     run_keypackage_self_claim_authorization_idempotency_vector,
     run_mls_welcome_keypackage_hash_vector,
-};
-pub use lattice_mixed_kinds::run_lattice_mixed_kinds_suite;
-pub use lattice_round_trip::{
-    VECTOR_ID_LATTICE_CAS_REGISTER_SUPERSESSION, run_lattice_cas_register_supersession_vector,
-    run_lattice_round_trip_suite,
 };
 pub use list_handles_for_subject_vectors::{
     ALL_LIST_HANDLES_FOR_SUBJECT_VECTOR_IDS, run_as_of_historical_replay_vector,
@@ -419,6 +410,7 @@ pub use signal_federation::{
 };
 pub use signal_sequence_high_water::run_signal_sequence_high_water_suite;
 pub use spec_business_flow::run_spec_business_flow_coverage_suite;
+pub use state_model_round_trip::run_state_model_round_trip_suite;
 pub use state_reducer_hardening::{
     ALL_STATE_REDUCER_HARDENING_VECTOR_IDS, VECTOR_ID_PATCH_REDACTABLE_CONTENT_SLOT_UNSET_BAN,
     run_patch_redactable_content_slot_unset_ban_vector, run_state_reducer_hardening_fixture_suite,
@@ -450,23 +442,20 @@ pub use visibility_policy::{
 pub use websocket_binding::run_websocket_binding_suite;
 pub use wire::{
     run_anchor_view_compaction_fixture_suite, run_composite_state_key_encoding_fixture_suite,
-    run_composite_state_subject_fixture_suite, run_conflict_repair_fixture_suite,
-    run_consent_fixture_suite, run_constraint_evaluation_class_fixture_suite,
-    run_constraint_family_fixture_suite, run_device_message_negative_fixture_suite,
-    run_discovery_profile_fixture_suite, run_event_kind_lattice_dispatch_fixture_suite,
-    run_event_kind_payload_coverage_fixture_suite, run_facet_renderer_query_fixture_suite,
-    run_frontier_conflict_resolution_fixture_suite, run_interop_downgrade_fixture_suite,
+    run_composite_state_subject_fixture_suite, run_consent_fixture_suite,
+    run_constraint_evaluation_class_fixture_suite, run_constraint_family_fixture_suite,
+    run_device_message_negative_fixture_suite, run_discovery_profile_fixture_suite,
+    run_event_kind_lattice_dispatch_fixture_suite, run_event_kind_payload_coverage_fixture_suite,
+    run_facet_renderer_query_fixture_suite, run_interop_downgrade_fixture_suite,
     run_key_backup_aead_round_trip_check, run_key_backup_encryption_fixture_suite,
     run_late_arriving_anchor_fixture_suite, run_late_arriving_anchor_idempotency_check,
     run_megolm_ratchet_kdf_chain_check, run_megolm_ratcheting_fixture_suite,
-    run_membership_fsm_fixture_suite, run_mimi_components_fixture_suite,
-    run_mimi_interop_fixture_suite, run_mls_e2ee_basic_fixture_suite,
-    run_mls_security_frontier_fixture_suite, run_multi_admin_distinct_approver_gate_check,
-    run_multi_realm_federation_fixture_suite, run_production_signing_fixture_suite,
-    run_read_receipt_policy_fixture_suite, run_recovery_bridge_full_chain_fixture_suite,
-    run_recovery_ticket_state_machine_check, run_redacted_cross_server_fixture_suite,
-    run_restore_full_workflows_fixture_suite, run_state_resolution_quarantine_fixture_suite,
-    run_threshold_multisig_fixture_suite,
+    run_mimi_components_fixture_suite, run_mimi_interop_fixture_suite,
+    run_mls_e2ee_basic_fixture_suite, run_mls_security_frontier_fixture_suite,
+    run_multi_admin_distinct_approver_gate_check, run_multi_realm_federation_fixture_suite,
+    run_production_signing_fixture_suite, run_read_receipt_policy_fixture_suite,
+    run_recovery_bridge_full_chain_fixture_suite, run_recovery_ticket_state_machine_check,
+    run_redacted_cross_server_fixture_suite, run_restore_full_workflows_fixture_suite,
 };
 
 // ── Shared fixture types ────────────────────────────────────────────────────

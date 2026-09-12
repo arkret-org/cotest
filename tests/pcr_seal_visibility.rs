@@ -1,6 +1,8 @@
 use anyhow::Result;
 use arkret_models_collaboration::event_sync::SealFrontierState;
-use arkret_models_collaboration::http_bodies::{SealResolveOutcome, SelfSealResolveRequestBody};
+use arkret_models_collaboration::http_bodies::{
+    SealResolveOutcome, SealResolveSelection, SelfSealResolveRequestBody,
+};
 use cotest::harness::{ArkretServer, expect_json};
 use cotest::scenarios::identity_test_support::{
     actor_did_for_service_did, seal_current_principal_control_frontier,
@@ -39,7 +41,9 @@ async fn pcr_seal_resolve_is_owner_only_without_synthetic_membership() -> Result
     assert_eq!(unchanged.frontier.sole_leaf()?, &seal_ref);
     let body = SelfSealResolveRequestBody {
         realm_id,
-        seal_refs: vec![seal_ref.clone()],
+        selection: SealResolveSelection::SealRefs {
+            seal_refs: vec![seal_ref.clone()],
+        },
         history_traversal_access: None,
     };
     let owner: SealResolveOutcome = serde_json::from_value(
@@ -49,9 +53,16 @@ async fn pcr_seal_resolve_is_owner_only_without_synthetic_membership() -> Result
         )
         .await?,
     )?;
-    assert!(owner.missing_seal_refs.is_empty());
-    assert_eq!(owner.seals.len(), 1);
-    assert_eq!(owner.seals[0].id, seal_ref);
+    let SealResolveOutcome::Seals {
+        seals,
+        missing_seal_refs,
+    } = owner
+    else {
+        panic!("Seal ref request returned conclusion mode")
+    };
+    assert!(missing_seal_refs.is_empty());
+    assert_eq!(seals.len(), 1);
+    assert_eq!(seals[0].id, seal_ref);
     let outsider: SealResolveOutcome = serde_json::from_value(
         expect_json(
             bob.query("/_arkret/self/seals/resolve").json(&body),
@@ -59,7 +70,14 @@ async fn pcr_seal_resolve_is_owner_only_without_synthetic_membership() -> Result
         )
         .await?,
     )?;
-    assert!(outsider.seals.is_empty());
-    assert_eq!(outsider.missing_seal_refs, vec![seal_ref]);
+    let SealResolveOutcome::Seals {
+        seals,
+        missing_seal_refs,
+    } = outsider
+    else {
+        panic!("Seal ref request returned conclusion mode")
+    };
+    assert!(seals.is_empty());
+    assert_eq!(missing_seal_refs, vec![seal_ref]);
     Ok(())
 }

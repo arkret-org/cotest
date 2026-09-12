@@ -107,7 +107,6 @@ pub async fn teabay_rejects_unsigned_ingest_run() -> Result<()> {
             refs: Vec::new(),
             causal_refs: Vec::new(),
             preconditions: Vec::new(),
-            seal_ref: None,
             auth_context: None,
             seal_basis: None,
             // `Event::payload` is an open `BTreeMap<String, Value>` on the wire

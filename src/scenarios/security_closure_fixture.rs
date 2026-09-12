@@ -100,7 +100,7 @@ pub const VECTOR_INVITE_CLAIM_REDUCER_STATE_MACHINE: &str =
 pub const VECTOR_CONSENT_SCOPE_CASCADE: &str = "ak.vector.consent.scope_cascade.v1";
 pub const VECTOR_CONSENT_CACHE_INVALIDATION: &str = "ak.vector.consent.cache_invalidation.v1";
 pub const VECTOR_SYNC_SOFT_FAIL_RECONCILE: &str = "ak.vector.sync.soft_fail_reconcile.v1";
-pub const VECTOR_LATTICE_LWW_OPEN_SET: &str = "ak.vector.lattice.lww_open_set.v1";
+pub const VECTOR_CAUSAL_CONCURRENT_HEADS: &str = "ak.vector.lattice.concurrent_heads_no_winner.v1";
 pub const VECTOR_E2EE_RELAXED_WINDOW_EXCEEDS_CEILING: &str =
     "ak.vector.e2ee_relaxed.window_exceeds_ceiling.v1";
 

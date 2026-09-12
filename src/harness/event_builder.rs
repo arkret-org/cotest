@@ -812,11 +812,11 @@ pub(crate) async fn prepare_event_submission_with_signing_identity(
             let physical_millis = chrono::Utc::now().timestamp_millis();
             event.hlc = Some(Hlc::new(format!("{physical_millis:012x}-0000-a13f9c2e"))?);
         } else {
-            event.seal_ref = Some(frontier.sole_leaf()?.clone());
             event.auth_context = Some(AuthContext {
                 key_id: auth_context_key_id(verification_method.as_str()),
                 key_epoch: 0,
                 credential_epoch: None,
+                authority_refs: frontier.leaves,
             });
         }
         refresh_typed_event_proof_with_signing_seed(&mut event, signing_seed)?;

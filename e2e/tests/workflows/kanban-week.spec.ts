@@ -195,11 +195,8 @@ test.describe("workflow: kanban week-in-review", () => {
           return boardCreate !== undefined;
         }, { timeout: 90_000 })
         .toBe(true);
-      expect(boardCreate?.seal_ref, "Board create is a Data Event").toEqual(
-        expect.stringMatching(/^ak:seal:/),
-      );
       expect(boardCreate?.auth_context, "Board create carries Data Event auth context").toEqual(
-        expect.any(Object),
+        expect.objectContaining({ authority_refs: expect.any(Array) }),
       );
       expect(boardCreate?.seal_basis, "Board create never enters Control Move shape").toBeUndefined();
 
@@ -345,7 +342,6 @@ test.describe("workflow: kanban week-in-review", () => {
       expect(controlMove?.seal_basis, "Control Move carries seal_basis").toEqual(
         expect.any(Object),
       );
-      expect(controlMove?.seal_ref, "Control Move has no Data Event seal_ref").toBeUndefined();
       expect(controlMove?.auth_context, "Control Move has no Data Event auth context").toBeUndefined();
       await stepShot(patPage.page, testInfo, "E-list-restored");
     } finally {

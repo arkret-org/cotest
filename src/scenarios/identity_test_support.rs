@@ -538,7 +538,7 @@ pub async fn seal_principal_control_frontier_with_pending_events(
             .pcr_pending_control(
                 &arkret_models_collaboration::governance_dependencies::PcrPendingControlRequestBody {
                     realm_id: realm_id.clone(),
-                    predecessor_refs: frontier.seal_basis.leaves.clone(),
+                    predecessor_ref: Some(leaf.clone()),
                     limit: 1,
                 },
             )
@@ -564,7 +564,7 @@ pub async fn seal_principal_control_frontier_with_pending_events(
         let request =
             arkret_models_collaboration::governance_dependencies::SealPrepareRequestBody {
                 realm_id: realm_id.clone(),
-                predecessor_refs: frontier.seal_basis.leaves,
+                predecessor_ref: Some(leaf.clone()),
                 event_digests: pending.event_digests,
                 hlc: Hlc::new(format!("{physical_millis:012x}-{index:04x}-a13f9c2e"))?,
             };
@@ -748,20 +748,26 @@ async fn bootstrap_test_device_authorization(
             principal_id: principal_actor_id.clone(),
             station_id: server.service_id().clone(),
             principal_did: principal.clone(),
-            notary: arkret_wire::NotaryValue::single_signer(arkret_wire::NotarySignerDescriptor {
-                actor_id: arkret_wire::ActorId::account(arkret_wire::AccountId::new(
-                    principal_actor_id.clone(),
-                    server.service_id().clone(),
-                )),
-                verification_method: crate::fixture_did_url(format!("{actor}#{device_id}")),
-                key_kind: arkret_wire::NotaryKeyKind::Ed25519Raw32,
-                jose_algorithm: arkret_wire::NotaryJoseAlgorithm::Ed25519,
-                frozen_public_key_b64u: URL_SAFE_NO_PAD
-                    .encode(device_signing_key.verifying_key().as_bytes()),
-                frozen_public_key_digest: Hash::new(arkret_canonical::canonical::sha256_digest(
-                    device_signing_key.verifying_key().as_bytes(),
-                ))?,
-            }),
+            notary: arkret_wire::NotaryValue::new(
+                vec![arkret_wire::NotarySignerDescriptor {
+                    actor_id: arkret_wire::ActorId::account(arkret_wire::AccountId::new(
+                        principal_actor_id.clone(),
+                        server.service_id().clone(),
+                    )),
+                    verification_method: crate::fixture_did_url(format!("{actor}#{device_id}")),
+                    key_kind: arkret_wire::NotaryKeyKind::Ed25519Raw32,
+                    jose_algorithm: arkret_wire::NotaryJoseAlgorithm::Ed25519,
+                    frozen_public_key_b64u: URL_SAFE_NO_PAD
+                        .encode(device_signing_key.verifying_key().as_bytes()),
+                    frozen_public_key_digest: Hash::new(
+                        arkret_canonical::canonical::sha256_digest(
+                            device_signing_key.verifying_key().as_bytes(),
+                        ),
+                    )?,
+                }],
+                0,
+                0,
+            )?,
             initial_resolution: arkret_models_identity::ResolutionCommitment {
                 did: principal.clone(),
                 method_history_head: arkret_canonical::canonical_sha256(&prepared.log_entry)?,
@@ -793,7 +799,7 @@ async fn bootstrap_test_device_authorization(
         &mut create,
         &root_signer,
         &root_verification_method,
-        arkret::signatures::SignEventOptions::new().with_created_at(created_at),
+        arkret::signatures::SignEventOptions::for_native_unit().with_created_at(created_at),
     )?;
     let realm_id = create.realm_id.clone();
     let mut authorize = arkret_wire::test_support::raw_event(
@@ -824,7 +830,7 @@ async fn bootstrap_test_device_authorization(
         &mut authorize,
         &device_signer,
         &device_method,
-        arkret::signatures::SignEventOptions::new().with_created_at(created_at),
+        arkret::signatures::SignEventOptions::for_native_unit().with_created_at(created_at),
     )?;
     let authorize_event_id = authorize.event_id.clone();
     let unit = build_self_principal_pcr_genesis_unit(

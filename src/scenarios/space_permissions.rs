@@ -223,6 +223,11 @@ fn rebind_authored_event(event: &mut arkret_wire::Event, actor: &str) -> Result<
     ));
     event.actor_seq = 0;
     event.prev_refs.clear();
+    let authority_refs = event
+        .auth_context
+        .as_ref()
+        .map(|context| context.authority_refs.clone())
+        .unwrap_or_default();
     if event.kind.is_control_plane() {
         event.auth_context = None;
     } else {
@@ -230,15 +235,12 @@ fn rebind_authored_event(event: &mut arkret_wire::Event, actor: &str) -> Result<
             key_id: crate::harness::auth_context_key_id(&verification_method),
             key_epoch: 0,
             credential_epoch: None,
+            authority_refs,
         });
     }
     event
         .proofs
-        .iter_mut()
-        .find_map(|proof| match proof {
-            arkret_wire::EventProof::Producer(proof) => Some(proof),
-            arkret_wire::EventProof::StationAdmission(_) => None,
-        })
+        .first_mut()
         .ok_or_else(|| anyhow!("authored Event has no proof"))?
         .verification_method =
         arkret_wire::DidUrl::new(verification_method).map_err(anyhow::Error::msg)?;

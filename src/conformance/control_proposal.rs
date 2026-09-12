@@ -83,10 +83,7 @@ pub fn run_control_proposal_ack_suite() -> Result<()> {
         .get("cases")
         .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("Control Proposal Ack fixture has no cases[]"))?;
-    const REQUIRED_CASES: [&str; 10] = [
-        "threshold_ack_set_uses_distinct_current_members",
-        "duplicate_member_does_not_count_twice",
-        "mixed_authority_set_and_out_of_window_rejected",
+    const REQUIRED_CASES: [&str; 7] = [
         "proposal_intake_sla_wire_maximum_is_inclusive",
         "proposal_intake_sla_above_wire_maximum_is_rejected",
         "exact_member_retry_is_byte_identical_and_conflict_cannot_extend",
@@ -119,116 +116,44 @@ pub fn run_control_proposal_ack_suite() -> Result<()> {
             .ok_or_else(|| anyhow!("Control Proposal Ack fixture is missing {name}"))
     };
 
-    let threshold_case = case("threshold_ack_set_uses_distinct_current_members")?;
-    let authority_ack_values = threshold_case["authority_acks"]
-        .as_array()
-        .ok_or_else(|| anyhow!("threshold authority_acks must be an array"))?;
-    let authority_ref = hash('a');
-    let members = authority_ack_values
-        .iter()
-        .map(|member| member_from_fixture(member, authority_ref.clone()))
-        .collect::<Result<Vec<_>>>()?;
-    let authority_members = members
-        .iter()
-        .map(|member| {
-            let controller = member
-                .signature
-                .verification_method
-                .rsplit_once('#')
-                .map(|(controller, _)| controller)
-                .ok_or_else(|| anyhow!("member verification method is not a DID URL"))?;
-            let did = arkret_wire::Did::new(controller.to_owned())?;
-            let actor_id = arkret_wire::project_did_to_core_id(&did).map_err(anyhow::Error::msg)?;
-            Ok(crate::fixture_notary_signer_for_method(
-                actor_id,
-                member.signature.verification_method.clone(),
-            ))
-        })
-        .collect::<Result<Vec<_>>>()?;
-    let notary = NotaryValue::Threshold {
-        threshold: threshold_case["threshold"]
-            .as_u64()
-            .and_then(|value| u32::try_from(value).ok())
-            .ok_or_else(|| anyhow!("threshold is invalid"))?,
-        signers: authority_members,
-        forensic_attribution: ForensicAttribution::QuorumIntersection,
-    };
     let policy = ControlProposalDecisionPolicy {
         proposal_intake_sla: chrono::Duration::seconds(60),
         decision_window: chrono::Duration::seconds(30),
         absolute_horizon: chrono::Duration::seconds(90),
         max_defers: 2,
     };
-    let ack = ControlProposalAck::from_authority_acks_for_notary(members, policy, &notary)?;
+    let authority_ref = hash('a');
+    let member = member(
+        "did:webvh:z6mkfixtureauthorityaexample:authority-a.example#notary",
+        "2026-07-29T00:00:00.000Z",
+        "2026-07-29T00:00:30.000Z",
+        "2026-07-29T00:01:30.000Z",
+        authority_ref,
+    )?;
+    let controller = member
+        .signature
+        .verification_method
+        .rsplit_once('#')
+        .map(|(controller, _)| controller)
+        .ok_or_else(|| anyhow!("member verification method is not a DID URL"))?;
+    let did = arkret_wire::Did::new(controller.to_owned())?;
+    let actor_id = arkret_wire::project_did_to_core_id(&did).map_err(anyhow::Error::msg)?;
+    let notary = NotaryValue::new(
+        vec![crate::fixture_notary_signer_for_method(
+            actor_id,
+            member.signature.verification_method.clone(),
+        )],
+        0,
+        0,
+    )?;
+    let ack = ControlProposalAck::from_authority_acks_for_notary(
+        vec![member],
+        policy,
+        &notary,
+    )?;
     ensure!(
-        ack.received_at == timestamp(&threshold_case["expected"], "received_at")?
-            && ack.decision_due_at == timestamp(&threshold_case["expected"], "decision_due_at")?
-            && ack.absolute_due_at == timestamp(&threshold_case["expected"], "absolute_due_at")?,
-        "threshold Ack aggregate window diverged"
-    );
-    let actual_order = ack
-        .authority_acks
-        .iter()
-        .map(|member| member.signature.verification_method.as_str())
-        .collect::<Vec<_>>();
-    let expected_order = threshold_case["expected"]["member_order"]
-        .as_array()
-        .ok_or_else(|| anyhow!("expected member order must be an array"))?
-        .iter()
-        .filter_map(Value::as_str)
-        .collect::<Vec<_>>();
-    ensure!(
-        actual_order == expected_order,
-        "member order is not canonical"
-    );
-
-    let duplicate = case("duplicate_member_does_not_count_twice")?;
-    let duplicate_methods = duplicate["member_verification_methods"]
-        .as_array()
-        .ok_or_else(|| anyhow!("duplicate methods must be an array"))?;
-    let duplicate_members = duplicate_methods
-        .iter()
-        .map(|method| {
-            member(
-                method
-                    .as_str()
-                    .ok_or_else(|| anyhow!("duplicate method must be text"))?,
-                "2026-07-29T00:00:00.000Z",
-                "2026-07-29T00:00:30.000Z",
-                "2026-07-29T00:01:30.000Z",
-                authority_ref.clone(),
-            )
-        })
-        .collect::<Result<Vec<_>>>()?;
-    ensure!(
-        ControlProposalAck::from_authority_acks_for_notary(duplicate_members, policy, &notary,)
-            .is_err(),
-        "duplicate member counted twice"
-    );
-
-    let mixed = case("mixed_authority_set_and_out_of_window_rejected")?;
-    let refs = mixed["member_authority_set_refs"]
-        .as_array()
-        .ok_or_else(|| anyhow!("mixed authority refs must be an array"))?;
-    let mixed_members = vec![
-        member(
-            "did:webvh:z6mkfixture:authority-a.example#notary",
-            "2026-07-29T00:00:00.000Z",
-            "2026-07-29T00:00:30.000Z",
-            "2026-07-29T00:01:30.000Z",
-            Hash::new(refs[0].as_str().unwrap())?,
-        )?,
-        member(
-            "did:webvh:z6mkfixture:authority-b.example#notary",
-            "2026-07-29T00:01:00.001Z",
-            "2026-07-29T00:01:30.001Z",
-            "2026-07-29T00:02:30.001Z",
-            Hash::new(refs[1].as_str().unwrap())?,
-        )?,
-    ];
-    ensure!(
-        ControlProposalAck::from_authority_acks(mixed_members, policy).is_err(),
-        "mixed authority Ack set was accepted"
+        ack.authority_acks.len() == 1 && notary.quorum_size() == 1,
+        "f=0 Control Proposal Ack must require exactly one configured replica",
     );
 
     ensure!(

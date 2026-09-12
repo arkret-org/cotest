@@ -199,7 +199,6 @@ async function fileModerationReport(
   if (!Array.isArray(sealLeaves) || typeof sealLeaves[0] !== "string") {
     throw new Error("moderation report Realm has no accepted Seal reference");
   }
-  reportEvent.seal_ref = sealLeaves[0];
   const proof = Array.isArray(reportEvent.proofs)
     ? (reportEvent.proofs[0] as Record<string, unknown> | undefined)
     : undefined;
@@ -214,6 +213,7 @@ async function fileModerationReport(
       ? keyIdFragment.slice(3)
       : keyIdFragment,
     key_epoch: 0,
+    authority_refs: [sealLeaves[0]],
   };
   refreshEventEnvelopeProof(reportEvent, verificationMethod);
   const url = `${solandBaseUrl()}/_arkret/self/moderation/report`;

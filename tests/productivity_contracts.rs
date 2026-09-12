@@ -464,12 +464,12 @@ fn scheduled_send_dispatch_freezes_content_bound_identities_and_bytes() {
     );
 }
 
-/// Minimal in-memory `cas_register`: the store accepts a write only when the
+/// Minimal in-memory optimistic write: the store accepts a write only when the
 /// caller's `expected_revision` matches the current one, and otherwise reports
 /// the conflict with the current entry, mirroring the server contract the
 /// client retry loop consumes.
 #[derive(Default)]
-struct MemoryCasRegister {
+struct MemoryRevisionStore {
     revision: u64,
     entry: Option<AccountDataEncryptedValue>,
 }
@@ -480,8 +480,8 @@ struct CasConflict {
     current_entry: Option<Box<AccountDataEncryptedValue>>,
 }
 
-impl MemoryCasRegister {
-    fn cas_register(
+impl MemoryRevisionStore {
+    fn compare_and_set(
         &mut self,
         expected_revision: u64,
         entry: AccountDataEncryptedValue,
@@ -515,8 +515,8 @@ fn scheduled_send_cas_conflict_retry_decrypts_merges_and_reseals() {
     );
     let wire_a = inkson::account_data::scheduled_send_account_data_value(&plan_a).unwrap();
     let sealed_a = seal_account_data_value(&secret, &actor, &key, &wire_a).unwrap();
-    let mut server = MemoryCasRegister::default();
-    assert_eq!(server.cas_register(0, sealed_a).unwrap(), 1);
+    let mut server = MemoryRevisionStore::default();
+    assert_eq!(server.compare_and_set(0, sealed_a).unwrap(), 1);
 
     // Device B writes with a stale expected revision and hits cas_conflict.
     let plan_b = scheduled_send_plan(
@@ -526,7 +526,7 @@ fn scheduled_send_cas_conflict_retry_decrypts_merges_and_reseals() {
     );
     let wire_b = inkson::account_data::scheduled_send_account_data_value(&plan_b).unwrap();
     let sealed_b = seal_account_data_value(&secret, &actor, &key, &wire_b).unwrap();
-    let conflict = server.cas_register(0, sealed_b).unwrap_err();
+    let conflict = server.compare_and_set(0, sealed_b).unwrap_err();
     assert_eq!(conflict.current_revision, 1);
 
     // The server only ever stores ciphertext; the AAD visibly binds the
@@ -550,7 +550,7 @@ fn scheduled_send_cas_conflict_retry_decrypts_merges_and_reseals() {
     let resealed = seal_account_data_value(&secret, &actor, &key, &winner_wire).unwrap();
     assert_eq!(
         server
-            .cas_register(conflict.current_revision, resealed)
+            .compare_and_set(conflict.current_revision, resealed)
             .unwrap(),
         2
     );

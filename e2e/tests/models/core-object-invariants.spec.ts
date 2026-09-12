@@ -287,7 +287,7 @@ test.describe("core object invariants", () => {
   // `ak.strand.update` is a data-plane Event in the event-kind registry and
   // MUST NOT carry preconditions[] or seal_basis. The registered v1 CAS surface
   // for this invariant is `ak.strand.move`: it writes the default-control-plane
-  // `ak.component.strand.position.v1:<board_space_id>:<strand_id>` cas_register.
+  // `ak.component.strand.position.v1:<board_space_id>:<strand_id>` sequenced state.
   // A stale head_eq MUST reject the whole Move; a subsequent fresh Move from
   // the same accepted position proves that the rejected effect did not land.
   test.fixme(// @blocking-on: soland#accepted-control-move-seal-finalization

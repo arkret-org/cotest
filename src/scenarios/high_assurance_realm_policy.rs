@@ -79,7 +79,7 @@ fn build_realm(
         updated_at: None,
         availability_policy: None,
         audit_policy: None,
-        notary: crate::fixture_single_signer_notary(principal.clone()),
+        notary: crate::fixture_notary_configuration(principal.clone()),
         fields: Default::default(),
         // `max_anchor_staleness_ms` was retired by the dual-plane split
         // without a direct replacement.

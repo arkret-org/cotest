@@ -87,7 +87,7 @@
    - content-digest 覆盖 body
    - service_binding_ref 与 server2 本地的 Realm policy snapshot 一致
    - 每个 Event 的 actor 签名 + 因果链
-   - server2 从每个 Event 的 `seal_ref` 或 `seal_basis` 所确定的 CBS 读取 Realm reducer-profile cell；请求和 binding 均不声明 profile
+   - server2 从普通 Event 的 `auth_context.authority_refs`（控制面 Event 使用 `seal_basis`）所确定的 CBS 读取 Realm reducer-profile cell；请求和 binding 均不声明 profile
 8. server2 返回 `{accepted: [invite_event_id], rejected: [], quarantine: []}`
 9. 断言(测试侧从 server1 视角拿响应,或者从测试 harness 直接读 server2 的 sync state):invite event 在 server2 上可见
 

@@ -1,4 +1,4 @@
-//! Stateful consumers of the same-core/two-Station admission invariant.
+//! Stateful consumers of the same-core/two-Station account isolation invariant.
 //! PostgreSQL execution is explicit and fails if its prerequisites are absent.
 use anyhow::{Context, Result, ensure};
 use arkret_canonical::{DigestSuite, canonical_json_bytes};
@@ -149,7 +149,7 @@ async fn seed(store: &dyn PersistenceStore, station: &str) -> Result<AccountFixt
         json!({"sequence": 0}),
         now,
     )?;
-    let genesis = admit(genesis, station)?;
+    let genesis = sign_portable_event(genesis, station)?;
     let bytes = canonical_json_bytes(&genesis.digest_payload()?)?;
     store
         .events()
@@ -258,12 +258,12 @@ async fn verify_isolation(
             own.events()
                 .get(fixture.pcr.genesis_event.event_id.as_str())
                 .await?
-                .context("stored admission")?
+                .context("stored event")?
                 .envelope,
         )?;
-        verify_admission(&stored, label)?;
+        verify_portable_event(&stored, label)?;
         ensure!(
-            verify_admission(
+            verify_portable_event(
                 &stored,
                 if label == "station-a" {
                     "station-b"
@@ -275,7 +275,7 @@ async fn verify_isolation(
         );
         let mut rewritten = stored.clone();
         rewritten.actor_id = ActorId::account(other.account.clone());
-        ensure!(verify_admission(&rewritten, label).is_err());
+        ensure!(verify_portable_event(&rewritten, label).is_err());
         ensure!(
             canonical_json_bytes(&stored)? == canonical_json_bytes(&fixture.pcr.genesis_event)?
         );
@@ -363,18 +363,9 @@ async fn verify_isolation(
     Ok(())
 }
 
-fn station_signer(station: &str) -> arkret_signatures::proof::Ed25519DetachedJwsSigner {
-    arkret_signatures::proof::Ed25519DetachedJwsSigner::from_seed(
-        [if station == "station-a" { 41 } else { 42 }; 32],
-        format!("did:web:{station}.example#admission"),
-    )
-}
-
-fn admit(event: Event, station: &str) -> Result<Event> {
+fn sign_portable_event(event: Event, station: &str) -> Result<Event> {
     use arkret_signatures::{Ed25519PayloadSigner, SignEventOptions, sign_event};
-    use arkret_wire::{
-        AuthoredEvent, DidKey, DidUrl, StationAdmissionProof, StationAdmissionProofKind,
-    };
+    use arkret_wire::{AuthoredEvent, DidUrl};
     let did = Did::new("did:web:station-isolation.example")?;
     let method = DidUrl::new(format!("{did}#device")).map_err(anyhow::Error::msg)?;
     let producer = Ed25519PayloadSigner::from_did_key_seed([40; 32], did, method.clone());
@@ -384,44 +375,26 @@ fn admit(event: Event, station: &str) -> Result<Event> {
         &mut authored,
         &producer,
         &method,
-        SignEventOptions::new().with_created_at(now),
+        SignEventOptions::new(cotest::fixture_signer_evidence_ref(station)).with_created_at(now),
     )?;
-    let proof = authored.proofs[0].as_producer().context("producer proof")?;
-    let reference = cotest::fixture_signer_evidence_ref(station);
-    let mut admission = StationAdmissionProof {
-        kind: StationAdmissionProofKind::StationAdmission,
-        verification_method: DidUrl::new(format!("did:web:{station}.example#admission"))
-            .map_err(anyhow::Error::msg)?,
-        event_digest: proof.event_digest.clone(),
-        producer_proof_digest: StationAdmissionProof::producer_proof_digest(proof)?,
-        producer_verification_method: method,
-        producer_signing_key_did: DidKey::new(format!(
-            "did:key:{}",
-            arkret_canonical::ed25519_pubkey_to_did_key_multibase(
-                &producer.verifying_key().to_bytes()
-            )
-        ))
-        .map_err(anyhow::Error::msg)?,
-        producer_signer_resolution_evidence_ref: None,
-        applet_installation_digest: None,
-        signer_resolution_evidence_ref: reference,
-        accepted_at: now,
-        jws: String::new(),
-    };
-    admission.jws =
-        station_signer(station).sign_detached_jws(&admission.canonical_binding_bytes()?);
-    authored.attach_proof(admission.into());
     let event = authored.into_event();
-    verify_admission(&event, station)?;
+    verify_portable_event(&event, station)?;
     Ok(event)
 }
 
-fn verify_admission(event: &Event, station: &str) -> Result<()> {
-    use arkret_signatures::proof::{
-        Ed25519DetachedJwsVerifier, PublicKeyMaterial, verify_ed25519_detached_jws_proof,
-    };
-    event.validate_station_admission_binding(DigestSuite::Sha256)?;
-    let producer = event.proofs[0].as_producer().context("producer")?;
+fn verify_portable_event(event: &Event, station: &str) -> Result<()> {
+    use arkret_signatures::proof::{PublicKeyMaterial, verify_ed25519_detached_jws_proof};
+    event.validate_proof_bindings_with_digest_suite(DigestSuite::Sha256)?;
+    ensure!(event.proofs.len() == 1);
+    ensure!(
+        event.actor_id.route_service_id()
+            == &DidCoreId::new(format!("ak:did_core:web:{station}.example"))?
+    );
+    let producer = &event.proofs[0];
+    ensure!(
+        producer.signer_resolution_evidence_ref
+            == Some(cotest::fixture_signer_evidence_ref(station))
+    );
     verify_ed25519_detached_jws_proof(
         producer,
         &canonical_json_bytes(&event.digest_payload()?)?,
@@ -433,30 +406,6 @@ fn verify_admission(event: &Event, station: &str) -> Result<()> {
                 .to_vec(),
         },
     )?;
-    let admission = event.proofs[1]
-        .as_station_admission()
-        .context("admission")?;
-    Ed25519DetachedJwsVerifier.verify_detached_jws(
-        &admission.jws,
-        &admission.canonical_binding_bytes()?,
-        &PublicKeyMaterial::Ed25519Raw {
-            bytes: station_signer(station).verifying_key().to_bytes().to_vec(),
-        },
-    )?;
-    Ok(())
-}
-
-fn fixture_contract() -> Result<()> {
-    let fixture =
-        arkret_schema_conformance::spec_json_artifact("fixtures/station-admission-fixture.json")?;
-    ensure!(fixture["runner"]["entrypoint"] == "ak.suite.identity.station_admission.v1");
-    ensure!(
-        fixture["semantic_cases"]
-            .as_array()
-            .context("cases")?
-            .iter()
-            .any(|case| case["name"] == "same_core_two_station_accounts_never_merge_state")
-    );
     Ok(())
 }
 
@@ -477,7 +426,6 @@ async fn connect(url: &str) -> Result<PgPersistenceStore> {
 /// proved isolation between two process-local maps, not between two databases.
 #[tokio::test(flavor = "multi_thread")]
 async fn same_core_two_station_accounts_never_merge_state_postgres_reopen() -> Result<()> {
-    fixture_contract()?;
     let left_database = TestDatabase::lease().await;
     let right_database = TestDatabase::lease().await;
     let left = connect(left_database.url()).await?;

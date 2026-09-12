@@ -309,7 +309,7 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
             principal_id: principal.clone(),
             station_id: DidCoreId::new("ak:did_core:web:principal.example")?,
             principal_did: principal_did.clone(),
-            notary: crate::fixture_single_signer_notary(principal.clone()),
+            notary: crate::fixture_notary_configuration(principal.clone()),
             initial_resolution: arkret_models_identity::ResolutionCommitment {
                 did: principal_did,
                 method_history_head: format!("sha256:{}", "1".repeat(64)),

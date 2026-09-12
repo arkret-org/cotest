@@ -94,7 +94,7 @@ pub fn run_container_realm_control_payload_suite() -> Result<()> {
             "ak.realm.notary",
             json!({
                 "realm_id": "ak:realm:AZpEa1TBWdyQensfzl-MJg8_sdcSNKSeAKHbyCN5ZXjb",
-                "notary": serde_json::to_value(crate::fixture_single_signer_notary(
+                "notary": serde_json::to_value(crate::fixture_notary_configuration(
                     arkret_wire::DidCoreId::new("ak:did_core:web:notary.example")?
                 ))?
             }),
@@ -549,7 +549,6 @@ fn validate_event_envelope(
         "refs",
         "causal_refs",
         "preconditions",
-        "seal_ref",
         "auth_context",
         "seal_basis",
         "payload",

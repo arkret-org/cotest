@@ -27,7 +27,7 @@ pub fn run_mls_security_frontier_fixture_suite() -> Result<()> {
 
     let mut saw_genesis = false;
     let mut saw_successor = false;
-    let mut saw_open_set = false;
+    let mut saw_multi_leaf_frontier = false;
     for case in cases {
         let name = case
             .get("name")
@@ -53,9 +53,9 @@ pub fn run_mls_security_frontier_fixture_suite() -> Result<()> {
         }
         saw_genesis |= request.previous_epoch == 0 && request.next_epoch == 0;
         saw_successor |= request.previous_epoch.checked_add(1) == Some(request.next_epoch);
-        saw_open_set |= request.proof_target_basis.leaves.len() > 1;
+        saw_multi_leaf_frontier |= request.proof_target_basis.leaves.len() > 1;
     }
-    if !(saw_genesis && saw_successor && saw_open_set) {
+    if !(saw_genesis && saw_successor && saw_multi_leaf_frontier) {
         bail!("MLS governance proof positives must cover genesis, successor and open-set targets");
     }
     Ok(())

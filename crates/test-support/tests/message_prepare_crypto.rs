@@ -15,6 +15,10 @@ use arkret_wire::{
     OpaqueLocalId, RealmId, RequestId, ScopeRef, SealId, StrandId,
 };
 
+fn seal(hex: &str) -> SealId {
+    SealId::new(format!("ak:seal:sha256:{}", hex.repeat(64))).unwrap()
+}
+
 /// Real MLS ciphertext survives prepare verification and an exact retry. This
 /// is a crypto/authoring composition test; network governance is tested live.
 #[test]
@@ -88,6 +92,7 @@ fn prepared_message_decrypts_at_the_other_mls_member_without_reencrypting() {
         key_id: OpaqueLocalId::new(device.as_str().strip_prefix("ak:").unwrap()).unwrap(),
         key_epoch: 0,
         credential_epoch: None,
+        authority_refs: vec![seal("a")],
     };
     let frontier = RealmActorFrontierView::new(
         realm,
@@ -101,7 +106,6 @@ fn prepared_message_decrypts_at_the_other_mls_member_without_reencrypting() {
         &request,
         frontier,
         scope.clone(),
-        SealId::new(format!("ak:seal:sha256:{}", "1".repeat(64))).unwrap(),
         auth.clone(),
         None,
         None,

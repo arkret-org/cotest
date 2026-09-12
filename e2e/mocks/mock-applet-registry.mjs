@@ -508,6 +508,9 @@ function detachedEventProof(
     actor_did: actorDid,
     verification_method: verificationMethod,
     created_at: createdAt,
+    signer_resolution_evidence_ref: `ak:signer_evidence:sha256:${createHash("sha256")
+      .update(verificationMethod)
+      .digest("hex")}`,
     event,
     signing_seed_b64url: signingJwk.d,
   });
@@ -544,7 +547,7 @@ function signedGhostMessageEvent({
   authorizationRef,
   realmId,
   strandId,
-  sealRef,
+  authorityRefs,
   externalId,
   displayName,
   text,
@@ -563,10 +566,10 @@ function signedGhostMessageEvent({
     executed_by: { kind: "service", service_id: packageInfo.serviceId },
     authorization_ref: authorizationRef,
     applet_id: packageInfo.appletId,
-    seal_ref: sealRef,
     auth_context: {
       key_id: packageInfo.verificationMethod.split("#").at(-1).replace(/^ak:/, ""),
       key_epoch: 0,
+      authority_refs: [...authorityRefs].sort(),
     },
     external_ref: {
       protocol: "bridge",
@@ -1072,6 +1075,9 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
       ...material,
       service_signing_seed_b64url: servicePrivateJwk.d,
       service_verification_method: packageInfo.verificationMethod,
+      signer_resolution_evidence_ref: `ak:signer_evidence:sha256:${createHash("sha256")
+        .update(packageInfo.verificationMethod)
+        .digest("hex")}`,
       station_id: stationId(),
       station_verification_method:
         currentStationVerificationMethod,
@@ -1206,10 +1212,11 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
       res.end(JSON.stringify({ error: "missing_strand_id" }));
       return;
     }
-    const sealRef = body.seal_ref;
-    if (typeof sealRef !== "string" || !sealRef.startsWith("ak:seal:")) {
+    const authorityRefs = body.authority_refs;
+    if (!Array.isArray(authorityRefs) || authorityRefs.length === 0 ||
+        authorityRefs.some((value) => typeof value !== "string" || !value.startsWith("ak:seal:"))) {
       res.statusCode = 400;
-      res.end(JSON.stringify({ error: "missing_accepted_realm_seal_ref" }));
+      res.end(JSON.stringify({ error: "missing_authority_refs" }));
       return;
     }
     const signed = signedGhostMessageEvent({
@@ -1218,7 +1225,7 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
       authorizationRef: body.authorization_ref ?? provision.authorization_ref,
       realmId: body.realm_id,
       strandId: body.strand_id,
-      sealRef,
+      authorityRefs,
       externalId,
       displayName,
       text: body.payload.text,

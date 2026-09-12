@@ -216,15 +216,9 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// C10.C — exercises the SDK's `arkret-lattice` crate against the normative
-    /// scenarios from `cbs-lattice-fixture.json` by reifying
-    /// the symbolic ops as real `LatticeOp` + `SealedOp` values and asserting
-    /// the spec's join semantics (CasRegister conflict ? Bottom, OrSet
-    /// commutativity, MvRegister multi-value, Counter PN sum, Fsm transitions,
-    /// OrderedLog monotonic append).
-    lattice_round_trip_suite_matches_reference_semantics,
-    "lattice_round_trip",
-    cotest::conformance::run_lattice_round_trip_suite,
+    state_model_round_trip_suite_matches_reference_semantics,
+    "state_model_round_trip",
+    cotest::conformance::run_state_model_round_trip_suite,
 );
 
 conformance_test!(
@@ -405,17 +399,6 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// M5 — conflict-repair Move vectors (head_in single-op?Value,
-    /// self-authorising winner reject at lattice layer, manual repair via
-    /// recovery_capability + anchorer endorsement). Stand-alone JSON fixture
-    /// for SUT black-box validation; lattice round-trip stays in
-    /// lattice_round_trip.rs.
-    conflict_repair_fixture_suite_matches_reference_semantics,
-    "conflict_repair_fixture",
-    cotest::conformance::run_conflict_repair_fixture_suite,
-);
-
-conformance_test!(
     /// MLS Security Frontier KAT plus orthogonality, active-leaf and
     /// Realm/Circle isolation checks through the public SDK projector.
     mls_security_frontier_fixture_suite_matches_reference_semantics,
@@ -433,17 +416,6 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// Threshold k-of-n anchor signing vectors driven through the live SDK
-    /// `arkret_wire::ThresholdAggregator`: k partials accept, k-1 partials
-    /// reject (`threshold_below_quorum`), signer-not-in-anchorer-set rejected at
-    /// admission, duplicate signer refused by `add_partial`, and the aggregate
-    /// carries one `PayloadSignature` per partial (each individually verified).
-    threshold_multisig_fixture_suite_matches_reference_semantics,
-    "threshold_multisig_fixture",
-    cotest::conformance::run_threshold_multisig_fixture_suite,
-);
-
-conformance_test!(
     /// Notary/anchor payload-signing path driven through the live SDK
     /// `arkret_signatures::Ed25519PayloadSigner`: a configured seed produces a
     /// byte-deterministic detached JWS, an ephemeral seed does not, distinct
@@ -457,7 +429,7 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// Event-kind ? LatticeKind dispatch consistency. Cross-checks
+    /// Event-kind to StateModel dispatch consistency. Cross-checks
     /// the live event-kind-registry: every active reducer-input durable kind
     /// with cell_family declares one core lattice, no cell_family appears in
     /// two lattices, namespace is ak.component.*, bottom is in {reject, expose},
@@ -473,20 +445,6 @@ conformance_test!(
     event_kind_payload_coverage_fixture_suite_matches_reference_semantics,
     "event_kind_payload_coverage_fixture",
     cotest::conformance::run_event_kind_payload_coverage_fixture_suite,
-);
-
-conformance_test!(
-    /// B1 — quarantine-on-fork algorithm.
-    state_resolution_quarantine_fixture_suite_matches_reference_semantics,
-    "state_resolution_quarantine_fixture",
-    cotest::conformance::run_state_resolution_quarantine_fixture_suite,
-);
-
-conformance_test!(
-    /// B5 — membership transition FSM.
-    membership_fsm_fixture_suite_matches_reference_semantics,
-    "membership_fsm_fixture",
-    cotest::conformance::run_membership_fsm_fixture_suite,
 );
 
 conformance_test!(
@@ -585,13 +543,6 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// E4 — frontier conflict resolution via lattice join.
-    frontier_conflict_resolution_fixture_suite_matches_reference_semantics,
-    "frontier_conflict_resolution_fixture",
-    cotest::conformance::run_frontier_conflict_resolution_fixture_suite,
-);
-
-conformance_test!(
     /// E5 — late-arriving anchor idempotency (no double-effect).
     late_arriving_anchor_fixture_suite_matches_reference_semantics,
     "late_arriving_anchor_fixture",
@@ -625,16 +576,6 @@ conformance_test!(
     multi_admin_distinct_approver_gate_round_27,
     "multi_admin_distinct_approver_gate_round_27",
     cotest::conformance::run_multi_admin_distinct_approver_gate_check,
-);
-
-conformance_test!(
-    /// CT-2 — mixed lattice cell types (cas-register + or-set + mv-register)
-    /// updating concurrently in the same Move batch / Anchor frontier. Spec:
-    /// models/realm-and-space.md (lattice cell registry / cowrite_policy) +
-    /// authz/event-auth-state-resolution.md §3 / §5.3.
-    lattice_mixed_kinds_suite_matches_reference_semantics,
-    "lattice_mixed_kinds",
-    cotest::conformance::run_lattice_mixed_kinds_suite,
 );
 
 conformance_test!(

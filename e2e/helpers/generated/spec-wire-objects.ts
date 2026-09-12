@@ -1343,7 +1343,7 @@ export type InviteDeliveryRequestBody = {
       "verification_method": string;
       "event_digest": string;
       "created_at": string;
-      "signer_resolution_evidence_ref": string;
+      "signer_resolution_evidence_ref"?: string;
       "domain"?: string;
       "audience"?: string | string[];
       "proof_purpose"?: "issuer_attestation" | "holder_acceptance";

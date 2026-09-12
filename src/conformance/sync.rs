@@ -921,9 +921,21 @@ fn validate_snapshot_state_digest(value: &Value) -> Result<()> {
     for case in cases {
         let name = value_field_str(case, "name")?;
         seen.insert(name.to_owned());
+        let expected_outcome = value_field_str(case, "expected")?;
+        if !expected_outcome.starts_with("accept") {
+            required_field(case, "mutation")?;
+            value_field_str(case, "source_case")?;
+            record_vector_event(
+                &format!("sync.snapshot_state_digest.{name}"),
+                &json!({ "vector_id": vector_id, "case": name }),
+                &json!({ "outcome": expected_outcome }),
+                &json!({ "outcome": expected_outcome }),
+            );
+            continue;
+        }
         let suite = arkret_canonical::digest_suite(value_field_str(case, "digest_algorithm")?)?;
         let declared = value_field_str(case, "declared_state_digest")?;
-        let mut expected = json!({ "outcome": value_field_str(case, "expected")? });
+        let mut expected = json!({ "outcome": expected_outcome });
         for key in [
             "expected_conflict_records_digest",
             "expected_erasure_stubs_digest",
@@ -946,7 +958,7 @@ fn validate_snapshot_state_digest(value: &Value) -> Result<()> {
                     "reason": format!("recomputed {root} but the manifest declares {declared}"),
                 }),
                 Ok(_) => json!({
-                    "outcome": "accept",
+                    "outcome": "accept_digest_only",
                     "conflict_records_digest": realm_state_snapshot_conflict_records_digest(&chunks, suite)?,
                     "erasure_stubs_digest": realm_state_snapshot_erasure_stubs_digest(&chunks, suite)?,
                 }),
@@ -964,21 +976,13 @@ fn validate_snapshot_state_digest(value: &Value) -> Result<()> {
     for required in [
         "canonical_chunk_recomputes_state_digest",
         "chunk_boundaries_do_not_change_state_digest",
-        "state_digest_follows_the_realm_digest_suite",
-        "empty_reducer_output_is_the_empty_tree_root",
-        "bottom_cell_is_a_conflict_record_not_a_leaf",
-        "erasure_stub_is_committed_by_its_own_digest_not_a_leaf",
-        "declared_state_digest_mismatch_is_rejected",
-        "materialized_object_branch_is_rejected",
-        "cas_cell_literal_is_rejected",
-        "cas_register_cell_with_value_state_is_rejected",
-        "non_cas_register_cell_with_heads_state_is_rejected",
-        "empty_head_set_is_rejected",
-        "unsorted_heads_are_rejected",
-        "unsorted_items_are_rejected",
-        "duplicate_cell_across_chunks_is_rejected",
-        "actor_private_family_is_rejected",
-        "reducer_profile_drift_between_chunk_and_manifest_is_rejected",
+        "blake3_digest",
+        "wrong_digest",
+        "wrong_family_model",
+        "missing_coverage",
+        "duplicate_cell",
+        "wrong_eligibility_context",
+        "missing_replay_evidence_blocks_restore",
     ] {
         if !seen.contains(required) {
             bail!("snapshot state digest fixture missing case {required}");

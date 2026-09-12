@@ -264,8 +264,9 @@ pub fn fixture_notary_signer_for_method(
 }
 
 #[track_caller]
-pub fn fixture_single_signer_notary(actor_id: arkret_wire::DidCoreId) -> arkret_wire::NotaryValue {
-    arkret_wire::NotaryValue::single_signer(fixture_notary_signer(actor_id))
+pub fn fixture_notary_configuration(actor_id: arkret_wire::DidCoreId) -> arkret_wire::NotaryValue {
+    arkret_wire::NotaryValue::new(vec![fixture_notary_signer(actor_id)], 0, 0)
+        .expect("single-replica fixture quorum is valid")
 }
 
 /// Build a deterministic content-addressed signer-evidence reference pair for

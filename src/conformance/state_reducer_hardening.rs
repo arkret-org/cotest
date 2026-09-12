@@ -6,7 +6,7 @@ use anyhow::{Result, anyhow, bail};
 use arkret_identifiers::CellRef;
 use arkret_state::lattice::CellState;
 use arkret_state::state::{EMPTY_STATE_ROOT, compute_state_root};
-use arkret_wire::{EventCellBottom, EventCellLattice, EventKind};
+use arkret_wire::{EventCellBottom, EventCellStateModel, EventKind};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -441,9 +441,9 @@ fn assert_strand_tracks_registry_binding() -> Result<()> {
             eventkind_strand_tracks_update = arkret_wire::event_kind_str::STRAND_TRACKS_UPDATE
         );
     }
-    if write.lattice != Some(EventCellLattice::MvRegister) {
+    if write.state_model != Some(EventCellStateModel::CausalRegister) {
         bail!(
-            "{eventkind_strand_tracks_update} lattice must remain mv_register",
+            "{eventkind_strand_tracks_update} state model must remain causal_register",
             eventkind_strand_tracks_update = arkret_wire::event_kind_str::STRAND_TRACKS_UPDATE
         );
     }
@@ -518,9 +518,9 @@ fn apply_delta_entries(cells: &mut BTreeMap<CellRef, CellState>, delta: &[Value]
 /// The fixture's cells are declared as values, so this asks for the value-leaf
 /// shape explicitly.
 ///
-/// `values_only` still runs the section 6.2.1 membership check: if the fixture
-/// starts naming a `cas_register` family it fails here rather than hashing a
-/// value leaf for a cell whose leaf is its head set.
+/// `values_only` still runs the section 6.2.1 membership check, so a fixture
+/// cannot hash a value leaf for a cell whose state model requires another
+/// committed representation.
 fn compute_root_str(cells: &BTreeMap<CellRef, CellState>) -> Result<String> {
     Ok(compute_state_root(
         arkret_state::GovernanceView::values_only(cells),

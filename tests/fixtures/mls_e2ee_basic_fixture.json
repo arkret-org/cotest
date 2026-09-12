@@ -8,7 +8,7 @@
     "epoch_cell": "ak:cell:ak.component.mls.epoch.v1:<realm_id>",
     "group_state_cell": "ak:cell:ak.component.mls.group_state.v1:<realm_id>",
     "covered_frontier_cell": "ak:cell:ak.component.mls.covered_frontier.v1:<realm_id>",
-    "epoch_lattice": "cas_register",
+    "epoch_state_model": "sequenced_state",
     "covered_frontier_lattice": "or_set",
     "aad_digest": "SHA-256 over canonical (move_id || epoch_id || tree_hash || covered_frontier_root)"
   },

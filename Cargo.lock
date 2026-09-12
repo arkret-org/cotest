@@ -9751,6 +9751,7 @@ dependencies = [
 name = "soland-services"
 version = "0.3.0"
 dependencies = [
+ "arkret",
  "arkret-canonical",
  "arkret-event-draft",
  "arkret-identifiers",

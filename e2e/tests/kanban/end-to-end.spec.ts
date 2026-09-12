@@ -371,7 +371,7 @@ test.describe("kanban end-to-end", () => {
     // the cas-register guard (event_log/submit.rs): the first move advances
     // the frontier, a second move stamped behind it is rejected with
     // cas_conflict ("actor_seq is older than the accepted actor frontier").
-    // The reason is cas_conflict, not cas_register_conflict (that code does
+    // The reason is cas_conflict (the removed state-model-specific code does
     // not exist in soland).
     const stamp = Date.now();
     const alice = uniqueUser("kanban-cas-alice");

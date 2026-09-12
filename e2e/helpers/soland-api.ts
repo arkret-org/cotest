@@ -98,7 +98,6 @@ type SignedEventEnvelopeArgs = {
   proofVerificationMethod?: string;
   refs?: Array<Record<string, unknown>>;
   preconditions?: Array<Record<string, unknown>>;
-  sealRef?: string;
   sealBasis?: Record<string, unknown>;
   authContext?: Record<string, unknown>;
   prevRefs?: string[];
@@ -387,7 +386,7 @@ export async function submitPrincipalSuccessorSealApi(
   const prepareUrl = `${solandBaseUrl(opts.server)}/_arkret/self/seals/prepare`;
   const prepareRequest = {
     realm_id: realmId,
-    predecessor_refs: [leaves[0]],
+    predecessor_ref: leaves[0],
     event_digests: [eventDigest],
     hlc: nextEnvelopeHlc(realmId, new Date().toISOString()),
   };
@@ -498,7 +497,7 @@ export function inviteLiveTargetCell(
 /// The `head_eq` guard an invite Move owes on the live-target slot.
 ///
 /// `ak.invite.create` asserts the free value, which is `null`: an unwritten
-/// `cas_register` cell reads `null` (§9.3.1.1), and so does a released slot,
+/// `sequenced_state` cell reads `null` before its first revision, as does a released slot,
 /// because a release is an explicit `set null`. The old `"__unset__"` spelling
 /// was the deleted `initial_value` mechanism; soland compares `head_eq` against
 /// `unwritten_cell_head()`, which is `Value::Null`, so that spelling made every
@@ -1013,7 +1012,7 @@ export async function addRealmMemberApi(
 // `additionalProperties: false`) — not a `{value: ...}` state-payload wrapper,
 // and it carries no `realm_id`: the governed Realm is the envelope's.
 //
-// The cell is a `cas_register`: every revision is a complete replacement and
+// The cell is `sequenced_state`: every revision is a complete replacement and
 // must carry a `head_eq` guard over the exact current value. Preserve every
 // current component and change only `policy_revision` + `join_policy`; omitting
 // the guard admits concurrent candidates and correctly collapses the cell to
@@ -1346,7 +1345,7 @@ const joinPolicyDigestCache = new Map<string, string>();
 
 // Last `policy_revision` this process wrote per (server, realm).
 //
-// `ak.component.realm.policy_bundle.v1` is a `cas_register` whose supersession
+// `ak.component.realm.policy_bundle.v1` is sequenced state whose supersession
 // binds by value, so the revision is what gives a bundle family its generation
 // dimension: a stateless constant makes the second write of a Realm a repeat of
 // the first, and the register has no way to order them. The helper therefore
@@ -1967,7 +1966,6 @@ export function signedEventEnvelope(
     // without each scenario re-spelling the cell; an explicit precondition list
     // still wins, which is how a negative case proves a wrong guard is refused.
     preconditions: preconditions?.length ? preconditions : undefined,
-    seal_ref: args.sealRef,
     seal_basis: args.sealBasis,
     auth_context: args.authContext,
     requirements: {
@@ -2080,6 +2078,8 @@ function eventEnvelopeProof(args: {
       type: "dev-proof",
       verification_method: verificationMethod,
       event_digest: eventDigest,
+      signer_resolution_evidence_ref:
+        `ak:signer_evidence:sha256:${sha256CanonicalJson({ verificationMethod })}`,
     };
   }
 
@@ -2092,6 +2092,8 @@ function eventEnvelopeProof(args: {
     event: args.event,
     verificationMethod,
     createdAt,
+    signerResolutionEvidenceRef:
+      `ak:signer_evidence:sha256:${sha256CanonicalJson({ verificationMethod })}`,
     signingSeedB64url: registeredSigner?.signingSeedB64url,
   });
 }
@@ -2930,7 +2932,7 @@ export async function readRealmSealBasis(
 }
 
 // Local projection of the registered `RealmSealFrontierView`: the single
-// accepted leaf of a `single_signer` test Realm, plus the roots the caller
+// accepted leaf of a single-replica quorum test Realm, plus the roots the caller
 // recomputes from that resolved leaf Seal, plus a flat pending-digest list.
 //
 // The view itself carries no root hint — `event-auth-state-resolution.md`
@@ -2989,9 +2991,8 @@ export async function readAcceptedSealBundle(
     if (seals.size >= 256) throw new Error("CBS Seal closure exceeds the v1 bound");
     const seal = await readAcceptedSeal(request, token, realmId, id, server);
     seals.set(id, seal);
-    for (const predecessor of (seal.predecessor_refs ?? []) as string[]) {
-      pending.push(predecessor);
-    }
+    const predecessor = seal.predecessor_ref;
+    if (typeof predecessor === "string") pending.push(predecessor);
   }
   return {
     target_seal_ref: targetSealRef,
@@ -3262,17 +3263,15 @@ async function applyRegisteredCbsPlane(
       changed = true;
     }
   } else if (descriptor.plane === "data") {
-    if (
-      envelope.seal_ref === undefined ||
-      envelope.auth_context === undefined
-    ) {
+    if (envelope.auth_context === undefined) {
+      let authorityRefs: string[];
       try {
         const basis = await readRealmSealBasis(request, token, realmId, server);
         const leaves = basis.leaves;
         if (!Array.isArray(leaves) || typeof leaves[0] !== "string") {
           throw new Error(`Realm ${realmId} has no citable Seal leaf`);
         }
-        envelope.seal_ref = leaves[0];
+        authorityRefs = leaves as string[];
       } catch {
         if (canonicalRealm) {
           const basis = await waitForRealmSealBasis(
@@ -3286,7 +3285,7 @@ async function applyRegisteredCbsPlane(
           if (!Array.isArray(leaves) || typeof leaves[0] !== "string") {
             throw new Error(`Realm ${realmId} has no citable Seal leaf`);
           }
-          envelope.seal_ref = leaves[0];
+          authorityRefs = leaves as string[];
         } else {
           // Only an isolated conformance Realm has no canonical Seal frontier.
           // A canonically created Realm must use its real frozen governance
@@ -3305,7 +3304,7 @@ async function applyRegisteredCbsPlane(
             response,
             `seed conformance Realm basis for ${kind}`,
           );
-          envelope.seal_ref = basis.seal_id;
+          authorityRefs = [basis.seal_id];
         }
       }
       const proof = Array.isArray(envelope.proofs)
@@ -3313,7 +3312,7 @@ async function applyRegisteredCbsPlane(
         : undefined;
       const verificationMethod =
         stringValue(proof?.verification_method) ?? `${actorId}#device`;
-      envelope.auth_context = eventAuthContext(verificationMethod);
+      envelope.auth_context = eventAuthContext(verificationMethod, authorityRefs);
       changed = true;
     }
   }
@@ -3397,19 +3396,21 @@ async function forceConformanceCbsBasis(
     envelope.seal_basis = {
       leaves: [basis.seal_id],
     };
-    delete envelope.seal_ref;
     delete envelope.auth_context;
   } else {
-    envelope.seal_ref = basis.seal_id;
     envelope.auth_context = eventAuthContext(
       verificationMethod ?? `${actorId}#device`,
+      [basis.seal_id],
     );
     delete envelope.seal_basis;
   }
   refreshEventEnvelopeProof(envelope, stringValue(proof?.verification_method));
 }
 
-function eventAuthContext(verificationMethod: string): Record<string, unknown> {
+function eventAuthContext(
+  verificationMethod: string,
+  authorityRefs: string[],
+): Record<string, unknown> {
   // `auth_context.key_id` is an opaque local key label
   // (`event-envelope.schema.json` closes it over `^(?!ak:)[A-Za-z0-9._:-]{1,128}$`),
   // decoupled from the verification-method fragment: the fragment may stay a
@@ -3424,6 +3425,7 @@ function eventAuthContext(verificationMethod: string): Record<string, unknown> {
   return {
     key_id: fragment.startsWith("ak:") ? fragment.slice(3) : fragment,
     key_epoch: 0,
+    authority_refs: [...authorityRefs].sort(),
   };
 }
 

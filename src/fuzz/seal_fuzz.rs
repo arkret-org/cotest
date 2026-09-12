@@ -2,7 +2,7 @@
 //!
 //! Companion to `envelope_fuzz::fuzz_seal_envelope`: this module
 //! drives a wider set of `Arbitrary` inputs that exercise the Seal
-//! validator's edge cases — long predecessor chains and malformed signatures.
+//! validator's edge cases — predecessor linkage and malformed signatures.
 //!
 //! Same panic-catch contract as the existing harness: any panic
 //! escaping the validator boundary surfaces as `Err(message)`; typed
@@ -21,11 +21,7 @@ fn registry() -> arkret_schema::ProtocolSchemaRegistry {
         .unwrap_or_default()
 }
 
-/// Wide-range Seal input. Predecessor refs are bounded to keep the
-/// harness linear in input size — without the cap, `arbitrary` happily
-/// produces multi-megabyte vectors that exercise allocator behaviour
-/// rather than the validator.
-const MAX_PREDS: usize = 16;
+/// Wide-range Seal input.
 const MAX_DELTA: usize = 16;
 
 #[derive(Debug, Arbitrary)]
@@ -41,7 +37,7 @@ pub struct FuzzSealDeepInput {
     pub include_signature: bool,
     pub sig_value: String,
     pub sig_key: String,
-    pub predecessor_count: u8,
+    pub include_predecessor: bool,
     pub delta_count: u8,
     pub predecessor_template: String,
     pub delta_template: String,
@@ -49,18 +45,18 @@ pub struct FuzzSealDeepInput {
 
 impl FuzzSealDeepInput {
     fn to_json(&self) -> Value {
-        let pred_count = (self.predecessor_count as usize).min(MAX_PREDS);
         let delta_count = (self.delta_count as usize).min(MAX_DELTA);
-        let predecessor_refs: Vec<Value> = (0..pred_count)
-            .map(|i| Value::String(format!("{}-{i}", self.predecessor_template)))
-            .collect();
+        let predecessor_ref = self
+            .include_predecessor
+            .then(|| Value::String(self.predecessor_template.clone()))
+            .unwrap_or(Value::Null);
         let delta: Vec<Value> = (0..delta_count)
             .map(|i| Value::String(format!("{}-{i}", self.delta_template)))
             .collect();
         let mut envelope = json!({
             "id": self.id,
             "realm_id": self.realm_id,
-            "predecessor_refs": predecessor_refs,
+            "predecessor_ref": predecessor_ref,
             "delta": delta,
             "control_event_set_root": self.control_event_set_root,
             "state_root": self.state_root,

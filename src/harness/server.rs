@@ -795,35 +795,6 @@ impl ArkretServer {
         &self.service_notary_signer
     }
 
-    /// Sign a Station-admission binding with this external fixture Station's
-    /// configured notary key. This is intentionally limited to the harness:
-    /// conformance fixtures sometimes need accepted envelopes without driving
-    /// unrelated production fanout work for every synthetic history row.
-    pub(crate) fn sign_station_admission_proof(
-        &self,
-        proof: &mut arkret_wire::StationAdmissionProof,
-    ) -> Result<()> {
-        let config = self
-            .external_restart
-            .as_ref()
-            .context("Station admission fixture requires an external Soland process")?;
-        let seed = BASE64_STANDARD
-            .decode(&config.notary_signing_key)
-            .context("decode external Soland notary seed")?;
-        let seed: [u8; 32] = seed
-            .try_into()
-            .map_err(|_| anyhow!("external Soland notary seed must contain 32 bytes"))?;
-        let binding = proof
-            .canonical_binding_bytes()
-            .context("encode Station admission binding")?;
-        proof.jws = arkret_signatures::sign_ed25519_detached_jws(
-            &ed25519_dalek::SigningKey::from_bytes(&seed),
-            &binding,
-        )
-        .context("sign Station admission fixture proof")?;
-        Ok(())
-    }
-
     pub fn trust_domain(&self) -> &TrustDomainId {
         &self.trust_domain
     }

@@ -67,10 +67,14 @@ pub fn refresh_typed_event_proof_with_signing_seed(
 ) -> Result<()> {
     let verification_method = event
         .proofs
-        .iter()
-        .find_map(arkret_wire::EventProof::as_producer)
+        .first()
         .map(|proof| proof.verification_method.clone())
         .ok_or_else(|| anyhow!("Event {} has no signing proof", event.event_id))?;
+    let signer_evidence_ref = event
+        .proofs
+        .first()
+        .and_then(|proof| proof.signer_resolution_evidence_ref.clone())
+        .ok_or_else(|| anyhow!("Event {} has no signer evidence", event.event_id))?;
     let signer_did = controller_did(&verification_method)?;
     let created_at = event.created_at;
     event.proofs.clear();
@@ -90,7 +94,7 @@ pub fn refresh_typed_event_proof_with_signing_seed(
         &mut authored,
         &signer,
         &verification_method,
-        arkret::signatures::SignEventOptions::new().with_created_at(created_at),
+        arkret::signatures::SignEventOptions::new(signer_evidence_ref).with_created_at(created_at),
     )
     .with_context(|| format!("SDK Event signer rejected {}", authored.event_id()))?;
     *event = authored.into_event();
@@ -101,8 +105,7 @@ pub fn refresh_typed_event_proof_with_signing_seed(
 pub fn refresh_typed_event_proof(event: &mut arkret_wire::Event) -> Result<()> {
     let verification_method = event
         .proofs
-        .iter()
-        .find_map(arkret_wire::EventProof::as_producer)
+        .first()
         .map(|proof| proof.verification_method.clone())
         .ok_or_else(|| anyhow!("Event {} has no signing proof", event.event_id))?;
     let signer = event

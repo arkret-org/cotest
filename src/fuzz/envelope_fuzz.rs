@@ -54,8 +54,6 @@ pub struct FuzzEventInput {
     pub prev_refs: Vec<String>,
     pub refs: Vec<ArbRefValue>,
     pub payload: ArbValue,
-    pub include_seal_ref: bool,
-    pub seal_ref: String,
     /// A signed `scope_ref` is required on every v1 Event; a Circle scope
     /// exercises the second variant of the enum.
     pub scope_circle_id: Option<String>,
@@ -103,9 +101,6 @@ impl FuzzEventInput {
             "payload": self.payload.0,
             "proofs": [],
         });
-        if self.include_seal_ref {
-            envelope["seal_ref"] = Value::String(self.seal_ref.clone());
-        }
         if let Some(basis) = &self.seal_basis {
             envelope["seal_basis"] = basis.0.clone();
         }
@@ -261,7 +256,7 @@ pub fn fuzz_signal_envelope(data: &[u8]) -> Result<(), String> {
 pub struct FuzzSealInput {
     pub id: String,
     pub realm_id: String,
-    pub predecessor_refs: Vec<String>,
+    pub predecessor_ref: Option<String>,
     pub delta: Vec<String>,
     pub control_event_set_root: String,
     pub state_root: String,
@@ -277,7 +272,7 @@ impl FuzzSealInput {
         json!({
             "id": self.id,
             "realm_id": self.realm_id,
-            "predecessor_refs": self.predecessor_refs,
+            "predecessor_ref": self.predecessor_ref,
             "delta": self.delta,
             "control_event_set_root": self.control_event_set_root,
             "state_root": self.state_root,

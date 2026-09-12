@@ -73,17 +73,17 @@ import {
 
 import type { ActorId, CapabilityGrantObject } from "../../helpers/generated/spec-wire-objects";
 
-async function readAppletMessageSealRef(
+async function readAppletMessageAuthorityRefs(
   request: APIRequestContext,
   token: string,
   realmId: string,
-): Promise<string> {
+): Promise<string[]> {
   await waitForRealmControlIdleApi(request, token, realmId);
   const { leaves } = await readRealmSealBasis(request, token, realmId);
   if (!Array.isArray(leaves) || leaves.length !== 1 || typeof leaves[0] !== "string") {
     throw new Error("Applet messages require one accepted control Seal");
   }
-  return leaves[0];
+  return [...leaves] as string[];
 }
 
 // Each case provisions its own identities and Realm; a failed case must not
@@ -581,7 +581,7 @@ test.describe("applet bridge", () => {
           provision_authorization_ref: provisionGrantRef,
           external_user: externalUser,
           ghost_creation: ghostCreation,
-          seal_ref: await readAppletMessageSealRef(request, aliceToken, realmId),
+          authority_refs: await readAppletMessageAuthorityRefs(request, aliceToken, realmId),
           payload: { kind: "message", text },
         },
       });
@@ -603,11 +603,8 @@ test.describe("applet bridge", () => {
       expect(bridgedMessage?.actor_id).toEqual(ghostActorId);
       expect(bridgedMessage?.executed_by).toEqual(serviceActorId(String(signed.applet_package.service_id)));
       const messageProofs = bridgedMessage?.proofs as Array<Record<string, unknown>>;
-      expect(messageProofs.map((proof) => proof.kind)).toEqual(["detached_jws", "station_admission"]);
-      expect(projectDidToCoreId(String(messageProofs[1].verification_method).split("#")[0])).toBe(solandServiceId());
-      expect(messageProofs[1].producer_proof_digest).toBe(canonicalHash(messageProofs[0]));
-      expect(messageProofs[1].event_digest).toBe(messageProofs[0].event_digest);
-      expect(messageProofs[1].producer_verification_method).toBe(messageProofs[0].verification_method);
+      expect(messageProofs.map((proof) => proof.kind)).toEqual(["detached_jws"]);
+      expect(messageProofs[0].signer_resolution_evidence_ref).toMatch(/^ak:signer_evidence:/);
       const ghostProfile = acceptedEvents.find(
         (event) =>
           event.kind === "ak.profile.create" &&
@@ -712,7 +709,7 @@ test.describe("applet bridge", () => {
           provision_authorization_ref: provisionGrantRef,
           external_user: externalUser,
           ghost_creation: ghostCreation,
-          seal_ref: await readAppletMessageSealRef(request, aliceToken, realmId),
+          authority_refs: await readAppletMessageAuthorityRefs(request, aliceToken, realmId),
           payload: { kind: "message", text: afterRevokeText },
         },
       });
@@ -1288,7 +1285,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
     appletId?: string;
     authorizationRef?: string;
     strandId?: string;
-    sealRef?: string;
+    authorityRefs?: string[];
     verificationMethod?: string;
     signingKey?: KeyObject;
   }) {
@@ -1317,12 +1314,12 @@ test.describe("applet inbound transaction push — per-delivery source signature
       hlc: hlcForStamp(args.stamp),
       prev_refs: args.prevRefs ?? [],
       refs: [],
-      ...(args.sealRef
+      ...(args.authorityRefs?.length
         ? {
-            seal_ref: args.sealRef,
             auth_context: {
               key_id: authKeyId,
               key_epoch: 0,
+              authority_refs: [...args.authorityRefs].sort(),
             },
           }
         : {}),
@@ -1443,7 +1440,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
         "ak.message.create",
       ),
       strandId,
-      sealRef: String(sealRef),
+      authorityRefs: [String(sealRef)],
       verificationMethod: String(
         (signed.applet_package.webhook_auth as Record<string, unknown>).key_ref,
       ),
@@ -1486,12 +1483,9 @@ test.describe("applet inbound transaction push — per-delivery source signature
     expect(accepted?.actor_id).toEqual(registration.bot_actor_id);
     expect(accepted?.executed_by).toEqual(serviceActorId(sourceServiceId));
     const proofs = accepted?.proofs as Array<Record<string, unknown>>;
-    expect(proofs.map((proof) => proof.kind)).toEqual(["detached_jws", "station_admission"]);
+    expect(proofs.map((proof) => proof.kind)).toEqual(["detached_jws"]);
     expect(proofs[0]).toEqual(body.events[0].proofs[0]);
-    expect(projectDidToCoreId(String(proofs[1].verification_method).split("#")[0])).toBe(solandServiceId());
-    expect(proofs[1].producer_proof_digest).toBe(canonicalHash(proofs[0]));
-    expect(proofs[1].event_digest).toBe(proofs[0].event_digest);
-    expect(proofs[1].producer_verification_method).toBe(proofs[0].verification_method);
+    expect(proofs[0].signer_resolution_evidence_ref).toMatch(/^ak:signer_evidence:/);
 
     const deliver = async (payload: Record<string, unknown>, key: string) => request.post(targetUri, {
       headers: signedAppletTransactionHeaders({
@@ -1510,9 +1504,8 @@ test.describe("applet inbound transaction push — per-delivery source signature
     expect(transactionRetry.status(), await transactionRetry.text()).toBe(200);
     expect(await transactionRetry.json()).toEqual(JSON.parse(responseText));
     for (const [label, submittedProofs] of [
-      ["accepted", proofs],
-      ["duplicate-admission", [...proofs, proofs[1]]],
-      ["applet-admission", [proofs[0], { ...proofs[1], verification_method: (signed.applet_package.webhook_auth as Record<string, unknown>).key_ref }]],
+      ["duplicate-producer", [proofs[0], proofs[0]]],
+      ["second-producer", [proofs[0], { ...proofs[0], verification_method: (signed.applet_package.webhook_auth as Record<string, unknown>).key_ref }]],
       ["replaced-producer", [{ ...proofs[0], jws: `${String(proofs[0].jws).slice(0, -8)}AAAAAAAA` }]],
     ] as const) {
       const forbidden = { ...body, events: [{ ...body.events[0], proofs: submittedProofs }] };
@@ -2713,6 +2706,9 @@ function appletEventProof(
     event,
     verificationMethod,
     createdAt: canonicalEventTimestamp(),
+    signerResolutionEvidenceRef: `ak:signer_evidence:sha256:${createHash("sha256")
+      .update(verificationMethod)
+      .digest("hex")}`,
     signingSeedB64url,
   });
 }

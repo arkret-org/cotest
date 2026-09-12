@@ -3,7 +3,7 @@
 use anyhow::{Result, anyhow};
 use arkret_models_collaboration::event_query::EventsDescribeRequestBody;
 use arkret_models_collaboration::http_bodies::{
-    EventsResolveRequestBody, SelfSealResolveRequestBody,
+    EventsResolveRequestBody, SealResolveSelection, SelfSealResolveRequestBody,
 };
 use arkret_wire::{EventId, Hash, RealmId, SealId};
 use reqwest::StatusCode;
@@ -45,7 +45,9 @@ pub async fn events_resolve_selector_budget_run() -> Result<()> {
             .query("/_arkret/self/seals/resolve")
             .json(&SelfSealResolveRequestBody {
                 realm_id: RealmId::new(realm_id)?,
-                seal_refs: vec![SealId::new(missing_seal.clone())?],
+                selection: SealResolveSelection::SealRefs {
+                    seal_refs: vec![SealId::new(missing_seal.clone())?],
+                },
                 history_traversal_access: None,
             }),
         StatusCode::OK,

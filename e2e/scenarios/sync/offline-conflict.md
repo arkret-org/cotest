@@ -2,7 +2,7 @@
 
 ## 目标
 
-bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending move。Realm title / summary / avatar 的唯一写入面 `ak.realm.profile` 使用 `ak.component.realm.profile.v1` 的 `cas_register / bottom=reject`：同一 single-chain Seal 中的互斥 sibling 必须至多接受一条，因果有序的后继 profile 保持单值；它不得被误报成 `bottom=expose`。当前规范还没有注册可由 inkson 提交的 repair event kind,所以 Realm admin 的 repair 区保持只读,不渲染未注册的修复提交控件。
+bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending move。Realm title / summary / avatar 的唯一写入面 `ak.realm.profile` 使用 `ak.component.realm.profile.v1` 的 `causal_register`：并发 sibling 作为多个 head 暴露，因果有序的后继 profile 收敛为单值。当前规范还没有注册可由 inkson 提交的 repair event kind,所以 Realm admin 的 repair 区保持只读,不渲染未注册的修复提交控件。
 
 ## Spec 锚点
 

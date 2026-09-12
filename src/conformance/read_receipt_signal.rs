@@ -167,7 +167,7 @@ pub fn run_genesis_join_policy_bundle_vector() -> Result<()> {
         bail!("{VECTOR_ID_GENESIS_JOIN_POLICY_BUNDLE}: the bundle did not survive a round trip");
     }
 
-    // The `cas_register` hazard: a follow-up revision authored from the
+    // Sequenced replacement requires a follow-up revision authored from the
     // accepted value keeps every component. Authoring one from scratch clears
     // them, which makes the complete-restatement requirement visible at the
     // call site.

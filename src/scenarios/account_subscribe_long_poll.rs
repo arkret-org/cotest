@@ -760,15 +760,13 @@ async fn submit_event_now(
             serde_json::from_value(seal_frontier)?;
         let frontier = state.frontier;
         if is_data_event {
-            // A DataEvent anchors on `seal_ref`; carrying `seal_basis` is what
-            // marks an Event as a Control Move.
-            event.seal_ref = Some(frontier.sole_leaf()?.clone());
             event.auth_context = Some(arkret_wire::AuthContext {
                 key_id: crate::harness::auth_context_key_id(
                     crate::harness::default_event_verification_method(&actor.actor).as_str(),
                 ),
                 key_epoch: 0,
                 credential_epoch: None,
+                authority_refs: frontier.leaves,
             });
             if actor.controls_realm_authority_root(realm_id) {
                 event.authorization_ref = Some(

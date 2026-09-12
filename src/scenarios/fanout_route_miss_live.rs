@@ -678,7 +678,6 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
     let budget_event_ids = install_frontier_budget_events(
         &alice,
         group.server(0),
-        &source_database_url,
         &baseline_realm_id,
         &baseline_strand_id,
         405,
@@ -1360,7 +1359,6 @@ async fn restore_postgres_database(database_url: &str, backup: &PostgresBackup) 
 async fn install_frontier_budget_events(
     client: &TestActorClient,
     server: &crate::harness::ArkretServer,
-    database_url: &str,
     realm_id: &str,
     strand_id: &str,
     count: usize,
@@ -1396,68 +1394,13 @@ async fn install_frontier_budget_events(
         previous = Some(template.event_id.clone());
         events.push(template.clone());
     }
-    // Admit one real Event so Soland freezes the source Station signer
-    // evidence through the production path. Reuse that evidence carrier for
-    // the remaining synthetic history rows, but rebind and re-sign every
-    // admission proof. This keeps the 405-row frontier fixture cryptographically
-    // valid without creating hundreds of unrelated live fanout jobs.
-    expect_json(
-        client
-            .post("/_arkret/self/events")
-            .json(&arkret_wire::EventInitialSubmission::online(
-                events[0].clone(),
-            )),
-        StatusCode::OK,
-    )
-    .await?;
-    let admitted_seed = canonical_event_envelope(database_url, &events[0].event_id).await?;
-    let seed_admission = admitted_seed
-        .proofs
-        .iter()
-        .find_map(arkret_wire::EventProof::as_station_admission)
-        .context("production-admitted budget seed is missing its Station proof")?
-        .clone();
-    for event in events.iter_mut().skip(1) {
-        let producer = event
-            .proofs
-            .first()
-            .and_then(arkret_wire::EventProof::as_producer)
-            .context("authored budget Event is missing its producer proof")?
-            .clone();
-        let mut admission = seed_admission.clone();
-        admission.event_digest = Hash::new(
-            event.event_digest_with_digest_suite(arkret_canonical::DigestSuite::Sha256)?,
-        )?;
-        admission.producer_proof_digest =
-            arkret_wire::StationAdmissionProof::producer_proof_digest(&producer)?;
-        admission.producer_verification_method = producer.verification_method.clone();
-        admission.jws.clear();
-        server.sign_station_admission_proof(&mut admission)?;
-        event.proofs.push(admission.into());
-        event.validate_station_admission_binding(arkret_canonical::DigestSuite::Sha256)?;
-    }
-    for chunk in events[1..].chunks(64) {
+    // Every row remains a complete producer-authored portable Event. Fixture
+    // installation exercises storage/page behavior and does not add a server
+    // acceptance signature.
+    for chunk in events.chunks(64) {
         install_fixture_events(server, chunk, &[]).await?;
     }
     Ok(events.into_iter().map(|event| event.event_id).collect())
-}
-
-async fn canonical_event_envelope(database_url: &str, event_id: &EventId) -> Result<Event> {
-    let database_url = database_url.to_owned();
-    let event_id = event_id.to_string();
-    tokio::task::spawn_blocking(move || -> Result<Event> {
-        let mut client = postgres::Client::connect(&database_url, postgres::NoTls)?;
-        let row = client
-            .query_opt(
-                "SELECT envelope::text FROM canonical_events \
-                 WHERE envelope->>'event_id' = $1",
-                &[&event_id],
-            )?
-            .context("production-admitted budget seed was not retained")?;
-        Ok(serde_json::from_str(row.get::<_, &str>(0))?)
-    })
-    .await
-    .context("join canonical budget Event read")?
 }
 
 /// Diagnostic read of this live scenario's source database, not a protocol

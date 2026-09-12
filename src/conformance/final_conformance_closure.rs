@@ -213,7 +213,7 @@ fn run_applet_transaction_delivery_authentication_record_digest_case(case: &Valu
     )?;
     let inferred_anchor_by_name = inferred_delivery_authentication_record_digests(case)?;
     let mut cache = BTreeMap::new();
-    let mut accepted_by_name = BTreeMap::new();
+    let mut identity_by_name = BTreeMap::new();
     let mut seen = BTreeSet::new();
 
     for transaction in required_array(case, "transactions")? {
@@ -224,7 +224,7 @@ fn run_applet_transaction_delivery_authentication_record_digest_case(case: &Valu
             &required_components,
             transaction,
             &mut cache,
-            &mut accepted_by_name,
+            &mut identity_by_name,
             &inferred_anchor_by_name,
         )?;
         assert_expected_subset(name, expected(transaction)?, &observed)?;
@@ -257,11 +257,11 @@ fn evaluate_applet_transaction(
     required_components: &BTreeSet<&str>,
     transaction: &Value,
     cache: &mut BTreeMap<AppletTransactionReplayIdentity, AppletTransactionReplayRecord>,
-    accepted_by_name: &mut BTreeMap<String, AppletTransactionReplayIdentity>,
+    identity_by_name: &mut BTreeMap<String, AppletTransactionReplayIdentity>,
     inferred_anchor_by_name: &BTreeMap<String, String>,
 ) -> Result<Value> {
     if let Some(replay_of) = transaction.get("replay_of").and_then(Value::as_str) {
-        let original_identity = accepted_by_name
+        let original_identity = identity_by_name
             .get(replay_of)
             .ok_or_else(|| anyhow!("replay references unknown accepted transaction {replay_of}"))?;
         let idempotency_key = required_str(transaction, "idempotency_key")?;
@@ -387,7 +387,7 @@ fn evaluate_applet_transaction(
             delivery_authentication_record_digest: delivery_authentication_record_digest.to_owned(),
         },
     );
-    accepted_by_name.insert(
+    identity_by_name.insert(
         required_str(transaction, "name")?.to_owned(),
         replay_identity,
     );

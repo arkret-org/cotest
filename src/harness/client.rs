@@ -283,7 +283,11 @@ impl TestActorClient {
             &mut event,
             &signer,
             &verification_method,
-            arkret_signatures::SignEventOptions::new().with_created_at(created_at),
+            arkret_signatures::SignEventOptions::new(crate::fixture_signer_evidence_ref(format!(
+                "contact:{}",
+                event.event_id()
+            )))
+            .with_created_at(created_at),
         )?;
         if Hash::new(event.event_digest_with_digest_suite(draft.event_digest.digest_suite()?)?)?
             != draft.event_digest
@@ -498,7 +502,9 @@ impl TestActorClient {
                                 self.query("/_arkret/self/seals/resolve").json(
                                     &arkret_models_collaboration::http_bodies::SelfSealResolveRequestBody {
                                         realm_id: realm_id.clone(),
-                                        seal_refs: vec![seal_ref.clone()],
+                                        selection: arkret_models_collaboration::http_bodies::SealResolveSelection::SealRefs {
+                                            seal_refs: vec![seal_ref.clone()],
+                                        },
                                         history_traversal_access: None,
                                     },
                                 ),
@@ -506,14 +512,20 @@ impl TestActorClient {
                             )
                             .await?,
                         )?;
-                    let Some(seal) = resolved.seals.into_iter().find(|seal| seal.id == seal_ref)
+                    let arkret_models_collaboration::http_bodies::SealResolveOutcome::Seals {
+                        seals,
+                        ..
+                    } = resolved
                     else {
+                        continue;
+                    };
+                    let Some(seal) = seals.into_iter().find(|seal| seal.id == seal_ref) else {
                         continue;
                     };
                     if seal.delta.contains(&event_digest) {
                         return Ok(frontier_leaf.to_string());
                     }
-                    pending.extend(seal.predecessor_refs);
+                    pending.extend(seal.predecessor_ref);
                 }
             }
             if std::time::Instant::now() >= deadline {
@@ -978,8 +990,7 @@ impl TestActorClient {
         body["cotest_event_digest"] = json!(
             event
                 .proofs
-                .iter()
-                .find_map(arkret_wire::EventProof::as_producer)
+                .first()
                 .expect("authored Event has producer proof")
                 .event_digest
         );
@@ -1035,16 +1046,13 @@ impl TestActorClient {
                     anyhow!("invalid Realm frontier response `{seal_frontier}`: {error}")
                 })?;
             let frontier = state.frontier;
-            // A DataEvent anchors its effects with `seal_ref`, not
-            // `seal_basis`: carrying a Seal basis is what marks an Event as a
-            // Control Move, and a Control Move may not write a data-plane cell.
-            event.seal_ref = Some(frontier.sole_leaf()?.clone());
             // Capability coverage is per DataEvent: the reducer checks that a
             // named grant actually covers this action on this target.
             event.auth_context = Some(AuthContext {
                 key_id: arkret_wire::OpaqueLocalId::new("cotest").expect("cotest key id"),
                 key_epoch: 0,
                 credential_epoch: None,
+                authority_refs: frontier.leaves,
             });
             if capability_refs.is_empty() {
                 self.stamp_authority(&mut event, realm_id, kind, true);
@@ -1150,11 +1158,11 @@ impl TestActorClient {
                 let physical_millis = chrono::Utc::now().timestamp_millis();
                 event.hlc = Some(Hlc::new(format!("{physical_millis:012x}-0000-a13f9c2e"))?);
             } else {
-                event.seal_ref = Some(frontier.sole_leaf()?.clone());
                 event.auth_context = Some(AuthContext {
                     key_id: arkret_wire::OpaqueLocalId::new("cotest").expect("cotest key id"),
                     key_epoch: 0,
                     credential_epoch: None,
+                    authority_refs: frontier.leaves,
                 });
             }
             // Self moderation reports use their holder proof as the complete

@@ -14,16 +14,6 @@ $sourceRoots = @(
     "chime\src"
 ) | ForEach-Object { Join-Path $WorkspaceRoot $_ } | Where-Object { Test-Path -LiteralPath $_ }
 
-$productionClassificationRoots = @(
-    "soland\crates\http\src",
-    "soland\crates\storage-postgres\src",
-    "inkson\src",
-    "cotest\src",
-    "coauth\crates",
-    "garth\src",
-    "chime\src"
-) | ForEach-Object { Join-Path $WorkspaceRoot $_ } | Where-Object { Test-Path -LiteralPath $_ }
-
 function Assert-NoRustMatch {
     param(
         [Parameter(Mandatory)][string]$Name,
@@ -48,11 +38,6 @@ Assert-NoRustMatch `
     -Name "exported Event descriptor plane access" `
     -Pattern '(?:descriptor\(\)[\s\S]{0,80}\.plane|descriptor\.plane)' `
     -Roots $sourceRoots
-Assert-NoRustMatch `
-    -Name "shape-derived Control Move classification" `
-    -Pattern 'is_reducer_input\(\)[\s\S]{0,180}seal_ref\.is_none\(\)[\s\S]{0,180}auth_context\.is_none\(\)' `
-    -Roots $productionClassificationRoots
-
 $generatedKinds = Join-Path $WorkspaceRoot "arkret-rust-sdk\crates\wire\src\generated\event_kinds.rs"
 $generatedSource = Get-Content -Raw -LiteralPath $generatedKinds
 foreach ($helper in @("cbs_plane", "is_data_plane", "is_control_plane")) {

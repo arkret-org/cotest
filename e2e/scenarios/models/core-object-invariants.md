@@ -71,7 +71,7 @@
 
 `ak.strand.update` 在 event-kind registry 中是 data-plane Event，不能携带
 `preconditions[]` 或 `seal_basis`。本 Phase 使用已注册的 control-plane
-`ak.strand.move` 和 `ak.component.strand.position.v1` cas_register。
+`ak.strand.move` 写入 `ak.component.strand.position.v1` 的 `sequenced_state`。
 
 6. **alice** 创建 Strand `F`，并准备 Board Space `B`、源 List `L1`、错误前像 List
    `L_stale` 与目标 List `L2`。

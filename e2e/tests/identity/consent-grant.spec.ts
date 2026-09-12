@@ -586,7 +586,6 @@ test.describe("consent grant", () => {
       },
     });
     conflictingEvent.seal_basis = structuredClone(grantEvent.seal_basis);
-    delete conflictingEvent.seal_ref;
     delete conflictingEvent.auth_context;
     const conflictingUnsigned = {
       ...unsignedUpdate,

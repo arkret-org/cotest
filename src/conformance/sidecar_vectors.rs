@@ -966,7 +966,6 @@ fn fixed_unsigned_sidecar_event(
         refs,
         causal_refs: Vec::new(),
         preconditions: Vec::new(),
-        seal_ref: None,
         auth_context: None,
         seal_basis: None,
         payload,
@@ -1156,7 +1155,11 @@ fn sign_prepared_draft(
         &mut event,
         signer,
         verification_method,
-        SignEventOptions::new().with_created_at(fixed_sidecar_time()),
+        SignEventOptions::new(crate::fixture_signer_evidence_ref(format!(
+            "sidecar:{}",
+            event.event_id()
+        )))
+        .with_created_at(fixed_sidecar_time()),
     )
     .map_err(|_| SidecarModelError::ProofMismatch)?;
     let after = arkret_canonical::canonical_json_bytes(
@@ -1171,9 +1174,7 @@ fn sign_prepared_draft(
     let public_key = PublicKeyMaterial::Ed25519Raw {
         bytes: signer.verifying_key().to_bytes().to_vec(),
     };
-    let proof = event.proofs[0]
-        .as_producer()
-        .ok_or(SidecarModelError::ProofMismatch)?;
+    let proof = &event.proofs[0];
     verify_ed25519_detached_jws_proof(proof, &before, &event.actor_id, &public_key)
         .map_err(|_| SidecarModelError::ProofMismatch)?;
     Ok(event.into_event())
@@ -1203,18 +1204,11 @@ fn validate_signed_draft(
             )
             .map_err(|_| SidecarModelError::DraftMismatch)?
             != draft.event_digest.as_str()
-        || !matches!(
-            event.proofs.as_slice(),
-            [arkret_wire::EventProof::Producer(proof)] if proof.event_digest == draft.event_digest
-        )
+        || !matches!(event.proofs.as_slice(), [proof] if proof.event_digest == draft.event_digest)
     {
         return Err(SidecarModelError::DraftMismatch);
     }
-    for proof in event
-        .proofs
-        .iter()
-        .filter_map(arkret_wire::EventProof::as_producer)
-    {
+    for proof in &event.proofs {
         verify_ed25519_detached_jws_proof(proof, &actual_unsigned, &event.actor_id, public_key)
             .map_err(|_| SidecarModelError::ProofMismatch)?;
     }

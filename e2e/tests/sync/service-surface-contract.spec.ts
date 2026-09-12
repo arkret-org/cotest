@@ -463,7 +463,6 @@ test.describe("service surface contract — error envelope, pagination, idempote
           content: { kind: "ak.content.text", body: `${body} drift` },
         },
       });
-      drift.seal_ref = envelope.seal_ref;
       drift.auth_context = envelope.auth_context;
       refreshEventEnvelopeProof(drift);
       // Deliberately reuse the accepted request identity with different content.

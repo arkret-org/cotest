@@ -685,7 +685,7 @@ pub fn run_agent_pcr_separation_vector() -> Result<()> {
     if agent_pcr == controller_pcr {
         bail!("Agent reused the controller PCR");
     }
-    let notary = serde_json::to_value(crate::fixture_single_signer_notary(
+    let notary = serde_json::to_value(crate::fixture_notary_configuration(
         arkret_wire::DidCoreId::new(agent)?,
     ))?;
     let genesis = serde_json::json!({

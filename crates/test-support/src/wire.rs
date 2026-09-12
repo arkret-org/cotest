@@ -49,6 +49,7 @@ struct EventProofInput {
     created_at: String,
     event: Value,
     signing_seed_b64url: Option<String>,
+    signer_resolution_evidence_ref: arkret_wire::SignerEvidenceRef,
 }
 
 #[derive(Debug, Deserialize)]
@@ -181,6 +182,7 @@ struct ManagedActorAuthorInput {
     service_actor_seq: u64,
     #[serde(default)]
     service_prev_refs: Vec<EventId>,
+    signer_resolution_evidence_ref: arkret_wire::SignerEvidenceRef,
     #[serde(default)]
     seal_basis: Option<SealBasis>,
     service_signing_seed_b64url: String,
@@ -423,6 +425,7 @@ pub fn managed_actor_author(input: Value) -> Result<Value> {
             method_history_evidence: input.method_history_evidence,
             service_actor_seq: input.service_actor_seq,
             service_prev_refs: input.service_prev_refs,
+            signer_resolution_evidence_ref: input.signer_resolution_evidence_ref,
             seal_basis,
             digest_suite: arkret::DigestSuite::Sha256,
             trust_domain: input.trust_domain,
@@ -706,21 +709,24 @@ fn build_pcr_genesis_unit(
             ),
         )?);
     let authorize_payload_value = serde_json::to_value(&authorize_payload)?;
-    let founding_notary = arkret::NotaryValue::single_signer(arkret::NotarySignerDescriptor {
-        actor_id: arkret::ActorId::account(arkret::AccountId::new(
-            principal_id.clone(),
-            station_id.clone(),
-        )),
-        verification_method: arkret::DidUrl::new(format!("{principal}#{device_id}"))
-            .map_err(anyhow::Error::msg)?,
-        key_kind: arkret::NotaryKeyKind::Ed25519Raw32,
-        jose_algorithm: arkret::NotaryJoseAlgorithm::Ed25519,
-        frozen_public_key_b64u: arkret::base64url_encode(device_public_key_bytes),
-        frozen_public_key_digest: arkret::Hash::new(arkret_canonical::canonical::sha256_digest(
-            device_public_key_bytes,
-        ))?,
-    });
-    founding_notary.validate()?;
+    let founding_notary = arkret::NotaryValue::new(
+        vec![arkret::NotarySignerDescriptor {
+            actor_id: arkret::ActorId::account(arkret::AccountId::new(
+                principal_id.clone(),
+                station_id.clone(),
+            )),
+            verification_method: arkret::DidUrl::new(format!("{principal}#{device_id}"))
+                .map_err(anyhow::Error::msg)?,
+            key_kind: arkret::NotaryKeyKind::Ed25519Raw32,
+            jose_algorithm: arkret::NotaryJoseAlgorithm::Ed25519,
+            frozen_public_key_b64u: arkret::base64url_encode(device_public_key_bytes),
+            frozen_public_key_digest: arkret::Hash::new(
+                arkret_canonical::canonical::sha256_digest(device_public_key_bytes),
+            )?,
+        }],
+        0,
+        0,
+    )?;
     let descriptor = arkret_models_collaboration::events_payloads::FoundingDeviceDescriptor {
         descriptor_version: 1,
         device_id: principal_device_id,
@@ -785,7 +791,7 @@ fn build_pcr_genesis_unit(
         &mut create,
         &root_signer,
         &root_verification_method,
-        arkret::signatures::SignEventOptions::new().with_created_at(created_at),
+        arkret::signatures::SignEventOptions::for_native_unit().with_created_at(created_at),
     )
     .context("sign the PCR genesis Event with the identity root")?;
     let mut authorize = arkret_event_draft::TypedEventDraft::<
@@ -816,7 +822,7 @@ fn build_pcr_genesis_unit(
         &mut authorize,
         &device_signer,
         &device_method,
-        arkret::signatures::SignEventOptions::new().with_created_at(created_at),
+        arkret::signatures::SignEventOptions::for_native_unit().with_created_at(created_at),
     )?;
     arkret_bootstrap::validate_self_principal_pcr_genesis_unit(&create, &authorize, &|event| {
         arkret_schema::project_registered_cell_writes(event, arkret_canonical::DigestSuite::Sha256)
@@ -1017,8 +1023,7 @@ pub fn identity_creation_register_request(input: Value) -> Result<Value> {
 fn trusted_actor_signer_material(event: &Event) -> Result<(Did, DidUrl)> {
     let verification_method = event
         .proofs
-        .iter()
-        .find_map(arkret_wire::EventProof::as_producer)
+        .first()
         .context("founding DeviceAuthorize lacks its signed proof")?
         .verification_method
         .clone();
@@ -1191,7 +1196,7 @@ pub fn event_proof(input: Value, digest_mode: EventDigestMode) -> Result<Value> 
         kind: proof_kind::DETACHED_JWS.to_owned(),
         verification_method: input.verification_method,
         event_digest,
-        signer_resolution_evidence_ref: None,
+        signer_resolution_evidence_ref: Some(input.signer_resolution_evidence_ref),
         created_at,
         domain: None,
         audience: None,
