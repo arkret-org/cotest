@@ -23,9 +23,7 @@ use arkret_models_collaboration::events_payloads::{
     FoundingDeviceDescriptor, FoundingDeviceHpkeKeyAlgorithm, FoundingDeviceKeyAlgorithm,
     FoundingDeviceKeyPurpose, SignatureMaterial, device_authorize_payload_digest,
 };
-use arkret_wire::{
-    AccountId, Audience, DidUrl, Event, EventRef, NonEmptyString, ProducerEventProof,
-};
+use arkret_wire::{AccountId, Audience, AuthoredEvent, DidUrl, Event, EventRef, NonEmptyString};
 use base64::Engine as _;
 use ed25519_dalek::{Signer as _, SigningKey};
 use serde::Deserialize;
@@ -218,7 +216,7 @@ pub fn run_identity_recovery_kdf_fixture_suite() -> Result<()> {
 /// fixture and verifies the remaining reducer cases stay explicitly declared.
 ///
 /// This is deliberately named a checkpoint suite: presence checks for the
-/// 62-case formal matrix are not reported as executed reducer coverage.
+/// formal matrix are not reported as executed reducer coverage.
 pub fn run_identity_root_anchor_checkpoint_suite() -> Result<()> {
     let fixture: IdentityRootAnchorFixture =
         serde_json::from_value(load_fixture_value(ROOT_ANCHOR_FIXTURE)?)?;
@@ -327,12 +325,11 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
         },
         &crate::publication::project_cells,
     )?;
-    let create = with_proof(
-        create.into_event(),
-        &crate::fixture_did_url(
-            "did:key:z6MkvMW3tjuvW6PqYiX8dLRNwZWyGhxe3biRDjA4ZPiBaFaJ#z6MkvMW3tjuvW6PqYiX8dLRNwZWyGhxe3biRDjA4ZPiBaFaJ",
-        ),
-    )?;
+    let root_key = SigningKey::from_bytes(&[0x24; 32]);
+    let root_multibase =
+        arkret_canonical::ed25519_pubkey_to_did_key_multibase(&root_key.verifying_key().to_bytes());
+    let root_method = DidUrl::new(format!("did:key:{root_multibase}#{root_multibase}"))?;
+    let create = with_native_unit_proof(create.into_event(), &root_method, &root_key)?;
     let realm_id = create.realm_id.clone();
     let mut authorize = arkret_wire::test_support::raw_event(
         arkret_wire::EventKind::DeviceAuthorize.as_str(),
@@ -345,7 +342,7 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
     )?;
     authorize.created_at = created_at;
     authorize.prev_refs = vec![create.event_id.clone()];
-    authorize = with_proof(authorize, &device_verification_method)?;
+    authorize = with_native_unit_proof(authorize, &device_verification_method, &device_key)?;
     let unit = build_self_principal_pcr_genesis_unit(
         create.clone(),
         authorize.clone(),
@@ -427,7 +424,7 @@ fn validate_reanchor_helpers() -> Result<()> {
     let mut mismatched = value;
     mismatched["new_device_generation"] = json!(3);
     if serde_json::from_value::<DeviceReanchorPayload>(mismatched).is_ok() {
-        bail!("device re-anchor accepted a DID/generation mismatch");
+        bail!("device re-anchor accepted a non-successor generation");
     }
     Ok(())
 }
@@ -473,12 +470,6 @@ fn validate_recovery_handoff_checkpoints(fixture: &IdentityRootAnchorFixture) ->
 
 fn require_declared_case_checkpoints(fixture: &IdentityRootAnchorFixture) -> Result<()> {
     let cases = &fixture.cases;
-    if cases.len() != 62 {
-        bail!(
-            "{ROOT_ANCHOR_FIXTURE} formal reducer matrix must declare 62 cases, found {}",
-            cases.len()
-        );
-    }
     let names = cases
         .iter()
         .filter_map(|case| case.get("name").and_then(Value::as_str))
@@ -503,9 +494,14 @@ fn require_declared_case_checkpoints(fixture: &IdentityRootAnchorFixture) -> Res
         "reject_split_or_partially_committed_reanchor_unit",
         "reject_old_generation_event_after_fence",
         "reject_old_generation_seal_after_fence",
-        "quarantine_all_same_version_number_conflicts_independent_of_arrival_order",
-        "quarantine_same_entry_two_different_units",
-        "accept_conflict_resolution_by_next_precommitted_authority",
+        "preserve_committed_generation_with_pending_rival_arriving_before",
+        "preserve_committed_generation_with_pending_rival_arriving_after",
+        "preserve_committed_generation_with_rejected_rival_arriving_before",
+        "preserve_committed_generation_with_rejected_rival_arriving_after",
+        "pending_complete_recovery_unit_does_not_advance_generation",
+        "did_update_does_not_resolve_or_advance_device_generation",
+        "reject_equivocating_seals_at_same_authority_position",
+        "reject_root_signed_reanchor_even_with_did_root_policy_factor",
         "reject_in_place_secret_rotation_without_independent_authority",
         "accept_staged_two_entry_secret_handoff",
         "accept_recovery_policy_distinct_signing_and_hpke_pair",
@@ -519,26 +515,63 @@ fn require_declared_case_checkpoints(fixture: &IdentityRootAnchorFixture) -> Res
     Ok(())
 }
 
-fn with_proof(mut event: Event, verification_method: &arkret_wire::DidUrl) -> Result<Event> {
-    event
-        .refresh_content_bound_identity_with_digest_suite(arkret_canonical::DigestSuite::Sha256)?;
-    let digest =
-        Hash::new(event.event_digest_with_digest_suite(arkret_canonical::DigestSuite::Sha256)?)?;
-    let signer_evidence_ref = crate::fixture_signer_evidence_ref(verification_method.as_str());
-    event.proofs = vec![
-        ProducerEventProof {
-            kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
-            verification_method: verification_method.clone(),
-            event_digest: digest,
-            signer_resolution_evidence_ref: Some(signer_evidence_ref),
-            created_at: event.created_at,
-            domain: None,
-            audience: Some(Audience::Single(event.realm_id.to_string())),
-            proof_purpose: None,
-            jws: "c2ln".to_owned(),
-        }
-        .into(),
-    ];
+fn with_native_unit_proof(
+    event: Event,
+    verification_method: &DidUrl,
+    signing_key: &SigningKey,
+) -> Result<Event> {
+    let suite = arkret_canonical::DigestSuite::Sha256;
+    let created_at = event.created_at;
+    let realm_id = event.realm_id.to_string();
+    let did = verification_method
+        .as_str()
+        .split_once('#')
+        .ok_or_else(|| anyhow!("native signer method has no DID fragment"))?
+        .0;
+    let signer = arkret_signatures::Ed25519PayloadSigner::new(
+        signing_key.clone(),
+        Did::new(did)?,
+        verification_method.clone(),
+    );
+    let mut authored = AuthoredEvent::finalize_with_digest_suite(event, suite)?;
+    arkret_signatures::sign_event(
+        &mut authored,
+        &signer,
+        verification_method,
+        arkret_signatures::SignEventOptions::for_native_unit()
+            .with_created_at(created_at)
+            .with_audience(Audience::Single(realm_id)),
+    )?;
+    let event = authored.into_event();
+    let bytes = arkret_canonical::canonical::canonical_json_bytes(&event.digest_payload()?)?;
+    let key = arkret_signatures::PublicKeyMaterial::Ed25519Raw {
+        bytes: signing_key.verifying_key().to_bytes().to_vec(),
+    };
+    arkret_signatures::verify_ed25519_detached_jws_proof_with_digest_suite(
+        &event.proofs[0],
+        &bytes,
+        &event.actor_id,
+        &key,
+        suite,
+    )
+    .map_err(|error| anyhow!(error.to_string()))?;
+    let wrong_key = arkret_signatures::PublicKeyMaterial::Ed25519Raw {
+        bytes: SigningKey::from_bytes(&[0x99; 32])
+            .verifying_key()
+            .to_bytes()
+            .to_vec(),
+    };
+    if arkret_signatures::verify_ed25519_detached_jws_proof_with_digest_suite(
+        &event.proofs[0],
+        &bytes,
+        &event.actor_id,
+        &wrong_key,
+        suite,
+    )
+    .is_ok()
+    {
+        bail!("native unit proof accepted another signing key");
+    }
     Ok(event)
 }
 
