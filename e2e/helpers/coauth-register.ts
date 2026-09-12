@@ -57,6 +57,7 @@ export type CoauthPasswordAccount = {
 
 export type CanonicalAccountHandoff = {
   requestId: string;
+  accountSubject: string;
   accountHandoffGrant: string;
   expiresAt: string;
   binding: Record<string, unknown>;
@@ -405,14 +406,15 @@ export async function createCanonicalAccountHandoff(
   const accountHandoffGrant = stringValue(
     validatedOutcome.account_handoff_grant,
   );
+  const accountSubject = stringValue(validatedOutcome.account_subject);
   const expiresAt = stringValue(validatedOutcome.expires_at);
   const binding = objectRecord(validatedOutcome.binding);
-  if (!accountHandoffGrant || !expiresAt || !binding) {
+  if (!accountSubject || !accountHandoffGrant || !expiresAt || !binding) {
     throw new Error(
       `incomplete account handoff outcome: ${JSON.stringify(outcome)}`,
     );
   }
-  return { requestId, accountHandoffGrant, expiresAt, binding, deviceKey };
+  return { requestId, accountSubject, accountHandoffGrant, expiresAt, binding, deviceKey };
 }
 
 export async function registerCoauthPasswordAccount(
@@ -496,7 +498,10 @@ export async function registerCoauthPasswordAccount(
     "identity-creation-register-request",
     {
       challenge,
-      did_operation: fixture.did_operation,
+      challenge_request: fixture.challenge_request,
+      account_subject: handoff.accountSubject,
+      origin: new URL(coauthBase).origin,
+      trust_domain: trustDomain,
       pcr_genesis_unit: fixture.checkpoint.pcr_genesis_unit,
       initial_session: fixture.checkpoint.initial_session,
       recovery_key: fixture.recovery_key,

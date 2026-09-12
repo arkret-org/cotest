@@ -139,7 +139,10 @@ struct AccountHandoffRequestFixtureInput {
 #[derive(Debug, Deserialize)]
 struct IdentityCreationRegisterFixtureInput {
     challenge: Value,
-    did_operation: Value,
+    challenge_request: arkret::IdentityBindingChallengeRequestBody,
+    account_subject: arkret::Hash,
+    origin: arkret::WebOrigin,
+    trust_domain: arkret::TrustDomainId,
     pcr_genesis_unit: Value,
     initial_session: arkret::InitialSessionGrantIntent,
     recovery_key: String,
@@ -998,19 +1001,26 @@ pub fn identity_creation_register_request(input: Value) -> Result<Value> {
         serde_json::from_value(input).context("parse identity-creation register input")?;
     let challenge: arkret::IdentityBindingChallengeOutcome =
         serde_json::from_value(input.challenge).context("parse identity-binding challenge")?;
-    let did_operation: arkret::DidOperationSubmitRequestBody =
-        serde_json::from_value(input.did_operation).context("parse DID operation")?;
     let key_material = arkret::identity_root::derive_identity_recovery_key_material_from_bip39(
         &input.recovery_key,
         "",
         0,
     )
     .context("derive identity root for control proof")?;
-    let expected_account_subject = challenge.account_subject.clone();
+    let context = garth::IdentityCreationBindingContext {
+        account_subject: input.account_subject,
+        dpop_jkt: input
+            .initial_session
+            .session_public_key
+            .thumbprint_sha256()?,
+        audience_id: input.initial_session.audience_id.clone(),
+        origin: input.origin,
+        trust_domain: input.trust_domain,
+    };
     let request = garth::identity_creation_register_request(
         &challenge,
-        &expected_account_subject,
-        did_operation,
+        &input.challenge_request,
+        &context,
         serde_json::from_value(input.pcr_genesis_unit).context("parse PCR genesis unit")?,
         input.initial_session,
         &key_material.root_seed,

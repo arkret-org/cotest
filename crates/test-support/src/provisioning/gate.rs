@@ -259,6 +259,7 @@ const CREATE_HANDOFF_OPERATION_ID: &str = "ak.gate.account.exchange.create_hando
 #[derive(Clone, Debug)]
 pub struct AccountHandoff {
     pub request_id: String,
+    pub account_subject: arkret_identifiers::Hash,
     pub account_handoff_grant: String,
     pub expires_at: String,
     /// The identity-creation binding. A fresh account must come back
@@ -337,6 +338,12 @@ pub async fn create_account_handoff(
 
     Ok(AccountHandoff {
         request_id,
+        account_subject: serde_json::from_value(
+            validated
+                .get("account_subject")
+                .cloned()
+                .context("handoff outcome omitted account subject")?,
+        )?,
         account_handoff_grant: validated
             .get("account_handoff_grant")
             .and_then(Value::as_str)
@@ -559,9 +566,10 @@ pub async fn found_principal(
     // Step 6: the register body, again from the shared oracle.
     let register_body = crate::wire::identity_creation_register_request(json!({
         "challenge": challenge,
-        "did_operation": fixture
-            .get("did_operation")
-            .context("registration fixture omitted the DID operation")?,
+        "challenge_request": fixture.get("challenge_request").context("registration fixture omitted challenge request")?,
+        "account_subject": handoff.account_subject,
+        "origin": reqwest::Url::parse(coauth)?.origin().ascii_serialization(),
+        "trust_domain": trust_domain,
         "pcr_genesis_unit": checkpoint
             .get("pcr_genesis_unit")
             .context("checkpoint omitted the PCR genesis unit")?,
