@@ -138,7 +138,7 @@ async function gotoConsentSettings(
 async function grantConsentDirect(
   actor: Awaited<ReturnType<typeof openUserPage>>,
   peerId: string,
-  scope: "invite" | "message" | "call",
+  scope: "invite" | "voice_call" | "presence",
   ttl = "30d",
 ) {
   await actor.clickWithPassivePromptRetry(
@@ -184,7 +184,7 @@ async function expectConsentCell(
       account_id: { principal_id: peerId, station_id: solandServiceId() },
     },
   } as const;
-  const wireScope = consentWireScope(scope);
+  const wireScope = scope;
   const cell = await request.get(
     `${solandBaseUrl()}/_arkret/self/consent/cell` +
       `?peer=${encodeURIComponent(JSON.stringify(peer))}&consent_scope=${encodeURIComponent(wireScope)}`,
@@ -214,28 +214,20 @@ async function expectConsentCellMissing(
   } as const;
   const response = await request.get(
     `${solandBaseUrl()}/_arkret/self/consent/cell` +
-      `?peer=${encodeURIComponent(JSON.stringify(peer))}&consent_scope=${encodeURIComponent(consentWireScope(scope))}`,
+      `?peer=${encodeURIComponent(JSON.stringify(peer))}&consent_scope=${encodeURIComponent(scope)}`,
     { headers: { authorization: `Bearer ${token}` } },
   );
   expect(response.status()).toBe(404);
-}
-
-function consentWireScope(scope: string): string {
-  return scope === "message"
-    ? "direct_message"
-    : scope === "call"
-      ? "voice_call"
-      : scope;
 }
 
 async function requestContactApi(
   request: APIRequestContext,
   token: string,
   targetId: string,
-  scope: "invite" | "message",
+  scope: "invite" | "direct_message",
 ) {
   const { outcome } = await requestContactArkret(request, token, targetId, {
-    requestedScopes: [consentWireScope(scope)],
+    requestedScopes: [scope],
   });
   return outcome;
 }
@@ -244,14 +236,14 @@ async function requestConsentApi(
   request: APIRequestContext,
   token: string,
   holderId: string,
-  scope: "invite" | "message" | "call",
+  scope: "voice_call" | "video_call" | "presence" | "any",
 ) {
   const response = await request.post(
     `${solandBaseUrl()}/_arkret/self/consent/request`,
     {
       headers: { ...authHeaders(token), "content-type": "application/json" },
       data: canonicalJson({
-        consent_scope: consentWireScope(scope),
+        consent_scope: scope,
         holder_account_id: {
           principal_id: holderId,
           station_id: solandServiceId(),
@@ -301,7 +293,7 @@ test.describe("consent grant", () => {
       );
       await selectDxcOption(
         alicePage.page.getByTestId("consent-new-grant-scope-input"),
-        "message",
+        "voice_call",
       );
       await alicePage.page
         .getByTestId("consent-new-grant-grantee-input")
@@ -365,7 +357,7 @@ test.describe("consent grant", () => {
       await alicePage.page.getByTestId("consent-request-button").click();
       await selectDxcOption(
         alicePage.page.getByTestId("consent-request-scope-input"),
-        "message",
+        "voice_call",
       );
       await alicePage.page
         .getByTestId("consent-request-holder-input")
@@ -389,7 +381,7 @@ test.describe("consent grant", () => {
       // contact fact, or requester-visible outgoing projection.
       const holderCellUrl =
         `${solandBaseUrl()}/_arkret/self/consent/cell` +
-        `?peer=${encodeURIComponent(JSON.stringify({ kind: "actor", actor_id: { kind: "account", account_id: { principal_id: bob.id, station_id: solandServiceId() } } }))}&consent_scope=direct_message`;
+        `?peer=${encodeURIComponent(JSON.stringify({ kind: "actor", actor_id: { kind: "account", account_id: { principal_id: bob.id, station_id: solandServiceId() } } }))}&consent_scope=voice_call`;
       const peerRead = await request.get(holderCellUrl, {
         headers: authHeaders(aliceToken),
       });
@@ -403,7 +395,7 @@ test.describe("consent grant", () => {
     }
   });
 
-  test("contacts modal submits scoped consent request", async ({
+  test("contacts modal submits Contact without creating Consent", async ({
     browser,
     request,
   }) => {
@@ -436,7 +428,7 @@ test.describe("consent grant", () => {
       await expect(pendingRow).toHaveAttribute("data-state", /pending/);
       const cellUrl =
         `${solandBaseUrl()}/_arkret/self/consent/cell` +
-        `?peer=${encodeURIComponent(JSON.stringify({ kind: "actor", actor_id: { kind: "account", account_id: { principal_id: bob.id, station_id: solandServiceId() } } }))}&consent_scope=direct_message`;
+        `?peer=${encodeURIComponent(JSON.stringify({ kind: "actor", actor_id: { kind: "account", account_id: { principal_id: bob.id, station_id: solandServiceId() } } }))}&consent_scope=voice_call`;
       const cell = await request.get(cellUrl, {
         headers: selfPathHeadersForDpopSession(
           aliceFlow.session,
@@ -487,7 +479,7 @@ test.describe("consent grant", () => {
     const openUnsigned = {
       requester_actor_id: accountActorId(bob.id),
       holder_account_id: accountActorId(alice.id).account_id,
-      purpose: "direct_message",
+      purpose: "voice_call",
     };
     const bobVerificationMethod = registeredEventVerificationMethod(bob.id);
     if (!bobVerificationMethod) {
@@ -525,7 +517,7 @@ test.describe("consent grant", () => {
       payload: {
         consent_id: openBody.consent_id,
         peer: { kind: "actor", actor_id: accountActorId(bob.id) },
-        consent_scope: "direct_message",
+        consent_scope: "voice_call",
       },
     });
     const consentEvent = await prepareSignedEventSubmissionApi(
@@ -582,7 +574,7 @@ test.describe("consent grant", () => {
       payload: {
         consent_id: openBody.consent_id,
         peer: { kind: "actor", actor_id: accountActorId(bob.id) },
-        consent_scope: "direct_message",
+        consent_scope: "voice_call",
       },
     });
     conflictingEvent.seal_basis = structuredClone(grantEvent.seal_basis);
@@ -684,7 +676,7 @@ test.describe("consent grant", () => {
     expect(unknownOutcome).toEqual(invisibleOutcome);
   });
 
-  test("ak.consent.grant event projects consent cell and contact gate", async ({
+  test("ak.consent.grant updates only consent and leaves Contact pending", async ({
     request,
   }) => {
     const alice = uniqueUser("p1-020-consent-event-alice");
@@ -706,7 +698,7 @@ test.describe("consent grant", () => {
       request,
       bobToken,
       alice.id,
-      "message",
+      "direct_message",
     );
     expect(pending.state).toBe("pending_outgoing");
 
@@ -721,7 +713,7 @@ test.describe("consent grant", () => {
       payload: {
         consent_id: consentId,
         peer: { kind: "actor", actor_id: accountActorId(bob.id) },
-        consent_scope: "direct_message",
+        consent_scope: "voice_call",
         expires_at: canonicalTimestamp(
           new Date(Date.now() + 24 * 60 * 60 * 1000),
         ),
@@ -737,7 +729,7 @@ test.describe("consent grant", () => {
       aliceToken,
       alice.id,
       bob.id,
-      "direct_message",
+      "voice_call",
       "active",
     );
     expect(granted.cell_id).toBe(
@@ -766,7 +758,7 @@ test.describe("consent grant", () => {
       aliceToken,
       alice.id,
       bob.id,
-      "direct_message",
+      "voice_call",
       "no_consent",
     );
     expect(revoked.revoked_dots).toContain(grantDot);
@@ -778,101 +770,7 @@ test.describe("consent grant", () => {
     expect(stillPendingAfterRevoke?.state).toBe("pending_outgoing");
   });
 
-  test("consent settings grants and revokes a pending request", async ({
-    browser,
-    request,
-  }) => {
-    test.skip(
-      true,
-      "spec-open 2026-09-04-1301: the quarantine carrier cannot represent contact/direct_message requests",
-    );
-    const aliceFlow = await openDpopUserPage(
-      browser,
-      request,
-      "p1-023-settings-consent-alice",
-      { prepareMlsDevice: false },
-    );
-    if (!aliceFlow) {
-      assertJointStackNotRequired("consent settings DPoP login");
-      test.skip(true, "coauth DPoP session-grant login is unavailable");
-      return;
-    }
-    const alice = aliceFlow.user;
-    const bob = uniqueUser("p1-023-settings-consent-bob");
-    await ensureRegistered(request, bob);
-    const [aliceToken, bobToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
-    ]);
-    await requestContactApi(request, bobToken, alice.id, "message");
-    const alicePage = aliceFlow.page;
-
-    try {
-      await gotoConsentSettings(alicePage);
-      const pendingRow = alicePage.page
-        .getByTestId("consent-pending-row")
-        .filter({
-          hasText: bob.id,
-        });
-      await expect(pendingRow).toBeVisible({ timeout: 30_000 });
-      await pendingRow.getByTestId("consent-detail-button").click();
-      const detail = alicePage.page.getByTestId("consent-pending-detail");
-      await expect(detail).toContainText(bob.id);
-      await selectDxcOption(
-        detail.getByTestId("consent-scope-select"),
-        "message",
-      );
-      await detail
-        .getByTestId("consent-valid-until-input")
-        .fill(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString());
-      await detail.getByTestId("grant-consent-button").click();
-      await expect(alicePage.page.getByTestId("write-status")).toContainText(
-        /granted/i,
-        {
-          timeout: 30_000,
-        },
-      );
-      await expect(
-        alicePage.page
-          .getByTestId("consent-granted-row")
-          .filter({ hasText: bob.id }),
-      ).toBeVisible({ timeout: 30_000 });
-      // Effective consent state is spec `active` (consent-model.md §2.2 /
-      // SDK `ConsentState::Active`).
-      await expectConsentCell(
-        request,
-        aliceToken,
-        alice.id,
-        bob.id,
-        "message",
-        "active",
-      );
-
-      await alicePage.page
-        .getByTestId("consent-granted-row")
-        .filter({ hasText: bob.id })
-        .getByTestId("revoke-consent-button")
-        .click();
-      await expect(alicePage.page.getByTestId("write-status")).toContainText(
-        /revoked/i,
-        {
-          timeout: 30_000,
-        },
-      );
-      await expectConsentCell(
-        request,
-        aliceToken,
-        alice.id,
-        bob.id,
-        "message",
-        "no_consent",
-      );
-    } finally {
-      await alicePage.close();
-    }
-  });
-
-  test("alice grants consent and bob can establish contact (full lifecycle)", async ({
+  test("consent grant and Contact acceptance use independent authority", async ({
     browser,
     request,
   }, testInfo) => {
@@ -918,10 +816,8 @@ test.describe("consent grant", () => {
       await stepShot(bobPage.page, testInfo, "A-bob-pending-consent");
 
       await gotoConsentSettings(alicePage);
-      // Contact and consent are independent authority roots. Until
-      // spec-open/2026-09-04-1301 closes the quarantine carrier, exercise the
-      // fully specified holder-authored grant path instead of inventing a
-      // pending entry shape.
+      // A Contact request creates no Consent authority. Exercise an explicit
+      // holder grant and verify that Contact still needs its own acceptance.
       await grantConsentDirect(alicePage, bob.id, "invite");
       // Spec `active` (consent-model.md §2.2 / SDK `ConsentState::Active`).
       await expectConsentCell(
@@ -1094,13 +990,13 @@ test.describe("consent grant", () => {
     try {
       await requestContact(bobPage, alice.id);
       await gotoConsentSettings(alicePage);
-      await grantConsentDirect(alicePage, bob.id, "message");
+      await grantConsentDirect(alicePage, bob.id, "voice_call");
       await expectConsentCell(
         request,
         aliceToken,
         alice.id,
         bob.id,
-        "message",
+        "voice_call",
         "active",
       );
 
@@ -1122,7 +1018,7 @@ test.describe("consent grant", () => {
         aliceToken,
         alice.id,
         bob.id,
-        "message",
+        "voice_call",
         "no_consent",
       );
 
@@ -1130,13 +1026,13 @@ test.describe("consent grant", () => {
         "pending",
         "pending_outgoing",
       ]);
-      await grantConsentDirect(alicePage, bob.id, "message");
+      await grantConsentDirect(alicePage, bob.id, "voice_call");
       await expectConsentCell(
         request,
         aliceToken,
         alice.id,
         bob.id,
-        "message",
+        "voice_call",
         "active",
       );
       await expectContactState(bobPage, alice.id, [
@@ -1200,7 +1096,7 @@ test.describe("consent grant", () => {
       // Contact scope and consent scope are independent. Voice call is not a
       // Contact request scope, so exercise the spec's opaque consent-request
       // surface and verify it does not create a holder consent cell.
-      await requestConsentApi(request, bobToken, alice.id, "call");
+      await requestConsentApi(request, bobToken, alice.id, "voice_call");
       await bobPage.page.reload({ waitUntil: "domcontentloaded" });
       await expectContactState(bobPage, alice.id, [
         "pending",
@@ -1210,7 +1106,7 @@ test.describe("consent grant", () => {
         request,
         aliceToken,
         bob.id,
-        "call",
+        "voice_call",
       );
       await stepShot(bobPage.page, testInfo, "scope-granularity-call-pending");
     } finally {

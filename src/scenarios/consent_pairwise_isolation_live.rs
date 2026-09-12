@@ -128,7 +128,7 @@ pub async fn run_consent_pairwise_isolation_live() -> Result<()> {
     };
 
     // ── Grant to the Realm-local pairwise actor ─────────────────────────────
-    let granted = grant_consent(&holder, &pairwise_peer, ConsentScope::DirectMessage).await?;
+    let granted = grant_consent(&holder, &pairwise_peer, ConsentScope::VoiceCall).await?;
     ensure!(
         granted.peer == pairwise_peer,
         "consent projection rewrote the pairwise peer: {:?}",
@@ -139,16 +139,16 @@ pub async fn run_consent_pairwise_isolation_live() -> Result<()> {
         "pairwise consent grant produced no active dot: {granted:?}"
     );
 
-    expect_consent_cell(&holder, &pairwise_peer, "direct_message").await?;
+    expect_consent_cell(&holder, &pairwise_peer, "voice_call").await?;
     // Cross kind: the same key as an ordinary Account never reaches the cell.
-    expect_no_consent_cell(&holder, &impersonating_actor_peer, "direct_message").await?;
+    expect_no_consent_cell(&holder, &impersonating_actor_peer, "voice_call").await?;
     // Cross Realm: `(realm_id, principal_id)` is the isolation key.
-    expect_no_consent_cell(&holder, &cross_realm_peer, "direct_message").await?;
+    expect_no_consent_cell(&holder, &cross_realm_peer, "voice_call").await?;
     // The root Account has no consent of its own yet.
-    expect_no_consent_cell(&holder, &root_peer_peer, "direct_message").await?;
+    expect_no_consent_cell(&holder, &root_peer_peer, "voice_call").await?;
 
     // ── Grant to the ordinary root Account ──────────────────────────────────
-    let root_granted = grant_consent(&holder, &root_peer_peer, ConsentScope::DirectMessage).await?;
+    let root_granted = grant_consent(&holder, &root_peer_peer, ConsentScope::VoiceCall).await?;
     ensure!(
         root_granted.peer == root_peer_peer,
         "consent projection rewrote the root Account peer: {:?}",
@@ -160,8 +160,8 @@ pub async fn run_consent_pairwise_isolation_live() -> Result<()> {
     );
 
     // Both cells now exist and stay separate.
-    expect_consent_cell(&holder, &pairwise_peer, "direct_message").await?;
-    expect_consent_cell(&holder, &root_peer_peer, "direct_message").await?;
+    expect_consent_cell(&holder, &pairwise_peer, "voice_call").await?;
+    expect_consent_cell(&holder, &root_peer_peer, "voice_call").await?;
     // The root Account's grant does not leak into the pairwise lane, and a
     // root peer on another Station is a different peer entirely.
     expect_no_consent_cell(
@@ -177,7 +177,7 @@ pub async fn run_consent_pairwise_isolation_live() -> Result<()> {
                 )
             ))?,
         )?,
-        "direct_message",
+        "voice_call",
     )
     .await?;
     expect_no_consent_cell(
@@ -188,7 +188,7 @@ pub async fn run_consent_pairwise_isolation_live() -> Result<()> {
                 DidCoreId::new("ak:did_core:web:other-station.invalid".to_owned())?,
             )),
         },
-        "direct_message",
+        "voice_call",
     )
     .await?;
 

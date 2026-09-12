@@ -1413,7 +1413,7 @@ mod tests {
                 "principal_id":"ak:did_core:web:bob.example", "station_id":"ak:did_core:web:station.example"
             }},
             "holder_account_id": {"principal_id":"ak:did_core:web:alice.example", "station_id":"ak:did_core:web:station.example"},
-            "purpose":"direct_message"
+            "purpose":"voice_call"
         });
         let input = json!({
             "request":body,

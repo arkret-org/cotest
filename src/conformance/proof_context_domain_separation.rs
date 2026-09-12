@@ -566,7 +566,7 @@ fn mimi_families() -> Result<Vec<FamilyUnderTest>> {
             "principal_id": "ak:did_core:web:bob.example",
             "station_id": "ak:did_core:web:holder-station.example"
         },
-        "purpose": "direct_message",
+        "purpose": "voice_call",
         "proofs": []
     }))?;
 

@@ -71,7 +71,7 @@ fn domain_wire_constraint_vectors_reject_drift() {
                 }
             }
         },
-        "consent_scope": "direct_message"
+        "consent_scope": "voice_call"
     });
     serde_json::from_value::<arkret::ConsentGrantPayload>(consent.clone())
         .expect("typed UUIDv7 consent identifier must pass");
