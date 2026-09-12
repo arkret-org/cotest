@@ -412,7 +412,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
         .ok_or_else(|| anyhow!("realm create response has no realm_id"))?
         .to_owned();
     // The product coordinator, not an operator endpoint, must publish the
-    // non-empty bootstrap Seal before a client authors its first DataEvent.
+    // non-empty bootstrap Seal before a client authors its first ordinary Event.
     let bootstrap_seal = wait_for_bootstrap_seal(&alice, &realm_id).await?;
     alice.add_member(&realm_id, &bob).await?;
     let member_seal = wait_for_next_seal(&alice, &realm_id, &bootstrap_seal).await?;
@@ -621,7 +621,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
 
     // Exchange device/arrival order for a second concurrent pair, replay the
     // exact first Event, and verify neither arrival order nor idempotent replay
-    // changes the exposed MV-register heads.
+    // changes the exposed causal-register heads.
     let mut next_pair_basis = frontier.clone();
     next_pair_basis.push(resolved_digest);
     next_pair_basis.sort();

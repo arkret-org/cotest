@@ -128,7 +128,7 @@
 ## Edge cases / sub-tests
 
 - **E_inv.1 reducer-managed 字段保护**：客户端尝试通过 `ak.patch.v1` 直接 `set` 一个 reducer-managed 字段（`id` / `schema` / `realm_id` / `created_by` / `created_at` / `state` / `state_changed_at`）—— reducer MUST 返回 `schema_violation` reason=`patch_path_reducer_managed`（spec §4.2.5）。
-- **E_inv.2 actor-supplied state_changed_at 被忽略**：客户端在 `ak.space.archive` 的 wire payload 中塞一个伪造的 `state_changed_at`（早于 Event 的 `created_at`），断言 reducer 写入的物化对象上的 `state_changed_at` 等于 Event 的 `created_at` / anchored_at，而**不是**客户端给的值（spec §5 normative 段）。
+- **E_inv.2 actor-supplied state_changed_at 被忽略**：客户端在 `ak.space.archive` 的 wire payload 中塞一个伪造的 `state_changed_at`（早于 Event 的 `created_at`），断言 reducer 写入的物化对象上的 `state_changed_at` 等于已验证 Event 的 `created_at`，而**不是**客户端给的值（spec §5 normative 段）。
 - **E_inv.3 same-state self-transition 拒绝**：对 `state == "archived"` 的 Space 再发一次 `ak.space.archive`，MUST 返回 `space_not_active`（spec §5.1 "不允许 same-state self-transition"，不能当作 idempotent no-op）。
 - **E_inv.4 redactable 字段 `unset` 防御**：客户端通过 `ak.patch.v1` 把 `Message.content` 字段 `$op="unset"`——reducer MUST 返回 `schema_violation` reason=`patch_unset_redactable_field`（spec §4.2.4 redaction escape 防御）。
 

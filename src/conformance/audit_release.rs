@@ -4,8 +4,8 @@ use anyhow::{Result, anyhow, bail};
 use arkret_wire::ProfileId;
 use serde_json::Value;
 
-pub const VECTOR_ID_BINDING_FSM: &str = "ak.vector.audit.binding_fsm.v1";
-pub const VECTOR_ID_SESSION_FSM: &str = "ak.vector.audit.session_fsm.v1";
+pub const VECTOR_ID_BINDING_TRANSITIONS: &str = "ak.vector.audit.binding_transitions.v1";
+pub const VECTOR_ID_SESSION_TRANSITIONS: &str = "ak.vector.audit.session_transitions.v1";
 pub const VECTOR_ID_RECIPIENT_BINDING: &str = "ak.vector.audit.release_recipient_binding.v1";
 pub const VECTOR_ID_RELEASE_WINDOW: &str = "ak.vector.audit.release_window.v1";
 pub const VECTOR_ID_BINDING_AUTHORIZATION_GATE: &str =
@@ -15,8 +15,8 @@ pub const VECTOR_ID_CLOSE_RELEASE_CONCURRENCY: &str =
 pub const VECTOR_ID_RYW_BEFORE_OUTPUT: &str = "ak.vector.audit.ryw_before_output.v1";
 
 pub const ALL_AUDIT_RELEASE_VECTOR_IDS: &[&str] = &[
-    VECTOR_ID_BINDING_FSM,
-    VECTOR_ID_SESSION_FSM,
+    VECTOR_ID_BINDING_TRANSITIONS,
+    VECTOR_ID_SESSION_TRANSITIONS,
     VECTOR_ID_RECIPIENT_BINDING,
     VECTOR_ID_RELEASE_WINDOW,
     VECTOR_ID_BINDING_AUTHORIZATION_GATE,
@@ -91,11 +91,11 @@ fn transition_binding(
         | (Some(BindingState::Suspended), BindingState::Active)
         | (Some(BindingState::Suspended), BindingState::Revoked) => Ok(to),
         (Some(current), target) if current == target => Ok(current),
-        _ => Err("failed_bottom"),
+        _ => Err("failed_precondition"),
     }
 }
 
-pub fn run_binding_fsm_vector() -> Result<()> {
+pub fn run_binding_transitions_vector() -> Result<()> {
     let active =
         transition_binding(None, BindingState::Active).map_err(|reason| anyhow!(reason))?;
     let suspended = transition_binding(Some(active), BindingState::Suspended)
@@ -104,10 +104,10 @@ pub fn run_binding_fsm_vector() -> Result<()> {
         .map_err(|reason| anyhow!(reason))?;
     let revoked = transition_binding(Some(reactivated), BindingState::Revoked)
         .map_err(|reason| anyhow!(reason))?;
-    if transition_binding(Some(revoked), BindingState::Active) != Err("failed_bottom") {
+    if transition_binding(Some(revoked), BindingState::Active) != Err("failed_precondition") {
         bail!("revoked audit binding was reactivated");
     }
-    if transition_binding(None, BindingState::Suspended) != Err("failed_bottom") {
+    if transition_binding(None, BindingState::Suspended) != Err("failed_precondition") {
         bail!("audit binding accepted a non-active initial state");
     }
     let same_basis_siblings = [BindingState::Suspended, BindingState::Revoked];
@@ -137,11 +137,11 @@ fn transition_session(
         | (Some(SessionState::Authorize), SessionState::Close)
         | (Some(SessionState::Notice), SessionState::Close) => Ok(to),
         (Some(current), target) if current == target => Ok(current),
-        _ => Err("failed_bottom"),
+        _ => Err("failed_precondition"),
     }
 }
 
-pub fn run_session_fsm_vector() -> Result<()> {
+pub fn run_session_transitions_vector() -> Result<()> {
     let request =
         transition_session(None, SessionState::Request).map_err(|reason| anyhow!(reason))?;
     let authorize = transition_session(Some(request), SessionState::Authorize)
@@ -150,10 +150,10 @@ pub fn run_session_fsm_vector() -> Result<()> {
         .map_err(|reason| anyhow!(reason))?;
     let close =
         transition_session(Some(notice), SessionState::Close).map_err(|reason| anyhow!(reason))?;
-    if transition_session(Some(close), SessionState::Notice) != Err("failed_bottom") {
+    if transition_session(Some(close), SessionState::Notice) != Err("failed_precondition") {
         bail!("closed audit session accepted a later notice");
     }
-    if transition_session(None, SessionState::Authorize) != Err("failed_bottom") {
+    if transition_session(None, SessionState::Authorize) != Err("failed_precondition") {
         bail!("audit session skipped request");
     }
     transition_session(Some(SessionState::Request), SessionState::Close)
@@ -438,8 +438,8 @@ pub fn run_ryw_before_output_vector() -> Result<()> {
 
 pub fn run_audit_release_vector_suite() -> Result<()> {
     validate_fixture_metadata()?;
-    run_binding_fsm_vector()?;
-    run_session_fsm_vector()?;
+    run_binding_transitions_vector()?;
+    run_session_transitions_vector()?;
     run_release_recipient_binding_vector()?;
     run_release_window_vector()?;
     run_binding_and_authorization_gate_vector()?;

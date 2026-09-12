@@ -177,7 +177,7 @@ pub fn run_focus_selection_oldest_membership_vector() -> Result<()> {
 // ─── VECT-MB-2 — session_focus_no_split_brain ──────────────────────────────
 
 /// Minimal write-once cell modelling the `ak.call.state.session_focus`
-/// cas-register. Second writer hits `session_focus_already_committed`;
+/// `sequenced_state` write-once rule. Second writer hits `session_focus_already_committed`;
 /// a local-only client whose chosen focus is unavailable surfaces
 /// `focus_unavailable_for_client` instead of silently downgrading.
 #[derive(Debug, Default)]

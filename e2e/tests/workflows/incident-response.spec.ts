@@ -170,13 +170,13 @@ test.describe("workflow: incident response", () => {
     request,
   }) => {
     // spec: common-fields.md §5.3.3-§5.3.4 — core stage has no directional
-    // FSM. A Realm profile may narrow it, but this fixture installs none.
+    // lifecycle transition rule. A Realm profile may narrow it, but this fixture installs none.
     const stamp = Date.now();
-    const oncall = uniqueUser("wf-incident-fsm");
+    const oncall = uniqueUser("wf-incident-lifecycle");
     await ensureRegistered(request, oncall);
     const token = await issueDevSession(request, oncall);
     const realmId = await createRealmApi(request, token, {
-      title: `SEV FSM ${stamp}`,
+      title: `SEV lifecycle ${stamp}`,
       ownerId: oncall.id,
     });
     const createdAt = canonicalTimestamp();

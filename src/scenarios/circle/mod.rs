@@ -26,8 +26,8 @@
 //!
 //! Phase A invariant scenarios (P2F.3.2):
 //!
-//!  8. [`member_state_machine`] Circle member state transition table from AKP-0007 Â§3.6 (legal
-//!     shared `join / knock / leave / ban` edges, self-loop guards).
+//!  8. [`member_transition_rules`] Circle member transition table from AKP-0007 Â§3.6 (legal shared
+//!     `join / knock / leave / ban` edges, self-loop guards).
 //!  9. [`scope_circle_id_immutability`] `scope_circle_id` rebind across sequential states of the
 //!     same Strand/Space/Morph MUST be rejected with `scope_rebind_forbidden`.
 //! 11. [`metadata_encryption_floor`] Circle `metadata_encryption_floor` MAY only tighten the parent
@@ -40,8 +40,8 @@ pub mod confidential_discussion_relation;
 pub mod create_circle;
 pub mod effective_scope_mismatch;
 pub mod error_code_paths;
-pub mod member_state_machine;
 pub mod member_strict_subset;
+pub mod member_transition_rules;
 pub mod metadata_encryption_floor;
 pub mod scope_circle_id_immutability;
 pub mod strand_scope_visibility;

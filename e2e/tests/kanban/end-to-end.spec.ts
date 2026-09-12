@@ -362,17 +362,13 @@ test.describe("kanban end-to-end", () => {
     }
   });
 
-  test("stale cross-list move: cas-register accepts the winner and rejects the stale move with cas_conflict", async ({
+  test("stale actor branch: accepted frontier rejects the later stale move with cas_conflict", async ({
     request,
   }) => {
-    // spec: realm-and-space.md §3.6 — ak.strand.move writes the strand
-    // position on the Move/Seal cas-register; concurrent moves of the same
-    // Card race for the same actor frontier. soland's actor_seq frontier is
-    // the cas-register guard (event_log/submit.rs): the first move advances
-    // the frontier, a second move stamped behind it is rejected with
-    // cas_conflict ("actor_seq is older than the accepted actor frontier").
-    // The reason is cas_conflict (the removed state-model-specific code does
-    // not exist in soland).
+    // The two locally authored Events use the same actor frontier. Once the
+    // first is accepted, an unseen second Event signed against the older actor
+    // sequence is rejected at actor-chain admission with cas_conflict. This is
+    // independent of the registered causal_register used for strand position.
     const stamp = Date.now();
     const alice = uniqueUser("kanban-cas-alice");
     await ensureRegistered(request, alice);

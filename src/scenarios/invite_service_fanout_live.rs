@@ -1,7 +1,7 @@
 //! Live acceptance for Station actor-private invite fanout.
 //!
 //! The durable source of truth for invite delivery and quarantine is the
-//! holder's account-data CAS register. `ak.account_data.update` is only a
+//! holder's account-data revision guard. `ak.account_data.update` is only a
 //! wake-up hint, so this scenario checks both sides of every write:
 //!
 //! 1. `ak.account.invite_delivery` after a notify decision;

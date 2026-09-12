@@ -547,9 +547,12 @@ fn cell_ref(raw: &str) -> Result<CellRef> {
 }
 
 fn revision_event_id(entry: &Value) -> Result<EventId> {
-    let digest = arkret_canonical::canonical_sha256(entry)?;
-    EventId::from_event_digest(&digest)
-        .map_err(|error| anyhow!("fixture revision does not derive an Event id: {error}"))
+    let revision = entry
+        .get("revision_event_id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("state entry is missing its Event-identified revision_event_id"))?;
+    EventId::new(revision.to_owned())
+        .map_err(|error| anyhow!("fixture revision_event_id is invalid: {error}"))
 }
 
 fn is_tombstone_state(state: &ResolvedCellState) -> bool {

@@ -1,7 +1,7 @@
-//! Circle membership uses the shared four-state `ak.fsm.membership.v1`.
+//! Circle membership uses registered `sequenced_state` transition rules.
 //!
 //! Invite create/cancel/revoke are a separate lifecycle and never synthesize a
-//! Circle member state. This scenario pins the structural FSM and the closed
+//! Circle member state. This scenario pins the ordered rules and the closed
 //! `ak.circle.member.state` payload spelling (`member_id`, not `actor_id`).
 
 use anyhow::{Result, anyhow};
@@ -63,7 +63,7 @@ fn round_trip_member_payload(state: &str) -> Result<()> {
     Ok(())
 }
 
-pub async fn member_state_machine_run() -> Result<()> {
+pub async fn member_transition_rules_run() -> Result<()> {
     for state in STATES {
         round_trip_member_payload(state)?;
     }
@@ -88,7 +88,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn member_state_machine_table_matches_spec() {
-        member_state_machine_run().await.unwrap();
+    async fn member_transition_table_matches_spec() {
+        member_transition_rules_run().await.unwrap();
     }
 }

@@ -65,7 +65,7 @@
 
 ## Edge cases
 
-- **E-sprint.1** 真正的 cross-column move(不是 archive 再加):inkson 拖拽支持 / 需要 cas-register move API
+- **E-sprint.1** 真正的 cross-column move(不是 archive 再加):inkson 拖拽支持 / 需要 causal-register move API
 - **E-sprint.2** 一个工程师把承诺的卡 archive 掉(等价 "我不做了"),timeline 应当通知 Mei
 - **E-sprint.3** Mei 在 sprint 结束时 archive 整个 Sprint board(批量归档)
 

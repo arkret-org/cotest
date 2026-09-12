@@ -1,6 +1,6 @@
 //! Core call-state conformance vectors.
 //!
-//! Covers the six `ak.vector.call_state.*` vectors for participant binding
+//! Covers the seven `ak.vector.call_state.*` vectors for participant binding
 //! admission and the base call lifecycle transition contract. The fixture provides registry
 //! evidence; this runner exercises SDK signing / verification helpers and the
 //! sequenced-state model with its domain transition validator.
@@ -34,6 +34,7 @@ pub const VECTOR_ID_TERMINAL_ABSORBING: &str = "ak.vector.call_state.terminal_ab
 pub const VECTOR_ID_REPLAY_SAME_STATE_NOOP: &str = "ak.vector.call_state.replay_same_state_noop.v1";
 pub const VECTOR_ID_ORDERED_COMPETING_TRANSITIONS: &str =
     "ak.vector.call_state.ordered_competing_transitions.v1";
+pub const VECTOR_ID_AXIS_CELL_SPLIT: &str = "ak.vector.call_state.axis_cell_split.v1";
 
 pub const ALL_CALL_STATE_CORE_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_PARTICIPANT_BINDING_INVALID,
@@ -42,6 +43,7 @@ pub const ALL_CALL_STATE_CORE_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_TERMINAL_ABSORBING,
     VECTOR_ID_REPLAY_SAME_STATE_NOOP,
     VECTOR_ID_ORDERED_COMPETING_TRANSITIONS,
+    VECTOR_ID_AXIS_CELL_SPLIT,
 ];
 
 const CALL_STATE_CORE_FIXTURE_FILE: &str = "call-state-core-fixture.json";
@@ -467,11 +469,76 @@ pub fn run_ordered_competing_transitions_vector() -> Result<()> {
     Ok(())
 }
 
+pub fn run_axis_cell_split_vector() -> Result<()> {
+    let state_rule = DomainTransitionRule::new(vec![
+        (json!("ringing"), json!("active")),
+        (json!("active"), json!("ended")),
+    ]);
+    let recording_rule = DomainTransitionRule::new(vec![
+        (json!("inactive"), json!("recording")),
+        (json!("inactive"), json!("blocked")),
+    ]);
+
+    let activate = op_transition("ringing", "active");
+    state_rule.validate(Some(&json!("ringing")), &activate)?;
+    let active = SequencedState::new(EventCellValueShape::Register)
+        .resolve(&cell(), &[StateWrite::new(issuer_digest("c1"), activate)])?;
+    let record = op_transition("inactive", "recording");
+    recording_rule.validate(Some(&json!("inactive")), &record)?;
+    let recording_cell = CellRef::new(
+        "ak:cell:ak.component.call.recording.v1:ak.call.0196441c-0000-7000-8000-000000000000"
+            .to_owned(),
+    )?;
+    let recording = SequencedState::new(EventCellValueShape::Register).resolve(
+        &recording_cell,
+        &[StateWrite::new(issuer_digest("c2"), record)],
+    )?;
+    let stale_recording = op_transition("inactive", "blocked");
+    if recording_rule
+        .validate(Some(&json!("recording")), &stale_recording)
+        .is_ok()
+    {
+        bail!("recording axis accepted a command against the stale revision");
+    }
+    let end = op_transition("active", "ended");
+    state_rule.validate(active.settled_value(), &end)?;
+    let ended = SequencedState::new(EventCellValueShape::Register)
+        .resolve(&cell(), &[StateWrite::new(issuer_digest("c3"), end)])?;
+    if recording.settled_value() != Some(&json!("recording"))
+        || ended.settled_value() != Some(&json!("ended"))
+    {
+        bail!("independent call axes did not retain their own sequenced revisions");
+    }
+
+    let moderation_rule = DomainTransitionRule::new(vec![(json!("clear"), json!("banned"))]);
+    let ban = op_transition("clear", "banned");
+    let moderation = SequencedState::new(EventCellValueShape::Register);
+    for (target, suffix) in [("target-a", "d1"), ("target-b", "d2")] {
+        moderation_rule.validate(Some(&json!("clear")), &ban)?;
+        let target_cell =
+            CellRef::new(format!("ak:cell:ak.component.call.moderation.v1:{target}"))?;
+        let resolved = moderation.resolve(
+            &target_cell,
+            &[StateWrite::new(issuer_digest(suffix), ban.clone())],
+        )?;
+        if resolved.settled_value() != Some(&json!("banned")) {
+            bail!("moderation target {target} did not advance independently");
+        }
+    }
+    if moderation_rule
+        .validate(Some(&json!("banned")), &ban)
+        .is_ok()
+    {
+        bail!("same-target moderation command accepted against the stale revision");
+    }
+    Ok(())
+}
+
 pub fn run_call_state_core_fixture_suite() -> Result<()> {
     validate_call_state_core_fixture_metadata()?;
-    if ALL_CALL_STATE_CORE_VECTOR_IDS.len() != 6 {
+    if ALL_CALL_STATE_CORE_VECTOR_IDS.len() != 7 {
         bail!(
-            "expected 6 call_state core vector ids, got {}",
+            "expected 7 call_state core vector ids, got {}",
             ALL_CALL_STATE_CORE_VECTOR_IDS.len()
         );
     }
@@ -481,6 +548,7 @@ pub fn run_call_state_core_fixture_suite() -> Result<()> {
     run_terminal_absorbing_vector()?;
     run_replay_same_state_noop_vector()?;
     run_ordered_competing_transitions_vector()?;
+    run_axis_cell_split_vector()?;
     Ok(())
 }
 
@@ -489,7 +557,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn all_six_call_state_core_vectors_run_clean() {
+    fn all_seven_call_state_core_vectors_run_clean() {
         run_call_state_core_fixture_suite().unwrap();
     }
 }

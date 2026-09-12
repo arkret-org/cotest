@@ -5,13 +5,7 @@
   "demo_space": {
     "id": "ak:realm:AaRfbi5sqNgNzzcqaDDsD5tsVkRS_qMFGKFnTcnsjmVG",
     "alias": "demo_space_v1",
-    "comment": "Reference Space used by anchor_view_compaction_fixture and event_kind_payload_coverage_fixture."
-  },
-  "anchor_examples": {
-    "anchor_abc123": "ak:anchor:sha256:abc123",
-    "anchor_def456": "ak:anchor:sha256:def456",
-    "anchor_ghi789": "ak:anchor:sha256:ghi789",
-    "comment": "Symbolic SHA256 anchors used by state-model conformance vectors."
+    "comment": "Reference Space used by event_kind_payload_coverage_fixture."
   },
   "event_id_prefix": {
     "value": "ak:event:Ab8fF-_JIKTb1BX6GXVZLOEoeeVFftSuQTq3Y8wtAvJT",

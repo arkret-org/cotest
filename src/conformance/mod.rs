@@ -142,9 +142,9 @@ pub use applet_install::{
 pub use arkret_private_kdf_and_durability::run_arkret_private_kdf_and_durability_suite;
 pub use audit_release::{
     ALL_AUDIT_RELEASE_VECTOR_IDS, run_audit_release_vector_suite,
-    run_binding_and_authorization_gate_vector, run_binding_fsm_vector,
+    run_binding_and_authorization_gate_vector, run_binding_transitions_vector,
     run_close_release_concurrency_vector, run_release_recipient_binding_vector,
-    run_release_window_vector, run_ryw_before_output_vector, run_session_fsm_vector,
+    run_release_window_vector, run_ryw_before_output_vector, run_session_transitions_vector,
 };
 pub use auth_session_proof::{
     ALL_AUTH_SESSION_PROOF_VECTOR_IDS, run_auth_session_grant_audience_binding_vector,
@@ -165,7 +165,7 @@ pub use call_signal::{
     run_proof_detached_jws_vector, run_seq_monotonic_vector, run_signal_kind_enum_vector,
 };
 pub use call_state_core::{
-    ALL_CALL_STATE_CORE_VECTOR_IDS, run_call_state_core_fixture_suite,
+    ALL_CALL_STATE_CORE_VECTOR_IDS, run_axis_cell_split_vector, run_call_state_core_fixture_suite,
     run_initial_state_accepts_allowed_vector, run_ordered_competing_transitions_vector,
     run_participant_binding_invalid_vector, run_replay_same_state_noop_vector,
     run_terminal_absorbing_vector, run_transition_matrix_vector,
@@ -441,18 +441,16 @@ pub use visibility_policy::{
 };
 pub use websocket_binding::run_websocket_binding_suite;
 pub use wire::{
-    run_anchor_view_compaction_fixture_suite, run_composite_state_key_encoding_fixture_suite,
-    run_composite_state_subject_fixture_suite, run_consent_fixture_suite,
-    run_constraint_evaluation_class_fixture_suite, run_constraint_family_fixture_suite,
-    run_device_message_negative_fixture_suite, run_discovery_profile_fixture_suite,
-    run_event_kind_lattice_dispatch_fixture_suite, run_event_kind_payload_coverage_fixture_suite,
-    run_facet_renderer_query_fixture_suite, run_interop_downgrade_fixture_suite,
-    run_key_backup_aead_round_trip_check, run_key_backup_encryption_fixture_suite,
-    run_late_arriving_anchor_fixture_suite, run_late_arriving_anchor_idempotency_check,
-    run_megolm_ratchet_kdf_chain_check, run_megolm_ratcheting_fixture_suite,
-    run_mimi_components_fixture_suite, run_mimi_interop_fixture_suite,
-    run_mls_e2ee_basic_fixture_suite, run_mls_security_frontier_fixture_suite,
-    run_multi_admin_distinct_approver_gate_check, run_multi_realm_federation_fixture_suite,
+    run_composite_state_key_encoding_fixture_suite, run_composite_state_subject_fixture_suite,
+    run_consent_fixture_suite, run_constraint_evaluation_class_fixture_suite,
+    run_constraint_family_fixture_suite, run_device_message_negative_fixture_suite,
+    run_discovery_profile_fixture_suite, run_event_kind_lattice_dispatch_fixture_suite,
+    run_event_kind_payload_coverage_fixture_suite, run_facet_renderer_query_fixture_suite,
+    run_interop_downgrade_fixture_suite, run_key_backup_aead_round_trip_check,
+    run_key_backup_encryption_fixture_suite, run_megolm_ratchet_kdf_chain_check,
+    run_megolm_ratcheting_fixture_suite, run_mimi_components_fixture_suite,
+    run_mimi_interop_fixture_suite, run_mls_e2ee_basic_fixture_suite,
+    run_mls_security_frontier_fixture_suite, run_multi_admin_distinct_approver_gate_check,
     run_production_signing_fixture_suite, run_read_receipt_policy_fixture_suite,
     run_recovery_bridge_full_chain_fixture_suite, run_recovery_ticket_state_machine_check,
     run_redacted_cross_server_fixture_suite, run_restore_full_workflows_fixture_suite,

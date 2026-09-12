@@ -83,7 +83,10 @@ pub fn run_control_proposal_ack_suite() -> Result<()> {
         .get("cases")
         .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("Control Proposal Ack fixture has no cases[]"))?;
-    const REQUIRED_CASES: [&str; 7] = [
+    const REQUIRED_CASES: [&str; 10] = [
+        "quorum_ack_set_uses_distinct_current_members",
+        "duplicate_member_does_not_count_twice",
+        "mixed_authority_set_and_out_of_window_rejected",
         "proposal_intake_sla_wire_maximum_is_inclusive",
         "proposal_intake_sla_above_wire_maximum_is_rejected",
         "exact_member_retry_is_byte_identical_and_conflict_cannot_extend",
@@ -122,34 +125,102 @@ pub fn run_control_proposal_ack_suite() -> Result<()> {
         absolute_horizon: chrono::Duration::seconds(90),
         max_defers: 2,
     };
-    let authority_ref = hash('a');
-    let member = member(
-        "did:webvh:z6mkfixtureauthorityaexample:authority-a.example#notary",
-        "2026-07-29T00:00:00.000Z",
-        "2026-07-29T00:00:30.000Z",
-        "2026-07-29T00:01:30.000Z",
-        authority_ref,
-    )?;
-    let controller = member
-        .signature
-        .verification_method
-        .rsplit_once('#')
-        .map(|(controller, _)| controller)
-        .ok_or_else(|| anyhow!("member verification method is not a DID URL"))?;
-    let did = arkret_wire::Did::new(controller.to_owned())?;
-    let actor_id = arkret_wire::project_did_to_core_id(&did).map_err(anyhow::Error::msg)?;
-    let notary = NotaryValue::new(
-        vec![crate::fixture_notary_signer_for_method(
-            actor_id,
-            member.signature.verification_method.clone(),
-        )],
-        0,
-        0,
-    )?;
-    let ack = ControlProposalAck::from_authority_acks_for_notary(vec![member], policy, &notary)?;
+    let quorum_case = case("quorum_ack_set_uses_distinct_current_members")?;
     ensure!(
-        ack.authority_acks.len() == 1 && notary.quorum_size() == 1,
-        "f=0 Control Proposal Ack must require exactly one configured replica",
+        quorum_case.pointer("/notary/kind").and_then(Value::as_str) == Some("quorum"),
+        "Control Proposal Ack must use the sole quorum notary kind"
+    );
+    let fault_tolerance = quorum_case
+        .pointer("/notary/fault_tolerance")
+        .and_then(Value::as_u64)
+        .and_then(|value| u32::try_from(value).ok())
+        .ok_or_else(|| anyhow!("quorum Ack fixture has invalid fault_tolerance"))?;
+    let signer_methods = quorum_case
+        .pointer("/notary/signer_verification_methods")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("quorum Ack fixture has no signer_verification_methods[]"))?;
+    let signers = signer_methods
+        .iter()
+        .map(|method| notary_signer_from_method(required_string(method, "notary method")?))
+        .collect::<Result<Vec<_>>>()?;
+    let notary = NotaryValue::new(signers, fault_tolerance, 0)?;
+    ensure!(
+        notary.signers.len() == 4 && notary.quorum_size() == 3,
+        "f=1 Control Proposal Ack must use n=4 and q=3"
+    );
+
+    let authority_ref = hash('a');
+    let quorum_members = quorum_case
+        .get("authority_acks")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("quorum Ack fixture has no authority_acks[]"))?
+        .iter()
+        .map(|value| {
+            member(
+                required_field(value, "verification_method")?,
+                required_field(value, "received_at")?,
+                required_field(value, "decision_due_at")?,
+                required_field(value, "absolute_due_at")?,
+                authority_ref.clone(),
+            )
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let ack = ControlProposalAck::from_authority_acks_for_notary(
+        quorum_members.clone(),
+        policy,
+        &notary,
+    )?;
+    let expected = &quorum_case["expected"];
+    let actual_member_order = ack
+        .authority_acks
+        .iter()
+        .map(|member| member.signature.verification_method.as_str())
+        .collect::<Vec<_>>();
+    let expected_member_order = expected["member_order"]
+        .as_array()
+        .ok_or_else(|| anyhow!("quorum Ack fixture has no expected member_order[]"))?
+        .iter()
+        .map(|value| required_string(value, "expected member"))
+        .collect::<Result<Vec<_>>>()?;
+    ensure!(
+        ack.received_at == timestamp(expected, "received_at")?
+            && ack.decision_due_at == timestamp(expected, "decision_due_at")?
+            && ack.absolute_due_at == timestamp(expected, "absolute_due_at")?
+            && actual_member_order == expected_member_order,
+        "quorum Ack aggregation diverged from the f=1 fixture"
+    );
+
+    let duplicate_case = case("duplicate_member_does_not_count_twice")?;
+    let duplicate_methods = duplicate_case["authority_ack_verification_methods"]
+        .as_array()
+        .ok_or_else(|| anyhow!("duplicate-member fixture has no authority methods[]"))?;
+    let mut duplicate_members = Vec::new();
+    for method in duplicate_methods {
+        let method = required_string(method, "duplicate member method")?;
+        let source = quorum_members
+            .iter()
+            .find(|member| member.signature.verification_method.as_str() == method)
+            .ok_or_else(|| anyhow!("duplicate-member fixture names unknown signer {method}"))?;
+        duplicate_members.push(source.clone());
+    }
+    ensure!(
+        ControlProposalAck::from_authority_acks_for_notary(duplicate_members, policy, &notary)
+            .is_err(),
+        "duplicate signer A,A,B incorrectly reached the f=1 quorum"
+    );
+
+    let mixed_case = case("mixed_authority_set_and_out_of_window_rejected")?;
+    let mut mixed_members = quorum_members;
+    mixed_members[1].authority_set_ref = hash('b');
+    mixed_members[2].received_at = mixed_members[0].received_at
+        + chrono::Duration::milliseconds(
+            mixed_case["received_at_span_ms"]
+                .as_i64()
+                .ok_or_else(|| anyhow!("mixed Ack fixture has no received_at_span_ms"))?,
+        );
+    ensure!(
+        ControlProposalAck::from_authority_acks_for_notary(mixed_members, policy, &notary).is_err(),
+        "mixed authority set / out-of-window Ack set was accepted"
     );
 
     ensure!(
@@ -313,6 +384,33 @@ pub fn run_control_proposal_ack_suite() -> Result<()> {
 
 fn hash(byte: char) -> Hash {
     Hash::new(format!("sha256:{}", byte.to_string().repeat(64))).unwrap()
+}
+
+fn required_string<'a>(value: &'a Value, context: &str) -> Result<&'a str> {
+    value
+        .as_str()
+        .ok_or_else(|| anyhow!("{context} must be a string"))
+}
+
+fn required_field<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
+    value
+        .get(field)
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("authority Ack is missing string field {field}"))
+}
+
+fn notary_signer_from_method(method: &str) -> Result<arkret_wire::NotarySignerDescriptor> {
+    let verification_method = DidUrl::new(method.to_owned()).map_err(anyhow::Error::msg)?;
+    let controller = method
+        .rsplit_once('#')
+        .map(|(controller, _)| controller)
+        .ok_or_else(|| anyhow!("notary verification method is not a DID URL: {method}"))?;
+    let did = arkret_wire::Did::new(controller.to_owned())?;
+    let actor_id = arkret_wire::project_did_to_core_id(&did).map_err(anyhow::Error::msg)?;
+    Ok(crate::fixture_notary_signer_for_method(
+        actor_id,
+        verification_method,
+    ))
 }
 
 fn member(

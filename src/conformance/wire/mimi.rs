@@ -556,13 +556,10 @@ pub fn run_mimi_components_fixture_suite() -> Result<()> {
     }
     if arkret_only < 5 {
         bail!(
-            "mimi component fixture must cover at least 5 Arkret-only components (anchorer, plaintext_visible_services, covered_frontier, ...), got {arkret_only}"
+            "mimi component fixture must cover at least 5 Arkret-only components, got {arkret_only}"
         );
     }
 
-    // Move/Anchor/Lattice rebase (spec 2026-05-08) removed ak.component.space.host*;
-    // anchorer cell governs Anchor signing instead. Anchorer-related cell families
-    // SHOULD be marked arkret_only (no direct MIMI equivalent for Anchor authority).
     Ok(())
 }
 /// Read receipt disclosure policy + per-scope preference vectors.

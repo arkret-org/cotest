@@ -188,7 +188,7 @@
       "disposition": "duplicate_removed",
       "replacements": [
         { "file": "cotest/src/scenarios/circle/member_strict_subset.rs", "symbol": "member_strict_subset_run" },
-        { "file": "cotest/src/scenarios/circle/member_state_machine.rs", "symbol": "member_state_machine_run" }
+        { "file": "cotest/src/scenarios/circle/member_transition_rules.rs", "symbol": "member_transition_rules_run" }
       ]
     },
     {

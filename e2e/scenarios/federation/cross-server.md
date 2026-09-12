@@ -2,7 +2,7 @@
 
 ## 目标
 
-验证两个独立 Station 之间的联邦推送能完成完整的协作链路:跨服务器邀请、被邀方接受、双向消息推送、anchor frontier 收敛、撤销服务委托后停止推送。证明协议是 federated 的 — 单一服务器不是全局权威,信任根是签名 Event + RFC 9421 HTTP Message Signature + 服务绑定快照。
+验证两个独立 Station 之间的联邦推送能完成完整的协作链路:跨服务器邀请、被邀方接受、双向消息推送、accepted Event frontier 收敛、撤销服务委托后停止推送。证明协议是 federated 的 — 单一服务器不是全局权威,信任根是签名 Event + RFC 9421 HTTP Message Signature + 服务绑定快照。
 
 不验证:第三方邮件邀请 (后续 invites/third-party,本 scenario 用 DID-to-DID 直接邀请)、moderation (spaces/moderation-ban)。
 
@@ -111,7 +111,7 @@
 
 ### Phase E — Frontier 一致性
 
-20. 测试 harness 分别查询 server1 和 server2 的 `GET /_arkret/peer/events/frontier?realm_id=${realmId}` (或等价 endpoint),拿到两端的 anchor frontier 集合
+20. 测试 harness 分别查询 server1 和 server2 的 `GET /_arkret/peer/events/frontier?realm_id=${realmId}` (或等价 endpoint),拿到两端的 accepted Event frontier 集合
 21. 断言:两端 frontier 覆盖相同的 event 集合;event_id 相同,顺序可能不同但因果一致
 
 ### Phase F — Pull / Backfill (sub-test E2.1)

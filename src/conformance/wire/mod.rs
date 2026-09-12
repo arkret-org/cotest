@@ -9,11 +9,9 @@
 //! Each protocol domain lives in its own submodule; the shared, module-level
 //! helpers below back every domain.
 
-mod anchor;
 mod consent;
 mod discovery;
 mod e2ee;
-mod federation;
 mod history;
 mod interop;
 mod key_backup;
@@ -24,10 +22,6 @@ mod security_frontier;
 
 use std::path::PathBuf;
 
-pub use anchor::{
-    run_anchor_view_compaction_fixture_suite, run_late_arriving_anchor_fixture_suite,
-    run_late_arriving_anchor_idempotency_check,
-};
 use anyhow::{Result, anyhow};
 pub use consent::{
     run_composite_state_key_encoding_fixture_suite, run_composite_state_subject_fixture_suite,
@@ -38,7 +32,6 @@ pub use e2ee::{
     run_device_message_negative_fixture_suite, run_megolm_ratchet_kdf_chain_check,
     run_megolm_ratcheting_fixture_suite, run_mls_e2ee_basic_fixture_suite,
 };
-pub use federation::run_multi_realm_federation_fixture_suite;
 pub use history::run_redacted_cross_server_fixture_suite;
 pub use interop::run_interop_downgrade_fixture_suite;
 pub use key_backup::{

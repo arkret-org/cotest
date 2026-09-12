@@ -2,7 +2,7 @@
   "profile": "ak.profile.composite_state_key_encoding_vectors.v1",
   "version": "2026-05-09",
   "inherits": ["_shared/_canonical_dids.json"],
-  "comment": "B3 — composite (cell, subject) state-key encoding determinism + reserved-name collision rejection. Spec authority: data-structures/cell-and-state-key.md (canonical state_key form) + encoding.md §9.5 (state_subject = base64url_nopad(sha256(canonical_json(components_array)))). The state_subject hash is canonical and kind-independent. Every vector — positive and negative — uses current v1 `ak.*` kinds and typed ids; there are no historical encodings to pin because the project ships no released wire format. The reserved cell-family names `__bottom__` (lattice-bottom diagnostic surface) and `__compaction__` (compaction marker surface) MUST NOT be reusable as user-supplied subject components — encoders MUST reject any components_array containing those literals.",
+  "comment": "B3 — composite (cell, subject) state-key encoding determinism. Spec authority: conformance/encoding.md §9.5 (state_subject = base64url_nopad(sha256(canonical_json(components_array))). The state_subject hash is canonical and kind-independent. Every vector uses current v1 `ak.*` kinds and typed ids.",
   "encoder": {
     "canonical_json": "RFC 8785 / encoding.md §1: arrays preserve order, object keys sorted, no whitespace",
     "digest": "SHA-256",
@@ -49,38 +49,6 @@
       "components_array": ["default", "ak:realm:AaRfbi5sqNgNzzcqaDDsD5tsVkRS_qMFGKFnTcnsjmVG"],
       "comment": "Second ordering negative on a different kind: policy_name before realm_id MUST NOT collide with realm_policy_default's canonical subject.",
       "must_differ_from": "lg6PHAc3ue-WsHPT_NvGrMC_fgLfnYW9Lgn-9rlFiC4"
-    }
-  ],
-  "reserved_name_negatives": [
-    {
-      "name": "bottom_reserved_rejected",
-      "components_array": ["__bottom__"],
-      "comment": "`__bottom__` is the spec-reserved lattice-bottom diagnostic surface name. Encoders MUST refuse to admit user-supplied components_array containing this literal anywhere. The hash, were it computed, would still be deterministic — but the encoder must reject before computing.",
-      "expected": {
-        "outcome": "reject",
-        "reason_code": "reserved_state_subject_component",
-        "reserved_token": "__bottom__"
-      }
-    },
-    {
-      "name": "compaction_reserved_rejected",
-      "components_array": ["ak:realm:01js0sp01000000000000000000", "__compaction__"],
-      "comment": "`__compaction__` is the spec-reserved compaction-marker surface name. Even when not the sole component, ANY position MUST trigger rejection.",
-      "expected": {
-        "outcome": "reject",
-        "reason_code": "reserved_state_subject_component",
-        "reserved_token": "__compaction__"
-      }
-    },
-    {
-      "name": "bottom_token_in_inner_position_rejected",
-      "components_array": ["ak:did_core:web:alice.example", "__bottom__", "dev_alice_01"],
-      "comment": "Reserved-token check is positional-agnostic — even when nested as a middle component, encoders MUST reject.",
-      "expected": {
-        "outcome": "reject",
-        "reason_code": "reserved_state_subject_component",
-        "reserved_token": "__bottom__"
-      }
     }
   ]
 }

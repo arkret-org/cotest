@@ -56,7 +56,9 @@ pub fn run_mls_security_frontier_fixture_suite() -> Result<()> {
         saw_multi_leaf_frontier |= request.proof_target_basis.leaves.len() > 1;
     }
     if !(saw_genesis && saw_successor && saw_multi_leaf_frontier) {
-        bail!("MLS governance proof positives must cover genesis, successor and open-set targets");
+        bail!(
+            "MLS governance proof positives must cover genesis, successor and multi-leaf targets"
+        );
     }
     Ok(())
 }

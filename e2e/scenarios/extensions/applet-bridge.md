@@ -65,12 +65,12 @@
 5. **alice** 通过 `/setup` 多步向导建 Realm `R`:
    - title = `"extensions/applet-bridge Demo Realm ${stamp}"`
    - discoverability = `listed`
-   - join_rule 由普通 Realm membership policy 决定，本场景不声称执行 invite FSM
+   - join_rule 由普通 Realm membership policy 决定，本场景不声称执行 invite lifecycle transition
    - history_access = `since_join`
    - seed_members = `[]`（install 不写 membership）
 6. 断言:`realm-lifecycle-strand` 显示 `created ak:realm:...`,记录 `realmId`
 7. 安装本身不创建 membership。PCR accepted 后，Bot 使用持久化的独立 runtime key，通过正式 `ak.member.state` Event 执行普通 self-join admission；不得由管理员预写 membership、Applet service 代签或调用私有 endpoint。
-8. 测试把已接受的同一 Bot Event 投递到标准 peer ingress，并仅断言 duplicate/accepted 幂等结果；这是 peer ingress 重放覆盖，不宣称观察了 outbound federation outbox，也不冒充 invite accept FSM。
+8. 测试把已接受的同一 Bot Event 投递到标准 peer ingress，并仅断言 duplicate/accepted 幂等结果；这是 peer ingress 重放覆盖，不宣称观察了 outbound federation outbox，也不冒充 invite accept transition。
    - 断言:返回 `{ status: "joined" }`
 9. **alice** 同步 `/realms/${realmId}/admin/members`,断言 members 列表包含 `bot_actor_id`
 

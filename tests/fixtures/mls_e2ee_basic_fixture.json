@@ -15,7 +15,7 @@
   "vectors": [
     {
       "name": "genesis_move_creates_epoch_zero",
-      "comment": "MLS group genesis: a creator Move (ak.mls.genesis) writes epoch=0, group_state=initial tree, covered_frontier=∅. The realm_id is fresh; no prior epoch exists; bottom mode is reject — but at genesis there is nothing to conflict with.",
+      "comment": "MLS group genesis: a creator Move (ak.mls.genesis) writes epoch=0, group_state=initial tree, covered_frontier=∅. The realm_id is fresh; no prior epoch exists and sequenced_state admits the genesis revision.",
       "realm_id": "ak:realm:01js0sp10000000000000000000",
       "kind": "ak.mls.genesis",
       "move_id": "ak:event:AU8xXWg8A9AVAiZfP0Z_M7tiqKGpZ1hhIY-sXnxXdI_h",
@@ -47,7 +47,7 @@
     },
     {
       "name": "epoch_advance_via_commit_zero_to_one",
-      "comment": "An MLS commit Move advances the epoch CAS-register from 0 to 1, replaces the group_state tree_hash with a new one, and adds the attested governance ref to covered_frontier.",
+      "comment": "An MLS commit Move advances the epoch sequenced_state from 0 to 1, replaces the group_state tree_hash with a new one, and adds the attested governance ref to covered_frontier.",
       "realm_id": "ak:realm:01js0sp11000000000000000000",
       "kind": "ak.mls.commit",
       "move_id": "ak:event:AQHMRth2l_3lquPsj7sAeUXmgyaXgLm8GvHzSh58p0_5",

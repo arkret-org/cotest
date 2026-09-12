@@ -316,7 +316,7 @@ pub async fn create_realm(
     Ok(realm_id)
 }
 
-/// Author the exact signed DataEvent carried by the self moderation-report
+/// Author the exact signed ordinary Event carried by the self moderation-report
 /// operation. The reporter is always the actor's core DID while Event proof
 /// verification methods remain DID URLs through `TestActorClient`.
 pub async fn moderation_report_request(
@@ -742,7 +742,7 @@ pub async fn submit_event_with_signing_seed_and_verification_method(
 }
 
 /// Build the exact signed Event a submit helper would POST, bound to the live
-/// actor frontier and (for Control Moves / DataEvents) the current Seal
+/// actor frontier and (for Control Moves / ordinary Events) the current Seal
 /// frontier, without submitting it. Callers that relay the Event through
 /// another admission surface — the device-pairing gate, for instance — wrap
 /// the result in `publication::initial_submission` themselves.
@@ -800,8 +800,8 @@ pub(crate) async fn prepare_event_submission_with_signing_identity(
     );
     let event_kind = arkret_wire::EventKind::from(kind);
     let is_control_move = event_kind.is_control_plane();
-    let is_data_event = event_kind.is_data_plane();
-    if is_control_move || is_data_event {
+    let is_ordinary_event = event_kind.is_data_plane();
+    if is_control_move || is_ordinary_event {
         let seal_frontier =
             realm_seal_frontier_for(server, token, realm_id, Duration::from_secs(10)).await?;
         let state: arkret_models_collaboration::event_sync::SealFrontierState =

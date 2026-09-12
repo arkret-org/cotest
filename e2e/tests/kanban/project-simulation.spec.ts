@@ -386,11 +386,11 @@ test.describe("project simulation", () => {
   test("canonical Strand stage uses ak.strand.stage.set; core permits planned → done without a workflow profile and rejects metadata.fields.status", async ({
     request,
   }) => {
-    const alice = uniqueUser("s16-fsm-alice");
+    const alice = uniqueUser("s16-transition-alice");
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
     const realmId = await createRealmApi(request, aliceToken, {
-      title: `S16 FSM ${Date.now()}`,
+      title: `S16 transition ${Date.now()}`,
       ownerId: alice.id,
     });
     const taskCreatedAt = canonicalTimestamp();
@@ -422,7 +422,7 @@ test.describe("project simulation", () => {
       "strand",
     );
 
-    // common-fields.md §5.3.3: without a profile-declared workflow FSM the
+    // common-fields.md §5.3.3: without a profile-declared workflow transition rule the
     // core reducer intentionally imposes no direction on the eight stage
     // values, so planned -> done is legal.
     await submitSignedEventApi(
@@ -453,7 +453,7 @@ test.describe("project simulation", () => {
       ).toBe("string");
     }
 
-    // The legacy status spelling is forbidden wire, not a private core FSM.
+    // The legacy status spelling is forbidden wire, not a private lifecycle state.
     const forbiddenStatusEvent = signedEventEnvelope({
       actorId: alice.id,
       realmId,

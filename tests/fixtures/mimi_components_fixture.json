@@ -23,7 +23,7 @@
       { "arkret_component_type": "ak.component.realm.media_service.v1",        "arkret_kind": "ak.realm.media_service",        "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json" },
       { "arkret_component_type": "ak.component.realm.schema.v1",               "arkret_kind": "ak.realm.schema",               "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json" },
       { "arkret_component_type": "ak.component.realm.inheritance_policy.v1",   "arkret_kind": "ak.realm.inheritance_policy",   "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json" },
-      { "arkret_component_type": "ak.component.consent.grant.v1",              "arkret_kind": "ak.consent.grant",              "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json", "comment": "Holder-private consent cell (or-set lattice). MIMI consent operations map to grant/revoke Moves on this cell; cross-protocol semantics is the cell join, not a discrete component." }
+      { "arkret_component_type": "ak.component.consent.grant.v1",              "arkret_kind": "ak.consent.grant",              "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json", "comment": "Holder-private consent cell (or_set). MIMI consent operations map to grant/revoke Events on this cell; cross-protocol semantics is the resolved cell value, not a discrete component." }
     ]
   }
 }

@@ -1,6 +1,6 @@
 //! Consent-cell and composite-state-subject wire-model conformance vectors.
 //!
-//! Covers holder-private consent or-set Move semantics and the
+//! Covers holder-private consent or-set Event semantics and the
 //! composite-state subject / key-encoding digests.
 
 use anyhow::{Context, Result, anyhow, bail};
@@ -21,22 +21,22 @@ fn consent_cell_id(mv: &Value, vector_name: &str) -> Result<String> {
     ))
 }
 
-/// W3 — holder-private consent cell or-set Move semantics.
+/// W3 — holder-private consent cell or-set Event semantics.
 ///
 /// Spec: `identity/consent-model.md` + `authz/event-auth-state-resolution.md`
-/// (Move/Anchor/Lattice). Each grant Move adds a `(peer, scope)` tag to the
+/// state-model rules. Each grant Event adds a `(peer, scope)` tag to the
 /// caller-minted cell `ak:cell:ak.component.consent.grant.v1:<consent_id>`.
-/// Each revoke Move issues a causal `or_set_remove` against a prior grant
+/// Each revoke Event issues a causal `or_set_remove` against a prior grant
 /// dot. The cell join is read by the downstream operation-admission gate;
 /// it is never copied into a cross-Realm CBS precondition.
 ///
-/// This validator replays the fixture's Move sequence per vector, tracking
-/// the or-set's active tags by their op_ids (Move ids). It enforces:
+/// This validator replays the fixture's Event sequence per vector, tracking
+/// the or-set's active tags by their Event-identified dots. It enforces:
 ///   * grant ops add `(peer, scope)` under the canonical `<EventId>:<write_index>` dot
 ///   * revoke ops remove the referenced dots causally
 ///   * `consent_active` operation-admission checks resolve against the cell's join, with
 ///     `scope=any` acting as a peer-scoped wildcard
-///   * `accept` preconditioned Moves always have an active matching tag
+///   * accepted operations always have an active matching tag
 ///   * rejected downstream operations carry `consent_required`; rejected intent rebinds use the
 ///     dedicated `consent_intent_rebind` decision
 pub fn run_consent_fixture_suite() -> Result<()> {
@@ -397,8 +397,7 @@ pub fn run_composite_state_subject_fixture_suite() -> Result<()> {
     }
     Ok(())
 }
-/// B3 — composite (cell, subject) state-key encoding determinism +
-/// reserved-name collision rejection.
+/// B3 — composite (cell, subject) state-key encoding determinism.
 pub fn run_composite_state_key_encoding_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("composite_state_key_encoding_fixture.json")?;
     validate_profile(
@@ -448,57 +447,6 @@ pub fn run_composite_state_key_encoding_fixture_suite() -> Result<()> {
     }
     if !saw_ordering {
         bail!("composite_state_key_encoding fixture must include at least one ordering negative");
-    }
-
-    // Reserved-name negatives: any components_array containing __bottom__ or
-    // __compaction__ MUST be rejected by the encoder. The fixture asserts the
-    // outcome metadata; we cross-check that the reserved_token is actually
-    // present in the components_array.
-    let reserved = fixture
-        .get("reserved_name_negatives")
-        .and_then(Value::as_array)
-        .ok_or_else(|| {
-            anyhow!("composite_state_key_encoding fixture missing reserved_name_negatives[]")
-        })?;
-    if reserved.len() < 2 {
-        bail!(
-            "composite_state_key_encoding fixture must include >= 2 reserved-name negatives (one per reserved token)"
-        );
-    }
-    let mut saw_bottom = false;
-    let mut saw_compaction = false;
-    for v in reserved {
-        let name = required_str(v, "name")?;
-        let components = v
-            .get("components_array")
-            .and_then(Value::as_array)
-            .ok_or_else(|| anyhow!("reserved negative {name} missing components_array[]"))?;
-        let expected = v
-            .get("expected")
-            .ok_or_else(|| anyhow!("reserved negative {name} missing expected"))?;
-        if required_str(expected, "outcome")? != "reject" {
-            bail!("reserved negative {name} outcome must be reject");
-        }
-        if required_str(expected, "reason_code")? != "reserved_state_subject_component" {
-            bail!("reserved negative {name} reason_code must be reserved_state_subject_component");
-        }
-        let token = required_str(expected, "reserved_token")?;
-        let token_present = components.iter().any(|c| c.as_str() == Some(token));
-        if !token_present {
-            bail!(
-                "reserved negative {name} declared reserved_token {token} but components_array does not contain it"
-            );
-        }
-        match token {
-            "__bottom__" => saw_bottom = true,
-            "__compaction__" => saw_compaction = true,
-            other => bail!("reserved negative {name} unknown reserved_token {other}"),
-        }
-    }
-    if !(saw_bottom && saw_compaction) {
-        bail!(
-            "composite_state_key_encoding fixture must include both __bottom__ and __compaction__ reserved-name negatives"
-        );
     }
 
     Ok(())

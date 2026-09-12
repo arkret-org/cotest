@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 
 use anyhow::{Context, Result, ensure};
+use arkret_wire::EventCellStateModel;
 use serde_json::Value;
 
 use super::load_local_fixture;
@@ -31,6 +32,13 @@ pub fn run_event_kind_lattice_dispatch_fixture_suite() -> Result<()> {
         for write in descriptor.cell_writes {
             if let Some(model) = write.state_model {
                 ensure!(STATE_MODELS.contains(&model.as_str()));
+                if model != EventCellStateModel::CausalRegister {
+                    ensure!(
+                        write.bottom.is_none(),
+                        "non-causal state model {} declares a Bottom policy",
+                        model.as_str()
+                    );
+                }
                 used.insert(model.as_str());
             }
         }

@@ -240,7 +240,7 @@ test.describe("moderation and ban", () => {
         },
       },
     });
-    // Cite the accepted post-ban governance state with a valid DataEvent.
+    // Cite the accepted post-ban governance state with a valid ordinary Event.
     // The owner can read that state; the Event and request remain Mallory's.
     // A malformed wrapper would only test schema rejection, not the ban gate.
     await prepareSignedEventCbsApi(request, aliceToken, bannedWriteEnvelope);
@@ -322,9 +322,9 @@ test.describe("moderation and ban", () => {
     await submitSignedEventApi(request, aliceToken, firstBan, {
       context: `first ban ${mallory.id}`,
     });
-    // common-fields.md §4.5: every same-state membership transition is
-    // illegal. Full lease pre-admission must reject ban -> ban before it can
-    // enter the governance cell and create a Bottom join.
+    // A same-state membership transition is illegal. Full lease pre-admission
+    // must reject ban -> ban against the current sequenced revision with zero
+    // governance-cell write.
     await prepareEventForAuthorizationLeaseApi(
       request,
       aliceToken,
