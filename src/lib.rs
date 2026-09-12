@@ -248,25 +248,19 @@ pub fn fixture_notary_signer_for_method(
 
     let public_key: [u8; 32] = Sha256::digest(actor_id.as_str().as_bytes()).into();
     let frozen_public_key_b64u = URL_SAFE_NO_PAD.encode(public_key);
-    let frozen_public_key_digest = arkret_wire::Hash::new(format!(
-        "sha256:{}",
-        hex::encode(Sha256::digest(public_key))
-    ))
-    .unwrap_or_else(|error| panic!("fixture notary digest is invalid: {error}"));
     arkret_wire::NotarySignerDescriptor {
         actor_id: arkret_wire::ActorId::service(actor_id),
         verification_method,
         key_kind: arkret_wire::NotaryKeyKind::Ed25519Raw32,
         jose_algorithm: arkret_wire::NotaryJoseAlgorithm::Ed25519,
         frozen_public_key_b64u,
-        frozen_public_key_digest,
     }
 }
 
 #[track_caller]
 pub fn fixture_notary_configuration(actor_id: arkret_wire::DidCoreId) -> arkret_wire::NotaryValue {
-    arkret_wire::NotaryValue::new(vec![fixture_notary_signer(actor_id)], 0, 0)
-        .expect("single-replica fixture quorum is valid")
+    arkret_wire::NotaryValue::new(fixture_notary_signer(actor_id), 0)
+        .expect("single-authority fixture is valid")
 }
 
 /// Build a deterministic content-addressed signer-evidence reference pair for

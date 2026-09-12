@@ -911,8 +911,8 @@ pub async fn run_current_signer_evidence_live() -> Result<()> {
         bail!("origin Station did not resolve the current sender");
     };
     ensure!(selector == &request.queries[0]);
-    ensure!(key.actor == envelope.sender_actor_id);
-    ensure!(key.verification_method == envelope.proof.verification_method);
+    ensure!(selector.actor() == &envelope.sender_actor_id);
+    ensure!(selector.verification_method() == &envelope.proof.verification_method);
     // The self result is the recipient Station's authority decision. Actual
     // producer signatures still require this exact key, without replaying its
     // peer attestation or governance dependency closure on the client.
@@ -940,12 +940,13 @@ pub async fn run_current_signer_evidence_live() -> Result<()> {
         "wrong authority Station did not return unavailable"
     );
     let mut misbound = outcome.clone();
-    let SignerKeyQueryOutcome::Current(CurrentSignerKeyOutcome { key, .. }) =
-        &mut misbound.results[0]
+    let SignerKeyQueryOutcome::Current(CurrentSignerKeyOutcome {
+        selector: SignerKeyQuerySelector::CurrentAccountDevice(selector), ..
+    }) = &mut misbound.results[0]
     else {
         unreachable!();
     };
-    key.actor = ActorId::account(bob_account);
+    selector.actor = ActorId::account(bob_account);
     ensure!(
         misbound.validate_for_request(&request).is_err(),
         "current key for another Actor remained usable"

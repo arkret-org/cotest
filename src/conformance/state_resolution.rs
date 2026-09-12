@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 use anyhow::{Context, Result, bail, ensure};
-use arkret_wire::{DidCoreId, NotaryValue};
+use arkret_wire::NotaryValue;
 use serde_json::Value;
 
 use super::{load_fixture_value, validate_profile};
@@ -83,7 +83,7 @@ pub fn run_cbs_lattice_fixture_suite() -> Result<()> {
         );
     }
 
-    validate_quorum_geometry(vectors)?;
+    validate_single_authority_configuration(vectors)?;
     validate_resolution_confirmation_refailure(vectors)?;
     validate_inclusion_obligation(vectors)?;
 
@@ -217,88 +217,26 @@ fn validate_inclusion_obligation(vectors: &[Value]) -> Result<()> {
     Ok(())
 }
 
-fn validate_quorum_geometry(vectors: &[Value]) -> Result<()> {
+fn validate_single_authority_configuration(vectors: &[Value]) -> Result<()> {
     let vector = vectors
         .iter()
         .find(|vector| {
-            vector.get("vector_id").and_then(Value::as_str)
-                == Some("ak.vector.cbs_lattice.quorum_geometry.v1")
+            vector["vector_id"] == "ak.vector.cbs_lattice.single_authority_configuration.v1"
         })
-        .context("CBS fixture omits quorum geometry vector")?;
-    let cases = vector
-        .get("cases")
-        .and_then(Value::as_array)
-        .context("quorum geometry vector omits cases[]")?;
-    for case in cases {
-        let name = case
-            .get("name")
-            .and_then(Value::as_str)
-            .context("quorum geometry case omits name")?;
+        .context("CBS fixture omits single authority configuration")?;
+    for case in vector["cases"].as_array().context("notary cases missing")? {
+        let parsed = serde_json::from_value::<NotaryValue>(case["instance"].clone());
+        let accepted = parsed
+            .and_then(|value| value.validate().map_err(serde::de::Error::custom))
+            .is_ok();
         ensure!(
-            case.pointer("/notary/kind").and_then(Value::as_str) == Some("quorum"),
-            "{name} uses a removed notary kind"
+            accepted
+                == case["expect_valid"]
+                    .as_bool()
+                    .context("notary verdict missing")?,
+            "notary configuration {} differs from SDK",
+            case["name"]
         );
-        let signer_count = case
-            .pointer("/notary/signer_count")
-            .and_then(Value::as_u64)
-            .and_then(|count| usize::try_from(count).ok())
-            .context("quorum geometry signer_count is invalid")?;
-        let fault_tolerance = case
-            .pointer("/notary/fault_tolerance")
-            .and_then(Value::as_u64)
-            .and_then(|value| u32::try_from(value).ok())
-            .context("quorum geometry fault_tolerance is invalid")?;
-        let signers = (0..signer_count)
-            .map(|index| {
-                DidCoreId::new(format!("ak:did_core:web:notary-{index}.cotest.invalid"))
-                    .map_err(anyhow::Error::msg)
-                    .map(crate::fixture_notary_signer)
-            })
-            .collect::<Result<Vec<_>>>()?;
-        let configuration = NotaryValue::new(signers, fault_tolerance, 0);
-        let expected_accept =
-            case.pointer("/expected/result").and_then(Value::as_str) == Some("accept");
-        match (configuration, expected_accept) {
-            (Ok(configuration), true) => {
-                let expected_quorum = case
-                    .pointer("/expected/quorum")
-                    .and_then(Value::as_u64)
-                    .and_then(|value| usize::try_from(value).ok())
-                    .context("accepted quorum case omits expected quorum")?;
-                let present = case
-                    .get("present_commit_signatures")
-                    .and_then(Value::as_u64)
-                    .and_then(|value| usize::try_from(value).ok())
-                    .context("accepted quorum case omits signature count")?;
-                ensure!(
-                    configuration.quorum_size() == expected_quorum && present >= expected_quorum,
-                    "{name} diverges from SDK quorum geometry"
-                );
-            }
-            (Err(_), false) => ensure!(
-                case.pointer("/expected/reason").and_then(Value::as_str)
-                    == Some("schema_violation"),
-                "{name} rejected for an unexpected reason"
-            ),
-            (Ok(configuration), false) => {
-                let present = case
-                    .get("present_commit_signatures")
-                    .and_then(Value::as_u64)
-                    .and_then(|value| usize::try_from(value).ok())
-                    .context("rejected quorum case omits signature count")?;
-                ensure!(
-                    present < configuration.quorum_size()
-                        && case.pointer("/expected/reason").and_then(Value::as_str)
-                            == Some("seal_signer_unauthorized"),
-                    "{name} does not exercise an insufficient commit quorum"
-                );
-            }
-            (Err(error), true) => bail!("{name} unexpectedly has invalid quorum geometry: {error}"),
-        }
     }
-    ensure!(
-        cases.len() == 4,
-        "quorum geometry fixture must retain four cases"
-    );
     Ok(())
 }

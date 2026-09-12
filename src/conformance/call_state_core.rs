@@ -161,22 +161,18 @@ fn unsigned_token_outcome(
 ) -> CallMediaTokenExchangeOutcome {
     let identity = "ak:rtc_participant:0198c2f4-0000-7000-8000-000000000000".to_owned();
     CallMediaTokenExchangeOutcome {
+        realm_id: request.realm_id.clone(),
+        call_id: request.call_id.clone(),
+        actor_id: request.actor_id.clone(),
+        device_id: request.device_id.clone(),
         focus_id: request.focus_id.clone(),
         backend_kind: MediaBackendKind::Livekit,
         connect_url: "wss://livekit-fra.example.com".to_owned(),
         backend_token: MediaBackendToken::Opaque("opaque-backend-token".to_owned()),
         participant_id: identity.clone(),
         participant_binding: CallMediaParticipantBinding {
-            scheme: ParticipantBinding::SCHEMA.to_owned(),
             sig: String::new(),
             issuer_kid: arkret::DidUrl::new(ISSUER_KID).unwrap(),
-            realm_id: request.realm_id.clone(),
-            call_id: request.call_id.clone(),
-            focus_id: request.focus_id.clone(),
-            actor_id: request.actor_id.clone(),
-            device_id: request.device_id.clone(),
-            participant_id: identity,
-            issued_at: expires_at - Duration::minutes(5),
             expires_at,
         },
         expires_at,
@@ -184,7 +180,9 @@ fn unsigned_token_outcome(
 }
 
 fn sign_outcome(outcome: &mut CallMediaTokenExchangeOutcome, key: &SigningKey) -> Result<()> {
-    let input = participant_binding_signing_input(&outcome.participant_binding)?;
+    let input = participant_binding_signing_input(
+        &arkret::ParticipantBindingContext::from_outcome(&outcome),
+    )?;
     outcome.participant_binding.sig = base64url_encode(key.sign(&input).to_bytes());
     Ok(())
 }
@@ -249,7 +247,7 @@ pub fn run_participant_binding_invalid_vector() -> Result<()> {
     )?;
 
     let mut tuple_mismatch = unsigned_token_outcome(&request, expires_at);
-    tuple_mismatch.participant_binding.focus_id = "fra-2".to_owned();
+    tuple_mismatch.focus_id = "fra-2".to_owned();
     sign_outcome(&mut tuple_mismatch, &key)?;
     assert_participant_binding_invalid(
         "binding tuple mismatch",
@@ -260,7 +258,7 @@ pub fn run_participant_binding_invalid_vector() -> Result<()> {
     )?;
 
     let mut expired = unsigned_token_outcome(&request, expires_at);
-    expired.participant_binding.issued_at = now - Duration::minutes(10);
+
     expired.participant_binding.expires_at = now - Duration::seconds(1);
     sign_outcome(&mut expired, &key)?;
     assert_participant_binding_invalid("expired binding", &request, &expired, &anchors, now)?;

@@ -305,37 +305,34 @@ pub fn run_participant_binding_required_vector() -> Result<()> {
             "arkret_wire::ReasonCode::PARTICIPANT_BINDING_INVALID spelling drifted: participant_binding_invalid"
         );
     }
-    // A response missing the `participant_binding` field, or one whose
-    // `scheme` is anything other than `ak.media.participant_binding.v1`,
-    // is invalid. We pin both branches at the SDK constant layer; the
-    // schema-validator integration target lands under R3.1.
-    let valid_scheme = ParticipantBinding::SCHEMA;
-    for bogus in [
-        "",
-        "ak.media.participant_binding",
-        "ak.media.participant_binding.unregistered.v1",
-    ] {
-        if bogus == valid_scheme {
-            bail!("participant_binding scheme leak: {bogus}");
+    let compact = serde_json::json!({
+        "expires_at": "2026-06-15T00:05:00.000Z",
+        "issuer_kid": "did:web:media.example#media",
+        "sig": "AA"
+    });
+    serde_json::from_value::<ParticipantBinding>(compact.clone())?;
+    for field in ["expires_at", "issuer_kid", "sig"] {
+        let mut missing = compact.clone();
+        missing.as_object_mut().unwrap().remove(field);
+        if serde_json::from_value::<ParticipantBinding>(missing).is_ok() {
+            bail!("compact participant binding accepted missing {field}");
         }
     }
-    // The bound tuple fields (sig + issuer_kid + realm_id + call_id +
-    // focus_id + actor_id + device_id + participant_id +
-    // expires_at) MUST all be present; missing any one is
-    // `participant_binding_invalid`.
-    let required = [
-        "sig",
-        "issuer_kid",
+    for field in [
+        "scheme",
+        "issued_at",
         "realm_id",
         "call_id",
         "focus_id",
         "actor_id",
         "device_id",
         "participant_id",
-        "expires_at",
-    ];
-    if required.len() != 9 {
-        bail!("participant_binding required tuple drifted (expected 9 fields)");
+    ] {
+        let mut old_shape = compact.clone();
+        old_shape[field] = serde_json::json!("retired");
+        if serde_json::from_value::<ParticipantBinding>(old_shape).is_ok() {
+            bail!("compact participant binding accepted retired {field}");
+        }
     }
 
     // Real Ed25519 verification (no longer a field-presence stub): reconstruct
