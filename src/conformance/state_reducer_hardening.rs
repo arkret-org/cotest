@@ -463,10 +463,7 @@ fn assert_strand_tracks_registry_binding() -> Result<()> {
     Ok(())
 }
 
-fn cells_from_array(
-    value: &Value,
-    pointer: &str,
-) -> Result<BTreeMap<CellRef, ResolvedCellState>> {
+fn cells_from_array(value: &Value, pointer: &str) -> Result<BTreeMap<CellRef, ResolvedCellState>> {
     let mut cells = BTreeMap::new();
     for entry in pointer_array(value, pointer)? {
         let cell_id = required_str(entry, "cell")?;

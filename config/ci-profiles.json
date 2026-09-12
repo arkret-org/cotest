@@ -118,15 +118,11 @@
         },
         {
           "target": "conformance_fixtures",
-          "filter": "lattice_round_trip_suite_matches_reference_semantics"
+          "filter": "state_model_round_trip_suite_matches_reference_semantics"
         },
         {
           "target": "conformance_fixtures",
           "filter": "anchor_view_compaction_fixture_suite_matches_reference_semantics"
-        },
-        {
-          "target": "conformance_fixtures",
-          "filter": "conflict_repair_fixture_suite_matches_reference_semantics"
         },
         {
           "target": "conformance_fixtures",

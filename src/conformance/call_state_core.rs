@@ -20,9 +20,7 @@ use arkret_models_collaboration::objects::media::{
 use arkret_state::state_model::{
     DomainTransitionRule, ResolvedCellState, SequencedState, StateModel, StateWrite,
 };
-use arkret_wire::{
-    AccountId, ActorId, EventCellValueShape, LatticeOp, LatticeOpType, ProfileId,
-};
+use arkret_wire::{AccountId, ActorId, EventCellValueShape, LatticeOp, LatticeOpType, ProfileId};
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use ed25519_dalek::{Signer, SigningKey};
 use serde_json::{Value, json};
@@ -344,10 +342,8 @@ fn classify_call_state_transition(from: &str, to: &str) -> std::result::Result<(
 fn assert_sequenced_transition_value(from: &str, to: &str, suffix: &str) -> Result<()> {
     let op = op_transition(from, to);
     call_state_transition_rule(from).validate(Some(&json!(from)), &op)?;
-    let resolved = SequencedState::new(EventCellValueShape::Register).resolve(
-        &cell(),
-        &[StateWrite::new(issuer_digest(suffix), op)],
-    )?;
+    let resolved = SequencedState::new(EventCellValueShape::Register)
+        .resolve(&cell(), &[StateWrite::new(issuer_digest(suffix), op)])?;
     if resolved.settled_value() != Some(&json!(to)) {
         bail!("expected call-state transition {from}->{to} to resolve to {to}, got {resolved:?}");
     }
@@ -443,10 +439,8 @@ pub fn run_replay_same_state_noop_vector() -> Result<()> {
     let op = op_transition("ringing", "connecting");
     call_state_transition_rule("ringing").validate(Some(&json!("ringing")), &op)?;
     let write = StateWrite::new(issuer_digest("aa"), op);
-    let resolved = SequencedState::new(EventCellValueShape::Register).resolve(
-        &cell(),
-        &[write.clone(), write],
-    )?;
+    let resolved = SequencedState::new(EventCellValueShape::Register)
+        .resolve(&cell(), &[write.clone(), write])?;
     if resolved.settled_value() != Some(&json!("connecting")) {
         bail!("same transition replay must remain connecting, got {resolved:?}");
     }

@@ -146,11 +146,7 @@ pub fn run_control_proposal_ack_suite() -> Result<()> {
         0,
         0,
     )?;
-    let ack = ControlProposalAck::from_authority_acks_for_notary(
-        vec![member],
-        policy,
-        &notary,
-    )?;
+    let ack = ControlProposalAck::from_authority_acks_for_notary(vec![member], policy, &notary)?;
     ensure!(
         ack.authority_acks.len() == 1 && notary.quorum_size() == 1,
         "f=0 Control Proposal Ack must require exactly one configured replica",
