@@ -1,4 +1,4 @@
-use anyhow::{Result, anyhow};
+use anyhow::{Context, Result, anyhow};
 use arkret::contact_operations::{
     ContactAcceptAction, ContactAcceptPrepareRequestBody, ContactAcceptRequestBody,
     ContactAcceptedOutcome, ContactCommitPhase, ContactCommitRequestBody, ContactOperationOutcome,
@@ -744,12 +744,26 @@ impl TestActorClient {
             &body,
             self.service_notary_signer.clone(),
         )?;
-        let (realm_id, events) = realm_bootstrap_event_batch_for_device(
+        let (realm_id, mut events) = realm_bootstrap_event_batch_for_device(
             &self.actor,
             &self.device_id,
             &DidCoreId::new(self.service_id.clone())?,
             draft,
         )?;
+        let control_evidence_ref = self.control_signer_evidence_ref().await?;
+        let data_evidence_ref = self.data_signer_evidence_ref().await?;
+        let (signing_seed, _) = event_signing_identity_for_device(&self.actor, &self.device_id);
+        for event in &mut events {
+            let evidence_ref = if arkret_schema::classify_event_execution(event)?
+                == Some(arkret_wire::CbsEffectPlane::Control)
+            {
+                &control_evidence_ref
+            } else {
+                &data_evidence_ref
+            };
+            event.proofs[0].signer_resolution_evidence_ref = Some(evidence_ref.clone());
+            refresh_typed_event_proof_with_signing_seed(event, signing_seed)?;
+        }
         self.controlled_realms
             .lock()
             .expect("cotest controlled-Realm set is not poisoned")
@@ -764,12 +778,81 @@ impl TestActorClient {
             StatusCode::OK,
         )
         .await?;
+        let typed_outcome: arkret_models_collaboration::http_bodies::EventsSubmitOutcome =
+            serde_json::from_value(event_response.clone())
+                .context("Realm bootstrap response is not the closed SDK outcome")?;
+        anyhow::ensure!(
+            typed_outcome.accepted.len() + typed_outcome.duplicate.len() == request.events.len()
+                && typed_outcome.rejections.is_empty(),
+            "Realm bootstrap did not accept every Event: {event_response}"
+        );
         let realm_id = arkret_identifiers::RealmId::new(realm_id.clone())?;
         Ok(json!({
             "realm_id": realm_id,
             "authority_root_ref": arkret_wire::REALM_AUTHORITY_ROOT_CELL,
             "event_response": event_response,
         }))
+    }
+
+    async fn control_signer_evidence_ref(&self) -> Result<arkret_wire::SignerEvidenceRef> {
+        let viewer: arkret_models_collaboration::account_lifecycle::AccountView =
+            serde_json::from_value(
+                expect_json(self.get("/_arkret/self/account/viewer"), StatusCode::OK).await?,
+            )
+            .context("account viewer is not the closed SDK outcome")?;
+        let expected_principal = project_did_to_core_id(&Did::new(self.actor.clone())?)?;
+        anyhow::ensure!(
+            viewer.principal_id == expected_principal,
+            "account viewer returned another principal"
+        );
+        let expected_device = arkret_identifiers::DeviceId::new(self.device_id.clone())?;
+        let device = viewer
+            .devices
+            .iter()
+            .find(|device| device.device_id == expected_device)
+            .context("account viewer omitted the active session device")?;
+        device.validate()?;
+        anyhow::ensure!(
+            device.status == arkret_models_identity::DeviceSummaryStatus::Active
+                && device.verification_state
+                    == arkret_models_identity::DeviceSummaryVerificationState::Verified,
+            "account viewer session device is not verified and active"
+        );
+        device
+            .signer_resolution_evidence_ref
+            .clone()
+            .context("verified account viewer device omits Control signer evidence")
+    }
+
+    async fn data_signer_evidence_ref(&self) -> Result<arkret_wire::SignerEvidenceRef> {
+        let principal_id = project_did_to_core_id(&Did::new(self.actor.clone())?)?;
+        let account_id = arkret_wire::AccountId::new(
+            principal_id,
+            arkret_wire::DidCoreId::new(self.service_id.clone())?,
+        );
+        let device_id = arkret_identifiers::DeviceId::new(self.device_id.clone())?;
+        let outcome: arkret_models_crypto::KeysQueryOutcome = serde_json::from_value(
+            expect_json(
+                self.post("/_arkret/self/keys/query").json(
+                    &arkret_models_crypto::KeysQueryRequestBody {
+                        device_keys: vec![arkret_models_crypto::QueryAccountDeviceSelector {
+                            account_id: account_id.clone(),
+                            device_ids: vec![device_id.clone()],
+                        }],
+                        timeout_ms: None,
+                    },
+                ),
+                StatusCode::OK,
+            )
+            .await?,
+        )
+        .context("self keys/query is not the closed SDK outcome")?;
+        outcome.validate()?;
+        outcome
+            .devices_for(&account_id)
+            .and_then(|devices| devices.get(&device_id))
+            .map(|device| device.signer_evidence_ref.clone())
+            .context("self keys/query omitted the active device signer evidence")
     }
 
     pub async fn add_member(&self, realm_id: &str, member: &TestActorClient) -> Result<Value> {
@@ -1171,6 +1254,11 @@ impl TestActorClient {
                 self.stamp_authority(&mut event, realm_id, kind, is_ordinary_event);
             }
         }
+        event.proofs[0].signer_resolution_evidence_ref = Some(if is_control_move {
+            self.control_signer_evidence_ref().await?
+        } else {
+            self.data_signer_evidence_ref().await?
+        });
         let (signing_seed, _) = event_signing_identity_for_device(&self.actor, &self.device_id);
         refresh_typed_event_proof_with_signing_seed(&mut event, signing_seed)?;
         Ok(event)

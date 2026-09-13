@@ -83,13 +83,7 @@
         "service": "teabay",
         "service_id": "ak:did_core:web:teabay.example",
         "supported_profiles": [],
-        "limitations": [
-          {
-            "feature": "webhook_fanout_delivery",
-            "status": "best_effort",
-            "detail": "delivery retry durability is not claimed by this sample"
-          }
-        ]
+        "limitations": []
       }
     }
   ]
