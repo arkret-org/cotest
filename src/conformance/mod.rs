@@ -1,6 +1,7 @@
 mod account_status_issuer_ledger;
 mod agent_membership_cascade;
 mod agent_mls_keypackage_authorization;
+mod agent_pairing_coordination;
 mod agent_participation;
 #[cfg(test)]
 mod agent_runtime_scope;
@@ -116,6 +117,7 @@ pub use account_status_issuer_ledger::{
 };
 pub use agent_membership_cascade::run_agent_membership_cascade_suite;
 pub use agent_mls_keypackage_authorization::run_agent_mls_keypackage_authorization_vector;
+pub use agent_pairing_coordination::run_agent_pairing_durable_coordination_matrix;
 pub use agent_participation::{
     ALL_AGENT_PARTICIPATION_VECTOR_IDS, run_agent_mention_selector_vector,
     run_agent_participation_ceiling_tighten_vector,

@@ -351,7 +351,16 @@ pub async fn bootstrap_registered_actor(
                 additional_devices: BTreeMap::new(),
             },
         );
-    Ok((principal, token))
+    // The credential used to submit PCR genesis predates the immutable
+    // principal/device binding.  It is bootstrap-only: once the genesis unit
+    // and its first Seal are durably accepted, obtain a fresh session whose
+    // grant is issued against that confirmed history.  Reusing `token` here
+    // would silently turn a pre-genesis development credential into a
+    // Standard session without a new issuance decision.
+    let confirmed_token = dev_login(server, actor, principal.device_id.as_str())
+        .await
+        .context("issue post-genesis session from confirmed PCR history")?;
+    Ok((principal, confirmed_token))
 }
 
 /// Admit an additional device of an already-provisioned principal into its PCR

@@ -662,15 +662,11 @@ pub fn bootstrap_coauth_config(
 /// Find the coauth repo root — the directory holding `policies/cedar` and
 /// `templates`. Returns `None` when neither layout below matches.
 ///
-/// Walking up from the binary only works when coauth built into its own
-/// `<repo>/target/`. This workspace shares one target directory across every
-/// sibling, so the binary sits at `<workspace>/.shared-target/debug/coauth.exe`
-/// and the walk reaches the workspace root without ever passing through
-/// `<workspace>/coauth`. It then returned `None`, the generated config kept
-/// coauth's default relative `./templates/`, and coauth died on boot with
-/// "Failed to load the templates at ./templates/" — which the caller reported
-/// as a soft-skipped missing prerequisite. So fall back to the sibling checkout
-/// the same way `locate_external_binary` does.
+/// The normal per-repository build lives under `<repo>/target/`, so walking up
+/// from that binary finds coauth directly. Keep the sibling-checkout fallback
+/// for an explicitly supplied external binary whose layout does not include
+/// the repository; without it the generated config would retain relative
+/// `./templates/` and `./policies/cedar` paths and fail at process startup.
 fn locate_sibling_coauth_repo(coauth_bin: &Path) -> Option<PathBuf> {
     fn is_coauth_repo(candidate: &Path) -> bool {
         candidate.join("policies").join("cedar").is_dir() && candidate.join("templates").is_dir()
