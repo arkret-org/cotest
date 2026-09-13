@@ -146,12 +146,14 @@ async fn inkson_schedule_frontier(
             })
         })
         .collect::<Result<Vec<_>>>()?;
-    Ok(vec![inkson::calendar::schedule_revision_winner(
-        &events,
-        strand_id,
-        arkret_canonical::DigestSuite::Sha256,
-    )?
-    .to_string()])
+    Ok(vec![
+        inkson::calendar::schedule_revision_winner(
+            &events,
+            strand_id,
+            arkret_canonical::DigestSuite::Sha256,
+        )?
+        .to_string(),
+    ])
 }
 
 fn winner_for(strand: &Value, actor: &arkret_wire::ActorId) -> Option<Value> {
@@ -567,13 +569,12 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
     let strand = read_soland_product_projection_strand(&alice, &strand_id).await?;
     let winner = winner_for(&strand, &actor_for_station(alice_did, alice.service_id())?)
         .ok_or_else(|| anyhow!("concurrent responses have no deterministic winner"))?;
-    let expected_status = if higher_event_id(&first_event, &second_event).event_id
-        == first_event.event_id
-    {
-        "accepted"
-    } else {
-        "declined"
-    };
+    let expected_status =
+        if higher_event_id(&first_event, &second_event).event_id == first_event.event_id {
+            "accepted"
+        } else {
+            "declined"
+        };
     if winner_status(&winner) != Some(expected_status) {
         return Err(anyhow!(
             "concurrent responses did not select the fixed (depth, EventId) winner"
@@ -665,13 +666,12 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
         &actor_for_station(alice_did, alice.service_id())?,
     )
     .ok_or_else(|| anyhow!("reversed concurrent responses have no winner"))?;
-    let reverse_expected = if higher_event_id(&reverse_first, &reverse_second).event_id
-        == reverse_first.event_id
-    {
-        "accepted"
-    } else {
-        "declined"
-    };
+    let reverse_expected =
+        if higher_event_id(&reverse_first, &reverse_second).event_id == reverse_first.event_id {
+            "accepted"
+        } else {
+            "declined"
+        };
     if winner_status(&winner) != Some(reverse_expected) {
         return Err(anyhow!(
             "reversed arrival plus exact replay changed the deterministic winner"

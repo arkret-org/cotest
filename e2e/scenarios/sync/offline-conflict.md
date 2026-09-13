@@ -54,8 +54,8 @@ bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending 
 ### Phase E — repair 区仍为只读
 
 15. 断言:inkson 不渲染 `prefer-safer-side-button`、`repair-target-cell-input`、`repair-winner-json-input`、`repair-submit-button`
-16. 断言:`GET /_soland/admin/realms/<S>/bottom` 仍为空；`sequenced_state` 永不产生 Bottom，该诊断面只可能列出 ordinary causal-register 冲突
-17. 备注:后续 AKP 注册 repair kind 后,本阶段再升级为提交标准 repair Move 并验证目标 cell 回到 active
+16. 断言:`GET /_soland/admin/realms/<S>/bottom` 仍为空；`sequenced_state` 与 ordinary `causal_register` 并发都不产生 Bottom，该诊断面只列出显式注册的跨 Cell 领域不变量失败
+17. 备注:若后续 AKP 为某个跨 Cell 不变量注册专用 repair kind，再单独覆盖该领域流程；ordinary causal-register 不进入 repair
 
 ### Phase F — Backfill via pull
 

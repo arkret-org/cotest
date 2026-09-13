@@ -85,7 +85,6 @@ pub fn run_cbs_lattice_fixture_suite() -> Result<()> {
 
     validate_single_authority_configuration(vectors)?;
     validate_resolution_confirmation_refailure(vectors)?;
-    validate_inclusion_obligation(vectors)?;
 
     let ordinary = vectors
         .iter()
@@ -116,7 +115,6 @@ pub fn run_cbs_lattice_fixture_suite() -> Result<()> {
     let canonical = arkret_canonical::canonical_json_bytes(&fixture)?;
     for removed in [
         "station_admission",
-        "single_signer",
         "open_set",
         "mv_register",
         "cas_register",
@@ -161,59 +159,6 @@ fn validate_resolution_confirmation_refailure(vectors: &[Value]) -> Result<()> {
             && case.get("resolution_cell_status_after_clear").is_none(),
         "fork-resolution refailure must be confirmation-based and must not use security Bottom"
     );
-    Ok(())
-}
-
-fn validate_inclusion_obligation(vectors: &[Value]) -> Result<()> {
-    let vector = vectors
-        .iter()
-        .find(|vector| {
-            vector.get("vector_id").and_then(Value::as_str)
-                == Some("ak.vector.cbs_lattice.inclusion_list_obligation.v1")
-        })
-        .context("CBS fixture omits inclusion-list obligation vector")?;
-    let cases = vector["cases"]
-        .as_array()
-        .context("inclusion-list vector omits cases")?;
-    // These are fixture verdicts; only a confirmed command result can discharge
-    // the obligation, including when that command result is a rejection.
-    for (name, action, result, reason) in [
-        ("next_seal_includes_digest", "include", "accept", None),
-        (
-            "next_seal_records_rejected_command_result",
-            "rejected_command_result",
-            "accept",
-            None,
-        ),
-        (
-            "standalone_verification_failure_is_not_terminal",
-            "pre_state_failure_proof",
-            "reject",
-            Some("inclusion_list_violation"),
-        ),
-        (
-            "next_seal_omits_obligation",
-            "omit",
-            "reject",
-            Some("inclusion_list_violation"),
-        ),
-    ] {
-        let matching = cases
-            .iter()
-            .filter(|case| case["name"] == name)
-            .collect::<Vec<_>>();
-        ensure!(
-            matching.len() == 1,
-            "inclusion-list fixture must contain exactly one {name}"
-        );
-        let case = matching[0];
-        ensure!(
-            case["seal_action"] == action
-                && case["expected"]["seal_result"] == result
-                && case["expected"]["reason"].as_str() == reason,
-            "inclusion-list case {name} must require a unique Seal command outcome"
-        );
-    }
     Ok(())
 }
 

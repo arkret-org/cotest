@@ -941,7 +941,8 @@ pub async fn run_current_signer_evidence_live() -> Result<()> {
     );
     let mut misbound = outcome.clone();
     let SignerKeyQueryOutcome::Current(CurrentSignerKeyOutcome {
-        selector: SignerKeyQuerySelector::CurrentAccountDevice(selector), ..
+        selector: SignerKeyQuerySelector::CurrentAccountDevice(selector),
+        ..
     }) = &mut misbound.results[0]
     else {
         unreachable!();
