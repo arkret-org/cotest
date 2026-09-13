@@ -150,6 +150,7 @@ pub struct ArkretServer {
     service_did: Did,
     service_notary_signer: arkret_wire::NotarySignerDescriptor,
     trust_domain: TrustDomainId,
+    account_authority_origin: String,
     blob_root: Option<PathBuf>,
     log_path: Option<PathBuf>,
     /// `host:port` this soland's Prometheus listener was bound to, when the
@@ -408,6 +409,7 @@ impl ArkretServer {
             service_did,
             service_notary_signer,
             trust_domain,
+            account_authority_origin: HARNESS_ACCOUNT_AUTHORITY_ORIGIN.to_owned(),
             blob_root: None,
             log_path: None,
             metrics_bind: None,
@@ -623,6 +625,11 @@ impl ArkretServer {
             service_did,
             service_notary_signer,
             trust_domain,
+            account_authority_origin: extra_env
+                .iter()
+                .find(|(key, _)| *key == "SOLAND_ACCOUNT_AUTHORITY_URL")
+                .map_or(HARNESS_ACCOUNT_AUTHORITY_ORIGIN, |(_, value)| *value)
+                .to_owned(),
             blob_root: Some(blob_root),
             log_path,
             metrics_bind: Some(metrics_bind_for_handle),
@@ -758,6 +765,11 @@ impl ArkretServer {
             service_did,
             service_notary_signer,
             trust_domain,
+            account_authority_origin: extra_env
+                .iter()
+                .find(|(key, _)| *key == "SOLAND_ACCOUNT_AUTHORITY_URL")
+                .map_or(HARNESS_ACCOUNT_AUTHORITY_ORIGIN, |(_, value)| *value)
+                .to_owned(),
             blob_root: None,
             log_path,
             // The container publishes only the HTTP port, so the metrics
@@ -793,6 +805,10 @@ impl ArkretServer {
 
     pub fn trust_domain(&self) -> &TrustDomainId {
         &self.trust_domain
+    }
+
+    pub(crate) fn account_authority_origin(&self) -> &str {
+        &self.account_authority_origin
     }
 
     /// `http://host:port` of this soland's Prometheus listener, when the

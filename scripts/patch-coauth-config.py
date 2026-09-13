@@ -110,12 +110,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--inkson-base-url", action="append", default=[])
     parser.add_argument("--inkson-server2-base-url")
     parser.add_argument("--oauth-client-id", required=True)
-    parser.add_argument("--station", action="append", default=[])
-    parser.add_argument("--soland-base-url")
-    parser.add_argument("--soland-server2-base-url")
+    parser.add_argument(
+        "--station",
+        action="append",
+        nargs=3,
+        metavar=("NAME", "URL", "SESSION_GRANT_INTROSPECTION_BEARER"),
+        default=[],
+    )
     parser.add_argument("--owning-station", default="server1")
     parser.add_argument("--admin-audience")
-    parser.add_argument("--session-grant-introspection-bearer", required=True)
     parser.add_argument("--embedded-webvh-registration-bearer", required=True)
     parser.add_argument("--mock-email-base-url")
     return parser.parse_args()
@@ -131,24 +134,27 @@ def main() -> int:
     )
     coauth_base = trailing_slash(args.coauth_base_url)
     station_items = list(args.station)
-    if not station_items and args.soland_base_url:
-        station_items.append(f"server1={args.soland_base_url}")
-        if args.soland_server2_base_url:
-            station_items.append(f"server2={args.soland_server2_base_url}")
     if not station_items:
-        raise SystemExit("FATAL: at least one --station serverN=URL is required")
-    stations_by_name: list[tuple[str, str]] = []
-    for item in station_items:
-        name, separator, endpoint = item.partition("=")
-        if not separator or not re.fullmatch(r"server[1-9][0-9]*", name):
-            raise SystemExit(f"FATAL: invalid --station value {item!r}; expected serverN=URL")
-        if any(existing == name for existing, _ in stations_by_name):
+        raise SystemExit(
+            "FATAL: at least one --station NAME URL SESSION_GRANT_INTROSPECTION_BEARER is required"
+        )
+    stations_by_name: list[tuple[str, str, str]] = []
+    bearer_credentials: set[str] = set()
+    for name, endpoint, bearer in station_items:
+        if not re.fullmatch(r"server[1-9][0-9]*", name):
+            raise SystemExit(f"FATAL: invalid Station name {name!r}; expected serverN")
+        if any(existing == name for existing, _, _ in stations_by_name):
             raise SystemExit(f"FATAL: duplicate Station name {name!r}")
-        stations_by_name.append((name, trailing_slash(endpoint)))
-    if args.owning_station not in {name for name, _ in stations_by_name}:
+        if not bearer.strip():
+            raise SystemExit(f"FATAL: Station {name!r} has an empty internal-channel bearer")
+        if bearer in bearer_credentials:
+            raise SystemExit("FATAL: internal-channel bearer credentials must be unique per Station")
+        bearer_credentials.add(bearer)
+        stations_by_name.append((name, trailing_slash(endpoint), bearer))
+    if args.owning_station not in {name for name, _, _ in stations_by_name}:
         raise SystemExit("FATAL: owning Station is not present in --station values")
     owning_station_url = next(
-        endpoint for name, endpoint in stations_by_name if name == args.owning_station
+        endpoint for name, endpoint, _ in stations_by_name if name == args.owning_station
     )
     inkson_urls = list(args.inkson_base_url)
     if args.inkson_server2_base_url:
@@ -247,14 +253,15 @@ def main() -> int:
     src = replace_top_level_section(src, "clients", clients)
 
     stations = ""
-    for station_name, station_endpoint in stations_by_name:
+    for station_name, station_endpoint, station_bearer in stations_by_name:
         stations += (
             f"  - name: {station_name}\n"
             f"    endpoint: {yaml_string(station_endpoint)}\n"
             "    session_grant_introspection_bearer: "
-            f"{yaml_string(args.session_grant_introspection_bearer)}\n"
+            f"{yaml_string(station_bearer)}\n"
             "    embedded_webvh_registration_bearer: "
             f"{yaml_string(args.embedded_webvh_registration_bearer)}\n"
+            "    trust_domain: ak:trust_domain:local.host\n"
         )
     arkret = (
         "arkret:\n"

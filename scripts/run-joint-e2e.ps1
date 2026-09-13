@@ -99,7 +99,11 @@ param(
     [string]$SavfoxToken = "cotest-savfox-joint-e2e-token-0000000000000001",
     [string]$SolandNotarySigningKey = "OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk=",
     [string]$SolandKeyStoreMasterKey = "d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3c=",
-    [string]$CoauthSessionGrantIntrospectionBearer = "joint-e2e-session-grant-introspection",
+    # Optional exact per-Station internal-channel credentials in
+    # `serverN=secret` form. When omitted, the runner creates distinct stable
+    # test credentials for every indexed Station; partial/shared assignments
+    # are rejected rather than falling back to a global bearer.
+    [string[]]$CoauthStationSessionGrantIntrospectionBearers = @(),
     [string]$CoauthEmbeddedWebvhRegistrationBearer = "joint-e2e-webvh-registration",
     # did:webvh degraded_no_witness window (identity-did.md §4.2.1). Compressed
     # for resolver and harness witness-health checks; production clamps any
@@ -1814,6 +1818,68 @@ function Export-EphemeralPostgresDump {
     return $OutputPath
 }
 
+function New-StationInternalChannelBindings {
+    param(
+        [Parameter(Mandatory = $true)][string[]]$StationBaseUrls,
+        [string[]]$BearerAssignments = @()
+    )
+
+    if (@($StationBaseUrls).Count -eq 0) {
+        throw "At least one Station is required for internal-channel binding"
+    }
+    $configured = [ordered]@{}
+    foreach ($assignment in @($BearerAssignments)) {
+        $separator = $assignment.IndexOf("=")
+        if ($separator -le 0 -or $separator -eq $assignment.Length - 1) {
+            throw "Station internal-channel bearer must use serverN=secret form"
+        }
+        $name = $assignment.Substring(0, $separator)
+        $bearer = $assignment.Substring($separator + 1)
+        if ($name -notmatch '^server[1-9][0-9]*$') {
+            throw "Invalid Station internal-channel bearer name '$name'"
+        }
+        if ([string]::IsNullOrWhiteSpace($bearer)) {
+            throw "Station '$name' has an empty internal-channel bearer"
+        }
+        if ($configured.Contains($name)) {
+            throw "Station '$name' has more than one internal-channel bearer"
+        }
+        $configured[$name] = $bearer
+    }
+
+    $usedBearers = [System.Collections.Generic.HashSet[string]]::new(
+        [System.StringComparer]::Ordinal
+    )
+    $expectedNames = [System.Collections.Generic.HashSet[string]]::new(
+        [System.StringComparer]::Ordinal
+    )
+    for ($index = 0; $index -lt $StationBaseUrls.Count; $index++) {
+        $name = "server$($index + 1)"
+        [void]$expectedNames.Add($name)
+        if ($configured.Count -gt 0 -and -not $configured.Contains($name)) {
+            throw "Station '$name' is missing its explicit internal-channel bearer"
+        }
+        $bearer = if ($configured.Count -gt 0) {
+            [string]$configured[$name]
+        } else {
+            "joint-e2e-session-grant-introspection-$name"
+        }
+        if (-not $usedBearers.Add($bearer)) {
+            throw "Internal-channel bearer credentials must be unique per Station"
+        }
+        [pscustomobject]@{
+            Name = $name
+            Endpoint = $StationBaseUrls[$index]
+            SessionGrantIntrospectionBearer = $bearer
+        }
+    }
+    foreach ($name in $configured.Keys) {
+        if (-not $expectedNames.Contains([string]$name)) {
+            throw "Internal-channel bearer was supplied for unknown Station '$name'"
+        }
+    }
+}
+
 function New-CoauthJointConfig {
     param(
         [Parameter(Mandatory = $true)][string]$CoauthBinary,
@@ -1830,11 +1896,8 @@ function New-CoauthJointConfig {
         [string]$InksonServer2BaseUrl,
         [string[]]$InksonBaseUrls = @(),
         [Parameter(Mandatory = $true)][string]$OAuthClientId,
-        [Parameter(Mandatory = $true)][string]$SolandBaseUrl,
-        [string]$SolandServer2BaseUrl,
-        [string[]]$StationBaseUrls = @(),
+        [Parameter(Mandatory = $true)][object[]]$StationChannelBindings,
         [string]$OwningStation = "server1",
-        [Parameter(Mandatory = $true)][string]$SessionGrantIntrospectionBearer,
         [Parameter(Mandatory = $true)][string]$EmbeddedWebvhRegistrationBearer,
         [string]$MockEmailBaseUrl
     )
@@ -1861,7 +1924,6 @@ function New-CoauthJointConfig {
         "--cedar-policy-file", $CedarPolicyFile,
         "--oauth-client-id", $OAuthClientId,
         "--owning-station", $OwningStation,
-        "--session-grant-introspection-bearer", $SessionGrantIntrospectionBearer,
         "--embedded-webvh-registration-bearer", $EmbeddedWebvhRegistrationBearer
     )
     if ($MockEmailBaseUrl) {
@@ -1876,9 +1938,13 @@ function New-CoauthJointConfig {
     foreach ($url in $resolvedInksonUrls) {
         $patchArgs += @("--inkson-base-url", $url)
     }
-    $resolvedStationUrls = @(if (@($StationBaseUrls).Count -gt 0) { @($StationBaseUrls) } else { @($SolandBaseUrl, $SolandServer2BaseUrl) | Where-Object { $_ } })
-    for ($index = 0; $index -lt $resolvedStationUrls.Count; $index++) {
-        $patchArgs += @("--station", "server$($index + 1)=$($resolvedStationUrls[$index])")
+    foreach ($station in $StationChannelBindings) {
+        $patchArgs += @(
+            "--station",
+            [string]$station.Name,
+            [string]$station.Endpoint,
+            [string]$station.SessionGrantIntrospectionBearer
+        )
     }
     if ((Split-Path -Leaf $python) -ieq "py.exe") {
         $patchArgs = @("-3") + $patchArgs
@@ -3179,6 +3245,15 @@ for ($serverIndex = 3; $serverIndex -le $ServerCount; $serverIndex++) {
     })
 }
 $allSolandBaseUrls = @($SolandBaseUrl, $solandServer2BaseUrl) + @($additionalServers | ForEach-Object { $_.SolandBaseUrl }) | Where-Object { $_ }
+$stationInternalChannelBindings = @(
+    New-StationInternalChannelBindings `
+        -StationBaseUrls $allSolandBaseUrls `
+        -BearerAssignments $CoauthStationSessionGrantIntrospectionBearers
+)
+$stationInternalChannelBindingsByName = @{}
+foreach ($binding in $stationInternalChannelBindings) {
+    $stationInternalChannelBindingsByName[$binding.Name] = $binding
+}
 $allInksonBaseUrls = @($InksonBaseUrl, $inksonServer2BaseUrl) | Where-Object { $_ } | Select-Object -Unique
 $coauthSecondaryBaseUrl = $null
 $CoauthSecondaryCommand = $null
@@ -3950,10 +4025,7 @@ try {
             -InksonServer2BaseUrl $inksonServer2BaseUrl `
             -InksonBaseUrls $allInksonBaseUrls `
             -OAuthClientId $CoauthOAuthClientId `
-            -SolandBaseUrl $SolandBaseUrl `
-            -SolandServer2BaseUrl $solandServer2BaseUrl `
-            -StationBaseUrls $allSolandBaseUrls `
-            -SessionGrantIntrospectionBearer $CoauthSessionGrantIntrospectionBearer `
+            -StationChannelBindings $stationInternalChannelBindings `
             -EmbeddedWebvhRegistrationBearer $CoauthEmbeddedWebvhRegistrationBearer `
             -MockEmailBaseUrl $mockEmailBaseUrl
         if ($multiServer) {
@@ -3967,9 +4039,8 @@ try {
                 -CoauthBaseUrl $coauthServer2BaseUrl -CoauthBind "127.0.0.1:$coauthServer2Port" `
                 -CedarPolicyFile $coauthPolicyFile -InksonBaseUrl $InksonBaseUrl -InksonServer2BaseUrl $inksonServer2BaseUrl `
                 -InksonBaseUrls $allInksonBaseUrls `
-                -OAuthClientId $CoauthOAuthClientId -SolandBaseUrl $SolandBaseUrl -SolandServer2BaseUrl $solandServer2BaseUrl `
-                -StationBaseUrls $allSolandBaseUrls -OwningStation "server2" `
-                -SessionGrantIntrospectionBearer $CoauthSessionGrantIntrospectionBearer `
+                -OAuthClientId $CoauthOAuthClientId -StationChannelBindings $stationInternalChannelBindings `
+                -OwningStation "server2" `
                 -EmbeddedWebvhRegistrationBearer $CoauthEmbeddedWebvhRegistrationBearer -MockEmailBaseUrl $mockEmailBaseUrl
             Invoke-CoauthMigrations -CoauthBinary $coauthBinary -ConfigPath $coauthServer2ConfigPath -LogDirectory $coauthServer2Dir -TimeoutSeconds $StartupTimeoutSeconds
         }
@@ -3982,9 +4053,8 @@ try {
                 -PostgresUrl $server.CoauthDatabase.Url -CoauthBaseUrl $server.CoauthBaseUrl `
                 -CoauthBind "127.0.0.1:$($server.CoauthPort)" -CedarPolicyFile $coauthPolicyFile `
                 -InksonBaseUrl $InksonBaseUrl -InksonBaseUrls $allInksonBaseUrls `
-                -OAuthClientId $CoauthOAuthClientId -SolandBaseUrl $SolandBaseUrl `
-                -StationBaseUrls $allSolandBaseUrls -OwningStation $server.Name `
-                -SessionGrantIntrospectionBearer $CoauthSessionGrantIntrospectionBearer `
+                -OAuthClientId $CoauthOAuthClientId -StationChannelBindings $stationInternalChannelBindings `
+                -OwningStation $server.Name `
                 -EmbeddedWebvhRegistrationBearer $CoauthEmbeddedWebvhRegistrationBearer `
                 -MockEmailBaseUrl $mockEmailBaseUrl
             Invoke-CoauthMigrations -CoauthBinary $coauthBinary -ConfigPath $server.CoauthConfigPath -LogDirectory $coauthServerDir -TimeoutSeconds $StartupTimeoutSeconds
@@ -4123,6 +4193,7 @@ try {
             [Parameter(Mandatory = $true)][string]$LogFileName,
             [Parameter(Mandatory = $true)][string]$CorsAllowOrigin,
             [Parameter(Mandatory = $true)][string]$KeyStoreMasterKey,
+            [Parameter(Mandatory = $true)][ValidateNotNullOrEmpty()][string]$SessionGrantIntrospectionBearer,
             [string]$NotarySigningKey = "",
             [string]$FederationPeers = ""
         )
@@ -4167,10 +4238,15 @@ try {
         if ($AccountAuthorityBaseUrl) {
             $coauthPublic = $AccountAuthorityBaseUrl.TrimEnd("/")
             $coauthContainer = (Convert-ToContainerReachableUrl $coauthPublic).TrimEnd("/")
-            $map.SOLAND_ACCOUNT_AUTHORITY_URL = $coauthPublic
+            # The bearer-protected targets are bound to the canonical Account
+            # Authority origin at Soland startup. In Docker the loopback host
+            # must therefore be rewritten for all three values, not only the
+            # operation URLs, or the origin check correctly fails closed.
+            $map.SOLAND_ACCOUNT_AUTHORITY_URL = $coauthContainer
             $map.SOLAND_SESSION_GRANT_INTROSPECTION_URL = "$coauthContainer/_arkret/gate/account/session-grants/introspect"
             $map.SOLAND_AUTH_SESSION_LOGOUT_URL = "$coauthContainer/_arkret/gate/account/auth-sessions/logout"
-            $map.SOLAND_SESSION_GRANT_INTROSPECTION_BEARER = $CoauthSessionGrantIntrospectionBearer
+            $map.SOLAND_SESSION_GRANT_INTROSPECTION_BEARER = $SessionGrantIntrospectionBearer
+            $map.SOLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN = "ak:trust_domain:local.host"
             $map.SOLAND_OAUTH_CLIENT_ID = $CoauthOAuthClientId
         }
         if ($TeabayBaseUrl) {
@@ -4201,6 +4277,7 @@ try {
             [Parameter(Mandatory = $true)][string]$LogFile,
             [Parameter(Mandatory = $true)][string]$CorsAllowOrigin,
             [Parameter(Mandatory = $true)][string]$KeyStoreMasterKey,
+            [Parameter(Mandatory = $true)][ValidateNotNullOrEmpty()][string]$SessionGrantIntrospectionBearer,
             [string]$NotarySigningKey = "",
             [string]$FederationPeers = ""
         )
@@ -4240,7 +4317,8 @@ try {
             $values.SOLAND_ACCOUNT_AUTHORITY_URL = $coauthTrimmed
             $values.SOLAND_SESSION_GRANT_INTROSPECTION_URL = "$coauthTrimmed/_arkret/gate/account/session-grants/introspect"
             $values.SOLAND_AUTH_SESSION_LOGOUT_URL = "$coauthTrimmed/_arkret/gate/account/auth-sessions/logout"
-            $values.SOLAND_SESSION_GRANT_INTROSPECTION_BEARER = $CoauthSessionGrantIntrospectionBearer
+            $values.SOLAND_SESSION_GRANT_INTROSPECTION_BEARER = $SessionGrantIntrospectionBearer
+            $values.SOLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN = "ak:trust_domain:local.host"
             $values.SOLAND_OAUTH_CLIENT_ID = $CoauthOAuthClientId
         }
         if ($TeabayBaseUrl) {
@@ -4310,6 +4388,7 @@ try {
             LogFile = $solandTraceFile
             CorsAllowOrigin = $solandCorsAllowOrigin
             KeyStoreMasterKey = $SolandKeyStoreMasterKey
+            SessionGrantIntrospectionBearer = $stationInternalChannelBindingsByName["server1"].SessionGrantIntrospectionBearer
             NotarySigningKey = $SolandNotarySigningKey
             FederationPeers = $server1Peer
         }
@@ -4341,6 +4420,7 @@ try {
             LogFileName = ([System.IO.Path]::GetFileName($solandTraceFile))
             CorsAllowOrigin = $solandCorsAllowOrigin
             KeyStoreMasterKey = $SolandKeyStoreMasterKey
+            SessionGrantIntrospectionBearer = $stationInternalChannelBindingsByName["server1"].SessionGrantIntrospectionBearer
             NotarySigningKey = $SolandNotarySigningKey
             FederationPeers = $server1Peer
         }
@@ -4382,6 +4462,7 @@ try {
                 LogFileName = ([System.IO.Path]::GetFileName($solandServer2TraceFile))
                 CorsAllowOrigin = $solandServer2CorsAllowOrigin
                 KeyStoreMasterKey = $SolandServer2KeyStoreMasterKey
+                SessionGrantIntrospectionBearer = $stationInternalChannelBindingsByName["server2"].SessionGrantIntrospectionBearer
                 NotarySigningKey = $SolandServer2NotarySigningKey
                 FederationPeers = (@($allSolandBaseUrls | Where-Object { $_ -ne $solandServer2BaseUrl }) -join ",")
             }
@@ -4418,6 +4499,7 @@ try {
                 LogFile = $solandServer2TraceFile
                 CorsAllowOrigin = $solandServer2CorsAllowOrigin
                 KeyStoreMasterKey = $SolandServer2KeyStoreMasterKey
+                SessionGrantIntrospectionBearer = $stationInternalChannelBindingsByName["server2"].SessionGrantIntrospectionBearer
                 NotarySigningKey = $SolandServer2NotarySigningKey
                 FederationPeers = (@($allSolandBaseUrls | Where-Object { $_ -ne $solandServer2BaseUrl }) -join ",")
             }
@@ -4450,6 +4532,7 @@ try {
             MetricsPort = $server.SolandMetricsPort
             CorsAllowOrigin = $solandCorsAllowOrigin
             KeyStoreMasterKey = $server.KeyStoreMasterKey
+            SessionGrantIntrospectionBearer = $stationInternalChannelBindingsByName[$server.Name].SessionGrantIntrospectionBearer
             NotarySigningKey = $server.NotarySigningKey
             FederationPeers = (@($allSolandBaseUrls | Where-Object { $_ -ne $server.SolandBaseUrl }) -join ",")
         }
@@ -4808,7 +4891,6 @@ try {
         }
         foreach ($server in $additionalServers) { Assert-CoauthDpopGrantSeamReady -BaseUrl $server.CoauthBaseUrl }
         $env:COTEST_COAUTH_SERVICE_ID = $CoauthServiceId
-        $env:COTEST_COAUTH_SESSION_GRANT_INTROSPECTION_BEARER = $CoauthSessionGrantIntrospectionBearer
         # The OAuth client_id soland is configured to advertise (see
         # SOLAND_OAUTH_CLIENT_ID in the generated soland config). Surfaced to e2e so
         # oidc-login-chain.spec.ts can assert /_arkret/describe advertises it.
@@ -4839,7 +4921,6 @@ try {
     } else {
         Remove-Item Env:COTEST_COAUTH_BASE_URL -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_COAUTH_SERVICE_ID -ErrorAction SilentlyContinue
-        Remove-Item Env:COTEST_COAUTH_SESSION_GRANT_INTROSPECTION_BEARER -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_OIDC_CLIENT_ID -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_SOLAND_NOTARY_SIGNING_KEY -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_CLIENT_KIND -ErrorAction SilentlyContinue

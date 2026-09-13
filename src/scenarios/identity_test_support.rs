@@ -870,7 +870,7 @@ async fn bootstrap_test_device_authorization(
             lease_fence: 1,
             dpop_jkt: format!("cotest-dpop-jkt-{local_id}"),
             audience_id: server.service_id().clone(),
-            origin: WebOrigin::new(HARNESS_ACCOUNT_AUTHORITY_ORIGIN)?,
+            origin: WebOrigin::new(server.account_authority_origin())?,
             trust_domain: server.trust_domain().clone(),
             issued_at,
             expires_at: issued_at + chrono::Duration::minutes(4),

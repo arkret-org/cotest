@@ -334,6 +334,7 @@ fn patch_station_config(
             "service_id": service_id,
             "session_grant_introspection_bearer": session_grant_introspection_bearer,
             "embedded_webvh_registration_bearer": embedded_webvh_registration_bearer,
+            "trust_domain": JOINT_TRUST_DOMAIN
         })])?,
     );
     file.set_len(0)?;

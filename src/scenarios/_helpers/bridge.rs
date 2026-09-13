@@ -1,69 +1,11 @@
 //! Bridge-contract scenario helpers for
 //! `session_grant_presentation_uses_configured_coauth_introspection`.
-use std::env;
-use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
+use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
 use salvo::affix_state;
 use salvo::prelude::{Depot, Json, Request, Response, Router, handler};
 use serde_json::{Value, json};
-
-pub struct EnvOverride {
-    previous: Vec<(&'static str, Option<String>)>,
-    _guard: MutexGuard<'static, ()>,
-}
-
-impl EnvOverride {
-    pub fn set(pairs: &[(&'static str, Option<String>)]) -> Self {
-        static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        let guard = ENV_LOCK
-            .get_or_init(|| Mutex::new(()))
-            .lock()
-            .expect("EnvOverride global lock poisoned");
-        let previous = pairs
-            .iter()
-            .map(|(key, _)| (*key, env::var(key).ok()))
-            .collect();
-        for (key, value) in pairs {
-            // SAFETY: EnvOverride serializes all writes performed through this
-            // helper with a process-wide mutex and holds the guard until Drop
-            // restores the previous values.
-            #[allow(
-                unsafe_code,
-                reason = "the test helper configures process environment while holding its global guard"
-            )]
-            unsafe {
-                match value {
-                    Some(value) => env::set_var(key, value),
-                    None => env::remove_var(key),
-                }
-            }
-        }
-        Self {
-            previous,
-            _guard: guard,
-        }
-    }
-}
-
-impl Drop for EnvOverride {
-    fn drop(&mut self) {
-        for (key, value) in &self.previous {
-            // SAFETY: the EnvOverride guard is still held while restoring the
-            // previous process environment values.
-            #[allow(
-                unsafe_code,
-                reason = "the test helper restores process environment while holding its global guard"
-            )]
-            unsafe {
-                match value {
-                    Some(value) => env::set_var(key, value),
-                    None => env::remove_var(key),
-                }
-            }
-        }
-    }
-}
 
 /// Grant metadata the mock returns on introspection. `cnf_jkt` and
 /// `session_public_key` both derive from the same holder signing key, and the
@@ -111,6 +53,7 @@ struct CoauthIntrospectionState {
 }
 
 pub struct MockCoauthIntrospectionServer {
+    origin: String,
     url: String,
     binding: Arc<Mutex<Option<CoauthGrantBinding>>>,
     requests: Arc<Mutex<Vec<Value>>>,
@@ -135,11 +78,10 @@ impl MockCoauthIntrospectionServer {
             .hoop(affix_state::inject(state))
             .post(coauth_introspect);
         let server = super::mock_http::spawn_mock(router).await?;
-        let url = format!(
-            "http://{}/_arkret/gate/account/session-grants/introspect",
-            server.addr()
-        );
+        let origin = format!("http://{}", server.addr());
+        let url = format!("{origin}/_arkret/gate/account/session-grants/introspect");
         Ok(Self {
+            origin,
             url,
             binding,
             requests,
@@ -187,6 +129,10 @@ impl MockCoauthIntrospectionServer {
 
     pub fn url(&self) -> String {
         self.url.clone()
+    }
+
+    pub fn origin(&self) -> String {
+        self.origin.clone()
     }
 
     pub fn requests(&self) -> Vec<Value> {

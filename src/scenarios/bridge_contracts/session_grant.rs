@@ -5,7 +5,7 @@ use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{ArkretServer, expect_json, expect_status};
-use crate::scenarios::_helpers::bridge::{EnvOverride, MockCoauthIntrospectionServer};
+use crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
 use crate::scenarios::identity_test_support::actor_did_for_service_did;
 
 /// A grant-shaped bearer credential (JWT with `kind = "ak.session.grant"`).
@@ -46,14 +46,27 @@ fn grant_shaped_jwt(subject: &str, device_id: &str, audience: &str, signature_by
 pub async fn session_grant_presentation_uses_configured_coauth_introspection() -> Result<()> {
     // The mock must exist before the SUT boots so its URL lands in the SUT env.
     let coauth = MockCoauthIntrospectionServer::spawn().await?;
-    let _env = EnvOverride::set(&[
-        ("SOLAND_SESSION_GRANT_INTROSPECTION_URL", Some(coauth.url())),
+    let account_authority_origin = coauth.origin();
+    let introspection_url = coauth.url();
+    let extra_env = [
+        (
+            "SOLAND_ACCOUNT_AUTHORITY_URL",
+            account_authority_origin.as_str(),
+        ),
+        (
+            "SOLAND_SESSION_GRANT_INTROSPECTION_URL",
+            introspection_url.as_str(),
+        ),
         (
             "SOLAND_SESSION_GRANT_INTROSPECTION_BEARER",
-            Some("principal-token".to_owned()),
+            "principal-token",
         ),
-    ]);
-    let server = ArkretServer::spawn("session-grant-presentation").await?;
+        (
+            "SOLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN",
+            "ak:trust_domain:mock-coauth.local",
+        ),
+    ];
+    let server = ArkretServer::spawn_with_env("session-grant-presentation", &extra_env).await?;
 
     // Canonical self-sovereign principal: deterministic did:webvh plus the
     // closed §5.1 genesis unit, so the grant's device selector replays a real

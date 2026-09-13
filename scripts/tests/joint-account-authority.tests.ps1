@@ -13,7 +13,8 @@ if ($ast.Extent.Text -match 'Get-DescribedServiceId -BaseUrl \$CoauthBaseUrl') {
 }
 $requiredFunctions = @(
     "Quote-PsLiteral", "Write-DotEnvFile", "Get-ContainerHostGatewayIpv4", "Convert-ToContainerReachableUrl",
-    "Build-SolandCommand", "Build-SolandDockerEnvironment", "Wait-HttpReady"
+    "New-StationInternalChannelBindings", "Build-SolandCommand",
+    "Build-SolandDockerEnvironment", "Wait-HttpReady"
 )
 foreach ($name in $requiredFunctions) {
     $definition = $ast.FindAll({
@@ -33,7 +34,6 @@ $CoauthCommand = $null
 $script:UseManagedCoauthAssertionKey = $true
 $CoauthServiceId = $null
 $CoauthEmbeddedWebvhRegistrationBearer = "test-registration-bearer"
-$CoauthSessionGrantIntrospectionBearer = "test-introspection-bearer"
 $CoauthOAuthClientId = "test-client"
 $TeabayBaseUrl = $null
 $WebvhDegradedNoWitnessMaxSecs = 60
@@ -46,15 +46,53 @@ $processArguments = @{
     ObjectsRoot = $testDirectory; StateRoot = $testDirectory; Port = 8008
     MetricsPort = 9001; LogFile = (Join-Path $testDirectory "trace.log")
     CorsAllowOrigin = "https://inkson.joint.example"; KeyStoreMasterKey = "test-key"
+    SessionGrantIntrospectionBearer = "test-introspection-server1"
     NotarySigningKey = ""; FederationPeers = ""
 }
 $dockerArguments = @{
     BaseUrl = $processArguments.BaseUrl; DatabaseUrl = $processArguments.DatabaseUrl
     MetricsPort = 9001; LogFileName = "trace.log"
     CorsAllowOrigin = $processArguments.CorsAllowOrigin; KeyStoreMasterKey = "test-key"
+    SessionGrantIntrospectionBearer = "test-introspection-server1"
     NotarySigningKey = ""; FederationPeers = ""
 }
 try {
+    $defaultBindings = @(
+        New-StationInternalChannelBindings -StationBaseUrls @(
+            "https://station-1.example", "https://station-2.example", "https://station-3.example"
+        )
+    )
+    if ($defaultBindings.Count -ne 3 -or
+        @($defaultBindings.SessionGrantIntrospectionBearer | Select-Object -Unique).Count -ne 3) {
+        throw "Default internal-channel bindings must carry one unique bearer per Station"
+    }
+    $explicitBindings = @(
+        New-StationInternalChannelBindings `
+            -StationBaseUrls @("https://station-1.example", "https://station-2.example") `
+            -BearerAssignments @("server1=alpha-bearer", "server2=beta-bearer")
+    )
+    if ($explicitBindings[0].SessionGrantIntrospectionBearer -ne "alpha-bearer" -or
+        $explicitBindings[1].SessionGrantIntrospectionBearer -ne "beta-bearer") {
+        throw "Explicit Station bearers must remain paired with their indexed Station"
+    }
+    $invalidAssignmentSets = @(
+        ,@("server1=shared-bearer", "server2=shared-bearer")
+        ,@("server1=only-one")
+    )
+    foreach ($invalidAssignments in $invalidAssignmentSets) {
+        $rejectedBinding = $false
+        try {
+            New-StationInternalChannelBindings `
+                -StationBaseUrls @("https://station-1.example", "https://station-2.example") `
+                -BearerAssignments $invalidAssignments | Out-Null
+        } catch {
+            $rejectedBinding = $true
+        }
+        if (-not $rejectedBinding) {
+            throw "Shared or partial Station bearer assignments must fail closed"
+        }
+    }
+
     Build-SolandCommand @processArguments | Out-Null
     $bootstrapConfig = Get-Content -LiteralPath $configPath -Raw
     if ($bootstrapConfig -match "SOLAND_ACCOUNT_AUTHORITY_SERVICE_ID=") {
@@ -65,6 +103,10 @@ try {
     }
     if ($bootstrapConfig -notmatch 'SOLAND_ACCOUNT_AUTHORITY_PUBLIC_KEY_MULTIBASE=') {
         throw "Station inception must preauthorize the deployment Account Authority public key"
+    }
+    if ($bootstrapConfig -notmatch 'SOLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN="ak:trust_domain:local.host"' -or
+        $bootstrapConfig -notmatch 'SOLAND_SESSION_GRANT_INTROSPECTION_BEARER="test-introspection-server1"') {
+        throw "Process identity bootstrap must emit the minimal internal authority peer binding"
     }
     # The runner fills CoauthCommand after generating its managed config.
     # That mutation must not erase the previously selected signing delegation.
@@ -82,6 +124,18 @@ try {
     $bootstrapDocker = Build-SolandDockerEnvironment @dockerArguments
     if ($bootstrapDocker.SOLAND_ACCOUNT_AUTHORITY_URL -ne $CoauthBaseUrl) {
         throw "Docker identity bootstrap must bind the managed Account Authority endpoint to its pinned key"
+    }
+    if ($bootstrapDocker.SOLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN -ne "ak:trust_domain:local.host" -or
+        $bootstrapDocker.SOLAND_SESSION_GRANT_INTROSPECTION_BEARER -ne "test-introspection-server1") {
+        throw "Docker identity bootstrap must emit the minimal internal authority peer binding"
+    }
+    $loopbackAuthority = "http://127.0.0.1:4455"
+    $loopbackDocker = Build-SolandDockerEnvironment @dockerArguments -AccountAuthorityBaseUrl $loopbackAuthority
+    $containerAuthority = "http://192.0.2.1:4455"
+    if ($loopbackDocker.SOLAND_ACCOUNT_AUTHORITY_URL -ne $containerAuthority -or
+        $loopbackDocker.SOLAND_SESSION_GRANT_INTROSPECTION_URL -ne "$containerAuthority/_arkret/gate/account/session-grants/introspect" -or
+        $loopbackDocker.SOLAND_AUTH_SESSION_LOGOUT_URL -ne "$containerAuthority/_arkret/gate/account/auth-sessions/logout") {
+        throw "Docker internal bearer endpoints must share the container-reachable Account Authority origin"
     }
 
     $CoauthServiceId = "ak:did_core:web:station.joint.example"

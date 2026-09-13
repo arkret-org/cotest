@@ -200,6 +200,10 @@ pub async fn try_bootstrap(config: JointServiceConfig) -> Result<JointServiceSta
             config.session_grant_introspection_bearer.clone(),
         ));
         soland_env.push((
+            "SOLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN".to_owned(),
+            crate::scenarios::_helpers::coauth_bootstrap::JOINT_TRUST_DOMAIN.to_owned(),
+        ));
+        soland_env.push((
             "SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER".to_owned(),
             config.embedded_webvh_registration_bearer.clone(),
         ));

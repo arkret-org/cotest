@@ -32,15 +32,16 @@ class PatchCoauthConfigTests(unittest.TestCase):
                 "arkret:\n  stations: []\n",
                 encoding="utf-8",
             )
-            arguments = [
+            common_arguments = [
                 str(SCRIPT), str(raw), str(output),
                 "--postgres-url", "postgres://test:1amTester!@127.0.0.1/test",
                 "--coauth-base-url", "https://coauth.test", "--coauth-bind", "127.0.0.1:9000",
                 "--cedar-policy-file", str(root / "policy.cedar"),
                 "--inkson-base-url", "https://inkson.test", "--oauth-client-id", "test",
-                "--soland-base-url", "https://station.test",
-                "--session-grant-introspection-bearer", "test-only",
                 "--embedded-webvh-registration-bearer", "test-only",
+            ]
+            arguments = common_arguments + [
+                "--station", "server1", "https://station.test", "station-1-bearer",
             ]
             with patch("sys.argv", arguments):
                 self.assertEqual(MODULE.main(), 0)
@@ -51,18 +52,19 @@ class PatchCoauthConfigTests(unittest.TestCase):
             for retired in ["identity_provider:", "identity_services:", "service_id:"]:
                 self.assertNotIn(retired, arkret)
             self.assertIn('endpoint: "https://station.test/"', arkret)
+            self.assertIn('session_grant_introspection_bearer: "station-1-bearer"', arkret)
             self.assertIn(
                 'resolver: "https://station.test/_arkret/root/identity/resolve"',
                 arkret,
             )
+            self.assertEqual(
+                arkret.count("trust_domain: ak:trust_domain:local.host"), 2
+            )
             self.assertNotIn("password_login_session_grants_enabled:", arkret)
-            indexed_arguments = [value for value in arguments if value not in (
-                "--soland-base-url", "https://station.test"
-            )]
-            with patch("sys.argv", indexed_arguments + [
-                "--station", "server1=https://station-server1.test",
-                "--station", "server2=https://station-server2.test",
-                "--station", "server3=https://station-server3.test",
+            with patch("sys.argv", common_arguments + [
+                "--station", "server1", "https://station-server1.test", "station-1-bearer",
+                "--station", "server2", "https://station-server2.test", "station-2-bearer",
+                "--station", "server3", "https://station-server3.test", "station-3-bearer",
                 "--owning-station", "server2",
                 "--inkson-base-url", "https://inkson-server2.test",
             ]):
@@ -70,12 +72,28 @@ class PatchCoauthConfigTests(unittest.TestCase):
             indexed = output.read_text(encoding="utf-8")
             self.assertIn("owning_station: server2", indexed)
             self.assertIn('endpoint: "https://station-server3.test/"', indexed)
+            for bearer in ("station-1-bearer", "station-2-bearer", "station-3-bearer"):
+                self.assertEqual(
+                    indexed.count(f'session_grant_introspection_bearer: "{bearer}"'),
+                    1,
+                )
             self.assertIn(
                 'resolver: "https://station-server2.test/_arkret/root/identity/resolve"',
                 indexed,
             )
+            indexed_arkret = indexed.split("arkret:\n", 1)[1]
+            self.assertEqual(
+                indexed_arkret.count("trust_domain: ak:trust_domain:local.host"), 4
+            )
             self.assertIn('"https://inkson-server2.test/auth/callback"', indexed)
             self.assertIn('"https://inkson.test/auth/callback"', indexed)
+
+            with patch("sys.argv", common_arguments + [
+                "--station", "server1", "https://station-server1.test", "shared-bearer",
+                "--station", "server2", "https://station-server2.test", "shared-bearer",
+            ]):
+                with self.assertRaisesRegex(SystemExit, "must be unique per Station"):
+                    MODULE.main()
 
     def test_missing_current_key_fails_closed_without_legacy_fallback(self):
         with self.assertRaises(SystemExit):
