@@ -19,7 +19,7 @@ otherwise.
 | # | Call | Surface | Notes |
 |---|---|---|---|
 | 1 | `POST {coauth}/_coauth/account/auth/register` | Coauth private | Starts account-first registration; returns a registration id and a `next_step`. |
-| 1a | `POST {coauth}/_coauth/account/auth/register/{id}/verify-email` | Coauth private | Only when `next_step == "verify_email"`. The code comes from the mock email inbox (`GET {mockEmail}/mock/email/verification/inbox`), so this leg needs `-StartMocks`. |
+| 1a | `POST {coauth}/_coauth/account/auth/register/{id}/verify-email` | Coauth private | Only when `next_step == "verify_email"`. The code comes from the mock email inbox (`GET {mockEmail}/mock/email/verification/inbox`). Managed `-StartCoauth` runs start this one required mock automatically; `-StartMocks` is only needed when scenarios also require the other optional mocks. |
 | 1b | `POST …/{id}/display-name`, `POST …/{id}/finish` | Coauth private | Completes the unbound account. |
 | 2 | `GET {soland}/_arkret/describe` | Arkret standard | Supplies `trust_domain` and `service_id`; the latter becomes the grant audience. |
 | 3 | `POST {coauth}/_arkret/gate/account/authentication-handoffs` | Arkret standard — `ak.gate.account.exchange.create_handoff.v1` | Must come back `identity_creation_active` with an `identity_creation_lease`. |

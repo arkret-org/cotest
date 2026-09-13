@@ -24,7 +24,7 @@ fn required_env(name: &str) -> String {
     std::env::var(name).unwrap_or_else(|_| {
         panic!(
             "{name} is required for the live provisioning check. Start the harness \
-             (scripts/run-joint-e2e.ps1 -RunProfile joint-api -StartCoauth -StartMocks \
+             (scripts/run-joint-e2e.ps1 -RunProfile joint-api -StartCoauth \
              -KeepServices) and export the variables it prints."
         )
     })

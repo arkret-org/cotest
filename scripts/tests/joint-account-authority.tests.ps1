@@ -14,7 +14,7 @@ if ($ast.Extent.Text -match 'Get-DescribedServiceId -BaseUrl \$CoauthBaseUrl') {
 $requiredFunctions = @(
     "Quote-PsLiteral", "Write-DotEnvFile", "Get-ContainerHostGatewayIpv4", "Convert-ToContainerReachableUrl",
     "New-StationInternalChannelBindings", "Build-SolandCommand",
-    "Build-SolandDockerEnvironment", "Wait-HttpReady"
+    "Build-SolandDockerEnvironment", "Wait-HttpReady", "Resolve-ManagedCoauthEmailMockRequirement"
 )
 foreach ($name in $requiredFunctions) {
     $definition = $ast.FindAll({
@@ -57,6 +57,19 @@ $dockerArguments = @{
     NotarySigningKey = ""; FederationPeers = ""
 }
 try {
+    if (-not (Resolve-ManagedCoauthEmailMockRequirement -StartCoauth $true -StartMockEmail $false)) {
+        throw "Managed Coauth must automatically start the email verification mock"
+    }
+    if (Resolve-ManagedCoauthEmailMockRequirement -StartCoauth $false -StartMockEmail $false) {
+        throw "A caller-owned deployment must not implicitly start the email verification mock"
+    }
+    if (-not (Resolve-ManagedCoauthEmailMockRequirement -StartCoauth $false -StartMockEmail $true)) {
+        throw "An explicitly requested email verification mock must remain enabled"
+    }
+    if ($ast.Extent.Text -match '--allow-insecure-dev-email-bypass') {
+        throw "Managed Coauth must not authorize the deterministic email delivery bypass"
+    }
+
     $defaultBindings = @(
         New-StationInternalChannelBindings -StationBaseUrls @(
             "https://station-1.example", "https://station-2.example", "https://station-3.example"

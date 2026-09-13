@@ -61,6 +61,21 @@ class PatchCoauthConfigTests(unittest.TestCase):
                 arkret.count("trust_domain: ak:trust_domain:local.host"), 2
             )
             self.assertNotIn("password_login_session_grants_enabled:", arkret)
+
+            with patch("sys.argv", arguments + [
+                "--mock-email-base-url", "http://127.0.0.1:4567",
+            ]):
+                self.assertEqual(MODULE.main(), 0)
+            verified_contact = output.read_text(encoding="utf-8")
+            self.assertIn(
+                "registration_email_delivery_bypass_allowed: false",
+                verified_contact,
+            )
+            self.assertIn(
+                'url: "http://127.0.0.1:4567/mock/email/verification/send"',
+                verified_contact,
+            )
+
             with patch("sys.argv", common_arguments + [
                 "--station", "server1", "https://station-server1.test", "station-1-bearer",
                 "--station", "server2", "https://station-server2.test", "station-2-bearer",

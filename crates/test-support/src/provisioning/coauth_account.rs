@@ -78,7 +78,7 @@ pub async fn register_unbound_account(
     if next_step.as_deref() == Some("verify_email") {
         let inbox = inbox.context(
             "this deployment requires email verification, but no mock inbox was configured; \
-             start the harness with -StartMocks",
+             start the managed harness with -StartCoauth or request -StartMockEmail",
         )?;
         let code = await_verification_code(http, inbox, &account.email).await?;
         let verified = post_json(

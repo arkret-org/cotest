@@ -5,13 +5,13 @@ This static inventory does not claim runtime verification; use an Arkret Joint P
 
 | Journey | Implemented | Promised | Coverage | Blocking fixme |
 |---|---:|---:|---:|---:|
-| UJ-A - First login and multi-device recovery | 34 | 34 | 100.0% | 0 |
+| UJ-A - First login and multi-device recovery | 33 | 33 | 100.0% | 0 |
 | UJ-B - Workspace creation, invites, and archive visibility | 17 | 17 | 100.0% | 0 |
 | UJ-C - Daily messaging, edits, reactions, receipts, and mentions | 41 | 41 | 100.0% | 0 |
 | UJ-D - Encrypted realm lifecycle and cross-device decrypt | 7 | 7 | 100.0% | 0 |
 | UJ-E - Federation and cross-domain collaboration | 19 | 19 | 100.0% | 0 |
 | UJ-F - Kanban collaboration and concurrent work | 46 | 46 | 100.0% | 0 |
-| UJ-G - Privacy rights, governance, and GDPR | 19 | 19 | 100.0% | 0 |
+| UJ-G - Privacy rights, governance, and GDPR | 18 | 18 | 100.0% | 0 |
 | UJ-H - Calls, push, and cross-platform sync | 5 | 5 | 100.0% | 0 |
 
 ## UJ-A - First login and multi-device recovery
@@ -20,7 +20,7 @@ This static inventory does not claim runtime verification; use an Arkret Joint P
 |---|---|---:|---:|---:|
 | encryption/key-backup | domain-fallback | 5 | 5 | 0 |
 | identity/account-profile-ui | domain-fallback | 1 | 1 | 0 |
-| identity/consent-grant | domain-fallback | 10 | 10 | 0 |
+| identity/consent-grant | domain-fallback | 9 | 9 | 0 |
 | identity/device-key-lifecycle | domain-fallback | 1 | 1 | 0 |
 | identity/multi-device | domain-fallback | 2 | 2 | 0 |
 | identity/oidc-login-chain | domain-fallback | 3 | 3 | 0 |
@@ -88,7 +88,7 @@ This static inventory does not claim runtime verification; use an Arkret Joint P
 | spec | mapping | implemented | promised | blocking |
 |---|---|---:|---:|---:|
 | governance/personal-blocklist | domain-fallback | 6 | 6 | 0 |
-| identity/consent-grant | domain-fallback | 10 | 10 | 0 |
+| identity/consent-grant | domain-fallback | 9 | 9 | 0 |
 | spaces/moderation-ban | domain-fallback | 3 | 3 | 0 |
 
 ## UJ-H - Calls, push, and cross-platform sync

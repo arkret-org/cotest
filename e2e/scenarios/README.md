@@ -95,7 +95,7 @@ e2e/
 ## 运行
 
 ```pwsh
-# 单服务器、无 mocks
+# 单服务器；自动启动注册验证所需的 email mock，不启动其他可选 mocks
 & "D:\Works\arkret\cotest\scripts\run-joint-e2e.ps1" -StartCoauth -RunProfile joint-full
 
 # 单服务器 + 全部 mocks

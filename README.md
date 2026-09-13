@@ -262,6 +262,10 @@ npm test                 # headless
 npm run test:headed      # watch it click
 ```
 
+Managed `-StartCoauth` runs automatically start only the mock email service required
+to complete Coauth's verified-contact registration flow. Pass `-StartMocks` only
+when the selected scenarios also need the remaining optional mock services.
+
 Evidence lands in `artifacts/runs/joint-e2e/<ts>-<profile>/`:
 `playwright-report/` (HTML with trace/video/failure screenshot),
 `screenshots/` (your `stepShot` captures), and `diagnostics/` (console +

@@ -178,6 +178,19 @@ param(
     [switch]$ForbidSkippedTests
 )
 
+function Resolve-ManagedCoauthEmailMockRequirement {
+    param(
+        [Parameter(Mandatory = $true)][bool]$StartCoauth,
+        [Parameter(Mandatory = $true)][bool]$StartMockEmail
+    )
+
+    # Every managed Coauth run executes the fail-closed Rust provisioning gate,
+    # whose account-first flow requires a verified contact. Supply the one mock
+    # that backs that verification without implicitly enabling any of the other
+    # optional scenario mocks.
+    return [bool]($StartCoauth -or $StartMockEmail)
+}
+
 if ($StartMocks) {
     $StartMockIdp = $true
     $StartMockEmail = $true
@@ -190,6 +203,9 @@ if ($StartMocks) {
     $StartMockChallengeProvider = $true
     $StartMockDidHost = $true
 }
+$StartMockEmail = Resolve-ManagedCoauthEmailMockRequirement `
+    -StartCoauth ([bool]$StartCoauth) `
+    -StartMockEmail ([bool]$StartMockEmail)
 
 $MockDidHostExtraDids = @(
     $MockDidHostExtraDids |
@@ -4075,12 +4091,9 @@ try {
         # so the joint harness can mint real DPoP-bound ak.session.grants instead
         # of dev-login bearers (see helpers/session-grant-dpop.ts mintDpopBoundGrant).
         #
-        # The generated dev config enables `account.registration_email_delivery_bypass_allowed`
-        # (in-band verification code, no SMTP) so the harness can register accounts
-        # headlessly. coauth's config validator fails closed and refuses to start
-        # unless the dev-only escape hatch is also set (mirrors coauth/justfile),
-        # so set it here too — otherwise coauth panics on boot and the whole MLS
-        # joint suite (which needs DPoP session-grant login) silently `test.skip`s.
+        # Managed Coauth always receives the runner-owned mock email webhook.
+        # Account registration therefore exercises the verified-contact flow
+        # without enabling Coauth's deterministic dev delivery bypass.
         #
         # Coauth's production client is HTTPS/public-egress only. The joint
         # services still bind plain loopback listeners behind the TLS proxy, so
@@ -4092,16 +4105,16 @@ try {
         if ($coauthPublicHost -and $jointTlsAssets) {
             $coauthCaPrefix = "`$env:SSL_CERT_FILE=$(Quote-PsLiteral $jointTlsAssets.CaPemPath); "
         }
-        $CoauthCommand = "$coauthCaPrefix& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-loopback-http --allow-insecure-dev-email-bypass server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthConfigPath)
+        $CoauthCommand = "$coauthCaPrefix& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-loopback-http server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthConfigPath)
         $CoauthHealthUrl = "$($CoauthBaseUrl.TrimEnd('/'))/health"
         if ($coauthServer2ConfigPath) {
-            $CoauthServer2Command = "$coauthCaPrefix& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-loopback-http --allow-insecure-dev-email-bypass server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthServer2ConfigPath)
+            $CoauthServer2Command = "$coauthCaPrefix& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-loopback-http server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthServer2ConfigPath)
         }
         foreach ($server in $additionalServers) {
-            $server.CoauthCommand = "$coauthCaPrefix& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-loopback-http --allow-insecure-dev-email-bypass server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $server.CoauthConfigPath)
+            $server.CoauthCommand = "$coauthCaPrefix& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-loopback-http server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $server.CoauthConfigPath)
         }
         if ($DualCoauth) {
-            $CoauthSecondaryCommand = "$coauthCaPrefix& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-loopback-http --allow-insecure-dev-email-bypass server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthSecondaryConfigPath)
+            $CoauthSecondaryCommand = "$coauthCaPrefix& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-loopback-http server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthSecondaryConfigPath)
         }
     }
 
