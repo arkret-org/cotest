@@ -67,7 +67,7 @@ bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending 
 - **E26.1 outbox 满**:bob 长期离线,outbox 满;客户端 UI 显示 "Too many pending changes, please reconnect"
 - **E26.2 旧 revision 再写**:同一 `sequenced_state` 的首条确认命令推进 revision；其余旧 revision 命令持久拒绝且不改变状态
 - **E26.3 重新 author**:客户端取得新 revision 后显式重建新 Event；旧签名 Event 本身不得被服务器改写或升级
-- **E26.4 ordinary causal 冲突**:只有注册为 `causal_register` 的 ordinary cell 可以产生并暴露 Bottom 诊断
+- **E26.4 ordinary causal 并发**：注册为 `causal_register` 的 ordinary cell 必须按固定 `(depth, EventId)` 得到唯一当前值；落选 sibling 保留为历史证据，不产生通用 Bottom 或人工修复流程
 
 ## Implementation notes
 

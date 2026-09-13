@@ -410,6 +410,7 @@ fn assert_event_target_does_not_drive_object_state() -> Result<()> {
                 refs: vec![],
                 preconditions: vec![],
                 auth_context: None,
+                data_basis: None,
                 seal_basis: None,
                 requirements: arkret_wire::EventRequirements::default(),
                 payload: serde_json::from_value(payload)?,

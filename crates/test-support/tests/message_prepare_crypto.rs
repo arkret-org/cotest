@@ -106,6 +106,7 @@ fn prepared_message_decrypts_at_the_other_mls_member_without_reencrypting() {
         auth.clone(),
         None,
         None,
+        seal("a"),
         DigestSuite::Sha256,
         request.created_at,
     )

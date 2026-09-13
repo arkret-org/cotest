@@ -108,6 +108,7 @@ pub async fn teabay_rejects_unsigned_ingest_run() -> Result<()> {
             causal_refs: Vec::new(),
             preconditions: Vec::new(),
             auth_context: None,
+            data_basis: None,
             seal_basis: None,
             // `Event::payload` is an open `BTreeMap<String, Value>` on the wire
             // type; the discovery record shape lives in the schema, not in Rust.
