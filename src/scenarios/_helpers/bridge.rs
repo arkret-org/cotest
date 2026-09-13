@@ -70,8 +70,15 @@ impl Drop for EnvOverride {
 /// device selector replays the provisioned principal's accepted founding
 /// `ak.device.authorize` Event, mirroring what a real Account Authority learns
 /// from its issuance gate.
+///
+/// `grant_jwt` is the exact credential the issuer ledger holds. The Account
+/// Authority is the only authority on session-grant state
+/// (`key-management.md` §6.1, `api-conventions.md` §3.3): a submitted token is
+/// active only when it is byte-identical to that record, so this mock matches
+/// on the complete token rather than on a `jti` or grant id.
 #[derive(Clone)]
 struct CoauthGrantBinding {
+    grant_jwt: String,
     subject: String,
     device_id: String,
     authorization_event_id: String,
@@ -79,16 +86,35 @@ struct CoauthGrantBinding {
     session_public_key: String,
 }
 
+/// What the deployment-internal authenticated channel actually carried on one
+/// call, as `service-http-binding.md` §2.2.3 constrains it: the caller identity
+/// MUST come from credential verification and deployment configuration, and
+/// self-reported `Source-Service-ID` / `Destination-Service-ID` / `internal`
+/// markers MUST NOT decide it.
+#[derive(Clone, Debug)]
+pub struct ChannelObservation {
+    pub presented_configured_credential: bool,
+    pub self_reported_identity_headers: Vec<String>,
+}
+
+const SELF_REPORTED_IDENTITY_HEADERS: [&str; 3] = [
+    "source-service-id",
+    "destination-service-id",
+    "x-arkret-internal",
+];
+
 #[derive(Clone)]
 struct CoauthIntrospectionState {
     binding: Arc<Mutex<Option<CoauthGrantBinding>>>,
     requests: Arc<Mutex<Vec<Value>>>,
+    channel: Arc<Mutex<Vec<ChannelObservation>>>,
 }
 
 pub struct MockCoauthIntrospectionServer {
     url: String,
     binding: Arc<Mutex<Option<CoauthGrantBinding>>>,
     requests: Arc<Mutex<Vec<Value>>>,
+    channel: Arc<Mutex<Vec<ChannelObservation>>>,
     _server: super::mock_http::MockServer,
 }
 
@@ -99,9 +125,11 @@ impl MockCoauthIntrospectionServer {
     pub async fn spawn() -> Result<Self> {
         let requests: Arc<Mutex<Vec<Value>>> = Arc::new(Mutex::new(Vec::new()));
         let binding: Arc<Mutex<Option<CoauthGrantBinding>>> = Arc::new(Mutex::new(None));
+        let channel: Arc<Mutex<Vec<ChannelObservation>>> = Arc::new(Mutex::new(Vec::new()));
         let state = CoauthIntrospectionState {
             binding: Arc::clone(&binding),
             requests: Arc::clone(&requests),
+            channel: Arc::clone(&channel),
         };
         let router = Router::with_path("_arkret/gate/account/session-grants/introspect")
             .hoop(affix_state::inject(state))
@@ -115,16 +143,21 @@ impl MockCoauthIntrospectionServer {
             url,
             binding,
             requests,
+            channel,
             _server: server,
         })
     }
 
-    /// Bind the introspected grant to a provisioned principal's founding
-    /// device. Both the DPoP thumbprint (`cnf.jkt`) and the RFC 9421
-    /// `session_public_key` derive from `holder_key`, so the same signing key
-    /// satisfies the DPoP binding and any PoP-signed follow-up request.
+    /// Record `grant_jwt` as the one exact active credential in the issuer
+    /// ledger and bind it to a provisioned principal's founding device. Both
+    /// the DPoP thumbprint (`cnf.jkt`) and the RFC 9421 `session_public_key`
+    /// derive from `holder_key`, so the same signing key satisfies the DPoP
+    /// binding and any PoP-signed follow-up request. Any other submitted token
+    /// — including a self-consistent forgery minted with a leaked issuer
+    /// signing key — has no active record and introspects as `not_found`.
     pub fn bind_founding_device_grant(
         &self,
+        grant_jwt: &str,
         subject: &str,
         device_id: &str,
         authorization_event_id: &str,
@@ -142,6 +175,7 @@ impl MockCoauthIntrospectionServer {
             )?
             .into_string();
         *self.binding.lock().expect("coauth mock binding lock") = Some(CoauthGrantBinding {
+            grant_jwt: grant_jwt.to_owned(),
             subject: subject.to_owned(),
             device_id: device_id.to_owned(),
             authorization_event_id: authorization_event_id.to_owned(),
@@ -157,6 +191,13 @@ impl MockCoauthIntrospectionServer {
 
     pub fn requests(&self) -> Vec<Value> {
         self.requests.lock().expect("mock requests lock").clone()
+    }
+
+    /// Every internal call this mock saw, credential and self-reported identity
+    /// headers included. Recorded before authorization, so a call that arrives
+    /// without the configured credential still shows up here.
+    pub fn channel_observations(&self) -> Vec<ChannelObservation> {
+        self.channel.lock().expect("mock channel lock").clone()
     }
 }
 
@@ -174,6 +215,18 @@ async fn coauth_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respo
             value
                 .to_ascii_lowercase()
                 .contains("bearer principal-token")
+        });
+    state
+        .channel
+        .lock()
+        .expect("mock channel lock")
+        .push(ChannelObservation {
+            presented_configured_credential: authorized,
+            self_reported_identity_headers: SELF_REPORTED_IDENTITY_HEADERS
+                .iter()
+                .filter(|name| req.headers().contains_key(**name))
+                .map(|name| (*name).to_owned())
+                .collect(),
         });
     if !authorized {
         res.status_code(salvo::http::StatusCode::UNAUTHORIZED);
@@ -211,6 +264,18 @@ async fn coauth_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respo
         res.render(Json(json!({ "error": "grant_not_bound" })));
         return;
     };
+    // Exact-token authority: only the complete credential the ledger recorded
+    // is active. A token that merely parses, or that reuses a known `jti` under
+    // re-signed claims, has no active record here.
+    if by_jwt.grant_jwt != binding.grant_jwt {
+        res.render(Json(json!({
+            "active": false,
+            "status": "not_found",
+            "proof_required": false,
+            "one_time_use_consumed": false
+        })));
+        return;
+    }
     let audience = by_jwt
         .audience_id
         .map(|value| value.as_str().to_owned())

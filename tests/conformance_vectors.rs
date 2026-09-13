@@ -326,7 +326,9 @@ fn agent_signer_evidence_vector_suite_runs_clean() {
         .join()
         .expect("Agent signer-evidence fixture worker must finish")
         .expect("Agent signer-evidence vectors must execute and pass");
-    assert_eq!(ALL_AGENT_SIGNER_EVIDENCE_CASES.len(), 49);
+    // Content-derived: the suite above already pins the exact ordered case
+    // list against the spec fixture, so this count must track that fixture.
+    assert_eq!(ALL_AGENT_SIGNER_EVIDENCE_CASES.len(), 34);
 }
 
 // ─── P0 / VECT-SC-1..18 — sidecar vectors ──────────────────────────────────

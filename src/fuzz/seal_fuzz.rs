@@ -48,10 +48,11 @@ pub struct FuzzSealDeepInput {
 impl FuzzSealDeepInput {
     fn to_json(&self) -> Value {
         let delta_count = (self.delta_count as usize).min(MAX_DELTA);
-        let predecessor_ref = self
-            .include_predecessor
-            .then(|| Value::String(self.predecessor_template.clone()))
-            .unwrap_or(Value::Null);
+        let predecessor_ref = if self.include_predecessor {
+            Value::String(self.predecessor_template.clone())
+        } else {
+            Value::Null
+        };
         let delta: Vec<Value> = (0..delta_count)
             .map(|i| Value::String(format!("{}-{i}", self.delta_template)))
             .collect();

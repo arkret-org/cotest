@@ -122,13 +122,16 @@ async fn upload_and_inspect_keys(
     )
     .await?;
     let query_keys: arkret_models_crypto::KeysQueryOutcome =
-        serde_json::from_value(query_keys_value)
+        serde_json::from_value(query_keys_value.clone())
             .context("keys/query response is not the closed SDK outcome")?;
-    // Query returns the accepted device projection. Device identity, signing
-    // material and generation live only inside the service attestation; the
-    // row itself carries just prekeys, trust algorithms and that attestation.
-    // The upload request signature authorizes the mutation; it is not a prekey
-    // algorithm entry and therefore is not echoed under `algorithms`.
+    // `device-lifecycle.md` §8.2 — this is the client-facing self surface. The
+    // client's own authenticated Station verified the origin Station's
+    // attestation and projects the verified values, so the row carries prekeys,
+    // trust algorithms, the `signer_evidence_ref` the client actually uses and
+    // the closed `device_projection` — never the origin proof or the wrapper
+    // whose only job was to verify it. The upload request signature authorizes
+    // the mutation; it is not a prekey algorithm entry and therefore is not
+    // echoed under `algorithms`.
     let account_id = arkret_wire::AccountId::new(
         arkret_identifiers::DidCoreId::new(actor_core_id.clone())?,
         server.service_id().clone(),
@@ -138,16 +141,89 @@ async fn upload_and_inspect_keys(
         .devices_for(&account_id)
         .and_then(|devices| devices.get(&device_id))
         .context("keys/query omitted the requested device record")?;
-    queried_record.validate_attestation_binding(&account_id, &device_id)?;
     let generation = query_keys
         .generation_for(&account_id)
         .context("keys/query omitted the principal generation fence")?;
-    assert!(
-        queried_record.is_usable_in_generation(Some(generation)),
-        "attested device must match the active response generation fence"
-    );
     let queried_device = serde_json::to_value(queried_record)?;
-    for retired_mirror in [
+    let row_members = queried_device
+        .as_object()
+        .context("keys/query row must be an object")?
+        .keys()
+        .cloned()
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        row_members,
+        std::collections::BTreeSet::from([
+            "algorithms".to_owned(),
+            "device_projection".to_owned(),
+            "signer_evidence_ref".to_owned(),
+            "trust_algorithms".to_owned(),
+        ]),
+        "self keys/query row is not the closed client-facing shape: {queried_device}"
+    );
+    assert!(
+        queried_device["signer_evidence_ref"]
+            .as_str()
+            .is_some_and(|value| !value.is_empty()),
+        "self row must keep the exact signer evidence reference it uses: {queried_device}"
+    );
+    let projection = &queried_device["device_projection"];
+    let projection_members = projection
+        .as_object()
+        .context("device_projection must be an object")?
+        .keys()
+        .cloned()
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        projection_members,
+        std::collections::BTreeSet::from([
+            "attested_at".to_owned(),
+            "authorization_window".to_owned(),
+            "authorized_generation_ref".to_owned(),
+            "device_authorize_event_id".to_owned(),
+            "device_signing_key_did".to_owned(),
+            "device_status".to_owned(),
+            "expires_at".to_owned(),
+            "hpke_key".to_owned(),
+        ]),
+        "device_projection is not the closed eight-member verified projection: {projection}"
+    );
+    assert_eq!(projection["device_status"], "active");
+    assert!(
+        projection["device_signing_key_did"]
+            .as_str()
+            .is_some_and(|key| key.starts_with("did:key:z6Mk")),
+        "query must expose the authoritative active device signing key: {queried_device}"
+    );
+    // The projected generation is the response fence: the returning Station
+    // matched the verified attestation against this exact account and device
+    // before projecting it, so the client never re-derives that binding.
+    assert_eq!(
+        projection["authorized_generation_ref"],
+        serde_json::to_value(generation.current_device_generation_ref)?,
+        "projected generation must equal the response fence: {queried_device}"
+    );
+    // §8.2 — `account_id` and `device_id` are the entry and map keys, not
+    // projection members, and the self face carries no origin proof shell: PCR
+    // genesis receipts, authorization chains and Seals MUST NOT appear either.
+    for forbidden in [
+        "account_id",
+        "device_id",
+        "principal_id",
+        "station_id",
+        "proof",
+        "attestation",
+        "device_projection_attestation",
+    ] {
+        assert!(
+            projection.get(forbidden).is_none(),
+            "verified device projection leaked {forbidden}: {projection}"
+        );
+    }
+    for forbidden in [
+        "device_projection_attestation",
+        "attestation",
+        "proof",
         "principal_id",
         "station_id",
         "device_id",
@@ -158,40 +234,6 @@ async fn upload_and_inspect_keys(
         "authorized_generation_ref",
         "attested_at",
         "expires_at",
-    ] {
-        assert!(
-            queried_device.get(retired_mirror).is_none(),
-            "keys/query row repeated attested identity field {retired_mirror}: {queried_device}"
-        );
-    }
-    let attestation = &queried_device["device_projection_attestation"];
-    assert_eq!(attestation["attestation"]["device_status"], "active");
-    assert!(
-        attestation["attestation"]["device_signing_key_did"]
-            .as_str()
-            .is_some_and(|key| key.starts_with("did:key:z6Mk")),
-        "query must expose the authoritative active device signing key: {queried_device}"
-    );
-    // `device-lifecycle.md` §8.2 — a returned row is complete and attested, and
-    // the attestation covers this exact projection. That is the whole
-    // verification closure of this cross-principal surface: PCR genesis
-    // receipts, authorization chains and Seals MUST NOT appear here.
-    assert_eq!(
-        attestation["attestation"]["authorized_generation_ref"],
-        serde_json::to_value(generation.current_device_generation_ref)?,
-        "attestation generation must equal the response fence: {queried_device}"
-    );
-    assert!(
-        attestation["proof"]["verification_method"]
-            .as_str()
-            .is_some_and(|method| method.contains('#')),
-        "attestation proof must name a verification method: {attestation}"
-    );
-    assert_eq!(
-        attestation["proof"]["created_at"], attestation["attestation"]["attested_at"],
-        "proof timestamp must equal the attested instant: {attestation}"
-    );
-    for forbidden in [
         "principal_genesis_receipt",
         "authorization_chain",
         "seal",
@@ -199,11 +241,37 @@ async fn upload_and_inspect_keys(
     ] {
         assert!(
             queried_device.get(forbidden).is_none(),
-            "keys/query MUST NOT carry PCR material ({forbidden}): {queried_device}"
+            "self keys/query row MUST NOT carry {forbidden}: {queried_device}"
         );
     }
-    // The typed DTO is the contract: a row that is not complete and attested
-    // fails to decode rather than being consumed as a partial projection.
+    // Negative: the closed self outcome rejects an origin proof shell outright.
+    // A Station MUST NOT hand the client an attested peer row, and a client
+    // MUST NOT accept one as a verified self projection — so re-decoding the
+    // very response we just accepted, with the peer-face member grafted back
+    // onto the row, must fail rather than ignore the extra member.
+    for shell in ["device_projection_attestation", "proof"] {
+        let mut forged = query_keys_value.clone();
+        forged["device_keys"][0]["device_keys"][KEYS_DEVICE_ID]
+            .as_object_mut()
+            .context("forged self row object")?
+            .insert(
+                shell.to_owned(),
+                serde_json::json!({
+                    "attestation": projection.clone(),
+                    "proof": {
+                        "verification_method": "did:web:origin.example#service-key",
+                        "created_at": projection["attested_at"].clone(),
+                        "jws": "ZXhhbXBsZQ"
+                    }
+                }),
+            );
+        assert!(
+            serde_json::from_value::<arkret_models_crypto::KeysQueryOutcome>(forged).is_err(),
+            "self keys/query outcome accepted an origin proof shell member `{shell}`"
+        );
+    }
+    // The typed DTO is the contract: a row that is not the closed verified
+    // projection fails to decode rather than being consumed as a partial one.
     let claimed = expect_json(
         server
             .http()

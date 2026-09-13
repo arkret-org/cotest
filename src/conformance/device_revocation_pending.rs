@@ -10,10 +10,8 @@ use arkret_wire::{
     DeviceRevocationGateCheckOutcome, DeviceRevocationGateCheckRequestBody,
     DeviceRevocationGateDecision, DeviceRevocationGateDecisionReceipt, DidCoreId, DidUrl, EventId,
     Hash, SessionGrantId, UnsignedAcceptedDeviceRefreshPossessionProof,
-    UnsignedDeviceRevocationGateDecisionReceipt,
 };
 use chrono::{DateTime, Duration, TimeZone as _, Utc};
-use ed25519_dalek::{Signature, Signer as _, SigningKey, Verifier as _};
 
 use super::load_fixture_value;
 
@@ -28,7 +26,7 @@ const REQUIRED_CASES: [&str; 13] = [
     "multiple_distinct_proposals_are_independent",
     "sealed_and_pending_records_remain_jointly_visible",
     "gate_record_bound_is_closed_without_truncation",
-    "gate_receipt_decision_shapes_and_proof_are_closed",
+    "gate_receipt_decision_shapes_are_closed",
     "only_exact_rejected_command_outcome_clears_last_pending",
     "overdue_stays_blocked_and_alerts",
     "command_outcome_is_unique_in_confirmed_sequence",
@@ -63,6 +61,7 @@ impl GenerationMaterial {
 pub fn run_device_revocation_pending_suite() -> Result<()> {
     validate_semantic_fixture()?;
     validate_receipt_decision_matrix()?;
+    validate_receipt_shape_is_closed_in_both_directions()?;
     validate_exact_request_and_intent_binding()?;
     validate_receipt_freshness_at_issuer_commit()?;
     validate_client_pending_and_revoked_material_lifecycle()
@@ -143,6 +142,29 @@ fn validate_semantic_fixture() -> Result<()> {
     if fixture_actions != sdk_actions.as_array().context("SDK denied action array")? {
         bail!("fixture denied_actions diverge from the SDK canonical five-action set");
     }
+
+    // `device-lifecycle.md` §2.2 closes the receipt in both directions: there is
+    // no "verify the proof when one is present, otherwise pass" path, so the
+    // fixture contract must state the rejection for a carried proof member and
+    // for arrival outside the registered deployment-internal channel.
+    let receipt_shapes = cases
+        .iter()
+        .find(|case| case["name"] == "gate_receipt_decision_shapes_are_closed")
+        .context("device revocation gate receipt shape case")?;
+    let receipt_invariants = receipt_shapes["invariants"]
+        .as_array()
+        .context("gate receipt shape invariants")?;
+    for required in [
+        "a receipt carrying a proof or a verification_method member is rejected",
+        "a receipt that did not arrive over the registered deployment-internal authenticated channel is rejected",
+    ] {
+        if !receipt_invariants
+            .iter()
+            .any(|invariant| invariant == required)
+        {
+            bail!("gate receipt fixture is missing closed-channel invariant: {required}");
+        }
+    }
     Ok(())
 }
 
@@ -155,12 +177,14 @@ fn validate_receipt_decision_matrix() -> Result<()> {
         DeviceRevocationGateDecision::AuthorityMismatch,
         DeviceRevocationGateDecision::GenerationMismatch,
     ] {
-        let receipt = signed_receipt(&request, decision, 30)?;
+        let receipt = channel_receipt(&request, decision, 30)?;
+        // The outcome is exactly the closed receipt: authenticity and integrity
+        // come from the registered deployment-internal authenticated channel,
+        // so there is no signature member left for a consumer to check.
         let outcome = DeviceRevocationGateCheckOutcome {
             decision_receipt: receipt.clone(),
         };
         outcome.validate_for_request(&request)?;
-        verify_receipt_signature(&receipt)?;
 
         let has_blocker = receipt.blocking_proposal_digest.is_some();
         let has_seal = receipt.covering_seal_id.is_some();
@@ -175,16 +199,65 @@ fn validate_receipt_decision_matrix() -> Result<()> {
         }
     }
 
-    let overlong = signed_receipt(&request, DeviceRevocationGateDecision::Allow, 31);
+    let overlong = channel_receipt(&request, DeviceRevocationGateDecision::Allow, 31);
     if overlong.is_ok() {
         bail!("device revocation receipt lifetime exceeded 30 seconds");
     }
     Ok(())
 }
 
+/// `device-lifecycle.md` §2.2 / `service-http-binding.md` §2.2.3: the gate
+/// receipt is closed in both directions. A `proof` or `verification_method`
+/// member rejects the whole receipt — and the whole enclosing outcome — rather
+/// than being verified or ignored, so no consumer can grow a "signed receipts
+/// are also accepted" branch back.
+fn validate_receipt_shape_is_closed_in_both_directions() -> Result<()> {
+    let request = request(DeviceRevocationGateActionClass::SessionGrantIssue, 'f')?;
+    let receipt = channel_receipt(&request, DeviceRevocationGateDecision::Allow, 30)?;
+    let canonical = serde_json::to_value(&receipt)?;
+    let round_trip: DeviceRevocationGateDecisionReceipt = serde_json::from_value(canonical.clone())
+        .context("the closed channel receipt must round-trip unchanged")?;
+    if round_trip != receipt {
+        bail!("closed gate receipt did not round-trip to the same value");
+    }
+
+    for (member, value) in [
+        (
+            "proof",
+            serde_json::json!({
+                "verification_method": "did:web:ps.example#service-key",
+                "created_at": "2026-04-12T00:00:00.000Z",
+                "jws": "ZXhhbXBsZQ"
+            }),
+        ),
+        (
+            "verification_method",
+            serde_json::json!("did:web:ps.example#service-key"),
+        ),
+    ] {
+        let mut carried = canonical.clone();
+        carried
+            .as_object_mut()
+            .context("gate receipt object")?
+            .insert(member.to_owned(), value);
+        if serde_json::from_value::<DeviceRevocationGateDecisionReceipt>(carried.clone()).is_ok() {
+            bail!(
+                "gate receipt accepted a `{member}` member; the internal-channel receipt shape must reject it outright"
+            );
+        }
+        // Rejection is whole-receipt: a consumer must not strip the forbidden
+        // member and keep the decision.
+        let outcome = serde_json::json!({ "decision_receipt": carried });
+        if serde_json::from_value::<DeviceRevocationGateCheckOutcome>(outcome).is_ok() {
+            bail!("gate check outcome accepted a receipt carrying `{member}`");
+        }
+    }
+    Ok(())
+}
+
 fn validate_exact_request_and_intent_binding() -> Result<()> {
     let request = request(DeviceRevocationGateActionClass::SessionGrantRefresh, 'b')?;
-    let receipt = signed_receipt(&request, DeviceRevocationGateDecision::Allow, 30)?;
+    let receipt = channel_receipt(&request, DeviceRevocationGateDecision::Allow, 30)?;
     let first = serde_json::to_vec(&receipt)?;
     let replay = serde_json::to_vec(&receipt)?;
     if first != replay {
@@ -210,7 +283,7 @@ fn validate_exact_request_and_intent_binding() -> Result<()> {
 
 fn validate_receipt_freshness_at_issuer_commit() -> Result<()> {
     let request = request(DeviceRevocationGateActionClass::SessionGrantIssue, 'd')?;
-    let allow = signed_receipt(&request, DeviceRevocationGateDecision::Allow, 30)?;
+    let allow = channel_receipt(&request, DeviceRevocationGateDecision::Allow, 30)?;
     if !allows_issuer_commit(
         &allow,
         &request,
@@ -222,7 +295,7 @@ fn validate_receipt_freshness_at_issuer_commit() -> Result<()> {
         bail!("receipt remained usable at its exclusive expiry boundary");
     }
 
-    let pending = signed_receipt(
+    let pending = channel_receipt(
         &request,
         DeviceRevocationGateDecision::RevocationPending,
         30,
@@ -256,7 +329,6 @@ fn allows_issuer_commit(
     commit_at: DateTime<Utc>,
 ) -> Result<bool> {
     receipt.validate_for_request(request)?;
-    verify_receipt_signature(receipt)?;
     Ok(receipt.decision == DeviceRevocationGateDecision::Allow && commit_at < receipt.expires_at)
 }
 
@@ -318,7 +390,10 @@ fn request(
     })
 }
 
-fn signed_receipt(
+/// Build the receipt exactly as the origin Station hands it to the account's
+/// bound Account Authority over the registered deployment-internal
+/// authenticated channel: no detached proof and no verification method.
+fn channel_receipt(
     request: &DeviceRevocationGateCheckRequestBody,
     decision: DeviceRevocationGateDecision,
     lifetime_seconds: i64,
@@ -336,7 +411,7 @@ fn signed_receipt(
         .as_ref()
         .map(AcceptedDevicePossessionProof::proof_digest)
         .transpose()?;
-    let unsigned = UnsignedDeviceRevocationGateDecisionReceipt {
+    let receipt = DeviceRevocationGateDecisionReceipt {
         account_id: request.account_id.clone(),
         device_id: request.device_id.clone(),
         target_device_authorize_event_id,
@@ -354,30 +429,9 @@ fn signed_receipt(
         covering_seal_id: (decision == DeviceRevocationGateDecision::Revoked)
             .then(|| format!("ak:seal:sha256:{}", "c".repeat(64)).parse())
             .transpose()?,
-        verification_method: DidUrl::new("did:web:ps.example#service-key")
-            .map_err(anyhow::Error::msg)?,
     };
-    let metadata = unsigned.proof_metadata()?;
-    let signing_bytes = unsigned.proof_signing_bytes(&metadata)?;
-    let signature = SigningKey::from_bytes(&[0x42; 32]).sign(&signing_bytes);
-    let proof = metadata.finalize(arkret_canonical::base64url_encode(signature.to_bytes()))?;
-    unsigned.attach_proof(proof).map_err(Into::into)
-}
-
-fn verify_receipt_signature(receipt: &DeviceRevocationGateDecisionReceipt) -> Result<()> {
-    receipt.verify_proof_with(|proof, bytes| {
-        let encoded = arkret_canonical::base64url_decode(&proof.jws)
-            .map_err(|error| arkret_wire::WireError::Protocol(error.to_string()))?;
-        let signature = Signature::from_slice(&encoded)
-            .map_err(|error| arkret_wire::WireError::Protocol(error.to_string()))?;
-        SigningKey::from_bytes(&[0x42; 32])
-            .verifying_key()
-            .verify(bytes, &signature)
-            .map_err(|_| {
-                arkret_wire::WireError::Protocol("invalid fixture receipt proof".to_owned())
-            })
-    })?;
-    Ok(())
+    receipt.validate()?;
+    Ok(receipt)
 }
 
 fn hash(byte: char) -> Result<Hash> {

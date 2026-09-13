@@ -127,6 +127,77 @@ pub fn run_agent_signer_evidence_vector_suite() -> Result<()> {
         "current_known_revocation_invalidates_before_deadline",
     )?;
     ensure!(revocation.get("expected").and_then(Value::as_str) == Some("rejected"));
+
+    // `service-http-binding.md` §2.2.3 registers
+    // `ak.gate.account.command.issue_controller_gate_attestation.v1` as a
+    // deployment-internal operation: the channel authenticates caller, target,
+    // trust domain and the allowed operation set, and that authenticated
+    // identity is the only source of the caller. A body field, a path segment
+    // or a deployment bearer MUST NOT stand in for it, and the request MUST NOT
+    // carry a service-resolution carrier any more.
+    let controller_gate = case(
+        cases,
+        "producer_fetches_controller_gate_from_account_authority",
+    )?;
+    ensure!(
+        controller_gate.get("operation_id").and_then(Value::as_str)
+            == Some("ak.gate.account.command.issue_controller_gate_attestation.v1")
+    );
+    for (field, expected) in [
+        (
+            "internal_authentication_binds_caller_station_domain_and_operation",
+            true,
+        ),
+        ("request_carries_service_resolution_carrier", false),
+        ("caller_identity_from_request_body", false),
+        ("bearer_used_as_identity_substitute", false),
+        ("authenticated_source_matches_agent_authority_id", true),
+        (
+            "authenticated_station_matches_principal_current_binding_authority",
+            true,
+        ),
+    ] {
+        ensure!(
+            controller_gate.get(field).and_then(Value::as_bool) == Some(expected),
+            "controller gate fixture must pin the internal-channel contract field {field} = {expected}"
+        );
+    }
+
+    // The same §2.2.3 registration makes "wrong caller" and "caller without
+    // this operation" ordinary rejections that MUST be indistinguishable from
+    // an unknown principal: a distinguishable error would turn the internal
+    // channel into an account-existence oracle.
+    let wrong_source = case(
+        cases,
+        "controller_gate_wrong_source_and_unknown_principal_are_indistinguishable",
+    )?;
+    let scenarios = wrong_source
+        .get("scenarios")
+        .and_then(Value::as_array)
+        .context("controller gate wrong-source case omits scenarios[]")?;
+    for required in [
+        "unknown_principal",
+        "missing_current_station",
+        "source_service_mismatch",
+        "unauthorized_service",
+    ] {
+        ensure!(
+            scenarios.iter().any(|scenario| scenario == required),
+            "controller gate wrong-source case is missing scenario {required}"
+        );
+    }
+    ensure!(
+        wrong_source
+            .get("same_error_envelope")
+            .and_then(Value::as_bool)
+            == Some(true)
+            && wrong_source
+                .get("account_status_disclosed")
+                .and_then(Value::as_bool)
+                == Some(false)
+            && wrong_source.get("expected").and_then(Value::as_str) == Some("rejected")
+            && wrong_source.get("reason").and_then(Value::as_str) == Some("not_found")
+    );
     Ok(())
 }
 

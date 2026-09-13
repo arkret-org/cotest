@@ -180,7 +180,7 @@ fn unsigned_token_outcome(
 
 fn sign_outcome(outcome: &mut CallMediaTokenExchangeOutcome, key: &SigningKey) -> Result<()> {
     let input = participant_binding_signing_input(
-        &arkret::ParticipantBindingContext::from_outcome(&outcome),
+        &arkret::ParticipantBindingContext::from_outcome(outcome),
     )?;
     outcome.participant_binding.sig = base64url_encode(key.sign(&input).to_bytes());
     Ok(())

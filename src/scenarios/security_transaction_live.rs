@@ -195,25 +195,20 @@ fn event_submission(
     let event_digest =
         Hash::new(event.event_digest_with_digest_suite(arkret_canonical::DigestSuite::Sha256)?)?;
     let signer_evidence_ref = crate::fixture_signer_evidence_ref(principal.as_str());
-    event.proofs.push(
-        arkret_wire::ProducerEventProof {
-            kind: "DataIntegrityProof".to_owned(),
-            // `zh/identity/did-usage-and-verification.md` §2.2: a
-            // `verification_method` is a DID URL, never a bare DID. This fixture
-            // used `principal` itself, which no receiver could resolve to a key.
-            verification_method: crate::harness::default_event_verification_method(
-                principal.as_str(),
-            ),
-            event_digest,
-            signer_resolution_evidence_ref: Some(signer_evidence_ref),
-            created_at: now,
-            domain: None,
-            audience: None,
-            proof_purpose: None,
-            jws: "eyJhbGciOiJFZDI1NTE5In0..c2lnbmF0dXJl".to_owned(),
-        }
-        .into(),
-    );
+    event.proofs.push(arkret_wire::ProducerEventProof {
+        kind: "DataIntegrityProof".to_owned(),
+        // `zh/identity/did-usage-and-verification.md` §2.2: a
+        // `verification_method` is a DID URL, never a bare DID. This fixture
+        // used `principal` itself, which no receiver could resolve to a key.
+        verification_method: crate::harness::default_event_verification_method(principal.as_str()),
+        event_digest,
+        signer_resolution_evidence_ref: Some(signer_evidence_ref),
+        created_at: now,
+        domain: None,
+        audience: None,
+        proof_purpose: None,
+        jws: "eyJhbGciOiJFZDI1NTE5In0..c2lnbmF0dXJl".to_owned(),
+    });
     let authorization_lease =
         crate::publication::authorization_lease_for(&event, "ak.realm.admin", RiskTier::High)?;
     let mut submission = crate::publication::initial_submission(event, "ak.realm.admin")?;

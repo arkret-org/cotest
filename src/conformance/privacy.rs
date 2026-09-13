@@ -900,6 +900,12 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                 validate_actor_accountability_grant_required(&case)?;
                 super::privacy_security::run_actor_accountability_grant_required_vector()?;
             }
+            "peer_device_directory_failure_blinding" => {
+                validate_peer_device_directory_failure_blinding(&case)?;
+            }
+            "remote_directory_unavailable_is_not_an_empty_device_list" => {
+                validate_remote_directory_unavailable_is_distinguishable(&case)?;
+            }
             _ => bail!("unknown privacy fixture case {}", case.name),
         }
     }
@@ -1486,6 +1492,408 @@ fn is_fail_closed_search_state_change(state_change: &str) -> bool {
             | "redaction_or_expiry"
             | "mls_epoch_rotate"
     )
+}
+
+/// `ak.vector.device.peer_directory_lookup_blinding.v1` --
+/// `device-lifecycle.md` §8.2 and `server-trusted-results.md` §5.10.
+///
+/// Three different underlying causes -- the target account does not exist, the
+/// requester has no current relationship with it, and the target device is
+/// revoked or generation-fenced -- MUST be one indistinguishable answer on the
+/// Station-to-Station device directory surface. Same status, same closed
+/// reason value, same body shape, same timing class. The teeth are not the
+/// fixture echo: the blinded outcome is built from the SDK peer types here and
+/// checked to carry none of the projection material a successful row would.
+fn validate_peer_device_directory_failure_blinding(case: &super::NamedCase) -> Result<()> {
+    use arkret_models_crypto::{
+        PeerKeysQueryOutcome, PeerKeysQueryRequestBody, QueryFailure, QueryFailureReason,
+    };
+
+    if case.operation_id.as_deref() != Some("ak.peer.keys.read.lookup.v1")
+        || case.vector_id.as_deref() != Some("ak.vector.device.peer_directory_lookup_blinding.v1")
+    {
+        bail!(
+            "privacy fixture {} is not the registered peer directory blinding vector",
+            case.name
+        );
+    }
+    let inputs = case
+        .inputs
+        .as_ref()
+        .ok_or_else(|| anyhow!("privacy fixture {} missing inputs", case.name))?;
+    if inputs.len() < 3 {
+        bail!(
+            "privacy fixture {} must present every blinded cause, got {}",
+            case.name,
+            inputs.len()
+        );
+    }
+    let expected = case
+        .expected
+        .as_ref()
+        .ok_or_else(|| anyhow!("privacy fixture {} missing expected", case.name))?;
+
+    // Every cause arrives as the same in-contract request: the wire shape alone
+    // must not say which of them applies.
+    let mut labels = BTreeSet::new();
+    let mut request_ids = BTreeSet::new();
+    let mut targets = BTreeSet::new();
+    let mut requests = Vec::new();
+    for input in inputs {
+        let label = required_str(input, "label")?.to_owned();
+        let body = input
+            .get("body")
+            .ok_or_else(|| anyhow!("privacy fixture {} input {label} missing body", case.name))?;
+        let request: PeerKeysQueryRequestBody =
+            serde_json::from_value(body.clone()).map_err(|error| {
+                anyhow!("blinded input {label} is not the closed peer request body: {error}")
+            })?;
+        request.validate()?;
+        request_ids.insert(request.request_id.as_str().to_owned());
+        targets.insert(serde_json::to_string(&request.device_keys)?);
+        labels.insert(label);
+        requests.push(request);
+    }
+    for required in [
+        "target_absent",
+        "no_current_relationship",
+        "revoked_or_fenced_device",
+    ] {
+        if !labels.contains(required) {
+            bail!(
+                "privacy fixture {} is missing blinded cause {required}",
+                case.name
+            );
+        }
+    }
+    if targets.len() != 1 {
+        bail!(
+            "privacy fixture {} blinded causes must name one identical target, got {} selections",
+            case.name,
+            targets.len()
+        );
+    }
+    if request_ids.len() != requests.len() {
+        bail!(
+            "privacy fixture {} reused a request_id across blinded causes",
+            case.name
+        );
+    }
+
+    // The closed reason vocabulary: the target-private value, never the one
+    // that reports the requester's own Station.
+    let reason_wire = expected
+        .get("same_failure_reason_code")
+        .and_then(Value::as_str)
+        .ok_or_else(|| {
+            anyhow!(
+                "privacy fixture {} missing same_failure_reason_code",
+                case.name
+            )
+        })?;
+    let reason: QueryFailureReason =
+        serde_json::from_value(json!(reason_wire)).map_err(|error| {
+            anyhow!("blinded reason code is outside the closed vocabulary: {error}")
+        })?;
+    if reason != QueryFailureReason::DeviceResultUnavailable {
+        bail!(
+            "privacy fixture {} blinds target state behind {reason_wire}, which reports the requester's own Station instead",
+            case.name
+        );
+    }
+    if expected.get("same_http_status").and_then(Value::as_u64) != Some(200)
+        || expected
+            .get("row_omission_and_failure_row_both_allowed")
+            .and_then(Value::as_bool)
+            != Some(true)
+        || expected
+            .get("transport_authentication_failure_precedes_any_target_read")
+            .and_then(Value::as_bool)
+            != Some(true)
+        || expected
+            .get("timing_equivalence_group")
+            .and_then(Value::as_str)
+            != Some("target_private_quantized")
+    {
+        bail!("privacy fixture {} blinding contract drifted", case.name);
+    }
+    if string_set_of(
+        expected
+            .get("rate_limit_keys")
+            .ok_or_else(|| anyhow!("blinding vector missing rate_limit_keys"))?,
+    )? != BTreeSet::from([
+        "(source_service_id, requester_account_id)".to_owned(),
+        "(source_service_id, target_account_id)".to_owned(),
+    ]) {
+        bail!(
+            "privacy fixture {} rate limiting must be keyed on requester and target, not on outcome",
+            case.name
+        );
+    }
+    let body_shape = string_set_of(
+        expected
+            .get("same_body_shape")
+            .ok_or_else(|| anyhow!("blinding vector missing same_body_shape"))?,
+    )?;
+    let forbidden = string_set_of(
+        expected
+            .get("must_not_include")
+            .ok_or_else(|| anyhow!("blinding vector missing must_not_include"))?,
+    )?;
+    for required in [
+        "device_signing_key_did",
+        "hpke_key",
+        "device_status",
+        "device_authorize_event_id",
+        "authorized_generation_ref",
+        "signer_evidence_ref",
+    ] {
+        if !forbidden.contains(required) {
+            bail!(
+                "privacy fixture {} allows the blinded answer to leak {required}",
+                case.name
+            );
+        }
+    }
+
+    // Build both permitted blinded answers from the SDK peer types and prove
+    // they carry nothing a usable row would.
+    let request = &requests[0];
+    let target = request
+        .device_keys
+        .first()
+        .ok_or_else(|| anyhow!("blinded request selects no target"))?;
+    let failure_row = PeerKeysQueryOutcome {
+        request_id: request.request_id.clone(),
+        requester_account_id: request.requester_account_id.clone(),
+        device_keys: Vec::new(),
+        device_generations: Vec::new(),
+        failures: vec![QueryFailure {
+            account_id: Some(target.account_id.clone()),
+            device_id: target.device_ids.first().cloned(),
+            reason_code: QueryFailureReason::DeviceResultUnavailable,
+            retry_after_ms: None,
+        }],
+    };
+    let row_omission = PeerKeysQueryOutcome {
+        failures: Vec::new(),
+        ..failure_row.clone()
+    };
+    for (label, outcome) in [
+        ("failure_row", &failure_row),
+        ("row_omission", &row_omission),
+    ] {
+        outcome.validate()?;
+        outcome.validate_for_request(request)?;
+        let value = serde_json::to_value(outcome)?;
+        let members = value
+            .as_object()
+            .ok_or_else(|| anyhow!("peer outcome must be an object"))?
+            .keys()
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        if !members.is_subset(&body_shape) {
+            bail!(
+                "blinded {label} answer exposes members outside the declared body shape: {members:?}"
+            );
+        }
+        for leaked in &forbidden {
+            if contains_key_recursive(&value, leaked) || contains_literal_recursive(&value, leaked)
+            {
+                bail!("blinded {label} answer leaked {leaked}: {value}");
+            }
+        }
+    }
+    if !serde_json::to_value(&failure_row)?
+        .as_object()
+        .is_some_and(|members| members.len() == body_shape.len())
+    {
+        bail!("the failure-row form must realize the full declared body shape");
+    }
+
+    // Negative: the blinded answer must stay bound to the request it answers.
+    // Indistinguishable causes are not an excuse for an unbound response.
+    if failure_row.validate_for_request(&requests[1]).is_ok() {
+        bail!("a blinded peer directory answer validated for a different request");
+    }
+
+    // Negative: `retry_after_ms` is a target-state side channel on the
+    // target-private reason, so it must be rejected rather than ignored.
+    let hinted = QueryFailure {
+        retry_after_ms: Some(std::num::NonZeroU64::new(1_000).expect("non-zero")),
+        ..failure_row.failures[0].clone()
+    };
+    if hinted.validate().is_ok() {
+        bail!("a target-private blinded failure accepted a retry_after_ms timing hint");
+    }
+
+    record_vector_event(
+        "privacy.peer_device_directory_failure_blinding",
+        &json!({ "causes": labels.iter().collect::<Vec<_>>() }),
+        expected,
+        expected,
+    );
+    Ok(())
+}
+
+/// `ak.vector.device.directory_unavailable_not_empty.v1` --
+/// `device-lifecycle.md` §8.2 / §8.3 and `server-trusted-results.md` §5.10.
+///
+/// When the client's own Station cannot reach the origin or cannot verify its
+/// attestation, that is a statement about *this Station's* fetch, never about
+/// the target. It MUST NOT collapse into an empty success set, a silently
+/// omitted row, a stale cache hit or a bare cached public key -- any of which a
+/// client would read as "that device is gone" and act on by downgrading.
+fn validate_remote_directory_unavailable_is_distinguishable(case: &super::NamedCase) -> Result<()> {
+    use arkret_models_crypto::{KeysQueryOutcome, QueryFailure, QueryFailureReason};
+
+    if case.operation_id.as_deref() != Some("ak.self.keys.read.lookup.v1")
+        || case.vector_id.as_deref() != Some("ak.vector.device.directory_unavailable_not_empty.v1")
+    {
+        bail!(
+            "privacy fixture {} is not the registered directory-unavailable vector",
+            case.name
+        );
+    }
+    let input = case
+        .input
+        .as_ref()
+        .ok_or_else(|| anyhow!("privacy fixture {} missing input", case.name))?;
+    if required_str(input, "peer_lookup_result")? != "unreachable_or_attestation_unverifiable" {
+        bail!(
+            "privacy fixture {} must model the requester-side fetch failure",
+            case.name
+        );
+    }
+    let expected = case
+        .expected
+        .as_ref()
+        .ok_or_else(|| anyhow!("privacy fixture {} missing expected", case.name))?;
+
+    let reason_wire = expected
+        .get("failure_reason_code")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("privacy fixture {} missing failure_reason_code", case.name))?;
+    let reason: QueryFailureReason = serde_json::from_value(json!(reason_wire))
+        .map_err(|error| anyhow!("unavailable reason is outside the closed vocabulary: {error}"))?;
+    if reason != QueryFailureReason::DeviceDirectoryUnavailable {
+        bail!(
+            "privacy fixture {} reports the requester-side failure as {reason_wire}",
+            case.name
+        );
+    }
+    // The two-value vocabulary must stay two distinct values on the wire: the
+    // whole point is that a client can tell "I could not fetch" from "that
+    // target has nothing for you".
+    let distinct_wire = expected
+        .get("distinct_from")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("privacy fixture {} missing distinct_from", case.name))?;
+    let distinct: QueryFailureReason = serde_json::from_value(json!(distinct_wire))
+        .map_err(|error| anyhow!("distinct_from is outside the closed vocabulary: {error}"))?;
+    if distinct == reason || distinct_wire == reason_wire {
+        bail!(
+            "privacy fixture {} collapsed the two device-directory failure reasons into one",
+            case.name
+        );
+    }
+    for flag in [
+        "may_include_retry_after_ms",
+        "must_not_omit_row_silently",
+        "must_not_return_empty_device_keys_as_the_answer",
+        "must_not_serve_expired_cache_or_bare_cached_public_key",
+        "must_not_extend_attestation_expires_at",
+    ] {
+        if expected.get(flag).and_then(Value::as_bool) != Some(true) {
+            bail!(
+                "privacy fixture {} dropped the {flag} obligation",
+                case.name
+            );
+        }
+    }
+    let behaviour = string_set_of(
+        expected
+            .get("client_behaviour")
+            .ok_or_else(|| anyhow!("directory-unavailable vector missing client_behaviour"))?,
+    )?;
+    for required in [
+        "MUST NOT treat as device absent, revoked or peer has no devices",
+        "MUST NOT downgrade encryption, skip a recipient or advance out-of-band verification",
+    ] {
+        if !behaviour.contains(required) {
+            bail!(
+                "privacy fixture {} dropped client obligation: {required}",
+                case.name
+            );
+        }
+    }
+
+    // The observable difference, built from the SDK self types: the
+    // unavailable answer carries a `failures` row, the empty answer does not,
+    // and the two never serialize to the same bytes.
+    let unavailable = KeysQueryOutcome {
+        device_keys: Vec::new(),
+        failures: vec![QueryFailure {
+            account_id: None,
+            device_id: None,
+            reason_code: QueryFailureReason::DeviceDirectoryUnavailable,
+            // Permitted only on this reason: it describes this Station's own
+            // retry, not the target.
+            retry_after_ms: Some(std::num::NonZeroU64::new(2_000).expect("non-zero")),
+        }],
+        device_generations: Vec::new(),
+    };
+    unavailable.validate()?;
+    let empty_success = KeysQueryOutcome {
+        device_keys: Vec::new(),
+        failures: Vec::new(),
+        device_generations: Vec::new(),
+    };
+    let unavailable_value = serde_json::to_value(&unavailable)?;
+    let empty_value = serde_json::to_value(&empty_success)?;
+    if unavailable_value == empty_value {
+        bail!("a directory-unavailable answer is byte-identical to an empty success set");
+    }
+    if unavailable_value.get("failures").is_none() {
+        bail!("the directory-unavailable answer omitted its failure row");
+    }
+    if empty_value.get("failures").is_some() {
+        bail!("the empty success set carried a failure row");
+    }
+    // No device material at all rides along: a stale cache hit or a bare cached
+    // public key would be exactly the downgrade input this vector forbids.
+    for leaked in [
+        "device_projection",
+        "device_projection_attestation",
+        "signer_evidence_ref",
+        "device_signing_key_did",
+        "hpke_key",
+        "algorithms",
+        "expires_at",
+    ] {
+        if contains_key_recursive(&unavailable_value, leaked)
+            || contains_literal_recursive(&unavailable_value, leaked)
+        {
+            bail!("directory-unavailable answer leaked {leaked}: {unavailable_value}");
+        }
+    }
+    // Negative: the same retry hint on the target-private reason is a target
+    // side channel and must be rejected.
+    let target_private_hint = QueryFailure {
+        reason_code: QueryFailureReason::DeviceResultUnavailable,
+        ..unavailable.failures[0].clone()
+    };
+    if target_private_hint.validate().is_ok() {
+        bail!("the target-private reason accepted a retry_after_ms timing hint");
+    }
+
+    record_vector_event(
+        "privacy.remote_directory_unavailable_is_not_an_empty_device_list",
+        input,
+        expected,
+        &unavailable_value,
+    );
+    Ok(())
 }
 
 fn is_sha256_digest(digest: &str) -> bool {

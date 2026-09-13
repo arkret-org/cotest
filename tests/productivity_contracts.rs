@@ -372,20 +372,17 @@ fn scheduled_send_signed_event(body: &str) -> arkret_wire::AuthoredEvent {
     .unwrap();
     let signer_resolution_evidence_ref =
         cotest::fixture_signer_evidence_ref("scheduled-send-producer");
-    event.attach_proof(
-        ProducerEventProof {
-            kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
-            verification_method: DidUrl::new("did:web:alice.example#device-1").unwrap(),
-            event_digest: digest,
-            signer_resolution_evidence_ref: Some(signer_resolution_evidence_ref),
-            created_at: event.created_at,
-            domain: None,
-            audience: None,
-            proof_purpose: None,
-            jws: "header..signature".to_owned(),
-        }
-        .into(),
-    );
+    event.attach_proof(ProducerEventProof {
+        kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
+        verification_method: DidUrl::new("did:web:alice.example#device-1").unwrap(),
+        event_digest: digest,
+        signer_resolution_evidence_ref: Some(signer_resolution_evidence_ref),
+        created_at: event.created_at,
+        domain: None,
+        audience: None,
+        proof_purpose: None,
+        jws: "header..signature".to_owned(),
+    });
     event
 }
 
