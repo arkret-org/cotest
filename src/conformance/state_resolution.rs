@@ -140,7 +140,7 @@ fn validate_resolution_confirmation_refailure(vectors: &[Value]) -> Result<()> {
         })
         .context("CBS fixture omits fork-resolution collision vector")?;
     let case = vector
-        .get("cases")
+        .get("resolution_cases")
         .and_then(Value::as_array)
         .and_then(|cases| {
             cases.iter().find(|case| {
@@ -148,7 +148,7 @@ fn validate_resolution_confirmation_refailure(vectors: &[Value]) -> Result<()> {
                     == Some("resolution_confirmation_failure_refails_closed_after_clear")
             })
         })
-        .context("fork-resolution vector omits confirmation-refailure case")?;
+        .context("fork-resolution vector omits resolution confirmation-refailure case")?;
     ensure!(
         case.get("resolution_confirmation_after_clear")
             .and_then(Value::as_str)

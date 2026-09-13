@@ -6,7 +6,7 @@ use anyhow::{Result, anyhow, bail};
 use arkret_identifiers::{CellRef, EventId};
 use arkret_state::state::{EMPTY_STATE_ROOT, compute_state_root};
 use arkret_state::state_model::{ResolvedCellState, SequencedStateValue};
-use arkret_wire::{CausalRegisterBottomPolicy, EventCellStateModel, EventKind};
+use arkret_wire::{EventCellStateModel, EventKind};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -444,12 +444,6 @@ fn assert_strand_tracks_registry_binding() -> Result<()> {
     if write.state_model != Some(EventCellStateModel::CausalRegister) {
         bail!(
             "{eventkind_strand_tracks_update} state model must remain causal_register",
-            eventkind_strand_tracks_update = arkret_wire::event_kind_str::STRAND_TRACKS_UPDATE
-        );
-    }
-    if write.bottom != Some(CausalRegisterBottomPolicy::Expose) {
-        bail!(
-            "{eventkind_strand_tracks_update} bottom policy must remain expose",
             eventkind_strand_tracks_update = arkret_wire::event_kind_str::STRAND_TRACKS_UPDATE
         );
     }

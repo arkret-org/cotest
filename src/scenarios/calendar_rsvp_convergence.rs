@@ -6,10 +6,10 @@
 //!
 //! * an RSVP carries the registry-derived cell effect, so it reaches its CBS cell instead of being
 //!   accepted as a side-band record;
-//! * two responses that do not observe each other stay exposed as two heads — the server may not
-//!   pick a winner by HLC, arrival order or event id;
-//! * a response that names both heads in `causal_refs` dominates them, so the responder converges
-//!   back to one answer;
+//! * two responses that do not observe each other retain both identities while the server exposes
+//!   the fixed `(depth, EventId)` winner, independently of HLC and arrival order;
+//! * a response that names the current winner in `causal_refs` has greater depth and becomes the
+//!   next deterministic answer;
 //!
 //! Cell-subject isolation between responders is not repeated here: the
 //! accountable actor is part of the composite subject, which the reducer unit
@@ -18,7 +18,7 @@
 //!
 //! This is deliberately a **Soland product-integration scenario**, not a
 //! portable Arkret conformance vector. Writes and public lifecycle reads use
-//! registered `/_arkret/*` operations; assertions over materialized RSVP heads
+//! registered `/_arkret/*` operations; assertions over the materialized RSVP winner
 //! use Soland's product-private projection read because that implementation
 //! state is not part of the cross-implementation wire contract.
 
@@ -92,11 +92,12 @@ fn inkson_rsvp_payload(
         None,
         &calendar_fields,
         basis,
+        None,
     )?;
     Ok(serde_json::to_value(operation.payload())?)
 }
 
-/// Reads the schedule revision frontier and the live RSVP heads.
+/// Reads the schedule revision winner used as the RSVP basis.
 async fn assert_realm_identity(client: &TestActorClient, realm_id: &str) -> Result<()> {
     let view: arkret_models_collaboration::governance::realm_governance::RealmLifecycleView =
         serde_json::from_value(
@@ -145,49 +146,44 @@ async fn inkson_schedule_frontier(
             })
         })
         .collect::<Result<Vec<_>>>()?;
-    Ok(inkson::calendar::schedule_revision_heads(
+    Ok(vec![inkson::calendar::schedule_revision_winner(
         &events,
         strand_id,
         arkret_canonical::DigestSuite::Sha256,
     )?
-    .into_iter()
-    .map(|digest| digest.as_str().to_owned())
-    .collect())
+    .to_string()])
 }
 
-fn heads_for(strand: &Value, actor: &arkret_wire::ActorId) -> Vec<Value> {
+fn winner_for(strand: &Value, actor: &arkret_wire::ActorId) -> Option<Value> {
     strand["rsvps"]
         .as_array()
-        .map(|cells| {
-            cells
-                .iter()
-                // This product-private projection stores canonical Actor JSON
-                // in a string; decode it strictly and compare the full identity.
-                .filter(|cell| {
-                    cell["actor_id"].as_str()
-                        .and_then(|value| serde_json::from_str::<arkret_wire::ActorId>(value).ok())
-                        .as_ref() == Some(actor)
-                })
-                .flat_map(|cell| {
-                    cell["heads"]
-                        .as_array()
-                        .cloned()
-                        .unwrap_or_default()
-                        .into_iter()
-                })
-                .collect()
+        .and_then(|cells| {
+            cells.iter().find(|cell| {
+                cell["actor_id"]
+                    .as_str()
+                    .and_then(|value| serde_json::from_str::<arkret_wire::ActorId>(value).ok())
+                    .as_ref()
+                    == Some(actor)
+            })
         })
-        .unwrap_or_default()
+        .and_then(|cell| cell.get("winner"))
+        .filter(|winner| !winner.is_null())
+        .cloned()
 }
 
-fn head_statuses(heads: &[Value]) -> Vec<String> {
-    let mut statuses: Vec<String> = heads
-        .iter()
-        .filter_map(|head| head["entry"]["response"]["status"].as_str())
-        .map(ToOwned::to_owned)
-        .collect();
-    statuses.sort();
-    statuses
+fn winner_status(winner: &Value) -> Option<&str> {
+    winner["entry"]["response"]["status"].as_str()
+}
+
+fn higher_event_id<'a>(
+    left: &'a arkret_wire::Event,
+    right: &'a arkret_wire::Event,
+) -> &'a arkret_wire::Event {
+    if left.event_id.token_bytes() > right.event_id.token_bytes() {
+        left
+    } else {
+        right
+    }
 }
 
 fn submitted_digest(response: &Value) -> Result<String> {
@@ -520,11 +516,12 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
         bob_grant_refs,
     )
     .await?;
-    let bob_heads = heads_for(
+    let bob_winner = winner_for(
         &read_soland_product_projection_strand(&bob, &strand_id).await?,
         &actor_for_station(bob_did, bob.service_id())?,
-    );
-    if head_statuses(&bob_heads) != vec!["accepted".to_owned()] {
+    )
+    .ok_or_else(|| anyhow!("Bob's RSVP has no deterministic winner"))?;
+    if winner_status(&bob_winner) != Some("accepted") {
         return Err(anyhow!(
             "Bob's RSVP did not materialize through the real reducer"
         ));
@@ -568,31 +565,38 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
     let second_digest = submit_prepared_event(&alice_second_device, &second_event).await?;
 
     let strand = read_soland_product_projection_strand(&alice, &strand_id).await?;
-    let heads = heads_for(&strand, &actor_for_station(alice_did, alice.service_id())?);
-    if heads.len() != 2 {
+    let winner = winner_for(&strand, &actor_for_station(alice_did, alice.service_id())?)
+        .ok_or_else(|| anyhow!("concurrent responses have no deterministic winner"))?;
+    let expected_status = if higher_event_id(&first_event, &second_event).event_id
+        == first_event.event_id
+    {
+        "accepted"
+    } else {
+        "declined"
+    };
+    if winner_status(&winner) != Some(expected_status) {
         return Err(anyhow!(
-            "concurrent responses must expose two heads, got {}; the server may not choose \
-             between them by HLC, arrival order or event id",
-            heads.len()
+            "concurrent responses did not select the fixed (depth, EventId) winner"
         ));
     }
-    if head_statuses(&heads) != vec!["accepted".to_owned(), "declined".to_owned()] {
-        return Err(anyhow!("both concurrent answers must remain visible"));
-    }
 
-    // Causal successor: naming both heads dominates them, so Alice converges
-    // back to a single answer without anyone picking a winner for her.
+    // A normal edit references the deterministic winner and therefore has a
+    // greater causal depth than both same-depth candidates.
+    let winning_digest = if expected_status == "accepted" {
+        first_digest.clone()
+    } else {
+        second_digest.clone()
+    };
     let mut resolving_basis = frontier.clone();
-    resolving_basis.push(first_digest.clone());
-    resolving_basis.push(second_digest.clone());
+    resolving_basis.push(winning_digest);
     resolving_basis.sort();
     resolving_basis.dedup();
     let resolved = alice
         .submit_event_with_causal_refs(
             &realm_id,
             "ak.rsvp.set",
-            // The entry basis stays the schedule frontier; the extra causal
-            // edges are what dominate the earlier RSVP heads.
+            // The entry basis stays the schedule winner; the additional causal
+            // edge is the previous RSVP winner.
             inkson_rsvp_payload(
                 &realm_id,
                 &strand_id,
@@ -608,20 +612,15 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
     let resolved_digest = submitted_digest(&resolved)?;
 
     let strand = read_soland_product_projection_strand(&alice, &strand_id).await?;
-    let heads = heads_for(&strand, &actor_for_station(alice_did, alice.service_id())?);
-    if heads.len() != 1 {
-        return Err(anyhow!(
-            "a response observing both heads must dominate them, got {} heads",
-            heads.len()
-        ));
-    }
-    if head_statuses(&heads) != vec!["tentative".to_owned()] {
-        return Err(anyhow!("the surviving head must be the causal successor"));
+    let winner = winner_for(&strand, &actor_for_station(alice_did, alice.service_id())?)
+        .ok_or_else(|| anyhow!("causal successor has no winner"))?;
+    if winner_status(&winner) != Some("tentative") {
+        return Err(anyhow!("the causal successor must become the winner"));
     }
 
     // Exchange device/arrival order for a second concurrent pair, replay the
     // exact first Event, and verify neither arrival order nor idempotent replay
-    // changes the exposed causal-register heads.
+    // changes the exposed causal-register winner.
     let mut next_pair_basis = frontier.clone();
     next_pair_basis.push(resolved_digest);
     next_pair_basis.sort();
@@ -661,19 +660,29 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
     let reverse_first_digest = submit_prepared_event(&alice_second_device, &reverse_first).await?;
     let reverse_second_digest = submit_prepared_event(&alice, &reverse_second).await?;
     submit_prepared_event(&alice_second_device, &reverse_first).await?;
-    let heads = heads_for(
+    let winner = winner_for(
         &read_soland_product_projection_strand(&alice_second_device, &strand_id).await?,
         &actor_for_station(alice_did, alice.service_id())?,
-    );
-    if heads.len() != 2
-        || head_statuses(&heads) != vec!["accepted".to_owned(), "declined".to_owned()]
+    )
+    .ok_or_else(|| anyhow!("reversed concurrent responses have no winner"))?;
+    let reverse_expected = if higher_event_id(&reverse_first, &reverse_second).event_id
+        == reverse_first.event_id
     {
+        "accepted"
+    } else {
+        "declined"
+    };
+    if winner_status(&winner) != Some(reverse_expected) {
         return Err(anyhow!(
-            "reversed arrival plus exact replay must retain exactly the two concurrent heads"
+            "reversed arrival plus exact replay changed the deterministic winner"
         ));
     }
     let mut final_resolution_basis = frontier.clone();
-    final_resolution_basis.extend([reverse_first_digest, reverse_second_digest]);
+    final_resolution_basis.push(if reverse_expected == "accepted" {
+        reverse_first_digest
+    } else {
+        reverse_second_digest
+    });
     final_resolution_basis.sort();
     final_resolution_basis.dedup();
     alice
@@ -692,11 +701,12 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
             calendar_grant_refs,
         )
         .await?;
-    let final_heads = heads_for(
+    let final_winner = winner_for(
         &read_soland_product_projection_strand(&alice, &strand_id).await?,
         &actor_for_station(alice_did, alice.service_id())?,
-    );
-    if final_heads.len() != 1 || head_statuses(&final_heads) != vec!["tentative".to_owned()] {
+    )
+    .ok_or_else(|| anyhow!("final RSVP has no winner"))?;
+    if winner_status(&final_winner) != Some("tentative") {
         return Err(anyhow!(
             "reversed arrival order must converge to the same causal successor"
         ));
@@ -841,15 +851,18 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
         .await?;
     let accepted_digest = submit_prepared_event(&alice, &accepted).await?;
     let declined_digest = submit_prepared_event(&alice_second_device, &declined).await?;
-    if heads_for(
+    let expected_status = if higher_event_id(&accepted, &declined).event_id == accepted.event_id {
+        "accepted"
+    } else {
+        "declined"
+    };
+    let before_restart = winner_for(
         &read_soland_product_projection_strand(&alice, &strand_id).await?,
         &actor_for_station(alice_did, alice.service_id())?,
-    )
-    .len()
-        != 2
-    {
+    );
+    if before_restart.as_ref().and_then(winner_status) != Some(expected_status) {
         return Err(anyhow!(
-            "pre-restart Calendar cell did not expose two heads"
+            "pre-restart Calendar cell did not expose the deterministic winner"
         ));
     }
 
@@ -869,31 +882,31 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
             "unknown namespaced display metadata was lost across restart: {restarted_strand}"
         ));
     }
-    let heads = heads_for(
+    let winner = winner_for(
         &restarted_strand,
         &actor_for_station(alice_did, alice.service_id())?,
     );
-    if heads.len() != 2
-        || head_statuses(&heads) != vec!["accepted".to_owned(), "declined".to_owned()]
-    {
+    if winner.as_ref().and_then(winner_status) != Some(expected_status) {
         return Err(anyhow!(
-            "restart did not restore the concurrent RSVP heads: {restarted_strand}"
+            "restart did not restore the deterministic RSVP winner: {restarted_strand}"
         ));
     }
     submit_prepared_event(&alice, &accepted).await?;
     submit_prepared_event(&alice_second_device, &declined).await?;
-    if heads_for(
+    let replayed = winner_for(
         &read_soland_product_projection_strand(&alice, &strand_id).await?,
         &actor_for_station(alice_did, alice.service_id())?,
-    )
-    .len()
-        != 2
-    {
-        return Err(anyhow!("post-restart exact replay duplicated RSVP heads"));
+    );
+    if replayed.as_ref().and_then(winner_status) != Some(expected_status) {
+        return Err(anyhow!("post-restart exact replay changed the RSVP winner"));
     }
 
     let mut resolution_basis = frontier.clone();
-    resolution_basis.extend([accepted_digest, declined_digest]);
+    resolution_basis.push(if expected_status == "accepted" {
+        accepted_digest
+    } else {
+        declined_digest
+    });
     resolution_basis.sort();
     resolution_basis.dedup();
     alice
@@ -919,11 +932,11 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
     let alice = server
         .demo_client(alice_did, "ak:device:01904100-0000-7000-8000-0000000000d1")
         .await?;
-    let heads = heads_for(
+    let winner = winner_for(
         &read_soland_product_projection_strand(&alice, &strand_id).await?,
         &actor_for_station(alice_did, alice.service_id())?,
     );
-    if heads.len() != 1 || head_statuses(&heads) != vec!["tentative".to_owned()] {
+    if winner.as_ref().and_then(winner_status) != Some("tentative") {
         return Err(anyhow!(
             "resolved RSVP cell did not survive the second restart"
         ));

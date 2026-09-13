@@ -2,7 +2,7 @@
 
 ## 目标
 
-bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending move。Realm title / summary / avatar 的唯一写入面 `ak.realm.profile` 使用 `ak.component.realm.profile.v1` 的 `causal_register`：并发 sibling 作为多个 head 暴露，因果有序的后继 profile 收敛为单值。当前规范还没有注册可由 inkson 提交的 repair event kind,所以 Realm admin 的 repair 区保持只读,不渲染未注册的修复提交控件。
+bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending move。Realm title / summary / avatar 的唯一写入面 `ak.realm.profile` 使用 `ak.component.realm.profile.v1` 的 `causal_register`：全部合资格 sibling 身份作为证据保留，current 按固定 `(depth, EventId)` 只暴露一个赢家。普通编辑引用当前来源即可形成更高 depth 的后继，不需要通用 repair event。
 
 ## Spec 锚点
 
@@ -72,9 +72,9 @@ bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending 
 ## Implementation notes
 
 - **soland 已落地**:`ak.realm.profile` 的 sequenced-state 更新不产生 Bottom；admin diagnostics 对该 cell 返回空数组。
-- **inkson 已落地**:Realm admin repair 区不为 sequenced-state 拒绝伪造 repair Event，无 causal-register Bottom 时保持只读空态。
-- **测试侧已激活**:offline outbox / pending reconcile 在 `sync/offline-queue-replay` live 覆盖;本 scenario 覆盖 title update 的 causal-register 多 head 语义与 read-only repair surface。普通 Event sibling 保留各自 Event identity，不选隐式 winner；control `sequenced_state` 的竞争 predecessor 由 call-state conformance vectors 覆盖。
-- **剩余边界**:outbox capacity、旧 revision 持久拒绝、重新 author、多个 ordinary causal-register Bottom cell 排序仍保留为后续边界 fixme。
+- **inkson 已落地**: ordinary causal-register current 只消费确定性赢家，不渲染通用多头 repair 或 Bottom 控件；领域专用诊断仍按各自合同显示。
+- **测试侧已激活**:offline outbox / pending reconcile 在 `sync/offline-queue-replay` live 覆盖；本 scenario 覆盖 title update 的固定 `(depth, EventId)` 赢家及后继编辑。普通 sibling 保留各自 Event identity 作为历史证据；control `sequenced_state` 的竞争 predecessor 由 call-state conformance vectors 覆盖。
+- **剩余边界**:outbox capacity、旧 revision 持久拒绝与重新 author 仍保留为后续边界 fixme；ordinary causal-register concurrency 不再产生 Bottom。
 
 ## 总耗时预估
 

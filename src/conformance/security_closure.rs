@@ -299,7 +299,7 @@ pub fn validate_security_closure_fixture(fixture: &SecurityClosureFixture) -> Re
         .find(|vector| vector.vector_id == "ak.vector.lattice.concurrent_heads_no_winner.v1")
         .expect("required concurrent-head vector was checked above");
     if concurrent.steps.len() != 1
-        || concurrent.steps[0].name != "input_order_independent_heads"
+        || concurrent.steps[0].name != "input_order_independent_winner"
         || concurrent.steps[0].runner.operation != "causal_register.join"
         || concurrent.steps[0]
             .input
@@ -308,7 +308,7 @@ pub fn validate_security_closure_fixture(fixture: &SecurityClosureFixture) -> Re
             .is_none_or(|siblings| siblings.len() != 2)
     {
         bail!(
-            "concurrent causal-register vector must retain two Event-identified heads without an implicit winner"
+            "concurrent causal-register vector must retain both Event identities and expose one input-order-independent winner"
         );
     }
     Ok(())

@@ -418,8 +418,8 @@ conformance_test!(
     /// Event-kind to StateModel dispatch consistency. Cross-checks
     /// the live event-kind-registry: every active reducer-input durable kind
     /// with cell_family declares one core model, no cell_family appears in
-    /// two models, namespace is ak.component.*, causal-register Bottom (when
-    /// declared) is reject or expose, non-causal models declare no Bottom, and the fixture's
+    /// two models, namespace is ak.component.*, causal-register families never
+    /// declare Bottom, and the fixture's
     /// expected cell-family/model bindings exactly match
     /// the registry.
     event_kind_lattice_dispatch_fixture_suite_matches_reference_semantics,

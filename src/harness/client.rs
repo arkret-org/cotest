@@ -472,8 +472,8 @@ impl TestActorClient {
         let event_digest = event_id.event_digest();
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
         // A frontier read can fail for reasons that have nothing to do with Seal
-        // coverage -- an ordinary causal-register Bottom diagnostic can make
-        // this endpoint answer 409. Swallowing that made a permanent server-side
+        // coverage -- a registered cross-Cell domain diagnostic can make this
+        // endpoint answer 409. Swallowing that made a permanent server-side
         // rejection look byte-for-byte like "the Seal has not caught up yet",
         // so the last error is kept and reported with the timeout.
         let mut last_frontier_error: Option<String> = None;
