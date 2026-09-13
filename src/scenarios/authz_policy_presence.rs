@@ -292,7 +292,7 @@ pub async fn push_and_ice_contracts_work() -> Result<()> {
                         platform: Some("desktop".to_owned()),
                         app_id: Some("inkson".to_owned()),
                         display_name: None,
-                        recipient_id: None,
+                        visible_notification_opt_in: false,
                     },
                 ),
                 StatusCode::OK,

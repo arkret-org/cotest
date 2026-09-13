@@ -236,7 +236,7 @@ pub async fn declared_durable_effects_match_live_producers() -> Result<()> {
             platform: Some("web".to_owned()),
             app_id: None,
             display_name: None,
-            recipient_id: None,
+            visible_notification_opt_in: false,
         })?
         .send()
         .await?;

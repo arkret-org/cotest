@@ -7,20 +7,18 @@ fn notary_value_uses_core_actor_id_and_rejects_did_spelling() {
     let actor_id = arkret_wire::DidCoreId::new("ak:did_core:web:notary.example").unwrap();
 
     let notary = cotest::fixture_notary_configuration(actor_id.clone());
-    assert_eq!(notary.quorum_size(), 1);
-    let quorum = serde_json::to_value(notary).expect("quorum notary serializes");
+    let authority = serde_json::to_value(notary).expect("notary authority serializes");
     assert_eq!(
-        quorum["signers"][0]["actor_id"],
+        authority["signer"]["actor_id"],
         json!(arkret_wire::ActorId::service(actor_id.clone()))
     );
-    assert_eq!(quorum["kind"], json!("quorum"));
-    assert_eq!(quorum["fault_tolerance"], json!(0));
-    assert_eq!(quorum["max_clock_error_ms"], json!(0));
-    assert!(quorum["signers"][0].get("did").is_none());
+    assert_eq!(authority["max_clock_error_ms"], json!(0));
+    assert!(authority["signer"].get("did").is_none());
+    assert!(authority.get("kind").is_none());
+    assert!(authority.get("fault_tolerance").is_none());
 
-    let empty_quorum =
-        json!({"kind": "quorum", "signers": [], "fault_tolerance": 0, "max_clock_error_ms": 0});
-    assert!(serde_json::from_value::<arkret_wire::NotaryValue>(empty_quorum).is_err());
+    let missing_signer = json!({"max_clock_error_ms": 0});
+    assert!(serde_json::from_value::<arkret_wire::NotaryValue>(missing_signer).is_err());
 }
 
 #[test]

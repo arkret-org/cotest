@@ -328,7 +328,8 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
     let root_key = SigningKey::from_bytes(&[0x24; 32]);
     let root_multibase =
         arkret_canonical::ed25519_pubkey_to_did_key_multibase(&root_key.verifying_key().to_bytes());
-    let root_method = DidUrl::new(format!("did:key:{root_multibase}#{root_multibase}"))?;
+    let root_method = DidUrl::new(format!("did:key:{root_multibase}#{root_multibase}"))
+        .map_err(anyhow::Error::msg)?;
     let create = with_native_unit_proof(create.into_event(), &root_method, &root_key)?;
     let realm_id = create.realm_id.clone();
     let mut authorize = arkret_wire::test_support::raw_event(

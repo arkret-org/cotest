@@ -1,11 +1,10 @@
 use arkret::{
-    ActorId, CellRef, Did, DidCoreId, DidUrl, Ed25519PayloadSigner, EventId, Hash,
-    NotaryJoseAlgorithm, NotaryKeyKind, NotarySignerDescriptor, NotaryValue,
-    PeerSealResolveRequestBody, RealmId, SealConclusionAncestryOutcome,
-    SealConclusionAncestrySelector, SealConclusionAncestrySelectorKind, SealConclusionOutcome,
-    SealConclusionQuery, SealConclusionSelector, SealConclusionSet, SealConclusionStatement,
-    SealId, SealResolveOutcome, SealResolveSelection, sign_seal_conclusion,
-    verify_seal_conclusion_set_quorum_chain,
+    ActorId, CellRef, Did, DidCoreId, DidUrl, Ed25519PayloadSigner, EventId, NotaryJoseAlgorithm,
+    NotaryKeyKind, NotarySignerDescriptor, NotaryValue, PeerSealResolveRequestBody, RealmId,
+    SealConclusionAncestryOutcome, SealConclusionAncestrySelector,
+    SealConclusionAncestrySelectorKind, SealConclusionOutcome, SealConclusionQuery,
+    SealConclusionSelector, SealConclusionSet, SealConclusionStatement, SealId, SealResolveOutcome,
+    SealResolveSelection, sign_seal_conclusion, verify_seal_conclusion_set_authority_chain,
 };
 use ed25519_dalek::SigningKey;
 use serde_json::json;
@@ -93,12 +92,12 @@ fn conclusion_query_round_trips_through_the_sdk_resolve_contract() {
             },
         )],
     };
-    let certificate = sign_seal_conclusion(statement, &[&signer]).unwrap();
+    let certificate = sign_seal_conclusion(statement, &signer).unwrap();
     let conclusion_set = SealConclusionSet {
         configuration_handoffs: vec![],
         conclusions: vec![certificate],
     };
-    verify_seal_conclusion_set_quorum_chain(
+    verify_seal_conclusion_set_authority_chain(
         &conclusion_set,
         &realm(),
         &configuration_ref,

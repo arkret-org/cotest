@@ -6,9 +6,9 @@ use arkret::state_model::{
     Counter, OrSet, OrderedLog, ResolvedCellState, StateModel, StateModelKind, StateWrite,
 };
 use arkret::{
-    ActorId, CanonicalCellState, CellRef, DidCoreId, EventCellStateModel, EventId, Hash, LatticeOp,
-    LatticeOpType,
+    ActorId, CanonicalCellState, CellRef, DidCoreId, EventId, Hash, LatticeOp, LatticeOpType,
 };
+use arkret_wire::EventCellStateModel;
 use serde_json::{Value, json};
 
 use super::{load_fixture_value, validate_profile};

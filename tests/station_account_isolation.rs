@@ -61,14 +61,29 @@ async fn seed(store: &dyn PersistenceStore, station: &str) -> Result<AccountFixt
             .await?,
         AccountDataCasResult::Applied(_)
     ));
+    let device_authorize_event_id = arkret_wire::EventId::from_digest(
+        DigestSuite::Sha256,
+        arkret_canonical::digest_bytes(DigestSuite::Sha256, station.as_bytes()),
+    );
+    let device_authorization = DeviceRevocationGateSelector {
+        principal_id: account.principal_id.clone(),
+        station_id: account.station_id.clone(),
+        device_id: DEVICE.into(),
+        target_device_authorize_event_id: device_authorize_event_id.to_string(),
+        target_device_generation_ref: 1,
+    };
     store
         .devices()
-        .put(&DeviceInventoryRecord {
+        .seed_test_record(&DeviceInventoryRecord {
             actor: account.principal_id.to_string(),
             device_id: DEVICE.into(),
             display_name: Some(station.into()),
             verification_state: "verified".into(),
-            payload: json!({"device_generation": 1, "station_id": account.station_id}),
+            payload: json!({
+                "device_authorize_event_id": device_authorize_event_id,
+                "authorized_generation_ref": 1,
+                "station_id": account.station_id.clone(),
+            }),
             created_at: now,
             updated_at: now,
             revoked_at: None,
@@ -115,6 +130,7 @@ async fn seed(store: &dyn PersistenceStore, station: &str) -> Result<AccountFixt
                 sender: account.principal_id.to_string(),
                 recipient: account.principal_id.to_string(),
                 device_id: DEVICE.into(),
+                recipient_device_authorization: device_authorization.clone(),
                 position: 1,
                 content: json!({"station": station}),
                 created_at: now,
@@ -133,11 +149,24 @@ async fn seed(store: &dyn PersistenceStore, station: &str) -> Result<AccountFixt
         .context("queue ack token")?;
     store
         .push_devices()
-        .register(json!({
-            "registration_id": "same-registration", "actor": account.principal_id,
-            "device_id": DEVICE, "push_gateway": "https://push.example", "push_key": "same-key",
-            "app_id": "inkson", "station_id": account.station_id,
-        }))
+        .register(
+            &device_authorization,
+            json!({
+                "registration_id": "same-registration",
+                "account_id": account.clone(),
+                "device_id": DEVICE,
+                "push_gateway": "https://push.example",
+                "push_key": "same-key",
+                "platform": null,
+                "app_id": "inkson",
+                "visible_notification_opt_in": false,
+                "push_route_id": "inkson",
+                "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
+                "salt_epoch_id": "station-isolation",
+                "expires_at": null,
+                "retained_push_targets": [],
+            }),
+        )
         .await?;
     let genesis = arkret_wire::test_support::raw_event_at(
         EventKind::RealmCreate.as_str(),
@@ -315,7 +344,7 @@ async fn verify_isolation(
             .await?;
         ensure!(queue.len() == 1 && queue[0].content["station"] == label);
         ensure!(
-            own.push_devices().snapshot_all().await?[0]["station_id"]
+            own.push_devices().snapshot_all().await?[0]["account_id"]["station_id"]
                 == fixture.account.station_id.as_str()
         );
         let mut takeover = fixture.pcr.clone();
@@ -340,7 +369,7 @@ async fn verify_isolation(
     ensure!(
         right
             .push_devices()
-            .unregister(principal, DEVICE, None, None)
+            .unregister(&b.account, DEVICE, None, None)
             .await?
             == 1
     );

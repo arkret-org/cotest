@@ -135,7 +135,8 @@ pub fn run_control_proposal_ack_suite() -> Result<()> {
     )?;
     ack.validate_notary_authority(&notary)?;
     let mut substituted = ack.clone();
-    substituted.signature.verification_method = DidUrl::new("did:web:other.example#notary")?;
+    substituted.signature.verification_method =
+        DidUrl::new("did:web:other.example#notary").map_err(anyhow::Error::msg)?;
     ensure!(
         substituted.validate_notary_authority(&notary).is_err(),
         "an unrelated Station supplied the sole Ack"

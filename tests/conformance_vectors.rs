@@ -529,7 +529,7 @@ fn agent_approval_cannot_admit_a_payload_without_its_publication_event() {
         .unwrap();
     assert_eq!(case["expect"], "fail");
     assert_eq!(case["reducer_input"], true);
-    let approval = arkret_wire::Event::new(
+    let approval = arkret_wire::test_support::raw_event_for_actor_at(
         "ak.agent.action_approve",
         arkret_wire::ScopeRef::Realm {
             realm_id: serde_json::from_value(case["payload"]["target"]["realm_id"].clone())
@@ -541,6 +541,9 @@ fn agent_approval_cannot_admit_a_payload_without_its_publication_event() {
         1,
         arkret_wire::Hlc::new("000000000001-0000-00000000").unwrap(),
         case["payload"].clone(),
+        chrono::DateTime::parse_from_rfc3339("2026-01-01T00:00:00Z")
+            .unwrap()
+            .to_utc(),
     )
     .unwrap();
     let error = arkret_wire::event_submission::validate_approval_publication_event(

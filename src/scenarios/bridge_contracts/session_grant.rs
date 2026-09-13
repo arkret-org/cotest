@@ -70,7 +70,7 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
         platform: Some("web".to_owned()),
         app_id: Some("inkson".to_owned()),
         display_name: None,
-        recipient_id: None,
+        visible_notification_opt_in: false,
     };
 
     // §3.3 presentation: `Authorization: DPoP <grant jwt>` plus a

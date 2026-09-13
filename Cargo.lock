@@ -503,6 +503,7 @@ dependencies = [
  "arkret-identifiers",
  "arkret-models-crypto",
  "arkret-models-identity",
+ "arkret-models-integration",
  "arkret-schema",
  "arkret-wire",
  "chrono",
@@ -9789,6 +9790,7 @@ dependencies = [
 name = "soland-storage"
 version = "0.3.0"
 dependencies = [
+ "arkret",
  "arkret-canonical",
  "arkret-event-draft",
  "arkret-identifiers",
@@ -9816,6 +9818,7 @@ name = "soland-storage-postgres"
 version = "0.3.0"
 dependencies = [
  "anyhow",
+ "arkret",
  "arkret-canonical",
  "arkret-event-draft",
  "arkret-identifiers",
