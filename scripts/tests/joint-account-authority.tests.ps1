@@ -76,20 +76,48 @@ try {
         throw "Explicit Station bearers must remain paired with their indexed Station"
     }
     $invalidAssignmentSets = @(
-        ,@("server1=shared-bearer", "server2=shared-bearer")
-        ,@("server1=only-one")
+        [pscustomobject]@{
+            Name = "shared bearer"
+            Assignments = @("server1=shared-bearer", "server2=shared-bearer")
+            ExpectedMessage = "must be unique per Station"
+        }
+        [pscustomobject]@{
+            Name = "partial assignment"
+            Assignments = @("server1=only-one")
+            ExpectedMessage = "is missing its explicit internal-channel bearer"
+        }
+        [pscustomobject]@{
+            Name = "malformed assignment"
+            Assignments = @("server1-without-separator", "server2=beta-bearer")
+            ExpectedMessage = "must use serverN=secret form"
+        }
+        [pscustomobject]@{
+            Name = "empty bearer"
+            Assignments = @("server1=   ", "server2=beta-bearer")
+            ExpectedMessage = "has an empty internal-channel bearer"
+        }
+        [pscustomobject]@{
+            Name = "duplicate Station"
+            Assignments = @("server1=alpha-bearer", "server1=second-bearer", "server2=beta-bearer")
+            ExpectedMessage = "has more than one internal-channel bearer"
+        }
+        [pscustomobject]@{
+            Name = "unknown Station"
+            Assignments = @("server1=alpha-bearer", "server2=beta-bearer", "server3=gamma-bearer")
+            ExpectedMessage = "was supplied for unknown Station"
+        }
     )
-    foreach ($invalidAssignments in $invalidAssignmentSets) {
+    foreach ($invalidCase in $invalidAssignmentSets) {
         $rejectedBinding = $false
         try {
             New-StationInternalChannelBindings `
                 -StationBaseUrls @("https://station-1.example", "https://station-2.example") `
-                -BearerAssignments $invalidAssignments | Out-Null
+                -BearerAssignments $invalidCase.Assignments | Out-Null
         } catch {
-            $rejectedBinding = $true
+            $rejectedBinding = $_.Exception.Message -match [regex]::Escape($invalidCase.ExpectedMessage)
         }
         if (-not $rejectedBinding) {
-            throw "Shared or partial Station bearer assignments must fail closed"
+            throw "Invalid Station bearer case '$($invalidCase.Name)' did not fail closed as expected"
         }
     }
 

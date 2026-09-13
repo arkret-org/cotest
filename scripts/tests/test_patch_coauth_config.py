@@ -95,6 +95,32 @@ class PatchCoauthConfigTests(unittest.TestCase):
                 with self.assertRaisesRegex(SystemExit, "must be unique per Station"):
                     MODULE.main()
 
+            invalid_station_sets = [
+                (
+                    ["--station", "server1", "https://station-server1.test", "   "],
+                    "empty internal-channel bearer",
+                ),
+                (
+                    [
+                        "--station", "server1", "https://station-server1.test", "alpha-bearer",
+                        "--station", "server1", "https://station-server2.test", "beta-bearer",
+                    ],
+                    "duplicate Station name",
+                ),
+                (
+                    [
+                        "--station", "server1", "https://station-server1.test", "alpha-bearer",
+                        "--owning-station", "server2",
+                    ],
+                    "owning Station is not present",
+                ),
+            ]
+            for station_arguments, expected_message in invalid_station_sets:
+                with self.subTest(expected_message=expected_message):
+                    with patch("sys.argv", common_arguments + station_arguments):
+                        with self.assertRaisesRegex(SystemExit, expected_message):
+                            MODULE.main()
+
     def test_missing_current_key_fails_closed_without_legacy_fallback(self):
         with self.assertRaises(SystemExit):
             MODULE.replace_named_pem_key(
