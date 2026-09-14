@@ -546,8 +546,6 @@ pub fn principal_registration_fixture(input: Value) -> Result<Value> {
         "sha256:{}",
         hex::encode(Sha256::digest(recovery_key.as_bytes()))
     );
-    let did_operation = serde_json::to_value(&draft.submit_body)
-        .context("serialize prepared principal DID operation")?;
     let did_document = draft
         .log_entry
         .get("state")
@@ -556,8 +554,18 @@ pub fn principal_registration_fixture(input: Value) -> Result<Value> {
     let normalized_did_document: arkret_models_identity::DidDocument =
         serde_json::from_value(did_document.clone())
             .context("project prepared principal DID document")?;
-    let document_digest = arkret_identity::document_canonical_digest(&normalized_did_document)
-        .map_err(|error| anyhow::anyhow!(error))?;
+    let principal_registration_anchor =
+        arkret_models_identity::PrincipalRegistrationAnchor::WebvhRegistration {
+            registration_did_operation: Box::new(draft.submit_body.clone()),
+            log_entries: vec![
+                serde_json::from_value(draft.log_entry.clone())
+                    .context("prepared principal inception is not an object")?,
+            ],
+            witness_records: Vec::new(),
+            normalized_did_document,
+        };
+    arkret_identity::validate_principal_registration_anchor(&principal_registration_anchor)
+        .context("validate prepared principal registration anchor")?;
     let lease: arkret::IdentityCreationLease =
         serde_json::from_value(input.identity_creation_lease)
             .context("parse identity-creation lease")?;
@@ -586,7 +594,7 @@ pub fn principal_registration_fixture(input: Value) -> Result<Value> {
         arkret::RequestId::new(arkret_identifiers::new_prefixed_uuid7("ak:request:"))
             .context("build identity-binding challenge request id")?,
         &lease,
-        draft.submit_body,
+        principal_registration_anchor.clone(),
         &arkret_wire::PcrGenesisUnit::new(
             genesis_create_event.clone(),
             founding_authorize_event.clone(),
@@ -611,13 +619,7 @@ pub fn principal_registration_fixture(input: Value) -> Result<Value> {
         "recovery_proof_public_key_multibase": key_material.recovery_proof_public_key_multikey,
         "backup_hpke_public_key_multibase": key_material.backup_hpke_public_key_multikey,
         "recovery_key_fingerprint": recovery_key_fingerprint,
-        "did_operation": did_operation,
-        "did_entry0_canonical_base64url": arkret::base64url_encode(
-            canonical::canonical_json_bytes(&draft.log_entry)?
-        ),
-        "did_document": did_document,
-        "document_digest": document_digest.as_str(),
-        "history_head": draft.version_id,
+        "principal_registration_anchor": principal_registration_anchor,
         // The signed genesis Event itself, not a reserved id for it. `ak:event:`
         // is an event-derived kind, so its id is a function of this finished
         // envelope; the id-only field this fixture used to emit was both
@@ -634,7 +636,7 @@ pub fn principal_registration_fixture(input: Value) -> Result<Value> {
         "stage": "custody_confirmed",
     });
     Ok(json!({
-        "did_operation": checkpoint["did_operation"],
+        "principal_registration_anchor": checkpoint["principal_registration_anchor"],
         "recovery_key": recovery_key,
         "checkpoint": checkpoint,
         "challenge_request": challenge_request,

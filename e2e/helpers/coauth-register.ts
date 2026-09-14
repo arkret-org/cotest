@@ -65,7 +65,7 @@ export type CanonicalAccountHandoff = {
 };
 
 type PrincipalRegistrationFixture = {
-  did_operation: Record<string, unknown>;
+  principal_registration_anchor: Record<string, unknown>;
   recovery_key: string;
   checkpoint: Record<string, unknown>;
   challenge_request: Record<string, unknown>;

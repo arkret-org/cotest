@@ -24,7 +24,8 @@ use arkret_models_crypto::{
     keys_upload_signing_input,
 };
 use arkret_models_identity::{
-    IdentityBindingPurpose, PCR_GENESIS_UNIT_KINDS, UnsignedIdentityCreationControlProof,
+    IdentityBindingPurpose, IdentityCreationControlProofKind, PCR_GENESIS_UNIT_KINDS,
+    PrincipalRegistrationAnchor, UnsignedIdentityCreationControlProof,
     UnsignedIdentityCreationControlProofBody,
 };
 use arkret_signatures::device_pairing::{
@@ -38,7 +39,6 @@ use arkret_signatures::http_signature::{
 use arkret_signatures::webvh::{
     PreparedPrincipalInception, PrincipalInceptionInput, prepare_principal_inception,
     sign_identity_creation_control_proof, sign_registration_did_evidence_draft,
-    validate_principal_inception_operation,
 };
 use arkret_wire::{
     Base64UrlString, EventRef, Hash, IdempotencyKey, NonEmptyString, ServiceOperationId,
@@ -841,7 +841,14 @@ async fn bootstrap_test_device_authorization(
         authorize.into_event(),
         &crate::publication::project_cells,
     )?;
-    let validated_inception = validate_principal_inception_operation(&prepared.submit_body)?;
+    let principal_registration_anchor = PrincipalRegistrationAnchor::WebvhRegistration {
+        registration_did_operation: Box::new(prepared.submit_body.clone()),
+        log_entries: vec![serde_json::from_value(prepared.log_entry.clone())?],
+        witness_records: Vec::new(),
+        normalized_did_document: serde_json::from_value(prepared.log_entry["state"].clone())?,
+    };
+    let validated_anchor =
+        arkret_identity::validate_principal_registration_anchor(&principal_registration_anchor)?;
     // This harness stands in for the Account Authority and therefore owns the
     // opaque deployment-local account subject. Keep the production domain
     // separator and bind the fixture subject to its stable local account id.
@@ -859,15 +866,16 @@ async fn bootstrap_test_device_authorization(
             .accept(issued_at)?;
     let control_proof =
         UnsignedIdentityCreationControlProof::new(UnsignedIdentityCreationControlProofBody {
+            proof_kind: IdentityCreationControlProofKind::DidWebvhInceptionUpdateKey,
             challenge_id: format!("cotest-pcr-genesis-{local_id}"),
             challenge: format!("cotest-pcr-genesis-challenge-{local_id}"),
             purpose: IdentityBindingPurpose::AccountBindingAndPcrGenesis,
             principal_id: principal_core_id.clone(),
             did: principal.clone(),
             account_subject,
-            operation_digest: validated_inception.operation_digest.clone(),
-            did_version_id: validated_inception.did_version_id.clone(),
-            control_key_digest: validated_inception.control_key_digest.clone(),
+            registration_anchor_digest: validated_anchor.registration_anchor_digest.clone(),
+            did_version_id: validated_anchor.did_version_id.clone(),
+            control_key_digest: validated_anchor.control_key_digest.clone(),
             pcr_realm_id: realm_id.clone(),
             realm_create_payload_digest: Hash::new(canonical_sha256(&unit.create().payload)?)?,
             founding_authorize_payload_digest: Hash::new(canonical_sha256(
@@ -883,7 +891,7 @@ async fn bootstrap_test_device_authorization(
             trust_domain: server.trust_domain().clone(),
             issued_at,
             expires_at: issued_at + chrono::Duration::minutes(4),
-            verification_key_multibase: validated_inception.root_public_key_multibase,
+            verification_key_multibase: validated_anchor.root_public_key_multibase,
         })?;
     let control_proof = sign_identity_creation_control_proof(control_proof, &root_seed)?;
     let idempotency_key = IdempotencyKey::new(format!("cotest-pcr-genesis-{local_id}"))
@@ -895,9 +903,9 @@ async fn bootstrap_test_device_authorization(
         pcr_realm_id: realm_id,
         idempotency_key: idempotency_key.clone(),
         registration_request_digest: Hash::new(format!("sha256:{}", "1".repeat(64)))?,
-        did_version_id: validated_inception.did_version_id,
-        control_key_digest: validated_inception.control_key_digest,
-        registration_did_operation: prepared.submit_body.clone(),
+        did_version_id: validated_anchor.did_version_id,
+        control_key_digest: validated_anchor.control_key_digest,
+        principal_registration_anchor,
         registration_did_evidence,
         identity_creation_control_proof: control_proof,
         genesis_unit: unit,
