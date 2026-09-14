@@ -317,7 +317,10 @@ impl TestActorClient {
             match response {
                 Ok(response) => return response.json(),
                 Err(error) if std::time::Instant::now() < deadline => {
-                    if !format!("{error}").contains("frontier_unavailable") {
+                    let detail = format!("{error}");
+                    if !detail.contains("frontier_unavailable")
+                        && !detail.contains("realm not found")
+                    {
                         return Err(error);
                     }
                     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
@@ -1136,6 +1139,7 @@ impl TestActorClient {
             let frontier = state.frontier;
             // Capability coverage is per ordinary Event: the reducer checks that a
             // named grant actually covers this action on this target.
+            event.data_basis = Some(frontier.sole_leaf()?.clone());
             event.auth_context = Some(AuthContext {
                 authority_refs: frontier.seal_basis.leaves,
             });
@@ -1243,6 +1247,7 @@ impl TestActorClient {
                 let physical_millis = chrono::Utc::now().timestamp_millis();
                 event.hlc = Some(Hlc::new(format!("{physical_millis:012x}-0000-a13f9c2e"))?);
             } else {
+                event.data_basis = Some(frontier.sole_leaf()?.clone());
                 event.auth_context = Some(AuthContext {
                     authority_refs: frontier.seal_basis.leaves,
                 });

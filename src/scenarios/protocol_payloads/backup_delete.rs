@@ -83,8 +83,8 @@ pub async fn run(server: &ArkretServer, token: &str, actor_id: &str) -> Result<(
             .bearer_auth(token)
             .header("Idempotency-Key", "protocol-payloads-key-backup-delete")
             .json(&body),
-        StatusCode::UNPROCESSABLE_ENTITY,
-        "schema_violation",
+        StatusCode::BAD_REQUEST,
+        "param_invalid",
     )
     .await?;
 

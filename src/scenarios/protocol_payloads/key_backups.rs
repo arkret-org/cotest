@@ -64,7 +64,8 @@ pub async fn run(server: &ArkretServer, token: &str, actor_id: &str) -> Result<(
     list_backups(server, token).await?;
     describe_backup_operations(server).await?;
     unlock_backup_requires_body_proof(server, token, actor_id).await?;
-    current_device_unlock_reaches_trust_anchor(server, token, actor_id).await?;
+    current_device_unlock_rejects_wrong_device_before_signature_trust(server, token, actor_id)
+        .await?;
     Ok(())
 }
 
@@ -243,15 +244,16 @@ async fn unlock_backup_requires_body_proof(
     Ok(())
 }
 
-async fn current_device_unlock_reaches_trust_anchor(
+async fn current_device_unlock_rejects_wrong_device_before_signature_trust(
     server: &ArkretServer,
     token: &str,
     actor_id: &str,
 ) -> Result<()> {
-    // `untrusted_backup_signature` is a registered `reason_codes[]` member, so
-    // it rides `error.details.reason_code`; the RFC 9457 `type` tail is the
-    // registered top-level code (api-conventions.md §5.1).
-    let problem = crate::harness::expect_api_error(
+    // The proof uses the deterministic backup-envelope key, not the
+    // authenticated session's current device key. Device binding is the first
+    // authorization gate, so the request must fail before evaluating whether
+    // that unrelated signature is otherwise well formed.
+    crate::harness::expect_api_error(
         server
             .http()
             .post(server.url(&format!("/_arkret/self/keys/backups/{BACKUP_ID}/unlock")))
@@ -259,19 +261,10 @@ async fn current_device_unlock_reaches_trust_anchor(
             .json(&KeysBackupsUnlockRequestBody {
                 proof: unlock_proof(server, token, actor_id).await?,
             }),
-        StatusCode::UNAUTHORIZED,
-        "signature_invalid",
+        StatusCode::FORBIDDEN,
+        "capability_denied",
     )
     .await?;
-    let reason = problem
-        .extensions
-        .get("reason_code")
-        .and_then(serde_json::Value::as_str);
-    if reason != Some("untrusted_backup_signature") {
-        return Err(anyhow!(
-            "unlock refusal must carry reason_code untrusted_backup_signature, got {reason:?}"
-        ));
-    }
     Ok(())
 }
 
