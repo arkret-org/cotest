@@ -118,6 +118,7 @@ test.describe("moderation and ban", () => {
     reportEvent.auth_context = {
       authority_refs: [sealRef],
     };
+    reportEvent.data_basis = sealRef;
     refreshEventEnvelopeProof(reportEvent, verificationMethod);
     const reportUrl = `${solandBaseUrl()}/_arkret/self/moderation/report`;
     const reportResp = await request.post(reportUrl, {

@@ -206,6 +206,7 @@ async function fileModerationReport(
   reportEvent.auth_context = {
     authority_refs: [sealLeaves[0]],
   };
+  reportEvent.data_basis = sealLeaves[0];
   refreshEventEnvelopeProof(reportEvent, verificationMethod);
   const url = `${solandBaseUrl()}/_arkret/self/moderation/report`;
   const response = await request.post(url, {
