@@ -114,7 +114,7 @@ def parse_args() -> argparse.Namespace:
         "--station",
         action="append",
         nargs=3,
-        metavar=("NAME", "URL", "SESSION_GRANT_INTROSPECTION_BEARER"),
+        metavar=("NAME", "URL", "INTERNAL_AUTHORITY_SHARED_SECRET"),
         default=[],
     )
     parser.add_argument("--owning-station", default="server1")
@@ -136,7 +136,7 @@ def main() -> int:
     station_items = list(args.station)
     if not station_items:
         raise SystemExit(
-            "FATAL: at least one --station NAME URL SESSION_GRANT_INTROSPECTION_BEARER is required"
+            "FATAL: at least one --station NAME URL INTERNAL_AUTHORITY_SHARED_SECRET is required"
         )
     stations_by_name: list[tuple[str, str, str]] = []
     bearer_credentials: set[str] = set()
@@ -257,7 +257,7 @@ def main() -> int:
         stations += (
             f"  - name: {station_name}\n"
             f"    endpoint: {yaml_string(station_endpoint)}\n"
-            "    session_grant_introspection_bearer: "
+            "    internal_authority_shared_secret: "
             f"{yaml_string(station_bearer)}\n"
             "    embedded_webvh_registration_bearer: "
             f"{yaml_string(args.embedded_webvh_registration_bearer)}\n"

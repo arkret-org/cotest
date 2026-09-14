@@ -103,7 +103,7 @@ param(
     # `serverN=secret` form. When omitted, the runner creates distinct stable
     # test credentials for every indexed Station; partial/shared assignments
     # are rejected rather than falling back to a global bearer.
-    [string[]]$CoauthStationSessionGrantIntrospectionBearers = @(),
+    [string[]]$CoauthStationInternalAuthoritySharedSecrets = @(),
     [string]$CoauthEmbeddedWebvhRegistrationBearer = "joint-e2e-webvh-registration",
     # did:webvh degraded_no_witness window (identity-did.md §4.2.1). Compressed
     # for resolver and harness witness-health checks; production clamps any
@@ -1897,7 +1897,7 @@ function New-StationInternalChannelBindings {
         [pscustomobject]@{
             Name = $name
             Endpoint = $StationBaseUrls[$index]
-            SessionGrantIntrospectionBearer = $bearer
+            InternalAuthoritySharedSecret = $bearer
         }
     }
     foreach ($name in $configured.Keys) {
@@ -1970,7 +1970,7 @@ function New-CoauthJointConfig {
             "--station",
             [string]$station.Name,
             [string]$station.Endpoint,
-            [string]$station.SessionGrantIntrospectionBearer
+            [string]$station.InternalAuthoritySharedSecret
         )
     }
     if ((Split-Path -Leaf $python) -ieq "py.exe") {
@@ -2033,37 +2033,6 @@ function Invoke-CoauthConfigSync {
     if ($LASTEXITCODE -ne 0) {
         throw "coauth config sync failed; see $syncLog"
     }
-}
-
-function Set-CoauthStationServiceIds {
-    param(
-        [Parameter(Mandatory = $true)][string]$ConfigPath,
-        [Parameter(Mandatory = $true)][System.Collections.IDictionary]$StationServiceIds
-    )
-
-    $config = Get-Content -LiteralPath $ConfigPath -Raw
-    foreach ($entry in $StationServiceIds.GetEnumerator()) {
-        if (-not $entry.Value.StartsWith("ak:did_core:", [System.StringComparison]::Ordinal)) {
-            throw "Coauth Station '$($entry.Key)' received an invalid service_id pin"
-        }
-        $name = [regex]::Escape([string]$entry.Key)
-        $pattern = "(?m)(^  - name: $name\r?`n)"
-        $replacement = "`${1}    service_id: $($entry.Value)`n"
-        $patched = [regex]::Replace($config, $pattern, $replacement, 1)
-        if ($patched -eq $config) {
-            throw "Could not locate Coauth Station '$($entry.Key)' in $ConfigPath"
-        }
-        $config = $patched
-    }
-    # Windows PowerShell 5's `Set-Content -Encoding UTF8` prepends a BOM,
-    # while PowerShell 7 does not. Coauth's YAML loader treats that rewritten
-    # file as a second document boundary, so keep the runner byte-identical
-    # across both hosts and write explicit UTF-8 without BOM.
-    [System.IO.File]::WriteAllText(
-        $ConfigPath,
-        $config,
-        [System.Text.UTF8Encoding]::new($false)
-    )
 }
 
 function Wait-HttpReady {
@@ -3275,7 +3244,7 @@ $allSolandBaseUrls = @($SolandBaseUrl, $solandServer2BaseUrl) + @($additionalSer
 $stationInternalChannelBindings = @(
     New-StationInternalChannelBindings `
         -StationBaseUrls $allSolandBaseUrls `
-        -BearerAssignments $CoauthStationSessionGrantIntrospectionBearers
+        -BearerAssignments $CoauthStationInternalAuthoritySharedSecrets
 )
 $stationInternalChannelBindingsByName = @{}
 foreach ($binding in $stationInternalChannelBindings) {
@@ -4220,7 +4189,7 @@ try {
             [Parameter(Mandatory = $true)][string]$LogFileName,
             [Parameter(Mandatory = $true)][string]$CorsAllowOrigin,
             [Parameter(Mandatory = $true)][string]$KeyStoreMasterKey,
-            [Parameter(Mandatory = $true)][ValidateNotNullOrEmpty()][string]$SessionGrantIntrospectionBearer,
+            [Parameter(Mandatory = $true)][ValidateNotNullOrEmpty()][string]$InternalAuthoritySharedSecret,
             [string]$NotarySigningKey = "",
             [string]$FederationPeers = ""
         )
@@ -4272,7 +4241,7 @@ try {
             $map.SOLAND_ACCOUNT_AUTHORITY_URL = $coauthContainer
             $map.SOLAND_SESSION_GRANT_INTROSPECTION_URL = "$coauthContainer/_arkret/gate/account/session-grants/introspect"
             $map.SOLAND_AUTH_SESSION_LOGOUT_URL = "$coauthContainer/_arkret/gate/account/auth-sessions/logout"
-            $map.SOLAND_SESSION_GRANT_INTROSPECTION_BEARER = $SessionGrantIntrospectionBearer
+            $map.SOLAND_INTERNAL_AUTHORITY_SHARED_SECRET = $InternalAuthoritySharedSecret
             $map.SOLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN = "ak:trust_domain:local.host"
             $map.SOLAND_OAUTH_CLIENT_ID = $CoauthOAuthClientId
         }
@@ -4304,7 +4273,7 @@ try {
             [Parameter(Mandatory = $true)][string]$LogFile,
             [Parameter(Mandatory = $true)][string]$CorsAllowOrigin,
             [Parameter(Mandatory = $true)][string]$KeyStoreMasterKey,
-            [Parameter(Mandatory = $true)][ValidateNotNullOrEmpty()][string]$SessionGrantIntrospectionBearer,
+            [Parameter(Mandatory = $true)][ValidateNotNullOrEmpty()][string]$InternalAuthoritySharedSecret,
             [string]$NotarySigningKey = "",
             [string]$FederationPeers = ""
         )
@@ -4344,7 +4313,7 @@ try {
             $values.SOLAND_ACCOUNT_AUTHORITY_URL = $coauthTrimmed
             $values.SOLAND_SESSION_GRANT_INTROSPECTION_URL = "$coauthTrimmed/_arkret/gate/account/session-grants/introspect"
             $values.SOLAND_AUTH_SESSION_LOGOUT_URL = "$coauthTrimmed/_arkret/gate/account/auth-sessions/logout"
-            $values.SOLAND_SESSION_GRANT_INTROSPECTION_BEARER = $SessionGrantIntrospectionBearer
+            $values.SOLAND_INTERNAL_AUTHORITY_SHARED_SECRET = $InternalAuthoritySharedSecret
             $values.SOLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN = "ak:trust_domain:local.host"
             $values.SOLAND_OAUTH_CLIENT_ID = $CoauthOAuthClientId
         }
@@ -4415,7 +4384,7 @@ try {
             LogFile = $solandTraceFile
             CorsAllowOrigin = $solandCorsAllowOrigin
             KeyStoreMasterKey = $SolandKeyStoreMasterKey
-            SessionGrantIntrospectionBearer = $stationInternalChannelBindingsByName["server1"].SessionGrantIntrospectionBearer
+            InternalAuthoritySharedSecret = $stationInternalChannelBindingsByName["server1"].InternalAuthoritySharedSecret
             NotarySigningKey = $SolandNotarySigningKey
             FederationPeers = $server1Peer
         }
@@ -4447,7 +4416,7 @@ try {
             LogFileName = ([System.IO.Path]::GetFileName($solandTraceFile))
             CorsAllowOrigin = $solandCorsAllowOrigin
             KeyStoreMasterKey = $SolandKeyStoreMasterKey
-            SessionGrantIntrospectionBearer = $stationInternalChannelBindingsByName["server1"].SessionGrantIntrospectionBearer
+            InternalAuthoritySharedSecret = $stationInternalChannelBindingsByName["server1"].InternalAuthoritySharedSecret
             NotarySigningKey = $SolandNotarySigningKey
             FederationPeers = $server1Peer
         }
@@ -4489,7 +4458,7 @@ try {
                 LogFileName = ([System.IO.Path]::GetFileName($solandServer2TraceFile))
                 CorsAllowOrigin = $solandServer2CorsAllowOrigin
                 KeyStoreMasterKey = $SolandServer2KeyStoreMasterKey
-                SessionGrantIntrospectionBearer = $stationInternalChannelBindingsByName["server2"].SessionGrantIntrospectionBearer
+                InternalAuthoritySharedSecret = $stationInternalChannelBindingsByName["server2"].InternalAuthoritySharedSecret
                 NotarySigningKey = $SolandServer2NotarySigningKey
                 FederationPeers = (@($allSolandBaseUrls | Where-Object { $_ -ne $solandServer2BaseUrl }) -join ",")
             }
@@ -4526,7 +4495,7 @@ try {
                 LogFile = $solandServer2TraceFile
                 CorsAllowOrigin = $solandServer2CorsAllowOrigin
                 KeyStoreMasterKey = $SolandServer2KeyStoreMasterKey
-                SessionGrantIntrospectionBearer = $stationInternalChannelBindingsByName["server2"].SessionGrantIntrospectionBearer
+                InternalAuthoritySharedSecret = $stationInternalChannelBindingsByName["server2"].InternalAuthoritySharedSecret
                 NotarySigningKey = $SolandServer2NotarySigningKey
                 FederationPeers = (@($allSolandBaseUrls | Where-Object { $_ -ne $solandServer2BaseUrl }) -join ",")
             }
@@ -4559,7 +4528,7 @@ try {
             MetricsPort = $server.SolandMetricsPort
             CorsAllowOrigin = $solandCorsAllowOrigin
             KeyStoreMasterKey = $server.KeyStoreMasterKey
-            SessionGrantIntrospectionBearer = $stationInternalChannelBindingsByName[$server.Name].SessionGrantIntrospectionBearer
+            InternalAuthoritySharedSecret = $stationInternalChannelBindingsByName[$server.Name].InternalAuthoritySharedSecret
             NotarySigningKey = $server.NotarySigningKey
             FederationPeers = (@($allSolandBaseUrls | Where-Object { $_ -ne $server.SolandBaseUrl }) -join ",")
         }
@@ -4643,20 +4612,11 @@ try {
 
     if ($StartCoauth) {
         $CoauthServiceId = $SolandServiceId
-        $stationServiceIds = [ordered]@{ server1 = $SolandServiceId }
-        if ($SolandServer2ServiceId) { $stationServiceIds.server2 = $SolandServer2ServiceId }
-        foreach ($server in $additionalServers) { $stationServiceIds[$server.Name] = $server.SolandServiceId }
-        Set-CoauthStationServiceIds -ConfigPath $coauthConfigPath -StationServiceIds $stationServiceIds
-        if ($DualCoauth) {
-            Set-CoauthStationServiceIds -ConfigPath $coauthSecondaryConfigPath -StationServiceIds $stationServiceIds
-        }
         Invoke-CoauthConfigSync -CoauthBinary $coauthBinary -ConfigPath $coauthConfigPath -LogDirectory $coauthServer1Dir
         if ($coauthServer2ConfigPath) {
-            Set-CoauthStationServiceIds -ConfigPath $coauthServer2ConfigPath -StationServiceIds $stationServiceIds
             Invoke-CoauthConfigSync -CoauthBinary $coauthBinary -ConfigPath $coauthServer2ConfigPath -LogDirectory (Split-Path -Parent $coauthServer2ConfigPath)
         }
         foreach ($server in $additionalServers) {
-            Set-CoauthStationServiceIds -ConfigPath $server.CoauthConfigPath -StationServiceIds $stationServiceIds
             Invoke-CoauthConfigSync -CoauthBinary $coauthBinary -ConfigPath $server.CoauthConfigPath -LogDirectory (Split-Path -Parent $server.CoauthConfigPath)
         }
     }

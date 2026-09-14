@@ -46,14 +46,14 @@ $processArguments = @{
     ObjectsRoot = $testDirectory; StateRoot = $testDirectory; Port = 8008
     MetricsPort = 9001; LogFile = (Join-Path $testDirectory "trace.log")
     CorsAllowOrigin = "https://inkson.joint.example"; KeyStoreMasterKey = "test-key"
-    SessionGrantIntrospectionBearer = "test-introspection-server1"
+    InternalAuthoritySharedSecret = "test-introspection-server1"
     NotarySigningKey = ""; FederationPeers = ""
 }
 $dockerArguments = @{
     BaseUrl = $processArguments.BaseUrl; DatabaseUrl = $processArguments.DatabaseUrl
     MetricsPort = 9001; LogFileName = "trace.log"
     CorsAllowOrigin = $processArguments.CorsAllowOrigin; KeyStoreMasterKey = "test-key"
-    SessionGrantIntrospectionBearer = "test-introspection-server1"
+    InternalAuthoritySharedSecret = "test-introspection-server1"
     NotarySigningKey = ""; FederationPeers = ""
 }
 try {
@@ -76,7 +76,7 @@ try {
         )
     )
     if ($defaultBindings.Count -ne 3 -or
-        @($defaultBindings.SessionGrantIntrospectionBearer | Select-Object -Unique).Count -ne 3) {
+        @($defaultBindings.InternalAuthoritySharedSecret | Select-Object -Unique).Count -ne 3) {
         throw "Default internal-channel bindings must carry one unique bearer per Station"
     }
     $explicitBindings = @(
@@ -84,8 +84,8 @@ try {
             -StationBaseUrls @("https://station-1.example", "https://station-2.example") `
             -BearerAssignments @("server1=alpha-bearer", "server2=beta-bearer")
     )
-    if ($explicitBindings[0].SessionGrantIntrospectionBearer -ne "alpha-bearer" -or
-        $explicitBindings[1].SessionGrantIntrospectionBearer -ne "beta-bearer") {
+    if ($explicitBindings[0].InternalAuthoritySharedSecret -ne "alpha-bearer" -or
+        $explicitBindings[1].InternalAuthoritySharedSecret -ne "beta-bearer") {
         throw "Explicit Station bearers must remain paired with their indexed Station"
     }
     $invalidAssignmentSets = @(
@@ -146,7 +146,7 @@ try {
         throw "Station inception must preauthorize the deployment Account Authority public key"
     }
     if ($bootstrapConfig -notmatch 'SOLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN="ak:trust_domain:local.host"' -or
-        $bootstrapConfig -notmatch 'SOLAND_SESSION_GRANT_INTROSPECTION_BEARER="test-introspection-server1"') {
+        $bootstrapConfig -notmatch 'SOLAND_INTERNAL_AUTHORITY_SHARED_SECRET="test-introspection-server1"') {
         throw "Process identity bootstrap must emit the minimal internal authority peer binding"
     }
     # The runner fills CoauthCommand after generating its managed config.
@@ -167,7 +167,7 @@ try {
         throw "Docker identity bootstrap must bind the managed Account Authority endpoint to its pinned key"
     }
     if ($bootstrapDocker.SOLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN -ne "ak:trust_domain:local.host" -or
-        $bootstrapDocker.SOLAND_SESSION_GRANT_INTROSPECTION_BEARER -ne "test-introspection-server1") {
+        $bootstrapDocker.SOLAND_INTERNAL_AUTHORITY_SHARED_SECRET -ne "test-introspection-server1") {
         throw "Docker identity bootstrap must emit the minimal internal authority peer binding"
     }
     $loopbackAuthority = "http://127.0.0.1:4455"

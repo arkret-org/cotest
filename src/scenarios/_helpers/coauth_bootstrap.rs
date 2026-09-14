@@ -229,8 +229,7 @@ impl PreparedCoauth {
     pub async fn spawn_for_station(
         self,
         station_endpoint: &str,
-        station_id: &str,
-        session_grant_introspection_bearer: &str,
+        internal_authority_shared_secret: &str,
         embedded_webvh_registration_bearer: &str,
         station_ca_path: Option<&Path>,
     ) -> Result<SpawnedCoauth> {
@@ -244,8 +243,7 @@ impl PreparedCoauth {
         patch_station_config(
             &mut bundle,
             station_endpoint,
-            station_id,
-            session_grant_introspection_bearer,
+            internal_authority_shared_secret,
             embedded_webvh_registration_bearer,
         )?;
         run_coauth_migrations(&coauth_bin, bundle.file.path())?;
@@ -305,8 +303,7 @@ pub fn prepare_coauth_with_db_required() -> Result<PreparedCoauth> {
 fn patch_station_config(
     bundle: &mut CoauthConfigBundle,
     endpoint: &str,
-    service_id: &str,
-    session_grant_introspection_bearer: &str,
+    internal_authority_shared_secret: &str,
     embedded_webvh_registration_bearer: &str,
 ) -> Result<()> {
     let file = bundle.file.as_file_mut();
@@ -331,8 +328,7 @@ fn patch_station_config(
         serde_yaml_ng::to_value(vec![serde_json::json!({
             "name": "cotest-soland",
             "endpoint": endpoint,
-            "service_id": service_id,
-            "session_grant_introspection_bearer": session_grant_introspection_bearer,
+            "internal_authority_shared_secret": internal_authority_shared_secret,
             "embedded_webvh_registration_bearer": embedded_webvh_registration_bearer,
             "trust_domain": JOINT_TRUST_DOMAIN
         })])?,

@@ -57,10 +57,7 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
             "SOLAND_SESSION_GRANT_INTROSPECTION_URL",
             introspection_url.as_str(),
         ),
-        (
-            "SOLAND_SESSION_GRANT_INTROSPECTION_BEARER",
-            "principal-token",
-        ),
+        ("SOLAND_INTERNAL_AUTHORITY_SHARED_SECRET", "principal-token"),
         (
             "SOLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN",
             "ak:trust_domain:mock-coauth.local",

@@ -52,7 +52,7 @@ class PatchCoauthConfigTests(unittest.TestCase):
             for retired in ["identity_provider:", "identity_services:", "service_id:"]:
                 self.assertNotIn(retired, arkret)
             self.assertIn('endpoint: "https://station.test/"', arkret)
-            self.assertIn('session_grant_introspection_bearer: "station-1-bearer"', arkret)
+            self.assertIn('internal_authority_shared_secret: "station-1-bearer"', arkret)
             self.assertIn(
                 'resolver: "https://station.test/_arkret/root/identity/resolve"',
                 arkret,
@@ -89,7 +89,7 @@ class PatchCoauthConfigTests(unittest.TestCase):
             self.assertIn('endpoint: "https://station-server3.test/"', indexed)
             for bearer in ("station-1-bearer", "station-2-bearer", "station-3-bearer"):
                 self.assertEqual(
-                    indexed.count(f'session_grant_introspection_bearer: "{bearer}"'),
+                    indexed.count(f'internal_authority_shared_secret: "{bearer}"'),
                     1,
                 )
             self.assertIn(

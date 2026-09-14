@@ -42,7 +42,7 @@ pub struct JointServiceConfig {
     /// Bearer token expected by soland when calling coauth's
     /// `session-grants/introspect` endpoint. Must match the value coauth's
     /// generated config patched in.
-    pub session_grant_introspection_bearer: String,
+    pub internal_authority_shared_secret: String,
     /// Bearer token soland presents when registering a did:webvh document
     /// against the embedded provider. Mirrors run-joint-e2e.ps1.
     pub embedded_webvh_registration_bearer: String,
@@ -61,7 +61,7 @@ impl JointServiceConfig {
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
-            session_grant_introspection_bearer: "cotest-session-grant-introspection".to_owned(),
+            internal_authority_shared_secret: "cotest-session-grant-introspection".to_owned(),
             embedded_webvh_registration_bearer: "cotest-webvh-registration".to_owned(),
             wire_directory_ingest: true,
             soland_database_url: std::env::var("COTEST_SOLAND_DATABASE_URL").ok(),
@@ -196,8 +196,8 @@ pub async fn try_bootstrap(config: JointServiceConfig) -> Result<JointServiceSta
             format!("{base}/_arkret/gate/account/auth-sessions/logout"),
         ));
         soland_env.push((
-            "SOLAND_SESSION_GRANT_INTROSPECTION_BEARER".to_owned(),
-            config.session_grant_introspection_bearer.clone(),
+            "SOLAND_INTERNAL_AUTHORITY_SHARED_SECRET".to_owned(),
+            config.internal_authority_shared_secret.clone(),
         ));
         soland_env.push((
             "SOLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN".to_owned(),
@@ -252,8 +252,7 @@ pub async fn try_bootstrap(config: JointServiceConfig) -> Result<JointServiceSta
             prepared
                 .spawn_for_station(
                     soland.base_url().as_str(),
-                    soland.service_id().as_str(),
-                    &config.session_grant_introspection_bearer,
+                    &config.internal_authority_shared_secret,
                     &config.embedded_webvh_registration_bearer,
                     soland.tls_ca_path(),
                 )
