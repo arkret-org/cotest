@@ -1298,9 +1298,6 @@ test.describe("applet inbound transaction push — per-delivery source signature
     const verificationMethod =
       args.verificationMethod ??
       `${solandServiceDid()}#applet-service-key`;
-    const authKeyId = verificationMethod.includes("#")
-      ? verificationMethod.slice(verificationMethod.indexOf("#") + 1)
-      : verificationMethod;
     const unidentified = {
       kind: "ak.message.create",
       realm_id: realmId,
@@ -1313,12 +1310,9 @@ test.describe("applet inbound transaction push — per-delivery source signature
       created_at: canonicalEventTimestamp(),
       hlc: hlcForStamp(args.stamp),
       prev_refs: args.prevRefs ?? [],
-      refs: [],
       ...(args.authorityRefs?.length
         ? {
             auth_context: {
-              key_id: authKeyId,
-              key_epoch: 0,
               authority_refs: [...args.authorityRefs].sort(),
             },
           }
@@ -1603,16 +1597,27 @@ test.describe("applet inbound transaction push — per-delivery source signature
   }) => {
     const token = await setupBearer(request);
     const stamp = Date.now();
-    // Only Authorization: Bearer, NO Signature / Signature-Input. §7.3.1: MUST reject.
+    // Keep the otherwise complete delivery headers, but omit both RFC 9421
+    // signature headers. Session authorization alone MUST NOT authenticate the
+    // source service. §7.3.1: reject.
     const transactionUrl = `${solandBaseUrl()}${TRANSACTIONS_PATH}`;
+    const body = transactionPushBody({ stamp });
+    const unsignedDeliveryHeaders = signedAppletTransactionHeaders({
+      body,
+      targetUri: transactionUrl,
+      sourceServiceId: solandServiceId(),
+      keyId: `${solandServiceDid()}#applet-service-key`,
+      destinationServiceId: solandServiceId(),
+      idempotencyKey: `inbound-nosig-${stamp}`,
+    });
+    delete unsignedDeliveryHeaders.signature;
+    delete unsignedDeliveryHeaders["signature-input"];
     const resp = await request.post(transactionUrl, {
       headers: {
         ...authHeaders(token, "POST", transactionUrl),
-        "content-type": "application/json",
-        "Source-Service-ID": solandServiceId(),
-        "Idempotency-Key": `inbound-nosig-${stamp}`,
+        ...unsignedDeliveryHeaders,
       },
-      data: canonicalJson(transactionPushBody({ stamp })),
+      data: canonicalJson(body),
     });
     const responseText = await resp.text();
     expect(resp.status(), responseText).toBe(401);
@@ -1624,24 +1629,69 @@ test.describe("applet inbound transaction push — per-delivery source signature
   test("invalid/forged Signature inbound transaction push → 401 http_signature_invalid", async ({
     request,
   }) => {
-    const token = await setupBearer(request);
+    test.setTimeout(300_000);
+    const registryBase = requireMockAppletRegistry();
     const stamp = Date.now();
-    // Structurally present but cryptographically bogus signature — cannot verify
-    // against any registration service DID verification method. §7.3.1: reject.
+    const alice = uniqueUser(`applet-inbound-forged-${stamp}`);
+    await ensureRegistered(request, alice);
+    const token = await issueDevSession(request, alice);
+    const realmId = await createAppletInstallRealm(request, token, {
+      title: `applet inbound forged signature ${stamp}`,
+      discoverability: "listed",
+      history_access: "since_join",
+    });
+    const signed = await signPackage(request, registryBase, {
+      package_id: `package:bridge:inbound-forged-${stamp}`,
+      namespace: `bridge.inbound.forged.${stamp}`,
+      capabilities: ["ak.message.create"],
+      webhook_auth: {
+        kind: "http_message_signature",
+        accepted_signature_algorithms: ["ed25519"],
+      },
+    });
+    const registration = await installApplet(
+      request,
+      token,
+      signed,
+      realmId,
+      `inbound-forged-install-${stamp}`,
+      { exerciseAuthoringKats: false },
+    );
+    const sourceServiceId = signed.applet_package.service_id;
+    const verificationMethod = String(
+      (signed.applet_package.webhook_auth as Record<string, unknown>).key_ref,
+    );
+
+    // Establish the exact active install and current webhook key first. The
+    // request is otherwise signed correctly with that key; only Signature bytes
+    // are then replaced, so a 401 proves the RFC 9421 verification gate rather
+    // than the no-install 403 gate from §7.3.1.
     const transactionUrl = `${solandBaseUrl()}${TRANSACTIONS_PATH}`;
-    const body = transactionPushBody({ stamp });
+    const body = transactionPushBody({
+      stamp,
+      sourceServiceId,
+      realmId,
+      appletId: registration.applet_id,
+      verificationMethod,
+      signingKey: signed.service_signing_private_key,
+    });
+    const forgedHeaders = signedAppletTransactionHeaders({
+      body,
+      targetUri: transactionUrl,
+      sourceServiceId,
+      keyId: verificationMethod,
+      destinationServiceId: solandServiceId(),
+      idempotencyKey: `inbound-badsig-${stamp}`,
+      signingKey: signed.service_signing_private_key,
+    });
+    // Keep the canonical body digest, covered components, key id and freshness
+    // window valid so this case changes only the signature bytes.
+    forgedHeaders.signature =
+      "sig1=:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==:";
     const resp = await request.post(transactionUrl, {
       headers: {
         ...authHeaders(token, "POST", transactionUrl),
-        "content-type": "application/json",
-        "Source-Service-ID": solandServiceId(),
-        "Idempotency-Key": `inbound-badsig-${stamp}`,
-        "Content-Digest":
-          "sha-256=:b3JCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=:",
-        "Signature-Input":
-          `sig1=("@method" "@target-uri" "@authority" "content-digest" "source-service-id" "destination-service-id" "idempotency-key");created=1700000000;expires=1700000200;keyid="${solandServiceDid()}#key-1";alg="ed25519"`,
-        Signature:
-          "sig1=:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=:",
+        ...forgedHeaders,
       },
       data: canonicalJson(body),
     });
@@ -1669,6 +1719,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
           body,
           targetUri,
           sourceServiceId,
+          keyId: `${solandServiceDid()}#applet-service-key`,
           destinationServiceId: solandServiceId(),
           idempotencyKey,
           created: 1_000_000_000,
@@ -1883,6 +1934,10 @@ async function installApplet(
   signed: SignedPackage,
   realmId: string,
   idempotencyKey: string,
+  options: {
+    commitDelayMs?: number;
+    exerciseAuthoringKats?: boolean;
+  } = {},
 ): Promise<AppletRegistration> {
   const result = await rawInstallApplet(
     request,
@@ -1890,6 +1945,8 @@ async function installApplet(
     signed,
     realmId,
     idempotencyKey,
+    undefined,
+    options,
   );
   const response = result.response;
   const responseText = await response.text();

@@ -15,9 +15,9 @@
 //
 // Phases A-E exercise the test-only conformance endpoints under the
 // spec-reserved namespace /_arkret/_conformance/{snapshot,query}
-// (service-http-binding.md §2.1.2). The leading `_` marks `_conformance` as a
+// (service-http-binding.md §2.1.3). The leading `_` marks `_conformance` as a
 // reserved test-only segment, NOT a production trust-surface; the namespace is
-// profile-gated on ak.profile.conformance_harness.v1 and production builds MUST
+// gated on ServiceDescribe `development_mode=true`, and production builds MUST
 // 404 it. These endpoints are debug/conformance surfaces only and never enter
 // the production operation registry.
 //
@@ -26,11 +26,9 @@
 //     touches soland). Always-pass on count so the suite stays green even
 //     when the fixtures directory has zero matching files today.
 //   - Phase G: optional surface probe of GET /_arkret/describe to
-//     assert the surface is *internally consistent* (does NOT claim the
-//     ak.profile.conformance_harness.v1 profile while the endpoint is 404,
-//     OR if it does claim it then the endpoint must respond with something
-//     other than 404). This is the same "claim ⇔ surface" sanity used by
-//     registry-drift / profile-gates.
+//     assert the surface is *internally consistent* (`development_mode=true`
+//     requires the endpoint to exist). This is the same "posture ⇔ surface"
+//     sanity used by registry-drift / profile-gates.
 
 import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { createHash } from "node:crypto";
@@ -135,7 +133,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
         chunks,
       }),
     });
-    expect(resp.status()).toBe(200);
+    expect(resp.status(), await resp.text()).toBe(200);
     const body = await resp.json();
     expect(body.manifest_digest).toBe(sha256Prefixed(canonicalJson(manifest)));
     expect(body.chunk_hashes).toEqual(chunkHashes);
@@ -388,18 +386,18 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     }
   });
 
-  test("Phase G — /server/describe surface is internally consistent re conformance_harness profile", async ({
+  test("Phase G — /server/describe development posture matches the conformance surface", async ({
     request,
   }, testInfo) => {
     // Optional surface probe — the assertion is "the surface is internally
     // consistent", NOT "the endpoint works". Two outcomes are acceptable:
-    //   (a) /server/describe does NOT claim ak.profile.conformance_harness.v1
+    //   (a) /server/describe reports development_mode=false
     //       → any status from /_arkret/_conformance/snapshot (incl. 404) is OK,
     //         because the server isn't promising the endpoint exists.
-    //   (b) /server/describe DOES claim ak.profile.conformance_harness.v1
+    //   (b) /server/describe reports development_mode=true
     //       → /_arkret/_conformance/snapshot MUST NOT return 404 (anything else
     //         — 200/400/401/405/501 — is acceptable; 404 alone would mean the
-    //         claim is a lie).
+    //         advertised posture is a lie).
 
     const describeResp = await request.get(`${solandBaseUrl()}/_arkret/describe`);
     if (!describeResp.ok()) {
@@ -411,19 +409,14 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     }
     const describe = await describeResp.json();
 
-    const supportedProfiles: string[] = Array.isArray(describe?.supported_profiles)
-      ? describe.supported_profiles
-      : [];
-    const claimsConformanceHarness = supportedProfiles.includes(
-      "ak.profile.conformance_harness.v1",
-    );
+    const developmentMode = describe?.development_mode === true;
 
-    await testInfo.attach("describe-claims-conformance-harness", {
-      body: String(claimsConformanceHarness),
+    await testInfo.attach("describe-development-mode", {
+      body: String(developmentMode),
       contentType: "text/plain",
     });
 
-    if (!claimsConformanceHarness) {
+    if (!developmentMode) {
       // Branch (a): nothing to enforce; surface is consistent by definition.
       return;
     }
@@ -442,7 +435,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     });
     expect(
       probe.status(),
-      `server claims ak.profile.conformance_harness.v1 but /_arkret/_conformance/snapshot returned 404 — surface is inconsistent`,
+      `server reports development_mode=true but /_arkret/_conformance/snapshot returned 404 — surface is inconsistent`,
     ).not.toBe(404);
   });
 });

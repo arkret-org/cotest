@@ -38,6 +38,7 @@ import {
   accountActorId,
   canonicalJson,
   cotestWire,
+  hydrateRegisteredEventSignerEvidenceApi,
   projectDidToCoreId,
   registerEventSigner,
   registerPrincipalControlRealm,
@@ -133,6 +134,12 @@ export type DpopUserSession = {
   grantAudience: string;
   dpopSeedB64url: string;
   eventSigningSeedB64url: string;
+  /// Exact immutable account_device evidence retained from self/keys/query.
+  /// It authorizes Data/history proof verification only.
+  dataSignerEvidenceRef: string;
+  /// Exact immutable account_device_control evidence retained from the
+  /// post-confirmation account viewer. It authorizes generic human Control.
+  controlSignerEvidenceRef: string;
   deviceKey: DpopDeviceKey;
   recoveryKey?: string;
   principalControlRealmId: string;
@@ -1758,6 +1765,8 @@ export async function createDpopUserSessionForAccount(
     grantAudience: grant.audience,
     dpopSeedB64url: dpopDeviceSeedB64url(deviceKey),
     eventSigningSeedB64url,
+    dataSignerEvidenceRef: "",
+    controlSignerEvidenceRef: "",
     deviceKey,
     recoveryKey: claimsPrincipalGenesis ? account.recoveryKey : undefined,
     principalControlRealmId: "",
@@ -1825,15 +1834,6 @@ export async function createDpopUserSessionForAccount(
     // grant instead of relying on the serde compatibility default (`None`).
     controller_authority: session.accountId,
   };
-  const viewerUrl = `${solandBaseUrl(opts.server)}/_arkret/self/account/viewer`;
-  const viewerResponse = await request.get(viewerUrl, {
-    headers: selfPathHeadersForDpopSession(session, "GET", viewerUrl),
-  });
-  const viewerText = await viewerResponse.text();
-  expect(
-    viewerResponse.ok(),
-    `principal bootstrap account viewer returned ${viewerResponse.status()}: ${viewerText}`,
-  ).toBeTruthy();
   const sealUrl = `${solandBaseUrl(opts.server)}/_arkret/self/seals`;
   const sealResponse = await request.post(sealUrl, {
     headers: {
@@ -1846,6 +1846,23 @@ export async function createDpopUserSessionForAccount(
     sealResponse.ok(),
     `principal bootstrap Seal returned ${sealResponse.status()}: ${await sealResponse.text()}`,
   ).toBeTruthy();
+  // device-lifecycle.md section 8.2.2: only the successful committed Seal may
+  // materialize the account_device_control root. Re-read the typed viewer after
+  // that boundary, select this session's exact device (never devices[0]), and
+  // separately retain the Data root returned by this account's keys/query row.
+  const signerEvidence = await hydrateRegisteredEventSignerEvidenceApi(
+    request,
+    session.grantJwt,
+    {
+      actorId: session.user.id,
+      accountId: session.accountId,
+      deviceId: session.user.deviceId,
+      verificationMethod: `${session.user.did}#${session.user.deviceId}`,
+      server: opts.server,
+    },
+  );
+  session.dataSignerEvidenceRef = signerEvidence.dataSignerEvidenceRef;
+  session.controlSignerEvidenceRef = signerEvidence.controlSignerEvidenceRef;
   return session;
 }
 

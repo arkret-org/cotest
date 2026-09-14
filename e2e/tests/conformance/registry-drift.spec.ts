@@ -320,6 +320,11 @@ test.describe("conformance registry drift @fully-implemented", () => {
       actorId: alice.id,
       realmId: "ak:realm:AWKBMlbiCDVvdxpftc7u00CFiTYThQbKQJCj2gi91O9H",
       kind: removed!.id,
+      // The kind is intentionally absent from the active registry, so the
+      // helper cannot derive a plane. Keep the proof otherwise valid and make
+      // this wire-negative's authority class explicit; unknown kinds never
+      // inherit a Data/Control fallback.
+      signerEvidenceAuthority: "account_device_data",
       payload: {},
     });
     const resp = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
@@ -447,6 +452,17 @@ test.describe("conformance registry drift @fully-implemented", () => {
     const messageReceipt = await submitSignedEventApi(request, token, messageEnvelope, {
       context: "forbidden-wire-fields message",
     });
+    const messageAuthorityRefs = (
+      messageEnvelope.auth_context as { authority_refs?: unknown } | undefined
+    )?.authority_refs;
+    expect(
+      messageAuthorityRefs,
+      "ordinary Event AuthContext cites the confirmed Realm Seal basis",
+    ).toEqual([messageEnvelope.data_basis]);
+    expect(
+      String(messageEnvelope.data_basis),
+      "ordinary Event carries a signed confirmed Seal data_basis",
+    ).toMatch(/^ak:seal:sha256:[0-9a-f]{64}$/);
 
     const cursorEnvelope = signedEventEnvelope({
       actorId: alice.id,

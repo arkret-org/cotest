@@ -567,8 +567,6 @@ function signedGhostMessageEvent({
     authorization_ref: authorizationRef,
     applet_id: packageInfo.appletId,
     auth_context: {
-      key_id: packageInfo.verificationMethod.split("#").at(-1).replace(/^ak:/, ""),
-      key_epoch: 0,
       authority_refs: [...authorityRefs].sort(),
     },
     external_ref: {

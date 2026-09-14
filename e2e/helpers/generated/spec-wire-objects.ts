@@ -1324,11 +1324,9 @@ export type InviteDeliveryRequestBody = {
       };
     }>;
     "auth_context"?: {
-      "key_id": string;
-      "key_epoch": number;
-      "credential_epoch"?: number;
       "authority_refs": string[];
     };
+    "data_basis"?: string;
     "seal_basis"?: {
       "leaves": string[];
     };
@@ -2829,11 +2827,9 @@ export type EventFederationSubmission = {
       };
     }>;
     "auth_context"?: {
-      "key_id": string;
-      "key_epoch": number;
-      "credential_epoch"?: number;
       "authority_refs": string[];
     };
+    "data_basis"?: string;
     "seal_basis"?: {
       "leaves": string[];
     };

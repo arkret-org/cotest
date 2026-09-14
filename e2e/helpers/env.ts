@@ -87,11 +87,11 @@ export function solandBaseUrl(key: SolandKey = "default"): string {
 }
 
 // Conformance debug endpoints live on the spec-reserved test-only namespace
-// `/_arkret/_conformance/*` (service-http-binding.md §2.1.2). The leading `_`
+// `/_arkret/_conformance/*` (service-http-binding.md §2.1.3). The leading `_`
 // marks `_conformance` as a reserved test-only segment, NOT a production
-// trust-surface classifier; it is profile-gated on `ak.profile.conformance_harness.v1`
-// and production builds MUST 404 the whole namespace. Tests target this base;
-// the harness only reaches it when the server runs under the conformance build profile.
+// trust-surface classifier; it is gated on `development_mode=true`, and
+// production builds MUST 404 the whole namespace. Tests target this base; the
+// harness only reaches it when the server runs in the canonical test posture.
 export function conformanceBaseUrl(key: SolandKey = "default"): string {
   return `${solandBaseUrl(key)}/_arkret/_conformance`;
 }

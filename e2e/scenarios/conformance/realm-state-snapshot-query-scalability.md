@@ -160,9 +160,9 @@
 
 36. `GET ${solandBaseUrl()}/_arkret/describe`(无认证)
 37. 断言响应是 JSON,且内部一致:
-    - **不应** 同时存在 "claim 了 `ak.profile.conformance_harness.v1` profile" 与 "`/_arkret/_conformance/snapshot` 端点返回 404/501" 这对矛盾状态
-    - 具体表达:若 `claimed_profiles` 数组里有任意 entry 的 `profile_id === "ak.profile.conformance_harness.v1"`,则对 `/_arkret/_conformance/snapshot` 发一个 minimal POST,响应 status 必须不是 404(允许 200 / 400 / 401 / 405 / 501;但 404 = 端点根本不存在,与 profile claim 矛盾)
-    - 若 `claimed_profiles` 不含该 profile,则任何状态码(包括 404)都可以接受 — 这是 "surface 内部一致" 而非 "端点已实现" 的断言
+    - **不应** 同时存在 "`development_mode === true`" 与 "`/_arkret/_conformance/snapshot` 端点返回 404" 这对矛盾状态
+    - 具体表达:若 `GET /_arkret/describe` 顶层 `development_mode === true`,则对 `/_arkret/_conformance/snapshot` 发一个 minimal POST,响应 status 必须不是 404(允许 200 / 400 / 401 / 405 / 501;但 404 = 端点根本不存在,与 test-build 姿态矛盾)
+    - 若 `development_mode === false`,则 404 是规范要求 — 这是 "surface 内部一致" 而不是生产能力宣告
 
 ## Observable assertions (合并清单)
 
@@ -172,7 +172,7 @@
 - Phase D:unknown filter op / conflicting sort / unauthorized projection 一律 4xx + `query_schema_violation`,响应不含 `items`
 - Phase E:超 page_size / 超 batch / 超 depth / 超 envelope 一律 4xx + `scalability_limit_exceeded` 或 `payload_too_large`,不静默截断
 - Phase F:fixtures dir 可读、glob 不抛、命中文件 JSON.parse 不抛、count >= 0
-- Phase G:`/server/describe` 与 `/conformance/snapshot` 状态在 profile-claim 与 endpoint-existence 之间没有自相矛盾
+- Phase G:`/_arkret/describe` 与 `/_arkret/_conformance/snapshot` 在 `development_mode` 姿态与 endpoint-existence 之间没有自相矛盾
 
 ## Edge cases / sub-tests
 
@@ -183,7 +183,7 @@
 
 ## Implementation notes
 
-- **soland 缺口**:`/_arkret/_conformance/{snapshot,query}` 端点目前**未实现**。当前 snapshot manifest 与 query schema 的 conformance 只跑在 Rust 侧内部测试(`soland/src/snapshot/*`、reducer 集成测试),不走 HTTP。本 scenario 的价值是把同一组 vector 通过 HTTP 暴露,捕获 reducer 与 HTTP layer 之间的 serializer drift。Phase A–E 在端点落地前以 `test.fixme(...)` 钉住 spec 合约;G3.S7 着陆后可逐项 live 化。
+- **Soland test-build 要求**:`/_arkret/_conformance/{snapshot,query}` 已实现为 development-only HTTP harness。joint runner 必须以 `conformance-harness` feature 构建 Soland 且设置 `development_mode=true`；仅源码时间戳 fresh 不足以证明缓存 binary 带有该 feature。生产 binary 不得暴露该命名空间。
 - **fixture 缺失 fallback**:目前 `arkret-spec/spec/v1/artifacts/fixtures/` 中**没有任何** `ak.vector.{snapshot,query,scalability}.*` 文件。Phase F 的 loader smoke 必须优雅降级:`readdirSync` 后命中数可以是 0,assertion 写成 `expect(count).toBeGreaterThanOrEqual(0)`(always-pass);candidate 清单与 count 用 `console.log` + `testInfo.attach` 输出,使得 (1) fixture 尚未提交时测试不红;(2) fixture 提交后日志里立刻能看到 vector 总数变化;(3) spec 作者新增 vector 时不需要改 harness。
 - **fixture loader 实现**:用 `fileURLToPath(import.meta.url)` + `dirname` + `path.resolve(..., "..", "..", "..", "..", "arkret-spec", "spec", "v1", "artifacts", "fixtures")` 从 spec 文件位置走到 fixtures 目录。**不**新增 `helpers/conformance-fixtures.ts`;loader 写在 spec 文件顶部(与 encoding-vectors 风格一致)。
 - **signing key 注入**:Phase B 验证 signature 时 vector 自带 `signer_did` + `public_key_jwk`,不依赖 alice 的 dev key — snapshot 签名者通常是服务自己或 trusted issuer,不是 actor。Phase C 的 query authz filter 才用 alice 的 session token。

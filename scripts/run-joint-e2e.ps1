@@ -700,6 +700,12 @@ function Test-BinaryContainsAsciiMarker {
     return $text.Contains($Marker)
 }
 
+# This operation id is compiled into Soland only with the development-only
+# `conformance-harness` feature. Source freshness alone cannot distinguish a
+# default production build from the feature-bearing joint-e2e SUT because both
+# write the same target/debug/soland executable.
+$solandConformanceHarnessMarker = "org.arkret.soland.conformance.realm_state_snapshot"
+
 function Resolve-PlaywrightCliInvocation {
     param([Parameter(Mandatory = $true)][string]$E2eRoot)
 
@@ -918,6 +924,11 @@ function Invoke-JointE2ePreflight {
                         (Join-Path $WorkspaceRoot "arkret-rust-sdk")
                     ) `
                     -RequireBuildStamp (-not [bool]$SolandBin)
+                if (Test-BinaryContainsAsciiMarker -Path $solandBinary -Marker $solandConformanceHarnessMarker) {
+                    Add-PreflightResult $results "soland conformance-harness feature" "pass" $solandBinary
+                } else {
+                    Add-PreflightResult $results "soland conformance-harness feature" "fail" "cached binary lacks the conformance-harness marker; rerun without -SkipBuild"
+                }
             } catch {
                 Add-PreflightResult $results "soland binary" "fail" $_.Exception.Message
             }
@@ -3502,7 +3513,10 @@ try {
                 (Join-Path $workspaceRoot "soland"),
                 (Join-Path $workspaceRoot "arkret-rust-sdk")
             )
-        if (-not $freshness.Fresh) {
+        $solandConformanceHarnessPresent = Test-BinaryContainsAsciiMarker `
+            -Path $defaultSolandBinary `
+            -Marker $solandConformanceHarnessMarker
+        if (-not $freshness.Fresh -or -not $solandConformanceHarnessPresent) {
             Write-Host "Preparing soland binary: $($freshness.Detail)"
             $started = Get-Date
             # `conformance-harness` compiles the development-only

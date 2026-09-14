@@ -115,12 +115,7 @@ test.describe("moderation and ban", () => {
       ? (reportEvent.proofs[0] as Record<string, unknown> | undefined)
       : undefined;
     const verificationMethod = String(proof?.verification_method ?? "");
-    const keyIdFragment = verificationMethod.split("#").at(-1) ?? verificationMethod;
     reportEvent.auth_context = {
-      key_id: keyIdFragment.startsWith("ak:")
-        ? keyIdFragment.slice(3)
-        : keyIdFragment,
-      key_epoch: 0,
       authority_refs: [sealRef],
     };
     refreshEventEnvelopeProof(reportEvent, verificationMethod);
