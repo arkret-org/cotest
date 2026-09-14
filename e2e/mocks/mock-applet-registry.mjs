@@ -1067,10 +1067,20 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
       res.end(JSON.stringify({ error: "applet_service_key_unavailable" }));
       return;
     }
+    const managedActorSealBasis = authoringRequest?.purpose === "install_bot"
+      ? authoringRequest?.basis?.registration_event?.seal_basis
+      : material.seal_basis;
+    const managedActorSealLeaves = managedActorSealBasis?.leaves;
+    if (!Array.isArray(managedActorSealLeaves) || managedActorSealLeaves.length !== 1) {
+      res.statusCode = 409;
+      res.end(JSON.stringify({ error: "managed_actor_data_basis_unavailable" }));
+      return;
+    }
     const outcome = runCotestWire("managed-actor-author", {
       authoring_request: authoringRequest,
       applet_package: packageInfo.appletPackage,
       ...material,
+      data_basis: managedActorSealLeaves[0],
       service_signing_seed_b64url: servicePrivateJwk.d,
       service_verification_method: packageInfo.verificationMethod,
       signer_resolution_evidence_ref: `ak:signer_evidence:sha256:${createHash("sha256")

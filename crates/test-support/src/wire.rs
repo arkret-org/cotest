@@ -188,6 +188,7 @@ struct ManagedActorAuthorInput {
     signer_resolution_evidence_ref: arkret_wire::SignerEvidenceRef,
     #[serde(default)]
     seal_basis: Option<SealBasis>,
+    data_basis: arkret_wire::SealId,
     service_signing_seed_b64url: String,
     service_verification_method: DidUrl,
     station_id: DidCoreId,
@@ -430,6 +431,7 @@ pub fn managed_actor_author(input: Value) -> Result<Value> {
             service_prev_refs: input.service_prev_refs,
             signer_resolution_evidence_ref: input.signer_resolution_evidence_ref,
             seal_basis,
+            data_basis: input.data_basis,
             digest_suite: arkret::DigestSuite::Sha256,
             trust_domain: input.trust_domain,
             security_class: SecurityClass::Standard,
