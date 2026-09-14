@@ -569,15 +569,39 @@ pub async fn seal_principal_control_frontier_with_pending_events(
             }
             return Ok(leaf);
         }
-        let physical_millis = chrono::Utc::now().timestamp_millis();
-        let request =
-            arkret_models_collaboration::governance_dependencies::SealPrepareRequestBody {
-                realm_id: realm_id.clone(),
-                predecessor_ref: leaf.clone(),
-                event_digests: pending.event_digests,
-                hlc: Hlc::new(format!("{physical_millis:012x}-{index:04x}-a13f9c2e"))?,
-            };
-        let prepared = sdk.seals_prepare(&request).await?;
+        let intended_event_digests = pending.event_digests;
+        let recovered = sdk
+            .seals_prepare_fence_result(
+                &arkret_models_collaboration::governance_dependencies::SealPrepareFenceResultRequestBody {
+                    realm_id: realm_id.clone(),
+                    predecessor_ref: leaf.clone(),
+                },
+            )
+            .await;
+        let (request, prepared) = match recovered {
+            Ok(recovered) => {
+                anyhow::ensure!(
+                    recovered.frozen_request.event_digests == intended_event_digests,
+                    "recovered PCR fence does not match the current pending signer intent"
+                );
+                (recovered.frozen_request, recovered.frozen_outcome)
+            }
+            Err(arkret_http_client::Error::Api { status: 404, error })
+                if error.error_code() == Some(arkret_wire::ErrorCode::NotFound) =>
+            {
+                let physical_millis = chrono::Utc::now().timestamp_millis();
+                let request =
+                    arkret_models_collaboration::governance_dependencies::SealPrepareRequestBody {
+                        realm_id: realm_id.clone(),
+                        predecessor_ref: leaf.clone(),
+                        event_digests: intended_event_digests,
+                        hlc: Hlc::new(format!("{physical_millis:012x}-{index:04x}-a13f9c2e"))?,
+                    };
+                let prepared = sdk.seals_prepare(&request).await?;
+                (request, prepared)
+            }
+            Err(error) => return Err(error.into()),
+        };
         let seal = prepared.sign(&request, &signer)?;
         let outcome = sdk.events_submit_seal(&seal).await?;
         anyhow::ensure!(
