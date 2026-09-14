@@ -5,6 +5,7 @@ use arkret_models_collaboration::http_bodies::EventsSubscribeFrameKind;
 use arkret_models_collaboration::sync_frames::account_subscribe::{
     AccountSubscribeFrame, AccountSubscribeFrameKind, StationCasAccountDataContainer,
 };
+use arkret_models_collaboration::sync_frames::account_sync::RealmSyncEntry;
 use arkret_models_collaboration::sync_frames::stream_trace::{
     StreamTraceError, StreamTraceFrame, StreamTraceFrameKind, StreamTraceValidator,
 };
@@ -40,6 +41,7 @@ pub fn run_sync_fixture_suite() -> Result<()> {
     validate_realm_actor_frontier_vectors(&value)?;
     run_stream_frame_sequence_vector()?;
     run_station_cas_account_data_vector()?;
+    run_timeline_window_completion_vector()?;
     Ok(())
 }
 
@@ -230,6 +232,274 @@ pub fn run_station_cas_account_data_vector() -> Result<()> {
         assert_expected_subset(name, expected, &observed)?;
         record_vector_event(
             &format!("sync.station_cas_account_data.{name}"),
+            case,
+            expected,
+            &observed,
+        );
+    }
+    Ok(())
+}
+
+const TIMELINE_WINDOW_COMPLETION_VECTOR_ID: &str = "ak.vector.sync.timeline_window_completion.v1";
+
+/// Window-level fields a later segment of the same frozen generation must
+/// repeat unchanged (`client-sync.md` 5.2). Their values are what a client
+/// reads to decide whether history has a gap, so a producer that varies them
+/// per segment makes the window unreadable.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct WindowLevelFields {
+    limited: bool,
+    preview_only: Option<bool>,
+    prev_cursor: Option<String>,
+}
+
+impl WindowLevelFields {
+    fn read(timeline: &Value) -> Result<Self> {
+        Ok(Self {
+            limited: timeline
+                .get("limited")
+                .and_then(Value::as_bool)
+                .ok_or_else(|| anyhow!("timeline must carry limited"))?,
+            preview_only: timeline.get("preview_only").and_then(Value::as_bool),
+            prev_cursor: timeline
+                .get("prev_cursor")
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned),
+        })
+    }
+}
+
+/// Decode the projected frame into the SDK entry type. The behaviour fixture
+/// models window bookkeeping, so the timeline container arrives as event_ids[];
+/// everything else is the real wire shape and must survive the SDK's own
+/// validation.
+fn decode_entry(entry: &Value) -> Result<RealmSyncEntry> {
+    let mut wire = entry.clone();
+    if let Some(object) = wire.as_object_mut()
+        && let Some(timeline) = object.get_mut("timeline")
+    {
+        let mut container = timeline.clone();
+        let fields = container
+            .as_object_mut()
+            .ok_or_else(|| anyhow!("timeline must be an object"))?;
+        fields.remove("event_ids");
+        fields.insert("events".into(), json!([]));
+        *timeline = container;
+    }
+    Ok(serde_json::from_value::<RealmSyncEntry>(wire)?)
+}
+
+/// Client-side model of one Realm's timeline window across frames. Everything
+/// it refuses is something a single-frame schema check cannot catch.
+#[derive(Default)]
+struct TimelineWindowTracker {
+    generation: Option<String>,
+    retired_generations: BTreeSet<String>,
+    window_limit: Option<u32>,
+    window_level: Option<WindowLevelFields>,
+    installed_events: BTreeSet<String>,
+    delivered: u64,
+    live_installed: u64,
+    stale_segments_rejected: u64,
+    complete: bool,
+    unavailable: Option<Value>,
+    rejected: Option<String>,
+}
+
+impl TimelineWindowTracker {
+    fn reject(&mut self, reason: &str) {
+        if self.rejected.is_none() {
+            self.rejected = Some(reason.to_owned());
+        }
+    }
+
+    fn apply(&mut self, entry: &Value) -> Result<()> {
+        if self.rejected.is_some() {
+            return Ok(());
+        }
+        if entry.as_object().is_some_and(serde_json::Map::is_empty) {
+            // A frame carrying no entry for this Realm says nothing: it is
+            // neither an empty window nor progress.
+            return Ok(());
+        }
+        let decoded = decode_entry(entry)?;
+        if decoded.unavailable.is_some()
+            && (entry.get("timeline").is_some() || decoded.timeline_baseline.is_some())
+        {
+            // The SDK must refuse the same shape; a client that accepted it
+            // could read an error frame as a successfully empty window.
+            if decoded.validate_demand().is_ok() {
+                bail!("SDK accepted an unavailable entry carrying detail fields");
+            }
+            self.reject("unavailable_with_detail_fields");
+            return Ok(());
+        }
+        if decoded.timeline_baseline.is_some() && entry.get("timeline").is_none() {
+            if decoded.validate_demand().is_ok() {
+                bail!("SDK accepted a timeline baseline without its timeline container");
+            }
+            self.reject("timeline_baseline_without_timeline");
+            return Ok(());
+        }
+        decoded.validate_demand()?;
+        if let Some(unavailable) = &decoded.unavailable {
+            self.unavailable = Some(serde_json::to_value(unavailable.error_code)?);
+            return Ok(());
+        }
+        let Some(timeline) = entry.get("timeline") else {
+            return Ok(());
+        };
+        let event_ids = value_array(required_field(timeline, "event_ids")?, "timeline event_ids")?
+            .iter()
+            .map(|id| {
+                id.as_str()
+                    .map(ToOwned::to_owned)
+                    .ok_or_else(|| anyhow!("timeline event_ids must be strings"))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let Some(baseline) = &decoded.timeline_baseline else {
+            // No timeline_baseline: live increment. It installs content but
+            // never completes, reopens or advances a frozen window.
+            for event_id in event_ids {
+                if self.installed_events.insert(event_id) {
+                    self.live_installed += 1;
+                }
+            }
+            return Ok(());
+        };
+        let generation = baseline.snapshot_cursor.as_str().to_owned();
+        let window_level = WindowLevelFields::read(timeline)?;
+        if self.generation.as_deref() == Some(generation.as_str()) {
+            if self.window_limit != Some(baseline.window_limit) {
+                self.reject("window_limit_changed");
+                return Ok(());
+            }
+            if self.window_level.as_ref() != Some(&window_level) {
+                self.reject("window_level_field_changed");
+                return Ok(());
+            }
+        } else if self.retired_generations.contains(&generation) {
+            // A late segment of a superseded generation must not resolve or
+            // disturb the window the client is actually waiting on.
+            self.stale_segments_rejected += 1;
+            return Ok(());
+        } else {
+            if let Some(previous) = self.generation.take() {
+                self.retired_generations.insert(previous);
+                self.delivered = 0;
+                self.complete = false;
+            }
+            self.generation = Some(generation);
+            self.window_limit = Some(baseline.window_limit);
+            self.window_level = Some(window_level);
+        }
+        for event_id in event_ids {
+            // Repeated Events are idempotent by identity, so a retried segment
+            // cannot inflate the window past its ceiling.
+            if self.installed_events.insert(event_id) {
+                self.delivered += 1;
+            }
+        }
+        if self.delivered > u64::from(baseline.window_limit) {
+            self.reject("window_limit_exceeded");
+            return Ok(());
+        }
+        if baseline.complete {
+            self.complete = true;
+        }
+        Ok(())
+    }
+
+    fn observation(&self) -> Value {
+        let window_state = if self.rejected.is_some() {
+            "rejected"
+        } else if self.unavailable.is_some() {
+            "unavailable"
+        } else if self.complete {
+            "complete"
+        } else {
+            "pending"
+        };
+        let mut observed = serde_json::Map::new();
+        observed.insert("window_state".into(), json!(window_state));
+        if let Some(reason) = &self.rejected {
+            observed.insert("reason".into(), json!(reason));
+        }
+        if let Some(error_code) = &self.unavailable {
+            observed.insert("error_code".into(), error_code.clone());
+        }
+        if let Some(generation) = &self.generation {
+            observed.insert("generation".into(), json!(generation));
+        }
+        if let Some(window_limit) = self.window_limit {
+            observed.insert("window_limit".into(), json!(window_limit));
+        }
+        observed.insert("delivered".into(), json!(self.delivered));
+        observed.insert("live_installed".into(), json!(self.live_installed));
+        observed.insert(
+            "stale_segments_rejected".into(),
+            json!(self.stale_segments_rejected),
+        );
+        observed.insert(
+            "backfill_required".into(),
+            json!(
+                self.complete
+                    && self
+                        .window_level
+                        .as_ref()
+                        .is_some_and(|fields| fields.limited)
+            ),
+        );
+        Value::Object(observed)
+    }
+}
+
+pub fn run_timeline_window_completion_vector() -> Result<()> {
+    let fixture = load_fixture_value("sync-fixture.json")?;
+    let vector = required_field(&fixture, "timeline_window_completion")?;
+    exact_object_keys(
+        vector,
+        &[
+            "cases",
+            "operations",
+            "projection_note",
+            "runner",
+            "vector_id",
+        ],
+        "timeline window completion vector",
+    )?;
+    if value_field_str(vector, "vector_id")? != TIMELINE_WINDOW_COMPLETION_VECTOR_ID
+        || value_field_str(vector, "runner")?
+            != "cotest::conformance::sync::run_timeline_window_completion_vector"
+    {
+        bail!("timeline window completion vector registration drifted");
+    }
+    let operations = value_array(
+        required_field(vector, "operations")?,
+        "timeline window operations",
+    )?;
+    if operations.as_slice()
+        != [Value::String(
+            arkret_wire::ServiceOperationId::SELF_ACCOUNT_STREAM_SUBSCRIBE_V1.to_owned(),
+        )]
+    {
+        bail!("timeline window vector must target only account subscribe");
+    }
+    let cases = value_array(required_field(vector, "cases")?, "timeline window cases")?;
+    if cases.len() != 12 {
+        bail!("timeline window completion vector must contain exactly 12 cases");
+    }
+    for case in cases {
+        let name = value_field_str(case, "name")?;
+        let expected = required_field(case, "expected")?;
+        let mut tracker = TimelineWindowTracker::default();
+        for frame in value_array(required_field(case, "frames")?, "timeline window frames")? {
+            tracker.apply(frame)?;
+        }
+        let observed = tracker.observation();
+        assert_expected_subset(name, expected, &observed)?;
+        record_vector_event(
+            &format!("sync.timeline_window_completion.{name}"),
             case,
             expected,
             &observed,

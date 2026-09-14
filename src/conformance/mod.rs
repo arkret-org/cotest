@@ -425,6 +425,7 @@ pub use station_certification::{
 };
 pub use sync::{
     run_station_cas_account_data_vector, run_stream_frame_sequence_vector, run_sync_fixture_suite,
+    run_timeline_window_completion_vector,
 };
 pub use vector_registry_gate::{
     VectorRegistryGateEntry, VectorRegistryGateMode, VectorRegistryGateReport,
