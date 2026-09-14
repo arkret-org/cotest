@@ -85,8 +85,12 @@ Recommended entrypoints:
 ```
 
 - `process` mode is the fast local path and spawns a pre-built SUT binary
-  (`SOLAND_BIN`, or the sibling soland target built by the runner script);
-  test execution never compiles the SUT itself.
+  (`SOLAND_BIN`, or the soland binary the runner script built); test execution
+  never compiles the SUT itself. Without `SOLAND_BIN`, lookup walks the Cargo
+  target directory this run was built into and then `../soland/target/debug/`,
+  so it works whether the workspace shares one `build.target-dir` or each repo
+  keeps its own `target/`. Never hard-code either layout: ask
+  `cargo metadata --format-version 1 --no-deps` for `target_directory`.
 - `.\scripts\run-compose.ps1` runs the process-mode `compose` profile and can
   attach live `coauth`, `floria`, `sodmin`, `inkson`, or `teabay` services
   through base URLs or managed service commands.

@@ -377,12 +377,25 @@ function Get-CargoMetadataTestTargets {
     )
 }
 
+# Cargo discovers `.cargo/config.toml` by walking up from the *current*
+# directory, not from `--manifest-path`, and `build.target-dir` there decides
+# where artifacts land. Running from outside the manifest's own tree would
+# therefore report a target directory the build never uses, so pin the location
+# for the duration of the query.
 function Get-CargoTargetDirectory {
     param([Parameter(Mandatory = $true)][string]$ManifestPath)
 
-    $metadataOutput = & cargo metadata --no-deps --format-version 1 --manifest-path $ManifestPath
-    if ($LASTEXITCODE -ne 0) {
-        throw "cargo metadata failed for $ManifestPath with exit code $LASTEXITCODE"
+    $manifestDirectory = Split-Path -Parent ([System.IO.Path]::GetFullPath($ManifestPath))
+    Push-Location -LiteralPath $manifestDirectory
+    try {
+        $metadataOutput = & cargo metadata --no-deps --format-version 1 --manifest-path $ManifestPath
+        $metadataExitCode = $LASTEXITCODE
+    }
+    finally {
+        Pop-Location
+    }
+    if ($metadataExitCode -ne 0) {
+        throw "cargo metadata failed for $ManifestPath with exit code $metadataExitCode"
     }
     $metadata = ($metadataOutput -join [Environment]::NewLine) | ConvertFrom-Json
     if (-not $metadata.target_directory) {
@@ -2306,8 +2319,11 @@ if ($servicesLiveProfile -and -not $delegatedProfile -and -not $PlanOnly -and -n
     # `BinTarget` is the Cargo bin target, which is not always the service name:
     # teabay's server crate is `server`, so it builds and installs as
     # `server.exe`. The Rust helper looks up `TEABAY_BIN` before falling back to
-    # `teabay/target/debug/teabay.exe`, a file a normal build never produces, so
-    # exporting the real path here is what makes the sibling checkout usable.
+    # `teabay.exe` in the Cargo target directory, a file a normal build never
+    # produces, so exporting the real path here is what makes the sibling
+    # checkout usable. Resolve that directory through `cargo metadata` rather
+    # than assuming `<repo>/target`: the workspace `.cargo/config.toml` may
+    # point `build.target-dir` at one shared tree.
     foreach ($sibling in @(
             [pscustomobject]@{ Service = "coauth"; BinEnv = "COAUTH_BIN"; BinTarget = "coauth" },
             [pscustomobject]@{ Service = "teabay"; BinEnv = "TEABAY_BIN"; BinTarget = "server" }

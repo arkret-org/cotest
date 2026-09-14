@@ -662,17 +662,20 @@ pub fn bootstrap_coauth_config(
 /// Find the coauth repo root — the directory holding `policies/cedar` and
 /// `templates`. Returns `None` when neither layout below matches.
 ///
-/// The normal per-repository build lives under `<repo>/target/`, so walking up
-/// from that binary finds coauth directly. Keep the sibling-checkout fallback
-/// for an explicitly supplied external binary whose layout does not include
-/// the repository; without it the generated config would retain relative
+/// A per-repository build lands in `<repo>/target/`, so walking up from that
+/// binary finds coauth directly. That walk finds nothing when the workspace
+/// redirects every repo into one shared `build.target-dir`, or when an
+/// explicitly supplied external binary sits outside any checkout, so the
+/// sibling-checkout fallback is what actually resolves the repository in those
+/// layouts; without it the generated config would retain relative
 /// `./templates/` and `./policies/cedar` paths and fail at process startup.
 fn locate_sibling_coauth_repo(coauth_bin: &Path) -> Option<PathBuf> {
     fn is_coauth_repo(candidate: &Path) -> bool {
         candidate.join("policies").join("cedar").is_dir() && candidate.join("templates").is_dir()
     }
 
-    // <repo>/target/debug/coauth.exe → walk up 3 levels to <repo>.
+    // <repo>/target/debug/coauth.exe → walk up 3 levels to <repo>. A shared
+    // workspace target directory has no such ancestor; the fallback below covers it.
     if let Some(mut cursor) = coauth_bin.parent() {
         for _ in 0..3 {
             if is_coauth_repo(cursor) {

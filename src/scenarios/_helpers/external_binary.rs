@@ -3,8 +3,12 @@
 //!
 //! The helper:
 //!   1. Resolves the binary path from an explicit env var override (e.g. `SOLAND_BIN`) **first**,
-//!      then falls back to a sibling-checkout convention path
-//!      (`../<crate>/target/debug/<bin>[.exe]` relative to the cotest workspace root).
+//!      then falls back to the Cargo target directory this test binary itself was built into
+//!      (derived from `current_exe`, so it follows `build.target-dir` / `CARGO_TARGET_DIR` wherever
+//!      the workspace points them), and finally to the per-repository sibling-checkout convention
+//!      path (`../<crate>/target/debug/<bin>[.exe]`). Never assume one layout: the workspace
+//!      `.cargo/config.toml` may redirect every sibling repo into one shared tree, in which case
+//!      `<crate>/target/` does not exist at all.
 //!   2. Optionally checks `required_env_vars` (e.g. `COAUTH_DATABASE_URI`) are present in the
 //!      caller's env before attempting to spawn — when a required dependency env var is missing we
 //!      treat the binary as unavailable (returns `Ok(None)` from `try_spawn`). This is how coauth /
@@ -42,7 +46,10 @@ pub struct ExternalBinarySpec {
     pub bin_env: &'static str,
     /// Sibling-checkout convention path segments under `arkret/`
     /// (e.g. `&["soland", "target", "debug"]`). The binary file name is
-    /// derived from `service` (`+ ".exe"` on Windows).
+    /// derived from `service` (`+ ".exe"` on Windows). Only meaningful when the
+    /// sibling repository builds into its own `target/`; with a shared
+    /// workspace `build.target-dir` the binary is found through
+    /// [`cargo_target_profile_dirs`] instead.
     pub sibling_path: &'static [&'static str],
     /// Env var that controls the bind address (e.g. `"TEABAY_BIND"`).
     /// Set to `""` if the binary does not accept a bind env var (in that
@@ -155,8 +162,66 @@ impl SkipReason {
     }
 }
 
+/// Profile directories of the Cargo target tree this test binary was built
+/// into, most specific first.
+///
+/// The running test executable lives at `<target-dir>/<profile>/deps/<name>`,
+/// so walking up from `current_exe` yields the target directory Cargo actually
+/// used, whether that comes from a workspace-level `build.target-dir`, a
+/// `CARGO_TARGET_DIR` override, or the default `<repo>/target`. Sibling
+/// services built from the same workspace land in that same profile
+/// directory, which is what makes this the primary lookup.
+pub fn cargo_target_profile_dirs() -> Vec<PathBuf> {
+    let Ok(exe) = std::env::current_exe() else {
+        return Vec::new();
+    };
+    let mut dirs = Vec::new();
+    // `<profile>/deps/<test-exe>` walks up to `<profile>`; a plain
+    // `<profile>/<exe>` layout is already covered by the first entry.
+    if let Some(parent) = exe.parent() {
+        dirs.push(parent.to_path_buf());
+        if parent.file_name().is_some_and(|name| name == "deps")
+            && let Some(profile) = parent.parent()
+        {
+            dirs.push(profile.to_path_buf());
+        }
+    }
+    dirs
+}
+
+/// Binary file name for a spec (`<service>` plus the platform executable
+/// suffix).
+fn external_binary_file_name(spec: &ExternalBinarySpec) -> String {
+    if cfg!(windows) {
+        format!("{}.exe", spec.service)
+    } else {
+        spec.service.to_owned()
+    }
+}
+
+/// Every path consulted by [`locate_external_binary`], in lookup order and
+/// independent of whether those files exist. Used for the skip/failure text so
+/// a missing binary reports the layout that was actually searched.
+pub fn external_binary_candidates(spec: &ExternalBinarySpec) -> Vec<PathBuf> {
+    let exe_name = external_binary_file_name(spec);
+    let mut candidates: Vec<PathBuf> = cargo_target_profile_dirs()
+        .into_iter()
+        .map(|dir| dir.join(&exe_name))
+        .collect();
+    if let Some(root) = workspace_root() {
+        let mut sibling = root;
+        for segment in spec.sibling_path {
+            sibling.push(segment);
+        }
+        sibling.push(&exe_name);
+        candidates.push(sibling);
+    }
+    candidates
+}
+
 /// Try to locate `<service>` binary by checking the `bin_env` override first,
-/// then the conventional sibling-checkout path. Returns `None` when neither is
+/// then the Cargo target directory this test binary was built into, then the
+/// conventional sibling-checkout path. Returns `None` when none of them is
 /// available — callers decide whether to skip or fail.
 pub fn locate_external_binary(spec: &ExternalBinarySpec) -> Option<PathBuf> {
     if let Ok(value) = std::env::var(spec.bin_env)
@@ -167,21 +232,19 @@ pub fn locate_external_binary(spec: &ExternalBinarySpec) -> Option<PathBuf> {
             return Some(candidate);
         }
     }
-    let exe_name = if cfg!(windows) {
-        format!("{}.exe", spec.service)
-    } else {
-        spec.service.to_owned()
-    };
-    let mut candidate = workspace_root()?;
-    for segment in spec.sibling_path {
-        candidate.push(segment);
-    }
-    candidate.push(exe_name);
-    if candidate.is_file() {
-        Some(candidate)
-    } else {
-        None
-    }
+    external_binary_candidates(spec)
+        .into_iter()
+        .find(|candidate| candidate.is_file())
+}
+
+/// Render [`external_binary_candidates`] as a comma-separated list for
+/// operator-facing skip and failure messages.
+fn describe_external_binary_candidates(spec: &ExternalBinarySpec) -> String {
+    external_binary_candidates(spec)
+        .iter()
+        .map(|path| path.display().to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// Determine whether the spec is currently spawnable; if not, return a
@@ -198,10 +261,9 @@ pub fn skip_reason(spec: &ExternalBinarySpec) -> Option<SkipReason> {
     }
     if locate_external_binary(spec).is_none() {
         let searched = format!(
-            "`{}` env var or `arkret/{}/target/debug/{}`",
+            "`{}` env var or {}",
             spec.bin_env,
-            spec.sibling_path.first().copied().unwrap_or(spec.service),
-            spec.service,
+            describe_external_binary_candidates(spec),
         );
         return Some(SkipReason::BinaryMissing { searched });
     }
@@ -288,12 +350,12 @@ pub async fn spawn_required(spec: &ExternalBinarySpec) -> Result<SpawnedExternal
                 .map(|r| r.describe(spec.service))
                 .unwrap_or_else(|| {
                     format!(
-                        "could not locate `{}` binary — set `{}=path/to/{}` or build the sibling \
-                         checkout under `arkret/{}/target/debug/`",
+                        "could not locate `{}` binary — set `{}=path/to/{}` or build the \
+                         sibling checkout into this run's Cargo target directory (searched {})",
                         spec.service,
                         spec.bin_env,
                         spec.service,
-                        spec.sibling_path.first().copied().unwrap_or(spec.service),
+                        describe_external_binary_candidates(spec),
                     )
                 });
             Err(anyhow!(reason))
@@ -332,8 +394,10 @@ pub(crate) fn workspace_root() -> Option<PathBuf> {
 // each service in one place and keep the cross-project conventions auditable.
 
 /// `soland` (Station) spec — `--bind` CLI flag + a few env vars. With no
-/// explicit `SOLAND_BIN`, resolution uses the current sibling checkout's
-/// per-repository `soland/target/debug/soland(.exe)` artifact.
+/// explicit `SOLAND_BIN`, resolution prefers `soland(.exe)` in the Cargo target
+/// directory this run was built into (the shared workspace tree whenever
+/// `build.target-dir` is set), then the per-repository
+/// `soland/target/debug/soland(.exe)` artifact.
 /// No external deps in its development-mode default (in-memory persistence).
 pub const SOLAND_SPEC: ExternalBinarySpec = ExternalBinarySpec {
     service: "soland",
@@ -367,3 +431,114 @@ pub const TEABAY_SPEC: ExternalBinarySpec = ExternalBinarySpec {
     health_path: "/health",
     health_timeout: Duration::from_secs(30),
 };
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn exe_name(service: &str) -> String {
+        if cfg!(windows) {
+            format!("{service}.exe")
+        } else {
+            service.to_owned()
+        }
+    }
+
+    /// The profile directory is derived from the running test binary, so it
+    /// tracks whatever `build.target-dir` / `CARGO_TARGET_DIR` the run used
+    /// instead of assuming `<repo>/target`.
+    #[test]
+    fn profile_dirs_track_the_running_target_directory() {
+        let exe = std::env::current_exe().expect("current_exe");
+        let dirs = cargo_target_profile_dirs();
+        assert!(
+            !dirs.is_empty(),
+            "no profile directory derived from {}",
+            exe.display()
+        );
+        assert_eq!(dirs[0], exe.parent().expect("exe parent"));
+        // Cargo puts integration/unit test binaries in `<profile>/deps`; the
+        // sibling service binaries sit one level up, so that level has to be a
+        // candidate too.
+        if dirs[0].file_name().is_some_and(|name| name == "deps") {
+            assert_eq!(
+                dirs.last().expect("profile dir"),
+                &dirs[0].parent().expect("profile parent").to_path_buf()
+            );
+        }
+        for dir in &dirs {
+            assert!(
+                dir.is_absolute(),
+                "profile directory {} is not absolute",
+                dir.display()
+            );
+        }
+    }
+
+    /// Both supported layouts are searched: the target directory this run was
+    /// built into (shared workspace tree included) and the per-repository
+    /// sibling checkout.
+    #[test]
+    fn candidates_cover_shared_and_per_repository_layouts() {
+        let candidates = external_binary_candidates(&SOLAND_SPEC);
+        let name = exe_name(SOLAND_SPEC.service);
+
+        let profile_dirs = cargo_target_profile_dirs();
+        for dir in &profile_dirs {
+            assert!(
+                candidates.contains(&dir.join(&name)),
+                "missing target-directory candidate {}",
+                dir.join(&name).display()
+            );
+        }
+
+        let sibling = workspace_root()
+            .expect("workspace root")
+            .join("soland")
+            .join("target")
+            .join("debug")
+            .join(&name);
+        assert!(
+            candidates.contains(&sibling),
+            "missing sibling-checkout candidate {}",
+            sibling.display()
+        );
+
+        // The target-directory lookup runs first so a freshly built binary
+        // wins over a stale sibling artifact.
+        assert_eq!(candidates.len(), profile_dirs.len() + 1);
+        assert_eq!(candidates.last(), Some(&sibling));
+    }
+
+    /// A missing binary has to name every path that was tried, otherwise the
+    /// skip message sends the reader to a directory this layout never uses.
+    #[test]
+    fn skip_reason_reports_every_searched_path() {
+        // Service name that no checkout builds, so resolution always fails.
+        const MISSING_SPEC: ExternalBinarySpec = ExternalBinarySpec {
+            service: "cotest-no-such-service",
+            bin_env: "COTEST_NO_SUCH_SERVICE_BIN",
+            sibling_path: &["cotest-no-such-service", "target", "debug"],
+            bind_env: "",
+            bind_arg: None,
+            extra_env: &[],
+            extra_args: &[],
+            required_env_vars: &[],
+            health_path: "/health",
+            health_timeout: Duration::from_secs(1),
+        };
+
+        assert!(locate_external_binary(&MISSING_SPEC).is_none());
+        let Some(SkipReason::BinaryMissing { searched }) = skip_reason(&MISSING_SPEC) else {
+            panic!("expected a BinaryMissing skip reason");
+        };
+        assert!(searched.contains(MISSING_SPEC.bin_env), "{searched}");
+        for candidate in external_binary_candidates(&MISSING_SPEC) {
+            assert!(
+                searched.contains(&candidate.display().to_string()),
+                "{searched} does not mention {}",
+                candidate.display()
+            );
+        }
+    }
+}
