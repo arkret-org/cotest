@@ -1939,6 +1939,23 @@ function New-CoauthJointConfig {
     }
     $generateOutput | Set-Content -Path $rawConfig -Encoding UTF8
 
+    # coauth keeps runtime key material in an encrypted-file KeyStore whose
+    # master key is a separate file the server never creates (coauth 492d8ba1).
+    # Both live under this run's own directory so a run never shares custody
+    # state with the developer's `coauth/.local` or with another server.
+    $keystorePath = Join-Path $JointDir "keystore\coauth.v1"
+    $masterKeyFile = Join-Path $JointDir "secrets\coauth-keystore-master-key"
+    $storageRoot = Join-Path $JointDir "media"
+    [void](New-Item -ItemType Directory -Force -Path (Split-Path -Parent $keystorePath))
+    [void](New-Item -ItemType Directory -Force -Path (Split-Path -Parent $masterKeyFile))
+    [void](New-Item -ItemType Directory -Force -Path $storageRoot)
+    if (-not (Test-Path -LiteralPath $masterKeyFile)) {
+        $masterKeyBytes = [byte[]]::new(32)
+        [System.Security.Cryptography.RandomNumberGenerator]::Fill($masterKeyBytes)
+        # No trailing newline: coauth trims, but keep the file byte-exact.
+        [System.IO.File]::WriteAllText($masterKeyFile, [Convert]::ToBase64String($masterKeyBytes))
+    }
+
     $python = Get-PythonExecutable
     $patcher = Join-Path $RepoRoot "scripts\patch-coauth-config.py"
     $patchArgs = @(
@@ -1949,6 +1966,9 @@ function New-CoauthJointConfig {
         "--coauth-base-url", $CoauthBaseUrl,
         "--coauth-bind", $CoauthBind,
         "--cedar-policy-file", $CedarPolicyFile,
+        "--keystore-path", $keystorePath,
+        "--keystore-master-key-file", $masterKeyFile,
+        "--storage-root", $storageRoot,
         "--oauth-client-id", $OAuthClientId,
         "--owning-station", $OwningStation,
         "--embedded-webvh-registration-bearer", $EmbeddedWebvhRegistrationBearer
@@ -4088,16 +4108,16 @@ try {
         if ($coauthPublicHost -and $jointTlsAssets) {
             $coauthCaPrefix = "`$env:SSL_CERT_FILE=$(Quote-PsLiteral $jointTlsAssets.CaPemPath); "
         }
-        $CoauthCommand = "$coauthCaPrefix& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-loopback-http server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthConfigPath)
+        $CoauthCommand = "$coauthCaPrefix& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-loopback-http server --first-provisioning --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthConfigPath)
         $CoauthHealthUrl = "$($CoauthBaseUrl.TrimEnd('/'))/health"
         if ($coauthServer2ConfigPath) {
-            $CoauthServer2Command = "$coauthCaPrefix& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-loopback-http server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthServer2ConfigPath)
+            $CoauthServer2Command = "$coauthCaPrefix& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-loopback-http server --first-provisioning --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthServer2ConfigPath)
         }
         foreach ($server in $additionalServers) {
-            $server.CoauthCommand = "$coauthCaPrefix& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-loopback-http server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $server.CoauthConfigPath)
+            $server.CoauthCommand = "$coauthCaPrefix& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-loopback-http server --first-provisioning --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $server.CoauthConfigPath)
         }
         if ($DualCoauth) {
-            $CoauthSecondaryCommand = "$coauthCaPrefix& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-loopback-http server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthSecondaryConfigPath)
+            $CoauthSecondaryCommand = "$coauthCaPrefix& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-loopback-http server --first-provisioning --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthSecondaryConfigPath)
         }
     }
 
@@ -4223,13 +4243,11 @@ try {
             SOLAND_WEBVH_DEGRADED_NO_WITNESS_MAX_SECS = "$WebvhDegradedNoWitnessMaxSecs"
             SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER = $CoauthEmbeddedWebvhRegistrationBearer
         }
-        if ($script:UseManagedCoauthAssertionKey) {
-            # Public half of patch-coauth-config.py's managed authority key;
-            # the Station commits it before deriving its signed DID inception.
-            $map.SOLAND_ACCOUNT_AUTHORITY_PUBLIC_KEY_MULTIBASE = "z6Mkfmm57fsb6VL7zVusP8zeA9SYkCKdvUhby2G7Yh8vvQ1P"
-            if ($AccountAuthorityBaseUrl) {
-                $map.SOLAND_ACCOUNT_AUTHORITY_URL = $AccountAuthorityBaseUrl.TrimEnd("/")
-            }
+        # No SOLAND_ACCOUNT_AUTHORITY_PUBLIC_KEY_MULTIBASE pin: the managed
+        # Account Authority mints its assertion key in its own KeyStore, so the
+        # Station discovers it from SOLAND_ACCOUNT_AUTHORITY_URL on every start.
+        if ($script:UseManagedCoauthAssertionKey -and $AccountAuthorityBaseUrl) {
+            $map.SOLAND_ACCOUNT_AUTHORITY_URL = $AccountAuthorityBaseUrl.TrimEnd("/")
         }
         if ($AccountAuthorityBaseUrl) {
             $coauthPublic = $AccountAuthorityBaseUrl.TrimEnd("/")
@@ -4302,11 +4320,10 @@ try {
             SOLAND_WEBVH_DEGRADED_NO_WITNESS_MAX_SECS = "$WebvhDegradedNoWitnessMaxSecs"
             SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER = $CoauthEmbeddedWebvhRegistrationBearer
         }
-        if ($script:UseManagedCoauthAssertionKey) {
-            $values.SOLAND_ACCOUNT_AUTHORITY_PUBLIC_KEY_MULTIBASE = "z6Mkfmm57fsb6VL7zVusP8zeA9SYkCKdvUhby2G7Yh8vvQ1P"
-            if ($AccountAuthorityBaseUrl) {
-                $values.SOLAND_ACCOUNT_AUTHORITY_URL = $AccountAuthorityBaseUrl.TrimEnd("/")
-            }
+        # See Build-SolandDockerEnvironment: the assertion key is discovered from
+        # the Account Authority, never pinned to a runner-side constant.
+        if ($script:UseManagedCoauthAssertionKey -and $AccountAuthorityBaseUrl) {
+            $values.SOLAND_ACCOUNT_AUTHORITY_URL = $AccountAuthorityBaseUrl.TrimEnd("/")
         }
         if ($AccountAuthorityBaseUrl) {
             $coauthTrimmed = $AccountAuthorityBaseUrl.TrimEnd("/")
@@ -4332,6 +4349,39 @@ try {
             (Quote-PsLiteral $BinaryPath),
             (Quote-PsLiteral $ConfigPath),
             $Port
+    }
+
+    # The Account Authority starts before any Soland process. Soland reads the
+    # Account Authority's published keyset on every startup and commits that
+    # assertion key into its Station DID document, and coauth only mints that
+    # key on its own first start (coauth 492d8ba1 moved it into the encrypted
+    # KeyStore, so it is no longer a value the runner can know in advance).
+    # coauth itself has no Station dependency at boot: it reads its config and
+    # its own PostgreSQL, and reaches Soland only when serving a request.
+    if ($CoauthCommand) {
+        if (-not $CoauthBaseUrl -and -not $CoauthHealthUrl) {
+            throw "CoauthCommand requires CoauthBaseUrl or CoauthHealthUrl"
+        }
+        $coauthWorkingDirectory = if ($StartCoauth) { Join-Path $workspaceRoot "coauth" } else { $workspaceRoot }
+        $managedServices.Add((Start-ManagedCommand -Name "coauth-server1" -Command $CoauthCommand -WorkingDirectory $coauthWorkingDirectory -LogDirectory $serverServiceLogDirs["server1"]))
+        $health = if ($CoauthHealthUrl) { $CoauthHealthUrl } else { "$($CoauthBaseUrl.TrimEnd('/'))/health" }
+        Wait-HttpReady -Url $health -TimeoutSeconds $StartupTimeoutSeconds
+    }
+    if ($CoauthSecondaryCommand) {
+        $managedServices.Add((Start-ManagedCommand -Name "coauth-secondary" -Command $CoauthSecondaryCommand -WorkingDirectory (Join-Path $workspaceRoot "coauth") -LogDirectory $serviceLogDir))
+        Wait-HttpReady -Url "$coauthSecondaryBaseUrl/health" -TimeoutSeconds $StartupTimeoutSeconds
+    }
+    if ($CoauthServer2Command) {
+        $managedServices.Add((Start-ManagedCommand -Name "coauth-server2" -Command $CoauthServer2Command -WorkingDirectory (Join-Path $workspaceRoot "coauth") -LogDirectory $serverServiceLogDirs["server2"]))
+        Wait-HttpReady -Url "$coauthServer2BaseUrl/health" -TimeoutSeconds $StartupTimeoutSeconds
+    }
+    foreach ($server in $additionalServers) {
+        if ($server.CoauthCommand) {
+            $coauthService = Start-ManagedCommand -Name $server.CoauthName -Command $server.CoauthCommand -WorkingDirectory (Join-Path $workspaceRoot "coauth") -LogDirectory $serverServiceLogDirs[$server.Name]
+            $managedServices.Add($coauthService)
+            $server | Add-Member -NotePropertyName CoauthService -NotePropertyValue $coauthService -Force
+            Wait-HttpReady -Url "$($server.CoauthBaseUrl)/health" -TimeoutSeconds $StartupTimeoutSeconds -ManagedService $coauthService
+        }
     }
 
     # Coauth is a private component of its owning Station, not a separate
@@ -4612,38 +4662,22 @@ try {
 
     if ($StartCoauth) {
         $CoauthServiceId = $SolandServiceId
+    }
+
+
+    # `config sync` needs the runtime key bundle, and coauth only ever creates
+    # that bundle from a server start with `--first-provisioning` (coauth
+    # 492d8ba1; `config sync` itself loads with provisioning disabled). So the
+    # sync runs after each server is healthy, not before it starts. The servers
+    # run with `--no-sync`, so this remains the only configuration sync, and it
+    # still completes before any Playwright project starts.
+    if ($StartCoauth) {
         Invoke-CoauthConfigSync -CoauthBinary $coauthBinary -ConfigPath $coauthConfigPath -LogDirectory $coauthServer1Dir
         if ($coauthServer2ConfigPath) {
             Invoke-CoauthConfigSync -CoauthBinary $coauthBinary -ConfigPath $coauthServer2ConfigPath -LogDirectory (Split-Path -Parent $coauthServer2ConfigPath)
         }
         foreach ($server in $additionalServers) {
             Invoke-CoauthConfigSync -CoauthBinary $coauthBinary -ConfigPath $server.CoauthConfigPath -LogDirectory (Split-Path -Parent $server.CoauthConfigPath)
-        }
-    }
-
-    if ($CoauthCommand) {
-        if (-not $CoauthBaseUrl -and -not $CoauthHealthUrl) {
-            throw "CoauthCommand requires CoauthBaseUrl or CoauthHealthUrl"
-        }
-        $coauthWorkingDirectory = if ($StartCoauth) { Join-Path $workspaceRoot "coauth" } else { $workspaceRoot }
-        $managedServices.Add((Start-ManagedCommand -Name "coauth-server1" -Command $CoauthCommand -WorkingDirectory $coauthWorkingDirectory -LogDirectory $serverServiceLogDirs["server1"]))
-        $health = if ($CoauthHealthUrl) { $CoauthHealthUrl } else { "$($CoauthBaseUrl.TrimEnd('/'))/health" }
-        Wait-HttpReady -Url $health -TimeoutSeconds $StartupTimeoutSeconds
-    }
-    if ($CoauthSecondaryCommand) {
-        $managedServices.Add((Start-ManagedCommand -Name "coauth-secondary" -Command $CoauthSecondaryCommand -WorkingDirectory (Join-Path $workspaceRoot "coauth") -LogDirectory $serviceLogDir))
-        Wait-HttpReady -Url "$coauthSecondaryBaseUrl/health" -TimeoutSeconds $StartupTimeoutSeconds
-    }
-    if ($CoauthServer2Command) {
-        $managedServices.Add((Start-ManagedCommand -Name "coauth-server2" -Command $CoauthServer2Command -WorkingDirectory (Join-Path $workspaceRoot "coauth") -LogDirectory $serverServiceLogDirs["server2"]))
-        Wait-HttpReady -Url "$coauthServer2BaseUrl/health" -TimeoutSeconds $StartupTimeoutSeconds
-    }
-    foreach ($server in $additionalServers) {
-        if ($server.CoauthCommand) {
-            $coauthService = Start-ManagedCommand -Name $server.CoauthName -Command $server.CoauthCommand -WorkingDirectory (Join-Path $workspaceRoot "coauth") -LogDirectory $serverServiceLogDirs[$server.Name]
-            $managedServices.Add($coauthService)
-            $server | Add-Member -NotePropertyName CoauthService -NotePropertyValue $coauthService -Force
-            Wait-HttpReady -Url "$($server.CoauthBaseUrl)/health" -TimeoutSeconds $StartupTimeoutSeconds -ManagedService $coauthService
         }
     }
 

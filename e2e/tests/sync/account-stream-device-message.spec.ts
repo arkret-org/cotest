@@ -82,7 +82,9 @@ test.describe("account stream + device-message convergence", () => {
   test("quiet long-poll closes at its bound and a fresh poll wakes on the next delta", async ({
     request,
   }) => {
-    test.setTimeout(75_000);
+    // Draining the segmented baseline before the measured quiet round costs a
+    // few fast rounds on top of the server's 30s bound and the wake re-poll.
+    test.setTimeout(120_000);
     const { user, token } = await accountSession(request, "account-long-poll");
     const realmId = await createRealmApi(request, token, {
       title: `long-poll scope ${Date.now()}`,
@@ -93,14 +95,31 @@ test.describe("account stream + device-message convergence", () => {
     const baseline = await accountSubscribeFramesApi(request, token, { filter });
     const baselineCursor = latestCursor(baseline);
 
-    const quietStartedAt = Date.now();
-    const quietPoll = accountSubscribeFramesApi(request, token, {
-      after: baselineCursor,
-      filter,
-      timeoutMs: 40_000,
-    });
-    const quiet = await quietPoll;
-    const quietElapsedMs = Date.now() - quietStartedAt;
+    // The account baseline is delivered in segments across rounds reached
+    // through the frame cursor (client-sync.md §2.3 detail scheduling, §13
+    // progressive loading), and a round that still has a segment to deliver
+    // returns immediately. Only a round with nothing left to deliver reaches
+    // the server's wait, so drain the fast rounds and measure the first one
+    // that blocks. Re-measuring the very first round instead would time the
+    // freshly created Realm's own baseline segment, not a quiet poll.
+    let quietCursor = baselineCursor;
+    let quiet: Array<Record<string, unknown>> = [];
+    let quietElapsedMs = 0;
+    for (let round = 0; ; round++) {
+      const roundStartedAt = Date.now();
+      quiet = await accountSubscribeFramesApi(request, token, {
+        after: quietCursor,
+        filter,
+        timeoutMs: 40_000,
+      });
+      quietElapsedMs = Date.now() - roundStartedAt;
+      quietCursor = latestCursor(quiet);
+      if (quietElapsedMs >= 5_000) break;
+      expect(
+        round,
+        "the account baseline drains in a bounded number of rounds",
+      ).toBeLessThan(6);
+    }
     expect(quiet[0]?.kind).toBe("frontier");
     expect(quietElapsedMs, "quiet poll respects the server-side 30s bound").toBeGreaterThanOrEqual(
       28_000,

@@ -1,6 +1,7 @@
 """Regression coverage for generated Account Authority configuration."""
 
 import importlib.util
+import json
 import pathlib
 import sys
 import tempfile
@@ -16,19 +17,23 @@ SPEC.loader.exec_module(MODULE)
 
 
 class PatchCoauthConfigTests(unittest.TestCase):
-    def test_current_account_authority_key_and_closed_arkret_config(self):
+    def test_run_scoped_keystore_and_closed_arkret_config(self):
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)
             raw = root / "raw.yaml"
             output = root / "coauth.yaml"
+            keystore = root / "keystore" / "coauth.v1"
+            master_key = root / "secrets" / "coauth-keystore-master-key"
+            storage_root = root / "media"
             raw.write_text(
                 "database:\n  uri: postgres://placeholder\n"
                 "http:\n  public_base_url: https://placeholder/\n"
                 "  issuer: https://placeholder/\n  listeners:\n"
                 "  - name: web\n    binds:\n    - address: '127.0.0.1:0'\n"
-                "secrets:\n  keys:\n  - kid: coauth-account-authority-v1\n"
-                "    key: |\n      -----BEGIN PRIVATE KEY-----\n"
-                "      placeholder\n      -----END PRIVATE KEY-----\n"
+                "secrets:\n  backend: encrypted_file\n"
+                "  path: ./.local/keystore/coauth.v1\n"
+                "  master_key_file: ./.local/secrets/coauth-keystore-master-key\n"
+                "storage:\n  backend: fs\n  root: ./.local/media\n"
                 "arkret:\n  stations: []\n",
                 encoding="utf-8",
             )
@@ -37,6 +42,9 @@ class PatchCoauthConfigTests(unittest.TestCase):
                 "--postgres-url", "postgres://test:1amTester!@127.0.0.1/test",
                 "--coauth-base-url", "https://coauth.test", "--coauth-bind", "127.0.0.1:9000",
                 "--cedar-policy-file", str(root / "policy.cedar"),
+                "--keystore-path", str(keystore),
+                "--keystore-master-key-file", str(master_key),
+                "--storage-root", str(storage_root),
                 "--inkson-base-url", "https://inkson.test", "--oauth-client-id", "test",
                 "--embedded-webvh-registration-bearer", "test-only",
             ]
@@ -46,7 +54,16 @@ class PatchCoauthConfigTests(unittest.TestCase):
             with patch("sys.argv", arguments):
                 self.assertEqual(MODULE.main(), 0)
             result = output.read_text(encoding="utf-8")
-            self.assertIn("kid: coauth-account-authority-v1", result)
+            # The runner owns key custody: no config-inline key material, and both
+            # KeyStore files are repointed out of the coauth checkout.
+            self.assertIn("backend: encrypted_file", result)
+            self.assertIn(f'path: {json.dumps(str(keystore.resolve()))}', result)
+            self.assertIn(
+                f'master_key_file: {json.dumps(str(master_key.resolve()))}', result
+            )
+            self.assertIn(f'root: {json.dumps(str(storage_root.resolve()))}', result)
+            self.assertNotIn("./.local/", result)
+            self.assertNotIn("BEGIN PRIVATE KEY", result)
             self.assertNotIn("coauth-service-identity-v1", result)
             arkret = result.split("arkret:\n", 1)[1]
             for retired in ["identity_provider:", "identity_services:", "service_id:"]:
@@ -136,12 +153,16 @@ class PatchCoauthConfigTests(unittest.TestCase):
                         with self.assertRaisesRegex(SystemExit, expected_message):
                             MODULE.main()
 
-    def test_missing_current_key_fails_closed_without_legacy_fallback(self):
-        with self.assertRaises(SystemExit):
-            MODULE.replace_named_pem_key(
-                "  - kid: coauth-service-identity-v1\n    key: |\n      obsolete\n",
-                "coauth-account-authority-v1", "replacement",
-            )
+    def test_missing_repointed_section_fails_closed_instead_of_appending(self):
+        # `replace_top_level_section` would append a section the generator no
+        # longer emits, producing a config coauth only rejects at startup.
+        for section in ("secrets", "storage"):
+            with self.subTest(section=section):
+                with self.assertRaisesRegex(SystemExit, f"no `{section}:` section"):
+                    MODULE.require_top_level_section(
+                        "database:\n  uri: postgres://placeholder\n", section
+                    )
+        MODULE.require_top_level_section("secrets:\n  backend: encrypted_file\n", "secrets")
 
 
 if __name__ == "__main__":

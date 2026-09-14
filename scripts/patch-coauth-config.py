@@ -79,20 +79,15 @@ def trailing_slash(value: str) -> str:
     return value.rstrip("/") + "/"
 
 
-def replace_named_pem_key(src: str, kid: str, pem_body: str) -> str:
-    pattern = (
-        rf"(^  - kid: {re.escape(kid)}\s*$\n^    key: \|\s*$\n)"
-        r"(?:^      .*\n)+"
-    )
-    replacement = (
-        rf"\g<1>      -----BEGIN PRIVATE KEY-----\n"
-        f"      {pem_body}\n"
-        "      -----END PRIVATE KEY-----\n"
-    )
-    patched, count = re.subn(pattern, replacement, src, count=1, flags=re.MULTILINE)
-    if count != 1:
-        raise SystemExit(f"FATAL: failed to patch configured key {kid!r}")
-    return patched
+def require_top_level_section(src: str, section: str) -> None:
+    """Fail closed when a section the runner must repoint is absent.
+
+    `replace_top_level_section` appends a missing section, which would hide a
+    coauth configuration-shape change behind a config the server then rejects at
+    startup. For sections whose generated presence is the contract, assert it.
+    """
+    if not re.search(rf"^{re.escape(section)}:\s*$", src, flags=re.MULTILINE):
+        raise SystemExit(f"FATAL: generated coauth config has no `{section}:` section")
 
 
 def parse_args() -> argparse.Namespace:
@@ -103,6 +98,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--coauth-base-url", required=True)
     parser.add_argument("--coauth-bind", required=True)
     parser.add_argument("--cedar-policy-file", required=True, type=pathlib.Path)
+    parser.add_argument("--keystore-path", required=True, type=pathlib.Path)
+    parser.add_argument("--keystore-master-key-file", required=True, type=pathlib.Path)
+    parser.add_argument("--storage-root", required=True, type=pathlib.Path)
     # Optional: a browserless lane (the `joint-api` Playwright project) starts no
     # Inkson, so it has no callback origin to register. The OAuth client itself is
     # still registered either way — `oidc-login-chain` asserts the advertised
@@ -127,11 +125,25 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     src = args.raw_config.read_text(encoding="utf-8-sig")
-    src = replace_named_pem_key(
-        src,
-        "coauth-account-authority-v1",
-        "MC4CAQAwBQYDK2VwBCIEIAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI",
+    # Runtime key material lives in coauth's encrypted-file KeyStore rather than
+    # inline config PEM (coauth 492d8ba1). The runner owns both files so each run
+    # holds its own custody state and nothing is written into the coauth
+    # checkout; `server --first-provisioning` generates the bundle exactly once.
+    require_top_level_section(src, "secrets")
+    secrets = (
+        "secrets:\n"
+        "  backend: encrypted_file\n"
+        f"  path: {yaml_string(str(args.keystore_path.resolve()))}\n"
+        f"  master_key_file: {yaml_string(str(args.keystore_master_key_file.resolve()))}\n"
     )
+    src = replace_top_level_section(src, "secrets", secrets)
+    require_top_level_section(src, "storage")
+    storage = (
+        "storage:\n"
+        "  backend: fs\n"
+        f"  root: {yaml_string(str(args.storage_root.resolve()))}\n"
+    )
+    src = replace_top_level_section(src, "storage", storage)
     coauth_base = trailing_slash(args.coauth_base_url)
     station_items = list(args.station)
     if not station_items:
