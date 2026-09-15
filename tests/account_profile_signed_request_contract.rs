@@ -148,6 +148,94 @@ fn sdk_keeps_profile_event_closed_and_separates_wire_from_accepted_basis() {
 }
 
 #[test]
+fn actor_profile_resolve_carries_the_event_without_a_seal_and_one_failure_value() {
+    let schema: Value = serde_json::from_str(&read(
+        "arkret-spec/spec/v1/artifacts/schemas/actor-profile-operations.schema.json",
+    ))
+    .expect("actor profile operation schema is JSON");
+    let row = &schema["$defs"]["resolved_actor_profile"];
+    assert_eq!(
+        row["required"],
+        json!(["actor_id", "actor_profile", "profile_event"]),
+        "the row is the projection plus its exact Event; there is no Seal member"
+    );
+    assert_eq!(row["additionalProperties"], false);
+    assert_eq!(
+        schema["$defs"]["profile_event"]["allOf"][1]["properties"]["kind"]["enum"],
+        json!(["ak.profile.create", "ak.profile.update"])
+    );
+    assert_eq!(
+        schema["$defs"]["resolve_failure"]["properties"]["reason"]["enum"],
+        json!(["profile_unavailable"]),
+        "unknown actor, missing profile, non-member actor and unauthorized caller are one value"
+    );
+
+    let mapping: Value = serde_json::from_str(&read(
+        "arkret-spec/spec/v1/artifacts/registry/operations-error-mapping.json",
+    ))
+    .expect("operation error mapping is JSON");
+    let entry = mapping
+        .as_object()
+        .and_then(|root| root.values().find_map(|value| value.as_array()))
+        .expect("error mapping rows")
+        .iter()
+        .find(|row| row["operation_id"] == "ak.self.actor_profile.read.resolve.v1")
+        .expect("resolve operation error mapping");
+    assert_eq!(entry["operation_specific"], json!([]));
+    assert!(
+        entry["description"]
+            .as_str()
+            .is_some_and(|notes| notes.contains("not_found for the whole request")),
+        "a caller without membership in the selector Realm gets one not_found"
+    );
+
+    // The shared consumer rule, so no host re-derives what a row proves.
+    let sdk = read("arkret-rust-sdk/crates/models-collaboration/src/actor_profile_resolution.rs");
+    assert!(sdk.contains("pub fn validate_resolved_actor_profile("));
+    assert!(sdk.contains("pub fn validate_actor_profile_resolve_outcome("));
+    assert!(sdk.contains("pub fn classify_confirmed_display_name("));
+    assert!(sdk.contains("pub fn contact_accept_may_initialize_confirmation("));
+    assert!(
+        !sdk.contains("accepted_seal"),
+        "ordinary profile state has no covering Seal for a consumer to check"
+    );
+
+    let client = read("arkret-rust-sdk/crates/http-client/src/endpoints/identity.rs");
+    let method = source_between(
+        &client,
+        "pub async fn actor_profile_resolve(",
+        "/// Fetch the current public principal resolution projection",
+    );
+    assert!(method.contains("request.validate()?"));
+    assert!(method.contains("/_arkret/self/actor-profiles/query"));
+    // The client enforces the batch invariant only. Row binding is per-actor, so
+    // checking it here would turn one self-inconsistent row into a failure for
+    // the whole request and lose the rows that were fine.
+    assert!(method.contains("outcome.validate_covers(&request.actor_ids)?"));
+    assert!(!method.contains("validate_resolved_actor_profile"));
+
+    // garth owns the freshness verdict, so a rename claim cannot be made from a
+    // stale cache and an unvalidated row is recorded as unavailable.
+    let engine = read("garth/src/actor_profile_directory.rs");
+    assert!(engine.contains("pub enum ActorProfileView"));
+    assert!(engine.contains("ActorProfileUnavailableCause::EvidenceRejected"));
+    assert!(engine.contains("pub fn confirmed_display_name_state("));
+    assert!(engine.contains("pub fn forget_realm("));
+
+    // The service refuses the request instead of answering per actor.
+    let service = read("soland/crates/http/src/routing/identity/account.rs");
+    let handler = source_between(
+        &service,
+        "async fn resolve_actor_profiles(",
+        "async fn read_principal_resolution_audit(",
+    );
+    assert!(handler.contains("if !caller_joined {"));
+    assert!(handler.contains("AppError::not_found(\"actor profiles unavailable\")"));
+    assert!(handler.contains("ActorProfileResolveFailureReason::ProfileUnavailable"));
+    assert!(handler.contains("validate_covers"));
+}
+
+#[test]
 fn service_and_product_do_not_keep_the_unsigned_patch_wrapper() {
     let service = read("soland/crates/http/src/routing/identity/account.rs");
     let handler = source_between(
@@ -157,7 +245,12 @@ fn service_and_product_do_not_keep_the_unsigned_patch_wrapper() {
     );
     assert!(handler.contains("profile_event"));
     assert!(handler.contains("submit_initial_event_submission"));
-    assert!(handler.contains("seal_covering_event"));
+    // Profile is ordinary causal state: the outcome is returned from the
+    // materialized projection after durable admission, and the handler neither
+    // waits for a covering Seal nor names one. `ak.profile.*` is `sealed: false`
+    // in the event-kind registry.
+    assert!(handler.contains("accepted_account_profile_in_realm"));
+    assert!(!handler.contains("seal_covering_event"));
     assert!(!handler.contains("let patch = body.patch"));
     assert!(!handler.contains("save_account(current.clone())"));
     assert!(!handler.contains("append_audit_log"));

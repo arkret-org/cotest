@@ -56,8 +56,9 @@
 14. bob 进 `/settings/profile`,改 display_name、bio、avatar
 15. inkson 提交 `ak.profile.update`
 16. alice 以共同 joined Realm 和 Bob 的完整 `ActorId` 调用
-    `ak.self.actor_profile.read.resolve.v1`（`POST /_arkret/self/actor-profiles/query`），验证返回的最新
-    signed profile Event 与 accepted Seal 后看到新 profile
+    `ak.self.actor_profile.read.resolve.v1`（`POST /_arkret/self/actor-profiles/query`），自行校验返回的最新
+    signed profile Event 与该 actor 的绑定后看到新 profile；普通 profile Event 没有 covering Seal。
+    该链路的独立覆盖见 [`contact-confirmed-display-name.md`](contact-confirmed-display-name.md)
 17. 断言:在 directory 搜结果中显示 bob 的新 display_name
 
 ### Phase F — Presence
