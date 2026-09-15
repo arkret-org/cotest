@@ -13,12 +13,12 @@ use arkret_models_collaboration::events_payloads::{
 };
 use arkret_models_crypto::{KeyPackagesClaimOutcome, KeyPackagesUploadOutcome};
 use arkret_wire::{DidUrl, ProfileId};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::schema_validation_fixture::{schema_invalid, schema_valid};
-use super::{expected_bool, expected_str, expected_u64, required_str};
+use super::{expected_bool, expected_str, expected_u64, required_str, required_u64};
 
 pub const VECTOR_ID_KEYPACKAGE_EXHAUSTION_CLAIM_LIMITS: &str =
     "ak.vector.keypackage.exhaustion_claim_limits.v1";
@@ -54,6 +54,14 @@ const MLS_WELCOME_PAYLOAD_SCHEMA: &str =
 const MLS_KEYPACKAGE_PAYLOAD_SCHEMA: &str =
     "schemas/event-payload.schema.json#/$defs/mls_keypackage_payload";
 const LAST_RESORT_FEATURE: &str = "ak.feature.mls_last_resort_keypackage.v1";
+const EXPIRY_SECURITY_CASE_NAME: &str = "last_resort_expiry_blocks_new_claim_not_old_decryption";
+const EXPIRY_SECURITY_CASE_KIND: &str = "last_resort_expiry_security";
+/// `normative-clause-registry.json` names the runner that owns the HPKE half of
+/// this case. It is not cotest: judging the captured GroupSecrets layer means
+/// re-implementing the decryption, and a second implementation of an evidence
+/// block is exactly what a shared fixture exists to avoid.
+const EXPIRY_SECURITY_EVIDENCE_RUNNER: &str = "python -m tools.test_residual_simplification";
+const X25519_PRIVATE_KEY_LEN: usize = 32;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -67,6 +75,43 @@ struct KeypackageLifecycleFixture {
     covers_vectors: Vec<String>,
     unsigned_selector_transcripts: Vec<Value>,
     cases: Vec<Value>,
+    expiry_security_case: ExpirySecurityCase,
+}
+
+/// The captured-Welcome evidence block of
+/// `last_resort_expiry_blocks_new_claim_not_old_decryption`.
+///
+/// The same case is published twice on purpose: once in `cases` as the Station
+/// claim verdict cotest executes, and once here as the HPKE material the
+/// registered Python runner executes. Declaring it as a typed
+/// `deny_unknown_fields` struct rather than a `Value` is the point — the block
+/// has a fixed shape, and a member added or renamed upstream has to be
+/// followed here rather than silently ignored.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ExpirySecurityCase {
+    evidence_scope: String,
+    created_day: u64,
+    welcome_day: u64,
+    expires_day: u64,
+    compromise_day: u64,
+    recipient_private_key_hex: String,
+    ephemeral_private_key_hex: String,
+    encrypt_context_hex: String,
+    group_secrets_hex: String,
+    captured_ciphertext_hex: String,
+    expected: ExpirySecurityExpectation,
+    runner: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ExpirySecurityExpectation {
+    new_claim_at_or_after_expiry: String,
+    matching_private_key_recovers_captured_group_secrets: bool,
+    expiry_revokes_historical_decryption: bool,
+    future_epoch_recovery: String,
+    historical_confidentiality_restored: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -464,6 +509,20 @@ impl MiniKeypackage {
             )),
         }
     }
+
+    /// Retire the package at its own `expires_at`.
+    ///
+    /// Expiry revokes the *distributable* package and nothing else. It cannot
+    /// reach backwards into a Welcome an attacker already captured, which is
+    /// why the returned reason is a claim-side reason code and the transition
+    /// touches no audit record.
+    fn expire(&mut self, now: DateTime<Utc>) -> Option<&'static str> {
+        if now < self.expires_at {
+            return None;
+        }
+        self.state = MiniKeypackageState::Revoked;
+        Some(arkret_wire::ReasonCode::KEYPACKAGE_EXPIRED)
+    }
 }
 
 fn claim_from_pool(
@@ -843,6 +902,192 @@ pub fn run_keypackage_last_resort_forced_rotation_vector() -> Result<()> {
         .ok_or_else(|| anyhow!("new package missing after rotation"))?;
     if new.state.as_str() != expected_str(vector, "new_state")? {
         bail!("replacement last-resort package is not published");
+    }
+    run_last_resort_expiry_security_case(&fixture)
+}
+
+/// Execute the Station half of
+/// `last_resort_expiry_blocks_new_claim_not_old_decryption`, and bind it to the
+/// crypto evidence block that carries the other half.
+///
+/// The case is published in two places under one timeline. Splitting a case
+/// across two runners is fine; letting the two halves drift apart is not, and
+/// nothing else would catch it — the registered Python runner never reads
+/// `cases`, and this suite never decrypts anything.
+///
+/// The three verdicts that must agree are the ones that would flip the security
+/// claim: expiry MUST block a new claim, expiry MUST NOT reach backwards into a
+/// captured Welcome, and a later secret update MUST NOT restore confidentiality
+/// that was already lost.
+fn run_last_resort_expiry_security_case(fixture: &KeypackageLifecycleFixture) -> Result<()> {
+    let evidence = &fixture.expiry_security_case;
+    if evidence.runner != EXPIRY_SECURITY_EVIDENCE_RUNNER {
+        bail!(
+            "expiry security evidence runner drifted: {}",
+            evidence.runner
+        );
+    }
+    if evidence.evidence_scope.trim().is_empty() {
+        bail!("expiry security evidence must state what it does and does not cover");
+    }
+    for (field, value, exact_len) in [
+        (
+            "recipient_private_key_hex",
+            &evidence.recipient_private_key_hex,
+            Some(X25519_PRIVATE_KEY_LEN),
+        ),
+        (
+            "ephemeral_private_key_hex",
+            &evidence.ephemeral_private_key_hex,
+            Some(X25519_PRIVATE_KEY_LEN),
+        ),
+        ("encrypt_context_hex", &evidence.encrypt_context_hex, None),
+        ("group_secrets_hex", &evidence.group_secrets_hex, None),
+        (
+            "captured_ciphertext_hex",
+            &evidence.captured_ciphertext_hex,
+            None,
+        ),
+    ] {
+        let bytes = hex::decode(value).map_err(|error| anyhow!("{field} is not hex: {error}"))?;
+        if bytes.is_empty() {
+            bail!("{field} carries no material");
+        }
+        if let Some(len) = exact_len
+            && bytes.len() != len
+        {
+            bail!("{field} must be {len} bytes, got {}", bytes.len());
+        }
+    }
+    // A sealed GroupSecrets layer is strictly longer than the plaintext it
+    // hides. Without this the fixture could carry the plaintext twice and the
+    // registered runner's "recovers the captured GroupSecrets" result would be
+    // vacuous.
+    if hex::decode(&evidence.captured_ciphertext_hex)?.len()
+        <= hex::decode(&evidence.group_secrets_hex)?.len()
+    {
+        bail!("captured ciphertext is not an AEAD expansion of the GroupSecrets plaintext");
+    }
+    if !(evidence.created_day <= evidence.welcome_day
+        && evidence.welcome_day < evidence.expires_day
+        && evidence.expires_day < evidence.compromise_day)
+    {
+        bail!(
+            "expiry security timeline must capture the Welcome before expiry and compromise it after"
+        );
+    }
+
+    let lifecycle = fixture
+        .cases
+        .iter()
+        .find(|case| case.get("name").and_then(Value::as_str) == Some(EXPIRY_SECURITY_CASE_NAME))
+        .ok_or_else(|| {
+            anyhow!("keypackage lifecycle fixture missing case {EXPIRY_SECURITY_CASE_NAME}")
+        })?;
+    if required_str(lifecycle, "kind")? != EXPIRY_SECURITY_CASE_KIND {
+        bail!("{EXPIRY_SECURITY_CASE_NAME} is no longer a last-resort expiry security case");
+    }
+    if required_str(lifecycle, "vector_id")? != VECTOR_ID_KEYPACKAGE_LAST_RESORT_FORCED_ROTATION {
+        bail!("{EXPIRY_SECURITY_CASE_NAME} moved to another vector");
+    }
+    for (field, declared) in [
+        ("created_day", evidence.created_day),
+        ("welcome_day", evidence.welcome_day),
+        ("expires_day", evidence.expires_day),
+        ("compromise_day", evidence.compromise_day),
+    ] {
+        if required_u64(lifecycle, field)? != declared {
+            bail!("{EXPIRY_SECURITY_CASE_NAME} and its crypto evidence disagree about {field}");
+        }
+    }
+    if (evidence.expected.new_claim_at_or_after_expiry == "reject")
+        == expected_bool(lifecycle, "new_claim_returns_old_package")?
+    {
+        bail!("expiry claim verdict disagrees with its crypto evidence block");
+    }
+    if evidence
+        .expected
+        .matching_private_key_recovers_captured_group_secrets
+        != expected_bool(
+            lifecycle,
+            "captured_welcome_decryptable_with_matching_private_key",
+        )?
+    {
+        bail!("captured-Welcome recovery verdict disagrees with its crypto evidence block");
+    }
+    if evidence.expected.expiry_revokes_historical_decryption
+        || evidence.expected.historical_confidentiality_restored
+    {
+        bail!(
+            "expiry security evidence claims retrospective secrecy the protocol does not provide"
+        );
+    }
+    if evidence.expected.future_epoch_recovery.trim().is_empty() {
+        bail!("expiry security evidence must state the future-epoch condition");
+    }
+
+    // The half cotest owns: at `compromise_day` the package is past its own
+    // `expires_day`, so it leaves the distributable pool with the registered
+    // expiry reason and a new claim cannot return it.
+    let day = |offset: u64| -> Result<DateTime<Utc>> {
+        Ok(parse_time("2026-01-01T00:00:00.000Z")? + Duration::days(i64::try_from(offset)?))
+    };
+    let realm = realm("ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1")?;
+    let mut pool = vec![MiniKeypackage::new_last_resort(
+        "ak:keypackage:expiring-last-resort",
+        "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        core_did("ak:did_core:web:alice.example")?,
+        verification_method(
+            "did:web:alice.example#ak:device:0196419b-0000-7000-8000-000000000001",
+        )?,
+        device("ak:device:0196419b-0000-7000-8000-000000000001")?,
+        realm.clone(),
+        day(evidence.expires_day)?,
+    )];
+    let welcome_claim = parse_claim_outcome(claim_from_pool(
+        &mut pool,
+        &realm,
+        "mls-keypackage-claim-before-expiry",
+        true,
+        true,
+    )?)?;
+    if welcome_claim.claims.len() != 1 {
+        bail!("last-resort package was not claimable before its own expiry");
+    }
+    // The Welcome the attacker captures is sealed against this consumption, at
+    // `welcome_day` — well before expiry. Claiming alone would leave the audit
+    // trail empty and make the invariant below vacuous.
+    if pool[0].consume(
+        "mls-keypackage-claim-before-expiry",
+        &realm,
+        day(evidence.welcome_day)?,
+    )? != MiniConsumeDecision::Consumed("ak:keypackage:expiring-last-resort".to_owned())
+    {
+        bail!("last-resort package was not usable before its own expiry");
+    }
+    let reason = pool[0]
+        .expire(day(evidence.compromise_day)?)
+        .ok_or_else(|| anyhow!("package past its expires_day did not expire"))?;
+    if reason != arkret_wire::ReasonCode::KEYPACKAGE_EXPIRED
+        || reason != expected_str(lifecycle, "revocation_reason")?
+    {
+        bail!("expired last-resort package did not carry the registered expiry reason");
+    }
+    if pool[0].state.as_str() != expected_str(lifecycle, "state_after_expiry")? {
+        bail!("expired last-resort package did not reach the declared state");
+    }
+    assert_claim_failed(&claim_from_pool(
+        &mut pool,
+        &realm,
+        "mls-keypackage-claim-after-expiry",
+        true,
+        true,
+    )?)?;
+    // Expiry revoked the distributable package without touching the audit
+    // record the pre-expiry claim produced: the captured Welcome keeps whatever
+    // confidentiality it already had, no more and no less.
+    if pool[0].audit_records.len() != 1 {
+        bail!("expiry rewrote the pre-expiry claim audit history");
     }
     Ok(())
 }
