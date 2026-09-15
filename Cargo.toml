@@ -25,6 +25,11 @@ resolver = "3"
 # exactly the weight the light edge must not carry. The root package therefore
 # calls into provisioning to build a client; provisioning knows nothing about
 # clients.
+#
+# `scripts/check_package_graph.py` is that arrow as a gate: it resolves this
+# workspace with `cargo metadata` and fails when the light edge can reach
+# Inkson, Dioxus, a `soland-*` crate or the root package, by a normal, build or
+# (from the light edge itself) dev edge.
 members = ["crates/test-support"]
 
 [workspace.lints.rust]

@@ -15,6 +15,10 @@ publish = false
 # `cotest-wire` already builds account handoffs and register requests through
 # Garth, which is the shared client engine those flows belong to. Inkson,
 # Dioxus and the soland implementation crates must not appear.
+#
+# Enforced by `scripts/check_package_graph.py`, including `[dev-dependencies]`:
+# the joint runner builds `--test provisioning_live` on every run with a live
+# Coauth, so a dev edge to Inkson costs exactly what a normal one does.
 [dependencies]
 anyhow = { workspace = true }
 # `signer` is explicit here. The root package gets it through Cargo feature

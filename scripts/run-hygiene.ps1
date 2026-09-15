@@ -7,7 +7,10 @@ param(
     [switch]$SkipE2eTypecheck,
     [switch]$SkipE2eWireTypes,
     [switch]$SkipFixmeDebt,
-    [switch]$SkipFixmeQuality
+    [switch]$SkipFixmeQuality,
+    [switch]$SkipPackageGraph,
+    [switch]$SkipBrowserlessLanes,
+    [switch]$SkipProvisioningCache
 )
 
 $ErrorActionPreference = "Stop"
@@ -182,6 +185,32 @@ if (-not $SkipFixmeQuality) {
         Add-Content -Path $rawLog -Value "=== e2e-fixme-quality (skipped) ==="
         Add-Content -Path $rawLog -Value "checker not found at $fixmeQuality"
     }
+}
+if (-not $SkipProvisioningCache) {
+    # The isolation rules behind `ensureRegistered`'s memo, as unit tests. They
+    # need no services and no browser: `helpers/provisioning-cache.ts` is free
+    # of Playwright imports for exactly this reason.
+    $provisioningCacheTest = Join-Path $repoRoot "e2e" "scripts" "provisioning-cache.test.mjs"
+    if (Test-Path $provisioningCacheTest) {
+        $nodePath = Resolve-CommandPath "node"
+        $results.Add((Invoke-HygieneCommand -Label "provisioning-cache" -FilePath $nodePath -Arguments @("--test", $provisioningCacheTest) -RunDir $runDir -RawLog $rawLog -WorkingDirectory (Join-Path $repoRoot "e2e")))
+    }
+}
+if (-not $SkipPackageGraph) {
+    # The light build edge as a gate rather than a remembered fact: neither
+    # `cotest-provision` nor `cotest-wire` may reach Inkson, Dioxus, a Soland
+    # implementation crate or the root package. `cargo metadata` resolves the
+    # graph without building anything, so this costs seconds, not a compile.
+    $packageGraph = Join-Path $scriptDir "check_package_graph.py"
+    $pythonPath = Resolve-CommandPath "python"
+    $results.Add((Invoke-HygieneCommand -Label "package-graph" -FilePath $pythonPath -Arguments @($packageGraph) -RunDir $runDir -RawLog $rawLog))
+}
+if (-not $SkipBrowserlessLanes) {
+    # The other half of the same boundary, on the Playwright side: `joint-api`
+    # must collect no browser setup, the runner's project classification must
+    # match the config, and no lane's selection may shrink below its floor.
+    $browserlessLanes = Join-Path $scriptDir "tests" "browserless-lane-resources.tests.ps1"
+    $results.Add((Invoke-HygieneCommand -Label "browserless-lanes" -FilePath $pwshPath -Arguments @("-NoProfile", "-File", $browserlessLanes) -RunDir $runDir -RawLog $rawLog))
 }
 if ($results.Count -eq 0) {
     throw "No hygiene checks were selected"

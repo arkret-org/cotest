@@ -107,6 +107,7 @@ jobs:
           python -m unittest
           scripts.tests.test_operation_test_coverage
           scripts.tests.test_api_only_migration
+          scripts.tests.test_package_graph
       - name: reject stale or manually edited inventory
         working-directory: cotest
         run: python scripts/check_operation_test_coverage.py --check
@@ -130,6 +131,20 @@ jobs:
       - name: typecheck
         working-directory: e2e
         run: npm run typecheck
+      - name: provisioning cache isolation
+        working-directory: e2e
+        # The memo behind `ensureRegistered` is load-bearing: the Coauth handle
+        # it registers is a fresh uuid, so nothing server-side deduplicates a
+        # second founding. Its isolation rules are kept Playwright-free so they
+        # can be checked here rather than only in a joint run.
+        run: npm run check:provisioning-cache
+      - name: browserless lane resources
+        shell: pwsh
+        # `joint-api` must collect no browser setup project, the runner's
+        # project classification must match playwright.config.ts, and no lane's
+        # selection may shrink below its recorded floor. Needs only the e2e npm
+        # deps installed above.
+        run: ./scripts/tests/browserless-lane-resources.tests.ps1
       - name: identity CI selection gate
         shell: pwsh
         # Proves the workflow selectors resolve to the two real joint-inkson
@@ -150,6 +165,52 @@ jobs:
         # @expected-live-by. It previously existed only as an npm alias with no
         # automated caller.
         run: npm run check:fixme
+
+  package-graph:
+    name: light build edge (package graph)
+    runs-on: ubuntu-latest
+    # `cotest-provision` / `cotest-wire` exist so the browserless lane builds
+    # without Inkson's wasm and the Soland implementation crates. That property
+    # was only ever checked by hand. `cargo metadata` resolves the graph without
+    # compiling anything, so this job needs every path-dependency sibling
+    # checked out but no build cache.
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: cotest
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/arkret-rust-sdk
+          path: arkret-rust-sdk
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/garth
+          path: garth
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/inkson
+          path: inkson
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/soland
+          path: soland
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN }}
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.98"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: package graph gate
+        working-directory: cotest
+        run: python scripts/check_package_graph.py
 
   typos:
     name: typos

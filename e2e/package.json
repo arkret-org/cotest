@@ -8,7 +8,8 @@
     "typecheck": "tsc --noEmit",
     "gen:wire-types": "node scripts/generate-wire-types.mjs",
     "check:wire-types": "node scripts/generate-wire-types.mjs --check",
-    "check:fixme": "node scripts/check-fixme-quality.mjs"
+    "check:fixme": "node scripts/check-fixme-quality.mjs",
+    "check:provisioning-cache": "node --test scripts/provisioning-cache.test.mjs"
   },
   "devDependencies": {
     "@noble/ciphers": "^1.3.0",

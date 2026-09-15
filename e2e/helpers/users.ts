@@ -46,6 +46,12 @@ import {
   registerRequestAuth,
   typedId,
 } from "./soland-api";
+import {
+  ProvisioningLedger,
+  assertCompleteIdentity,
+  provisioningKey,
+  type ProvisionedIdentity,
+} from "./provisioning-cache";
 import { deviceSuffix } from "./ids";
 import { base58btcEncode } from "./encoding";
 import { withOperationSelectors } from "./arkret-test";
@@ -1469,13 +1475,7 @@ export function uniqueUser(prefix: string, server?: SolandKey): JointUser {
   };
 }
 
-/// The identity fields canonical provisioning rebinds on the caller's user.
-type ProvisionedIdentity = Pick<
-  JointUser,
-  "id" | "did" | "deviceId" | "handle" | "displayName"
->;
-
-// In-flight canonical provisioning per (server, user name). The first
+// In-flight canonical provisioning per provisioning target. The first
 // `ensureRegistered` call for a user drives the co-located coauth account +
 // PCR genesis once; concurrent and repeat callers share the same promise.
 //
@@ -1484,7 +1484,15 @@ type ProvisionedIdentity = Pick<
 // with the same name got a settled promise and an untouched user: same name,
 // same cache key, and none of `id`/`did`/`deviceId` rebound — a principal that
 // was never registered, failing later and somewhere else.
+//
+// The key is a `provisioningKey`, not `${server}\0${name}`: `undefined`,
+// `"default"` and `"server1"` are three names for one Station and all three are
+// live in this suite, so an alias-keyed memo founded the same user once per
+// alias and rebound the caller's object to the last one. See
+// `provisioning-cache.ts` for the isolation rules and for why this memo is not
+// a substitute for the Authority's own duplicate handling.
 const provisionedPrincipals = new Map<string, Promise<ProvisionedIdentity>>();
+const provisioningLedger = new ProvisioningLedger();
 
 export async function ensureRegistered(
   request: APIRequestContext,
@@ -1498,7 +1506,14 @@ export async function ensureRegistered(
   // `user` is rebound to the account-bound identity the ceremony returns.
   const coauth = coauthBaseUrl(opts.server);
   if (coauth) {
-    const key = `${opts.server ?? "default"}\0${user.name}`;
+    const key = provisioningKey({
+      stationBaseUrl: solandBaseUrl(opts.server),
+      authorityBaseUrl: coauth,
+      principalName: user.name,
+    });
+    // Before the await, so a caller that mixes Station aliases for one user is
+    // told where, rather than getting a second principal.
+    provisioningLedger.claim(user, key);
     let provisioning = provisionedPrincipals.get(key);
     if (!provisioning) {
       provisioning = (async (): Promise<ProvisionedIdentity> => {
@@ -1527,13 +1542,16 @@ export async function ensureRegistered(
               `ensureRegistered: canonical provisioning returned no session for ${user.name}`,
             );
           }
-          return {
-            id: session.user.id,
-            did: session.user.did,
-            deviceId: session.user.deviceId,
-            handle: session.user.handle,
-            displayName: session.user.displayName,
-          };
+          return assertCompleteIdentity(
+            {
+              id: session.user.id,
+              did: session.user.did,
+              deviceId: session.user.deviceId,
+              handle: session.user.handle,
+              displayName: session.user.displayName,
+            },
+            key,
+          );
         } finally {
           await accountRequest.dispose();
         }
@@ -1549,7 +1567,19 @@ export async function ensureRegistered(
       });
       provisionedPrincipals.set(key, provisioning);
     }
-    const identity = await provisioning;
+    let identity: ProvisionedIdentity;
+    try {
+      identity = await provisioning;
+    } catch (error) {
+      // The claim is released too, or the retry this failure invites would be
+      // refused as a second target for the same user.
+      provisioningLedger.release(user, key);
+      throw error;
+    }
+    // One founding device belongs to one principal. Two principals under one
+    // device id means a response was attributed to the wrong request, which no
+    // later assertion in the scenario would name.
+    provisioningLedger.recordDevice(identity);
     // Applied per caller, not inside the cached body. This is the line that
     // makes a repeat caller with its own user object get a registered
     // principal rather than an untouched one.
