@@ -407,6 +407,8 @@ fn validate_recovery_terminal_commit_case(case: &Value, name: &str) -> Result<()
                 );
             }
         }
+        // Same caveat as the race case below: the fixture contract is the
+        // atomic boundary, which the Station has not closed yet.
         "terminal_commit_is_one_atomic_commit" => {
             let invisible = members(case, "invisible_before_commit");
             let visible = members(case, "visible_after_commit");
@@ -439,6 +441,14 @@ fn validate_recovery_terminal_commit_case(case: &Value, name: &str) -> Result<()
                 );
             }
         }
+        // KNOWN UNCLOSED on the Station side: the seven steps of the terminal
+        // commit do not share one local database transaction yet - both Events
+        // still land through the ordinary batch submit before the Seal is
+        // accepted. So "the loser leaves no residue" and "a crash before the
+        // commit rolls the whole thing back" hold in the fixture contract this
+        // runner checks, and do NOT hold end to end in a joint run. This stays
+        // the contract, not a relaxed one: the joint acceptance is an open
+        // implementation item, not a reason to weaken the check here.
         "two_units_race_the_same_previous_generation" => {
             if !members(case, "loser_residue").is_empty()
                 || case.get("winner_quarantined").and_then(Value::as_bool) != Some(false)
