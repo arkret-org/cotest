@@ -17,13 +17,16 @@ use arkret_identifiers::{
 };
 use arkret_models_collaboration::events_payloads::device_identity::{
     DeviceAuthorizationBindingKind, DeviceAuthorizePayload, DeviceOrPrincipalRef,
-    DeviceReanchorPayload, validate_device_reanchor_recovery_first_seal,
+    DeviceReanchorPayload, UnsignedDeviceAuthorizePayload, typed_device_authorize_payload_digest,
+    validate_device_reanchor_recovery_first_seal,
 };
 use arkret_models_collaboration::events_payloads::{
     FoundingDeviceDescriptor, FoundingDeviceHpkeKeyAlgorithm, FoundingDeviceKeyAlgorithm,
     FoundingDeviceKeyPurpose, SignatureMaterial, device_authorize_payload_digest,
 };
-use arkret_wire::{AccountId, Audience, AuthoredEvent, DidUrl, Event, EventRef, NonEmptyString};
+use arkret_wire::{
+    AccountId, Audience, AuthoredEvent, DidUrl, Event, EventRef, NonEmptyString, RecoverySessionId,
+};
 use base64::Engine as _;
 use ed25519_dalek::{Signer as _, SigningKey};
 use serde::Deserialize;
@@ -275,6 +278,9 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
         authorization_binding_kind: DeviceAuthorizationBindingKind::RegistrationAnchor,
         device_signature: SignatureMaterial::NonEmptyString(non_empty("pending")?),
         recovery_session_id: None,
+        // `registration_anchor` is one of the three branches that MUST NOT
+        // carry an install fence (`device-lifecycle.md` section 5.2.3).
+        applet_id: None,
     };
     let subject_account_id = AccountId::new(
         principal.clone(),
@@ -422,10 +428,243 @@ fn validate_reanchor_helpers() -> Result<()> {
         bail!("device re-anchor accepted a replacement Event id binding");
     }
 
+    validate_generation_fence_is_the_unsealed_successor(&payload)?;
+    validate_recovery_first_seal_signer_comes_from_the_fence()?;
+
     let mut mismatched = value;
     mismatched["new_device_generation"] = json!(3);
     if serde_json::from_value::<DeviceReanchorPayload>(mismatched).is_ok() {
         bail!("device re-anchor accepted a non-successor generation");
+    }
+    Ok(())
+}
+
+/// The B-model generation state a Station consults while admitting a Seal.
+///
+/// `current` is the **Seal-confirmed** generation, which is the only generation
+/// a Station can report before the first new-generation Seal commits.
+#[derive(Clone, Debug)]
+struct GenerationFenceState {
+    current: u64,
+    /// The `new_device_generation` every accepted re-anchor in this Realm
+    /// declares.
+    declared_by_accepted_reanchors: Vec<u64>,
+}
+
+impl GenerationFenceState {
+    fn select(&self, wanted: u64) -> Vec<u64> {
+        self.declared_by_accepted_reanchors
+            .iter()
+            .copied()
+            .filter(|generation| *generation == wanted)
+            .collect()
+    }
+}
+
+/// Fixed vector: the generation fence selects the successor that is **accepted
+/// but not yet sealed**, which is `current + 1`.
+///
+/// The property is an off-by-one that is invisible in review and silent at
+/// runtime. `DeviceReanchorPayload` already forces `new == previous + 1`, and a
+/// Station's `current` is the Seal-confirmed generation, so during the exact
+/// window the fence exists for — successor accepted, first Seal not yet
+/// committed — canonical history contains a re-anchor declaring `current + 1`
+/// and none declaring `current`. A predicate written against `current` is
+/// therefore not a stricter fence: it selects nothing at all, and can only ever
+/// match a re-anchor whose own Seal has already been accepted. That is the same
+/// observable behaviour as having no fence, which is why nothing failed when it
+/// was wrong.
+///
+/// The vector pins both halves — the fence engages on `current + 1`, and it
+/// releases by itself once that Seal makes the successor the confirmed
+/// generation — so neither "fix" can be undone without this failing.
+fn validate_generation_fence_is_the_unsealed_successor(
+    payload: &DeviceReanchorPayload,
+) -> Result<()> {
+    if payload.new_device_generation != payload.previous_device_generation + 1 {
+        bail!("re-anchor payload no longer declares the immediate successor generation");
+    }
+    let pending = GenerationFenceState {
+        current: payload.previous_device_generation,
+        declared_by_accepted_reanchors: vec![payload.new_device_generation],
+    };
+    if !pending.select(pending.current).is_empty() {
+        bail!(
+            "a re-anchor declared the Seal-confirmed generation: the off-by-one predicate is no longer structurally empty"
+        );
+    }
+    if pending.select(pending.current + 1) != vec![payload.new_device_generation] {
+        bail!("the generation fence did not engage on the accepted but unsealed successor");
+    }
+
+    let sealed = GenerationFenceState {
+        current: payload.new_device_generation,
+        declared_by_accepted_reanchors: vec![payload.new_device_generation],
+    };
+    if !sealed.select(sealed.current + 1).is_empty() {
+        bail!("the generation fence did not release once its own first Seal committed");
+    }
+    Ok(())
+}
+
+/// One row of the PCR device directory as it stands while the first
+/// new-generation Seal is being admitted.
+#[derive(Clone, Debug)]
+struct PcrDeviceDirectoryRow {
+    device_public_key_did: String,
+    verified: bool,
+    revoked: bool,
+    generation: u64,
+}
+
+impl PcrDeviceDirectoryRow {
+    /// The signer predicate every *ordinary* B-model Seal uses.
+    fn can_sign_at(&self, current_generation: u64) -> bool {
+        self.verified && !self.revoked && self.generation == current_generation
+    }
+}
+
+/// Fixed vector: the first new-generation Seal's signer is the key the fence
+/// froze, not a `verified` current-generation inventory row.
+///
+/// `security-transactions.md` section 2.3 step 4 makes the replacement device
+/// `active + verified + current generation` **as a consequence of this Seal**.
+/// So requiring an already-verified current-generation row here is not a strict
+/// check that happens to fail — it is a circular impossibility: the state it
+/// demands is the state this operation produces, and fresh-device recovery can
+/// never reach a Standard grant.
+///
+/// The authority used instead is not weaker, and this vector is what says so:
+/// the frozen `(device id, public key)` pair comes from the accepted re-anchor
+/// unit's own replacement authorization, and the re-anchor payload's
+/// `replacement_authorize_payload_digest` already commits to exactly that
+/// payload. Substituting any other key therefore names a different unit, which
+/// the vector proves by recomputing the digest.
+fn validate_recovery_first_seal_signer_comes_from_the_fence() -> Result<()> {
+    let suite = arkret_canonical::DigestSuite::Sha256;
+    let principal = DidCoreId::new("ak:did_core:webvh:z6mkfixture")?;
+    let subject_account_id = AccountId::new(
+        principal.clone(),
+        DidCoreId::new("ak:did_core:web:principal.example")?,
+    );
+    let replacement_key = SigningKey::from_bytes(&[23u8; 32]);
+    let replacement_public_key = non_empty(format!(
+        "did:key:{}",
+        arkret_canonical::ed25519_pubkey_to_did_key_multibase(
+            &replacement_key.verifying_key().to_bytes()
+        )
+    ))?;
+    let device_id = DeviceId::new("ak:device:019a4100-0000-7000-8000-00000000000a")?;
+    let not_before = arkret_canonical::parse_timestamp_canonical("2026-09-15T00:00:00.000Z")?;
+    let unsigned = UnsignedDeviceAuthorizePayload::new(
+        device_id.clone(),
+        replacement_public_key.clone(),
+        non_empty("z6LSCotestRecoveryReplacementHpkeKey")?,
+        vec![non_empty("ak.hpke_x25519_aead_chacha20poly1305.v1")?],
+        Some(non_empty("Ed25519")?),
+        DeviceOrPrincipalRef::Principal(principal.clone()),
+        None,
+        not_before,
+        None,
+        DeviceAuthorizationBindingKind::PcrRecovery,
+        Some(RecoverySessionId::new(
+            "ak:recovery_session:01904100-0000-7000-8000-000000000002",
+        )?),
+        None,
+    )?;
+    let signature =
+        replacement_key.sign(&unsigned.device_possession_signature_input(&subject_account_id)?);
+    let replacement_authorize = DeviceAuthorizePayload {
+        device_id: device_id.clone(),
+        device_public_key_did: replacement_public_key.clone(),
+        hpke_key: non_empty("z6LSCotestRecoveryReplacementHpkeKey")?,
+        algorithms: vec![non_empty("ak.hpke_x25519_aead_chacha20poly1305.v1")?],
+        device_key_algorithm: Some(non_empty("Ed25519")?),
+        authorized_by: DeviceOrPrincipalRef::Principal(principal),
+        scopes: None,
+        not_before,
+        expires_at: None,
+        authorization_binding_kind: DeviceAuthorizationBindingKind::PcrRecovery,
+        device_signature: SignatureMaterial::NonEmptyString(non_empty(
+            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(signature.to_bytes()),
+        )?),
+        recovery_session_id: Some(RecoverySessionId::new(
+            "ak:recovery_session:01904100-0000-7000-8000-000000000002",
+        )?),
+        pairing_challenge_transcript_digest: None,
+        applet_id: None,
+    };
+    arkret_signatures::verify_device_authorize_possession(
+        &replacement_authorize,
+        &subject_account_id,
+    )
+    .map_err(|error| anyhow!(error.to_string()))?;
+    let committed_digest = typed_device_authorize_payload_digest(&replacement_authorize, suite)?;
+
+    let previous_generation = 1u64;
+    let new_generation = 2u64;
+    // Every directory shape reachable *before* this Seal commits. The
+    // replacement row is either absent or present-but-unverified at the
+    // outgoing generation; in neither case does the ordinary predicate have a
+    // witness, which is the circularity stated as a fact rather than as prose.
+    let reachable_directories: [Vec<PcrDeviceDirectoryRow>; 2] = [
+        vec![PcrDeviceDirectoryRow {
+            device_public_key_did: "did:key:z6MkOutgoingGenerationDevice".to_owned(),
+            verified: true,
+            revoked: false,
+            generation: previous_generation,
+        }],
+        vec![
+            PcrDeviceDirectoryRow {
+                device_public_key_did: "did:key:z6MkOutgoingGenerationDevice".to_owned(),
+                verified: true,
+                revoked: false,
+                generation: previous_generation,
+            },
+            PcrDeviceDirectoryRow {
+                device_public_key_did: replacement_authorize
+                    .device_public_key_did
+                    .as_str()
+                    .to_owned(),
+                verified: false,
+                revoked: false,
+                generation: previous_generation,
+            },
+        ],
+    ];
+    for directory in &reachable_directories {
+        if directory.iter().any(|row| row.can_sign_at(new_generation)) {
+            bail!(
+                "the ordinary verified-current-generation signer predicate found a witness before the Seal that creates it"
+            );
+        }
+    }
+    // The replacement device's own row may already be staged in the second
+    // reachable shape. Naming it explicitly is what rules out the weaker
+    // reading of the sentence above — that the predicate fails only because the
+    // row is missing, rather than because the row cannot yet be `verified` at
+    // the incoming generation.
+    let staged = reachable_directories[1]
+        .iter()
+        .find(|row| {
+            row.device_public_key_did == replacement_authorize.device_public_key_did.as_str()
+        })
+        .context("the reachable directory lost its staged replacement device row")?;
+    if staged.verified || staged.can_sign_at(new_generation) {
+        bail!("the replacement device was already verified before the Seal that verifies it");
+    }
+
+    // What the fence froze, and what it is worth. The frozen key is the one the
+    // re-anchor payload digest already commits to, so a Seal signed by any
+    // other key belongs to a different re-anchor unit.
+    let frozen_public_key = replacement_authorize.device_public_key_did.clone();
+    if frozen_public_key != replacement_public_key {
+        bail!("the frozen replacement key is not the one the accepted authorize carries");
+    }
+    let mut substituted = replacement_authorize.clone();
+    substituted.device_public_key_did = non_empty("did:key:z6MkSomeOtherRecoveryDevice")?;
+    if typed_device_authorize_payload_digest(&substituted, suite)? == committed_digest {
+        bail!("substituting the replacement device key left the committed unit digest unchanged");
     }
     Ok(())
 }
