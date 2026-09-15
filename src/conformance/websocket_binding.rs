@@ -89,11 +89,13 @@ pub fn run_websocket_binding_suite() -> Result<()> {
     run_reauth_trace(&fixture, kat)?;
     run_drain_and_close_traces(&fixture, &limits)?;
     run_fallback_cases(&fixture)?;
+    let schema_cases = run_schema_validation_cases(&fixture, &env)?;
 
     eprintln!(
         "[cotest {SUITE}] discovery={discovery} dpop_kat=1 dpop_negative={negatives} \
          frame_schema={frames_len} wire_negative={wire_negatives} multiplex=1 reauth=2 \
-         drain_and_close=6 fallback=2 bundle_closure={bundle_closure}",
+         drain_and_close=6 fallback=2 bundle_closure={bundle_closure} \
+         schema_validation={schema_cases}",
         frames_len = frames.len()
     );
     Ok(())
@@ -127,6 +129,20 @@ struct WebSocketBindingFixture {
     reauth_trace: Vec<ReauthCase>,
     drain_and_close_traces: Vec<DrainCase>,
     fallback_cases: Vec<FallbackCase>,
+    /// The spec fixture also publishes ordinary `schema_validation_cases`.
+    /// They run here rather than through the shared schema-validation runner:
+    /// that runner owns a whole fixture file, and this one carries fifteen
+    /// other sections of its own.
+    schema_validation_cases: Vec<SchemaValidationCase>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SchemaValidationCase {
+    name: String,
+    schema_ref: String,
+    instance: Value,
+    expect_valid: bool,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize)]
@@ -751,6 +767,35 @@ fn direction_of(schema_ref: &str) -> Result<Direction> {
         return Ok(Direction::Client);
     }
     bail!("{schema_ref} is not one of the two registered direction schemas")
+}
+
+/// Run the fixture's `schema_validation_cases` against the schemas they name.
+///
+/// The cases are the same shape every other spec fixture publishes, so they go
+/// through the same `SchemaEnv` the frame cases use. Requiring a non-empty set
+/// is what keeps the section from being declared-and-ignored: a struct field
+/// alone would parse the fixture and never look at it again.
+fn run_schema_validation_cases(
+    fixture: &WebSocketBindingFixture,
+    env: &SchemaEnv,
+) -> Result<usize> {
+    let cases = &fixture.schema_validation_cases;
+    if cases.is_empty() {
+        bail!("{FIXTURE} declares an empty schema_validation_cases section");
+    }
+    for case in cases {
+        let validator = env.compile(&case.schema_ref)?;
+        let valid = validator.is_valid(&case.instance);
+        if valid != case.expect_valid {
+            bail!(
+                "{FIXTURE} schema_validation case {} against {} is valid={valid}, expected {}",
+                case.name,
+                case.schema_ref,
+                case.expect_valid
+            );
+        }
+    }
+    Ok(cases.len())
 }
 
 fn run_frame_schema_cases<'a>(

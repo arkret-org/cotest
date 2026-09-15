@@ -270,7 +270,11 @@ mod tests {
                 "kind": "detached_jws",
                 "verification_method": "did:web:alice.example#ak:device:019f3b1c-76c8-7000-8000-000000000001",
                 "envelope_digest": format!("sha256:{}", "0".repeat(64)),
-                "created_at": "2026-07-07T00:00:00.000Z",
+                // `created_at` is a transcript member injected from the outer
+                // `sent_at`, not a wire member of the proof
+                // (`signal-envelope.schema.json#/$defs/signal_proof` is closed
+                // over four members). Carrying it here made the envelope
+                // unparseable by the shared type.
                 "jws": "eyJhbGciOiJFZDI1NTE5In0..c2ln"
             }
         });
