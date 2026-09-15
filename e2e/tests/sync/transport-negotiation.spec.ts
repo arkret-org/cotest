@@ -1,4 +1,4 @@
-// Transport binding negotiation (HTTP / WebSocket / TSP fallback)
+// Transport binding negotiation (HTTP / WebSocket fallback)
 // Contract: e2e/scenarios/sync/transport-negotiation.md
 // Spec refs:
 //   - sync/transport-bindings.md §2-§4 (binding layers, requirements,
@@ -35,7 +35,6 @@
 //     peer endpoint requires — so cross-server delivery does not yet complete.
 //   ✗ ak.transport.negotiate operation — NOT in spec registry (reserved name)
 //   ✗ WebSocket frame binding — extension profile, not v1 core (tb §6)
-//   ✗ TSP binding — extension profile, not v1 core
 //   ✗ Binding fallback chain state machine — presupposes the above bindings
 
 import { expect, test } from "../../helpers/arkret-test";

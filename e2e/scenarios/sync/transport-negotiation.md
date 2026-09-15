@@ -1,8 +1,8 @@
-# Transport binding negotiation (HTTP / WebSocket / TSP fallback)
+# Transport binding negotiation (HTTP / WebSocket fallback)
 
 ## 目标
 
-验证两个 soland 实例(soland_a 和 soland_b)能完成「HTTP signed baseline → 协商升级到 WebSocket → 进一步切到 TSP relationship envelope → 任一 transport 断连后回退到 HTTP」的完整 transport negotiation 链路;过程中 RFC 9421 HTTP Message Signature、origin/destination service DID、nonce、key rotation 等约束在所有 transport 上一致执行,binding fallback chain 在故障时收敛到 HTTP/JSON baseline。
+验证两个 soland 实例(soland_a 和 soland_b)能完成「HTTP signed baseline → 协商升级到 WebSocket → 任一 transport 断连后回退到 HTTP」的完整 transport negotiation 链路;过程中 RFC 9421 HTTP Message Signature、origin/destination service DID、nonce、key rotation 等约束在所有 transport 上一致执行,binding fallback chain 在故障时收敛到 HTTP/JSON baseline。
 
 不验证:单服务器 sync (见 sync/offline-conflict)、cross-server federation push 业务逻辑 (见 federation/cross-server)、push notification gateway (见 discovery/push-notifications)、blob transport (见 media/blob-transport)。
 
@@ -86,27 +86,16 @@
 10. **soland_b** 验证 frame_signature → 入库 → bob 30s 内看到消息
 11. 断言:server A 和 server B 都通过 `GET /_arkret/describe` 或内部 admin endpoint 报告当前活跃 binding = `websocket_frame`(至少一条 active connection)
 
-### Phase C — TSP binding (optional extension)
+### Phase C — Binding fallback (WebSocket 断连 → 回到 HTTP)
 
-12. **soland_a** 在 `GET /_arkret/describe` 中宣布支持 TSP binding(`extension_profile_required: "ak.profile.binding.tsp.v1"`)
-13. **soland_b** 选择 TSP — 通过 `ak.transport.negotiate` 协商把后续 federation 流量切到 TSP relationship envelope
-14. **soland_a** 通过 TSP node 向 soland_b 发送下一批事件
-    - TSP envelope: outer wrapper 携带 sender/receiver VID(verifiable identifier),inner payload 是 canonical EventEnvelope
-    - 不再需要 RFC 9421 — TSP envelope 自身 cryptographic binding 取代 HTTP 层签名
-15. 断言:soland_b 通过 TSP 收到 envelope → 解封 → 入库 → bob 看到消息
-
-注:Phase C 是未发布扩展的设计记录。当前 soland 无 TSP binding 实现,且 v1 registry 没有对应 operation,因此不进入 Playwright test discovery。
-
-### Phase D — Binding fallback (WebSocket 断连 → 回到 HTTP)
-
-16. 在 Phase B 的 WebSocket 连接活跃时,测试 harness 通过 `route.abort` 或 `forceClose` 让 soland_a 与 soland_b 之间的 WebSocket 断开
-17. soland_a 检测到 connection lost(ping/pong 超时或 socket close 帧)
-18. 期望:soland_a 不立即重连 WebSocket,而是按 binding fallback chain 回到 HTTP/JSON
-    - fallback chain: `tsp` → `websocket_frame` → `http_json`
-    - 既然 TSP 没启用、WebSocket 刚 fail,直接降级到 HTTP
-19. soland_a 用下一个 outbound event 触发 HTTP POST(同 Phase A 的形态),重新走 RFC 9421 signed POST
-20. 断言:30s 内 bob 看到该事件(经 HTTP 投递),即使 WebSocket 暂时不可用
-21. 断言:server A 的内部 metric/log 显示 `binding.fallback{from=websocket_frame,to=http_json}` 计数增加
+12. 在 Phase B 的 WebSocket 连接活跃时,测试 harness 通过 `route.abort` 或 `forceClose` 让 soland_a 与 soland_b 之间的 WebSocket 断开
+13. soland_a 检测到 connection lost(ping/pong 超时或 socket close 帧)
+14. 期望:soland_a 不立即重连 WebSocket,而是按 binding fallback chain 回到 HTTP/JSON
+    - fallback chain: `websocket_frame` → `http_json`
+    - WebSocket 刚 fail,直接降级到 HTTP
+15. soland_a 用下一个 outbound event 触发 HTTP POST(同 Phase A 的形态),重新走 RFC 9421 signed POST
+16. 断言:30s 内 bob 看到该事件(经 HTTP 投递),即使 WebSocket 暂时不可用
+17. 断言:server A 的内部 metric/log 显示 `binding.fallback{from=websocket_frame,to=http_json}` 计数增加
 
 ## Observable assertions (合并清单)
 
@@ -115,8 +104,7 @@
 - Phase B:`GET /_arkret/describe` 含 `transport_bindings[].kind=websocket`
 - Phase B:WebSocket upgrade 返回 101;subprotocol = `ak.federation.v1`
 - Phase B:bob 在 30s 内看到通过 WebSocket 帧投递的消息
-- Phase C(设计 backlog):TSP binding 出现在未来扩展的 `transport_bindings` 中;TSP envelope 解封成功
-- Phase D:WebSocket 断后,server A 自动回退到 HTTP/JSON;bob 仍然在 30s 内收到下一个事件
+- Phase C:WebSocket 断后,server A 自动回退到 HTTP/JSON;bob 仍然在 30s 内收到下一个事件
 - 全程:任何 transport 上,`origin` / `destination` service DID 与 DID Document 一致;签名 / envelope 验证失败 → 整批 reject
 
 ## Edge cases / sub-tests
@@ -149,7 +137,6 @@
 
 - **soland 缺口**:
   - WebSocket transport binding 整体未实现(只在 spec slot 中保留 — `transport-bindings.md` §6 明说 non-HTTP binding 是 extension profile)
-  - TSP binding 完全未实现
   - HTTP RFC 9421 入站签名验证 partial(`federation.rs` 已有 stub,但完整 RFC 9421 components / `Content-Digest` / nonce / key rotation hint 路径未完成)
   - 出站签名生成不完整(`federation.rs:548-572` 出站 push 是 logs-only stub)
   - `ak.transport.negotiate` operation 在 contract catalog 中作为 slot 保留,无运行时实现
@@ -161,8 +148,8 @@
   - 多 hop relay 用第三个 mock service(`MOCK_RELAY_BASE_URL`)或 `route.fulfill` 拦截 + 重写
   - WebSocket forceClose 用 `ws.close()` 或 `page.context().setOffline(true)` 配合 host filter
 
-- **预期结果**:可执行 spec 只覆盖已注册的 HTTP/JSON federation 与 RFC 9421 边界。WebSocket/TSP negotiation 与 relay-inner 只保留为未来扩展设计,不得通过空 `test.fixme` 进入测试报告。
+- **预期结果**:可执行 spec 只覆盖已注册的 HTTP/JSON federation 与 RFC 9421 边界。WebSocket negotiation 与 relay-inner 只保留为未来扩展设计,不得通过空 `test.fixme` 进入测试报告。
 
 ## 总耗时预估
 
-当前单次跑约 30-60s。一旦 spec 正式发布 WebSocket/TSP 扩展并完成实现,应新增真实测试,预计约 90-120s。
+当前单次跑约 30-60s。一旦 spec 正式发布 WebSocket 扩展并完成实现,应新增真实测试,预计约 90-120s。

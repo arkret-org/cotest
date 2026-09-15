@@ -15,7 +15,6 @@ import {
   mockEmailBaseUrl,
   mockIdpBaseUrl,
   mockPushGatewayBaseUrl,
-  mockTspEndpointBaseUrl,
   mockWitnessBaseUrl,
   mockWitnessQuorumBaseUrls,
   mockWitnessQuorumDids,
@@ -358,57 +357,6 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     const identity = await (await request.get(`${baseUrl}/identity`)).json();
     expect(typeof identity.did).toBe("string");
   });
-  test("mock-tsp-endpoint: relationship bootstrap, message ACK round-trip", async ({
-    request,
-  }) => {
-    const baseUrl = mockTspEndpointBaseUrl();
-    test.skip(!baseUrl, "mock-tsp-endpoint not started for this run");
-
-    await request.delete(`${baseUrl}/scenarios`);
-
-    const remoteVid = `did:web:alice-selftest-${Date.now()}.example`;
-    const bootstrap = await request.post(`${baseUrl}/tsp/relationship-bootstrap`, {
-      data: {
-        remote_vid: remoteVid,
-        remote_public_jwk: { kty: "OKP", crv: "Ed25519", x: "selftest-key" },
-      },
-    });
-    expect(bootstrap.status()).toBe(200);
-    const bsBody = await bootstrap.json();
-    expect(typeof bsBody.endpoint_vid).toBe("string");
-    expect(typeof bsBody.established_at).toBe("string");
-
-    // Posting a message before bootstrap fails; verify with a fresh remote.
-    const unestablishedRemote = `did:web:bob-${Date.now()}.example`;
-    const noRel = await request.post(`${baseUrl}/tsp/message`, {
-      data: {
-        from_vid: unestablishedRemote,
-        to_vid: bsBody.endpoint_vid,
-        payload_b64: Buffer.from(JSON.stringify({ type: "ak.invite.create" })).toString("base64url"),
-        signature_b64: "test-sig",
-      },
-    });
-    expect(noRel.status()).toBe(412);
-
-    // Established relationship can post.
-    const msg = await request.post(`${baseUrl}/tsp/message`, {
-      data: {
-        from_vid: remoteVid,
-        to_vid: bsBody.endpoint_vid,
-        payload_b64: Buffer.from(
-          JSON.stringify({ type: "ak.invite.create", target: bsBody.endpoint_vid }),
-        ).toString("base64url"),
-        signature_b64: "test-sig",
-      },
-    });
-    expect(msg.status()).toBe(200);
-    const msgBody = await msg.json();
-    expect(msgBody.accepted).toBe(true);
-
-    const jwks = await (await request.get(`${baseUrl}/jwks`)).json();
-    expect(jwks.keys?.[0]?.kid).toBe("mock-tsp-endpoint-key-1");
-  });
-
   test("mock-mimi-facade: bob_mimi join, fallback/deferred, content quarantine", async ({
     request,
   }) => {

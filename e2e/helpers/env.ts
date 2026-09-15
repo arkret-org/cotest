@@ -266,14 +266,6 @@ export function mockAppletRegistryBaseUrl(): string | undefined {
   );
 }
 
-export function mockTspEndpointBaseUrl(): string | undefined {
-  return optionalEnv("COTEST_MOCK_TSP_ENDPOINT_BASE_URL")?.replace(/\/$/, "");
-}
-
-export function mockTspEndpointVid(): string | undefined {
-  return optionalEnv("COTEST_MOCK_TSP_ENDPOINT_VID");
-}
-
 export function mockMimiFacadeBaseUrl(): string | undefined {
   return optionalEnv("COTEST_MOCK_MIMI_FACADE_BASE_URL")?.replace(/\/$/, "");
 }

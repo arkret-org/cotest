@@ -149,8 +149,6 @@ param(
     [string]$MockPushGatewayIss,
     [switch]$StartMockAppletRegistry,
     [string]$MockAppletRegistryDid,
-    [switch]$StartMockTspEndpoint,
-    [string]$MockTspEndpointVid,
     [switch]$StartMockMimiFacade,
     [string]$MockMimiFacadeDid = "did:webvh:z6mkfixture:mimi-facade.joint-e2e.local",
     [switch]$StartMockClaimIssuer,
@@ -197,7 +195,6 @@ if ($StartMocks) {
     $StartMockWitness = $true
     $StartMockPushGateway = $true
     $StartMockAppletRegistry = $true
-    $StartMockTspEndpoint = $true
     $StartMockMimiFacade = $true
     $StartMockClaimIssuer = $true
     $StartMockChallengeProvider = $true
@@ -3392,12 +3389,6 @@ if ($StartMockAppletRegistry) {
     $mockAppletRegistryPort = Get-FreeTcpPort
     $mockAppletRegistryBaseUrl = "http://127.0.0.1:$mockAppletRegistryPort"
 }
-$mockTspEndpointPort = $null
-$mockTspEndpointBaseUrl = $null
-if ($StartMockTspEndpoint) {
-    $mockTspEndpointPort = Get-FreeTcpPort
-    $mockTspEndpointBaseUrl = "http://127.0.0.1:$mockTspEndpointPort"
-}
 $mockMimiFacadePort = $null
 $mockMimiFacadeBaseUrl = $null
 if ($StartMockMimiFacade) {
@@ -3956,15 +3947,6 @@ try {
         $mockPushGatewayCmd = "$envExpr; node " + (Quote-PsLiteral (Join-Path $mocksRoot "mock-push-gateway.mjs"))
         $managedServices.Add((Start-ManagedCommand -Name "mock-push-gateway" -Command $mockPushGatewayCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
         Wait-HttpReady -Url "$mockPushGatewayBaseUrl/jwks" -TimeoutSeconds 30
-    }
-    if ($StartMockTspEndpoint) {
-        $envExpr = "`$env:MOCK_TSP_ENDPOINT_PORT='$mockTspEndpointPort'"
-        if ($MockTspEndpointVid) {
-            $envExpr = "$envExpr; `$env:MOCK_TSP_ENDPOINT_VID=" + (Quote-PsLiteral $MockTspEndpointVid)
-        }
-        $mockTspEndpointCmd = "$envExpr; node " + (Quote-PsLiteral (Join-Path $mocksRoot "mock-tsp-endpoint.mjs"))
-        $managedServices.Add((Start-ManagedCommand -Name "mock-tsp-endpoint" -Command $mockTspEndpointCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
-        Wait-HttpReady -Url "$mockTspEndpointBaseUrl/identity" -TimeoutSeconds 30
     }
     if ($StartMockMimiFacade) {
         $mockMimiFacadeCmd = (
@@ -5019,17 +5001,6 @@ try {
         $env:COTEST_MOCK_APPLET_REGISTRY_BASE_URL = $mockAppletRegistryBaseUrl
     } else {
         Remove-Item Env:COTEST_MOCK_APPLET_REGISTRY_BASE_URL -ErrorAction SilentlyContinue
-    }
-    if ($mockTspEndpointBaseUrl) {
-        $env:COTEST_MOCK_TSP_ENDPOINT_BASE_URL = $mockTspEndpointBaseUrl
-        if ($MockTspEndpointVid) {
-            $env:COTEST_MOCK_TSP_ENDPOINT_VID = $MockTspEndpointVid
-        } else {
-            Remove-Item Env:COTEST_MOCK_TSP_ENDPOINT_VID -ErrorAction SilentlyContinue
-        }
-    } else {
-        Remove-Item Env:COTEST_MOCK_TSP_ENDPOINT_BASE_URL -ErrorAction SilentlyContinue
-        Remove-Item Env:COTEST_MOCK_TSP_ENDPOINT_VID -ErrorAction SilentlyContinue
     }
     if ($mockMimiFacadeBaseUrl) {
         $env:COTEST_MOCK_MIMI_FACADE_BASE_URL = $mockMimiFacadeBaseUrl

@@ -431,8 +431,6 @@ fn apply_case_mutation(case_name: &str, instance: &mut Value, mutation: &Value) 
 fn validate_event_payload_value_closure_coverage(cases: &[SchemaValidationCase]) -> Result<()> {
     const CLOSED_FAMILIES: &[&str] = &[
         "organization_moderation_policy_state_payload",
-        "identity_disclosure_policy_state_payload",
-        "identity_disclosure_receipt_state_payload",
         "policy_set_state_payload",
         "policy_action_state_payload",
     ];

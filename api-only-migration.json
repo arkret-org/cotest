@@ -216,14 +216,6 @@
       ]
     },
     {
-      "source": "cotest/e2e/tests/identity/tsp-bootstrap.spec.ts",
-      "disposition": "duplicate_removed",
-      "replacements": [
-        { "file": "arkret-rust-sdk/crates/wire/src/tsp_vid.rs", "symbol": "accepts_each_registered_vid_kind" },
-        { "file": "cotest/src/conformance/privacy.rs", "symbol": "run_privacy_security_fixture_suite" }
-      ]
-    },
-    {
       "source": "cotest/e2e/tests/joint/did-boundary-call-counts.spec.ts",
       "disposition": "duplicate_removed",
       "replacements": [

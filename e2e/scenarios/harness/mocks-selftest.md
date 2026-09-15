@@ -19,10 +19,9 @@
 | WebVH witness | [`mocks/mock-witness.mjs`](../../mocks/mock-witness.mjs) | harness/mocks-selftest |
 | Push gateway | [`mocks/mock-push-gateway.mjs`](../../mocks/mock-push-gateway.mjs) | discovery/notifications |
 | Applet registry | [`mocks/mock-applet-registry.mjs`](../../mocks/mock-applet-registry.mjs) | extensions/applet-bridge |
-| TSP endpoint | [`mocks/mock-tsp-endpoint.mjs`](../../mocks/mock-tsp-endpoint.mjs) | identity/tsp-bootstrap, extensions/mimi-federation |
 | MIMI facade | [`mocks/mock-mimi-facade.mjs`](../../mocks/mock-mimi-facade.mjs) | extensions/mimi-federation |
 
-本 scenario 覆盖的 8 类 mock 共享 `mocks/_shared/inspect.mjs`(`/inspect` debug surface 风格统一);需要签名的 mock 还共享 `mocks/_shared/keypairs.mjs`(RS256 / Ed25519 keypair 生成与缓存)。
+本 scenario 覆盖的 7 类 mock 共享 `mocks/_shared/inspect.mjs`(`/inspect` debug surface 风格统一);需要签名的 mock 还共享 `mocks/_shared/keypairs.mjs`(RS256 / Ed25519 keypair 生成与缓存)。
 
 实现锚点:[`tests/harness/mocks-selftest.spec.ts`](../../tests/harness/mocks-selftest.spec.ts) 是本 scenario 的唯一 spec 文件。
 
@@ -58,19 +57,17 @@
    另有一条独立 live test 遍历配置的 witness quorum，确认每个实例都暴露与配置 DID 一致的健康 policy。
 4. **mock-push-gateway**:`DELETE /scenarios` 清空 → `POST /_arkret/edge/push/register-device` 注册 pusher → `POST /_arkret/edge/push/notify` 收到 `delivered=true` + `delivery_receipt` 是 3 段 JWT;再 `notify` 一条 `blind_wake: true` 且 payload 含明文 body → 必须返回 4xx/422(blind-wake 模式禁明文键);`/mock/push/inbox` 至少有一条历史;`/jwks` kid 为 `mock-push-gateway-key-1`。
 5. **mock-applet-registry**:`POST /sign-package` 生成 controller-signed `ak.schema.applet_package.v1` → 返回 `package_digest`、`applet_package.bot_actor_id`、`proof.payload_digest` 与可提交到 soland identity store 的 `service_id_document`;`GET /identity` 返回 registry 自身 DID。ghost 生成通过 soland 的 typed applet ingress 在 applet-bridge e2e 中覆盖。
-6. **mock-tsp-endpoint**:`DELETE /scenarios` 清空 → `POST /tsp/relationship-bootstrap` 立一个 remote_vid 关系 → 返回 `endpoint_vid` + `established_at`;用一个**未 bootstrap** 的 remote 发消息 → 412(`relationship_not_established` 语义);用 bootstrap 过的 remote 再发 → 200 + `accepted=true`;`/jwks` kid 为 `mock-tsp-endpoint-key-1`。
-7. **mock-mimi-facade**:`DELETE /scenarios` 清空 → `POST /mock/mimi/join-requests` 预置 `bob_mimi` join → `POST /mock/mimi/approve` 返回 realm-scoped `did:pairwise:`;`POST /mock/mimi/outbound` happy path 返回 `delivered`;设置 `unavailable=true` 后 outbound 返回 503 + `status="deferred"`;`POST /mock/mimi/inbound` 对未知 `content_kind=m.location.share.live` 返回 202 + `status="quarantined"` + `unknown_content_kind`;`/inspect` 至少记录 join、approval、outbound、inbound、quarantine。
+6. **mock-mimi-facade**:`DELETE /scenarios` 清空 → `POST /mock/mimi/join-requests` 预置 `bob_mimi` join → `POST /mock/mimi/approve` 返回 realm-scoped `did:pairwise:`;`POST /mock/mimi/outbound` happy path 返回 `delivered`;设置 `unavailable=true` 后 outbound 返回 503 + `status="deferred"`;`POST /mock/mimi/inbound` 对未知 `content_kind=m.location.share.live` 返回 202 + `status="quarantined"` + `unknown_content_kind`;`/inspect` 至少记录 join、approval、outbound、inbound、quarantine。
 
 ## Observable assertions(合并清单)
 
 - 每个测试在对应 mock 未启动时 `skipped`,不污染整体 pass rate
-- 9 条 live tests / 8 类契约 invariant(详见上面 Steps，witness 单实例与 quorum 各占一条 test):
+- 8 条 live tests / 7 类契约 invariant(详见上面 Steps，witness 单实例与 quorum 各占一条 test):
   - mock-idp 的 PKCE happy path + force_error matrix
   - mock-email 的 TTL 过期 → 410 / happy path → binding_proof + `sha256:` 前缀的 `token_commitment`
   - mock-witness 的 chain 链头单调、prev hash 一致、stale timestamp 拒绝
   - mock-push-gateway 的 register/notify/blind-wake 拒明文/inbox 可读 / jwks
   - mock-applet-registry 的 bot DID `did:web:applet.` 命名 / ghost DID `did:web:ghost.` 命名 / accountability 回指 bot
-  - mock-tsp-endpoint 的 bootstrap-then-message gate / 412 on unestablished / jwks kid
   - mock-mimi-facade 的 bob_mimi join / pairwise DID / fallback deferred / unknown content quarantine
 
 ## Implementation notes
@@ -78,7 +75,7 @@
 - **不要把 harness 自检放进任何业务 scenario 的 setup**:本套件只在 `tests/harness/mocks-selftest.spec.ts` 跑,业务 scenario 直接信任 helper 的返回值;否则一个 mock 漂移会让 N 个业务 scenario 同时 fail,排查反而更难
 - **`test.skip(!baseUrl, ...)` 必须在 `test(...)` 体内第一行**,不要挪到 `beforeAll` — Playwright 会把 `test.skip` 标记为 skipped 而非 failed,只有写在 test 体内才生效
 - **mock 实现升级时同步更新本 spec**:任何 mock 加端点、改状态码、改错误码、改 kid,必须同步改 `mocks-selftest.spec.ts`,这是 "spec drift 拦截器" 的核心价值
-- **`/scenarios` reset 顺序**:某些 mock 的注入是累积的(push-gateway / tsp-endpoint),测试开头必须 `DELETE /scenarios` 清空,否则前一次 run 残留会影响断言
+- **`/scenarios` reset 顺序**:某些 mock 的注入是累积的(例如 push-gateway),测试开头必须 `DELETE /scenarios` 清空,否则前一次 run 残留会影响断言
 - **selftest stamp 用 `Date.now()`**:避免跨 run 撞 scid / pusher_id / namespace;同一 run 内多个 mock 之间也用同一个 stamp 没问题,因为他们的命名空间互不重叠
 
 ## 总耗时预估
