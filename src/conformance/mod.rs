@@ -53,6 +53,7 @@ mod member_identity_vectors;
 mod member_roster_vectors;
 mod mention_rendering_vectors;
 mod mimi_provider_directory;
+mod mls_creator_bootstrap_recovery;
 mod object_addressing_vectors;
 mod operation_clause_registry;
 mod operation_registry_gate;
@@ -307,6 +308,7 @@ pub use mention_rendering_vectors::{
 pub use mimi_provider_directory::{
     VECTOR_ID_MIMI_PROVIDER_DIRECTORY_SIGNATURE, run_mimi_provider_directory_signature_vector,
 };
+pub use mls_creator_bootstrap_recovery::run_mls_creator_bootstrap_recovery_suite;
 pub use object_addressing_vectors::{
     ALL_OBJECT_ADDRESSING_VECTOR_IDS, run_grammar_fail_closed_vector,
     run_object_addressing_vector_suite, run_realm_id_vs_alias_vector,
@@ -426,7 +428,8 @@ pub use station_certification::{
     validate_station_certification,
 };
 pub use sync::{
-    run_station_cas_account_data_vector, run_stream_frame_sequence_vector, run_sync_fixture_suite,
+    run_realm_detail_baseline_singletons_vector, run_station_cas_account_data_vector,
+    run_stream_frame_sequence_vector, run_sync_fixture_suite,
     run_timeline_window_completion_vector,
 };
 pub use vector_registry_gate::{

@@ -60,6 +60,12 @@ conformance_test!(
 );
 
 conformance_test!(
+    mls_creator_bootstrap_recovery_executes_the_registered_state_machine,
+    "mls_creator_bootstrap_recovery",
+    cotest::conformance::run_mls_creator_bootstrap_recovery_suite,
+);
+
+conformance_test!(
     device_pairing_code_claim_executes_registered_variants,
     "device_pairing_code_claim",
     cotest::conformance::run_device_pairing_code_claim_suite,

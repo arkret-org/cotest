@@ -42,6 +42,7 @@ pub fn run_sync_fixture_suite() -> Result<()> {
     run_stream_frame_sequence_vector()?;
     run_station_cas_account_data_vector()?;
     run_timeline_window_completion_vector()?;
+    run_realm_detail_baseline_singletons_vector()?;
     Ok(())
 }
 
@@ -506,6 +507,229 @@ pub fn run_timeline_window_completion_vector() -> Result<()> {
         );
     }
     Ok(())
+}
+
+const REALM_DETAIL_BASELINE_SINGLETONS_VECTOR_ID: &str =
+    "ak.vector.sync.realm_detail_baseline_singletons.v1";
+
+/// One published current-result row, reduced to the members the baseline
+/// contract decides on.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct DetailBaselineRow {
+    cell_id: String,
+    status: String,
+    /// Present exactly when `status == "value"`. A confirmed empty is
+    /// `value: null` with the member present, which is a different row from an
+    /// absent member.
+    value: Option<Value>,
+    source_present: bool,
+}
+
+/// Publish the four required Realm detail-baseline singletons.
+///
+/// The publisher decides three things and each is decided here rather than
+/// read back: a singleton the Realm never wrote is a **confirmed empty**
+/// (`status=value`, `value=null`) and not `removed` or `unavailable`; the
+/// confirmed empty omits `source` because it has no write identity while a
+/// written pointer keeps carrying `source={event_id, depth}`; and a row that is
+/// simply absent from the database was never verified, so it may not be
+/// published as a confirmed empty and may not complete the baseline.
+fn publish_detail_baseline(
+    required: &[String],
+    written: &BTreeMap<String, Value>,
+    verified: bool,
+) -> (Vec<DetailBaselineRow>, bool) {
+    if !verified {
+        // No accepted-state verification happened. There is nothing truthful to
+        // publish and the baseline stays incomplete.
+        return (Vec::new(), false);
+    }
+    let rows = required
+        .iter()
+        .map(|cell_id| match written.get(cell_id) {
+            Some(value) => DetailBaselineRow {
+                cell_id: cell_id.clone(),
+                status: "value".to_owned(),
+                value: Some(value.clone()),
+                source_present: true,
+            },
+            None => DetailBaselineRow {
+                cell_id: cell_id.clone(),
+                status: "value".to_owned(),
+                value: Some(Value::Null),
+                source_present: false,
+            },
+        })
+        .collect();
+    (rows, true)
+}
+
+pub fn run_realm_detail_baseline_singletons_vector() -> Result<()> {
+    let fixture = load_fixture_value("sync-fixture.json")?;
+    let vector = required_field(&fixture, "realm_detail_baseline_singletons")?;
+    exact_object_keys(
+        vector,
+        &[
+            "cases",
+            "operations",
+            "required_singleton_cells",
+            "runner",
+            "vector_id",
+        ],
+        "realm detail baseline singletons vector",
+    )?;
+    if value_field_str(vector, "vector_id")? != REALM_DETAIL_BASELINE_SINGLETONS_VECTOR_ID
+        || value_field_str(vector, "runner")?
+            != "cotest::conformance::sync::run_realm_detail_baseline_singletons_vector"
+    {
+        bail!("realm detail baseline singletons vector registration drifted");
+    }
+    let operations = value_array(
+        required_field(vector, "operations")?,
+        "realm detail baseline operations",
+    )?;
+    if operations.as_slice()
+        != [Value::String(
+            arkret_wire::ServiceOperationId::SELF_ACCOUNT_STREAM_SUBSCRIBE_V1.to_owned(),
+        )]
+    {
+        bail!("realm detail baseline vector must target only account subscribe");
+    }
+    let required: Vec<String> = value_array(
+        required_field(vector, "required_singleton_cells")?,
+        "required singleton cells",
+    )?
+    .iter()
+    .map(|value| {
+        value
+            .as_str()
+            .map(str::to_owned)
+            .ok_or_else(|| anyhow!("required singleton cell must be a string"))
+    })
+    .collect::<Result<_>>()?;
+    // The default Strand pointer is the member this vector exists for: it is a
+    // causal_register singleton, so before 1506 a Realm that never committed
+    // `ak.realm.set_default_strand` had no representable baseline value at all.
+    if required.len() != 4
+        || !required
+            .iter()
+            .any(|cell| cell.contains("ak.component.realm.set_default_strand.v1"))
+    {
+        bail!("the four required Realm detail-baseline singletons changed");
+    }
+
+    let cases = value_array(
+        required_field(vector, "cases")?,
+        "realm detail baseline cases",
+    )?;
+    if cases.len() != 4 {
+        bail!("realm detail baseline vector must contain exactly 4 cases");
+    }
+    for case in cases {
+        let name = value_field_str(case, "name")?;
+        let verified = case.get("publisher_state").is_none();
+        let written = written_singletons(case)?;
+        let (rows, complete) = publish_detail_baseline(&required, &written, verified);
+        let declared_complete = case
+            .get("baseline_complete")
+            .and_then(Value::as_bool)
+            .ok_or_else(|| anyhow!("case {name} omits baseline_complete"))?;
+        if complete != declared_complete {
+            bail!(
+                "case {name} declares baseline_complete={declared_complete} but the publisher derives {complete}"
+            );
+        }
+        for expected in value_array_or_empty(case, "expected_results")? {
+            let cell_id = value_field_str(expected, "cell_id")?;
+            let row = rows
+                .iter()
+                .find(|row| row.cell_id == cell_id)
+                .ok_or_else(|| anyhow!("case {name} expects a row for {cell_id}"))?;
+            let expected_row = DetailBaselineRow {
+                cell_id: cell_id.to_owned(),
+                status: value_field_str(expected, "status")?.to_owned(),
+                value: Some(
+                    expected
+                        .get("value")
+                        .cloned()
+                        .ok_or_else(|| anyhow!("case {name} row {cell_id} omits value"))?,
+                ),
+                source_present: expected
+                    .get("source_present")
+                    .and_then(Value::as_bool)
+                    .ok_or_else(|| anyhow!("case {name} row {cell_id} omits source_present"))?,
+            };
+            if row != &expected_row {
+                bail!("case {name} row {cell_id} diverged: published {row:?}");
+            }
+            // A written pointer keeps its write identity; a confirmed empty has
+            // none to keep.
+            if expected_row.source_present != expected.get("source").is_some() {
+                bail!("case {name} row {cell_id} disagrees with its own source member");
+            }
+        }
+        for forbidden in value_array_or_empty(case, "forbidden_results")? {
+            let cell_id = value_field_str(forbidden, "cell_id")?;
+            let status = value_field_str(forbidden, "status")?;
+            if rows
+                .iter()
+                .any(|row| row.cell_id == cell_id && row.status == status)
+            {
+                bail!("case {name} published the forbidden {status} row for {cell_id}");
+            }
+        }
+        if !verified {
+            // Every listed publisher outcome is forbidden for an absent row,
+            // and withholding the publication is the only admissible one.
+            for forbidden in value_array_or_empty(case, "forbidden_publisher_outcomes")? {
+                let outcome = forbidden
+                    .as_str()
+                    .ok_or_else(|| anyhow!("forbidden publisher outcome must be a string"))?;
+                let performed = match outcome {
+                    "publish_confirmed_empty_without_verifying_accepted_state"
+                    | "publish_removed"
+                    | "publish_unavailable" => !rows.is_empty(),
+                    "mark_baseline_complete" => complete,
+                    other => bail!("case {name} names unknown publisher outcome {other}"),
+                };
+                if performed {
+                    bail!("case {name} performed the forbidden publisher outcome {outcome}");
+                }
+            }
+        }
+        record_vector_event(
+            &format!("sync.realm_detail_baseline_singletons.{name}"),
+            case,
+            &json!({"baseline_complete": declared_complete}),
+            &json!({"baseline_complete": complete, "published_rows": rows.len()}),
+        );
+    }
+    Ok(())
+}
+
+fn written_singletons(case: &Value) -> Result<BTreeMap<String, Value>> {
+    let mut written = BTreeMap::new();
+    for cell in value_array_or_empty(case, "written_singleton_cells")? {
+        let cell_id = cell
+            .as_str()
+            .ok_or_else(|| anyhow!("written singleton cell must be a string"))?;
+        // The written value and its write identity come from the case's own
+        // expected row, so the publisher never invents either.
+        let value = value_array_or_empty(case, "expected_results")?
+            .iter()
+            .find(|row| row.get("cell_id").and_then(Value::as_str) == Some(cell_id))
+            .and_then(|row| row.get("value").cloned())
+            .ok_or_else(|| anyhow!("written singleton {cell_id} has no expected value"))?;
+        written.insert(cell_id.to_owned(), value);
+    }
+    Ok(written)
+}
+
+fn value_array_or_empty<'a>(value: &'a Value, key: &str) -> Result<&'a [Value]> {
+    match value.get(key) {
+        None => Ok(&[]),
+        Some(found) => value_array(found, key).map(Vec::as_slice),
+    }
 }
 
 fn validate_realm_actor_frontier_vectors(value: &Value) -> Result<()> {
