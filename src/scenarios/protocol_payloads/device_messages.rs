@@ -1,5 +1,5 @@
 //! Phase 2 — `/_arkret/self/device_messages` send / duplicate / list / describe
-//! plus the `ak.key.verification.request` side channel.
+//! plus the `ak.secret.request` side channel.
 
 use anyhow::Result;
 use reqwest::StatusCode;
@@ -111,9 +111,9 @@ async fn send_verification_message(
                 actor_id,
                 "ak:device:01904100-0000-7000-8000-0000000000a1",
                 "ak:device_message:0196419b-0000-7000-8000-00000000f202",
-                "ak.key.verification.request",
+                "ak.secret.request",
                 encrypted_envelope(
-                    "ak.key.verification.request",
+                    "ak.secret.request",
                     "base64url-opaque-verification-ciphertext",
                 ),
                 chrono::DateTime::parse_from_rfc3339("2026-12-31T00:00:00.000Z")?

@@ -54,9 +54,9 @@ fn interop_profile_is_always_acceptable() {
             "ak.profile.mimi_interop.v1".to_owned(),
             ClaimKind::ConformanceVerified,
         ),
-        // `matrix_compat` is also interop.
+        // `encoding.cbor` is also interop.
         (
-            "ak.profile.matrix_compat.v1".to_owned(),
+            "ak.profile.encoding.cbor.v1".to_owned(),
             ClaimKind::ConformanceVerified,
         ),
     ];
