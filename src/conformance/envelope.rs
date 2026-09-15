@@ -509,6 +509,27 @@ fn validate_synthetic_event_envelope_negatives(
     Ok(())
 }
 
+/// The closed top-level field set of an Event envelope, read from the schema
+/// that declares it.
+fn registered_event_envelope_fields() -> Result<&'static BTreeSet<String>> {
+    static FIELDS: std::sync::OnceLock<BTreeSet<String>> = std::sync::OnceLock::new();
+    if let Some(fields) = FIELDS.get() {
+        return Ok(fields);
+    }
+    let schema = load_artifact_json("schemas/event-envelope.schema.json")?;
+    if schema.get("additionalProperties") != Some(&Value::Bool(false)) {
+        bail!("the Event envelope schema root stopped being a closed object");
+    }
+    let fields = schema
+        .get("properties")
+        .and_then(Value::as_object)
+        .ok_or_else(|| anyhow!("event-envelope.schema.json declares no root properties"))?
+        .keys()
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    Ok(FIELDS.get_or_init(|| fields))
+}
+
 fn validate_event_envelope(
     event: &Value,
     event_kinds: &HashMap<String, EventKindInfo>,
@@ -528,37 +549,16 @@ fn validate_event_envelope(
         ));
     }
 
-    // event-envelope.schema.json roots `additionalProperties:false`: any
-    // top-level field outside this set MUST be rejected. This is the hard
-    // guard against unregistered/forbidden envelope fields (`schema`,
-    // `schema_id`, `space_id`, …) reaching the wire.
-    const ALLOWED_TOP_LEVEL_FIELDS: &[&str] = &[
-        "event_id",
-        "kind",
-        "realm_id",
-        "scope_ref",
-        "actor_id",
-        "executed_by",
-        "authorization_ref",
-        "applet_id",
-        "external_ref",
-        "actor_seq",
-        "created_at",
-        "hlc",
-        "prev_refs",
-        "refs",
-        "causal_refs",
-        "preconditions",
-        "auth_context",
-        "seal_basis",
-        "payload",
-        "unsigned",
-        "proofs",
-        "requirements",
-    ];
+    // `event-envelope.schema.json` roots `additionalProperties: false`, so the
+    // registered property set *is* the allow-list. It is read from the artifact
+    // rather than restated here: a hand-copied list is a second spelling of a
+    // published set, and this one went stale the moment `data_basis` was
+    // registered -- rejecting a field the schema allows, on every Event that
+    // carries it.
+    let allowed = registered_event_envelope_fields()?;
     if let Some(unknown) = event_object
         .keys()
-        .find(|key| !ALLOWED_TOP_LEVEL_FIELDS.contains(&key.as_str()))
+        .find(|key| !allowed.contains(key.as_str()))
     {
         return Ok(EventEnvelopeDecision::reject(
             "schema_violation",
