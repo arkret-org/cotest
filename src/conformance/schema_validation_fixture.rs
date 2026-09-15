@@ -693,24 +693,41 @@ impl SchemaEnv {
                 .get(&key)
                 .ok_or_else(|| anyhow!("schema_ref points at unknown file `{schema_ref}`"))?;
             let base_url = parent.get("$id").and_then(Value::as_str).map(str::to_owned);
-            let mut schema = if let Some(fragment) = fragment {
-                let pointer = format!("/{}", fragment.trim_start_matches('/'));
-                let value = parent.pointer(&pointer).ok_or_else(|| {
-                    anyhow!("schema_ref fragment not found in {schema_ref}: {pointer}")
+            if let Some(fragment) = fragment {
+                // A `$defs` entry MUST NOT be lifted out of its document. Each
+                // one is written against its own file: `shared_history_event`
+                // is `allOf: [{"$ref": "#"}, …]`, and `#` means *this
+                // document's root*. Compiling the extracted object as a
+                // standalone schema re-points `#` at the extracted object
+                // itself, so the entire envelope half of the contract -- every
+                // root `required` and every root
+                // `additionalProperties: false` -- silently stops being
+                // applied, and a negative case that depends on it is accepted
+                // for a reason that has nothing to do with the rule it names.
+                //
+                // Naming the fragment by URI instead keeps the document
+                // identity, so `#` still resolves to the file root through the
+                // registry.
+                let pointer = fragment.trim_start_matches('/');
+                let id = base_url.ok_or_else(|| {
+                    anyhow!("schema file behind `{schema_ref}` has no $id to reference")
                 })?;
-                value.clone()
-            } else {
-                parent.clone()
-            };
+                if parent.pointer(&format!("/{pointer}")).is_none() {
+                    bail!("schema_ref fragment not found in {schema_ref}: /{pointer}");
+                }
+                return Ok((
+                    json!({
+                        "$schema": "https://json-schema.org/draft/2020-12/schema",
+                        "$ref": format!("{id}#/{pointer}"),
+                    }),
+                    None,
+                ));
+            }
 
-            // Seed `$schema` and inherit `$defs` so a fragment compiles
-            // standalone but can still resolve sibling defs.
+            let mut schema = parent.clone();
             if let Value::Object(map) = &mut schema {
                 map.entry("$schema")
                     .or_insert(json!("https://json-schema.org/draft/2020-12/schema"));
-                if let Some(defs) = parent.get("$defs") {
-                    map.entry("$defs").or_insert_with(|| defs.clone());
-                }
             }
             return Ok((schema, base_url));
         }
