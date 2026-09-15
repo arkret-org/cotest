@@ -115,7 +115,7 @@
         "kind": "tampered_canonical_body",
         "tamper_at": "verify_time",
         "tampered_body": "{\"body\":\"seal-statement-tampered-mutated\"}",
-        "tampered_body_sha256": "sha256:6a760218f2da4a6ba5f2707698679619dbe6c7b4c7a8454fbdb40db3b8813349"
+        "tampered_body_sha256": "sha256:0fe6b2f3beaf4011a4842bbd0c18ffd4ab3e2ddf7f9442c33ed68f951eea496b"
       },
       "expected": {
         "outcome": "reject",
