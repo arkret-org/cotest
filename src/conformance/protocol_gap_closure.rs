@@ -14,20 +14,24 @@ pub fn run_protocol_gap_closure_fixture_suite() -> Result<()> {
     {
         bail!("security-transaction fixture has the wrong runner entrypoint");
     }
-    if !fixture["covers_vectors"].as_array().is_some_and(|vectors| {
-        vectors
-            .iter()
-            .any(|value| value == "ak.vector.security_transaction.resilience.v1")
-    }) {
-        bail!("security-transaction resilience vector is not covered");
+    for vector in [
+        "ak.vector.security_transaction.resilience.v1",
+        "ak.vector.security_transaction.recovery_terminal_commit.v1",
+    ] {
+        if !fixture["covers_vectors"]
+            .as_array()
+            .is_some_and(|vectors| vectors.iter().any(|value| value == vector))
+        {
+            bail!("security-transaction fixture does not cover {vector}");
+        }
     }
 
     let matrix = &fixture["fault_matrix"];
     let kinds = strings(&matrix["transaction_kinds"])?;
     let positions = strings(&matrix["fault_positions"])?;
     let faults = strings(&matrix["faults"])?;
-    if kinds != BTreeSet::from(["security_rotation"]) {
-        bail!("security-transaction fixture must contain only security_rotation");
+    if kinds != BTreeSet::from(["recovery", "security_rotation"]) {
+        bail!("security-transaction fixture must carry exactly recovery and security_rotation");
     }
     for required in [
         "before_remote_side_effect",
@@ -56,6 +60,12 @@ pub fn run_protocol_gap_closure_fixture_suite() -> Result<()> {
         "pointer_switch_precedes_every_old_series_erase",
         "erased_series_never_becomes_active_again",
         "public_store_log_telemetry_and_crash_artifact_contain_no_secret_material",
+        // The recovery half of the suite: the whole point of collapsing
+        // recovery into one step is that the Seal has exactly one entrance and
+        // that every authoritative result crosses the same boundary at once.
+        "recovery_first_generation_seal_enters_only_through_commit_recovery_unit",
+        "recovery_authoritative_results_are_all_invisible_before_the_commit_and_all_visible_after",
+        "only_the_atomic_generation_cas_winner_commits_a_first_generation_seal",
     ] {
         require(&assertions, required, "assertion")?;
     }
@@ -104,10 +114,7 @@ fn run_independent_replay_model(
 ) -> Result<()> {
     let mut executed = 0usize;
     for kind in kinds {
-        let effect_count = match *kind {
-            "security_rotation" => 5,
-            other => bail!("unknown transaction kind {other}"),
-        };
+        let effect_count = remote_effect_count(kind)?;
         for position in positions {
             for fault in faults {
                 for fault_step in 0..effect_count {
@@ -156,10 +163,9 @@ fn run_independent_replay_model(
     }
     let expected: usize = kinds
         .iter()
-        .map(|kind| match *kind {
-            "security_rotation" => 5,
-            _ => 0,
-        })
+        .map(|kind| remote_effect_count(kind))
+        .collect::<Result<Vec<_>>>()?
+        .into_iter()
         .sum::<usize>()
         * positions.len()
         * faults.len();
@@ -167,6 +173,21 @@ fn run_independent_replay_model(
         bail!("independent runner did not execute the complete Cartesian matrix");
     }
     Ok(())
+}
+
+/// Remote side effects a transaction of this kind performs, which is also the
+/// number of distinct positions a fault can be injected at.
+///
+/// A RecoveryTransaction has exactly one: `commit_recovery_unit` carries both
+/// re-anchor Events, the first new-generation Seal and the terminal result
+/// across a single boundary. The old two-step shape is gone, so a second
+/// position here would be modelling a boundary the protocol no longer has.
+fn remote_effect_count(kind: &str) -> Result<usize> {
+    match kind {
+        "recovery" => Ok(1),
+        "security_rotation" => Ok(5),
+        other => bail!("unknown transaction kind {other}"),
+    }
 }
 
 fn strings(value: &Value) -> Result<BTreeSet<&str>> {

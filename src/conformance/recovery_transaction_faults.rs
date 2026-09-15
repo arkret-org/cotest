@@ -9,15 +9,22 @@ use std::collections::{BTreeMap, BTreeSet};
 use anyhow::{Result, bail};
 use sha2::{Digest, Sha256};
 
+/// The one client-attested step of a RecoveryTransaction.
+const TERMINAL_STEP: &str = "commit_recovery_unit";
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum RecoveryModel {
     PcrPolicy,
 }
 
 impl RecoveryModel {
+    /// `create` prepares and freezes; `commit_recovery_unit` is the single
+    /// client-attested terminal step that carries both Events, the first
+    /// new-generation Seal and the receipt. There is no separate re-anchor
+    /// submission and no separate receipt issuance any more.
     fn steps(self) -> &'static [&'static str] {
         match self {
-            Self::PcrPolicy => &["create", "submit_reanchor_unit", "issue_terminal_receipt"],
+            Self::PcrPolicy => &["create", "commit_recovery_unit"],
         }
     }
 }
@@ -138,12 +145,7 @@ fn author_terminal_with_staged_secret(
     if !staged_secret_available {
         bail!("staged_secret_lost");
     }
-    ledger.attempt(
-        "issue_terminal_receipt",
-        operation_id,
-        canonical_request,
-        Fault::None,
-    )
+    ledger.attempt(TERMINAL_STEP, operation_id, canonical_request, Fault::None)
 }
 
 pub fn run_recovery_transaction_fault_matrix() -> Result<()> {
@@ -204,10 +206,10 @@ pub fn run_recovery_transaction_fault_matrix() -> Result<()> {
     }
 
     let mut terminal = DurableLedger::default();
-    let terminal_bytes = b"canonical-device-signed-terminal-receipt";
+    let terminal_bytes = b"canonical-device-signed-recovery-terminal-commit";
     assert_eq!(
         terminal.attempt(
-            "issue_terminal_receipt",
+            TERMINAL_STEP,
             "terminal-receipt-1",
             terminal_bytes,
             Fault::ResponseLostAfterAccepted,
@@ -216,7 +218,7 @@ pub fn run_recovery_transaction_fault_matrix() -> Result<()> {
     );
     assert!(matches!(
         terminal.attempt(
-            "issue_terminal_receipt",
+            TERMINAL_STEP,
             "terminal-receipt-1",
             terminal_bytes,
             Fault::RestartAfterAccepted,
@@ -227,7 +229,7 @@ pub fn run_recovery_transaction_fault_matrix() -> Result<()> {
     assert_eq!(
         terminal
             .attempt(
-                "issue_terminal_receipt",
+                TERMINAL_STEP,
                 "terminal-receipt-1",
                 b"different-terminal-receipt",
                 Fault::None,

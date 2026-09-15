@@ -35,13 +35,16 @@ pub fn run_security_transaction_resilience_joint_gate() -> Result<()> {
     verify_continue_cases(&reference_fixture.continue_cases)
         .context("security transaction continue cases")?;
 
+    // 42 fault projections (two transaction kinds x three fault positions x
+    // seven faults), two rotation cases and the twelve recovery
+    // terminal-commit cases the fixture added with `commit_recovery_unit`.
     ensure!(
-        sdk.len() == 23,
-        "SDK runner did not execute all 23 security-rotation scenarios"
+        sdk.len() == 56,
+        "SDK runner did not execute all 56 security-transaction scenarios"
     );
     ensure!(
-        reference.len() == 23,
-        "reference runner did not execute all 23 security-rotation scenarios"
+        reference.len() == 56,
+        "reference runner did not execute all 56 security-transaction scenarios"
     );
     ensure!(
         sdk.iter()
@@ -63,12 +66,13 @@ pub fn run_security_transaction_resilience_joint_gate() -> Result<()> {
 ///
 /// The derivation is the point of the contract, so this recomputes it from
 /// `(kind, accepted_steps.length)` instead of reading `derived_next_step` back.
-/// The general request schema carries no `kind`, which is why the `{1,4}` terminal
+/// The general request schema carries no `kind`, which is why the `{0,4}` terminal
 /// indices must not appear in the schema and must be enforced here: a coordinator
 /// -owned prefix step, a not-yet-ready terminal, a mismatched attestation step and
 /// an attestation-less POST are all `failed_precondition` with no side effect.
 fn verify_continue_cases(cases: &[Value]) -> Result<()> {
     ensure!(!cases.is_empty(), "fixture publishes no continue cases");
+    let mut saw_kinds = BTreeSet::new();
     let mut saw_worker_prefix = false;
     let mut saw_accepted_terminal = false;
     let mut saw_attestation_less_rejection = false;
@@ -79,22 +83,38 @@ fn verify_continue_cases(cases: &[Value]) -> Result<()> {
             .as_u64()
             .with_context(|| format!("continue case {name} omits accepted_step_count"))?;
         let (terminal_index, terminal_step) = match kind {
-            "recovery" => (1, "issue_terminal_receipt"),
+            // Recovery has no coordinator-owned prefix at all: index 0 is
+            // already terminal, so the only derivable step is the single
+            // `commit_recovery_unit`.
+            "recovery" => (0, "commit_recovery_unit"),
             "security_rotation" => (4, "local_commit"),
             other => bail!("continue case {name} declares unknown transaction kind {other}"),
         };
-        let derived = required_str(case, "derived_next_step")?;
+        // Past the terminal index there is no next step, and the fixture spells
+        // that as an explicit JSON `null` rather than omitting the member.
+        let derived = case
+            .get("derived_next_step")
+            .with_context(|| format!("continue case {name} omits derived_next_step"))?;
+        let derived = match derived {
+            Value::Null => None,
+            Value::String(value) => Some(value.as_str()),
+            _ => bail!("continue case {name} derives a non-string next step"),
+        };
         let terminal_ready = accepted == terminal_index;
-        if terminal_ready && derived != terminal_step {
-            bail!("continue case {name} is terminal-ready but derives {derived}");
+        if terminal_ready && derived != Some(terminal_step) {
+            bail!("continue case {name} is terminal-ready but derives {derived:?}");
         }
-        if !terminal_ready && derived == terminal_step {
+        if !terminal_ready && derived == Some(terminal_step) {
             bail!("continue case {name} derives the terminal step from a coordinator prefix");
+        }
+        if accepted > terminal_index && derived.is_some() {
+            bail!("continue case {name} derives a step after the terminal one");
         }
 
         let attested_step = case["client_attestation_step"].as_str();
         let expected = required_str(case, "expected")?;
         let should_accept = terminal_ready && attested_step == Some(terminal_step);
+        saw_kinds.insert(kind.to_owned());
         match expected {
             "accept_terminal_step" => {
                 if !should_accept {
@@ -140,6 +160,10 @@ fn verify_continue_cases(cases: &[Value]) -> Result<()> {
     ensure!(
         saw_attestation_less_rejection,
         "continue cases must cover that an attestation-less POST is not a `get` alias"
+    );
+    ensure!(
+        saw_kinds == BTreeSet::from(["recovery".to_owned(), "security_rotation".to_owned()]),
+        "continue cases must cover both transaction kinds"
     );
     Ok(())
 }

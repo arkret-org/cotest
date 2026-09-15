@@ -250,11 +250,32 @@ test.describe("fresh-browser device entry paths @fully-implemented", () => {
         "POST",
         "/_arkret/self/security-transactions",
       );
-      expectSuccessfulPathMatch(
-        responses,
-        "POST",
-        /^\/_arkret\/self\/security-transactions\/[^/]+\/continue$/,
+      // `identity/security-transactions.md` §2.3: a RecoveryTransaction has
+      // exactly one client-attested step. The old
+      // `submit_reanchor_unit` -> `issue_terminal_receipt` pair is gone, so two
+      // successful continues would mean the two-step shape survived somewhere.
+      const continuePath =
+        /^\/_arkret\/self\/security-transactions\/[^/]+\/continue$/;
+      expectSuccessfulPathMatch(responses, "POST", continuePath);
+      expectExactlyOnePathMatch(responses, "POST", continuePath);
+
+      // Both re-anchor Events, the first new-generation Seal and the terminal
+      // result all enter through that one commit. Before it there is no
+      // accepted Event and no Seal to be had: recovery never submits through
+      // the ordinary Event or Seal surfaces, and the recovery grant's closed
+      // operation set does not contain Seal prepare or submit at all.
+      const beforeCommit = responses.slice(
+        0,
+        responses.findIndex(
+          (hit) => hit.method === "POST" && continuePath.test(hit.pathname),
+        ),
       );
+      expectNoWriteToPaths(beforeCommit, [
+        "/_arkret/self/events",
+        "/_arkret/self/seals",
+      ]);
+      expectNoWriteToPaths(responses, ["/_arkret/self/seals"]);
+
       expectSuccessfulOperation(
         responses,
         "POST",
@@ -395,6 +416,49 @@ function expectSuccessfulPathMatch(
     ),
     `expected successful ${method} ${pathname}; observed ${JSON.stringify(responses)}`,
   ).toBe(true);
+}
+
+function expectExactlyOnePathMatch(
+  responses: ProtocolResponse[],
+  method: string,
+  pathname: RegExp,
+): void {
+  const accepted = responses.filter(
+    (hit) =>
+      hit.method === method &&
+      pathname.test(hit.pathname) &&
+      hit.status >= 200 &&
+      hit.status < 300,
+  );
+  expect(
+    accepted.length,
+    `expected exactly one successful ${method} ${pathname}; observed ${JSON.stringify(responses)}`,
+  ).toBe(1);
+}
+
+/**
+ * Assert that no accepted write reached any of `prefixes`.
+ *
+ * Reads are allowed through: the point is that recovery produces no
+ * authoritative Event or Seal outside its own terminal commit, not that the
+ * client never looks at those surfaces.
+ */
+function expectNoWriteToPaths(
+  responses: ProtocolResponse[],
+  prefixes: string[],
+): void {
+  const writes = responses.filter(
+    (hit) =>
+      hit.method !== "GET" &&
+      hit.method !== "QUERY" &&
+      hit.status >= 200 &&
+      hit.status < 300 &&
+      prefixes.some((prefix) => hit.pathname.startsWith(prefix)),
+  );
+  expect(
+    writes,
+    `recovery wrote through a surface outside its terminal commit: ${JSON.stringify(writes)}`,
+  ).toEqual([]);
 }
 
 function escapeRegExp(value: string): string {

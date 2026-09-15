@@ -3,19 +3,21 @@
 use std::collections::BTreeMap;
 
 use anyhow::{Context as _, Result, anyhow, bail};
+use arkret_identifiers::Hlc;
 use arkret_models_collaboration::session_grant_bodies::SessionGrantOutcome;
 use arkret_models_crypto::{
     RecoveryAuthorityKind, RecoveryProofKind, RecoveryProofSummary, RecoveryReceipt,
-    RecoveryReceiptOutcome, UnsignedRecoveryReceipt, UnsignedRecoveryReceiptBody,
+    RecoveryReceiptOutcome, RecoveryTerminalCommit, UnsignedRecoveryReceipt,
+    UnsignedRecoveryReceiptBody,
 };
 use arkret_models_identity::{
     ACCOUNT_HANDOFF_ALLOWED_OPERATIONS, AccountHandoffBinding, AccountHandoffOutcome,
     CanonicalSessionPublicJwk, InitialSessionGrantIntent, standard_initial_session_grant_scope,
 };
 use arkret_wire::{
-    AccountId, Did, IssueRecoveryCompletionGrantOutcome, IssueRecoveryCompletionGrantRequest,
-    UnsignedRecoveryCompletionAttestation, UnsignedRecoveryCompletionAttestationBody,
-    project_did_to_core_id,
+    AccountId, Did, Hash, IssueRecoveryCompletionGrantOutcome, IssueRecoveryCompletionGrantRequest,
+    Seal, SealCommandOutcome, SealSignature, UnsignedRecoveryCompletionAttestation,
+    UnsignedRecoveryCompletionAttestationBody, UnsignedSeal, project_did_to_core_id,
 };
 use base64::Engine as _;
 use chrono::{Duration, TimeZone as _, Utc};
@@ -34,7 +36,13 @@ struct CompletionVector {
     handoff: AccountHandoffOutcome,
     request: IssueRecoveryCompletionGrantRequest,
     outcome: IssueRecoveryCompletionGrantOutcome,
+    /// The replacement device's terminal commit. It never crosses the
+    /// completion-grant boundary, so the Account Authority can only bind it
+    /// transitively through `terminal_commit_digest`; the harness keeps it to
+    /// prove that the digest the Station signed is recomputable at all.
+    terminal_commit: RecoveryTerminalCommit,
     coordinator_key: SigningKey,
+    replacement_key: SigningKey,
     context: CompletionContext,
 }
 
@@ -70,6 +78,23 @@ fn completion_vector() -> Result<CompletionVector> {
     let audience = project_did_to_core_id(&coordinator_did)?.to_string();
     let verification_method = format!("{coordinator_did}#{coordinator_multibase}");
 
+    // The replacement device owns both halves of the terminal commit: it signs
+    // the frozen first new-generation Seal and the receipt that names it. The
+    // coordinator only countersigns the completion attestation afterwards, so
+    // the two identities must not share a key in the vector either.
+    let replacement_key = SigningKey::from_bytes(&[0x71; 32]);
+    let replacement_multibase = arkret_canonical::ed25519_pubkey_to_did_key_multibase(
+        replacement_key.verifying_key().as_bytes(),
+    );
+    let replacement_did = Did::new(format!("did:key:{replacement_multibase}"))?;
+    let replacement_method = format!("{replacement_did}#{replacement_multibase}");
+
+    let first_generation_seal = first_generation_seal(
+        &replacement_key,
+        crate::fixture_did_url(replacement_method.clone()),
+        completed_at,
+    )?;
+
     let receipt = UnsignedRecoveryReceipt::new(
         UnsignedRecoveryReceiptBody {
             receipt_id: "ak:receipt:019a8400-0000-7000-8000-000000000003".parse()?,
@@ -94,6 +119,7 @@ fn completion_vector() -> Result<CompletionVector> {
             reanchor_batch_receipt_id: Some(
                 "ak:receipt:019a8400-0000-7000-8000-000000000006".parse()?,
             ),
+            first_generation_seal_id: first_generation_seal.id.clone(),
             proof_summary: RecoveryProofSummary {
                 kind: RecoveryProofKind::RecoveryUnlock,
                 proof_digest: hash('4').parse()?,
@@ -108,16 +134,22 @@ fn completion_vector() -> Result<CompletionVector> {
             completed_at,
             extra: Default::default(),
         },
-        crate::fixture_did_url(verification_method.clone()),
+        crate::fixture_did_url(replacement_method.clone()),
     )?;
     let signature = arkret_wire::Base64UrlString::new(sign_b64url(
-        &coordinator_key,
+        &replacement_key,
         &receipt.signing_payload_bytes()?,
     ))
     .map_err(anyhow::Error::msg)?;
     let receipt = receipt.attach_signature(signature)?;
     let terminal_receipt = serde_json::to_value(&receipt)?;
     let terminal_receipt_digest = arkret_canonical::canonical_sha256(&terminal_receipt)?;
+    let terminal_commit = RecoveryTerminalCommit {
+        first_generation_seal,
+        recovery_receipt: receipt.clone(),
+    };
+    terminal_commit.validate()?;
+    let terminal_commit_digest = terminal_commit.terminal_commit_digest()?;
 
     let attestation = UnsignedRecoveryCompletionAttestation::new(
         UnsignedRecoveryCompletionAttestationBody {
@@ -125,13 +157,14 @@ fn completion_vector() -> Result<CompletionVector> {
             transaction_request_digest: transaction_request_digest.parse()?,
             prepared_plan_digest: prepared_plan_digest.parse()?,
             account_id: arkret_wire::AccountId::new(principal_id.parse()?, audience.parse()?),
-            coordinator_id: audience.parse()?,
             recovery_session_id: "ak:recovery_session:019a8400-0000-7000-8000-000000000004"
                 .parse()?,
             terminal_receipt_id: "ak:receipt:019a8400-0000-7000-8000-000000000003".parse()?,
             terminal_receipt_digest: terminal_receipt_digest.parse()?,
+            terminal_commit_digest: terminal_commit_digest.clone(),
             replacement_device_id: device_id.parse()?,
             device_authorization_event_id: authorization_event_id.parse()?,
+            first_generation_seal_id: terminal_commit.first_generation_seal.id.clone(),
             result_model_generation_ref: result_generation,
             completed_at,
         },
@@ -216,13 +249,88 @@ fn completion_vector() -> Result<CompletionVector> {
         handoff,
         request,
         outcome,
+        terminal_commit,
         coordinator_key,
+        replacement_key,
         context: CompletionContext {
             principal_id: principal_id.to_owned(),
             audience,
             holder_jkt,
         },
     })
+}
+
+/// Freeze the exact first new-generation Seal the replacement device signs
+/// inside `RecoveryTerminalCommit`.
+///
+/// `Seal::from_canonical_body_and_signature` derives the identity from the
+/// canonical body and re-verifies `notary_signature.payload_digest` against the
+/// commit transcript, so this builder cannot publish a Seal whose id or
+/// transcript drifted. The transcript is the two-member
+/// `JCS({context, seal_digest})` of `ak.seal.commit.v1`; it carries no view
+/// member, and nothing here may add one.
+fn first_generation_seal(
+    signing_key: &SigningKey,
+    verification_method: arkret_wire::DidUrl,
+    sealed_at: chrono::DateTime<Utc>,
+) -> Result<Seal> {
+    let suite = arkret_canonical::DigestSuite::Sha256;
+    // The recovery unit is exactly [reanchor, authorize] in execution order,
+    // so the command result names the re-anchor Event first and the Seal delta
+    // carries both members in canonical order.
+    let reanchor_digest: Hash = hash('5').parse()?;
+    let authorize_digest: Hash = hash('6').parse()?;
+    let mut delta = vec![reanchor_digest.clone(), authorize_digest.clone()];
+    delta.sort_by(|left, right| left.as_str().cmp(right.as_str()));
+    let body = UnsignedSeal {
+        realm_id: "ak:realm:ATg8FU4syAKnb6AxCmZvnzVYTFe33amlqXfbtAUgi5R3".parse()?,
+        predecessor_ref: Some(
+            "ak:seal:sha256:1111111111111111111111111111111111111111111111111111111111111111"
+                .parse()?,
+        ),
+        delta,
+        control_event_set_root: hash('7').parse()?,
+        data_delta: Vec::new(),
+        data_event_set_root: arkret_wire::empty_data_event_set_root(suite)?,
+        state_root: hash('8').parse()?,
+        notary_seq: 2,
+        availability_receipt_digests: Vec::new(),
+        covered_event_digests: Vec::new(),
+        previous_state_root: None,
+        previous_digest_algorithm: None,
+        sealed_at,
+        hlc: Hlc::new("01970e589d21-0003-a13f9c2e")?,
+        configuration_ref: "ak:event:ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM".parse()?,
+        command_results: vec![SealCommandOutcome::committed(
+            reanchor_digest.clone(),
+            vec![reanchor_digest, authorize_digest],
+            Vec::new(),
+            suite,
+        )?],
+        authorization_closures: Vec::new(),
+        data_closure_announcements: Vec::new(),
+        data_closures: Vec::new(),
+        existence_anchors: Vec::new(),
+    };
+    let canonical_body = arkret_canonical::canonical_json_bytes(&body)?;
+    let seal_digest = sha256_hash(&canonical_body);
+    let transcript = arkret_canonical::canonical_json_bytes(&json!({
+        "context": "ak.seal.commit.v1",
+        "seal_digest": seal_digest,
+    }))?;
+    let signature = SealSignature {
+        verification_method,
+        payload_digest: sha256_hash(&transcript).parse()?,
+        jws: arkret_signatures::sign_ed25519_detached_jws(signing_key, &transcript)
+            .map_err(|error| anyhow!(error.to_string()))?,
+    };
+    Seal::from_canonical_body_and_signature(&canonical_body, signature, suite)
+        .map_err(anyhow::Error::from)
+}
+
+fn sha256_hash(bytes: &[u8]) -> String {
+    use sha2::{Digest as _, Sha256};
+    format!("sha256:{}", hex::encode(Sha256::digest(bytes)))
 }
 
 fn validate_completion_vector(vector: &CompletionVector) -> Result<()> {
@@ -241,7 +349,7 @@ fn validate_completion_vector(vector: &CompletionVector) -> Result<()> {
         bail!("recovery completion used a non-terminal receipt");
     }
     verify_b64url(
-        &vector.coordinator_key,
+        &vector.replacement_key,
         &receipt.signature_transcript_bytes()?,
         &receipt.auth_data.signature,
     )?;
@@ -268,11 +376,26 @@ fn validate_completion_vector(vector: &CompletionVector) -> Result<()> {
         || receipt.authorization_event_id != vector.request.device_authorization_event_id
         || receipt_generation != attestation_generation
         || receipt_generation != request_generation
-        || attestation.coordinator_id.as_str() != vector.context.audience
+        || receipt.first_generation_seal_id != attestation.first_generation_seal_id
+        || attestation.account_id.station_id.as_str() != vector.context.audience
         || initial.audience_id.as_str() != vector.context.audience
         || initial.session_public_key.thumbprint_sha256()? != vector.context.holder_jkt
     {
         bail!("recovery completion evidence is not closed over receipt/device/session bindings");
+    }
+
+    // The signed Seal never crosses this boundary, so the Account Authority
+    // binds it transitively: `terminal_commit_digest` is a member of the
+    // Station's fixed signing projection, and the receipt half of the commit
+    // is the request's own `terminal_receipt`. Recomputing the digest here
+    // proves the projection the Station signed is reproducible from the exact
+    // commit the replacement device authored.
+    let commit = &vector.terminal_commit;
+    if commit.terminal_commit_digest()? != attestation.terminal_commit_digest
+        || commit.first_generation_seal.id != attestation.first_generation_seal_id
+        || serde_json::to_value(&commit.recovery_receipt)? != vector.request.terminal_receipt
+    {
+        bail!("recovery completion attestation does not commit to the terminal commit");
     }
 
     if vector.outcome.transaction_id != vector.request.transaction_id {
@@ -346,6 +469,29 @@ fn validate_mutation_matrix(vector: &CompletionVector) -> Result<()> {
     attestation.request.canonical_request_digest =
         attestation.request.expected_canonical_request_digest()?;
     mutations.push(("attestation", attestation));
+
+    // The two members the terminal commit added to the fixed signing
+    // projection: a verifier that still reproduces the old 12-member transcript
+    // would accept both of these.
+    let mut seal_id = vector.clone();
+    seal_id
+        .request
+        .completion_attestation
+        .first_generation_seal_id =
+        "ak:seal:sha256:2222222222222222222222222222222222222222222222222222222222222222"
+            .parse()?;
+    seal_id.request.canonical_request_digest =
+        seal_id.request.expected_canonical_request_digest()?;
+    mutations.push(("first_generation_seal_id", seal_id));
+
+    let mut commit_digest = vector.clone();
+    commit_digest
+        .request
+        .completion_attestation
+        .terminal_commit_digest = hash('9').parse()?;
+    commit_digest.request.canonical_request_digest =
+        commit_digest.request.expected_canonical_request_digest()?;
+    mutations.push(("terminal_commit_digest", commit_digest));
 
     let mut device = vector.clone();
     device.request.initial_session["device_id"] =
