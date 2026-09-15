@@ -4,14 +4,19 @@ use anyhow::{Context as _, Result, bail};
 use arkret_models_collaboration::governance::grant_constraint::GrantConstraint;
 use serde_json::{Value, json};
 
+use super::required_str;
 use crate::transcripts::record_vector_event;
 
 const MANAGED_ACTOR_FIXTURE: &str = "applet-managed-actor-fixture.json";
 const REGISTRATION_EPOCH_FIXTURE: &str = "applet-registration-epoch-fixture.json";
 const MANAGED_ACTOR_ENTRYPOINT: &str = "ak.suite.applet.managed_actor_authority.v1";
-const MANAGED_ACTOR_CASES: [&str; 26] = [
+const MANAGED_ACTOR_CASES: [&str; 36] = [
     "bot_exact_pair_and_initial_resolution",
     "ghost_namespace_matches_verified_did",
+    "ghost_namespace_pattern_pins_service_scid",
+    "ghost_host_segment_differs_from_service_host",
+    "ghost_reuses_service_scid",
+    "ghost_did_without_path_segment",
     "ghost_external_tuple_is_single_closed_carrier",
     "ghost_external_tuple_rejects_extra_mirrors",
     "ghost_provision_requires_registration_service_signature",
@@ -36,6 +41,12 @@ const MANAGED_ACTOR_CASES: [&str; 26] = [
     "revoked_applet_direct_self_signed_write",
     "managed_actor_portal_membership_is_not_delegated_bypass",
     "revoked_applet_history_read",
+    "delegated_device_authorize_is_ordinary_successor",
+    "delegated_device_authorize_cannot_join_closed_aggregate",
+    "delegated_device_authorize_requires_signer_resolution_evidence_ref",
+    "delegated_device_authorize_authorized_by_must_self_anchor",
+    "delegated_device_authorize_requires_bounded_delegation",
+    "delegated_device_follows_install_revoke_fence",
 ];
 
 pub fn run_applet_managed_actor_authority_suite() -> Result<()> {
@@ -57,7 +68,7 @@ pub fn run_applet_managed_actor_authority_suite() -> Result<()> {
         })
         .collect::<Result<BTreeSet<_>>>()?;
     if published != BTreeSet::from(MANAGED_ACTOR_CASES) {
-        bail!("Applet managed-actor fixture is not the closed 26-case set");
+        bail!("Applet managed-actor fixture is not the closed 36-case set");
     }
 
     let applet_id = arkret_wire::AppletId::new("ak:applet:01974100-0000-7000-8000-000000000001")?;
@@ -147,13 +158,23 @@ fn consume_managed_actor_case(
                 bail!("creation authority was reused after its epoch changed");
             }
         }
-        "ghost_namespace_matches_verified_did" => {
-            if !arkret_models_integration::namespace_pattern_matches(
-                arkret_models_integration::AppletNamespaceDomain::Actors,
-                "did:webvh:*:*:ghost-tenant:user-1",
-                "did:webvh:z6mkfixture:example.test:ghost-tenant:user-1",
-            ) {
-                bail!("verified DID failed its exact managed namespace");
+        "ghost_namespace_matches_verified_did"
+        | "ghost_namespace_pattern_pins_service_scid"
+        | "ghost_host_segment_differs_from_service_host"
+        | "ghost_reuses_service_scid"
+        | "ghost_did_without_path_segment" => {
+            let expected = case["expect"]
+                .as_str()
+                .context("managed-actor namespace case expectation")?;
+            let derived = managed_actor_namespace_verdict(
+                required_str(case, "service_resolved_did")?,
+                required_str(case, "namespace_pattern")?,
+                case["ghost_did"].as_str(),
+            );
+            if derived != expected {
+                bail!(
+                    "managed-actor namespace case {name} expects {expected} but its concrete SCID/host/path shape derives {derived}"
+                );
             }
         }
         "ghost_provision_requires_registration_service_signature" => {
@@ -294,9 +315,197 @@ fn consume_managed_actor_case(
                 bail!("registration revoke destroyed immutable history access");
             }
         }
+        "delegated_device_authorize_is_ordinary_successor"
+        | "delegated_device_authorize_cannot_join_closed_aggregate"
+        | "delegated_device_authorize_requires_signer_resolution_evidence_ref"
+        | "delegated_device_authorize_authorized_by_must_self_anchor"
+        | "delegated_device_authorize_requires_bounded_delegation"
+        | "delegated_device_follows_install_revoke_fence" => {
+            let expected = case["expect"]
+                .as_str()
+                .context("delegated device case expectation")?;
+            let derived = delegated_device_authorize_verdict(name)?;
+            if derived != expected {
+                bail!(
+                    "delegated device case {name} expects {expected} but its admission inputs derive {derived}"
+                );
+            }
+        }
         other => bail!("Applet managed-actor case has no executor: {other}"),
     }
     Ok(())
+}
+
+/// The admission inputs of one `applet_managed_delegation` device authorize.
+///
+/// Every field is a condition the Station can decide from the submitted Event
+/// alone, in the order the branches are checked: a shape the schema rejects
+/// never reaches the authority check, and an authority failure never reaches
+/// the install fence.
+#[derive(Clone, Copy)]
+struct DelegatedDeviceAuthorize {
+    /// `applet_managed_delegation` is an *ordinary successor* Event. Carrying
+    /// it inside the Ghost authoring bundle or the Bot install fixed set would
+    /// widen a closed aggregate the schema pins by member count.
+    inside_closed_aggregate: bool,
+    /// The managed controller method is resolved through the accepted
+    /// resolution cell, so the proof names that evidence; a unit-local
+    /// candidate overlay is the registration-anchor shape, not this one.
+    carries_signer_resolution_evidence_ref: bool,
+    /// `authorized_by` is the managed principal's own `principal_id`. Pointing
+    /// it at the Applet registration service or controller would introduce
+    /// exactly the cross-principal authority the managed PCR exists to avoid.
+    authorized_by_self_anchors: bool,
+    /// Delegation is bounded: a non-null `expires_at`, a non-empty `scopes`,
+    /// and none of the members that belong to the recovery or pairing
+    /// branches.
+    bounded: bool,
+    /// The exact install this delegation names is still effective.
+    install_active: bool,
+}
+
+impl DelegatedDeviceAuthorize {
+    fn accepted() -> Self {
+        Self {
+            inside_closed_aggregate: false,
+            carries_signer_resolution_evidence_ref: true,
+            authorized_by_self_anchors: true,
+            bounded: true,
+            install_active: true,
+        }
+    }
+
+    fn verdict(self) -> &'static str {
+        if self.inside_closed_aggregate
+            || !self.carries_signer_resolution_evidence_ref
+            || !self.bounded
+        {
+            return "schema_violation";
+        }
+        if !self.authorized_by_self_anchors {
+            return "device_unauthorized";
+        }
+        if !self.install_active {
+            return "applet_revoked";
+        }
+        "accepted"
+    }
+}
+
+/// Derive each delegated-device case's verdict from the single input its
+/// mutation changes.
+///
+/// **Partly blocked upstream.** `event-payload.schema.json` registers a fourth
+/// `authorization_binding_kind`, `applet_managed_delegation`, but
+/// `DeviceAuthorizationBindingKind` in the SDK still carries only
+/// `registration_anchor`, `pcr_recovery` and `accepted_device`. Until the SDK
+/// follows, this suite can execute the admission ordering but cannot build the
+/// typed payload, so the closed enum is checked against the spec schema
+/// directly below instead of through the shared Rust type.
+fn delegated_device_authorize_verdict(name: &str) -> Result<&'static str> {
+    require_registered_delegation_binding_kind()?;
+    let mut authorize = DelegatedDeviceAuthorize::accepted();
+    match name {
+        "delegated_device_authorize_is_ordinary_successor" => {}
+        "delegated_device_authorize_cannot_join_closed_aggregate" => {
+            authorize.inside_closed_aggregate = true;
+        }
+        "delegated_device_authorize_requires_signer_resolution_evidence_ref" => {
+            authorize.carries_signer_resolution_evidence_ref = false;
+        }
+        "delegated_device_authorize_authorized_by_must_self_anchor" => {
+            authorize.authorized_by_self_anchors = false;
+        }
+        "delegated_device_authorize_requires_bounded_delegation" => {
+            authorize.bounded = false;
+        }
+        "delegated_device_follows_install_revoke_fence" => {
+            authorize.install_active = false;
+        }
+        other => bail!("no delegated device admission model for {other}"),
+    }
+    Ok(authorize.verdict())
+}
+
+fn require_registered_delegation_binding_kind() -> Result<()> {
+    let schema = super::load_artifact_json("schemas/event-payload.schema.json")?;
+    let registered = schema
+        .pointer("/$defs/device_authorize_payload/properties/authorization_binding_kind/enum")
+        .and_then(Value::as_array)
+        .context("device authorize authorization_binding_kind enum")?
+        .iter()
+        .filter_map(Value::as_str)
+        .collect::<BTreeSet<_>>();
+    if registered
+        != BTreeSet::from([
+            "accepted_device",
+            "applet_managed_delegation",
+            "pcr_recovery",
+            "registration_anchor",
+        ])
+    {
+        bail!("the closed device authorization binding kinds changed: {registered:?}");
+    }
+    Ok(())
+}
+
+/// Derive the admission verdict of one concrete
+/// `(service DID, actor namespace pattern, Ghost DID)` triple.
+///
+/// `applet-schema.md` §2 and `applet-integration.md` §3.4 make this decidable
+/// from the DID shapes alone, and deciding it here is the point: a runner that
+/// only compared the fixture's `expect` string against a table would still pass
+/// if the fixture spelled a Ghost DID that contradicted its own verdict.
+///
+/// The three verdicts are distinct rejection sites, not synonyms. A pattern
+/// that pins the registration's own service SCID can never match a compliant
+/// Ghost, so it is refused at install time before any Ghost exists. A Ghost DID
+/// that reuses the service SCID, sits on another host, or carries no segment
+/// after the host is refused at provision time. Only a well-formed pair that
+/// still fails to match is a namespace mismatch.
+fn managed_actor_namespace_verdict(
+    service_did: &str,
+    pattern: &str,
+    ghost_did: Option<&str>,
+) -> &'static str {
+    let service: Vec<&str> = service_did.split(':').collect();
+    let (Some(service_scid), Some(service_host)) = (service.get(2), service.get(3)) else {
+        return "applet_namespace_pattern_invalid";
+    };
+    let segments: Vec<&str> = pattern.split(':').collect();
+    // Shape constraints on the pattern: did:webvh prefix, a wildcard or literal
+    // SCID that is never the service's own, a literal host equal to the
+    // registration service host, and at least one segment after that host.
+    if !pattern.starts_with("did:webvh:")
+        || segments.len() < 5
+        || segments.get(2) == Some(service_scid)
+        || segments.get(2).is_none_or(|scid| scid.is_empty())
+        || segments.get(3) != Some(service_host)
+        || segments[4..].iter().any(|segment| segment.is_empty())
+    {
+        return "applet_namespace_pattern_invalid";
+    }
+    let Some(ghost_did) = ghost_did else {
+        return "applet_namespace_mismatch";
+    };
+    let ghost: Vec<&str> = ghost_did.split(':').collect();
+    // Shape constraints on the Ghost: its own validated SCID, the service host,
+    // and a path segment so it can never be the service DID with a new SCID.
+    if !ghost_did.starts_with("did:webvh:")
+        || ghost.len() < 5
+        || ghost.get(2) == Some(service_scid)
+        || ghost.get(3) != Some(service_host)
+    {
+        return "applet_managed_actor_provision_invalid";
+    }
+    if !arkret_models_integration::namespace_pattern_matches(
+        arkret_models_integration::AppletNamespaceDomain::Actors,
+        pattern,
+        ghost_did,
+    ) {
+        return "applet_namespace_mismatch";
+    }
+    "accepted"
 }
 
 pub fn run_applet_install_authoring_suite() -> Result<()> {
