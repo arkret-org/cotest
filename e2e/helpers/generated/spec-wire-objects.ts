@@ -890,11 +890,6 @@ export type RealmObject = {
     "applies_to": Array<"seal_include" | "snapshot" | "backfill">;
     "minimum_retention_ms"?: number;
   };
-  "audit_policy"?: {
-    "seal_transparency_auditor_ids": string[];
-    "seal_transparency_min_attestations": number;
-    "seal_transparency_auditor_independence": "distinct_did" | "distinct_controlling_organization";
-  };
   "digest_algorithm"?: "sha256" | "blake3";
   "notary": {
     "signer": {

@@ -78,7 +78,6 @@ fn build_realm(
         updated_by: None,
         updated_at: None,
         availability_policy: None,
-        audit_policy: None,
         notary: crate::fixture_notary_configuration(principal.clone()),
         fields: Default::default(),
         proposal_intake_sla_ms: None,

@@ -32,33 +32,6 @@ fn encoding_artifact_vectors_reject_drift() -> Result<()> {
 
 #[test]
 fn domain_wire_constraint_vectors_reject_drift() {
-    let checks = json!({
-        "append_only": true,
-        "seal_signatures": true,
-        "dag_edges_verified": true,
-        "set_root_monotonic": true,
-        "completeness_monotonic": true
-    });
-    serde_json::from_value::<arkret::SealTransparencyChecks>(checks.clone())
-        .expect("all required transparency checks set to true must pass");
-
-    let mut missing_dag_edges = checks.clone();
-    missing_dag_edges
-        .as_object_mut()
-        .expect("checks fixture is an object")
-        .remove("dag_edges_verified");
-    assert!(
-        serde_json::from_value::<arkret::SealTransparencyChecks>(missing_dag_edges).is_err(),
-        "missing dag_edges_verified must fail closed"
-    );
-
-    let mut false_dag_edges = checks;
-    false_dag_edges["dag_edges_verified"] = json!(false);
-    assert!(
-        serde_json::from_value::<arkret::SealTransparencyChecks>(false_dag_edges).is_err(),
-        "false dag_edges_verified must fail closed"
-    );
-
     let consent = json!({
         "consent_id": "ak:consent:01904100-0000-7000-8000-000000000001",
         "peer": {
