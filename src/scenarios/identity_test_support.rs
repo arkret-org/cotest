@@ -369,6 +369,21 @@ pub async fn bootstrap_registered_actor(
 /// and signs the pairing challenge, then the founding device authors the
 /// accepted-device `ak.device.authorize` Control Move whose `device_signature`
 /// is the §5.2.2 target attestation bound to that challenge transcript.
+///
+/// **Blocked on a cross-repository gap, not on this helper.** `device-lifecycle
+/// .md` §2.1.1 clause 2 makes `ak.gate.account.command.finalize_device_pairing
+/// .v1` the only way a staged record reaches `ready_for_claim`, and
+/// `pair_device` MUST refuse a record that is still `staged`. That finalize is
+/// authenticated with `Authorization: DPoP <account_handoff_grant>`, and the
+/// Station cannot yet resolve which account such a grant is bound to
+/// (`account_handoff_bound_account` is a declared fail-closed dead end that
+/// answers `temporarily_unavailable` /
+/// `internal_reason=account_handoff_introspection_unwired`). Until that
+/// Station/Account-Authority interface exists there is no finalize call to
+/// make here, so this helper stops one step short of the spec sequence and the
+/// gate call below fails closed. Do not paper over it by authenticating
+/// finalize with an ordinary session: that is exactly the substitution the
+/// two-phase design exists to forbid.
 async fn authorize_additional_principal_device(
     server: &ArkretServer,
     founding: &ProvisionedTestPrincipal,
@@ -435,11 +450,18 @@ async fn authorize_additional_principal_device(
     );
     let (_, transcript_digest) = server_device_pairing_transcript(&new_device_pubkey, &challenge)?;
 
-    // §5.2.2: the accepted-device possession attestation binds only the
-    // target's own key material and the challenge transcript digest; the
-    // authorizing device's Event proof carries the remaining payload fields.
+    // §5.2.2: the accepted-device possession attestation binds the exact
+    // account, the target's own key material and the challenge transcript
+    // digest; the authorizing device's Event proof carries the remaining
+    // payload fields. `account_id` is a signed member of the eight-member
+    // `ak.device_authorize_accepted_device_possession_proof.v1` object, so it
+    // must be the account the candidate's pending handoff is bound to and not
+    // a value read back off a route or a session audience.
+    let account_id =
+        arkret_wire::AccountId::new(founding.core_id.clone(), server.service_id().clone());
     let attestation = sign_device_pairing_target_proof(
         UnsignedDevicePairingTargetProof::new(
+            account_id,
             new_device_id.clone(),
             arkret_wire::DidKey::new(device_public_key.as_str().to_owned())
                 .map_err(anyhow::Error::msg)?,

@@ -25,6 +25,7 @@ mod coauth_lifecycle;
 mod control_proposal;
 mod cursor_vectors;
 mod decision_0017_vectors;
+mod device_pairing_code_claim;
 mod device_revocation_pending;
 mod did_binding_digests;
 mod did_webvh_v1;
@@ -198,6 +199,7 @@ pub use cursor_vectors::{
 pub use decision_0017_vectors::{
     run_account_data_cas_convergence_vector_suite, run_read_cursor_multi_device_merge_vector_suite,
 };
+pub use device_pairing_code_claim::run_device_pairing_code_claim_suite;
 pub use device_revocation_pending::run_device_revocation_pending_suite;
 pub use did_binding_digests::{
     ALL_DID_BINDING_DIGEST_VECTOR_IDS, VECTOR_ID_DID_BINDING_DOCUMENT_DIGEST_KAT,

@@ -60,6 +60,12 @@ conformance_test!(
 );
 
 conformance_test!(
+    device_pairing_code_claim_executes_registered_variants,
+    "device_pairing_code_claim",
+    cotest::conformance::run_device_pairing_code_claim_suite,
+);
+
+conformance_test!(
     applet_registration_epoch_consumes_embedded_canonical_kat,
     "applet_registration_epoch",
     cotest::conformance::run_applet_registration_epoch_kat_suite,

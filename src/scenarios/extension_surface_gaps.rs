@@ -4,9 +4,9 @@ use arkret::{
 };
 use arkret_models_collaboration::governance::agent_artifacts::PublicKey;
 use arkret_models_collaboration::http_bodies::{
-    DevicePairingBootstrap, DevicePairingNonce, DevicePairingResolveRequestBody,
-    DevicePairingStageOutcome, DevicePairingStageRequestBody, DevicePairingState,
-    DevicePairingStatusOutcome, DevicePairingStatusRequestBody,
+    DevicePairingNonce, DevicePairingResolveRequestBody, DevicePairingStageOutcome,
+    DevicePairingStageRequestBody, DevicePairingState, DevicePairingStatusOutcome,
+    DevicePairingStatusRequestBody,
 };
 use arkret_models_discovery::ServiceDescribe;
 use arkret_wire::{Base64UrlString, NonEmptyString};
@@ -247,21 +247,26 @@ pub async fn device_pairing_handoff_bundle_selects_all_canonical_routes() -> Res
         "r": request_id.as_str()
     }))?);
 
-    let resolved: DevicePairingBootstrap = serde_json::from_value(
-        expect_json(
-            server
-                .http()
-                .post(server.url("/_arkret/open/device-pairing/resolve"))
-                .json(&DevicePairingResolveRequestBody {
-                    pairing_token: token,
-                }),
-            StatusCode::OK,
-        )
-        .await?,
-    )?;
-    assert_eq!(resolved.device_pairing_request_id, request_id);
-    assert_eq!(resolved.pairing_code, pairing_code);
+    // `device-lifecycle.md` 2.1.1: stage is account-less and lands in `staged`.
+    // Resolve, code claim and `pair_device` all require `ready_for_claim`, so a
+    // record that has not been finalized is indistinguishable from one that
+    // never existed. Anything that resolves here would mean the anonymous stage
+    // call alone produced a claimable pairing.
+    expect_api_error(
+        server
+            .http()
+            .post(server.url("/_arkret/open/device-pairing/resolve"))
+            .json(&DevicePairingResolveRequestBody {
+                pairing_token: token,
+            }),
+        StatusCode::NOT_FOUND,
+        "not_found",
+    )
+    .await?;
 
+    // `status` is the one surface that keeps answering for a staged record: its
+    // query credential is the request id plus the pairing code, which only the
+    // candidate device that minted them holds.
     let status: DevicePairingStatusOutcome = serde_json::from_value(
         expect_json(
             server
@@ -275,6 +280,10 @@ pub async fn device_pairing_handoff_bundle_selects_all_canonical_routes() -> Res
         )
         .await?,
     )?;
-    assert_eq!(status.state, DevicePairingState::PendingAuthorization);
+    assert_eq!(status.state, DevicePairingState::Staged);
+    assert!(
+        status.device_id.is_none() && status.authorized_event_ref.is_none(),
+        "a staged record exposes no device identity and no authorization"
+    );
     Ok(())
 }
