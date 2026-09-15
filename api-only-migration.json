@@ -1,6 +1,6 @@
 {
   "schema": "arkret.api-only-rust-migration.v1",
-  "expected_candidate_count": 30,
+  "expected_candidate_count": 29,
   "specialized_api_lanes": [
     "cotest/e2e/tests/extensions/platform-live.spec.ts",
     "cotest/e2e/tests/harness/mocks-selftest.spec.ts",
