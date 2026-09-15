@@ -18,7 +18,7 @@
       "did": "did:web:hub.example",
       "kid": "did:web:hub.example#notary-key",
       "canonical_body": "{\"body\":\"seal-statement-configured-seed\"}",
-      "canonical_body_sha256": "sha256:b3b24bd881306ad99649f15b7683626f6c46f0007f4b582ab9496af0de671ec0",
+      "canonical_body_sha256": "sha256:ac78663f21077a27b48e79e31bda13391648973a93396c225f29cdaf3bd944a8",
       "expected": {
         "outcome": "deterministic_signature",
         "rationale": "Configured 32-byte seed + same canonical body bytes => identical Ed25519 signature on every invocation. The detached-JWS signature segment and payload_digest are byte-stable, which is what lets a notary replay its own notary signatures across a restart. Cotest constructs two signers from the same seed and asserts the two PayloadSignature.jws strings are equal."
@@ -31,7 +31,7 @@
       "did": "did:web:peer.example",
       "kid": "did:web:peer.example#ephemeral-key",
       "canonical_body": "{\"body\":\"seal-statement-ephemeral-seed\"}",
-      "canonical_body_sha256": "sha256:6df5998f51e4e5b78dabe08cd1bb53f915a9500522a82afe1846c5e0de654ca0",
+      "canonical_body_sha256": "sha256:09c0b48aafd87106343345fd7edcc04054d49820464c75a5820b172973bf895a",
       "expected": {
         "outcome": "non_deterministic_signature",
         "rationale": "An ephemeral seed is fresh CSPRNG bytes per signer construction, so each run holds a different signing key. Even with identical canonical body bytes the JWS signature segment differs. Suitable for one-shot fixtures and ephemeral peers; MUST NOT back a notary that needs restart-replay. Cotest draws two independent random seeds and asserts the signatures differ."
@@ -48,7 +48,7 @@
       "did": "did:web:hub.example",
       "kid": "did:web:hub.example#notary-key",
       "canonical_body": "{\"body\":\"seal-statement-key-binding\"}",
-      "canonical_body_sha256": "sha256:06b781a6b61e003d107a08c1df3e9e8c71b0c323c37920d7a0d296e1501b05ab",
+      "canonical_body_sha256": "sha256:0c96b0a3e6b0638ace3a434aa0b3fd13547a65fa729033c22752af1461715c86",
       "expected": {
         "outcome": "different_signatures",
         "rationale": "Key binding: s = sign(sk, m). Same m, distinct sk => distinct s. Confirms Ed25519PayloadSigner is not silently reusing a process-global key; each signer carries its own SigningKey derived from its own seed. payload_digest, by contrast, MUST be identical across the two signers because it commits only to the canonical body."
@@ -62,7 +62,7 @@
       "did": "did:web:hub.example",
       "kid": "did:web:hub.example#notary-key",
       "canonical_body": "{\"body\":\"seal-statement-round-trip-verify\"}",
-      "canonical_body_sha256": "sha256:c8aa6ea8e485a420edeb0d119afb456f3d4b079834436b6d9b9f95de28fcdbd3",
+      "canonical_body_sha256": "sha256:8de0359906e08eab8072abb1c547954d889f6a8569b84023453df688aa381fca",
       "expected": {
         "outcome": "verify_ok",
         "verify_via": "verify_ed25519_payload_signature",
@@ -77,7 +77,7 @@
       "did": "did:web:hub.example",
       "kid": "did:web:hub.example#notary-key",
       "canonical_body": "{\"body\":\"seal-statement-payload-digest\"}",
-      "canonical_body_sha256": "sha256:b47e4789a93067eccf8cc2bff95e6f26e14a529b5d55be8ecf84c3bdc46f7be1",
+      "canonical_body_sha256": "sha256:ebdd9bf63bad37e672c69a3d20f6f9958865792e57915220f16aaae5eed9492a",
       "expected": {
         "outcome": "payload_digest_matches",
         "rationale": "PayloadSignature.payload_digest = sha256:<hex of canonical body>. A receiver re-derives the canonical body bytes and recomputes sha256; it must equal the declared payload_digest before the JWS signature segment is verified. Wire-form invariant for detached JWS (RFC 7515 section 3.2). Cotest asserts the SDK-produced digest equals the fixture-pinned digest, so the fixture pin and the SDK cannot drift apart silently."
@@ -92,7 +92,7 @@
       "did": "did:web:hub.example",
       "kid": "did:web:hub.example#notary-key",
       "canonical_body": "{\"body\":\"seal-statement-wrong-verifying-key\"}",
-      "canonical_body_sha256": "sha256:7cbc48f2d8ce4acf97d11abd82f48b75061b9bbf92b3809db1a3836d5d8791d5",
+      "canonical_body_sha256": "sha256:962e5a6cf99d648728094e18fe9407aa5ccc03327d3f2859c8e57c6903195e94",
       "drift": {
         "kind": "wrong_verifying_key",
         "verify_with_seed_hex": "1717171717171717171717171717171717171717171717171717171717171717"
@@ -110,7 +110,7 @@
       "did": "did:web:hub.example",
       "kid": "did:web:hub.example#notary-key",
       "canonical_body": "{\"body\":\"seal-statement-tampered\"}",
-      "canonical_body_sha256": "sha256:31a49d932fed2d8327d0b9548c5689ea2c5c4064c90bea8437b02453c39ccbf4",
+      "canonical_body_sha256": "sha256:289bfa96a197eab5ffbc2ce77feb4ef5d47f57a995ee0d068a452f2013664761",
       "drift": {
         "kind": "tampered_canonical_body",
         "tamper_at": "verify_time",

@@ -485,6 +485,9 @@ async fn authorize_additional_principal_device(
         authorization_binding_kind: DeviceAuthorizationBindingKind::AcceptedDevice,
         device_signature: attestation.device_signature.clone(),
         recovery_session_id: None,
+        // `accepted_device` is one of the three branches that MUST NOT carry an
+        // install fence (`device-lifecycle.md` section 5.2.3).
+        applet_id: None,
     };
 
     // The gate authenticates the authorizing device, so the exact Event is
@@ -767,6 +770,9 @@ async fn bootstrap_test_device_authorization(
             NonEmptyString::new("pending").map_err(anyhow::Error::msg)?,
         ),
         recovery_session_id: None,
+        // `registration_anchor` is one of the three branches that MUST NOT
+        // carry an install fence (`device-lifecycle.md` section 5.2.3).
+        applet_id: None,
     };
     payload.device_signature = SignatureMaterial::NonEmptyString(
         NonEmptyString::new(

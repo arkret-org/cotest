@@ -704,6 +704,9 @@ fn build_pcr_genesis_unit(
                 non_empty("pending")?,
             ),
             recovery_session_id: None,
+            // `registration_anchor` is one of the three branches that MUST NOT
+            // carry an install fence (`device-lifecycle.md` section 5.2.3).
+            applet_id: None,
         };
     authorize_payload.device_signature =
         arkret_models_collaboration::events_payloads::SignatureMaterial::NonEmptyString(non_empty(
@@ -1610,7 +1613,16 @@ mod tests {
                 "created_at": "2026-07-07T05:45:49.000Z",
                 "event": event,
                 "signing_seed_b64url": base64::engine::general_purpose::URL_SAFE_NO_PAD
-                    .encode(seed)
+                    .encode(seed),
+                // An ordinary Event proof MUST name the accepted signer
+                // projection it resolved through: the two omission exceptions
+                // in `encoding.md` section 4 are the human PCR genesis unit and
+                // the PCR-policy recovery unit, and `ak.member.state` is
+                // neither.
+                "signer_resolution_evidence_ref": format!(
+                    "ak:signer_evidence:sha256:{}",
+                    "3".repeat(64)
+                )
             }),
             EventDigestMode::RawCanonicalJson,
         )

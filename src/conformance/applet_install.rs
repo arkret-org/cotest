@@ -1,7 +1,17 @@
 use std::collections::BTreeSet;
 
-use anyhow::{Context as _, Result, bail};
+use anyhow::{Context as _, Result, anyhow, bail};
+use arkret_identifiers::{AppletId, DeviceId, DidCoreId, Hash};
+use arkret_models_collaboration::events_payloads::SignatureMaterial;
+use arkret_models_collaboration::events_payloads::device_identity::{
+    DeviceAuthorizationBindingKind, DeviceAuthorizePayload, DeviceOrPrincipalRef,
+    UnsignedDeviceAuthorizePayload,
+};
 use arkret_models_collaboration::governance::grant_constraint::GrantConstraint;
+use arkret_wire::{AccountId, NonEmptyString, RecoverySessionId};
+use base64::Engine as _;
+use chrono::Duration;
+use ed25519_dalek::{Signer as _, SigningKey};
 use serde_json::{Value, json};
 
 use super::required_str;
@@ -324,11 +334,17 @@ fn consume_managed_actor_case(
             let expected = case["expect"]
                 .as_str()
                 .context("delegated device case expectation")?;
-            let derived = delegated_device_authorize_verdict(name)?;
-            if derived != expected {
-                bail!(
-                    "delegated device case {name} expects {expected} but its admission inputs derive {derived}"
-                );
+            // One fixture case can describe several mutations of the same Event
+            // ("expires_at=null, then scopes omitted, then carrying a
+            // recovery_session_id"). Every one of them has to reach the same
+            // verdict, so every one of them runs.
+            for mutation in delegated_device_mutations(name)? {
+                let derived = delegated_device_authorize_verdict(mutation, applet_id, service_id)?;
+                if derived != expected {
+                    bail!(
+                        "delegated device case {name} expects {expected} but mutation {mutation:?} derives {derived}"
+                    );
+                }
             }
         }
         other => bail!("Applet managed-actor case has no executor: {other}"),
@@ -336,97 +352,352 @@ fn consume_managed_actor_case(
     Ok(())
 }
 
-/// The admission inputs of one `applet_managed_delegation` device authorize.
+/// One mutation of the single `applet_managed_delegation` device authorize that
+/// `device-lifecycle.md` section 5.2.3 defines.
 ///
-/// Every field is a condition the Station can decide from the submitted Event
-/// alone, in the order the branches are checked: a shape the schema rejects
-/// never reaches the authority check, and an authority failure never reaches
-/// the install fence.
-#[derive(Clone, Copy)]
-struct DelegatedDeviceAuthorize {
-    /// `applet_managed_delegation` is an *ordinary successor* Event. Carrying
-    /// it inside the Ghost authoring bundle or the Bot install fixed set would
-    /// widen a closed aggregate the schema pins by member count.
-    inside_closed_aggregate: bool,
-    /// The managed controller method is resolved through the accepted
-    /// resolution cell, so the proof names that evidence; a unit-local
-    /// candidate overlay is the registration-anchor shape, not this one.
-    carries_signer_resolution_evidence_ref: bool,
-    /// `authorized_by` is the managed principal's own `principal_id`. Pointing
-    /// it at the Applet registration service or controller would introduce
-    /// exactly the cross-principal authority the managed PCR exists to avoid.
-    authorized_by_self_anchors: bool,
-    /// Delegation is bounded: a non-null `expires_at`, a non-empty `scopes`,
-    /// and none of the members that belong to the recovery or pairing
-    /// branches.
-    bounded: bool,
-    /// The exact install this delegation names is still effective.
-    install_active: bool,
+/// The variants are the mutations the fixture spells out, not a set of
+/// independent booleans. That distinction is the point of this rewrite: the
+/// previous model carried a `bounded` flag whose meaning was "the SDK would
+/// have refused this", which stays true even if the SDK stops refusing it.
+/// Each variant here is applied to a real [`UnsignedDeviceAuthorizePayload`]
+/// and judged by the shared wire type instead.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DelegatedDeviceMutation {
+    /// The accepted shape: an ordinary successor Event in the managed
+    /// principal's own `applet_managed_control` PCR.
+    None,
+    /// Carried as a fifth Event of the Ghost authoring bundle, or as a seventh
+    /// fact of the Bot install fixed set.
+    InsideClosedAggregate,
+    /// `proof.signer_resolution_evidence_ref` omitted, with the controller
+    /// method resolved through a unit-local candidate overlay instead.
+    OmitsSignerResolutionEvidenceRef,
+    /// `authorized_by` names the Applet registration service.
+    AuthorizedByRegistrationService,
+    /// `authorized_by` names the Applet controller DID.
+    AuthorizedByControllerDid,
+    /// `expires_at` is present but null.
+    UnboundedLifetime,
+    /// `scopes` is absent.
+    UnscopedDelegation,
+    /// Carries a `recovery_session_id`, which belongs to the recovery branch.
+    CarriesRecoverySessionId,
+    /// Carries a `pairing_challenge_transcript_digest`, which belongs to the
+    /// pairing branch.
+    CarriesPairingChallengeTranscriptDigest,
+    /// The exact install this delegation names is no longer effective.
+    InstallRevoked,
 }
 
-impl DelegatedDeviceAuthorize {
-    fn accepted() -> Self {
-        Self {
-            inside_closed_aggregate: false,
-            carries_signer_resolution_evidence_ref: true,
-            authorized_by_self_anchors: true,
-            bounded: true,
-            install_active: true,
-        }
-    }
+/// The admission classes that may omit `proof.signer_resolution_evidence_ref`.
+///
+/// `encoding.md` section 4 publishes this as a closed **two-entry** table, and
+/// `device-lifecycle.md` section 5.3 forbids adding the delegation branch to
+/// it. There is no machine artifact for the table, so it is modelled here as a
+/// fixed-length array of the shared binding-kind enum: a third entry cannot be
+/// introduced by relaxing a predicate, only by editing a list whose own type
+/// says how long it is.
+const SIGNER_EVIDENCE_OMISSION_CLASSES: [DeviceAuthorizationBindingKind; 2] = [
+    DeviceAuthorizationBindingKind::RegistrationAnchor,
+    DeviceAuthorizationBindingKind::PcrRecovery,
+];
 
-    fn verdict(self) -> &'static str {
-        if self.inside_closed_aggregate
-            || !self.carries_signer_resolution_evidence_ref
-            || !self.bounded
-        {
-            return "schema_violation";
-        }
-        if !self.authorized_by_self_anchors {
-            return "device_unauthorized";
-        }
-        if !self.install_active {
-            return "applet_revoked";
-        }
-        "accepted"
+/// The single self-anchor failure section 5.2.3 defines. It is raised while
+/// building the possession transcript, because that is the only place the
+/// Event's account actor reaches the payload.
+const SELF_ANCHOR_REFUSAL: &str = "device_authorize_applet_managed_delegation_requires_self_anchor";
+
+/// Why a delegated-device authorize was refused, in the SDK's own words.
+///
+/// The two verdicts are distinct rejection sites, not synonyms: a shape the
+/// closed schema refuses never reaches the authority check. Classifying by the
+/// validator that actually spoke — rather than by a local guess — is what keeps
+/// that ordering honest.
+enum DelegatedDeviceRefusal {
+    Schema,
+    Authority,
+}
+
+fn classify_delegated_device_refusal(reason: &str) -> DelegatedDeviceRefusal {
+    if reason.contains(SELF_ANCHOR_REFUSAL) {
+        DelegatedDeviceRefusal::Authority
+    } else {
+        DelegatedDeviceRefusal::Schema
     }
 }
 
-/// Derive each delegated-device case's verdict from the single input its
-/// mutation changes.
-///
-/// **Partly blocked upstream.** `event-payload.schema.json` registers a fourth
-/// `authorization_binding_kind`, `applet_managed_delegation`, but
-/// `DeviceAuthorizationBindingKind` in the SDK still carries only
-/// `registration_anchor`, `pcr_recovery` and `accepted_device`. Until the SDK
-/// follows, this suite can execute the admission ordering but cannot build the
-/// typed payload, so the closed enum is checked against the spec schema
-/// directly below instead of through the shared Rust type.
-fn delegated_device_authorize_verdict(name: &str) -> Result<&'static str> {
-    require_registered_delegation_binding_kind()?;
-    let mut authorize = DelegatedDeviceAuthorize::accepted();
-    match name {
-        "delegated_device_authorize_is_ordinary_successor" => {}
+fn delegated_device_mutations(name: &str) -> Result<Vec<DelegatedDeviceMutation>> {
+    Ok(match name {
+        "delegated_device_authorize_is_ordinary_successor" => vec![DelegatedDeviceMutation::None],
         "delegated_device_authorize_cannot_join_closed_aggregate" => {
-            authorize.inside_closed_aggregate = true;
+            vec![DelegatedDeviceMutation::InsideClosedAggregate]
         }
         "delegated_device_authorize_requires_signer_resolution_evidence_ref" => {
-            authorize.carries_signer_resolution_evidence_ref = false;
+            vec![DelegatedDeviceMutation::OmitsSignerResolutionEvidenceRef]
         }
-        "delegated_device_authorize_authorized_by_must_self_anchor" => {
-            authorize.authorized_by_self_anchors = false;
-        }
-        "delegated_device_authorize_requires_bounded_delegation" => {
-            authorize.bounded = false;
-        }
+        "delegated_device_authorize_authorized_by_must_self_anchor" => vec![
+            DelegatedDeviceMutation::AuthorizedByRegistrationService,
+            DelegatedDeviceMutation::AuthorizedByControllerDid,
+        ],
+        "delegated_device_authorize_requires_bounded_delegation" => vec![
+            DelegatedDeviceMutation::UnboundedLifetime,
+            DelegatedDeviceMutation::UnscopedDelegation,
+            DelegatedDeviceMutation::CarriesRecoverySessionId,
+            DelegatedDeviceMutation::CarriesPairingChallengeTranscriptDigest,
+        ],
         "delegated_device_follows_install_revoke_fence" => {
-            authorize.install_active = false;
+            vec![DelegatedDeviceMutation::InstallRevoked]
         }
         other => bail!("no delegated device admission model for {other}"),
-    }
-    Ok(authorize.verdict())
+    })
 }
 
+/// Derive one delegated-device mutation's verdict.
+///
+/// The branches run in admission order, and each is decided by the narrowest
+/// authority that can decide it: the published schema for the two closed
+/// carriers, the shared wire type for everything the payload itself pins, and
+/// the install fence last — because only a payload that is already well formed
+/// and self-anchored can still be refused for naming a revoked install.
+fn delegated_device_authorize_verdict(
+    mutation: DelegatedDeviceMutation,
+    applet_id: &AppletId,
+    service_id: &DidCoreId,
+) -> Result<&'static str> {
+    require_registered_delegation_binding_kind()?;
+    match mutation {
+        DelegatedDeviceMutation::InsideClosedAggregate => {
+            require_closed_carriers_have_no_device_authorize_slot()?;
+            return Ok("schema_violation");
+        }
+        DelegatedDeviceMutation::OmitsSignerResolutionEvidenceRef => {
+            if SIGNER_EVIDENCE_OMISSION_CLASSES
+                .contains(&DeviceAuthorizationBindingKind::AppletManagedDelegation)
+            {
+                bail!(
+                    "the signer-evidence omission table grew a third entry: this branch already has an accepted signer projection before the Event"
+                );
+            }
+            return Ok("schema_violation");
+        }
+        _ => {}
+    }
+
+    let account_id = managed_principal_account_id()?;
+    let payload = match delegated_device_payload(mutation, applet_id, service_id, &account_id) {
+        Ok(payload) => payload,
+        Err(DelegatedDeviceRefusal::Schema) => return Ok("schema_violation"),
+        Err(DelegatedDeviceRefusal::Authority) => return Ok("device_unauthorized"),
+    };
+    // The payload the SDK accepted is the one the fence reads: `applet_id` is
+    // the revocation carrier, so a delegated device cannot outlive the install
+    // that justified it without the Station consulting some second table.
+    if payload.applet_id.as_ref() != Some(applet_id) {
+        bail!("the accepted delegation payload lost its install fence carrier");
+    }
+    if mutation == DelegatedDeviceMutation::InstallRevoked {
+        return Ok("applet_revoked");
+    }
+    Ok("accepted")
+}
+
+/// Build the payload one mutation describes, and sign it for real.
+///
+/// The possession signature is produced and verified rather than stubbed
+/// because the self-anchor rule lives in the transcript builder: a payload that
+/// names the Applet service instead of the managed principal is refused exactly
+/// there, and a stub signature would skip the only check that catches it.
+fn delegated_device_payload(
+    mutation: DelegatedDeviceMutation,
+    applet_id: &AppletId,
+    service_id: &DidCoreId,
+    account_id: &AccountId,
+) -> Result<DeviceAuthorizePayload, DelegatedDeviceRefusal> {
+    build_delegated_device_payload(mutation, applet_id, service_id, account_id)
+        .map_err(|error| classify_delegated_device_refusal(&error.to_string()))
+}
+
+fn build_delegated_device_payload(
+    mutation: DelegatedDeviceMutation,
+    applet_id: &AppletId,
+    service_id: &DidCoreId,
+    account_id: &AccountId,
+) -> Result<DeviceAuthorizePayload> {
+    let device_key = SigningKey::from_bytes(&[19u8; 32]);
+    let device_public_key_did = non_empty(format!(
+        "did:key:{}",
+        arkret_canonical::ed25519_pubkey_to_did_key_multibase(
+            &device_key.verifying_key().to_bytes()
+        )
+    ))?;
+    let device_id = DeviceId::new("ak:device:019a4100-0000-7000-8000-000000000001")?;
+    let hpke_key = non_empty("z6LSCotestAppletDelegatedHpkeKey")?;
+    let algorithms = vec![non_empty("ak.hpke_x25519_aead_chacha20poly1305.v1")?];
+    let device_key_algorithm = Some(non_empty("Ed25519")?);
+    let not_before = arkret_canonical::parse_timestamp_canonical("2026-09-15T00:00:00.000Z")?;
+    let authorized_by = DeviceOrPrincipalRef::Principal(match mutation {
+        DelegatedDeviceMutation::AuthorizedByRegistrationService => service_id.clone(),
+        DelegatedDeviceMutation::AuthorizedByControllerDid => {
+            DidCoreId::new("ak:did_core:web:controller.example")?
+        }
+        _ => account_id.principal_id.clone(),
+    });
+    let scopes = match mutation {
+        DelegatedDeviceMutation::UnscopedDelegation => None,
+        _ => Some(vec![non_empty("ak.applet.managed_actor.delegated_device")?]),
+    };
+    let expires_at = match mutation {
+        DelegatedDeviceMutation::UnboundedLifetime => Some(None),
+        _ => Some(Some(not_before + Duration::days(91))),
+    };
+    let recovery_session_id = match mutation {
+        DelegatedDeviceMutation::CarriesRecoverySessionId => Some(RecoverySessionId::new(
+            "ak:recovery_session:019a4100-0000-7000-8000-000000000009",
+        )?),
+        _ => None,
+    };
+    let pairing_challenge_transcript_digest = match mutation {
+        DelegatedDeviceMutation::CarriesPairingChallengeTranscriptDigest => {
+            Some(Hash::new(format!("sha256:{}", "5".repeat(64)))?)
+        }
+        _ => None,
+    };
+
+    let mut unsigned = UnsignedDeviceAuthorizePayload::new(
+        device_id.clone(),
+        device_public_key_did.clone(),
+        hpke_key.clone(),
+        algorithms.clone(),
+        device_key_algorithm.clone(),
+        authorized_by.clone(),
+        scopes.clone(),
+        not_before,
+        expires_at,
+        DeviceAuthorizationBindingKind::AppletManagedDelegation,
+        recovery_session_id.clone(),
+        Some(applet_id.clone()),
+    )?;
+    if let Some(digest) = pairing_challenge_transcript_digest.clone() {
+        unsigned = unsigned.with_pairing_challenge_transcript_digest(digest);
+    }
+    let signature = device_key.sign(&unsigned.device_possession_signature_input(account_id)?);
+    let payload = DeviceAuthorizePayload {
+        device_id,
+        device_public_key_did,
+        hpke_key,
+        algorithms,
+        device_key_algorithm,
+        authorized_by,
+        scopes,
+        not_before,
+        expires_at,
+        authorization_binding_kind: DeviceAuthorizationBindingKind::AppletManagedDelegation,
+        device_signature: SignatureMaterial::NonEmptyString(non_empty(
+            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(signature.to_bytes()),
+        )?),
+        recovery_session_id,
+        pairing_challenge_transcript_digest,
+        applet_id: Some(applet_id.clone()),
+    };
+    // The signed type carries one rule the unsigned one cannot: the pairing
+    // transcript digest belongs to `accepted_device` and to nothing else.
+    payload
+        .validate_wire_constraints()
+        .map_err(|reason| anyhow!(reason))?;
+    arkret_signatures::verify_device_authorize_possession(&payload, account_id)
+        .map_err(|error| anyhow!(error.to_string()))?;
+    Ok(payload)
+}
+
+fn non_empty(value: impl Into<String>) -> Result<NonEmptyString> {
+    NonEmptyString::new(value.into()).map_err(anyhow::Error::msg)
+}
+
+/// The managed principal's own account actor.
+///
+/// `account_id` never appears in the payload: section 5.2.3 injects it from the
+/// Event envelope, which is why the self-anchor comparison can only happen once
+/// a caller supplies it.
+fn managed_principal_account_id() -> Result<AccountId> {
+    Ok(AccountId::new(
+        DidCoreId::new("ak:did_core:webvh:zExampleManagedActorScid")?,
+        DidCoreId::new("ak:did_core:web:station.example")?,
+    ))
+}
+
+/// Prove that neither closed carrier has a slot an `ak.device.authorize` could
+/// occupy.
+///
+/// The Ghost authoring bundle pins four Event slots by `kind` const under
+/// `additionalProperties: false`, and the install outcome pins its refs the
+/// same way. So "carry the authorize as a fifth Event" is not a policy the
+/// Station has to remember to refuse — it has no representable form, which is
+/// the stronger statement and the one the schema can be asked for directly.
+fn require_closed_carriers_have_no_device_authorize_slot() -> Result<()> {
+    let authoring = super::load_artifact_json("schemas/applet-install-authoring.schema.json")?;
+    let bundle = authoring
+        .pointer("/$defs/managed_actor_bundle")
+        .context("managed actor authoring bundle")?;
+    if bundle.get("additionalProperties") != Some(&Value::Bool(false)) {
+        bail!("the Ghost authoring bundle stopped being a closed object");
+    }
+    let properties = bundle
+        .pointer("/properties")
+        .and_then(Value::as_object)
+        .context("managed actor authoring bundle properties")?;
+    let mut pinned_kinds = BTreeSet::new();
+    for slot in properties.values() {
+        let Some(variants) = slot.pointer("/allOf").and_then(Value::as_array) else {
+            continue;
+        };
+        for variant in variants {
+            if let Some(kind) = variant
+                .pointer("/properties/kind/const")
+                .and_then(Value::as_str)
+            {
+                pinned_kinds.insert(kind);
+            }
+        }
+    }
+    if pinned_kinds
+        != BTreeSet::from([
+            "ak.applet.managed_actor.provision",
+            "ak.identity.accountability_grant",
+            "ak.profile.create",
+            "ak.realm.create",
+        ])
+    {
+        bail!("the Ghost authoring bundle Event set changed: {pinned_kinds:?}");
+    }
+
+    let install = super::load_artifact_json("schemas/applet-install-operations.schema.json")?;
+    let outcome = install
+        .pointer("/$defs/applet_install_outcome")
+        .context("applet install outcome")?;
+    if outcome.get("additionalProperties") != Some(&Value::Bool(false)) {
+        bail!("the Bot install outcome stopped being a closed object");
+    }
+    let refs = outcome
+        .pointer("/properties")
+        .and_then(Value::as_object)
+        .context("applet install outcome properties")?
+        .keys()
+        .filter(|name| name.ends_with("_ref") || name.ends_with("_refs"))
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    if refs.iter().any(|name| name.contains("device")) {
+        bail!("the Bot install fixed set grew a device slot: {refs:?}");
+    }
+    Ok(())
+}
+
+/// Compare the shared closed enum with the published one, arrow by arrow.
+///
+/// Reading the schema enum alone would only prove the artifact still lists four
+/// kinds; reading the Rust enum alone would only prove the code still has four
+/// variants. What has to hold is that the two spell the same four things, so
+/// every variant's wire spelling is taken from the SDK itself rather than
+/// restated here.
 fn require_registered_delegation_binding_kind() -> Result<()> {
     let schema = super::load_artifact_json("schemas/event-payload.schema.json")?;
     let registered = schema
@@ -435,16 +706,26 @@ fn require_registered_delegation_binding_kind() -> Result<()> {
         .context("device authorize authorization_binding_kind enum")?
         .iter()
         .filter_map(Value::as_str)
+        .map(str::to_owned)
         .collect::<BTreeSet<_>>();
-    if registered
-        != BTreeSet::from([
-            "accepted_device",
-            "applet_managed_delegation",
-            "pcr_recovery",
-            "registration_anchor",
-        ])
-    {
-        bail!("the closed device authorization binding kinds changed: {registered:?}");
+    let modelled = [
+        DeviceAuthorizationBindingKind::AcceptedDevice,
+        DeviceAuthorizationBindingKind::AppletManagedDelegation,
+        DeviceAuthorizationBindingKind::PcrRecovery,
+        DeviceAuthorizationBindingKind::RegistrationAnchor,
+    ]
+    .into_iter()
+    .map(|kind| {
+        serde_json::to_value(kind)?
+            .as_str()
+            .map(str::to_owned)
+            .context("binding kind does not serialize to a string")
+    })
+    .collect::<Result<BTreeSet<_>>>()?;
+    if registered != modelled {
+        bail!(
+            "the closed device authorization binding kinds drifted: schema {registered:?} vs model {modelled:?}"
+        );
     }
     Ok(())
 }
