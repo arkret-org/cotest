@@ -6,6 +6,11 @@ use super::{load_fixture_value, required_str, required_u64, validate_profile};
 
 const FIXTURE_FILE: &str = "scalability-limits-fixture.json";
 
+/// `scalability-constraints.md` section 2.1.1: the complete canonical accepted
+/// Event envelope, every active producer proof included and the read-view
+/// `unsigned` excluded.
+const ACCEPTED_EVENT_ENVELOPE_MAX_BYTES: u64 = 1_048_576;
+
 pub fn run_scalability_limits_fixture_suite() -> Result<()> {
     let fixture = load_fixture_value(FIXTURE_FILE)?;
     validate_profile(&fixture, ProfileId::CORE_EVENT_STORE_V1)?;
@@ -81,16 +86,55 @@ fn run_case(case: &Value) -> Result<()> {
             }
             return Ok(());
         }
-        "event_reducer_stamp_boundary" => {
+        "event_admission_proof_budget_boundary" => {
+            // `scalability-constraints.md` section 2.1.1 fixes the measured
+            // object as the accepted envelope *including every active producer
+            // proof*. This case exists because the pre-proof envelope fits: a
+            // runner that measured the producer's own bytes would accept an
+            // Event that is over the limit once the admission proof set it must
+            // carry is attached.
             let producer = required_u64(generator, "producer_envelope_bytes")?;
             let accepted = required_u64(generator, "accepted_candidate_bytes")?;
-            let actual = if producer <= 1_048_576 && accepted > 1_048_576 {
-                "reject"
-            } else {
-                "accept"
-            };
+            let proof_kinds = generator
+                .get("proof_kinds")
+                .and_then(Value::as_array)
+                .ok_or_else(|| anyhow!("{name} must name the proofs the candidate carries"))?;
+            if proof_kinds.is_empty() {
+                bail!("{name} must name at least one proof kind, or it measures nothing");
+            }
+            if producer > ACCEPTED_EVENT_ENVELOPE_MAX_BYTES {
+                bail!(
+                    "{name} pre-proof envelope must fit, or the case proves nothing about proofs"
+                );
+            }
+            if accepted <= producer {
+                bail!("{name} accepted candidate must exceed the envelope it attaches proofs to");
+            }
+            let over = accepted > ACCEPTED_EVENT_ENVELOPE_MAX_BYTES;
+            let actual = if over { "reject" } else { "accept" };
             if case.pointer("/expected/decision").and_then(Value::as_str) != Some(actual) {
-                bail!("{name} reducer-stamped Event boundary drifted");
+                bail!("{name} admission-proof budget boundary drifted");
+            }
+            if over {
+                if case.pointer("/expected/error_code").and_then(Value::as_str)
+                    != Some(arkret_wire::ErrorCode::PAYLOAD_TOO_LARGE)
+                {
+                    bail!("{name} over-limit Event must reject as payload_too_large");
+                }
+                // The rejection has to land before anything is written: an
+                // oversize Event that is refused *after* a commit starts leaves
+                // exactly the half state the limit exists to prevent.
+                if case
+                    .pointer("/expected/commit_started")
+                    .and_then(Value::as_bool)
+                    != Some(false)
+                    || case
+                        .pointer("/expected/state_unchanged")
+                        .and_then(Value::as_bool)
+                        != Some(true)
+                {
+                    bail!("{name} over-limit Event did not reject before any commit");
+                }
             }
             return Ok(());
         }
