@@ -57,6 +57,9 @@ fn registry_and_schema_pin_the_exact_signed_report_event() {
         event["properties"]["kind"]["const"],
         "ak.self.moderation.report"
     );
+    // Mirrors `moderation-report.schema.json`. `seal_ref` left this list when
+    // the envelope moved to portable events and scoped Seals; the basis now
+    // rides the envelope rather than being re-required per submission.
     assert_eq!(
         event["required"],
         json!([
@@ -65,7 +68,6 @@ fn registry_and_schema_pin_the_exact_signed_report_event() {
             "scope_ref",
             "actor_id",
             "payload",
-            "seal_ref",
             "auth_context"
         ])
     );

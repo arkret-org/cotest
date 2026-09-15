@@ -194,6 +194,12 @@ fn run_accountability_scope_set_subject_vector(fixture: &EncodingArtifactFixture
                 "issuer_id": issuer,
                 "subject_id": subject,
                 "accountability_scope": scope,
+                // The registered cell contract projects `not_before` out of the
+                // grant's own signed payload (the Agent-provision writer reads
+                // it off the envelope instead). It is a required member of both
+                // `accountability-grant.schema.json` and the projected record,
+                // so a payload without it addresses no cell at all.
+                "not_before": "2026-07-26T01:00:00.000Z",
                 "grant_status": status
             },
             "proofs": []

@@ -435,7 +435,10 @@ fn unsigned_proof(payload_digest: &Hash, mimi: bool) -> Result<PayloadProof> {
             .to_owned(),
         )),
         proof_purpose: None,
-        jws: "pending".to_owned(),
+        // The carrier is overwritten by the real detached JWS a line later,
+        // but  now rejects anything that is not
+        // compact-JWS shaped, so the placeholder has to be shaped like one.
+        jws: "eyJhbGciOiJFZDI1NTE5In0..cGxhY2Vob2xkZXI".to_owned(),
     })
 }
 

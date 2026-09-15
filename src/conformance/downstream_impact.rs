@@ -186,10 +186,12 @@ fn run_error_code_vocabulary_unregistered_spelling_vector() -> Result<()> {
 }
 
 fn run_event_kind_unregistered_spelling_vector() -> Result<()> {
-    const RENAMES: &[(&str, &str)] = &[
-        ("ak.contact.tombstoned", "ak.contact.tombstone"),
-        ("ak.state.conflict_recovery", "ak.conflict.recovery"),
-    ];
+    // Each row is `(unregistered spelling, the registered kind that replaced
+    // it)`. A row survives only while its right-hand side is still a registered
+    // kind: `ak.conflict.recovery` was retired outright rather than renamed
+    // again, so asserting it round-trips through the SDK was asserting a kind
+    // that no longer exists on either side of the arrow.
+    const RENAMES: &[(&str, &str)] = &[("ak.contact.tombstoned", "ak.contact.tombstone")];
 
     for &(unregistered, canonical) in RENAMES {
         if EventKind::try_new(unregistered)

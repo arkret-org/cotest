@@ -425,6 +425,10 @@ fn manifest_from_fixture(vector: &Value) -> Result<RealmStateSnapshotManifest> {
         "state_digest": value_field_str(fixture_manifest, "state_digest")?,
         "frontier": required_field(fixture_manifest, "frontier")?,
         "event_set_commitment": required_field(fixture_manifest, "event_set_commitment")?,
+        // Copied from the fixture rather than synthesised: this block is the
+        // manifest re-keyed into the SDK shape, and every member left out is a
+        // member the vector silently stops covering.
+        "eligibility_context": required_field(fixture_manifest, "eligibility_context")?,
         "verification_hints": {
             "verification_profile": security_class,
         },
