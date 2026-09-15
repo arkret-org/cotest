@@ -119,7 +119,7 @@
           "kind": "ordinary",
           "path": "../soland/crates/http/src/routing/identity/recovery/security_transaction_endpoints.rs",
           "markers": [
-            "continue_submit_reanchor_unit"
+            "continue_commit_recovery_unit"
           ]
         },
         {
@@ -236,7 +236,7 @@
           "path": "../coauth/crates/backend/src/handlers/arkret/session_grant/session_logout.rs",
           "markers": [
             "require_auth_session_logout_service_caller(req, depot)?",
-            "terminate_auth_side_session_by_grant_jwt(depot, &body.grant_jwt).await?"
+            "terminate_auth_side_session_by_grant_jwt(depot, &caller_service_id, &body.grant_jwt)"
           ]
         },
         {
@@ -800,7 +800,7 @@
         },
         {
           "kind": "ordinary",
-          "path": "../soland/crates/server/tests/account_data_sync.rs",
+          "path": "../soland/crates/server/tests/http_api/push_keys/push_profile.rs",
           "markers": [
             "/_arkret/edge/push/register-device",
             "/_arkret/edge/push/notify"

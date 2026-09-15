@@ -42,6 +42,12 @@ fn fixtures_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")
 }
 
+fn load_spec_fixture(name: &str) -> Result<Value> {
+    let path = cotest::conformance::fixture_path(name);
+    let raw = fs::read_to_string(&path).with_context(|| format!("read spec fixture {name}"))?;
+    serde_json::from_str(&raw).with_context(|| format!("parse spec fixture {name}"))
+}
+
 fn load_fixture(name: &str) -> Result<Value> {
     let path = fixtures_dir().join(name);
     let raw = fs::read_to_string(&path).with_context(|| format!("read fixture {name}"))?;
@@ -67,7 +73,10 @@ fn strong_catalog() -> EventPayloadValidatorCatalog {
 
 #[test]
 fn coverage_fixture_active_and_revoked_realm_organization_payloads_validate() -> Result<()> {
-    let fixture = load_fixture("event-kind-payload-coverage-fixture.json")?;
+    // This one is a spec artifact, not a cotest-local vector file. Reading it
+    // out of `tests/fixtures` looked for a copy that does not exist, so the
+    // suite failed on a missing file rather than on any payload it validates.
+    let fixture = load_spec_fixture("event-kind-payload-coverage-fixture.json")?;
     let catalog = strong_catalog();
 
     let positives = fixture

@@ -171,6 +171,22 @@ fn station_cas_observation(
     })
 }
 
+/// Return `value` with any `local_live_keys` array sorted in place.
+fn sort_live_key_rows(value: &Value) -> Value {
+    let mut value = value.clone();
+    if let Some(keys) = value
+        .get_mut("local_live_keys")
+        .and_then(Value::as_array_mut)
+    {
+        keys.sort_by(|left, right| {
+            left.as_str()
+                .unwrap_or_default()
+                .cmp(right.as_str().unwrap_or_default())
+        });
+    }
+    value
+}
+
 pub fn run_station_cas_account_data_vector() -> Result<()> {
     let fixture = load_fixture_value("sync-fixture.json")?;
     let vector = required_field(&fixture, "station_cas_account_data")?;
@@ -230,6 +246,16 @@ pub fn run_station_cas_account_data_vector() -> Result<()> {
             .and_then(Value::as_array)
             .is_some_and(|channels| channels.iter().any(|channel| channel == "station_cas"));
         let observed = station_cas_observation(name, delta, complete, &baseline, &registered_keys);
+        // `local_live_keys` is the set of keys whose row is live. Neither
+        // `client-sync.md` section 9 nor the vector declares an order for it,
+        // and the fixture's own rows show none is being asserted: the
+        // expectation is spelled in the vector's declared key order while the
+        // upserts that produce it arrive in the opposite one. Both sides are
+        // therefore ordered before comparison, so the assertion stays exactly
+        // "the same keys are live" and does not pin an order the spec leaves
+        // open.
+        let expected = &sort_live_key_rows(expected);
+        let observed = sort_live_key_rows(&observed);
         assert_expected_subset(name, expected, &observed)?;
         record_vector_event(
             &format!("sync.station_cas_account_data.{name}"),

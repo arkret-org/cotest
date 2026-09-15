@@ -516,7 +516,7 @@ pub(crate) use fixture_dsl::{
     string_set_of, string_vec,
 };
 
-pub(crate) fn spec_artifacts_root() -> PathBuf {
+pub fn spec_artifacts_root() -> PathBuf {
     if let Some(root) = std::env::var_os("COTEST_SPEC_ARTIFACTS_ROOT") {
         return PathBuf::from(root);
     }
@@ -538,7 +538,7 @@ pub(crate) fn spec_artifacts_root() -> PathBuf {
         .join("artifacts")
 }
 
-pub(crate) fn fixture_path(file_name: &str) -> PathBuf {
+pub fn fixture_path(file_name: &str) -> PathBuf {
     if let Some(root) = std::env::var_os("COTEST_SPEC_ROOT") {
         let root = PathBuf::from(root);
         for artifact_root in spec_artifact_candidates(&root) {
