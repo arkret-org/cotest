@@ -568,12 +568,7 @@ pub fn principal_registration_fixture(input: Value) -> Result<Value> {
         // is an event-derived kind, so its id is a function of this finished
         // envelope; the id-only field this fixture used to emit was both
         // unreadable by Inkson and a forbidden random mint.
-        "pcr_genesis_unit": {
-            "events": [
-                creation_events.realm_create,
-                creation_events.founding_device_authorize
-            ],
-        },
+        "pcr_genesis_unit": creation_events,
         "initial_session": initial_session,
         "device_signing_seed_b64url": device_signing_seed,
         "genesis_created_at": arkret_canonical::format_timestamp_canonical(created_at),
@@ -611,7 +606,7 @@ fn build_pcr_genesis_unit(
     device_id: &str,
     device_seed_basis: &[u8],
     created_at: chrono::DateTime<Utc>,
-) -> Result<(arkret_models_identity::IdentityCreationEvents, String)> {
+) -> Result<(arkret_wire::PcrGenesisUnit, String)> {
     let principal_id = project_did_to_core_id(principal)?;
     let principal_device_id = DeviceId::new(device_id.to_owned()).context("parse device id")?;
     let device_seed: [u8; 32] = Sha256::digest(
@@ -747,11 +742,8 @@ fn build_pcr_genesis_unit(
         arkret::signatures::SignEventOptions::new().with_created_at(created_at),
     )?;
     Ok((
-        arkret_bootstrap::build_identity_creation_events(
-            create.into_event(),
-            authorize.into_event(),
-        )
-        .context("package the identity creation Events")?,
+        arkret_wire::PcrGenesisUnit::new(create.into_event(), authorize.into_event())
+            .context("package the PCR genesis unit")?,
         base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(device_seed),
     ))
 }
