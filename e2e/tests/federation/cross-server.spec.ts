@@ -45,7 +45,6 @@ import {
   grantServiceCapabilityApi,
   listInvitesApi,
   makeFederationEvent,
-  peerEventFrontierApi,
   pushFederationEvents,
   rawPushFederationEvents,
   queryRealmEventsApi,

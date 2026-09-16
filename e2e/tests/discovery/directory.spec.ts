@@ -29,7 +29,6 @@ import {
   prepareSignedEventSubmissionApi,
   principalControlRealmForId,
   signedEventEnvelope,
-  submitPrincipalSuccessorSealApi,
   wireErrCode,
 } from "../../helpers/soland-api";
 
@@ -268,12 +267,6 @@ test.describe("discovery", () => {
     let update = await postProfile();
     if (update.status() === 503) {
       expect(await update.text()).toContain("frontier_unavailable");
-      await submitPrincipalSuccessorSealApi(
-        request,
-        bobToken,
-        bob.id,
-        profileEvent,
-      );
       for (let attempt = 0; attempt < 120; attempt += 1) {
         update = await postProfile();
         if (update.status() !== 503) break;

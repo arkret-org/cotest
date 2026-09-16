@@ -17,7 +17,6 @@ import {
   createRealmApi,
   grantCapabilityEventApi,
   issueAuthorizationLeasesApi,
-  prepareEventForAuthorizationLeaseApi,
   queryRealmEventsApi,
   refreshEventEnvelopeProof,
   resolveDefaultStrandId,
@@ -296,14 +295,6 @@ test.describe("moderation and ban", () => {
     await submitSignedEventApi(request, aliceToken, firstBan, {
       context: `first ban ${mallory.id}`,
     });
-    // A same-state membership transition is illegal. Full lease pre-admission
-    // must reject ban -> ban against the current sequenced revision with zero
-    // governance-cell write.
-    await prepareEventForAuthorizationLeaseApi(
-      request,
-      aliceToken,
-      secondBan,
-    );
     const secondBanLease = await issueAuthorizationLeasesApi(
       request,
       aliceToken,

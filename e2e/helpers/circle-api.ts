@@ -32,7 +32,6 @@ import {
   canonicalTimestamp,
   expectJsonOk,
   issueAuthorizationLeasesApi,
-  prepareEventForAuthorizationLeaseApi,
   prepareSignedEventSubmissionApi,
   signedEventEnvelope,
   submitSignedEventApi,
@@ -356,12 +355,6 @@ export async function issueCircleMemberLeaseRaw(
       membership: args.membership ?? "join",
     },
   });
-  await prepareEventForAuthorizationLeaseApi(
-    request,
-    token,
-    envelope,
-    args.server,
-  );
   return await issueAuthorizationLeasesApi(
     request,
     token,

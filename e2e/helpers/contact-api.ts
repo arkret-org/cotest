@@ -30,7 +30,6 @@ import {
   signWithRegisteredEventSigner,
   signedEventEnvelope,
   submitPeerInviteDeliveryApi,
-  submitPrincipalSuccessorSealApi,
   submitSignedEventApi,
   cotestWire,
   type InviteDeliveryOutcomeView,
@@ -160,13 +159,6 @@ export async function grantInviteConsentArkret(
     server: opts.server,
     context: `grant invite consent to ${peerId}`,
   });
-  await submitPrincipalSuccessorSealApi(
-    request,
-    token,
-    holder.id,
-    envelope,
-    opts,
-  );
   const eventRef = String(envelope.event_id);
   const dot = `${eventRef}:0`;
   await expect
@@ -271,13 +263,6 @@ export async function requestContactArkret(
       `contact request -> ${target} was not accepted: ${JSON.stringify(accepted)}`,
     );
   }
-  await submitPrincipalSuccessorSealApi(
-    request,
-    token,
-    eventPrincipalId(signedEvent),
-    signedEvent,
-    { server: opts.server },
-  );
   const outcome: ContactRequestOutcome = {
     request_event_ref:
       accepted.request_acceptance_receipt.core.request_event_ref,
@@ -418,13 +403,6 @@ export async function respondContactArkret(
   const accepted = await expectJsonOk<Record<string, unknown>>(
     response,
     `contact respond ${opts.action} <- ${opts.requesterId}`,
-  );
-  await submitPrincipalSuccessorSealApi(
-    request,
-    token,
-    eventPrincipalId(signedEvent),
-    signedEvent,
-    { server: opts.server },
   );
   const receipt =
     (accepted.normal_response_acceptance_receipt as
@@ -567,13 +545,6 @@ export async function tombstoneContactArkret(
     }),
   });
   if (response.ok()) {
-    await submitPrincipalSuccessorSealApi(
-      request,
-      token,
-      eventPrincipalId(signedEvent),
-      signedEvent,
-      { server: opts.server },
-    );
   }
   const accepted = await expectJsonOk<ContactTombstoneOutcome>(
     response,

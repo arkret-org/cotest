@@ -21,6 +21,7 @@ import {
   canonicalTimestamp,
   createRealmApi,
   rawSubmitSignedEventApi,
+  scanRealmStreamApi,
   sdkEventDerivedObjectId,
   signedEventEnvelope,
   submitSignedEventApi,
@@ -360,13 +361,14 @@ test.describe("kanban end-to-end", () => {
     }
   });
 
-  test("stale actor branch: accepted frontier rejects the later stale move with cas_conflict", async ({
+  test("two moves of one card commit in order and the later commit wins", async ({
     request,
   }) => {
-    // The two locally authored Events use the same actor frontier. Once the
-    // first is accepted, an unseen second Event signed against the older actor
-    // sequence is rejected at actor-chain admission with cas_conflict. This is
-    // independent of the registered causal_register used for strand position.
+    // A producer Event carries no stamp to go stale against: it names no
+    // predecessor, no position and no compare-and-swap basis. Two independently
+    // authored moves of the same card are therefore both admissible, and the
+    // governance Station decides between them by the order it commits them.
+    // Convergence is "the later commit wins", read off the Realm stream.
     const stamp = Date.now();
     const alice = uniqueUser("kanban-cas-alice");
     await ensureRegistered(request, alice);
@@ -445,20 +447,34 @@ test.describe("kanban end-to-end", () => {
       `CAS frontier advance ${stamp}`,
     );
 
-    // Loser targets the SAME card but is stamped behind the accepted frontier
-    // → cas_conflict. It still has to use the canonical lease/publication
-    // rail; the negative helper disables only the normal automatic frontier
-    // repair so that the stale verdict remains observable.
-    const loserResponse = await rawSubmitSignedEventApi(
-      request,
-      aliceToken,
-      loserMove,
-      { retryActorFrontier: false },
+    // The second move of the same card is admitted too: nothing on the
+    // envelope binds it to a state the first move invalidated.
+    const later = await submitSignedEventApi(request, aliceToken, loserMove, {
+      context: "concurrent move follower",
+    });
+    const laterCommit = later.commit as Record<string, unknown>;
+
+    // Both moves sit in this Realm's own stream, and the follower is strictly
+    // after the winner. That ordering — not a stamp the producer carried — is
+    // what makes the outcome deterministic for every reader.
+    const scan = await scanRealmStreamApi(request, aliceToken, realmId);
+    const moves = scan.commits.filter(
+      (_commit: Record<string, unknown>, index: number) =>
+        scan.events[index]!.kind === "ak.strand.move",
     );
-    const loserBody = await loserResponse.json();
-    const loserReason =
-      wireErrCode(loserBody) ?? loserBody.rejections?.[0]?.reason_code;
-    expect(loserReason, JSON.stringify(loserBody)).toBe("cas_conflict");
+    expect(moves.length, "both moves were committed").toBe(2);
+    expect(
+      Number(moves[1]!.stream_position) > Number(moves[0]!.stream_position),
+      "the follower commit is strictly after the winner",
+    ).toBe(true);
+    expect(
+      laterCommit.commit_id,
+      "the follower is the last committed move",
+    ).toBe(moves[1]!.commit_id);
+    expect(
+      moves[1]!.stream_ref,
+      "both moves stay in the one Realm stream",
+    ).toEqual({ kind: "realm", realm_id: realmId });
   });
 
   test("cross-realm contains relation rejected with reason=cross_realm_structural_relation", async ({

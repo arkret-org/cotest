@@ -26,7 +26,6 @@ import {
   principalControlRealmForId,
   retypeEventDerivedId,
   signedEventEnvelope,
-  submitPrincipalSuccessorSealApi,
 } from "../../helpers/soland-api";
 
 /// The prepared submission carries the envelope after CBS plane, frontier
@@ -95,12 +94,6 @@ test.describe("contact confirmed display name", () => {
           });
         let response = await send();
         if (response.status() === 503) {
-          await submitPrincipalSuccessorSealApi(
-            request,
-            bobToken,
-            bob.id,
-            envelope,
-          );
           for (let attempt = 0; attempt < 120; attempt += 1) {
             response = await send();
             if (response.status() !== 503) break;
