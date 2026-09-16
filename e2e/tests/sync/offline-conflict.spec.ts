@@ -11,7 +11,6 @@ import {
 } from "../../helpers/api";
 import {
   acceptInviteApi,
-  advanceEnvelopeToActorFrontier,
   authHeaders,
   createRealmApi,
   listInvitesApi,
@@ -308,12 +307,6 @@ test.describe("offline sync + conflict repair", () => {
         },
       },
     });
-    await advanceEnvelopeToActorFrontier(
-      request,
-      aliceToken,
-      missingEvent,
-      "server1",
-    );
     const server1EventsBeforeOfflineWrite = await queryRealmEventsApi(
       request,
       aliceToken,

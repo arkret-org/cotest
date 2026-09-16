@@ -7,7 +7,6 @@ import { solandBaseUrl } from "../../helpers/env";
 import {
   accountActorId,
   addRealmMemberApi,
-  advanceEnvelopeToActorFrontier,
   authHeaders,
   canonicalJson,
   canonicalTimestamp,
@@ -184,11 +183,6 @@ async function fileModerationReport(
       evidence_refs: [],
     },
   });
-  await advanceEnvelopeToActorFrontier(
-    request,
-    setup.reporterToken,
-    reportEvent,
-  );
   const sealLeaves: unknown = undefined;
   if (!Array.isArray(sealLeaves) || typeof sealLeaves[0] !== "string") {
     throw new Error("moderation report Realm has no accepted Seal reference");

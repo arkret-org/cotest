@@ -31,10 +31,8 @@ import {
 } from "../../helpers/api";
 import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
 import {
-  alignSignedEventToActorFrontierApi,
   authHeaders,
   canonicalJson,
-  prepareSignedEventCbsApi,
   refreshEventEnvelopeProof,
   resolveDefaultStrandId,
   signedEventEnvelope,
@@ -415,8 +413,6 @@ test.describe("service surface contract — error envelope, pagination, idempote
           content: { kind: "ak.content.text", body },
         },
       });
-      await prepareSignedEventCbsApi(request, token, envelope);
-      await alignSignedEventToActorFrontierApi(request, token, envelope);
       const eventId = String(envelope.event_id);
       const submitUrl = `${solandBaseUrl()}/_arkret/self/events`;
 
@@ -673,8 +669,6 @@ test.describe("service surface contract — error envelope, pagination, idempote
       const submitUrl = `${solandBaseUrl()}/_arkret/self/events`;
       // R1 — first request under the key executes and is cached.
       const b1 = messageEnvelope(`idem body ${stamp} v1`);
-      await prepareSignedEventCbsApi(request, token, b1);
-      await alignSignedEventToActorFrontierApi(request, token, b1);
       const r1 = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: { ...authHeaders(token, "POST", submitUrl), "idempotency-key": idempotencyKey, "content-type": "application/json" },
         data: canonicalJson({ event: b1 }),
@@ -701,8 +695,6 @@ test.describe("service surface contract — error envelope, pagination, idempote
 
       // R3 — same key + DIFFERENT canonical body (fresh event_id) → duplicate_conflict.
       const b2 = messageEnvelope(`idem body ${stamp} v2-divergent`);
-      await prepareSignedEventCbsApi(request, token, b2);
-      await alignSignedEventToActorFrontierApi(request, token, b2);
       const r3 = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: { ...authHeaders(token, "POST", submitUrl), "idempotency-key": idempotencyKey, "content-type": "application/json" },
         data: canonicalJson({ event: b2 }),
@@ -753,8 +745,6 @@ test.describe("service surface contract — error envelope, pagination, idempote
           content: { kind: "ak.content.text", body: "must not accept unknown feature" },
         },
       });
-      await prepareSignedEventCbsApi(request, token, envelope);
-      await alignSignedEventToActorFrontierApi(request, token, envelope);
       (envelope.requirements as { features: string[] }).features = [undeclaredFeature];
       refreshEventEnvelopeProof(envelope);
       const eventId = String(envelope.event_id);
@@ -801,8 +791,6 @@ test.describe("service surface contract — error envelope, pagination, idempote
           },
         },
       });
-      await prepareSignedEventCbsApi(request, token, envelope);
-      await alignSignedEventToActorFrontierApi(request, token, envelope);
       (
         envelope.requirements as {
           critical_extensions: Array<{

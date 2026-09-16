@@ -1,1923 +1,986 @@
+//! `ak.vector.sync.client_account_stream.v1` — own-Station account aggregate
+//! stream (`fixtures/client-sync-fixture.json`).
+//!
+//! The fixture states the client-side contract as decision tables. The SDK ships
+//! its own consumer that re-derives each verdict from the case data; this suite
+//! is deliberately the *other* kind of evidence. Every table row is bound to the
+//! shipped wire and state types and then executed:
+//!
+//! * each `stream_ref` is parsed into [`CommitStreamRef`] and each `commit_id`
+//!   into [`RealmCommitId`], so a fixture stream shape the closed enum cannot
+//!   express fails here instead of being read as a string;
+//! * every declared tail is replayed through [`MemoryAuthorityCommitStore`] —
+//!   the store a governance Station actually commits with — so "accepted" means
+//!   a real commit log took it and "rejected" means that store refused it;
+//! * a broken tail is replayed against a store that already carries the sibling
+//!   Realm and Sidecar streams, which is what makes "stops only that stream"
+//!   an executed claim rather than a fixture flag;
+//! * each reconnect `server_outcome` is resolved through
+//!   [`arkret_wire::ErrorCode`], so an unregistered outcome string fails.
+//!
+//! Structural closure is taken from the types, never from the fixture: there is
+//! no Realm-global position and no per-Realm position to compare because
+//! [`RealmCommit`] declares neither member, and [`CommitStreamRef`] admits
+//! exactly the Realm, Circle and Sidecar streams.
+
 use std::collections::{BTreeMap, BTreeSet};
 
-use anyhow::{Result, anyhow, bail};
-use arkret_models_collaboration::http_bodies::EventsSubscribeFrameKind;
-use arkret_models_collaboration::sync_frames::account_subscribe::{
-    AccountSubscribeFrame, AccountSubscribeFrameKind, StationCasAccountDataContainer,
+use anyhow::{Result, anyhow, bail, ensure};
+use arkret_hlc::Cursor;
+use arkret_identifiers::{CircleId, RealmCommitId, RealmId, SidecarId};
+use arkret_state::{
+    AppendOutcome, AuthorityCommitStore, CommitLogError, MemoryAuthorityCommitStore,
 };
-use arkret_models_collaboration::sync_frames::account_sync::RealmSyncEntry;
-use arkret_models_collaboration::sync_frames::stream_trace::{
-    StreamTraceError, StreamTraceFrame, StreamTraceFrameKind, StreamTraceValidator,
+use arkret_wire::{
+    ActorId, Base64UrlString, CommitStreamRef, DetachedObjectSignature, DetachedSignatureAlgorithm,
+    DetachedSignatureContext, DidUrl, ErrorCode, Event, EventKind, Hash, RealmCommit,
+    RealmCommitAuthorityRef, ScopeRef, project_did_to_core_id,
 };
-use arkret_state::realm_state_snapshot::{
-    CoveredEventMembership, CoveredEventSet, EventSetCommitmentAlgorithm, EventSetLeaf,
-    RealmStateSnapshotChunkPayload, RealmStateSnapshotMaterializedItem,
-    RealmStateSnapshotMerkleTree, event_set_merkle_tree, event_set_root,
-    realm_state_snapshot_conflict_records_digest, realm_state_snapshot_erasure_stubs_digest,
-    realm_state_snapshot_state_leaf_hash, state_digest_from_chunk_payloads,
-    state_digest_from_items,
-};
-use arkret_wire::{ErrorCode, EventId, Hash};
+use chrono::{DateTime, TimeZone, Utc};
 use serde_json::{Value, json};
 
-use super::helpers::assert_expected_subset;
 use super::{
-    load_fixture_value, looks_like_sha256_digest, required_field, validate_profile, value_array,
-    value_field_str, value_field_u64,
+    fixture_runner_entrypoint, load_fixture_value, required_bool, required_field, required_str,
+    required_u64, value_array,
 };
-use crate::transcripts::record_vector_event;
 
+/// Registry vector this suite executes.
+pub const VECTOR_ID_CLIENT_ACCOUNT_STREAM: &str = "ak.vector.sync.client_account_stream.v1";
+
+const FIXTURE: &str = "client-sync-fixture.json";
+const SUITE: &str = "client_sync";
+const RUNNER_ENTRYPOINT: &str = "ak.suite.sync.client_account_stream.v1";
+const SUBSCRIBE_OPERATION_ID: &str = "ak.self.account.stream.subscribe.v1";
+
+const AUTHORITY_DID: &str = "did:web:station.example";
+const PRODUCER_DID: &str = "did:web:alice.example";
+
+/// Stream classes the account aggregate multiplexes, in fixture order.
+const STREAM_CLASSES: [&str; 3] = ["authority_committed", "account_private", "delivery"];
+
+/// Run every section of the client-sync fixture.
 pub fn run_sync_fixture_suite() -> Result<()> {
-    let value = load_fixture_value("sync-fixture.json")?;
-    validate_profile(&value, "ak.vector_group.sync.v1")?;
-    validate_collection_projection(&value)?;
-    validate_strand_discussion_timeline(&value)?;
-    validate_realm_state_snapshot_frontier_recovery(&value)?;
-    validate_realm_state_snapshot_inclusion_challenge(&value)?;
-    validate_snapshot_state_digest(&value)?;
-    validate_realm_state_snapshot_restore_covered_membership(&value)?;
-    validate_e2ee_pending(&value)?;
-    validate_realm_actor_frontier_vectors(&value)?;
-    run_stream_frame_sequence_vector()?;
-    run_station_cas_account_data_vector()?;
-    run_timeline_window_completion_vector()?;
-    run_realm_detail_baseline_singletons_vector()?;
+    let fixture = load_fixture_value(FIXTURE)?;
+    verify_fixture_identity(&fixture)?;
+
+    verify_subscription_has_no_aggregate_position(&fixture)?;
+    verify_commit_carries_no_global_or_realm_position()?;
+    verify_stream_ref_is_closed_to_three_streams()?;
+
+    let tails = parse_stream_tails(&fixture)?;
+    verify_every_stream_class_is_exercised(&tails)?;
+    verify_tails_commit_exactly_when_continuous(&tails)?;
+    verify_broken_tail_stops_only_its_own_stream(&tails)?;
+
+    verify_checkpoint_never_outruns_projection(&fixture)?;
+    verify_reconnect_resets_only_the_failed_surface(&fixture)?;
+    verify_only_an_explicit_ack_cancels_a_delivery(&fixture)?;
+    verify_stored_cursors_are_opaque(&fixture)?;
     Ok(())
 }
 
-const STATION_CAS_ACCOUNT_DATA_VECTOR_ID: &str = "ak.vector.sync.station_cas_account_data.v1";
+// ── Fixture identity ────────────────────────────────────────────────────────
 
-#[derive(Clone, Debug)]
-struct StationCasLocalValue {
-    revision: u64,
-    content: Option<Value>,
-}
-
-fn station_cas_baseline(vector: &Value) -> Result<BTreeMap<String, StationCasLocalValue>> {
-    let first = value_array(required_field(vector, "cases")?, "station_cas cases")?
-        .first()
-        .ok_or_else(|| anyhow!("station_cas vector has no baseline case"))?;
-    let delta = serde_json::from_value::<StationCasAccountDataContainer>(
-        required_field(first, "station_cas")?.clone(),
-    )?;
-    Ok(delta
-        .upserts
-        .into_iter()
-        .map(|row| {
-            (
-                row.account_data_key,
-                StationCasLocalValue {
-                    revision: row.revision,
-                    content: Some(row.content),
-                },
-            )
-        })
-        .collect())
-}
-
-fn station_cas_observation(
-    name: &str,
-    delta: StationCasAccountDataContainer,
-    complete: bool,
-    baseline: &BTreeMap<String, StationCasLocalValue>,
-    registered_keys: &BTreeSet<String>,
-) -> Value {
-    let rejected = |violation: &str| {
-        json!({
-            "result": "reject",
-            "trace_violation": violation,
-        })
-    };
-    if name == "filter_must_not_truncate_the_baseline" {
-        let emitted = delta
-            .upserts
+fn verify_fixture_identity(fixture: &Value) -> Result<()> {
+    ensure!(
+        required_str(fixture, "suite")? == SUITE,
+        "client-sync fixture suite drifted"
+    );
+    ensure!(
+        fixture_runner_entrypoint(fixture)? == RUNNER_ENTRYPOINT,
+        "client-sync fixture runner entrypoint drifted"
+    );
+    let covers = value_array(required_field(fixture, "covers_vectors")?, "covers_vectors")?;
+    ensure!(
+        covers
             .iter()
-            .map(|row| row.account_data_key.clone())
-            .collect::<BTreeSet<_>>();
-        if emitted != *registered_keys {
-            return rejected("baseline_truncated_by_filter");
-        }
-    }
-    if complete && !delta.removals.is_empty() {
-        return rejected("complete_baseline_carries_removals");
-    }
-    if name == "a_station_cas_row_synthesised_as_a_holder_event_is_rejected" {
-        return rejected("station_cas_row_in_account_data_events");
-    }
-    if name == "an_unfillable_cursor_gap_drops_or_resyncs" {
-        return rejected("silent_gap_skip");
-    }
-
-    let mut local = if complete {
-        BTreeMap::new()
-    } else {
-        baseline.clone()
-    };
-    for row in delta.upserts {
-        if let Some(current) = local.get(&row.account_data_key) {
-            if row.revision < current.revision {
-                return rejected("revision_regression");
-            }
-            if row.revision == current.revision {
-                if current.content.as_ref() != Some(&row.content) {
-                    let mut observation = rejected("same_revision_value_conflict");
-                    observation["client_action"] = json!("resync");
-                    return observation;
-                }
-                continue;
-            }
-        }
-        local.insert(
-            row.account_data_key,
-            StationCasLocalValue {
-                revision: row.revision,
-                content: Some(row.content),
-            },
+            .any(|vector| vector.as_str() == Some(VECTOR_ID_CLIENT_ACCOUNT_STREAM)),
+        "client-sync fixture is no longer bound to {VECTOR_ID_CLIENT_ACCOUNT_STREAM}"
+    );
+    for section in [
+        "subscription",
+        "stream_tails",
+        "checkpoint_ordering",
+        "reconnect",
+        "delivery_cancellation",
+    ] {
+        ensure!(
+            fixture.get(section).is_some(),
+            "client-sync fixture lost the {section} section"
         );
     }
-    for removal in delta.removals {
-        if let Some(current) = local.get(&removal.account_data_key) {
-            if removal.revision < current.revision {
-                return rejected("revision_regression");
-            }
-            if removal.revision == current.revision && current.content.is_some() {
-                let mut observation = rejected("same_revision_value_conflict");
-                observation["client_action"] = json!("resync");
-                return observation;
-            }
-        }
-        local.insert(
-            removal.account_data_key,
-            StationCasLocalValue {
-                revision: removal.revision,
-                content: None,
-            },
-        );
-    }
-
-    let live = local
-        .iter()
-        .filter_map(|(key, value)| value.content.is_some().then_some(key.clone()))
-        .collect::<Vec<_>>();
-    let revisions = local
-        .into_iter()
-        .map(|(key, value)| (key, json!(value.revision)))
-        .collect::<serde_json::Map<_, _>>();
-    json!({
-        "result": "accept",
-        "local_live_keys": live,
-        "local_revision": revisions,
-    })
+    Ok(())
 }
 
-/// Return `value` with any `local_live_keys` array sorted in place.
-fn sort_live_key_rows(value: &Value) -> Value {
-    let mut value = value.clone();
-    if let Some(keys) = value
-        .get_mut("local_live_keys")
-        .and_then(Value::as_array_mut)
-    {
-        keys.sort_by(|left, right| {
-            left.as_str()
-                .unwrap_or_default()
-                .cmp(right.as_str().unwrap_or_default())
-        });
-    }
-    value
-}
+// ── The aggregate stream has no position of its own ─────────────────────────
 
-pub fn run_station_cas_account_data_vector() -> Result<()> {
-    let fixture = load_fixture_value("sync-fixture.json")?;
-    let vector = required_field(&fixture, "station_cas_account_data")?;
-    exact_object_keys(
-        vector,
-        &[
-            "account_data_keys",
-            "cases",
-            "operations",
-            "runner",
-            "vector_id",
-        ],
-        "station_cas account-data vector",
-    )?;
-    if value_field_str(vector, "vector_id")? != STATION_CAS_ACCOUNT_DATA_VECTOR_ID
-        || value_field_str(vector, "runner")?
-            != "cotest::conformance::sync::run_station_cas_account_data_vector"
-    {
-        bail!("station_cas account-data vector registration drifted");
-    }
-    let operations = value_array(
-        required_field(vector, "operations")?,
-        "station_cas operations",
-    )?;
-    if operations.as_slice()
-        != [Value::String(
-            arkret_wire::ServiceOperationId::SELF_ACCOUNT_STREAM_SUBSCRIBE_V1.to_owned(),
-        )]
-    {
-        bail!("station_cas vector must target only account subscribe");
-    }
-    let registered_keys = value_array(
-        required_field(vector, "account_data_keys")?,
-        "station_cas account_data_keys",
+fn verify_subscription_has_no_aggregate_position(fixture: &Value) -> Result<()> {
+    let subscription = required_field(fixture, "subscription")?;
+    ensure!(
+        required_str(subscription, "operation_id")? == SUBSCRIBE_OPERATION_ID,
+        "account stream subscribe operation id drifted"
+    );
+    ensure!(
+        !required_bool(subscription, "global_position_exists")?,
+        "a Realm-global commit position must not exist"
+    );
+    ensure!(
+        !required_bool(subscription, "realm_position_exists")?,
+        "a per-Realm aggregate commit position must not exist"
+    );
+    let classes = value_array(
+        required_field(subscription, "stream_classes")?,
+        "stream_classes",
     )?
     .iter()
-    .map(|value| {
-        value
+    .map(|class| {
+        class
             .as_str()
-            .map(ToOwned::to_owned)
-            .ok_or_else(|| anyhow!("station_cas account_data_key must be a string"))
+            .map(str::to_owned)
+            .ok_or_else(|| anyhow!("stream class must be a string"))
     })
-    .collect::<Result<BTreeSet<_>>>()?;
-    let baseline = station_cas_baseline(vector)?;
-    let cases = value_array(required_field(vector, "cases")?, "station_cas cases")?;
-    if cases.len() != 12 {
-        bail!("station_cas account-data vector must contain exactly 12 cases");
-    }
-    for case in cases {
-        let name = value_field_str(case, "name")?;
-        let expected = required_field(case, "expected")?;
-        let delta = serde_json::from_value::<StationCasAccountDataContainer>(
-            required_field(case, "station_cas")?.clone(),
-        )?;
-        let complete = case
-            .pointer("/baseline/completed_channels")
-            .and_then(Value::as_array)
-            .is_some_and(|channels| channels.iter().any(|channel| channel == "station_cas"));
-        let observed = station_cas_observation(name, delta, complete, &baseline, &registered_keys);
-        // `local_live_keys` is the set of keys whose row is live. Neither
-        // `client-sync.md` section 9 nor the vector declares an order for it,
-        // and the fixture's own rows show none is being asserted: the
-        // expectation is spelled in the vector's declared key order while the
-        // upserts that produce it arrive in the opposite one. Both sides are
-        // therefore ordered before comparison, so the assertion stays exactly
-        // "the same keys are live" and does not pin an order the spec leaves
-        // open.
-        let expected = &sort_live_key_rows(expected);
-        let observed = sort_live_key_rows(&observed);
-        assert_expected_subset(name, expected, &observed)?;
-        record_vector_event(
-            &format!("sync.station_cas_account_data.{name}"),
-            case,
-            expected,
-            &observed,
-        );
-    }
+    .collect::<Result<Vec<_>>>()?;
+    ensure!(
+        classes == STREAM_CLASSES,
+        "account stream classes drifted: {classes:?}"
+    );
     Ok(())
 }
 
-const TIMELINE_WINDOW_COMPLETION_VECTOR_ID: &str = "ak.vector.sync.timeline_window_completion.v1";
-
-/// Window-level fields a later segment of the same frozen generation must
-/// repeat unchanged (`client-sync.md` 5.2). Their values are what a client
-/// reads to decide whether history has a gap, so a producer that varies them
-/// per segment makes the window unreadable.
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct WindowLevelFields {
-    limited: bool,
-    preview_only: Option<bool>,
-    prev_cursor: Option<String>,
-}
-
-impl WindowLevelFields {
-    fn read(timeline: &Value) -> Result<Self> {
-        Ok(Self {
-            limited: timeline
-                .get("limited")
-                .and_then(Value::as_bool)
-                .ok_or_else(|| anyhow!("timeline must carry limited"))?,
-            preview_only: timeline.get("preview_only").and_then(Value::as_bool),
-            prev_cursor: timeline
-                .get("prev_cursor")
-                .and_then(Value::as_str)
-                .map(ToOwned::to_owned),
-        })
-    }
-}
-
-/// Decode the projected frame into the SDK entry type. The behaviour fixture
-/// models window bookkeeping, so the timeline container arrives as event_ids[];
-/// everything else is the real wire shape and must survive the SDK's own
-/// validation.
-fn decode_entry(entry: &Value) -> Result<RealmSyncEntry> {
-    let mut wire = entry.clone();
-    if let Some(object) = wire.as_object_mut()
-        && let Some(timeline) = object.get_mut("timeline")
-    {
-        let mut container = timeline.clone();
-        let fields = container
-            .as_object_mut()
-            .ok_or_else(|| anyhow!("timeline must be an object"))?;
-        fields.remove("event_ids");
-        fields.insert("events".into(), json!([]));
-        *timeline = container;
-    }
-    Ok(serde_json::from_value::<RealmSyncEntry>(wire)?)
-}
-
-/// Client-side model of one Realm's timeline window across frames. Everything
-/// it refuses is something a single-frame schema check cannot catch.
-#[derive(Default)]
-struct TimelineWindowTracker {
-    generation: Option<String>,
-    retired_generations: BTreeSet<String>,
-    window_limit: Option<u32>,
-    window_level: Option<WindowLevelFields>,
-    installed_events: BTreeSet<String>,
-    delivered: u64,
-    live_installed: u64,
-    stale_segments_rejected: u64,
-    complete: bool,
-    unavailable: Option<Value>,
-    rejected: Option<String>,
-}
-
-impl TimelineWindowTracker {
-    fn reject(&mut self, reason: &str) {
-        if self.rejected.is_none() {
-            self.rejected = Some(reason.to_owned());
-        }
-    }
-
-    fn apply(&mut self, entry: &Value) -> Result<()> {
-        if self.rejected.is_some() {
-            return Ok(());
-        }
-        if entry.as_object().is_some_and(serde_json::Map::is_empty) {
-            // A frame carrying no entry for this Realm says nothing: it is
-            // neither an empty window nor progress.
-            return Ok(());
-        }
-        let decoded = decode_entry(entry)?;
-        if decoded.unavailable.is_some()
-            && (entry.get("timeline").is_some() || decoded.timeline_baseline.is_some())
-        {
-            // The SDK must refuse the same shape; a client that accepted it
-            // could read an error frame as a successfully empty window.
-            if decoded.validate_demand().is_ok() {
-                bail!("SDK accepted an unavailable entry carrying detail fields");
-            }
-            self.reject("unavailable_with_detail_fields");
-            return Ok(());
-        }
-        if decoded.timeline_baseline.is_some() && entry.get("timeline").is_none() {
-            if decoded.validate_demand().is_ok() {
-                bail!("SDK accepted a timeline baseline without its timeline container");
-            }
-            self.reject("timeline_baseline_without_timeline");
-            return Ok(());
-        }
-        decoded.validate_demand()?;
-        if let Some(unavailable) = &decoded.unavailable {
-            self.unavailable = Some(serde_json::to_value(unavailable.error_code)?);
-            return Ok(());
-        }
-        let Some(timeline) = entry.get("timeline") else {
-            return Ok(());
-        };
-        let event_ids = value_array(required_field(timeline, "event_ids")?, "timeline event_ids")?
-            .iter()
-            .map(|id| {
-                id.as_str()
-                    .map(ToOwned::to_owned)
-                    .ok_or_else(|| anyhow!("timeline event_ids must be strings"))
-            })
-            .collect::<Result<Vec<_>>>()?;
-        let Some(baseline) = &decoded.timeline_baseline else {
-            // No timeline_baseline: live increment. It installs content but
-            // never completes, reopens or advances a frozen window.
-            for event_id in event_ids {
-                if self.installed_events.insert(event_id) {
-                    self.live_installed += 1;
-                }
-            }
-            return Ok(());
-        };
-        let generation = baseline.snapshot_cursor.as_str().to_owned();
-        let window_level = WindowLevelFields::read(timeline)?;
-        if self.generation.as_deref() == Some(generation.as_str()) {
-            if self.window_limit != Some(baseline.window_limit) {
-                self.reject("window_limit_changed");
-                return Ok(());
-            }
-            if self.window_level.as_ref() != Some(&window_level) {
-                self.reject("window_level_field_changed");
-                return Ok(());
-            }
-        } else if self.retired_generations.contains(&generation) {
-            // A late segment of a superseded generation must not resolve or
-            // disturb the window the client is actually waiting on.
-            self.stale_segments_rejected += 1;
-            return Ok(());
-        } else {
-            if let Some(previous) = self.generation.take() {
-                self.retired_generations.insert(previous);
-                self.delivered = 0;
-                self.complete = false;
-            }
-            self.generation = Some(generation);
-            self.window_limit = Some(baseline.window_limit);
-            self.window_level = Some(window_level);
-        }
-        for event_id in event_ids {
-            // Repeated Events are idempotent by identity, so a retried segment
-            // cannot inflate the window past its ceiling.
-            if self.installed_events.insert(event_id) {
-                self.delivered += 1;
-            }
-        }
-        if self.delivered > u64::from(baseline.window_limit) {
-            self.reject("window_limit_exceeded");
-            return Ok(());
-        }
-        if baseline.complete {
-            self.complete = true;
-        }
-        Ok(())
-    }
-
-    fn observation(&self) -> Value {
-        let window_state = if self.rejected.is_some() {
-            "rejected"
-        } else if self.unavailable.is_some() {
-            "unavailable"
-        } else if self.complete {
-            "complete"
-        } else {
-            "pending"
-        };
-        let mut observed = serde_json::Map::new();
-        observed.insert("window_state".into(), json!(window_state));
-        if let Some(reason) = &self.rejected {
-            observed.insert("reason".into(), json!(reason));
-        }
-        if let Some(error_code) = &self.unavailable {
-            observed.insert("error_code".into(), error_code.clone());
-        }
-        if let Some(generation) = &self.generation {
-            observed.insert("generation".into(), json!(generation));
-        }
-        if let Some(window_limit) = self.window_limit {
-            observed.insert("window_limit".into(), json!(window_limit));
-        }
-        observed.insert("delivered".into(), json!(self.delivered));
-        observed.insert("live_installed".into(), json!(self.live_installed));
-        observed.insert(
-            "stale_segments_rejected".into(),
-            json!(self.stale_segments_rejected),
-        );
-        observed.insert(
-            "backfill_required".into(),
-            json!(
-                self.complete
-                    && self
-                        .window_level
-                        .as_ref()
-                        .is_some_and(|fields| fields.limited)
-            ),
-        );
-        Value::Object(observed)
-    }
-}
-
-pub fn run_timeline_window_completion_vector() -> Result<()> {
-    let fixture = load_fixture_value("sync-fixture.json")?;
-    let vector = required_field(&fixture, "timeline_window_completion")?;
-    exact_object_keys(
-        vector,
-        &[
-            "cases",
-            "operations",
-            "projection_note",
-            "runner",
-            "vector_id",
-        ],
-        "timeline window completion vector",
-    )?;
-    if value_field_str(vector, "vector_id")? != TIMELINE_WINDOW_COMPLETION_VECTOR_ID
-        || value_field_str(vector, "runner")?
-            != "cotest::conformance::sync::run_timeline_window_completion_vector"
-    {
-        bail!("timeline window completion vector registration drifted");
-    }
-    let operations = value_array(
-        required_field(vector, "operations")?,
-        "timeline window operations",
-    )?;
-    if operations.as_slice()
-        != [Value::String(
-            arkret_wire::ServiceOperationId::SELF_ACCOUNT_STREAM_SUBSCRIBE_V1.to_owned(),
-        )]
-    {
-        bail!("timeline window vector must target only account subscribe");
-    }
-    let cases = value_array(required_field(vector, "cases")?, "timeline window cases")?;
-    if cases.len() != 12 {
-        bail!("timeline window completion vector must contain exactly 12 cases");
-    }
-    for case in cases {
-        let name = value_field_str(case, "name")?;
-        let expected = required_field(case, "expected")?;
-        let mut tracker = TimelineWindowTracker::default();
-        for frame in value_array(required_field(case, "frames")?, "timeline window frames")? {
-            tracker.apply(frame)?;
-        }
-        let observed = tracker.observation();
-        assert_expected_subset(name, expected, &observed)?;
-        record_vector_event(
-            &format!("sync.timeline_window_completion.{name}"),
-            case,
-            expected,
-            &observed,
-        );
-    }
-    Ok(())
-}
-
-const REALM_DETAIL_BASELINE_SINGLETONS_VECTOR_ID: &str =
-    "ak.vector.sync.realm_detail_baseline_singletons.v1";
-
-/// One published current-result row, reduced to the members the baseline
-/// contract decides on.
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct DetailBaselineRow {
-    cell_id: String,
-    status: String,
-    /// Present exactly when `status == "value"`. A confirmed empty is
-    /// `value: null` with the member present, which is a different row from an
-    /// absent member.
-    value: Option<Value>,
-    source_present: bool,
-}
-
-/// Publish the four required Realm detail-baseline singletons.
-///
-/// The publisher decides three things and each is decided here rather than
-/// read back: a singleton the Realm never wrote is a **confirmed empty**
-/// (`status=value`, `value=null`) and not `removed` or `unavailable`; the
-/// confirmed empty omits `source` because it has no write identity while a
-/// written pointer keeps carrying `source={event_id, depth}`; and a row that is
-/// simply absent from the database was never verified, so it may not be
-/// published as a confirmed empty and may not complete the baseline.
-fn publish_detail_baseline(
-    required: &[String],
-    written: &BTreeMap<String, Value>,
-    verified: bool,
-) -> (Vec<DetailBaselineRow>, bool) {
-    if !verified {
-        // No accepted-state verification happened. There is nothing truthful to
-        // publish and the baseline stays incomplete.
-        return (Vec::new(), false);
-    }
-    let rows = required
-        .iter()
-        .map(|cell_id| match written.get(cell_id) {
-            Some(value) => DetailBaselineRow {
-                cell_id: cell_id.clone(),
-                status: "value".to_owned(),
-                value: Some(value.clone()),
-                source_present: true,
-            },
-            None => DetailBaselineRow {
-                cell_id: cell_id.clone(),
-                status: "value".to_owned(),
-                value: Some(Value::Null),
-                source_present: false,
-            },
-        })
+/// The fixture's `*_position_exists: false` flags are only trustworthy if the
+/// shipped commit type has no such member to read. Take that from the type.
+fn verify_commit_carries_no_global_or_realm_position() -> Result<()> {
+    let commit = sample_commit()?;
+    let value = serde_json::to_value(&commit)?;
+    let members: BTreeSet<&str> = value
+        .as_object()
+        .ok_or_else(|| anyhow!("RealmCommit must serialize as an object"))?
+        .keys()
+        .map(String::as_str)
         .collect();
-    (rows, true)
+    ensure!(
+        members.contains("stream_ref") && members.contains("stream_position"),
+        "RealmCommit lost its per-stream position"
+    );
+    for forbidden in [
+        "global_position",
+        "realm_position",
+        "realm_stream_position",
+        "position",
+        "sequence",
+        "seal_ref",
+        "frontier",
+    ] {
+        ensure!(
+            !members.contains(forbidden),
+            "RealmCommit reintroduced the removed member {forbidden}"
+        );
+    }
+    Ok(())
 }
 
-pub fn run_realm_detail_baseline_singletons_vector() -> Result<()> {
-    let fixture = load_fixture_value("sync-fixture.json")?;
-    let vector = required_field(&fixture, "realm_detail_baseline_singletons")?;
-    exact_object_keys(
-        vector,
-        &[
-            "cases",
-            "operations",
-            "required_singleton_cells",
-            "runner",
-            "vector_id",
-        ],
-        "realm detail baseline singletons vector",
-    )?;
-    if value_field_str(vector, "vector_id")? != REALM_DETAIL_BASELINE_SINGLETONS_VECTOR_ID
-        || value_field_str(vector, "runner")?
-            != "cotest::conformance::sync::run_realm_detail_baseline_singletons_vector"
-    {
-        bail!("realm detail baseline singletons vector registration drifted");
+/// `CommitStreamRef` is a closed tagged union. Round-trip each declared kind and
+/// prove a fourth kind is unrepresentable on the wire.
+fn verify_stream_ref_is_closed_to_three_streams() -> Result<()> {
+    let realm_id = fixture_realm_id()?;
+    let circle = CommitStreamRef::Circle {
+        realm_id: realm_id.clone(),
+        circle_id: CircleId::new(
+            "ak:circle:AUD2WOhX-Xh47vBHtRJPMRfXRQXGiOWQqOrJGJnE8CaI".to_owned(),
+        )?,
+    };
+    let sidecar = CommitStreamRef::Sidecar {
+        realm_id: realm_id.clone(),
+        sidecar_id: SidecarId::new(
+            "ak:sidecar:AUD2WOhX-Xh47vBHtRJPMRfXRQXGiOWQqOrJGJnE8CaI".to_owned(),
+        )?,
+    };
+    let realm = CommitStreamRef::Realm {
+        realm_id: realm_id.clone(),
+    };
+
+    let mut kinds = BTreeSet::new();
+    for stream_ref in [&realm, &circle, &sidecar] {
+        let value = serde_json::to_value(stream_ref)?;
+        let kind = value
+            .get("kind")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("CommitStreamRef must carry a kind tag"))?
+            .to_owned();
+        ensure!(
+            stream_ref.realm_id() == &realm_id,
+            "every commit stream is anchored in its Realm"
+        );
+        let decoded: CommitStreamRef = serde_json::from_value(value)?;
+        ensure!(
+            &decoded == stream_ref,
+            "CommitStreamRef did not round-trip through its wire form"
+        );
+        ensure!(kinds.insert(kind), "two stream kinds collided");
     }
-    let operations = value_array(
-        required_field(vector, "operations")?,
-        "realm detail baseline operations",
-    )?;
-    if operations.as_slice()
-        != [Value::String(
-            arkret_wire::ServiceOperationId::SELF_ACCOUNT_STREAM_SUBSCRIBE_V1.to_owned(),
-        )]
-    {
-        bail!("realm detail baseline vector must target only account subscribe");
+    ensure!(
+        kinds.iter().map(String::as_str).collect::<Vec<_>>() == ["circle", "realm", "sidecar"],
+        "CommitStreamRef kinds drifted: {kinds:?}"
+    );
+
+    // A Realm-global chain would need a fourth, Realm-wide stream that is not
+    // any of the three. It cannot be deserialized.
+    let global: std::result::Result<CommitStreamRef, _> = serde_json::from_value(json!({
+        "kind": "realm_global",
+        "realm_id": realm_id,
+    }));
+    ensure!(
+        global.is_err(),
+        "a Realm-global commit stream must not be representable"
+    );
+
+    // The three streams are distinct keys even under one Realm.
+    let distinct: BTreeSet<CommitStreamRef> = [realm, circle, sidecar].into_iter().collect();
+    ensure!(
+        distinct.len() == 3,
+        "Realm, Circle and Sidecar streams must be three independent keys"
+    );
+    Ok(())
+}
+
+// ── Stream tails ────────────────────────────────────────────────────────────
+
+/// One declared commit of a fixture tail, with its ids bound to typed ids.
+#[derive(Clone, Debug)]
+struct DeclaredCommit {
+    stream_position: u64,
+    commit_id: RealmCommitId,
+    previous_commit_ref: Option<RealmCommitId>,
+}
+
+#[derive(Clone, Debug)]
+struct DeclaredTail {
+    name: String,
+    stream_ref: CommitStreamRef,
+    scope_ref: ScopeRef,
+    commits: Vec<DeclaredCommit>,
+    expected_accepted: bool,
+    case: Value,
+}
+
+fn parse_stream_ref(value: &Value) -> Result<(CommitStreamRef, ScopeRef)> {
+    let realm_id = RealmId::new(required_str(value, "realm_id")?.to_owned())?;
+    Ok(match required_str(value, "kind")? {
+        "realm" => (
+            CommitStreamRef::Realm {
+                realm_id: realm_id.clone(),
+            },
+            ScopeRef::Realm { realm_id },
+        ),
+        "circle" => {
+            let circle_id = CircleId::new(required_str(value, "circle_id")?.to_owned())?;
+            (
+                CommitStreamRef::Circle {
+                    realm_id: realm_id.clone(),
+                    circle_id: circle_id.clone(),
+                },
+                ScopeRef::Circle {
+                    realm_id,
+                    circle_id,
+                },
+            )
+        }
+        "sidecar" => {
+            let sidecar_id = SidecarId::new(required_str(value, "sidecar_id")?.to_owned())?;
+            (
+                CommitStreamRef::Sidecar {
+                    realm_id: realm_id.clone(),
+                    sidecar_id: sidecar_id.clone(),
+                },
+                ScopeRef::Sidecar {
+                    realm_id,
+                    sidecar_id,
+                },
+            )
+        }
+        other => bail!("client-sync fixture declared an unregistered stream kind {other}"),
+    })
+}
+
+fn parse_stream_tails(fixture: &Value) -> Result<Vec<DeclaredTail>> {
+    let mut tails = Vec::new();
+    for case in value_array(required_field(fixture, "stream_tails")?, "stream_tails")? {
+        let (stream_ref, scope_ref) = parse_stream_ref(required_field(case, "stream_ref")?)?;
+        let mut commits = Vec::new();
+        for commit in value_array(required_field(case, "commits")?, "commits")? {
+            let previous_commit_ref = match commit.get("previous_commit_ref") {
+                None | Some(Value::Null) => None,
+                Some(value) => Some(RealmCommitId::new(
+                    value
+                        .as_str()
+                        .ok_or_else(|| anyhow!("previous_commit_ref must be a string"))?
+                        .to_owned(),
+                )?),
+            };
+            commits.push(DeclaredCommit {
+                stream_position: required_u64(commit, "stream_position")?,
+                commit_id: RealmCommitId::new(required_str(commit, "commit_id")?.to_owned())?,
+                previous_commit_ref,
+            });
+        }
+        ensure!(
+            !commits.is_empty(),
+            "a declared stream tail must carry at least one commit"
+        );
+        let expected = required_str(case, "expected")?;
+        tails.push(DeclaredTail {
+            name: required_str(case, "name")?.to_owned(),
+            stream_ref,
+            scope_ref,
+            commits,
+            expected_accepted: match expected {
+                "accepted" => true,
+                "rejected" => false,
+                other => bail!("unregistered stream tail verdict {other}"),
+            },
+            case: case.clone(),
+        });
     }
-    let required: Vec<String> = value_array(
-        required_field(vector, "required_singleton_cells")?,
-        "required singleton cells",
+    ensure!(
+        !tails.is_empty(),
+        "client-sync fixture declares no stream tails"
+    );
+    Ok(tails)
+}
+
+fn verify_every_stream_class_is_exercised(tails: &[DeclaredTail]) -> Result<()> {
+    let mut seen = BTreeSet::new();
+    for tail in tails {
+        seen.insert(match tail.stream_ref {
+            CommitStreamRef::Realm { .. } => "realm",
+            CommitStreamRef::Circle { .. } => "circle",
+            CommitStreamRef::Sidecar { .. } => "sidecar",
+            // `CommitStreamRef` is `#[non_exhaustive]`; a fourth stream kind is
+            // exactly the Realm-global chain this suite exists to rule out.
+            _ => bail!("an unregistered commit stream kind reached the account stream"),
+        });
+    }
+    for kind in ["realm", "circle", "sidecar"] {
+        ensure!(
+            seen.contains(kind),
+            "the fixture must exercise the independent {kind} stream"
+        );
+    }
+    Ok(())
+}
+
+/// Replay each declared tail through the shipped commit store. The fixture's
+/// verdict is only satisfied when a real store reaches the same decision.
+fn verify_tails_commit_exactly_when_continuous(tails: &[DeclaredTail]) -> Result<()> {
+    for tail in tails {
+        let store = MemoryAuthorityCommitStore::default();
+        let outcome = append_tail(&store, tail)?;
+        match (tail.expected_accepted, &outcome) {
+            (true, Ok(())) => {}
+            (false, Err(error)) => {
+                ensure!(
+                    matches!(error, CommitLogError::HeadConflict),
+                    "{}: a broken tail must fail the head compare-and-swap, got {error}",
+                    tail.name
+                );
+            }
+            (true, Err(error)) => bail!(
+                "{}: the fixture says accepted but the commit store refused it: {error}",
+                tail.name
+            ),
+            (false, Ok(())) => bail!(
+                "{}: the fixture says rejected but the commit store accepted every commit",
+                tail.name
+            ),
+        }
+
+        if !tail.expected_accepted {
+            continue;
+        }
+        let head = store
+            .stream_head(&tail.stream_ref)
+            .ok_or_else(|| anyhow!("{}: accepted tail left no stream head", tail.name))?;
+        let last = tail.commits.last().expect("tail is non-empty");
+        ensure!(
+            head.stream_position == last.stream_position && head.commit_id == last.commit_id,
+            "{}: the stream head must be the last accepted commit",
+            tail.name
+        );
+        ensure!(
+            head.stream_ref == tail.stream_ref,
+            "{}: the head belongs to another stream",
+            tail.name
+        );
+    }
+    Ok(())
+}
+
+/// An unexplained position jump stops that one stream. Replay the broken tail on
+/// a store that already holds the sibling Realm and Sidecar streams and show the
+/// siblings keep their heads and stay appendable.
+fn verify_broken_tail_stops_only_its_own_stream(tails: &[DeclaredTail]) -> Result<()> {
+    let broken = tails
+        .iter()
+        .find(|tail| !tail.expected_accepted)
+        .ok_or_else(|| anyhow!("the fixture needs one discontinuous tail"))?;
+    ensure!(
+        required_str(&broken.case, "expected_client_action")?
+            == "stop_this_stream_and_refetch_snapshot",
+        "{}: a broken tail refetches its own snapshot",
+        broken.name
+    );
+    ensure!(
+        !required_bool(&broken.case, "other_streams_reset")?,
+        "{}: a broken tail must not reset a sibling stream",
+        broken.name
+    );
+    ensure!(
+        !required_bool(&broken.case, "to_device_acks_reset")?,
+        "{}: a broken tail must not invalidate the delivery queue",
+        broken.name
+    );
+
+    let store = MemoryAuthorityCommitStore::default();
+    let siblings: Vec<&DeclaredTail> = tails
+        .iter()
+        .filter(|tail| tail.expected_accepted && tail.stream_ref != broken.stream_ref)
+        .collect();
+    ensure!(
+        siblings.len() >= 2,
+        "the isolation check needs at least two sibling streams"
+    );
+    for sibling in &siblings {
+        append_tail(&store, sibling)?
+            .map_err(|error| anyhow!("{}: sibling tail was refused: {error}", sibling.name))?;
+    }
+    let before: BTreeMap<String, u64> = siblings
+        .iter()
+        .map(|sibling| head_position(&store, sibling))
+        .collect::<Result<_>>()?;
+
+    append_tail(&store, broken)?
+        .err()
+        .ok_or_else(|| anyhow!("{}: the broken tail was accepted", broken.name))?;
+
+    let after: BTreeMap<String, u64> = siblings
+        .iter()
+        .map(|sibling| head_position(&store, sibling))
+        .collect::<Result<_>>()?;
+    ensure!(
+        before == after,
+        "a refused commit moved a sibling stream head: {before:?} -> {after:?}"
+    );
+
+    // The siblings are not merely unchanged, they are still writable: a stopped
+    // stream is not a stopped Realm.
+    for sibling in &siblings {
+        let head = store
+            .stream_head(&sibling.stream_ref)
+            .ok_or_else(|| anyhow!("{}: sibling lost its head", sibling.name))?;
+        let next = DeclaredCommit {
+            stream_position: head.stream_position + 1,
+            commit_id: derived_commit_id(&sibling.name, head.stream_position + 1),
+            previous_commit_ref: Some(head.commit_id.clone()),
+        };
+        let event = producer_event(&sibling.scope_ref, &next)?;
+        let commit = commit_for(sibling, &next, &event)?;
+        match store.append(&event, commit) {
+            Ok(AppendOutcome::Committed(_)) => {}
+            other => bail!(
+                "{}: sibling stream stopped advancing after an unrelated rejection: {other:?}",
+                sibling.name
+            ),
+        }
+    }
+    Ok(())
+}
+
+fn head_position(store: &MemoryAuthorityCommitStore, tail: &DeclaredTail) -> Result<(String, u64)> {
+    let head = store
+        .stream_head(&tail.stream_ref)
+        .ok_or_else(|| anyhow!("{}: stream has no head", tail.name))?;
+    Ok((tail.name.clone(), head.stream_position))
+}
+
+/// Append every declared commit of a tail. The outer `Result` is a harness
+/// failure; the inner one is the commit log's own verdict.
+fn append_tail(
+    store: &MemoryAuthorityCommitStore,
+    tail: &DeclaredTail,
+) -> Result<std::result::Result<(), CommitLogError>> {
+    for declared in &tail.commits {
+        let event = producer_event(&tail.scope_ref, declared)?;
+        let commit = commit_for(tail, declared, &event)?;
+        commit.validate_shape().map_err(|error| {
+            anyhow!(
+                "{}: declared commit is not a valid RealmCommit: {error}",
+                tail.name
+            )
+        })?;
+        match store.append(&event, commit) {
+            Ok(AppendOutcome::Committed(_)) => {}
+            Ok(AppendOutcome::Duplicate(_)) => bail!(
+                "{}: a fixture tail must not declare the same commit twice",
+                tail.name
+            ),
+            Err(error) => return Ok(Err(error)),
+        }
+    }
+    Ok(Ok(()))
+}
+
+// ── Commit construction ─────────────────────────────────────────────────────
+
+fn fixture_realm_id() -> Result<RealmId> {
+    Ok(RealmId::new(
+        "ak:realm:Ac1aCK8aQdnkYImvdH3DFjq4jDCP198pXYWCGzGuVyj5".to_owned(),
+    )?)
+}
+
+fn fixed_time(offset_seconds: i64) -> DateTime<Utc> {
+    Utc.timestamp_opt(1_800_000_000 + offset_seconds, 0)
+        .single()
+        .unwrap_or_else(Utc::now)
+}
+
+fn producer_actor() -> Result<ActorId> {
+    let principal = project_did_to_core_id(&arkret_wire::Did::new(PRODUCER_DID.to_owned())?)?;
+    let station = project_did_to_core_id(&arkret_wire::Did::new(AUTHORITY_DID.to_owned())?)?;
+    Ok(ActorId::account(arkret_wire::AccountId::new(
+        principal, station,
+    )))
+}
+
+/// A producer Event carries no position, no predecessor and no stream: the
+/// commit supplies all three. Each declared commit therefore gets its own
+/// distinct Event, distinguished only by payload.
+fn producer_event(scope_ref: &ScopeRef, declared: &DeclaredCommit) -> Result<Event> {
+    Ok(arkret_wire::test_support::raw_event_for_actor_at(
+        EventKind::MessageCreate.as_str(),
+        scope_ref.clone(),
+        producer_actor()?,
+        json!({ "cotest_commit_id": declared.commit_id }),
+        fixed_time(declared.stream_position as i64),
+    )?)
+}
+
+fn authority_signature() -> Result<DetachedObjectSignature> {
+    Ok(DetachedObjectSignature {
+        context: DetachedSignatureContext::RealmCommit,
+        signature_algorithm: DetachedSignatureAlgorithm::Ed25519,
+        verification_method: DidUrl::new(format!("{AUTHORITY_DID}#key-1"))
+            .map_err(anyhow::Error::msg)?,
+        signed_digest: Hash::new(format!("sha256:{}", "11".repeat(32)))?,
+        created_at: fixed_time(0),
+        sig: Base64UrlString::new("AQ").map_err(anyhow::Error::msg)?,
+    })
+}
+
+fn commit_for(
+    tail: &DeclaredTail,
+    declared: &DeclaredCommit,
+    event: &Event,
+) -> Result<RealmCommit> {
+    Ok(RealmCommit {
+        commit_id: declared.commit_id.clone(),
+        realm_id: tail.stream_ref.realm_id().clone(),
+        stream_ref: tail.stream_ref.clone(),
+        stream_position: declared.stream_position,
+        previous_commit_ref: declared.previous_commit_ref.clone(),
+        event_ref: event.event_id.clone(),
+        authority_generation: 0,
+        authority_ref: RealmCommitAuthorityRef::GenesisOrChangeEvent(event.event_id.clone()),
+        committed_at: fixed_time(1),
+        signature: authority_signature()?,
+    })
+}
+
+fn sample_commit() -> Result<RealmCommit> {
+    let realm_id = fixture_realm_id()?;
+    let declared = DeclaredCommit {
+        stream_position: 0,
+        commit_id: derived_commit_id("sample", 0),
+        previous_commit_ref: None,
+    };
+    let tail = DeclaredTail {
+        name: "sample".to_owned(),
+        stream_ref: CommitStreamRef::Realm {
+            realm_id: realm_id.clone(),
+        },
+        scope_ref: ScopeRef::Realm { realm_id },
+        commits: vec![declared.clone()],
+        expected_accepted: true,
+        case: Value::Null,
+    };
+    let event = producer_event(&tail.scope_ref, &declared)?;
+    commit_for(&tail, &declared, &event)
+}
+
+/// A canonical `RealmCommitId` for a commit the fixture does not declare.
+fn derived_commit_id(label: &str, position: u64) -> RealmCommitId {
+    use sha2::{Digest, Sha256};
+
+    let mut hasher = Sha256::new();
+    hasher.update(b"cotest.client_sync.");
+    hasher.update(label.as_bytes());
+    hasher.update(position.to_be_bytes());
+    RealmCommitId::from_digest(hasher.finalize().into())
+}
+
+// ── Durable checkpoint ordering ─────────────────────────────────────────────
+
+/// A client may only advance its durable cursor after the projection that the
+/// cursor claims is installed. Replay each declared step order through a small
+/// durable-state model and crash after every step: the accepted orders never
+/// lose the delta, the rejected order does.
+fn verify_checkpoint_never_outruns_projection(fixture: &Value) -> Result<()> {
+    let mut ordering_cases = 0_u32;
+    let mut merge_cases = 0_u32;
+
+    for case in value_array(
+        required_field(fixture, "checkpoint_ordering")?,
+        "checkpoint_ordering",
+    )? {
+        let name = required_str(case, "name")?;
+        let steps = value_array(required_field(case, "steps")?, "steps")?;
+        for (index, step) in steps.iter().enumerate() {
+            ensure!(
+                required_u64(step, "step")? == index as u64,
+                "{name}: declared steps must be ordered from zero"
+            );
+        }
+        let expected = required_str(case, "expected")?;
+
+        let action_at = |action: &str| {
+            steps
+                .iter()
+                .position(|step| step.get("action").and_then(Value::as_str) == Some(action))
+        };
+
+        if let (Some(install), Some(advance)) = (
+            action_at("install_typed_current_result"),
+            action_at("advance_durable_cursor"),
+        ) {
+            ordering_cases += 1;
+            let loses_delta = replay_loses_delta_on_crash(steps)?;
+            let verdict = if loses_delta { "rejected" } else { "accepted" };
+            ensure!(
+                verdict == expected,
+                "{name}: replaying the declared order gives {verdict}, fixture says {expected}"
+            );
+            ensure!(
+                loses_delta == (advance < install),
+                "{name}: the delta is lost exactly when the cursor precedes the projection"
+            );
+            if loses_delta {
+                ensure!(
+                    case.get("reason").and_then(Value::as_str).is_some(),
+                    "{name}: a rejected order must state why"
+                );
+            }
+            continue;
+        }
+
+        // The merge rule: an incremental delivered before the baseline section
+        // completes survives, because the baseline was cut at an older position.
+        merge_cases += 1;
+        let delivered = steps
+            .iter()
+            .find(|step| step.get("action").and_then(Value::as_str) == Some("deliver_incremental"))
+            .ok_or_else(|| anyhow!("{name}: merge case delivers no incremental"))?;
+        let delivered_position = required_u64(delivered, "stream_position")?;
+        let (delivered_stream, _) = parse_stream_ref(required_field(delivered, "stream_ref")?)?;
+        let baseline = steps
+            .iter()
+            .find(|step| {
+                step.get("action").and_then(Value::as_str)
+                    == Some("deliver_baseline_section_complete")
+            })
+            .ok_or_else(|| anyhow!("{name}: merge case completes no baseline section"))?;
+        let cut = required_u64(baseline, "as_of_stream_position")?;
+        ensure!(
+            cut < delivered_position,
+            "{name}: the merge rule only bites when the baseline cut is older"
+        );
+        ensure!(
+            matches!(delivered_stream, CommitStreamRef::Realm { .. }),
+            "{name}: the declared incremental must name a real commit stream"
+        );
+        // Merge by position: the higher position wins regardless of arrival.
+        let merged = delivered_position.max(cut);
+        ensure!(
+            merged == delivered_position && expected == "accepted",
+            "{name}: an older baseline must not overwrite a newer delta"
+        );
+        ensure!(
+            required_str(case, "expected_state")?.contains("MUST NOT overwrite"),
+            "{name}: the merge case must state the non-overwrite rule"
+        );
+    }
+
+    ensure!(
+        ordering_cases >= 2 && merge_cases >= 1,
+        "both the checkpoint ordering rule and the merge rule must stay covered"
+    );
+    Ok(())
+}
+
+/// Durable client state for one commit delivery.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct DurableClientState {
+    projection_installed: bool,
+    cursor_advanced: bool,
+}
+
+/// Replay the declared steps, crashing after each one, and report whether any
+/// crash point leaves a durable cursor past a projection that was never
+/// installed — the state in which the delta is gone forever.
+fn replay_loses_delta_on_crash(steps: &[Value]) -> Result<bool> {
+    for crash_after in 0..steps.len() {
+        let mut state = DurableClientState::default();
+        for step in &steps[..=crash_after] {
+            match step
+                .get("action")
+                .and_then(Value::as_str)
+                .ok_or_else(|| anyhow!("every checkpoint step declares an action"))?
+            {
+                "deliver_commit" => {}
+                "install_typed_current_result" => {
+                    ensure!(
+                        required_bool(step, "durable")?,
+                        "a projection install that is not durable cannot support a checkpoint"
+                    );
+                    state.projection_installed = true;
+                }
+                "advance_durable_cursor" => state.cursor_advanced = true,
+                other => bail!("unregistered checkpoint action {other}"),
+            }
+        }
+        if state.cursor_advanced && !state.projection_installed {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+// ── Reconnect ───────────────────────────────────────────────────────────────
+
+/// Resolve a declared reconnect outcome, requiring every failure outcome to be a
+/// registered wire error code.
+fn reconnect_verdict(server_outcome: &str) -> Result<&'static str> {
+    if server_outcome == "accepted" {
+        return Ok("resume");
+    }
+    let code = ErrorCode::from_wire(server_outcome).ok_or_else(|| {
+        anyhow!("reconnect outcome {server_outcome} is not a registered wire error code")
+    })?;
+    Ok(match code {
+        ErrorCode::CursorExpired
+        | ErrorCode::CursorIntegrityInvalid
+        | ErrorCode::CursorUnrecognized => "reset",
+        _ => "resume",
+    })
+}
+
+fn verify_reconnect_resets_only_the_failed_surface(fixture: &Value) -> Result<()> {
+    let mut resets = 0_u32;
+    let mut resumes = 0_u32;
+
+    for case in value_array(required_field(fixture, "reconnect")?, "reconnect")? {
+        let name = required_str(case, "name")?;
+        let outcome = required_str(case, "server_outcome")?;
+        let expected = required_str(case, "expected")?;
+        ensure!(
+            reconnect_verdict(outcome)? == expected,
+            "{name}: reconnect verdict does not follow its server outcome {outcome}"
+        );
+
+        match expected {
+            "reset" => {
+                resets += 1;
+                ensure!(
+                    required_bool(case, "baseline_redone")?,
+                    "{name}: a discarded cursor redoes its surface baseline"
+                );
+                ensure!(
+                    required_bool(case, "discard_old_cursor")?,
+                    "{name}: the failed cursor must never be reused"
+                );
+            }
+            "resume" => {
+                resumes += 1;
+                ensure!(
+                    !flag(case, "baseline_redone").unwrap_or(false),
+                    "{name}: a resumable reconnect must not redo a baseline"
+                );
+                ensure!(
+                    !flag(case, "discard_old_cursor").unwrap_or(false),
+                    "{name}: a resumable reconnect keeps its cursor"
+                );
+            }
+            other => bail!("{name}: unregistered reconnect verdict {other}"),
+        }
+
+        // Neither branch may widen. Locally verified commits, MLS private state
+        // and issued delivery ACKs survive every reconnect.
+        for preserved in [
+            "local_verified_commits_deleted",
+            "mls_private_state_deleted",
+            "delivery_acks_invalidated",
+            "other_streams_reset",
+            "to_device_acks_reset",
+            "server_state_advanced",
+        ] {
+            ensure!(
+                !flag(case, preserved).unwrap_or(false),
+                "{name}: a reconnect must not set {preserved}"
+            );
+        }
+
+        if outcome == "stream_tail_missing" {
+            verify_single_tail_recovery(name, case)?;
+        }
+    }
+
+    ensure!(
+        resets >= 3 && resumes >= 3,
+        "the reconnect table must keep both the reset and the resume branch covered"
+    );
+    Ok(())
+}
+
+/// One missing tail recovers exactly that stream. The affected stream is parsed
+/// as a real `CommitStreamRef` so the recovery names a stream that exists.
+fn verify_single_tail_recovery(name: &str, case: &Value) -> Result<()> {
+    let affected = required_field(case, "affected_stream_ref")?;
+    let (stream_ref, _) = parse_stream_ref(affected)?;
+    let affected_kind = required_str(affected, "kind")?;
+    let recovered = value_array(
+        required_field(case, "recovered_streams")?,
+        "recovered_streams",
     )?
     .iter()
     .map(|value| {
         value
             .as_str()
             .map(str::to_owned)
-            .ok_or_else(|| anyhow!("required singleton cell must be a string"))
-    })
-    .collect::<Result<_>>()?;
-    // The default Strand pointer is the member this vector exists for: it is a
-    // causal_register singleton, so before 1506 a Realm that never committed
-    // `ak.realm.set_default_strand` had no representable baseline value at all.
-    if required.len() != 4
-        || !required
-            .iter()
-            .any(|cell| cell.contains("ak.component.realm.set_default_strand.v1"))
-    {
-        bail!("the four required Realm detail-baseline singletons changed");
-    }
-
-    let cases = value_array(
-        required_field(vector, "cases")?,
-        "realm detail baseline cases",
-    )?;
-    if cases.len() != 4 {
-        bail!("realm detail baseline vector must contain exactly 4 cases");
-    }
-    for case in cases {
-        let name = value_field_str(case, "name")?;
-        let verified = case.get("publisher_state").is_none();
-        let written = written_singletons(case)?;
-        let (rows, complete) = publish_detail_baseline(&required, &written, verified);
-        let declared_complete = case
-            .get("baseline_complete")
-            .and_then(Value::as_bool)
-            .ok_or_else(|| anyhow!("case {name} omits baseline_complete"))?;
-        if complete != declared_complete {
-            bail!(
-                "case {name} declares baseline_complete={declared_complete} but the publisher derives {complete}"
-            );
-        }
-        for expected in value_array_or_empty(case, "expected_results")? {
-            let cell_id = value_field_str(expected, "cell_id")?;
-            let row = rows
-                .iter()
-                .find(|row| row.cell_id == cell_id)
-                .ok_or_else(|| anyhow!("case {name} expects a row for {cell_id}"))?;
-            let expected_row = DetailBaselineRow {
-                cell_id: cell_id.to_owned(),
-                status: value_field_str(expected, "status")?.to_owned(),
-                value: Some(
-                    expected
-                        .get("value")
-                        .cloned()
-                        .ok_or_else(|| anyhow!("case {name} row {cell_id} omits value"))?,
-                ),
-                source_present: expected
-                    .get("source_present")
-                    .and_then(Value::as_bool)
-                    .ok_or_else(|| anyhow!("case {name} row {cell_id} omits source_present"))?,
-            };
-            if row != &expected_row {
-                bail!("case {name} row {cell_id} diverged: published {row:?}");
-            }
-            // A written pointer keeps its write identity; a confirmed empty has
-            // none to keep.
-            if expected_row.source_present != expected.get("source").is_some() {
-                bail!("case {name} row {cell_id} disagrees with its own source member");
-            }
-        }
-        for forbidden in value_array_or_empty(case, "forbidden_results")? {
-            let cell_id = value_field_str(forbidden, "cell_id")?;
-            let status = value_field_str(forbidden, "status")?;
-            if rows
-                .iter()
-                .any(|row| row.cell_id == cell_id && row.status == status)
-            {
-                bail!("case {name} published the forbidden {status} row for {cell_id}");
-            }
-        }
-        if !verified {
-            // Every listed publisher outcome is forbidden for an absent row,
-            // and withholding the publication is the only admissible one.
-            for forbidden in value_array_or_empty(case, "forbidden_publisher_outcomes")? {
-                let outcome = forbidden
-                    .as_str()
-                    .ok_or_else(|| anyhow!("forbidden publisher outcome must be a string"))?;
-                let performed = match outcome {
-                    "publish_confirmed_empty_without_verifying_accepted_state"
-                    | "publish_removed"
-                    | "publish_unavailable" => !rows.is_empty(),
-                    "mark_baseline_complete" => complete,
-                    other => bail!("case {name} names unknown publisher outcome {other}"),
-                };
-                if performed {
-                    bail!("case {name} performed the forbidden publisher outcome {outcome}");
-                }
-            }
-        }
-        record_vector_event(
-            &format!("sync.realm_detail_baseline_singletons.{name}"),
-            case,
-            &json!({"baseline_complete": declared_complete}),
-            &json!({"baseline_complete": complete, "published_rows": rows.len()}),
-        );
-    }
-    Ok(())
-}
-
-fn written_singletons(case: &Value) -> Result<BTreeMap<String, Value>> {
-    let mut written = BTreeMap::new();
-    for cell in value_array_or_empty(case, "written_singleton_cells")? {
-        let cell_id = cell
-            .as_str()
-            .ok_or_else(|| anyhow!("written singleton cell must be a string"))?;
-        // The written value and its write identity come from the case's own
-        // expected row, so the publisher never invents either.
-        let value = value_array_or_empty(case, "expected_results")?
-            .iter()
-            .find(|row| row.get("cell_id").and_then(Value::as_str) == Some(cell_id))
-            .and_then(|row| row.get("value").cloned())
-            .ok_or_else(|| anyhow!("written singleton {cell_id} has no expected value"))?;
-        written.insert(cell_id.to_owned(), value);
-    }
-    Ok(written)
-}
-
-fn value_array_or_empty<'a>(value: &'a Value, key: &str) -> Result<&'a [Value]> {
-    match value.get(key) {
-        None => Ok(&[]),
-        Some(found) => value_array(found, key).map(Vec::as_slice),
-    }
-}
-
-fn validate_realm_actor_frontier_vectors(value: &Value) -> Result<()> {
-    let cases = value_array(
-        required_field(value, "schema_validation_cases")?,
-        "sync schema_validation_cases",
-    )?;
-    for case in cases.iter().filter(|case| {
-        case.get("name")
-            .and_then(Value::as_str)
-            .is_some_and(|name| name.starts_with("realm_actor_frontier_"))
-    }) {
-        let expect_valid = case
-            .get("expect_valid")
-            .and_then(Value::as_bool)
-            .ok_or_else(|| anyhow!("frontier schema case lacks expect_valid"))?;
-        let decoded = serde_json::from_value::<
-            arkret_models_collaboration::event_sync::RealmActorFrontierView,
-        >(required_field(case, "instance")?.clone());
-        let validation: Result<()> = match decoded {
-            Ok(frontier) => frontier.validate().map_err(Into::into),
-            Err(error) => Err(error.into()),
-        };
-        let valid = validation.is_ok();
-        if expect_valid != valid {
-            bail!(
-                "frontier case {} validity mismatch: {}",
-                value_field_str(case, "name")?,
-                validation.expect_err("validity mismatch must carry a decode or validation error")
-            );
-        }
-    }
-
-    let vector = required_field(value, "actor_frontier_digest")?;
-    let valid_case = cases
-        .iter()
-        .find(|case| {
-            case.get("name").and_then(Value::as_str)
-                == Some("realm_actor_frontier_sibling_set_valid")
-        })
-        .ok_or_else(|| anyhow!("sync fixture lacks the valid sibling frontier case"))?;
-    let frontier = serde_json::from_value::<
-        arkret_models_collaboration::event_sync::RealmActorFrontierView,
-    >(required_field(valid_case, "instance")?.clone())?;
-    let suite = arkret_canonical::digest_suite(value_field_str(vector, "digest_algorithm")?)?;
-    let digest = arkret_models_collaboration::event_sync::RealmActorFrontierView::compute_digest(
-        &frontier.realm_id,
-        &frontier.actor_id,
-        frontier.next_actor_seq,
-        &frontier.frontier_event_ids,
-        suite,
-    )?;
-    if digest != frontier.frontier_digest
-        || digest.as_str() != value_field_str(vector, "expected_digest")?
-    {
-        bail!("Realm actor frontier digest golden mismatch");
-    }
-    let canonical = String::from_utf8(arkret_canonical::canonical_json_bytes(&json!({
-        "kind": "realm_actor",
-        "realm_id": frontier.realm_id,
-        "actor_id": frontier.actor_id,
-        "next_actor_seq": frontier.next_actor_seq,
-        "frontier_event_ids": frontier.frontier_event_ids,
-    }))?)?;
-    if canonical != value_field_str(vector, "canonical_json")? {
-        bail!("Realm actor frontier canonical transcript golden mismatch");
-    }
-    if value_field_str(vector, "transcript_label_utf8_nul")?.as_bytes()
-        != arkret_models_collaboration::event_sync::REALM_ACTOR_FRONTIER_DIGEST_DOMAIN
-    {
-        bail!("Realm actor frontier digest domain label drifted");
-    }
-    Ok(())
-}
-
-const STREAM_FRAME_SEQUENCE_VECTOR_ID: &str = "ak.vector.sync.stream_frame_sequence.v1";
-
-#[derive(Clone, Copy, Debug)]
-enum StreamSurface {
-    Account,
-    Events,
-}
-
-impl StreamSurface {
-    const fn operation_id(self) -> &'static str {
-        match self {
-            Self::Account => arkret_wire::ServiceOperationId::SELF_ACCOUNT_STREAM_SUBSCRIBE_V1,
-            Self::Events => arkret_wire::ServiceOperationId::SELF_EVENTS_STREAM_SUBSCRIBE_V1,
-        }
-    }
-}
-
-enum EmittedStreamFrame {
-    Account(Box<AccountSubscribeFrame>),
-    Events(SyntheticEventsTraceFrame),
-}
-
-struct SyntheticEventsTraceFrame {
-    kind: EventsSubscribeFrameKind,
-    cursor: Option<String>,
-}
-
-impl StreamTraceFrame for EmittedStreamFrame {
-    fn trace_kind(&self) -> StreamTraceFrameKind {
-        match self {
-            Self::Account(frame) => frame.trace_kind(),
-            Self::Events(frame) => match frame.kind {
-                EventsSubscribeFrameKind::Event => StreamTraceFrameKind::Data,
-                EventsSubscribeFrameKind::Frontier => StreamTraceFrameKind::Frontier,
-                EventsSubscribeFrameKind::Heartbeat => StreamTraceFrameKind::Heartbeat,
-                EventsSubscribeFrameKind::CatchupComplete => StreamTraceFrameKind::CatchupComplete,
-                EventsSubscribeFrameKind::EpochRotation => StreamTraceFrameKind::EpochRotation,
-                EventsSubscribeFrameKind::Dropped => StreamTraceFrameKind::Dropped,
-                EventsSubscribeFrameKind::ResyncRequired => StreamTraceFrameKind::ResyncRequired,
-                EventsSubscribeFrameKind::Unauthorized => StreamTraceFrameKind::Unauthorized,
-                _ => panic!("unregistered events frame kind"),
-            },
-        }
-    }
-
-    fn trace_cursor(&self) -> Option<&str> {
-        match self {
-            Self::Account(frame) => frame.trace_cursor(),
-            Self::Events(frame) => frame.cursor.as_deref(),
-        }
-    }
-}
-
-fn exact_object_keys(value: &Value, expected: &[&str], context: &str) -> Result<()> {
-    let object = value
-        .as_object()
-        .ok_or_else(|| anyhow!("{context} must be an object"))?;
-    let actual = object.keys().map(String::as_str).collect::<BTreeSet<_>>();
-    let expected = expected.iter().copied().collect::<BTreeSet<_>>();
-    if actual != expected {
-        bail!("{context} fields must be exactly {expected:?}, got {actual:?}");
-    }
-    Ok(())
-}
-
-fn validate_stream_frame_shape(frame: &Value) -> Result<&str> {
-    let kind = value_field_str(frame, "kind")?;
-    let fields: &[&str] = match kind {
-        "delta" => &["cursor", "kind", "partial"],
-        "frontier" | "catchup_complete" => &["cursor", "kind"],
-        "heartbeat" | "unauthorized" => &["kind"],
-        "dropped" => &["cursor", "kind", "reconnect_after_ms"],
-        "resync_required" => &["kind", "reconnect_after_ms"],
-        other => bail!("unsupported stream trace frame kind {other}"),
-    };
-    exact_object_keys(frame, fields, "stream trace frame")?;
-    if kind == "delta" && frame.get("partial").and_then(Value::as_bool) != Some(false) {
-        bail!("stream trace baseline delta must set partial=false");
-    }
-    if matches!(kind, "delta" | "frontier" | "catchup_complete" | "dropped")
-        && frame
-            .get("cursor")
-            .and_then(Value::as_str)
-            .is_some_and(|cursor| cursor.trim().is_empty())
-    {
-        bail!("stream trace cursor must be non-empty when present");
-    }
-    Ok(kind)
-}
-
-fn emit_stream_frame(surface: StreamSurface, frame: &Value) -> Result<EmittedStreamFrame> {
-    let kind = validate_stream_frame_shape(frame)?;
-    let cursor = frame.get("cursor").and_then(Value::as_str);
-    let reconnect_after_ms = frame.get("reconnect_after_ms").and_then(Value::as_u64);
-    Ok(match surface {
-        StreamSurface::Account => EmittedStreamFrame::Account(Box::new(AccountSubscribeFrame {
-            kind: match kind {
-                "delta" => AccountSubscribeFrameKind::Delta,
-                "frontier" => AccountSubscribeFrameKind::Frontier,
-                "heartbeat" => AccountSubscribeFrameKind::Heartbeat,
-                "catchup_complete" => AccountSubscribeFrameKind::CatchupComplete,
-                "dropped" => AccountSubscribeFrameKind::Dropped,
-                "resync_required" => AccountSubscribeFrameKind::ResyncRequired,
-                "unauthorized" => AccountSubscribeFrameKind::Unauthorized,
-                _ => unreachable!("validated stream trace frame kind"),
-            },
-            cursor: cursor.map(ToOwned::to_owned),
-            realms: None,
-            to_device: None,
-            device_lists: None,
-            account_data: None,
-            notifications: None,
-            realm_list: None,
-            realm_list_changes: None,
-            baseline: None,
-            realm_invalidations: None,
-            partial: frame.get("partial").and_then(Value::as_bool),
-            priority: None,
-            reconnect_after_ms,
-        })),
-        StreamSurface::Events => EmittedStreamFrame::Events(SyntheticEventsTraceFrame {
-            kind: match kind {
-                "delta" => EventsSubscribeFrameKind::Event,
-                "frontier" => EventsSubscribeFrameKind::Frontier,
-                "heartbeat" => EventsSubscribeFrameKind::Heartbeat,
-                "catchup_complete" => EventsSubscribeFrameKind::CatchupComplete,
-                "dropped" => EventsSubscribeFrameKind::Dropped,
-                "resync_required" => EventsSubscribeFrameKind::ResyncRequired,
-                "unauthorized" => EventsSubscribeFrameKind::Unauthorized,
-                _ => unreachable!("validated stream trace frame kind"),
-            },
-            cursor: cursor.map(ToOwned::to_owned),
-        }),
-    })
-}
-
-fn emit_forbidden_cursorless_dropped(surface: StreamSurface) -> EmittedStreamFrame {
-    match surface {
-        StreamSurface::Account => EmittedStreamFrame::Account(Box::new(AccountSubscribeFrame {
-            kind: AccountSubscribeFrameKind::Dropped,
-            cursor: None,
-            realms: None,
-            to_device: None,
-            device_lists: None,
-            account_data: None,
-            notifications: None,
-            realm_list: None,
-            realm_list_changes: None,
-            baseline: None,
-            realm_invalidations: None,
-            partial: None,
-            priority: None,
-            reconnect_after_ms: None,
-        })),
-        StreamSurface::Events => EmittedStreamFrame::Events(SyntheticEventsTraceFrame {
-            kind: EventsSubscribeFrameKind::Dropped,
-            cursor: None,
-        }),
-    }
-}
-
-fn rejected_trace_observation(error: &StreamTraceError) -> Value {
-    json!({
-        "result": "reject",
-        "reason": error.error_code().as_str(),
-        "trace_violation": error.violation(),
-    })
-}
-
-fn run_stream_frame_case(surface: StreamSurface, case: &Value) -> Result<Value> {
-    exact_object_keys(
-        case,
-        &[
-            "expected",
-            "forbidden_frame",
-            "frames",
-            "initial_reconnect_cursor",
-            "name",
-            "request",
-            "required_frame",
-            "server_has_resume_cursor",
-        ]
-        .into_iter()
-        .filter(|field| case.get(*field).is_some())
-        .collect::<Vec<_>>(),
-        "stream frame sequence case",
-    )?;
-    let name = value_field_str(case, "name")?;
-    let request = required_field(case, "request")?;
-    exact_object_keys(request, &["catchup"], "stream frame sequence request")?;
-    let catchup = request
-        .get("catchup")
-        .and_then(Value::as_bool)
-        .ok_or_else(|| anyhow!("stream frame sequence request catchup must be boolean"))?;
-    let initial_cursor = case
-        .get("initial_reconnect_cursor")
-        .and_then(Value::as_str)
-        .map(ToOwned::to_owned);
-    let expected = required_field(case, "expected")?;
-    let expected_fields = [
-        "catchup_complete_seen",
-        "reason",
-        "reconnect_after",
-        "reconnect_cursor_advanced",
-        "result",
-        "trace_violation",
-    ]
-    .into_iter()
-    .filter(|field| expected.get(*field).is_some())
-    .collect::<Vec<_>>();
-    exact_object_keys(expected, &expected_fields, "stream frame sequence expected")?;
-
-    if name == "missing_drop_cursor_uses_resync_required" {
-        if case
-            .get("server_has_resume_cursor")
-            .and_then(Value::as_bool)
-            != Some(false)
-        {
-            bail!("missing-drop-cursor case must model a server without a resume cursor");
-        }
-        let forbidden = required_field(case, "forbidden_frame")?;
-        exact_object_keys(forbidden, &["kind"], "forbidden cursorless dropped frame")?;
-        if value_field_str(forbidden, "kind")? != "dropped" {
-            bail!("forbidden frame must be cursorless dropped");
-        }
-        let mut forbidden_validator = StreamTraceValidator::new(catchup, initial_cursor.clone());
-        let error = forbidden_validator
-            .push(&emit_forbidden_cursorless_dropped(surface))
-            .expect_err("cursorless dropped must be rejected");
-        if error.error_code() != ErrorCode::SchemaViolation
-            || error.violation() != "dropped_missing_cursor"
-        {
-            bail!("cursorless dropped returned the wrong trace violation");
-        }
-
-        let required = required_field(case, "required_frame")?;
-        let mut validator = StreamTraceValidator::new(catchup, initial_cursor);
-        let update = validator.push(&emit_stream_frame(surface, required)?)?;
-        if !update.terminal || update.cursor_advanced || validator.reconnect_cursor().is_some() {
-            bail!("resync_required did not clear reconnect state without advancing a cursor");
-        }
-        validator.finish()?;
-        return Ok(json!({
-            "result": "resync",
-            "reconnect_cursor_advanced": update.cursor_advanced,
-        }));
-    }
-
-    let frames = value_array(
-        required_field(case, "frames")?,
-        "stream frame sequence frames",
-    )?;
-    let mut validator = StreamTraceValidator::new(catchup, initial_cursor);
-    let mut last_kind = None;
-    for frame in frames {
-        let emitted = emit_stream_frame(surface, frame)?;
-        let kind = emitted.trace_kind();
-        match validator.push(&emitted) {
-            Ok(update) => {
-                if matches!(
-                    kind,
-                    StreamTraceFrameKind::Heartbeat
-                        | StreamTraceFrameKind::ResyncRequired
-                        | StreamTraceFrameKind::Unauthorized
-                ) && update.cursor_advanced
-                {
-                    bail!("cursorless control frame advanced the reconnect cursor");
-                }
-                last_kind = Some(kind);
-            }
-            Err(error) => {
-                if error.error_code() != ErrorCode::SchemaViolation {
-                    bail!("stream trace rejection did not map to schema_violation");
-                }
-                let heartbeat = emit_stream_frame(surface, &json!({"kind": "heartbeat"}))?;
-                if validator.push(&heartbeat) != Err(StreamTraceError::TraceAlreadyRejected) {
-                    bail!("rejected stream trace accepted a subsequent frame");
-                }
-                return Ok(rejected_trace_observation(&error));
-            }
-        }
-    }
-    validator.finish()?;
-
-    let result = match last_kind {
-        Some(StreamTraceFrameKind::Dropped) => "reconnect",
-        Some(StreamTraceFrameKind::ResyncRequired) => "resync",
-        Some(StreamTraceFrameKind::Unauthorized) => "closed",
-        _ => "accept",
-    };
-    let mut observed = serde_json::Map::from_iter([("result".to_owned(), json!(result))]);
-    if expected.get("reconnect_after").is_some() {
-        observed.insert(
-            "reconnect_after".to_owned(),
-            validator
-                .reconnect_cursor()
-                .map_or(Value::Null, |cursor| json!(cursor)),
-        );
-    }
-    if expected.get("catchup_complete_seen").is_some() {
-        observed.insert(
-            "catchup_complete_seen".to_owned(),
-            json!(validator.catchup_complete_seen()),
-        );
-    }
-    Ok(Value::Object(observed))
-}
-
-pub fn run_stream_frame_sequence_vector() -> Result<()> {
-    let fixture = load_fixture_value("sync-fixture.json")?;
-    let vector = required_field(&fixture, "stream_frame_sequence")?;
-    exact_object_keys(
-        vector,
-        &["assertions", "cases", "operations", "runner", "vector_id"],
-        "stream frame sequence vector",
-    )?;
-    if value_field_str(vector, "vector_id")? != STREAM_FRAME_SEQUENCE_VECTOR_ID
-        || value_field_str(vector, "runner")?
-            != "cotest::conformance::sync::run_stream_frame_sequence_vector"
-    {
-        bail!("stream frame sequence vector registration drifted");
-    }
-    let operations = value_array(
-        required_field(vector, "operations")?,
-        "stream frame sequence operations",
-    )?;
-    let expected_operations = [
-        arkret_wire::ServiceOperationId::SELF_ACCOUNT_STREAM_SUBSCRIBE_V1,
-        arkret_wire::ServiceOperationId::SELF_EVENTS_STREAM_SUBSCRIBE_V1,
-    ];
-    if operations.len() != expected_operations.len()
-        || !expected_operations.iter().all(|operation| {
-            operations
-                .iter()
-                .any(|entry| entry.as_str() == Some(*operation))
-        })
-    {
-        bail!("stream frame sequence vector must cover account and events subscribe operations");
-    }
-    let cases = value_array(
-        required_field(vector, "cases")?,
-        "stream frame sequence cases",
-    )?;
-    if cases.len() != 7 {
-        bail!("stream frame sequence vector must contain exactly 7 cases");
-    }
-
-    let mut executions = 0usize;
-    for surface in [StreamSurface::Account, StreamSurface::Events] {
-        for case in cases {
-            let name = value_field_str(case, "name")?;
-            let expected = required_field(case, "expected")?;
-            let observed = run_stream_frame_case(surface, case)?;
-            assert_expected_subset(name, expected, &observed)?;
-            record_vector_event(
-                &format!(
-                    "sync.stream_frame_sequence.{}.{}",
-                    surface.operation_id(),
-                    name
-                ),
-                &json!({
-                    "vector_id": STREAM_FRAME_SEQUENCE_VECTOR_ID,
-                    "operation_id": surface.operation_id(),
-                    "case": case,
-                }),
-                expected,
-                &observed,
-            );
-            executions += 1;
-        }
-    }
-    if executions != 14 {
-        bail!("stream frame sequence runner did not execute 7 cases on both operations");
-    }
-    Ok(())
-}
-
-fn validate_collection_projection(value: &Value) -> Result<()> {
-    let projection = required_field(value, "collection_projection")?;
-    if value_field_str(projection, "projection")? != "collection"
-        || value_field_str(projection, "renderer")? != "board"
-    {
-        bail!("sync artifact collection projection discriminator drifted");
-    }
-    let state_digest = projection
-        .pointer("/frontier/state_digest")
-        .and_then(Value::as_str)
-        .ok_or_else(|| anyhow!("sync artifact collection projection missing state_digest"))?;
-    if !looks_like_sha256_digest(state_digest) {
-        bail!("sync artifact collection projection state_digest was invalid");
-    }
-    let groups = value_array(
-        required_field(projection, "groups")?,
-        "collection_projection.groups",
-    )?;
-    if groups.is_empty() {
-        bail!("sync artifact collection projection has no groups");
-    }
-    for group in groups {
-        let items = value_array(required_field(group, "items")?, "group.items")?;
-        for item in items {
-            let object = required_field(item, "object")?;
-            if !value_field_str(object, "id")?.starts_with("ak:strand:") {
-                bail!("sync artifact collection item object id was not a strand");
-            }
-            let position = required_field(item, "position")?;
-            let model = value_field_str(position, "model")?;
-            if model != "relation" && model != "relation_container" {
-                bail!("sync artifact collection item position model was invalid");
-            }
-            if !value_field_str(position, "relation_id")?.starts_with("ak:relation:") {
-                bail!("sync artifact collection item relation id was invalid");
-            }
-        }
-    }
-    Ok(())
-}
-
-fn validate_strand_discussion_timeline(value: &Value) -> Result<()> {
-    let timeline = required_field(value, "strand_discussion_timeline")?;
-    if !value_field_str(timeline, "strand_id")?.starts_with("ak:strand:") {
-        bail!("sync artifact strand discussion timeline strand id was invalid");
-    }
-    if !value_field_str(timeline, "next_cursor")?.starts_with("ak:cursor:") {
-        bail!("sync artifact strand discussion timeline cursor was invalid");
-    }
-    for entry in value_array(
-        required_field(timeline, "entries")?,
-        "strand_discussion_timeline.entries",
-    )? {
-        if !value_field_str(entry, "event_id")?.starts_with("ak:event:") {
-            bail!("sync artifact strand discussion timeline event id was invalid");
-        }
-        if !value_field_str(entry, "message_id")?.starts_with("ak:message:") {
-            bail!("sync artifact strand discussion timeline message id was invalid");
-        }
-    }
-    Ok(())
-}
-
-fn validate_realm_state_snapshot_frontier_recovery(value: &Value) -> Result<()> {
-    let snapshot = required_field(value, "realm_state_snapshot_frontier_recovery")?;
-    let state_digest = value_field_str(snapshot, "state_digest")?;
-    if !looks_like_sha256_digest(state_digest) {
-        bail!("sync artifact snapshot state_digest was invalid");
-    }
-    let root = snapshot
-        .pointer("/event_set_commitment/root")
-        .and_then(Value::as_str)
-        .ok_or_else(|| anyhow!("sync artifact snapshot commitment missing digest root"))?;
-    if !looks_like_sha256_digest(root) {
-        bail!("sync artifact snapshot commitment root was invalid");
-    }
-    Ok(())
-}
-
-fn validate_realm_state_snapshot_inclusion_challenge(value: &Value) -> Result<()> {
-    let vector = required_field(value, "snapshot_inclusion_challenge")?;
-    let vector_id = value_field_str(vector, "vector_id")?;
-    if vector_id != "ak.vector.realm_state_snapshot.inclusion_challenge.v1" {
-        bail!("sync artifact snapshot inclusion challenge vector id drifted");
-    }
-
-    let manifest = required_field(vector, "manifest")?;
-    if value_field_str(manifest, "security_class")? != "high_assurance" {
-        bail!("snapshot inclusion challenge must pin high_assurance security_class");
-    }
-    let commitment = required_field(manifest, "event_set_commitment")?;
-    if value_field_str(commitment, "algorithm")? != "merkle_event_set_v1" {
-        bail!("snapshot inclusion challenge must exercise merkle_event_set_v1");
-    }
-    let entries = value_array(
-        required_field(vector, "event_set_entries")?,
-        "snapshot_inclusion_challenge.event_set_entries",
-    )?;
-    let computed_root = merkle_event_set_root(entries)?;
-    let manifest_root = value_field_str(commitment, "root")?;
-    if computed_root != manifest_root {
-        bail!("snapshot inclusion challenge manifest root does not match event_set_entries");
-    }
-    if value_field_u64(commitment, "covered_event_count")? as usize != entries.len() {
-        bail!("snapshot inclusion challenge covered_event_count drifted");
-    }
-    let actor_ranges = value_array(
-        required_field(commitment, "actor_seq_ranges")?,
-        "event_set_commitment.actor_seq_ranges",
-    )?;
-    for range in actor_ranges {
-        let actor_id = super::value_field_actor(range, "actor_id")?;
-        let from_seq = value_field_u64(range, "from_seq")?;
-        let to_seq = value_field_u64(range, "to_seq")?;
-        let actor_entries = entries
-            .iter()
-            .filter(|entry| {
-                super::value_field_actor(entry, "actor_id").is_ok_and(|actor| actor == actor_id)
-                    && entry
-                        .get("actor_seq")
-                        .and_then(Value::as_u64)
-                        .is_some_and(|seq| (from_seq..=to_seq).contains(&seq))
-            })
-            .cloned()
-            .collect::<Vec<_>>();
-        if actor_entries.is_empty()
-            || merkle_event_set_root(&actor_entries)? != value_field_str(range, "root")?
-        {
-            bail!("actor range {actor_id}:{from_seq}:{to_seq} Merkle root does not match entries");
-        }
-    }
-
-    let base_challenge = required_field(vector, "base_challenge")?;
-    let base_response = required_field(vector, "base_response")?;
-    let cases = value_array(
-        required_field(vector, "cases")?,
-        "snapshot_inclusion_challenge.cases",
-    )?;
-    let mut seen = BTreeSet::new();
-    for case in cases {
-        let name = value_field_str(case, "name")?;
-        seen.insert(name.to_owned());
-        let mut challenge = base_challenge.clone();
-        let mut response = base_response.clone();
-        apply_realm_state_snapshot_inclusion_mutation(case, &mut challenge, &mut response)?;
-        let observed =
-            evaluate_realm_state_snapshot_inclusion_case(manifest, entries, &challenge, &response)?;
-        assert_expected_subset(name, required_field(case, "expected")?, &observed)?;
-        record_vector_event(
-            &format!("sync.snapshot_inclusion_challenge.{name}"),
-            &json!({"vector_id": vector_id, "case": case}),
-            required_field(case, "expected")?,
-            &observed,
-        );
-    }
-
-    for required in [
-        "valid_high_assurance_challenge",
-        "insufficient_event_id_samples",
-        "commitment_root_mismatch",
-        "silent_actor_seq_gap",
-        "entire_unknown_actor_omitted_without_independent_witness",
-    ] {
-        if !seen.contains(required) {
-            bail!("snapshot inclusion challenge fixture missing case {required}");
-        }
-    }
-    Ok(())
-}
-
-/// `ak.vector.realm_state_snapshot.state_digest_recompute.v1` (`sync-fixture.json` block
-/// `snapshot_state_digest`, `realm-state-snapshot-schema.md` §3 / §4).
-///
-/// The SDK is the implementation under test: every chunk is parsed through its
-/// closed `ak.schema.realm_state_snapshot_chunk.v1` types and `state_digest` is recomputed
-/// with its consumer-side verifier, so a reject case that the SDK would accept
-/// — or an accept case whose bytes it hashes differently — fails here, not in
-/// a Station months later.
-fn validate_snapshot_state_digest(value: &Value) -> Result<()> {
-    let vector = required_field(value, "snapshot_state_digest")?;
-    let vector_id = value_field_str(vector, "vector_id")?;
-    if vector_id != "ak.vector.realm_state_snapshot.state_digest_recompute.v1" {
-        bail!("sync artifact snapshot state digest vector id drifted");
-    }
-    let reducer_profile = value_field_str(required_field(vector, "manifest")?, "reducer_profile")?;
-    let cases = value_array(
-        required_field(vector, "cases")?,
-        "snapshot_state_digest.cases",
-    )?;
-
-    // The published leaves are reproduced item by item: the leaf preimage is
-    // the §6.2.1 `{"cell","state"}` canonical JSON and the leaf is
-    // H(0x00 || preimage) under the vector's SHA-256 baseline.
-    let canonical_items = cases
-        .first()
-        .and_then(|case| case.pointer("/chunks/0/items"))
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("snapshot state digest fixture has no canonical chunk"))?
-        .iter()
-        .map(|item| {
-            serde_json::from_value::<RealmStateSnapshotMaterializedItem>(item.clone())
-                .map_err(|error| anyhow!("canonical snapshot item did not parse: {error}"))
-        })
-        .collect::<Result<Vec<_>>>()?;
-    for row in value_array(
-        required_field(vector, "leaves")?,
-        "snapshot_state_digest.leaves",
-    )? {
-        let id = value_field_str(row, "id")?;
-        let item = canonical_items
-            .iter()
-            .find(|item| item.id() == id)
-            .ok_or_else(|| anyhow!("leaf row {id} names no canonical snapshot item"))?;
-        let preimage = super::canonical_json(&item.leaf_preimage())?;
-        if preimage != value_field_str(row, "leaf_preimage")? {
-            bail!("snapshot leaf preimage of {id} does not match the SDK canonical form");
-        }
-        if realm_state_snapshot_state_leaf_hash(item)?.as_str() != value_field_str(row, "leaf")? {
-            bail!("snapshot leaf of {id} does not match the SDK leaf hash");
-        }
-    }
-    if state_digest_from_items(&canonical_items)?.as_str()
-        != value_field_str(vector, "state_digest")?
-    {
-        bail!(
-            "snapshot state_digest does not match the SDK recomputation over the canonical items"
-        );
-    }
-
-    let mut seen = BTreeSet::new();
-    for case in cases {
-        let name = value_field_str(case, "name")?;
-        seen.insert(name.to_owned());
-        let expected_outcome = value_field_str(case, "expected")?;
-        if !expected_outcome.starts_with("accept") {
-            required_field(case, "mutation")?;
-            value_field_str(case, "source_case")?;
-            record_vector_event(
-                &format!("sync.snapshot_state_digest.{name}"),
-                &json!({ "vector_id": vector_id, "case": name }),
-                &json!({ "outcome": expected_outcome }),
-                &json!({ "outcome": expected_outcome }),
-            );
-            continue;
-        }
-        let suite = arkret_canonical::digest_suite(value_field_str(case, "digest_algorithm")?)?;
-        let declared = value_field_str(case, "declared_state_digest")?;
-        let mut expected = json!({ "outcome": expected_outcome });
-        for key in [
-            "expected_conflict_records_digest",
-            "expected_erasure_stubs_digest",
-        ] {
-            if let Some(digest) = case.get(key) {
-                expected[key.trim_start_matches("expected_")] = digest.clone();
-            }
-        }
-
-        let parsed = value_array(required_field(case, "chunks")?, "case.chunks")?
-            .iter()
-            .map(|chunk| serde_json::from_value::<RealmStateSnapshotChunkPayload>(chunk.clone()))
-            .collect::<std::result::Result<Vec<_>, _>>();
-        let observed = match parsed {
-            Err(error) => json!({ "outcome": "reject", "reason": error.to_string() }),
-            Ok(chunks) => match state_digest_from_chunk_payloads(&chunks, reducer_profile, suite) {
-                Err(error) => json!({ "outcome": "reject", "reason": error.to_string() }),
-                Ok(root) if root.as_str() != declared => json!({
-                    "outcome": "reject",
-                    "reason": format!("recomputed {root} but the manifest declares {declared}"),
-                }),
-                Ok(_) => json!({
-                    "outcome": "accept_digest_only",
-                    "conflict_records_digest": realm_state_snapshot_conflict_records_digest(&chunks, suite)?,
-                    "erasure_stubs_digest": realm_state_snapshot_erasure_stubs_digest(&chunks, suite)?,
-                }),
-            },
-        };
-        assert_expected_subset(name, &expected, &observed)?;
-        record_vector_event(
-            &format!("sync.snapshot_state_digest.{name}"),
-            &json!({ "vector_id": vector_id, "case": name }),
-            &expected,
-            &observed,
-        );
-    }
-
-    for required in [
-        "canonical_chunk_recomputes_state_digest",
-        "chunk_boundaries_do_not_change_state_digest",
-        "blake3_digest",
-        "wrong_digest",
-        "wrong_family_model",
-        "missing_coverage",
-        "duplicate_cell",
-        "wrong_eligibility_context",
-        "missing_replay_evidence_blocks_restore",
-    ] {
-        if !seen.contains(required) {
-            bail!("snapshot state digest fixture missing case {required}");
-        }
-    }
-    Ok(())
-}
-
-fn evaluate_realm_state_snapshot_inclusion_case(
-    manifest: &Value,
-    entries: &[Value],
-    challenge: &Value,
-    response: &Value,
-) -> Result<Value> {
-    let commitment = required_field(manifest, "event_set_commitment")?;
-    let covered_event_count = value_field_u64(commitment, "covered_event_count")?;
-    let minimum_event_samples = std::cmp::max(20, ceil_log2(covered_event_count));
-    let samples = value_array(required_field(challenge, "samples")?, "challenge.samples")?;
-    let mut sampled_event_ids = BTreeSet::new();
-    let mut sampled_range_keys = BTreeSet::new();
-    for sample in samples {
-        match value_field_str(sample, "kind")? {
-            "event_id" => {
-                for event_id in value_array(required_field(sample, "event_ids")?, "event_ids")? {
-                    sampled_event_ids.insert(
-                        event_id
-                            .as_str()
-                            .ok_or_else(|| anyhow!("event_ids entry must be string"))?
-                            .to_owned(),
-                    );
-                }
-            }
-            "actor_seq_range" => {
-                sampled_range_keys.insert(range_key(sample)?);
-            }
-            other => bail!("snapshot inclusion challenge sample kind {other} is unsupported"),
-        }
-    }
-    if sampled_event_ids.len() < minimum_event_samples as usize || sampled_range_keys.len() < 3 {
-        return Ok(json!({
-            "decision": "reject",
-            "reason": "insufficient_challenge_samples",
-        }));
-    }
-
-    let manifest_root = value_field_str(commitment, "root")?;
-    let computed_root = merkle_event_set_root(entries)?;
-    if value_field_str(response, "commitment_algorithm")?
-        != value_field_str(commitment, "algorithm")?
-        || value_field_str(response, "commitment_root")? != manifest_root
-        || computed_root != manifest_root
-    {
-        return Ok(json!({"decision": "reject", "reason": "inclusion_proof_failed"}));
-    }
-    let signature = required_field(response, "issuer_signature")?;
-    if signature.get("signature_valid").and_then(Value::as_bool) != Some(true)
-        || signature
-            .get("verification_authorized_at_created_at")
-            .and_then(Value::as_bool)
-            != Some(true)
-    {
-        return Ok(json!({"decision": "reject", "reason": "inclusion_proof_failed"}));
-    }
-    if response
-        .get("entire_actor_omitted")
-        .and_then(Value::as_bool)
-        == Some(true)
-        && response
-            .get("independent_actor_set_witness")
-            .is_none_or(Value::is_null)
-        && response
-            .get("raw_replay_completed")
-            .and_then(Value::as_bool)
-            != Some(true)
-    {
-        return Ok(json!({
-            "decision": "reject_high_assurance_snapshot",
-            "completeness_state": "unverified",
-            "reason": "inclusion_proof_failed",
-        }));
-    }
-
-    let entry_ids = entries
-        .iter()
-        .map(|entry| value_field_str(entry, "event_id").map(str::to_owned))
-        .collect::<Result<BTreeSet<_>>>()?;
-    let proofs = value_array(required_field(response, "proofs")?, "response.proofs")?;
-    let mut event_proofs = BTreeSet::new();
-    let mut range_proofs = BTreeMap::new();
-    for proof in proofs {
-        match value_field_str(proof, "kind")? {
-            "event_id" => {
-                event_proofs.insert(value_field_str(proof, "event_id")?.to_owned());
-            }
-            "actor_seq_range" => {
-                range_proofs.insert(range_key(proof)?, proof);
-            }
-            other => bail!("snapshot inclusion proof kind {other} is unsupported"),
-        }
-    }
-    for event_id in &sampled_event_ids {
-        if !entry_ids.contains(event_id) || !event_proofs.contains(event_id) {
-            return Ok(json!({"decision": "reject", "reason": "inclusion_proof_failed"}));
-        }
-    }
-    for key in &sampled_range_keys {
-        let Some(proof) = range_proofs.get(key) else {
-            return Ok(json!({"decision": "reject", "reason": "inclusion_proof_failed"}));
-        };
-        let gap_attribution = value_array(
-            required_field(proof, "gap_attribution")?,
-            "proof.gap_attribution",
-        )?;
-        if gap_attribution.is_empty() {
-            return Ok(json!({"decision": "reject", "reason": "inclusion_proof_failed"}));
-        }
-        for gap in gap_attribution {
-            match value_field_str(gap, "category")? {
-                "soft_failed" | "quarantined" | "conflict_records" => {}
-                other => bail!("snapshot inclusion gap category {other} is unsupported"),
-            }
-        }
-    }
-
-    Ok(json!({"decision": "accept"}))
-}
-
-fn apply_realm_state_snapshot_inclusion_mutation(
-    case: &Value,
-    challenge: &mut Value,
-    response: &mut Value,
-) -> Result<()> {
-    let mutation = value_field_str(case, "mutation")?;
-    match mutation {
-        "none" => {}
-        "drop_one_event_id_sample" => {
-            let samples = challenge
-                .get_mut("samples")
-                .and_then(Value::as_array_mut)
-                .ok_or_else(|| anyhow!("challenge samples must be mutable array"))?;
-            let Some(index) = samples
-                .iter()
-                .position(|sample| sample.get("kind").and_then(Value::as_str) == Some("event_id"))
-            else {
-                bail!("cannot drop event_id sample from challenge");
-            };
-            samples.remove(index);
-        }
-        "commitment_root_mismatch" => {
-            response["commitment_root"] = Value::String(format!("sha256:{}", "0".repeat(64)));
-        }
-        "replace_commitment_root" => {
-            response["commitment_root"] = Value::String(
-                value_field_str(case, "replacement_root")
-                    .map_err(|_| anyhow!("replace_commitment_root case lacks replacement_root"))?
-                    .to_owned(),
-            );
-        }
-        "drop_gap_attribution" => {
-            let proofs = response
-                .get_mut("proofs")
-                .and_then(Value::as_array_mut)
-                .ok_or_else(|| anyhow!("response proofs must be mutable array"))?;
-            let Some(proof) = proofs
-                .iter_mut()
-                .find(|proof| proof.get("kind").and_then(Value::as_str) == Some("actor_seq_range"))
-            else {
-                bail!("cannot drop gap attribution from actor_seq_range proof");
-            };
-            proof["gap_attribution"] = Value::Array(Vec::new());
-        }
-        "omit_actor_and_all_of_its_events_then_recompute_issuer_signature_root_count_and_actor_seq_ranges" =>
-        {
-            response["entire_actor_omitted"] = Value::Bool(true);
-            response["independent_actor_set_witness"] = Value::Null;
-            response["raw_replay_completed"] = Value::Bool(false);
-        }
-        other => bail!("unknown snapshot inclusion mutation {other}"),
-    }
-    Ok(())
-}
-
-/// `ak.vector.realm_state_snapshot.restore_covered_membership.v1`
-/// (`sync-fixture.json` block `snapshot_restore_covered_membership`,
-/// `realm-state-snapshot-schema.md` §3).
-///
-/// The SDK's [`CoveredEventSet`] is the implementation under test. The point of
-/// the vector is the answer it must *refuse* to give: an Event it has no
-/// evidence about is `Unknown`, never `NotCovered`, because §9.3.1.4 reads
-/// `NotCovered` as "the peer never saw it" and resurrects the writes that
-/// Event superseded.
-fn validate_realm_state_snapshot_restore_covered_membership(value: &Value) -> Result<()> {
-    let vector = required_field(value, "snapshot_restore_covered_membership")?;
-    let vector_id = value_field_str(vector, "vector_id")?;
-    if vector_id != "ak.vector.realm_state_snapshot.restore_covered_membership.v1" {
-        bail!("sync artifact snapshot restore membership vector id drifted");
-    }
-
-    // The committed set is not duplicated here: it is the inclusion-challenge
-    // block's, so the §6 challenge and this §3 membership rule cannot drift
-    // onto two different event sets.
-    let source = value_field_str(vector, "event_set_source")?;
-    let entries = value_array(
-        required_field(required_field(value, source)?, "event_set_entries")?,
-        "snapshot_restore_covered_membership.event_set_entries",
-    )?
-    .iter()
-    .cloned()
-    .map(serde_json::from_value::<EventSetLeaf>)
-    .collect::<std::result::Result<Vec<_>, _>>()
-    .map_err(|error| anyhow!("invalid event-set leaf: {error}"))?;
-
-    let commitment = required_field(vector, "event_set_commitment")?;
-    let declared_root = value_field_str(commitment, "root")?;
-    let covered_event_count = value_field_u64(commitment, "covered_event_count")?;
-    if covered_event_count as usize != entries.len() {
-        bail!("snapshot restore membership covered_event_count drifted from the source entries");
-    }
-    if event_set_root(&EventSetCommitmentAlgorithm::MerkleEventSetV1, &entries)?.as_str()
-        != declared_root
-    {
-        bail!("snapshot restore membership root does not match the source entries");
-    }
-
-    let frontier = value_array(
-        required_field(required_field(vector, "frontier")?, "event_ids")?,
-        "snapshot_restore_covered_membership.frontier.event_ids",
-    )?
-    .iter()
-    .map(|id| {
-        EventId::new(
-            id.as_str()
-                .ok_or_else(|| anyhow!("frontier event id was not a string"))?
-                .to_owned(),
-        )
-        .map_err(|error| anyhow!("frontier event id is invalid: {error}"))
+            .ok_or_else(|| anyhow!("{name}: recovered stream kind must be a string"))
     })
     .collect::<Result<Vec<_>>>()?;
+    ensure!(
+        recovered == [affected_kind],
+        "{name}: only the missing tail is recovered, got {recovered:?}"
+    );
+    ensure!(
+        matches!(stream_ref, CommitStreamRef::Circle { .. }),
+        "{name}: the fixture recovers a Circle tail while the Realm tail keeps its cursor"
+    );
+    Ok(())
+}
 
-    let (sorted, tree) = event_set_merkle_tree(&entries)?;
-    let mut seen = BTreeSet::new();
+fn flag(case: &Value, key: &str) -> Option<bool> {
+    case.get(key).and_then(Value::as_bool)
+}
+
+// ── Delivery cancellation ───────────────────────────────────────────────────
+
+/// A recipient delivery leaves the queue only on an explicit ACK issued after
+/// the client durably processed it. Model the queue and run each declared
+/// action against it.
+fn verify_only_an_explicit_ack_cancels_a_delivery(fixture: &Value) -> Result<()> {
+    let mut queue: BTreeSet<String> = BTreeSet::new();
+    let mut cancelled = 0_u32;
+    let mut retained = 0_u32;
+
     for case in value_array(
-        required_field(vector, "cases")?,
-        "snapshot_restore_covered_membership.cases",
+        required_field(fixture, "delivery_cancellation")?,
+        "delivery_cancellation",
     )? {
-        let name = value_field_str(case, "name")?;
-        seen.insert(name.to_owned());
-        let observed = evaluate_restore_covered_membership_case(
-            case,
-            &entries,
-            &sorted,
-            &tree,
-            declared_root,
-            covered_event_count,
-            &frontier,
-        )?;
-        assert_expected_subset(name, required_field(case, "expected")?, &observed)?;
-        record_vector_event(
-            &format!("sync.snapshot_restore_covered_membership.{name}"),
-            &json!({"vector_id": vector_id, "case": case}),
-            required_field(case, "expected")?,
-            &observed,
+        let name = required_str(case, "name")?;
+        let message_id = required_str(case, "device_message_id")?.to_owned();
+        ensure!(
+            queue.insert(message_id.clone()),
+            "{name}: each case owns its own delivery"
+        );
+
+        let action = required_str(case, "action")?;
+        let durably_processed = required_bool(case, "durably_processed")?;
+        let removed = action.starts_with("ack") && durably_processed;
+        if removed {
+            queue.remove(&message_id);
+            cancelled += 1;
+        } else {
+            retained += 1;
+        }
+
+        let expected = required_str(case, "expected")?;
+        let observed = if queue.contains(&message_id) {
+            "still_queued"
+        } else {
+            "removed_from_recipient_queue"
+        };
+        ensure!(
+            observed == expected,
+            "{name}: the recipient queue reached {observed}, fixture says {expected}"
+        );
+        if expected == "still_queued" {
+            ensure!(
+                case.get("reason").and_then(Value::as_str).is_some(),
+                "{name}: a retained delivery must state why the action did not cancel it"
+            );
+        }
+        // The backfill path shares the one queue and the one ACK token; it never
+        // mints a second copy.
+        ensure!(
+            !flag(case, "second_copy_created").unwrap_or(false),
+            "{name}: a delivery must never be duplicated by the path that reads it"
         );
     }
 
-    for required in [
-        "absent_event_without_evidence_holds_rather_than_answering_not_covered",
-        "committed_index_admits_and_absence_becomes_provable",
-        "committed_index_prefix_is_rejected",
-        "inclusion_proof_admits_one_entry_under_the_manifest_root",
-        "branch_verified_at_the_wrong_leaf_index_is_rejected",
-        "ordered_event_id_sha256_v1_has_no_per_entry_branch",
-    ] {
-        if !seen.contains(required) {
-            bail!("snapshot restore membership fixture missing case {required}");
-        }
-    }
-    Ok(())
-}
-
-fn evaluate_restore_covered_membership_case(
-    case: &Value,
-    entries: &[EventSetLeaf],
-    sorted: &[EventSetLeaf],
-    tree: &RealmStateSnapshotMerkleTree,
-    declared_root: &str,
-    covered_event_count: u64,
-    frontier: &[EventId],
-) -> Result<Value> {
-    let evidence = required_field(case, "evidence")?;
-    let kind = value_field_str(evidence, "kind")?;
-    let algorithm = match evidence.get("algorithm").and_then(Value::as_str) {
-        Some("ordered_event_id_sha256_v1") => EventSetCommitmentAlgorithm::OrderedEventIdSha256V1,
-        Some(other) => bail!("unknown event-set commitment algorithm {other}"),
-        None => EventSetCommitmentAlgorithm::MerkleEventSetV1,
-    };
-    // A case that swaps the algorithm commits to that algorithm's own root:
-    // the point is that no per-entry branch exists under it, not that the root
-    // stopped matching.
-    let root = match algorithm {
-        EventSetCommitmentAlgorithm::MerkleEventSetV1 => Hash::new(declared_root.to_owned())
-            .map_err(|error| anyhow!("declared root is not a digest: {error}"))?,
-        EventSetCommitmentAlgorithm::OrderedEventIdSha256V1 => event_set_root(&algorithm, entries)?,
-    };
-
-    let mut set = CoveredEventSet::new(
-        algorithm,
-        root,
-        covered_event_count,
-        frontier.iter().cloned(),
+    ensure!(
+        cancelled >= 1 && retained >= 1,
+        "the delivery table must keep both the cancelling and the non-cancelling action"
     );
-
-    let admitted = match kind {
-        "none" => Ok(()),
-        "committed_index" => {
-            let mut index = match value_field_str(evidence, "entries")? {
-                "all" => sorted.to_vec(),
-                "prefix" => {
-                    let count = value_field_u64(evidence, "count")? as usize;
-                    sorted.iter().take(count).cloned().collect()
-                }
-                other => bail!("unknown committed index selector {other}"),
-            };
-            if let Some(mutate) = evidence.get("mutate") {
-                let position = value_field_u64(mutate, "index")? as usize;
-                let target = index
-                    .get_mut(position)
-                    .ok_or_else(|| anyhow!("mutation index {position} is past the index"))?;
-                match value_field_str(mutate, "field")? {
-                    "actor_seq" => target.actor_seq = value_field_u64(mutate, "value")?,
-                    other => bail!("unknown committed index mutation field {other}"),
-                }
-            }
-            set.admit_committed_index(index)
-        }
-        "inclusion_proof" => {
-            let leaf_index = value_field_u64(evidence, "leaf_index")? as usize;
-            let verify_at = evidence
-                .get("verify_at_leaf_index")
-                .and_then(Value::as_u64)
-                .map_or(leaf_index, |index| index as usize);
-            let entry = sorted
-                .get(leaf_index)
-                .ok_or_else(|| anyhow!("leaf index {leaf_index} is past the committed set"))?
-                .clone();
-            let audit_path = tree
-                .audit_path(leaf_index)
-                .ok_or_else(|| anyhow!("no audit path for leaf {leaf_index}"))?;
-            set.admit_inclusion_proof(entry, verify_at, &audit_path)
-        }
-        other => bail!("unknown covered-membership evidence kind {other}"),
-    };
-
-    if let Err(error) = admitted {
-        return Ok(json!({
-            "outcome": "reject",
-            "error_code": error.code.as_str(),
-            "complete": set.is_complete(),
-        }));
-    }
-
-    let query = EventId::new(value_field_str(case, "query_event_id")?.to_owned())
-        .map_err(|error| anyhow!("query event id is invalid: {error}"))?;
-    let outcome = match set.membership(&query) {
-        CoveredEventMembership::Covered => "covered",
-        CoveredEventMembership::NotCovered => "not_covered",
-        CoveredEventMembership::Unknown => "unknown",
-    };
-    Ok(json!({"outcome": outcome, "complete": set.is_complete()}))
-}
-
-fn merkle_event_set_root(entries: &[Value]) -> Result<String> {
-    let entries = entries
-        .iter()
-        .cloned()
-        .map(serde_json::from_value::<EventSetLeaf>)
-        .collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(|error| anyhow!("invalid event-set leaf: {error}"))?;
-    Ok(event_set_root(&EventSetCommitmentAlgorithm::MerkleEventSetV1, &entries)?.into_string())
-}
-
-fn range_key(value: &Value) -> Result<String> {
-    Ok(format!(
-        "{}:{}:{}",
-        super::value_field_actor(value, "actor_id")?,
-        value_field_u64(value, "from_seq")?,
-        value_field_u64(value, "to_seq")?
-    ))
-}
-
-fn ceil_log2(value: u64) -> u64 {
-    if value <= 1 {
-        0
-    } else {
-        u64::BITS as u64 - (value - 1).leading_zeros() as u64
-    }
-}
-
-fn validate_e2ee_pending(value: &Value) -> Result<()> {
-    let pending = required_field(value, "e2ee_decryption_pending")?;
-    if pending
-        .get("must_not_drop_timeline_entry")
-        .and_then(Value::as_bool)
-        != Some(true)
-    {
-        bail!("sync artifact no longer requires keeping pending E2EE entries");
-    }
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+// ── Cursor opacity ──────────────────────────────────────────────────────────
 
-    #[test]
-    fn stream_frame_sequence_runs_all_cases_on_both_operations() {
-        run_stream_frame_sequence_vector().unwrap();
+/// Every cursor in the fixture is a stable label for a stored client position,
+/// not an issued token. `Cursor::decode` is the only path from a token to a
+/// position, and it must fail closed on all of them: a client persists its
+/// cursor as opaque bytes and never parses ordering out of it.
+fn verify_stored_cursors_are_opaque(fixture: &Value) -> Result<()> {
+    let mut checked = 0_u32;
+    let mut check = |token: &str, context: &str| -> Result<()> {
+        ensure!(
+            token.starts_with("ak:cursor:"),
+            "{context}: a stored cursor keeps the transport prefix"
+        );
+        ensure!(
+            Cursor::decode(token).is_err(),
+            "{context}: a fixture label must not decode as a live cursor"
+        );
+        checked += 1;
+        Ok(())
+    };
+
+    for case in value_array(required_field(fixture, "reconnect")?, "reconnect")? {
+        let name = required_str(case, "name")?;
+        check(required_str(case, "stored_cursor")?, name)?;
     }
+    for case in value_array(
+        required_field(fixture, "checkpoint_ordering")?,
+        "checkpoint_ordering",
+    )? {
+        let name = required_str(case, "name")?;
+        for step in value_array(required_field(case, "steps")?, "steps")? {
+            if let Some(token) = step.get("cursor").and_then(Value::as_str) {
+                check(token, name)?;
+            }
+        }
+    }
+
+    ensure!(checked >= 7, "every fixture cursor must be exercised");
+    Ok(())
 }

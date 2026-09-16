@@ -26,7 +26,6 @@ import {
 import {
   accountActorId,
   addRealmMemberApi,
-  advanceEnvelopeToActorFrontier,
   authHeaders,
   canonicalEventTimestamp,
   requireDidCoreId,
@@ -158,7 +157,6 @@ async function configureAppletPlaintextServices(
       services: plaintextVisibleServiceDeclarations(serviceIds),
     },
   });
-  await advanceEnvelopeToActorFrontier(request, token, envelope);
   await submitSignedEventApi(request, token, envelope, {
     context: "configure Applet plaintext-visible services",
   });
@@ -2225,7 +2223,6 @@ async function prepareAppletInstallAuthoringBasis(
     scopeRef: effectiveScope,
     payload: registrationPayload as Record<string, unknown>,
   });
-  await advanceEnvelopeToActorFrontier(request, token, registrationEvent);
   const registrationActorSeq = registrationEvent.actor_seq;
   const registrationEventId = registrationEvent.event_id;
   if (

@@ -802,30 +802,40 @@ export async function createRealmApi(
       station_id: creatorServiceId,
     },
   };
-  const creatorActorCanonical = canonicalJson(creatorActorId);
-  const memberCellSubject = base64url(
-    createHash("sha256")
-      .update(canonicalJson([creatorActorCanonical]))
-      .digest(),
-  );
   pushBootstrapEvent("ak.member.state", {
     realm_id: realmId,
     member_id: creatorActorId,
     membership: "join",
   });
 
-  const bootstrapOutcome = await submitSignedEventBatchApi(
-    request,
-    token,
-    bootstrapEvents,
-    {
+  // There is no batch submission: one `RealmCommit` admits exactly one Event.
+  // The founding unit is therefore submitted Event by Event, and the commits it
+  // gets back must occupy consecutive positions of this Realm's own stream
+  // starting at zero — which is the whole ordering guarantee the retired
+  // actor-frontier chain used to carry on the producer envelope.
+  const bootstrapOutcomes: Array<Record<string, unknown>> = [];
+  for (const [index, event] of bootstrapEvents.entries()) {
+    const outcome = await submitSignedEventApi(request, token, event, {
       server: opts.server,
-      context: `create realm ${data.title}`,
-    },
-  );
+      context: `create realm ${data.title} (${String(event.kind)})`,
+    });
+    const commit = outcome.commit as Record<string, unknown> | undefined;
+    expect(
+      commit?.stream_position,
+      `realm bootstrap Event ${index} did not take Realm stream position ${index}`,
+    ).toBe(index);
+    const previous = bootstrapOutcomes[index - 1]?.commit as
+      | Record<string, unknown>
+      | undefined;
+    expect(
+      commit?.previous_commit_ref ?? null,
+      `realm bootstrap Event ${index} does not follow its predecessor commit`,
+    ).toEqual(previous ? previous.commit_id : null);
+    bootstrapOutcomes.push(outcome);
+  }
   opts.onAcceptedBootstrap?.({
     events: structuredClone(bootstrapEvents),
-    outcome: structuredClone(bootstrapOutcome),
+    outcome: structuredClone({ commits: bootstrapOutcomes }),
   });
   realmAuthorityControllers.set(
     realmAuthorityControllerKey(opts.server, realmId),
@@ -838,11 +848,6 @@ export async function createRealmApi(
       genesisEventId,
     );
   }
-  // The founding unit is accepted before the durable coordinator publishes
-  // its first Seal. Do not let the next helper call mistake that short window
-  // for an uninitialised conformance-only Realm and inject a synthetic basis:
-  // the real genesis Seal must atomically cover the complete founding unit.
-
   for (const invitee of data.invitees ?? []) {
     const recipientServiceId =
       data.invitee_ids?.[invitee] ?? solandServiceId(opts.server);
@@ -864,12 +869,6 @@ export async function createRealmApi(
         ),
       },
     });
-    await advanceEnvelopeToActorFrontier(
-      request,
-      token,
-      inviteEvent,
-      opts.server,
-    );
     await submitSignedEventApi(request, token, inviteEvent, {
       server: opts.server,
       context: `directed invite ${invitee}`,
@@ -1576,7 +1575,6 @@ export async function sendMessageApi(
     },
   });
   if (opts.actorSeq === undefined) {
-    await advanceEnvelopeToActorFrontier(request, token, envelope, opts.server);
   }
   const submission = await submitSignedEventApi(request, token, envelope, {
     server: opts.server,
@@ -1629,25 +1627,65 @@ export async function setStrandWatchLevelApi(
   );
 }
 
+/// Read a Realm's own commit stream through `ak.self.events.read.scan.v1`.
+///
+/// There is no Realm-wide Event query any more: a reader walks one stream by
+/// continuous `stream_position`. The flattened `events` list is returned in
+/// commit order alongside the commits that carry them, so a caller can assert
+/// either the Event payloads or the ordering the Station assigned them.
+export async function scanRealmStreamApi(
+  request: APIRequestContext,
+  token: string,
+  realmId: string,
+  opts: {
+    server?: SolandKey;
+    limit?: number;
+    streamRef?: Record<string, unknown>;
+  } = {},
+): Promise<{
+  commits: Array<Record<string, unknown>>;
+  events: Array<Record<string, unknown>>;
+  truncated: boolean;
+}> {
+  const streamRef = opts.streamRef ?? { kind: "realm", realm_id: realmId };
+  const url = `${solandBaseUrl(opts.server)}/_arkret/self/streams/scan`;
+  const response = await request.post(url, {
+    headers: {
+      ...authHeaders(token, "POST", url),
+      "content-type": "application/json",
+    },
+    data: canonicalJson({
+      realm_id: realmId,
+      stream_ref: streamRef,
+      limit: opts.limit ?? 256,
+    }),
+  });
+  const body = await expectJsonOk<{
+    commits?: Array<{
+      commit: Record<string, unknown>;
+      event: Record<string, unknown>;
+    }>;
+    truncated?: boolean;
+  }>(response, `scan Realm stream for ${realmId}`);
+  const items = body.commits ?? [];
+  return {
+    commits: items.map((item) => item.commit),
+    events: items.map((item) => item.event),
+    truncated: body.truncated === true,
+  };
+}
+
+/// Back-compatible projection of [`scanRealmStreamApi`] for callers that only
+/// read the Event list. The Events arrive in the order the governance Station
+/// committed them, which is the only order that exists.
 export async function queryRealmEventsApi(
   request: APIRequestContext,
   token: string,
   realmId: string,
   opts: { server?: SolandKey; limit?: number } = {},
-) {
-  const url = `${solandBaseUrl(opts.server)}/_arkret/self/events`;
-  const response = await request.fetch(url, {
-    method: "QUERY",
-    data: canonicalJson({ realm_ids: [realmId], limit: opts.limit ?? 100 }),
-    headers: {
-      ...authHeaders(token, "QUERY", url),
-      "content-type": "application/json",
-    },
-  });
-  return await expectJsonOk<Record<string, unknown>>(
-    response,
-    `query events for ${realmId}`,
-  );
+): Promise<Record<string, unknown>> {
+  const scan = await scanRealmStreamApi(request, token, realmId, opts);
+  return { events: scan.events, commits: scan.commits };
 }
 
 /// The holder-signed `ak.account_data.set` both account-data endpoints now take.
@@ -1691,11 +1729,6 @@ async function prepareAccountDataSetSubmissionApi(
 ): Promise<Record<string, unknown>> {
   const draft = accountDataSetSubmission(args);
   const event = draft.event as Record<string, unknown>;
-  // actor_private_event is outside the shared Realm Data/Control planes: the
-  // spec forbids seal_ref, seal_basis, CBS and shared-reducer coverage here.
-  // It still participates in the holder's signed actor chain, so align that
-  // frontier but do not ask the shared Event lease endpoint to authorize it.
-  await advanceEnvelopeToActorFrontier(request, token, event, opts.server);
   return { event };
 }
 
@@ -2170,6 +2203,13 @@ function eventEnvelopeProof(args: {
   });
 }
 
+/// Submit one producer-signed Event to its Realm's current governance Station.
+///
+/// The producer Event carries no position, predecessor or coverage: the Station
+/// supplies all three by returning the `RealmCommit` that admitted it. There is
+/// therefore no preparation step and no retry ladder — either the Station
+/// commits the exact submitted Event into the stream its scope names, or the
+/// submission is rejected with a reason code.
 export async function submitSignedEventApi(
   request: APIRequestContext,
   token: string,
@@ -2181,304 +2221,141 @@ export async function submitSignedEventApi(
   } = {},
 ) {
   const context = opts.context ?? `submit ${String(envelope.kind)}`;
-  await applyRegisteredCbsPlane(request, token, envelope, opts.server);
-  await advanceEnvelopeToActorFrontier(request, token, envelope, opts.server);
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const realmId = stringValue(envelope.realm_id);
-    const actorId = eventPrincipalId(envelope);
-    const actorControlRealm = actorId
-      ? principalControlRealmForIdIfKnown(actorId)
-      : undefined;
-    const eventsUrl = `${solandBaseUrl(opts.server)}/_arkret/self/events`;
-    const response = await request.post(eventsUrl, {
-      headers: {
-        ...authHeaders(token, "POST", eventsUrl),
-        "content-type": "application/json",
-      },
-      data: canonicalJson({ event: envelope }),
-    });
-    const text = await response.text();
-    if ([200, 201].includes(response.status())) {
-      const outcome = JSON.parse(text) as Record<string, unknown>;
-      rememberPublicationEvidence([envelope], outcome,
-        { token: opts.controlObserverToken ?? token, server: opts.server });
-      return outcome;
-    }
-    const body = JSON.parse(text) as unknown;
-    if (
-      response.status() === 403 &&
-      wireErrCode(body) === "capability_denied" &&
-      !(
-        realmId &&
-        realmAuthorityControllers.has(
-          realmAuthorityControllerKey(opts.server, realmId),
-        )
-      ) &&
-      attempt < 2
-    ) {
-      await forceConformanceCbsBasis(request, envelope, opts.server);
-      continue;
-    }
-    const actorFrontierRefreshRequired = requiresActorFrontierRefresh(
-      response.status(),
-      body,
-      text,
-    );
-    if (!actorFrontierRefreshRequired || attempt === 2) {
-      expect(
-        [200, 201],
-        `${context} returned ${response.status()}: ${text}`,
-      ).toContain(response.status());
-    }
-    await advanceEnvelopeToActorFrontier(request, token, envelope, opts.server);
-  }
-  throw new Error(`${context}: exhausted actor-frontier retry loop`);
+  const eventsUrl = `${solandBaseUrl(opts.server)}/_arkret/self/events`;
+  const response = await request.post(eventsUrl, {
+    headers: {
+      ...authHeaders(token, "POST", eventsUrl),
+      "content-type": "application/json",
+    },
+    data: canonicalJson({ event: envelope }),
+  });
+  const text = await response.text();
+  expect(
+    [200, 201],
+    `${context} returned ${response.status()}: ${text}`,
+  ).toContain(response.status());
+  const outcome = JSON.parse(text) as Record<string, unknown>;
+  assertAuthoritySubmitOutcome(outcome, envelope, context);
+  rememberPublicationEvidence([envelope], outcome, {
+    token: opts.controlObserverToken ?? token,
+    server: opts.server,
+  });
+  return outcome;
 }
 
-export async function prepareSignedEventSubmissionApi(
-  request: APIRequestContext,
-  token: string,
+/// The commit the Station returns must admit the exact Event that was
+/// submitted, into the one stream that Event's scope names.
+///
+/// `CommitStreamRef` is closed to `realm` / `circle` / `sidecar`; there is no
+/// Realm-global chain and no Realm-global position, so the only ordering the
+/// outcome may carry is `stream_position` inside `stream_ref`.
+export function assertAuthoritySubmitOutcome(
+  outcome: Record<string, unknown>,
   envelope: Record<string, unknown>,
-  opts: { server?: SolandKey; context?: string } = {},
+  context: string,
+): void {
+  const status = stringValue(outcome.status);
+  expect(
+    ["committed", "duplicate"],
+    `${context}: unexpected submit status ${String(status)}`,
+  ).toContain(status);
+  const commit = outcome.commit as Record<string, unknown> | undefined;
+  if (!commit) {
+    throw new Error(`${context}: an accepted submission returns its RealmCommit`);
+  }
+  expect(commit.event_ref, `${context}: commit does not name the submitted Event`)
+    .toBe(envelope.event_id);
+  const streamRef = commit.stream_ref as Record<string, unknown> | undefined;
+  const kind = stringValue(streamRef?.kind);
+  expect(
+    ["realm", "circle", "sidecar"],
+    `${context}: unregistered commit stream kind ${String(kind)}`,
+  ).toContain(kind);
+  expect(
+    commitStreamRefForScope(envelope),
+    `${context}: the commit landed in another stream`,
+  ).toEqual(streamRef);
+  expect(
+    typeof commit.stream_position === "number" &&
+      Number.isSafeInteger(commit.stream_position),
+    `${context}: a commit carries an integer stream_position`,
+  ).toBe(true);
+  for (const forbidden of [
+    "global_position",
+    "realm_position",
+    "seal_ref",
+    "frontier",
+  ]) {
+    expect(
+      forbidden in commit,
+      `${context}: the commit reintroduced ${forbidden}`,
+    ).toBe(false);
+  }
+  if (commit.stream_position === 0) {
+    expect(
+      commit.previous_commit_ref ?? null,
+      `${context}: the first commit of a stream has no predecessor`,
+    ).toBeNull();
+  } else {
+    expect(
+      typeof commit.previous_commit_ref === "string",
+      `${context}: every successor commit names its predecessor`,
+    ).toBe(true);
+  }
+}
+
+/// The commit stream an Event's own `scope_ref` selects.
+export function commitStreamRefForScope(
+  envelope: Record<string, unknown>,
+): Record<string, unknown> {
+  const scope = envelope.scope_ref as Record<string, unknown> | undefined;
+  const realmId = stringValue(envelope.realm_id) ?? stringValue(scope?.realm_id);
+  if (!realmId) {
+    throw new Error("an Event outside Realm genesis carries its realm_id");
+  }
+  switch (stringValue(scope?.kind)) {
+    case "circle":
+      return { kind: "circle", realm_id: realmId, circle_id: scope!.circle_id };
+    case "sidecar":
+      return {
+        kind: "sidecar",
+        realm_id: realmId,
+        sidecar_id: scope!.sidecar_id,
+      };
+    default:
+      // `realm` and `realm_genesis` both commit into the Realm stream.
+      return { kind: "realm", realm_id: realmId };
+  }
+}
+
+/// The `EventCommitSubmission` DTO: one producer Event and nothing else.
+///
+/// There is exactly one Event submission shape in the authority-commit
+/// protocol. A prepared submission therefore carries no lease, no precondition
+/// set and no chain material — the Station derives every ordering fact from its
+/// own stream when it mints the `RealmCommit`.
+export async function prepareSignedEventSubmissionApi(
+  _request: APIRequestContext,
+  _token: string,
+  envelope: Record<string, unknown>,
+  _opts: { server?: SolandKey; context?: string } = {},
 ): Promise<Record<string, unknown>> {
-  const context = opts.context ?? `prepare ${String(envelope.kind)}`;
-  await applyRegisteredCbsPlane(request, token, envelope, opts.server);
-  // This helper returns an EventInitialSubmission for a later endpoint to
-  // admit, so it cannot rely on the ordinary submit path's retry after an
-  // actor-frontier rejection. Bind the envelope to the current frontier
-  // before issuing its authorization lease.
-  await advanceEnvelopeToActorFrontier(request, token, envelope, opts.server);
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const leaseResponse = await issueAuthorizationLeasesApi(
-      request,
-      token,
-      [envelope],
-      opts.server,
-    );
-    const leaseText = await leaseResponse.text();
-    if (![200, 201].includes(leaseResponse.status())) {
-      const leaseBody = parseJsonOrRaw(leaseText);
-      if (
-        !requiresActorFrontierRefresh(
-          leaseResponse.status(),
-          leaseBody,
-          leaseText,
-        ) ||
-        attempt === 2
-      ) {
-        expect(
-          [200, 201],
-          `${context} lease issuance returned ${leaseResponse.status()}: ${leaseText}`,
-        ).toContain(leaseResponse.status());
-      }
-      await advanceEnvelopeToActorFrontier(
-        request,
-        token,
-        envelope,
-        opts.server,
-      );
-      continue;
-    }
-    const authorizationLease = authorizationLeasesFromIssueOutcome(
-      leaseText,
-      1,
-      context,
-    )[0];
-    return {
-      event: envelope,
-      authorization_lease: authorizationLease,
-    };
-  }
-  throw new Error(`${context}: exhausted actor-frontier retry loop`);
+  return { event: envelope };
 }
 
+/// Prepare several `EventCommitSubmission` bodies.
+///
+/// This is not a batch submission: one `RealmCommit` admits exactly one Event.
+/// Callers that need several Events atomically rely on the Station's own
+/// transaction (MLS Commit plus its Welcome deliveries is the one wire shape
+/// that carries more than one object), not on a client-side batch.
 export async function prepareSignedEventBatchSubmissionsApi(
-  request: APIRequestContext,
-  token: string,
+  _request: APIRequestContext,
+  _token: string,
   events: Array<Record<string, unknown>>,
-  opts: { server?: SolandKey; context?: string } = {},
+  _opts: { server?: SolandKey; context?: string } = {},
 ): Promise<Array<Record<string, unknown>>> {
-  if (events.length === 0) {
-    return [];
-  }
-  const context = opts.context ?? "prepare Event batch";
-  for (const event of events) {
-    await applyRegisteredCbsPlane(request, token, event, opts.server);
-  }
-  await advanceEnvelopeToActorFrontier(request, token, events[0], opts.server);
-  refreshBatchActorChain(events);
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const leaseResponse = await issueAuthorizationLeasesApi(
-      request,
-      token,
-      events,
-      opts.server,
-    );
-    const leaseText = await leaseResponse.text();
-    if (![200, 201].includes(leaseResponse.status())) {
-      const leaseBody = parseJsonOrRaw(leaseText);
-      if (
-        !requiresActorFrontierRefresh(
-          leaseResponse.status(),
-          leaseBody,
-          leaseText,
-        ) ||
-        attempt === 2
-      ) {
-        expect(
-          [200, 201],
-          `${context} lease issuance returned ${leaseResponse.status()}: ${leaseText}`,
-        ).toContain(leaseResponse.status());
-      }
-      await advanceEnvelopeToActorFrontier(
-        request,
-        token,
-        events[0],
-        opts.server,
-      );
-      refreshBatchActorChain(events);
-      continue;
-    }
-    const leases = authorizationLeasesFromIssueOutcome(
-      leaseText,
-      events.length,
-      context,
-    );
-    const submissions: Array<Record<string, unknown>> = [];
-    for (const [index, event] of events.entries()) {
-      submissions.push({
-        event,
-        authorization_lease: leases[index],
-      });
-    }
-    return submissions;
-  }
-  throw new Error(`${context}: exhausted actor-frontier retry loop`);
-}
-
-export async function submitSignedEventBatchApi(
-  request: APIRequestContext,
-  token: string,
-  events: Array<Record<string, unknown>>,
-  opts: { server?: SolandKey; context?: string } = {},
-) {
-  if (events.length === 0) {
-    throw new Error("Event batch must contain at least one Event");
-  }
-  const context = opts.context ?? "submit Event batch";
-  if (events[0]?.kind !== "ak.realm.create") {
-    for (const event of events) {
-      await applyRegisteredCbsPlane(request, token, event, opts.server);
-    }
-    // Leases authorize a candidate but do not repair its causal sequence.
-    // Bind the first Event to the accepted frontier, then author each sibling
-    // against its exact predecessor before obtaining any publication evidence.
-    await advanceEnvelopeToActorFrontier(request, token, events[0], opts.server);
-    refreshBatchActorChain(events);
-  }
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const leaseResponse = await issueAuthorizationLeasesApi(
-      request,
-      token,
-      events,
-      opts.server,
-    );
-    const leaseText = await leaseResponse.text();
-    if (![200, 201].includes(leaseResponse.status())) {
-      const leaseBody = parseJsonOrRaw(leaseText);
-      const actorFrontierRefreshRequired = requiresActorFrontierRefresh(
-        leaseResponse.status(),
-        leaseBody,
-        leaseText,
-      );
-      if (!actorFrontierRefreshRequired || attempt === 2) {
-        expect(
-          [200, 201],
-          `${context} lease issuance returned ${leaseResponse.status()}: ${leaseText}`,
-        ).toContain(leaseResponse.status());
-      }
-      await advanceEnvelopeToActorFrontier(
-        request,
-        token,
-        events[0],
-        opts.server,
-      );
-      refreshBatchActorChain(events);
-      continue;
-    }
-    const authorizationLeases = authorizationLeasesFromIssueOutcome(
-      leaseText,
-      events.length,
-      context,
-    );
-    const submissions: Array<Record<string, unknown>> = [];
-    for (const [index, event] of events.entries()) {
-      submissions.push({
-        event,
-        authorization_lease: authorizationLeases[index],
-      });
-    }
-    const realmId = stringValue(events[0]?.realm_id);
-    const actorId = eventPrincipalId(events[0]);
-    const actorControlRealm = actorId
-      ? principalControlRealmForIdIfKnown(actorId)
-      : undefined;
-    const eventsUrl = `${solandBaseUrl(opts.server)}/_arkret/self/events`;
-    const response = await request.post(eventsUrl, {
-      headers: {
-        ...authHeaders(token, "POST", eventsUrl),
-        "content-type": "application/json",
-      },
-      data: canonicalJson({
-        events: submissions,
-      }),
-    });
-    const text = await response.text();
-    if ([200, 201].includes(response.status())) {
-      const outcome = JSON.parse(text) as Record<string, unknown>;
-      rememberPublicationEvidence(events, outcome, { token, server: opts.server });
-      return outcome;
-    }
-    const body = JSON.parse(text) as unknown;
-    if (
-      response.status() === 403 &&
-      wireErrCode(body) === "capability_denied" &&
-      !events.some((event) => {
-        const realmId = stringValue(event.realm_id);
-        return (
-          realmId !== undefined &&
-          realmAuthorityControllers.has(
-            realmAuthorityControllerKey(opts.server, realmId),
-          )
-        );
-      }) &&
-      attempt < 2
-    ) {
-      for (const event of events) {
-        await forceConformanceCbsBasis(request, event, opts.server);
-      }
-      continue;
-    }
-    const actorFrontierRefreshRequired = requiresActorFrontierRefresh(
-      response.status(),
-      body,
-      text,
-    );
-    if (!actorFrontierRefreshRequired || attempt === 2) {
-      expect(
-        [200, 201],
-        `${context} returned ${response.status()}: ${text}`,
-      ).toContain(response.status());
-    }
-    await advanceEnvelopeToActorFrontier(
-      request,
-      token,
-      events[0],
-      opts.server,
-    );
-    refreshBatchActorChain(events);
-  }
-  throw new Error(`${context}: exhausted actor-frontier retry loop`);
+  return events.map((event) => ({ event }));
 }
 
 /**
@@ -2514,12 +2391,6 @@ export async function rawSubmitSignedEventApi(
       ) {
         return leaseResponse;
       }
-      await advanceEnvelopeToActorFrontier(
-        request,
-        token,
-        envelope,
-        opts.server,
-      );
       continue;
     }
 
@@ -2552,7 +2423,6 @@ export async function rawSubmitSignedEventApi(
     ) {
       return response;
     }
-    await advanceEnvelopeToActorFrontier(request, token, envelope, opts.server);
   }
   throw new Error(
     `submit ${String(envelope.kind)} exhausted actor-frontier retry loop`,
@@ -2613,7 +2483,6 @@ export async function prepareEventForAuthorizationLeaseApi(
   server?: SolandKey,
 ): Promise<void> {
   await applyRegisteredCbsPlane(request, token, envelope, server);
-  await advanceEnvelopeToActorFrontier(request, token, envelope, server);
 }
 
 export function authorizationLeasesFromIssueOutcome(
@@ -2734,88 +2603,6 @@ function refreshBatchActorChain(events: Array<Record<string, unknown>>): void {
   }
 }
 
-export async function advanceEnvelopeToActorFrontier(
-  request: APIRequestContext,
-  token: string,
-  envelope: Record<string, unknown>,
-  server?: SolandKey,
-  allowInvisibleRealmGenesis = false,
-  invisibleActorFrontier?: {
-    nextActorSeq: number;
-    frontierEventIds: string[];
-  },
-): Promise<void> {
-  const actorId = eventActorId(envelope);
-  const realmId = stringValue(envelope.realm_id);
-  if (!realmId) {
-    throw new Error(
-      "Event envelope realm_id is required to refresh its frontier",
-    );
-  }
-  const frontierUrl = `${solandBaseUrl(server)}/_arkret/self/events/frontier`;
-  const response = await request.fetch(frontierUrl, {
-    method: "QUERY",
-    data: canonicalJson({ actor_id: actorId, realm_id: realmId }),
-    headers: {
-      ...authHeaders(token, "QUERY", frontierUrl),
-      "content-type": "application/json",
-    },
-  });
-  if (allowInvisibleRealmGenesis && response.status() === 404) {
-    const proofVerificationMethod = Array.isArray(envelope.proofs)
-      ? stringValue(
-          (envelope.proofs[0] as Record<string, unknown> | undefined)
-            ?.verification_method,
-        )
-      : undefined;
-    envelope.actor_seq = invisibleActorFrontier?.nextActorSeq ?? 0;
-    envelope.prev_refs = invisibleActorFrontier?.frontierEventIds ?? [];
-    refreshEventEnvelopeProof(envelope, proofVerificationMethod);
-    return;
-  }
-  const body = await expectJsonOk<{
-    frontier?: {
-      kind?: unknown;
-      realm_id?: unknown;
-      actor_id?: unknown;
-      next_actor_seq?: unknown;
-      frontier_event_ids?: unknown;
-    };
-  }>(response, `read Realm actor frontier for (${realmId}, ${actorId})`);
-  if (
-    body.frontier?.kind !== "realm_actor" ||
-    body.frontier.realm_id !== realmId ||
-    canonicalJson(body.frontier.actor_id) !== canonicalJson(actorId)
-  ) {
-    throw new Error(
-      "combined Event frontier response does not match its selector",
-    );
-  }
-  const actorSeq = body.frontier.next_actor_seq;
-  if (typeof actorSeq !== "number" || !Number.isSafeInteger(actorSeq)) {
-    throw new Error(
-      `Realm actor frontier for ${actorId} has no valid next_actor_seq`,
-    );
-  }
-  if (
-    !Array.isArray(body.frontier.frontier_event_ids) ||
-    body.frontier.frontier_event_ids.some((value) => typeof value !== "string")
-  ) {
-    throw new Error(
-      `Realm actor frontier for ${actorId} has invalid frontier_event_ids`,
-    );
-  }
-  const proofVerificationMethod = Array.isArray(envelope.proofs)
-    ? stringValue(
-        (envelope.proofs[0] as Record<string, unknown> | undefined)
-          ?.verification_method,
-      )
-    : undefined;
-  envelope.actor_seq = actorSeq;
-  envelope.prev_refs = [...body.frontier.frontier_event_ids];
-  refreshEventEnvelopeProof(envelope, proofVerificationMethod);
-}
-
 /// Wait until every Event submitted for `realmId` is durably committed.
 ///
 /// `ak.self.events.command.submit.v1` answers with the RealmCommit it produced,
@@ -2922,8 +2709,6 @@ async function applyRegisteredCbsPlane(
     }
   }
 
-
-
   if (changed) {
     const proof = Array.isArray(envelope.proofs)
       ? (envelope.proofs[0] as Record<string, unknown> | undefined)
@@ -3023,15 +2808,6 @@ function eventAuthContext(
   };
 }
 
-export async function prepareSignedEventCbsApi(
-  request: APIRequestContext,
-  token: string,
-  envelope: Record<string, unknown>,
-  opts: { server?: SolandKey } = {},
-): Promise<void> {
-  await applyRegisteredCbsPlane(request, token, envelope, opts.server);
-}
-
 export async function seedConformanceRealmBasisApi(
   request: APIRequestContext,
   realmId: string,
@@ -3054,15 +2830,6 @@ export async function seedConformanceRealmBasisApi(
     },
   );
   return await expectJsonOk(response, "seed conformance Realm basis");
-}
-
-export async function alignSignedEventToActorFrontierApi(
-  request: APIRequestContext,
-  token: string,
-  envelope: Record<string, unknown>,
-  opts: { server?: SolandKey } = {},
-): Promise<void> {
-  await advanceEnvelopeToActorFrontier(request, token, envelope, opts.server);
 }
 
 // COT-06-004: discover a Realm's default discussion Strand via the projection face.

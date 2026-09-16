@@ -1,1184 +1,389 @@
-//! `ak.vector.account_status.issuer_ledger.v1` — Account Authority issuer
-//! ledger closure (`zh/identity/account-lifecycle.md` §3 / §3.1,
-//! `zh/conformance/conformance-vectors.md` "Account status issuer ledger").
+//! `ak.vector.account_status.issuer_ledger.v1` — Account Authority issuer ledger
+//! (`fixtures/account-status-issuer-ledger-fixture.json`).
 //!
-//! Account lifecycle is **not** a Principal Control Realm finality domain. An
-//! `AccountStatusRecord` is not an Event: it never enters a Realm timeline, an
-//! actor frontier, a Seal, a CBS, a Control Proposal or a lattice reducer, and
-//! neither a holder device nor a PCR notary can veto an Account Authority deny
-//! transition. Everything in this module drives the shared SDK types and the
-//! Station replica store, so a divergence here is a real divergence
-//! and not a test-local reimplementation.
+//! Account lifecycle is **not** a Realm finality domain. An `AccountStatusRecord`
+//! is not an Event: it never enters a commit stream, is never covered by a
+//! `RealmCommit`, and never waits for a Station checkpoint. Its ordering comes
+//! from its own compare-and-swap chain — `status_seq` plus
+//! `previous_account_status_record_id` — keyed by `(account_authority_id,
+//! account_id)`.
 //!
-//! Closure driven here:
+//! Everything here is executed against shipped code rather than restated:
 //!
-//! 1. genesis is `status_seq=1, status=active`, has no predecessor and needs no PCR Seal or
-//!    frontier;
-//! 2. byte-identical replay returns the first receipt (`duplicate`), not a second write;
-//! 3. same-sequence chain conflict is a typed fork, never `duplicate_conflict`;
-//! 4. a higher-sequence gap performs zero writes, reports the exact `required_status_seq`, and is
-//!    repaired through the bounded `ak.peer.account_status.read.resolve.v1` range;
-//! 5. a lower `binding_version` is a typed binding rollback;
-//! 6. an offline, revoked or hostile holder cannot veto `locked | suspended | deactivated |
-//!    erasure_pending` — the record carries no holder-controlled carrier at all, and a
-//!    holder-controlled proof is rejected outright;
-//! 7. an Account Authority service-key rotation keeps historical records verifiable and replicable,
-//!    while the rotated key must still resolve to the same Account Authority;
-//! 8. receipted fanout replicates the exact signed record bytes and accepts only receiver-signed
-//!    `AccountStatusReceipt` values;
-//! 9. the erasure trigger union is closed and account erasure binds the exact record id.
+//! * the fixture's `unsigned_core_canonical_bytes_utf8`, `unsigned_core_digest`
+//!   and `account_status_record_id` are re-derived from the record itself with
+//!   [`UnsignedAccountStatusRecord`], so a fixture whose declared identity stops
+//!   matching its own bytes fails here;
+//! * the declared proof metadata is re-bound with the SDK's proof-binding bytes,
+//!   so a proof that names another digest, time or context is rejected;
+//! * every `replica_classification_cases` row is run through soland's shipped
+//!   [`classify_account_status_replica_append`] — the receiver implementation
+//!   itself — and cross-checked against the normative decision table in
+//!   `registry/account-status-replica-decision-table.json`;
+//! * the record's member set is closed against every removed carrier, so a
+//!   commit, stream, Seal or Cell reference cannot creep back into the ledger.
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use anyhow::{Result, anyhow, bail};
-use arkret_models_collaboration::account_lifecycle::{
-    AccountStatusReceipt, AccountStatusRecord, AccountStatusResolveOutcome,
-    AccountStatusResolveRequestBody, UnsignedAccountStatusReceipt, UnsignedAccountStatusRecord,
+use anyhow::{Result, anyhow, bail, ensure};
+use arkret_models_collaboration::account_status::{
+    AccountStatusReceipt, AccountStatusRecord, UnsignedAccountStatusReceipt,
+    UnsignedAccountStatusRecord,
 };
-use arkret_models_collaboration::events_payloads::event_wire::ErasureTrigger;
 use arkret_models_collaboration::objects::account_status::AccountStatus;
-use arkret_signatures::PublicKeyMaterial;
-use arkret_signatures::account_status::{
-    sign_account_status_receipt, sign_account_status_record as sdk_sign_account_status_record,
-    verify_account_status_receipt, verify_account_status_record,
-};
 use arkret_wire::{
-    AccountId, AccountStatusRecordId, DidCoreId, DidUrl, ErrorCode, RealmId, ReasonCode, ReceiptId,
-    SchemaId, ServiceOperationId,
+    AccountId, AccountStatusRecordId, DidCoreId, DidUrl, ErrorCode, Hash, PayloadProof, ReceiptId,
+    SchemaId,
 };
 use chrono::{DateTime, Utc};
-use ed25519_dalek::SigningKey;
-use serde_json::{Value, json};
+use serde_json::{Map, Value};
 use soland_storage::{
-    AccountStatusReplicaAppend, AccountStatusReplicaConflictKind, AccountStatusReplicaStore,
-    SyncStoreRegistry as _,
+    AccountStatusReplicaAppend, AccountStatusReplicaConflictKind,
+    classify_account_status_replica_append,
 };
 
-use super::load_artifact_json;
-use super::schema_validation_fixture::SchemaEnv;
-use super::security_closure::SecurityClosureFixture;
+use super::{
+    canonical_json, fixture_runner_entrypoint, load_artifact_json, load_fixture_value,
+    required_bool, required_field, required_str, required_u64, sha256_prefixed, value_array,
+};
 
 pub const VECTOR_ID_ACCOUNT_STATUS_ISSUER_LEDGER: &str =
     "ak.vector.account_status.issuer_ledger.v1";
 
-const AUTHORITY_ID: &str = "ak:did_core:web:soland.example";
-const AUTHORITY_METHOD: &str = "did:web:soland.example#account-status-key";
-/// Successor service key after an Account Authority key rotation. Same
-/// controller, different key reference.
-const AUTHORITY_ROTATED_METHOD: &str = "did:web:soland.example#account-status-key-2";
-
-fn sign_account_status_record(
-    unsigned: UnsignedAccountStatusRecord,
-    signing_key: &SigningKey,
-) -> arkret_signatures::Result<AccountStatusRecord> {
-    sdk_sign_account_status_record(
-        unsigned,
-        DidUrl::new(AUTHORITY_METHOD).expect("constant Account Authority method"),
-        signing_key,
-    )
-}
-const STATION_ID: &str = "ak:did_core:web:soland.example";
-const RECEIVER_METHOD: &str = "did:web:soland.example#notary-key";
-const PRINCIPAL_CONTROL_REALM: &str = "ak:realm:AfTcej7ZFNg8uTbkOiUJT0KN1F_c9l1fmtil65CUwncm";
-const REBOUND_PRINCIPAL_CONTROL_REALM: &str =
-    "ak:realm:ARmJMvTcKFyiF-V_8oL4mIoHfnlqERCrcgNBONtY4HQD";
-
-/// Field names that would reintroduce the superseded Event / PCR authority
-/// model into a portable record. None of them may appear at any depth.
-const FORBIDDEN_RECORD_KEYS: &[&str] = &[
-    "seal_basis",
-    "pending_seal",
-    "authoring_frontiers",
-    "account_status_authoring_frontiers",
-    "current_status_event_ids",
-    "event_id",
-    "frontier_digest",
-    "seal_ref",
-    "device_id",
-    "holder_proof",
-    "holder_signature",
-    "notary_proof",
-    "cell_ref",
-];
-
-/// Fixture steps this suite deliberately does not drive, asserted here only at
-/// the registered-vocabulary level.
-///
-/// * `record_or_idempotency_mismatch_is_zero_write` is an `Idempotency-Key` scope decision that
-///   exists only on the `ak.peer.account_status.command.submit.v1` transport, not on any shared
-///   type.
-const TRANSPORT_ONLY_STEPS: &[&str] = &["record_or_idempotency_mismatch_is_zero_write"];
-
-/// Machine-readable classification table the receiver decision is compared
-/// against. It is the spec's own ordered rule set, so a reordering or a
-/// re-typed outcome fails here rather than being absorbed by this suite.
+const FIXTURE: &str = "account-status-issuer-ledger-fixture.json";
+const SUITE: &str = "account_status_issuer_ledger";
+const RUNNER_ENTRYPOINT: &str = "ak.suite.account_status.issuer_ledger.v1";
 const REPLICA_DECISION_TABLE_REF: &str = "registry/account-status-replica-decision-table.json";
 
-/// What the deterministic model actually produced for one fixture step.
-#[derive(Clone, Debug)]
-struct StepObservation {
-    outcome: &'static str,
-    reason_code: Option<String>,
-}
+const PROOF_CONTEXT: &str = "ak.account_status_record_proof.v1";
 
-impl StepObservation {
-    fn accepted() -> Self {
-        Self {
-            outcome: "accepted",
-            reason_code: None,
-        }
-    }
+/// The compare-and-swap key of the issuer ledger.
+const CAS_KEY: [&str; 2] = ["account_authority_id", "account_id"];
 
-    fn rejected(reason_code: &str) -> Self {
-        Self {
-            outcome: "rejected",
-            reason_code: Some(reason_code.to_owned()),
-        }
-    }
-}
+/// Writes the successor transaction performs atomically.
+const ATOMIC_WRITES: [&str; 4] = [
+    "account_row",
+    "immutable_record",
+    "transition_audit",
+    "propagation_outbox",
+];
 
-type Observations = BTreeMap<&'static str, StepObservation>;
+/// The idempotency scope of a replica submission.
+const IDEMPOTENCY_SCOPE: [&str; 3] = [
+    "Source-Service-ID",
+    "Destination-Service-ID",
+    "Idempotency-Key",
+];
 
+/// The only two terminal acks a bounded outbox may mark a destination on.
+const TERMINAL_ACKS: [&str; 2] = ["accepted", "duplicate"];
+
+/// Members no `AccountStatusRecord` may ever carry: the ledger is not a Realm
+/// timeline, so no commit, stream, position or retired coverage carrier belongs
+/// in it.
+const FORBIDDEN_RECORD_MEMBERS: &[&str] = &[
+    "commit_id",
+    "commit_ref",
+    "previous_commit_ref",
+    "stream_ref",
+    "stream_position",
+    "event_id",
+    "event_ref",
+    "committed_event_ref",
+    "realm_commit",
+    "seal_ref",
+    "seal_id",
+    "seal_basis",
+    "cell_id",
+    "cell_ref",
+    "frontier",
+    "control_proposal",
+    "state_root",
+    "policy_root",
+];
+
+/// Run the issuer-ledger vector.
 pub fn run_account_status_issuer_ledger_vector() -> Result<()> {
-    let mut observed: Observations = BTreeMap::new();
+    let fixture = load_fixture_value(FIXTURE)?;
+    verify_fixture_identity(&fixture)?;
 
-    let authority_key = SigningKey::from_bytes(&[41; 32]);
-    let rotated_authority_key = SigningKey::from_bytes(&[47; 32]);
-    let receiver_key = SigningKey::from_bytes(&[43; 32]);
-    let holder_key = SigningKey::from_bytes(&[45; 32]);
+    let ledger = required_field(&fixture, "ledger")?;
+    verify_ledger_identity(ledger)?;
 
-    assert_typed_reason_codes_are_registered()?;
-    assert_resolve_operation_is_registered()?;
-    assert_durable_head_is_the_only_comparison_baseline()?;
+    let chain = parse_records(ledger, "records")?;
+    let conflicting = parse_named_records(ledger, "conflicting_records")?;
+    verify_record_identity_and_proof_binding(ledger, &chain, &conflicting)?;
+    verify_record_carries_no_commit_or_stream_carrier(&chain, &conflicting)?;
+    verify_chain_is_a_cas_successor_chain(&chain)?;
+    verify_genesis_rules(&fixture, &chain)?;
+    verify_successor_cas_contract(ledger, &fixture)?;
 
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()?;
-    runtime.block_on(async {
-        let receiver_database = soland_storage_postgres::test_database::TestDatabase::lease().await;
-        let receiver = soland_storage_postgres::PgPersistenceStore::new(receiver_database.pool());
-        let replicas = receiver.account_status_replicas();
-
-        assert_genesis_replay_fork_and_binding_rollback(
-            replicas,
-            &authority_key,
-            &receiver_key,
-            &mut observed,
-        )
-        .await?;
-        assert_gap_recovery_through_bounded_resolve(
-            replicas,
-            &authority_key,
-            &receiver_key,
-            &mut observed,
-        )
-        .await?;
-        assert_offline_and_hostile_holder_cannot_veto_deny(
-            replicas,
-            &authority_key,
-            &receiver_key,
-            &holder_key,
-        )
-        .await?;
-        assert_service_key_rotation_keeps_records_verifiable(
-            replicas,
-            &authority_key,
-            &rotated_authority_key,
-            &receiver_key,
-        )
-        .await?;
-        assert_below_head_is_stale_against_the_durable_head(
-            replicas,
-            &authority_key,
-            &receiver_key,
-            &mut observed,
-        )
-        .await?;
-        Ok::<(), anyhow::Error>(())
-    })?;
-
-    assert_receipted_fanout_preserves_the_signed_record(
-        &authority_key,
-        &receiver_key,
-        &mut observed,
-    )?;
-    assert_erasure_trigger_union_is_closed(&authority_key)?;
-
-    compare_against_fixture(&observed)
-}
-
-/// Genesis, exact replay, same-sequence fork and binding rollback on one
-/// monotonic replica.
-async fn assert_genesis_replay_fork_and_binding_rollback(
-    replicas: &dyn AccountStatusReplicaStore,
-    authority_key: &SigningKey,
-    receiver_key: &SigningKey,
-    observed: &mut Observations,
-) -> Result<()> {
-    let account = "account-issuer-ledger-core";
-
-    // A genesis record is pinned by the shared type: sequence 1 carries no
-    // predecessor and no status other than `active`. Neither branch can be
-    // signed at all, so no receiver ever has to re-derive the rule.
-    let mut invalid_genesis = unsigned(account, 1, None, 1, AccountStatus::Active, 0)?;
-    invalid_genesis.status = AccountStatus::Locked;
-    if sign_account_status_record(invalid_genesis, authority_key).is_ok() {
-        bail!("a non-active account-status genesis record was signable");
-    }
-    let mut predecessor_genesis = unsigned(account, 1, None, 1, AccountStatus::Active, 0)?;
-    predecessor_genesis.previous_account_status_record_id = Some(AccountStatusRecordId::new(
-        "ak:account_status_record:AaqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqQ",
-    )?);
-    if sign_account_status_record(predecessor_genesis, authority_key).is_ok() {
-        bail!("an account-status genesis record with a predecessor was signable");
-    }
-
-    let genesis = sign_account_status_record(
-        unsigned(account, 1, None, 1, AccountStatus::Active, 0)?,
-        authority_key,
-    )?;
-    verify_account_status_record(&genesis, &public_key(authority_key))?;
-    assert_record_carries_no_event_or_seal_carrier(&genesis)?;
-
-    let genesis_receipt = receipt_for(&genesis, 1, receiver_key)?;
-    verify_account_status_receipt(&genesis_receipt, &public_key(receiver_key))?;
-    let AccountStatusReplicaAppend::Accepted(accepted_receipt) =
-        replicas.append(&genesis, &genesis_receipt).await?
-    else {
-        bail!("account-status genesis was not accepted by a receiver with no PCR Seal");
-    };
-    if accepted_receipt != genesis_receipt {
-        bail!("account-status genesis acceptance returned a receipt it did not receive");
-    }
-    observed.insert(
-        "genesis_active_is_atomic_without_pcr_frontier",
-        StepObservation::accepted(),
-    );
-
-    // Exact replay: a retry carries a fresh receipt, and the receiver must
-    // answer with the receipt it already made durable rather than writing again.
-    let replayed_receipt = receipt_for(&genesis, 2, receiver_key)?;
-    let AccountStatusReplicaAppend::Duplicate(stored_receipt) =
-        replicas.append(&genesis, &replayed_receipt).await?
-    else {
-        bail!("exact account-status replay was not classified as duplicate");
-    };
-    if stored_receipt != genesis_receipt {
-        bail!("account-status duplicate returned a receipt other than the first accepted one");
-    }
-
-    // Same sequence, different record id: a fork, never an idempotency conflict.
-    let mut fork_unsigned = genesis.unsigned();
-    fork_unsigned.issued_at = at(3)?;
-    fork_unsigned.effective_at = fork_unsigned.issued_at;
-    let fork = sign_account_status_record(fork_unsigned, authority_key)?;
-    if fork.account_status_record_id == genesis.account_status_record_id {
-        bail!("the fork fixture did not produce a second record identity");
-    }
-    let AccountStatusReplicaAppend::Conflict {
-        kind: AccountStatusReplicaConflictKind::Fork,
-        ..
-    } = replicas
-        .append(&fork, &receipt_for(&fork, 3, receiver_key)?)
-        .await?
-    else {
-        bail!("a same-sequence account-status chain conflict was not classified as a fork");
-    };
-    assert_head_is(replicas, &genesis).await?;
-    observed.insert(
-        "chain_conflict_is_typed_fork_and_quarantined",
-        StepObservation::rejected(ReasonCode::ACCOUNT_STATUS_RECORD_FORK),
-    );
-
-    // A valid successor advances the replica exactly once, and a re-bound
-    // principal tuple is legitimate only together with a higher binding_version.
-    let mut successor_unsigned = unsigned(
-        account,
-        2,
-        Some(genesis.account_status_record_id.clone()),
-        2,
-        AccountStatus::Locked,
-        4,
-    )?;
-    successor_unsigned.principal_control_realm_id = RealmId::new(REBOUND_PRINCIPAL_CONTROL_REALM)?;
-    let successor = sign_account_status_record(successor_unsigned, authority_key)?;
-    let AccountStatusReplicaAppend::Accepted(_) = replicas
-        .append(&successor, &receipt_for(&successor, 4, receiver_key)?)
-        .await?
-    else {
-        bail!("a valid account-status successor did not advance the monotonic replica");
-    };
-    assert_head_is(replicas, &successor).await?;
-    observed.insert(
-        "valid_successor_advances_monotonic_replica",
-        StepObservation::accepted(),
-    );
-
-    // Lower binding_version under the durable floor: a typed rollback, not a fork.
-    let rollback = sign_account_status_record(
-        unsigned(
-            account,
-            3,
-            Some(successor.account_status_record_id.clone()),
-            1,
-            AccountStatus::Suspended,
-            5,
-        )?,
-        authority_key,
-    )?;
-    let AccountStatusReplicaAppend::Conflict {
-        kind: AccountStatusReplicaConflictKind::BindingRollback,
-        ..
-    } = replicas
-        .append(&rollback, &receipt_for(&rollback, 5, receiver_key)?)
-        .await?
-    else {
-        bail!("an account-status binding_version rollback was not typed as a binding rollback");
-    };
-    assert_head_is(replicas, &successor).await?;
-    observed.insert(
-        "binding_version_rollback_is_typed_and_zero_write",
-        StepObservation::rejected(ReasonCode::ACCOUNT_STATUS_BINDING_ROLLBACK),
-    );
-
-    // Signature coverage: the binding_version floor is signed, so a rollback
-    // cannot be laundered by editing an accepted record.
-    let mut tampered = successor;
-    tampered.binding_version += 1;
-    if verify_account_status_record(&tampered, &public_key(authority_key)).is_ok() {
-        bail!("an account-status record survived binding_version mutation");
-    }
+    let index = record_index(&chain, &conflicting);
+    verify_replica_classification(&fixture, &index)?;
+    verify_idempotency_contract(&fixture)?;
+    verify_fanout_outbox(&fixture)?;
     Ok(())
 }
 
-/// A higher-sequence submission performs zero writes, names the exact missing
-/// sequence, and is repaired by the bounded resolve range rather than by
-/// skipping the predecessor.
-async fn assert_gap_recovery_through_bounded_resolve(
-    replicas: &dyn AccountStatusReplicaStore,
-    authority_key: &SigningKey,
-    receiver_key: &SigningKey,
-    observed: &mut Observations,
-) -> Result<()> {
-    let account = "account-issuer-ledger-gap";
-    let authority_database = soland_storage_postgres::test_database::TestDatabase::lease().await;
-    let authority_ledger =
-        soland_storage_postgres::PgPersistenceStore::new(authority_database.pool());
-    // The Account Authority ledger enforces the same single-writer CAS the
-    // receiver replays: `status_seq = current + 1` with an exact predecessor.
-    let ledger = authority_ledger.account_status_replicas();
+// ── Fixture identity ────────────────────────────────────────────────────────
 
-    let genesis = sign_account_status_record(
-        unsigned(account, 1, None, 1, AccountStatus::Active, 10)?,
-        authority_key,
-    )?;
-    let second = sign_account_status_record(
-        unsigned(
-            account,
-            2,
-            Some(genesis.account_status_record_id.clone()),
-            1,
-            AccountStatus::Suspended,
-            11,
-        )?,
-        authority_key,
-    )?;
-    let third = sign_account_status_record(
-        unsigned(
-            account,
-            3,
-            Some(second.account_status_record_id.clone()),
-            1,
-            AccountStatus::Deactivated,
-            12,
-        )?,
-        authority_key,
-    )?;
-    for (index, record) in [&genesis, &second, &third].into_iter().enumerate() {
-        let index = 10 + index as u32;
-        let AccountStatusReplicaAppend::Accepted(_) = ledger
-            .append(record, &receipt_for(record, index, receiver_key)?)
-            .await?
-        else {
-            bail!("the Account Authority ledger rejected its own contiguous successor");
-        };
-    }
-
-    // The receiver only holds genesis, so the third record is a gap.
-    let AccountStatusReplicaAppend::Accepted(_) = replicas
-        .append(&genesis, &receipt_for(&genesis, 20, receiver_key)?)
-        .await?
-    else {
-        bail!("the gap-recovery receiver did not accept genesis");
-    };
-    let AccountStatusReplicaAppend::DependencyMissing {
-        required_status_seq,
-        current_record,
-    } = replicas
-        .append(&third, &receipt_for(&third, 21, receiver_key)?)
-        .await?
-    else {
-        bail!("a higher-sequence account-status record was not reported as a dependency gap");
-    };
-    if required_status_seq != 2 {
-        bail!("account-status gap reported required_status_seq {required_status_seq}, expected 2");
-    }
-    if current_record.map(|record| record.status_seq) != Some(1) {
-        bail!("an account-status gap moved the replica head");
-    }
-    assert_head_is(replicas, &genesis).await?;
-    observed.insert(
-        "sequence_gap_is_zero_write_and_resolved_contiguously",
-        StepObservation {
-            outcome: "dependency_missing",
-            reason_code: None,
-        },
+fn verify_fixture_identity(fixture: &Value) -> Result<()> {
+    ensure!(
+        required_str(fixture, "suite")? == SUITE,
+        "issuer-ledger fixture suite drifted"
     );
-
-    // Bounded resolve from the exact required sequence. The response is a
-    // contiguous range of the original signed records, and the shared outcome
-    // type is what proves it.
-    let request = AccountStatusResolveRequestBody {
-        account_authority_id: DidCoreId::new(AUTHORITY_ID)?,
-        account_id: genesis.account_id.clone(),
-        from_status_seq: required_status_seq,
-        limit: 128,
-    };
-    request.validate()?;
-    let resolved = ledger
-        .resolve(
-            request.account_authority_id.as_str(),
-            &request.account_id,
-            request.from_status_seq,
-            request.limit,
-        )
-        .await?;
-    let outcome = AccountStatusResolveOutcome {
-        account_authority_id: request.account_authority_id.clone(),
-        account_id: request.account_id.clone(),
-        records: resolved,
-        has_more: false,
-        next_status_seq: None,
-    };
-    outcome.validate_for_request(&request)?;
-    if outcome.records.len() != 2 {
-        bail!(
-            "bounded resolve returned {} records, expected the contiguous 2..=3 range",
-            outcome.records.len()
+    ensure!(
+        fixture_runner_entrypoint(fixture)? == RUNNER_ENTRYPOINT,
+        "issuer-ledger fixture runner entrypoint drifted"
+    );
+    let covers = value_array(required_field(fixture, "covers_vectors")?, "covers_vectors")?;
+    ensure!(
+        covers
+            .iter()
+            .any(|vector| vector.as_str() == Some(VECTOR_ID_ACCOUNT_STATUS_ISSUER_LEDGER)),
+        "issuer-ledger fixture is no longer bound to {VECTOR_ID_ACCOUNT_STATUS_ISSUER_LEDGER}"
+    );
+    for section in [
+        "ledger",
+        "genesis_rules",
+        "successor_cas",
+        "idempotency",
+        "replica_classification_cases",
+        "fanout_outbox",
+    ] {
+        ensure!(
+            fixture.get(section).is_some(),
+            "issuer-ledger fixture lost the {section} section"
         );
     }
-    if outcome.records[0] != second || outcome.records[1] != third {
-        bail!("bounded resolve did not return the original signed records");
-    }
-
-    // Bounds are part of the contract, not a service-local convention.
-    for (from_status_seq, limit) in [(0, 128), (2, 0), (2, 129)] {
-        let invalid = AccountStatusResolveRequestBody {
-            account_authority_id: request.account_authority_id.clone(),
-            account_id: request.account_id.clone(),
-            from_status_seq,
-            limit,
-        };
-        if invalid.validate().is_ok() {
-            bail!(
-                "account-status resolve accepted out-of-bounds (from_status_seq={from_status_seq}, \
-                 limit={limit})"
-            );
-        }
-    }
-    let mut non_contiguous = outcome;
-    non_contiguous.records.remove(0);
-    if non_contiguous.validate_for_request(&request).is_ok() {
-        bail!("account-status resolve accepted a non-contiguous range");
-    }
-
-    // Applying the resolved range in order clears the gap; the previously
-    // rejected record is now an ordinary successor.
-    for (index, record) in [&second, &third].into_iter().enumerate() {
-        let index = 22 + index as u32;
-        let AccountStatusReplicaAppend::Accepted(_) = replicas
-            .append(record, &receipt_for(record, index, receiver_key)?)
-            .await?
-        else {
-            bail!("gap recovery did not advance the replica over the resolved range");
-        };
-    }
-    assert_head_is(replicas, &third).await?;
     Ok(())
 }
 
-/// The authority invariant: an offline, revoked or hostile holder cannot block
-/// a deny transition, and cannot manufacture a competing record.
-async fn assert_offline_and_hostile_holder_cannot_veto_deny(
-    replicas: &dyn AccountStatusReplicaStore,
-    authority_key: &SigningKey,
-    receiver_key: &SigningKey,
-    holder_key: &SigningKey,
-) -> Result<()> {
-    const DENY_STATUSES: &[AccountStatus] = &[
-        AccountStatus::Locked,
-        AccountStatus::Suspended,
-        AccountStatus::Deactivated,
-        AccountStatus::ErasurePending,
-    ];
-
-    for (index, status) in DENY_STATUSES.iter().copied().enumerate() {
-        let account = format!("account-holder-deny-{}", status.as_str());
-        let base = 30 + (index as u32) * 4;
-        let genesis = sign_account_status_record(
-            unsigned(&account, 1, None, 1, AccountStatus::Active, base)?,
-            authority_key,
-        )?;
-        let AccountStatusReplicaAppend::Accepted(_) = replicas
-            .append(&genesis, &receipt_for(&genesis, base, receiver_key)?)
-            .await?
-        else {
-            bail!("holder-deny genesis was not accepted");
-        };
-
-        if !AccountStatus::Active.can_transition_to(status) {
-            bail!(
-                "active -> {} must be a legal Account Authority deny transition",
-                status.as_str()
-            );
-        }
-        // The deny record is produced with the Account Authority key alone: no
-        // holder key, no device key, no PCR notary, no Seal, no frontier read.
-        let deny = sign_account_status_record(
-            unsigned(
-                &account,
-                2,
-                Some(genesis.account_status_record_id.clone()),
-                1,
-                status,
-                base + 1,
-            )?,
-            authority_key,
-        )?;
-        assert_record_carries_no_event_or_seal_carrier(&deny)?;
-        let AccountStatusReplicaAppend::Accepted(_) = replicas
-            .append(&deny, &receipt_for(&deny, base + 1, receiver_key)?)
-            .await?
-        else {
-            bail!(
-                "the receiver refused an Account Authority {} transition while the holder was \
-                 offline",
-                status.as_str()
-            );
-        };
-        assert_head_is(replicas, &deny).await?;
-
-        // A hostile holder cannot sign a competing record: the proof controller
-        // must project to the Account Authority, so a holder-controlled
-        // verification method is refused before any signature is even compared.
-        let mut forged = deny.unsigned();
-        forged.issued_at = at(base + 2)?;
-        forged.effective_at = forged.issued_at;
-        if sdk_sign_account_status_record(
-            forged,
-            DidUrl::new("did:web:alice.example#account-status-key").map_err(anyhow::Error::msg)?,
-            holder_key,
-        )
-        .is_ok()
-        {
-            bail!(
-                "a holder-controlled verification method produced a valid {} record",
-                status.as_str()
-            );
-        }
-
-        // A hostile holder cannot undo the deny: only an Account Authority
-        // successor can advance this ledger. The replica intentionally cannot
-        // inspect the issuer's local appeal or completed-PCR-recovery evidence;
-        // it accepts an authority-signed legal successor. `erasure_pending`
-        // alone has no outbound edge.
-        let reversal = sign_account_status_record(
-            unsigned(
-                &account,
-                3,
-                Some(deny.account_status_record_id.clone()),
-                1,
-                AccountStatus::Active,
-                base + 3,
-            )?,
-            authority_key,
-        )?;
-        let append = replicas
-            .append(&reversal, &receipt_for(&reversal, base + 3, receiver_key)?)
-            .await?;
-        match status {
-            AccountStatus::ErasurePending => {
-                let AccountStatusReplicaAppend::Conflict {
-                    kind: AccountStatusReplicaConflictKind::ErasurePendingTerminal,
-                    ..
-                } = append
-                else {
-                    bail!("erasure_pending accepted a successor despite being terminal");
-                };
-                assert_head_is(replicas, &deny).await?;
-            }
-            // `locked` and `suspended` are appealable, while `deactivated` is
-            // recoverable only after the issuer's local deployment-policy and
-            // completed-PCR-recovery gates. All three appear to the replica as
-            // an authority-signed legal successor; authoring conformance checks
-            // the distinct local authorization closures.
-            _ => {
-                let AccountStatusReplicaAppend::Accepted(_) = append else {
-                    bail!(
-                        "an Account Authority legal successor out of {} was refused",
-                        status.as_str()
-                    );
-                };
-            }
-        }
-    }
-    Ok(())
-}
-
-/// An Account Authority service-key rotation does not invalidate the ledger:
-/// records signed before the rotation stay verifiable under their historical
-/// key and stay replicable, while the rotated key still has to resolve to the
-/// same Account Authority.
-async fn assert_service_key_rotation_keeps_records_verifiable(
-    replicas: &dyn AccountStatusReplicaStore,
-    authority_key: &SigningKey,
-    rotated_authority_key: &SigningKey,
-    receiver_key: &SigningKey,
-) -> Result<()> {
-    let account = "account-issuer-ledger-rotation";
-    let before = sign_account_status_record(
-        unsigned(account, 1, None, 1, AccountStatus::Active, 50)?,
-        authority_key,
-    )?;
-    let after_unsigned = unsigned(
-        account,
-        2,
-        Some(before.account_status_record_id.clone()),
-        1,
-        AccountStatus::Suspended,
-        51,
-    )?;
-    let after = sdk_sign_account_status_record(
-        after_unsigned,
-        DidUrl::new(AUTHORITY_ROTATED_METHOD).map_err(anyhow::Error::msg)?,
-        rotated_authority_key,
-    )?;
-
-    for (record, key) in [(&before, authority_key), (&after, rotated_authority_key)] {
-        verify_account_status_record(record, &public_key(key))?;
-    }
-    // Rotation is not a wildcard: the historical record does not become
-    // verifiable under the new key, nor the reverse.
-    if verify_account_status_record(&before, &public_key(rotated_authority_key)).is_ok()
-        || verify_account_status_record(&after, &public_key(authority_key)).is_ok()
-    {
-        bail!("an account-status record verified under the wrong side of a key rotation");
-    }
-
-    for (index, record) in [&before, &after].into_iter().enumerate() {
-        let index = 50 + index as u32;
-        let AccountStatusReplicaAppend::Accepted(_) = replicas
-            .append(record, &receipt_for(record, index, receiver_key)?)
-            .await?
-        else {
-            bail!("a service-key rotation broke monotonic replication");
-        };
-    }
-    assert_head_is(replicas, &after).await?;
-
-    // The rotated key still has to be controlled by the same Account
-    // Authority; a rotation into a foreign controller is not a rotation.
-    let foreign_unsigned = unsigned(
-        account,
-        3,
-        Some(after.account_status_record_id.clone()),
-        1,
-        AccountStatus::Deactivated,
-        52,
-    )?;
-    if sdk_sign_account_status_record(
-        foreign_unsigned,
-        DidUrl::new("did:web:evil.example#account-status-key").map_err(anyhow::Error::msg)?,
-        rotated_authority_key,
-    )
-    .is_ok()
-    {
-        bail!("an account-status record signed by a foreign controller was accepted");
-    }
-    Ok(())
-}
-
-/// Below-head submissions are typed `stale`, and byte-identity with a retained
-/// history row does not downgrade that to `duplicate`.
-///
-/// `account-status-replica-decision-table.json` settles the comparison
-/// baseline: the durable replica head is the only one. A receiver that compared
-/// against the stored row for the submitted `status_seq` would make the typed
-/// outcome depend on how much history it happens to retain — a local retention
-/// decision — and would let a bounded outbox mark a destination complete while
-/// the successor record is still unreplicated. Both steps run on one replica
-/// that *does* still hold the row for the submitted sequence, so the weaker
-/// reading is actually reachable and is what fails here.
-async fn assert_below_head_is_stale_against_the_durable_head(
-    replicas: &dyn AccountStatusReplicaStore,
-    authority_key: &SigningKey,
-    receiver_key: &SigningKey,
-    observed: &mut Observations,
-) -> Result<()> {
-    let account = "account-issuer-ledger-stale";
-
-    let genesis = sign_account_status_record(
-        unsigned(account, 1, None, 1, AccountStatus::Active, 80)?,
-        authority_key,
-    )?;
-    let second = sign_account_status_record(
-        unsigned(
-            account,
-            2,
-            Some(genesis.account_status_record_id.clone()),
-            1,
-            AccountStatus::Locked,
-            81,
-        )?,
-        authority_key,
-    )?;
-    let third = sign_account_status_record(
-        unsigned(
-            account,
-            3,
-            Some(second.account_status_record_id.clone()),
-            1,
-            AccountStatus::Suspended,
-            82,
-        )?,
-        authority_key,
-    )?;
-    let second_receipt = receipt_for(&second, 81, receiver_key)?;
-    for (index, record, receipt) in [
-        (80, &genesis, receipt_for(&genesis, 80, receiver_key)?),
-        (81, &second, second_receipt.clone()),
-        (82, &third, receipt_for(&third, 82, receiver_key)?),
-    ] {
-        let AccountStatusReplicaAppend::Accepted(_) = replicas.append(record, &receipt).await?
-        else {
-            bail!("the stale-baseline replica refused contiguous record {index}");
-        };
-    }
-    assert_head_is(replicas, &third).await?;
-    // The receiver still holds the row for the submitted sequence, so a
-    // history-row baseline would have something to match against.
-    let second_account_key = second.account_id.clone();
-    if replicas
-        .receipt(second.account_authority_id.as_str(), &second_account_key, 2)
-        .await?
-        .as_ref()
-        != Some(&second_receipt)
-    {
-        bail!("the stale-baseline replica did not retain the status_seq 2 history row");
-    }
-
-    // A below-head submission that is *not* the retained row: typed stale, and
-    // never a fork, because the fork rows only cover head and head+1.
-    let mut divergent_unsigned = second.unsigned();
-    divergent_unsigned.issued_at = at(83)?;
-    divergent_unsigned.effective_at = divergent_unsigned.issued_at;
-    let divergent = sign_account_status_record(divergent_unsigned, authority_key)?;
-    if divergent.account_status_record_id == second.account_status_record_id {
-        bail!("the below-head fixture did not produce a second record identity");
-    }
-    let AccountStatusReplicaAppend::Stale { current_record } = replicas
-        .append(&divergent, &receipt_for(&divergent, 83, receiver_key)?)
-        .await?
-    else {
-        bail!("a below-head account-status submission was not classified as stale");
-    };
-    if current_record.account_status_record_id != third.account_status_record_id {
-        bail!("the stale classification did not report the durable head");
-    }
-    assert_head_is(replicas, &third).await?;
-    observed.insert(
-        "lower_sequence_is_typed_stale_and_zero_write",
-        StepObservation::rejected(ReasonCode::ACCOUNT_STATUS_RECORD_STALE),
+fn verify_ledger_identity(ledger: &Value) -> Result<()> {
+    let authority = DidCoreId::new(required_str(ledger, "account_authority_id")?.to_owned())?;
+    let account: AccountId = serde_json::from_value(required_field(ledger, "account_id")?.clone())?;
+    account.validate()?;
+    ensure!(
+        account.station_id() != &authority || account.principal_id() != &authority,
+        "the fixture account must not collapse principal, Station and Authority into one id"
     );
-
-    // The same submission, byte-identical to the retained status_seq 2 row.
-    // `duplicate` means the durable head already is the submitted record, so
-    // this is stale too — the retained row must not downgrade the outcome.
-    let replay_receipt = receipt_for(&second, 84, receiver_key)?;
-    let replayed = replicas.append(&second, &replay_receipt).await?;
-    if let AccountStatusReplicaAppend::Duplicate(_) = replayed {
-        bail!(
-            "a byte-identical below-head account-status record was answered `duplicate`; the \
-             durable head is the only comparison baseline, so a retained history row must not \
-             turn a stale submission into a terminal ack"
+    ensure!(
+        required_str(ledger, "proof_context")? == PROOF_CONTEXT,
+        "issuer-ledger proof context drifted"
+    );
+    // The declared identity rule is the one the SDK implements: a suite-tagged
+    // digest over the JCS bytes of the record without its id and proof.
+    let rule = required_str(ledger, "identity_rule")?;
+    for fragment in [
+        "account_status_record_id",
+        "SHA-256",
+        "JCS",
+        "without account_status_record_id and proof",
+    ] {
+        ensure!(
+            rule.contains(fragment),
+            "issuer-ledger identity rule no longer states {fragment}"
         );
     }
-    let AccountStatusReplicaAppend::Stale { current_record } = replayed else {
-        bail!(
-            "a byte-identical below-head account-status record was not classified as stale: \
-             {replayed:?}"
-        );
-    };
-    if current_record.account_status_record_id != third.account_status_record_id {
-        bail!("the byte-identical stale classification did not report the durable head");
-    }
-    assert_head_is(replicas, &third).await?;
-    // Zero write: the retained row keeps its original receipt, and the replay
-    // receipt was never made durable.
-    let second_account_key = second.account_id.clone();
-    let stored = replicas
-        .receipt(second.account_authority_id.as_str(), &second_account_key, 2)
-        .await?
-        .ok_or_else(|| anyhow!("the stale replay dropped the retained status_seq 2 receipt"))?;
-    if stored != second_receipt || stored == replay_receipt {
-        bail!("a stale account-status submission rewrote the retained receipt");
-    }
-    observed.insert(
-        "byte_identical_lower_sequence_is_stale_not_duplicate",
-        StepObservation::rejected(ReasonCode::ACCOUNT_STATUS_RECORD_STALE),
-    );
     Ok(())
 }
 
-/// The published decision table says what it must: an ordered rule set whose
-/// only comparison baseline is the durable replica head, in which `duplicate`
-/// is reachable solely when the head already is the submitted record.
-fn assert_durable_head_is_the_only_comparison_baseline() -> Result<()> {
-    let table = load_artifact_json(REPLICA_DECISION_TABLE_REF)?;
-    if table.get("comparison_baseline").and_then(Value::as_str) != Some("durable_replica_head") {
-        bail!("the account-status replica decision table no longer names a single baseline");
-    }
-    let classifications = table
-        .get("classifications")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("replica decision table has no classifications[]"))?;
+// ── Record projection ───────────────────────────────────────────────────────
 
-    let row = |name: &str| -> Result<&Value> {
-        classifications
-            .iter()
-            .find(|row| row.get("name").and_then(Value::as_str) == Some(name))
-            .ok_or_else(|| anyhow!("replica decision table has no `{name}` classification"))
-    };
-    let stale = row("stale")?;
-    if stale.get("outcome").and_then(Value::as_str) != Some("rejected")
-        || stale.get("reason_code").and_then(Value::as_str)
-            != Some(ReasonCode::ACCOUNT_STATUS_RECORD_STALE)
-        || stale.get("replica_writes").and_then(Value::as_str) != Some("none")
-        || stale
-            .get("retryable_for_exact_record")
-            .and_then(Value::as_bool)
-            != Some(false)
-    {
-        bail!("the `stale` classification drifted from a zero-write, non-retryable rejection");
-    }
-    if stale.get("condition").and_then(Value::as_str)
-        != Some("submitted.status_seq < head.status_seq")
-    {
-        bail!("the `stale` classification is no longer decided purely against the durable head");
-    }
-    let duplicate = row("duplicate")?;
-    if duplicate.get("condition").and_then(Value::as_str)
-        != Some(
-            "submitted.status_seq == head.status_seq && submitted.account_status_record_id == \
-             head.account_status_record_id",
-        )
-    {
-        bail!("`duplicate` is no longer restricted to the durable head being the submitted record");
-    }
-    // Ordering matters: the binding rollback row is evaluated before every
-    // sequence row, so a rolled-back binding can never reach the advance branch.
-    let position = |name: &str| {
-        classifications
-            .iter()
-            .position(|row| row.get("name").and_then(Value::as_str) == Some(name))
-    };
-    let (Some(rollback), Some(advance)) =
-        (position("binding_version_rollback"), position("advance"))
-    else {
-        bail!("replica decision table lost the binding rollback or advance classification");
-    };
-    if rollback > advance {
-        bail!("`binding_version_rollback` is no longer evaluated before the advance branch");
-    }
-    Ok(())
+/// One declared record plus the identity the fixture asserts for it.
+#[derive(Clone, Debug)]
+struct DeclaredRecord {
+    name: String,
+    record: AccountStatusRecord,
+    declared_canonical_bytes: String,
+    declared_core_digest: String,
+    declared_record_id: AccountStatusRecordId,
 }
 
-/// Receipted fanout carries the exact signed record bytes and only
-/// receiver-signed `AccountStatusReceipt` values.
-fn assert_receipted_fanout_preserves_the_signed_record(
-    authority_key: &SigningKey,
-    receiver_key: &SigningKey,
-    observed: &mut Observations,
-) -> Result<()> {
-    let account = "account-issuer-ledger-fanout";
-    let record = sign_account_status_record(
-        unsigned(account, 1, None, 1, AccountStatus::Active, 60)?,
-        authority_key,
-    )?;
-    let receipt = receipt_for(&record, 60, receiver_key)?;
-    let record_json = serde_json::to_value(&record)?;
-    let receipt_json = serde_json::to_value(&receipt)?;
-
-    let env = SchemaEnv::load()?;
-    let publication_validator = env.compile(
-        "schemas/account-operations.schema.json#/$defs/account_status_publication_request_body",
-    )?;
-
-    let initial = json!({"publication": {"record": record_json.clone()}});
-    let receipted = json!({
-        "publication": {
-            "record": record_json.clone(),
-            "account_status_receipts": [receipt_json.clone()]
-        }
-    });
-    for (name, body) in [("initial", &initial), ("receipted", &receipted)] {
-        if !publication_validator.is_valid(body) {
-            let detail = publication_validator
-                .iter_errors(body)
-                .next()
-                .map(|error| format!("{error}"))
-                .unwrap_or_else(|| "<no error reported>".to_owned());
-            bail!("the {name} account-status publication was rejected by schema: {detail}");
-        }
-        let parsed: arkret_models_collaboration::account_lifecycle::AccountStatusPublicationRequestBody =
-            serde_json::from_value(body.clone())?;
-        parsed.validate_shape()?;
-        if serde_json::to_value(parsed.publication.record())? != record_json {
-            bail!("the {name} account-status publication mutated the signed record bytes");
-        }
-    }
-
-    // Fanout progress never rewrites the record, and a receipt for another
-    // record grants no replication authority.
-    let mut mismatched = receipted.clone();
-    mismatched["publication"]["account_status_receipts"][0]["status_seq"] = json!(2);
-    if serde_json::from_value::<
-        arkret_models_collaboration::account_lifecycle::AccountStatusPublicationRequestBody,
-    >(mismatched)
-    .is_ok_and(|body| body.validate_shape().is_ok())
-    {
-        bail!("a receipt bound to another record was accepted for fanout");
-    }
-
-    // A generic Event ingress receipt is not an AccountStatusReceipt, and an
-    // authorization lease is not part of this carrier.
-    let mut generic_receipt = receipted.clone();
-    generic_receipt["publication"]["account_status_receipts"] = json!([{
-        "receipt_id": "ak:receipt:01904100-0000-7000-8000-000000000099",
-        "event_id": "ak:event:AeT7kJ7nzcZNqlGtEPM_6ii47B_Y8P7N087AORix-7uC"
-    }]);
-    let mut leased = receipted.clone();
-    leased["publication"]["authorization_lease_id"] =
-        json!("ak:authorization_lease:01904100-0000-7000-8000-000000000098");
-    for (name, body) in [
-        ("generic ingress receipt", &generic_receipt),
-        ("authorization lease", &leased),
-    ] {
-        if publication_validator.is_valid(body) {
-            bail!("the account-status fanout carrier accepted a {name}");
-        }
-        if serde_json::from_value::<
-            arkret_models_collaboration::account_lifecycle::AccountStatusPublicationRequestBody,
-        >(body.clone())
-        .is_ok()
-        {
-            bail!("the shared fanout type accepted a {name}");
-        }
-    }
-    observed.insert(
-        "fanout_requires_dedicated_receipt_without_lease",
-        StepObservation::rejected("schema_violation"),
-    );
-    Ok(())
-}
-
-/// Account erasure binds the exact `erasure_pending` record id through the
-/// closed `event | account_status_record` trigger union.
-fn assert_erasure_trigger_union_is_closed(authority_key: &SigningKey) -> Result<()> {
-    let record = sign_account_status_record(
-        unsigned(
-            "account-issuer-ledger-erasure",
-            1,
-            None,
-            1,
-            AccountStatus::Active,
-            70,
+fn parse_declared(name: &str, entry: &Value) -> Result<DeclaredRecord> {
+    let record: AccountStatusRecord =
+        serde_json::from_value(required_field(entry, "record")?.clone())
+            .map_err(|error| anyhow!("{name}: record is not an AccountStatusRecord: {error}"))?;
+    record
+        .validate_shape()
+        .map_err(|error| anyhow!("{name}: record failed its own shape validator: {error}"))?;
+    Ok(DeclaredRecord {
+        name: name.to_owned(),
+        record,
+        declared_canonical_bytes: required_str(entry, "unsigned_core_canonical_bytes_utf8")?
+            .to_owned(),
+        declared_core_digest: required_str(entry, "unsigned_core_digest")?.to_owned(),
+        declared_record_id: AccountStatusRecordId::new(
+            required_str(entry, "account_status_record_id")?.to_owned(),
         )?,
-        authority_key,
-    )?;
-    let trigger = ErasureTrigger::AccountStatusRecord {
-        account_status_record_id: record.account_status_record_id.clone(),
-    };
-    let trigger_json = serde_json::to_value(&trigger)?;
-    if trigger_json["kind"] != "account_status_record"
-        || trigger_json["account_status_record_id"] != record.account_status_record_id.as_str()
+    })
+}
+
+fn parse_records(ledger: &Value, key: &str) -> Result<Vec<DeclaredRecord>> {
+    let mut out = Vec::new();
+    for (index, entry) in value_array(required_field(ledger, key)?, key)?
+        .iter()
+        .enumerate()
     {
-        bail!("the account-status erasure trigger did not bind the exact record id");
+        out.push(parse_declared(&format!("{key}[{index}]"), entry)?);
     }
-    if serde_json::from_value::<ErasureTrigger>(trigger_json)? != trigger {
-        bail!("the account-status erasure trigger did not round-trip");
+    ensure!(!out.is_empty(), "issuer-ledger {key} is empty");
+    Ok(out)
+}
+
+fn parse_named_records(ledger: &Value, key: &str) -> Result<Vec<DeclaredRecord>> {
+    let mut out = Vec::new();
+    for entry in value_array(required_field(ledger, key)?, key)? {
+        out.push(parse_declared(required_str(entry, "name")?, entry)?);
     }
-    // The pre-union event-only shape must stay closed; accepting it would let
-    // an account erasure be attributed to an Event again.
-    if serde_json::from_value::<ErasureTrigger>(json!({
-        "triggering_event_id": "ak:event:AeT7kJ7nzcZNqlGtEPM_6ii47B_Y8P7N087AORix-7uC"
-    }))
-    .is_ok()
-    {
-        bail!("the pre-union event-only erasure trigger shape was accepted");
-    }
-    // Both union branches are closed against each other's discriminated field.
-    if serde_json::from_value::<ErasureTrigger>(json!({
-        "kind": "account_status_record",
-        "event_id": "ak:event:AeT7kJ7nzcZNqlGtEPM_6ii47B_Y8P7N087AORix-7uC"
-    }))
-    .is_ok()
-    {
-        bail!("the account_status_record erasure trigger branch accepted an event_id");
+    ensure!(!out.is_empty(), "issuer-ledger {key} is empty");
+    Ok(out)
+}
+
+fn record_index<'a>(
+    chain: &'a [DeclaredRecord],
+    conflicting: &'a [DeclaredRecord],
+) -> BTreeMap<AccountStatusRecordId, &'a DeclaredRecord> {
+    chain
+        .iter()
+        .chain(conflicting.iter())
+        .map(|declared| (declared.record.account_status_record_id.clone(), declared))
+        .collect()
+}
+
+// ── Identity and proof binding ──────────────────────────────────────────────
+
+/// Re-derive the unsigned core from each declared record and require the
+/// fixture's own canonical bytes, digest and record id to fall out of it.
+fn verify_record_identity_and_proof_binding(
+    ledger: &Value,
+    chain: &[DeclaredRecord],
+    conflicting: &[DeclaredRecord],
+) -> Result<()> {
+    let authority = DidCoreId::new(required_str(ledger, "account_authority_id")?.to_owned())?;
+    let mut seen_ids = BTreeSet::new();
+
+    for declared in chain.iter().chain(conflicting.iter()) {
+        let name = &declared.name;
+        let unsigned = declared.record.unsigned();
+        unsigned
+            .validate()
+            .map_err(|error| anyhow!("{name}: unsigned core is invalid: {error}"))?;
+
+        let canonical_bytes = unsigned
+            .canonical_bytes()
+            .map_err(|error| anyhow!("{name}: unsigned core has no canonical bytes: {error}"))?;
+        let canonical_text = String::from_utf8(canonical_bytes.clone())
+            .map_err(|error| anyhow!("{name}: canonical bytes are not UTF-8: {error}"))?;
+        ensure!(
+            canonical_text == declared.declared_canonical_bytes,
+            "{name}: declared canonical core bytes do not match the SDK encoder\n  declared: {}\n  derived:  {canonical_text}",
+            declared.declared_canonical_bytes
+        );
+        // The declared bytes really are the record minus exactly two members.
+        verify_core_omits_only_id_and_proof(name, &declared.record, &canonical_text)?;
+
+        let derived_digest = sha256_prefixed(&canonical_bytes);
+        ensure!(
+            derived_digest == declared.declared_core_digest,
+            "{name}: declared core digest {} is not the digest of the core bytes ({derived_digest})",
+            declared.declared_core_digest
+        );
+
+        let derived_id = unsigned
+            .record_id()
+            .map_err(|error| anyhow!("{name}: record id derivation failed: {error}"))?;
+        ensure!(
+            derived_id == declared.declared_record_id
+                && derived_id == declared.record.account_status_record_id,
+            "{name}: the record id is not the content address of its own core"
+        );
+        ensure!(
+            seen_ids.insert(derived_id.clone()),
+            "{name}: two declared records share one record id"
+        );
+
+        // The proof binds this exact core: same digest, same issuance time, and
+        // the Account Authority's own verification method.
+        let proof = &declared.record.proof;
+        let payload_digest = unsigned
+            .payload_digest()
+            .map_err(|error| anyhow!("{name}: payload digest failed: {error}"))?;
+        ensure!(
+            proof.payload_digest == payload_digest,
+            "{name}: the proof does not name the digest of its own core"
+        );
+        unsigned
+            .canonical_proof_binding_bytes(&proof.unsigned())
+            .map_err(|error| anyhow!("{name}: proof metadata does not bind the core: {error}"))?;
+        ensure!(
+            proof
+                .verification_method
+                .as_str()
+                .contains(authority.as_str().trim_start_matches("ak:did_core:")),
+            "{name}: the record is not signed by its own Account Authority"
+        );
+
+        // A record the fixture re-signs with a different digest must be refused
+        // by the same binding check, so the check is not vacuous.
+        let mut tampered = proof.unsigned();
+        tampered.payload_digest = Hash::new(format!("sha256:{}", "ab".repeat(32)))?;
+        ensure!(
+            unsigned.canonical_proof_binding_bytes(&tampered).is_err(),
+            "{name}: a proof naming a foreign digest was accepted"
+        );
     }
     Ok(())
 }
 
-fn assert_typed_reason_codes_are_registered() -> Result<()> {
-    for code in [
-        ReasonCode::ACCOUNT_STATUS_RECORD_STALE,
-        ReasonCode::ACCOUNT_STATUS_RECORD_FORK,
-        ReasonCode::ACCOUNT_STATUS_BINDING_ROLLBACK,
-        ReasonCode::ACCOUNT_STATUS_TRANSITION_INVALID,
-        ReasonCode::DUPLICATE_CONFLICT,
-    ] {
-        if matches!(ReasonCode::from_wire(code), ReasonCode::Unknown(_)) {
-            bail!("account-status reason code `{code}` is not registered in the SDK vocabulary");
-        }
-    }
-    // The fork classification must never collapse into the idempotency
-    // conflict the submit operation reserves for `Idempotency-Key` reuse.
-    if ReasonCode::ACCOUNT_STATUS_RECORD_FORK == ReasonCode::DUPLICATE_CONFLICT {
-        bail!("the account-status fork reason code reuses duplicate_conflict");
-    }
+/// The unsigned core is the record without exactly `account_status_record_id`
+/// and `proof` — nothing else is dropped and nothing is added.
+fn verify_core_omits_only_id_and_proof(
+    name: &str,
+    record: &AccountStatusRecord,
+    canonical_text: &str,
+) -> Result<()> {
+    let full = serde_json::to_value(record)?;
+    let mut expected: Map<String, Value> = full
+        .as_object()
+        .ok_or_else(|| anyhow!("{name}: record must serialize as an object"))?
+        .clone();
+    let dropped_id = expected.remove("account_status_record_id").is_some();
+    let dropped_proof = expected.remove("proof").is_some();
+    ensure!(
+        dropped_id && dropped_proof,
+        "{name}: the record no longer carries both an id and a proof"
+    );
+    let expected_text = canonical_json(&Value::Object(expected))?;
+    ensure!(
+        expected_text == canonical_text,
+        "{name}: the unsigned core drops more or less than the id and the proof"
+    );
     Ok(())
 }
 
-fn assert_resolve_operation_is_registered() -> Result<()> {
-    let registry = load_artifact_json("registry/operation-registry.json")?;
-    let operations = registry
-        .get("operations")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("operation registry missing operations[]"))?;
-    for (operation_id, http, request_ref, response_ref) in [
-        (
-            ServiceOperationId::PEER_ACCOUNT_STATUS_COMMAND_SUBMIT_V1,
-            "POST /_arkret/peer/account-status",
-            "schemas/account-operations.schema.json#/$defs/account_status_publication_request_body",
-            "schemas/account-operations.schema.json#/$defs/account_status_publication_outcome",
-        ),
-        (
-            ServiceOperationId::PEER_ACCOUNT_STATUS_READ_RESOLVE_V1,
-            "POST /_arkret/peer/account-status/resolve",
-            "schemas/account-operations.schema.json#/$defs/account_status_resolve_request_body",
-            "schemas/account-operations.schema.json#/$defs/account_status_resolve_outcome",
-        ),
-    ] {
-        let operation = operations
-            .iter()
-            .find(|row| row.get("operation_id").and_then(Value::as_str) == Some(operation_id))
-            .ok_or_else(|| anyhow!("operation registry missing {operation_id}"))?;
-        if operation.get("http").and_then(Value::as_str) != Some(http)
-            || operation.get("request_schema_ref").and_then(Value::as_str) != Some(request_ref)
-            || operation.get("response_schema_ref").and_then(Value::as_str) != Some(response_ref)
-        {
-            bail!("account-status operation binding drifted for {operation_id}");
-        }
-    }
-    Ok(())
-}
-
-/// Compare the driven observations against the fixture branch, and fail on any
-/// step-name drift in either direction.
-fn compare_against_fixture(observed: &Observations) -> Result<()> {
-    let fixture = SecurityClosureFixture::load()?;
-    let vector = fixture.vector(VECTOR_ID_ACCOUNT_STATUS_ISSUER_LEDGER)?;
-
-    let mut fixture_steps = BTreeSet::new();
-    for step in &vector.steps {
-        if !fixture_steps.insert(step.name.as_str()) {
-            bail!(
-                "{VECTOR_ID_ACCOUNT_STATUS_ISSUER_LEDGER} repeats step `{}`",
-                step.name
+/// The ledger keeps its own chain. It must not carry a Realm commit, stream,
+/// position or any retired coverage carrier.
+fn verify_record_carries_no_commit_or_stream_carrier(
+    chain: &[DeclaredRecord],
+    conflicting: &[DeclaredRecord],
+) -> Result<()> {
+    for declared in chain.iter().chain(conflicting.iter()) {
+        let mut members = BTreeSet::new();
+        collect_keys(&serde_json::to_value(&declared.record)?, &mut members);
+        for forbidden in FORBIDDEN_RECORD_MEMBERS {
+            ensure!(
+                !members.contains(*forbidden),
+                "{}: the issuer ledger reintroduced the carrier {forbidden}",
+                declared.name
             );
         }
-        if let Some(reason_code) = step.expected.reason_code.as_deref()
-            && matches!(ReasonCode::from_wire(reason_code), ReasonCode::Unknown(_))
-            && ErrorCode::from_wire(reason_code).is_none()
-        {
-            bail!(
-                "{VECTOR_ID_ACCOUNT_STATUS_ISSUER_LEDGER} step `{}` names unregistered reason \
-                 code `{reason_code}`",
-                step.name
-            );
-        }
-
-        let Some(observation) = observed.get(step.name.as_str()) else {
-            if TRANSPORT_ONLY_STEPS.contains(&step.name.as_str()) {
-                continue;
-            }
-            bail!(
-                "{VECTOR_ID_ACCOUNT_STATUS_ISSUER_LEDGER} step `{}` has no cotest observation",
-                step.name
-            );
-        };
-        if observation.outcome != step.expected.outcome {
-            bail!(
-                "{VECTOR_ID_ACCOUNT_STATUS_ISSUER_LEDGER} step `{}` observed outcome `{}`, fixture \
-                 expects `{}`",
-                step.name,
-                observation.outcome,
-                step.expected.outcome
-            );
-        }
-        if let (Some(actual), Some(expected)) = (
-            observation.reason_code.as_deref(),
-            step.expected.reason_code.as_deref(),
-        ) && actual != expected
-        {
-            bail!(
-                "{VECTOR_ID_ACCOUNT_STATUS_ISSUER_LEDGER} step `{}` observed reason `{actual}`, \
-                 fixture expects `{expected}`",
-                step.name
-            );
-        }
-    }
-
-    for name in observed.keys() {
-        if !fixture_steps.contains(name) {
-            bail!(
-                "{VECTOR_ID_ACCOUNT_STATUS_ISSUER_LEDGER} has no fixture step `{name}`; the cotest \
-                 observation is bound to a step the spec no longer publishes"
-            );
-        }
-    }
-    for name in TRANSPORT_ONLY_STEPS {
-        if !fixture_steps.contains(name) {
-            bail!(
-                "{VECTOR_ID_ACCOUNT_STATUS_ISSUER_LEDGER} no longer publishes transport-only step \
-                 `{name}`"
-            );
-        }
-    }
-    Ok(())
-}
-
-fn assert_record_carries_no_event_or_seal_carrier(record: &AccountStatusRecord) -> Result<()> {
-    let encoded = serde_json::to_value(record)?;
-    let mut keys = BTreeSet::new();
-    collect_keys(&encoded, &mut keys);
-    for forbidden in FORBIDDEN_RECORD_KEYS {
-        if keys.contains(*forbidden) {
-            bail!(
-                "AccountStatusRecord carries `{forbidden}`; account lifecycle has no Event, Seal, \
-                 frontier or holder-device carrier"
-            );
-        }
+        // The chain link it does carry is its own predecessor record id.
+        ensure!(
+            members.contains("status_seq") && members.contains("binding_version"),
+            "{}: the record lost its own ordering fields",
+            declared.name
+        );
     }
     Ok(())
 }
@@ -1200,92 +405,549 @@ fn collect_keys(value: &Value, out: &mut BTreeSet<String>) {
     }
 }
 
-async fn assert_head_is(
-    replicas: &dyn AccountStatusReplicaStore,
-    expected: &AccountStatusRecord,
+// ── The declared chain ──────────────────────────────────────────────────────
+
+fn verify_chain_is_a_cas_successor_chain(chain: &[DeclaredRecord]) -> Result<()> {
+    ensure!(
+        chain.len() >= 3,
+        "the issuer ledger needs a genesis and at least two successors"
+    );
+    let mut previous: Option<&AccountStatusRecord> = None;
+    for declared in chain {
+        let record = &declared.record;
+        ensure!(
+            record.schema == SchemaId::ACCOUNT_STATUS_RECORD_V1,
+            "{}: record schema drifted",
+            declared.name
+        );
+        match previous {
+            None => {
+                ensure!(
+                    record.status_seq == 1
+                        && record.previous_account_status_record_id.is_none()
+                        && record.status == AccountStatus::Active,
+                    "{}: genesis must be an active record at status_seq 1 with no predecessor",
+                    declared.name
+                );
+            }
+            Some(head) => {
+                ensure!(
+                    record.status_seq == head.status_seq + 1,
+                    "{}: the chain must advance by exactly one sequence",
+                    declared.name
+                );
+                ensure!(
+                    record.previous_account_status_record_id.as_ref()
+                        == Some(&head.account_status_record_id),
+                    "{}: the successor must name the exact predecessor record id",
+                    declared.name
+                );
+                ensure!(
+                    record.account_authority_id == head.account_authority_id
+                        && record.account_id == head.account_id,
+                    "{}: the chain must stay inside one compare-and-swap key",
+                    declared.name
+                );
+                ensure!(
+                    record.binding_version >= head.binding_version,
+                    "{}: the binding version must never roll back along the chain",
+                    declared.name
+                );
+                ensure!(
+                    record.issued_at >= head.issued_at,
+                    "{}: the chain must not travel backwards in issuance time",
+                    declared.name
+                );
+            }
+        }
+        previous = Some(record);
+    }
+    Ok(())
+}
+
+// ── Genesis ─────────────────────────────────────────────────────────────────
+
+/// Genesis is created inside the account-binding transaction and waits for
+/// nothing in the commit plane: no Station checkpoint, no `RealmCommit`.
+fn verify_genesis_rules(fixture: &Value, chain: &[DeclaredRecord]) -> Result<()> {
+    let rules = required_field(fixture, "genesis_rules")?;
+    ensure!(
+        required_bool(rules, "created_in_the_binding_commit_transaction")?,
+        "account status genesis must be created in the binding transaction"
+    );
+    ensure!(
+        required_u64(rules, "status_seq")? == 1,
+        "account status genesis must be status_seq 1"
+    );
+    ensure!(
+        required_str(rules, "status")? == "active",
+        "account status genesis must be active"
+    );
+    ensure!(
+        !required_bool(rules, "carries_previous_account_status_record_id")?,
+        "account status genesis must carry no predecessor"
+    );
+    ensure!(
+        !required_bool(rules, "waits_for_station_checkpoint")?,
+        "account status genesis must not wait for a Station checkpoint"
+    );
+    ensure!(
+        !required_bool(rules, "waits_for_realm_commit")?,
+        "account status genesis must not wait for a RealmCommit"
+    );
+
+    // The rules are executable, not documentation: the SDK validator refuses a
+    // genesis that carries a predecessor and refuses a non-active genesis.
+    let genesis = chain
+        .first()
+        .ok_or_else(|| anyhow!("the ledger declares no genesis record"))?;
+    let mut with_predecessor = genesis.record.unsigned();
+    with_predecessor.previous_account_status_record_id =
+        Some(chain[1].record.account_status_record_id.clone());
+    ensure!(
+        with_predecessor.validate().is_err(),
+        "a genesis record with a predecessor was accepted"
+    );
+    let mut inactive = genesis.record.unsigned();
+    inactive.status = AccountStatus::Locked;
+    ensure!(
+        inactive.validate().is_err(),
+        "a genesis record that is not active was accepted"
+    );
+    let mut zero = genesis.record.unsigned();
+    zero.status_seq = 0;
+    ensure!(
+        zero.validate().is_err(),
+        "a record at status_seq 0 was accepted"
+    );
+    Ok(())
+}
+
+// ── Successor compare-and-swap ──────────────────────────────────────────────
+
+fn verify_successor_cas_contract(ledger_owner: &Value, fixture: &Value) -> Result<()> {
+    let _ = ledger_owner;
+    let cas = required_field(fixture, "successor_cas")?;
+    let key = string_list(cas, "cas_key")?;
+    ensure!(
+        key == CAS_KEY,
+        "the issuer-ledger compare-and-swap key drifted: {key:?}"
+    );
+    ensure!(
+        required_str(cas, "required_status_seq")? == "head.status_seq + 1",
+        "a successor must take exactly the next sequence"
+    );
+    ensure!(
+        required_str(cas, "required_predecessor")? == "head.account_status_record_id",
+        "a successor must name the durable head as its predecessor"
+    );
+    let writes = string_list(cas, "atomic_writes")?;
+    ensure!(
+        writes == ATOMIC_WRITES,
+        "the successor transaction's atomic write set drifted: {writes:?}"
+    );
+    Ok(())
+}
+
+fn string_list(value: &Value, key: &str) -> Result<Vec<String>> {
+    value_array(required_field(value, key)?, key)?
+        .iter()
+        .map(|item| {
+            item.as_str()
+                .map(str::to_owned)
+                .ok_or_else(|| anyhow!("{key} entries must be strings"))
+        })
+        .collect()
+}
+
+// ── Replica classification ──────────────────────────────────────────────────
+
+/// Run every declared classification case through the shipped receiver and
+/// cross-check it against the normative decision table.
+fn verify_replica_classification(
+    fixture: &Value,
+    index: &BTreeMap<AccountStatusRecordId, &DeclaredRecord>,
 ) -> Result<()> {
-    let account_key = expected.account_id.clone();
-    let head = replicas
-        .current(expected.account_authority_id.as_str(), &account_key)
-        .await?
-        .ok_or_else(|| {
-            anyhow!(
-                "account-status replica has no head for {}",
-                expected.account_id
-            )
+    let table = load_artifact_json(REPLICA_DECISION_TABLE_REF)?;
+    ensure!(
+        required_str(&table, "comparison_baseline")? == "durable_replica_head",
+        "the replica decision table changed its comparison baseline"
+    );
+    let rows: BTreeMap<String, Value> = value_array(
+        required_field(&table, "classifications")?,
+        "classifications",
+    )?
+    .iter()
+    .map(|row| Ok((required_str(row, "name")?.to_owned(), row.clone())))
+    .collect::<Result<_>>()?;
+
+    let mut executed = BTreeSet::new();
+    for case in value_array(
+        required_field(fixture, "replica_classification_cases")?,
+        "replica_classification_cases",
+    )? {
+        let name = required_str(case, "name")?;
+        let classification = required_str(case, "classification")?;
+        let row = rows.get(classification).ok_or_else(|| {
+            anyhow!("{name}: classification {classification} is not in the decision table")
         })?;
-    if head.account_status_record_id != expected.account_status_record_id {
-        bail!(
-            "account-status replica head is {}, expected {}",
-            head.account_status_record_id.as_str(),
-            expected.account_status_record_id.as_str()
+
+        let submitted_id = AccountStatusRecordId::new(required_str(case, "submitted")?.to_owned())?;
+        let submitted = index
+            .get(&submitted_id)
+            .ok_or_else(|| anyhow!("{name}: submitted record {submitted_id} is not declared"))?;
+
+        let head = match case.get("durable_head") {
+            None | Some(Value::Null) => None,
+            Some(head) => {
+                let head_id = AccountStatusRecordId::new(
+                    required_str(head, "account_status_record_id")?.to_owned(),
+                )?;
+                let declared = index
+                    .get(&head_id)
+                    .ok_or_else(|| anyhow!("{name}: durable head {head_id} is not declared"))?;
+                ensure!(
+                    declared.record.status_seq == required_u64(head, "status_seq")?
+                        && declared.record.binding_version
+                            == required_u64(head, "binding_version")?,
+                    "{name}: the declared durable head disagrees with the record it names"
+                );
+                Some((declared.record.clone(), receipt_for(&declared.record)?))
+            }
+        };
+
+        let observed = classify_account_status_replica_append(&submitted.record, head.as_ref());
+        let expected = required_field(case, "expected")?;
+        compare_classification(name, classification, row, expected, &observed)?;
+        executed.insert(classification.to_owned());
+    }
+
+    // Every row of the normative table must be executed by some case, otherwise
+    // the table has a branch nothing in this repository ever reaches.
+    for row in rows.keys() {
+        ensure!(
+            executed.contains(row),
+            "the decision table row {row} is never executed by the fixture"
         );
     }
     Ok(())
 }
 
-fn public_key(key: &SigningKey) -> PublicKeyMaterial {
-    PublicKeyMaterial::Ed25519Raw {
-        bytes: key.verifying_key().to_bytes().to_vec(),
-    }
-}
+fn compare_classification(
+    name: &str,
+    classification: &str,
+    row: &Value,
+    expected: &Value,
+    observed: &Option<AccountStatusReplicaAppend>,
+) -> Result<()> {
+    let outcome = required_str(expected, "outcome")?;
+    ensure!(
+        required_str(row, "outcome")? == outcome,
+        "{name}: the fixture outcome disagrees with the decision table row {classification}"
+    );
+    ensure!(
+        required_str(expected, "replica_writes")? == required_str(row, "replica_writes")?,
+        "{name}: the fixture write set disagrees with the decision table row {classification}"
+    );
 
-fn at(second: u32) -> Result<DateTime<Utc>> {
-    Ok(format!(
-        "2026-08-01T{:02}:{:02}:{:02}.000Z",
-        second / 3600,
-        (second / 60) % 60,
-        second % 60
-    )
-    .parse()?)
-}
-
-fn unsigned(
-    account_id: &str,
-    status_seq: u64,
-    previous_account_status_record_id: Option<AccountStatusRecordId>,
-    binding_version: u64,
-    status: AccountStatus,
-    second: u32,
-) -> Result<UnsignedAccountStatusRecord> {
-    let issued_at = at(second)?;
-    Ok(UnsignedAccountStatusRecord {
-        schema: SchemaId::ACCOUNT_STATUS_RECORD_V1.to_owned(),
-        account_authority_id: DidCoreId::new(AUTHORITY_ID)?,
-        account_id: AccountId::new(
-            DidCoreId::new(format!("ak:did_core:web:{account_id}.example"))?,
-            DidCoreId::new(STATION_ID)?,
+    match (outcome, observed) {
+        // `None` means the receiver admits the submission and must perform the
+        // advancing write itself.
+        ("accepted", None) => {
+            ensure!(
+                required_str(expected, "replica_writes")? == "advance",
+                "{name}: an admitted submission must advance the replica"
+            );
+            ensure!(
+                expected.get("reason_code").is_none_or(Value::is_null),
+                "{name}: an accepted submission carries no reason code"
+            );
+        }
+        ("duplicate", Some(AccountStatusReplicaAppend::Duplicate(_))) => {
+            ensure!(
+                required_bool(expected, "terminal_ack")?,
+                "{name}: duplicate is a terminal ack"
+            );
+            ensure!(
+                TERMINAL_ACKS.contains(&outcome),
+                "{name}: duplicate must stay a terminal ack"
+            );
+        }
+        (
+            "dependency_missing",
+            Some(AccountStatusReplicaAppend::DependencyMissing {
+                required_status_seq,
+                ..
+            }),
+        ) => {
+            ensure!(
+                *required_status_seq == required_u64(expected, "required_status_seq")?,
+                "{name}: the receiver reported required_status_seq {required_status_seq}"
+            );
+            ensure!(
+                required_bool(row, "retryable_for_exact_record")?,
+                "{name}: dependency_missing is the only retryable outcome"
+            );
+        }
+        ("rejected", Some(append)) => {
+            verify_rejection(name, classification, row, expected, append)?;
+        }
+        (outcome, observed) => bail!(
+            "{name}: the shipped receiver returned {observed:?} for a fixture that expects {outcome}"
         ),
-        principal_control_realm_id: RealmId::new(PRINCIPAL_CONTROL_REALM)?,
-        binding_version,
-        status_seq,
-        previous_account_status_record_id,
-        status,
-        reason_code: None,
-        reason: None,
-        issued_at,
-        effective_at: issued_at,
-        expires_at: None,
+    }
+    Ok(())
+}
+
+fn verify_rejection(
+    name: &str,
+    classification: &str,
+    row: &Value,
+    expected: &Value,
+    observed: &AccountStatusReplicaAppend,
+) -> Result<()> {
+    let error_code = required_str(expected, "error_code")?;
+    ensure!(
+        ErrorCode::from_wire(error_code).is_some(),
+        "{name}: {error_code} is not a registered wire error code"
+    );
+    ensure!(
+        required_str(row, "error_code")? == error_code,
+        "{name}: the fixture error code disagrees with the decision table"
+    );
+    let reason_code = required_str(expected, "reason_code")?;
+    ensure!(
+        required_str(row, "reason_code")? == reason_code,
+        "{name}: the fixture reason code disagrees with the decision table"
+    );
+    ensure!(
+        !required_bool(row, "retryable_for_exact_record")?,
+        "{name}: a rejected submission is never retryable for the exact record"
+    );
+
+    match (classification, observed) {
+        (
+            "fork_predecessor_mismatch" | "fork_same_sequence",
+            AccountStatusReplicaAppend::Conflict {
+                kind: AccountStatusReplicaConflictKind::Fork,
+                ..
+            },
+        ) => {
+            ensure!(
+                required_bool(expected, "quarantine")?,
+                "{name}: a fork is quarantined, never silently dropped"
+            );
+        }
+        (
+            "binding_version_rollback",
+            AccountStatusReplicaAppend::Conflict {
+                kind: AccountStatusReplicaConflictKind::BindingRollback,
+                ..
+            },
+        ) => {}
+        ("stale", AccountStatusReplicaAppend::Stale { .. }) => {
+            ensure!(
+                required_bool(expected, "duplicate_forbidden")?,
+                "{name}: a below-head submission must never be reported as duplicate"
+            );
+        }
+        (classification, observed) => bail!(
+            "{name}: classification {classification} produced {observed:?} from the shipped receiver"
+        ),
+    }
+    Ok(())
+}
+
+/// A receipt for a durable head. Only the head's identity is read by the
+/// classifier, so this binds the exact record it acknowledges.
+fn receipt_for(record: &AccountStatusRecord) -> Result<AccountStatusReceipt> {
+    let unsigned = record.unsigned();
+    let record_digest = unsigned.payload_digest()?;
+    let verification_method = record.proof.verification_method.clone();
+    let receipt = UnsignedAccountStatusReceipt {
+        receipt_id: receipt_id_for(record)?,
+        account_status_record_id: record.account_status_record_id.clone(),
+        record_digest: record_digest.clone(),
+        account_authority_id: record.account_authority_id.clone(),
+        account_id: record.account_id.clone(),
+        status_seq: record.status_seq,
+        receiver_id: record.account_id.station_id().clone(),
+        accepted_at: record.issued_at,
+        verification_method: verification_method.clone(),
+    };
+    Ok(AccountStatusReceipt {
+        receipt_id: receipt.receipt_id.clone(),
+        account_status_record_id: receipt.account_status_record_id.clone(),
+        record_digest: receipt.record_digest.clone(),
+        account_authority_id: receipt.account_authority_id.clone(),
+        account_id: receipt.account_id.clone(),
+        status_seq: receipt.status_seq,
+        receiver_id: receipt.receiver_id.clone(),
+        accepted_at: receipt.accepted_at,
+        proof: head_receipt_proof(&receipt, verification_method)?,
     })
 }
 
-fn receipt_for(
-    record: &AccountStatusRecord,
-    index: u32,
-    receiver_key: &SigningKey,
-) -> Result<AccountStatusReceipt> {
-    Ok(sign_account_status_receipt(
-        UnsignedAccountStatusReceipt {
-            receipt_id: ReceiptId::new(format!("ak:receipt:01904100-0000-7000-8000-{index:012x}"))?,
-            account_status_record_id: record.account_status_record_id.clone(),
-            record_digest: record.payload_digest()?,
-            account_authority_id: record.account_authority_id.clone(),
-            account_id: record.account_id.clone(),
-            status_seq: record.status_seq,
-            receiver_id: record.account_id.station_id.clone(),
-            accepted_at: at(1000 + index)?,
-            verification_method: DidUrl::new(RECEIVER_METHOD).map_err(anyhow::Error::msg)?,
-        },
-        receiver_key,
-    )?)
+fn head_receipt_proof(
+    receipt: &UnsignedAccountStatusReceipt,
+    verification_method: DidUrl,
+) -> Result<PayloadProof> {
+    Ok(PayloadProof {
+        kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
+        verification_method,
+        payload_digest: receipt.payload_digest()?,
+        created_at: receipt.accepted_at,
+        domain: None,
+        audience: None,
+        proof_purpose: None,
+        jws: "eyJhbGciOiJFZDI1NTE5In0..AA".to_owned(),
+    })
+}
+
+fn receipt_id_for(record: &AccountStatusRecord) -> Result<ReceiptId> {
+    use sha2::{Digest, Sha256};
+
+    let mut hasher = Sha256::new();
+    hasher.update(b"cotest.account_status.receipt.");
+    hasher.update(record.account_status_record_id.as_str().as_bytes());
+    Ok(ReceiptId::from_digest(hasher.finalize().into()))
+}
+
+// ── Idempotency ─────────────────────────────────────────────────────────────
+
+/// One idempotency key scoped to a source/destination pair either replays the
+/// first response bytes or is a typed conflict. It never half-writes, and it
+/// never leaves a pending commit behind, because the ledger has no commit plane.
+fn verify_idempotency_contract(fixture: &Value) -> Result<()> {
+    let idempotency = required_field(fixture, "idempotency")?;
+    let scope = string_list(idempotency, "scope")?;
+    ensure!(
+        scope == IDEMPOTENCY_SCOPE,
+        "the issuer-ledger idempotency scope drifted: {scope:?}"
+    );
+    ensure!(
+        required_str(idempotency, "same_key_same_canonical_body")?
+            == "replays the first response bytes",
+        "a byte-identical replay must return the first response bytes"
+    );
+    let different = required_field(idempotency, "same_key_different_canonical_body")?;
+    ensure!(
+        required_str(different, "outcome")? == "rejected",
+        "one key must not cover two canonical bodies"
+    );
+    let error_code = required_str(different, "error_code")?;
+    ensure!(
+        ErrorCode::from_wire(error_code) == Some(ErrorCode::DuplicateConflict),
+        "an idempotency-key reuse under a different body is duplicate_conflict, not {error_code}"
+    );
+    ensure!(
+        required_str(different, "replica_writes")? == "none",
+        "a rejected idempotency reuse performs zero writes"
+    );
+    let acks = string_list(idempotency, "terminal_acks")?;
+    ensure!(
+        acks == TERMINAL_ACKS,
+        "the terminal ack set drifted: {acks:?}"
+    );
+    ensure!(
+        !required_bool(idempotency, "pending_commit_exists")?,
+        "the issuer ledger has no commit plane and therefore no pending commit"
+    );
+    Ok(())
+}
+
+// ── Bounded fanout outbox ───────────────────────────────────────────────────
+
+/// Propagation is a bounded outbox: one outstanding update per destination, a
+/// bounded destination set, a dedupe key that names the exact record, and a
+/// completion rule that only terminal acks satisfy.
+fn verify_fanout_outbox(fixture: &Value) -> Result<()> {
+    let outbox = required_field(fixture, "fanout_outbox")?;
+    let dedupe = string_list(outbox, "dedupe_key")?;
+    ensure!(
+        dedupe
+            == [
+                "account_authority_id",
+                "account_id",
+                "destination_id",
+                "account_status_record_id"
+            ],
+        "the fanout dedupe key drifted: {dedupe:?}"
+    );
+    let max_destinations = required_u64(outbox, "max_destinations_per_account")?;
+    ensure!(
+        max_destinations == 256,
+        "the destination bound drifted: {max_destinations}"
+    );
+    ensure!(
+        required_u64(outbox, "max_outstanding_updates_per_destination")? == 1,
+        "a destination may carry at most one outstanding update"
+    );
+
+    let mut complete = 0_u32;
+    let mut incomplete = 0_u32;
+    for transition in value_array(required_field(outbox, "transitions")?, "transitions")? {
+        let name = required_str(transition, "name")?;
+        let acks = string_list(transition, "destination_acks")?;
+        ensure!(!acks.is_empty(), "{name}: a transition declares its acks");
+        let all_terminal = acks.iter().all(|ack| TERMINAL_ACKS.contains(&ack.as_str()));
+        let expected_state = required_str(transition, "expected_state")?;
+        let derived = if all_terminal {
+            "complete"
+        } else {
+            "incomplete"
+        };
+        ensure!(
+            derived == expected_state,
+            "{name}: a record is complete exactly when every destination gave a terminal ack"
+        );
+        ensure!(
+            !required_bool(transition, "may_skip_predecessor")?,
+            "{name}: a destination must never skip a predecessor record"
+        );
+        if expected_state == "complete" {
+            complete += 1;
+        } else {
+            incomplete += 1;
+        }
+
+        // A non-terminal ack that is a wire outcome must still be registered.
+        for ack in &acks {
+            ensure!(
+                TERMINAL_ACKS.contains(&ack.as_str())
+                    || matches!(ack.as_str(), "pending" | "dependency_missing"),
+                "{name}: unregistered destination ack {ack}"
+            );
+        }
+        if acks.iter().any(|ack| ack == "dependency_missing") {
+            ensure!(
+                required_str(transition, "required_action")?
+                    == "resolve_from_required_status_seq_then_resubmit",
+                "{name}: a destination gap resolves before the successor is submitted"
+            );
+        }
+    }
+    ensure!(
+        complete >= 1 && incomplete >= 2,
+        "the outbox table must keep both the completing and the blocking transitions"
+    );
+
+    let barriers = string_list(outbox, "barrier_statuses")?;
+    ensure!(
+        barriers == ["deactivated", "erasure_pending"],
+        "the propagation barrier statuses drifted: {barriers:?}"
+    );
+    for barrier in &barriers {
+        ensure!(
+            serde_json::from_value::<AccountStatus>(Value::String(barrier.clone())).is_ok(),
+            "barrier status {barrier} is not a registered AccountStatus"
+        );
+    }
+    Ok(())
+}
+
+/// Unused import guard: the suite reads timestamps through the record types.
+#[allow(dead_code)]
+fn _timestamp_type_is_used(value: DateTime<Utc>) -> DateTime<Utc> {
+    value
 }

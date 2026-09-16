@@ -11,7 +11,6 @@ import {
 } from "@playwright/test";
 import { type SolandKey, solandBaseUrl, solandServiceId } from "./env";
 import {
-  alignSignedEventToActorFrontierApi,
   accountActorId,
   eventPrincipalId,
   acceptInviteApi,
@@ -757,9 +756,6 @@ async function deliverInvite(
     recipientServiceId,
     recipientServer: args.recipientServer,
     evidence: args.evidence,
-  });
-  await alignSignedEventToActorFrontierApi(request, args.inviterToken, event, {
-    server: args.originServer,
   });
   refreshEventEnvelopeProof(event);
   // The Station answers submission with the RealmCommit that covers the Event.

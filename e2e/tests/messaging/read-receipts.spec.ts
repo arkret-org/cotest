@@ -19,7 +19,6 @@ import { solandBaseUrl } from "../../helpers/env";
 import { createTwoUserMessagingRealm } from "../../helpers/messaging-fixtures";
 import {
   accountActorId,
-  alignSignedEventToActorFrontierApi,
   canonicalJson,
   resolveDefaultStrandId,
   signedEventEnvelope,
@@ -115,11 +114,6 @@ test.describe("read receipts + privacy", () => {
         },
       },
     });
-    await alignSignedEventToActorFrontierApi(
-      request,
-      bobToken,
-      messageEnvelope,
-    );
     await submitSignedEventApi(request, bobToken, messageEnvelope, {
       context: "submit MLS receipt target message",
     });
@@ -795,11 +789,6 @@ async function sendEncryptedReceiptMessage(
       },
     },
   });
-  await alignSignedEventToActorFrontierApi(
-    request,
-    token,
-    messageEnvelope,
-  );
   await submitSignedEventApi(request, token, messageEnvelope, {
     context: `encrypted receipt target ${body}`,
   });
@@ -958,7 +947,6 @@ async function advanceReadCursor(
       position: body.position,
     },
   });
-  await alignSignedEventToActorFrontierApi(request, token, event);
   const url = `${solandBaseUrl()}/_arkret/self/read-cursors`;
   return await request.post(url, {
     headers: { ...authHeaders(token, "POST", url), "content-type": "application/json" },

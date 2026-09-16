@@ -8,7 +8,6 @@ import {
   accountActorId,
   canonicalJson,
   grantCapabilityEventApi,
-  prepareSignedEventCbsApi,
   retypeEventDerivedId,
   signedEventEnvelope,
 } from "../../helpers/soland-api";
@@ -570,7 +569,6 @@ async function submitSignedEvent(
     kind,
     payload,
   });
-  await prepareSignedEventCbsApi(request, session.grantJwt, envelope);
   const response = await request.post(url, {
     headers: {
       ...selfPathHeadersForDpopSession(session, "POST", url),

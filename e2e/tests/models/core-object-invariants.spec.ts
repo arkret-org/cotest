@@ -27,12 +27,10 @@ import type {
 import { stepShot } from "../../helpers/screenshots";
 import {
   accountActorId,
-  alignSignedEventToActorFrontierApi,
   authHeaders,
   canonicalJson,
   canonicalTimestamp,
   createRealmApi,
-  prepareSignedEventCbsApi,
   retypeEventDerivedId,
   signedEventEnvelope,
   submitSignedEventApi,
@@ -304,7 +302,6 @@ test.describe("core object invariants", () => {
         rank: "m",
       },
     });
-    await alignSignedEventToActorFrontierApi(request, aliceToken, initialMove);
     await submitSignedEventApi(request, aliceToken, initialMove, {
       context: "establish initial Strand position",
     });
@@ -334,11 +331,6 @@ test.describe("core object invariants", () => {
         expected_position: { space_id: staleExpectedListId, rank: "m" },
       },
     });
-    await alignSignedEventToActorFrontierApi(
-      request,
-      aliceToken,
-      staleMoveEnvelope,
-    );
     const staleMove = await request.post(
       `${solandBaseUrl()}/_arkret/self/events`,
       {
@@ -368,7 +360,6 @@ test.describe("core object invariants", () => {
         expected_position: { space_id: sourceListId, rank: "m" },
       },
     });
-    await alignSignedEventToActorFrontierApi(request, aliceToken, freshMove);
     await submitSignedEventApi(request, aliceToken, freshMove, {
       context: "fresh Strand position CAS after stale rejection",
     });
@@ -600,12 +591,6 @@ test.describe("core object invariants", () => {
         }),
       },
     });
-    await prepareSignedEventCbsApi(request, aliceToken, crossRealmEnvelope);
-    await alignSignedEventToActorFrontierApi(
-      request,
-      aliceToken,
-      crossRealmEnvelope,
-    );
     const crossRealm = await request.post(
       `${solandBaseUrl()}/_arkret/self/events`,
       {

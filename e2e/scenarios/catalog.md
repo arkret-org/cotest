@@ -55,7 +55,7 @@ Static source definitions are implementation inventory, never runtime verificati
 | encryption/audited-e2ee | 1 | 1 | 100.0% | 0 | 0 | live-only | yes |  |
 | encryption/file-transfer | 1 | 1 | 100.0% | 0 | 1 | live-only | yes | @fully-implemented |
 | encryption/key-backup | 5 | 5 | 100.0% | 0 | 8 | live-only | yes | @fully-implemented |
-| events/batch-realm-bootstrap | 1 | 1 | 100.0% | 0 | 0 | live-only | yes | @fully-implemented |
+| events/realm-genesis-commit-stream | 1 | 1 | 100.0% | 0 | 0 | live-only | yes | @fully-implemented |
 | extensions/applet-bridge | 13 | 13 | 100.0% | 0 | 2 | live-only | yes |  |
 | extensions/platform-live | 1 | 1 | 100.0% | 0 | 0 | live-only | no |  |
 | federation/contact-graph-federation | 5 | 5 | 100.0% | 0 | 2 | live-only | no |  |

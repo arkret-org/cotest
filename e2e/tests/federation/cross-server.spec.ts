@@ -36,7 +36,6 @@ import {
   acceptPreparedInviteApi,
   waitForInviteDeliveryApi,
   accountActorId,
-  advanceEnvelopeToActorFrontier,
   authHeaders,
   canonicalJson,
   queryPeerEventsApi,
@@ -439,12 +438,6 @@ test.describe("cross-server federation", () => {
         expires_at: new Date(Date.now() + 86_400_000).toISOString(),
       },
     });
-    await advanceEnvelopeToActorFrontier(
-      request,
-      aliceToken,
-      inviteEvent,
-      "server1",
-    );
     await submitSignedEventApi(request, aliceToken, inviteEvent, {
       server: "server1",
       context: "submit server1 invite for federated Seal-closure delivery",
@@ -728,12 +721,6 @@ test.describe("cross-server federation", () => {
         },
       },
     });
-    await advanceEnvelopeToActorFrontier(
-      request,
-      aliceToken,
-      missingEvent,
-      "server1",
-    );
     const server1BeforePartitionWrite = await queryRealmEventsApi(
       request,
       aliceToken,

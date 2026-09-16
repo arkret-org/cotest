@@ -392,11 +392,7 @@ pub use signal_federation::{
 };
 pub use signal_sequence_high_water::run_signal_sequence_high_water_suite;
 pub use spec_business_flow::run_spec_business_flow_coverage_suite;
-pub use sync::{
-    run_realm_detail_baseline_singletons_vector, run_station_cas_account_data_vector,
-    run_stream_frame_sequence_vector, run_sync_fixture_suite,
-    run_timeline_window_completion_vector,
-};
+pub use sync::{VECTOR_ID_CLIENT_ACCOUNT_STREAM, run_sync_fixture_suite};
 pub use vector_registry_gate::{
     VectorRegistryGateEntry, VectorRegistryGateMode, VectorRegistryGateReport,
     VectorRegistryGateStatus, build_vector_registry_gate_report,

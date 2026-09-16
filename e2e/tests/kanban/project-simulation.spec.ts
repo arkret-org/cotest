@@ -16,12 +16,10 @@ import { solandBaseUrl } from "../../helpers/env";
 import {
   accountActorId,
   addRealmMemberApi,
-  alignSignedEventToActorFrontierApi,
   authHeaders,
   canonicalJson,
   canonicalTimestamp,
   createRealmApi,
-  prepareSignedEventCbsApi,
   retypeEventDerivedId,
   sdkEventDerivedObjectId,
   sha256CanonicalJson,
@@ -463,12 +461,6 @@ test.describe("project simulation", () => {
         patch: { metadata: { fields: { status: "resolved" } } },
       },
     });
-    await prepareSignedEventCbsApi(request, aliceToken, forbiddenStatusEvent);
-    await alignSignedEventToActorFrontierApi(
-      request,
-      aliceToken,
-      forbiddenStatusEvent,
-    );
     const forbiddenStatus = await request.post(
       `${solandBaseUrl()}/_arkret/self/events`,
       {

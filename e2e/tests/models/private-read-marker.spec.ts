@@ -16,7 +16,6 @@ import {
 } from "../../helpers/api";
 import {
   accountSubscribeDeltaApi,
-  alignSignedEventToActorFrontierApi,
   authHeaders,
   accountActorId,
   canonicalJson,
@@ -501,7 +500,6 @@ async function postReadCursor(
       position,
     },
   });
-  await alignSignedEventToActorFrontierApi(request, token, event);
   const url = `${solandBaseUrl()}/_arkret/self/read-cursors`;
   return await request.post(url, {
     headers: {

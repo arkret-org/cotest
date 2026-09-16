@@ -11,14 +11,12 @@ import {
   solandServiceId,
 } from "../../helpers/env";
 import {
-  alignSignedEventToActorFrontierApi,
   authHeaders,
   requireDidCoreId,
   canonicalJson,
   canonicalTimestamp,
   createRealmApi,
   expectJsonOk,
-  prepareSignedEventCbsApi,
   projectDidToCoreId,
   registerEventSigner,
   registeredEventSigningSeedB64url,
@@ -130,12 +128,7 @@ async function submitSelfEvent(
   envelope: Record<string, unknown>,
   opts: { alignFrontier?: boolean } = {},
 ): Promise<SelfEventsOutcome> {
-  // This setup creates a real Realm, so bind the Event to its authoritative
-  // frontier. A synthetic conformance basis would inject non-Event digests
-  // into the real Seal DAG and poison every later control-seal pass.
-  await prepareSignedEventCbsApi(request, token, envelope);
   if (opts.alignFrontier !== false) {
-    await alignSignedEventToActorFrontierApi(request, token, envelope);
   }
   const response = await request.post(
     `${solandBaseUrl()}/_arkret/self/events`,

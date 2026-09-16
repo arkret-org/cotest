@@ -264,7 +264,7 @@
       ]
     },
     {
-      "scenario_key": "events/batch-realm-bootstrap",
+      "scenario_key": "events/realm-genesis-commit-stream",
       "suite_kind": "joint-e2e",
       "realism_level": "server-contract",
       "evidence_class": "server-contract",

@@ -16,7 +16,6 @@ import type {
   InviteDeliveryRequestBodyBodyBody,
 } from "../../helpers/soland-api";
 import {
-  advanceEnvelopeToActorFrontier,
   canonicalServiceResolution,
   canonicalJson,
   canonicalTimestamp,
@@ -155,7 +154,6 @@ async function acceptedInviteFixture(
       ),
     },
   });
-  await advanceEnvelopeToActorFrontier(request, inviterToken, event);
   refreshEventEnvelopeProof(event);
   const submitOutcome = await submitSignedEventApi(request, inviterToken, event, {
     context: `persist ${slug} invite create`,

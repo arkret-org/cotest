@@ -17,10 +17,8 @@ import { solandBaseUrl } from "../../helpers/env";
 import { createTwoUserMessagingRealm } from "../../helpers/messaging-fixtures";
 import {
   accountActorId,
-  alignSignedEventToActorFrontierApi,
   canonicalJson,
   canonicalTimestamp,
-  prepareSignedEventCbsApi,
   rawSubmitSignedEventApi,
   retypeEventDerivedId,
   resolveDefaultStrandId,
@@ -507,16 +505,6 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
         patch: { scope_circle_id: { $op: "set", value: circleId } },
       },
     });
-    await alignSignedEventToActorFrontierApi(
-      request,
-      fixture.aliceToken,
-      envelope,
-    );
-    await prepareSignedEventCbsApi(
-      request,
-      fixture.aliceToken,
-      envelope,
-    );
     const response = await request.post(
       `${solandBaseUrl()}/_arkret/self/events`,
       {
@@ -852,7 +840,6 @@ async function createDiscussionMessageViaApi(
       ...messageContent,
     },
   });
-  await alignSignedEventToActorFrontierApi(request, token, envelope);
   await submitSignedEventApi(request, token, envelope, {
     context: `discussion message ${body}`,
   });

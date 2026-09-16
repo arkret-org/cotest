@@ -16,12 +16,10 @@ import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
   accountActorId,
-  alignSignedEventToActorFrontierApi,
   authHeaders,
   canonicalJson,
   canonicalTimestamp,
   createRealmApi,
-  prepareSignedEventCbsApi,
   rawSubmitSignedEventApi,
   sdkEventDerivedObjectId,
   signedEventEnvelope,
@@ -435,10 +433,6 @@ test.describe("kanban end-to-end", () => {
         rank: "m",
       },
     });
-    await prepareSignedEventCbsApi(request, aliceToken, winnerMove);
-    await prepareSignedEventCbsApi(request, aliceToken, loserMove);
-    await alignSignedEventToActorFrontierApi(request, aliceToken, winnerMove);
-    await alignSignedEventToActorFrontierApi(request, aliceToken, loserMove);
     // Winner is accepted (submitSignedEventApi asserts 200/201).
     await submitSignedEventApi(request, aliceToken, winnerMove, {
       context: "concurrent move winner",
@@ -530,12 +524,6 @@ test.describe("kanban end-to-end", () => {
         }),
       },
     });
-    await prepareSignedEventCbsApi(request, aliceToken, crossRealm);
-    await alignSignedEventToActorFrontierApi(
-      request,
-      aliceToken,
-      crossRealm,
-    );
     const response = await request.post(
       `${solandBaseUrl()}/_arkret/self/events`,
       {
@@ -615,19 +603,6 @@ test.describe("kanban end-to-end", () => {
         },
       },
     });
-    // Same shape as the cross-Realm rejection above: the registered CBS plane
-    // has to be on the envelope before it is signed-and-sent, and the body has
-    // to be JCS bytes. Posting the bare object let Playwright serialise it in
-    // insertion order, so the write was refused at wire validation
-    // (422 schema_violation, "canonical JSON input is not byte-for-byte
-    // canonical") and never reached the archived-Strand reducer this case is
-    // about.
-    await prepareSignedEventCbsApi(request, aliceToken, trackWrite);
-    await alignSignedEventToActorFrontierApi(
-      request,
-      aliceToken,
-      trackWrite,
-    );
     const response = await request.post(
       `${solandBaseUrl()}/_arkret/self/events`,
       {

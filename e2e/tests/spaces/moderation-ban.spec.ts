@@ -12,15 +12,12 @@ import { solandBaseUrl } from "../../helpers/env";
 import {
   accountActorId,
   addRealmMemberApi,
-  advanceEnvelopeToActorFrontier,
-  alignSignedEventToActorFrontierApi,
   authHeaders,
   canonicalJson,
   createRealmApi,
   grantCapabilityEventApi,
   issueAuthorizationLeasesApi,
   prepareEventForAuthorizationLeaseApi,
-  prepareSignedEventCbsApi,
   queryRealmEventsApi,
   refreshEventEnvelopeProof,
   resolveDefaultStrandId,
@@ -106,7 +103,6 @@ test.describe("moderation and ban", () => {
         evidence_refs: [sent.event_id],
       },
     });
-    await advanceEnvelopeToActorFrontier(request, bobToken, reportEvent);
     const proof = Array.isArray(reportEvent.proofs)
       ? (reportEvent.proofs[0] as Record<string, unknown> | undefined)
       : undefined;
@@ -161,12 +157,6 @@ test.describe("moderation and ban", () => {
         reason: "non_moderator_attempt",
       },
     });
-    await prepareSignedEventCbsApi(request, bobToken, unauthorizedBanEvent);
-    await alignSignedEventToActorFrontierApi(
-      request,
-      bobToken,
-      unauthorizedBanEvent,
-    );
     const leaseUrl = `${solandBaseUrl()}/_arkret/self/authorization-leases`;
     const unauthorizedBan = await request.post(leaseUrl, {
       headers: {
@@ -228,10 +218,6 @@ test.describe("moderation and ban", () => {
         },
       },
     });
-    // Cite the accepted post-ban governance state with a valid ordinary Event.
-    // The owner can read that state; the Event and request remain Mallory's.
-    // A malformed wrapper would only test schema rejection, not the ban gate.
-    await prepareSignedEventCbsApi(request, aliceToken, bannedWriteEnvelope);
     const bannedWrite = await request.post(bannedWriteUrl, {
       headers: {
         ...authHeaders(malloryToken, "POST", bannedWriteUrl),

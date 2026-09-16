@@ -8,11 +8,9 @@ import { expect, test } from "../../helpers/arkret-test";
 import { solandBaseUrl } from "../../helpers/env";
 import {
   accountActorId,
-  alignSignedEventToActorFrontierApi,
   authHeaders,
   canonicalJson,
   createRealmApi,
-  prepareSignedEventCbsApi,
   signedEventEnvelope,
   submitSignedEventApi,
   wireErrCode,
@@ -416,11 +414,6 @@ test.describe("realm links", () => {
             membership: "ban",
           },
         });
-      // Use T's public-to-its-member governance basis without granting Alice
-      // any authority. The server must reach authorization, not wrapper parsing.
-      await prepareSignedEventCbsApi(request, bobToken, deniedEvent);
-      // Bob reads Alice's selected frontier in T; Alice remains the signer and submitter.
-      await alignSignedEventToActorFrontierApi(request, bobToken, deniedEvent);
       const submitUrl = `${solandBaseUrl()}/_arkret/self/events`;
       const attempt = await request.post(submitUrl, {
         headers: { ...authHeaders(aliceToken, "POST", submitUrl), "content-type": "application/json" },
