@@ -164,7 +164,7 @@ fn verify_ledger_identity(ledger: &Value) -> Result<()> {
     let account: AccountId = serde_json::from_value(required_field(ledger, "account_id")?.clone())?;
     account.validate()?;
     ensure!(
-        account.station_id() != &authority || account.principal_id() != &authority,
+        account.station_id != authority || account.principal_id != authority,
         "the fixture account must not collapse principal, Station and Authority into one id"
     );
     ensure!(
@@ -771,7 +771,7 @@ fn receipt_for(record: &AccountStatusRecord) -> Result<AccountStatusReceipt> {
         account_authority_id: record.account_authority_id.clone(),
         account_id: record.account_id.clone(),
         status_seq: record.status_seq,
-        receiver_id: record.account_id.station_id().clone(),
+        receiver_id: record.account_id.station_id.clone(),
         accepted_at: record.issued_at,
         verification_method: verification_method.clone(),
     };
@@ -804,13 +804,27 @@ fn head_receipt_proof(
     })
 }
 
+/// A deterministic receipt id for a durable head.
+///
+/// `ak:receipt:` is a producer-allocated UUIDv7 kind, not a content address, so
+/// the value is derived by laying the record's own digest into a well-formed
+/// v7 payload. Only the head's identity is read by the classifier; the id has
+/// to parse, not to be resolvable.
 fn receipt_id_for(record: &AccountStatusRecord) -> Result<ReceiptId> {
     use sha2::{Digest, Sha256};
 
-    let mut hasher = Sha256::new();
-    hasher.update(b"cotest.account_status.receipt.");
-    hasher.update(record.account_status_record_id.as_str().as_bytes());
-    Ok(ReceiptId::from_digest(hasher.finalize().into()))
+    let digest: [u8; 32] =
+        Sha256::digest(record.account_status_record_id.as_str().as_bytes()).into();
+    let hex = hex::encode(&digest[..16]);
+    let value = format!(
+        "ak:receipt:{}-{}-7{}-8{}-{}",
+        &hex[0..8],
+        &hex[8..12],
+        &hex[13..16],
+        &hex[17..20],
+        &hex[20..32],
+    );
+    Ok(ReceiptId::new(value)?)
 }
 
 // ── Idempotency ─────────────────────────────────────────────────────────────

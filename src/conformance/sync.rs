@@ -765,10 +765,21 @@ fn replay_loses_delta_on_crash(steps: &[Value]) -> Result<bool> {
 
 // ── Reconnect ───────────────────────────────────────────────────────────────
 
-/// Resolve a declared reconnect outcome, requiring every failure outcome to be a
-/// registered wire error code.
+/// The one declared reconnect outcome that is not a wire error code.
+///
+/// `stream_tail_missing` appears in `client-sync-fixture.json` and nowhere else
+/// in arkret-spec: it is in no error-code registry, no normative prose and no
+/// generated SDK constant. It is carried here as a fixture-local condition
+/// rather than silently accepted, and [`verify_unregistered_outcome_is_still_unregistered`]
+/// fails the moment the spec registers it so this allowance is removed instead
+/// of quietly outliving the gap.
+const UNREGISTERED_RECONNECT_OUTCOME: &str = "stream_tail_missing";
+
+/// Resolve a declared reconnect outcome. Every failure outcome except the one
+/// unregistered condition above must be a registered wire error code, so a
+/// fixture typo cannot pass for a verdict.
 fn reconnect_verdict(server_outcome: &str) -> Result<&'static str> {
-    if server_outcome == "accepted" {
+    if server_outcome == "accepted" || server_outcome == UNREGISTERED_RECONNECT_OUTCOME {
         return Ok("resume");
     }
     let code = ErrorCode::from_wire(server_outcome).ok_or_else(|| {
@@ -782,7 +793,18 @@ fn reconnect_verdict(server_outcome: &str) -> Result<&'static str> {
     })
 }
 
+/// Guard the allowance above: when `stream_tail_missing` becomes a registered
+/// wire error code, this fails and the special case must be deleted.
+fn verify_unregistered_outcome_is_still_unregistered() -> Result<()> {
+    ensure!(
+        ErrorCode::from_wire(UNREGISTERED_RECONNECT_OUTCOME).is_none(),
+        "{UNREGISTERED_RECONNECT_OUTCOME} is now a registered wire error code;          delete the fixture-local allowance in reconnect_verdict and resolve it          through ErrorCode like every other outcome"
+    );
+    Ok(())
+}
+
 fn verify_reconnect_resets_only_the_failed_surface(fixture: &Value) -> Result<()> {
+    verify_unregistered_outcome_is_still_unregistered()?;
     let mut resets = 0_u32;
     let mut resumes = 0_u32;
 
@@ -837,7 +859,7 @@ fn verify_reconnect_resets_only_the_failed_surface(fixture: &Value) -> Result<()
             );
         }
 
-        if outcome == "stream_tail_missing" {
+        if outcome == UNREGISTERED_RECONNECT_OUTCOME {
             verify_single_tail_recovery(name, case)?;
         }
     }
