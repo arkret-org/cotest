@@ -35,7 +35,6 @@ import {
   acceptInviteApi,
   acceptPreparedInviteApi,
   waitForInviteDeliveryApi,
-  waitForRealmControlIdleApi,
   accountActorId,
   advanceEnvelopeToActorFrontier,
   authHeaders,

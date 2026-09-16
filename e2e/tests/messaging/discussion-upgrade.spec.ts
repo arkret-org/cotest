@@ -27,7 +27,6 @@ import {
   signedEventEnvelope,
   submitSignedEventApi,
   typedId,
-  waitForRealmControlIdleApi,
 } from "../../helpers/soland-api";
 import {
   ensureRegistered,
@@ -719,11 +718,6 @@ async function createDiscussionCircleViaApi(
       "join",
     );
   }
-  await waitForRealmControlIdleApi(
-    request,
-    fixture.aliceToken,
-    fixture.realmId,
-  );
   return circleId;
 }
 

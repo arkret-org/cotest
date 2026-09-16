@@ -26,7 +26,6 @@ import {
   retypeEventDerivedId,
   signedEventEnvelope,
   submitSignedEventApi,
-  waitForRealmControlIdleApi,
   wireErrCode,
 } from "../../helpers/soland-api";
 import {
@@ -248,7 +247,6 @@ async function submitThirdPartyInvite(
   });
   const outcome = await submitSelfEvent(request, token, envelope);
   if (outcome.accepted.length > 0) {
-    await waitForRealmControlIdleApi(request, token, cell.realmId);
     // Event-derived-id contract: the Invite id is a retype of the accepted
     // Event id (apply_invites.rs InviteId::from_event_id) and is never
     // carried in the payload, so the cell learns it only now.
@@ -271,7 +269,6 @@ async function submitClaim(
   // basis obtained by an existing member as part of the out-of-band claim
   // flow; the claimant's self surface cannot discover membership-private
   // Realm state before the claim succeeds.
-  await waitForRealmControlIdleApi(request, realmMemberToken, cell.realmId);
   return await submitSelfEvent(
     request,
     bobToken,

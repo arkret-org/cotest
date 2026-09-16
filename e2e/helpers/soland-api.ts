@@ -1181,13 +1181,6 @@ export async function grantCapabilityEventApi(
     server: args.server,
     context: `grant [${args.actions.join(", ")}] to ${args.subjectId}`,
   });
-  // A derived grant must be authored against a predecessor Seal that already
-  // contains its parent. Returning while this grant is merely pending lets a
-  // caller submit parent and child into one frozen-predecessor batch, where
-  // the child correctly cannot observe the parent authority.
-  await waitForRealmControlIdleApi(request, ownerToken, args.realmId, {
-    server: args.server,
-  });
   const eventId = String(envelope.event_id);
   return { grantId: retypeEventDerivedId(eventId, "grant"), eventId };
 }
@@ -1216,9 +1209,6 @@ export async function revokeCapabilityApi(
     }),
     { server: args.server, context: `revoke grant ${args.grantId}` },
   );
-  await waitForRealmControlIdleApi(request, ownerToken, args.realmId, {
-    server: args.server,
-  });
   return outcome;
 }
 
@@ -2876,13 +2866,6 @@ export async function readCommitStreamHeadApi(
     afterPosition = last.stream_position;
   }
 }
-
-export async function waitForRealmControlIdleApi(
-  _request: APIRequestContext,
-  _token: string,
-  _realmId: string,
-  _opts: { server?: SolandKey; timeoutMs?: number } = {},
-): Promise<void> {}
 
 async function applyRegisteredCbsPlane(
   request: APIRequestContext,

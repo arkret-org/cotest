@@ -22,7 +22,6 @@ import {
   signedEventEnvelope,
   submitSignedEventApi,
   typedId,
-  waitForRealmControlIdleApi,
 } from "../../helpers/soland-api";
 import {
   hasServerCount,
@@ -576,7 +575,6 @@ async function createBottomConflictFixture(
   );
   const aliceTitle = `renamed by alice ${stamp}`;
   const bobTitle = `renamed by bob ${stamp}`;
-  await waitForRealmControlIdleApi(request, aliceToken, realmId);
   await submitRealmTitleUpdate(
     request,
     aliceToken,
@@ -593,7 +591,6 @@ async function createBottomConflictFixture(
     bobTitle,
     aliceTitle,
   );
-  await waitForRealmControlIdleApi(request, bobToken, realmId);
   const bobPage = bobFlow!.page;
   return { alice, bob, aliceToken, bobToken, bobPage, realmId, aliceTitle };
 }

@@ -53,7 +53,6 @@ import {
   rawPushFederationEvents,
   typedId,
   serviceActorId,
-  waitForRealmControlIdleApi,
   wireErrCode,
 } from "../../helpers/soland-api";
 import {
@@ -163,7 +162,6 @@ async function configureAppletPlaintextServices(
   await submitSignedEventApi(request, token, envelope, {
     context: "configure Applet plaintext-visible services",
   });
-  await waitForRealmControlIdleApi(request, token, realmId);
 }
 
 async function revokeAppletRuntime(
@@ -531,7 +529,6 @@ test.describe("applet bridge", () => {
       const ghostActorId = accountActorId(projectDidToCoreId(ghostBuilt.did));
       expect(provisionBody.ghost_actor_id).toEqual(ghostActorId);
       await addRealmMemberApi(request, aliceToken, realmId, ghostActorId);
-      await waitForRealmControlIdleApi(request, aliceToken, realmId);
       const portalStrandId = await resolveDefaultStrandId(
         request,
         aliceToken,
@@ -1361,7 +1358,6 @@ test.describe("applet inbound transaction push — per-delivery source signature
     const strandId = await resolveDefaultStrandId(request, token, realmId);
     // Freeze the ordinary Event basis only after installation grants, membership,
     // and the target Strand have reached accepted control finality.
-    await waitForRealmControlIdleApi(request, token, realmId);
 
     const idempotencyKey = `inbound-ok-${stamp}`;
     const beforeInbound = await queryRealmEventsApi(request, token, realmId);

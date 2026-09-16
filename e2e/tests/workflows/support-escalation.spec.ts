@@ -14,7 +14,6 @@ import { stepShot } from "../../helpers/screenshots";
 import {
   grantCapabilityEventApi,
   resolveDefaultStrandId,
-  waitForRealmControlIdleApi,
 } from "../../helpers/soland-api";
 import { openDpopUserPage } from "../../helpers/users";
 
@@ -65,12 +64,6 @@ test.describe("workflow: support escalation", () => {
       // predecessor value written by invite.create. Seeing the pending invite
       // projection is not finality; wait until the create Move is sealed so
       // the accept cannot race into the same fixed-prestate notary batch.
-      await waitForRealmControlIdleApi(
-        request,
-        alexFlow.session.grantJwt,
-        realmId,
-        { timeoutMs: 60_000 },
-      );
       await samPage.acceptInvite(realmId);
       // A default discussion Strand is optional and is never an implicit Realm
       // bootstrap side effect. This workflow needs one, so create it and set
