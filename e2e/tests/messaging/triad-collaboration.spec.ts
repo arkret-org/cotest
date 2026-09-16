@@ -290,7 +290,7 @@ test.describe("single-server triad collaboration", () => {
         discoverability: "listed",
         joinRule: "invite",
         historyAccess: "since_join",
-        encryptionProfile: "none",
+        mlsActivated: false,
         seedMembers: [bob.id],
       });
       await stepShot(alicePage.page, testInfo, "A-alice-space-created");

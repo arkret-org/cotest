@@ -3,6 +3,11 @@ use std::collections::BTreeSet;
 use anyhow::{Result, anyhow, bail};
 use serde_json::Value;
 
+/// The conformance profile every privacy / security vector-group fixture
+/// declares in its `profile` member.
+pub(super) const PRIVACY_SECURITY_VECTOR_GROUP_PROFILE: &str =
+    "ak.vector_group.privacy_security.v1";
+
 pub(super) fn profile_claims(describe: &Value) -> BTreeSet<String> {
     describe
         .get("supported_profiles")

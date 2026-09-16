@@ -24,7 +24,6 @@ import {
   selfInviteDispatchBody,
   expectJsonOk,
   principalControlRealmForId,
-  readRealmSealBasis,
   registeredEventSigningSeedB64url,
   registeredEventVerificationMethod,
   retypeEventDerivedId,
@@ -702,7 +701,6 @@ function buildInviteCreateEvent(args: {
     actorId: args.inviterId,
     realmId: args.realmId,
     kind: "ak.invite.create",
-    schemaId: "ak.schema.invite.v1",
     payload: {
       invitee_account_id: {
           principal_id: args.inviteeId,
@@ -750,7 +748,6 @@ async function deliverInvite(
 ): Promise<{
   outcome: InviteDeliveryOutcome;
   inviteId: string;
-  sealBasis: Record<string, unknown>;
 }> {
   const recipientServiceId = solandServiceId(args.recipientServer);
   const { event } = buildInviteCreateEvent({
@@ -764,18 +761,16 @@ async function deliverInvite(
   await alignSignedEventToActorFrontierApi(request, args.inviterToken, event, {
     server: args.originServer,
   });
-  event.seal_basis = await readRealmSealBasis(
-    request,
-    args.inviterToken,
-    args.realmId,
-    args.originServer,
-  );
   refreshEventEnvelopeProof(event);
-  const sealBasis = event.seal_basis as Record<string, unknown>;
-  await submitSignedEventApi(request, args.inviterToken, event, {
+  // The Station answers submission with the RealmCommit that covers the Event.
+  // That commit is what the recipient Station verifies the delivery against,
+  // so it travels with the request instead of a Seal basis.
+  const submitOutcome = await submitSignedEventApi(request, args.inviterToken, event, {
     server: args.originServer,
     context: args.context,
   });
+  const inviteCommit = (submitOutcome as Record<string, unknown>).commit as
+    InviteDeliveryRequestBodyBodyBody["invite_commit"];
   const acceptedEventId = String(event.event_id);
   const inviteId = retypeEventDerivedId(acceptedEventId, "invite");
   const inviteAddress = {
@@ -800,7 +795,6 @@ async function deliverInvite(
         server: args.originServer,
       }),
       inviteId,
-      sealBasis,
     };
   }
 
@@ -809,11 +803,18 @@ async function deliverInvite(
     // `signedEventEnvelope` still returns an untyped record — wiring the Event
     // envelope itself to the generated type is the remaining B3 item.
     invite_event: event as InviteDeliveryRequestBodyBodyBody["invite_event"],
+    // §7 step 4: the receiver cannot resolve the invite Realm's authority
+    // itself, so the covering RealmCommit and the locator hints that reach the
+    // inviter's Station travel with the request.
+    invite_commit: inviteCommit,
+    authority_locator_hints: [
+      {
+        service_id: solandServiceId(args.originServer),
+        source: "invite",
+      },
+    ],
     invite_address: inviteAddress,
     introduction_evidence: args.evidence,
-    // §7 step 4: the receiver cannot resolve the invite Realm's authority
-    // closure itself, so it travels with the request — one bundle per
-    // `seal_basis` leaf, read from the inviter side's own accepted Seals.
     idempotency_key: idempotencyKey,
   };
   return {
@@ -823,7 +824,6 @@ async function deliverInvite(
       server: args.recipientServer,
     }),
     inviteId,
-    sealBasis,
   };
 }
 
@@ -844,7 +844,6 @@ export async function deliverInviteWithConsentGrant(
 ): Promise<{
   outcome: InviteDeliveryOutcome;
   inviteId: string;
-  sealBasis: Record<string, unknown>;
 }> {
   return await deliverInvite(request, {
     ...args,
@@ -924,7 +923,6 @@ export async function acceptInviteArkret(
     args.inviteId,
     {
       server: args.server,
-      sealBasis: args.sealBasis,
     },
   );
 }

@@ -20,7 +20,6 @@ import {
   expectJsonOk,
   prepareSignedEventCbsApi,
   projectDidToCoreId,
-  readRealmSealBasis,
   registerEventSigner,
   registeredEventSigningSeedB64url,
   registeredEventVerificationMethod,
@@ -222,7 +221,6 @@ async function allowlistVerificationService(
       actorId: ownerId,
       realmId,
       kind: "ak.realm.policy_bundle",
-      preconditions: [{cell_id: policyCell, predicate: {op: "head_eq", value: currentCell.value}}],
       payload: {
         ...currentCell.value,
         policy_revision: Number(currentCell.value.policy_revision) + 1,
@@ -246,7 +244,6 @@ async function submitThirdPartyInvite(
     actorId: ownerId,
     realmId: cell.realmId,
     kind: "ak.invite.third_party",
-    schemaId: "ak.schema.event.v1",
     payload,
   });
   const outcome = await submitSelfEvent(request, token, envelope);
@@ -275,11 +272,6 @@ async function submitClaim(
   // flow; the claimant's self surface cannot discover membership-private
   // Realm state before the claim succeeds.
   await waitForRealmControlIdleApi(request, realmMemberToken, cell.realmId);
-  const sealBasis = await readRealmSealBasis(
-    request,
-    realmMemberToken,
-    cell.realmId,
-  );
   return await submitSelfEvent(
     request,
     bobToken,
@@ -287,10 +279,6 @@ async function submitClaim(
       actorId: claimant.id,
       realmId: cell.realmId,
       kind: "ak.invite.claim",
-      actorSeq: 0,
-      prevRefs: [],
-      sealBasis,
-      schemaId: "ak.schema.event.v1",
       payload: claimPayload,
     }),
     { alignFrontier: false },

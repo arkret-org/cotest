@@ -58,7 +58,7 @@ test.describe("workflow: support escalation", () => {
         discoverability: "listed",
         joinRule: "invite",
         historyAccess: "all_history_for_current_members",
-        encryptionProfile: "none",
+        mlsActivated: false,
         seedMembers: [sam.id],
       });
       // invite.accept transitions the invite lifecycle from the accepted
@@ -197,7 +197,7 @@ test.describe("workflow: support escalation", () => {
         summary: "Triage -> In Progress -> Resolved",
         discoverability: "listed",
         joinRule: "invite",
-        encryptionProfile: "none",
+        mlsActivated: false,
       });
 
       await alexPage.page.goto(`/kanban/${realmId}`, {
@@ -293,7 +293,7 @@ test.describe("workflow: support escalation", () => {
         summary: "Alex redacts a reply that leaked PII",
         discoverability: "listed",
         joinRule: "invite",
-        encryptionProfile: "none",
+        mlsActivated: false,
         seedMembers: [sam.id],
       });
       await samPage.acceptInvite(realmId);

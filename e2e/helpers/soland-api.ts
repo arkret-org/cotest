@@ -30,10 +30,11 @@ import type {
   ActorId,
   InviteObject,
   CapabilityGrantObject,
-  EventFederationSubmission,
+  CommitStreamHead,
+  EventCommitSubmission,
   InviteDeliveryRequestBody,
+  RealmGenesisObject,
   RealmObject,
-  RealmSealFrontierView,
   SelfInviteDispatchRequestBody,
   RealmJoinPrepareRequestBody,
   MessagePrepareRequestBody,
@@ -87,20 +88,10 @@ type SignedEventEnvelopeArgs = {
   realmId: string;
   kind: string;
   payload: Record<string, unknown>;
-  actorSeq?: number;
   createdAt?: string;
-  hlc?: string;
   eventId?: string;
-  schemaId?: string;
-  /// Override the full `requirements.schema[]` binding.
-  requirementsSchema?: string[];
-  requirementsCriticalExtensions?: Array<Record<string, unknown>>;
   proofVerificationMethod?: string;
   refs?: Array<Record<string, unknown>>;
-  preconditions?: Array<Record<string, unknown>>;
-  sealBasis?: Record<string, unknown>;
-  authContext?: Record<string, unknown>;
-  prevRefs?: string[];
   scopeRef?: Record<string, unknown>;
   authorizationRef?: string;
   executedBy?: ActorId;
@@ -138,9 +129,19 @@ const principalControlEvents = new Map<
 >();
 
 // capabilities.md §3.2 — the only Realm authority source an operational
-// authorization may resolve against.
-export const REALM_AUTHORITY_ROOT_CELL =
-  "ak:cell:ak.component.realm.authority_root.v1:null";
+// authorization may resolve against. It is now an ordinary reference to the
+// accepted Realm-genesis Event, so a Realm the harness did not author itself
+// simply has no entry here and its Events carry no root claim.
+const realmAuthorityRootEventIds = new Map<string, string>();
+
+export function realmAuthorityRootRef(
+  server: SolandKey | undefined,
+  realmId: string,
+): string | undefined {
+  return realmAuthorityRootEventIds.get(
+    realmAuthorityControllerKey(server, realmId),
+  );
+}
 
 function realmAuthorityControllerKey(
   server: SolandKey | undefined,
@@ -621,25 +622,6 @@ function serviceCoreIdToDid(serviceId: string): string {
   throw new Error(`no fixture DID is registered for service id ${serviceId}`);
 }
 
-// The Realm freezes its sole Station authority's exact signer descriptor.
-// Development fixtures derive the same notary key as the configured service.
-export function stationNotaryFromDid(
-  did: string,
-): RealmObject["notary"] {
-  const actorId = projectDidToCoreId(did);
-  const publicKey = serviceNotaryPublicKey(actorId);
-  return {
-    signer: {
-      actor_id: serviceActorId(actorId),
-      verification_method: `${did}#notary-key`,
-      key_kind: "ed25519_raw32",
-      jose_algorithm: "Ed25519",
-      frozen_public_key_b64u: publicKey.toString("base64url"),
-    },
-    max_clock_error_ms: 1000,
-  };
-}
-
 // FIXTURE ONLY: mirrors soland development_mode notary keys, which are derived
 // from the same seed as the service HTTP signing key.
 function serviceNotaryPublicKey(serviceId: string): Buffer {
@@ -705,7 +687,10 @@ export async function createRealmApi(
     // strings: a typo used to travel all the way to the server.
     discoverability?: RealmObject["default_discoverability"];
     history_access?: RealmObject["history_access"];
-    encryption_profile?: RealmObject["encryption_profile"];
+    /// Activate MLS for the new Realm by accepting an `ak.mls.genesis` for
+    /// its scope. There is no declared profile to compare against: a scope is
+    /// end-to-end encrypted exactly when that genesis has been accepted.
+    mls_activated?: boolean;
     invitees?: string[];
     /**
      * Optional home Station DID for directed invite-create events.
@@ -742,45 +727,33 @@ export async function createRealmApi(
   const createdAt = data.created_at ?? canonicalTimestamp();
   const plaintextVisibleServiceIds =
     data.plaintext_visible_services ??
-    (data.encryption_profile === "mls_rfc9420"
-      ? []
-      : [solandServiceId(opts.server)]);
+    (data.mls_activated ? [] : [solandServiceId(opts.server)]);
   const plaintextVisibleServices = plaintextVisibleServiceDeclarations(
     plaintextVisibleServiceIds,
   );
-  const realmGenesis = {
+  // `realm-genesis.schema.json` is closed and now carries the three initial
+  // policy axes itself, so the bootstrap no longer authors a separate facet
+  // Event for each of them. There is no reducer profile, no digest algorithm
+  // and no frozen notary on it any more.
+  const realmGenesis: RealmGenesisObject = {
     schema: "ak.schema.realm_genesis.v1",
     purpose: "collaboration",
     genesis_salt: base64url(randomBytes(32)),
     trust_domain: "ak:trust_domain:soland.local",
-    schema_refs: data.schema_refs ?? ["ak.schema.realm.v1"],
-    reducer_profile: "ak.reducer.core.v1",
-    encryption_profile: data.encryption_profile ?? "none",
     security_class: "standard",
-    digest_algorithm: "sha256",
-    // This helper creates Station-hosted collaboration Realms. The
-    // service owns the notary key and confirms the Realm's security commands;
-    // the principal remains the Realm creator and root authority-cell controller.
-    notary: stationNotaryFromDid(solandServiceDid(opts.server)),
-    // Create-locked (realm-and-space.md section 2.5): the reducer copies this
-    // into the Realm authority-root cell, which is what gives the creator
-    // effective `ak.realm.owner`. v1 issues no genesis self-grant.
+    governance_station_id: solandServiceId(opts.server),
+    initial_join_rule: data.default_join_rule ?? "invite",
+    initial_history_access: data.history_access ?? "since_join",
+    initial_discoverability:
+      data.discoverability ?? (data.public ? "public" : "listed"),
   };
-  const realmCreateCell = "ak:cell:ak.component.realm.create.v1:null";
   const { envelope: realmCreateEvent, realmId } = signedRealmGenesisEnvelope({
     actorId: ownerId,
     // The genesis names no Realm; the envelope builder derives both its own id
     // and the Realm's from the finished envelope.
     realmId: "",
     kind: "ak.realm.create",
-    actorSeq: 0,
     createdAt,
-    preconditions: [
-      {
-        cell_id: realmCreateCell,
-        predicate: { op: "head_eq", value: null },
-      },
-    ],
     payload: {
       object: realmGenesis,
     },
@@ -790,94 +763,35 @@ export async function createRealmApi(
   const bootstrapEvents = [realmCreateEvent];
   const pushBootstrapEvent = (
     kind: string,
-    cell: string,
     payload: Record<string, unknown>,
   ): void => {
-    const predecessorId = stringValue(
-      bootstrapEvents[bootstrapEvents.length - 1]?.event_id,
-    );
-    if (!predecessorId) {
-      throw new Error(
-        `Realm bootstrap predecessor for ${kind} is missing event_id`,
-      );
-    }
     bootstrapEvents.push(
       signedEventEnvelope({
         actorId: ownerId,
         realmId,
         kind,
-        actorSeq: bootstrapEvents.length,
         createdAt,
-        prevRefs: [predecessorId],
-        authorizationRef: REALM_AUTHORITY_ROOT_CELL,
-        preconditions: [
-          {
-            cell_id: cell,
-            predicate: { op: "head_eq", value: null },
-          },
-        ],
+        authorizationRef: stringValue(realmCreateEvent.event_id),
         payload,
       }),
     );
   };
-  pushBootstrapEvent(
-    "ak.realm.profile",
-    "ak:cell:ak.component.realm.profile.v1:null",
-    {
-      schema: "ak.schema.realm_profile.v1",
-      title: data.title,
-      ...(data.summary === undefined ? {} : { summary: data.summary }),
-    },
-  );
-  pushBootstrapEvent(
-    "ak.realm.policy_bundle",
-    "ak:cell:ak.component.realm.policy_bundle.v1:null",
-    {
-      policy_revision: 1,
-      federation_policy: data.federation_policy ?? "restricted",
-      content_encryption_floor:
-        data.encryption_profile === "mls_rfc9420"
-          ? "e2ee_required"
-          : "allow_plaintext",
-      metadata_encryption_floor:
-        data.encryption_profile === "mls_rfc9420"
-          ? "e2ee_required"
-          : "allow_plaintext",
-    },
-  );
-  pushBootstrapEvent(
-    "ak.realm.join_rule",
-    "ak:cell:ak.component.realm.join_rule.v1:null",
-    { value: data.default_join_rule ?? "invite" },
-  );
-  pushBootstrapEvent(
-    "ak.realm.history_access",
-    "ak:cell:ak.component.realm.history_access.v1:null",
-    {
-      // event-payload.schema.json#/$defs/history_access_payload models this
-      // facet as an explicit sequenced-state transition. The ordinary Realm bootstrap is
-      // the one legal initial transition, so it must author null -> value
-      // rather than relying on the reducer to infer the missing predecessor.
-      from: null,
-      to: data.history_access ?? "since_join",
-    },
-  );
-  pushBootstrapEvent(
-    "ak.realm.discovery",
-    "ak:cell:ak.component.realm.discovery.v1:null",
-    {
-      value: {
-        discoverability:
-          data.discoverability ?? (data.public ? "public" : "listed"),
-      },
-    },
-  );
+  pushBootstrapEvent("ak.realm.profile", {
+    schema: "ak.schema.realm_profile.v1",
+    title: data.title,
+    ...(data.summary === undefined ? {} : { summary: data.summary }),
+  });
+  // Whether content must be end-to-end encrypted is no longer a declared
+  // profile: it follows from whether this scope has an accepted
+  // `ak.mls.genesis`. The bundle therefore carries only what is still policy.
+  pushBootstrapEvent("ak.realm.policy_bundle", {
+    policy_revision: 1,
+    federation_policy: data.federation_policy ?? "restricted",
+  });
   if (plaintextVisibleServices.length > 0) {
-    pushBootstrapEvent(
-      "ak.realm.plaintext_visible_services",
-      "ak:cell:ak.component.realm.plaintext_visible_services.v1:null",
-      { services: plaintextVisibleServices },
-    );
+    pushBootstrapEvent("ak.realm.plaintext_visible_services", {
+      services: plaintextVisibleServices,
+    });
   }
   const creatorServiceId =
     data.creator_id ?? solandServiceId(opts.server);
@@ -894,15 +808,11 @@ export async function createRealmApi(
       .update(canonicalJson([creatorActorCanonical]))
       .digest(),
   );
-  pushBootstrapEvent(
-    "ak.member.state",
-    `ak:cell:ak.component.member.state.v1:${memberCellSubject}`,
-    {
-      realm_id: realmId,
-      member_id: creatorActorId,
-      membership: "join",
-    },
-  );
+  pushBootstrapEvent("ak.member.state", {
+    realm_id: realmId,
+    member_id: creatorActorId,
+    membership: "join",
+  });
 
   const bootstrapOutcome = await submitSignedEventBatchApi(
     request,
@@ -921,11 +831,17 @@ export async function createRealmApi(
     realmAuthorityControllerKey(opts.server, realmId),
     accountActorId(ownerId, opts.server),
   );
+  const genesisEventId = stringValue(realmCreateEvent.event_id);
+  if (genesisEventId) {
+    realmAuthorityRootEventIds.set(
+      realmAuthorityControllerKey(opts.server, realmId),
+      genesisEventId,
+    );
+  }
   // The founding unit is accepted before the durable coordinator publishes
   // its first Seal. Do not let the next helper call mistake that short window
   // for an uninitialised conformance-only Realm and inject a synthetic basis:
   // the real genesis Seal must atomically cover the complete founding unit.
-  await waitForRealmSealBasis(request, token, realmId, opts.server);
 
   for (const invitee of data.invitees ?? []) {
     const recipientServiceId =
@@ -936,17 +852,10 @@ export async function createRealmApi(
     if (!recipientServer) throw new Error("directed invite recipient Station is not configured");
     const inviteeAccountId = accountActorId(invitee, recipientServer, recipientServiceId).account_id;
     const evidence = { kind: "explicit_address" } as const;
-    const sealBasis = await readRealmSealBasis(
-      request,
-      token,
-      realmId,
-      opts.server,
-    );
     const inviteEvent = signedEventEnvelope({
       actorId: ownerId,
       realmId,
       kind: "ak.invite.create",
-      sealBasis,
       payload: {
         invitee_account_id: inviteeAccountId,
         introduction_evidence_digest: `sha256:${sha256CanonicalJson(evidence)}`,
@@ -1047,12 +956,6 @@ export async function writeJoinPolicyApi(
 ): Promise<string> {
   const actorId = await currentActorIdApi(request, token, opts);
   const digest = `sha256:${sha256CanonicalJson(joinPolicy)}`;
-  const previousFrontier = await readRealmSealFrontier(
-    request,
-    token,
-    realmId,
-    opts.server,
-  );
   const policyCell = "ak:cell:ak.component.realm.policy_bundle.v1:null";
   const currentResponse = await request.get(
     `${solandBaseUrl(opts.server)}/_soland/admin/cells/${encodeURIComponent(policyCell)}?realm_id=${encodeURIComponent(realmId)}`,
@@ -1079,48 +982,11 @@ export async function writeJoinPolicyApi(
       policy_revision: policyRevision,
       join_policy: joinPolicy,
     },
-    preconditions: [
-      {
-        cell_id: policyCell,
-        predicate: { op: "head_eq", value: currentPolicy },
-      },
-    ],
   });
   await submitSignedEventApi(request, token, policyEvent, {
     server: opts.server,
     context: `write join policy ${realmId}`,
   });
-  const proposalDigest = Array.isArray(policyEvent.proofs)
-    ? stringValue(
-        (policyEvent.proofs[0] as Record<string, unknown> | undefined)
-          ?.event_digest,
-      )
-    : undefined;
-  if (!proposalDigest) {
-    throw new Error(`join policy ${realmId} is missing its proposal digest`);
-  }
-  await expect
-    .poll(
-      async () => {
-        const current = await readRealmSealFrontier(
-          request,
-          token,
-          realmId,
-          opts.server,
-        );
-        return (
-          current.control_event_set_root !==
-            previousFrontier.control_event_set_root &&
-          !current.pending_proposal_digests.includes(proposalDigest)
-        );
-      },
-      {
-        message: `join policy ${realmId} proposal ${proposalDigest} reaches the control Seal frontier`,
-        timeout: 30_000,
-        intervals: [250, 500, 1_000, 2_000],
-      },
-    )
-    .toBe(true);
   await expect
     .poll(
       async () => {
@@ -1187,8 +1053,7 @@ export async function grantServiceCapabilityApi(
       {
         kind: "realm_root",
         realm_id: args.realmId,
-        cell_ref: "ak:cell:ak.component.realm.authority_root.v1:null",
-        controller_epoch_at_issuance: 0,
+        authority_event_ref: realmAuthorityRootRef(args.server, args.realmId)!,
         authority_generation: 0,
       },
     ],
@@ -1278,8 +1143,7 @@ export function buildCapabilityGrantEnvelope(args: CapabilityGrantEventArgs): {
       {
         kind: "realm_root",
         realm_id: args.realmId,
-        cell_ref: "ak:cell:ak.component.realm.authority_root.v1:null",
-        controller_epoch_at_issuance: 0,
+        authority_event_ref: realmAuthorityRootRef(args.server, args.realmId)!,
         authority_generation: 0,
       },
     ],
@@ -1419,8 +1283,6 @@ export async function acceptInviteApi(
     server: opts.server,
     realmId,
     kind: "ak.invite.accept",
-    actorSeq: 0,
-    sealBasis,
     payload: {
       invite_id: inviteId,
       ...(opts.directed === false ? {} : {
@@ -1479,9 +1341,20 @@ export async function acceptPreparedInviteApi(
   const delivery = await readOwnInviteDeliveryApi(request, token, realmId, opts, inviteId);
   expect(Boolean(delivery), "own invitation credential must be available").toBe(true);
   const input: RealmJoinPrepareRequestBody = {
-    request_id: typedId("request"), account_id: account, realm_id: realmId,
-    intent: { intent: "invite_accept", invite_id: inviteId, invite_token: delivery!.invite_token },
-    created_at: canonicalTimestamp(),
+    request_id: typedId("request"),
+    target: {
+      realm_id: realmId,
+      invite_id: inviteId,
+      invite_token: delivery!.invite_token,
+      authority_locator_hints: [
+        {
+          service_id: solandServiceId(opts.server),
+          source: "invite",
+          endpoint_url: solandBaseUrl(opts.server),
+        },
+      ],
+    },
+    intent: { kind: "invite_accept", invite_id: inviteId, invite_token: delivery!.invite_token },
   };
   const url = `${solandBaseUrl(opts.server)}/_arkret/self/realm-joins/prepare`;
   const prepare = () => request.post(url, {
@@ -1489,21 +1362,24 @@ export async function acceptPreparedInviteApi(
     data: canonicalJson(input),
   });
   const prepared = await expectJsonOk<Record<string, any>>(await prepare(), "own-Station join prepare");
-  expect(await expectJsonOk(await prepare(), "exact join prepare replay")).toEqual(prepared);
-  expect(prepared.request_digest).toBe(`sha256:${createHash("sha256")
-    .update("ak.realm-join-prepare-request-v1\0", "utf8").update(canonicalJson(input)).digest("hex")}`);
-  const event = prepared.unsigned_event;
-  expect(event.kind).toBe("ak.invite.accept");
-  expect(event.realm_id).toBe(realmId);
-  expect(event.actor_id).toEqual(accountActorId(actorId, opts.server));
-  expect(event.scope_ref).toEqual({ kind: "realm", realm_id: realmId });
-  expect(event.created_at).toBe(input.created_at);
-  expect(event.hlc).toBeUndefined();
-  expect(event.payload).toEqual({ invite_id: inviteId, invitee_account_id: account });
-  expect(event.actor_seq).toBe(prepared.accepted_actor_frontier.next_actor_seq);
-  expect(event.prev_refs).toEqual(prepared.accepted_actor_frontier.frontier_event_ids);
-  expect(event.event_id).toBe(sdkEventDerivedIds(event).event_id);
-  event.proofs = [eventEnvelopeProof({ actorId, event })];
+  // Prepare is context, not a reservation: repeating it returns the same
+  // authority bundle and the same Realm stream head, and reserves nothing.
+  expect(prepared.request_id).toBe(input.request_id);
+  expect(prepared.authority_bundle?.realm_id).toBe(realmId);
+  const head = prepared.realm_stream_head as CommitStreamHead;
+  expect(head.stream_ref).toEqual({ kind: "realm", realm_id: realmId });
+  expect(typeof head.stream_position).toBe("number");
+  expect(head.commit_id).toMatch(/^ak:realm_commit:/);
+
+  // The producer authors its own Event against that context. There is no
+  // actor frontier to reserve and no predecessor graph to extend.
+  const event = signedEventEnvelope({
+    actorId,
+    realmId,
+    kind: "ak.invite.accept",
+    payload: { invite_id: inviteId, invitee_account_id: account },
+    server: opts.server,
+  });
   const submitUrl = `${solandBaseUrl(opts.server)}/_arkret/self/events`;
   const signed = canonicalJson({ event });
   const submit = () => request.post(submitUrl, {
@@ -1511,23 +1387,21 @@ export async function acceptPreparedInviteApi(
     data: signed,
   });
   const accepted = await expectJsonOk<Record<string, any>>(await submit(), "prepared join submit");
-  expect(accepted.accepted).toContain(event.event_id);
+  expect(accepted.status).toBe("committed");
+  expect(accepted.commit?.event_ref).toBe(event.event_id);
   const replay = await expectJsonOk<Record<string, any>>(await submit(), "exact join submit replay");
-  expect(replay.duplicate).toContain(event.event_id);
+  expect(replay.status).toBe("duplicate");
+  expect(replay.commit?.commit_id).toBe(accepted.commit?.commit_id);
   if (opts.waitForStatus !== false) {
     const statusUrl = `${solandBaseUrl(opts.server)}/_arkret/self/realm-joins/application-status`;
     await expect.poll(async () => {
       const response = await request.post(statusUrl, {
         headers: { ...authHeaders(token, "POST", statusUrl), "content-type": "application/json" },
-        data: { request_id: typedId("request"), account_id: account, realm_id: realmId, event_id: event.event_id },
+        data: { request_id: typedId("request"), realm_id: realmId, event_id: event.event_id },
       });
       const status = await expectJsonOk<Record<string, any>>(response, "own join application status");
-      expect(status.account_id).toEqual(account);
-      expect(status.event_id).toBe(event.event_id);
-      if (status.realm_state !== "sealed") return status.realm_state ?? status.origin_state;
-      expect(status.accepted_seal_id).toMatch(/^ak:seal:/);
-      return "sealed";
-    }, { timeout: 120_000, intervals: [1000, 2000, 5000] }).toBe("sealed");
+      return status.status;
+    }, { timeout: 120_000, intervals: [1000, 2000, 5000] }).toBe("committed");
   }
   return event;
 }
@@ -1688,7 +1562,6 @@ export async function sendMessageApi(
     actorId,
     realmId,
     kind: "ak.message.create",
-    actorSeq: opts.actorSeq,
     createdAt: opts.createdAt,
     payload: {
       strand_id: strandId,
@@ -2131,7 +2004,6 @@ export function signedEventEnvelope(
   const createdAt = canonicalEventTimestamp(
     args.createdAt === undefined ? undefined : new Date(args.createdAt),
   );
-  const hlc = args.hlc ?? nextEnvelopeHlc(args.realmId, createdAt);
   const payload = stripUndefined(args.payload) as Record<string, unknown>;
   const actor = typeof args.actorId === "string"
     ? accountActorId(args.actorId, args.server, args.stationId)
@@ -2141,7 +2013,6 @@ export function signedEventEnvelope(
   // closed `realm_genesis` form. Sending either would be
   // `realm_id_not_event_derived`.
   const isRealmGenesis = args.kind === "ak.realm.create";
-  const preconditions = args.preconditions ?? inviteLiveTargetPreconditions(args.kind, payload);
   const unidentified = stripUndefined({
     kind: args.kind,
     realm_id: isRealmGenesis ? undefined : args.realmId,
@@ -2154,26 +2025,8 @@ export function signedEventEnvelope(
     executed_by: args.executedBy,
     authorization_ref: args.authorizationRef,
     applet_id: args.appletId,
-    actor_seq: args.actorSeq ?? nextActorSeq(),
     created_at: createdAt,
-    hlc,
-    prev_refs: args.prevRefs ?? [],
     refs: args.refs?.length ? args.refs : undefined,
-    // An invite Move that writes the live-target slot MUST carry that cell's
-    // head_eq. Deriving it here keeps every harness-authored invite conformant
-    // without each scenario re-spelling the cell; an explicit precondition list
-    // still wins, which is how a negative case proves a wrong guard is refused.
-    preconditions: preconditions?.length ? preconditions : undefined,
-    seal_basis: args.sealBasis,
-    auth_context: args.authContext,
-    requirements: {
-      schema: args.requirementsSchema ?? [
-        args.schemaId ?? schemaIdForEventKind(args.kind),
-      ],
-      ...(args.requirementsCriticalExtensions?.length
-        ? { critical_extensions: args.requirementsCriticalExtensions }
-        : {}),
-    },
     payload,
   }) as Record<string, unknown>;
   // `event_id` sits outside the digest preimage, so deriving it from the
@@ -2341,61 +2194,24 @@ export async function submitSignedEventApi(
   await applyRegisteredCbsPlane(request, token, envelope, opts.server);
   await advanceEnvelopeToActorFrontier(request, token, envelope, opts.server);
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    const controlControlProposalAck = await issueControlProposalAckApi(
-      request,
-      token,
-      envelope,
-      undefined,
-      opts.server,
-      context,
-    );
     const realmId = stringValue(envelope.realm_id);
     const actorId = eventPrincipalId(envelope);
     const actorControlRealm = actorId
       ? principalControlRealmForIdIfKnown(actorId)
       : undefined;
-    const previousControlRoot =
-      controlControlProposalAck &&
-      realmId &&
-      envelope.kind !== "ak.invite.accept" &&
-      (!actorControlRealm || realmId !== actorControlRealm)
-        ? (await readRealmSealFrontier(request, token, realmId, opts.server))
-            .control_event_set_root
-        : undefined;
     const eventsUrl = `${solandBaseUrl(opts.server)}/_arkret/self/events`;
     const response = await request.post(eventsUrl, {
       headers: {
         ...authHeaders(token, "POST", eventsUrl),
         "content-type": "application/json",
       },
-      data: canonicalJson({
-        event: envelope,
-        ...(controlControlProposalAck
-          ? { control_proposal_ack: controlControlProposalAck }
-          : {}),
-      }),
+      data: canonicalJson({ event: envelope }),
     });
     const text = await response.text();
     if ([200, 201].includes(response.status())) {
       const outcome = JSON.parse(text) as Record<string, unknown>;
-      rememberPublicationEvidence([envelope], [], outcome,
-        { token: opts.controlObserverToken ?? token, server: opts.server }, [controlControlProposalAck]);
-      if (realmId && previousControlRoot) {
-        // A successful leave may immediately remove the author from the
-        // Realm's read surface. Observe the resulting Control frontier with
-        // an explicitly authorised member when the caller supplies one;
-        // using the departed actor would correctly collapse to not_found.
-        await waitForRealmControlIdleApi(
-          request,
-          opts.controlObserverToken ?? token,
-          realmId,
-          {
-          server: opts.server,
-          afterControlEventSetRoot: previousControlRoot,
-          timeoutMs: 60_000,
-          },
-        );
-      }
+      rememberPublicationEvidence([envelope], outcome,
+        { token: opts.controlObserverToken ?? token, server: opts.server });
       return outcome;
     }
     const body = JSON.parse(text) as unknown;
@@ -2478,20 +2294,9 @@ export async function prepareSignedEventSubmissionApi(
       1,
       context,
     )[0];
-    const controlProposalAck = await issueControlProposalAckApi(
-      request,
-      token,
-      envelope,
-      authorizationLease,
-      opts.server,
-      context,
-    );
     return {
       event: envelope,
       authorization_lease: authorizationLease,
-      ...(controlProposalAck
-        ? { control_proposal_ack: controlProposalAck }
-        : {}),
     };
   }
   throw new Error(`${context}: exhausted actor-frontier retry loop`);
@@ -2551,20 +2356,9 @@ export async function prepareSignedEventBatchSubmissionsApi(
     );
     const submissions: Array<Record<string, unknown>> = [];
     for (const [index, event] of events.entries()) {
-      const controlProposalAck = await issueControlProposalAckApi(
-        request,
-        token,
-        event,
-        leases[index],
-        opts.server,
-        context,
-      );
       submissions.push({
         event,
         authorization_lease: leases[index],
-        ...(controlProposalAck
-          ? { control_proposal_ack: controlProposalAck }
-          : {}),
       });
     }
     return submissions;
@@ -2627,25 +2421,11 @@ export async function submitSignedEventBatchApi(
       events.length,
       context,
     );
-    const anchorUnit = events[0]?.kind === "ak.realm.create";
     const submissions: Array<Record<string, unknown>> = [];
     for (const [index, event] of events.entries()) {
-      const controlControlProposalAck = anchorUnit
-        ? undefined
-        : await issueControlProposalAckApi(
-            request,
-            token,
-            event,
-            authorizationLeases[index],
-            opts.server,
-            context,
-          );
       submissions.push({
         event,
         authorization_lease: authorizationLeases[index],
-        ...(controlControlProposalAck
-          ? { control_proposal_ack: controlControlProposalAck }
-          : {}),
       });
     }
     const realmId = stringValue(events[0]?.realm_id);
@@ -2653,15 +2433,6 @@ export async function submitSignedEventBatchApi(
     const actorControlRealm = actorId
       ? principalControlRealmForIdIfKnown(actorId)
       : undefined;
-    const previousControlRoot =
-      realmId &&
-      events.every((event) => stringValue(event.realm_id) === realmId) &&
-      submissions.some((submission) => submission.control_proposal_ack) &&
-      !events.some((event) => event.kind === "ak.invite.accept") &&
-      (!actorControlRealm || realmId !== actorControlRealm)
-        ? (await readRealmSealFrontier(request, token, realmId, opts.server))
-            .control_event_set_root
-        : undefined;
     const eventsUrl = `${solandBaseUrl(opts.server)}/_arkret/self/events`;
     const response = await request.post(eventsUrl, {
       headers: {
@@ -2675,15 +2446,7 @@ export async function submitSignedEventBatchApi(
     const text = await response.text();
     if ([200, 201].includes(response.status())) {
       const outcome = JSON.parse(text) as Record<string, unknown>;
-      rememberPublicationEvidence(events, authorizationLeases, outcome,
-        { token, server: opts.server }, submissions.map((submission) => submission.control_proposal_ack));
-      if (realmId && previousControlRoot) {
-        await waitForRealmControlIdleApi(request, token, realmId, {
-          server: opts.server,
-          afterControlEventSetRoot: previousControlRoot,
-          timeoutMs: 60_000,
-        });
-      }
+      rememberPublicationEvidence(events, outcome, { token, server: opts.server });
       return outcome;
     }
     const body = JSON.parse(text) as unknown;
@@ -2775,14 +2538,6 @@ export async function rawSubmitSignedEventApi(
       1,
       `submit ${String(envelope.kind)}`,
     )[0];
-    const controlControlProposalAck = await issueControlProposalAckApi(
-      request,
-      token,
-      envelope,
-      authorizationLease,
-      opts.server,
-      `submit ${String(envelope.kind)}`,
-    );
     const eventsUrl = `${solandBaseUrl(opts.server)}/_arkret/self/events`;
     const response = await request.post(eventsUrl, {
       headers: {
@@ -2792,9 +2547,6 @@ export async function rawSubmitSignedEventApi(
       data: canonicalJson({
         event: envelope,
         authorization_lease: authorizationLease,
-        ...(controlControlProposalAck
-          ? { control_proposal_ack: controlControlProposalAck }
-          : {}),
       }),
     });
     const responseText = await response.text();
@@ -2815,56 +2567,6 @@ export async function rawSubmitSignedEventApi(
   throw new Error(
     `submit ${String(envelope.kind)} exhausted actor-frontier retry loop`,
   );
-}
-
-async function issueControlProposalAckApi(
-  request: APIRequestContext,
-  token: string,
-  event: Record<string, unknown>,
-  authorizationLease: Record<string, unknown> | undefined,
-  server: SolandKey | undefined,
-  context: string,
-): Promise<EventFederationSubmission["control_proposal_ack"]> {
-  // In the Standard submission context, seal_basis distinguishes an ordinary
-  // non-genesis Control Move from an ordinary Event. Native PCR units are filtered by
-  // their batch caller and must never enter this operation.
-  if (event.seal_basis == null) {
-    return undefined;
-  }
-  if (isAuthorityAuthoredSelfPrincipalMove(event)) {
-    // cbs-profiles.md §4: once the human PCR genesis is accepted, a current
-    // device authoring in its own principal-control Realm is the authority.
-    // This exceptional Control Move must omit an independent Proposal Ack.
-    return undefined;
-  }
-  const url = `${solandBaseUrl(server)}/_arkret/self/control-proposal-acks`;
-  const response = await request.post(url, {
-    headers: {
-      ...authHeaders(token, "POST", url),
-      "content-type": "application/json",
-    },
-    data: canonicalJson({
-      event,
-      publication_mode: authorizationLease ? "delayed" : "online",
-      ...(authorizationLease ? { authorization_lease: authorizationLease } : {}),
-    }),
-  });
-  const text = await response.text();
-  expect(
-    [200, 201],
-    `${context} Control Proposal Ack issuance returned ${response.status()}: ${text}`,
-  ).toContain(response.status());
-  const body = parseJsonOrRaw(text) as Record<string, unknown>;
-  const ack = body.authority_ack as EventFederationSubmission["control_proposal_ack"];
-  if (!ack) {
-    throw new Error(
-      `${context} Control Proposal Ack issuance omitted authority_ack`,
-    );
-  }
-  expect(ack.kind, `${context} Ack kind`).toBe("signed_ack");
-  expect(ack.realm_id, `${context} Ack Realm`).toBe(event.realm_id);
-  expect(ack.signature, `${context} Ack signature`).toBeDefined();
-  return ack;
 }
 
 function isAuthorityAuthoredSelfPrincipalMove(
@@ -2954,40 +2656,36 @@ function parseJsonOrRaw(text: string): unknown {
   }
 }
 
-// `service-operation-dtos.schema.json#/$defs/EventFederationSubmission` — the
-// exact body `federationEventWireBody` pushes to `/_arkret/peer/events`, so it
-// is generated rather than restated. It was three opaque
-// `Record<string, unknown>` members before.
-type PublicationEvidence = EventFederationSubmission;
+// `authority-commit-operations.schema.json#/$defs/stream_item` — one accepted
+// Event together with the exact RealmCommit that covers it. That pair is the
+// whole federation evidence now: there is no ingress receipt, authorization
+// lease or Control Proposal Ack beside it.
+type PublicationEvidence = {
+  event: Record<string, unknown>;
+  commit?: Record<string, unknown>;
+};
 
 const publicationEvidenceByEventId = new Map<string, PublicationEvidence>();
 const publicationSourceByEventId = new Map<string, { token: string; server?: SolandKey }>();
 
 function rememberPublicationEvidence(
   events: Array<Record<string, unknown>>,
-  leases: Array<Record<string, unknown>>,
   outcome: Record<string, unknown>,
   source: { token: string; server?: SolandKey },
-  controlProposalAcks: unknown[],
 ): void {
-  const receipts = Array.isArray(outcome.ingress_receipts)
-    ? (outcome.ingress_receipts as Array<Record<string, unknown>>)
-    : [];
-  if (receipts.length !== 0 && receipts.length !== events.length) {
+  const commits = Array.isArray(outcome.commits)
+    ? (outcome.commits as Array<Record<string, unknown>>)
+    : outcome.commit
+      ? [outcome.commit as Record<string, unknown>]
+      : [];
+  if (commits.length !== 0 && commits.length !== events.length) {
     throw new Error(
-      `publication returned ${receipts.length} ingress receipts for ${events.length} Events: ${JSON.stringify({
-        status: outcome.status,
-        rejection_codes: Array.isArray(outcome.rejections)
-          ? outcome.rejections.map((item: Record<string, unknown>) => item.reason_code ?? item.code)
-          : [],
-        rejection_topics: Array.isArray(outcome.rejections)
-          ? outcome.rejections.map((item: Record<string, unknown>) => [
-              "actor_seq", "prev_refs", "digest", "proof", "seal_basis", "authorization_lease",
-              "control_proposal_ack", "unknown field", "canonical", "dot", "frontier", "signature",
-              "payload", "binding", "causal", "lease", "sequence", "schema", "metadata",
-            ].filter((topic) => String(item.detail ?? item.message ?? "").includes(topic)))
-          : [],
-      })}`,
+      `publication returned ${commits.length} RealmCommits for ${events.length} Events: ${JSON.stringify(
+        {
+          status: outcome.status,
+          reason_code: outcome.reason_code,
+        },
+      )}`,
     );
   }
   events.forEach((event, index) => {
@@ -2996,20 +2694,8 @@ function rememberPublicationEvidence(
       throw new Error("published Event is missing event_id");
     }
     publicationEvidenceByEventId.set(eventId, {
-      event: stripUndefined(event) as PublicationEvidence["event"],
-      ...(leases[index]
-        ? {
-            authorization_lease: leases[
-              index
-            ] as PublicationEvidence["authorization_lease"],
-          }
-        : {}),
-      ingress_receipts: (receipts[index]
-        ? [receipts[index]]
-        : []) as PublicationEvidence["ingress_receipts"],
-      ...(controlProposalAcks[index] ? {
-        control_proposal_ack: controlProposalAcks[index] as PublicationEvidence["control_proposal_ack"],
-      } : {}),
+      event: stripUndefined(event) as Record<string, unknown>,
+      ...(commits[index] ? { commit: commits[index] } : {}),
     });
     publicationSourceByEventId.set(eventId, source);
   });
@@ -3140,268 +2826,63 @@ export async function advanceEnvelopeToActorFrontier(
   refreshEventEnvelopeProof(envelope, proofVerificationMethod);
 }
 
-export async function readRealmSealBasis(
+/// Wait until every Event submitted for `realmId` is durably committed.
+///
+/// `ak.self.events.command.submit.v1` answers with the RealmCommit it produced,
+/// so acceptance is already synchronous; what can still lag is the Station's
+/// own projection of that commit. Callers that need the projection read it
+/// back directly, so this is now a no-op kept for call-site readability.
+/// The current head of one independent commit stream.
+///
+/// `ak.self.events.read.scan.v1` returns accepted `{commit, event}` pairs in
+/// stream order; the last one is the head. A Realm, each Circle and each
+/// Sidecar own separate linear streams, so a head only ever names its own.
+export async function readCommitStreamHeadApi(
   request: APIRequestContext,
   token: string,
   realmId: string,
-  server?: SolandKey,
-): Promise<Record<string, unknown>> {
-  const frontier = await readRealmSealFrontier(request, token, realmId, server);
-  // `event-envelope.schema.json`: the sorted Seal leaves are the sole producer
-  // commitment. The Seal roots stay on the Seal — a receiver resolves each leaf
-  // and recomputes them — so copying them into the Event is an unknown member.
-  return { leaves: [frontier.seal_id] };
-}
-
-// Local projection of the registered `RealmSealFrontierView`: the single
-// accepted leaf of a single-authority test Realm, plus the roots the caller
-// recomputes from that resolved leaf Seal, plus a flat pending-digest list.
-//
-// The view itself carries no root hint — `event-auth-state-resolution.md`
-// requires the consumer to resolve and verify every leaf Seal — so the two
-// roots below come from `ak.self.seals.read.resolve.v1`, never from the frontier
-// response.
-type RealmSealFrontier = {
-  seal_id: string;
-  control_event_set_root: string;
-  state_root: string;
-  pending_proposal_digests: string[];
-};
-
-export async function readAcceptedSeal(
-  request: APIRequestContext,
-  token: string,
-  realmId: string,
-  sealId: string,
-  server?: SolandKey,
-): Promise<Record<string, unknown>> {
-  const resolveUrl = `${solandBaseUrl(server)}/_arkret/self/seals/resolve`;
-  const response = await request.fetch(resolveUrl, {
-    method: "QUERY",
-    data: canonicalJson({ realm_id: realmId, seal_refs: [sealId] }),
-    headers: {
-      ...authHeaders(token, "QUERY", resolveUrl),
-      "content-type": "application/json",
-    },
-  });
-  const body = await expectJsonOk<{
-    seals?: Array<Record<string, unknown>>;
-  }>(response, `resolve accepted Seal ${sealId}`);
-  const seal = (body.seals ?? []).find((candidate) => candidate.id === sealId);
-  if (!seal) {
-    throw new Error(
-      `accepted Seal ${sealId} did not resolve: ${JSON.stringify(body)}`,
-    );
-  }
-  return seal;
-}
-
-// Receiver-relative CBS dependency closure (cbs-profiles.md section 5).
-// The caller must separately transport any control Events missing at the peer.
-export async function readAcceptedSealBundle(
-  request: APIRequestContext,
-  token: string,
-  realmId: string,
-  targetSealRef: string,
-  server?: SolandKey,
-): Promise<Record<string, unknown>> {
-  const seals = new Map<string, Record<string, unknown>>();
-  const pending = [targetSealRef];
-  while (pending.length > 0) {
-    const id = pending.pop()!;
-    if (seals.has(id)) continue;
-    if (seals.size >= 256) throw new Error("CBS Seal closure exceeds the v1 bound");
-    const seal = await readAcceptedSeal(request, token, realmId, id, server);
-    seals.set(id, seal);
-    const predecessor = seal.predecessor_ref;
-    if (typeof predecessor === "string") pending.push(predecessor);
-  }
-  return {
-    target_seal_ref: targetSealRef,
-    seals: [...seals.entries()]
-      .sort(([left], [right]) => Buffer.compare(Buffer.from(left), Buffer.from(right)))
-      .map(([, seal]) => seal),
-    control_moves: [],
-    inclusion_proofs: [],
-    availability_proofs: [],
-  };
-}
-
-async function resolveAcceptedSeal(
-  request: APIRequestContext,
-  token: string,
-  realmId: string,
-  sealId: string,
-  server?: SolandKey,
-): Promise<{ control_event_set_root: string; state_root: string }> {
-  const resolveUrl = `${solandBaseUrl(server)}/_arkret/self/seals/resolve`;
-  const response = await request.fetch(resolveUrl, {
-    method: "QUERY",
-    data: canonicalJson({ realm_id: realmId, seal_refs: [sealId] }),
-    headers: {
-      ...authHeaders(token, "QUERY", resolveUrl),
-      "content-type": "application/json",
-    },
-  });
-  const body = await expectJsonOk<{
-    seals?: Array<{
-      id?: unknown;
-      control_event_set_root?: unknown;
-      state_root?: unknown;
-    }>;
-  }>(response, `resolve accepted Seal ${sealId}`);
-  const seal = (body.seals ?? []).find((candidate) => candidate.id === sealId);
-  if (
-    !seal ||
-    typeof seal.control_event_set_root !== "string" ||
-    typeof seal.state_root !== "string"
-  ) {
-    throw new Error(
-      `accepted Seal ${sealId} did not resolve: ${JSON.stringify(body)}`,
-    );
-  }
-  return {
-    control_event_set_root: seal.control_event_set_root,
-    state_root: seal.state_root,
-  };
-}
-
-async function readRealmSealFrontier(
-  request: APIRequestContext,
-  token: string,
-  realmId: string,
-  server?: SolandKey,
-): Promise<RealmSealFrontier> {
-  const frontierUrl = `${solandBaseUrl(server)}/_arkret/self/seals/frontier`;
-  const response = await request.fetch(frontierUrl, {
-    method: "QUERY",
-    data: canonicalJson({ realm_id: realmId }),
-    headers: {
-      ...authHeaders(token, "QUERY", frontierUrl),
-      "content-type": "application/json",
-    },
-  });
-  // The endpoint answers 200 with an absent frontier before the genesis Seal
-  // lands, so every member is treated as possibly missing and re-checked at
-  // runtime below.
-  const body = await expectJsonOk<{
-    frontier?: {
-      kind?: string;
-      seal_basis?: { leaves?: unknown };
-      governance_health?: Partial<RealmSealFrontierView["governance_health"]>;
+  opts: { server?: SolandKey; streamRef?: Record<string, unknown> } = {},
+): Promise<CommitStreamHead | undefined> {
+  const streamRef = opts.streamRef ?? { kind: "realm", realm_id: realmId };
+  const url = `${solandBaseUrl(opts.server)}/_arkret/self/streams/scan`;
+  let afterPosition = -1;
+  let head: CommitStreamHead | undefined;
+  for (;;) {
+    const response = await request.post(url, {
+      headers: {
+        ...authHeaders(token, "POST", url),
+        "content-type": "application/json",
+      },
+      data: canonicalJson({
+        realm_id: realmId,
+        stream_ref: streamRef,
+        after_position: afterPosition,
+        limit: 256,
+      }),
+    });
+    const body = await expectJsonOk<{
+      commits?: Array<{ commit: CommitStreamHead & { stream_position: number } }>;
+      truncated?: boolean;
+    }>(response, `scan commit stream for ${realmId}`);
+    const commits = body.commits ?? [];
+    if (commits.length === 0) return head;
+    const last = commits[commits.length - 1]!.commit;
+    head = {
+      stream_ref: streamRef as CommitStreamHead["stream_ref"],
+      stream_position: last.stream_position,
+      commit_id: last.commit_id,
     };
-  }>(response, `read Realm Seal frontier for ${realmId}`);
-  const frontier = body.frontier;
-  const leaves = frontier?.seal_basis?.leaves;
-  if (
-    frontier?.kind !== "realm_seal" ||
-    !Array.isArray(leaves) ||
-    leaves.length !== 1 ||
-    typeof leaves[0] !== "string"
-  ) {
-    throw new Error(
-      `Realm Seal frontier for ${realmId} has an invalid shape: ${JSON.stringify(body)}`,
-    );
+    if (!body.truncated) return head;
+    afterPosition = last.stream_position;
   }
-  const sealId = leaves[0];
-  const roots = await resolveAcceptedSeal(
-    request,
-    token,
-    realmId,
-    sealId,
-    server,
-  );
-  return {
-    seal_id: sealId,
-    control_event_set_root: roots.control_event_set_root,
-    state_root: roots.state_root,
-    pending_proposal_digests: (
-      frontier.governance_health?.pending_proposals ?? []
-    ).flatMap((proposal) =>
-      typeof proposal.control_proposal_ack.proposal_digest === "string"
-        ? [proposal.control_proposal_ack.proposal_digest]
-        : [],
-    ),
-  };
-}
-
-async function waitForRealmSealBasis(
-  request: APIRequestContext,
-  token: string,
-  realmId: string,
-  server?: SolandKey,
-  timeoutMs = 15_000,
-): Promise<Record<string, unknown>> {
-  const deadline = Date.now() + timeoutMs;
-  let lastError: unknown;
-  while (Date.now() < deadline) {
-    try {
-      const frontier = await readRealmSealFrontier(
-        request,
-        token,
-        realmId,
-        server,
-      );
-      if (frontier.pending_proposal_digests.length === 0) {
-        return {
-          leaves: [frontier.seal_id],
-          control_event_set_root: frontier.control_event_set_root,
-          state_root: frontier.state_root,
-        };
-      }
-    } catch (error) {
-      lastError = error;
-    }
-    await new Promise<void>((resolve) => setTimeout(resolve, 100));
-  }
-  throw new Error(
-    `Realm ${realmId} founding Seal was not materialized within ${timeoutMs}ms`,
-    { cause: lastError },
-  );
 }
 
 export async function waitForRealmControlIdleApi(
-  request: APIRequestContext,
-  token: string,
-  realmId: string,
-  opts: {
-    server?: SolandKey;
-    afterControlEventSetRoot?: string;
-    timeoutMs?: number;
-  } = {},
-): Promise<Record<string, unknown>> {
-  const deadline = Date.now() + (opts.timeoutMs ?? 30_000);
-  let lastFrontier: RealmSealFrontier | undefined;
-  let lastError: unknown;
-  while (Date.now() < deadline) {
-    try {
-      lastFrontier = await readRealmSealFrontier(
-        request,
-        token,
-        realmId,
-        opts.server,
-      );
-      if (
-        lastFrontier.pending_proposal_digests.length === 0 &&
-        (!opts.afterControlEventSetRoot ||
-          lastFrontier.control_event_set_root !== opts.afterControlEventSetRoot)
-      ) {
-        return {
-          leaves: [lastFrontier.seal_id],
-          control_event_set_root: lastFrontier.control_event_set_root,
-          state_root: lastFrontier.state_root,
-        };
-      }
-    } catch (error) {
-      lastError = error;
-    }
-    await new Promise<void>((resolve) => setTimeout(resolve, 100));
-  }
-  throw new Error(
-    `Realm ${realmId} control frontier did not become idle after ${opts.afterControlEventSetRoot ?? "its current root"} within ${opts.timeoutMs ?? 30_000}ms; last frontier=${JSON.stringify(lastFrontier)}; last error=${String(lastError instanceof Error ? lastError.message : lastError).replace(/[A-Za-z0-9_-]{32,}/g, "[redacted]").slice(0, 600)}`,
-    { cause: lastError },
-  );
-}
+  _request: APIRequestContext,
+  _token: string,
+  _realmId: string,
+  _opts: { server?: SolandKey; timeoutMs?: number } = {},
+): Promise<void> {}
 
 async function applyRegisteredCbsPlane(
   request: APIRequestContext,
@@ -3451,116 +2932,14 @@ async function applyRegisteredCbsPlane(
     // realm-and-space.md section 2.5: the creator identity is only audit
     // metadata. Operational owner authority is an explicit inclusion proof of
     // the registered authority-root cell at this Event's governance basis.
-    envelope.authorization_ref = REALM_AUTHORITY_ROOT_CELL;
-    changed = true;
-  }
-  if (effectivePlane === "control") {
-    const sealBasis = envelope.seal_basis as
-      Record<string, unknown> | undefined;
-    if (
-      !sealBasis ||
-      !Array.isArray(sealBasis.leaves) ||
-      sealBasis.leaves.length === 0
-    ) {
-      try {
-        envelope.seal_basis = await readRealmSealBasis(
-          request,
-          token,
-          realmId,
-          server,
-        );
-      } catch {
-        if (canonicalRealm && actorControlsRealm) {
-          envelope.seal_basis = await waitForRealmSealBasis(
-            request,
-            token,
-            realmId,
-            server,
-            60_000,
-          );
-        } else {
-          const directoryBasis = await readDirectoryJoinCandidateSealBasis(
-            request,
-            realmId,
-            actorId,
-          );
-          if (directoryBasis) {
-            envelope.seal_basis = directoryBasis;
-          } else {
-            await forceConformanceCbsBasis(request, envelope, server);
-            return;
-          }
-        }
-      }
-      changed = true;
-    }
-  } else if (effectivePlane === "data") {
-    if (
-      envelope.auth_context === undefined ||
-      envelope.data_basis === undefined
-    ) {
-      let authorityRefs: string[];
-      try {
-        const basis = await readRealmSealBasis(request, token, realmId, server);
-        const leaves = basis.leaves;
-        if (!Array.isArray(leaves) || typeof leaves[0] !== "string") {
-          throw new Error(`Realm ${realmId} has no citable Seal leaf`);
-        }
-        authorityRefs = leaves as string[];
-      } catch {
-        if (canonicalRealm) {
-          const basis = await waitForRealmSealBasis(
-            request,
-            token,
-            realmId,
-            server,
-            60_000,
-          );
-          const leaves = basis.leaves;
-          if (!Array.isArray(leaves) || typeof leaves[0] !== "string") {
-            throw new Error(`Realm ${realmId} has no citable Seal leaf`);
-          }
-          authorityRefs = leaves as string[];
-        } else {
-          // Only an isolated conformance Realm has no canonical Seal frontier.
-          // A canonically created Realm must use its real frozen governance
-          // state; the server refuses synthetic state grafts onto that DAG.
-          const response = await request.post(
-            `${solandBaseUrl(server)}/_arkret/_conformance/realm-basis`,
-            {
-              data: {
-                realm_id: realmId,
-                subject: actorId,
-                data_plane_actions: [kind],
-              },
-            },
-          );
-          const basis = await expectJsonOk<{ seal_id: string }>(
-            response,
-            `seed conformance Realm basis for ${kind}`,
-          );
-          authorityRefs = [basis.seal_id];
-        }
-      }
-      if (authorityRefs.length !== 1 || typeof authorityRefs[0] !== "string") {
-        throw new Error(
-          `Realm ${realmId} data Event basis must resolve exactly one confirmed Seal leaf`,
-        );
-      }
-      if (envelope.auth_context === undefined) {
-        envelope.auth_context = eventAuthContext(authorityRefs);
-      }
-      if (envelope.data_basis === undefined) {
-        // operations-sync.md section 2.1: every post-bootstrap ordinary Event
-        // signs one confirmed, still-open same-Realm Seal as its publication
-        // interval.  The current single-authority frontier is the canonical
-        // fixture choice; it grants no authority and does not replace the
-        // independently signed AuthContext.
-        envelope.data_basis = authorityRefs[0];
-      }
+    const rootRef = realmAuthorityRootRef(server, realmId);
+    if (rootRef) {
+      envelope.authorization_ref = rootRef;
       changed = true;
     }
   }
+
+
 
   if (changed) {
     const proof = Array.isArray(envelope.proofs)
@@ -3923,8 +3302,6 @@ export function makeFederationEvent(args: {
     actorId: args.actorId ?? "did:web:cotest-federation.example",
     realmId: args.realmId,
     kind: args.kind,
-    schemaId: schemaIdForEventKind(args.kind),
-    sealBasis: args.sealBasis,
     payload: args.payload,
   });
 }
@@ -4147,8 +3524,8 @@ async function federationEventWireBodies(
       data: canonicalJson({ event_ids: [...new Set(group.eventIds)], include_payload: true }),
     });
     const body = await expectJsonOk<Record<string, unknown>>(response, "resolve accepted source Events for federation");
-    for (const event of (body.events ?? []) as PublicationEvidence["event"][]) {
-      accepted.set(event.event_id, event);
+    for (const event of (body.events ?? []) as Array<Record<string, unknown>>) {
+      accepted.set(String(event.event_id), event);
     }
   }
   return entries.map(({ eventId, evidence }) => {

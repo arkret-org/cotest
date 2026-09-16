@@ -19,7 +19,6 @@ import {
   pushFederationEvents,
   queryPeerEventsApi,
   queryRealmEventsApi,
-  readRealmSealBasis,
   signedEventEnvelope,
   submitSignedEventApi,
   typedId,
@@ -578,11 +577,6 @@ async function createBottomConflictFixture(
   const aliceTitle = `renamed by alice ${stamp}`;
   const bobTitle = `renamed by bob ${stamp}`;
   await waitForRealmControlIdleApi(request, aliceToken, realmId);
-  const beforeAliceUpdate = await readRealmSealBasis(
-    request,
-    aliceToken,
-    realmId,
-  );
   await submitRealmTitleUpdate(
     request,
     aliceToken,
@@ -591,9 +585,6 @@ async function createBottomConflictFixture(
     aliceTitle,
     initialTitle,
   );
-  await waitForRealmControlIdleApi(request, aliceToken, realmId, {
-    afterControlEventSetRoot: String(beforeAliceUpdate.control_event_set_root),
-  });
   await submitRealmTitleUpdate(
     request,
     bobToken,
@@ -622,18 +613,6 @@ async function submitRealmTitleUpdate(
       actorId,
       realmId: realmId,
       kind: "ak.realm.profile",
-      preconditions: [
-        {
-          cell_id: "ak:cell:ak.component.realm.profile.v1:null",
-          predicate: {
-            op: "head_eq",
-            value: {
-              schema: "ak.schema.realm_profile.v1",
-              title: previousTitle,
-            },
-          },
-        },
-      ],
       payload: {
         schema: "ak.schema.realm_profile.v1",
         title,

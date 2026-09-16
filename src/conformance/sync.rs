@@ -36,7 +36,6 @@ pub fn run_sync_fixture_suite() -> Result<()> {
     validate_realm_state_snapshot_inclusion_challenge(&value)?;
     validate_snapshot_state_digest(&value)?;
     validate_realm_state_snapshot_restore_covered_membership(&value)?;
-    super::realm_state_snapshot_witness_quorum::run_realm_state_snapshot_witness_quorum_attestation_vector()?;
     validate_e2ee_pending(&value)?;
     validate_realm_actor_frontier_vectors(&value)?;
     run_stream_frame_sequence_vector()?;

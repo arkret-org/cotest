@@ -163,7 +163,10 @@ type CreateRealmOpts = {
   discoverability?: string;
   joinRule?: string;
   historyAccess?: RealmObject["history_access"];
-  encryptionProfile?: string;
+  /// Turn MLS on for the new Realm. The UI no longer offers an encryption
+  /// profile to declare: a scope is end-to-end encrypted exactly when an
+  /// `ak.mls.genesis` has been accepted for it.
+  mlsActivated?: boolean;
   seedMembers?: string[];
   completeRecoveryKeySetup?: boolean;
   allowPassivePromptDismissal?: boolean;
@@ -984,10 +987,10 @@ export class JointUserPage {
         promptHandling,
       );
     }
-    if (opts.encryptionProfile !== undefined) {
+    if (opts.mlsActivated !== undefined) {
       await this.selectCreateRealmOption(
-        strand.getByTestId("realm-encryption-profile-input"),
-        opts.encryptionProfile,
+        strand.getByTestId("realm-mls-activation-input"),
+        opts.mlsActivated ? "activated" : "none",
         promptHandling,
       );
     }

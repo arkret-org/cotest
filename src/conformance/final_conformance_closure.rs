@@ -154,7 +154,7 @@ fn final_conformance_closure_fixture() -> Result<FinalConformanceClosureFixture>
 fn validate_final_conformance_closure_fixture_metadata(
     fixture: &FinalConformanceClosureFixture,
 ) -> Result<()> {
-    if fixture.profile != crate::conformance::security_closure::SECURITY_CLOSURE_VECTORS_PROFILE
+    if fixture.profile != crate::conformance::helpers::PRIVACY_SECURITY_VECTOR_GROUP_PROFILE
         || fixture.suite != "final_conformance_closure"
         || fixture.version.trim().is_empty()
     {

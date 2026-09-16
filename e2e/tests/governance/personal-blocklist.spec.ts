@@ -182,7 +182,7 @@ test.describe("personal blocklist", () => {
         discoverability: "listed",
         joinRule: "invite",
         historyAccess: "since_join",
-        encryptionProfile: "none",
+        mlsActivated: false,
         seedMembers: [bob.id],
       });
       await bobPage.acceptInvite(realmId);
@@ -249,7 +249,6 @@ test.describe("personal blocklist", () => {
       const m2 = `S31 m2 ${stamp}`;
       await sendMessageApi(request, bobToken, realmId, m2, {
         mentions: [alice.id],
-        actorSeq: apiActorSeq,
       });
       await alicePage.gotoTimelineRealm(realmId);
       await expect(

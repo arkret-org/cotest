@@ -314,7 +314,7 @@ impl Session {
                 struct Body {
                     handoff_id: String,
                     soland_base_url: String,
-                    actor_id: String,
+                    account_id: arkret_wire::AccountId,
                     device_id: String,
                 }
                 let body: Body = serde_json::from_value(request.body).context("parse request")?;
@@ -342,7 +342,7 @@ impl Session {
                     &body.soland_base_url,
                     grant.clone(),
                     handoff.device_key.signing_key(),
-                    &body.actor_id,
+                    body.account_id,
                     &body.device_id,
                     &store_root,
                 )?;

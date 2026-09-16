@@ -560,7 +560,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         discoverability: "listed",
         joinRule: "invite",
         historyAccess: "since_join",
-        encryptionProfile: "mls_rfc9420",
+        mlsActivated: true,
       });
       const boardId = await buildEncryptedBoardListCard(
         creator.page,
@@ -643,7 +643,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           discoverability: "listed",
           joinRule: "invite",
           historyAccess: "since_join",
-          encryptionProfile: "mls_rfc9420",
+          mlsActivated: true,
         });
         await grantInviteConsentArkret(
           request,
@@ -881,7 +881,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         discoverability: "listed",
         joinRule: "invite",
         historyAccess: "all_history_for_current_members",
-        encryptionProfile: "mls_rfc9420",
+        mlsActivated: true,
       });
       await grantInviteConsentArkret(
         request,

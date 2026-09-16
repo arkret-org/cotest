@@ -187,7 +187,7 @@ test.describe("private read marker", () => {
       title: `read cursor xdev ${stamp}`,
       discoverability: "listed",
       history_access: "all_history_for_current_members",
-      encryption_profile: "none",
+      mls_activated: false,
       ownerId: alice.id,
     });
 
@@ -275,7 +275,7 @@ test.describe("private read marker", () => {
       title: `read cursor ec ${stamp}`,
       discoverability: "listed",
       history_access: "all_history_for_current_members",
-      encryption_profile: "none",
+      mls_activated: false,
       ownerId: alice.id,
     });
 
@@ -333,7 +333,7 @@ test.describe("private read marker", () => {
       title: `read cursor e2ee ${stamp}`,
       discoverability: "listed",
       history_access: "since_join",
-      encryption_profile: "mls_rfc9420",
+      mls_activated: true,
       invitees: [alice.id],
       ownerId: bob.id,
     });
@@ -378,7 +378,7 @@ test.describe("private read marker", () => {
       title: `read cursor circle ${stamp}`,
       discoverability: "listed",
       history_access: "all_history_for_current_members",
-      encryption_profile: "none",
+      mls_activated: false,
       ownerId: alice.id,
     });
 
@@ -460,7 +460,7 @@ async function readCursorFixture(
     title: `read cursor ${stamp}`,
     discoverability: "listed",
     history_access: "all_history_for_current_members",
-    encryption_profile: "none",
+    mls_activated: false,
     ownerId: alice.id,
   });
   const position = await sendAndResolvePosition(

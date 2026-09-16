@@ -27,7 +27,7 @@ test.describe("admin section route", () => {
         title: `Admin section probe ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
-        encryptionProfile: "none",
+        mlsActivated: false,
       });
 
       // Land directly on the access admin section via hard navigation (no tab

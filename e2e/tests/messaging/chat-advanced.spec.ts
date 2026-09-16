@@ -442,7 +442,7 @@ test.describe("chat advanced", () => {
       const realmId = await createRealmApi(request, aliceToken, {
         title: `typing API ${stamp}`,
         ownerId: aliceFlow.user.id,
-        encryption_profile: "mls_rfc9420",
+        mls_activated: true,
         history_access: "since_join",
       });
       await addRealmMemberApi(request, aliceToken, realmId, bob.id);
@@ -572,7 +572,7 @@ test.describe("chat advanced", () => {
         title: `S14 Chat ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
-        encryptionProfile: "none",
+        mlsActivated: false,
         seedMembers: [bob.id, carol.id],
       });
       await bobPage.acceptInvite(realmId);
@@ -701,7 +701,7 @@ test.describe("chat advanced", () => {
         title: `S14D Mention ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
-        encryptionProfile: "none",
+        mlsActivated: false,
         seedMembers: [bob.id, carol.id],
       });
       await alicePage.grantRealmCapability(
@@ -717,7 +717,7 @@ test.describe("chat advanced", () => {
       mention = mentionSuffix;
       await sendMessageApi(request, aliceToken, realmId, mention, {
         mentions: [bob.id],
-        actorSeq: apiActorSeq,
+
       });
       await alicePage.gotoTimelineRealm(realmId);
       await expect(alicePage.page.getByTestId("message-list")).toContainText(
@@ -1021,7 +1021,7 @@ test.describe("chat advanced", () => {
       {
         title: `S14.2 E2EE Mention ${stamp}`,
         historyAccess: "since_join",
-        encryptionProfile: "mls_rfc9420",
+        mlsActivated: true,
       },
     );
     const plaintext = `Encrypted mention for @${bob.handle.replace(/^@/, "")} ${stamp}`;

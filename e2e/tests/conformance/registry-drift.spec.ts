@@ -434,7 +434,7 @@ test.describe("conformance registry drift @fully-implemented", () => {
 
     const realmId = await createRealmApi(request, token, {
       title: "forbidden-wire-fields probe",
-      encryption_profile: "none",
+      mls_activated: false,
     });
     const strandId = await resolveDefaultStrandId(request, token, realmId);
 
@@ -442,7 +442,6 @@ test.describe("conformance registry drift @fully-implemented", () => {
       actorId: alice.id,
       realmId,
       kind: "ak.message.create",
-      schemaId: "ak.schema.message.v1",
       payload: {
         strand_id: strandId,
         track_name: "discussion",

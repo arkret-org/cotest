@@ -13,12 +13,17 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::Duration;
 
 use anyhow::{Context, Result};
 use arkret_http_client::{Auth, Client as SdkClient, DpopAuth};
-use arkret_identifiers::{DeviceId, DidCoreId};
+use arkret_identifiers::DeviceId;
+use arkret_wire::{AccountId, ActorId};
 use ed25519_dalek::SigningKey;
-use garth::{ArkretClient, CursorScope, CursorStore, FileStore, NativeExecutor, SyncLoopControl};
+use garth::{
+    AccountRunner, ClientEvent, ClientProjector, CursorScope, CursorStore, FileStore,
+    NativeExecutor, RunOptions, SyncLoopControl, TransportProvider,
+};
 
 /// A Garth client bound to one founded principal.
 ///
@@ -27,7 +32,7 @@ use garth::{ArkretClient, CursorScope, CursorStore, FileStore, NativeExecutor, S
 /// the same durable state.
 pub struct GarthClientHandle {
     sdk: SdkClient,
-    actor_id: DidCoreId,
+    actor_id: ActorId,
     device_id: DeviceId,
     store_path: PathBuf,
 }
@@ -64,7 +69,7 @@ impl GarthClientHandle {
         station_base_url: &str,
         session_grant: String,
         signing_key: SigningKey,
-        actor_id: &str,
+        account_id: AccountId,
         device_id: &str,
         store_root: &Path,
     ) -> Result<Self> {
@@ -85,7 +90,7 @@ impl GarthClientHandle {
         std::fs::create_dir_all(store_root).context("create the Garth store directory")?;
         Ok(Self {
             sdk,
-            actor_id: DidCoreId::new(actor_id.to_owned()).map_err(anyhow::Error::msg)?,
+            actor_id: ActorId::account(account_id),
             device_id: DeviceId::new(device_id.to_owned()).map_err(anyhow::Error::msg)?,
             store_path: store_root.join("account.json"),
         })
@@ -107,51 +112,33 @@ impl GarthClientHandle {
     pub async fn sync_account_once(&self) -> Result<SyncOutcome> {
         let store = FileStore::open(&self.store_path).map_err(anyhow::Error::msg)?;
         let control = SyncLoopControl::new();
-        let rounds = Arc::new(AtomicUsize::new(0));
-        let failure: Arc<std::sync::Mutex<Option<String>>> = Arc::new(std::sync::Mutex::new(None));
-        let transport = {
-            let sdk = self.sdk.clone();
-            let control = control.clone();
-            let rounds = Arc::clone(&rounds);
-            let failure = Arc::clone(&failure);
-            move |request, options| {
-                let sdk = sdk.clone();
-                let control = control.clone();
-                let rounds = Arc::clone(&rounds);
-                let failure = Arc::clone(&failure);
-                async move {
-                    // Counted before the call, and the loop is cancelled after
-                    // the first attempt whatever its outcome. Cancelling only
-                    // on success is what turned an unreachable Station into a
-                    // retry loop that outlived the caller's timeout: a client
-                    // that cannot connect must report that, not hang.
-                    let first = rounds.fetch_add(1, Ordering::SeqCst) == 0;
-                    let outcome = sdk
-                        .account_subscribe_batch_with_options(&request, &options)
-                        .await
-                        .map_err(|error| garth::Error::Http(error.to_string()));
-                    if first {
-                        control.cancel();
-                    }
-                    if let Err(error) = &outcome {
-                        *failure.lock().expect("transport failure lock") = Some(error.to_string());
-                    }
-                    outcome
-                }
-            }
+        let provider = BoundedProvider {
+            sdk: self.sdk.clone(),
+            control: control.clone(),
+            rounds: Arc::new(AtomicUsize::new(0)),
         };
+        let projector = CountingProjector::default();
 
-        let host = ArkretClient::new(NativeExecutor, store.clone(), store.clone());
-        let stop = host
-            .subscription_engine()
+        let stop = AccountRunner::new(NativeExecutor, store.clone())
             .with_control(control)
-            .run_account_to_inbox(self.actor_id.clone(), self.device_id.clone(), &transport)
-            .await
-            .map_err(anyhow::Error::msg)?;
-
-        if let Some(error) = failure.lock().expect("transport failure lock").take() {
-            anyhow::bail!("Garth's transport could not reach the Station: {error}");
-        }
+            .run(
+                &provider,
+                &projector,
+                self.scope(),
+                RunOptions {
+                    beat: Duration::from_millis(1),
+                    ..RunOptions::default()
+                },
+            )
+            .await;
+        let rounds = provider.rounds.load(Ordering::SeqCst);
+        let stop = match stop {
+            Ok(stop) => stop,
+            // The engine classifies an unreachable Station as retryable and
+            // would otherwise back off past the caller's timeout, which reads
+            // as a hang rather than as the connection failure it is.
+            Err(error) => anyhow::bail!("Garth's transport could not reach the Station: {}", error),
+        };
 
         let cursor = store
             .load(self.scope())
@@ -159,7 +146,7 @@ impl GarthClientHandle {
             .map_err(anyhow::Error::msg)?
             .map(|cursor| cursor.to_string());
         Ok(SyncOutcome {
-            rounds: rounds.load(Ordering::SeqCst),
+            rounds,
             cursor,
             stop_reason: format!("{stop:?}").to_lowercase(),
         })
@@ -177,5 +164,37 @@ impl GarthClientHandle {
             .await
             .map_err(anyhow::Error::msg)?
             .map(|cursor| cursor.to_string()))
+    }
+}
+
+/// Hands the engine the harness's own CA-trusting Station client, and closes
+/// the loop after the first attempt whatever its outcome.
+struct BoundedProvider {
+    sdk: SdkClient,
+    control: SyncLoopControl,
+    rounds: Arc<AtomicUsize>,
+}
+
+impl TransportProvider for BoundedProvider {
+    type Transport = SdkClient;
+
+    async fn provide(&self) -> garth::Result<SdkClient> {
+        self.rounds.fetch_add(1, Ordering::SeqCst);
+        self.control.cancel();
+        Ok(self.sdk.clone())
+    }
+}
+
+/// Counts what the engine decoded, so a round that returned nothing is
+/// distinguishable from one that never ran.
+#[derive(Debug, Default)]
+struct CountingProjector {
+    projected: AtomicUsize,
+}
+
+impl ClientProjector for CountingProjector {
+    async fn project(&self, batch: Vec<ClientEvent>) -> garth::Result<()> {
+        self.projected.fetch_add(batch.len(), Ordering::SeqCst);
+        Ok(())
     }
 }

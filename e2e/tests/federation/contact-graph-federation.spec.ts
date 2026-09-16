@@ -29,7 +29,6 @@ import {
 import {
   authHeaders,
   createRealmApi,
-  readRealmSealBasis,
   accountActorId,
   canonicalJson,
 } from "../../helpers/soland-api";
@@ -506,7 +505,6 @@ test.describe("contact graph federation (server1/server2)", () => {
       realmId,
       inviteId: invite!.id,
       server: "server2",
-      sealBasis: await readRealmSealBasis(request, aliceTokenServer1, realmId, "server1"),
     });
     await expect
       .poll(

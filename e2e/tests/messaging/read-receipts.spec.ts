@@ -70,7 +70,7 @@ test.describe("read receipts + privacy", () => {
         title: `G2.T7 Receipt ${stamp}`,
         discoverability: "listed",
         historyAccess: "since_join",
-        encryptionProfile: "mls_rfc9420",
+        mlsActivated: true,
       },
     );
     // read-receipts.md §2 defines the position as a message on the discussion
@@ -693,7 +693,7 @@ async function createReceiptFixture(request: APIRequestContext, label: string) {
     realm: {
       discoverability: "listed",
       historyAccess: "since_join",
-      encryptionProfile: "mls_rfc9420",
+      mlsActivated: true,
     },
   });
   const message = await sendEncryptedReceiptMessage(
@@ -733,7 +733,7 @@ async function createPairableReceiptFixture(
       title: `${label} receipt ${stamp}`,
       discoverability: "listed",
       historyAccess: "since_join",
-      encryptionProfile: "mls_rfc9420",
+      mlsActivated: true,
     },
   );
   const message = await sendEncryptedReceiptMessage(
@@ -900,12 +900,7 @@ async function setReadReceiptPolicy(
       actorId: fixture.bob.id,
       realmId: fixture.realmId,
       kind: "ak.realm.read_receipt_policy",
-      schemaId: "ak.schema.event_payload.v1",
       payload,
-      preconditions: [{
-        cell_id: "ak:cell:ak.component.realm.read_receipt_policy.v1:null",
-        predicate: { op: "head_eq", value: acceptedReceiptPolicies.get(fixture) ?? null },
-      }],
     }),
     { context: `read receipt policy ${fixture.realmId}` },
   );

@@ -11,53 +11,23 @@
 /** `realm-join-intake.schema.json#/$defs/self_prepare_request_body` — closed object schema. */
 export type RealmJoinPrepareRequestBody = {
   "request_id": string;
-  "account_id": {
-    "principal_id": string;
-    "station_id": string;
+  "target": {
+    "realm_id": string;
+    "invite_id"?: string;
+    "invite_token"?: string;
+    "authority_locator_hints": Array<{
+      "service_id": string;
+      "source": "invite" | "directory" | "cache";
+      "endpoint_url"?: string;
+    }>;
   };
-  "realm_id": string;
   "intent": {
-    "intent": "invite_accept";
+    "kind": "invite_accept";
     "invite_id": string;
     "invite_token": string;
   } | {
-    "intent": "member_join";
-    "gate_proofs"?: Array<{
-      "gate_id": string;
-      "kind": "challenge_response" | "claim_required";
-      "realm_id": string;
-      "applicant_actor_id": {
-        "kind": "account";
-        "account_id": {
-          "principal_id": string;
-          "station_id": string;
-        };
-      } | {
-        "kind": "service";
-        "service_id": string;
-      };
-      "policy_digest": string;
-      "created_at": string;
-      "challenge_kind"?: "captcha" | "pow" | "attested_human" | "idp_oidc";
-      "challenge_id"?: string;
-      "issuer_id"?: string;
-      "claims"?: string[];
-      "proofs": Array<{
-        "kind": "detached_jws";
-        "verification_method": string;
-        "payload_digest": string;
-        "created_at": string;
-        "domain"?: string;
-        "audience"?: string | string[];
-        "proof_purpose"?: "issuer_attestation" | "holder_acceptance" | "status_attestation" | "revocation_authorization" | "governance_authorization";
-        "jws": string;
-      }>;
-    }>;
-  } | {
-    "intent": "knock";
+    "kind": "member_join" | "knock";
   };
-  "created_at": string;
-  "hlc"?: string;
 };
 
 /** `message-authoring.schema.json#/$defs/message_prepare_request_body` — closed object schema. */
@@ -465,14 +435,6 @@ export type MessagePrepareRequestBody = {
             "target_ref": string;
             "routing_tag": string;
           };
-        } | {
-          "epoch": number;
-          "group_state_ref": string;
-          "counter": number;
-          "routing_context"?: {
-            "target_ref": string;
-            "routing_tag": string;
-          };
         };
         "ciphertext": string;
       };
@@ -486,19 +448,11 @@ export type MessagePrepareRequestBody = {
             "target_ref": string;
             "routing_tag": string;
           };
-        } | {
-          "epoch": number;
-          "group_state_ref": string;
-          "counter": number;
-          "routing_context"?: {
-            "target_ref": string;
-            "routing_tag": string;
-          };
         };
         "ciphertext": string;
       };
       "encryption_context": {
-        "scheme": "mls_rfc9420" | "mls_exporter_aead_v1";
+        "scheme": "mls_rfc9420";
         "effective_scope": {
           "kind": "realm";
           "realm_id": string;
@@ -520,7 +474,6 @@ export type MessagePrepareRequestBody = {
     "reply_to_id"?: string;
   };
   "created_at": string;
-  "hlc"?: string;
 };
 
 /** `identity-resolution.schema.json#/$defs/public_principal_resolution` — closed object schema. */
@@ -645,12 +598,7 @@ export type CircleView = {
   "directory_visibility": "member_ids" | "realm_members";
   "join_rule": "invite" | "knock" | "public";
   "history_access": "since_join" | "all_history_for_current_members";
-  "content_encryption_floor"?: "allow_plaintext" | "e2ee_required";
-  "metadata_encryption_floor"?: "allow_plaintext" | "e2ee_required";
-  "encryption_profile": "none" | "mls_rfc9420";
-  "content_scheme"?: "mls_rfc9420" | "mls_exporter_aead_v1";
   "mls_group_id"?: string;
-  "durability_policy"?: "none" | "organization_recovery_key";
   "state": "active" | "archived" | "tombstoned";
   "viewer_membership"?: "join" | "knock" | "leave" | "ban";
   "member_ids": Array<{
@@ -869,11 +817,7 @@ export type RealmObject = {
   "default_discoverability": "public" | "listed" | "restricted" | "unlisted" | "invite_only" | "secret";
   "default_join_rule": "public" | "invite" | "knock" | "restricted" | "knock_restricted" | "closed";
   "history_access": "since_join" | "all_history_for_current_members";
-  "reducer_profile": string;
-  "encryption_profile": "none" | "mls_rfc9420" | "external";
-  "content_scheme"?: "mls_rfc9420" | "mls_exporter_aead_v1";
-  "content_encryption_floor"?: "allow_plaintext" | "e2ee_required";
-  "metadata_encryption_floor"?: "allow_plaintext" | "e2ee_required";
+  "governance_station_id": string;
   "agent_participation"?: {
     "agent": {
       "reply_message": boolean;
@@ -883,55 +827,15 @@ export type RealmObject = {
       "act_on_behalf": boolean;
     };
   };
-  "durability_policy"?: "none" | "organization_recovery_key";
   "federation_policy"?: "open" | "restricted" | "closed" | "quarantine";
   "availability_policy"?: {
     "min_holders": number;
-    "applies_to": Array<"seal_include" | "snapshot" | "backfill">;
+    "applies_to": Array<"commit_include" | "snapshot" | "backfill">;
     "minimum_retention_ms"?: number;
   };
   "digest_algorithm"?: "sha256" | "blake3";
-  "notary": {
-    "signer": {
-      "actor_id": {
-        "kind": "account";
-        "account_id": {
-          "principal_id": string;
-          "station_id": string;
-        };
-      } | {
-        "kind": "service";
-        "service_id": string;
-      };
-      "verification_method": string;
-      "key_kind": "ed25519_raw32";
-      "jose_algorithm": "Ed25519";
-      "frozen_public_key_b64u": string;
-    } | {
-      "actor_id": {
-        "kind": "account";
-        "account_id": {
-          "principal_id": string;
-          "station_id": string;
-        };
-      } | {
-        "kind": "service";
-        "service_id": string;
-      };
-      "verification_method": string;
-      "key_kind": "p256_sec1_compressed33";
-      "jose_algorithm": "ES256";
-      "frozen_public_key_b64u": string;
-    };
-    "max_clock_error_ms": number;
-  };
-  "proposal_intake_sla_ms"?: number;
-  "proposal_decision_window_ms"?: number;
-  "proposal_absolute_deadline_ms"?: number;
-  "max_proposal_defers"?: number;
-  "seal_compaction_max_interval_ms"?: number;
+  "commit_compaction_max_interval_ms"?: number;
   "max_authority_lifetime_ms"?: number;
-  "bottom_escalation_after_ms"?: number;
   "retention_policy_id"?: string;
   "avatar_blob_ref"?: string;
   "created_by": {
@@ -956,6 +860,35 @@ export type RealmObject = {
     "service_id": string;
   };
   "updated_at"?: string;
+};
+
+/** `realm-genesis.schema.json` — closed object schema. */
+export type RealmGenesisObject = {
+  "schema": "ak.schema.realm_genesis.v1";
+  "purpose": "collaboration" | "direct_conversation" | "principal_control" | "agent_control" | "applet_managed_control";
+  "genesis_salt": string;
+  "founding_device_descriptor"?: {
+    "descriptor_version": 1;
+    "device_id": string;
+    "device_public_key_did": string;
+    "device_key_algorithm": "Ed25519";
+    "device_key_purpose": "event_signing_and_mls_identity";
+    "hpke_key": string;
+    "hpke_key_algorithm": "X25519";
+    "algorithms": string[];
+    "founding_authorize_payload_digest": string;
+  };
+  "initial_resolution"?: {
+    "did": string;
+    "method_history_head": string;
+    "version_id": string;
+  };
+  "trust_domain": string;
+  "security_class": "standard" | "high_assurance";
+  "governance_station_id": string;
+  "initial_join_rule": "public" | "invite" | "knock" | "restricted" | "knock_restricted" | "closed";
+  "initial_history_access": "since_join" | "all_history_for_current_members";
+  "initial_discoverability": "public" | "listed" | "restricted" | "unlisted" | "invite_only" | "secret";
 };
 
 /** `space.schema.json` — closed object schema. */
@@ -1217,15 +1150,14 @@ export type CapabilityGrantObject = {
   } | {
     "kind": "realm_root";
     "realm_id": string;
-    "cell_ref": "ak:cell:ak.component.realm.authority_root.v1:null";
-    "controller_epoch_at_issuance": number;
+    "authority_event_ref": string;
     "authority_generation": number;
   }>;
   "authority_depth"?: number;
   "authority_root_refs"?: Array<{
     "kind": "realm_root";
     "realm_id": string;
-    "cell_ref": "ak:cell:ak.component.realm.authority_root.v1:null";
+    "authority_event_ref": string;
     "authority_generation": number;
   }>;
 };
@@ -1271,7 +1203,7 @@ export type InviteDeliveryRequestBody = {
       "kind": "service";
       "service_id": string;
     };
-    "authorization_ref"?: string | "ak:cell:ak.component.realm.authority_root.v1:null" | "ak.authority.direct_conversation_participant.v1" | "ak.authority.direct_conversation_bootstrap_participant.v1";
+    "authorization_ref"?: string | "ak.authority.direct_conversation_participant.v1" | "ak.authority.direct_conversation_bootstrap_participant.v1";
     "applet_id"?: string;
     "external_ref"?: {
       "schema"?: string;
@@ -1285,74 +1217,63 @@ export type InviteDeliveryRequestBody = {
       "uri"?: string;
       [key: string]: unknown;
     };
-    "actor_seq": number;
     "created_at": string;
-    "hlc"?: string;
-    "prev_refs": string[];
     "refs"?: Array<{
       "id": string;
-      "role": "state_witness" | "inclusion_proof";
-      "critical": true;
-      "proof": {
-        "kind": "rfc6962_merkle";
-        "root_field": "state_root" | "control_event_set_root";
-        "root_digest": string;
-        "leaf_canonical_preimage_b64u": string;
-        "leaf_digest": string;
-        "audit_path": string[];
-        "leaf_index": number;
-        "leaf_count": number;
-      };
+      "role": "authorized_by";
+      "critical": boolean;
     } | {
       "id": string;
-      "role": "authorized_by" | "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "did_inception" | "accountability" | "bootstrap_genesis" | "authorization_closure" | "disclosure_authorization" | "capture_stop";
+      "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "did_inception" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision" | "applet_managed_actor_provision";
       "critical": boolean;
     }>;
-    "causal_refs"?: string[];
-    "preconditions"?: Array<{
-      "cell_id": string;
-      "predicate": {
-        "op": "head_eq" | "head_in" | "satisfies" | "contains";
-        "value"?: unknown;
-        "values"?: unknown[];
-        "predicate_id"?: string;
-      };
-    }>;
-    "auth_context"?: {
-      "authority_refs": string[];
-    };
-    "data_basis"?: string;
-    "seal_basis"?: {
-      "leaves": string[];
-    };
     "payload": Record<string, unknown>;
-    "unsigned"?: Record<string, unknown>;
     "proofs": Array<{
       "kind": "detached_jws";
       "verification_method": string;
       "event_digest": string;
       "created_at": string;
-      "signer_resolution_evidence_ref"?: string;
       "domain"?: string;
       "audience"?: string | string[];
       "proof_purpose"?: "issuer_attestation" | "holder_acceptance";
       "jws": string;
     }>;
-    "requirements"?: {
-      "schema"?: string[];
-      "features"?: string[];
-      "critical_extensions"?: Array<{
-        "id": string;
-        "extension_scope": "event" | "payload" | "proof" | "authz" | "reducer" | "projection" | "encryption";
-        "schema_ref"?: string;
-        "profile_ref"?: string;
-        "parameters"?: Record<string, unknown>;
-        "material_digest"?: string;
-        "evidence_ref"?: string;
-        "fail_closed": true;
-      }>;
+  };
+  "invite_commit": {
+    "commit_id": string;
+    "realm_id": string;
+    "stream_ref": {
+      "kind": "realm";
+      "realm_id": string;
+    } | {
+      "kind": "circle";
+      "realm_id": string;
+      "circle_id": string;
+    } | {
+      "kind": "sidecar";
+      "realm_id": string;
+      "sidecar_id": string;
+    };
+    "stream_position": number;
+    "previous_commit_ref": string | null;
+    "event_ref": string;
+    "authority_generation": number;
+    "authority_ref": string;
+    "committed_at": string;
+    "signature": {
+      "context": "ak.realm_commit_signature.v1";
+      "signature_algorithm": "Ed25519";
+      "verification_method": string;
+      "signed_digest": string;
+      "created_at": string;
+      "sig": string;
     };
   };
+  "authority_locator_hints": Array<{
+    "service_id": string;
+    "source": "invite" | "directory" | "cache";
+    "endpoint_url"?: string;
+  }>;
   "invite_address": {
     "account_id": {
       "principal_id": string;
@@ -2625,120 +2546,29 @@ export type SelfInviteDispatchRequestBody = {
   "idempotency_key": string;
 };
 
-/** `service-operation-dtos.schema.json#/$defs/RealmSealFrontierView` — closed object schema. */
-export type RealmSealFrontierView = {
-  "kind": "realm_seal";
-  "realm_id": string;
-  "seal_basis": {
-    "leaves": string[];
+/** `realm-commit.schema.json#/$defs/stream_head` — closed object schema. */
+export type CommitStreamHead = {
+  "stream_ref": {
+    "kind": "realm";
+    "realm_id": string;
+  } | {
+    "kind": "circle";
+    "realm_id": string;
+    "circle_id": string;
+  } | {
+    "kind": "sidecar";
+    "realm_id": string;
+    "sidecar_id": string;
   };
-  "live_digest_suite": "sha256" | "blake3";
-  "governance_health": {
-    "status": "healthy" | "degraded";
-    "pending_proposals": Array<{
-      "control_proposal_ack": {
-        "kind": "signed_ack";
-        "realm_id": string;
-        "proposal_digest": string;
-        "received_at": string;
-        "decision_due_at": string;
-        "absolute_due_at": string;
-        "defer_count": 0;
-        "authority_set_ref": string;
-        "signature": {
-          "verification_method": string;
-          "payload_digest": string;
-          "created_at": string;
-          "jws": string;
-        };
-      };
-      "decisions": Array<{
-        "kind": "signed_defer";
-        "realm_id": string;
-        "proposal_digest": string;
-        "proposal_ack_digest": string;
-        "decided_at": string;
-        "decision_due_at": string;
-        "absolute_due_at": string;
-        "defer_count": number;
-        "reason_code": "dependency_missing" | "temporarily_unavailable";
-        "authority_set_ref": string;
-        "proof": {
-          "verification_method": string;
-          "payload_digest": string;
-          "created_at": string;
-          "jws": string;
-        };
-      }>;
-      "decision_state": "pending" | "deferred" | "overdue";
-      "fault_reason"?: "control_proposal_decision_overdue";
-      "device_revocation_state"?: {
-        "schema": "ak.schema.device_revocation_state.v1";
-        "account_id": {
-          "principal_id": string;
-          "station_id": string;
-        };
-        "device_id": string;
-        "target_device_authorize_event_id": string;
-        "target_device_generation_ref": number;
-        "proposal_event_id": string;
-        "accepted_at": string;
-        "acceptance_seq": number;
-        "control_proposal_ack": {
-          "kind": "signed_ack";
-          "realm_id": string;
-          "proposal_digest": string;
-          "received_at": string;
-          "decision_due_at": string;
-          "absolute_due_at": string;
-          "defer_count": 0;
-          "authority_set_ref": string;
-          "signature": {
-            "verification_method": string;
-            "payload_digest": string;
-            "created_at": string;
-            "jws": string;
-          };
-        };
-        "status": "revocation_pending";
-        "decision_state": "pending" | "deferred" | "overdue";
-        "denied_actions": unknown[];
-        "decisions"?: Array<{
-          "kind": "signed_defer";
-          "realm_id": string;
-          "proposal_digest": string;
-          "proposal_ack_digest": string;
-          "decided_at": string;
-          "decision_due_at": string;
-          "absolute_due_at": string;
-          "defer_count": number;
-          "reason_code": "dependency_missing" | "temporarily_unavailable";
-          "authority_set_ref": string;
-          "proof": {
-            "verification_method": string;
-            "payload_digest": string;
-            "created_at": string;
-            "jws": string;
-          };
-        }>;
-        "fault_reason"?: "control_proposal_decision_overdue";
-        [key: string]: unknown;
-      };
-    }>;
-    "pending_proposals_complete": boolean;
-  };
-  "observation_coordinate": {
-    "service_id": string;
-    "sequence": number;
-    "observed_at": string;
-  };
+  "stream_position": number;
+  "commit_id": string;
 };
 
-/** `service-operation-dtos.schema.json#/$defs/EventFederationSubmission` — closed object schema. */
-export type EventFederationSubmission = {
+/** `service-operation-dtos.schema.json#/$defs/EventCommitSubmission` — closed object schema. */
+export type EventCommitSubmission = {
   "event": {
     "event_id": string;
-    "kind": "ak.actor.discovery" | "ak.agent.action_approve" | "ak.agent.key.authorize" | "ak.agent.key.revoke" | "ak.agent.provision" | "ak.agent.selector_claim" | "ak.agent.sidecar.exchange.control" | "ak.applet.bridge_error" | "ak.applet.discovery" | "ak.applet.managed_actor.provision" | "ak.applet.registration" | "ak.audit.accessed" | "ak.audit.applet_binding.create" | "ak.audit.applet_binding.state" | "ak.audit.erasure_receipt" | "ak.audit.release" | "ak.audit.ryw_receipt" | "ak.audit.session.authorize" | "ak.audit.session.close" | "ak.audit.session.notice" | "ak.audit.session.request" | "ak.call.create" | "ak.call.recording.start" | "ak.call.state" | "ak.call.summary" | "ak.capability.derived" | "ak.capability.grant" | "ak.capability.relinquish" | "ak.capability.revoke" | "ak.circle.archive" | "ak.circle.create" | "ak.circle.history_access" | "ak.circle.member.state" | "ak.circle.restore" | "ak.circle.tombstone" | "ak.circle.update" | "ak.consent.grant" | "ak.consent.revoke" | "ak.contact.accepted" | "ak.contact.rejected" | "ak.contact.requested" | "ak.contact.scope.update" | "ak.contact.tombstone" | "ak.container.move_item" | "ak.container.rebalance" | "ak.device.authorize" | "ak.device.list_update" | "ak.device.reanchor" | "ak.device.revoke" | "ak.direct_conversation.bound" | "ak.fork.resolution" | "ak.handle.discovery" | "ak.identity.accountability_grant" | "ak.identity.resolution.update" | "ak.invite.accept" | "ak.invite.cancel" | "ak.invite.claim" | "ak.invite.create" | "ak.invite.revoke" | "ak.invite.third_party" | "ak.key_backup.active_series" | "ak.member.identity.update" | "ak.member.state" | "ak.message.create" | "ak.message.redact" | "ak.message.revise" | "ak.mimi.room_binding" | "ak.mls.commit" | "ak.mls.commit_failed" | "ak.mls.genesis" | "ak.mls.keypackage" | "ak.mls.proposal" | "ak.mls.welcome" | "ak.moderation.decision" | "ak.moderation.decision.lift" | "ak.moderation.franking_proof" | "ak.morph.archive" | "ak.morph.create" | "ak.morph.restore" | "ak.morph.stage.set" | "ak.morph.update" | "ak.notary.fault.censorship" | "ak.notary.fault.equivocation" | "ak.organization.discovery" | "ak.organization.moderation_policy" | "ak.pin.add" | "ak.pin.remove" | "ak.pin.reorder" | "ak.policy.action" | "ak.policy.rule" | "ak.policy.set" | "ak.profile.create" | "ak.profile.realm_override" | "ak.profile.update" | "ak.reaction.add" | "ak.reaction.remove" | "ak.realm.alias" | "ak.realm.archive" | "ak.realm.asset_privacy_policy" | "ak.realm.authority.reset" | "ak.realm.create" | "ak.realm.destroy" | "ak.realm.digest_suite_transition" | "ak.realm.discovery" | "ak.realm.freeze" | "ak.realm.history_access" | "ak.realm.inheritance_policy" | "ak.realm.join_rule" | "ak.realm.link" | "ak.realm.media_service" | "ak.realm.notary" | "ak.realm.organization" | "ak.realm.organization_recovery_key.register" | "ak.realm.organization_recovery_key.rotate" | "ak.realm.owner.transfer" | "ak.realm.plaintext_visible_services" | "ak.realm.policy" | "ak.realm.policy_bundle" | "ak.realm.preview_policy" | "ak.realm.profile" | "ak.realm.read_receipt_policy" | "ak.realm.restore" | "ak.realm.schema" | "ak.realm.search_policy" | "ak.realm.set_default_strand" | "ak.realm.tombstone" | "ak.realm.unfreeze" | "ak.realm.upgrade" | "ak.redaction" | "ak.relation.create" | "ak.relation.resolve" | "ak.relation.tombstone" | "ak.relation.update" | "ak.rsvp.set" | "ak.schema.define" | "ak.self.agent.deactivate" | "ak.self.agent.pause" | "ak.self.agent.resume" | "ak.self.moderation.report" | "ak.sidecar.context.attach" | "ak.sidecar.create" | "ak.sovereign.did_policy" | "ak.space.archive" | "ak.space.create" | "ak.space.parent" | "ak.space.restore" | "ak.space.tombstone" | "ak.space.update" | "ak.strand.archive" | "ak.strand.create" | "ak.strand.move" | "ak.strand.reorder" | "ak.strand.restore" | "ak.strand.stage.set" | "ak.strand.tracks.update" | "ak.strand.update" | "ak.strand.watch.set" | "ak.view.create" | "ak.view.reconcile" | "ak.view.update";
+    "kind": string;
     "realm_id"?: string;
     "scope_ref": {
       "kind": "realm";
@@ -2774,7 +2604,7 @@ export type EventFederationSubmission = {
       "kind": "service";
       "service_id": string;
     };
-    "authorization_ref"?: string | "ak:cell:ak.component.realm.authority_root.v1:null" | "ak.authority.direct_conversation_participant.v1" | "ak.authority.direct_conversation_bootstrap_participant.v1";
+    "authorization_ref"?: string | "ak.authority.direct_conversation_participant.v1" | "ak.authority.direct_conversation_bootstrap_participant.v1";
     "applet_id"?: string;
     "external_ref"?: {
       "schema"?: string;
@@ -2788,312 +2618,26 @@ export type EventFederationSubmission = {
       "uri"?: string;
       [key: string]: unknown;
     };
-    "actor_seq": number;
     "created_at": string;
-    "hlc"?: string;
-    "prev_refs": string[];
     "refs"?: Array<{
       "id": string;
-      "role": "state_witness" | "inclusion_proof";
-      "critical": true;
-      "proof": {
-        "kind": "rfc6962_merkle";
-        "root_field": "state_root" | "control_event_set_root";
-        "root_digest": string;
-        "leaf_canonical_preimage_b64u": string;
-        "leaf_digest": string;
-        "audit_path": string[];
-        "leaf_index": number;
-        "leaf_count": number;
-      };
+      "role": "authorized_by";
+      "critical": boolean;
     } | {
       "id": string;
-      "role": "authorized_by" | "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "did_inception" | "accountability" | "bootstrap_genesis" | "authorization_closure" | "disclosure_authorization" | "capture_stop";
+      "role": "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "did_inception" | "accountability" | "bootstrap_genesis" | "disclosure_authorization" | "capture_stop" | "direct_conversation_binding" | "direct_conversation_founding_unit" | "direct_conversation_contact_round" | "direct_conversation_agent_provision" | "applet_managed_actor_provision";
       "critical": boolean;
     }>;
-    "causal_refs"?: string[];
-    "preconditions"?: Array<{
-      "cell_id": string;
-      "predicate": {
-        "op": "head_eq" | "head_in" | "satisfies" | "contains";
-        "value"?: unknown;
-        "values"?: unknown[];
-        "predicate_id"?: string;
-      };
-    }>;
-    "auth_context"?: {
-      "authority_refs": string[];
-    };
-    "data_basis"?: string;
-    "seal_basis"?: {
-      "leaves": string[];
-    };
     "payload": Record<string, unknown>;
-    "unsigned"?: Record<string, unknown>;
-    "proofs": unknown;
-    "requirements"?: {
-      "schema"?: string[];
-      "features"?: string[];
-      "critical_extensions"?: Array<{
-        "id": string;
-        "extension_scope": "event" | "payload" | "proof" | "authz" | "reducer" | "projection" | "encryption";
-        "schema_ref"?: string;
-        "profile_ref"?: string;
-        "parameters"?: Record<string, unknown>;
-        "material_digest"?: string;
-        "evidence_ref"?: string;
-        "fail_closed": true;
-      }>;
-    };
-  };
-  "mls_frontier_leaves"?: Array<{
-    "leaf_index": number;
-    "actor_id": {
-      "kind": "account";
-      "account_id": {
-        "principal_id": string;
-        "station_id": string;
-      };
-    } | {
-      "kind": "service";
-      "service_id": string;
-    };
-    "credential_ref": string;
-  }>;
-  "authorization_lease"?: {
-    "authorization_lease_id": string;
-    "basis_ref": string | {
-      "leaves": string[];
-    } | {
-      "anchor_unit": {
-        "realm_id": string;
-        "event_digests": string[];
-        "unit_digest": string;
-      };
-    };
-    "actor_id": {
-      "kind": "account";
-      "account_id": {
-        "principal_id": string;
-        "station_id": string;
-      };
-    } | {
-      "kind": "service";
-      "service_id": string;
-    };
-    "device_id": string;
-    "scope_ref": {
-      "kind": "realm";
-      "realm_id": string;
-    } | {
-      "kind": "circle";
-      "realm_id": string;
-      "circle_id": string;
-    } | {
-      "kind": "sidecar";
-      "realm_id": string;
-      "sidecar_id": string;
-    } | {
-      "kind": "realm_genesis";
-    };
-    "action": string;
-    "authorization_rule_id": string;
-    "risk_tier": "low" | "medium" | "high";
-    "issued_at": string;
-    "expires_at": string;
-    "authority_set_ref": {
-      "authority_set_id": string;
-      "authority_set_digest": string;
-    };
-    "authority_set_policy": {
-      "schema": "ak.schema.authority_set_policy.v1";
-      "authority_set_id": string;
-      "policy_kind": "principal_control" | "realm_admission";
-      "scope_ref": {
-        "kind": "realm";
-        "realm_id": string;
-      } | {
-        "kind": "circle";
-        "realm_id": string;
-        "circle_id": string;
-      } | {
-        "kind": "sidecar";
-        "realm_id": string;
-        "sidecar_id": string;
-      } | {
-        "kind": "realm_genesis";
-      };
-      "source": {
-        "source_kind": "did_document" | "pcr_device_directory" | "recovery_policy" | "realm_control";
-        "source_ref": string;
-        "source_digest": string;
-        "generation_ref": string;
-      };
-      "authorization_rules": Array<{
-        "rule_id": string;
-        "issuer_role": "identity_recovery" | "accepted_device" | "realm_admission";
-        "allowed_actions": string[];
-        "issuers": Array<{
-          "verification_method": string;
-        }>;
-        "threshold": number;
-      }>;
-    };
     "proofs": Array<{
       "kind": "detached_jws";
       "verification_method": string;
-      "payload_digest": string;
+      "event_digest": string;
       "created_at": string;
       "domain"?: string;
       "audience"?: string | string[];
-      "proof_purpose"?: "issuer_attestation" | "holder_acceptance" | "status_attestation" | "revocation_authorization" | "governance_authorization";
+      "proof_purpose"?: "issuer_attestation" | "holder_acceptance";
       "jws": string;
     }>;
-  };
-  "ingress_receipts": Array<{
-    "receipt_id": string;
-    "event_digest": string;
-    "qualified_ingress_did": string;
-    "received_at": string;
-    "ingress_frontier": string[];
-    "proofs": Array<{
-      "kind": "detached_jws";
-      "verification_method": string;
-      "payload_digest": string;
-      "created_at": string;
-      "domain"?: string;
-      "audience"?: string | string[];
-      "proof_purpose"?: "issuer_attestation" | "holder_acceptance" | "status_attestation" | "revocation_authorization" | "governance_authorization";
-      "jws": string;
-    }>;
-  }>;
-  "control_proposal_ack"?: {
-    "kind": "signed_ack";
-    "realm_id": string;
-    "proposal_digest": string;
-    "received_at": string;
-    "decision_due_at": string;
-    "absolute_due_at": string;
-    "defer_count": 0;
-    "authority_set_ref": string;
-    "signature": {
-      "verification_method": string;
-      "payload_digest": string;
-      "created_at": string;
-      "jws": string;
-    };
-  };
-  "ackless_self_principal_admission_evidence"?: {
-    "device_id": string;
-    "device_authorize_event_id": string;
-    "device_generation_ref": number;
-    "seal_basis_digest": string;
-  };
-  "membership_compensation_evidence"?: {
-    "delegation": {
-      "delegation_id": string;
-      "core": {
-        "authority": "ak.authority.membership_compensation.v1";
-        "admission_id": string;
-        "join_event_id": string;
-        "membership_cell_id": string;
-        "member_id": {
-          "kind": "account";
-          "account_id": {
-            "principal_id": string;
-            "station_id": string;
-          };
-        } | {
-          "kind": "service";
-          "service_id": string;
-        };
-        "join_actor_id": {
-          "kind": "account";
-          "account_id": {
-            "principal_id": string;
-            "station_id": string;
-          };
-        } | {
-          "kind": "service";
-          "service_id": string;
-        };
-        "executed_by"?: {
-          "kind": "account";
-          "account_id": {
-            "principal_id": string;
-            "station_id": string;
-          };
-        } | {
-          "kind": "service";
-          "service_id": string;
-        };
-        "authorization_ref"?: string | "ak:cell:ak.component.realm.authority_root.v1:null" | "ak.authority.direct_conversation_participant.v1" | "ak.authority.direct_conversation_bootstrap_participant.v1";
-        "verification_method": string;
-        "executor_id": {
-          "kind": "account";
-          "account_id": {
-            "principal_id": string;
-            "station_id": string;
-          };
-        } | {
-          "kind": "service";
-          "service_id": string;
-        };
-        "executor_proof_key_kid": string;
-        "resource_id": string;
-        "action": "ak.member.compensate.leave" | "ak.member.compensate.remove";
-        "deadline": string;
-      };
-      "signature": {
-        "verification_method": string;
-        "created_at": string;
-        "jws": string;
-      };
-    };
-    "join_accepted_proof": {
-      "admission_id": string;
-      "join_event_id": string;
-      "accepted_at": string;
-      "issuer_id": string;
-      "signature": {
-        "verification_method": string;
-        "created_at": string;
-        "jws": string;
-      };
-    };
-    "terminal_certificate": {
-      "domain": "ak.membership_compensation.terminal_certificate.v1";
-      "admission_id": string;
-      "delegation_id": string;
-      "operation_id": string;
-      "terminal_state": "failed_after_membership_acceptance" | "failed_after_mls_add";
-      "certified_at": string;
-      "issuer_id": string;
-      "signature": {
-        "verification_method": string;
-        "created_at": string;
-        "jws": string;
-      };
-    };
-    "single_use_cas_token": {
-      "domain": "ak.membership_compensation.single_use_cas.v1";
-      "admission_id": string;
-      "delegation_id": string;
-      "expected_state": "unused";
-      "destination_id": string;
-      "issued_at": string;
-      "expires_at": string;
-      "issuer_id": string;
-      "signature": {
-        "verification_method": string;
-        "created_at": string;
-        "jws": string;
-      };
-    };
-  };
-  "publication_event"?: {
-    "kind"?: "ak.actor.discovery" | "ak.agent.action_approve" | "ak.agent.key.authorize" | "ak.agent.key.revoke" | "ak.agent.provision" | "ak.agent.selector_claim" | "ak.agent.sidecar.exchange.control" | "ak.applet.bridge_error" | "ak.applet.discovery" | "ak.applet.managed_actor.provision" | "ak.applet.registration" | "ak.audit.accessed" | "ak.audit.applet_binding.create" | "ak.audit.applet_binding.state" | "ak.audit.release" | "ak.audit.session.authorize" | "ak.audit.session.close" | "ak.audit.session.notice" | "ak.audit.session.request" | "ak.call.create" | "ak.call.recording.start" | "ak.call.state" | "ak.call.summary" | "ak.capability.derived" | "ak.capability.grant" | "ak.capability.relinquish" | "ak.capability.revoke" | "ak.circle.archive" | "ak.circle.create" | "ak.circle.history_access" | "ak.circle.member.state" | "ak.circle.restore" | "ak.circle.tombstone" | "ak.circle.update" | "ak.consent.grant" | "ak.consent.revoke" | "ak.contact.accepted" | "ak.contact.rejected" | "ak.contact.requested" | "ak.contact.scope.update" | "ak.contact.tombstone" | "ak.container.move_item" | "ak.container.rebalance" | "ak.device.authorize" | "ak.device.list_update" | "ak.device.reanchor" | "ak.device.revoke" | "ak.direct_conversation.bound" | "ak.fork.resolution" | "ak.handle.discovery" | "ak.identity.accountability_grant" | "ak.identity.resolution.update" | "ak.invite.accept" | "ak.invite.cancel" | "ak.invite.claim" | "ak.invite.create" | "ak.invite.revoke" | "ak.invite.third_party" | "ak.key_backup.active_series" | "ak.member.identity.update" | "ak.member.state" | "ak.message.create" | "ak.message.redact" | "ak.message.revise" | "ak.mimi.room_binding" | "ak.mls.commit" | "ak.mls.commit_failed" | "ak.mls.genesis" | "ak.mls.keypackage" | "ak.mls.proposal" | "ak.mls.welcome" | "ak.moderation.decision" | "ak.moderation.decision.lift" | "ak.moderation.franking_proof" | "ak.morph.archive" | "ak.morph.create" | "ak.morph.restore" | "ak.morph.stage.set" | "ak.morph.update" | "ak.notary.fault.censorship" | "ak.notary.fault.equivocation" | "ak.organization.discovery" | "ak.organization.moderation_policy" | "ak.pin.add" | "ak.pin.remove" | "ak.pin.reorder" | "ak.policy.action" | "ak.policy.rule" | "ak.policy.set" | "ak.profile.create" | "ak.profile.realm_override" | "ak.profile.update" | "ak.reaction.add" | "ak.reaction.remove" | "ak.realm.alias" | "ak.realm.archive" | "ak.realm.asset_privacy_policy" | "ak.realm.authority.reset" | "ak.realm.create" | "ak.realm.destroy" | "ak.realm.digest_suite_transition" | "ak.realm.discovery" | "ak.realm.freeze" | "ak.realm.history_access" | "ak.realm.inheritance_policy" | "ak.realm.join_rule" | "ak.realm.link" | "ak.realm.media_service" | "ak.realm.notary" | "ak.realm.organization" | "ak.realm.organization_recovery_key.register" | "ak.realm.organization_recovery_key.rotate" | "ak.realm.owner.transfer" | "ak.realm.plaintext_visible_services" | "ak.realm.policy" | "ak.realm.policy_bundle" | "ak.realm.preview_policy" | "ak.realm.profile" | "ak.realm.read_receipt_policy" | "ak.realm.restore" | "ak.realm.schema" | "ak.realm.search_policy" | "ak.realm.set_default_strand" | "ak.realm.tombstone" | "ak.realm.unfreeze" | "ak.realm.upgrade" | "ak.redaction" | "ak.relation.create" | "ak.relation.resolve" | "ak.relation.tombstone" | "ak.relation.update" | "ak.rsvp.set" | "ak.schema.define" | "ak.self.agent.deactivate" | "ak.self.agent.pause" | "ak.self.agent.resume" | "ak.self.moderation.report" | "ak.sidecar.context.attach" | "ak.sidecar.create" | "ak.sovereign.did_policy" | "ak.space.archive" | "ak.space.create" | "ak.space.parent" | "ak.space.restore" | "ak.space.tombstone" | "ak.space.update" | "ak.strand.archive" | "ak.strand.create" | "ak.strand.move" | "ak.strand.reorder" | "ak.strand.restore" | "ak.strand.stage.set" | "ak.strand.tracks.update" | "ak.strand.update" | "ak.strand.watch.set" | "ak.view.create" | "ak.view.reconcile" | "ak.view.update";
-    "refs"?: unknown;
-    [key: string]: unknown;
   };
 };

@@ -42,7 +42,7 @@ const MIXED_PROFILE_FIELDS: &[&str] = &[
 ];
 
 const LOCAL_PROFILE_SUITES: &[(&str, &str)] = &[(
-    crate::conformance::security_closure::SECURITY_CLOSURE_VECTORS_PROFILE,
+    crate::conformance::helpers::PRIVACY_SECURITY_VECTOR_GROUP_PROFILE,
     "security_negative_profile",
 )];
 

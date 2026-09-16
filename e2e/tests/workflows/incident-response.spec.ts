@@ -75,7 +75,7 @@ test.describe("workflow: incident response", () => {
         discoverability: "listed",
         joinRule: "invite",
         historyAccess: "all_history_for_current_members",
-        encryptionProfile: "none",
+        mlsActivated: false,
         seedMembers: [backend.id, comms.id],
       });
       await Promise.all([
@@ -267,7 +267,7 @@ test.describe("workflow: incident response", () => {
         title: `SEV-1 priority ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
-        encryptionProfile: "mls_rfc9420",
+        mlsActivated: true,
         completeRecoveryKeySetup: true,
       });
 

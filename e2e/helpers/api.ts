@@ -22,7 +22,8 @@ export type ApiRealmOpts = {
   // Closed `realm.schema.json` enums, mirrored from the spec artifacts.
   discoverability?: RealmObject["default_discoverability"];
   historyAccess?: RealmObject["history_access"];
-  encryptionProfile?: RealmObject["encryption_profile"];
+  /// Accept an `ak.mls.genesis` for the new Realm's scope.
+  mlsActivated?: boolean;
   plaintextVisibleServices?: string[];
   invitees?: string[];
   ownerId?: string;
@@ -72,7 +73,7 @@ export async function createRealmViaApi(
       summary: opts.summary,
       discoverability: opts.discoverability ?? "public",
       history_access: opts.historyAccess,
-      encryption_profile: opts.encryptionProfile,
+      mls_activated: opts.mlsActivated,
       plaintext_visible_services: opts.plaintextVisibleServices,
       invitees: opts.invitees,
       ownerId: opts.ownerId,

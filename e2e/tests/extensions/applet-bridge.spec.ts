@@ -44,12 +44,11 @@ import {
   plaintextVisibleServiceDeclarations,
   prepareSignedEventBatchSubmissionsApi,
   projectDidToCoreId,
-  readRealmSealBasis,
+  realmAuthorityRootRef,
   retypeEventDerivedId,
   resolveDefaultStrandId,
   signedEventEnvelope,
   signedRealmGenesisEnvelope,
-  stationNotaryFromDid,
   submitSignedEventApi,
   rawPushFederationEvents,
   typedId,
@@ -72,19 +71,6 @@ import {
 } from "../../helpers/webvh-api";
 
 import type { ActorId, CapabilityGrantObject } from "../../helpers/generated/spec-wire-objects";
-
-async function readAppletMessageAuthorityRefs(
-  request: APIRequestContext,
-  token: string,
-  realmId: string,
-): Promise<string[]> {
-  await waitForRealmControlIdleApi(request, token, realmId);
-  const { leaves } = await readRealmSealBasis(request, token, realmId);
-  if (!Array.isArray(leaves) || leaves.length !== 1 || typeof leaves[0] !== "string") {
-    throw new Error("Applet messages require one accepted control Seal");
-  }
-  return [...leaves] as string[];
-}
 
 // Each case provisions its own identities and Realm; a failed case must not
 // skip the remaining independent admission and replay checks.
@@ -119,6 +105,12 @@ type AppletRegistration = {
   namespace: string;
   status: string;
   registration_event_ref: string;
+  /// Accepted commit coordinate of `registration_event_ref`, as the Station
+  /// reported it on the registration submit outcome.
+  registration_commit?: {
+    commit_id: string;
+    stream_position: number;
+  };
   capability_grants: Array<{
     grant_ref: string;
     actions: string[];
@@ -162,20 +154,7 @@ async function configureAppletPlaintextServices(
     actorId,
     realmId,
     kind: "ak.realm.plaintext_visible_services",
-    authorizationRef: "ak:cell:ak.component.realm.authority_root.v1:null",
-    sealBasis: await readRealmSealBasis(request, token, realmId),
-    preconditions: [
-      {
-        cell_id: cell,
-        predicate: {
-          op: "head_eq",
-          value:
-            currentValue && typeof currentValue === "object"
-              ? currentValue
-              : null,
-        },
-      },
-    ],
+    authorizationRef: realmAuthorityRootRef(undefined, realmId),
     payload: {
       services: plaintextVisibleServiceDeclarations(serviceIds),
     },
@@ -226,7 +205,6 @@ async function revokeAppletRuntime(
     };
   };
   expect(plan.revoke_plan.membership_removals ?? []).toEqual([]);
-  const sealBasis = await readRealmSealBasis(request, token, realmId);
   const revokeEvents = (plan.revoke_plan.capability_revocations ?? []).map(
     (intent) =>
       signedEventEnvelope({
@@ -234,7 +212,6 @@ async function revokeAppletRuntime(
         realmId,
         kind: "ak.capability.revoke",
         scopeRef: effectiveScope,
-        sealBasis,
         authorizationRef: "ak:cell:ak.component.realm.authority_root.v1:null",
         payload: {
           grant_id: intent.grant_id,
@@ -319,7 +296,7 @@ test.describe("applet bridge", () => {
         title: `applet-bridge Demo Space ${stamp}`,
         discoverability: "listed",
         historyAccess: "since_join",
-        encryptionProfile: "none",
+        mlsActivated: false,
       });
       await grantCapabilityEventApi(request, aliceToken, {
         ownerId: alice.id,
@@ -412,8 +389,6 @@ test.describe("applet bridge", () => {
         realmId,
         kind: "ak.member.state",
         // The joining Bot cannot read the Realm before admission. The admin
-        // supplies the real accepted Seal frontier; no synthetic basis is used.
-        sealBasis: await readRealmSealBasis(request, aliceToken, realmId),
         appletId: registration.applet_id,
         // Installation alone cannot authorize a Bot-authored membership write.
         authorizationRef: registration.registration_event_ref,
@@ -434,7 +409,6 @@ test.describe("applet bridge", () => {
         actorId: alice.id,
         realmId,
         kind: "ak.member.state",
-        sealBasis: await readRealmSealBasis(request, aliceToken, realmId),
         authorizationRef: "ak:cell:ak.component.realm.authority_root.v1:null",
         payload: {
           realm_id: realmId,
@@ -524,11 +498,7 @@ test.describe("applet bridge", () => {
         realmId,
         ghostBuilt,
         externalUser,
-        serviceActorSeq: Number(serviceHead?.actor_seq ?? -1) + 1,
-        servicePrevRef:
-          typeof serviceHead?.event_id === "string"
-            ? serviceHead.event_id
-            : undefined,
+        registrationRef: registrationCommitRef(registration),
       });
       const leaseResponse = await issueAuthorizationLeasesApi(
         request,
@@ -581,7 +551,6 @@ test.describe("applet bridge", () => {
           provision_authorization_ref: provisionGrantRef,
           external_user: externalUser,
           ghost_creation: ghostCreation,
-          authority_refs: await readAppletMessageAuthorityRefs(request, aliceToken, realmId),
           payload: { kind: "message", text },
         },
       });
@@ -709,7 +678,6 @@ test.describe("applet bridge", () => {
           provision_authorization_ref: provisionGrantRef,
           external_user: externalUser,
           ghost_creation: ghostCreation,
-          authority_refs: await readAppletMessageAuthorityRefs(request, aliceToken, realmId),
           payload: { kind: "message", text: afterRevokeText },
         },
       });
@@ -1280,12 +1248,9 @@ test.describe("applet inbound transaction push — per-delivery source signature
     sourceServiceId?: string;
     realmId?: string;
     actorId?: ActorId;
-    actorSeq?: number;
-    prevRefs?: string[];
     appletId?: string;
     authorizationRef?: string;
     strandId?: string;
-    authorityRefs?: string[];
     verificationMethod?: string;
     signingKey?: KeyObject;
   }) {
@@ -1306,17 +1271,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
         realm_id: realmId,
       },
       actor_id: actorId,
-      actor_seq: args.actorSeq ?? 0,
       created_at: canonicalEventTimestamp(),
-      hlc: hlcForStamp(args.stamp),
-      prev_refs: args.prevRefs ?? [],
-      ...(args.authorityRefs?.length
-        ? {
-            auth_context: {
-              authority_refs: [...args.authorityRefs].sort(),
-            },
-          }
-        : {}),
       requirements: {
         schema: ["ak.schema.message.v1"],
       },
@@ -1407,14 +1362,6 @@ test.describe("applet inbound transaction push — per-delivery source signature
     // Freeze the ordinary Event basis only after installation grants, membership,
     // and the target Strand have reached accepted control finality.
     await waitForRealmControlIdleApi(request, token, realmId);
-    const sealBasis = await readRealmSealBasis(request, token, realmId);
-    const sealRef = Array.isArray(sealBasis.leaves)
-      ? sealBasis.leaves[0]
-      : undefined;
-    expect(
-      sealRef,
-      "applet transaction fixture requires a current Seal leaf",
-    ).toBeTruthy();
 
     const idempotencyKey = `inbound-ok-${stamp}`;
     const beforeInbound = await queryRealmEventsApi(request, token, realmId);
@@ -1426,15 +1373,12 @@ test.describe("applet inbound transaction push — per-delivery source signature
       sourceServiceId,
       realmId,
       actorId: registration.bot_actor_id,
-      actorSeq: Number(botHead?.actor_seq ?? -1) + 1,
-      prevRefs: botHead ? [String(botHead.event_id)] : [],
       appletId: registration.applet_id,
       authorizationRef: capabilityGrantRefForAction(
         registration,
         "ak.message.create",
       ),
       strandId,
-      authorityRefs: [String(sealRef)],
       verificationMethod: String(
         (signed.applet_package.webhook_auth as Record<string, unknown>).key_ref,
       ),
@@ -1539,10 +1483,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
     const { proofs: originalProducer, ...previousUnsigned } = body.events[0];
     const nextUnsigned = {
       ...previousUnsigned,
-      actor_seq: previousUnsigned.actor_seq + 1,
-      prev_refs: [previousUnsigned.event_id],
       created_at: canonicalEventTimestamp(),
-      hlc: hlcForStamp(stamp + 1),
       external_ref: { ...previousUnsigned.external_ref, external_id: `ext-race-${stamp}` },
     };
     nextUnsigned.event_id = sdkEventDerivedIds(nextUnsigned).event_id;
@@ -1567,10 +1508,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
     }
     const fencedUnsigned = {
       ...nextUnsigned,
-      actor_seq: racedEvent ? nextUnsigned.actor_seq + 1 : nextUnsigned.actor_seq,
-      prev_refs: [racedEvent ? next.event_id : previousUnsigned.event_id],
       created_at: canonicalEventTimestamp(),
-      hlc: hlcForStamp(stamp + 2),
       external_ref: { ...nextUnsigned.external_ref, external_id: `ext-fenced-${stamp}` },
     };
     fencedUnsigned.event_id = sdkEventDerivedIds(fencedUnsigned).event_id;
@@ -2263,7 +2201,6 @@ async function prepareAppletInstallAuthoringBasis(
   grantActionsById: Map<string, string[]>;
 }> {
   const actorId = await currentActorIdApi(request, token);
-  const sealBasis = await readRealmSealBasis(request, token, realmId);
   const registrationPayload = appletRegistrationPayload(signed);
   const registrationManifest = registrationPayload.manifest;
   if (
@@ -2290,7 +2227,6 @@ async function prepareAppletInstallAuthoringBasis(
     kind: "ak.applet.registration",
     createdAt,
     scopeRef: effectiveScope,
-    sealBasis,
     payload: registrationPayload as Record<string, unknown>,
   });
   await advanceEnvelopeToActorFrontier(request, token, registrationEvent);
@@ -2346,8 +2282,7 @@ async function prepareAppletInstallAuthoringBasis(
         {
           kind: "realm_root",
           realm_id: realmId,
-          cell_ref: "ak:cell:ak.component.realm.authority_root.v1:null",
-          controller_epoch_at_issuance: 0,
+          authority_event_ref: realmAuthorityRootRef(undefined, realmId)!,
           authority_generation: 0,
         },
       ],
@@ -2359,11 +2294,8 @@ async function prepareAppletInstallAuthoringBasis(
       actorId,
       realmId,
       kind: "ak.capability.grant",
-      actorSeq: registrationActorSeq + offset + 1,
       createdAt,
-      prevRefs: [previousEventId],
       scopeRef: effectiveScope,
-      sealBasis,
       payload: {
         grant,
       },
@@ -2566,8 +2498,8 @@ async function buildGhostManagedActorCreation(args: {
   realmId: string;
   ghostBuilt: BuiltWebvhGenesis;
   externalUser: { id: string; display_name?: string };
-  serviceActorSeq: number;
-  servicePrevRef?: string;
+  /// Accepted commit coordinate of the exact active Applet registration.
+  registrationRef: Record<string, unknown>;
 }) {
   const externalRef = {
     protocol: "bridge",
@@ -2604,9 +2536,7 @@ async function buildGhostManagedActorCreation(args: {
         actor_id: accountActorId(projectDidToCoreId(args.ghostBuilt.did)),
         initial_resolution: evidence.initialResolution,
         method_history_evidence: evidence.methodHistoryEvidence,
-        service_actor_seq: args.serviceActorSeq,
-        service_prev_refs: args.servicePrevRef ? [args.servicePrevRef] : [],
-        seal_basis: await readRealmSealBasis(args.request, args.token, args.realmId),
+        registration_ref: args.registrationRef,
       },
     },
   });
@@ -2697,6 +2627,28 @@ function detachedJws(
   return `${protectedHeader}..${signature}`;
 }
 
+/// Accepted commit coordinate of an Applet registration Event.
+///
+/// TODO(cotest): source `commit_id` / `stream_position` from the
+/// `ak.self.events.command.submit.v1` outcome once the submission helpers
+/// return the `RealmCommit` the Station produced.
+function registrationCommitRef(
+  registration: AppletRegistration,
+): Record<string, unknown> {
+  const commit = registration.registration_commit;
+  if (!commit) {
+    throw new Error(
+      `Applet registration ${registration.applet_id} has no accepted commit coordinate`,
+    );
+  }
+  return {
+    event_id: registration.registration_event_ref,
+    commit_id: commit.commit_id,
+    stream_ref: { kind: "realm", realm_id: registration.portal_realm_id },
+    stream_position: commit.stream_position,
+  };
+}
+
 function canonicalHash(value: unknown): string {
   return `sha256:${createHash("sha256").update(canonicalJson(value)).digest("hex")}`;
 }
@@ -2708,13 +2660,11 @@ function authoringRequestUnsigned(
     schema: request.schema,
     purpose: request.purpose,
     basis: request.basis,
-    hosting_notary: request.hosting_notary,
+    plan_digest: request.plan_digest,
+    authoring_authority: request.authoring_authority,
     issued_at: request.issued_at,
     expires_at: request.expires_at,
   };
-  if (request.plan_digest !== undefined) {
-    unsigned.plan_digest = request.plan_digest;
-  }
   return unsigned;
 }
 

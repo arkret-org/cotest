@@ -30,8 +30,6 @@
 //!     `join / knock / leave / ban` edges, self-loop guards).
 //!  9. [`scope_circle_id_immutability`] `scope_circle_id` rebind across sequential states of the
 //!     same Strand/Space/Morph MUST be rejected with `scope_rebind_forbidden`.
-//! 11. [`metadata_encryption_floor`] Circle `metadata_encryption_floor` MAY only tighten the parent
-//!     Realm floor; loosening MUST fail with `metadata_encryption_floor_violation`.
 //! 12. [`child_scope_policy`] Space `child_scope_policy` enforcement for each of the four variants
 //!     (`allow_any` / `require_e2ee` / `require_same_scope` / `require_scope_circle_id`).
 
@@ -42,6 +40,5 @@ pub mod effective_scope_mismatch;
 pub mod error_code_paths;
 pub mod member_strict_subset;
 pub mod member_transition_rules;
-pub mod metadata_encryption_floor;
 pub mod scope_circle_id_immutability;
 pub mod strand_scope_visibility;

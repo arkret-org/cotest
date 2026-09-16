@@ -30,8 +30,6 @@ fn main() -> Result<()> {
         "account-handoff-request" => wire::account_handoff_request(input)?,
         "principal-registration-fixture" => wire::principal_registration_fixture(input)?,
         "identity-creation-register-request" => wire::identity_creation_register_request(input)?,
-        "principal-bootstrap-seal" => wire::principal_bootstrap_seal(input)?,
-        "principal-successor-seal" => wire::principal_successor_seal(input)?,
         "managed-actor-author" => wire::managed_actor_author(input)?,
         _ => bail!("unknown cotest-wire command {command:?}"),
     };

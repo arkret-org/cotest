@@ -13,7 +13,6 @@ import {
   canonicalTimestamp,
   createRealmApi,
   grantCapabilityEventApi,
-  readRealmSealBasis,
   refreshEventEnvelopeProof,
   signedEventEnvelope,
   submitSignedEventApi,
@@ -96,7 +95,7 @@ async function setupEncryptedMessage(
     title: `S25 moderation franking ${label} ${Date.now()}`,
     discoverability: "listed",
     history_access: "since_join",
-    encryption_profile: "mls_rfc9420",
+    mls_activated: true,
     plaintext_visible_services: [],
     ownerId: alice.id,
   });
@@ -190,12 +189,7 @@ async function fileModerationReport(
     setup.reporterToken,
     reportEvent,
   );
-  const sealBasis = await readRealmSealBasis(
-    request,
-    setup.reporterToken,
-    setup.realmId,
-  );
-  const sealLeaves = sealBasis.leaves;
+  const sealLeaves: unknown = undefined;
   if (!Array.isArray(sealLeaves) || typeof sealLeaves[0] !== "string") {
     throw new Error("moderation report Realm has no accepted Seal reference");
   }

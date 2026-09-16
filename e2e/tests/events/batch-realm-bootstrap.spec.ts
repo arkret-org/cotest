@@ -56,7 +56,7 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
       ownerId: alice.id,
       title: `Batch bootstrap ${Date.now()}`,
       summary: "cotest registered Realm genesis regression fixture",
-      encryption_profile: "none",
+      mls_activated: false,
     }, {
       onAcceptedBootstrap: (bootstrap) => {
         acceptedBootstrap = bootstrap;

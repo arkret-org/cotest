@@ -20,7 +20,10 @@
 
 import { type APIRequestContext, expect, test } from "../../helpers/arkret-test";
 import { solandBaseUrl } from "../../helpers/env";
-import type { ActorId } from "../../helpers/generated/spec-wire-objects";
+import type {
+  ActorId,
+  CommitStreamHead,
+} from "../../helpers/generated/spec-wire-objects";
 import { stepShot } from "../../helpers/screenshots";
 import {
   accountActorId,
@@ -30,12 +33,12 @@ import {
   canonicalTimestamp,
   createRealmApi,
   prepareSignedEventCbsApi,
-  readAcceptedSeal,
   retypeEventDerivedId,
   signedEventEnvelope,
   submitSignedEventApi,
   typedId,
   wireErrCode,
+  readCommitStreamHeadApi,
 } from "../../helpers/soland-api";
 import {
   assertJointStackNotRequired,
@@ -82,49 +85,15 @@ async function createStrandApi(
   return retypeEventDerivedId(String(envelope.event_id), "strand");
 }
 
-type RealmSealBasis = {
-  leaves: string[];
-  control_event_set_root: string;
-  state_root: string;
-};
-
-async function fetchRealmSealBasis(
+/// The Realm's accepted commit head, as the probe for "did accepted state
+/// advance". A rejected Event produces no RealmCommit, so the head is
+/// unchanged by construction.
+async function fetchRealmCommitHead(
   request: APIRequestContext,
   token: string,
   realmId: string,
-): Promise<RealmSealBasis> {
-  // `ak.self.seals.read.frontier.v1` is the only registered Realm Seal
-  // discovery surface and accepts a closed QUERY body.
-  const frontierUrl = `${solandBaseUrl()}/_arkret/self/seals/frontier`;
-  const response = await request.fetch(frontierUrl, {
-    method: "QUERY",
-    headers: {
-      ...authHeaders(token, "QUERY", frontierUrl),
-      "content-type": "application/json",
-    },
-    data: canonicalJson({ realm_id: realmId }),
-  });
-  const body = (await response.json()) as {
-    frontier?: {
-      kind?: unknown;
-      seal_basis?: { leaves?: unknown };
-    };
-  };
-  expect(
-    response.ok(),
-    `read Realm Seal frontier returned ${response.status()}: ${JSON.stringify(body)}`,
-  ).toBeTruthy();
-  expect(body.frontier?.kind).toBe("realm_seal");
-  const leaves = body.frontier?.seal_basis?.leaves as string[] | undefined;
-  expect(leaves).toEqual([expect.stringMatching(/^ak:seal:/)]);
-  const seal = await readAcceptedSeal(request, token, realmId, leaves![0]);
-  expect(seal.control_event_set_root).toMatch(/^(sha256|blake3):[0-9a-f]{64}$/);
-  expect(seal.state_root).toMatch(/^(sha256|blake3):[0-9a-f]{64}$/);
-  return {
-    leaves: [leaves![0]],
-    control_event_set_root: String(seal.control_event_set_root),
-    state_root: String(seal.state_root),
-  };
+): Promise<CommitStreamHead | undefined> {
+  return await readCommitStreamHeadApi(request, token, realmId);
 }
 
 // `ak.relation.create` derives `ak:relation:` from the create Event, so the
@@ -318,7 +287,7 @@ test.describe("core object invariants", () => {
     const targetListId = typedId("space");
     const positionCell = `ak:cell:ak.component.strand.position.v1:${boardSpaceId}:${strandId}`;
 
-    const initialBasis = await fetchRealmSealBasis(
+    const initialHead = await fetchRealmCommitHead(
       request,
       aliceToken,
       realmId,
@@ -328,13 +297,6 @@ test.describe("core object invariants", () => {
       actorId: alice.id,
       realmId,
       kind: "ak.strand.move",
-      preconditions: [
-        {
-          cell_id: positionCell,
-          predicate: { op: "head_eq", value: null },
-        },
-      ],
-      sealBasis: initialBasis,
       payload: {
         board_space_id: boardSpaceId,
         strand_id: strandId,
@@ -348,13 +310,13 @@ test.describe("core object invariants", () => {
     });
 
     await expect
-      .poll(() => fetchRealmSealBasis(request, aliceToken, realmId), {
+      .poll(() => fetchRealmCommitHead(request, aliceToken, realmId), {
         message:
-          "initial Strand position Control Move becomes covered by a later Seal",
+          "the initial Strand position move advances the Realm commit head",
         timeout: 30_000,
       })
-      .not.toEqual(initialBasis);
-    const acceptedBasis = await fetchRealmSealBasis(
+      .not.toEqual(initialHead);
+    const acceptedHead = await fetchRealmCommitHead(
       request,
       aliceToken,
       realmId,
@@ -363,16 +325,6 @@ test.describe("core object invariants", () => {
       actorId: alice.id,
       realmId,
       kind: "ak.strand.move",
-      preconditions: [
-        {
-          cell_id: positionCell,
-          predicate: {
-            op: "head_eq",
-            value: { list_space_id: staleExpectedListId, rank: "m" },
-          },
-        },
-      ],
-      sealBasis: acceptedBasis,
       payload: {
         board_space_id: boardSpaceId,
         strand_id: strandId,
@@ -397,23 +349,16 @@ test.describe("core object invariants", () => {
     expect(staleMove.status()).toBe(409);
     expect(wireErrCode(await staleMove.json())).toBe("failed_precondition");
 
-    const basisAfterReject = await fetchRealmSealBasis(
+    const headAfterReject = await fetchRealmCommitHead(
       request,
       aliceToken,
       realmId,
     );
-    expect(basisAfterReject).toEqual(acceptedBasis);
+    expect(headAfterReject).toEqual(acceptedHead);
     const freshMove = signedEventEnvelope({
       actorId: alice.id,
       realmId,
       kind: "ak.strand.move",
-      preconditions: [
-        {
-          cell_id: positionCell,
-          predicate: { op: "head_eq", value: initialPosition },
-        },
-      ],
-      sealBasis: basisAfterReject,
       payload: {
         board_space_id: boardSpaceId,
         strand_id: strandId,

@@ -42,7 +42,6 @@ pub mod profile_claim_gate;
 pub mod protocol_payloads;
 pub mod realm_wire_round_trip;
 pub mod schema_policy_realtime;
-pub mod security_closure_fixture;
 pub mod security_transaction_live;
 pub mod service_surface;
 pub mod soland_teabay_directory_sync;

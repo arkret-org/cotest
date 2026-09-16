@@ -72,7 +72,7 @@ export class GarthTestClient implements TestClient {
     await this.#bridge.openGarthClient({
       handoffId: handoff.handoffId,
       solandBaseUrl: this.#endpoints.solandBaseUrl,
-      actorId: founded.accountId.principal_id,
+      accountId: founded.accountId,
       deviceId: founded.deviceId,
     });
     this.#handoffs.set(label, handoff.handoffId);

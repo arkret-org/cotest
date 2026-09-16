@@ -19,7 +19,6 @@ import {
   canonicalEventTimestamp,
   canonicalJson,
   canonicalTimestamp,
-  readRealmSealBasis,
   registeredEventVerificationMethod,
   seedConformanceRealmBasisApi,
   signedEventEnvelope,
@@ -268,10 +267,7 @@ export async function prepareSignalEnvelope(
     ).toBe(200);
   }
   let basis: Record<string, unknown>;
-  try {
-    basis = await readRealmSealBasis(request, token, realmId);
-    envelope.seal_ref = (basis.leaves as string[])[0];
-  } catch {
+  {
     basis = await seedConformanceRealmBasisApi(
       request,
       realmId,
@@ -286,7 +282,6 @@ export async function prepareSignalEnvelope(
     deviceId,
     realmId,
     envelope.scope_ref as Record<string, unknown>,
-    basis,
   );
   const encryptedPayload = envelope.encrypted_payload as Record<string, unknown>;
   const keyRef = encryptedPayload.key_ref as Record<string, unknown>;
@@ -309,7 +304,6 @@ async function ensureSignalMlsBasis(
   deviceId: string,
   realmId: string,
   scopeRef: Record<string, unknown>,
-  sealBasis: Record<string, unknown>,
 ): Promise<SignalMlsBasis> {
   const cacheKey = canonicalJson(scopeRef);
   const cached = signalMlsBasisCache.get(cacheKey);
@@ -331,7 +325,6 @@ async function ensureSignalMlsBasis(
       kind: "ak.mls.genesis",
       createdAt,
       scopeRef,
-      sealBasis,
       payload: {
         mls_group_id: mlsGroupId,
         effective_scope: scopeRef,

@@ -60,6 +60,9 @@ const TARGETS = [
   { file: "invite.schema.json", typeName: "InviteObject" },
   { file: "event-payload.schema.json", pointer: "#/$defs/membership_payload", typeName: "MembershipPayload" },
   { file: "realm.schema.json", typeName: "RealmObject" },
+  // The closed security-root a `ak.realm.create` carries. Its three initial
+  // policy axes live here, not in separate bootstrap facet Events.
+  { file: "realm-genesis.schema.json", typeName: "RealmGenesisObject" },
   { file: "space.schema.json", typeName: "SpaceObject" },
   { file: "capability-grant.schema.json", typeName: "CapabilityGrantObject" },
   {
@@ -77,15 +80,18 @@ const TARGETS = [
     pointer: "#/$defs/self_invite_dispatch_request_body",
     typeName: "SelfInviteDispatchRequestBody",
   },
+  // One independent stream's current head. A Realm, each Circle and each
+  // Sidecar own separate linear streams, so a head names its own stream and
+  // there is no Realm-global position.
   {
-    file: "service-operation-dtos.schema.json",
-    pointer: "#/$defs/RealmSealFrontierView",
-    typeName: "RealmSealFrontierView",
+    file: "realm-commit.schema.json",
+    pointer: "#/$defs/stream_head",
+    typeName: "CommitStreamHead",
   },
   {
     file: "service-operation-dtos.schema.json",
-    pointer: "#/$defs/EventFederationSubmission",
-    typeName: "EventFederationSubmission",
+    pointer: "#/$defs/EventCommitSubmission",
+    typeName: "EventCommitSubmission",
   },
 ];
 

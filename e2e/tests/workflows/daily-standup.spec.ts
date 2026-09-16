@@ -67,7 +67,7 @@ test.describe("workflow: async daily standup", () => {
         summary: "Async standup channel",
         discoverability: "listed",
         joinRule: "invite",
-        encryptionProfile: "none",
+        mlsActivated: false,
         seedMembers: [pat.id, quincy.id],
       });
       await Promise.all([
@@ -194,7 +194,7 @@ test.describe("workflow: async daily standup", () => {
         summary: "Outbox + offline persistence",
         discoverability: "listed",
         joinRule: "invite",
-        encryptionProfile: "none",
+        mlsActivated: false,
       });
       await patPage.gotoTimelineRealm(realmId);
 
@@ -268,7 +268,7 @@ test.describe("workflow: async daily standup", () => {
         summary: "Lin redacts their own standup",
         discoverability: "listed",
         joinRule: "invite",
-        encryptionProfile: "none",
+        mlsActivated: false,
       });
       await linPage.sendTimelineMessage(realmId, wrongTemplate);
 

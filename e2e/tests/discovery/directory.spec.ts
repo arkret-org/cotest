@@ -28,7 +28,6 @@ import {
   canonicalJson,
   prepareSignedEventSubmissionApi,
   principalControlRealmForId,
-  readRealmSealBasis,
   signedEventEnvelope,
   submitPrincipalSuccessorSealApi,
   wireErrCode,
@@ -236,7 +235,6 @@ test.describe("discovery", () => {
       kind: "ak.profile.create",
       realmId: bobRealmId,
       actorId: bob.id,
-      sealBasis: await readRealmSealBasis(request, bobToken, bobRealmId),
       payload: {
         object: {
           schema: "ak.schema.actor_profile.v1",
@@ -381,7 +379,7 @@ test.describe("discovery", () => {
         title: `S24 Presence ${stamp}`,
         discoverability: "unlisted",
         historyAccess: "since_join",
-        encryptionProfile: "mls_rfc9420",
+        mlsActivated: true,
       });
       await bobPage.inviteFromAdmin(presenceRealmId, alice.id);
       await alicePage.acceptInviteFromNotifications(presenceRealmId);

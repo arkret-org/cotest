@@ -214,34 +214,6 @@ fn proof_context_domain_separation_vector_runs_clean() {
         .expect("per-family proof context domain separation must hold");
 }
 
-/// 2026-08-17 — snapshot witness attestations became a typed object family
-/// signed under their own context over a signature-free projection. Quorum
-/// counting, witness authorization and the issuer's binding to the final sorted
-/// list are cross-object rules.
-#[test]
-fn realm_state_snapshot_witness_quorum_attestation_vector_runs_clean() {
-    assert_eq!(
-        cotest::conformance::VECTOR_ID_REALM_STATE_SNAPSHOT_WITNESS_QUORUM_ATTESTATION,
-        "ak.vector.realm_state_snapshot.witness_quorum_attestation.v1"
-    );
-    cotest::conformance::run_realm_state_snapshot_witness_quorum_attestation_vector()
-        .expect("snapshot witness quorum attestation vector must pass");
-}
-
-/// 2026-08-17 — `event-and-patch.md` §4.2.4 pinned against the machine-readable
-/// redactable-field registry: `$op="unset"` on a registered content-carrier
-/// slot is a slot-existence violation, while the metadata members stay
-/// ordinary optional fields.
-#[test]
-fn patch_redactable_content_slot_unset_ban_vector_runs_clean() {
-    assert_eq!(
-        cotest::conformance::VECTOR_ID_PATCH_REDACTABLE_CONTENT_SLOT_UNSET_BAN,
-        "ak.vector.patch.redactable_content_slot_unset_ban.v1"
-    );
-    cotest::conformance::run_patch_redactable_content_slot_unset_ban_vector()
-        .expect("redactable content slot unset ban vector must pass");
-}
-
 #[test]
 fn presence_signal_receiver_vector_suite_runs_clean() {
     run_presence_signal_vector_suite().expect("presence receiver vectors must pass");

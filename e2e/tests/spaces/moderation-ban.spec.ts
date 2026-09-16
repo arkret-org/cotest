@@ -22,7 +22,6 @@ import {
   prepareEventForAuthorizationLeaseApi,
   prepareSignedEventCbsApi,
   queryRealmEventsApi,
-  readRealmSealBasis,
   refreshEventEnvelopeProof,
   resolveDefaultStrandId,
   sendMessageApi,
@@ -108,17 +107,10 @@ test.describe("moderation and ban", () => {
       },
     });
     await advanceEnvelopeToActorFrontier(request, bobToken, reportEvent);
-    const sealBasis = await readRealmSealBasis(request, bobToken, realmId);
-    const sealRef = Array.isArray(sealBasis.leaves) ? sealBasis.leaves[0] : undefined;
-    expect(typeof sealRef, "moderation report Seal reference").toBe("string");
     const proof = Array.isArray(reportEvent.proofs)
       ? (reportEvent.proofs[0] as Record<string, unknown> | undefined)
       : undefined;
     const verificationMethod = String(proof?.verification_method ?? "");
-    reportEvent.auth_context = {
-      authority_refs: [sealRef],
-    };
-    reportEvent.data_basis = sealRef;
     refreshEventEnvelopeProof(reportEvent, verificationMethod);
     const reportUrl = `${solandBaseUrl()}/_arkret/self/moderation/report`;
     const reportResp = await request.post(reportUrl, {

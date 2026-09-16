@@ -56,7 +56,6 @@ arkret-hlc = { path = "../arkret-rust-sdk/crates/hlc" }
 arkret-http-client = { path = "../arkret-rust-sdk/crates/http-client" }
 arkret-identifiers = { path = "../arkret-rust-sdk/crates/identifiers" }
 arkret-identity = { path = "../arkret-rust-sdk/crates/identity" }
-arkret-lattice-registry = { path = "../arkret-rust-sdk/crates/lattice-registry" }
 arkret-models-collaboration = { path = "../arkret-rust-sdk/crates/models-collaboration" }
 arkret-models-crypto = { path = "../arkret-rust-sdk/crates/models-crypto" }
 arkret-models-discovery = { path = "../arkret-rust-sdk/crates/models-discovery" }
@@ -167,7 +166,6 @@ arkret-hlc = { workspace = true }
 arkret-http-client = { workspace = true }
 arkret-identifiers = { workspace = true }
 arkret-identity = { workspace = true }
-arkret-lattice-registry = { workspace = true }
 arkret-models-collaboration = { workspace = true }
 arkret-models-crypto = { workspace = true }
 arkret-models-discovery = { workspace = true }

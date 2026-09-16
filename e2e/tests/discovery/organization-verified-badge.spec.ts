@@ -63,7 +63,6 @@ async function submitOrganizationStatement(
       actorId,
       realmId,
       kind: "ak.realm.organization",
-      schemaId: "ak.schema.event_payload.v1",
       payload: statement,
     }) },
   });
@@ -199,7 +198,6 @@ test.describe("directory verified organization badge", () => {
           actorId: alice.id,
           realmId,
           kind: "ak.realm.organization",
-          schemaId: "ak.schema.event_payload.v1",
           payload: {
             statement_id: activeStatementId,
             realm_id: realmId,

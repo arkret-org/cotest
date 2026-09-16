@@ -311,13 +311,13 @@ export class ProvisioningBridge {
   async openGarthClient(args: {
     handoffId: string;
     solandBaseUrl: string;
-    actorId: string;
+    accountId: { principal_id: string; station_id: string };
     deviceId: string;
   }): Promise<{ storeRoot: string }> {
     const result = await this.#call("garth_client_open", {
       handoff_id: args.handoffId,
       soland_base_url: args.solandBaseUrl,
-      actor_id: args.actorId,
+      account_id: args.accountId,
       device_id: args.deviceId,
     });
     return { storeRoot: String(result.store_root) };

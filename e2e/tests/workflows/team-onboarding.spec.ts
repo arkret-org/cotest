@@ -50,7 +50,7 @@ test.describe("workflow: team onboarding", () => {
         summary: "Day-1 onboarding hub",
         discoverability: "listed",
         joinRule: "invite",
-        encryptionProfile: "none",
+        mlsActivated: false,
         seedMembers: [yuki.id],
       });
       await yukiPage.acceptInvite(realmId);
@@ -149,7 +149,7 @@ test.describe("workflow: team onboarding", () => {
         summary: "Day-1 onboarding hub with a pinned welcome",
         discoverability: "listed",
         joinRule: "invite",
-        encryptionProfile: "none",
+        mlsActivated: false,
         seedMembers: [yuki.id],
       });
       await yukiPage.acceptInvite(realmId);
@@ -228,7 +228,7 @@ test.describe("workflow: team onboarding", () => {
         summary: "Edit the welcome twice; assert the numeric write-status",
         discoverability: "listed",
         joinRule: "invite",
-        encryptionProfile: "none",
+        mlsActivated: false,
       });
       await meiPage.sendTimelineMessage(realmId, welcome);
 

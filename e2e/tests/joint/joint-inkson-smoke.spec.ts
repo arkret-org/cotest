@@ -9,7 +9,6 @@ import {
   canonicalJson,
   grantCapabilityEventApi,
   prepareSignedEventCbsApi,
-  readRealmSealBasis,
   retypeEventDerivedId,
   signedEventEnvelope,
 } from "../../helpers/soland-api";
@@ -97,7 +96,7 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
         discoverability: "listed",
         joinRule: "invite",
         historyAccess: "all_history_for_current_members",
-        encryptionProfile: "none",
+        mlsActivated: false,
       });
       const batchEvents = (body: Record<string, unknown>): IngressEvent[] =>
         ingressEvents(
@@ -441,7 +440,7 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
         discoverability: "listed",
         joinRule: "invite",
         historyAccess: "since_join",
-        encryptionProfile: "none",
+        mlsActivated: false,
       });
       await grantInviteConsentArkret(
         request,
@@ -565,18 +564,11 @@ async function submitSignedEvent(
     serverUrl,
     realmId,
   );
-  const sealBasis =
-    kind === "ak.member.state"
-      ? await readRealmSealBasis(request, session.grantJwt, realmId)
-      : undefined;
   const envelope = signedEventEnvelope({
     actorId,
     realmId,
     kind,
-    actorSeq: frontier.nextActorSeq,
-    prevRefs: frontier.frontierEventIds,
     payload,
-    sealBasis,
   });
   await prepareSignedEventCbsApi(request, session.grantJwt, envelope);
   const response = await request.post(url, {

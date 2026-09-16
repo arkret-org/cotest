@@ -1,15 +1,18 @@
-//! C.8 — Snapshot-envelope fuzz harness.
+//! Authority snapshot and commit fuzz harness.
 //!
-//! Extension of the `envelope_fuzz` shape: feeds `arbitrary`-derived
-//! inputs through the snapshot manifest + chunk header validators and
-//! asserts the typed deserializers never panic on adversarial inputs.
+//! The objects a governance Station hands a joining client are the signed
+//! typed snapshot and the per-stream commit tails. Both are parsed before any
+//! signature is checked, so a panic in either deserializer is reachable
+//! pre-authentication. Three entry points:
 //!
-//! Two entry points:
-//!   - [`fuzz_realm_state_snapshot_manifest`] — drives the manifest envelope.
-//!   - [`fuzz_realm_state_snapshot_chunk_lists`] — drives a chunk payload's four auxiliary lists.
+//!   - [`fuzz_realm_state_snapshot`] — the signed typed snapshot envelope.
+//!   - [`fuzz_realm_commit`] — one authority-signed commit, including the shape validator that
+//!     enforces the position / predecessor rule.
+//!   - [`fuzz_stream_scan_outcome`] — a returned stream tail, including the contiguity check that
+//!     walks predecessor links pairwise.
 //!
-//! Both use the same panic-catch pattern as `envelope_fuzz` so a fuzz
-//! finding surfaces as `Err(message)` rather than aborting the harness.
+//! All three use the same panic-catch pattern as `envelope_fuzz`, so a finding
+//! surfaces as `Err(message)` rather than aborting the harness.
 
 use arbitrary::{Arbitrary, Unstructured};
 use arkret_wire::SchemaId;
@@ -25,55 +28,67 @@ fn registry() -> arkret_schema::ProtocolSchemaRegistry {
         .unwrap_or_default()
 }
 
-/// `arbitrary`-derived input shaped to the snapshot manifest. Field
-/// names mirror the canonical envelope so the schema validator sees a
-/// realistic structural shape, while values are random.
+/// `arbitrary`-derived input shaped to the signed typed snapshot.
+///
+/// `visible_stream_heads` is the member worth shaking: it is the caller's only
+/// evidence of which streams the snapshot covers, and a decoder that mis-parses
+/// it hands the client a silently narrower or wider approved set.
 #[derive(Debug, Arbitrary)]
-pub struct FuzzRealmStateSnapshotManifestInput {
-    pub id: String,
+pub struct FuzzRealmStateSnapshotInput {
+    pub snapshot_id: String,
     pub realm_id: String,
-    pub reducer_profile: String,
-    pub security_class: String,
-    pub schema_profile_refs: Vec<String>,
-    pub state_digest: String,
-    pub frontier: ArbValue,
-    pub event_set_commitment: ArbValue,
-    pub chunks: ArbValue,
-    pub created_by: String,
+    pub authority_generation: u64,
+    pub head_stream_kind: String,
+    pub head_circle_id: String,
+    pub head_position: u64,
+    pub head_commit_id: String,
+    pub current_state_entries: ArbValue,
+    pub history_access: String,
+    pub floor_position: u64,
     pub created_at: String,
-    pub authority_binding: ArbValue,
     pub signature: ArbValue,
-    pub eligibility_context: ArbValue,
 }
 
-impl FuzzRealmStateSnapshotManifestInput {
+impl FuzzRealmStateSnapshotInput {
     fn to_json(&self) -> Value {
         json!({
-            "id": self.id,
+            "snapshot_id": self.snapshot_id,
             "realm_id": self.realm_id,
-            "reducer_profile": self.reducer_profile,
-            "security_class": self.security_class,
-            "schema_profile_refs": self.schema_profile_refs,
-            "state_digest": self.state_digest,
-            "frontier": self.frontier.0,
-            "event_set_commitment": self.event_set_commitment.0,
-            "chunks": self.chunks.0,
-            "created_by": self.created_by,
+            "authority_generation": self.authority_generation,
+            "visible_stream_heads": [{
+                "stream_ref": {
+                    "kind": self.head_stream_kind,
+                    "realm_id": self.realm_id,
+                    "circle_id": self.head_circle_id,
+                },
+                "stream_position": self.head_position,
+                "commit_id": self.head_commit_id,
+            }],
+            "current_state_entries": self.current_state_entries.0,
+            "retention_and_history_floor": {
+                "history_access": self.history_access,
+                "stream_floors": [{
+                    "stream_ref": {
+                        "kind": self.head_stream_kind,
+                        "realm_id": self.realm_id,
+                        "circle_id": self.head_circle_id,
+                    },
+                    "oldest_position": self.floor_position,
+                }],
+            },
             "created_at": self.created_at,
-            "authority_binding": self.authority_binding.0,
             "signature": self.signature.0,
-            "eligibility_context": self.eligibility_context.0,
         })
     }
 }
 
-/// Fuzz the snapshot manifest envelope.
-pub fn fuzz_realm_state_snapshot_manifest(data: &[u8]) -> Result<(), String> {
+/// Fuzz the signed typed snapshot envelope.
+pub fn fuzz_realm_state_snapshot(data: &[u8]) -> Result<(), String> {
     catch(|| {
-        let _ = serde_json::from_slice::<arkret_state::RealmStateSnapshotManifest>(data);
+        let _ = serde_json::from_slice::<arkret_wire::RealmStateSnapshot>(data);
     })?;
     let mut unstructured = Unstructured::new(data);
-    let Ok(input) = FuzzRealmStateSnapshotManifestInput::arbitrary(&mut unstructured) else {
+    let Ok(input) = FuzzRealmStateSnapshotInput::arbitrary(&mut unstructured) else {
         return Ok(());
     };
     let value = input.to_json();
@@ -81,112 +96,119 @@ pub fn fuzz_realm_state_snapshot_manifest(data: &[u8]) -> Result<(), String> {
         let _ = registry().validate_value(SchemaId::REALM_STATE_SNAPSHOT_V1, &value);
     })?;
     catch(|| {
-        let _ = serde_json::from_value::<arkret_state::RealmStateSnapshotManifest>(value.clone());
+        let _ = serde_json::from_value::<arkret_wire::RealmStateSnapshot>(value.clone());
     })
 }
 
-/// `arbitrary`-derived input shaped to a chunk payload's auxiliary lists.
-///
-/// `conflict_records[]`, `soft_failed[]`, `quarantined[]` and `erasure_stubs[]`
-/// are not `state_digest` leaves, so nothing downstream re-derives them: a
-/// decoder that mis-parses one hands the caller a wrong `⊥` or erasure set with
-/// no digest to catch it. The `conflict_records` union is fuzzed on its `kind`
-/// tag for the same reason.
+/// `arbitrary`-derived input shaped to one authority-signed commit.
 #[derive(Debug, Arbitrary)]
-pub struct FuzzRealmStateSnapshotChunkListsInput {
-    pub realm_state_snapshot_ref: String,
-    pub index: u32,
-    pub reducer_profile: String,
-    pub conflict_kind: String,
-    pub cell_ref: String,
-    pub event_id: String,
-    pub actor_id: String,
-    pub actor_seq: u64,
-    pub include_soft_failed: bool,
-    pub include_quarantined: bool,
-    pub include_erasure_stub: bool,
-    pub stub_schema: String,
+pub struct FuzzRealmCommitInput {
+    pub commit_id: String,
+    pub realm_id: String,
+    pub stream_kind: String,
+    pub circle_id: String,
+    pub sidecar_id: String,
+    pub stream_position: u64,
+    pub previous_commit_ref: Option<String>,
+    pub event_ref: String,
+    pub authority_generation: u64,
+    pub authority_ref: String,
+    pub committed_at: String,
+    pub signature: ArbValue,
 }
 
-impl FuzzRealmStateSnapshotChunkListsInput {
+impl FuzzRealmCommitInput {
     fn to_json(&self) -> Value {
-        let non_accepted = json!({
-            "event_id": self.event_id,
-            "actor_id": self.actor_id,
-            "actor_seq": self.actor_seq,
-        });
         json!({
-            "chunk_kind": "realm_state_snapshot_chunk",
-            "realm_state_snapshot_ref": self.realm_state_snapshot_ref,
-            "index": self.index,
-            "reducer_profile": self.reducer_profile,
-            "items": [],
-            "conflict_records": [{
-                "kind": self.conflict_kind,
-                "cell_ref": self.cell_ref,
-                "event_id": self.event_id,
-                "actor_id": self.actor_id,
-                "actor_seq": self.actor_seq,
-            }],
-            "soft_failed": if self.include_soft_failed {
-                json!([non_accepted])
-            } else {
-                json!([])
+            "commit_id": self.commit_id,
+            "realm_id": self.realm_id,
+            "stream_ref": {
+                "kind": self.stream_kind,
+                "realm_id": self.realm_id,
+                "circle_id": self.circle_id,
+                "sidecar_id": self.sidecar_id,
             },
-            "quarantined": if self.include_quarantined {
-                json!([non_accepted])
-            } else {
-                json!([])
-            },
-            "erasure_stubs": if self.include_erasure_stub {
-                json!([{"cell_ref": self.cell_ref, "stub": {"schema": self.stub_schema}}])
-            } else {
-                json!([])
-            },
+            "stream_position": self.stream_position,
+            "previous_commit_ref": self.previous_commit_ref,
+            "event_ref": self.event_ref,
+            "authority_generation": self.authority_generation,
+            "authority_ref": self.authority_ref,
+            "committed_at": self.committed_at,
+            "signature": self.signature.0,
         })
     }
 }
 
-/// Fuzz a chunk payload's auxiliary lists.
-pub fn fuzz_realm_state_snapshot_chunk_lists(data: &[u8]) -> Result<(), String> {
+/// Fuzz one `RealmCommit`, including its position / predecessor shape rule.
+pub fn fuzz_realm_commit(data: &[u8]) -> Result<(), String> {
     catch(|| {
-        let _ = serde_json::from_slice::<arkret_state::RealmStateSnapshotChunkPayload>(data);
+        let _ = serde_json::from_slice::<arkret_wire::RealmCommit>(data);
     })?;
     let mut unstructured = Unstructured::new(data);
-    let Ok(input) = FuzzRealmStateSnapshotChunkListsInput::arbitrary(&mut unstructured) else {
+    let Ok(input) = FuzzRealmCommitInput::arbitrary(&mut unstructured) else {
         return Ok(());
     };
     let value = input.to_json();
     catch(|| {
-        let _ = registry().validate_value(SchemaId::REALM_STATE_SNAPSHOT_CHUNK_V1, &value);
+        let _ = registry().validate_value(SchemaId::REALM_COMMIT_V1, &value);
     })?;
     catch(|| {
-        let _ =
-            serde_json::from_value::<arkret_state::RealmStateSnapshotChunkPayload>(value.clone());
+        if let Ok(commit) = serde_json::from_value::<arkret_wire::RealmCommit>(value.clone()) {
+            let _ = commit.validate_shape();
+        }
     })
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+/// `arbitrary`-derived input shaped to a returned stream tail.
+#[derive(Debug, Arbitrary)]
+pub struct FuzzStreamScanOutcomeInput {
+    pub commits: ArbValue,
+    pub truncated: bool,
+    pub realm_id: String,
+    pub stream_kind: String,
+    pub circle_id: String,
+    pub after_position: Option<u64>,
+    pub limit: u16,
+}
 
-    /// Canonical-corpus seed: the empty byte string must NOT panic the
-    /// harness. The validator returns `Ok` or typed `Err` — never a panic.
-    #[test]
-    fn empty_input_does_not_panic_manifest() {
-        let _ = fuzz_realm_state_snapshot_manifest(&[]);
+impl FuzzStreamScanOutcomeInput {
+    fn outcome_json(&self) -> Value {
+        json!({
+            "commits": self.commits.0,
+            "truncated": self.truncated,
+        })
     }
 
-    #[test]
-    fn empty_input_does_not_panic_chunk_header() {
-        let _ = fuzz_realm_state_snapshot_chunk_lists(&[]);
+    fn request_json(&self) -> Value {
+        json!({
+            "realm_id": self.realm_id,
+            "stream_ref": {
+                "kind": self.stream_kind,
+                "realm_id": self.realm_id,
+                "circle_id": self.circle_id,
+            },
+            "after_position": self.after_position,
+            "limit": self.limit,
+        })
     }
+}
 
-    /// Pseudo-random byte string at typical libFuzzer corpus size (4 KiB).
-    #[test]
-    fn four_kib_random_does_not_panic() {
-        let data: Vec<u8> = (0..4096).map(|i| (i * 31 + 7) as u8).collect();
-        let _ = fuzz_realm_state_snapshot_manifest(&data);
-        let _ = fuzz_realm_state_snapshot_chunk_lists(&data);
-    }
+/// Fuzz a stream tail against its own request, exercising the contiguity walk.
+pub fn fuzz_stream_scan_outcome(data: &[u8]) -> Result<(), String> {
+    catch(|| {
+        let _ = serde_json::from_slice::<arkret_wire::StreamScanOutcome>(data);
+    })?;
+    let mut unstructured = Unstructured::new(data);
+    let Ok(input) = FuzzStreamScanOutcomeInput::arbitrary(&mut unstructured) else {
+        return Ok(());
+    };
+    let outcome_value = input.outcome_json();
+    let request_value = input.request_json();
+    catch(|| {
+        let outcome = serde_json::from_value::<arkret_wire::StreamScanOutcome>(outcome_value);
+        let request = serde_json::from_value::<arkret_wire::StreamScanRequest>(request_value);
+        if let (Ok(outcome), Ok(request)) = (outcome, request) {
+            let _ = outcome.validate_for_request(&request);
+        }
+    })
 }

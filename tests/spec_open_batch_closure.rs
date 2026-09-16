@@ -3,12 +3,10 @@ use cotest::conformance::{
     run_did_binding_digest_kat_suite, run_key_backup_delete_authority_vector,
     run_keypackage_self_claim_authorization_idempotency_vector,
     run_mimi_provider_directory_signature_vector, run_signal_device_authorization_domain_vector,
-    run_state_model_round_trip_suite,
 };
 
 #[test]
-fn spec_open_batch_exact_vector_runners_close_all_eight_ids() -> Result<()> {
-    run_state_model_round_trip_suite()?;
+fn spec_open_batch_exact_vector_runners_close_their_ids() -> Result<()> {
     run_key_backup_delete_authority_vector()?;
     run_mimi_provider_directory_signature_vector()?;
     run_signal_device_authorization_domain_vector()?;

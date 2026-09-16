@@ -206,7 +206,7 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
           discoverability: "unlisted",
           joinRule: "invite",
           historyAccess: "since_join",
-          encryptionProfile: "mls_rfc9420",
+          mlsActivated: true,
           completeRecoveryKeySetup: false,
           allowPassivePromptDismissal: false,
         });
@@ -266,7 +266,7 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
           discoverability: "unlisted",
           joinRule: "invite",
           historyAccess: "all_history_for_current_members",
-          encryptionProfile: "none",
+          mlsActivated: false,
           completeRecoveryKeySetup: false,
           allowPassivePromptDismissal: false,
         });

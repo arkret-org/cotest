@@ -64,7 +64,7 @@ test.describe("notifications", () => {
         title: `S23 Notif ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
-        encryptionProfile: "none",
+        mlsActivated: false,
         seedMembers: [bob.id],
       });
       await bobPage.acceptInvite(realmId);
@@ -149,7 +149,7 @@ test.describe("notifications", () => {
         title: `S23 Muted ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
-        encryptionProfile: "none",
+        mlsActivated: false,
         seedMembers: [bob.id],
       });
       await bobPage.acceptInvite(realmId);
@@ -201,7 +201,6 @@ test.describe("notifications", () => {
       const mentionMsg = mentionSuffix;
       await sendMessageApi(request, aliceToken, realmId, mentionMsg, {
         mentions: [bob.id],
-        actorSeq: apiActorSeq,
       });
       await bobPage.page.reload({ waitUntil: "domcontentloaded" });
       await expect(
@@ -267,7 +266,7 @@ test.describe("notifications", () => {
         title: `S23 DND ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
-        encryptionProfile: "none",
+        mlsActivated: false,
         seedMembers: [bob.id],
       });
       await bobDeviceA.acceptInvite(realmId);
@@ -327,7 +326,6 @@ test.describe("notifications", () => {
       suppressedMsg = suppressedSuffix;
       await sendMessageApi(request, aliceToken, realmId, suppressedMsg, {
         mentions: [bob.id],
-        actorSeq: apiActorSeq,
       });
       await bobDeviceA.gotoNotifications();
       await expect(
@@ -349,7 +347,6 @@ test.describe("notifications", () => {
       resumedMsg = resumedSuffix;
       await sendMessageApi(request, aliceToken, realmId, resumedMsg, {
         mentions: [bob.id],
-        actorSeq: apiActorSeq + 1,
       });
       await bobDeviceA.gotoNotifications();
       await expect(
@@ -392,7 +389,7 @@ test.describe("notifications", () => {
       title: `S23 Mark Read ${stamp}`,
       discoverability: "listed",
       history_access: "all_history_for_current_members",
-      encryption_profile: "none",
+      mls_activated: false,
     });
     await addRealmMemberApi(request, aliceToken, realmId, bob.id);
     const msg = `mark all read notification ${stamp}`;
@@ -450,7 +447,7 @@ test.describe("notifications", () => {
       title: `S23 E2EE Blind Wake ${stamp}`,
       discoverability: "listed",
       history_access: "since_join",
-      encryption_profile: "mls_rfc9420",
+      mls_activated: true,
     });
     await addRealmMemberApi(request, aliceToken, realmId, bob.id);
     await replaceAccountDataApi(
@@ -599,7 +596,7 @@ test.describe("notifications", () => {
         title: `S23 Cross Device ${stamp}`,
         discoverability: "listed",
         history_access: "all_history_for_current_members",
-        encryption_profile: "none",
+        mls_activated: false,
       });
       await addRealmMemberApi(request, aliceToken, realmId, bob.id);
       const msg = `cross-device unread ${stamp}`;

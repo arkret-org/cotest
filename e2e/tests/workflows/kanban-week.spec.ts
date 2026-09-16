@@ -164,7 +164,7 @@ test.describe("workflow: kanban week-in-review", () => {
       const realmId = await createRealmViaApi(request, patFlow.session.grantJwt, {
         title: `Week 21 ops ${stamp}`,
         discoverability: "listed",
-        encryptionProfile: "none",
+        mlsActivated: false,
         ownerId: patFlow.user.id,
       });
       await patPage.page.evaluate((path) => {

@@ -134,17 +134,6 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// A2 — security-closure-fixture runner contract.
-    /// Confirms the 12 `ak.vector.*` ids are present and every step
-    /// exposes the full `runner {given_state, operation, transcript,
-    /// expected_state_transition, expected_external_response,
-    /// expected_audit_reason}` quad.
-    security_closure_fixture_suite_matches_reference_semantics,
-    "security_closure_fixture",
-    cotest::conformance::run_security_closure_fixture_suite,
-);
-
-conformance_test!(
     encoding_fixture_suite_matches_reference_semantics,
     "encoding_fixture",
     cotest::conformance::run_encoding_fixture_suite,
@@ -198,42 +187,6 @@ conformance_test!(
 );
 
 conformance_test!(
-    state_resolution_fixture_suite_matches_reference_semantics,
-    "state_resolution_fixture",
-    cotest::conformance::run_state_resolution_fixture_suite,
-);
-
-conformance_test!(
-    cbs_lattice_fixture_suite_matches_reference_semantics,
-    "cbs_lattice_fixture",
-    cotest::conformance::run_cbs_lattice_fixture_suite,
-);
-
-conformance_test!(
-    control_proposal_bounded_decision_suite_matches_reference_semantics,
-    "control_proposal_bounded_decision",
-    cotest::conformance::run_control_proposal_bounded_decision_suite,
-);
-
-conformance_test!(
-    control_proposal_ack_suite_matches_reference_semantics,
-    "control_proposal_ack",
-    cotest::conformance::run_control_proposal_ack_suite,
-);
-
-conformance_test!(
-    state_reducer_hardening_fixture_suite_matches_reference_semantics,
-    "state_reducer_hardening_fixture",
-    cotest::conformance::run_state_reducer_hardening_fixture_suite,
-);
-
-conformance_test!(
-    state_model_round_trip_suite_matches_reference_semantics,
-    "state_model_round_trip",
-    cotest::conformance::run_state_model_round_trip_suite,
-);
-
-conformance_test!(
     sync_fixture_suite_matches_reference_semantics,
     "sync_fixture",
     cotest::conformance::run_sync_fixture_suite,
@@ -249,18 +202,6 @@ conformance_test!(
     privacy_security_fixture_suite_matches_reference_semantics,
     "privacy_security_fixture",
     cotest::conformance::run_privacy_security_fixture_suite,
-);
-
-conformance_test!(
-    service_closure_hardening_fixture_suite_matches_reference_semantics,
-    "service_closure_hardening_fixture",
-    cotest::conformance::run_service_closure_hardening_fixture_suite,
-);
-
-conformance_async_test!(
-    history_key_direct_traversal_fixture_matches_shared_sdk_types,
-    "history_key_direct_traversal_fixture",
-    cotest::conformance::run_history_key_direct_traversal_suite,
 );
 
 conformance_test!(
@@ -397,14 +338,6 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// MLS Security Frontier KAT plus orthogonality, active-leaf and
-    /// Realm/Circle isolation checks through the public SDK projector.
-    mls_security_frontier_fixture_suite_matches_reference_semantics,
-    "mls_security_frontier_fixture",
-    cotest::conformance::run_mls_security_frontier_fixture_suite,
-);
-
-conformance_test!(
     /// Discovery profile (ak.profile.discovery.v1) advertise vs
     /// core/extension tier filtering, interop_bridge handling, and post-C16
     /// surface naming (blob_storage / realtime_media / moderation_reports).
@@ -424,19 +357,6 @@ conformance_test!(
     production_signing_fixture_suite_matches_reference_semantics,
     "production_signing_fixture",
     cotest::conformance::run_production_signing_fixture_suite,
-);
-
-conformance_test!(
-    /// Event-kind to StateModel dispatch consistency. Cross-checks
-    /// the live event-kind-registry: every active reducer-input durable kind
-    /// with cell_family declares one core model, no cell_family appears in
-    /// two models, namespace is ak.component.*, causal-register families never
-    /// declare Bottom, and the fixture's
-    /// expected cell-family/model bindings exactly match
-    /// the registry.
-    event_kind_lattice_dispatch_fixture_suite_matches_reference_semantics,
-    "event_kind_lattice_dispatch_fixture",
-    cotest::conformance::run_event_kind_lattice_dispatch_fixture_suite,
 );
 
 conformance_test!(

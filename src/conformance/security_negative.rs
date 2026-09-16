@@ -21,7 +21,7 @@ pub fn run_security_negative_profile_suite() -> Result<()> {
     }
     validate_profile(
         &fixture,
-        crate::conformance::security_closure::SECURITY_CLOSURE_VECTORS_PROFILE,
+        crate::conformance::helpers::PRIVACY_SECURITY_VECTOR_GROUP_PROFILE,
     )?;
 
     let cases = fixture

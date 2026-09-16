@@ -16,19 +16,16 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, bail};
 use arkret_canonical as canonical;
-use arkret_event_draft::EventPayloadExt as _;
-use arkret_identifiers::{
-    ConsentId, DeviceId, Did, DidCoreId, EventId, Hash, project_did_to_core_id,
-};
+use arkret_identifiers::{ConsentId, DeviceId, Did, DidCoreId, Hash, project_did_to_core_id};
 use arkret_models_collaboration::governance::membership_invite::{
     InviteClaimBindingProof, InviteSubjectProof, InviteSubjectProofBody,
 };
-use arkret_models_collaboration::http_bodies::{
+use arkret_models_collaboration::mimi_operations::{
     MimiConsentDecision, MimiRequestConsentRequestBody, MimiUpdateConsentRequestBody,
 };
 use arkret_wire::{
-    AccountId, Audience, AuditReasonText, DidUrl, Event, EventInitialSubmission, NonEmptyString,
-    PayloadProof, ProducerEventProof, SealBasis, SecurityClass, proof_kind,
+    AccountId, Audience, AuditReasonText, CommittedEventRef, DidUrl, Event, EventCommitSubmission,
+    NonEmptyString, PayloadProof, ProducerEventProof, SecurityClass, proof_kind,
 };
 use base64::Engine as _;
 use chrono::{Timelike as _, Utc};
@@ -49,7 +46,6 @@ struct EventProofInput {
     created_at: String,
     event: Value,
     signing_seed_b64url: Option<String>,
-    signer_resolution_evidence_ref: arkret_wire::SignerEvidenceRef,
 }
 
 #[derive(Debug, Deserialize)]
@@ -150,21 +146,6 @@ struct IdentityCreationRegisterFixtureInput {
 }
 
 #[derive(Debug, Deserialize)]
-struct PrincipalBootstrapSealInput {
-    pcr_genesis_unit: Value,
-    device_signing_seed_b64url: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct PrincipalSuccessorSealInput {
-    request: arkret_models_collaboration::governance_dependencies::SealPrepareRequestBody,
-    outcome: arkret_models_collaboration::governance_dependencies::SealPrepareOutcome,
-    signer_did: arkret_wire::Did,
-    verification_method: arkret_wire::DidUrl,
-    device_signing_seed_b64url: String,
-}
-
-#[derive(Debug, Deserialize)]
 struct WebvhVerifyLogInput {
     did: String,
     log_path: String,
@@ -181,14 +162,7 @@ struct ManagedActorAuthorInput {
     actor_id: arkret_wire::ActorId,
     initial_resolution: arkret::ResolutionCommitment,
     method_history_evidence: arkret::ResolutionMethodHistoryEvidence,
-    #[serde(default)]
-    service_actor_seq: u64,
-    #[serde(default)]
-    service_prev_refs: Vec<EventId>,
-    signer_resolution_evidence_ref: arkret_wire::SignerEvidenceRef,
-    #[serde(default)]
-    seal_basis: Option<SealBasis>,
-    data_basis: arkret_wire::SealId,
+    registration_ref: CommittedEventRef,
     service_signing_seed_b64url: String,
     service_verification_method: DidUrl,
     station_id: DidCoreId,
@@ -308,7 +282,7 @@ pub fn managed_actor_author(input: Value) -> Result<Value> {
         ));
     }
     if request.proof.verification_method != input.station_verification_method
-        || request.proof.verification_method != request.hosting_notary.verification_method
+        || request.proof.verification_method != request.authoring_authority.verification_method
     {
         return Ok(author_rejection(
             "authoring_request_proof_invalid",
@@ -346,7 +320,7 @@ pub fn managed_actor_author(input: Value) -> Result<Value> {
             "package managed-actor material does not match the signed request",
         ));
     }
-    let (registration_evidence, seal_basis) = if let Some(install) = request.basis.install() {
+    let registration_evidence = if let Some(install) = request.basis.install() {
         let evidence: arkret::AppletRegistrationEpochEvidence = install
             .registration_event
             .payload
@@ -368,26 +342,14 @@ pub fn managed_actor_author(input: Value) -> Result<Value> {
                 "registration Event does not bind the signed package",
             ));
         }
-        (
-            evidence,
-            install
-                .registration_event
-                .seal_basis
-                .clone()
-                .context("registration Event omits the accepted Realm Seal basis")?,
-        )
+        evidence
     } else {
-        let ghost = request
+        request
             .basis
             .ghost()
-            .context("validated request has no Ghost basis")?;
-        (
-            ghost.registration_epoch_evidence.clone(),
-            input
-                .seal_basis
-                .clone()
-                .context("Ghost authoring requires the accepted Realm Seal basis")?,
-        )
+            .context("validated request has no Ghost basis")?
+            .registration_epoch_evidence
+            .clone()
     };
     if !registration_evidence.contains_signing_key(input.service_verification_method.as_str()) {
         return Ok(author_rejection(
@@ -427,17 +389,16 @@ pub fn managed_actor_author(input: Value) -> Result<Value> {
                 .clone(),
             initial_resolution: input.initial_resolution,
             method_history_evidence: input.method_history_evidence,
-            service_actor_seq: input.service_actor_seq,
-            service_prev_refs: input.service_prev_refs,
-            signer_resolution_evidence_ref: input.signer_resolution_evidence_ref,
-            seal_basis,
-            data_basis: input.data_basis,
+            registration_ref: input.registration_ref,
             digest_suite: arkret::DigestSuite::Sha256,
             trust_domain: input.trust_domain,
             security_class: SecurityClass::Standard,
             genesis_salt: arkret::GenesisSalt::new(
                 base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(digest_bytes),
             )?,
+            initial_join_rule: arkret::JoinRule::Invite,
+            initial_history_access: arkret::HistoryAccess::SinceJoin,
+            initial_discoverability: arkret::Discoverability::Unlisted,
             bot_display_name: "Applet Bot".to_owned(),
         },
         &signer,
@@ -534,14 +495,6 @@ pub fn principal_registration_fixture(input: Value) -> Result<Value> {
         .context("prepare principal inception")?;
     let principal = Did::new(draft.did.clone()).context("parse prepared principal DID")?;
     let genesis_salt = arkret::GenesisSalt::generate()?;
-    // The create Event has no Realm id yet. This value is only a local HLC
-    // allocator namespace and is never emitted as the PCR coordinate.
-    let genesis_stamp_scope = "ak:realm:ASyOHakrqmsRPkLKvhTD20V-YWCl-X7zYrlca5tdQLaR";
-    let mut hlc = arkret::hlc::HlcGenerator::new(
-        genesis_stamp_scope,
-        &input.device_id,
-        input.handoff_request_id.as_bytes(),
-    );
     let recovery_key_fingerprint = format!(
         "sha256:{}",
         hex::encode(Sha256::digest(recovery_key.as_bytes()))
@@ -569,36 +522,27 @@ pub fn principal_registration_fixture(input: Value) -> Result<Value> {
     let lease: arkret::IdentityCreationLease =
         serde_json::from_value(input.identity_creation_lease)
             .context("parse identity-creation lease")?;
-    // One HLC value, used by BOTH the checkpoint field and the Event below.
-    // Inkson rebuilds this Event from the checkpoint and compares canonical
-    // bytes, so a second `generate()` here would fail that comparison.
-    let bootstrap_hlc = hlc.generate().to_string();
-    let (genesis_create_event, founding_authorize_event, device_signing_seed) =
-        build_pcr_genesis_unit(
-            &principal,
-            initial_session.audience_id.clone(),
-            genesis_salt.clone(),
-            &input.trust_domain,
-            &draft.version_id,
-            &arkret_canonical::canonical_sha256(&draft.log_entry)?,
-            &draft.root_public_key_multibase,
-            &draft.root_verification_method,
-            &key_material.root_seed,
-            &input.device_id,
-            input.handoff_request_id.as_bytes(),
-            created_at,
-            &bootstrap_hlc,
-        )
-        .context("build PCR genesis unit")?;
+    let (creation_events, device_signing_seed) = build_pcr_genesis_unit(
+        &principal,
+        initial_session.audience_id.clone(),
+        genesis_salt.clone(),
+        &input.trust_domain,
+        &draft.version_id,
+        &arkret_canonical::canonical_sha256(&draft.log_entry)?,
+        &draft.root_public_key_multibase,
+        &draft.root_verification_method,
+        &key_material.root_seed,
+        &input.device_id,
+        input.handoff_request_id.as_bytes(),
+        created_at,
+    )
+    .context("build PCR genesis unit")?;
     let challenge_request = garth::identity_binding_challenge_request(
         arkret::RequestId::new(arkret_identifiers::new_prefixed_uuid7("ak:request:"))
             .context("build identity-binding challenge request id")?,
         &lease,
         principal_registration_anchor.clone(),
-        &arkret_wire::PcrGenesisUnit::new(
-            genesis_create_event.clone(),
-            founding_authorize_event.clone(),
-        )?,
+        &creation_events,
         &initial_session,
     )
     .context("build identity-binding challenge request")?;
@@ -625,12 +569,14 @@ pub fn principal_registration_fixture(input: Value) -> Result<Value> {
         // envelope; the id-only field this fixture used to emit was both
         // unreadable by Inkson and a forbidden random mint.
         "pcr_genesis_unit": {
-            "events": [genesis_create_event, founding_authorize_event],
+            "events": [
+                creation_events.realm_create,
+                creation_events.founding_device_authorize
+            ],
         },
         "initial_session": initial_session,
         "device_signing_seed_b64url": device_signing_seed,
         "genesis_created_at": arkret_canonical::format_timestamp_canonical(created_at),
-        "genesis_hlc": bootstrap_hlc,
         "genesis_salt": genesis_salt,
         "binding_receipt": null,
         "stage": "custody_confirmed",
@@ -649,8 +595,8 @@ pub fn principal_registration_fixture(input: Value) -> Result<Value> {
 /// This mirrors Inkson's `build_bootstrap_create_event` exactly, and it has to:
 /// Inkson rebuilds the Event from the checkpoint's own fields and refuses the
 /// checkpoint unless the canonical bytes match byte-for-byte. Every input below
-/// is therefore taken from a field the checkpoint also stores, and the cell
-/// projector is the same `DigestSuite::Sha256` projection Inkson routes through.
+/// is therefore taken from a field the checkpoint also stores, and the digest
+/// suite is the same `DigestSuite::Sha256` Inkson routes through.
 #[allow(clippy::too_many_arguments)]
 fn build_pcr_genesis_unit(
     principal: &Did,
@@ -665,8 +611,7 @@ fn build_pcr_genesis_unit(
     device_id: &str,
     device_seed_basis: &[u8],
     created_at: chrono::DateTime<Utc>,
-    hlc: &str,
-) -> Result<(Event, Event, String)> {
+) -> Result<(arkret_models_identity::IdentityCreationEvents, String)> {
     let principal_id = project_did_to_core_id(principal)?;
     let principal_device_id = DeviceId::new(device_id.to_owned()).context("parse device id")?;
     let device_seed: [u8; 32] = Sha256::digest(
@@ -691,7 +636,7 @@ fn build_pcr_genesis_unit(
             device_public_key_did: device_public_key.clone(),
             hpke_key: hpke_key.clone(),
             algorithms: algorithms.clone(),
-            device_key_algorithm: Some(non_empty("Ed25519")?),
+            device_key_algorithm: non_empty("Ed25519")?,
             authorized_by:
                 arkret_models_collaboration::events_payloads::DeviceOrPrincipalRef::Principal(
                     principal_id.clone(),
@@ -719,20 +664,6 @@ fn build_pcr_genesis_unit(
             ),
         )?);
     let authorize_payload_value = serde_json::to_value(&authorize_payload)?;
-    let founding_notary = arkret::NotaryValue::new(
-        arkret::NotarySignerDescriptor {
-            actor_id: arkret::ActorId::account(arkret::AccountId::new(
-                principal_id.clone(),
-                station_id.clone(),
-            )),
-            verification_method: arkret::DidUrl::new(format!("{principal}#{device_id}"))
-                .map_err(anyhow::Error::msg)?,
-            key_kind: arkret::NotaryKeyKind::Ed25519Raw32,
-            jose_algorithm: arkret::NotaryJoseAlgorithm::Ed25519,
-            frozen_public_key_b64u: arkret::base64url_encode(device_public_key_bytes),
-        },
-        0,
-    )?;
     let descriptor = arkret_models_collaboration::events_payloads::FoundingDeviceDescriptor {
         descriptor_version: 1,
         device_id: principal_device_id,
@@ -754,9 +685,8 @@ fn build_pcr_genesis_unit(
     let mut create = arkret_bootstrap::build_self_principal_pcr_create(
         arkret_bootstrap::SelfPrincipalPcrCreateInput {
             principal_id: principal_id.clone(),
-            station_id,
+            governance_station_id: station_id,
             principal_did: principal.clone(),
-            notary: founding_notary,
             initial_resolution: arkret_models_identity::ResolutionCommitment {
                 did: principal.clone(),
                 method_history_head: method_history_head.to_owned(),
@@ -770,15 +700,10 @@ fn build_pcr_genesis_unit(
                 arkret_bootstrap::DID_INCEPTION_REF_ROLE,
             ),
             founding_device_descriptor: descriptor,
+            initial_join_rule: arkret::JoinRule::Closed,
+            initial_history_access: arkret::HistoryAccess::SinceJoin,
+            initial_discoverability: arkret::Discoverability::Secret,
             created_at,
-            hlc: arkret::Hlc::new(hlc.to_owned()).context("parse bootstrap HLC")?,
-        },
-        &|event| {
-            arkret_schema::project_registered_cell_writes(
-                event,
-                arkret_canonical::DigestSuite::Sha256,
-            )
-            .map_err(|error| error.to_string())
         },
     )
     .context("build self principal PCR create")?;
@@ -796,26 +721,18 @@ fn build_pcr_genesis_unit(
     arkret::signatures::sign_event(
         &mut create,
         &root_signer,
-        &root_verification_method,
-        arkret::signatures::SignEventOptions::for_native_unit().with_created_at(created_at),
+        arkret::signatures::SignEventOptions::new().with_created_at(created_at),
     )
     .context("sign the PCR genesis Event with the identity root")?;
-    let mut authorize = arkret_event_draft::TypedEventDraft::<
-        arkret_wire::event_spec::DeviceAuthorize,
-    >::new(
-        arkret::ScopeRef::Realm {
-            realm_id: create.realm_id.clone(),
-        },
-        create.actor_id.clone(),
-        authorize_payload,
-    )?
-    .with_prev_refs(vec![create.event_id.clone()])
-    .author_with_digest_suite(
-        1,
-        arkret::hlc::HlcGenerator::new(create.realm_id.as_str(), device_id, root_seed).generate(),
-        created_at,
-        arkret_canonical::DigestSuite::Sha256,
-    )?;
+    let mut authorize =
+        arkret_event_draft::TypedEventDraft::<arkret_wire::event_spec::DeviceAuthorize>::new(
+            arkret::ScopeRef::Realm {
+                realm_id: create.realm_id.clone(),
+            },
+            create.actor_id.clone(),
+            authorize_payload,
+        )?
+        .author_with_digest_suite(created_at, arkret_canonical::DigestSuite::Sha256)?;
     let device_method =
         arkret_wire::DidUrl::new(format!("{principal}#{device_id}")).map_err(anyhow::Error::msg)?;
     let device_did = Did::new(format!("did:key:{device_multibase}"))?;
@@ -827,16 +744,14 @@ fn build_pcr_genesis_unit(
     arkret::signatures::sign_event(
         &mut authorize,
         &device_signer,
-        &device_method,
-        arkret::signatures::SignEventOptions::for_native_unit().with_created_at(created_at),
+        arkret::signatures::SignEventOptions::new().with_created_at(created_at),
     )?;
-    arkret_bootstrap::validate_self_principal_pcr_genesis_unit(&create, &authorize, &|event| {
-        arkret_schema::project_registered_cell_writes(event, arkret_canonical::DigestSuite::Sha256)
-            .map_err(|error| error.to_string())
-    })?;
     Ok((
-        create.into_event(),
-        authorize.into_event(),
+        arkret_bootstrap::build_identity_creation_events(
+            create.into_event(),
+            authorize.into_event(),
+        )
+        .context("package the identity creation Events")?,
         base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(device_seed),
     ))
 }
@@ -1033,84 +948,6 @@ pub fn identity_creation_register_request(input: Value) -> Result<Value> {
     serde_json::to_value(request).context("serialize identity-creation register request")
 }
 
-fn trusted_actor_signer_material(event: &Event) -> Result<(Did, DidUrl)> {
-    let verification_method = event
-        .proofs
-        .first()
-        .context("founding DeviceAuthorize lacks its signed proof")?
-        .verification_method
-        .clone();
-    let controller = verification_method
-        .as_str()
-        .split_once('#')
-        .map(|(controller, _)| controller)
-        .context("founding DeviceAuthorize proof method lacks a controller fragment")?;
-    let controller = Did::new(controller.to_owned())
-        .context("parse founding DeviceAuthorize proof controller DID")?;
-    let controller_actor = project_did_to_core_id(&controller)
-        .context("project founding DeviceAuthorize proof controller")?;
-    if &controller_actor != event.actor_id.signing_principal_id() {
-        bail!("founding DeviceAuthorize proof controller does not match its actor core id");
-    }
-    Ok((controller, verification_method))
-}
-
-pub fn principal_bootstrap_seal(input: Value) -> Result<Value> {
-    let input: PrincipalBootstrapSealInput =
-        serde_json::from_value(input).context("parse principal bootstrap Seal input")?;
-    let unit: arkret_wire::PcrGenesisUnit = serde_json::from_value(input.pcr_genesis_unit)
-        .context("parse PCR genesis unit for bootstrap Seal")?;
-    let create = unit.create();
-    let authorize = unit.founding_authorize();
-    let create_payload = create
-        .typed_payload::<arkret::event_spec::RealmCreate>()
-        .context("parse PCR create payload")?;
-    let descriptor = create_payload
-        .object
-        .founding_device_descriptor
-        .context("PCR create omits founding device descriptor")?;
-    let seed = signing_key_from_seed(&input.device_signing_seed_b64url)?.to_bytes();
-    let (signer_did, verification_method) = trusted_actor_signer_material(authorize)?;
-    let signer =
-        arkret::Ed25519PayloadSigner::from_did_key_seed(seed, signer_did, verification_method);
-    let mut hlc = arkret_hlc::HlcGenerator::new(
-        create.realm_id.as_str(),
-        descriptor.device_id.as_str(),
-        &seed,
-    );
-    let seal = arkret_bootstrap::build_self_principal_bootstrap_seal(
-        create,
-        authorize,
-        hlc.generate(),
-        &signer,
-        &|event| {
-            arkret_schema::project_registered_cell_writes(
-                event,
-                arkret_canonical::DigestSuite::Sha256,
-            )
-            .map_err(|error| error.to_string())
-        },
-    )
-    .context("build self-principal bootstrap Seal")?;
-    serde_json::to_value(seal).context("serialize self-principal bootstrap Seal")
-}
-
-pub fn principal_successor_seal(input: Value) -> Result<Value> {
-    let input: PrincipalSuccessorSealInput =
-        serde_json::from_value(input).context("parse principal successor Seal input")?;
-    let seed = signing_key_from_seed(&input.device_signing_seed_b64url)?.to_bytes();
-    let signer = arkret::Ed25519PayloadSigner::from_did_key_seed(
-        seed,
-        input.signer_did,
-        input.verification_method,
-    );
-    let seal = input
-        .outcome
-        .sign(&input.request, &signer)
-        .context("sign Station-prepared principal Seal")?;
-    serde_json::to_value(seal).context("serialize self-principal successor Seal")
-}
-
 fn signing_key_from_seed(seed_b64url: &str) -> Result<SigningKey> {
     let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
         .decode(seed_b64url)
@@ -1209,7 +1046,6 @@ pub fn event_proof(input: Value, digest_mode: EventDigestMode) -> Result<Value> 
         kind: proof_kind::DETACHED_JWS.to_owned(),
         verification_method: input.verification_method,
         event_digest,
-        signer_resolution_evidence_ref: Some(input.signer_resolution_evidence_ref),
         created_at,
         domain: None,
         audience: None,
@@ -1271,7 +1107,7 @@ pub fn mimi_consent_proof(input: Value) -> Result<Value> {
         decision: serde_json::from_value::<MimiConsentDecision>(decision)
             .context("parse consent decision")?,
         actor_id,
-        consent_event: serde_json::from_value::<EventInitialSubmission>(consent_event)
+        consent_event: serde_json::from_value::<EventCommitSubmission>(consent_event)
             .context("parse MIMI consent Event")?,
         signature: PayloadProof {
             kind: proof_kind::DETACHED_JWS.to_owned(),
@@ -1426,7 +1262,8 @@ mod tests {
                 "principal_id":"ak:did_core:web:bob.example", "station_id":"ak:did_core:web:station.example"
             }},
             "holder_account_id": {"principal_id":"ak:did_core:web:alice.example", "station_id":"ak:did_core:web:station.example"},
-            "purpose":"voice_call"
+            "purpose":"voice_call",
+            "proofs":[]
         });
         let input = json!({
             "request":body,
@@ -1485,22 +1322,13 @@ mod tests {
             "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP",
             "scope_ref": {"kind": "realm", "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP"},
             "actor_id": actor_id,
-            "actor_seq": 1,
             "created_at": "2026-07-07T05:45:49.000Z",
-            "hlc": "019f3b1c76c8-0000-ac7eadec",
-            "prev_refs": [],
-            "requirements": {
-                "schema": ["ak.schema.event_payload.v1"],
-                "features": [],
-                "critical_extensions": []
-            },
             "payload": {
                 "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP",
                 "member_id": actor_id,
                 "membership": "join",
                 "reason": "invite_accept"
             },
-            "unsigned": {"trace": "local"},
             "proofs": []
         });
 
@@ -1529,15 +1357,11 @@ mod tests {
             "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP",
             "scope_ref": {"kind": "realm", "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP"},
             "actor_id": actor_id,
-            "actor_seq": 1,
             "created_at": "2026-07-07T05:45:49.000Z",
-            "hlc": "019f3b1c76c8-0000-ac7eadec",
-            "prev_refs": [],
             "refs": [{
                 "role": "authorized_by",
                 "id": "ak:grant:AVmnCiapkC3K0OFT032clTI00FaccV3R4XoEuGk4xygg"
             }],
-            "requirements": {"schema": ["ak.schema.event_payload.v1"]},
             "payload": {
                 "target_ref": "ak:morph:Aa8s5OtJTr4DL7dYQbiLrzNhuis8EyjprcGjTo_qPZDF",
                 "patch": [{"op": "replace", "path": "fields.status", "value": "review"}]
@@ -1590,15 +1414,7 @@ mod tests {
             "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP",
             "scope_ref": {"kind": "realm", "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP"},
             "actor_id": actor,
-            "actor_seq": 1,
             "created_at": "2026-07-07T05:45:49.000Z",
-            "hlc": "019f3b1c76c8-0000-ac7eadec",
-            "prev_refs": [],
-            "requirements": {
-                "schema": ["ak.schema.event_payload.v1"],
-                "features": [],
-                "critical_extensions": []
-            },
             "payload": {
                 "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP",
                 "scope_ref": {"kind": "realm", "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP"},
@@ -1613,16 +1429,7 @@ mod tests {
                 "created_at": "2026-07-07T05:45:49.000Z",
                 "event": event,
                 "signing_seed_b64url": base64::engine::general_purpose::URL_SAFE_NO_PAD
-                    .encode(seed),
-                // An ordinary Event proof MUST name the accepted signer
-                // projection it resolved through: the two omission exceptions
-                // in `encoding.md` section 4 are the human PCR genesis unit and
-                // the PCR-policy recovery unit, and `ak.member.state` is
-                // neither.
-                "signer_resolution_evidence_ref": format!(
-                    "ak:signer_evidence:sha256:{}",
-                    "3".repeat(64)
-                )
+                    .encode(seed)
             }),
             EventDigestMode::RawCanonicalJson,
         )

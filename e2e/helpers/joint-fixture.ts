@@ -45,7 +45,7 @@ export const test = base.extend<{
       discoverability: "public",
       joinRule: "invite",
       historyAccess: "since_join",
-      encryptionProfile: "none",
+      mlsActivated: false,
     });
     await use({ ...jointUsers, realmId });
   },

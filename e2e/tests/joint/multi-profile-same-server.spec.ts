@@ -60,7 +60,7 @@ test.describe("same-server multi-profile UI @fully-implemented", () => {
         discoverability: "listed",
         joinRule: "invite",
         historyAccess: "since_join",
-        encryptionProfile: "none",
+        mlsActivated: false,
       });
       // Ordinary Realm bootstrap intentionally has no implicit discussion
       // Strand. Author the two explicit Events required by the spec before

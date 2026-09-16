@@ -14,4 +14,3 @@
 pub mod envelope_fuzz;
 mod panic_guard;
 pub mod realm_state_snapshot_fuzz;
-pub mod seal_fuzz;

@@ -21,8 +21,8 @@ import {
   listInvitesApi,
   pushFederationEvents,
   queryPeerEventsApi,
+  readCommitStreamHeadApi,
   queryRealmEventsApi,
-  readRealmSealBasis,
   revokeCapabilityApi,
   sendMessageApi,
 } from "../../helpers/soland-api";
@@ -224,12 +224,6 @@ async function createThreeServerRealm(
     ],
     federation_policy: "open",
   }, { server: "server1" });
-  const sealBasis = await readRealmSealBasis(
-    request,
-    alice.token,
-    realmId,
-    "server1",
-  );
   for (const participant of [bob, carol]) {
     const invite = await waitForInvite(request, participant, realmId);
     await acceptInviteApi(
@@ -238,7 +232,7 @@ async function createThreeServerRealm(
       participant.user.id,
       realmId,
       invite.id,
-      { server: participant.server, sealBasis },
+      { server: participant.server },
     );
   }
   await expect.poll(async () => {
@@ -284,17 +278,16 @@ test.describe("three-server federation P0 @three-server-p0", () => {
       ]);
       return sets[0].join("\n") === sets[1].join("\n") && sets[1].join("\n") === sets[2].join("\n");
     }, { timeout: 60_000, intervals: [2_000, 5_000] }).toBeTruthy();
+    // Convergence is now the Realm's own commit stream: all three Stations
+    // must report the identical head position and commit id for it.
     await expect.poll(async () => {
-      const bases = await Promise.all([
-        readRealmSealBasis(request, realm.alice.token, realm.realmId, "server1"),
-        readRealmSealBasis(request, realm.bob.token, realm.realmId, "server2"),
-        readRealmSealBasis(request, realm.carol.token, realm.realmId, "server3"),
+      const heads = await Promise.all([
+        readCommitStreamHeadApi(request, realm.alice.token, realm.realmId, { server: "server1" }),
+        readCommitStreamHeadApi(request, realm.bob.token, realm.realmId, { server: "server2" }),
+        readCommitStreamHeadApi(request, realm.carol.token, realm.realmId, { server: "server3" }),
       ]);
-      return new Set(bases.map((basis) => String(basis.control_event_set_root))).size === 1 &&
-        new Set(bases.map((basis) => String(basis.state_root))).size === 1 &&
-        new Set(bases.map((basis) => JSON.stringify(
-          Array.isArray(basis.leaves) ? basis.leaves.map(String).sort() : [],
-        ))).size === 1;
+      return heads.every((head) => head !== undefined) &&
+        new Set(heads.map((head) => JSON.stringify(head))).size === 1;
     }, { timeout: 60_000, intervals: [2_000, 5_000] }).toBeTruthy();
     const sourcePage = await queryPeerEventsApi(request, {
       server: "server1",

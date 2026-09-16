@@ -31,7 +31,7 @@ const SCAFFOLD_MARKERS: &[&str] = &[
 pub fn run_scaffold_profile_gate_suite() -> Result<()> {
     run_gate_fixture(
         SCAFFOLD_FIXTURE,
-        crate::conformance::security_closure::SECURITY_CLOSURE_VECTORS_PROFILE,
+        crate::conformance::helpers::PRIVACY_SECURITY_VECTOR_GROUP_PROFILE,
         false,
     )
 }

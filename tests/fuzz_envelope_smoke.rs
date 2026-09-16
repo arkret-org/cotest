@@ -11,8 +11,9 @@
 
 use std::collections::BTreeMap;
 
-use cotest::fuzz::envelope_fuzz::{
-    fuzz_event_envelope, fuzz_realm_state_snapshot_chunk, fuzz_seal_envelope, fuzz_signal_envelope,
+use cotest::fuzz::envelope_fuzz::{fuzz_event_envelope, fuzz_signal_envelope};
+use cotest::fuzz::realm_state_snapshot_fuzz::{
+    fuzz_realm_commit, fuzz_realm_state_snapshot, fuzz_stream_scan_outcome,
 };
 
 /// Deterministic-but-mixing PRNG: a 64-bit xorshift seeded from
@@ -57,10 +58,15 @@ fn fuzz_envelope_smoke() {
     let mut findings: BTreeMap<String, Vec<String>> = BTreeMap::new();
     run_fuzz_loop("event_envelope", fuzz_event_envelope, &mut findings);
     run_fuzz_loop("signal_envelope", fuzz_signal_envelope, &mut findings);
-    run_fuzz_loop("seal_envelope", fuzz_seal_envelope, &mut findings);
     run_fuzz_loop(
-        "realm_state_snapshot_chunk",
-        fuzz_realm_state_snapshot_chunk,
+        "realm_state_snapshot",
+        fuzz_realm_state_snapshot,
+        &mut findings,
+    );
+    run_fuzz_loop("realm_commit", fuzz_realm_commit, &mut findings);
+    run_fuzz_loop(
+        "stream_scan_outcome",
+        fuzz_stream_scan_outcome,
         &mut findings,
     );
 
@@ -79,6 +85,6 @@ fn fuzz_envelope_smoke() {
 
     eprintln!(
         "ok: {} validator paths × {} iterations × {} bytes/input, zero panics",
-        4, ITERATIONS, INPUT_BYTES
+        5, ITERATIONS, INPUT_BYTES
     );
 }

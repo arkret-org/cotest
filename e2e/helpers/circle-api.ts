@@ -202,10 +202,8 @@ function circleCreateObject(args: {
   joinRule?: string;
   directoryVisibility?: string;
   historyAccess?: "since_join" | "all_history_for_current_members";
-  encryptionProfile?: string;
   createdAt: string;
 }): Record<string, unknown> {
-  const encryptionProfile = args.encryptionProfile ?? "mls_rfc9420";
   return {
     schema: "ak.schema.circle.v1",
     realm_id: args.realmId,
@@ -215,10 +213,6 @@ function circleCreateObject(args: {
     directory_visibility: args.directoryVisibility ?? "members",
     join_rule: args.joinRule ?? "invite",
     history_access: args.historyAccess ?? "since_join",
-    encryption_profile: encryptionProfile,
-    ...(encryptionProfile === "mls_rfc9420"
-      ? { content_scheme: "mls_rfc9420" }
-      : {}),
     state: "active",
     created_by: accountActorId(args.actorId, args.server),
     created_at: args.createdAt,
@@ -239,7 +233,6 @@ export async function createCircleArkret(
     joinRule?: string;
     directoryVisibility?: string;
     historyAccess?: RealmObject["history_access"];
-    encryptionProfile?: string;
     summary?: string;
     server?: SolandKey;
   },

@@ -121,7 +121,7 @@ test.describe("holder device key lifecycle separation @fully-implemented", () =>
           discoverability: "listed",
           joinRule: "invite",
           historyAccess: "since_join",
-          encryptionProfile: "mls_rfc9420",
+          mlsActivated: true,
         });
         boardId = await buildEncryptedBoardListCard(
           jointPage,

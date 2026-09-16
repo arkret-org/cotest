@@ -242,7 +242,7 @@ test.describe("key backup + restore", () => {
         discoverability: "unlisted",
         joinRule: "invite",
         historyAccess: "since_join",
-        encryptionProfile: "mls_rfc9420",
+        mlsActivated: true,
       });
 
       const historicalCards = [
@@ -383,7 +383,7 @@ test.describe("key backup + restore", () => {
         discoverability: "unlisted",
         joinRule: "invite",
         historyAccess: "since_join",
-        encryptionProfile: "mls_rfc9420",
+        mlsActivated: true,
       });
       const recoveryKey = await createMlsRecoveryBackupFromPrompt(
         deviceA.page,
@@ -556,7 +556,7 @@ test.describe("key backup + restore", () => {
         discoverability: "unlisted",
         joinRule: "invite",
         historyAccess: "since_join",
-        encryptionProfile: "mls_rfc9420",
+        mlsActivated: true,
       });
       const boardId = await createKanbanBoardListAndCard(
         deviceA.page,

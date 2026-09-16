@@ -24,7 +24,6 @@ import {
   canonicalJson,
   prepareSignedEventSubmissionApi,
   principalControlRealmForId,
-  readRealmSealBasis,
   retypeEventDerivedId,
   signedEventEnvelope,
   submitPrincipalSuccessorSealApi,
@@ -119,7 +118,6 @@ test.describe("contact confirmed display name", () => {
         kind: "ak.profile.create",
         realmId: bobRealmId,
         actorId: bob.id,
-        sealBasis: await readRealmSealBasis(request, bobToken, bobRealmId),
         payload: {
           object: {
             schema: "ak.schema.actor_profile.v1",
@@ -174,7 +172,6 @@ test.describe("contact confirmed display name", () => {
         kind: "ak.profile.update",
         realmId: bobRealmId,
         actorId: bob.id,
-        sealBasis: await readRealmSealBasis(request, bobToken, bobRealmId),
         payload: {
           target_ref: profileId,
           patch: { display_name: { $op: "set", value: renamedDisplay } },

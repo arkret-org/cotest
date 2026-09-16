@@ -284,7 +284,7 @@ test.describe("kanban end-to-end", () => {
         title: `Kanban Realm ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
-        encryptionProfile: "none",
+        mlsActivated: false,
       });
       // Kanban scopes writes to the selected Realm; navigate with the explicit
       // realm_id so the route resolves to the freshly-created Realm (plain
@@ -867,7 +867,7 @@ test.describe("kanban end-to-end", () => {
         discoverability: "listed",
         joinRule: "invite",
         historyAccess: "since_join",
-        encryptionProfile: "mls_rfc9420",
+        mlsActivated: true,
       });
 
       await alicePage.page.goto(`/kanban/${realmId}`, { waitUntil: "domcontentloaded" });
@@ -991,7 +991,7 @@ test.describe("kanban end-to-end", () => {
         discoverability: "listed",
         joinRule: "invite",
         historyAccess: "since_join",
-        encryptionProfile: "mls_rfc9420",
+        mlsActivated: true,
       });
       await buildEncryptedBoardAndCard(alicePage.page, realmId, stamp, cardTitle);
 
@@ -1070,7 +1070,7 @@ test.describe("kanban end-to-end", () => {
         discoverability: "listed",
         joinRule: "invite",
         historyAccess: "since_join",
-        encryptionProfile: "mls_rfc9420",
+        mlsActivated: true,
       });
       await buildEncryptedBoardAndCard(alicePage.page, realmId, stamp, cardTitle);
 

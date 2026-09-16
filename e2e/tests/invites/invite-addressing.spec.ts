@@ -26,7 +26,6 @@ import {
   rawDispatchSelfInviteApi,
   rawSubmitPeerInviteDeliveryApi,
   selfInviteDispatchBody,
-  readRealmSealBasis,
   refreshEventEnvelopeProof,
   sha256CanonicalJson,
   signedEventEnvelope,
@@ -89,11 +88,11 @@ type AcceptedInviteFixture = {
   inviteeToken: string;
   realmId: string;
   acceptedEventId: string;
-  // The accepted `ak.invite.create` envelope and the Seal basis it committed
-  // to. §7 has the inviter-side Station read its own persisted canonical bytes
+  // The accepted `ak.invite.create` envelope and the RealmCommit that covers
+  // it. §7 has the inviter-side Station read its own persisted canonical bytes
   // rather than rebuild them.
   inviteEvent: Record<string, unknown>;
-  sealBasis: Record<string, unknown>;
+  inviteCommit: InviteDeliveryRequestBodyBodyBody["invite_commit"];
   evidence: InviteDeliveryRequestBodyBodyBody["introduction_evidence"];
   inviteAddress: InviteDeliveryRequestBodyBodyBody["invite_address"];
 };
@@ -157,10 +156,8 @@ async function acceptedInviteFixture(
     },
   });
   await advanceEnvelopeToActorFrontier(request, inviterToken, event);
-  const sealBasis = await readRealmSealBasis(request, inviterToken, realmId);
-  event.seal_basis = sealBasis;
   refreshEventEnvelopeProof(event);
-  await submitSignedEventApi(request, inviterToken, event, {
+  const submitOutcome = await submitSignedEventApi(request, inviterToken, event, {
     context: `persist ${slug} invite create`,
   });
 
@@ -172,7 +169,8 @@ async function acceptedInviteFixture(
     realmId,
     acceptedEventId: String(event.event_id),
     inviteEvent: await readAcceptedInvite(request, inviterToken, String(event.event_id)),
-    sealBasis,
+    inviteCommit: (submitOutcome as Record<string, unknown>)
+      .commit as InviteDeliveryRequestBodyBodyBody["invite_commit"],
     evidence,
     inviteAddress,
   };
@@ -228,6 +226,10 @@ function peerDeliveryBody(
     // envelope itself to the generated type is the remaining B3 item.
     invite_event:
       inviteEvent as InviteDeliveryRequestBodyBodyBody["invite_event"],
+    invite_commit: fixture.inviteCommit,
+    authority_locator_hints: [
+      { service_id: solandServiceId(), source: "invite" },
+    ],
     invite_address: fixture.inviteAddress,
     introduction_evidence: fixture.evidence,
     idempotency_key: `cotest-peer-invite-${label}-${Date.now()}`,
@@ -271,6 +273,10 @@ test.describe("invite addressing", () => {
         // Event envelope itself to the generated type is the remaining B3 item.
         invite_event:
           fixture.inviteEvent as InviteDeliveryRequestBodyBodyBody["invite_event"],
+        invite_commit: fixture.inviteCommit,
+        authority_locator_hints: [
+          { service_id: solandServiceId(), source: "invite" },
+        ],
         invite_address: fixture.inviteAddress,
         introduction_evidence: fixture.evidence,
         idempotency_key: `cotest-peer-invite-${Date.now()}`,

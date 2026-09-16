@@ -66,7 +66,7 @@ const SCHEMA_VALIDATION_FIXTURE_FILES: &[(&str, FixtureIdentity<'static>, &str)]
     (
         SCHEMA_VALIDATION_FIXTURE,
         FixtureIdentity::Profile(
-            crate::conformance::security_closure::SECURITY_CLOSURE_VECTORS_PROFILE,
+            crate::conformance::helpers::PRIVACY_SECURITY_VECTOR_GROUP_PROFILE,
         ),
         "schema_validation",
     ),
@@ -78,7 +78,7 @@ const SCHEMA_VALIDATION_FIXTURE_FILES: &[(&str, FixtureIdentity<'static>, &str)]
     (
         REALM_ORGANIZATION_FIXTURE,
         FixtureIdentity::Profile(
-            crate::conformance::security_closure::SECURITY_CLOSURE_VECTORS_PROFILE,
+            crate::conformance::helpers::PRIVACY_SECURITY_VECTOR_GROUP_PROFILE,
         ),
         "realm_organization_conformance",
     ),

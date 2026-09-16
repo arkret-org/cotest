@@ -231,7 +231,6 @@ dependencies = [
  "arkret-identifiers",
  "arkret-identity",
  "arkret-keystore",
- "arkret-lattice-registry",
  "arkret-mls",
  "arkret-models-collaboration",
  "arkret-models-crypto",
@@ -240,6 +239,7 @@ dependencies = [
  "arkret-models-integration",
  "arkret-policy",
  "arkret-push-policy",
+ "arkret-retry",
  "arkret-schema",
  "arkret-signatures",
  "arkret-state",
@@ -268,11 +268,8 @@ name = "arkret-bootstrap"
 version = "0.3.0"
 dependencies = [
  "arkret-canonical",
- "arkret-event-draft",
- "arkret-lattice-registry",
  "arkret-models-collaboration",
  "arkret-models-identity",
- "arkret-state",
  "arkret-wire",
  "chrono",
  "serde_json",
@@ -445,18 +442,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "arkret-lattice-registry"
-version = "0.3.0"
-dependencies = [
- "arkret-models-collaboration",
- "arkret-schema",
- "arkret-state",
- "arkret-wire",
- "serde_json",
- "thiserror 2.0.20",
-]
-
-[[package]]
 name = "arkret-locale"
 version = "0.3.0"
 dependencies = [
@@ -502,7 +487,6 @@ dependencies = [
  "arkret-identifiers",
  "arkret-models-crypto",
  "arkret-models-identity",
- "arkret-models-integration",
  "arkret-schema",
  "arkret-wire",
  "chrono",
@@ -662,17 +646,8 @@ dependencies = [
 name = "arkret-state"
 version = "0.3.0"
 dependencies = [
- "arkret-canonical",
- "arkret-event-draft",
  "arkret-identifiers",
- "arkret-models-collaboration",
- "arkret-models-crypto",
  "arkret-wire",
- "async-trait",
- "chrono",
- "hex",
- "serde",
- "serde_json",
  "thiserror 2.0.20",
 ]
 
@@ -688,6 +663,7 @@ dependencies = [
  "chrono",
  "serde",
  "serde_json",
+ "sha2 0.11.0",
 ]
 
 [[package]]
@@ -709,6 +685,7 @@ dependencies = [
  "unicode-normalization",
  "unicode-security",
  "url",
+ "uuid",
  "web-time",
 ]
 
@@ -2057,7 +2034,6 @@ dependencies = [
  "arkret-http-client",
  "arkret-identifiers",
  "arkret-identity",
- "arkret-lattice-registry",
  "arkret-models-collaboration",
  "arkret-models-crypto",
  "arkret-models-discovery",
@@ -3247,7 +3223,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -3279,7 +3255,7 @@ version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab8ecd87370524b461f8557c119c405552c396ed91fc0a8eec68679eab26f94a"
 dependencies = [
- "libloading 0.8.9",
+ "libloading 0.7.4",
 ]
 
 [[package]]
@@ -3608,7 +3584,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -4045,40 +4021,28 @@ version = "0.3.0"
 dependencies = [
  "arkret-auth",
  "arkret-canonical",
- "arkret-crypto",
  "arkret-event-draft",
  "arkret-hlc",
  "arkret-http-client",
  "arkret-identifiers",
  "arkret-identity",
  "arkret-keystore",
- "arkret-lattice-registry",
  "arkret-models-collaboration",
  "arkret-models-crypto",
  "arkret-models-discovery",
  "arkret-models-identity",
  "arkret-policy",
  "arkret-retry",
- "arkret-schema",
  "arkret-signatures",
- "arkret-state",
  "arkret-wire",
- "base64 0.23.1",
- "chacha20poly1305 0.11.0",
  "chrono",
  "ed25519-dalek 3.0.0",
- "getrandom 0.4.3",
  "gloo-timers 0.4.0",
- "hex",
- "hkdf 0.13.0",
  "serde",
  "serde_json",
- "sha2 0.11.0",
  "thiserror 2.0.20",
  "tokio",
- "tracing",
  "url",
- "x25519-dalek 3.0.0",
  "zeroize",
 ]
 
@@ -5024,7 +4988,7 @@ dependencies = [
  "js-sys",
  "log",
  "wasm-bindgen",
- "windows-core 0.62.2",
+ "windows-core 0.61.2",
 ]
 
 [[package]]
@@ -6462,7 +6426,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -6578,7 +6542,7 @@ version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "680998035259dcfcafe653688bf2aa6d3e2dc05e98be6ab46afb089dc84f1df8"
 dependencies = [
- "proc-macro-crate 3.5.0",
+ "proc-macro-crate 1.3.1",
  "proc-macro2",
  "quote",
  "syn 2.0.117",
@@ -8047,7 +8011,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.60.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -8744,7 +8708,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -8803,7 +8767,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -8888,7 +8852,7 @@ version = "0.96.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "53fb3afc3d6cc525ab788a7f20c12cd3c5b86f756e61e1da094753f4318a5b16"
 dependencies = [
- "proc-macro-crate 3.5.0",
+ "proc-macro-crate 2.0.2",
  "proc-macro2",
  "quote",
  "salvo-serde-util",
@@ -8984,7 +8948,7 @@ version = "0.96.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0612c6b3c3cfa9ef85bc5cfbf421c9f71be49bdd471af1a03c9ca55e8d4b5d1e"
 dependencies = [
- "proc-macro-crate 3.5.0",
+ "proc-macro-crate 2.0.2",
  "proc-macro2",
  "quote",
  "salvo-serde-util",
@@ -9731,14 +9695,12 @@ dependencies = [
  "arkret-event-draft",
  "arkret-hlc",
  "arkret-identifiers",
- "arkret-lattice-registry",
  "arkret-mls",
  "arkret-models-collaboration",
  "arkret-models-crypto",
  "arkret-models-identity",
  "arkret-policy",
  "arkret-schema",
- "arkret-state",
  "arkret-wire",
  "base64 0.23.1",
  "chrono",
@@ -9758,7 +9720,6 @@ dependencies = [
  "arkret-event-draft",
  "arkret-identifiers",
  "arkret-identity",
- "arkret-lattice-registry",
  "arkret-models-collaboration",
  "arkret-models-crypto",
  "arkret-models-identity",
@@ -10198,7 +10159,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -11552,7 +11513,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -12172,7 +12133,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e7e8131a03190127fb2263afc72b322ecadae46b6ff8c6f399ff5d02f5559af6"
 dependencies = [
  "curve25519-dalek 5.0.0",
- "getrandom 0.4.3",
  "rand_core 0.10.1",
  "zeroize",
 ]

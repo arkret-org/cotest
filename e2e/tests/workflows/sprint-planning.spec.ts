@@ -78,7 +78,7 @@ test.describe("workflow: sprint planning", () => {
         summary: "Sprint planning + claims",
         discoverability: "listed",
         joinRule: "invite",
-        encryptionProfile: "none",
+        mlsActivated: false,
         seedMembers: [bob.id, carol.id],
       });
       await Promise.all([
@@ -209,7 +209,7 @@ test.describe("workflow: sprint planning", () => {
         summary: "Multi-card draft-state batch",
         discoverability: "listed",
         joinRule: "invite",
-        encryptionProfile: "none",
+        mlsActivated: false,
       });
 
       await meiPage.page.goto(`/kanban/${realmId}`, {
@@ -313,7 +313,7 @@ test.describe("workflow: sprint planning", () => {
         summary: "Cross-user kanban hydration",
         discoverability: "listed",
         joinRule: "invite",
-        encryptionProfile: "none",
+        mlsActivated: false,
         seedMembers: [bob.id, carol.id],
       });
       await Promise.all([
@@ -579,7 +579,7 @@ test.describe("workflow: sprint planning", () => {
         summary: "End-of-week bulk archive + cascade",
         discoverability: "listed",
         joinRule: "invite",
-        encryptionProfile: "none",
+        mlsActivated: false,
       });
 
       await meiPage.page.goto(`/kanban/${realmId}`, {

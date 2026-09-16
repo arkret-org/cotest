@@ -11,8 +11,8 @@
 //! cannot drift on what a registration looks like.
 
 use anyhow::{Context, Result, bail};
-use arkret_models_collaboration::account_lifecycle::AccountRegisterOutcome;
-use arkret_models_collaboration::session_grant_bodies::SessionGrantOutcome;
+use arkret_models_collaboration::account_operations::AccountRegisterOutcome;
+use arkret_models_collaboration::session_grants::SessionGrantOutcome;
 use base64::Engine as _;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};

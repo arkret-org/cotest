@@ -41,6 +41,7 @@ import {
   authHeaders,
   canonicalJson,
   queryPeerEventsApi,
+  readCommitStreamHeadApi,
   createRealmApi,
   dispatchSelfInviteApi,
   grantServiceCapabilityApi,
@@ -50,7 +51,6 @@ import {
   pushFederationEvents,
   rawPushFederationEvents,
   queryRealmEventsApi,
-  readAcceptedSealBundle,
   revokeCapabilityApi,
   sendMessageApi,
   sendPreparedMessageApi,
@@ -411,36 +411,16 @@ test.describe("cross-server federation", () => {
       ...(bootstrapPush.duplicate ?? []),
     ]).toHaveLength(bootstrapEvents.length);
 
-    const frontierUrl = `${solandBaseUrl("server1")}/_arkret/self/seals/frontier`;
-    const frontierResponse = await request.fetch(frontierUrl, {
-      method: "QUERY",
-      headers: {
-        ...authHeaders(aliceToken, "QUERY", frontierUrl),
-        "content-type": "application/json",
-      },
-      data: canonicalJson({ realm_id: realmId }),
-    });
-    const frontierBody = (await frontierResponse.json()) as {
-      frontier?: {
-        kind?: unknown;
-        seal_basis?: { leaves?: unknown };
-      };
-    };
-    expect(
-      frontierResponse.ok(),
-      `read server1 Realm Seal frontier: ${JSON.stringify(frontierBody)}`,
-    ).toBeTruthy();
-    expect(frontierBody.frontier?.kind).toBe("realm_seal");
-    const leaves = frontierBody.frontier?.seal_basis?.leaves as
-      string[] | undefined;
-    expect(leaves).toEqual([expect.stringMatching(/^ak:seal:/)]);
-    const inviteBasisBundle = await readAcceptedSealBundle(
+    const realmHead = await readCommitStreamHeadApi(
       request,
       aliceToken,
       realmId,
-      leaves![0],
-      "server1",
+      { server: "server1" },
     );
+    expect(realmHead, "server1 must have an accepted Realm commit stream").toBeTruthy();
+    expect(realmHead!.commit_id).toMatch(/^ak:realm_commit:/);
+    expect(realmHead!.stream_ref).toEqual({ kind: "realm", realm_id: realmId });
+
     const locatorToken = await issueInviteLocatorToken(request, bobToken, "server2");
     const locatorResponse = await request.post(
       `${solandBaseUrl("server2")}/_arkret/open/invite-locators/resolve`,
@@ -454,9 +434,6 @@ test.describe("cross-server federation", () => {
       realmId,
       kind: "ak.invite.create",
       actorId: alice.id,
-      sealBasis: {
-        leaves: [leaves![0]],
-      },
       payload: {
         invitee_account_id: locator.account_id,
         introduction_evidence_digest: `sha256:${sha256CanonicalJson(evidence)}`,
@@ -504,7 +481,6 @@ test.describe("cross-server federation", () => {
       server: "server2",
       realmId,
       idempotencyKey: `${solandServiceId("server1")}#cotest-cross-server-smoke`,
-      cbsProofBundles: [inviteBasisBundle],
     });
     expect(replay.rejections ?? [], "accepted invite replay must not be rejected").toEqual([]);
     expect([...(replay.accepted ?? []), ...(replay.duplicate ?? [])]).toContain(
@@ -1065,14 +1041,14 @@ test.describe("prepared authoring and join", () => {
 
       if (charlie && charlieToken) {
         const invitation = await waitForInviteDeliveryApi(request, charlieToken, charlie.id, realmId, "server1");
-        const beforeJoin = await waitForRealmControlIdleApi(request, aliceToken, realmId, { server: "server1" });
+        const beforeJoin = await readCommitStreamHeadApi(request, aliceToken, realmId, { server: "server1" });
         const joined = await acceptPreparedInviteApi(request, charlieToken, charlie.id, realmId, invitation.id, { server: "server1", waitForStatus: false });
-        const afterJoin = await waitForRealmControlIdleApi(request, aliceToken, realmId, {
-          server: "server1", afterControlEventSetRoot: String(beforeJoin.control_event_set_root),
-        });
-        const covering = await readAcceptedSealBundle(request, aliceToken, realmId, (afterJoin.leaves as string[])[0], "server1");
-        const joinDigest = joined.proofs[0].event_digest;
-        expect((covering.seals as Array<{ delta?: string[] }>).some((seal) => seal.delta?.includes(joinDigest))).toBe(true);
+        // The join advanced the Realm's own stream by exactly the commits it
+        // caused, and the accepted head is a later position than before it.
+        const afterJoin = await readCommitStreamHeadApi(request, aliceToken, realmId, { server: "server1" });
+        expect(afterJoin, "join must advance the Realm commit stream").toBeTruthy();
+        expect(afterJoin!.stream_position).toBeGreaterThan(beforeJoin?.stream_position ?? -1);
+        expect(String(joined.event_id)).toMatch(/^ak:event:/);
         await waitForMember(request, aliceToken, charlie.id, realmId, "server1");
         await submitSignedEventApi(request, charlieToken, signedEventEnvelope({
           actorId: charlie.id,
@@ -1095,10 +1071,6 @@ test.describe("prepared authoring and join", () => {
           historicalPayloadBytes += Buffer.byteLength(canonicalJson(payload), "utf8");
           await submitSignedEventApi(request, aliceToken, signedEventEnvelope({
             actorId: alice.id, realmId, kind: "ak.schema.define", payload,
-            preconditions: [{
-              cell_id: `ak:cell:ak.component.schema.definition.v1:${payload.value.$id}`,
-              predicate: { op: "head_eq", value: null },
-            }],
           }), { server: "server1", context: `accept historical schema ${index}` });
         }
         expect(historicalPayloadBytes).toBeGreaterThan(8 * 1024 * 1024);
