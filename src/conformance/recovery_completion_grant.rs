@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use anyhow::{Context as _, Result, anyhow, bail};
 use arkret_identifiers::Hlc;
-use arkret_models_collaboration::session_grant_bodies::SessionGrantOutcome;
+use arkret_models_collaboration::session_grants::SessionGrantOutcome;
 use arkret_models_crypto::{
     RecoveryAuthorityKind, RecoveryProofKind, RecoveryProofSummary, RecoveryReceipt,
     RecoveryReceiptOutcome, RecoveryTerminalCommit, UnsignedRecoveryReceipt,

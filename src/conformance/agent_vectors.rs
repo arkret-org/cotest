@@ -21,9 +21,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Context as _, Result, anyhow, bail};
 use arkret_identifiers::DidCoreId;
-use arkret_models_collaboration::agent_operations::agent_requested_scope_digest;
+use arkret_models_collaboration::agent_scope::agent_requested_scope_digest;
 use arkret_models_collaboration::events_payloads::agent::AgentKeyScope;
-use arkret_models_collaboration::sync_frames::account_sync::{
+use arkret_models_collaboration::sync_frames::account_subscribe::{
     NotificationDelta, NotificationDeltaAction,
 };
 use arkret_wire::{AgentHumanApprovalProblem, CapabilityActionId, Problem, ProfileId};
@@ -363,7 +363,7 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
     let typed_verification_method =
         arkret_wire::DidUrl::new("did:webvh:z6mkagent:agent.example#runtime-1")
             .map_err(|error| anyhow!(error))?;
-    let binding = arkret_models_collaboration::agent_operations::agent_runtime_key_binding_digest(
+    let binding = arkret_models_collaboration::agent_scope::agent_runtime_key_binding_digest(
         &agent_id,
         &typed_pairing_request_id,
         &typed_verification_method,
@@ -452,7 +452,7 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
         .get("canonical_pairing_expires_at")
         .and_then(Value::as_str)
         .ok_or_else(|| anyhow!("canonical pairing expiry missing"))?;
-    let proof: arkret_models_collaboration::agent_operations::AgentRuntimeKeyPossessionProof =
+    let proof: arkret_models_collaboration::agent_scope::AgentRuntimeKeyPossessionProof =
         serde_json::from_value(
             case.get("proof_of_possession")
                 .cloned()

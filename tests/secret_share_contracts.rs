@@ -4,10 +4,10 @@ use anyhow::{Result, anyhow, bail};
 use arkret_canonical::{canonical_json_bytes, from_canonical_json_slice};
 use arkret_crypto::secret_share::{SecretShareRequestContent, SecretShareSendContent};
 use arkret_identifiers::{DeviceId, DeviceMessageId, DidCoreId};
-use arkret_models_collaboration::sync_frames::account_sync::{
-    DeviceMessageContent, DeviceMessageEnvelope, DeviceMessageSender, DeviceMessageTarget,
-    DeviceMessagesSendRequestBody,
+use arkret_models_collaboration::device_messages::{
+    DeviceMessageEnvelope, DeviceMessageSender, DeviceMessageTarget, DeviceMessagesSendRequestBody,
 };
+use arkret_models_collaboration::sync_frames::account_sync::DeviceMessageContent;
 use arkret_wire::{
     AccountId, HPKE_SUITE_X25519_CHACHA20POLY1305_V1, ProtocolKind, SECRET_REQUEST_KIND,
     SECRET_SEND_KIND,

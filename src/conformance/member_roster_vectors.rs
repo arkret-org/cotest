@@ -22,7 +22,9 @@
 
 use anyhow::{Result, anyhow, bail};
 use arkret_identifiers::{DidCoreId, EventId, Hash, RealmId};
-use arkret_models_collaboration::sync_frames::account_sync::{MemberRosterEntry, MembershipState};
+use arkret_models_collaboration::account_subscribe_projections::{
+    MemberRosterEntry, MemberRosterMembership,
+};
 use arkret_models_identity::{
     EffectiveIdentityEntry, HandleClaim, HandleClaimStatus, MemberIdentitySegment,
     RosterHandleClaimDigestEntry, member_display_state_digest,
@@ -122,11 +124,11 @@ fn verified_claim_for_subject(handle: &str, subject: &AccountId) -> Result<Handl
 pub fn run_member_roster_shape_vector() -> Result<()> {
     let entry = MemberRosterEntry {
         actor_id: alice()?,
-        membership: MembershipState::Join,
+        membership: MemberRosterMembership::Join,
         subject_account_id: None,
         identity_event_ids: vec![fake_event(0xe01)?, fake_event(0xe02)?],
         member_display_state_digest: Some(pinned_state_digest()?),
-        identity_events: vec![],
+        identity_events: None,
         handle_claim_digests: None,
         handle_claims: None,
         handle_claims_limited: None,
@@ -338,11 +340,11 @@ pub fn run_member_roster_subject_undisclosed_omits_gated_fields_vector() -> Resu
     // Valid undisclosed entry: no subject_id, no gated fields.
     let clean = MemberRosterEntry {
         actor_id: alice()?,
-        membership: MembershipState::Join,
+        membership: MemberRosterMembership::Join,
         subject_account_id: None,
         identity_event_ids: vec![fake_event(0xf01)?],
         member_display_state_digest: Some(pinned_state_digest()?),
-        identity_events: vec![],
+        identity_events: None,
         handle_claim_digests: None,
         handle_claims: None,
         handle_claims_limited: None,
@@ -399,11 +401,11 @@ pub fn run_member_roster_handle_claims_subject_alignment_vector() -> Result<()> 
     let subject = alice_subject()?;
     let aligned = MemberRosterEntry {
         actor_id: alice()?,
-        membership: MembershipState::Join,
+        membership: MemberRosterMembership::Join,
         subject_account_id: Some(subject.clone()),
         identity_event_ids: vec![fake_event(0xf11)?],
         member_display_state_digest: Some(pinned_state_digest()?),
-        identity_events: vec![],
+        identity_events: None,
         handle_claim_digests: Some(vec![pinned_claim_digest("22")?]),
         handle_claims: Some(vec![verified_claim_for_subject(
             "alice:acme.example",
@@ -511,11 +513,11 @@ pub fn run_member_roster_handle_claims_limited_semantics_vector() -> Result<()> 
     // Limited roster: only digest hints, claims truncated.
     let limited = MemberRosterEntry {
         actor_id: alice()?,
-        membership: MembershipState::Join,
+        membership: MemberRosterMembership::Join,
         subject_account_id: Some(subject.clone()),
         identity_event_ids: vec![fake_event(0xf31)?],
         member_display_state_digest: Some(pinned_state_digest()?),
-        identity_events: vec![],
+        identity_events: None,
         handle_claim_digests: Some(vec![pinned_claim_digest("55")?, pinned_claim_digest("66")?]),
         // claims truncated — only one of the two digests is materialised.
         handle_claims: Some(vec![verified_claim_for_subject(

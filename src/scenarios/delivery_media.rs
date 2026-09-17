@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, anyhow};
-use arkret_models_collaboration::sync_frames::account_sync::{
+use arkret_models_collaboration::device_messages::{
     DeviceMessagesAckRequestBody, DeviceMessagesSendRequestBody,
 };
 use arkret_models_crypto::{KeysClaimRequestBody, KeysQueryRequestBody};
@@ -255,7 +255,7 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
             .is_none()
     );
 
-    let ack: arkret_models_collaboration::sync_frames::account_sync::DeviceMessagesAckOutcome =
+    let ack: arkret_models_collaboration::device_messages::DeviceMessagesAckOutcome =
         serde_json::from_value(
             expect_json(
                 server

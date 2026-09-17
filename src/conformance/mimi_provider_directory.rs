@@ -7,7 +7,7 @@ use arkret_models_collaboration::objects::interop::{
     ProviderDirectory, ProviderDirectoryEndpoint, ProviderDirectoryMimi, ProviderDirectoryProof,
 };
 use arkret_signatures::Ed25519PayloadSigner;
-use arkret_signatures::signer::verify_ed25519_payload_signature;
+use arkret_signatures::verify_ed25519_payload_signature;
 use arkret_wire::{Did, DidUrl, Hash, MimiUri, PayloadProof, PayloadSigner as _};
 use chrono::{Duration, Utc};
 

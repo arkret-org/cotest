@@ -20,17 +20,20 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use arkret_identifiers::{ConsentId, DidCoreId, InviteId};
-use arkret_models_collaboration::account_lifecycle::{
-    ConsentCellView, ConsentGrantRequestBody, ConsentPeer, ConsentRevokeRequestBody,
+use arkret_models_collaboration::consent_operations::{
+    ConsentGrantRequestBody, ConsentRevokeRequestBody, ConsentView,
 };
+use arkret_models_collaboration::events_payloads::consent::ConsentPeer;
 use arkret_models_collaboration::events_payloads::ConsentGrantPayload;
 use arkret_models_collaboration::governance::invite_addressing::{
     IntroductionEvidence, InviteAddress, InviteReceivePolicy, SelfInviteDispatchRequestBody,
 };
 use arkret_models_collaboration::governance_payloads::{ConsentObservedDot, ConsentRevokePayload};
+use arkret_models_collaboration::device_messages::{
+    DeviceMessageSender, DeviceMessagesAckRequestBody, DeviceMessagesGetOutcome,
+};
 use arkret_models_collaboration::sync_frames::account_sync::{
-    ActorPrivateAccountDataOperation, DeviceMessageContent, DeviceMessageSender,
-    DeviceMessagesAckRequestBody, DeviceMessagesGetOutcome,
+    ActorPrivateAccountDataOperation, DeviceMessageContent,
 };
 use arkret_models_identity::ServiceResolutionCarrier;
 use arkret_models_identity::account::{AccountDataList, AccountDataRow};
@@ -296,7 +299,7 @@ async fn assert_service_account_data_fanout(
     let ack_token = outcome
         .ack_token
         .context("non-empty to-device response omitted ack_token")?;
-    let ack: arkret_models_collaboration::sync_frames::account_sync::DeviceMessagesAckOutcome =
+    let ack: arkret_models_collaboration::device_messages::DeviceMessagesAckOutcome =
         serde_json::from_value(
             expect_json(
                 holder
@@ -313,7 +316,7 @@ async fn assert_service_account_data_fanout(
 async fn grant_then_revoke_invite_consent(
     holder: &TestActorClient,
     peer: &TestActorClient,
-) -> Result<ConsentCellView> {
+) -> Result<ConsentView> {
     let principal = holder
         .principal
         .as_ref()
@@ -359,8 +362,8 @@ async fn grant_then_revoke_invite_consent(
         StatusCode::OK,
     )
     .await?;
-    let granted: ConsentCellView = serde_json::from_value(granted)
-        .context("consent grant response is not a ConsentCellView")?;
+    let granted: ConsentView = serde_json::from_value(granted)
+        .context("consent grant response is not a ConsentView")?;
     let expected_dot = format!("{}:0", grant_event_id.as_str());
     ensure!(
         granted
@@ -410,7 +413,7 @@ async fn grant_then_revoke_invite_consent(
         StatusCode::OK,
     )
     .await?;
-    serde_json::from_value(revoked).context("consent revoke response is not a ConsentCellView")
+    serde_json::from_value(revoked).context("consent revoke response is not a ConsentView")
 }
 
 async fn assert_notify_invite_wakes_account_subscribe(

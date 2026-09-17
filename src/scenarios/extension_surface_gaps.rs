@@ -3,7 +3,7 @@ use arkret::{
     AgentKeyScope, AgentKeyScopeResource, AgentKeyScopeResourceKind, AgentProvisionRequestBody, Did,
 };
 use arkret_models_collaboration::governance::agent_artifacts::PublicKey;
-use arkret_models_collaboration::http_bodies::{
+use arkret_models_collaboration::device_pairing::{
     DevicePairingNonce, DevicePairingResolveRequestBody, DevicePairingStageOutcome,
     DevicePairingStageRequestBody, DevicePairingState, DevicePairingStatusOutcome,
     DevicePairingStatusRequestBody,

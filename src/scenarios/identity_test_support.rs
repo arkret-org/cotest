@@ -15,7 +15,7 @@ use arkret_models_collaboration::events_payloads::{
     FoundingDeviceKeyPurpose, SignatureMaterial, device_authorize_payload_digest,
 };
 use arkret_models_collaboration::governance::agent_artifacts::PublicKey;
-use arkret_models_collaboration::http_bodies::{
+use arkret_models_collaboration::device_pairing::{
     AccountDevicePairOutcome, AccountDevicePairRequestBody, DevicePairingNonce,
     DevicePairingStageOutcome, DevicePairingStageRequestBody, UnsignedDevicePairingTargetProof,
 };

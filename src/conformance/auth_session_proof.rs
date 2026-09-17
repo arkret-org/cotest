@@ -3,9 +3,10 @@
 use anyhow::{Result, anyhow, bail};
 use arkret_canonical as canonical;
 use arkret_identifiers::{DeviceId, DidCoreId, Hash, SessionGrantId};
-use arkret_models_collaboration::session_grant_bodies::{
+use arkret_models_collaboration::session_grant_bodies::session_grant_refresh_request_digest;
+use arkret_models_collaboration::session_grants::{
     SessionGrantOutcome, SessionGrantRefreshRequestBody, SessionGrantRequestBody,
-    human_session_grant_intent_digest, session_grant_refresh_request_digest,
+    human_session_grant_intent_digest,
 };
 use arkret_models_identity::{
     CanonicalSessionPublicJwk, STANDARD_INITIAL_SESSION_GRANT_OPERATIONS,

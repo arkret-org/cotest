@@ -21,9 +21,8 @@ use std::time::Duration;
 
 use anyhow::{Context as _, Result, bail, ensure};
 use arkret_identifiers::ConsentId;
-use arkret_models_collaboration::account_lifecycle::{
-    ConsentCellView, ConsentGrantRequestBody, ConsentPeer,
-};
+use arkret_models_collaboration::consent_operations::{ConsentGrantRequestBody, ConsentView};
+use arkret_models_collaboration::events_payloads::consent::ConsentPeer;
 use arkret_models_collaboration::events_payloads::ConsentGrantPayload;
 use arkret_models_collaboration::governance::membership_invite::MembershipPayload;
 use arkret_wire::{
@@ -201,7 +200,7 @@ async fn grant_consent(
     holder: &TestActorClient,
     peer: &ConsentPeer,
     consent_scope: ConsentScope,
-) -> Result<ConsentCellView> {
+) -> Result<ConsentView> {
     let principal = holder
         .principal
         .as_ref()
@@ -232,7 +231,7 @@ async fn grant_consent(
         StatusCode::OK,
     )
     .await?;
-    serde_json::from_value(granted).context("consent grant response is not a ConsentCellView")
+    serde_json::from_value(granted).context("consent grant response is not a ConsentView")
 }
 
 /// The cell is addressed by the exact wire `consent_peer`, so a request that
@@ -252,14 +251,14 @@ async fn expect_consent_cell(
     holder: &TestActorClient,
     peer: &ConsentPeer,
     consent_scope: &str,
-) -> Result<ConsentCellView> {
+) -> Result<ConsentView> {
     let value = expect_json(
         consent_cell_request(holder, peer, consent_scope)?,
         StatusCode::OK,
     )
     .await?;
-    let cell: ConsentCellView =
-        serde_json::from_value(value).context("consent cell response is not a ConsentCellView")?;
+    let cell: ConsentView =
+        serde_json::from_value(value).context("consent cell response is not a ConsentView")?;
     ensure!(
         &cell.peer == peer,
         "consent cell answered with a different peer than it was addressed by: {:?}",

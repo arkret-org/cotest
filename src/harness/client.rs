@@ -798,7 +798,7 @@ impl TestActorClient {
     }
 
     async fn control_signer_evidence_ref(&self) -> Result<arkret_wire::SignerEvidenceRef> {
-        let viewer: arkret_models_collaboration::account_lifecycle::AccountView =
+        let viewer: arkret_models_collaboration::account_operations::AccountView =
             serde_json::from_value(
                 expect_json(self.get("/_arkret/self/account/viewer"), StatusCode::OK).await?,
             )

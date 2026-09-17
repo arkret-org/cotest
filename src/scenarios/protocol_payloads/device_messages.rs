@@ -19,7 +19,7 @@ async fn send_application_message(
     token: &str,
     actor_id: &str,
 ) -> Result<()> {
-    let send: arkret_models_collaboration::sync_frames::account_sync::DeviceMessagesSendOutcome =
+    let send: arkret_models_collaboration::device_messages::DeviceMessagesSendOutcome =
         serde_json::from_value(
             expect_json(
                 server
@@ -40,11 +40,12 @@ async fn send_application_message(
             )
             .await?,
         )?;
-    let actor_core_id = crate::harness::actor_core_id(actor_id)?;
-    assert_eq!(
-        send.delivered[&actor_core_id][0],
-        "ak:device:01904100-0000-7000-8000-0000000000a1"
-    );
+    assert_delivered_to(
+        &send,
+        actor_id,
+        "ak:device:01904100-0000-7000-8000-0000000000a1",
+        "ak:device_message:0196419b-0000-7000-8000-00000000f201",
+    )?;
     Ok(())
 }
 
@@ -53,7 +54,7 @@ async fn duplicate_send_is_idempotent(
     token: &str,
     actor_id: &str,
 ) -> Result<()> {
-    let duplicate_send: arkret_models_collaboration::sync_frames::account_sync::DeviceMessagesSendOutcome =
+    let duplicate_send: arkret_models_collaboration::device_messages::DeviceMessagesSendOutcome =
         serde_json::from_value(expect_json(
         server
             .http()
@@ -72,11 +73,12 @@ async fn duplicate_send_is_idempotent(
         StatusCode::OK,
     )
     .await?)?;
-    let actor_core_id = crate::harness::actor_core_id(actor_id)?;
-    assert_eq!(
-        duplicate_send.delivered[&actor_core_id][0],
-        "ak:device:01904100-0000-7000-8000-0000000000a1"
-    );
+    assert_delivered_to(
+        &duplicate_send,
+        actor_id,
+        "ak:device:01904100-0000-7000-8000-0000000000a1",
+        "ak:device_message:0196419b-0000-7000-8000-00000000f201",
+    )?;
     Ok(())
 }
 
@@ -100,7 +102,7 @@ async fn send_verification_message(
     token: &str,
     actor_id: &str,
 ) -> Result<()> {
-    let verification_send: arkret_models_collaboration::sync_frames::account_sync::DeviceMessagesSendOutcome =
+    let verification_send: arkret_models_collaboration::device_messages::DeviceMessagesSendOutcome =
         serde_json::from_value(expect_json(
         server
             .http()
@@ -122,10 +124,48 @@ async fn send_verification_message(
         StatusCode::OK,
     )
     .await?)?;
-    let actor_core_id = crate::harness::actor_core_id(actor_id)?;
-    assert_eq!(
-        verification_send.delivered[&actor_core_id][0],
-        "ak:device:01904100-0000-7000-8000-0000000000a1"
+    assert_delivered_to(
+        &verification_send,
+        actor_id,
+        "ak:device:01904100-0000-7000-8000-0000000000a1",
+        "ak:device_message:0196419b-0000-7000-8000-00000000f202",
+    )?;
+    Ok(())
+}
+
+/// `DeviceMessagesSendOutcome.delivered` is now keyed by `DeviceId` and carries a
+/// `DeviceMessageDeliveredRow` rather than a bare device-id string, so the check
+/// names the device it expects and reads the row's status back instead of
+/// comparing position 0 against a literal.
+fn assert_delivered_to(
+    outcome: &arkret_models_collaboration::device_messages::DeviceMessagesSendOutcome,
+    actor_id: &str,
+    device_id: &str,
+    device_message_id: &str,
+) -> Result<()> {
+    use arkret_models_collaboration::device_messages::DeviceMessageDeliveredStatus;
+    use arkret_identifiers::{DeviceId, DeviceMessageId, Did, project_did_to_core_id};
+
+    let core_id = project_did_to_core_id(&Did::new(actor_id.to_owned())?)?;
+    let device_id = DeviceId::new(device_id.to_owned())?;
+    let devices = outcome
+        .delivered
+        .get(&core_id)
+        .ok_or_else(|| anyhow::anyhow!("send outcome delivered nothing to {core_id}"))?;
+    let row = devices.get(&device_id).ok_or_else(|| {
+        anyhow::anyhow!("send outcome delivered nothing to device {device_id}")
+    })?;
+    anyhow::ensure!(
+        row.status == DeviceMessageDeliveredStatus::Delivered,
+        "device message to {device_id} is not delivered"
+    );
+    anyhow::ensure!(
+        row.device_message_id == DeviceMessageId::new(device_message_id.to_owned())?,
+        "delivered row names a different device message than the one sent"
+    );
+    anyhow::ensure!(
+        outcome.unknown_devices.is_empty(),
+        "send outcome reported unknown devices"
     );
     Ok(())
 }

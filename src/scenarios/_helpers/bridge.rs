@@ -188,10 +188,10 @@ async fn coauth_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respo
     // The contract surface is the typed wire shape: only a by-JWT
     // introspection request with an audience is in-contract.
     let parsed = serde_json::from_value::<
-        arkret_models_collaboration::session_grant_bodies::SessionGrantIntrospectRequestBody,
+        arkret_models_collaboration::session_grants::SessionGrantIntrospectRequestBody,
     >(body);
     let Ok(
-        arkret_models_collaboration::session_grant_bodies::SessionGrantIntrospectRequestBody::ByJwt(
+        arkret_models_collaboration::session_grants::SessionGrantIntrospectRequestBody::ByJwt(
             by_jwt,
         ),
     ) = parsed

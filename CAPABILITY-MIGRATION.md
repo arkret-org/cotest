@@ -433,15 +433,186 @@ against and the root package would not compile even with blocker 1 cleared.
   sufficient once the workspace compiles. `psql` must carry `PGPASSWORD` or it
   blocks on a password prompt.
 
+### 6. Measured baseline, 2026-09-17 — 555 errors, and where they are
+
+The handoff carried "约 650 条残留，根 package 从未编译到" forward from an
+estimate. It was re-measured personally after the SDK went green at `2293a1fa`,
+and the second clause is the one that matters: cotest's root package is blocked
+by **sibling path dependencies**, not by an earlier package in its own
+workspace. `cargo check --workspace --all-targets --message-format short`:
+
+| crate | errors |
+| --- | --- |
+| `inkson` (lib) | 271 |
+| `soland-services` (lib) | 167 |
+| `garth`, `soland-domain`, `soland-storage`, `soland-storage-postgres` | 0 |
+| `cotest-test-support` (`crates/test-support`) | 0 |
+| **`cotest` (lib)** | **never reached — 0 files type-checked** |
+
+So there was never a trustworthy cotest number to compare against. To get one,
+the §8 oracle technique was applied at whole-package scale: a scratch crate
+carrying cotest's real `src/` with the 14 inkson-importing modules removed, and
+`inkson` / `soland-services` dropped from the dependency list.
+
+| reading | cotest lib errors | files |
+| --- | --- | --- |
+| baseline (HEAD `5b074180`) | 555 | 70 |
+| after this round | 542 | 61 |
+
+Five of the 555 are oracle artefacts (`conformance/privacy.rs` × 4 referencing
+the dropped `super::privacy_security`, `scenarios/protocol_payloads/mod.rs` × 1
+referencing the dropped `push`), so the real figures are ≈550 → ≈537. The 14
+dropped modules are still unmeasured and are in neither number.
+
+**Nine files went red → clean:** `conformance/auth_session_proof.rs`,
+`conformance/member_roster_vectors.rs`, `conformance/mimi_provider_directory.rs`,
+`conformance/schema_validation_fixture.rs`, `conformance/wire/multisig.rs`,
+`scenarios/_helpers/bridge.rs`, `scenarios/delivery_media.rs`,
+`scenarios/protocol_payloads/device_messages.rs`,
+`scenarios/to_device_offline_ordering.rs`.
+
+The drop is small on purpose. Every error fixed this round was a **module move**
+— a type that still exists in the SDK under a new parent — and those are the
+only ones fixable from here while `arkret-rust-sdk` is off-limits. The moves
+found and followed:
+
+| was | is now |
+| --- | --- |
+| `session_grant_bodies::{SessionGrantOutcome, SessionGrant*RequestBody, human_session_grant_intent_digest}` | `session_grants::…` |
+| `sync_frames::account_sync::{DeviceMessage*, DeviceMessages*}` | `device_messages::…` |
+| `sync_frames::account_sync::{NotificationDelta, NotificationDeltaAction}` | `sync_frames::account_subscribe::…` |
+| `sync_frames::account_sync::{MemberRosterEntry, MembershipState}` | `account_subscribe_projections::{MemberRosterEntry, MemberRosterMembership}` |
+| `account_lifecycle::{ConsentCellView, Consent*RequestBody}` | `consent_operations::{ConsentView, Consent*RequestBody}` |
+| `account_lifecycle::AccountView` | `account_operations::AccountView` |
+| `agent_operations::{agent_requested_scope_digest, agent_runtime_key_binding_digest, AgentRuntimeKeyPossessionProof}` | `agent_scope::…` |
+| `events_payloads::PolicySetStatePayload` | `governance::operation_wire::PolicySetStatePayload` |
+| `http_bodies::{DevicePairing*, AccountDevicePair*, UnsignedDevicePairingTargetProof}` | `device_pairing::…` |
+| `arkret_signatures::signer::verify_ed25519_payload_signature` | `arkret_signatures::verify_…` (module made private, item re-exported at crate root) |
+
+Two semantic follow-ons were required and are **not** compatibility shims:
+
+- `MemberRosterEntry.identity_events` is now `Option<Vec<Event>>`. The four
+  roster fixtures assert that an empty inline identity-event list MUST be
+  omitted from the wire, so `vec![]` became `None` — the exact statement of the
+  invariant, not a silencer.
+- `DeviceMessagesSendOutcome.delivered` is now keyed by `DeviceId` and carries a
+  `DeviceMessageDeliveredRow`. Three assertions had been comparing
+  `delivered[&actor][0]` against a device-id literal. They are replaced by
+  `assert_delivered_to()` in `scenarios/protocol_payloads/device_messages.rs`,
+  which names the device it expects, reads back the row's
+  `DeviceMessageDeliveredStatus` and `device_message_id`, and asserts
+  `unknown_devices` is empty. That is strictly more checking than before.
+
+**Why the number did not fall further.** Fixing an import lets the compiler see
+the type drift behind it for the first time, so each pass trades import errors
+for deeper real ones: pass 1 removed 25 and revealed 29 (555 → 559), pass 2
+removed 17 and revealed 0 (559 → 542), pass 3 removed 2 and revealed 2 (542 →
+542). The count is a poor progress metric here; the composition is the real one,
+and it has shifted from "stale module path" to "capability absent".
+
+### 7. Blocked on the typed current-result family registry (handoff §4)
+
+31 errors in 11 files are waiting on the same missing thing: `result_writes[]`
+contracts and the `ak.component.*` identifiers that replace the Cell model.
+`CellRef`, `CellFamilyId`, `LatticeOp`, `LatticeOpType`, `EventCellValueShape`,
+`state_model`, `cell_writes`, `cell_family` and the whole
+`arkret_lattice_registry` crate were removed with nothing in their place.
+**These were deliberately left untouched** — anything written against them now
+would have to be rewritten when §4 lands.
+
+| file:line | waiting on |
+| --- | --- |
+| `src/harness/event_builder.rs:426` | `arkret_wire::CellRef` |
+| `src/harness/event_builder.rs:557,562,567,572,577,583,591,607` | `arkret_wire::CellFamilyId` |
+| `src/harness/event_builder.rs:612` | `arkret_schema::validate_registered_cell_writes_in_context` |
+| `src/publication.rs:28` | `arkret_schema::project_registered_cell_writes` |
+| `src/conformance/encoding.rs:101` | `EventKindDescriptor.cell_writes` |
+| `src/conformance/encoding.rs:105` | `arkret_wire::CellFamilyId` |
+| `src/conformance/encoding.rs:214,248` | `arkret_wire::CellRef` |
+| `src/conformance/encoding.rs:232,233` | `arkret_schema::validate_registered_cell_writes` |
+| `src/conformance/call_state_core.rs:14` | `arkret_identifiers::CellRef` |
+| `src/conformance/call_state_core.rs:19` | `arkret_state::state_model` |
+| `src/conformance/call_state_core.rs:22` | `arkret_wire::{EventCellValueShape, LatticeOp, LatticeOpType}` |
+| `src/conformance/agent_vectors.rs:723` | `EventKindDescriptor.cell_writes` |
+| `src/conformance/agent_vectors.rs:727` | `arkret_wire::CellFamilyId` |
+| `src/conformance/wire/mimi.rs:514,515` | `EventKindDescriptor.{cell_family, cell_writes}` |
+| `src/conformance/profile_matrix.rs:555` | `arkret_identifiers::CellRef` |
+| `src/conformance/push_route_revision.rs:6` | the `arkret_lattice_registry` crate |
+| `src/scenarios/consent_pairwise_isolation_live.rs:137,157` | `ConsentView.{active_grant_dots, cell_id}` |
+| `src/scenarios/invite_service_fanout_live.rs:370,386,640` | `ConsentView.active_grant_dots` |
+
+### 8. SDK surfaces cotest needs back
+
+Not naming rules — symbols the SDK deleted and did not replace. Grouped by what
+they gate, counted from the 542-error oracle reading.
+
+- **Seal / frontier polling (19 sites).** `arkret_wire::SealId`,
+  `EventInitialSubmission`, `http_bodies::{SealResolveOutcome,
+  SealResolveSelection, SelfSealResolveRequestBody, EventSealSubmitOutcome}`,
+  `SealFrontierState`, `EventsFrontierState`, `event_sync::EventsFrontierView`,
+  `SignalEnvelope.seal_ref`,
+  `DeviceRevocationGateDecisionReceipt.covering_seal_id`. Most of these should
+  stay deleted; the callers need rewriting onto `CommitStreamHead`, which is a
+  cotest job for a later round, not an SDK one. `EventInitialSubmission` is the
+  exception — it has no successor named anywhere.
+- **`arkret_wire::Notary*` (19 sites).** `NotarySignerDescriptor`,
+  `NotaryValue`, `NotaryKeyKind`, `NotaryJoseAlgorithm`. The first was renamed
+  to `RealmAuthoritySignerDescriptor` mid-round; the other three have no
+  observed successor.
+- **`arkret_models_collaboration::http_bodies` (6 sites left).** The module is
+  gone. Device-pairing and mimi bodies were relocated and are followed above;
+  `EventDelivery*`, `EventsResolve*`, `EventsSubmitOutcome`,
+  `PeerEventsResolveRequestBody`, `MimiIdentifierQueryRequestBody` and
+  `MimiKeyMaterial{Outcome,RequestBody}` are absent entirely.
+- **`arkret::AgentSidecar*` (≈18 symbols, 72 errors in
+  `src/conformance/sidecar_vectors.rs` alone).** The largest single hole.
+- **`arkret_wire::cbs` (8), `arkret_wire::null_subject_cell` (7).** CBS was
+  removed by design; the vectors asserting its absence still import it.
+- **`arkret::{reaction_routing_tag_from_root,
+  derive_content_key_from_history_secret,
+  decrypt_content_exporter_aead_standalone}` (14).** The RFC 9420 exporter
+  primitives kept for RTC/Signal/reaction labels are no longer exported.
+- **`arkret_models_collaboration::{poll, direct_conversation_ops,
+  governance_dependencies}` (11).** Modules absent.
+- **`arkret_models_collaboration::sync_frames::{websocket_binding,
+  websocket_session}`.** Merged into `sync_frames::websocket`, but
+  `WebSocketConsumerHandoff`, `WebSocketConsumerOwner`, `WebSocketFallbackPolicy`,
+  `WebSocketFrameCodec`, `WebSocketHandshakeFailure`, `WebSocketOpenAdmission`,
+  `WebSocketServerEvent` and `WebSocketTransportDecision` did not survive the
+  merge, so `src/conformance/websocket_binding.rs` cannot simply follow the move.
+- **`arkret_models_crypto::run_security_transaction_resilience_fixture`.** See
+  blocker 3.
+- **`arkret_wire::run_authorization_lease_issuance_fixture`**
+  (`src/conformance/authorization_lease_issuance.rs:23`). Same shape as
+  blocker 3: the fixture runner is gone, the data model is not.
+- **`ProfileId::{MLS_GOVERNANCE_BINDING_FULL_V1, ATTESTED_AUDIT_E2EE_V1,
+  DISCLOSED_AUDIT_E2EE_V1}`.** Profiles retired; the conformance vectors that
+  assert their behaviour have not been retired with them, and should be, by
+  whoever retired the profiles.
+
+### 9. `soland-services` is a dead dependency of cotest
+
+`Cargo.toml` declares it. `grep -rw soland_services src/ tests/ crates/` returns
+nothing. Its 167 errors are therefore 167 errors of compile-blocking that buy
+cotest nothing.
+
+It was **not** removed this round: doing so unilaterally is churn against a repo
+another agent is mid-migration in, and `inkson`'s 271 would keep the root
+package red regardless. Recorded so the decision gets made deliberately once
+`inkson` clears.
+
 ---
 
 ## What the next round has to do
 
 1. Re-run `cargo check --workspace --all-targets --no-default-features` once
    `inkson` and `soland-services` are green, and treat the resulting cotest
-   error list as the real work queue. At the last reading through the scratch
-   oracle that list was ~227 errors across ~40 files, concentrated in
-   `src/harness/{client,event_builder}.rs`.
+   error list as the real work queue. The current reading through the scratch
+   oracle is 542 errors across 61 files (section 6), concentrated in
+   `src/conformance/sidecar_vectors.rs` (72),
+   `src/harness/event_builder.rs` (50) and `src/harness/client.rs` (45).
+   Of those, 31 are blocked on handoff §4 (section 7) and the large majority of
+   the rest are absent SDK surfaces (section 8), not cotest bugs.
 2. Migrate `src/harness/event_builder.rs` and `src/harness/client.rs`. These are
    the root of most remaining Rust residue: `realm_bootstrap_event_batch` still
    authors a multi-Event Cell-precondition unit, and `client.rs` still polls a

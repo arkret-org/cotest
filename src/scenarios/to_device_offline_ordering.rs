@@ -29,7 +29,7 @@
 //! acknowledgements, concurrent retry and logical message target conflicts.
 
 use anyhow::{Result, anyhow, bail};
-use arkret_models_collaboration::sync_frames::account_sync::{
+use arkret_models_collaboration::device_messages::{
     DeviceMessagesAckRequestBody, DeviceMessagesSendRequestBody,
 };
 use reqwest::StatusCode;
@@ -260,14 +260,14 @@ async fn ack_to_device(
     recipient_token: &str,
     ack_token: &str,
 ) -> Result<()> {
-    let ack: arkret_models_collaboration::sync_frames::account_sync::DeviceMessagesAckOutcome =
+    let ack: arkret_models_collaboration::device_messages::DeviceMessagesAckOutcome =
         serde_json::from_value(expect_json(
         server
             .http()
             .post(server.url("/_arkret/self/device_messages/ack"))
             .bearer_auth(recipient_token)
             .json(
-                &arkret_models_collaboration::sync_frames::account_sync::DeviceMessagesAckRequestBody {
+                &arkret_models_collaboration::device_messages::DeviceMessagesAckRequestBody {
                     ack_token: ack_token.to_owned(),
                 },
             ),

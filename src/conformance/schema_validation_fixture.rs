@@ -468,7 +468,7 @@ fn run_schema_semantic_cases(cases: &[SchemaSemanticCase]) -> Result<()> {
     for case in cases {
         let accepted = match case.semantic_rule.as_str() {
             "policy_set_subject_matches_value_identity" => serde_json::from_value::<
-                arkret_models_collaboration::events_payloads::PolicySetStatePayload,
+                arkret_models_collaboration::governance::operation_wire::PolicySetStatePayload,
             >(case.instance.clone())
             .is_ok(),
             rule => bail!("{} has unknown semantic_rule {rule}", case.name),
