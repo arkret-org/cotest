@@ -36,15 +36,15 @@ pub fn run_security_transaction_resilience_joint_gate() -> Result<()> {
         .context("security transaction continue cases")?;
 
     // 42 fault projections (two transaction kinds x three fault positions x
-    // seven faults), two rotation cases and the twelve recovery
-    // terminal-commit cases the fixture added with `commit_recovery_unit`.
+    // seven faults), two rotation cases and the eleven recovery
+    // terminal-commit cases the fixture drives through `commit_recovery_unit`.
     ensure!(
-        sdk.len() == 56,
-        "SDK runner did not execute all 56 security-transaction scenarios"
+        sdk.len() == 55,
+        "SDK runner did not execute all 55 security-transaction scenarios"
     );
     ensure!(
-        reference.len() == 56,
-        "reference runner did not execute all 56 security-transaction scenarios"
+        reference.len() == 55,
+        "reference runner did not execute all 55 security-transaction scenarios"
     );
     ensure!(
         sdk.iter()

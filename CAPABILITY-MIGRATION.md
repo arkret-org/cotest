@@ -204,30 +204,27 @@ TypeScript spec was replaced file-for-file.
 
 ---
 
-## A gap the rewrite found
+## A gap the rewrite found — now closed
 
-`client-sync-fixture.json` declares a reconnect `server_outcome` of
-`stream_tail_missing`. Searching the whole of `arkret-spec` and the SDK:
+`client-sync-fixture.json` declared a reconnect `server_outcome` of
+`stream_tail_missing` that, at the time of the rewrite, appeared in no
+error-code registry, no normative prose and no generated SDK constant. It was
+carried in `sync.rs` as one named constant, `UNREGISTERED_RECONNECT_OUTCOME`,
+guarded by a check that failed as soon as the spec registered it — so the
+allowance would be deleted rather than quietly outlive the gap.
 
-```
-$ grep -rn "stream_tail_missing" arkret-spec/spec/
-spec/v1/artifacts/fixtures/client-sync-fixture.json:226:      "server_outcome": "stream_tail_missing",
-$ grep -rn "stream_tail_missing" arkret-rust-sdk/crates/wire/src/error_codes/
-(no matches)
-```
+The spec took the first of the two options: the code is registered, as
+`ReasonCode::StreamTailMissing`, with a descriptor row in
+`REASON_CODE_DESCRIPTORS`. It is deliberately a reason code and not an
+`ErrorCode`: a missing stream tail is a condition the client resumes from, not
+an HTTP error.
 
-It is in no error-code registry, no normative prose and no generated SDK
-constant — the only other occurrence anywhere is the SDK's own consumer of the
-same fixture. Every other declared outcome resolves through
-`arkret_wire::ErrorCode::from_wire`.
-
-It is carried in `sync.rs` as one named constant,
-`UNREGISTERED_RECONNECT_OUTCOME`, guarded by
-`verify_unregistered_outcome_is_still_unregistered`, which **fails as soon as
-the spec registers it** so the allowance is deleted rather than quietly
-outliving the gap. This needs a decision in `arkret-spec`: either register the
-code, or restate the case as a client-side condition rather than a server
-outcome.
+The allowance is therefore gone and the guard is inverted. `sync.rs` now carries
+`REASON_CODE_RECONNECT_OUTCOME`, and
+`verify_reason_code_outcome_is_registered` asserts the registration positively
+(the descriptor must be present) while still failing if the code additionally
+becomes an `ErrorCode`, in which case the reason-code branch in
+`reconnect_verdict` is redundant and must go.
 
 ---
 
@@ -377,7 +374,37 @@ whole dependency graph was green. Two consequences to plan around:
 - `crates/test-support/src/wire.rs` needed a fix this round purely because the
   SDK dropped `IdentityCreationEvents` underneath it. Expect more of these.
 
-### 3. Live end-to-end and joint end-to-end cannot run
+### 3. The SDK dropped the security-transaction resilience runner
+
+`src/conformance/security_transaction_resilience.rs` calls
+`arkret_models_crypto::run_security_transaction_resilience_fixture`. That symbol
+no longer exists:
+
+```
+$ grep -rn "run_security_transaction_resilience_fixture" --include=*.rs arkret-rust-sdk/
+(no matches outside target/)
+$ grep -rn "resilience" --include=*.rs arkret-rust-sdk/crates/
+(no matches)
+```
+
+`crates/models-crypto/src/security_transaction.rs` still carries the data model
+— including the renamed `SecurityTransactionTerminalOutcome` — but the
+fixture-runner entry point is gone, so the joint gate has no SDK side to compare
+against and the root package would not compile even with blocker 1 cleared.
+
+- **This is a capability gap, not a naming one.** It was *not* worked around:
+  the gate is neither stubbed nor deleted, and the independent reference runner
+  beside it was brought fully up to date with the fixture instead.
+- **The reference half is verified green on its own.** It holds the module's
+  no-SDK-dependency fence, so a scratch crate carrying only `serde`,
+  `serde_json` and `sha2` re-hosts it against the live
+  `arkret-spec` fixture: 55 projections, and the module's own unit test passes.
+- **Next round:** either the SDK re-exposes a runner over
+  `fixtures/security-transaction-resilience-fixture.json`, or the gate is
+  restated as a single-runner fixture check and `equivalence_output`'s
+  `minimum_independent_runners: 2` is raised against `arkret-spec`.
+
+### 4. Live end-to-end and joint end-to-end cannot run
 
 - **Commands:** `cd e2e && npm test` (Playwright), `scripts/run-joint-e2e.ps1`
 - **Pass:** 0 · **Fail:** 0 · **Not started.**
@@ -391,7 +418,7 @@ whole dependency graph was green. Two consequences to plan around:
   includes the whole `realm-genesis-commit-stream` spec and
   `assertAuthoritySubmitOutcome`.
 
-### 4. Server conformance needs a database variable the script does not export
+### 5. Server conformance needs a database variable the script does not export
 
 - **Commands:** `scripts/run-server-conformance.ps1`, and any
   `soland-services` / cotest conformance test that opens a database.
@@ -425,6 +452,5 @@ whole dependency graph was green. Two consequences to plan around:
    wrapper still sends `service_binding_ref` / `membership_frontier`, while
    `ak.peer.events.command.submit.v1` now takes the same `{ event }` body as the
    self endpoint.
-4. Raise `stream_tail_missing` against `arkret-spec`.
-5. Annotate `MembershipPayload` and `SpaceObject` literals with their generated
+4. Annotate `MembershipPayload` and `SpaceObject` literals with their generated
    types, or drop them from the generator's target list.

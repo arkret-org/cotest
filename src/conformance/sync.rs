@@ -15,8 +15,10 @@
 //! * a broken tail is replayed against a store that already carries the sibling
 //!   Realm and Sidecar streams, which is what makes "stops only that stream"
 //!   an executed claim rather than a fixture flag;
-//! * each reconnect `server_outcome` is resolved through
-//!   [`arkret_wire::ErrorCode`], so an unregistered outcome string fails.
+//! * each reconnect `server_outcome` is resolved through a registry —
+//!   [`arkret_wire::ErrorCode`], or [`arkret_wire::ReasonCode`] for the one
+//!   stream condition that is not an HTTP error — so an outcome string no
+//!   registry defines fails.
 //!
 //! Structural closure is taken from the types, never from the fixture: there is
 //! no Realm-global position and no per-Realm position to compare because
@@ -34,7 +36,7 @@ use arkret_state::{
 use arkret_wire::{
     ActorId, Base64UrlString, CommitStreamRef, DetachedObjectSignature, DetachedSignatureAlgorithm,
     DetachedSignatureContext, DidUrl, ErrorCode, Event, EventKind, Hash, RealmCommit,
-    RealmCommitAuthorityRef, ScopeRef, project_did_to_core_id,
+    RealmCommitAuthorityRef, ReasonCode, ScopeRef, project_did_to_core_id,
 };
 use chrono::{DateTime, TimeZone, Utc};
 use serde_json::{Value, json};
@@ -765,21 +767,23 @@ fn replay_loses_delta_on_crash(steps: &[Value]) -> Result<bool> {
 
 // ── Reconnect ───────────────────────────────────────────────────────────────
 
-/// The one declared reconnect outcome that is not a wire error code.
+/// The one declared reconnect outcome that is a reason code rather than a wire
+/// error code.
 ///
-/// `stream_tail_missing` appears in `client-sync-fixture.json` and nowhere else
-/// in arkret-spec: it is in no error-code registry, no normative prose and no
-/// generated SDK constant. It is carried here as a fixture-local condition
-/// rather than silently accepted, and [`verify_unregistered_outcome_is_still_unregistered`]
-/// fails the moment the spec registers it so this allowance is removed instead
-/// of quietly outliving the gap.
-const UNREGISTERED_RECONNECT_OUTCOME: &str = "stream_tail_missing";
+/// This used to be a fixture-local allowance: `stream_tail_missing` appeared in
+/// `client-sync-fixture.json` and in no registry at all. The spec has since
+/// registered it — `ReasonCode::StreamTailMissing` carries a descriptor — so the
+/// gap is closed and the allowance is gone. It is deliberately *not* an
+/// [`ErrorCode`]: a missing stream tail is a condition the client resumes from,
+/// not an HTTP error, so it resolves through the reason-code registry while
+/// every other failure outcome must still be a registered wire error code.
+const REASON_CODE_RECONNECT_OUTCOME: &str = "stream_tail_missing";
 
 /// Resolve a declared reconnect outcome. Every failure outcome except the one
-/// unregistered condition above must be a registered wire error code, so a
+/// reason-code condition above must be a registered wire error code, so a
 /// fixture typo cannot pass for a verdict.
 fn reconnect_verdict(server_outcome: &str) -> Result<&'static str> {
-    if server_outcome == "accepted" || server_outcome == UNREGISTERED_RECONNECT_OUTCOME {
+    if server_outcome == "accepted" || server_outcome == REASON_CODE_RECONNECT_OUTCOME {
         return Ok("resume");
     }
     let code = ErrorCode::from_wire(server_outcome).ok_or_else(|| {
@@ -793,18 +797,30 @@ fn reconnect_verdict(server_outcome: &str) -> Result<&'static str> {
     })
 }
 
-/// Guard the allowance above: when `stream_tail_missing` becomes a registered
-/// wire error code, this fails and the special case must be deleted.
-fn verify_unregistered_outcome_is_still_unregistered() -> Result<()> {
+/// Guard the split above from both sides.
+///
+/// The registration is what licenses the branch in [`reconnect_verdict`], so it
+/// is asserted rather than assumed: were the descriptor withdrawn, the fixture
+/// would be back to declaring an outcome no registry defines and this gate would
+/// be accepting it on the strength of a stale comment. And if the code ever also
+/// becomes an [`ErrorCode`], the branch is redundant and the outcome must be
+/// resolved through `ErrorCode` like every other one.
+fn verify_reason_code_outcome_is_registered() -> Result<()> {
     ensure!(
-        ErrorCode::from_wire(UNREGISTERED_RECONNECT_OUTCOME).is_none(),
-        "{UNREGISTERED_RECONNECT_OUTCOME} is now a registered wire error code;          delete the fixture-local allowance in reconnect_verdict and resolve it          through ErrorCode like every other outcome"
+        ReasonCode::from_wire(REASON_CODE_RECONNECT_OUTCOME)
+            .descriptor()
+            .is_some(),
+        "{REASON_CODE_RECONNECT_OUTCOME} is no longer a registered reason code;          the reconnect fixture would be declaring an outcome no registry defines"
+    );
+    ensure!(
+        ErrorCode::from_wire(REASON_CODE_RECONNECT_OUTCOME).is_none(),
+        "{REASON_CODE_RECONNECT_OUTCOME} is now a wire error code as well;          drop the reason-code branch in reconnect_verdict and resolve it through          ErrorCode like every other outcome"
     );
     Ok(())
 }
 
 fn verify_reconnect_resets_only_the_failed_surface(fixture: &Value) -> Result<()> {
-    verify_unregistered_outcome_is_still_unregistered()?;
+    verify_reason_code_outcome_is_registered()?;
     let mut resets = 0_u32;
     let mut resumes = 0_u32;
 
@@ -859,7 +875,7 @@ fn verify_reconnect_resets_only_the_failed_surface(fixture: &Value) -> Result<()
             );
         }
 
-        if outcome == UNREGISTERED_RECONNECT_OUTCOME {
+        if outcome == REASON_CODE_RECONNECT_OUTCOME {
             verify_single_tail_recovery(name, case)?;
         }
     }

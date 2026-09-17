@@ -44,7 +44,7 @@ pub struct ReferenceProjection {
     pub request_digest: String,
     pub prepared_plan_digest: String,
     pub accepted_steps: Vec<String>,
-    pub terminal_result: String,
+    pub terminal_outcome: String,
 }
 
 fn canonical_write(value: &Value, output: &mut String) -> Result<(), String> {
@@ -116,8 +116,8 @@ fn strings_at<'a>(fixture: &'a Value, pointer: &str) -> Result<Vec<&'a str>, Str
 
 /// A RecoveryTransaction has exactly one step. The two-step
 /// `submit_reanchor_unit` / `issue_terminal_receipt` shape is gone: both
-/// Events, the first new-generation Seal and the terminal result now enter
-/// through the single `commit_recovery_unit` continue.
+/// Events, the first new-generation reanchor commit and the terminal outcome
+/// now enter through the single `commit_recovery_unit` continue.
 fn steps(kind: &str) -> Result<Vec<String>, String> {
     let values = match kind {
         "recovery" => vec!["commit_recovery_unit"],
@@ -146,7 +146,7 @@ fn projection(
     scenario: String,
     kind: &str,
     accepted_steps: Vec<String>,
-    terminal_result: &str,
+    terminal_outcome: &str,
 ) -> Result<ReferenceProjection, String> {
     let transaction_id = transaction_id(kind)?;
     Ok(ReferenceProjection {
@@ -163,7 +163,7 @@ fn projection(
         }))?,
         transaction_id,
         accepted_steps,
-        terminal_result: terminal_result.to_owned(),
+        terminal_outcome: terminal_outcome.to_owned(),
     })
 }
 
@@ -214,24 +214,36 @@ fn validate_schema_cases(fixture: &SecurityTransactionResilienceFixture) -> Resu
         return Err("backup binding schema case is not closed".to_owned());
     }
 
-    let outcome = cases[1]
+    let outcome_value = cases[1]
         .get("instance")
-        .and_then(Value::as_object)
         .ok_or_else(|| "erase outcome schema instance is missing".to_owned())?;
+    let outcome = outcome_value
+        .as_object()
+        .ok_or_else(|| "erase outcome schema instance is not an object".to_owned())?;
+    // `partial` is the status that must not carry a confirmation: the per-series
+    // records are the whole answer. A record that reports an erased series has
+    // to name the pointer it moved off and leave nothing behind on the old one.
     if outcome.get("status").and_then(Value::as_str) != Some("partial")
         || outcome.contains_key("confirmation")
+        || !is_digest(outcome.get("request_digest"))
         || !outcome
-            .get("series_results")
+            .get("series_records")
             .and_then(Value::as_array)
-            .is_some_and(|results| {
-                results.len() == 2
-                    && results[0].get("backup_kind").and_then(Value::as_str)
+            .is_some_and(|records| {
+                records.len() == 1
+                    && records[0].get("backup_kind").and_then(Value::as_str)
                         == Some("secret_storage")
-                    && results[0].get("status").and_then(Value::as_str) == Some("erased")
-                    && results[1].get("backup_kind").and_then(Value::as_str) == Some("mls_history")
-                    && results[1].get("status").and_then(Value::as_str) == Some("failed_retryable")
-                    && results[1].get("reason_code").and_then(Value::as_str)
-                        == Some("storage_temporarily_unavailable")
+                    && records[0].get("status").and_then(Value::as_str) == Some("erased")
+                    && records[0].get("previous_series_id") != records[0].get("new_series_id")
+                    && records[0]
+                        .get("erased_backups")
+                        .and_then(Value::as_array)
+                        .is_some_and(|values| values.len() == 1)
+                    && is_digest(records[0].pointer("/erased_backups/0/ciphertext_digest"))
+                    && records[0]
+                        .get("remaining_backups")
+                        .and_then(Value::as_array)
+                        .is_some_and(|values| values.is_empty())
             })
     {
         return Err("partial erase outcome schema case is invalid".to_owned());
@@ -263,7 +275,7 @@ fn validate_fixture(fixture: &SecurityTransactionResilienceFixture) -> Result<()
             "request_digest",
             "prepared_plan_digest",
             "accepted_steps",
-            "terminal_result",
+            "terminal_outcome",
         ]
     {
         return Err("resilience equivalence fields changed".to_owned());
@@ -280,14 +292,14 @@ fn validate_fixture(fixture: &SecurityTransactionResilienceFixture) -> Result<()
         "erased_series_never_becomes_active_again",
         "exact_replay_returns_the_stored_outcome",
         "one_transaction_id_and_one_reserved_id_set",
-        "only_the_atomic_generation_cas_winner_commits_a_first_generation_seal",
+        "only_the_atomic_generation_cas_winner_commits_a_reanchor_commit",
         "pointer_switch_precedes_every_old_series_erase",
         "public_store_log_telemetry_and_crash_artifact_contain_no_secret_material",
         "recovery_authoritative_results_are_all_invisible_before_the_commit_and_all_visible_after",
-        "recovery_create_freezes_one_unsigned_seal_body_with_no_recovery_effect",
-        "recovery_first_generation_seal_enters_only_through_commit_recovery_unit",
+        "recovery_create_freezes_one_unsigned_commit_body_with_no_recovery_effect",
+        "recovery_reanchor_commit_enters_only_through_commit_recovery_unit",
         "recovery_stored_outcome_is_checked_before_consumed_session_refusal",
-        "request_plan_step_outputs_and_first_terminal_result_are_durable",
+        "request_plan_step_outputs_and_first_terminal_outcome_are_durable",
     ];
     let assertions = fixture
         .assertions
@@ -358,11 +370,11 @@ fn run_rotation_cases(
 const RECOVERY_AUTHORITATIVE_RESULTS: [&str; 7] = [
     "accepted_reanchor_event",
     "accepted_authorize_event",
-    "committed_first_generation_seal",
+    "committed_reanchor_commit",
     "advanced_device_generation",
     "active_verified_replacement_device",
     "consumed_recovery_session",
-    "completed_terminal_result",
+    "completed_terminal_outcome",
 ];
 
 fn members<'a>(case: &'a Value, key: &str) -> Vec<&'a str> {
@@ -395,14 +407,14 @@ fn recovery_case_outcome(case: &Value, expected: &str) -> String {
 
 fn validate_recovery_terminal_commit_case(case: &Value, name: &str) -> Result<(), String> {
     match name {
-        "create_freezes_the_only_signable_seal_body" => {
+        "create_freezes_the_only_signable_commit_body" => {
             if !members(case, "observable_recovery_effects").is_empty()
                 || members(case, "committed_command_result_unit_event_digests")
                     != ["reanchor_digest", "authorize_digest"]
-                || !members(case, "frozen_plan_members").contains(&"first_generation_seal_body")
+                || !members(case, "frozen_plan_members").contains(&"reanchor_commit_body")
             {
                 return Err(
-                    "recovery create must freeze one unsigned Seal body over the exact [reanchor, authorize] unit and leave no recovery effect"
+                    "recovery create must freeze one unsigned reanchor commit body over the exact [reanchor, authorize] unit and leave no recovery effect"
                         .to_owned(),
                 );
             }
@@ -443,9 +455,9 @@ fn validate_recovery_terminal_commit_case(case: &Value, name: &str) -> Result<()
         }
         // KNOWN UNCLOSED on the Station side: the seven steps of the terminal
         // commit do not share one local database transaction yet - both Events
-        // still land through the ordinary batch submit before the Seal is
-        // accepted. So "the loser leaves no residue" and "a crash before the
-        // commit rolls the whole thing back" hold in the fixture contract this
+        // still land through the ordinary batch submit before the reanchor
+        // commit is accepted. So "the loser leaves no residue" and "a crash
+        // before the commit rolls the whole thing back" hold in the contract this
         // runner checks, and do NOT hold end to end in a joint run. This stays
         // the contract, not a relaxed one: the joint acceptance is an open
         // implementation item, not a reason to weaken the check here.
@@ -454,42 +466,64 @@ fn validate_recovery_terminal_commit_case(case: &Value, name: &str) -> Result<()
                 || case.get("winner_quarantined").and_then(Value::as_bool) != Some(false)
             {
                 return Err(
-                    "only the atomic CAS winner may commit a first-generation Seal, and it is never quarantined"
+                    "only the atomic CAS winner may commit a reanchor commit, and it is never quarantined"
                         .to_owned(),
                 );
             }
         }
-        "raw_recovery_seal_without_a_completed_transaction" => {
+        "raw_recovery_commit_without_a_completed_transaction" => {
             if members(case, "attempted_paths")
-                != ["ordinary_seal_submit", "federation", "history_replay"]
+                != ["ordinary_commit_submit", "federation", "history_replay"]
                 || case.get("expected_finality").and_then(Value::as_str) != Some("none")
             {
                 return Err(
-                    "a raw recovery Seal must reach no finality through submit, federation or history replay"
+                    "a raw recovery commit must reach no finality through submit, federation or history replay"
                         .to_owned(),
                 );
             }
-        }
-        "ordinary_seal_prepare_or_submit_under_a_recovery_grant"
-            if members(case, "attempted_operations")
-                != [
-                    "ak.self.seals.command.prepare.v1",
-                    "ak.self.seals.command.submit.v1",
-                ] =>
-        {
-            return Err(
-                "the recovery grant operation set must stay closed against ordinary Seal prepare and submit"
-                    .to_owned(),
-            );
         }
         _ => {}
     }
     Ok(())
 }
 
+/// The recovery terminal-commit cases, pinned by name for the same reason the
+/// assertion set is: a count alone cannot say *which* case left the fixture,
+/// and a case that quietly disappears takes its arm in
+/// [`validate_recovery_terminal_commit_case`] out of service without a word.
+const EXPECTED_RECOVERY_TERMINAL_COMMIT_CASES: &[&str] = &[
+    "byte_identical_create_replays_the_same_frozen_material",
+    "commit_body_differs_from_the_frozen_body",
+    "create_freezes_the_only_signable_commit_body",
+    "raw_recovery_commit_without_a_completed_transaction",
+    "receipt_completed_at_later_than_the_linearized_commit_time",
+    "receipt_omits_or_rebinds_reanchor_commit_id",
+    "same_transaction_id_with_different_intent_bytes",
+    "signing_slot_fence_is_not_released_by_expiry_or_restart",
+    "terminal_commit_is_one_atomic_commit",
+    "terminal_response_lost_then_byte_identical_continue",
+    "two_units_race_the_same_previous_generation",
+];
+
 fn run_recovery_terminal_commit_cases(
     fixture: &SecurityTransactionResilienceFixture,
 ) -> Result<Vec<ReferenceProjection>, String> {
+    let declared = fixture
+        .recovery_terminal_commit_cases
+        .iter()
+        .filter_map(|case| case.get("name").and_then(Value::as_str))
+        .collect::<BTreeSet<_>>();
+    let expected = EXPECTED_RECOVERY_TERMINAL_COMMIT_CASES
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    if declared != expected {
+        let missing = expected.difference(&declared).copied().collect::<Vec<_>>();
+        let extra = declared.difference(&expected).copied().collect::<Vec<_>>();
+        return Err(format!(
+            "recovery terminal commit case set drifted: missing {missing:?}, unregistered {extra:?}"
+        ));
+    }
     let terminal_step = steps("recovery")?;
     let mut projections = Vec::with_capacity(fixture.recovery_terminal_commit_cases.len());
     for case in &fixture.recovery_terminal_commit_cases {

@@ -2308,7 +2308,7 @@ function parseJsonOrRaw(text: string): unknown {
   }
 }
 
-// `authority-commit-operations.schema.json#/$defs/stream_item` — one accepted
+// `authority-commit-operations.schema.json#/$defs/stream_row` — one accepted
 // Event together with the exact RealmCommit that covers it. That pair is the
 // whole federation evidence now: there is no ingress receipt, authorization
 // lease or Control Proposal Ack beside it.

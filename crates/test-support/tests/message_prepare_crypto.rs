@@ -17,7 +17,7 @@ use arkret_wire::{
     DetachedSignatureAlgorithm, DetachedSignatureContext, DeviceId, DidCoreId, DidUrl,
     EncryptedPayloadScheme, EventCommitSubmission, EventId, Hash, MlsWelcomeDelivery,
     MlsWelcomeDeliveryId, MlsWelcomeRecipientEndpoint, RealmCommit, RealmCommitAuthorityRef,
-    RealmCommitId, RealmId, ScopeRef, StrandId, StreamItem,
+    RealmCommitId, RealmId, ScopeRef, StrandId, StreamRow,
 };
 
 const STATION: &str = "ak:did_core:web:station.example";
@@ -25,7 +25,7 @@ const REALM: &str = "ak:realm:ASZ1iAvlGxgLC_-P6WHoR9vfijpaxbI5hoSwBx8zWTcT";
 
 /// The authority's detached object signature over a committed object.
 ///
-/// `StreamItem` and `MlsWelcomeDelivery` validate the signature *shape* and its
+/// `StreamRow` and `MlsWelcomeDelivery` validate the signature *shape* and its
 /// domain context; the cryptographic check belongs to the accepting service and
 /// is exercised live, so this composition test carries a well-formed carrier.
 fn detached(context: DetachedSignatureContext) -> DetachedObjectSignature {
@@ -100,7 +100,7 @@ fn authored_message_decrypts_at_the_other_mls_member_without_reencrypting() {
     )
     .unwrap();
     let commit_event_id = EventId::from_digest(DigestSuite::Sha256, [11; 32]);
-    let accepted_commit = StreamItem {
+    let accepted_commit = StreamRow {
         commit: RealmCommit {
             commit_id: RealmCommitId::from_digest([19; 32]),
             realm_id: realm.clone(),
