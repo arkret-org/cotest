@@ -556,7 +556,7 @@ fn mimi_families() -> Result<Vec<FamilyUnderTest>> {
     }))?;
     // The signed request names both identities in full; the proof issuer is
     // the complete Actor and holder_account_id is a binding field. Ruling
-    // `review/spec-done/2026-09-05-1240-mimi-consent-correlation-cannot-carry-the-consent-peer.md`.
+    // `tasks/spec-done/2026-09-05-1240-mimi-consent-correlation-cannot-carry-the-consent-peer.md`.
     let request_consent: MimiRequestConsentRequestBody = serde_json::from_value(json!({
         "requester_actor_id": {
             "kind": "account",

@@ -254,7 +254,7 @@ pub fn run_agent_mention_selector_vector() -> Result<()> {
     let vector = case(&fixture, VECTOR_ID_AGENT_MENTION_SELECTOR)?;
     // The signed claim names one complete AccountId and the mention copies it
     // verbatim; the Station is no longer supplied by the consumer. Ruling
-    // `review/spec-done/2026-09-05-1310-agent-selector-mention-has-no-normative-station-source.md`.
+    // `tasks/spec-done/2026-09-05-1310-agent-selector-mention-has-no-normative-station-source.md`.
     let expected_subject = account_pointer(vector, "/persisted_mention/subject_account_id")?;
     let expected_controller =
         account_pointer(vector, "/persisted_mention/controller_subject_account_id")?;

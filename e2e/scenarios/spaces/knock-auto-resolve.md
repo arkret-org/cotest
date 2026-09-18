@@ -47,7 +47,7 @@
 4. bob 向 captcha-provider 请求 challenge → 完成 → 拿到 signed proof
 5. bob 客户端组 `ak.member.state{ membership: "join", member_id: bob.actor_id, gate_proofs: [...] }`，
    每项是封闭的 `join_gate_proof`（`event-payload.schema.json#/$defs/join_gate_proof`，裁决
-   [`2026-09-05-0730`](../../../../arkret-work/review/spec-open/2026-09-05-0730-join-gate-proofs-have-no-closed-carrier.md)）：
+   [`2026-09-05-0730`](../../../../arkret-work/tasks/spec-open/2026-09-05-0730-join-gate-proofs-have-no-closed-carrier.md)）：
    `{ gate_id, kind, realm_id, applicant_actor_id, policy_digest, created_at, (challenge_kind + challenge_id | issuer_id + claims), proofs: [detached JWS] }`。
    `policy_digest` 是当前 accepted `join_policy` component 的 canonical JSON sha256。
    裁决前 soland 读的 `claim_presentation` / `challenge_proof.*` 成员名是实现自造，spec 从未定义，现已删除。

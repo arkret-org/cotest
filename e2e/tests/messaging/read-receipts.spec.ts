@@ -931,7 +931,7 @@ async function advanceReadCursor(
   // read-receipts.md §6.1: the cursor is never updated in place, so the payload
   // carries no `updated_at`; the update time IS this envelope `created_at`, and
   // the derived `read_marker_outcome` takes it from there. A payload restating
-  // it is a closed-shape violation (review/spec-done/2026-09-04-2130-read-cursor-advance-updated-at-envelope-equality.md).
+  // it is a closed-shape violation (tasks/spec-done/2026-09-04-2130-read-cursor-advance-updated-at-envelope-equality.md).
   const updatedAt = new Date().toISOString();
   const event = signedEventEnvelope({
     actorId: actor.id,

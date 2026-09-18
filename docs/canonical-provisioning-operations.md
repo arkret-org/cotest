@@ -1,7 +1,7 @@
 # Canonical principal provisioning — operation inventory
 
 What `ensureRegistered`'s canonical branch actually does, step by step, so the
-Rust provisioning module in [1725](../../arkret-work/work/active/2026-09-06-1725-joint-e2e-inkson-decoupling-and-provisioning-convergence.md)'s
+Rust provisioning module in [1725](../../arkret-work/tasks/impl-active/2026-09-06-1725-joint-e2e-inkson-decoupling-and-provisioning-convergence.md)'s
 P2 is written against the real chain rather than a reconstruction of it.
 
 Read this before moving any step: the split between **Coauth's private product

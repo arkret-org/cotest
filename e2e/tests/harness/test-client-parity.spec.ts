@@ -16,7 +16,7 @@
 //   through `capabilities.durableCursor`, and the restart check runs only where
 //   it can mean something — recorded, not hidden.
 //
-// Owner: `arkret-work/work/active/2026-09-07-0600-garth-as-the-complete-client-inkson-as-a-shell.md`.
+// Owner: `arkret-work/tasks/impl-active/2026-09-07-0600-garth-as-the-complete-client-inkson-as-a-shell.md`.
 
 import { expect, test } from "../../helpers/arkret-test";
 import {

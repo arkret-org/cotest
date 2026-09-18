@@ -10,7 +10,7 @@
 // has and Garth does not shows up as a failing parity run instead of as an
 // absence nobody measures. Today that absence is most of Garth's client
 // surface — see
-// `arkret-work/work/active/2026-09-07-0600-garth-as-the-complete-client-inkson-as-a-shell.md`.
+// `arkret-work/tasks/impl-active/2026-09-07-0600-garth-as-the-complete-client-inkson-as-a-shell.md`.
 //
 // **What belongs in this interface.** Only operations both clients genuinely
 // execute *through their own runtime*. Founding a principal is shared

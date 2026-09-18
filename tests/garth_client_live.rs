@@ -6,7 +6,7 @@
 //! only consumer of Garth's client runtime was Inkson, and Inkson only drives
 //! it through a browser, so a 431-second wasm build was the sole integration
 //! path a 37,000-line crate had. That is the gap
-//! `arkret-work/work/active/2026-09-07-0030-garth-client-runtime-maturity.md`
+//! `arkret-work/tasks/impl-active/2026-09-07-0030-garth-client-runtime-maturity.md`
 //! is about, and this is its first closing move.
 //!
 //! What runs here is Garth's own subscription engine over its own durable

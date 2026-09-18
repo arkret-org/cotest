@@ -194,4 +194,4 @@ SDK filter 两条单元测试及 HTTP 参数编码一条单元测试、TypeScrip
 
 最新 joint-api run `artifacts/runs/joint-e2e/20260908-151819-joint-api-selection`：**10/10 通过、0 skip**，真实 Coauth + Soland provisioning **7/7 通过**；`summary.md` / `junit.xml` 为最终证据，runner exit 0。因此本次累计 23 条新增 Cotest 用例及对应 5 条旧用例已在重放远端更新后通过定向验证。原生详细输出见工作区 `.codex-logs/complement-replayed-native-tests-20260908.log`。
 
-原生复验须设置 `SOLAND_BIN` 为共享 `.shared-target/debug/soland.exe`（以 `conformance-harness` feature 构建），并设置 `COTEST_SOLAND_DATABASE_URL` 为可创建隔离数据库的本机 PostgreSQL DSN。任务记录归档到 `arkret-work/work/done/2026-09-08-1322-complement-test-coverage-expansion.md`；表中其它待设计场景仍不计入已通过覆盖。
+原生复验须设置 `SOLAND_BIN` 为共享 `.shared-target/debug/soland.exe`（以 `conformance-harness` feature 构建），并设置 `COTEST_SOLAND_DATABASE_URL` 为可创建隔离数据库的本机 PostgreSQL DSN。任务记录归档到 `arkret-work/tasks/impl-done/2026-09-08-1322-complement-test-coverage-expansion.md`；表中其它待设计场景仍不计入已通过覆盖。
