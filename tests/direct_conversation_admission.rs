@@ -19,6 +19,6 @@ fn direct_conversation_admission_suite_is_audited_but_not_falsely_marked_live() 
     assert_eq!(coverage.audited_reason_codes.len(), 7);
     assert_eq!(coverage.audited_negative_cases, 27);
     assert_eq!(coverage.service_e2e_status, "unwired");
-    assert_eq!(coverage.blockers.len(), 3);
+    assert_eq!(coverage.blockers.len(), 2);
     Ok(())
 }

@@ -139,7 +139,6 @@ pub fn audit_direct_conversation_admission_contract() -> Result<DirectConversati
         blockers: vec![
             "station_producer_for_all_seven_reasons_not_yet_available",
             "public_operation_setup_for_all_negative_pre_states_not_yet_available",
-            "sdk_read_blocker_member_count_invalid_not_yet_available",
         ],
     })
 }
