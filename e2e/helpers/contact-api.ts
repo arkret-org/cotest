@@ -565,14 +565,16 @@ async function uploadDirectConversationKeyPackage(
       `no accepted device signing seed registered for ${user.id}`,
     );
   }
+  const actorId = accountActorId(user.id, opts.server);
   const keyPackages = [
     cotestWire<Record<string, unknown>>("mls-keypackage-upload-entry", {
-      principal_id: user.id,
+      actor_id: actorId,
       device_id: user.deviceId,
       signing_seed_b64url: signingSeedB64url,
     }),
   ];
   const unsigned = {
+    actor_id: actorId,
     principal_id: user.id,
     device_id: user.deviceId,
     keypackages: keyPackages,

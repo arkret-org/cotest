@@ -60,7 +60,7 @@ struct MimiConsentProofInput {
 
 #[derive(Debug, Deserialize)]
 struct MlsKeyPackageUploadEntryInput {
-    principal_id: DidCoreId,
+    actor_id: arkret_wire::ActorId,
     device_id: DeviceId,
     signing_seed_b64url: String,
 }
@@ -282,7 +282,7 @@ pub fn managed_actor_author(input: Value) -> Result<Value> {
         ));
     }
     if request.proof.verification_method != input.station_verification_method
-        || request.proof.verification_method != request.authoring_authority.verification_method
+        || request.governance_station_id != input.station_id
     {
         return Ok(author_rejection(
             "authoring_request_proof_invalid",
@@ -420,7 +420,7 @@ pub fn mls_keypackage_upload_entry(input: Value) -> Result<Value> {
         .try_into()
         .map_err(|_| anyhow::anyhow!("MLS signing seed must be 32 bytes"))?;
     let identity = arkret::ArkretMlsIdentity::new_human_device(
-        input.principal_id,
+        input.actor_id,
         input.device_id,
         arkret::ArkretMlsSigner::from_ed25519_signing_key(ed25519_dalek::SigningKey::from_bytes(
             &seed,
