@@ -50,8 +50,8 @@ fn registered_canonical_json_digest_constructions_match_known_answers() -> Resul
 fn named_suite_audit_executes_registered_runners_and_exposes_every_gap() -> Result<()> {
     let report = run_named_suite_audit()?;
     assert_eq!(report.fixture_count, 63);
-    assert_eq!(report.executed_entrypoints.len(), 3);
-    assert_eq!(report.unwired_entrypoints.len(), 60);
+    assert_eq!(report.executed_entrypoints.len(), 17);
+    assert_eq!(report.unwired_entrypoints.len(), 46);
     for required_gap in [
         "ak.suite.account.blocklist_projection.v1",
         "ak.suite.consent.cache_invalidation.v1",
