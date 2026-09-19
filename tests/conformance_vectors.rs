@@ -16,14 +16,62 @@ use cotest::conformance::{
     ALL_PRESENCE_SIGNAL_VECTOR_IDS, ALL_PRIMARY_HANDLE_VECTOR_IDS, ALL_SIDECAR_VECTOR_IDS,
     load_local_fixture_value, run_agent_signer_evidence_vector_suite, run_agent_vector_suite,
     run_call_signal_vector_suite, run_call_state_media_lifecycle_vector_suite,
-    run_container_realm_control_payload_suite, run_cursor_vector_suite, run_encoding_fixture_suite,
-    run_handle_claim_rejection_vector_suite, run_list_handles_for_subject_vector_suite,
-    run_media_binding_vector_suite, run_member_identity_vector_suite,
-    run_member_roster_vector_suite, run_mention_rendering_vector_suite,
-    run_object_addressing_vector_suite, run_poll_reducer_fixture_suite,
-    run_presence_signal_vector_suite, run_primary_handle_vector_suite, run_sidecar_vector_suite,
+    run_container_realm_control_payload_suite, run_cursor_vector_suite,
+    run_digest_construction_known_answers, run_encoding_fixture_suite,
+    run_handle_claim_rejection_vector_suite, run_keypackage_write_transcripts_suite,
+    run_list_handles_for_subject_vector_suite, run_media_binding_vector_suite,
+    run_member_identity_vector_suite, run_member_roster_vector_suite,
+    run_mention_rendering_vector_suite, run_named_suite_audit, run_object_addressing_vector_suite,
+    run_poll_reducer_fixture_suite, run_presence_signal_vector_suite,
+    run_primary_handle_vector_suite, run_protocol_time_tolerance_suite, run_sidecar_vector_suite,
 };
 use serde_json::{Value, json};
+
+#[test]
+fn keypackage_write_transcript_named_suite_returns_one_result_per_case() -> Result<()> {
+    let execution = run_keypackage_write_transcripts_suite()?;
+    assert_eq!(execution.cases.len(), 4);
+    Ok(())
+}
+
+#[test]
+fn protocol_time_tolerance_named_suite_returns_one_result_per_case() -> Result<()> {
+    let execution = run_protocol_time_tolerance_suite()?;
+    assert_eq!(execution.cases.len(), 10);
+    Ok(())
+}
+
+#[test]
+fn registered_canonical_json_digest_constructions_match_known_answers() -> Result<()> {
+    run_digest_construction_known_answers()
+}
+
+#[test]
+fn named_suite_audit_executes_registered_runners_and_exposes_every_gap() -> Result<()> {
+    let report = run_named_suite_audit()?;
+    assert_eq!(report.fixture_count, 63);
+    assert_eq!(report.executed_entrypoints.len(), 3);
+    assert_eq!(report.unwired_entrypoints.len(), 60);
+    for required_gap in [
+        "ak.suite.account.blocklist_projection.v1",
+        "ak.suite.consent.cache_invalidation.v1",
+        "ak.suite.federation.idempotency_after_key_revoke.v1",
+        "ak.suite.identity_link.invalidation.v1",
+        "ak.suite.invite.claim_security.v1",
+        "ak.suite.webrtc.media_plaintext_downgrade.v1",
+        "ak.suite.identity.test_material_rejection.v1",
+        "ak.suite.sdk.precheck.v1",
+    ] {
+        assert!(
+            report
+                .unwired_entrypoints
+                .iter()
+                .any(|entrypoint| entrypoint == required_gap),
+            "audit must keep the unimplemented priority suite visible: {required_gap}"
+        );
+    }
+    Ok(())
+}
 
 #[test]
 fn encoding_artifact_vectors_reject_drift() -> Result<()> {

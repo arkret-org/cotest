@@ -29,6 +29,7 @@ mod device_pairing_code_claim;
 mod device_revocation_pending;
 mod did_binding_digests;
 mod did_webvh_v1;
+mod digest_construction;
 mod direct_conversation_flow;
 mod downstream_impact;
 mod encoding;
@@ -45,6 +46,7 @@ mod inkson_client;
 mod invite_new_source_quota;
 mod key_backup_hardening;
 mod keypackage_lifecycle;
+mod keypackage_write_transcripts;
 mod list_handles_for_subject_vectors;
 mod long_text_content;
 mod media_binding;
@@ -53,6 +55,7 @@ mod member_roster_vectors;
 mod mention_rendering_vectors;
 mod mimi_provider_directory;
 mod mls_creator_bootstrap_recovery;
+mod named_suite_audit;
 mod object_addressing_vectors;
 mod operation_clause_registry;
 mod operation_registry_gate;
@@ -67,6 +70,7 @@ mod profile_matrix;
 mod profile_registry;
 mod proof_context_domain_separation;
 mod protocol_gap_closure;
+mod protocol_time_tolerance;
 mod push_route_revision;
 mod push_rule_core;
 mod read_receipt_signal;
@@ -88,6 +92,7 @@ mod signal_recipient;
 mod signal_sequence_high_water;
 mod spec_business_flow;
 mod station_certification;
+mod suite_execution;
 mod sync;
 mod vector_registry_gate;
 mod visibility_policy;
@@ -202,6 +207,9 @@ pub use did_binding_digests::{
     run_did_binding_evidence_receipt_kat_vector, run_did_binding_policy_snapshot_kat_vector,
 };
 pub use did_webvh_v1::run_did_webvh_v1_adapter_fixture_suite;
+pub use digest_construction::{
+    CANONICAL_JSON_DIGEST_DOMAINS, run_digest_construction_known_answers,
+};
 pub use direct_conversation_flow::run_direct_conversation_flow_suite;
 pub use downstream_impact::{
     run_downstream_impact_contract_suite, run_error_status_context_vector,
@@ -256,6 +264,9 @@ pub use keypackage_lifecycle::{
     run_keypackage_self_claim_authorization_idempotency_vector,
     run_mls_welcome_keypackage_hash_vector,
 };
+pub use keypackage_write_transcripts::{
+    KEYPACKAGE_WRITE_TRANSCRIPTS_ENTRYPOINT, run_keypackage_write_transcripts_suite,
+};
 pub use list_handles_for_subject_vectors::{
     ALL_LIST_HANDLES_FOR_SUBJECT_VECTOR_IDS, run_as_of_historical_replay_vector,
     run_audience_filter_applied_vector, run_cursor_pagination_vector,
@@ -301,6 +312,7 @@ pub use mimi_provider_directory::{
     VECTOR_ID_MIMI_PROVIDER_DIRECTORY_SIGNATURE, run_mimi_provider_directory_signature_vector,
 };
 pub use mls_creator_bootstrap_recovery::run_mls_creator_bootstrap_recovery_suite;
+pub use named_suite_audit::{NamedSuiteAuditReport, run_named_suite_audit};
 pub use object_addressing_vectors::{
     ALL_OBJECT_ADDRESSING_VECTOR_IDS, run_grammar_fail_closed_vector,
     run_object_addressing_vector_suite, run_realm_id_vs_alias_vector,
@@ -346,6 +358,9 @@ pub use proof_context_domain_separation::{
     run_proof_context_domain_separation_vector,
 };
 pub use protocol_gap_closure::run_protocol_gap_closure_fixture_suite;
+pub use protocol_time_tolerance::{
+    PROTOCOL_TIME_TOLERANCE_ENTRYPOINT, run_protocol_time_tolerance_suite,
+};
 pub use push_route_revision::run_push_route_revision_suite;
 pub use push_rule_core::{run_push_rule_client_only_vector, run_push_rule_core_fixture_suite};
 pub use read_receipt_signal::{
@@ -392,6 +407,7 @@ pub use signal_federation::{
 };
 pub use signal_sequence_high_water::run_signal_sequence_high_water_suite;
 pub use spec_business_flow::run_spec_business_flow_coverage_suite;
+pub use suite_execution::{CaseExecutionResult, SuiteExecutionResult};
 pub use sync::{VECTOR_ID_CLIENT_ACCOUNT_STREAM, run_sync_fixture_suite};
 pub use vector_registry_gate::{
     VectorRegistryGateEntry, VectorRegistryGateMode, VectorRegistryGateReport,

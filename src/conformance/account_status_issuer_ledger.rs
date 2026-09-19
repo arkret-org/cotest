@@ -122,6 +122,77 @@ pub fn run_account_status_issuer_ledger_vector() -> Result<()> {
     verify_replica_classification(&fixture, &index)?;
     verify_idempotency_contract(&fixture)?;
     verify_fanout_outbox(&fixture)?;
+    verify_security_evidence_mapping(&fixture)?;
+    Ok(())
+}
+
+/// Bind every declared security decision point to a fixture surface this
+/// runner actually executes above. This deliberately validates pointers and
+/// execution ownership, rather than treating a resolvable JSON Pointer as
+/// evidence by itself.
+fn verify_security_evidence_mapping(fixture: &Value) -> Result<()> {
+    let evidence = required_field(fixture, "security_evidence")?;
+    ensure!(
+        required_str(evidence, "vector_id")? == VECTOR_ID_ACCOUNT_STATUS_ISSUER_LEDGER,
+        "issuer-ledger security evidence vector drifted"
+    );
+    ensure!(
+        required_str(evidence, "clause_id")? == "AK-NC-081",
+        "issuer-ledger security evidence clause drifted"
+    );
+
+    let expected: BTreeMap<&str, &[&str]> = BTreeMap::from([
+        ("genesis_creation", &["/genesis_rules"][..]),
+        (
+            "cas_successor_chaining",
+            &["/successor_cas", "/ledger/records"][..],
+        ),
+        (
+            "record_identity_and_proof_binding",
+            &[
+                "/ledger/identity_rule",
+                "/ledger/proof_context",
+                "/ledger/conflicting_records",
+            ][..],
+        ),
+        (
+            "replica_classification",
+            &["/replica_classification_cases"][..],
+        ),
+        ("idempotency_conflict", &["/idempotency"][..]),
+        ("bounded_fanout_outbox", &["/fanout_outbox"][..]),
+    ]);
+    let mut observed = BTreeSet::new();
+    for point in value_array(
+        required_field(evidence, "decision_points")?,
+        "security_evidence.decision_points",
+    )? {
+        let id = required_str(point, "id")?;
+        ensure!(observed.insert(id), "duplicate decision point {id}");
+        let expected_pointers = expected
+            .get(id)
+            .ok_or_else(|| anyhow!("unexecuted security decision point {id}"))?;
+        let pointers = string_list(point, "evidence")?;
+        ensure!(
+            pointers
+                .iter()
+                .map(String::as_str)
+                .eq(expected_pointers.iter().copied()),
+            "{id}: evidence pointers drifted: {pointers:?}"
+        );
+        for pointer in &pointers {
+            ensure!(
+                fixture.pointer(pointer).is_some(),
+                "{id}: evidence pointer {pointer} does not resolve"
+            );
+        }
+    }
+    ensure!(
+        observed.len() == expected.len(),
+        "issuer-ledger runner covers {} of {} security decision points",
+        observed.len(),
+        expected.len()
+    );
     Ok(())
 }
 
