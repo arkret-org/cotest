@@ -24,6 +24,7 @@ use cotest::conformance::{
     run_mention_rendering_vector_suite, run_named_suite_audit, run_object_addressing_vector_suite,
     run_poll_reducer_fixture_suite, run_presence_signal_vector_suite,
     run_primary_handle_vector_suite, run_protocol_time_tolerance_suite, run_sidecar_vector_suite,
+    run_webrtc_media_plaintext_suite,
 };
 use serde_json::{Value, json};
 
@@ -42,6 +43,13 @@ fn protocol_time_tolerance_named_suite_returns_one_result_per_case() -> Result<(
 }
 
 #[test]
+fn webrtc_media_plaintext_named_suite_returns_one_result_per_case() -> Result<()> {
+    let execution = run_webrtc_media_plaintext_suite()?;
+    assert_eq!(execution.cases.len(), 5);
+    Ok(())
+}
+
+#[test]
 fn registered_canonical_json_digest_constructions_match_known_answers() -> Result<()> {
     run_digest_construction_known_answers()
 }
@@ -50,15 +58,14 @@ fn registered_canonical_json_digest_constructions_match_known_answers() -> Resul
 fn named_suite_audit_executes_registered_runners_and_exposes_every_gap() -> Result<()> {
     let report = run_named_suite_audit()?;
     assert_eq!(report.fixture_count, 63);
-    assert_eq!(report.executed_entrypoints.len(), 17);
-    assert_eq!(report.unwired_entrypoints.len(), 46);
+    assert_eq!(report.executed_entrypoints.len(), 18);
+    assert_eq!(report.unwired_entrypoints.len(), 45);
     for required_gap in [
         "ak.suite.account.blocklist_projection.v1",
         "ak.suite.consent.cache_invalidation.v1",
         "ak.suite.federation.idempotency_after_key_revoke.v1",
         "ak.suite.identity_link.invalidation.v1",
         "ak.suite.invite.claim_security.v1",
-        "ak.suite.webrtc.media_plaintext_downgrade.v1",
         "ak.suite.identity.test_material_rejection.v1",
         "ak.suite.sdk.precheck.v1",
     ] {

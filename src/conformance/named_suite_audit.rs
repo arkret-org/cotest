@@ -20,8 +20,8 @@ use super::{
     run_invite_new_source_quota_suite, run_keypackage_write_transcripts_suite,
     run_mls_creator_bootstrap_recovery_suite, run_protocol_time_tolerance_suite,
     run_security_transaction_resilience_joint_gate, run_session_grant_issuer_ledger_suite,
-    run_signal_sequence_high_water_suite, run_sync_fixture_suite, run_websocket_binding_suite,
-    spec_artifacts_root,
+    run_signal_sequence_high_water_suite, run_sync_fixture_suite, run_webrtc_media_plaintext_suite,
+    run_websocket_binding_suite, spec_artifacts_root,
 };
 
 const ACCOUNT_STATUS_ENTRYPOINT: &str = "ak.suite.account_status.issuer_ledger.v1";
@@ -29,7 +29,7 @@ const ACCOUNT_STATUS_ENTRYPOINT: &str = "ak.suite.account_status.issuer_ledger.v
 /// Exact acknowledged gap ledger. This is deliberately closed: adding or
 /// renaming a canonical named suite cannot remain invisible merely because the
 /// total number of unwired suites happened to stay constant.
-const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 46] = [
+const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 45] = [
     "ak.suite.account.blocklist_projection.v1",
     "ak.suite.account_data.cas_convergence.v1",
     "ak.suite.account_data.private_view_inbox_binding.v1",
@@ -75,7 +75,6 @@ const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 46] = [
     "ak.suite.service.protocol_version_bootstrap.v1",
     "ak.suite.view.write_contract.v1",
     "ak.suite.visibility.policy.v1",
-    "ak.suite.webrtc.media_plaintext_downgrade.v1",
 ];
 
 enum Runner {
@@ -83,7 +82,7 @@ enum Runner {
     EvidenceMapped(fn() -> Result<()>),
 }
 
-const RUNNERS: [(&str, Runner); 17] = [
+const RUNNERS: [(&str, Runner); 18] = [
     (
         "ak.suite.agent.membership_cascade.v1",
         Runner::EvidenceMapped(run_agent_membership_cascade_suite),
@@ -151,6 +150,10 @@ const RUNNERS: [(&str, Runner); 17] = [
     (
         PROTOCOL_TIME_TOLERANCE_ENTRYPOINT,
         Runner::Cases(run_protocol_time_tolerance_suite),
+    ),
+    (
+        "ak.suite.webrtc.media_plaintext_downgrade.v1",
+        Runner::Cases(run_webrtc_media_plaintext_suite),
     ),
 ];
 

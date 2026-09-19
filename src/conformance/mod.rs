@@ -96,6 +96,7 @@ mod suite_execution;
 mod sync;
 mod vector_registry_gate;
 mod visibility_policy;
+mod webrtc_media_plaintext;
 mod websocket_binding;
 mod wire;
 
@@ -423,6 +424,9 @@ pub use visibility_policy::{
     run_directory_visibility_realm_members_indistinguishable_vector,
     run_in_place_e2ee_enable_vector, run_metadata_floor_downgrade_rejected_vector,
     run_visibility_policy_fixture_suite,
+};
+pub use webrtc_media_plaintext::{
+    WEBRTC_MEDIA_PLAINTEXT_ENTRYPOINT, run_webrtc_media_plaintext_suite,
 };
 pub use websocket_binding::run_websocket_binding_suite;
 pub use wire::{
