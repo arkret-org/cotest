@@ -1,0 +1,101 @@
+{
+  "suite": "agent_draft_pending_intent_account_subscribe_protocol",
+  "canonical_fixture": "agent-draft-pending-intent-fixture.json",
+  "schema_ref": "schemas/account-subscribe-frame.schema.json",
+  "contract_expectations": {
+    "authorization_allow": "authenticated active device of exact controller_account_id",
+    "authorization_deny": [
+      "agent_session",
+      "foreign_account",
+      "target_realm_member",
+      "federation_peer"
+    ],
+    "max_items_per_frame": 100,
+    "legacy_channels": [
+      "account_data_events",
+      "station_cas",
+      "device_lists",
+      "notifications"
+    ]
+  },
+  "live": {
+    "schema": "ak.schema.agent_draft_pending_intent.v1",
+    "controller_account_id": {
+      "principal_id": "ak:did_core:web:controller.example",
+      "station_id": "ak:did_core:web:station.example"
+    },
+    "agent_id": "ak:did_core:web:agent.example",
+    "draft_id": "draft-001",
+    "proposed_action": "ak.message.create",
+    "target": {
+      "kind": "realm",
+      "realm_id": "ak:realm:AcQajqaKFvyDoMpqpSlBvMh0d4gheZsVPhbHaTlqXtkV"
+    },
+    "content_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "content_handoff": {
+      "scheme": "ak.hpke_x25519_aead_chacha20poly1305.v1",
+      "recipients": [
+        {
+          "recipient_device_id": "ak:device:01964137-0000-7000-8000-000000000000",
+          "recipient_hpke_key_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+          "enc": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "ciphertext": "AAAAAAAAAAAAAAAAAAAAAA",
+          "ciphertext_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        }
+      ]
+    },
+    "canonical_event_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+    "accepted_event_id": "ak:event:AQJmSg1s9QyzppFeJL40dN92YVHZeLdBBt3UWHa9XNOD",
+    "expires_at": "2026-09-20T03:00:00.000Z",
+    "created_at": "2026-09-20T01:00:00.000Z",
+    "state": "available"
+  },
+  "terminal": {
+    "schema": "ak.schema.agent_draft_pending_intent.v1",
+    "controller_account_id": {
+      "principal_id": "ak:did_core:web:controller.example",
+      "station_id": "ak:did_core:web:station.example"
+    },
+    "agent_id": "ak:did_core:web:agent.example",
+    "draft_id": "draft-001",
+    "proposed_action": "ak.message.create",
+    "target": {
+      "kind": "realm",
+      "realm_id": "ak:realm:AcQajqaKFvyDoMpqpSlBvMh0d4gheZsVPhbHaTlqXtkV"
+    },
+    "content_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "canonical_event_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+    "accepted_event_id": "ak:event:AQJmSg1s9QyzppFeJL40dN92YVHZeLdBBt3UWHa9XNOD",
+    "expires_at": "2026-09-20T03:00:00.000Z",
+    "created_at": "2026-09-20T01:00:00.000Z",
+    "state": "consumed",
+    "consumption": {
+      "account_data_set_event_id": "ak:event:AQJmSg1s9QyzppFeJL40dN92YVHZeLdBBt3UWHa9XNOD",
+      "account_data_key": "ak.agent.draft.v1:29zs6Yu_GblluGkdTEDf8gWy8fRlKv2Am4Ms91DB-U8:HpcHzfESu5dFt2Is2QQ2Tp_c7hfh4SZtz4pKrbxp0_s",
+      "accepted_revision": 1,
+      "consumed_at": "2026-09-20T01:30:00.000Z"
+    }
+  },
+  "removal": {
+    "key": {
+      "controller_account_id": {
+        "principal_id": "ak:did_core:web:controller.example",
+        "station_id": "ak:did_core:web:station.example"
+      },
+      "agent_id": "ak:did_core:web:agent.example",
+      "draft_id": "draft-001"
+    },
+    "accepted_event_id": "ak:event:AQJmSg1s9QyzppFeJL40dN92YVHZeLdBBt3UWHa9XNOD",
+    "canonical_event_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+    "content_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "expires_at": "2026-09-20T03:00:00.000Z",
+    "state": "consumed",
+    "consumption": {
+      "account_data_set_event_id": "ak:event:AQJmSg1s9QyzppFeJL40dN92YVHZeLdBBt3UWHa9XNOD",
+      "account_data_key": "ak.agent.draft.v1:29zs6Yu_GblluGkdTEDf8gWy8fRlKv2Am4Ms91DB-U8:HpcHzfESu5dFt2Is2QQ2Tp_c7hfh4SZtz4pKrbxp0_s",
+      "accepted_revision": 1,
+      "consumed_at": "2026-09-20T01:30:00.000Z"
+    },
+    "removed_at": "2026-09-20T04:00:00.000Z"
+  }
+}

@@ -29,10 +29,11 @@ const ACCOUNT_STATUS_ENTRYPOINT: &str = "ak.suite.account_status.issuer_ledger.v
 /// Exact acknowledged gap ledger. This is deliberately closed: adding or
 /// renaming a canonical named suite cannot remain invisible merely because the
 /// total number of unwired suites happened to stay constant.
-const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 45] = [
+const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 46] = [
     "ak.suite.account.blocklist_projection.v1",
     "ak.suite.account_data.cas_convergence.v1",
     "ak.suite.account_data.private_view_inbox_binding.v1",
+    "ak.suite.agent.draft_pending_intent.v1",
     "ak.suite.agent.mls_keypackage_authorization.v1",
     "ak.suite.agent.participation.v1",
     "ak.suite.agent.vectors.v1",

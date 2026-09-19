@@ -1,4 +1,5 @@
 mod account_status_issuer_ledger;
+mod agent_draft_pending_intent_account_subscribe;
 mod agent_membership_cascade;
 mod agent_mls_keypackage_authorization;
 mod agent_pairing_coordination;
@@ -115,6 +116,10 @@ const ARTIFACT_FIXTURES_DIR: &str = "fixtures";
 
 pub use account_status_issuer_ledger::{
     VECTOR_ID_ACCOUNT_STATUS_ISSUER_LEDGER, run_account_status_issuer_ledger_vector,
+};
+pub use agent_draft_pending_intent_account_subscribe::{
+    AgentDraftPendingIntentAccountSubscribeCoverage,
+    run_agent_draft_pending_intent_account_subscribe_conformance,
 };
 pub use agent_membership_cascade::run_agent_membership_cascade_suite;
 pub use agent_mls_keypackage_authorization::run_agent_mls_keypackage_authorization_vector;
