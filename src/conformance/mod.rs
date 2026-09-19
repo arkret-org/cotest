@@ -32,6 +32,7 @@ mod device_revocation_pending;
 mod did_binding_digests;
 mod did_webvh_v1;
 mod digest_construction;
+mod direct_conversation_admission;
 mod direct_conversation_flow;
 mod downstream_impact;
 mod encoding;
@@ -219,6 +220,9 @@ pub use did_binding_digests::{
 pub use did_webvh_v1::run_did_webvh_v1_adapter_fixture_suite;
 pub use digest_construction::{
     CANONICAL_JSON_DIGEST_DOMAINS, run_digest_construction_known_answers,
+};
+pub use direct_conversation_admission::{
+    DirectConversationAdmissionCoverage, audit_direct_conversation_admission_contract,
 };
 pub use direct_conversation_flow::run_direct_conversation_flow_suite;
 pub use downstream_impact::{
