@@ -13,6 +13,7 @@ mod arkret_private_kdf_and_durability;
 mod audit_release;
 mod auth_session_proof;
 mod authority_commit;
+mod authority_event_submit_carriers;
 mod authorization_lease_issuance;
 mod authorization_lease_issuance_reference;
 mod blind_payload;
@@ -161,6 +162,9 @@ pub use auth_session_proof::{
 };
 pub use authority_commit::{
     VECTOR_ID_AUTHORITY_COMMIT_INDEPENDENT_STREAMS, run_authority_commit_suite,
+};
+pub use authority_event_submit_carriers::{
+    AuthorityEventSubmitCarrierCoverage, run_authority_event_submit_carrier_conformance,
 };
 pub use authorization_lease_issuance::run_authorization_lease_issuance_joint_gate;
 pub use blind_payload::{

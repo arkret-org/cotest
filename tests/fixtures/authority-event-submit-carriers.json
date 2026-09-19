@@ -1,0 +1,32 @@
+{
+  "profile": "cotest.static.authority_event_submit_carriers.v1",
+  "canonical_named_suite": "ak.suite.peer.event_submit.semantic_union.v1",
+  "execution_scope": "schema_and_public_sdk_roundtrip",
+  "service_e2e_status": "unwired",
+  "description": "Static protocol conformance for the endpoint-specific authority Event-submit carriers. This fixture does not claim Station persistence, signature verification, atomicity or federation delivery E2E.",
+  "schema_refs": {
+    "self_request": "schemas/authority-commit-operations.schema.json#/$defs/self_submit_request",
+    "self_outcome": "schemas/authority-commit-operations.schema.json#/$defs/self_submit_outcome",
+    "peer_request": "schemas/authority-commit-operations.schema.json#/$defs/peer_submit_request",
+    "peer_outcome": "schemas/authority-commit-operations.schema.json#/$defs/peer_submit_outcome",
+    "dependency_problem": "schemas/authority-commit-operations.schema.json#/$defs/direct_conversation_founding_dependency_missing_problem"
+  },
+  "required_static_cases": [
+    "self_and_peer_closed_unions",
+    "approval_signature_sidecar_reuse",
+    "replication_exact_source_event_commit_witness",
+    "replication_bound_1_through_100",
+    "direct_conversation_four_event_order",
+    "direct_conversation_receipt_and_authority_evidence",
+    "membership_compensation_self_and_peer",
+    "typed_dependency_missing_problem",
+    "forbid_event_federation_submission",
+    "forbid_partial_accepted_arrays"
+  ],
+  "non_claims": [
+    "no_live_station_was_started",
+    "no_persistence_or_atomicity_was_observed",
+    "no_signature_or_authority_key_was_cryptographically_verified",
+    "no_federation_delivery_was performed"
+  ]
+}
