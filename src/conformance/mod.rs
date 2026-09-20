@@ -97,6 +97,7 @@ mod spec_business_flow;
 mod station_certification;
 mod suite_execution;
 mod sync;
+mod test_material_rejection;
 mod vector_registry_gate;
 mod visibility_policy;
 mod webrtc_media_plaintext;
@@ -419,6 +420,10 @@ pub use signal_sequence_high_water::run_signal_sequence_high_water_suite;
 pub use spec_business_flow::run_spec_business_flow_coverage_suite;
 pub use suite_execution::{CaseExecutionResult, SuiteExecutionResult};
 pub use sync::{VECTOR_ID_CLIENT_ACCOUNT_STREAM, run_sync_fixture_suite};
+pub use test_material_rejection::{
+    TEST_MATERIAL_REJECTION_ENTRYPOINT, TestMaterialRejectionCoverage,
+    run_test_material_rejection_suite, run_test_material_rejection_suite_with_coverage,
+};
 pub use vector_registry_gate::{
     VectorRegistryGateEntry, VectorRegistryGateMode, VectorRegistryGateReport,
     VectorRegistryGateStatus, build_vector_registry_gate_report,

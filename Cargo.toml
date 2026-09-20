@@ -30,7 +30,7 @@ resolver = "3"
 # workspace with `cargo metadata` and fails when the light edge can reach
 # Inkson, Dioxus, a `soland-*` crate or the root package, by a normal, build or
 # (from the light edge itself) dev edge.
-members = ["crates/test-support"]
+members = ["crates/test-support", "crates/test-material-runner"]
 
 [workspace.lints.rust]
 unsafe_code = "deny"
@@ -44,6 +44,7 @@ unimplemented = "deny"
 [workspace.dependencies]
 aes-gcm = "0.11.1"
 cotest-test-support = { path = "crates/test-support" }
+cotest-test-material-runner = { path = "crates/test-material-runner" }
 anyhow = "1.0.104"
 arbitrary = "1.4"
 argon2 = { version = "0.6.0", default-features = false, features = ["alloc", "password-hash"] }
@@ -74,6 +75,7 @@ base64 = "0.23.1"
 bip39 = { version = "2.2.2", default-features = false, features = ["std"] }
 chacha20poly1305 = { version = "0.11.0", default-features = false }
 chrono = "0.4.45"
+coauth-backend = { path = "../coauth/crates/backend" }
 ed25519-dalek = { version = "3.0.0", default-features = false }
 fs2 = "0.4.3"
 # `native` gives us `NativeExecutor` and the durable `FileStore`, which are what
@@ -90,6 +92,7 @@ hpke-rs-rust-crypto = "0.7"
 inkson = { path = "../inkson" }
 jsonschema = { version = "0.52.1", default-features = false }
 postgres = "0.19.14"
+p256 = "0.14.0"
 proptest = { version = "1", default-features = false }
 rand_chacha = { version = "0.10.0", default-features = false }
 rcgen = "0.14.10"
@@ -185,6 +188,7 @@ base64 = { workspace = true }
 bip39 = { workspace = true }
 chacha20poly1305 = { workspace = true, default-features = false, features = ["alloc"] }
 chrono = { workspace = true }
+cotest-test-material-runner = { workspace = true }
 ed25519-dalek = { workspace = true, default-features = false, features = ["alloc"] }
 fs2 = { workspace = true }
 garth = { workspace = true }
