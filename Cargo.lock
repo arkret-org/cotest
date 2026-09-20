@@ -2780,6 +2780,7 @@ dependencies = [
  "chacha20poly1305 0.11.0",
  "chrono",
  "cotest-blob-stream-aead-runner",
+ "cotest-call-state-core-runner",
  "cotest-cursor-negative-runner",
  "cotest-detached-object-signature-runner",
  "cotest-franking-proof-runner",
@@ -2835,6 +2836,23 @@ dependencies = [
  "arkret-schema",
  "arkret-schema-conformance",
  "arkret-wire",
+ "serde_json",
+]
+
+[[package]]
+name = "cotest-call-state-core-runner"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "arkret",
+ "arkret-canonical",
+ "arkret-identifiers",
+ "arkret-models-collaboration",
+ "arkret-state",
+ "arkret-wire",
+ "chrono",
+ "ed25519-dalek 3.0.0",
+ "serde",
  "serde_json",
 ]
 

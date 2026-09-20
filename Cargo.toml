@@ -32,6 +32,7 @@ resolver = "3"
 # (from the light edge itself) dev edge.
 members = [
     "crates/blob-stream-aead-runner",
+    "crates/call-state-core-runner",
     "crates/cursor-negative-runner",
     "crates/detached-object-signature-runner",
     "crates/device-verification-runner",
@@ -56,6 +57,7 @@ unimplemented = "deny"
 [workspace.dependencies]
 aes-gcm = "0.11.1"
 cotest-blob-stream-aead-runner = { path = "crates/blob-stream-aead-runner" }
+cotest-call-state-core-runner = { path = "crates/call-state-core-runner" }
 cotest-cursor-negative-runner = { path = "crates/cursor-negative-runner" }
 cotest-detached-object-signature-runner = { path = "crates/detached-object-signature-runner" }
 cotest-franking-proof-runner = { path = "crates/franking-proof-runner" }
@@ -152,6 +154,7 @@ test-with-containers = ["dep:testcontainers"]
 # without Inkson.
 cotest-test-support = { workspace = true }
 cotest-blob-stream-aead-runner = { workspace = true }
+cotest-call-state-core-runner = { workspace = true }
 cotest-cursor-negative-runner = { workspace = true }
 cotest-detached-object-signature-runner = { workspace = true }
 cotest-franking-proof-runner = { workspace = true }

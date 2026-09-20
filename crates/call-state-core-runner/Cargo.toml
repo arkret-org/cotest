@@ -1,0 +1,22 @@
+[package]
+name = "cotest-call-state-core-runner"
+version = "0.3.0"
+edition = "2024"
+rust-version = "1.98"
+publish = false
+
+[dependencies]
+anyhow = { workspace = true }
+arkret = { workspace = true }
+arkret-canonical = { workspace = true }
+arkret-identifiers = { workspace = true }
+arkret-models-collaboration = { workspace = true }
+arkret-state = { workspace = true }
+arkret-wire = { workspace = true }
+chrono = { workspace = true }
+ed25519-dalek = { workspace = true, features = ["alloc"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

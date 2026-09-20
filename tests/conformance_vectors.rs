@@ -15,18 +15,18 @@ use cotest::conformance::{
     ALL_OBJECT_ADDRESSING_VECTOR_IDS, ALL_PRESENCE_SIGNAL_VECTOR_IDS,
     ALL_PRIMARY_HANDLE_VECTOR_IDS, ALL_SIDECAR_VECTOR_IDS, load_local_fixture_value,
     run_agent_signer_evidence_vector_suite, run_agent_vector_suite, run_blob_stream_aead_suite,
-    run_call_signal_vector_suite, run_call_state_media_lifecycle_vector_suite,
-    run_container_realm_control_payload_suite, run_cursor_negative_suite, run_cursor_vector_suite,
-    run_detached_object_signature_suite, run_digest_construction_known_answers,
-    run_encoding_fixture_suite, run_franking_proof_suite, run_handle_claim_rejection_vector_suite,
-    run_keypackage_write_transcripts_suite, run_media_binding_vector_suite,
-    run_member_identity_vector_suite, run_member_roster_vector_suite,
-    run_mention_rendering_vector_suite, run_named_suite_audit, run_object_addressing_vector_suite,
-    run_poll_reducer_fixture_suite, run_presence_signal_vector_suite,
-    run_primary_handle_vector_suite, run_protocol_time_tolerance_suite, run_protocol_version_suite,
-    run_push_rule_core_suite, run_sdk_precheck_suite, run_sidecar_vector_suite,
-    run_string_profile_suite, run_test_material_rejection_suite_with_coverage,
-    run_webrtc_media_plaintext_suite,
+    run_call_signal_vector_suite, run_call_state_core_suite,
+    run_call_state_media_lifecycle_vector_suite, run_container_realm_control_payload_suite,
+    run_cursor_negative_suite, run_cursor_vector_suite, run_detached_object_signature_suite,
+    run_digest_construction_known_answers, run_encoding_fixture_suite, run_franking_proof_suite,
+    run_handle_claim_rejection_vector_suite, run_keypackage_write_transcripts_suite,
+    run_media_binding_vector_suite, run_member_identity_vector_suite,
+    run_member_roster_vector_suite, run_mention_rendering_vector_suite, run_named_suite_audit,
+    run_object_addressing_vector_suite, run_poll_reducer_fixture_suite,
+    run_presence_signal_vector_suite, run_primary_handle_vector_suite,
+    run_protocol_time_tolerance_suite, run_protocol_version_suite, run_push_rule_core_suite,
+    run_sdk_precheck_suite, run_sidecar_vector_suite, run_string_profile_suite,
+    run_test_material_rejection_suite_with_coverage, run_webrtc_media_plaintext_suite,
 };
 use serde_json::{Value, json};
 
@@ -120,6 +120,15 @@ fn push_rule_core_named_suite_executes_all_current_cases() -> Result<()> {
 }
 
 #[test]
+fn call_state_core_named_suite_executes_all_current_cases() -> Result<()> {
+    let execution = run_call_state_core_suite()?;
+    assert_eq!(execution.entrypoint, "ak.suite.call.state_core.v1");
+    assert_eq!(execution.cases.len(), 7);
+    assert!(execution.cases.iter().all(|case| case.assertions > 0));
+    Ok(())
+}
+
+#[test]
 fn registered_canonical_json_digest_constructions_match_known_answers() -> Result<()> {
     run_digest_construction_known_answers()
 }
@@ -128,8 +137,8 @@ fn registered_canonical_json_digest_constructions_match_known_answers() -> Resul
 fn named_suite_audit_executes_registered_runners_and_exposes_every_gap() -> Result<()> {
     let report = run_named_suite_audit()?;
     assert_eq!(report.fixture_count, 70);
-    assert_eq!(report.executed_entrypoints.len(), 28);
-    assert_eq!(report.unwired_entrypoints.len(), 42);
+    assert_eq!(report.executed_entrypoints.len(), 29);
+    assert_eq!(report.unwired_entrypoints.len(), 41);
     for required_gap in [
         "ak.suite.consent.cache_invalidation.v1",
         "ak.suite.direct_conversation.admission_producers.v1",
