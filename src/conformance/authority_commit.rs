@@ -691,9 +691,7 @@ fn verify_event_commit_submission_is_the_only_event_dto() -> Result<()> {
         commits: Vec::new(),
     };
     let event = signed_event(producer_event(&stream, 2)?)?;
-    let submission = EventCommitSubmission {
-        event: event.clone(),
-    };
+    let submission = EventCommitSubmission::new(event.clone());
     let encoded = serde_json::to_value(&submission)?;
     ensure!(
         encoded

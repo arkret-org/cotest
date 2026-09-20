@@ -13,11 +13,11 @@ use arkret_models_crypto::{
     MlsGovernanceBindingPayload, MlsKeyPackageState,
 };
 use arkret_wire::{
-    AccountId, ActorId, Base64UrlString, CommitStreamRef, DetachedObjectSignature,
-    DetachedSignatureAlgorithm, DetachedSignatureContext, DeviceId, DidCoreId, DidUrl,
-    EncryptedPayloadScheme, EventCommitSubmission, EventId, Hash, MlsWelcomeDelivery,
-    MlsWelcomeDeliveryId, MlsWelcomeRecipientEndpoint, RealmCommit, RealmCommitAuthorityRef,
-    RealmCommitId, RealmId, ScopeRef, StrandId, StreamRow,
+    AccountId, ActorId, Base64UrlString, CommitStreamRef, CommittedEventFullView,
+    DetachedObjectSignature, DetachedSignatureAlgorithm, DetachedSignatureContext, DeviceId,
+    DidCoreId, DidUrl, EncryptedPayloadScheme, EventCommitSubmission, EventId, Hash,
+    MlsWelcomeDelivery, MlsWelcomeDeliveryId, MlsWelcomeRecipientEndpoint, RealmCommit,
+    RealmCommitAuthorityRef, RealmCommitId, RealmId, ScopeRef, StrandId,
 };
 
 const STATION: &str = "ak:did_core:web:station.example";
@@ -25,7 +25,7 @@ const REALM: &str = "ak:realm:ASZ1iAvlGxgLC_-P6WHoR9vfijpaxbI5hoSwBx8zWTcT";
 
 /// The authority's detached object signature over a committed object.
 ///
-/// `StreamRow` and `MlsWelcomeDelivery` validate the signature *shape* and its
+/// `CommittedEventFullView` and `MlsWelcomeDelivery` validate the signature *shape* and its
 /// domain context; the cryptographic check belongs to the accepting service and
 /// is exercised live, so this composition test carries a well-formed carrier.
 fn detached(context: DetachedSignatureContext) -> DetachedObjectSignature {
@@ -47,9 +47,19 @@ fn detached(context: DetachedSignatureContext) -> DetachedObjectSignature {
 fn authored_message_decrypts_at_the_other_mls_member_without_reencrypting() {
     let alice_id = DidCoreId::new("ak:did_core:web:alice.example").unwrap();
     let device = DeviceId::new("ak:device:01904100-0000-7000-8000-000000000006").unwrap();
-    let alice = ArkretMlsIdentity::new_test_human_device(alice_id.clone(), device.clone()).unwrap();
+    let alice = ArkretMlsIdentity::new_test_human_device(
+        ActorId::account(AccountId::new(
+            alice_id.clone(),
+            DidCoreId::new(STATION).unwrap(),
+        )),
+        device.clone(),
+    )
+    .unwrap();
     let bob = ArkretMlsIdentity::new_test_human_device(
-        DidCoreId::new("ak:did_core:web:bob.example").unwrap(),
+        ActorId::account(AccountId::new(
+            DidCoreId::new("ak:did_core:web:bob.example").unwrap(),
+            DidCoreId::new(STATION).unwrap(),
+        )),
         DeviceId::new("ak:device:01904100-0000-7000-8000-00000000000e").unwrap(),
     )
     .unwrap();
@@ -60,13 +70,12 @@ fn authored_message_decrypts_at_the_other_mls_member_without_reencrypting() {
         realm_id: realm.clone(),
     };
 
-    // The MLS group id is the canonical scope key, so the group state the
-    // Commit Event names and the group Alice actually holds are the same group
-    // by construction rather than by agreement.
-    let group_id = scope.canonical_effective_scope_key_bytes().unwrap();
+    // The MLS group id is derived from the canonical scope, so the group state
+    // the Commit Event names and the group Alice actually holds are the same
+    // group by construction rather than by agreement.
     let genesis_binding = MlsGovernanceBindingPayload::realm(realm.clone(), None, 0, 0, 0).unwrap();
     let mut sender = alice
-        .create_group_with_governance_binding(&group_id, &genesis_binding)
+        .create_group_with_governance_binding(&scope, &genesis_binding)
         .unwrap();
 
     // Adding Bob is one accepted transition: epoch 0 -> 1, bound to the Event
@@ -100,7 +109,7 @@ fn authored_message_decrypts_at_the_other_mls_member_without_reencrypting() {
     )
     .unwrap();
     let commit_event_id = EventId::from_digest(DigestSuite::Sha256, [11; 32]);
-    let accepted_commit = StreamRow {
+    let accepted_commit = CommittedEventFullView {
         commit: RealmCommit {
             commit_id: RealmCommitId::from_digest([19; 32]),
             realm_id: realm.clone(),
@@ -110,7 +119,7 @@ fn authored_message_decrypts_at_the_other_mls_member_without_reencrypting() {
             stream_position: 0,
             previous_commit_ref: None,
             event_ref: commit_event_id.clone(),
-            authority_generation: 0,
+            governance_generation: 0,
             authority_ref: RealmCommitAuthorityRef::GenesisOrChangeEvent(commit_event_id.clone()),
             committed_at: "2026-09-12T00:00:00.000Z".parse().unwrap(),
             signature: detached(DetachedSignatureContext::RealmCommit),
@@ -149,6 +158,7 @@ fn authored_message_decrypts_at_the_other_mls_member_without_reencrypting() {
             .unwrap();
 
     let scheme = EncryptedPayloadScheme::MlsRfc9420;
+    let sender_domain = sender.local_content_sender_domain().unwrap();
     let header = EventContentPreEncryptionHeader::reconstruct(
         "1.0",
         "application/vnd.arkret.message+json",
@@ -157,7 +167,7 @@ fn authored_message_decrypts_at_the_other_mls_member_without_reencrypting() {
         "ak.message.create",
         sender.epoch(),
         EventId::from_digest(DigestSuite::Sha256, [7; 32]),
-        device.as_str(),
+        &sender_domain,
         None,
         EventContentRoutingContext::None,
     )
@@ -177,7 +187,7 @@ fn authored_message_decrypts_at_the_other_mls_member_without_reencrypting() {
             encryption_context: MessageEncryptionContext {
                 scheme: scheme.clone(),
                 effective_scope: scope.clone(),
-                sender_domain: device.to_string(),
+                sender_domain: sender_domain.clone(),
             },
         },
         blob_refs: vec![],
@@ -215,7 +225,7 @@ fn authored_message_decrypts_at_the_other_mls_member_without_reencrypting() {
             scheme,
             scope.clone(),
             "ak.message.create",
-            device.as_str(),
+            &sender_domain,
             None,
         )
         .unwrap();
@@ -261,9 +271,9 @@ fn message_submission_admits_only_the_message_create_kind() {
     let event_id = EventId::from_digest(DigestSuite::Sha256, [23; 32]);
     let binding = MlsGovernanceBindingPayload::realm(realm.clone(), None, 0, 0, 0).unwrap();
     let wrong_kind = MessageSubmitRequestBody {
-        submission: EventCommitSubmission {
-            event: mls_commit_like_event(&realm, &scope, &event_id, &binding),
-        },
+        submission: EventCommitSubmission::new(mls_commit_like_event(
+            &realm, &scope, &event_id, &binding,
+        )),
     };
     assert!(wrong_kind.validate().is_err());
 }
@@ -316,7 +326,6 @@ fn event_with_payload(
         )),
         "created_at": "2026-09-12T00:00:00.000Z",
         "payload": payload,
-        "proofs": [],
     }))
     .unwrap()
 }
