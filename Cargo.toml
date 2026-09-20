@@ -42,6 +42,7 @@ members = [
     "crates/protocol-version-runner",
     "crates/push-rule-core-runner",
     "crates/sdk-precheck-runner",
+    "crates/signal-wire-runner",
     "crates/string-profile-runner",
     "crates/test-support",
     "crates/test-material-runner",

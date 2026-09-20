@@ -18,13 +18,13 @@
 use std::collections::BTreeMap;
 
 use anyhow::{Result, anyhow, bail};
-use arkret_identifiers::{CallId, DeviceId, DidCoreId, Hash, RealmId};
+use arkret_identifiers::{CallId, DeviceId, DidCoreId, Hash, RealmCommitId, RealmId};
 use arkret_models_collaboration::call_signal::CallSignalPlaintext;
 use arkret_signatures::PublicKeyMaterial;
 use arkret_signatures::proof::verify_ed25519_signal_proof;
 use arkret_wire::signal::{SIGNAL_AEAD_PURPOSE, SIGNAL_AEAD_SCHEME};
 use arkret_wire::{
-    AccountId, ActorId, ScopeRef, SealId, SignalClass, SignalEncryptedPayload, SignalEnvelope,
+    AccountId, ActorId, ScopeRef, SignalClass, SignalEncryptedPayload, SignalEnvelope,
     SignalKeyRef, SignalProof,
 };
 use chrono::{DateTime, Duration, TimeZone, Utc};
@@ -193,12 +193,12 @@ pub fn run_seq_monotonic_vector() -> Result<()> {
 
 /// Build a call-signal [`SignalEnvelope`] exactly as a sender does, sign it
 /// with a real ed25519 key under the `ak.signal_proof.v1` transcript, and
-/// verify it through the SDK receiver path.
+/// verify it through the SDK wire and signature-verifier path.
 ///
 /// The transcript commits to `envelope_digest` — the envelope with `proof`
-/// removed — and therefore to the ciphertext and `aad_digest` as well as the
-/// header, so a signature minted on the Event rail can never be replayed here
-/// and tampering with any covered field breaks verification.
+/// removed — and therefore to the ciphertext and complete header. AEAD binds
+/// that same header through production `aad_bytes`; neither binding needs a
+/// redundant digest on the wire.
 pub fn run_proof_detached_jws_vector() -> Result<()> {
     let signing_key = SigningKey::from_bytes(&[0x33u8; 32]);
     let public = PublicKeyMaterial::Ed25519Raw {
@@ -211,6 +211,60 @@ pub fn run_proof_detached_jws_vector() -> Result<()> {
         .map_err(|err| anyhow!("a canonical call-signal envelope must validate: {err}"))?;
     verify_ed25519_signal_proof(&envelope, &public)
         .map_err(|err| anyhow!("the sender-style signal proof MUST verify: {err}"))?;
+    let original_aad = envelope
+        .aead_binding()
+        .aad_bytes(&envelope.encrypted_payload.nonce)?;
+    let wire = serde_json::to_value(&envelope)?;
+    let aad_field_mutations = vec![
+        (
+            "/realm_id",
+            json!("ak:realm:AYcmQBZ6x7FCwln_vbdWIyV2tJ4pOJ4rmbd6v_0Y7N9_"),
+        ),
+        (
+            "/scope_ref/realm_id",
+            json!("ak:realm:AYcmQBZ6x7FCwln_vbdWIyV2tJ4pOJ4rmbd6v_0Y7N9_"),
+        ),
+        (
+            "/sender_actor_id/account_id/station_id",
+            json!("ak:did_core:web:station-b.example.com"),
+        ),
+        (
+            "/sender_device_id",
+            json!("ak:device:01964137-0000-7000-8000-000000000001"),
+        ),
+        (
+            "/stream_head_ref",
+            json!("ak:realm_commit:ARNRmzDi2r78zveOLmoHOb6AephFMwVuGE1fwXmCoeo4"),
+        ),
+        ("/signal_class", json!("moderation")),
+        ("/sent_at", json!("2026-04-26T00:00:01.000Z")),
+        ("/expires_at", json!("2026-04-26T00:01:59.000Z")),
+        ("/encrypted_payload/scheme", json!("ak.signal.changed.v1")),
+        (
+            "/encrypted_payload/key_ref/group_state_ref",
+            json!(crate::fixture_event_id("call-signal-aad-group-state")),
+        ),
+        ("/encrypted_payload/purpose", json!("ak.signal.changed.v1")),
+        (
+            "/encrypted_payload/aead_profile",
+            json!("MLS_128_DHKEMX25519_CHACHA20POLY1305_SHA256_Ed25519"),
+        ),
+        ("/encrypted_payload/epoch", json!(8)),
+        ("/encrypted_payload/nonce", json!("AAAAAAAAAAAAAAAB")),
+    ];
+    for (pointer, replacement) in aad_field_mutations {
+        let mut mutated = wire.clone();
+        *mutated
+            .pointer_mut(pointer)
+            .ok_or_else(|| anyhow!("Signal fixture has no AAD field at {pointer}"))? = replacement;
+        let mutated: SignalEnvelope = serde_json::from_value(mutated)?;
+        let mutated_aad = mutated
+            .aead_binding()
+            .aad_bytes(&mutated.encrypted_payload.nonce)?;
+        if mutated_aad == original_aad {
+            bail!("mutating Signal AAD field {pointer} left canonical AAD bytes unchanged");
+        }
+    }
 
     // Negative: tampering the ciphertext changes `envelope_digest`, so the
     // envelope no longer validates against its own proof.
@@ -224,18 +278,25 @@ pub fn run_proof_detached_jws_vector() -> Result<()> {
     // is what stops a relay from re-scoping a signal it cannot decrypt.
     let mut rescoped = envelope.clone();
     rescoped.signal_class = SignalClass::Session;
-    if rescoped.validate_structural().is_ok() {
-        bail!("a rewritten signal_class still matched the recorded aad_digest");
+    if rescoped
+        .aead_binding()
+        .aad_bytes(&rescoped.encrypted_payload.nonce)?
+        == original_aad
+    {
+        bail!("a rewritten signal_class did not change canonical Signal AAD bytes");
     }
 
     // The proof controller is unchanged, but the Station is part of both the
     // authenticated envelope and the AAD, not an inferred routing hint.
     let mut other_account = envelope.clone();
     other_account.sender_actor_id = fixture_actor("ak:did_core:web:station-b.example.com")?;
-    if other_account.validate_structural().is_ok() {
-        bail!("a rewritten sender Station still matched the recorded aad_digest");
+    if other_account
+        .aead_binding()
+        .aad_bytes(&other_account.encrypted_payload.nonce)?
+        == original_aad
+    {
+        bail!("a rewritten sender Station did not change canonical Signal AAD bytes");
     }
-    other_account.encrypted_payload.aad_digest = other_account.expected_aad_digest()?;
     other_account.proof.envelope_digest = other_account.envelope_digest()?;
     other_account.validate_structural()?;
     if verify_ed25519_signal_proof(&other_account, &public).is_ok() {
@@ -276,6 +337,34 @@ pub fn run_outer_metadata_minimal_vector() -> Result<()> {
     }
     if object.get("signal_class").and_then(Value::as_str) != Some("setup") {
         bail!("an invite-bearing envelope must be classified `setup` for wake-up");
+    }
+    if wire["encrypted_payload"].get("aad_digest").is_some()
+        || wire["encrypted_payload"]["key_ref"]
+            .get("algorithm")
+            .is_some()
+    {
+        bail!("Signal wire retained a redundant AAD digest or key algorithm mirror");
+    }
+    for (pointer, value) in [
+        (
+            "/encrypted_payload/aad_digest",
+            json!(format!("sha256:{}", "0".repeat(64))),
+        ),
+        (
+            "/encrypted_payload/key_ref/algorithm",
+            json!("MLS-EXPORTER-AEAD"),
+        ),
+    ] {
+        let mut legacy = wire.clone();
+        let (parent, member) = pointer.rsplit_once('/').expect("static JSON pointer");
+        legacy
+            .pointer_mut(parent)
+            .and_then(Value::as_object_mut)
+            .ok_or_else(|| anyhow!("Signal fixture has no object at {parent}"))?
+            .insert(member.to_owned(), value);
+        if serde_json::from_value::<SignalEnvelope>(legacy).is_ok() {
+            bail!("legacy Signal member {pointer} was accepted by the production wire type");
+        }
     }
 
     // `session` tops out at 30 seconds; the `setup` TTL above it must not be
@@ -376,14 +465,15 @@ fn signed_call_signal_envelope(
         scope_ref: ScopeRef::Realm { realm_id },
         sender_actor_id: actor_id.clone(),
         sender_device_id: Some(device_id.clone()),
-        seal_ref: SealId::new(format!("ak:seal:sha256:{}", "a".repeat(64)))?,
+        stream_head_ref: RealmCommitId::new(
+            "ak:realm_commit:Ac08ROpjn3Ilj_UaM-_XLY93u4SUTptG0-Q-_CUDb5aS",
+        )?,
         signal_class,
         sent_at: sent_at(),
         expires_at: sent_at() + Duration::seconds(ttl_seconds),
         encrypted_payload: SignalEncryptedPayload {
             scheme: SIGNAL_AEAD_SCHEME.to_owned(),
             key_ref: SignalKeyRef {
-                algorithm: "MLS-EXPORTER-AEAD".to_owned(),
                 group_state_ref: "ak:event:AXehYOgO_p3M5hbOzs6Mhblqek3i9nwaGUec3J9_89_C".to_owned(),
             },
             purpose: SIGNAL_AEAD_PURPOSE.to_owned(),
@@ -391,7 +481,6 @@ fn signed_call_signal_envelope(
             epoch: 7,
             nonce: "AAAAAAAAAAAAAAAA".to_owned(),
             ciphertext: "Q2lwaGVydGV4dFBsYWNlaG9sZGVy".to_owned(),
-            aad_digest: Hash::new(format!("sha256:{}", "0".repeat(64)))?,
         },
         proof: SignalProof {
             kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
@@ -412,7 +501,7 @@ fn signed_call_signal_envelope(
 pub fn run_call_signal_vector_suite() -> Result<()> {
     if ALL_CALL_SIGNAL_VECTOR_IDS.len() != 5 {
         bail!(
-            "expected 4 call_signal vector ids, got {}",
+            "expected 5 call_signal vector ids, got {}",
             ALL_CALL_SIGNAL_VECTOR_IDS.len()
         );
     }

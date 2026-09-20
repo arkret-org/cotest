@@ -140,16 +140,10 @@ fn event_fixture_label(event: &Value) -> String {
 /// (`zh/sync/signal.md` §1). The binding bytes come from
 /// [`arkret_wire::SignalEnvelope::proof_binding_bytes`] and the JWS wire form
 /// from the SDK signer, so this helper cannot drift from the verifier.
-///
-/// `aad_digest` is recomputed from the immutable outer header as required by
-/// `SignalEnvelope::validate_structural`; the signed envelope carries `sent_at`.
 pub fn attach_signal_proof(
     envelope: &mut arkret_wire::SignalEnvelope,
     signing_key: &ed25519_dalek::SigningKey,
 ) {
-    envelope.encrypted_payload.aad_digest = envelope
-        .expected_aad_digest()
-        .expect("signal envelope header is canonicalizable");
     envelope.proof.envelope_digest = envelope
         .envelope_digest()
         .expect("signal envelope is canonicalizable");
@@ -249,22 +243,20 @@ mod tests {
                 }
             },
             "sender_device_id": "ak:device:019f3b1c-76c8-7000-8000-000000000001",
-            "seal_ref": format!("ak:seal:sha256:{}", "a".repeat(64)),
+            "stream_head_ref": "ak:realm_commit:Ac08ROpjn3Ilj_UaM-_XLY93u4SUTptG0-Q-_CUDb5aS",
             "signal_class": "session",
             "sent_at": "2026-07-07T00:00:00.000Z",
             "expires_at": "2026-07-07T00:00:30.000Z",
             "encrypted_payload": {
                 "scheme": "ak.signal_exporter_aead.v1",
                 "key_ref": {
-                    "algorithm": "MLS-EXPORTER-AEAD",
                     "group_state_ref": "ak:event:Ab1ksa-umr9kNJE_n2EEj6AVhUsqM_Xml_hJgWyMpwq8"
                 },
                 "purpose": "ak.signal.v1",
                 "aead_profile": "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
                 "epoch": 7,
                 "nonce": "AAAAAAAAAAAAAAAA",
-                "ciphertext": "Q2lwaGVydGV4dFBsYWNlaG9sZGVy",
-                "aad_digest": format!("sha256:{}", "0".repeat(64))
+                "ciphertext": "Q2lwaGVydGV4dFBsYWNlaG9sZGVy"
             },
             "proof": {
                 "kind": "detached_jws",

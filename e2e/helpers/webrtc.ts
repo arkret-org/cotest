@@ -16,9 +16,9 @@ import {
   authHeaders,
   base64url,
   base64urlJsonCanonical,
-  canonicalEventTimestamp,
   canonicalJson,
   canonicalTimestamp,
+  readCommitStreamHeadApi,
   registeredEventVerificationMethod,
   seedConformanceRealmBasisApi,
   signedEventEnvelope,
@@ -128,14 +128,14 @@ export function buildSignalEnvelope(args: {
     scope_ref: args.scopeRef ?? { kind: "realm", realm_id: args.realmId },
     sender_actor_id: accountActorId(args.actorId),
     sender_device_id: args.deviceId,
-    seal_ref: `ak:seal:sha256:${"0".repeat(64)}`,
+    stream_head_ref:
+      "ak:realm_commit:Ac08ROpjn3Ilj_UaM-_XLY93u4SUTptG0-Q-_CUDb5aS",
     signal_class: signalClass,
     sent_at: canonicalTimestamp(sentAt),
     expires_at: canonicalTimestamp(expiresAt),
     encrypted_payload: {
       scheme: "ak.signal_exporter_aead.v1",
       key_ref: {
-        algorithm: "MLS-EXPORTER-AEAD",
         // Frozen accepted MLS group-state Event fixture. Event references use
         // DID tokens, never UUID placeholders.
         group_state_ref:
@@ -146,7 +146,6 @@ export function buildSignalEnvelope(args: {
       epoch: 0,
       nonce: base64url(Buffer.alloc(12)),
       ciphertext: base64url(Buffer.from(canonicalJson(args.plaintext), "utf8")),
-      aad_digest: `sha256:${"0".repeat(64)}`,
     },
     proof: {
       kind: "detached_jws",
@@ -154,7 +153,6 @@ export function buildSignalEnvelope(args: {
         registeredEventVerificationMethod(args.actorId, args.deviceId) ??
         `${args.actorId}#${args.deviceId}`,
       envelope_digest: `sha256:${"0".repeat(64)}`,
-      created_at: canonicalEventTimestamp(sentAt),
       jws: "",
     },
   };
@@ -163,31 +161,7 @@ export function buildSignalEnvelope(args: {
 }
 
 function finalizeSignalEnvelopeProof(envelope: Record<string, unknown>): void {
-  const encryptedPayload = envelope.encrypted_payload as Record<
-    string,
-    unknown
-  >;
   const proof = envelope.proof as Record<string, unknown>;
-  const aad = {
-    realm_id: envelope.realm_id,
-    scope_ref: envelope.scope_ref,
-    sender_actor_id: envelope.sender_actor_id,
-    sender_device_id: envelope.sender_device_id,
-    seal_ref: envelope.seal_ref,
-    signal_class: envelope.signal_class,
-    sent_at: envelope.sent_at,
-    expires_at: envelope.expires_at,
-    scheme: encryptedPayload.scheme,
-    key_ref: encryptedPayload.key_ref,
-    purpose: encryptedPayload.purpose,
-    aead_profile: encryptedPayload.aead_profile,
-    epoch: encryptedPayload.epoch,
-    nonce: encryptedPayload.nonce,
-  };
-  encryptedPayload.aad_digest = `sha256:${createHash("sha256")
-    .update(canonicalJson(aad), "utf8")
-    .digest("hex")}`;
-
   const unsigned = { ...envelope };
   delete unsigned.proof;
   const envelopeDigest = `sha256:${createHash("sha256")
@@ -200,7 +174,7 @@ function finalizeSignalEnvelopeProof(envelope: Record<string, unknown>): void {
     sender_actor_id: envelope.sender_actor_id,
     sender_device_id: envelope.sender_device_id,
     verification_method: proof.verification_method,
-    created_at: proof.created_at,
+    created_at: envelope.sent_at,
   };
   const protectedHeader = base64urlJsonCanonical({ alg: "Ed25519" });
   const bindingPayload = base64urlJsonCanonical(bindingObject);
@@ -239,8 +213,8 @@ export function signalPlaintext(
 // ── Signal submit + subscribe read-back (canonical wire) ────────────────────
 
 /**
- * Submit one encrypted Signal envelope. The Seal reference is resolved just
- * before signing so the proof and AAD bind the current accepted basis.
+ * Submit one encrypted Signal envelope. The independent commit-stream head is
+ * resolved just before signing so the proof and AEAD bind current authority.
  */
 export async function prepareSignalEnvelope(
   request: APIRequestContext,
@@ -266,15 +240,18 @@ export async function prepareSignalEnvelope(
       `seed Signal device key returned ${keyResponse.status()}: ${await keyResponse.text()}`,
     ).toBe(200);
   }
-  let basis: Record<string, unknown>;
   {
-    basis = await seedConformanceRealmBasisApi(
+    await seedConformanceRealmBasisApi(
       request,
       realmId,
       actorId,
       ["ak.message.create"],
     );
-    envelope.seal_ref = basis.seal_id;
+    const head = await readCommitStreamHeadApi(request, token, realmId);
+    if (!head) {
+      throw new Error(`seeded Realm ${realmId} has no accepted commit head`);
+    }
+    envelope.stream_head_ref = head.commit_id;
   }
   const mlsBasis = await ensureSignalMlsBasis(
     request,

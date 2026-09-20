@@ -157,14 +157,12 @@ pub struct FuzzSignalInput {
     pub sent_at: String,
     pub expires_at: String,
     pub scheme: String,
-    pub key_algorithm: String,
     pub group_state_ref: String,
     pub purpose: String,
     pub aead_profile: String,
     pub epoch: u64,
     pub nonce: String,
     pub ciphertext: String,
-    pub aad_digest: String,
     pub proof_kind: String,
     pub verification_method: String,
     pub envelope_digest: String,
@@ -213,7 +211,6 @@ impl FuzzSignalInput {
             "encrypted_payload": {
                 "scheme": self.scheme,
                 "key_ref": {
-                    "algorithm": self.key_algorithm,
                     "group_state_ref": self.group_state_ref,
                 },
                 "purpose": self.purpose,
@@ -221,7 +218,6 @@ impl FuzzSignalInput {
                 "epoch": self.epoch,
                 "nonce": self.nonce,
                 "ciphertext": self.ciphertext,
-                "aad_digest": self.aad_digest,
             },
             "proof": {
                 "kind": self.proof_kind,
@@ -236,9 +232,10 @@ impl FuzzSignalInput {
 
 /// Fuzz the `SignalEnvelope` wire shape and its structural validator.
 ///
-/// `validate_structural` is the interesting leg: it recomputes the AAD digest
-/// and the envelope digest over attacker-shaped input, so a panic there would
-/// be reachable before any authentication.
+/// `validate_structural` is the interesting leg: it validates the immutable
+/// header and recomputes the envelope digest over attacker-shaped input, so a
+/// panic there would be reachable before any authentication. AEAD verification
+/// consumes the canonical AAD bytes in the production MLS recipient path.
 pub fn fuzz_signal_envelope(data: &[u8]) -> Result<(), String> {
     catch(|| {
         let _ = serde_json::from_slice::<arkret_wire::SignalEnvelope>(data);

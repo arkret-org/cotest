@@ -19,9 +19,9 @@ use arkret_models_identity::{
     SignerKeysQueryRequestBody,
 };
 use arkret_wire::{
-    AccountId, ActorId, Did, DidCoreId, DidUrl, Event, EventId, EventKind, Hash, RealmId,
-    RequestId, ScopeRef, SealId, SignalClass, SignalEncryptedPayload, SignalEnvelope, SignalKeyRef,
-    SignalProof,
+    AccountId, ActorId, Did, DidCoreId, DidUrl, Event, EventId, EventKind, Hash, RealmCommitId,
+    RealmId, RequestId, ScopeRef, SignalClass, SignalEncryptedPayload, SignalEnvelope,
+    SignalKeyRef, SignalProof,
 };
 use chrono::Utc;
 use reqwest::StatusCode;
@@ -967,14 +967,15 @@ fn cold_signal_envelope(
         scope_ref: ScopeRef::Realm { realm_id },
         sender_actor_id,
         sender_device_id: Some(sender_device_id),
-        seal_ref: SealId::new(format!("ak:seal:sha256:{}", "a".repeat(64)))?,
+        stream_head_ref: RealmCommitId::new(
+            "ak:realm_commit:Ac08ROpjn3Ilj_UaM-_XLY93u4SUTptG0-Q-_CUDb5aS",
+        )?,
         signal_class: SignalClass::Session,
         sent_at,
         expires_at: sent_at + chrono::Duration::seconds(30),
         encrypted_payload: SignalEncryptedPayload {
             scheme: arkret_wire::SIGNAL_AEAD_SCHEME.to_owned(),
             key_ref: SignalKeyRef {
-                algorithm: "MLS-EXPORTER-AEAD".to_owned(),
                 group_state_ref: crate::fixture_event_id("cold-signal-group-state").to_string(),
             },
             purpose: arkret_wire::SIGNAL_AEAD_PURPOSE.to_owned(),
@@ -982,7 +983,6 @@ fn cold_signal_envelope(
             epoch: 1,
             nonce: "AAAAAAAAAAAAAAAA".to_owned(),
             ciphertext: "Q29sZFJlY2lwaWVudEV2aWRlbmNl".to_owned(),
-            aad_digest: Hash::new(format!("sha256:{}", "0".repeat(64)))?,
         },
         proof: SignalProof {
             kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
@@ -993,7 +993,6 @@ fn cold_signal_envelope(
             jws: "a..b".to_owned(),
         },
     };
-    envelope.encrypted_payload.aad_digest = envelope.expected_aad_digest()?;
     envelope.proof.envelope_digest = envelope.envelope_digest()?;
     envelope.validate_structural()?;
     Ok(envelope)

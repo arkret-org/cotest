@@ -2,7 +2,7 @@ use anyhow::{Result, anyhow, bail};
 use arkret_signatures::{PublicKeyMaterial, verify_ed25519_signal_proof};
 use arkret_wire::{
     AccountId, ActorId, DeviceId, Did, DidCoreId, Hash, MAX_SIGNAL_RELAY_CANONICAL_BODY_BYTES,
-    MAX_SIGNAL_RELAY_ITEMS, ProfileId, RealmId, ScopeRef, SealId, SignalClass,
+    MAX_SIGNAL_RELAY_ITEMS, ProfileId, RealmCommitId, RealmId, ScopeRef, SignalClass,
     SignalEncryptedPayload, SignalEnvelope, SignalKeyRef, SignalProof, SignalRelayOutcome,
     SignalRelayRequest, project_did_to_core_id,
 };
@@ -35,14 +35,15 @@ pub(super) fn envelope() -> Result<SignalEnvelope> {
         sender_device_id: Some(DeviceId::new(
             "ak:device:01904100-0000-7000-8000-bbbbbbbbbbbb",
         )?),
-        seal_ref: SealId::new(format!("ak:seal:sha256:{}", "a".repeat(64)))?,
+        stream_head_ref: RealmCommitId::new(
+            "ak:realm_commit:Ac08ROpjn3Ilj_UaM-_XLY93u4SUTptG0-Q-_CUDb5aS",
+        )?,
         signal_class: SignalClass::Session,
         sent_at,
         expires_at: sent_at + Duration::seconds(30),
         encrypted_payload: SignalEncryptedPayload {
             scheme: arkret_wire::SIGNAL_AEAD_SCHEME.to_owned(),
             key_ref: SignalKeyRef {
-                algorithm: "MLS-EXPORTER-AEAD".to_owned(),
                 group_state_ref: "ak:event:AbyX-ijAQZ4DkcySKE3VusrcCoBFT8DGS4fx8tpo-PNm".to_owned(),
             },
             purpose: arkret_wire::SIGNAL_AEAD_PURPOSE.to_owned(),
@@ -50,7 +51,6 @@ pub(super) fn envelope() -> Result<SignalEnvelope> {
             epoch: 7,
             nonce: "AAAAAAAAAAAAAAAA".to_owned(),
             ciphertext: "Q2lwaGVydGV4dFBsYWNlaG9sZGVy".to_owned(),
-            aad_digest: Hash::new(format!("sha256:{}", "0".repeat(64)))?,
         },
         proof: SignalProof {
             kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),

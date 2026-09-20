@@ -2968,6 +2968,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "cotest-signal-wire-runner"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "arkret",
+ "arkret-canonical",
+ "arkret-signatures",
+ "arkret-wire",
+ "chrono",
+ "ed25519-dalek 3.0.0",
+ "serde_json",
+]
+
+[[package]]
 name = "cotest-string-profile-runner"
 version = "0.3.0"
 dependencies = [
