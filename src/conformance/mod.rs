@@ -29,6 +29,7 @@ mod coauth_lifecycle;
 mod cursor_negative;
 mod cursor_vectors;
 mod decision_0017_vectors;
+mod detached_object_signature;
 mod device_pairing_code_claim;
 mod device_revocation_pending;
 mod did_binding_digests;
@@ -218,6 +219,9 @@ pub use cursor_vectors::{
 };
 pub use decision_0017_vectors::{
     run_account_data_cas_convergence_vector_suite, run_read_cursor_multi_device_merge_vector_suite,
+};
+pub use detached_object_signature::{
+    DETACHED_OBJECT_SIGNATURE_ENTRYPOINT, run_detached_object_signature_suite,
 };
 pub use device_pairing_code_claim::run_device_pairing_code_claim_suite;
 pub use device_revocation_pending::run_device_revocation_pending_suite;

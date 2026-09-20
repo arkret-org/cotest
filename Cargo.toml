@@ -32,6 +32,7 @@ resolver = "3"
 # (from the light edge itself) dev edge.
 members = [
     "crates/cursor-negative-runner",
+    "crates/detached-object-signature-runner",
     "crates/device-verification-runner",
     "crates/protocol-version-runner",
     "crates/sdk-precheck-runner",
@@ -52,6 +53,7 @@ unimplemented = "deny"
 [workspace.dependencies]
 aes-gcm = "0.11.1"
 cotest-cursor-negative-runner = { path = "crates/cursor-negative-runner" }
+cotest-detached-object-signature-runner = { path = "crates/detached-object-signature-runner" }
 cotest-protocol-version-runner = { path = "crates/protocol-version-runner" }
 cotest-test-support = { path = "crates/test-support" }
 cotest-sdk-precheck-runner = { path = "crates/sdk-precheck-runner" }
@@ -144,6 +146,7 @@ test-with-containers = ["dep:testcontainers"]
 # without Inkson.
 cotest-test-support = { workspace = true }
 cotest-cursor-negative-runner = { workspace = true }
+cotest-detached-object-signature-runner = { workspace = true }
 cotest-protocol-version-runner = { workspace = true }
 cotest-sdk-precheck-runner = { workspace = true }
 cotest-string-profile-runner = { workspace = true }

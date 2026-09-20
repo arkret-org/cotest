@@ -2780,6 +2780,7 @@ dependencies = [
  "chacha20poly1305 0.11.0",
  "chrono",
  "cotest-cursor-negative-runner",
+ "cotest-detached-object-signature-runner",
  "cotest-protocol-version-runner",
  "cotest-sdk-precheck-runner",
  "cotest-string-profile-runner",
@@ -2828,6 +2829,18 @@ dependencies = [
  "anyhow",
  "arkret-canonical",
  "arkret-hlc",
+ "serde_json",
+]
+
+[[package]]
+name = "cotest-detached-object-signature-runner"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "arkret-canonical",
+ "arkret-signatures",
+ "arkret-wire",
+ "hex",
  "serde_json",
 ]
 
