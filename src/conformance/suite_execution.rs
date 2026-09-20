@@ -43,6 +43,7 @@ impl SuiteExecutionResult {
             let declared_id = case
                 .get("case_id")
                 .or_else(|| case.get("name"))
+                .or_else(|| case.get("vector_id"))
                 .and_then(Value::as_str)
                 .ok_or_else(|| anyhow::anyhow!("{} cases[{index}] has no id", self.fixture))?;
             if declared_id != result.case_id {

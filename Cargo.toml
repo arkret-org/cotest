@@ -34,6 +34,7 @@ members = [
     "crates/cursor-negative-runner",
     "crates/device-verification-runner",
     "crates/sdk-precheck-runner",
+    "crates/string-profile-runner",
     "crates/test-support",
     "crates/test-material-runner",
 ]
@@ -52,6 +53,7 @@ aes-gcm = "0.11.1"
 cotest-cursor-negative-runner = { path = "crates/cursor-negative-runner" }
 cotest-test-support = { path = "crates/test-support" }
 cotest-sdk-precheck-runner = { path = "crates/sdk-precheck-runner" }
+cotest-string-profile-runner = { path = "crates/string-profile-runner" }
 cotest-test-material-runner = { path = "crates/test-material-runner" }
 anyhow = "1.0.104"
 arbitrary = "1.4"
@@ -141,6 +143,7 @@ test-with-containers = ["dep:testcontainers"]
 cotest-test-support = { workspace = true }
 cotest-cursor-negative-runner = { workspace = true }
 cotest-sdk-precheck-runner = { workspace = true }
+cotest-string-profile-runner = { workspace = true }
 # CT-19 — `arbitrary` powers the wire-envelope fuzz harness in
 # `cotest/src/fuzz/`. Lives in `[dependencies]` rather than
 # `[dev-dependencies]` so the harness types (FuzzEventInput / FuzzSignalInput /

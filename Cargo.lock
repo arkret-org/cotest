@@ -2781,6 +2781,7 @@ dependencies = [
  "chrono",
  "cotest-cursor-negative-runner",
  "cotest-sdk-precheck-runner",
+ "cotest-string-profile-runner",
  "cotest-test-material-runner",
  "cotest-test-support",
  "ed25519-dalek 3.0.0",
@@ -2848,6 +2849,15 @@ dependencies = [
  "arkret-schema",
  "arkret-schema-conformance",
  "arkret-wire",
+ "serde_json",
+]
+
+[[package]]
+name = "cotest-string-profile-runner"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "arkret-schema",
  "serde_json",
 ]
 
