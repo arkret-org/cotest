@@ -384,7 +384,10 @@ pub use protocol_time_tolerance::{
 };
 pub use protocol_version::{PROTOCOL_VERSION_ENTRYPOINT, run_protocol_version_suite};
 pub use push_route_revision::run_push_route_revision_suite;
-pub use push_rule_core::{run_push_rule_client_only_vector, run_push_rule_core_fixture_suite};
+pub use push_rule_core::{
+    PUSH_RULE_CORE_ENTRYPOINT, run_push_rule_client_only_vector, run_push_rule_core_fixture_suite,
+    run_push_rule_core_suite,
+};
 pub use read_receipt_signal::{
     ALL_READ_RECEIPT_SIGNAL_VECTOR_IDS, VECTOR_ID_GENESIS_JOIN_POLICY_BUNDLE,
     VECTOR_ID_READ_RECEIPT_ROUND_TRIP, run_genesis_join_policy_bundle_vector,

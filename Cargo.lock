@@ -2784,6 +2784,7 @@ dependencies = [
  "cotest-detached-object-signature-runner",
  "cotest-franking-proof-runner",
  "cotest-protocol-version-runner",
+ "cotest-push-rule-core-runner",
  "cotest-sdk-precheck-runner",
  "cotest-string-profile-runner",
  "cotest-test-material-runner",
@@ -2890,6 +2891,18 @@ dependencies = [
  "arkret-models-discovery",
  "arkret-models-integration",
  "arkret-wire",
+ "serde_json",
+]
+
+[[package]]
+name = "cotest-push-rule-core-runner"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "arkret-models-integration",
+ "arkret-push-policy",
+ "arkret-wire",
+ "serde",
  "serde_json",
 ]
 
