@@ -612,7 +612,6 @@ pub fn run_test_material_rejection_suite_with_coverage() -> Result<TestMaterialR
             "live WebSocket DPoP consumer and replay/auth-state zero-residue observation",
             "ML-DSA-65 production verifier consumer (SDK currently reserves but does not produce this algorithm)",
             "Soland trust-admission and cross-service ledger/cache observation",
-            "pre-existing durable Coauth binding purge requires a repository-backed joint test",
         ],
     })
 }
@@ -637,7 +636,7 @@ mod tests {
                 .all(|case| case.assertions > 0)
         );
         assert_eq!(coverage.service_e2e_status, "partial");
-        assert_eq!(coverage.service_e2e_gaps.len(), 4);
+        assert_eq!(coverage.service_e2e_gaps.len(), 3);
         Ok(())
     }
 }

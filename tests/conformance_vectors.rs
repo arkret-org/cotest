@@ -53,7 +53,7 @@ fn test_material_rejection_named_suite_executes_all_cases_and_exposes_service_ga
     let coverage = run_test_material_rejection_suite_with_coverage()?;
     assert_eq!(coverage.execution.cases.len(), 14);
     assert_eq!(coverage.service_e2e_status, "partial");
-    assert_eq!(coverage.service_e2e_gaps.len(), 4);
+    assert_eq!(coverage.service_e2e_gaps.len(), 3);
     Ok(())
 }
 
