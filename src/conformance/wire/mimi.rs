@@ -566,7 +566,8 @@ pub fn run_mimi_components_fixture_suite() -> Result<()> {
 ///
 /// Spec: `discovery/read-receipts.md` §2.4-§2.5 and
 /// `discovery/client-preferences.md` §3.6. Vectors describe the
-/// decision rules that compliant clients and Sync Service MUST honor.
+/// decision rules that compliant clients MUST honor while Sync Service only
+/// enforces the signed outer scope.
 /// This suite is structural — it walks every vector, replays the
 /// decision against the spec rules, and asserts the recorded
 /// `expected.decision` / `expected.is_send` / `expected.is_locked`
@@ -583,8 +584,8 @@ pub fn run_read_receipt_policy_fixture_suite() -> Result<()> {
     }
 
     let mut covered_required = false;
-    let mut covered_disabled = false;
-    let mut covered_visibility_private = false;
+    let mut covered_disabled_client_enforcement = false;
+    let mut covered_visibility_private_client_filter = false;
     let mut covered_display_false_local_only = false;
     let mut covered_branch_tighten = false;
     let mut covered_branch_loosen_blocked = false;
@@ -643,10 +644,6 @@ pub fn run_read_receipt_policy_fixture_suite() -> Result<()> {
                     parent_visibility,
                     branch_visibility,
                     overrides_allowed,
-                    parent
-                        .get("allow_child_privacy_tightening_against_required")
-                        .and_then(Value::as_bool)
-                        .unwrap_or(false),
                 )?;
                 if let Some(rejection) = child_rejection {
                     let declared = expected
@@ -734,35 +731,52 @@ pub fn run_read_receipt_policy_fixture_suite() -> Result<()> {
             bail!("vector {name} is_display: expected {expected_display}, computed {pref_display}");
         }
 
-        // Visibility-private fanout MUST be explicitly recorded so that
-        // Sync Service implementations have a vector to check against.
+        // Signal payload kind and event_id remain encrypted. The service may
+        // enforce only signed scope fanout; private receipt filtering happens
+        // after decryption on the client.
         if eff_visibility == "private"
             && eff_disclosure != "disabled"
-            && expected.get("sync_service_fanout").and_then(Value::as_str) != Some("sender_only")
+            && (expected.get("sync_service_fanout").and_then(Value::as_str)
+                != Some("scope_members")
+                || expected
+                    .get("client_receive_filter")
+                    .and_then(Value::as_str)
+                    != Some("referenced_event_sender_only"))
         {
             bail!(
-                "vector {name} effective visibility=private must record sync_service_fanout=sender_only"
+                "vector {name} effective visibility=private must record scope-only service fanout and client sender filtering"
             );
         }
         if eff_disclosure == "disabled"
-            && expected.get("sync_service_action").and_then(Value::as_str)
-                != Some("drop_with_policy_violation")
+            && (expected.get("client_generation").and_then(Value::as_str) != Some("forbidden")
+                || expected
+                    .get("client_receive_action")
+                    .and_then(Value::as_str)
+                    != Some("drop_without_display")
+                || expected.get("sync_service_fanout").and_then(Value::as_str)
+                    != Some("scope_members"))
         {
             bail!(
-                "vector {name} effective disclosure=disabled must record sync_service_action=drop_with_policy_violation"
+                "vector {name} effective disclosure=disabled must record client generation/drop behavior and opaque scope fanout"
             );
         }
 
         match name {
             "disclosure_required_locks_client_send" => covered_required = true,
-            "disclosure_disabled_drops_receipt_at_sync_service" => covered_disabled = true,
-            "visibility_private_fanout_only_to_sender" => covered_visibility_private = true,
+            "disclosure_disabled_is_enforced_by_clients" => {
+                covered_disabled_client_enforcement = true
+            }
+            "visibility_private_filters_after_client_decryption" => {
+                covered_visibility_private_client_filter = true
+            }
             "display_false_hides_local_indicator_only" => {
                 covered_display_false_local_only = true;
                 if expected.get("is_display").and_then(Value::as_bool) != Some(false) {
                     bail!("vector {name} must record expected.is_display=false");
                 }
-                if expected.get("sync_service_fanout").and_then(Value::as_str) != Some("members") {
+                if expected.get("sync_service_fanout").and_then(Value::as_str)
+                    != Some("scope_members")
+                {
                     bail!("vector {name} must keep Sync Service fanout unchanged");
                 }
                 if expected.get("unread_action").and_then(Value::as_str) != Some("unchanged") {
@@ -793,8 +807,8 @@ pub fn run_read_receipt_policy_fixture_suite() -> Result<()> {
     }
 
     if !(covered_required
-        && covered_disabled
-        && covered_visibility_private
+        && covered_disabled_client_enforcement
+        && covered_visibility_private_client_filter
         && covered_display_false_local_only
         && covered_branch_tighten
         && covered_branch_loosen_blocked
@@ -802,7 +816,7 @@ pub fn run_read_receipt_policy_fixture_suite() -> Result<()> {
         && covered_realm_overrides_default)
     {
         bail!(
-            "read_receipt_policy fixture must cover required-lock / disabled-drop / private-fanout / display-false-local-only / branch-tighten / branch-loosen-blocked / strand-overrides-realm / realm-overrides-default"
+            "read_receipt_policy fixture must cover required-lock / disabled-client-enforcement / private-client-filter / display-false-local-only / branch-tighten / branch-loosen-blocked / strand-overrides-realm / realm-overrides-default"
         );
     }
 
@@ -814,7 +828,6 @@ fn child_policy_rejection(
     parent_visibility: &str,
     child_visibility: &str,
     overrides_allowed: bool,
-    allow_required_privacy_tightening: bool,
 ) -> Result<Option<&'static str>> {
     validate_disclosure(parent_disclosure)?;
     validate_disclosure(child_disclosure)?;
@@ -830,9 +843,8 @@ fn child_policy_rejection(
         | ("optional", "optional")
         | ("optional", "disabled")
         | ("disabled", "disabled") => {}
-        ("required", "optional" | "disabled") if allow_required_privacy_tightening => {}
         ("required", "optional" | "disabled") => {
-            return Ok(Some("read_receipt_compliance_floor_violated"));
+            return Ok(Some("reject_loosening_strand_scope_move"));
         }
         _ => return Ok(Some("reject_loosening_strand_scope_move")),
     }

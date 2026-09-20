@@ -1,7 +1,7 @@
 {
   "profile": "ak.profile.read_receipt_policy_vectors.v1",
-  "version": "2026-05-19",
-  "comment": "Read receipt disclosure policy and per-scope client preference vectors. Spec: discovery/read-receipts.md §2.4-§2.5 and discovery/client-preferences.md §3.6. Disclosure policy is a soft (non-cryptographic) commitment carried by the component cell ak.component.realm.read_receipt_policy.v1 using sequenced_state. Per spec 2026-05-08, track-level read-receipt overrides (ak.strand.track.read_receipt_policy) were removed; when a discussion timeline needs a read-receipt policy distinct from its parent Realm it MUST be upgraded to an independent Strand/Circle scope (Strand.scope_circle_id pointing at a Circle, per AKP-0007) whose own ak.realm.read_receipt_policy declares the override. User preferences live under the actor-private account-data key ak.read_receipt.preferences. The decision rule is: required > disabled > optional defers to (strand → realm → default).",
+  "version": "2026-09-21",
+  "comment": "Read receipt disclosure policy and per-scope client preference vectors. Spec: discovery/read-receipts.md §2.4-§2.5 and discovery/client-preferences.md §3.6. Disclosure policy is a soft (non-cryptographic) commitment carried by the component cell ak.component.realm.read_receipt_policy.v1 using sequenced_state. Track-level read-receipt overrides are absent; a discussion timeline that needs a distinct policy uses an independent Strand/Circle scope. Signal payload kind and event_id remain encrypted, so Sync Service enforces only signed scope fanout while compliant clients enforce generation, display, and referenced-sender filtering. User preferences live under the actor-private account-data key ak.read_receipt.preferences. The decision rule is: required > disabled > optional defers to (strand → realm → default).",
   "vectors": [
     {
       "name": "disclosure_required_locks_client_send",
@@ -22,8 +22,8 @@
       }
     },
     {
-      "name": "disclosure_disabled_drops_receipt_at_sync_service",
-      "comment": "When a Realm declares disclosure=disabled, even a user preference of send=true MUST be overridden — compliant clients MUST NOT generate the receipt and Sync Service MUST drop any inbound ak.receipt.read for this scope.",
+      "name": "disclosure_disabled_is_enforced_by_clients",
+      "comment": "When a Realm declares disclosure=disabled, even a user preference of send=true MUST be overridden. A compliant sender does not generate the receipt; a receiving client drops a non-compliant receipt after decryption. Sync Service cannot distinguish it from another encrypted Signal payload and only enforces scope fanout.",
       "policy": {
         "scope": "realm",
         "disclosure": "disabled",
@@ -37,12 +37,14 @@
         "decision": "forced_skip",
         "is_send": false,
         "is_locked": true,
-        "sync_service_action": "drop_with_policy_violation"
+        "client_generation": "forbidden",
+        "client_receive_action": "drop_without_display",
+        "sync_service_fanout": "scope_members"
       }
     },
     {
-      "name": "visibility_private_fanout_only_to_sender",
-      "comment": "When visibility=private, Sync Service MUST only fanout the receipt to the original sender of the referenced event_id. Other Realm members MUST NOT observe it.",
+      "name": "visibility_private_filters_after_client_decryption",
+      "comment": "When visibility=private, Sync Service still fans out only by the signed outer scope because event_id is encrypted. After decryption, only the client that sent the referenced event may display the receipt; other scope members drop it.",
       "policy": {
         "scope": "realm",
         "disclosure": "optional",
@@ -56,7 +58,8 @@
         "decision": "send",
         "is_send": true,
         "is_locked": false,
-        "sync_service_fanout": "sender_only"
+        "sync_service_fanout": "scope_members",
+        "client_receive_filter": "referenced_event_sender_only"
       }
     },
     {
@@ -76,7 +79,7 @@
         "is_send": true,
         "is_locked": false,
         "is_display": false,
-        "sync_service_fanout": "members",
+        "sync_service_fanout": "scope_members",
         "unread_action": "unchanged"
       }
     },
@@ -105,7 +108,9 @@
         "decision": "forced_skip",
         "is_send": false,
         "is_locked": true,
-        "sync_service_action": "drop_with_policy_violation"
+        "client_generation": "forbidden",
+        "client_receive_action": "drop_without_display",
+        "sync_service_fanout": "scope_members"
       }
     },
     {
@@ -133,7 +138,8 @@
         "decision": "forced_send",
         "is_send": true,
         "is_locked": true,
-        "sync_service_fanout": "sender_only",
+        "sync_service_fanout": "scope_members",
+        "client_receive_filter": "referenced_event_sender_only",
         "reducer_action": "reject_loosening_strand_scope_move"
       }
     },
