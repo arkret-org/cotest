@@ -1,0 +1,20 @@
+[package]
+name = "cotest-crypto-hpke-runner"
+version = "0.3.0"
+edition = "2024"
+rust-version = "1.98"
+publish = false
+
+[dependencies]
+anyhow = { workspace = true }
+arkret-canonical = { workspace = true }
+arkret-crypto = { workspace = true, features = ["hpke"] }
+arkret-wire = { workspace = true }
+hex = { workspace = true }
+hpke-rs = { workspace = true, features = ["hazmat", "hpke-test", "hpke-test-prng"] }
+hpke-rs-crypto = { workspace = true }
+hpke-rs-rust-crypto = { workspace = true, features = ["deterministic-prng"] }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

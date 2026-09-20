@@ -35,6 +35,7 @@ members = [
     "crates/blob-stream-aead-runner",
     "crates/call-state-core-runner",
     "crates/cursor-negative-runner",
+    "crates/crypto-hpke-runner",
     "crates/detached-object-signature-runner",
     "crates/device-verification-runner",
     "crates/franking-proof-runner",
@@ -62,6 +63,7 @@ cotest-agent-mls-keypackage-authorization-runner = { path = "crates/agent-mls-ke
 cotest-blob-stream-aead-runner = { path = "crates/blob-stream-aead-runner" }
 cotest-call-state-core-runner = { path = "crates/call-state-core-runner" }
 cotest-cursor-negative-runner = { path = "crates/cursor-negative-runner" }
+cotest-crypto-hpke-runner = { path = "crates/crypto-hpke-runner" }
 cotest-detached-object-signature-runner = { path = "crates/detached-object-signature-runner" }
 cotest-franking-proof-runner = { path = "crates/franking-proof-runner" }
 cotest-protocol-version-runner = { path = "crates/protocol-version-runner" }
@@ -161,6 +163,7 @@ cotest-agent-mls-keypackage-authorization-runner = { workspace = true }
 cotest-blob-stream-aead-runner = { workspace = true }
 cotest-call-state-core-runner = { workspace = true }
 cotest-cursor-negative-runner = { workspace = true }
+cotest-crypto-hpke-runner = { workspace = true }
 cotest-detached-object-signature-runner = { workspace = true }
 cotest-franking-proof-runner = { workspace = true }
 cotest-protocol-version-runner = { workspace = true }

@@ -2782,6 +2782,7 @@ dependencies = [
  "cotest-agent-mls-keypackage-authorization-runner",
  "cotest-blob-stream-aead-runner",
  "cotest-call-state-core-runner",
+ "cotest-crypto-hpke-runner",
  "cotest-cursor-negative-runner",
  "cotest-detached-object-signature-runner",
  "cotest-franking-proof-runner",
@@ -2870,6 +2871,21 @@ dependencies = [
  "serde",
  "serde_json",
  "soland-domain",
+]
+
+[[package]]
+name = "cotest-crypto-hpke-runner"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "arkret-canonical",
+ "arkret-crypto",
+ "arkret-wire",
+ "hex",
+ "hpke-rs",
+ "hpke-rs-crypto",
+ "hpke-rs-rust-crypto",
+ "serde_json",
 ]
 
 [[package]]

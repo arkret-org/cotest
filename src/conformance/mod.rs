@@ -27,6 +27,7 @@ mod canonical_cross_lang;
 mod canonical_fixture;
 mod capability;
 mod coauth_lifecycle;
+mod crypto_hpke;
 mod cursor_negative;
 mod cursor_vectors;
 mod decision_0017_vectors;
@@ -217,6 +218,7 @@ pub use capability::{
     run_capability_fixture_suite,
 };
 pub use coauth_lifecycle::run_coauth_account_lifecycle_fixture_suite;
+pub use crypto_hpke::{CRYPTO_HPKE_ENTRYPOINT, run_crypto_hpke_suite};
 pub use cursor_negative::{CURSOR_NEGATIVE_ENTRYPOINT, run_cursor_negative_suite};
 pub use cursor_vectors::{
     ALL_CURSOR_VECTOR_IDS, run_cursor_handle_reject_vector, run_cursor_opaque_core_vector,
