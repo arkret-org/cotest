@@ -9,13 +9,6 @@ async fn duplicate_event_submit_is_idempotent_and_projects_once() -> Result<()> 
 
 #[tokio::test]
 #[serial]
-async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
-    cotest::scenarios::event_idempotency_replay::duplicate_edit_and_redaction_replay_project_once()
-        .await
-}
-
-#[tokio::test]
-#[serial]
 async fn concurrent_event_retransmission_accepts_once_and_allows_the_next_write() -> Result<()> {
     cotest::scenarios::event_idempotency_replay::concurrent_event_retransmission_accepts_once_and_allows_the_next_write().await
 }

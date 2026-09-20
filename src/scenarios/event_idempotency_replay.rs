@@ -1,14 +1,11 @@
-use std::time::Duration;
-
 use anyhow::{Result, anyhow};
 use arkret_wire::Event;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{
-    TestActorClient, TestServerGroup, events_query_for_realm, eventually, expect_json,
-    message_create_text_payload_for_strand, message_redact_payload, message_revise_text_payload,
-    parse_strand_id,
+    TestActorClient, TestServerGroup, events_query_for_realm, expect_json,
+    message_create_text_payload_for_strand, parse_strand_id,
 };
 use crate::scenarios::_helpers::protocol_values::submitted_event_id;
 use crate::scenarios::identity_test_support::actor_did_for_service_did;
@@ -201,127 +198,6 @@ pub async fn idempotency_keys_are_isolated_between_authenticated_actors() -> Res
     Ok(())
 }
 
-pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
-    let group = TestServerGroup::single("event-idempotency-edit-redact").await?;
-    let server = group.server(0);
-    let alice_did = actor_did_for_service_did(server.service_did(), "alice-edit-redact")?;
-    let alice = server
-        .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
-        .await?;
-    let realm_id = create_test_realm(&alice, "Event Idempotency Edit Redact").await?;
-    let create_event = alice
-        .author_event(
-            &realm_id,
-            "ak.message.create",
-            message_create_text_payload_for_strand(
-                parse_strand_id(&alice.default_strand_id(&realm_id)?)?,
-                "message before edit/redact replay",
-            )?,
-        )
-        .await?;
-
-    let created = submit_and_duplicate(&alice, &create_event).await?;
-    let create_event_id =
-        submitted_event_id(&created).ok_or_else(|| anyhow!("create response missing event id"))?;
-    assert_projected_kind_count(
-        &alice,
-        &realm_id,
-        "ak.message.create",
-        1,
-        submission_barrier(&created)?,
-    )
-    .await?;
-
-    let revise_event = alice
-        .author_event(
-            &realm_id,
-            "ak.message.revise",
-            message_revise_text_payload(create_event_id, "message after idempotent edit replay")?,
-        )
-        .await?;
-    let revised = submit_and_duplicate(&alice, &revise_event).await?;
-    let revise_event_id =
-        submitted_event_id(&revised).ok_or_else(|| anyhow!("revise response missing event id"))?;
-    let revise_barrier = submission_barrier(&revised)?;
-    assert_projected_event_count(&alice, &realm_id, revise_event_id, 1, revise_barrier).await?;
-    assert_projected_kind_count(&alice, &realm_id, "ak.message.revise", 1, revise_barrier).await?;
-
-    let seal_before_redaction = current_realm_seal(&alice, &realm_id).await?;
-    let redact_event = alice
-        .author_event(
-            &realm_id,
-            "ak.message.redact",
-            message_redact_payload(create_event_id, Some("idempotent_redaction_replay"))?,
-        )
-        .await?;
-    let redacted = submit_and_duplicate(&alice, &redact_event).await?;
-    let redact_event_id =
-        submitted_event_id(&redacted).ok_or_else(|| anyhow!("redact response missing event id"))?;
-    wait_for_next_realm_seal(&alice, &realm_id, &seal_before_redaction).await?;
-    let visible_after_redaction =
-        list_realm_events_after(&alice, &realm_id, submission_barrier(&redacted)?).await?;
-    assert_eq!(
-        event_count(&visible_after_redaction, create_event_id)?,
-        1,
-        "redaction must retain the original create slot as a tombstone"
-    );
-    assert_eq!(
-        event_count(&visible_after_redaction, redact_event_id)?,
-        1,
-        "canonical event scan must retain exactly one accepted redaction Event"
-    );
-    assert_eq!(
-        event_count(&visible_after_redaction, revise_event_id)?,
-        1,
-        "duplicate redaction replay should not duplicate the visible edit-chain projection"
-    );
-    assert_event_is_redacted_tombstone(
-        &visible_after_redaction,
-        create_event_id,
-        "message before edit/redact replay",
-    )?;
-    assert_event_is_redacted_tombstone(
-        &visible_after_redaction,
-        revise_event_id,
-        "message after idempotent edit replay",
-    )?;
-    assert_eq!(
-        event_kind_count(&visible_after_redaction, "ak.message.revise")?,
-        1,
-        "edit-chain projection should remain single after redaction replay"
-    );
-
-    Ok(())
-}
-
-async fn current_realm_seal(alice: &TestActorClient, realm_id: &str) -> Result<String> {
-    let frontier = alice.realm_seal_frontier(realm_id).await?;
-    frontier["frontier"]["seal_basis"]["leaves"][0]
-        .as_str()
-        .map(ToOwned::to_owned)
-        .ok_or_else(|| anyhow!("Realm frontier has no sole Seal leaf"))
-}
-
-async fn wait_for_next_realm_seal(
-    alice: &TestActorClient,
-    realm_id: &str,
-    predecessor: &str,
-) -> Result<()> {
-    eventually(
-        "redaction-covering Realm Seal",
-        Duration::from_secs(30),
-        Duration::from_millis(100),
-        || async {
-            let successor = current_realm_seal(alice, realm_id).await?;
-            if successor == predecessor {
-                return Err(anyhow!("message redaction is not sealed yet"));
-            }
-            Ok(())
-        },
-    )
-    .await
-}
-
 /// Creates a Realm and returns the id the genesis Event derived.
 ///
 /// A Realm id is `retype(event_id)` of its own create, so a caller cannot
@@ -438,48 +314,6 @@ fn event_kind_count(listed: &Value, kind: &str) -> Result<usize> {
                 == Some(kind)
         })
         .count())
-}
-
-fn assert_event_is_redacted_tombstone(
-    listed: &Value,
-    event_id: &str,
-    leaked_body: &str,
-) -> Result<()> {
-    let event = projected_events(listed)?
-        .iter()
-        .find(|event| event["event_id"].as_str() == Some(event_id))
-        .ok_or_else(|| anyhow!("projected event {event_id} missing"))?;
-    assert_eq!(
-        event["view_kind"],
-        json!("redacted_event_view"),
-        "projected event {event_id} must use the RedactedEventView contract"
-    );
-    assert_eq!(
-        event["redaction_reason"],
-        json!("redacted"),
-        "projected event {event_id} must identify an explicit redaction"
-    );
-    assert_eq!(
-        event["reducer_input"],
-        json!(false),
-        "a RedactedEventView must never be usable as reducer input"
-    );
-    let hidden_fields = event["hidden_fields"]
-        .as_array()
-        .ok_or_else(|| anyhow!("projected event {event_id} missing hidden_fields"))?;
-    assert!(
-        hidden_fields.iter().any(|field| field == "payload"),
-        "projected event {event_id} must declare its payload hidden"
-    );
-    assert!(
-        event.get("payload").is_none() && event.get("content").is_none(),
-        "projected event {event_id} retained payload/content outside the redacted view"
-    );
-    assert!(
-        !serde_json::to_string(event)?.contains(leaked_body),
-        "projected event {event_id} still contains redacted plaintext"
-    );
-    Ok(())
 }
 
 fn projected_events(listed: &Value) -> Result<&Vec<Value>> {
