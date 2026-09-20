@@ -183,6 +183,105 @@ fn p256_fixture_bytes_and_verify(crypto: &Value) -> Result<Vec<u8>> {
     Ok(point)
 }
 
+fn coauth_websocket_rejects_before_state(websocket: &Value) -> Result<()> {
+    use arkret_models_collaboration::sync_frames::websocket::WebSocketClientFrame;
+    use arkret_wire::WebOrigin;
+    use arkret_wire::websocket_binding::WebSocketChallengeRecord;
+    use coauth_backend::services::websocket_auth::{
+        WebSocketAuthenticationCommit, WebSocketAuthenticationError, WebSocketAuthenticationState,
+        admit_websocket_authentication,
+    };
+
+    #[derive(Default)]
+    struct JointWebSocketState {
+        commit_calls: usize,
+        challenge_consumed: bool,
+        replay_rows: usize,
+        cache_rows: usize,
+        auth_state_rows: usize,
+    }
+
+    #[async_trait::async_trait]
+    impl WebSocketAuthenticationState for JointWebSocketState {
+        type Error = std::convert::Infallible;
+
+        async fn commit_verified_authentication(
+            &mut self,
+            _challenge: &WebSocketChallengeRecord,
+            _verified: &arkret_signatures::websocket_auth::VerifiedWebSocketAuth,
+        ) -> Result<WebSocketAuthenticationCommit, Self::Error> {
+            self.commit_calls += 1;
+            self.challenge_consumed = true;
+            self.replay_rows += 1;
+            self.cache_rows += 1;
+            self.auth_state_rows += 1;
+            Ok(WebSocketAuthenticationCommit::Authenticated)
+        }
+    }
+
+    let kat = &websocket["dpop_kat"];
+    let stored = &kat["challenge_state"];
+    let issued_at: chrono::DateTime<chrono::Utc> =
+        serde_json::from_value(stored["issued_at"].clone())?;
+    let expires_at: chrono::DateTime<chrono::Utc> =
+        serde_json::from_value(stored["expires_at"].clone())?;
+    let challenge = WebSocketChallengeRecord {
+        connection_id: kat["connection_id"]
+            .as_str()
+            .context("WebSocket connection_id")?
+            .to_owned(),
+        nonce: kat["nonce"].as_str().context("WebSocket nonce")?.to_owned(),
+        canonical_origin: WebOrigin::new(
+            stored["canonical_origin"]
+                .as_str()
+                .context("WebSocket canonical_origin")?,
+        )?,
+        canonical_base_url: stored["canonical_base_url"]
+            .as_str()
+            .context("WebSocket canonical_base_url")?
+            .to_owned(),
+        issued_at,
+        expires_at,
+        consumed: stored["consumed"]
+            .as_bool()
+            .context("WebSocket challenge consumed")?,
+    };
+    let frame = WebSocketClientFrame::Authenticate {
+        connection_id: challenge.connection_id.clone(),
+        session_grant: kat["session_grant"]
+            .as_str()
+            .context("WebSocket session_grant")?
+            .to_owned(),
+        dpop_proof: kat["compact_jws"]
+            .as_str()
+            .context("WebSocket compact_jws")?
+            .to_owned(),
+    };
+    let mut state = JointWebSocketState::default();
+    let runtime = tokio::runtime::Builder::new_current_thread().build()?;
+    let error = runtime
+        .block_on(admit_websocket_authentication(
+            &frame,
+            kat["origin"].as_str().context("WebSocket origin")?,
+            &challenge,
+            kat["cnf_jkt"].as_str().context("WebSocket cnf_jkt")?,
+            issued_at,
+            &mut state,
+        ))
+        .expect_err("the published DPoP confirmation key must be terminally denied");
+    ensure!(matches!(
+        error,
+        WebSocketAuthenticationError::TestSigningMaterialDenied
+    ));
+    ensure!(error.to_string() == "test_signing_material_denied");
+    ensure!(state.commit_calls == 0);
+    ensure!(!state.challenge_consumed);
+    ensure!(state.replay_rows == 0);
+    ensure!(state.cache_rows == 0);
+    ensure!(state.auth_state_rows == 0);
+    Ok(())
+}
+
 fn coauth_rejects_before_binding_state(public_key: &[u8]) -> Result<()> {
     use arkret_identifiers::{Did, Hash, TrustDomainId};
     use arkret_identity::{
@@ -476,9 +575,9 @@ pub fn run_test_material_rejection_suite_with_coverage() -> Result<TestMaterialR
     )));
     record(3, 4)?;
 
-    // 4: the published RFC 8032 DPoP KAT verifies cryptographically and the
-    // same guard refuses its confirmation key. Live WebSocket state remains a
-    // named gap, rather than being simulated here.
+    // 4: the published RFC 8032 DPoP KAT verifies cryptographically, then the
+    // Coauth production consumer rejects it before its single atomic state
+    // port can consume the challenge or write replay/cache/auth state.
     let dpop = &websocket["dpop_kat"];
     let dpop_key = b64u(dpop["public_jwk"]["x"].as_str().context("DPoP x")?)?;
     ensure!(verify_detached_ed25519_signature(
@@ -499,7 +598,8 @@ pub fn run_test_material_rejection_suite_with_coverage() -> Result<TestMaterialR
         None,
         None,
     )));
-    record(4, 3)?;
+    coauth_websocket_rejects_before_state(&websocket)?;
+    record(4, 10)?;
 
     // 5: a fresh unlisted key remains cryptographically and policy valid.
     let unlisted = ed25519_dalek::SigningKey::from_bytes(&[91; 32]);
@@ -609,7 +709,6 @@ pub fn run_test_material_rejection_suite_with_coverage() -> Result<TestMaterialR
         execution,
         service_e2e_status: "partial",
         service_e2e_gaps: vec![
-            "live WebSocket DPoP consumer and replay/auth-state zero-residue observation",
             "ML-DSA-65 production verifier consumer (SDK currently reserves but does not produce this algorithm)",
             "Soland trust-admission and cross-service ledger/cache observation",
         ],
@@ -636,7 +735,7 @@ mod tests {
                 .all(|case| case.assertions > 0)
         );
         assert_eq!(coverage.service_e2e_status, "partial");
-        assert_eq!(coverage.service_e2e_gaps.len(), 3);
+        assert_eq!(coverage.service_e2e_gaps.len(), 2);
         Ok(())
     }
 }

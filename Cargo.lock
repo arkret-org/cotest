@@ -2825,6 +2825,7 @@ dependencies = [
  "arkret-canonical",
  "arkret-identifiers",
  "arkret-identity",
+ "arkret-models-collaboration",
  "arkret-signatures",
  "arkret-wire",
  "async-trait",

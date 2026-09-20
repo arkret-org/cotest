@@ -10,6 +10,7 @@ anyhow = { workspace = true }
 arkret-canonical = { workspace = true }
 arkret-identifiers = { workspace = true }
 arkret-identity = { workspace = true }
+arkret-models-collaboration = { workspace = true }
 arkret-signatures = { workspace = true }
 arkret-wire = { workspace = true }
 async-trait = { workspace = true }
