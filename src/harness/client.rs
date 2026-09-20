@@ -17,7 +17,9 @@ use arkret_models_collaboration::events_payloads::{
 use arkret_models_collaboration::governance::membership_invite::MembershipPayloadState;
 use arkret_models_collaboration::objects::profiles::StrandTrack;
 use arkret_models_collaboration::objects::strand::Strand;
-use arkret_wire::{AccountId, ActorId, AuthContext, AuthorizationRef, Event, EventRef, ProfileRef};
+use arkret_wire::{
+    AccountId, ActorId, AuthContext, AuthorizationRef, Event, ProfileRef, SemanticRef,
+};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 use url::Url;
@@ -70,7 +72,8 @@ pub struct TestActorClient {
         std::sync::Arc<std::sync::Mutex<std::collections::BTreeMap<String, String>>>,
     /// Grants issued to this actor, keyed by Realm. Membership derives read
     /// access only (`capabilities.md` line 700); every write action still needs
-    /// a covering grant, which an ordinary Event names in `refs[role=authorized_by]`.
+    /// a covering grant, which an ordinary Event names in
+    /// `semantic_refs[role=authorized_by]`.
     pub(super) held_grants: HeldGrants,
 }
 
@@ -688,7 +691,7 @@ impl TestActorClient {
         let event_response = bootstrap["event_response"].clone();
         let strand_id = self.create_default_strand(realm_id.as_str()).await?;
         // An ordinary Event that writes a cell has to name a covering authority in
-        // `refs[role=authorized_by]` / `authorization_ref`. For the creator that
+        // `semantic_refs[role=authorized_by]` / `authorization_ref`. For the creator that
         // authority is the Realm authority-root cell the create contract wrote,
         // not a grant id: v1 genesis issues no capability grant at all.
         Ok(json!({
@@ -905,10 +908,10 @@ impl TestActorClient {
         let covering = self.covering_grants_for(realm_id, kind);
         if !covering.is_empty() {
             if is_ordinary_event {
-                event.refs = covering
+                event.semantic_refs = covering
                     .into_iter()
                     .map(|grant_id| {
-                        EventRef::new(grant_id, arkret_wire::EVENT_REF_ROLE_AUTHORIZED_BY)
+                        SemanticRef::new(grant_id, arkret_wire::SEMANTIC_REF_ROLE_AUTHORIZED_BY)
                     })
                     .collect();
             }
@@ -1150,9 +1153,11 @@ impl TestActorClient {
             if capability_refs.is_empty() {
                 self.stamp_authority(&mut event, realm_id, kind, true);
             }
-            event.refs = capability_refs
+            event.semantic_refs = capability_refs
                 .into_iter()
-                .map(|grant_id| EventRef::new(grant_id, arkret_wire::EVENT_REF_ROLE_AUTHORIZED_BY))
+                .map(|grant_id| {
+                    SemanticRef::new(grant_id, arkret_wire::SEMANTIC_REF_ROLE_AUTHORIZED_BY)
+                })
                 .collect();
             if kind == arkret_wire::event_kind_str::STRAND_UPDATE
                 && event

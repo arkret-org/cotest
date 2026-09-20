@@ -562,7 +562,7 @@ function signedGhostMessageEvent({
     created_at: createdAt,
     hlc: currentHlc(),
     prev_refs: [provision.profile_event_ref],
-    refs: [],
+    semantic_refs: [],
     executed_by: { kind: "service", service_id: packageInfo.serviceId },
     authorization_ref: authorizationRef,
     applet_id: packageInfo.appletId,

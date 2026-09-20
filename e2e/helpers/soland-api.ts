@@ -91,7 +91,7 @@ type SignedEventEnvelopeArgs = {
   createdAt?: string;
   eventId?: string;
   proofVerificationMethod?: string;
-  refs?: Array<Record<string, unknown>>;
+  semanticRefs?: Array<Record<string, unknown>>;
   scopeRef?: Record<string, unknown>;
   authorizationRef?: string;
   executedBy?: ActorId;
@@ -949,7 +949,8 @@ export async function grantServiceCapabilityApi(
 
 // Mint a realm-scoped `ak.capability.grant` event for an arbitrary action set
 // and return both the immutable grant id (`ak:grant:*`) and its carrying Event
-// id (`ak:event:*`). capabilities.md §10.3 requires `refs[authorized_by]` to
+// id (`ak:event:*`). capabilities.md §10.3 requires
+// `semantic_refs[authorized_by]` to
 // name the grant itself; the Event id remains useful only for Event-history
 // causality and diagnostics.
 type CapabilityGrantEventArgs = {
@@ -1354,7 +1355,7 @@ export async function sendPreparedMessageApi(
       `prepared draft reintroduced the retired member ${retired}`,
     ).toBe(false);
   }
-  expect(unsigned.refs ?? []).toEqual([]);
+  expect(unsigned.semantic_refs ?? []).toEqual([]);
   const derived = sdkEventDerivedIds(unsigned);
   const event = { ...unsigned, event_id: derived.event_id };
   expect(prepared.draft.event_digest).toBe(`sha256:${sha256CanonicalJson(unsigned)}`);
@@ -1925,7 +1926,7 @@ export function signedEventEnvelope(
     authorization_ref: args.authorizationRef,
     applet_id: args.appletId,
     created_at: createdAt,
-    refs: args.refs?.length ? args.refs : undefined,
+    semantic_refs: args.semanticRefs?.length ? args.semanticRefs : undefined,
     payload,
   }) as Record<string, unknown>;
   // `event_id` sits outside the digest preimage, so deriving it from the

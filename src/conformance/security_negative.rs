@@ -184,7 +184,7 @@ fn validate_bad_schema_payload(case: &Value) -> Result<SecurityDecision> {
         "actor_seq",
         "created_at",
         "prev_refs",
-        "refs",
+        "semantic_refs",
         "payload",
         "proofs",
     ] {

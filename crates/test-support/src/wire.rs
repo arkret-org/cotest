@@ -690,7 +690,7 @@ fn build_pcr_genesis_unit(
             genesis_salt,
             trust_domain: arkret::TrustDomainId::new(trust_domain.to_owned())
                 .context("parse trust domain")?,
-            did_inception_ref: arkret::EventRef::new(
+            did_inception_ref: arkret::SemanticRef::new(
                 version_id.to_owned(),
                 arkret_bootstrap::DID_INCEPTION_REF_ROLE,
             ),
@@ -1224,15 +1224,10 @@ pub fn event_derived_id(event: Value) -> Result<Value> {
 
 fn event_digest(event: &Value, _mode: EventDigestMode) -> Result<String> {
     // Use the SDK projection that every verifier uses. Deserializing before
-    // hashing is significant: wire defaults such as EventRef.critical=true
+    // hashing is significant: wire defaults such as SemanticRef.critical=true
     // are part of Event::digest_payload even when the producer omitted them.
-    let mut event = event.clone();
-    if let Value::Object(object) = &mut event {
-        object
-            .entry("proofs")
-            .or_insert_with(|| Value::Array(Vec::new()));
-    }
-    let event: Event = serde_json::from_value(event).context("parse SDK Event digest payload")?;
+    let event: Event =
+        serde_json::from_value(event.clone()).context("parse SDK Event digest payload")?;
     let payload = event
         .digest_payload()
         .context("build SDK Event digest payload")?;
@@ -1320,8 +1315,7 @@ mod tests {
                 "member_id": actor_id,
                 "membership": "join",
                 "reason": "invite_accept"
-            },
-            "proofs": []
+            }
         });
 
         let digest = event_digest(&event, EventDigestMode::RawCanonicalJson).unwrap();
@@ -1350,7 +1344,7 @@ mod tests {
             "scope_ref": {"kind": "realm", "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP"},
             "actor_id": actor_id,
             "created_at": "2026-07-07T05:45:49.000Z",
-            "refs": [{
+            "semantic_refs": [{
                 "role": "authorized_by",
                 "id": "ak:grant:AVmnCiapkC3K0OFT032clTI00FaccV3R4XoEuGk4xygg"
             }],
@@ -1364,7 +1358,7 @@ mod tests {
         let sdk_event: Event = serde_json::from_value(event).unwrap();
         let sdk_payload = sdk_event.digest_payload().unwrap();
 
-        assert_eq!(sdk_payload["refs"][0]["critical"], json!(true));
+        assert_eq!(sdk_payload["semantic_refs"][0]["critical"], json!(true));
         assert_ne!(sdk_digest, raw_digest);
         assert_eq!(
             sdk_digest,

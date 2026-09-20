@@ -25,7 +25,8 @@ use arkret_models_collaboration::events_payloads::{
     FoundingDeviceKeyPurpose, SignatureMaterial, device_authorize_payload_digest,
 };
 use arkret_wire::{
-    AccountId, Audience, AuthoredEvent, DidUrl, Event, EventRef, NonEmptyString, RecoverySessionId,
+    AccountId, Audience, AuthoredEvent, DidUrl, Event, NonEmptyString, RecoverySessionId,
+    SemanticRef,
 };
 use base64::Engine as _;
 use ed25519_dalek::{Signer as _, SigningKey};
@@ -321,7 +322,7 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
             },
             genesis_salt: arkret_wire::GenesisSalt::generate()?,
             trust_domain: TrustDomainId::new("ak:trust_domain:example.net")?,
-            did_inception_ref: EventRef::new(
+            did_inception_ref: SemanticRef::new(
                 "did:webvh:z6mkfixture:alice.example#entry-0",
                 DID_INCEPTION_REF_ROLE,
             ),

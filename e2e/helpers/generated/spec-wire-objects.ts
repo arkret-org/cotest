@@ -1218,7 +1218,7 @@ export type InviteDeliveryRequestBody = {
       [key: string]: unknown;
     };
     "created_at": string;
-    "refs"?: Array<{
+    "semantic_refs"?: Array<{
       "id": string;
       "role": "authorized_by";
       "critical": boolean;
@@ -2619,7 +2619,7 @@ export type EventCommitSubmission = {
       [key: string]: unknown;
     };
     "created_at": string;
-    "refs"?: Array<{
+    "semantic_refs"?: Array<{
       "id": string;
       "role": "authorized_by";
       "critical": boolean;

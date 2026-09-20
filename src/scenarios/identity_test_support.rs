@@ -41,7 +41,7 @@ use arkret_signatures::webvh::{
     sign_identity_creation_control_proof, sign_registration_did_evidence_draft,
 };
 use arkret_wire::{
-    Base64UrlString, EventRef, Hash, IdempotencyKey, NonEmptyString, ServiceOperationId,
+    Base64UrlString, Hash, IdempotencyKey, NonEmptyString, SemanticRef, ServiceOperationId,
 };
 use base64::Engine;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
@@ -830,7 +830,10 @@ async fn bootstrap_test_device_authorization(
             },
             genesis_salt: test_principal_genesis_salt(&host, local_id, device_id.as_str())?,
             trust_domain: server.trust_domain().clone(),
-            did_inception_ref: EventRef::new(prepared.version_id.clone(), DID_INCEPTION_REF_ROLE),
+            did_inception_ref: SemanticRef::new(
+                prepared.version_id.clone(),
+                DID_INCEPTION_REF_ROLE,
+            ),
             founding_device_descriptor: descriptor,
             created_at,
             hlc: Hlc::new("01970e589d21-0000-a13f9c2e")?,

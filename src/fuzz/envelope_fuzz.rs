@@ -53,7 +53,7 @@ pub struct FuzzEventInput {
     pub hlc_physical_ms: u64,
     pub hlc_logical: u32,
     pub prev_refs: Vec<String>,
-    pub refs: Vec<ArbRefValue>,
+    pub semantic_refs: Vec<ArbRefValue>,
     pub payload: ArbValue,
     pub proofs: Vec<ArbValue>,
     pub auth_context: Option<ArbValue>,
@@ -96,7 +96,7 @@ impl FuzzEventInput {
             "created_at": self.created_at,
             "hlc": hlc,
             "prev_refs": self.prev_refs,
-            "refs": self.refs.iter().map(|r| json!({
+            "semantic_refs": self.semantic_refs.iter().map(|r| json!({
                 "id": r.id,
                 "role": r.role,
                 "critical": r.critical,

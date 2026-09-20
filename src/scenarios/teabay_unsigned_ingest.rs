@@ -104,7 +104,7 @@ pub async fn teabay_rejects_unsigned_ingest_run() -> Result<()> {
             created_at: arkret_canonical::parse_timestamp_canonical("2026-05-18T00:00:00.000Z")?,
             hlc: None,
             prev_refs: Vec::new(),
-            refs: Vec::new(),
+            semantic_refs: Vec::new(),
             causal_refs: Vec::new(),
             preconditions: Vec::new(),
             auth_context: None,

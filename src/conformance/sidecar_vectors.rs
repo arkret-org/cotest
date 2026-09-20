@@ -37,11 +37,11 @@ use arkret::{
     AgentSidecarExchangeProjectionSchema, AgentSidecarExchangeRequestContext,
     AgentSidecarExchangeStatus, AgentSidecarMlsContext, AgentSidecarProjectionProvenance,
     AgentSidecarSchema, AgentSidecarSourceTrackRef, AgentSidecarState, AgentSidecarView, Did,
-    DidCoreId, DidUrl, Event, EventId, EventRef, Hash, Hlc, MessageMetadata,
-    MlsGovernanceBindingPayload, NonEmptyString, PendingSidecarAccessReconciliation,
-    PendingSidecarAccessReconciliationStage, PreparedEventDraft, RealmId, ScopeRef, SidecarId,
-    SidecarMlsBinding, StrandId, agent_sidecar_exchange_event_set_digest,
-    agent_sidecar_participant_authority_digest, recover_agent_sidecar_context_locators,
+    DidCoreId, DidUrl, Event, EventId, Hash, Hlc, MessageMetadata, MlsGovernanceBindingPayload,
+    NonEmptyString, PendingSidecarAccessReconciliation, PendingSidecarAccessReconciliationStage,
+    PreparedEventDraft, RealmId, ScopeRef, SemanticRef, SidecarId, SidecarMlsBinding, StrandId,
+    agent_sidecar_exchange_event_set_digest, agent_sidecar_participant_authority_digest,
+    recover_agent_sidecar_context_locators,
 };
 use arkret_models_collaboration::sidecar_operations::{
     SidecarAcceptedOk, SidecarAcceptedPhase, SidecarAttachPhase, SidecarCommitPhase,
@@ -876,7 +876,7 @@ fn build_fixed_sidecar_prepare(
         |create| {
             (
                 vec![create.event_id.clone()],
-                vec![EventRef::new(create.event_id.to_string(), "after")],
+                vec![SemanticRef::new(create.event_id.to_string(), "after")],
             )
         },
     );
@@ -935,7 +935,7 @@ fn fixed_unsigned_sidecar_event(
     actor_id: arkret_wire::ActorId,
     actor_seq: u64,
     prev_refs: Vec<EventId>,
-    refs: Vec<EventRef>,
+    semantic_refs: Vec<SemanticRef>,
     payload: Value,
 ) -> SidecarModelResult<Event> {
     let payload = payload
@@ -962,7 +962,7 @@ fn fixed_unsigned_sidecar_event(
         created_at: fixed_sidecar_time(),
         hlc: None,
         prev_refs,
-        refs,
+        semantic_refs,
         causal_refs: Vec::new(),
         preconditions: Vec::new(),
         auth_context: None,
@@ -1101,7 +1101,7 @@ fn validate_prepared_outcome(
     if let Some(create) = create {
         validate_new_after_link(&create, &attach)?;
     } else if attach
-        .refs
+        .semantic_refs
         .iter()
         .any(|reference| reference.role == "after")
     {
@@ -1123,11 +1123,10 @@ fn prepared_reservation_handle(prepared: &SidecarPreparedOutcome) -> &Reservatio
 
 fn validate_new_after_link(create: &Event, attach: &Event) -> SidecarModelResult<()> {
     if attach.prev_refs != [create.event_id.clone()]
-        || attach.refs.len() != 1
-        || attach.refs[0].id != create.event_id.as_str()
-        || attach.refs[0].role != "after"
-        || !attach.refs[0].critical
-        || attach.refs[0].proof.is_some()
+        || attach.semantic_refs.len() != 1
+        || attach.semantic_refs[0].id != create.event_id.as_str()
+        || attach.semantic_refs[0].role != "after"
+        || !attach.semantic_refs[0].critical
     {
         return Err(SidecarModelError::AfterLinkMismatch);
     }
@@ -1355,7 +1354,7 @@ pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
         EventId::new("ak:event:AR9z2q8WciIPBQxN5ECtwwI7tb_zAwItKYIUMxeXuIWA")?;
     let mut matching_link = attach_event.clone();
     matching_link.prev_refs = vec![event_id_mutation.event_id.clone()];
-    matching_link.refs = vec![EventRef::new(
+    matching_link.semantic_refs = vec![SemanticRef::new(
         event_id_mutation.event_id.to_string(),
         "after",
     )];
@@ -1377,7 +1376,7 @@ pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
         SidecarModelError::DraftMismatch,
     )?;
     let mut after_mutation = attach_event.clone();
-    after_mutation.refs[0].role = "before".to_owned();
+    after_mutation.semantic_refs[0].role = "before".to_owned();
     assert_new_commit_failure_is_write_free(
         &mut model,
         &commit(create_event.clone(), after_mutation),

@@ -407,7 +407,7 @@ fn assert_event_target_does_not_drive_object_state() -> Result<()> {
                         .map_err(|err| anyhow!("fixture hlc: {err}"))?,
                 ),
                 prev_refs: vec![],
-                refs: vec![],
+                semantic_refs: vec![],
                 preconditions: vec![],
                 auth_context: None,
                 data_basis: None,

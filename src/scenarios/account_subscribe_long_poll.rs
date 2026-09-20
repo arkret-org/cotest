@@ -769,13 +769,13 @@ async fn submit_event_now(
                         .map_err(anyhow::Error::msg)?,
                 );
             } else {
-                event.refs = actor
+                event.semantic_refs = actor
                     .covering_grants_for(realm_id, kind)
                     .into_iter()
                     .map(|grant_id| {
-                        arkret_wire::EventRef::new(
+                        arkret_wire::SemanticRef::new(
                             grant_id,
-                            arkret_wire::EVENT_REF_ROLE_AUTHORIZED_BY,
+                            arkret_wire::SEMANTIC_REF_ROLE_AUTHORIZED_BY,
                         )
                     })
                     .collect();

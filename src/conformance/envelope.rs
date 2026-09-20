@@ -608,7 +608,7 @@ fn validate_event_envelope(
 
     // Spec event-envelope.schema.json required fields:
     //   event_id, kind, realm_id, actor_id, actor_seq, created_at,
-    //   prev_refs, payload, proofs. `refs` and `causal_refs` are optional but,
+    //   prev_refs, payload, proofs. `semantic_refs` and `causal_refs` are optional but,
     //   when present, must be non-empty. `prev_refs` is required and may be
     //   empty.
     for field in [
@@ -656,12 +656,12 @@ fn validate_event_envelope(
             .ok_or_else(|| anyhow!("event.prev_refs missing after required-field check"))?,
         "event.prev_refs",
     )?;
-    let extra_refs: &[Value] = if let Some(refs) = event.get("refs") {
-        let refs = value_array(refs, "event.refs")?;
+    let extra_refs: &[Value] = if let Some(refs) = event.get("semantic_refs") {
+        let refs = value_array(refs, "event.semantic_refs")?;
         if refs.is_empty() {
             return Ok(EventEnvelopeDecision::reject(
                 "schema_violation",
-                "event.refs must be omitted when empty",
+                "event.semantic_refs must be omitted when empty",
             ));
         }
         refs
@@ -703,7 +703,7 @@ fn validate_event_envelope(
         ));
     }
     let event_id = value_field_str(event, "event_id")?;
-    // Spec post-2026-05-08: `refs[]` entries MUST be typed-ref objects
+    // `semantic_refs[]` entries MUST be typed-ref objects
     // `{id: "ak:<kind>:<ulid>", role, critical, ...}`. v1 is unreleased,
     // so no dual-pattern accommodation: bare string entries fail loudly.
     // `prev_refs[]` is a bare-string list of `ak:event:` ids per spec
@@ -723,7 +723,7 @@ fn validate_event_envelope(
     if extra_refs_invalid || prev_refs_invalid {
         return Ok(EventEnvelopeDecision::reject(
             "schema_violation",
-            "prev_refs / refs must contain typed ak: refs",
+            "prev_refs / semantic_refs must contain typed ak: refs",
         ));
     }
     if extra_refs.iter().any(|reference| {
@@ -735,7 +735,7 @@ fn validate_event_envelope(
     }) {
         return Ok(EventEnvelopeDecision::reject(
             "schema_violation",
-            "refs[role=authorized_by] must contain immutable ak:grant: ids",
+            "semantic_refs[role=authorized_by] must contain immutable ak:grant: ids",
         ));
     }
     if prev_refs
@@ -1087,7 +1087,7 @@ fn sample_envelope_event(
         "created_at": created_at,
         "hlc": hlc,
         "prev_refs": [],
-        "refs": [{
+        "semantic_refs": [{
             "id": "ak:event:AVkkQ3SRXwZhSvXw0hnu-AeFeMX_3g54oqAZWM4qri4H",
             "role": "reply_to",
             "critical": false
