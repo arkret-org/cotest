@@ -44,6 +44,7 @@ members = [
     "crates/string-profile-runner",
     "crates/test-support",
     "crates/test-material-runner",
+    "crates/view-write-contract-runner",
 ]
 
 [workspace.lints.rust]
@@ -69,6 +70,7 @@ cotest-test-support = { path = "crates/test-support" }
 cotest-sdk-precheck-runner = { path = "crates/sdk-precheck-runner" }
 cotest-string-profile-runner = { path = "crates/string-profile-runner" }
 cotest-test-material-runner = { path = "crates/test-material-runner" }
+cotest-view-write-contract-runner = { path = "crates/view-write-contract-runner" }
 anyhow = "1.0.104"
 arbitrary = "1.4"
 argon2 = { version = "0.6.0", default-features = false, features = ["alloc", "password-hash"] }
@@ -165,6 +167,7 @@ cotest-protocol-version-runner = { workspace = true }
 cotest-push-rule-core-runner = { workspace = true }
 cotest-sdk-precheck-runner = { workspace = true }
 cotest-string-profile-runner = { workspace = true }
+cotest-view-write-contract-runner = { workspace = true }
 # CT-19 — `arbitrary` powers the wire-envelope fuzz harness in
 # `cotest/src/fuzz/`. Lives in `[dependencies]` rather than
 # `[dev-dependencies]` so the harness types (FuzzEventInput / FuzzSignalInput /

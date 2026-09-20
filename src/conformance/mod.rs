@@ -106,6 +106,7 @@ mod suite_execution;
 mod sync;
 mod test_material_rejection;
 mod vector_registry_gate;
+mod view_write_contract;
 mod visibility_policy;
 mod webrtc_media_plaintext;
 mod websocket_binding;
@@ -451,6 +452,7 @@ pub use vector_registry_gate::{
     validate_vector_registry_gate, validate_vector_registry_gate_report,
     validate_vector_registry_gate_report_with_mode,
 };
+pub use view_write_contract::{VIEW_WRITE_CONTRACT_ENTRYPOINT, run_view_write_contract_suite};
 pub use visibility_policy::{
     ALL_VISIBILITY_POLICY_VECTOR_IDS, run_circle_content_floor_below_realm_rejected_vector,
     run_content_floor_downgrade_rejected_vector,

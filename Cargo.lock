@@ -2791,6 +2791,7 @@ dependencies = [
  "cotest-string-profile-runner",
  "cotest-test-material-runner",
  "cotest-test-support",
+ "cotest-view-write-contract-runner",
  "ed25519-dalek 3.0.0",
  "fs2",
  "garth",
@@ -3014,6 +3015,17 @@ dependencies = [
  "sha2 0.11.0",
  "tokio",
  "url",
+]
+
+[[package]]
+name = "cotest-view-write-contract-runner"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "arkret-schema",
+ "arkret-schema-conformance",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
