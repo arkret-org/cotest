@@ -6,19 +6,18 @@
 //! is deliberately the *other* kind of evidence. Every table row is bound to the
 //! shipped wire and state types and then executed:
 //!
-//! * each `stream_ref` is parsed into [`CommitStreamRef`] and each `commit_id`
-//!   into [`RealmCommitId`], so a fixture stream shape the closed enum cannot
-//!   express fails here instead of being read as a string;
-//! * every declared tail is replayed through [`MemoryAuthorityCommitStore`] —
-//!   the store a governance Station actually commits with — so "accepted" means
-//!   a real commit log took it and "rejected" means that store refused it;
-//! * a broken tail is replayed against a store that already carries the sibling
-//!   Realm and Sidecar streams, which is what makes "stops only that stream"
-//!   an executed claim rather than a fixture flag;
-//! * each reconnect `server_outcome` is resolved through a registry —
-//!   [`arkret_wire::ErrorCode`], or [`arkret_wire::ReasonCode`] for the one
-//!   stream condition that is not an HTTP error — so an outcome string no
-//!   registry defines fails.
+//! * each `stream_ref` is parsed into [`CommitStreamRef`] and each `commit_id` into
+//!   [`RealmCommitId`], so a fixture stream shape the closed enum cannot express fails here instead
+//!   of being read as a string;
+//! * every declared tail is replayed through [`MemoryAuthorityCommitStore`] — the store a
+//!   governance Station actually commits with — so "accepted" means a real commit log took it and
+//!   "rejected" means that store refused it;
+//! * a broken tail is replayed against a store that already carries the sibling Realm and Sidecar
+//!   streams, which is what makes "stops only that stream" an executed claim rather than a fixture
+//!   flag;
+//! * each reconnect `server_outcome` is resolved through a registry — [`arkret_wire::ErrorCode`],
+//!   or [`arkret_wire::ReasonCode`] for the one stream condition that is not an HTTP error — so an
+//!   outcome string no registry defines fails.
 //!
 //! Structural closure is taken from the types, never from the fixture: there is
 //! no Realm-global position and no per-Realm position to compare because

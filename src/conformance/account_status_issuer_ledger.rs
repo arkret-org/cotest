@@ -10,18 +10,18 @@
 //!
 //! Everything here is executed against shipped code rather than restated:
 //!
-//! * the fixture's `unsigned_core_canonical_bytes_utf8`, `unsigned_core_digest`
-//!   and `account_status_record_id` are re-derived from the record itself with
-//!   [`UnsignedAccountStatusRecord`], so a fixture whose declared identity stops
-//!   matching its own bytes fails here;
-//! * the declared proof metadata is re-bound with the SDK's proof-binding bytes,
-//!   so a proof that names another digest, time or context is rejected;
+//! * the fixture's `unsigned_core_canonical_bytes_utf8`, `unsigned_core_digest` and
+//!   `account_status_record_id` are re-derived from the record itself with
+//!   [`UnsignedAccountStatusRecord`], so a fixture whose declared identity stops matching its own
+//!   bytes fails here;
+//! * the declared proof metadata is re-bound with the SDK's proof-binding bytes, so a proof that
+//!   names another digest, time or context is rejected;
 //! * every `replica_classification_cases` row is run through soland's shipped
-//!   [`classify_account_status_replica_append`] — the receiver implementation
-//!   itself — and cross-checked against the normative decision table in
+//!   [`classify_account_status_replica_append`] — the receiver implementation itself — and
+//!   cross-checked against the normative decision table in
 //!   `registry/account-status-replica-decision-table.json`;
-//! * the record's member set is closed against every removed carrier, so a
-//!   commit, stream, Seal or Cell reference cannot creep back into the ledger.
+//! * the record's member set is closed against every removed carrier, so a commit, stream, Seal or
+//!   Cell reference cannot creep back into the ledger.
 
 use std::collections::{BTreeMap, BTreeSet};
 

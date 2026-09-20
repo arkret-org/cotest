@@ -190,11 +190,9 @@ async fn coauth_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respo
     let parsed = serde_json::from_value::<
         arkret_models_collaboration::session_grants::SessionGrantIntrospectRequestBody,
     >(body);
-    let Ok(
-        arkret_models_collaboration::session_grants::SessionGrantIntrospectRequestBody::ByJwt(
-            by_jwt,
-        ),
-    ) = parsed
+    let Ok(arkret_models_collaboration::session_grants::SessionGrantIntrospectRequestBody::ByJwt(
+        by_jwt,
+    )) = parsed
     else {
         res.status_code(salvo::http::StatusCode::BAD_REQUEST);
         res.render(Json(json!({ "error": "invalid_typed_request" })));

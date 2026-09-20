@@ -9,16 +9,16 @@ use arkret_bootstrap::{
 use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_canonical::{canonical_json_bytes, canonical_sha256};
 use arkret_identifiers::{DeviceId, Did, Hlc, RealmId, WebOrigin, project_did_to_core_id};
+use arkret_models_collaboration::device_pairing::{
+    AccountDevicePairOutcome, AccountDevicePairRequestBody, DevicePairingNonce,
+    DevicePairingStageOutcome, DevicePairingStageRequestBody, UnsignedDevicePairingTargetProof,
+};
 use arkret_models_collaboration::events_payloads::{
     DeviceAuthorizationBindingKind, DeviceAuthorizePayload, DeviceOrPrincipalRef,
     FoundingDeviceDescriptor, FoundingDeviceHpkeKeyAlgorithm, FoundingDeviceKeyAlgorithm,
     FoundingDeviceKeyPurpose, SignatureMaterial, device_authorize_payload_digest,
 };
 use arkret_models_collaboration::governance::agent_artifacts::PublicKey;
-use arkret_models_collaboration::device_pairing::{
-    AccountDevicePairOutcome, AccountDevicePairRequestBody, DevicePairingNonce,
-    DevicePairingStageOutcome, DevicePairingStageRequestBody, UnsignedDevicePairingTargetProof,
-};
 use arkret_models_crypto::{
     AlgorithmKeyRecords, KeyOperationSignature, KeysUploadRequestBody, KeysUploadUnsignedRequest,
     keys_upload_signing_input,

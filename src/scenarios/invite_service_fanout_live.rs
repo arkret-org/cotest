@@ -23,15 +23,15 @@ use arkret_identifiers::{ConsentId, DidCoreId, InviteId};
 use arkret_models_collaboration::consent_operations::{
     ConsentGrantRequestBody, ConsentRevokeRequestBody, ConsentView,
 };
-use arkret_models_collaboration::events_payloads::consent::ConsentPeer;
+use arkret_models_collaboration::device_messages::{
+    DeviceMessageSender, DeviceMessagesAckRequestBody, DeviceMessagesGetOutcome,
+};
 use arkret_models_collaboration::events_payloads::ConsentGrantPayload;
+use arkret_models_collaboration::events_payloads::consent::ConsentPeer;
 use arkret_models_collaboration::governance::invite_addressing::{
     IntroductionEvidence, InviteAddress, InviteReceivePolicy, SelfInviteDispatchRequestBody,
 };
 use arkret_models_collaboration::governance_payloads::{ConsentObservedDot, ConsentRevokePayload};
-use arkret_models_collaboration::device_messages::{
-    DeviceMessageSender, DeviceMessagesAckRequestBody, DeviceMessagesGetOutcome,
-};
 use arkret_models_collaboration::sync_frames::account_sync::{
     ActorPrivateAccountDataOperation, DeviceMessageContent,
 };
@@ -362,8 +362,8 @@ async fn grant_then_revoke_invite_consent(
         StatusCode::OK,
     )
     .await?;
-    let granted: ConsentView = serde_json::from_value(granted)
-        .context("consent grant response is not a ConsentView")?;
+    let granted: ConsentView =
+        serde_json::from_value(granted).context("consent grant response is not a ConsentView")?;
     let expected_dot = format!("{}:0", grant_event_id.as_str());
     ensure!(
         granted

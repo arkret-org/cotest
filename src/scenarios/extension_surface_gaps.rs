@@ -2,12 +2,12 @@ use anyhow::Result;
 use arkret::{
     AgentKeyScope, AgentKeyScopeResource, AgentKeyScopeResourceKind, AgentProvisionRequestBody, Did,
 };
-use arkret_models_collaboration::governance::agent_artifacts::PublicKey;
 use arkret_models_collaboration::device_pairing::{
     DevicePairingNonce, DevicePairingResolveRequestBody, DevicePairingStageOutcome,
     DevicePairingStageRequestBody, DevicePairingState, DevicePairingStatusOutcome,
     DevicePairingStatusRequestBody,
 };
+use arkret_models_collaboration::governance::agent_artifacts::PublicKey;
 use arkret_models_discovery::ServiceDescribe;
 use arkret_wire::{Base64UrlString, NonEmptyString};
 use base64::Engine as _;

@@ -7,8 +7,7 @@
 //! green after the contract it claims to pin disappears.
 
 use anyhow::{Result, anyhow, bail};
-use arkret_signatures::Ed25519PayloadSigner;
-use arkret_signatures::verify_ed25519_payload_signature;
+use arkret_signatures::{Ed25519PayloadSigner, verify_ed25519_payload_signature};
 use arkret_wire::{Did, DidUrl, PayloadSigner as _};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};

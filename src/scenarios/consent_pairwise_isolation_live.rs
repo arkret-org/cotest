@@ -22,8 +22,8 @@ use std::time::Duration;
 use anyhow::{Context as _, Result, bail, ensure};
 use arkret_identifiers::ConsentId;
 use arkret_models_collaboration::consent_operations::{ConsentGrantRequestBody, ConsentView};
-use arkret_models_collaboration::events_payloads::consent::ConsentPeer;
 use arkret_models_collaboration::events_payloads::ConsentGrantPayload;
+use arkret_models_collaboration::events_payloads::consent::ConsentPeer;
 use arkret_models_collaboration::governance::membership_invite::MembershipPayload;
 use arkret_wire::{
     AccountId, ActorId, ConsentScope, DidCoreId, EventInitialSubmission, EventKind, RealmId,
