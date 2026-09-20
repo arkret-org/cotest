@@ -636,6 +636,9 @@ fn build_pcr_genesis_unit(
                 arkret_models_collaboration::events_payloads::DeviceOrPrincipalRef::Principal(
                     principal_id.clone(),
                 ),
+            // A registration-anchor authorization initializes and signs the
+            // same PCR-local generation established by the genesis unit.
+            authorized_generation_ref: 1,
             scopes: None,
             not_before: created_at,
             expires_at: None,
