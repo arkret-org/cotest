@@ -137,8 +137,8 @@ fn registered_canonical_json_digest_constructions_match_known_answers() -> Resul
 fn named_suite_audit_executes_registered_runners_and_exposes_every_gap() -> Result<()> {
     let report = run_named_suite_audit()?;
     assert_eq!(report.fixture_count, 70);
-    assert_eq!(report.executed_entrypoints.len(), 29);
-    assert_eq!(report.unwired_entrypoints.len(), 41);
+    assert_eq!(report.executed_entrypoints.len(), 31);
+    assert_eq!(report.unwired_entrypoints.len(), 39);
     for required_gap in [
         "ak.suite.consent.cache_invalidation.v1",
         "ak.suite.direct_conversation.admission_producers.v1",
