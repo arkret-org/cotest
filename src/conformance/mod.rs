@@ -136,7 +136,9 @@ pub use agent_draft_pending_intent_account_subscribe::{
     run_agent_draft_pending_intent_account_subscribe_conformance,
 };
 pub use agent_membership_cascade::run_agent_membership_cascade_suite;
-pub use agent_mls_keypackage_authorization::run_agent_mls_keypackage_authorization_vector;
+pub use agent_mls_keypackage_authorization::{
+    AGENT_MLS_KEYPACKAGE_AUTHORIZATION_ENTRYPOINT, run_agent_mls_keypackage_authorization_suite,
+};
 pub use agent_pairing_coordination::run_agent_pairing_durable_coordination_matrix;
 pub use agent_participation::{
     ALL_AGENT_PARTICIPATION_VECTOR_IDS, run_agent_mention_selector_vector,

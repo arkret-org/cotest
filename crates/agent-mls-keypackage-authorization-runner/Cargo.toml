@@ -1,0 +1,18 @@
+[package]
+name = "cotest-agent-mls-keypackage-authorization-runner"
+version = "0.3.0"
+edition = "2024"
+rust-version = "1.98"
+publish = false
+
+[dependencies]
+anyhow = { workspace = true }
+arkret-models-crypto = { workspace = true }
+arkret-policy = { workspace = true }
+arkret-wire = { workspace = true }
+ed25519-dalek = { workspace = true, features = ["alloc"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true
