@@ -121,7 +121,7 @@ pub async fn production_rejects_placeholder_proof_e2e_run() -> Result<()> {
             "hi",
         )?,
     );
-    let proof = &mut event.proofs[0];
+    let proof = event.producer_proof.as_mut().expect("producer proof");
     proof.jws = "a..b".to_owned();
     let submission = crate::publication::initial_submission(event, "")?;
 

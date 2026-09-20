@@ -365,8 +365,8 @@ async fn submit_prepared_event(
     )
     .await?;
     event
-        .proofs
-        .first()
+        .producer_proof
+        .as_ref()
         .map(|proof| proof.event_digest.to_string())
         .ok_or_else(|| anyhow!("prepared Event carries no event digest"))
 }

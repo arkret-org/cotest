@@ -1361,9 +1361,7 @@ mod tests {
         });
         let raw_digest = canonical::canonical_sha256(&event).unwrap();
         let sdk_digest = event_digest(&event, EventDigestMode::RawCanonicalJson).unwrap();
-        let mut event_with_proofs = event;
-        event_with_proofs["proofs"] = json!([]);
-        let sdk_event: Event = serde_json::from_value(event_with_proofs).unwrap();
+        let sdk_event: Event = serde_json::from_value(event).unwrap();
         let sdk_payload = sdk_event.digest_payload().unwrap();
 
         assert_eq!(sdk_payload["refs"][0]["critical"], json!(true));
@@ -1428,9 +1426,7 @@ mod tests {
         .unwrap();
         let proof: ProducerEventProof = serde_json::from_value(proof_value).unwrap();
 
-        let mut event_with_proofs = event;
-        event_with_proofs["proofs"] = json!([]);
-        let sdk_event: Event = serde_json::from_value(event_with_proofs).unwrap();
+        let sdk_event: Event = serde_json::from_value(event).unwrap();
         let canonical_bytes =
             canonical::canonical_json_bytes(&sdk_event.digest_payload().unwrap()).unwrap();
         let public_key = arkret_signatures::proof::PublicKeyMaterial::Ed25519Raw {

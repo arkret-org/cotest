@@ -414,12 +414,12 @@ fn sign_portable_event(event: Event, station: &str) -> Result<Event> {
 fn verify_portable_event(event: &Event, station: &str) -> Result<()> {
     use arkret_signatures::proof::{PublicKeyMaterial, verify_ed25519_detached_jws_proof};
     event.validate_proof_bindings_with_digest_suite(DigestSuite::Sha256)?;
-    ensure!(event.proofs.len() == 1);
+    ensure!(event.producer_proof.is_some());
     ensure!(
         event.actor_id.route_service_id()
             == &DidCoreId::new(format!("ak:did_core:web:{station}.example"))?
     );
-    let producer = &event.proofs[0];
+    let producer = event.producer_proof.as_ref().expect("producer proof");
     ensure!(
         producer.signer_resolution_evidence_ref
             == Some(cotest::fixture_signer_evidence_ref(station))

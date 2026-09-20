@@ -202,7 +202,7 @@ fn run_accountability_scope_set_subject_vector(fixture: &EncodingArtifactFixture
                 "not_before": "2026-07-26T01:00:00.000Z",
                 "grant_status": status
             },
-            "proofs": []
+            "producer_proof": null
         }))?)
     };
     // The cell an accountability grant addresses is derived from `kind +

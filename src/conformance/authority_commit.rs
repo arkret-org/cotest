@@ -733,7 +733,7 @@ fn verify_event_commit_submission_is_the_only_event_dto() -> Result<()> {
 /// Attach the single structural producer proof `validate_structural` requires.
 fn signed_event(mut event: Event) -> Result<Event> {
     let digest = Hash::new(format!("sha256:{}", "22".repeat(32)))?;
-    event.proofs = vec![arkret_wire::ProducerEventProof {
+    event.producer_proof = Some(arkret_wire::ProducerEventProof {
         kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
         verification_method: DidUrl::new(format!("{PRODUCER_DID}#key-1"))
             .map_err(anyhow::Error::msg)?,
@@ -743,7 +743,7 @@ fn signed_event(mut event: Event) -> Result<Event> {
         audience: None,
         proof_purpose: None,
         jws: arkret_wire::test_support::structural_only_detached_jws(&digest),
-    }];
+    });
     event
         .validate_for_submit_structural()
         .map_err(|error| anyhow!("structurally signed Event is invalid: {error}"))?;

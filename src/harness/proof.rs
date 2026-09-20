@@ -66,18 +66,18 @@ pub fn refresh_typed_event_proof_with_signing_seed(
     signing_seed: [u8; 32],
 ) -> Result<()> {
     let verification_method = event
-        .proofs
-        .first()
+        .producer_proof
+        .as_ref()
         .map(|proof| proof.verification_method.clone())
         .ok_or_else(|| anyhow!("Event {} has no signing proof", event.event_id))?;
     let signer_evidence_ref = event
-        .proofs
-        .first()
+        .producer_proof
+        .as_ref()
         .and_then(|proof| proof.signer_resolution_evidence_ref.clone())
         .ok_or_else(|| anyhow!("Event {} has no signer evidence", event.event_id))?;
     let signer_did = controller_did(&verification_method)?;
     let created_at = event.created_at;
-    event.proofs.clear();
+    event.producer_proof = None;
     let signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
         signing_seed,
         signer_did,
@@ -104,8 +104,8 @@ pub fn refresh_typed_event_proof_with_signing_seed(
 /// Re-sign a typed Event through the registered cotest identity.
 pub fn refresh_typed_event_proof(event: &mut arkret_wire::Event) -> Result<()> {
     let verification_method = event
-        .proofs
-        .first()
+        .producer_proof
+        .as_ref()
         .map(|proof| proof.verification_method.clone())
         .ok_or_else(|| anyhow!("Event {} has no signing proof", event.event_id))?;
     let signer = event
@@ -208,18 +208,18 @@ mod tests {
                 "message_id": "ak:message:AWb5Nken0jbCnqSrJsuRfB0gnGenpREJucvnn6MsxwLz",
                 "strand_id": "ak:strand:AWb5Nken0jbCnqSrJsuRfB0gnGenpREJucvnn6MsxwLz"
             },
-            "proofs": [{
+            "producer_proof": {
                 "kind": "detached_jws",
                 "verification_method": "did:web:alice.example#device",
                 "event_digest": "",
                 "created_at": "2026-07-07T00:00:00.000Z",
                 "jws": "placeholder"
-            }]
+            }
         });
 
         let digest = super::canonical_event_digest(&event).unwrap();
         let mut parseable = event.clone();
-        parseable["proofs"][0]["event_digest"] =
+        parseable["producer_proof"]["event_digest"] =
             json!("sha256:0000000000000000000000000000000000000000000000000000000000000000");
         let typed: arkret_wire::Event = serde_json::from_value(parseable).unwrap();
 

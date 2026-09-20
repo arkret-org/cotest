@@ -157,8 +157,8 @@ fn validate_crypto_signature_event_vector(
     event_kinds: &HashMap<String, EventKindInfo>,
 ) -> Result<()> {
     let name = required_str(vector, "name")?;
-    let event_without_proofs = required_field(vector, "event_without_proofs")?;
-    let canonical = canonical_event_payload(event_without_proofs)?;
+    let event_without_producer_proof = required_field(vector, "event_without_producer_proof")?;
+    let canonical = canonical_event_payload(event_without_producer_proof)?;
     let expected_canonical = required_str(vector, "canonical_event_payload")?;
     if canonical != expected_canonical {
         bail!("crypto vector {name} canonical event payload drifted");
@@ -686,7 +686,10 @@ fn validate_event_envelope(
             "Event.content must be an object",
         ));
     }
-    value_array(required_field(event, "proofs")?, "event.proofs")?;
+    value_object(
+        required_field(event, "producer_proof")?,
+        "event.producer_proof",
+    )?;
 
     if event
         .get("prev_ref_count")
@@ -802,7 +805,7 @@ fn validate_event_envelope(
     // Per spec encoding.md §1.6/§4 and the canonical `event_proof` schema
     // (`additionalProperties:false`, `required` includes `event_digest`):
     // the Event content fingerprint is carried by `proof.event_digest ≡
-    // canonical_digest(event_without_proofs_unsigned)`. There is no
+    // canonical_digest(event_without_producer_proof_unsigned)`. There is no
     // proof-level `payload_digest` for Event proofs. `domain`/`audience` are
     // optional binding context folded into the signed JWS bytes, but they do
     // NOT change `event_digest`: it MUST always equal the canonical Event
@@ -813,39 +816,38 @@ fn validate_event_envelope(
     // the envelope-shape validator.
     let computed_canonical = canonical_event_payload_digest(event)?;
     let zero_digest = "sha256:0000000000000000000000000000000000000000000000000000000000000000";
-    for proof in event
-        .get("proofs")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-    {
-        let proof_hash = proof.get("event_digest").and_then(Value::as_str);
-        let Some(proof_hash) = proof_hash else {
-            return Ok(EventEnvelopeDecision::reject(
-                "signature_invalid",
-                "proof.event_digest missing",
-            ));
-        };
-        if !looks_like_sha256_digest(proof_hash) {
-            return Ok(EventEnvelopeDecision::reject(
-                "signature_invalid",
-                "proof.event_digest must be sha256:<hex>",
-            ));
-        }
-        // Sentinel zero-hash always rejects — used by negative fixtures to
-        // simulate tamper / mismatch without exercising real JWS crypto.
-        if proof_hash == zero_digest {
-            return Ok(EventEnvelopeDecision::reject(
-                "signature_invalid",
-                "proof.event_digest is the zero sentinel — tampered envelope",
-            ));
-        }
-        if proof_hash != computed_canonical.as_str() {
-            return Ok(EventEnvelopeDecision::reject(
-                "signature_invalid",
-                "proof.event_digest does not match canonical Event bytes without proofs",
-            ));
-        }
+    let Some(proof) = event.get("producer_proof").and_then(Value::as_object) else {
+        return Ok(EventEnvelopeDecision::reject(
+            "signature_invalid",
+            "producer_proof missing",
+        ));
+    };
+    let proof_hash = proof.get("event_digest").and_then(Value::as_str);
+    let Some(proof_hash) = proof_hash else {
+        return Ok(EventEnvelopeDecision::reject(
+            "signature_invalid",
+            "producer_proof.event_digest missing",
+        ));
+    };
+    if !looks_like_sha256_digest(proof_hash) {
+        return Ok(EventEnvelopeDecision::reject(
+            "signature_invalid",
+            "producer_proof.event_digest must be sha256:<hex>",
+        ));
+    }
+    // Sentinel zero-hash always rejects — used by negative fixtures to
+    // simulate tamper / mismatch without exercising real JWS crypto.
+    if proof_hash == zero_digest {
+        return Ok(EventEnvelopeDecision::reject(
+            "signature_invalid",
+            "producer_proof.event_digest is the zero sentinel — tampered envelope",
+        ));
+    }
+    if proof_hash != computed_canonical.as_str() {
+        return Ok(EventEnvelopeDecision::reject(
+            "signature_invalid",
+            "producer_proof.event_digest does not match canonical Event bytes without producer_proof",
+        ));
     }
 
     Ok(EventEnvelopeDecision::accept())
@@ -957,12 +959,12 @@ pub(crate) fn event_kind_metadata(registry: &Value) -> Result<HashMap<String, Ev
     Ok(event_kinds)
 }
 
-pub(crate) fn event_without_proofs(event: &Value) -> Result<Value> {
+pub(crate) fn event_without_producer_proof(event: &Value) -> Result<Value> {
     arkret_wire::event_digest_preimage(event).map_err(Into::into)
 }
 
 pub(crate) fn canonical_event_payload(event: &Value) -> Result<String> {
-    super::canonical_json(&event_without_proofs(event)?)
+    super::canonical_json(&event_without_producer_proof(event)?)
 }
 
 pub(crate) fn canonical_event_payload_digest(event: &Value) -> Result<String> {
@@ -1093,20 +1095,20 @@ fn sample_envelope_event(
         "payload": content,
         // Synthetic placeholder proof. `event_digest` is filled below with the
         // real canonical Event digest so the envelope-shape validator's
-        // `event_digest == canonical(event_without_proofs_unsigned)` check
+        // `event_digest == canonical(event_without_producer_proof_unsigned)` check
         // passes. Real Ed25519 verify happens elsewhere.
-        "proofs": [{
+        "producer_proof": {
             "kind": "detached_jws",
             "verification_method": "did:web:alice.example#k1",
             "event_digest": "",
             "created_at": created_at,
             "domain": "arkret-event-v1",
             "jws": "eyJhbGciOiJFZDI1NTE5In0..synthetic_placeholder_signature_bytes"
-        }]
+        }
     });
     let digest =
         canonical_event_payload_digest(&event).expect("synthetic event is canonicalizable");
-    event["proofs"][0]["event_digest"] = Value::String(digest);
+    event["producer_proof"]["event_digest"] = Value::String(digest);
     event
 }
 

@@ -764,7 +764,11 @@ impl TestActorClient {
             } else {
                 &data_evidence_ref
             };
-            event.proofs[0].signer_resolution_evidence_ref = Some(evidence_ref.clone());
+            event
+                .producer_proof
+                .as_mut()
+                .expect("producer proof")
+                .signer_resolution_evidence_ref = Some(evidence_ref.clone());
             refresh_typed_event_proof_with_signing_seed(event, signing_seed)?;
         }
         self.controlled_realms
@@ -1080,8 +1084,8 @@ impl TestActorClient {
         // hand it back to the caller alongside the submit result.
         body["cotest_event_digest"] = json!(
             event
-                .proofs
-                .first()
+                .producer_proof
+                .as_ref()
                 .expect("authored Event has producer proof")
                 .event_digest
         );
@@ -1259,7 +1263,11 @@ impl TestActorClient {
                 self.stamp_authority(&mut event, realm_id, kind, is_ordinary_event);
             }
         }
-        event.proofs[0].signer_resolution_evidence_ref = Some(if is_control_move {
+        event
+            .producer_proof
+            .as_mut()
+            .expect("producer proof")
+            .signer_resolution_evidence_ref = Some(if is_control_move {
             self.control_signer_evidence_ref().await?
         } else {
             self.data_signer_evidence_ref().await?

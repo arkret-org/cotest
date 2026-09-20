@@ -788,7 +788,7 @@ fn with_native_unit_proof(
         bytes: signing_key.verifying_key().to_bytes().to_vec(),
     };
     arkret_signatures::verify_ed25519_detached_jws_proof_with_digest_suite(
-        &event.proofs[0],
+        event.producer_proof.as_ref().expect("producer proof"),
         &bytes,
         &event.actor_id,
         &key,
@@ -802,7 +802,7 @@ fn with_native_unit_proof(
             .to_vec(),
     };
     if arkret_signatures::verify_ed25519_detached_jws_proof_with_digest_suite(
-        &event.proofs[0],
+        event.producer_proof.as_ref().expect("producer proof"),
         &bytes,
         &event.actor_id,
         &wrong_key,

@@ -43,7 +43,7 @@ pub async fn teabay_signed_ingest_negative_run() -> Result<()> {
                     "directory_ids": ["ak:did_core:web:teabay.cotest.local"]
                 }
             },
-            "proofs": []
+            "producer_proof": null
         },
         "source_refs": ["ak:event:ASWGTju1AH5ri82iFC0b-lZTclyFRuOI8TagaYiq5ZD2"],
         "as_of": arkret_canonical::format_timestamp_canonical(Utc::now()),

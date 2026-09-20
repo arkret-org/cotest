@@ -449,7 +449,7 @@ fn scheduled_send_dispatch_freezes_content_bound_identities_and_bytes() {
 
     // Dispatch refuses an envelope that was never signed.
     let mut unsigned = scheduled_send_signed_event("unsigned");
-    unsigned.clear_proofs();
+    unsigned.clear_producer_proof();
     assert!(
         QueuedSdkEvent::scheduled_authored(
             ScheduledSendId::new(SCHEDULED_SEND_ID).unwrap(),

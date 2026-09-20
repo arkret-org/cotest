@@ -970,7 +970,7 @@ fn fixed_unsigned_sidecar_event(
         data_basis: None,
         payload,
         unsigned: BTreeMap::new(),
-        proofs: Vec::new(),
+        producer_proof: None,
         requirements: EventRequirements::default(),
     };
     event.event_id = event
@@ -1166,13 +1166,13 @@ fn sign_prepared_draft(
             .map_err(|_| SidecarModelError::DraftMismatch)?,
     )
     .map_err(|_| SidecarModelError::DraftMismatch)?;
-    if before != after || event.proofs.len() != 1 {
+    if before != after || event.producer_proof.is_none() {
         return Err(SidecarModelError::ProofMismatch);
     }
     let public_key = PublicKeyMaterial::Ed25519Raw {
         bytes: signer.verifying_key().to_bytes().to_vec(),
     };
-    let proof = &event.proofs[0];
+    let proof = event.producer_proof.as_ref().expect("producer proof");
     verify_ed25519_detached_jws_proof(proof, &before, &event.actor_id, &public_key)
         .map_err(|_| SidecarModelError::ProofMismatch)?;
     Ok(event.into_event())
@@ -1202,14 +1202,16 @@ fn validate_signed_draft(
             )
             .map_err(|_| SidecarModelError::DraftMismatch)?
             != draft.event_digest.as_str()
-        || !matches!(event.proofs.as_slice(), [proof] if proof.event_digest == draft.event_digest)
+        || !matches!(event.producer_proof.as_ref(), Some(proof) if proof.event_digest == draft.event_digest)
     {
         return Err(SidecarModelError::DraftMismatch);
     }
-    for proof in &event.proofs {
-        verify_ed25519_detached_jws_proof(proof, &actual_unsigned, &event.actor_id, public_key)
-            .map_err(|_| SidecarModelError::ProofMismatch)?;
-    }
+    let proof = event
+        .producer_proof
+        .as_ref()
+        .ok_or(SidecarModelError::ProofMismatch)?;
+    verify_ed25519_detached_jws_proof(proof, &actual_unsigned, &event.actor_id, public_key)
+        .map_err(|_| SidecarModelError::ProofMismatch)?;
     Ok(())
 }
 

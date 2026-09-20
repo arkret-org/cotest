@@ -234,8 +234,8 @@ fn rebind_authored_event(event: &mut arkret_wire::Event, actor: &str) -> Result<
         event.auth_context = Some(arkret_wire::AuthContext { authority_refs });
     }
     event
-        .proofs
-        .first_mut()
+        .producer_proof
+        .as_mut()
         .ok_or_else(|| anyhow!("authored Event has no proof"))?
         .verification_method =
         arkret_wire::DidUrl::new(verification_method).map_err(anyhow::Error::msg)?;

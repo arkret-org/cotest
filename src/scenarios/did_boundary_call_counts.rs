@@ -107,7 +107,7 @@ async fn seeded_actor(server: &ArkretServer, actor: &str, device: &str) -> Resul
     server.demo_client(actor, device).await
 }
 
-/// Flip one character of `proofs[0].jws`'s signature segment, leaving every
+/// Flip one character of `producer_proof.jws`'s signature segment, leaving every
 /// other byte — including `event_digest` and `verification_method` — intact.
 ///
 /// The Event therefore stays structurally valid and correctly authorized; the
@@ -115,20 +115,20 @@ async fn seeded_actor(server: &ArkretServer, actor: &str, device: &str) -> Resul
 /// under test.
 fn corrupt_detached_jws(event: &mut arkret_wire::Event) -> Result<()> {
     let jws = event
-        .proofs
-        .first()
+        .producer_proof
+        .as_ref()
         .map(|proof| proof.jws.as_str())
-        .context("authored Event carries no proofs[0].jws")?
+        .context("authored Event carries no producer_proof.jws")?
         .to_owned();
     let (header, signature) = jws
         .rsplit_once('.')
-        .context("proofs[0].jws is not a detached JWS")?;
+        .context("producer_proof.jws is not a detached JWS")?;
     let mut bytes = URL_SAFE_NO_PAD
         .decode(signature)
-        .context("proofs[0].jws signature is not canonical base64url")?;
+        .context("producer_proof.jws signature is not canonical base64url")?;
     let first = bytes
         .first_mut()
-        .context("proofs[0].jws has an empty signature segment")?;
+        .context("producer_proof.jws has an empty signature segment")?;
     // Mutate a real signature bit, then re-encode canonically. Ed25519's
     // 64-byte signature encodes to 86 base64url characters, so replacing its
     // final character can accidentally alter padding bits and be rejected by
@@ -136,9 +136,9 @@ fn corrupt_detached_jws(event: &mut arkret_wire::Event) -> Result<()> {
     *first ^= 1;
     let corrupted = URL_SAFE_NO_PAD.encode(bytes);
     event
-        .proofs
-        .first_mut()
-        .context("authored Event carries no proofs[0]")?
+        .producer_proof
+        .as_mut()
+        .context("authored Event carries no producer_proof")?
         .jws = format!("{header}.{corrupted}");
     Ok(())
 }

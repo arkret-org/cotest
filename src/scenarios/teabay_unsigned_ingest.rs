@@ -121,7 +121,7 @@ pub async fn teabay_rejects_unsigned_ingest_run() -> Result<()> {
                 }
             }))?,
             unsigned: std::collections::BTreeMap::new(),
-            proofs: Vec::new(),
+            producer_proof: None,
             requirements: arkret_wire::EventRequirements::default(),
         },
         source_ref_access,
