@@ -76,6 +76,7 @@ bip39 = { version = "2.2.2", default-features = false, features = ["std"] }
 chacha20poly1305 = { version = "0.11.0", default-features = false }
 chrono = "0.4.45"
 coauth-backend = { path = "../coauth/crates/backend" }
+coauth-data = { path = "../coauth/crates/data" }
 ed25519-dalek = { version = "3.0.0", default-features = false }
 fs2 = "0.4.3"
 # `native` gives us `NativeExecutor` and the durable `FileStore`, which are what

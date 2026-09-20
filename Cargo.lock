@@ -2827,13 +2827,16 @@ dependencies = [
  "arkret-identity",
  "arkret-signatures",
  "arkret-wire",
+ "async-trait",
  "base64 0.23.1",
  "chrono",
  "coauth-backend",
+ "coauth-data",
  "ed25519-dalek 3.0.0",
  "hex",
  "p256 0.14.0",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]

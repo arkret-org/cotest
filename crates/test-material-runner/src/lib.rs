@@ -186,11 +186,77 @@ fn p256_fixture_bytes_and_verify(crypto: &Value) -> Result<Vec<u8>> {
 fn coauth_rejects_before_binding_state(public_key: &[u8]) -> Result<()> {
     use arkret_identifiers::{Did, Hash, TrustDomainId};
     use arkret_identity::{
-        DidBindingPurpose, InMemoryVerifiedDidBindingStore, VerifiedDidBindingKey,
+        AcceptedDidBinding, DidBindingPurpose, DidBindingStatus, EvidenceReceipt,
+        InMemoryVerifiedDidBindingStore, LimitedTrust, MethodEvidence, VerifiedDidBinding,
+        VerifiedDidBindingDocumentInput, VerifiedDidBindingKey,
     };
     use coauth_backend::handlers::arkret::{DidDocument, VerificationMethod};
-    use coauth_backend::services::did_binding::{binding_from_resolution, high_risk_freshness};
+    use coauth_backend::services::did_binding::{
+        DurableVerifiedDidBindingStore, binding_from_resolution, encode_row, high_risk_freshness,
+        to_shared_document,
+    };
     use coauth_backend::services::did_resolver::{DidResolution, DidResolutionSource};
+    use coauth_data::RepositoryError;
+    use coauth_data::did_binding::{
+        VerifiedDidBindingInvalidation, VerifiedDidBindingKeyColumns, VerifiedDidBindingRepository,
+        VerifiedDidBindingRow,
+    };
+
+    #[derive(Default)]
+    struct MemoryBindingRepository {
+        row: Option<VerifiedDidBindingRow>,
+        get_calls: usize,
+        delete_exact_calls: usize,
+    }
+
+    #[async_trait::async_trait]
+    impl VerifiedDidBindingRepository for MemoryBindingRepository {
+        type Error = RepositoryError;
+
+        async fn get(
+            &mut self,
+            key: &VerifiedDidBindingKeyColumns,
+            _now: chrono::DateTime<chrono::Utc>,
+        ) -> Result<Option<VerifiedDidBindingRow>, Self::Error> {
+            self.get_calls += 1;
+            Ok(self.row.clone().filter(|row| &row.key == key))
+        }
+
+        async fn upsert(
+            &mut self,
+            row: VerifiedDidBindingRow,
+            _now: chrono::DateTime<chrono::Utc>,
+        ) -> Result<(), Self::Error> {
+            self.row = Some(row);
+            Ok(())
+        }
+
+        async fn delete_exact(
+            &mut self,
+            key: &VerifiedDidBindingKeyColumns,
+        ) -> Result<bool, Self::Error> {
+            self.delete_exact_calls += 1;
+            let existed = self.row.as_ref().is_some_and(|row| &row.key == key);
+            if existed {
+                self.row = None;
+            }
+            Ok(existed)
+        }
+
+        async fn invalidate(
+            &mut self,
+            _selector: &VerifiedDidBindingInvalidation,
+        ) -> Result<usize, Self::Error> {
+            Ok(0)
+        }
+
+        async fn prune_expired(
+            &mut self,
+            _now: chrono::DateTime<chrono::Utc>,
+        ) -> Result<usize, Self::Error> {
+            Ok(0)
+        }
+    }
 
     let did = "did:web:cotest-production.example.net";
     let trust_domain = TrustDomainId::new("ak:trust_domain:cotest.production".to_owned())?;
@@ -251,6 +317,72 @@ fn coauth_rejects_before_binding_state(public_key: &[u8]) -> Result<()> {
     ensure!(
         store.get(&key, now).is_none(),
         "Coauth refusal left cache state"
+    );
+
+    // Recreate a valid row accepted before the published-material rule existed.
+    // Construction still goes through every SDK binding/digest invariant; only
+    // today's Coauth formal-admission guard is deliberately bypassed.
+    let legacy_document = DidDocument {
+        id: did.to_owned(),
+        also_known_as: Vec::new(),
+        verification_method: vec![VerificationMethod {
+            id: format!("{did}#runtime-1"),
+            kind: "JsonWebKey2020".to_owned(),
+            controller: did.to_owned(),
+            public_key_jwk: Some(serde_json::from_value(serde_json::json!({
+                "x": arkret_canonical::base64url_encode(public_key),
+                "crv": "Ed25519",
+                "kty": "OKP"
+            }))?),
+            public_key_multibase: None,
+        }],
+        authentication: Vec::new(),
+        assertion_method: Vec::new(),
+        service: Vec::new(),
+        metadata: None,
+    };
+    let shared_document = to_shared_document(&legacy_document)?;
+    let document_digest = arkret_identity::document_canonical_digest(&shared_document)?;
+    let evidence = MethodEvidence::none();
+    let receipt = EvidenceReceipt::new("web", document_digest, &evidence);
+    let legacy_binding = VerifiedDidBinding::from_verified_document(
+        &shared_document,
+        VerifiedDidBindingDocumentInput {
+            trust_domain: key.trust_domain.clone(),
+            purpose: key.purpose,
+            verification_method: None,
+            history_head: None,
+            version_id: None,
+            limited_trust: Some(LimitedTrust::for_proofless_method(None, None)),
+            evidence_digest: receipt.digest()?,
+            evidence_dependencies: receipt.evidence_dependencies()?,
+            policy_digest: key.policy_digest.clone(),
+            verified_at: now,
+            refresh_after: Some(now + chrono::Duration::minutes(5)),
+            expires_at: Some(now + chrono::Duration::hours(1)),
+            status: DidBindingStatus::Active,
+        },
+    )?;
+    let legacy = AcceptedDidBinding::new(legacy_binding, shared_document, receipt)?;
+    let durable = DurableVerifiedDidBindingStore::new(4);
+    durable.accept(legacy.clone())?;
+    let mut repository = MemoryBindingRepository {
+        row: Some(encode_row(&legacy)?),
+        ..MemoryBindingRepository::default()
+    };
+    let runtime = tokio::runtime::Builder::new_current_thread().build()?;
+    let error = runtime
+        .block_on(durable.load_from_repository(&mut repository, &key, now))
+        .expect_err("historical published material must be a terminal durable-load denial");
+    ensure!(matches!(
+        error,
+        coauth_backend::services::did_binding::DidBindingError::TestSigningMaterialDenied
+    ));
+    ensure!(repository.get_calls == 1 && repository.delete_exact_calls == 1);
+    ensure!(repository.row.is_none(), "rejected durable row survived");
+    ensure!(
+        durable.get(&key, now).is_none(),
+        "rejected durable row survived in the mirror"
     );
     Ok(())
 }
