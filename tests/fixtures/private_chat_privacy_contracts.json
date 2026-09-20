@@ -1,10 +1,12 @@
 {
   "suite": "private_chat_privacy_contracts",
-  "version": 1,
+  "version": 2,
   "source_refs": [
     "arkret-spec/spec/v1/zh/discovery/client-preferences.md",
     "arkret-spec/spec/v1/zh/identity/contact-and-direct-conversation.md",
+    "arkret-spec/spec/v1/artifacts/schemas/authority-commit-operations.schema.json",
     "arkret-spec/spec/v1/artifacts/schemas/contact-operations.schema.json",
+    "arkret-spec/spec/v1/artifacts/schemas/direct-conversation-operations.schema.json",
     "arkret-spec/spec/v1/artifacts/schemas/event-payload.schema.json",
     "arkret-spec/spec/v1/artifacts/registry/account-data-key-registry.json"
   ],
@@ -16,34 +18,8 @@
       "ak:event:AS_LTHQu5UtXbAIUOgUFzEY5nFJzI1cgPvxODB_NnHSR"
     ],
     "expected_founding_unit_digest": "sha256:3cd20dd09f6c8bc93757a03640c1612a6b85599eeb702cc488e2cc083ebfa46e",
-    "receipt": {
-      "pair_key": "sha256:6457016d972d540b582137f8436a76e92d3e4fd53ea9859bb390f33c9eb3fd0a",
-      "founder_id": {
-        "kind": "account",
-        "account_id": {
-          "principal_id": "ak:did_core:web:bob.example",
-          "station_id": "ak:did_core:web:station.example"
-        }
-      },
-      "realm_id": "ak:realm:AQJmSg1s9QyzppFeJL40dN92YVHZeLdBBt3UWHa9XNOD",
-      "main_strand_id": "ak:strand:AT0qp3NTTWtVZNVOgsvsAncs9xRV-c5HXCz7uzXd7NQS",
-      "founding_unit_digest": "sha256:3cd20dd09f6c8bc93757a03640c1612a6b85599eeb702cc488e2cc083ebfa46e",
-      "authorization_core": {
-        "kind": "human",
-        "current_contact_round_id": "sha256:55e2bdad8a06d2503f04e1d0cb5046a918f1002eab53e560ce399fe5aaf10c82",
-        "root_contact_round_id": "sha256:55e2bdad8a06d2503f04e1d0cb5046a918f1002eab53e560ce399fe5aaf10c82",
-        "accepted_contact_evidence_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
-      },
-      "issuer_id": "ak:did_core:web:ps.example",
-      "accepted_at": "2026-08-08T00:00:00.000Z",
-      "proof": {
-        "verification_method": "did:web:ps.example#key-1",
-        "created_at": "2026-08-08T00:00:00.000Z",
-        "jws": "eyJhbGciOiJFZERTQSJ9"
-      }
-    },
-    "expected_receipt_transcript_digest": "sha256:5e681f6c3b2451b8aa5f15b1caff19c0129f184ff27b254bf838885dec93ade7",
-    "expected_peer_verdict": "accept"
+    "expected_realm_id": "ak:realm:AQJmSg1s9QyzppFeJL40dN92YVHZeLdBBt3UWHa9XNOD",
+    "expected_main_strand_id": "ak:strand:AS_LTHQu5UtXbAIUOgUFzEY5nFJzI1cgPvxODB_NnHSR"
   },
   "account_data_cases": {
     "positive": {

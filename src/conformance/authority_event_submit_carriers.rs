@@ -215,7 +215,7 @@ fn assert_direct_conversation_carriers(approved: &Value) -> Result<usize> {
         .enumerate()
         .map(|(index, submission)| {
             json!({
-                "submission": submission,
+                "event_submission": submission,
                 "source_commit": realm_commit(index as u64)
             })
         })
@@ -225,18 +225,22 @@ fn assert_direct_conversation_carriers(approved: &Value) -> Result<usize> {
         "unit": {
             "unit_kind": "direct_conversation_founding",
             "committed_events": committed_events,
-            "source_acceptance_receipt": founding_receipt(),
             "founding_authority_evidence": founding_evidence()
         }
     });
     schema_valid(PEER_REQUEST, &peer_request)?;
     assert_roundtrip::<PeerAuthoritySubmitRequest>(&peer_request)?;
 
-    for required in ["source_acceptance_receipt", "founding_authority_evidence"] {
-        let mut missing = peer_request.clone();
-        missing["unit"].as_object_mut().unwrap().remove(required);
-        schema_invalid(PEER_REQUEST, &missing)?;
-    }
+    let mut missing_evidence = peer_request.clone();
+    missing_evidence["unit"]
+        .as_object_mut()
+        .unwrap()
+        .remove("founding_authority_evidence");
+    schema_invalid(PEER_REQUEST, &missing_evidence)?;
+
+    let mut legacy_receipt = peer_request;
+    legacy_receipt["unit"]["source_acceptance_receipt"] = founding_receipt();
+    schema_invalid(PEER_REQUEST, &legacy_receipt)?;
     Ok(8)
 }
 
@@ -255,7 +259,7 @@ fn assert_membership_compensation_carriers(approved: &Value) -> Result<usize> {
         "unit": {
             "unit_kind": "membership_compensation",
             "committed_event": {
-                "submission": approved,
+                "event_submission": approved,
                 "source_commit": realm_commit(0)
             },
             "membership_compensation_evidence": compensation_evidence()
@@ -347,7 +351,7 @@ fn replication_request(submissions: Vec<Value>) -> Value {
 fn replication_item(submission: Value) -> Value {
     json!({
         "committed_event": {
-            "submission": submission,
+            "event_submission": submission,
             "source_commit": realm_commit(0)
         },
         "recipient_witnesses": [{
