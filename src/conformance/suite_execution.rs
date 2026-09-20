@@ -27,6 +27,10 @@ impl SuiteExecutionResult {
             .get("cases")
             .and_then(Value::as_array)
             .ok_or_else(|| anyhow::anyhow!("{} has no cases[]", self.fixture))?;
+        self.assert_complete_against_cases(declared)
+    }
+
+    pub fn assert_complete_against_cases(&self, declared: &[Value]) -> Result<()> {
         if declared.len() != self.cases.len() {
             bail!(
                 "{} declared {} cases but runner returned {} case results",

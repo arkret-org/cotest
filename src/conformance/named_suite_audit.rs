@@ -12,17 +12,18 @@ use anyhow::{Result, anyhow, ensure};
 use serde_json::Value;
 
 use super::{
-    ACCOUNT_BLOCKLIST_PROJECTION_ENTRYPOINT, KEYPACKAGE_WRITE_TRANSCRIPTS_ENTRYPOINT,
-    PROTOCOL_TIME_TOLERANCE_ENTRYPOINT, SDK_PRECHECK_ENTRYPOINT, SuiteExecutionResult,
-    TEST_MATERIAL_REJECTION_ENTRYPOINT,
+    ACCOUNT_BLOCKLIST_PROJECTION_ENTRYPOINT, CURSOR_NEGATIVE_ENTRYPOINT,
+    KEYPACKAGE_WRITE_TRANSCRIPTS_ENTRYPOINT, PROTOCOL_TIME_TOLERANCE_ENTRYPOINT,
+    SDK_PRECHECK_ENTRYPOINT, SuiteExecutionResult, TEST_MATERIAL_REJECTION_ENTRYPOINT,
     run_account_blocklist_projection_vector, run_account_status_issuer_ledger_vector,
     run_agent_membership_cascade_suite, run_applet_registration_epoch_kat_suite,
-    run_authority_commit_suite, run_encoding_fixture_suite, run_event_envelope_fixture_suite,
-    run_fanout_route_miss_suite, run_file_transfer_stream_aead_fixture_suite,
-    run_invite_new_source_quota_suite, run_keypackage_write_transcripts_suite,
-    run_mls_creator_bootstrap_recovery_suite, run_protocol_time_tolerance_suite,
+    run_authority_commit_suite, run_cursor_negative_suite, run_encoding_fixture_suite,
+    run_event_envelope_fixture_suite, run_fanout_route_miss_suite,
+    run_file_transfer_stream_aead_fixture_suite, run_invite_new_source_quota_suite,
+    run_keypackage_write_transcripts_suite, run_mls_creator_bootstrap_recovery_suite,
+    run_protocol_time_tolerance_suite, run_sdk_precheck_suite,
     run_security_transaction_resilience_joint_gate, run_session_grant_issuer_ledger_suite,
-    run_sdk_precheck_suite, run_signal_sequence_high_water_suite, run_sync_fixture_suite,
+    run_signal_sequence_high_water_suite, run_sync_fixture_suite,
     run_test_material_rejection_suite, run_webrtc_media_plaintext_suite,
     run_websocket_binding_suite, spec_artifacts_root,
 };
@@ -32,7 +33,7 @@ const ACCOUNT_STATUS_ENTRYPOINT: &str = "ak.suite.account_status.issuer_ledger.v
 /// Exact acknowledged gap ledger. This is deliberately closed: adding or
 /// renaming a canonical named suite cannot remain invisible merely because the
 /// total number of unwired suites happened to stay constant.
-const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 49] = [
+const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 48] = [
     "ak.suite.account_data.cas_convergence.v1",
     "ak.suite.account_data.private_view_inbox_binding.v1",
     "ak.suite.agent.draft_pending_intent.v1",
@@ -57,7 +58,6 @@ const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 49] = [
     "ak.suite.direct_conversation.admission_producers.v1",
     "ak.suite.direct_conversation.signal_admission.v1",
     "ak.suite.encoding.content_bound_event_id.v1",
-    "ak.suite.encoding.cursor_negative.v1",
     "ak.suite.encoding.string_profiles.v1",
     "ak.suite.events.redaction.v1",
     "ak.suite.federation.idempotency_after_key_revoke.v1",
@@ -86,10 +86,14 @@ const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 49] = [
 
 enum Runner {
     Cases(fn() -> Result<SuiteExecutionResult>),
+    CasesAt {
+        run: fn() -> Result<SuiteExecutionResult>,
+        pointer: &'static str,
+    },
     EvidenceMapped(fn() -> Result<()>),
 }
 
-const RUNNERS: [(&str, Runner); 21] = [
+const RUNNERS: [(&str, Runner); 22] = [
     (
         ACCOUNT_BLOCKLIST_PROJECTION_ENTRYPOINT,
         Runner::EvidenceMapped(run_account_blocklist_projection_vector),
@@ -153,6 +157,13 @@ const RUNNERS: [(&str, Runner); 21] = [
     (
         ACCOUNT_STATUS_ENTRYPOINT,
         Runner::EvidenceMapped(run_account_status_issuer_ledger_vector),
+    ),
+    (
+        CURSOR_NEGATIVE_ENTRYPOINT,
+        Runner::CasesAt {
+            run: run_cursor_negative_suite,
+            pointer: "/vectors/0/cases",
+        },
     ),
     (
         KEYPACKAGE_WRITE_TRANSCRIPTS_ENTRYPOINT,
@@ -253,6 +264,18 @@ fn execute_runner(entrypoint: &str, runner: Runner, fixture: &Value) -> Result<(
                 "runner returned the wrong entrypoint"
             );
             result.assert_complete_against(fixture)
+        }
+        Runner::CasesAt { run, pointer } => {
+            let result = run()?;
+            ensure!(
+                result.entrypoint == entrypoint,
+                "runner returned the wrong entrypoint"
+            );
+            let cases = fixture
+                .pointer(pointer)
+                .and_then(Value::as_array)
+                .ok_or_else(|| anyhow!("{} has no cases at {pointer}", result.fixture))?;
+            result.assert_complete_against_cases(cases)
         }
         Runner::EvidenceMapped(run) => {
             ensure!(

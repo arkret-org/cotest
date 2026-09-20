@@ -2779,6 +2779,7 @@ dependencies = [
  "bip39",
  "chacha20poly1305 0.11.0",
  "chrono",
+ "cotest-cursor-negative-runner",
  "cotest-sdk-precheck-runner",
  "cotest-test-material-runner",
  "cotest-test-support",
@@ -2816,6 +2817,16 @@ dependencies = [
  "unicode-normalization",
  "url",
  "zeroize",
+]
+
+[[package]]
+name = "cotest-cursor-negative-runner"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "arkret-canonical",
+ "arkret-hlc",
+ "serde_json",
 ]
 
 [[package]]

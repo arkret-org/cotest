@@ -26,6 +26,7 @@ mod canonical_cross_lang;
 mod canonical_fixture;
 mod capability;
 mod coauth_lifecycle;
+mod cursor_negative;
 mod cursor_vectors;
 mod decision_0017_vectors;
 mod device_pairing_code_claim;
@@ -81,10 +82,10 @@ mod recovery_completion_grant;
 pub mod recovery_transaction_faults;
 mod redaction;
 mod scaffold_gate;
-mod sdk_precheck;
 mod scalability_limits;
 mod schema_validation;
 mod schema_validation_fixture;
+mod sdk_precheck;
 mod security_negative;
 mod security_transaction_resilience;
 mod security_transaction_resilience_reference;
@@ -208,6 +209,7 @@ pub use capability::{
     run_capability_fixture_suite,
 };
 pub use coauth_lifecycle::run_coauth_account_lifecycle_fixture_suite;
+pub use cursor_negative::{CURSOR_NEGATIVE_ENTRYPOINT, run_cursor_negative_suite};
 pub use cursor_vectors::{
     ALL_CURSOR_VECTOR_IDS, run_cursor_handle_reject_vector, run_cursor_opaque_core_vector,
     run_cursor_vector_suite,
@@ -394,6 +396,7 @@ pub use schema_validation_fixture::{
     run_event_payload_value_closure_fixture, run_schema_definition_validator_kat,
     run_schema_validation_fixture_file, run_schema_validation_fixture_suite,
 };
+pub use sdk_precheck::{SDK_PRECHECK_ENTRYPOINT, run_sdk_precheck_suite};
 pub use security_negative::run_security_negative_profile_suite;
 pub use security_transaction_resilience::run_security_transaction_resilience_joint_gate;
 pub use session_grant_issuer_ledger::{
@@ -413,7 +416,6 @@ pub use sidecar_vectors::{
     run_sidecar_non_disclosure_surface_matrix_vector, run_sidecar_revoke_fail_closed_vector,
     run_sidecar_union_history_frontier_vector, run_sidecar_vector_suite,
 };
-pub use sdk_precheck::{SDK_PRECHECK_ENTRYPOINT, run_sdk_precheck_suite};
 pub use signal_federation::{
     VECTOR_ID_SIGNAL_DEVICE_AUTHORIZATION_DOMAIN, run_signal_device_authorization_domain_vector,
     run_signal_federation_fixture_suite,
