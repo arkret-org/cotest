@@ -183,9 +183,8 @@ pub use blind_payload::{
     run_blind_payload_sanitizer_suite, run_blind_payload_sanitizer_suite_counts,
 };
 pub use blob_stream_aead::{
-    ALL_BLOB_STREAM_AEAD_VECTOR_IDS, run_blob_stream_aead_fixture_suite,
-    run_stream_aead_reorder_rejected_vector, run_stream_aead_roundtrip_vector,
-    run_stream_aead_scheme_closure_vector, run_stream_aead_truncation_rejected_vector,
+    ALL_BLOB_STREAM_AEAD_VECTOR_IDS, BLOB_STREAM_AEAD_ENTRYPOINT,
+    run_blob_stream_aead_fixture_suite, run_blob_stream_aead_suite,
 };
 pub use call_signal::{
     ALL_CALL_SIGNAL_VECTOR_IDS, run_call_signal_vector_suite, run_plaintext_closed_schema_vector,

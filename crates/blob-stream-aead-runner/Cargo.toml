@@ -1,0 +1,18 @@
+[package]
+name = "cotest-blob-stream-aead-runner"
+version = "0.3.0"
+edition = "2024"
+rust-version = "1.98"
+publish = false
+
+[dependencies]
+anyhow = { workspace = true }
+arkret-crypto = { workspace = true, features = ["blob-aead"] }
+arkret-models-crypto = { workspace = true }
+arkret-schema = { workspace = true }
+arkret-schema-conformance = { workspace = true }
+arkret-wire = { workspace = true }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true
