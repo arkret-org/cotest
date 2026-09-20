@@ -45,6 +45,7 @@ mod federation;
 mod file_transfer_stream_aead;
 mod final_conformance_closure;
 mod fixture_dsl;
+mod franking_proof;
 mod handle_claim_rejection_vectors;
 mod helpers;
 mod identity_root;
@@ -263,6 +264,7 @@ pub use final_conformance_closure::{
     run_moderation_franking_roundtrip_vector,
     run_relation_reference_projection_indistinguishable_vector,
 };
+pub use franking_proof::{FRANKING_PROOF_ENTRYPOINT, run_franking_proof_suite};
 pub use handle_claim_rejection_vectors::{
     ALL_HANDLE_CLAIM_REJECTION_VECTOR_IDS, run_handle_claim_rejection_vector_suite,
     run_service_handle_rejected_vector, run_subject_not_principal_did_rejected_vector,

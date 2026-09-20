@@ -17,7 +17,7 @@ use cotest::conformance::{
     run_agent_signer_evidence_vector_suite, run_agent_vector_suite, run_call_signal_vector_suite,
     run_call_state_media_lifecycle_vector_suite, run_container_realm_control_payload_suite,
     run_cursor_negative_suite, run_cursor_vector_suite, run_detached_object_signature_suite,
-    run_digest_construction_known_answers, run_encoding_fixture_suite,
+    run_digest_construction_known_answers, run_encoding_fixture_suite, run_franking_proof_suite,
     run_handle_claim_rejection_vector_suite, run_keypackage_write_transcripts_suite,
     run_media_binding_vector_suite, run_member_identity_vector_suite,
     run_member_roster_vector_suite, run_mention_rendering_vector_suite, run_named_suite_audit,
@@ -91,6 +91,14 @@ fn protocol_version_named_suite_executes_all_current_cases() -> Result<()> {
 fn detached_object_signature_named_suite_executes_all_current_cases() -> Result<()> {
     let execution = run_detached_object_signature_suite()?;
     assert_eq!(execution.cases.len(), 6);
+    Ok(())
+}
+
+#[test]
+fn franking_proof_named_suite_executes_all_bound_fields() -> Result<()> {
+    let execution = run_franking_proof_suite()?;
+    assert_eq!(execution.cases.len(), 7);
+    assert!(execution.cases.iter().all(|case| case.assertions > 0));
     Ok(())
 }
 
