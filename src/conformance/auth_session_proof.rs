@@ -12,8 +12,11 @@ use arkret_models_identity::{
     CanonicalSessionPublicJwk, STANDARD_INITIAL_SESSION_GRANT_OPERATIONS,
 };
 use arkret_signatures::http_signature::{
-    Component, ContentDigest, ContentDigestAlgorithm, SignatureInput, SignatureVerificationPolicy,
-    SignedRequestParts, canonical_message, sign_message, verify_signed_http_message,
+    Component, ContentDigest, ContentDigestAlgorithm, HTTP_SIGNATURE_COMMON_COVERED_COMPONENTS,
+    HTTP_SIGNATURE_CREATED_SKEW_SECONDS, HTTP_SIGNATURE_FRESHNESS_PROFILE_ID,
+    HTTP_SIGNATURE_MAX_LIFETIME_SECONDS, HttpSignatureScenario, SignatureInput,
+    SignatureVerificationPolicy, SignedRequestParts, canonical_message,
+    http_signature_scenario_components, sign_message, verify_signed_http_message,
 };
 use arkret_wire::{AccountId, ProfileId, ProofContextId};
 use chrono::{DateTime, Duration, Utc};
@@ -29,11 +32,14 @@ pub const VECTOR_ID_AUTH_SESSION_GRANT_AUDIENCE_BINDING: &str =
 pub const VECTOR_ID_SESSION_POP_PRESENTATION: &str = "ak.vector.session.pop_presentation.v1";
 pub const VECTOR_ID_SESSION_BARE_BEARER_REJECTED_PROTECTED: &str =
     "ak.vector.session.bare_bearer_rejected_protected.v1";
+pub const VECTOR_ID_HTTP_SIGNATURE_FRESHNESS_BOUNDARIES: &str =
+    "ak.vector.service.http_signature_freshness_window_boundaries.v1";
 
 pub const ALL_AUTH_SESSION_PROOF_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_AUTH_SESSION_GRANT_AUDIENCE_BINDING,
     VECTOR_ID_SESSION_POP_PRESENTATION,
     VECTOR_ID_SESSION_BARE_BEARER_REJECTED_PROTECTED,
+    VECTOR_ID_HTTP_SIGNATURE_FRESHNESS_BOUNDARIES,
 ];
 
 const AUTH_SESSION_PROOF_FIXTURE_FILE: &str = "auth-session-proof-fixture.json";
@@ -41,8 +47,7 @@ const SESSION_GRANT_REQUEST_SCHEMA: &str =
     "schemas/service-operation-dtos.schema.json#/$defs/SessionGrantRequestBody";
 const SESSION_GRANT_OUTCOME_SCHEMA: &str =
     "schemas/service-operation-dtos.schema.json#/$defs/SessionGrantOutcome";
-const MAX_HTTP_SIGNATURE_WINDOW_SECONDS: i64 = 300;
-const HTTP_SIGNATURE_SKEW_SECONDS: i64 = 30;
+const SELF_EVENTS_SUBMIT_OPERATION: &str = "ak.self.events.command.submit.v1";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -313,29 +318,33 @@ fn sign_self_request(request: SelfRequestSigning<'_>) -> Result<SignedRequest> {
         created,
         expires,
     } = request;
-    let mut covered = vec![
-        Component::Method,
-        Component::TargetUri,
-        Component::Authority,
-    ];
-    let mut names = vec!["\"@method\"", "\"@target-uri\"", "\"@authority\""];
-    let mut headers: Vec<(String, String)> = Vec::new();
-    let mut signed_headers: Vec<(String, String)> = Vec::new();
+    let mut applicable_components = Vec::new();
+    let mut headers = vec![(
+        "arkret-operation".to_owned(),
+        SELF_EVENTS_SUBMIT_OPERATION.to_owned(),
+    )];
+    let mut signed_headers = headers.clone();
     let digest = if body.is_empty() {
         None
     } else {
         let digest = ContentDigest::compute(body, ContentDigestAlgorithm::Sha256);
-        covered.push(Component::Header("content-digest".to_owned()));
-        names.push("\"content-digest\"");
+        applicable_components.push("content-digest");
         headers.push(("content-digest".to_owned(), digest.wire_value.clone()));
         Some(digest.wire_value)
     };
     if let Some(idempotency_key) = idempotency_key {
-        covered.push(Component::Header("idempotency-key".to_owned()));
-        names.push("\"idempotency-key\"");
+        applicable_components.push("idempotency-key");
         headers.push(("idempotency-key".to_owned(), idempotency_key.to_owned()));
         signed_headers.push(("idempotency-key".to_owned(), idempotency_key.to_owned()));
     }
+    let covered = http_signature_scenario_components(
+        HttpSignatureScenario::ClientSessionPopV1,
+        &applicable_components,
+    )?;
+    let names = covered
+        .iter()
+        .map(|component| format!("\"{}\"", component.canonical_name()))
+        .collect::<Vec<_>>();
 
     let params_value = format!(
         "({});created={created};expires={expires};keyid=\"{key_id}\";alg=\"ed25519\"",
@@ -378,17 +387,22 @@ fn verify_self_pop(
     expected_key_id: &str,
     now: i64,
 ) -> std::result::Result<(), &'static str> {
-    let policy = if request.body.is_empty() {
-        SignatureVerificationPolicy::new(vec![
-            Component::Method,
-            Component::TargetUri,
-            Component::Authority,
-        ])
-        .require_content_digest(false)
-    } else {
-        SignatureVerificationPolicy::service_ingest().require_content_digest(true)
+    let mut applicable_components = Vec::new();
+    if !request.body.is_empty() {
+        applicable_components.push("content-digest");
     }
-    .max_clock_skew_seconds(HTTP_SIGNATURE_SKEW_SECONDS);
+    if request
+        .headers
+        .iter()
+        .any(|(name, _)| name.eq_ignore_ascii_case("idempotency-key"))
+    {
+        applicable_components.push("idempotency-key");
+    }
+    let policy = SignatureVerificationPolicy::for_scenario(
+        HttpSignatureScenario::ClientSessionPopV1,
+        &applicable_components,
+    )
+    .map_err(|_| arkret_wire::ErrorCode::UNAUTHENTICATED)?;
 
     let verified = verify_signed_http_message(
         &request.method,
@@ -406,11 +420,6 @@ fn verify_self_pop(
     )
     .map_err(|_| arkret_wire::ErrorCode::UNAUTHENTICATED)?;
     if verified.signature_input.key_id != expected_key_id {
-        return Err(arkret_wire::ErrorCode::UNAUTHENTICATED);
-    }
-    if verified.signature_input.expires - verified.signature_input.created
-        > MAX_HTTP_SIGNATURE_WINDOW_SECONDS
-    {
         return Err(arkret_wire::ErrorCode::UNAUTHENTICATED);
     }
     Ok(())
@@ -678,11 +687,77 @@ pub fn run_session_bare_bearer_rejected_protected_vector() -> Result<()> {
     Ok(())
 }
 
+fn run_http_signature_boundary_rows(vector: &Value, field: &str) -> Result<()> {
+    let rows = vector
+        .get(field)
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("HTTP signature freshness case missing {field}"))?;
+    if rows.len() != 10 {
+        bail!("HTTP signature freshness {field} must contain exactly 10 rows");
+    }
+    let policy =
+        SignatureVerificationPolicy::for_scenario(HttpSignatureScenario::ClientSessionPopV1, &[])?;
+    for row in rows {
+        let created = required_i64(row, "created")?;
+        let expires = required_i64(row, "expires")?;
+        let now = row
+            .get("now")
+            .and_then(Value::as_i64)
+            .unwrap_or(required_i64(vector, "now")?);
+        let input = SignatureInput {
+            label: "sig1".to_owned(),
+            covered_components: HTTP_SIGNATURE_COMMON_COVERED_COMPONENTS
+                .iter()
+                .map(|component| Component::parse(component))
+                .collect(),
+            created,
+            expires,
+            key_id: "did:web:fixture.example#key-1".to_owned(),
+            algorithm: "ed25519".to_owned(),
+            params_value: String::new(),
+        };
+        let accepted = policy.validate(&input, None, now).is_ok();
+        let expected = expected_str(row, "expected")? == "accepted";
+        if accepted != expected {
+            bail!(
+                "HTTP signature freshness row {} observed accepted={accepted}, expected {expected}",
+                required_str(row, "name")?
+            );
+        }
+    }
+    Ok(())
+}
+
+pub fn run_http_signature_freshness_boundaries_vector() -> Result<()> {
+    let fixture = auth_session_proof_fixture()?;
+    let vector = case(&fixture, VECTOR_ID_HTTP_SIGNATURE_FRESHNESS_BOUNDARIES)?;
+    if required_str(vector, "freshness_profile_id")? != HTTP_SIGNATURE_FRESHNESS_PROFILE_ID
+        || required_i64(vector, "max_signature_lifetime_seconds")?
+            != HTTP_SIGNATURE_MAX_LIFETIME_SECONDS
+        || required_i64(vector, "created_skew_seconds")? != HTTP_SIGNATURE_CREATED_SKEW_SECONDS
+    {
+        bail!("HTTP signature fixture drifted from generated SDK freshness constants");
+    }
+    let resolved_by = required_string_array(vector, "resolved_by_operations")?;
+    for operation in [
+        "ak.edge.applet.command.transaction.v1",
+        "ak.peer.keys.read.lookup.v1",
+        "ak.peer.signal.command.relay.v1",
+    ] {
+        if !resolved_by.iter().any(|candidate| candidate == operation) {
+            bail!("HTTP signature fixture does not resolve {operation}");
+        }
+    }
+    run_http_signature_boundary_rows(vector, "boundaries")?;
+    run_http_signature_boundary_rows(vector, "removed_tightening_boundaries")?;
+    Ok(())
+}
+
 pub fn run_auth_session_proof_fixture_suite() -> Result<()> {
     validate_auth_session_proof_fixture_metadata(&auth_session_proof_fixture()?)?;
-    if ALL_AUTH_SESSION_PROOF_VECTOR_IDS.len() != 3 {
+    if ALL_AUTH_SESSION_PROOF_VECTOR_IDS.len() != 4 {
         bail!(
-            "expected 3 auth session proof vector ids, got {}",
+            "expected 4 auth session proof vector ids, got {}",
             ALL_AUTH_SESSION_PROOF_VECTOR_IDS.len()
         );
     }
@@ -691,6 +766,7 @@ pub fn run_auth_session_proof_fixture_suite() -> Result<()> {
     validate_closed_human_session_shapes()?;
     run_session_pop_presentation_vector()?;
     run_session_bare_bearer_rejected_protected_vector()?;
+    run_http_signature_freshness_boundaries_vector()?;
     Ok(())
 }
 

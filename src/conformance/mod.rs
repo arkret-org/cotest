@@ -157,8 +157,8 @@ pub use audit_release::{
 };
 pub use auth_session_proof::{
     ALL_AUTH_SESSION_PROOF_VECTOR_IDS, run_auth_session_grant_audience_binding_vector,
-    run_auth_session_proof_fixture_suite, run_session_bare_bearer_rejected_protected_vector,
-    run_session_pop_presentation_vector,
+    run_auth_session_proof_fixture_suite, run_http_signature_freshness_boundaries_vector,
+    run_session_bare_bearer_rejected_protected_vector, run_session_pop_presentation_vector,
 };
 pub use authority_commit::{
     VECTOR_ID_AUTHORITY_COMMIT_INDEPENDENT_STREAMS, run_authority_commit_suite,

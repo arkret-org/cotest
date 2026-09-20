@@ -10,14 +10,14 @@
 //! wrong key) that MUST be rejected.
 
 use arkret_signatures::http_signature::{
-    Component, ContentDigest, ContentDigestAlgorithm, SignatureInput, SignatureVerificationPolicy,
-    SignedRequestParts, canonical_message, public_key_from_bytes, sign_message,
+    ContentDigest, ContentDigestAlgorithm, HttpSignatureScenario, SignatureInput,
+    SignatureVerificationPolicy, SignedRequestParts, canonical_message,
+    http_signature_scenario_components, public_key_from_bytes, sign_message,
     verify_signed_http_message,
 };
 use ed25519_dalek::{SigningKey, VerifyingKey};
 
-const MAX_WINDOW_SECONDS: i64 = 300;
-const SKEW_SECONDS: i64 = 30;
+const OPERATION_ID: &str = "ak.self.events.command.submit.v1";
 
 struct SignedRequest {
     method: String,
@@ -38,22 +38,25 @@ fn sign_self_request(
     created: i64,
     expires: i64,
 ) -> SignedRequest {
-    let mut covered = vec![
-        Component::Method,
-        Component::TargetUri,
-        Component::Authority,
-    ];
-    let mut names = vec!["\"@method\"", "\"@target-uri\"", "\"@authority\""];
-    let mut headers: Vec<(String, String)> = Vec::new();
+    let mut applicable_components = Vec::new();
+    let mut headers = vec![("arkret-operation".to_owned(), OPERATION_ID.to_owned())];
     let digest = if body.is_empty() {
         None
     } else {
         let digest = ContentDigest::compute(body, ContentDigestAlgorithm::Sha256);
-        covered.push(Component::Header("content-digest".to_owned()));
-        names.push("\"content-digest\"");
+        applicable_components.push("content-digest");
         headers.push(("content-digest".to_owned(), digest.wire_value.clone()));
         Some(digest.wire_value)
     };
+    let covered = http_signature_scenario_components(
+        HttpSignatureScenario::ClientSessionPopV1,
+        &applicable_components,
+    )
+    .expect("client session PoP scenario is generated");
+    let names = covered
+        .iter()
+        .map(|component| format!("\"{}\"", component.canonical_name()))
+        .collect::<Vec<_>>();
     let params_value = format!(
         "({});created={created};expires={expires};keyid=\"{key_id}\";alg=\"ed25519\"",
         names.join(" ")
@@ -72,7 +75,7 @@ fn sign_self_request(
         target_uri: URI.to_owned(),
         authority: AUTHORITY.to_owned(),
         path: PATH.to_owned(),
-        headers: Vec::new(),
+        headers: vec![("arkret-operation".to_owned(), OPERATION_ID.to_owned())],
         body_digest: digest,
     };
     let canonical = canonical_message(&parts, &signature_input).expect("canonical");
@@ -90,22 +93,20 @@ fn sign_self_request(
 }
 
 /// The verification soland's `session_pop` hoop performs: SDK verify (covered
-/// components + content-digest + created/expires sanity) plus the 300s window
-/// upper bound.
+/// components + content-digest + the registry-generated freshness window).
 fn verify_self_pop(req: &SignedRequest, public_key: &VerifyingKey, now: i64) -> Result<(), String> {
-    let policy = if req.body.is_empty() {
-        SignatureVerificationPolicy::new(vec![
-            Component::Method,
-            Component::TargetUri,
-            Component::Authority,
-        ])
-        .require_content_digest(false)
+    let applicable_components = if req.body.is_empty() {
+        Vec::new()
     } else {
-        SignatureVerificationPolicy::service_ingest().require_content_digest(true)
-    }
-    .max_clock_skew_seconds(SKEW_SECONDS);
+        vec!["content-digest"]
+    };
+    let policy = SignatureVerificationPolicy::for_scenario(
+        HttpSignatureScenario::ClientSessionPopV1,
+        &applicable_components,
+    )
+    .map_err(|error| format!("policy: {error}"))?;
 
-    let verified = verify_signed_http_message(
+    verify_signed_http_message(
         &req.method,
         &req.target_uri,
         &req.authority,
@@ -117,9 +118,6 @@ fn verify_self_pop(req: &SignedRequest, public_key: &VerifyingKey, now: i64) -> 
         now,
     )
     .map_err(|error| format!("verify: {error}"))?;
-    if verified.signature_input.expires - verified.signature_input.created > MAX_WINDOW_SECONDS {
-        return Err("window exceeds 300s".to_owned());
-    }
     Ok(())
 }
 
