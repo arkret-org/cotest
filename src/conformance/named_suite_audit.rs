@@ -12,8 +12,9 @@ use anyhow::{Result, anyhow, ensure};
 use serde_json::Value;
 
 use super::{
-    KEYPACKAGE_WRITE_TRANSCRIPTS_ENTRYPOINT, PROTOCOL_TIME_TOLERANCE_ENTRYPOINT,
-    SuiteExecutionResult, run_account_status_issuer_ledger_vector,
+    ACCOUNT_BLOCKLIST_PROJECTION_ENTRYPOINT, KEYPACKAGE_WRITE_TRANSCRIPTS_ENTRYPOINT,
+    PROTOCOL_TIME_TOLERANCE_ENTRYPOINT, SuiteExecutionResult,
+    run_account_blocklist_projection_vector, run_account_status_issuer_ledger_vector,
     run_agent_membership_cascade_suite, run_applet_registration_epoch_kat_suite,
     run_authority_commit_suite, run_encoding_fixture_suite, run_event_envelope_fixture_suite,
     run_fanout_route_miss_suite, run_file_transfer_stream_aead_fixture_suite,
@@ -29,8 +30,7 @@ const ACCOUNT_STATUS_ENTRYPOINT: &str = "ak.suite.account_status.issuer_ledger.v
 /// Exact acknowledged gap ledger. This is deliberately closed: adding or
 /// renaming a canonical named suite cannot remain invisible merely because the
 /// total number of unwired suites happened to stay constant.
-const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 50] = [
-    "ak.suite.account.blocklist_projection.v1",
+const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 51] = [
     "ak.suite.account_data.cas_convergence.v1",
     "ak.suite.account_data.private_view_inbox_binding.v1",
     "ak.suite.agent.draft_pending_intent.v1",
@@ -51,8 +51,9 @@ const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 50] = [
     "ak.suite.crypto.hpke.v1",
     "ak.suite.crypto.key_backup_hardening.v1",
     "ak.suite.crypto.keypackage_lifecycle.v1",
-    "ak.suite.device_pairing.split_admission_saga.v1",
+    "ak.suite.detached_object_signature_transcripts.v1",
     "ak.suite.direct_conversation.admission_producers.v1",
+    "ak.suite.direct_conversation.signal_admission.v1",
     "ak.suite.encoding.content_bound_event_id.v1",
     "ak.suite.encoding.cursor_negative.v1",
     "ak.suite.encoding.string_profiles.v1",
@@ -73,6 +74,7 @@ const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 50] = [
     "ak.suite.privacy.security.v1",
     "ak.suite.protocol.edge_cases.v1",
     "ak.suite.push.rule_core.v1",
+    "ak.suite.realm_join_candidate.untrusted_locator.v1",
     "ak.suite.scope.circle.v1",
     "ak.suite.sdk.event_type_axes.v1",
     "ak.suite.sdk.precheck.v1",
@@ -87,7 +89,11 @@ enum Runner {
     EvidenceMapped(fn() -> Result<()>),
 }
 
-const RUNNERS: [(&str, Runner); 18] = [
+const RUNNERS: [(&str, Runner); 19] = [
+    (
+        ACCOUNT_BLOCKLIST_PROJECTION_ENTRYPOINT,
+        Runner::EvidenceMapped(run_account_blocklist_projection_vector),
+    ),
     (
         "ak.suite.agent.membership_cascade.v1",
         Runner::EvidenceMapped(run_agent_membership_cascade_suite),

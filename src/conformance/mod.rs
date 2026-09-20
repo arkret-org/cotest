@@ -1,3 +1,4 @@
+mod account_blocklist_projection;
 mod account_status_issuer_ledger;
 mod agent_draft_pending_intent_account_subscribe;
 mod agent_membership_cascade;
@@ -115,6 +116,10 @@ const ARTIFACT_FIXTURES_DIR: &str = "fixtures";
 
 // ── Public suite re-exports ─────────────────────────────────────────────────
 
+pub use account_blocklist_projection::{
+    ACCOUNT_BLOCKLIST_PROJECTION_ENTRYPOINT, VECTOR_ID_ACCOUNT_BLOCKLIST_PROJECTION,
+    run_account_blocklist_projection_vector,
+};
 pub use account_status_issuer_ledger::{
     VECTOR_ID_ACCOUNT_STATUS_ISSUER_LEDGER, run_account_status_issuer_ledger_vector,
 };

@@ -55,18 +55,19 @@ fn registered_canonical_json_digest_constructions_match_known_answers() -> Resul
 #[test]
 fn named_suite_audit_executes_registered_runners_and_exposes_every_gap() -> Result<()> {
     let report = run_named_suite_audit()?;
-    assert_eq!(report.fixture_count, 68);
-    assert_eq!(report.executed_entrypoints.len(), 18);
-    assert_eq!(report.unwired_entrypoints.len(), 50);
+    assert_eq!(report.fixture_count, 70);
+    assert_eq!(report.executed_entrypoints.len(), 19);
+    assert_eq!(report.unwired_entrypoints.len(), 51);
     for required_gap in [
-        "ak.suite.account.blocklist_projection.v1",
         "ak.suite.consent.cache_invalidation.v1",
-        "ak.suite.device_pairing.split_admission_saga.v1",
+        "ak.suite.detached_object_signature_transcripts.v1",
         "ak.suite.direct_conversation.admission_producers.v1",
+        "ak.suite.direct_conversation.signal_admission.v1",
         "ak.suite.federation.idempotency_after_key_revoke.v1",
         "ak.suite.identity_link.invalidation.v1",
         "ak.suite.invite.claim_security.v1",
         "ak.suite.peer.event_submit.semantic_union.v1",
+        "ak.suite.realm_join_candidate.untrusted_locator.v1",
         "ak.suite.identity.test_material_rejection.v1",
         "ak.suite.sdk.precheck.v1",
         "ak.suite.signer_key.historical_commit_coordinate.v1",
@@ -80,6 +81,16 @@ fn named_suite_audit_executes_registered_runners_and_exposes_every_gap() -> Resu
         );
     }
     Ok(())
+}
+
+#[test]
+fn account_blocklist_projection_vector_runs_clean() {
+    assert_eq!(
+        cotest::conformance::VECTOR_ID_ACCOUNT_BLOCKLIST_PROJECTION,
+        "ak.vector.account.blocklist_projection.v1"
+    );
+    cotest::conformance::run_account_blocklist_projection_vector()
+        .expect("account blocklist projection vector must pass");
 }
 
 #[test]
