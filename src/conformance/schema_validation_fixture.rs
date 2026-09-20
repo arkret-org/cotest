@@ -503,45 +503,92 @@ fn run_semantic_cases(file_name: &str, cases: &[SchemaValidationCase]) -> Result
     if file_name != SDK_CONFORMANCE_CLAIM_FIXTURE {
         return Ok(());
     }
+    let artifacts = spec_artifacts_root();
+    let profiles: Value = serde_json::from_slice(
+        &fs::read(artifacts.join("profiles/conformance-profiles.json"))
+            .context("read SDK conformance profile contract")?,
+    )
+    .context("parse SDK conformance profile contract")?;
+    let registry: Value = serde_json::from_slice(
+        &fs::read(artifacts.join("registry/vector-registry.json"))
+            .context("read vector registry")?,
+    )
+    .context("parse vector registry")?;
+    let active_vectors = registry["vectors"]
+        .as_array()
+        .ok_or_else(|| anyhow!("vector registry missing vectors[]"))?
+        .iter()
+        .filter(|row| row["status"] == "active")
+        .map(|row| {
+            row["vector_id"]
+                .as_str()
+                .ok_or_else(|| anyhow!("active vector row missing vector_id"))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let contract = arkret_schema::sdk_conformance::SdkConformanceContract::from_value(
+        &profiles["sdk_conformance_contract"],
+        active_vectors,
+    )
+    .context("parse canonical SDK conformance contract")?;
+
     for case in cases {
-        let claims = case
-            .instance
-            .get("clause_claims")
-            .and_then(Value::as_array)
-            .ok_or_else(|| anyhow!("{} missing clause_claims[]", case.name))?;
-        let mut clause_ids = std::collections::BTreeSet::new();
-        let duplicate = claims.iter().any(|claim| {
-            claim
-                .get("clause_id")
-                .and_then(Value::as_str)
-                .is_some_and(|clause_id| !clause_ids.insert(clause_id))
-        });
-        // Accept-class outcomes. `accept_after_digest_revision_and_signature_verification`
-        // is the signed, artifact-bound accept: its non-zero digest / spec_revision
-        // and proof-signature preconditions are enforced at the schema layer (the
-        // `expect_valid` pass in `run_cases`), so at the semantic layer it shares the
-        // plain `accept` invariant — no duplicate clause claim.
-        match case.semantic_outcome.as_deref() {
-            Some(
-                outcome @ ("accept" | "accept_after_digest_revision_and_signature_verification"),
-            ) if duplicate => {
-                bail!(
-                    "{} ({outcome}) unexpectedly contains a duplicate clause claim",
-                    case.name
+        // Schema-negative cases have already been executed by `run_cases` and
+        // intentionally cannot be decoded into the typed production model.
+        if !case.expect_valid {
+            continue;
+        }
+        let claim: arkret_schema::sdk_conformance::SdkConformanceClaim =
+            serde_json::from_value(case.instance.clone())
+                .with_context(|| format!("decode typed SDK claim case {}", case.name))?;
+        let result = claim.validate_against_contract(
+            &contract,
+            &claim.sdk_artifact.digest,
+            &claim.spec_revision,
+            |_, proof, signing_bytes| {
+                let Some(multibase) = proof
+                    .kid
+                    .split('#')
+                    .next()
+                    .and_then(|did| did.strip_prefix("did:key:"))
+                else {
+                    return false;
+                };
+                arkret_signatures::verify_detached_ed25519_signature(
+                    &arkret_signatures::PublicKeyMaterial::Ed25519Multibase {
+                        value: multibase.to_owned(),
+                    },
+                    signing_bytes,
+                    &proof.signature,
                 )
-            }
-            Some("reject") => {
-                if case.expected_reason_code.as_deref() == Some("duplicate_clause_claim")
-                    && !duplicate
-                {
-                    bail!(
-                        "{} expected duplicate_clause_claim but had no duplicate",
-                        case.name
-                    );
-                }
-            }
-            Some("accept" | "accept_after_digest_revision_and_signature_verification") | None => {}
-            Some(outcome) => bail!("{} has unknown semantic_outcome {outcome}", case.name),
+            },
+        );
+        match case.semantic_outcome.as_deref() {
+            Some("accept_after_digest_revision_and_signature_verification") if result.is_ok() => {}
+            Some("reject")
+                if case.expected_reason_code.as_deref() == Some("signature_invalid")
+                    && matches!(
+                        result,
+                        Err(
+                            arkret_schema::sdk_conformance::SdkConformanceClaimError::SignatureInvalid
+                        )
+                    ) => {}
+            Some("reject_contract_binding")
+                if case.expected_reason_code.as_deref()
+                    == Some("governance_binding_mismatch")
+                    && matches!(
+                        result,
+                        Err(
+                            arkret_schema::sdk_conformance::SdkConformanceClaimError::BindingMismatch(
+                                _
+                            )
+                        )
+                    ) => {}
+            expected => bail!(
+                "{} semantic outcome drifted: expected {:?}/{:?}, observed {result:?}",
+                case.name,
+                expected,
+                case.expected_reason_code
+            ),
         }
     }
     Ok(())
