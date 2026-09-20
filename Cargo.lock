@@ -2780,6 +2780,7 @@ dependencies = [
  "chacha20poly1305 0.11.0",
  "chrono",
  "cotest-cursor-negative-runner",
+ "cotest-protocol-version-runner",
  "cotest-sdk-precheck-runner",
  "cotest-string-profile-runner",
  "cotest-test-material-runner",
@@ -2839,6 +2840,17 @@ dependencies = [
  "arkret-models-identity",
  "arkret-wire",
  "soland-services",
+]
+
+[[package]]
+name = "cotest-protocol-version-runner"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "arkret-models-discovery",
+ "arkret-models-integration",
+ "arkret-wire",
+ "serde_json",
 ]
 
 [[package]]

@@ -75,6 +75,7 @@ mod profile_registry;
 mod proof_context_domain_separation;
 mod protocol_gap_closure;
 mod protocol_time_tolerance;
+mod protocol_version;
 mod push_route_revision;
 mod push_rule_core;
 mod read_receipt_signal;
@@ -376,6 +377,7 @@ pub use protocol_gap_closure::run_protocol_gap_closure_fixture_suite;
 pub use protocol_time_tolerance::{
     PROTOCOL_TIME_TOLERANCE_ENTRYPOINT, run_protocol_time_tolerance_suite,
 };
+pub use protocol_version::{PROTOCOL_VERSION_ENTRYPOINT, run_protocol_version_suite};
 pub use push_route_revision::run_push_route_revision_suite;
 pub use push_rule_core::{run_push_rule_client_only_vector, run_push_rule_core_fixture_suite};
 pub use read_receipt_signal::{
