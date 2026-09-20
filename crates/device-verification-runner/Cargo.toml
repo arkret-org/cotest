@@ -1,0 +1,16 @@
+[package]
+name = "cotest-device-verification-runner"
+version = "0.3.0"
+edition = "2024"
+rust-version = "1.98"
+publish = false
+
+[dependencies]
+anyhow = { workspace = true }
+arkret-canonical = { workspace = true }
+arkret-models-identity = { workspace = true }
+arkret-wire = { workspace = true }
+soland-services = { workspace = true }
+
+[lints]
+workspace = true

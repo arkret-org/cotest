@@ -30,7 +30,11 @@ resolver = "3"
 # workspace with `cargo metadata` and fails when the light edge can reach
 # Inkson, Dioxus, a `soland-*` crate or the root package, by a normal, build or
 # (from the light edge itself) dev edge.
-members = ["crates/test-support", "crates/test-material-runner"]
+members = [
+    "crates/device-verification-runner",
+    "crates/test-support",
+    "crates/test-material-runner",
+]
 
 [workspace.lints.rust]
 unsafe_code = "deny"

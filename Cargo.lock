@@ -2818,6 +2818,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "cotest-device-verification-runner"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "arkret-canonical",
+ "arkret-models-identity",
+ "arkret-wire",
+ "soland-services",
+]
+
+[[package]]
 name = "cotest-test-material-runner"
 version = "0.3.0"
 dependencies = [
