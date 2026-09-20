@@ -2846,14 +2846,15 @@ dependencies = [
  "anyhow",
  "arkret",
  "arkret-canonical",
+ "arkret-event-draft",
  "arkret-identifiers",
  "arkret-models-collaboration",
- "arkret-state",
  "arkret-wire",
  "chrono",
  "ed25519-dalek 3.0.0",
  "serde",
  "serde_json",
+ "soland-domain",
 ]
 
 [[package]]
