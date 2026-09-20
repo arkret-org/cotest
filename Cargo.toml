@@ -32,6 +32,7 @@ resolver = "3"
 # (from the light edge itself) dev edge.
 members = [
     "crates/device-verification-runner",
+    "crates/sdk-precheck-runner",
     "crates/test-support",
     "crates/test-material-runner",
 ]
@@ -48,6 +49,7 @@ unimplemented = "deny"
 [workspace.dependencies]
 aes-gcm = "0.11.1"
 cotest-test-support = { path = "crates/test-support" }
+cotest-sdk-precheck-runner = { path = "crates/sdk-precheck-runner" }
 cotest-test-material-runner = { path = "crates/test-material-runner" }
 anyhow = "1.0.104"
 arbitrary = "1.4"
@@ -135,6 +137,7 @@ test-with-containers = ["dep:testcontainers"]
 # this harness and the TypeScript suite consume it, and it must stay buildable
 # without Inkson.
 cotest-test-support = { workspace = true }
+cotest-sdk-precheck-runner = { workspace = true }
 # CT-19 — `arbitrary` powers the wire-envelope fuzz harness in
 # `cotest/src/fuzz/`. Lives in `[dependencies]` rather than
 # `[dev-dependencies]` so the harness types (FuzzEventInput / FuzzSignalInput /

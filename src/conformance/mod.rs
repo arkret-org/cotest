@@ -81,6 +81,7 @@ mod recovery_completion_grant;
 pub mod recovery_transaction_faults;
 mod redaction;
 mod scaffold_gate;
+mod sdk_precheck;
 mod scalability_limits;
 mod schema_validation;
 mod schema_validation_fixture;
@@ -412,6 +413,7 @@ pub use sidecar_vectors::{
     run_sidecar_non_disclosure_surface_matrix_vector, run_sidecar_revoke_fail_closed_vector,
     run_sidecar_union_history_frontier_vector, run_sidecar_vector_suite,
 };
+pub use sdk_precheck::{SDK_PRECHECK_ENTRYPOINT, run_sdk_precheck_suite};
 pub use signal_federation::{
     VECTOR_ID_SIGNAL_DEVICE_AUTHORIZATION_DOMAIN, run_signal_device_authorization_domain_vector,
     run_signal_federation_fixture_suite,
