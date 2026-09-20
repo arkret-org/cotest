@@ -1,4 +1,4 @@
-# 组织治理:已验证关系 vs 声明 + moderation policy 继承
+# 组织治理：已验证关系与显式 target-scoped moderation deny
 
 ## 目标
 
@@ -6,10 +6,10 @@ cotest 是“**声明的 owning organization != 已验证的组织治理关系**
 
 协议治理语义的唯一真相源是 **`ak.realm.organization` 关系声明(`RealmOrganizationPayload`)**:
 
-- `realm.create.object.owning_organization_ids[]` 只是 Realm 单方面**声明**的归属,**不**授予任何继承、official badge 或 governance policy。
-- 只有 organization 侧签发的、**active** 且通过验证(proof / delegation / 有效期窗口 / scope 覆盖)的 `ak.realm.organization` 关系声明,才建立可继承的治理关系。
-- `relationship` ∈ {`owner`, `governance`, `sponsor`, `directory_certifier`};只有 `owner` / `governance` 关系并且 `control_scopes` 覆盖 `moderation_policy` 时,才继承 organization moderation policy。`sponsor` 是赞助/背书关系,**不**承载 owner / governance 控制。
-- `revoked` 状态(或过期 / not-before 未到 / scope 不覆盖)的声明**立即失效**,继承关系随之消失。
+- `realm.create.object.owning_organization_ids[]` 只是 Realm 单方面**声明**的归属,**不**授予任何 authority、official badge 或 governance policy。
+- organization 侧签发、active 且通过验证的 `ak.realm.organization` 只建立已验证关系；它本身不传播 policy 或 capability。
+- Organization moderation 是独立 `ak.organization.moderation_policy` deny 层，document scope 必须显式覆盖目标 Realm／service，且目标 Realm 的 active relationship 必须背书该适用性。
+- `revoked`、过期、not-before 未到或 scope 不覆盖的关系不生效；但失效语义不是删除一条继承链，因为 current-v1 没有 Realm automatic inheritance。
 
 cotest **不再**用 `_soland/self/organizations`(本地部署面,非标准协议面)判断协议治理语义;它至多是 directory/UI 的产品面镜像。
 
@@ -36,33 +36,33 @@ cotest **不再**用 `_soland/self/organizations`(本地部署面,非标准协�
 
 ## Cases(协议语义)
 
-### Case A — 仅 `owning_organization_ids` 声明,不继承
+### Case A — 仅 `owning_organization_ids` 声明，不产生已验证关系或 deny 层
 
 1. alice 创建 Realm,`owning_organization_ids: [acme-org.organization_id]`,但**不**写入任何 `ak.realm.organization` 声明。
-2. 断言:`GET .../effective-policy` 不含 acme-org 的 organization policy 层;
-   `inheritance_mode == none`;official badge **未**点亮。
-3. 含义:单方声明归属不等于已验证治理关系。soland 若回退到“`owning_organization_ids` 直接继承”旧行为,本 case 应当变红。
+2. 断言 organization relationship list 只把该 ID 放在 unverified hints；official badge **未**点亮，organization
+   moderation admission 也不应用 acme-org 的 rule。
+3. 含义：单方声明归属不等于已验证治理关系，更不能成为 policy carrier。
 
-### Case B — active verified 声明 + scope 覆盖才继承
+### Case B — active verified 声明 + 显式 target-scoped policy 才形成额外 deny 层
 
 4. acme-org 签发 active `ak.realm.organization`,`relationship=owner`、`status=active`、
    `control_scopes` 含 `moderation_policy`(及/或 `official_badge`),proof 合法、在有效期窗口内。
 5. alice(持 `ak.realm.admin`)把该声明写入 Realm history。
-6. 断言:`effective-policy` 出现 acme-org organization policy 层;mallory 命中 `deny_join`;
-   official badge 点亮(当 scope 含 `official_badge`)。
-7. **scope 不覆盖**变体:声明 `control_scopes` 仅含 `realm_admin`(不含 `moderation_policy`)→ 不继承 moderation policy;仅含 `realm_admin`(不含 `official_badge`)→ badge 不点亮。
+6. acme-org 另行签发 `ak.organization.moderation_policy`，其 closed document scope 显式覆盖该 Realm；断言 mallory
+   命中 `deny_join`，且当关系 scope 含 `official_badge` 时 badge 点亮。
+7. **scope 不覆盖**变体：关系不含 `moderation_policy`，或 organization policy document 没有显式覆盖目标 Realm →
+   不应用 deny；关系不含 `official_badge` → badge 不点亮。
 
-### Case C — revoke 后继承立即失效
+### Case C — revoke 后关系与依赖该关系的 deny 适用性失效
 
 8. acme-org 签发 `status=revoked` 的 `ak.realm.organization`(携带 `revokes_statement_id` 指向 Case B 的声明)。
-9. 断言:`effective-policy` 不再含 acme-org 层;mallory 的 join 不再被 organization policy 拒;official badge 熄灭。
+9. 断言 organization relationship 不再是 verified active；依赖该关系适用性的 organization deny 不再命中，official badge 熄灭。
 10. 过期 / not-before 未到的声明同样不生效(等价于 revoke 后的最终态)。
 
-### Case D — sponsor 关系不得当 owner / governance 继承
+### Case D — sponsor 关系不得当 owner / governance authority
 
 11. sponsor-org 仅签发 `relationship=sponsor` 的 active 声明。
-12. 断言:`effective-policy` 不把 sponsor-org 当作 owner / governance policy 来源;
-    sponsor 的任何 moderation 规则**不**被继承;official badge 不因 sponsor 关系点亮。
+12. 断言 sponsor-org 不成为 Realm authority；它的 policy 不因 relationship 自动传播，official badge 不因 sponsor 关系点亮。
 
 ## Verified organization badge(COT-ORG-04,directory / teabay)
 
@@ -83,11 +83,12 @@ cotest 还守护 directory / teabay 的 verified badge 与上面**同一**已验
 
 ## Implementation notes / blocking-on
 
-- 旧实现把 `owning_organization_ids[]` 的单方声明直接当继承链、把 `_soland/self/organizations` 当治理真相源;**这是被本 scenario 推翻的行为**。
+- 旧实现把 `owning_organization_ids[]` 的单方声明或 organization relationship 当自动 policy merge 链；这是已删除行为。
 - 新的协议语义依赖 soland 侧:
   - SOL-ORG-02:`ak.realm.organization` reducer + 验证(proof / delegation / 窗口 / scope / revoke)。
   - SOL-ORG-03:organization delegation 解析(供 governance_service / account_authority issuer 使用)。
-  - SOL-ORG-05:`effective-policy` 仅从 **active verified** 关系派生 organization 层,并暴露 official badge / inheritance_mode。
+  - SOL-ORG-05：admission 只在 active verified 关系与显式 target-scoped organization policy 同时成立时应用额外 deny；
+    不恢复已删除的 effective-policy operation、inheritance mode 或 merge DTO。
   - SOL-ORG-06 / TBY-ORG-*:directory verified badge 读同一关系语义。
   - COA-ORG-02/03/04:coauth organization bootstrap / delegation 签发面。
 - 在上述 soland / coauth / teabay 端点落地前,对应 e2e 以 `test.fixme` + `@blocking-on` 标注(见 `e2e/tests/governance/organization-policy.spec.ts`)。scenario 文档(本文件)与 `ak.realm.organization` 的 payload/向量回归(`tests/fixtures/event-kind-payload-coverage-fixture.json`、`tests/fixtures/realm_organization_statement_negative_vectors.json`、`tests/realm_organization_statement_negative.rs`)已经实做并由 SDK validator 消费。

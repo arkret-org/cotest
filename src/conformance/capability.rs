@@ -97,7 +97,6 @@ pub fn run_capability_fixture_suite() -> Result<()> {
             "relinquish_and_dependency_pending" => evaluate_relinquish_pending_fixture(fixture)?,
             "unified_authority_constraints" => evaluate_unified_authority_constraints(fixture)?,
             "authority_audit_materialization" => evaluate_authority_audit_fixture(fixture)?,
-            "derived_uses_issuer_authority_rules" => evaluate_derived_authority_fixture(fixture)?,
             "sensitive_field_handling" => evaluate_sensitive_field_handling_fixture(fixture)?,
             _ => {}
         }
@@ -1556,34 +1555,6 @@ fn evaluate_authority_audit_fixture(fixture: &CapabilityCase) -> Result<()> {
             != Some("dependency_pending")
     {
         bail!("authority audit materialization is not deterministic or complete");
-    }
-    Ok(())
-}
-
-fn evaluate_derived_authority_fixture(fixture: &CapabilityCase) -> Result<()> {
-    let descriptor = arkret_schema::capability_action("ak.capability.derived")
-        .ok_or_else(|| anyhow!("derived capability action descriptor missing"))?;
-    let active = fixture.get("source_refs_active").and_then(Value::as_bool) == Some(true)
-        && fixture
-            .get("realm_link_policy_allows")
-            .and_then(Value::as_bool)
-            == Some(true);
-    if fixture
-        .pointer("/expected/derived_grant_active")
-        .and_then(Value::as_bool)
-        != Some(active)
-        || fixture
-            .pointer("/expected/authority_rule")
-            .and_then(Value::as_str)
-            != Some("issuer_authority")
-        || fixture
-            .pointer("/expected/authorable_by_principal")
-            .and_then(Value::as_bool)
-            != Some(false)
-        || !descriptor.reducer_only
-        || arkret_policy::owner_may_grant("ak.capability.derived")?
-    {
-        bail!("derived capability escaped reducer-only issuer-authority semantics");
     }
     Ok(())
 }

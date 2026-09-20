@@ -1,6 +1,6 @@
 {
   "schema": "arkret.api-only-rust-migration.v1",
-  "expected_candidate_count": 29,
+  "expected_candidate_count": 30,
   "specialized_api_lanes": [
     "cotest/e2e/tests/extensions/platform-live.spec.ts",
     "cotest/e2e/tests/harness/mocks-selftest.spec.ts",
@@ -234,9 +234,21 @@
     {
       "source": "cotest/e2e/tests/spaces/knock-auto-resolve.spec.ts",
       "disposition": "duplicate_removed",
+      "coverage_status": "partial",
+      "remaining_gap": "The named Soland tests cover in-memory gate evaluation only. They do not close the current-v1 parent_membership production contract: active join_gate_from and same-current-Station authority-tenure checks, canonical durable locks, cross-Station/handoff fail-closed, and zero Event/RealmCommit/member_state writes still require a Cotest production runner.",
       "replacements": [
-        { "file": "soland/crates/server/tests/realm_join_policy.rs", "symbol": "any_combinator_accepts_parent_membership_gate_without_challenge" },
+        { "file": "soland/crates/server/tests/realm_join_policy.rs", "symbol": "parent_membership_gate_never_uses_projection_cache_as_authority" },
         { "file": "soland/crates/server/tests/realm_join_policy.rs", "symbol": "cooldown_gate_denies_independently_of_any_combinator" }
+      ]
+    },
+    {
+      "source": "cotest/e2e/tests/models/realm-links.spec.ts",
+      "disposition": "migrated",
+      "coverage_status": "static_clean_break_only",
+      "remaining_gap": "The retired positive inheritance flow was deleted. Static artifact checks prove that policy, capability and notification propagation have no current-v1 wire carrier; a production Soland durable migration/zero-write runner remains open and is documented in e2e/scenarios/models/realm-links.md.",
+      "replacements": [
+        { "file": "cotest/tests/realm_link_clean_break.rs", "symbol": "rejects_automatic_realm_inheritance_without_current_v1_carrier" },
+        { "file": "cotest/tests/realm_link_clean_break.rs", "symbol": "parent_membership_contract_is_co_governed_and_caller_proof_free" }
       ]
     }
   ],
@@ -247,7 +259,6 @@
     { "source": "cotest/e2e/tests/events/realm-genesis-commit-stream.spec.ts", "needs": "Needs the canonical founding-unit builder and the governance-Station submit path exposed to Rust scenarios so genesis commits are not hand-rolled." },
     { "source": "cotest/e2e/tests/sync/transport-negotiation.spec.ts", "needs": "Needs transport negotiation in the Rust harness; the spec also captures screenshots, so its evidence must move to a Rust transcript artifact." },
     { "source": "cotest/e2e/tests/encryption/audited-e2ee.spec.ts", "needs": "Needs SDK client coverage for the audited-E2EE read path." },
-    { "source": "cotest/e2e/tests/models/realm-links.spec.ts", "needs": "Needs SDK client methods for realm-link create and resolve." },
     { "source": "cotest/e2e/tests/conformance/realm-state-snapshot-query-scalability.spec.ts", "needs": "Needs the snapshot manifest and query surface in the Rust conformance harness." },
     { "source": "cotest/e2e/tests/invites/invite-addressing.spec.ts", "needs": "Needs contact-api and authenticated invite notification through SDK DTOs." },
     { "source": "cotest/e2e/tests/conformance/registry-drift.spec.ts", "needs": "Overlaps the Rust drift validator; fold the remaining assertions into that suite rather than porting the spec." },

@@ -87,12 +87,34 @@
   Realm B(或换 applicant、或在 policy 改版后重放)→ 绑定元组比较即失败,对外 `gate_check_failed`
 - **E6.2.3 wrong combinator**:把 combinator 改 `any` → bob 只需要满足任一个 gate;但 cooldown 仍独立
 
+## Parent membership：同 Station durable gate
+
+`parent_membership` 不是 Realm inheritance。它不复制 source membership，只允许 target Realm 的 current governing
+Station 在接纳 target `membership=join` 的同一个 durable transaction 中读取 source authoritative current member row。
+
+生产验收必须覆盖：
+
+1. target 对每个 source 都有 current active `join_gate_from` link；缺任一个 link 时返回统一
+   `gate_check_failed`，Event、RealmCommit 与 target `member_state` 均零写入；
+2. source 与 target 的 verified current authority-tenure `service_id` 逐字相同；每个 Realm 自己的
+   `governance_generation` 分别为 current，不跨 Realm 比较 generation，也不用 capability `authority_generation`；
+3. 按 RealmId canonical bytes 锁 authority-tenure／handoff、target policy／links 与 source member rows；全部依赖可验证，
+   且至少一个 source exact current membership 为 accepted `join` 时才通过；
+4. 跨 Station、任一侧 handoff、分库不能形成单一事务 cut、authoritative lookup 不可用时统一
+   `gate_check_failed` 零写入；cache、replica、history、Directory 与 caller proof 都不能替代；
+5. join 若先线性化并提交，之后 source leave／ban 不级联撤销 target membership；依赖变更若先取得锁，本次 join 拒绝。
+
+`tests/realm_link_clean_break.rs::parent_membership_contract_is_co_governed_and_caller_proof_free` 只检查 canonical
+schema／registry 已表达 active link、co-governance、authoritative current lookup 与 caller-proof ban。它不是生产事务验收。
+
 ## Implementation notes
 
 - **soland 现状(2026-09-05 傍晚)**:`gate_proofs[]` 按封闭载体解析 ✓、绑定元组与 freshness 比较 ✓、
   issuer 边界与 claims 覆盖 ✓、detached JWS 验签接在 envelope 验证链上 ✓、cooldown 时间 tracking ✓。
   soland 单元覆盖见 `crates/server/tests/realm_join_policy.rs`(24 条)。
-- **仍缺**:本 joint 场景本身;验签路径的定向正负例(需要真实 Ed25519 密钥与 DID document 夹具)
+- **仍缺**:本 joint 场景本身;验签路径的定向正负例(需要真实 Ed25519 密钥与 DID document 夹具)；以及上述
+  `parent_membership` 的生产 durable transaction runner。Soland 内存 reducer 的 parent-membership 测试只说明纯求值，
+  不证明 authority-tenure/link/member lock、跨 Station/handoff fail-closed 或三类零写入。
 - **harness 缺口**:mock claim-issuer 和 captcha-provider 服务
 
 ## 总耗时预估
