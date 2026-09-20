@@ -66,7 +66,6 @@ pub fn profile_claim_gate_negative_claims_fail_closed() -> Result<()> {
         "supported_event_schemas": [
             "ak.schema.event.v1",
             "ak.schema.event_payload.v1",
-            "ak.schema.event_batch_receipt.v1",
             "ak.schema.cursor.v1",
             "ak.schema.anchor.v1"
         ],

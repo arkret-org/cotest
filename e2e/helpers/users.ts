@@ -1760,7 +1760,7 @@ export async function createDpopUserSessionForAccount(
   expect(grant.dpopJkt).toBe(deviceKey.thumbprint);
   expect(grant.scopes).toEqual([
     "ak.self.account.read.describe.v1",
-    "ak.self.events.read.scan.v1",
+    "ak.self.committed_event.read.scan.v1",
   ]);
   // Consume only the verified DID returned by the atomic registration result.
   expect(

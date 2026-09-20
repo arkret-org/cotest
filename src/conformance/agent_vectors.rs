@@ -221,7 +221,7 @@ pub fn run_agent_provision_vector() -> Result<()> {
         (
             "operation",
             None,
-            Some("ak.self.events.stream.subscribe.v1"),
+            Some("ak.self.committed_event.stream.subscribe.v1"),
         ),
         ("realm", Some(realm), None),
     ];

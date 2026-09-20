@@ -83,7 +83,7 @@ export type FoundedPrincipal = {
   recoveryKey: string;
   grant: SessionGrant;
   bindingReceipt: Record<string, unknown>;
-  pcrGenesisReceipt: Record<string, unknown>;
+  pcrGenesisCommits: Array<Record<string, unknown>>;
 };
 
 function endpointsWire(endpoints: DeploymentEndpoints) {
@@ -269,7 +269,9 @@ export class ProvisioningBridge {
         expiresAt: String(grant.expires_at),
       },
       bindingReceipt: (result.binding_receipt ?? {}) as Record<string, unknown>,
-      pcrGenesisReceipt: (result.pcr_genesis_receipt ?? {}) as Record<string, unknown>,
+      pcrGenesisCommits: (result.pcr_genesis_commits ?? []) as Array<
+        Record<string, unknown>
+      >,
     };
   }
 

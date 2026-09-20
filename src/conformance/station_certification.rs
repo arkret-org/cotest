@@ -15,8 +15,8 @@ const REQUIRED_OPERATIONS: &[&str] = &[
     "ak.server.read.describe.v1",
     "ak.self.account.read.describe.v1",
     "ak.self.account.stream.subscribe.v1",
-    "ak.self.events.stream.subscribe.v1",
-    "ak.self.events.read.scan.v1",
+    "ak.self.committed_event.stream.subscribe.v1",
+    "ak.self.committed_event.read.scan.v1",
     "ak.self.realm_state_snapshot.read.manifest_head.v1",
     "ak.self.authz.read.check.v1",
 ];

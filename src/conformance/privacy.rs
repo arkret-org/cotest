@@ -96,16 +96,10 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
             // body shape / timing class — and MUST NOT leak the listed
             // binding fields.
             "resolve_handle_failure_blinding" => {
-                validate_resolve_failure_blinding(
-                    &case,
-                    "ak.find.directory.read.resolve_handle.v1",
-                )?;
+                validate_resolve_failure_blinding(&case)?;
             }
             "resolve_agent_selector_failure_blinding" => {
-                validate_resolve_failure_blinding(
-                    &case,
-                    "ak.find.directory.read.resolve_agent_selector.v1",
-                )?;
+                validate_resolve_failure_blinding(&case)?;
             }
             "private_contact_discovery_padding_and_cardinality" => {
                 let input = case
@@ -273,8 +267,7 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                 let claims_hold = required_true_claims
                     .iter()
                     .all(|claim| expected.get(claim).and_then(Value::as_bool) == Some(true));
-                let valid = case.operation_id.as_deref()
-                    == Some("ak.find.directory.read.private_contact_discovery.v1")
+                let valid = case.operation_id.is_none()
                     && input
                         .pointer("/blind_request/phase")
                         .and_then(Value::as_str)
@@ -334,10 +327,8 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                 for required in [
                     "ak.find.directory.read.search_realms.v1",
                     "ak.find.directory.read.resolve_realm.v1",
-                    "ak.find.directory.read.resolve_target.v1",
                     "ak.find.directory.command.announce.v1",
                     "ak.find.directory.command.withdraw.v1",
-                    "ak.find.directory.read.private_contact_discovery.v1",
                 ] {
                     if !operation_ids.iter().any(|operation| operation == required) {
                         bail!(
@@ -349,9 +340,9 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                 let covers_vectors = case.covers_vectors.as_ref().ok_or_else(|| {
                     anyhow!("privacy fixture {} missing covers_vectors", case.name)
                 })?;
-                if covers_vectors.len() < 20 {
+                if covers_vectors.len() < 8 {
                     bail!(
-                        "privacy fixture {} no longer closes the directory/PSI vector set",
+                        "privacy fixture {} no longer closes the public-Realm directory vector set",
                         case.name
                     );
                 }
@@ -359,30 +350,12 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     .expected
                     .as_ref()
                     .ok_or_else(|| anyhow!("privacy fixture {} missing expected", case.name))?;
-                let common_fields = expected
-                    .get("query_results_require_common_fields")
-                    .and_then(Value::as_array)
-                    .ok_or_else(|| {
-                        anyhow!("privacy fixture {} missing common fields", case.name)
-                    })?;
-                for required in ["as_of", "source_refs", "policy_revision"] {
-                    if !common_fields
-                        .iter()
-                        .any(|field| field.as_str() == Some(required))
-                    {
-                        bail!(
-                            "privacy fixture {} missing common result field {required}",
-                            case.name
-                        );
-                    }
-                }
                 for required_flag in [
-                    "resolve_target_hidden_targets_are_indistinguishable",
-                    "ingest_requires_resource_directory_opt_in",
+                    "query_results_are_closed_public_realm_metadata",
+                    "resolve_unknown_and_withdrawn_realms_are_indistinguishable",
+                    "ingest_requires_current_governance_station",
                     "ingest_rejects_bad_signature_and_stale_signature",
-                    "withdraw_and_takedown_have_blinded_external_responses",
-                    "psi_is_set_membership_only",
-                    "psi_denials_are_padded_and_timing_blinded",
+                    "withdraw_has_blinded_external_responses",
                 ] {
                     if expected.get(required_flag).and_then(Value::as_bool) != Some(true) {
                         bail!(
@@ -399,13 +372,14 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     }),
                     &json!({
                         "required_operation_ids_present": true,
-                        "common_fields_present": true,
-                        "directory_and_psi_guards_true": true,
+                        "public_realm_boundary_closed": true,
+                        "directory_guards_true": true,
                     }),
                     &json!({
                         "operation_ids": operation_ids,
                         "covers_vectors": covers_vectors.len(),
-                        "common_fields": common_fields,
+                        "forbidden_resource_families": expected
+                            .get("forbidden_resource_families"),
                     }),
                 );
             }
@@ -1166,11 +1140,11 @@ fn validate_actor_accountability_grant_required(case: &super::NamedCase) -> Resu
 /// code (`not_found`), identical body shape, identical timing class, and the
 /// response MUST NOT include any of the binding/identity fields that would let
 /// a probe distinguish "hidden" from "missing".
-fn validate_resolve_failure_blinding(case: &super::NamedCase, expected_op: &str) -> Result<()> {
+fn validate_resolve_failure_blinding(case: &super::NamedCase) -> Result<()> {
     let op_id = case.operation_id.as_deref();
-    if op_id != Some(expected_op) {
+    if op_id.is_some() {
         bail!(
-            "privacy fixture {} operation_id {:?} drifted from {expected_op}",
+            "privacy fixture {} still carries retired operation_id {:?}",
             case.name,
             op_id
         );

@@ -45,7 +45,7 @@ The current harness tracks the sibling `arkret-spec` checkout and includes:
 - **schema-validation-fixture runner** — positive and negative cases
   exercised against `schema_ref`.
 - **Round R4 literal-scanner rules** — bad DID method segments,
-  string-payload `ak.self.events.stream.subscribe.v1` usage, and
+  string-payload `ak.self.committed_event.stream.subscribe.v1` usage, and
   `compute_audit_policy_version_digest` calls with fewer than 4 arguments.
 - **Drift-validator allowlists extended** for the new capability action
   `ak.morph.create`, the `historical_only` diagnostic error code, the

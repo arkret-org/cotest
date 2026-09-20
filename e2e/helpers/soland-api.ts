@@ -1504,7 +1504,7 @@ export async function setStrandWatchLevelApi(
   );
 }
 
-/// Read a Realm's own commit stream through `ak.self.events.read.scan.v1`.
+/// Read a Realm's own commit stream through `ak.self.committed_event.read.scan.v1`.
 ///
 /// There is no Realm-wide Event query any more: a reader walks one stream by
 /// continuous `stream_position`. The flattened `events` list is returned in
@@ -2362,7 +2362,7 @@ function rememberPublicationEvidence(
 /// back directly, so this is now a no-op kept for call-site readability.
 /// The current head of one independent commit stream.
 ///
-/// `ak.self.events.read.scan.v1` returns accepted `{commit, event}` pairs in
+/// `ak.self.committed_event.read.scan.v1` returns accepted `{commit, event}` pairs in
 /// stream order; the last one is the head. A Realm, each Circle and each
 /// Sidecar own separate linear streams, so a head only ever names its own.
 export async function readCommitStreamHeadApi(

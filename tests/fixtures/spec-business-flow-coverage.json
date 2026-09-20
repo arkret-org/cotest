@@ -161,12 +161,6 @@
           ]
         },
         {
-          "operation_id": "ak.gate.account.command.introspect_session_grant.v1",
-          "surfaces": [
-            "account_auth"
-          ]
-        },
-        {
           "operation_id": "ak.self.account.read.viewer.v1",
           "surfaces": [
             "events_sync"
@@ -198,12 +192,6 @@
         },
         {
           "operation_id": "ak.gate.account.command.revoke_session.v1",
-          "surfaces": [
-            "account_auth"
-          ]
-        },
-        {
-          "operation_id": "ak.gate.account.command.logout_auth_session.v1",
           "surfaces": [
             "account_auth"
           ]
@@ -632,7 +620,7 @@
     },
     {
       "id": "directory_discovery_takedown",
-      "title": "Directory search, handle resolution, private discovery, announce, withdraw, and takedown",
+      "title": "Public Realm Directory search, resolve, announce, and withdraw",
       "status": "partially_implemented",
       "surfaces": [
         "directory_discovery"
@@ -652,30 +640,6 @@
         },
         {
           "operation_id": "ak.find.directory.read.resolve_realm.v1",
-          "surfaces": [
-            "directory_discovery"
-          ]
-        },
-        {
-          "operation_id": "ak.find.directory.read.resolve_target.v1",
-          "surfaces": [
-            "directory_discovery"
-          ]
-        },
-        {
-          "operation_id": "ak.find.directory.read.resolve_handle.v1",
-          "surfaces": [
-            "directory_discovery"
-          ]
-        },
-        {
-          "operation_id": "ak.find.directory.read.private_contact_discovery.v1",
-          "surfaces": [
-            "directory_discovery"
-          ]
-        },
-        {
-          "operation_id": "ak.find.directory.read.list_handles_for_subject.v1",
           "surfaces": [
             "directory_discovery"
           ]
@@ -703,16 +667,6 @@
           ]
         },
         {
-          "kind": "ordinary",
-          "path": "src/scenarios/handle_to_join_e2e.rs",
-          "markers": [
-            "Some(&account_a),",
-            "Some(&account_b),",
-            "&trusted_verifiers,",
-            "MembershipPayload::join"
-          ]
-        },
-        {
           "kind": "joint_e2e",
           "path": "src/scenarios/teabay_unsigned_ingest.rs",
           "markers": [
@@ -723,22 +677,8 @@
           "kind": "conformance_fixture",
           "path": "src/conformance/privacy.rs",
           "markers": [
-            "ak.find.directory.read.private_contact_discovery.v1",
-            "withdraw_and_takedown_have_blinded_external_responses"
-          ]
-        },
-        {
-          "kind": "conformance_fixture",
-          "path": "src/conformance/list_handles_for_subject_vectors.rs",
-          "markers": [
-            "ak.find.directory.read.list_handles_for_subject.v1"
-          ]
-        },
-        {
-          "kind": "conformance_fixture",
-          "path": "src/conformance/object_addressing_vectors.rs",
-          "markers": [
-            "ak.find.directory.read.resolve_target.v1"
+            "ak.find.directory.read.resolve_realm.v1",
+            "query_results_are_closed_public_realm_metadata"
           ]
         }
       ]
@@ -955,7 +895,7 @@
           ]
         },
         {
-          "operation_id": "ak.peer.events.read.frontier.v1",
+          "operation_id": "ak.peer.committed_event.read.scan.v1",
           "surfaces": [
             "peer_federation"
           ]

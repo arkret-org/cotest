@@ -17,7 +17,7 @@ SPEC.loader.exec_module(inventory)
 
 
 OP_ONE = "ak.server.read.describe.v1"
-OP_TWO = "ak.self.events.read.scan.v1"
+OP_TWO = "ak.self.committed_event.read.scan.v1"
 
 
 class OperationTestCoverageTests(unittest.TestCase):

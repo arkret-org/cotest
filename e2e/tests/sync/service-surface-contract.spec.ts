@@ -12,7 +12,7 @@
 // `GET /_arkret/describe` with the supported profiles and verification evidence layer in place, so the two
 // describe probes are LIVE today. Phase A.E1 (claim_kind partition), Phase B
 // (error envelope), Phase E (unsupported_feature fail-closed), Phase C (opaque
-// list-pagination cursor on `ak.self.events.read.scan.v1`) and Phase D (generic
+// list-pagination cursor on `ak.self.committed_event.read.scan.v1`) and Phase D (generic
 // `Idempotency-Key` header path on POST /_arkret/self/events) are all live on
 // soland.
 //
@@ -475,7 +475,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       //       §7.1 (list pagination response: { <items_field>, next_cursor, has_more };
       //         client paginates by `has_more`, follows `next_cursor`).
       //
-      // The `ak.self.events.read.scan.v1` list surface at QUERY /_arkret/self/events
+      // The `ak.self.committed_event.read.scan.v1` list surface at POST /_arkret/self/streams/scan
       // is the first list endpoint to reach the §7.1 wire shape exactly:
       // `{ events, next_cursor: "ak:cursor:<base64url>", has_more, prev_cursor }`.
       const stamp = Date.now();

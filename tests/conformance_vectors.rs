@@ -10,21 +10,19 @@ use anyhow::{Result, anyhow, bail};
 use cotest::conformance::{
     ALL_AGENT_SIGNER_EVIDENCE_CASES, ALL_AGENT_VECTOR_IDS, ALL_CALL_SIGNAL_VECTOR_IDS,
     ALL_CALL_STATE_MEDIA_LIFECYCLE_VECTOR_IDS, ALL_CURSOR_VECTOR_IDS,
-    ALL_HANDLE_CLAIM_REJECTION_VECTOR_IDS, ALL_LIST_HANDLES_FOR_SUBJECT_VECTOR_IDS,
-    ALL_MEDIA_BINDING_VECTOR_IDS, ALL_MEMBER_IDENTITY_VECTOR_IDS, ALL_MEMBER_ROSTER_VECTOR_IDS,
-    ALL_MENTION_RENDERING_VECTOR_IDS, ALL_OBJECT_ADDRESSING_VECTOR_IDS,
-    ALL_PRESENCE_SIGNAL_VECTOR_IDS, ALL_PRIMARY_HANDLE_VECTOR_IDS, ALL_SIDECAR_VECTOR_IDS,
-    load_local_fixture_value, run_agent_signer_evidence_vector_suite, run_agent_vector_suite,
-    run_call_signal_vector_suite, run_call_state_media_lifecycle_vector_suite,
-    run_container_realm_control_payload_suite, run_cursor_vector_suite,
-    run_digest_construction_known_answers, run_encoding_fixture_suite,
+    ALL_HANDLE_CLAIM_REJECTION_VECTOR_IDS, ALL_MEDIA_BINDING_VECTOR_IDS,
+    ALL_MEMBER_IDENTITY_VECTOR_IDS, ALL_MEMBER_ROSTER_VECTOR_IDS, ALL_MENTION_RENDERING_VECTOR_IDS,
+    ALL_OBJECT_ADDRESSING_VECTOR_IDS, ALL_PRESENCE_SIGNAL_VECTOR_IDS,
+    ALL_PRIMARY_HANDLE_VECTOR_IDS, ALL_SIDECAR_VECTOR_IDS, load_local_fixture_value,
+    run_agent_signer_evidence_vector_suite, run_agent_vector_suite, run_call_signal_vector_suite,
+    run_call_state_media_lifecycle_vector_suite, run_container_realm_control_payload_suite,
+    run_cursor_vector_suite, run_digest_construction_known_answers, run_encoding_fixture_suite,
     run_handle_claim_rejection_vector_suite, run_keypackage_write_transcripts_suite,
-    run_list_handles_for_subject_vector_suite, run_media_binding_vector_suite,
-    run_member_identity_vector_suite, run_member_roster_vector_suite,
-    run_mention_rendering_vector_suite, run_named_suite_audit, run_object_addressing_vector_suite,
-    run_poll_reducer_fixture_suite, run_presence_signal_vector_suite,
-    run_primary_handle_vector_suite, run_protocol_time_tolerance_suite, run_sidecar_vector_suite,
-    run_webrtc_media_plaintext_suite,
+    run_media_binding_vector_suite, run_member_identity_vector_suite,
+    run_member_roster_vector_suite, run_mention_rendering_vector_suite, run_named_suite_audit,
+    run_object_addressing_vector_suite, run_poll_reducer_fixture_suite,
+    run_presence_signal_vector_suite, run_primary_handle_vector_suite,
+    run_protocol_time_tolerance_suite, run_sidecar_vector_suite, run_webrtc_media_plaintext_suite,
 };
 use serde_json::{Value, json};
 
@@ -398,19 +396,6 @@ fn mention_rendering_vector_suite_runs_clean() {
     );
 }
 
-// ─── R3.2 / VECT-COT-3 — ak.find.directory.read.list_handles_for_subject.v1 ────────────
-
-#[test]
-fn list_handles_for_subject_vector_suite_runs_clean() {
-    run_list_handles_for_subject_vector_suite()
-        .expect("list-handles-for-subject vectors must pass");
-    assert!(
-        ALL_LIST_HANDLES_FOR_SUBJECT_VECTOR_IDS.len() >= 5,
-        "VECT-COT-3 requires >= 5 cases, got {}",
-        ALL_LIST_HANDLES_FOR_SUBJECT_VECTOR_IDS.len()
-    );
-}
-
 // ─── R3.2 / VECT-COT-6/7 — handle-claim rejection vectors ─────────────────
 
 #[test]
@@ -431,11 +416,6 @@ fn vect_cot_vector_registry_is_mechanically_complete() {
             "VECT-COT-2 mention rendering",
             ALL_MENTION_RENDERING_VECTOR_IDS,
             6usize,
-        ),
-        (
-            "VECT-COT-3 list handles for subject",
-            ALL_LIST_HANDLES_FOR_SUBJECT_VECTOR_IDS,
-            5usize,
         ),
         ("VECT-COT-4 roster v2", ALL_MEMBER_ROSTER_VECTOR_IDS, 7usize),
         (
@@ -473,7 +453,7 @@ fn vect_cot_vector_registry_is_mechanically_complete() {
     );
 }
 
-// ─── R3.3 / OA-COT-1..4 — AKP-0011 object addressing + resolve_target ─────
+// ─── R3.3 / OA-COT-1..3 — AKP-0011 object addressing ─────────────────────
 //
 // SDK-pure vectors over the `arkret_wire` object-addressing surface:
 //   * OA-COT-1 (4 cases) — grammar: scheme⇄fragment equivalence, hierarchy forms, fail-closed
@@ -482,13 +462,10 @@ fn vect_cot_vector_registry_is_mechanically_complete() {
 //     identity, omitted-key (not null) canonical shape.
 //   * OA-COT-3 (2 cases) — scope confusion: cross-object replay rejected, token address_link_kind
 //     wins over URL `lt` hint.
-//   * OA-COT-4 (2 cases) — resolve_target response shape: §9.1 common fields
-//     + target_kind; realm target carries realm_preview.
-
 #[test]
 fn object_addressing_vector_suite_runs_clean() {
     run_object_addressing_vector_suite().expect("object-addressing vectors must pass");
-    assert_eq!(ALL_OBJECT_ADDRESSING_VECTOR_IDS.len(), 11);
+    assert_eq!(ALL_OBJECT_ADDRESSING_VECTOR_IDS.len(), 9);
 }
 
 // ─── P0 / FIX-1 — fixture presence + shape ────────────────────────────────

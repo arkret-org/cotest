@@ -11,9 +11,8 @@ extended it — the authority-commit protocol deleted.
 ## Strand
 
 1. Register Alice and issue a dev session.
-2. Confirm the retired `ak.self.events.read.frontier.v1` surface no longer
-   answers: a producer must not be able to read, synthesize or extend an
-   authoring frontier.
+2. Confirm the retired producer-frontier surface no longer answers: a producer
+   must not be able to read, synthesize or extend an authoring frontier.
 3. Create a Realm. Each founding Event — `ak.realm.create`, profile, policy
    bundle, conditional plaintext-visible services, creator membership — is
    submitted on its own and answered with the `RealmCommit` that admitted it.

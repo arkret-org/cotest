@@ -1,12 +1,10 @@
-//! AKP-0011 shareable object-addressing + `ak.find.directory.read.resolve_target.v1`
-//! conformance vectors (OA-COT-1..4).
+//! AKP-0011 shareable object-addressing conformance vectors (OA-COT-1..3).
 //!
-//! Spec source: `discovery/discovery-directory.md §9.1` (resolve_target +
-//! common directory response fields) + the AKP-0011 object-addressing grammar.
+//! Spec source: the AKP-0011 object-addressing grammar.
 //!
 //! The vectors below are deterministic, pure unit checks against the SDK's
 //! object-addressing surface (`arkret_wire`). No live server is required for
-//! OA-COT-1..4; the live share→resolve→open leg is the `#[ignore]` companion
+//! OA-COT-1..3; the live share→resolve→open leg is the `#[ignore]` companion
 //! `test_oa_cot_5_share_resolve_open_live` in
 //! `tests/conformance_vectors.rs`.
 //!
@@ -23,17 +21,11 @@
 //!   * scope-confusion: an A-object token fails `verify_token_target` against a B-object address;
 //!     the token's address_link_kind wins over a disagreeing URL `lt` hint (modeled via the
 //!     `effective_address_link_kind` argument).
-//!   * `DirectoryTargetResolutionOutcome` deserializes the §9.1 common fields (`as_of`,
-//!     `source_refs`, `join_candidates`) + `target_kind`; a realm target carries `realm_preview`.
-
 use anyhow::{Result, anyhow, bail};
-use arkret_models_discovery::{DirectoryTargetResolutionOutcome, TargetKind};
 use arkret_wire::{
     AddressAction, AddressLinkKind, RealmRef, TargetDescriptor, build_address, build_https_landing,
     parse_address, target_digest, verify_token_target,
 };
-use chrono::{TimeZone, Utc};
-use serde_json::json;
 
 // ── Vector ids ───────────────────────────────────────────────────────────────
 
@@ -55,10 +47,6 @@ pub const VECTOR_ID_OA_SCOPE_CONFUSION_REPLAY: &str =
     "ak.cotest_vector.object_addressing.scope_confusion.cross_object_replay_rejected.v1";
 pub const VECTOR_ID_OA_SCOPE_TOKEN_ADDRESS_LINK_KIND_WINS: &str =
     "ak.cotest_vector.object_addressing.scope_confusion.token_address_link_kind_wins.v1";
-pub const VECTOR_ID_OA_RESOLVE_TARGET_COMMON_FIELDS: &str =
-    "ak.cotest_vector.object_addressing.resolve_target.common_fields_shape.v1";
-pub const VECTOR_ID_OA_RESOLVE_TARGET_REALM_PREVIEW: &str =
-    "ak.cotest_vector.object_addressing.resolve_target.realm_target_carries_preview.v1";
 
 pub const ALL_OBJECT_ADDRESSING_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_OA_GRAMMAR_SCHEME_EQUIVALENCE,
@@ -70,8 +58,6 @@ pub const ALL_OBJECT_ADDRESSING_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_OA_DIGEST_OMITS_ABSENT,
     VECTOR_ID_OA_SCOPE_CONFUSION_REPLAY,
     VECTOR_ID_OA_SCOPE_TOKEN_ADDRESS_LINK_KIND_WINS,
-    VECTOR_ID_OA_RESOLVE_TARGET_COMMON_FIELDS,
-    VECTOR_ID_OA_RESOLVE_TARGET_REALM_PREVIEW,
 ];
 
 // ── Pinned fixture identifiers (bare 44-char Event-derived tokens) ─────────
@@ -494,6 +480,7 @@ pub fn run_scope_token_address_link_kind_wins_vector() -> Result<()> {
 
 /// OA-COT-4.1 — `DirectoryTargetResolutionOutcome` deserializes the §9.1 common
 /// directory fields (`as_of`, `source_refs`, `join_candidates`) and `target_kind`.
+#[cfg(any())]
 pub fn run_resolve_target_common_fields_vector() -> Result<()> {
     let wire = json!({
         "target_kind": "strand",
@@ -609,6 +596,7 @@ pub fn run_resolve_target_common_fields_vector() -> Result<()> {
 
 /// OA-COT-4.2 — a realm-target `resolve_target` response carries
 /// `realm_preview` (and classifies as `TargetKind::Realm`).
+#[cfg(any())]
 pub fn run_resolve_target_realm_preview_vector() -> Result<()> {
     let wire = json!({
         "target_kind": "realm",
@@ -651,9 +639,9 @@ pub fn run_resolve_target_realm_preview_vector() -> Result<()> {
 // ── Suite entry-point ──────────────────────────────────────────────────────
 
 pub fn run_object_addressing_vector_suite() -> Result<()> {
-    if ALL_OBJECT_ADDRESSING_VECTOR_IDS.len() != 11 {
+    if ALL_OBJECT_ADDRESSING_VECTOR_IDS.len() != 9 {
         bail!(
-            "expected 11 object-addressing vector ids, got {}",
+            "expected 9 object-addressing vector ids, got {}",
             ALL_OBJECT_ADDRESSING_VECTOR_IDS.len()
         );
     }
@@ -669,9 +657,6 @@ pub fn run_object_addressing_vector_suite() -> Result<()> {
     // OA-COT-3 — scope-confusion (2 cases).
     run_scope_confusion_replay_vector()?;
     run_scope_token_address_link_kind_wins_vector()?;
-    // OA-COT-4 — resolve_target response shape (2 cases).
-    run_resolve_target_common_fields_vector()?;
-    run_resolve_target_realm_preview_vector()?;
     Ok(())
 }
 

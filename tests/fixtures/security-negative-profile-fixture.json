@@ -179,7 +179,7 @@
     {
       "name": "query_auth_leakage_hard_fails",
       "category": "query_auth_leakage",
-      "operation_id": "ak.self.events.read.scan.v1",
+      "operation_id": "ak.self.committed_event.read.scan.v1",
       "input": {
         "request": {
           "method": "GET",

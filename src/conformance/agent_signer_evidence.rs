@@ -128,21 +128,16 @@ pub fn run_agent_signer_evidence_vector_suite() -> Result<()> {
     )?;
     ensure!(revocation.get("expected").and_then(Value::as_str) == Some("rejected"));
 
-    // `service-http-binding.md` §2.2.3 registers
-    // `ak.gate.account.command.issue_controller_gate_attestation.v1` as a
-    // deployment-internal operation: the channel authenticates caller, target,
-    // trust domain and the allowed operation set, and that authenticated
-    // identity is the only source of the caller. A body field, a path segment
-    // or a deployment bearer MUST NOT stand in for it, and the request MUST NOT
-    // carry a service-resolution carrier any more.
+    // The private controller-gate adapter authenticates caller, target and
+    // trust domain at the channel boundary. That authenticated identity is the
+    // only source of the caller; a body field, path segment or deployment
+    // bearer MUST NOT stand in for it, and the request MUST NOT carry a
+    // service-resolution carrier.
     let controller_gate = case(
         cases,
         "producer_fetches_controller_gate_from_account_authority",
     )?;
-    ensure!(
-        controller_gate.get("operation_id").and_then(Value::as_str)
-            == Some("ak.gate.account.command.issue_controller_gate_attestation.v1")
-    );
+    ensure!(controller_gate.get("operation_id").is_none());
     for (field, expected) in [
         (
             "internal_authentication_binds_caller_station_domain_and_operation",
@@ -163,10 +158,9 @@ pub fn run_agent_signer_evidence_vector_suite() -> Result<()> {
         );
     }
 
-    // The same §2.2.3 registration makes "wrong caller" and "caller without
-    // this operation" ordinary rejections that MUST be indistinguishable from
-    // an unknown principal: a distinguishable error would turn the internal
-    // channel into an account-existence oracle.
+    // A wrong or unauthorized caller is indistinguishable from an unknown
+    // principal: a distinguishable error would turn the private channel into
+    // an account-existence oracle.
     let wrong_source = case(
         cases,
         "controller_gate_wrong_source_and_unknown_principal_are_indistinguishable",

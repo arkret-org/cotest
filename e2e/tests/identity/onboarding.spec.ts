@@ -73,7 +73,7 @@ test.describe("first registration PCR genesis @fully-implemented", () => {
       "ak.realm.create",
       "ak.device.authorize",
     ]);
-    expect(account.pcrGenesisReceipt).toBeTruthy();
+    expect(account.pcrGenesisCommits).toHaveLength(2);
     expect(account.initialGrant.eventSigningKey?.publicJwk.x).toBeTruthy();
   });
 

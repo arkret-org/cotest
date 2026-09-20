@@ -274,7 +274,7 @@ impl Session {
                         "expires_at": arkret_canonical::format_timestamp_canonical(grant.expires_at),
                     },
                     "binding_receipt": principal.outcome.binding_receipt,
-                    "pcr_genesis_receipt": principal.outcome.pcr_genesis_receipt,
+                    "pcr_genesis_commits": principal.outcome.pcr_genesis_commits,
                 }))
             }
             "read_self_account_viewer" => {

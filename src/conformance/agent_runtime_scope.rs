@@ -1,11 +1,9 @@
 use arkret_schema::agent_runtime_scope::{AgentRuntimeScopeLayer, assess_agent_runtime_scopes};
 
 const INTERACTIVE: &[&str] = &[
-    "ak.self.events.stream.subscribe.v1",
-    "ak.self.events.read.scan.v1",
-    "ak.self.events.read.frontier.v1",
-    "ak.self.seals.read.frontier.v1",
     "ak.self.events.command.submit.v1",
+    "ak.self.committed_event.read.scan.v1",
+    "ak.self.committed_event.stream.subscribe.v1",
 ];
 const KEYPACKAGE_UPLOAD: &str = "ak.self.keys.keypackages.upload.create.v1";
 const KEYPACKAGE_CONSUME: &str = "ak.self.keys.keypackages.command.consume.v1";
@@ -27,7 +25,7 @@ fn provision_key_session_deficiencies_keep_highest_layer_priority() {
 
     let provision = complete
         .iter()
-        .filter(|operation| operation.as_str() != "ak.self.seals.read.frontier.v1")
+        .filter(|operation| operation.as_str() != "ak.self.events.command.submit.v1")
         .cloned()
         .collect::<Vec<_>>();
     let deficiency = assess_agent_runtime_scopes(&provision, &complete, &complete)
@@ -41,7 +39,7 @@ fn provision_key_session_deficiencies_keep_highest_layer_priority() {
 
     let key = complete
         .iter()
-        .filter(|operation| operation.as_str() != "ak.self.seals.read.frontier.v1")
+        .filter(|operation| operation.as_str() != "ak.self.events.command.submit.v1")
         .cloned()
         .collect::<Vec<_>>();
     let deficiency = assess_agent_runtime_scopes(&complete, &key, &complete)
@@ -55,7 +53,7 @@ fn provision_key_session_deficiencies_keep_highest_layer_priority() {
 
     let session = complete
         .iter()
-        .filter(|operation| operation.as_str() != "ak.self.seals.read.frontier.v1")
+        .filter(|operation| operation.as_str() != "ak.self.events.command.submit.v1")
         .cloned()
         .collect::<Vec<_>>();
     let deficiency = assess_agent_runtime_scopes(&complete, &complete, &session)
@@ -66,31 +64,6 @@ fn provision_key_session_deficiencies_keep_highest_layer_priority() {
         deficiency.reason,
         arkret_wire::ReasonCode::AgentSessionScopeRefreshRequired
     );
-}
-
-#[test]
-fn event_and_seal_frontiers_are_not_substitutable() {
-    for (omitted, expected_missing) in [
-        (
-            "ak.self.events.read.frontier.v1",
-            "ak.self.events.read.frontier.v1",
-        ),
-        (
-            "ak.self.seals.read.frontier.v1",
-            "ak.self.seals.read.frontier.v1",
-        ),
-    ] {
-        let scope = INTERACTIVE
-            .iter()
-            .copied()
-            .filter(|operation| *operation != omitted)
-            .collect::<Vec<_>>();
-        let deficiency = assess_agent_runtime_scopes(&scope, INTERACTIVE, INTERACTIVE)
-            .unwrap()
-            .unwrap();
-        assert_eq!(deficiency.layer, AgentRuntimeScopeLayer::Provision);
-        assert_eq!(deficiency.missing_operations, [expected_missing]);
-    }
 }
 
 #[test]

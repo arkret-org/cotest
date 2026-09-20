@@ -50,7 +50,6 @@ mod invite_new_source_quota;
 mod key_backup_hardening;
 mod keypackage_lifecycle;
 mod keypackage_write_transcripts;
-mod list_handles_for_subject_vectors;
 mod long_text_content;
 mod media_binding;
 mod member_identity_vectors;
@@ -281,13 +280,6 @@ pub use keypackage_lifecycle::{
 pub use keypackage_write_transcripts::{
     KEYPACKAGE_WRITE_TRANSCRIPTS_ENTRYPOINT, run_keypackage_write_transcripts_suite,
 };
-pub use list_handles_for_subject_vectors::{
-    ALL_LIST_HANDLES_FOR_SUBJECT_VECTOR_IDS, run_as_of_historical_replay_vector,
-    run_audience_filter_applied_vector, run_cursor_pagination_vector,
-    run_happy_path_single_claim_vector, run_issuer_trust_filter_vector,
-    run_list_handles_for_subject_vector_suite, run_primary_handle_field_aligned_with_3_2_1_vector,
-    run_subject_mismatch_rejected_vector,
-};
 pub use long_text_content::run_long_text_content_fixture_suite;
 pub use media_binding::{
     ALL_MEDIA_BINDING_VECTOR_IDS, run_e2ee_key_source_vector,
@@ -330,8 +322,7 @@ pub use named_suite_audit::{NamedSuiteAuditReport, run_named_suite_audit};
 pub use object_addressing_vectors::{
     ALL_OBJECT_ADDRESSING_VECTOR_IDS, run_grammar_fail_closed_vector,
     run_object_addressing_vector_suite, run_realm_id_vs_alias_vector,
-    run_realm_strand_message_forms_vector, run_resolve_target_common_fields_vector,
-    run_resolve_target_realm_preview_vector, run_scheme_fragment_equivalence_vector,
+    run_realm_strand_message_forms_vector, run_scheme_fragment_equivalence_vector,
     run_scope_confusion_replay_vector, run_scope_token_address_link_kind_wins_vector,
     run_target_digest_ignores_hints_vector, run_target_digest_omits_absent_vector,
     run_target_digest_tracks_object_vector,

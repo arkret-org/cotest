@@ -64,7 +64,7 @@
         "interop_bridge_present": false,
         "client_can_call": [
           "ak.self.events.command.submit.v1",
-          "ak.self.events.read.frontier.v1",
+          "ak.self.committed_event.read.scan.v1",
           "ak.self.account.stream.subscribe.v1"
         ],
         "client_must_not_call": [

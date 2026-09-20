@@ -116,9 +116,6 @@ fn completion_vector() -> Result<CompletionVector> {
             reanchor_event_id: Some(
                 "ak:event:AZk4PXzJ6MpkxXnYTUmgXzeIYNd0Wfnz3N0hwLHNV6Xq".parse()?,
             ),
-            reanchor_batch_receipt_id: Some(
-                "ak:receipt:019a8400-0000-7000-8000-000000000006".parse()?,
-            ),
             first_generation_seal_id: first_generation_seal.id.clone(),
             proof_summary: RecoveryProofSummary {
                 kind: RecoveryProofKind::RecoveryUnlock,

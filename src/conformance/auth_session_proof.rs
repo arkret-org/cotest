@@ -636,7 +636,7 @@ pub fn run_session_bare_bearer_rejected_protected_vector() -> Result<()> {
     if required_str(vector, "public_metadata_surface")? != "unauthenticated_public_response_only" {
         bail!("public metadata surface control drifted");
     }
-    if required_str(vector, "public_metadata_operation_id")? != "ak.self.events.read.describe.v1" {
+    if required_str(vector, "public_metadata_operation_id")? != "ak.server.read.describe.v1" {
         bail!("public metadata operation classification drifted");
     }
     if classify_public_metadata_bare_bearer()

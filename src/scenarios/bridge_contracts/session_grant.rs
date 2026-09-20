@@ -160,11 +160,10 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
             .all(|request| request.get("id").is_none() && request.get("proof").is_none()),
         "exact-token introspection must not degrade to an id lookup or carry a request proof: {requests:?}"
     );
-    // `service-http-binding.md` §2.2.3 registers
-    // `ak.gate.account.command.introspect_session_grant.v1` as a
-    // deployment-internal call: the Station authenticates with its configured
-    // credential, and MUST NOT let a self-reported `Source-Service-ID` /
-    // `Destination-Service-ID` / `internal` header stand in for that identity.
+    // The private Station-to-Account-Authority introspection adapter
+    // authenticates with its configured credential and MUST NOT let a
+    // self-reported `Source-Service-ID` / `Destination-Service-ID` / `internal`
+    // header stand in for that identity. It is not a canonical Arkret operation.
     let observations = coauth.channel_observations();
     assert!(
         !observations.is_empty()

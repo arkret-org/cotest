@@ -50,7 +50,7 @@ export type CoauthPasswordAccount = {
   /// Original holder-bound bearer retained only so reconciliation tests can
   /// prove that a consumed register handoff still reads its terminal snapshot.
   accountHandoffGrant: string;
-  pcrGenesisReceipt: Record<string, unknown>;
+  pcrGenesisCommits: Array<Record<string, unknown>>;
   principalRegistrationCheckpoint: Record<string, unknown>;
   genesisClaimed?: boolean;
 };
@@ -522,7 +522,11 @@ export async function registerCoauthPasswordAccount(
     "canonical identity-creation register",
   );
   const receipt = objectRecord(registered.binding_receipt);
-  const pcrGenesisReceipt = objectRecord(registered.pcr_genesis_receipt);
+  const pcrGenesisCommits = Array.isArray(registered.pcr_genesis_commits)
+    ? registered.pcr_genesis_commits.filter(
+        (commit): commit is Record<string, unknown> => objectRecord(commit) !== undefined,
+      )
+    : [];
   const sessionOutcome = objectRecord(registered.session_grant_outcome);
   const registeredPrincipalId = stringValue(registered.principal_id);
   const grantId = stringValue(sessionOutcome?.session_grant_id);
@@ -547,7 +551,7 @@ export async function registerCoauthPasswordAccount(
     receipt.binding_state !== "bound" ||
     receipt.principal_id !== principalId ||
     receipt.did !== did ||
-    !pcrGenesisReceipt ||
+    pcrGenesisCommits.length !== 2 ||
     !sessionOutcome ||
     !grantId ||
     !grantJwt ||
@@ -565,7 +569,7 @@ export async function registerCoauthPasswordAccount(
         receiptPrincipalId: receipt?.principal_id,
         receiptDid: receipt?.did,
         expectedDid: did,
-        hasPcrGenesisReceipt: Boolean(pcrGenesisReceipt),
+        pcrGenesisCommitCount: pcrGenesisCommits.length,
         hasSessionOutcome: Boolean(sessionOutcome),
         hasGrantId: Boolean(grantId),
         hasGrantJwt: Boolean(grantJwt),
@@ -608,7 +612,7 @@ export async function registerCoauthPasswordAccount(
     initialGrant,
     initialHolderKey: handoff.deviceKey,
     accountHandoffGrant: handoff.accountHandoffGrant,
-    pcrGenesisReceipt,
+    pcrGenesisCommits,
     principalRegistrationCheckpoint: {
       ...fixture.checkpoint,
       binding_receipt: receipt,
