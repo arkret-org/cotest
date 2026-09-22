@@ -47,6 +47,7 @@ members = [
     "crates/producer-identity-runner",
     "crates/push-registration-handoff-runner",
     "crates/push-rule-core-runner",
+    "crates/realm-join-candidate-runner",
     "crates/relation-structural-realm-runner",
     "crates/sdk-precheck-runner",
     "crates/signal-wire-runner",
@@ -83,6 +84,7 @@ cotest-private-view-inbox-runner = { path = "crates/private-view-inbox-runner" }
 cotest-producer-identity-runner = { path = "crates/producer-identity-runner" }
 cotest-push-registration-handoff-runner = { path = "crates/push-registration-handoff-runner" }
 cotest-push-rule-core-runner = { path = "crates/push-rule-core-runner" }
+cotest-realm-join-candidate-runner = { path = "crates/realm-join-candidate-runner" }
 cotest-relation-structural-realm-runner = { path = "crates/relation-structural-realm-runner" }
 cotest-test-support = { path = "crates/test-support" }
 cotest-sdk-precheck-runner = { path = "crates/sdk-precheck-runner" }
@@ -192,6 +194,7 @@ cotest-private-view-inbox-runner = { workspace = true }
 cotest-producer-identity-runner = { workspace = true }
 cotest-push-registration-handoff-runner = { workspace = true }
 cotest-push-rule-core-runner = { workspace = true }
+cotest-realm-join-candidate-runner = { workspace = true }
 cotest-relation-structural-realm-runner = { workspace = true }
 cotest-sdk-precheck-runner = { workspace = true }
 cotest-strand-watch-current-runner = { workspace = true }

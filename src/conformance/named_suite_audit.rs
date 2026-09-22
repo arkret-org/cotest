@@ -20,27 +20,27 @@ use super::{
     KEY_BACKUP_HARDENING_ENTRYPOINT, KEYPACKAGE_WRITE_TRANSCRIPTS_ENTRYPOINT,
     MEDIA_BINDING_ENTRYPOINT, OBJECT_IDENTITY_COLLISION_ENTRYPOINT, PRIVATE_VIEW_INBOX_ENTRYPOINT,
     PRODUCER_IDENTITY_ENTRYPOINT, PROTOCOL_TIME_TOLERANCE_ENTRYPOINT, PROTOCOL_VERSION_ENTRYPOINT,
-    PUSH_RULE_CORE_ENTRYPOINT, RELATION_STRUCTURAL_REALM_ENTRYPOINT, SDK_PRECHECK_ENTRYPOINT,
-    STRAND_WATCH_CURRENT_ENTRYPOINT, STRING_PROFILE_ENTRYPOINT, SuiteExecutionResult,
-    TEST_MATERIAL_REJECTION_ENTRYPOINT, VIEW_WRITE_CONTRACT_ENTRYPOINT,
-    run_account_blocklist_projection_vector, run_account_data_cas_convergence_suite,
-    run_account_status_issuer_ledger_vector, run_aead_nonce_replay_suite,
-    run_agent_membership_cascade_suite, run_agent_mls_keypackage_authorization_suite,
-    run_applet_registration_epoch_kat_suite, run_authority_commit_suite,
-    run_blob_stream_aead_suite, run_call_media_lifecycle_suite, run_call_state_core_suite,
-    run_capability_relinquish_authoring_suite, run_crypto_hpke_suite, run_cursor_negative_suite,
-    run_detached_object_signature_suite, run_encoding_fixture_suite,
+    PUSH_RULE_CORE_ENTRYPOINT, REALM_JOIN_CANDIDATE_ENTRYPOINT,
+    RELATION_STRUCTURAL_REALM_ENTRYPOINT, SDK_PRECHECK_ENTRYPOINT, STRAND_WATCH_CURRENT_ENTRYPOINT,
+    STRING_PROFILE_ENTRYPOINT, SuiteExecutionResult, TEST_MATERIAL_REJECTION_ENTRYPOINT,
+    VIEW_WRITE_CONTRACT_ENTRYPOINT, run_account_blocklist_projection_vector,
+    run_account_data_cas_convergence_suite, run_account_status_issuer_ledger_vector,
+    run_aead_nonce_replay_suite, run_agent_membership_cascade_suite,
+    run_agent_mls_keypackage_authorization_suite, run_applet_registration_epoch_kat_suite,
+    run_authority_commit_suite, run_blob_stream_aead_suite, run_call_media_lifecycle_suite,
+    run_call_state_core_suite, run_capability_relinquish_authoring_suite, run_crypto_hpke_suite,
+    run_cursor_negative_suite, run_detached_object_signature_suite, run_encoding_fixture_suite,
     run_event_envelope_fixture_suite, run_fanout_route_miss_suite,
     run_file_transfer_stream_aead_fixture_suite, run_franking_proof_suite,
     run_invite_new_source_quota_suite, run_key_backup_hardening_suite,
     run_keypackage_write_transcripts_suite, run_media_binding_suite,
     run_mls_creator_bootstrap_recovery_suite, run_object_identity_collision_suite,
     run_private_view_inbox_suite, run_producer_identity_suite, run_protocol_time_tolerance_suite,
-    run_protocol_version_suite, run_push_rule_core_suite, run_relation_structural_realm_suite,
-    run_sdk_precheck_suite, run_security_transaction_resilience_joint_gate,
-    run_session_grant_issuer_ledger_suite, run_signal_sequence_high_water_suite,
-    run_strand_watch_current_suite, run_string_profile_suite, run_sync_fixture_suite,
-    run_test_material_rejection_suite, run_view_write_contract_suite,
+    run_protocol_version_suite, run_push_rule_core_suite, run_realm_join_candidate_suite,
+    run_relation_structural_realm_suite, run_sdk_precheck_suite,
+    run_security_transaction_resilience_joint_gate, run_session_grant_issuer_ledger_suite,
+    run_signal_sequence_high_water_suite, run_strand_watch_current_suite, run_string_profile_suite,
+    run_sync_fixture_suite, run_test_material_rejection_suite, run_view_write_contract_suite,
     run_webrtc_media_plaintext_suite, run_websocket_binding_suite, spec_artifacts_root,
 };
 
@@ -49,7 +49,7 @@ const ACCOUNT_STATUS_ENTRYPOINT: &str = "ak.suite.account_status.issuer_ledger.v
 /// Exact acknowledged gap ledger. This is deliberately closed: adding or
 /// renaming a canonical named suite cannot remain invisible merely because the
 /// total number of unwired suites happened to stay constant.
-const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 30] = [
+const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 29] = [
     "ak.suite.agent.draft_pending_intent.v1",
     "ak.suite.agent.participation.v1",
     "ak.suite.agent.vectors.v1",
@@ -75,7 +75,6 @@ const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 30] = [
     "ak.suite.peer.event_submit.semantic_union.v1",
     "ak.suite.privacy.security.v1",
     "ak.suite.protocol.edge_cases.v1",
-    "ak.suite.realm_join_candidate.untrusted_locator.v1",
     "ak.suite.scope.circle.v1",
     "ak.suite.sdk.event_type_axes.v1",
     "ak.suite.signer_key.historical_commit_coordinate.v1",
@@ -95,7 +94,7 @@ enum Runner {
     EvidenceMapped(fn() -> Result<()>),
 }
 
-const RUNNERS: [(&str, Runner); 43] = [
+const RUNNERS: [(&str, Runner); 44] = [
     (
         ACCOUNT_DATA_CAS_CONVERGENCE_ENTRYPOINT,
         Runner::Cases(run_account_data_cas_convergence_suite),
@@ -252,6 +251,18 @@ const RUNNERS: [(&str, Runner); 43] = [
     (
         RELATION_STRUCTURAL_REALM_ENTRYPOINT,
         Runner::Cases(run_relation_structural_realm_suite),
+    ),
+    (
+        REALM_JOIN_CANDIDATE_ENTRYPOINT,
+        Runner::CasesAcross {
+            run: run_realm_join_candidate_suite,
+            pointers: &[
+                "/rejected_additional_members",
+                "/rejected_locator_arrays",
+                "/authority_assertion_cases",
+                "/authority_chain_cases",
+            ],
+        },
     ),
     (
         SDK_PRECHECK_ENTRYPOINT,

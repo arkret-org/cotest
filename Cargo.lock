@@ -2853,6 +2853,7 @@ dependencies = [
  "cotest-protocol-version-runner",
  "cotest-push-registration-handoff-runner",
  "cotest-push-rule-core-runner",
+ "cotest-realm-join-candidate-runner",
  "cotest-relation-structural-realm-runner",
  "cotest-sdk-precheck-runner",
  "cotest-strand-watch-current-runner",
@@ -3091,6 +3092,23 @@ dependencies = [
  "arkret-models-integration",
  "arkret-push-policy",
  "arkret-wire",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "cotest-realm-join-candidate-runner"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "arkret-canonical",
+ "arkret-identity",
+ "arkret-models-collaboration",
+ "arkret-models-identity",
+ "arkret-signatures",
+ "arkret-wire",
+ "chrono",
+ "ed25519-dalek 3.0.0",
  "serde",
  "serde_json",
 ]

@@ -1,0 +1,22 @@
+[package]
+name = "cotest-realm-join-candidate-runner"
+version = "0.3.0"
+edition = "2024"
+rust-version = "1.98"
+publish = false
+
+[dependencies]
+anyhow = { workspace = true }
+arkret-canonical = { workspace = true }
+arkret-identity = { workspace = true }
+arkret-models-collaboration = { workspace = true }
+arkret-models-identity = { workspace = true }
+arkret-signatures = { workspace = true }
+arkret-wire = { workspace = true, features = ["test-support"] }
+chrono = { workspace = true }
+ed25519-dalek = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true
