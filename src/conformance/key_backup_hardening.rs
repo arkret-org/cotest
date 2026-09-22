@@ -1,9 +1,7 @@
 //! Key-backup KDF floor and unlock-proof conformance vectors.
 
 use anyhow::{Context, Result, anyhow, bail};
-use arkret_models_crypto::{
-    BackupKind, KeyBackupKeybag, KeyBackupPlaintext, KeyBackupUnlockAuthority, KeyBackupUnlockProof,
-};
+use arkret_models_crypto::{KeyBackupPlaintext, KeyBackupUnlockAuthority, KeyBackupUnlockProof};
 use arkret_wire::{ActorId, ProfileId};
 use base64::Engine as _;
 use serde::Deserialize;
@@ -14,7 +12,7 @@ use super::{expected_bool, expected_str, required_str};
 
 pub const VECTOR_ID_KEY_BACKUP_KDF_FLOOR_REJECTED: &str =
     "ak.vector.key_backup.kdf_floor_rejected.v1";
-pub use arkret_models_crypto::key_backup::VECTOR_ID_KEY_BACKUP_UNLOCK_PROOF;
+pub const VECTOR_ID_KEY_BACKUP_UNLOCK_PROOF: &str = "ak.vector.key_backup.unlock_proof.v1";
 pub const VECTOR_ID_KEY_BACKUP_DELETE_AUTHORITY: &str = "ak.vector.key_backup.delete_authority.v1";
 
 pub const ALL_KEY_BACKUP_HARDENING_VECTOR_IDS: &[&str] = &[
@@ -24,6 +22,7 @@ pub const ALL_KEY_BACKUP_HARDENING_VECTOR_IDS: &[&str] = &[
 ];
 
 const KEY_BACKUP_HARDENING_FIXTURE_FILE: &str = "key-backup-hardening-fixture.json";
+pub const KEY_BACKUP_HARDENING_ENTRYPOINT: &str = "ak.suite.crypto.key_backup_hardening.v1";
 const KEY_BACKUP_ENCRYPTION_SCHEMA: &str = "schemas/key-backup.schema.json#/properties/encryption";
 const KEY_BACKUP_UNLOCK_REQUEST_SCHEMA: &str =
     "schemas/keys-operations.schema.json#/$defs/keys_backups_unlock_request_body";
@@ -175,13 +174,6 @@ fn backup_envelope_state(value: &Value) -> Result<BackupEnvelopeState> {
     })
 }
 
-fn backup_class_str(backup_kind: BackupKind) -> &'static str {
-    match backup_kind {
-        BackupKind::SecretStorage => "secret_storage",
-        BackupKind::MlsHistory => "mls_history",
-    }
-}
-
 fn authorize_unlock(
     path_backup_id: &str,
     caller: &ActorId,
@@ -203,7 +195,7 @@ fn authorize_unlock(
         || !matches!(&proof.authority, KeyBackupUnlockAuthority::RecoverySession { recovery_session_id } if recovery_session_id.as_str()==session.recovery_session_id)
         || proof.account_id != session.account_id
         || proof.requesting_device_id.as_str() != session.requesting_device_id
-        || backup_class_str(proof.backup_kind) != envelope.backup_kind
+        || proof.backup_kind.as_str() != envelope.backup_kind
         || proof.series_id.as_str() != envelope.series_id
         || proof.ciphertext_digest.as_str() != envelope.ciphertext_digest
         || proof.challenge.as_str() != session.challenge
@@ -415,26 +407,25 @@ pub fn run_key_backup_unlock_proof_vector() -> Result<()> {
         .cloned()
         .ok_or_else(|| anyhow!("unlock vector missing plaintext"))?;
     schema_valid(KEY_BACKUP_PLAINTEXT_SCHEMA_FILE, &plaintext_value)?;
-    let plaintext: KeyBackupPlaintext = serde_json::from_value(plaintext_value)?;
+    let plaintext: KeyBackupPlaintext = serde_json::from_value(serde_json::json!({
+        "backup_kind": plaintext_value["backup_kind"],
+        "items": plaintext_value["items"],
+    }))?;
     if expected_bool(vector, "plaintext_metadata_matches_envelope")?
-        && (plaintext.backup_id.as_str() != envelope.backup_id
-            || backup_class_str(plaintext.keybag.backup_kind()) != envelope.backup_kind
-            || plaintext.series_id.as_str() != envelope.series_id
-            || plaintext.series_seq != envelope.series_seq)
+        && (required_str(&plaintext_value, "backup_id")? != envelope.backup_id
+            || plaintext.backup_kind.as_str() != envelope.backup_kind
+            || required_str(&plaintext_value, "series_id")? != envelope.series_id
+            || plaintext_value.get("series_seq").and_then(Value::as_u64)
+                != Some(envelope.series_seq))
     {
         bail!("key backup plaintext metadata does not match the envelope");
     }
-    match &plaintext.keybag {
-        KeyBackupKeybag::SecretStorage { items } => {
-            if items.iter().any(|item| item.secret_b64u.trim().is_empty()) {
-                bail!("plaintext keybag item carried an empty secret");
-            }
-        }
-        KeyBackupKeybag::MlsHistory { items, .. } => {
-            if items.iter().any(|item| item.secrets_b64u.trim().is_empty()) {
-                bail!("plaintext keybag item carried an empty secret");
-            }
-        }
+    if plaintext
+        .items
+        .iter()
+        .any(|item| item.secret_b64u.as_str().is_empty() || item.validate().is_err())
+    {
+        bail!("plaintext keybag item carried an invalid or empty secret");
     }
     Ok(())
 }
@@ -443,7 +434,7 @@ pub fn run_key_backup_unlock_proof_vector() -> Result<()> {
 pub fn run_key_backup_delete_authority_vector() -> Result<()> {
     use std::collections::{BTreeMap, BTreeSet};
 
-    use arkret_models_crypto::key_backup::KeysBackupsDeleteChallenge;
+    use arkret_models_crypto::KeysBackupsDeleteChallenge;
     use chrono::Duration;
     use serde_json::json;
 
@@ -464,13 +455,39 @@ pub fn run_key_backup_delete_authority_vector() -> Result<()> {
         "expires_at": "2026-07-31T00:05:00.000Z"
     }))?;
     let reason = Some("operator-request");
-    let baseline = challenge.delete_intent_digest(reason)?.to_string();
+    let baseline = key_backup_delete_intent_digest(&challenge, reason)?;
 
     // The transcript binds the delete-intent family's own registered context.
     // `key-management.md` §7.8.1 gives the deletion authority its own object
     // family, so a signature minted under any other context signs different
     // bytes and can never be replayed onto a delete.
-    let transcript = challenge.delete_intent_transcript(reason);
+    let transcript = key_backup_delete_intent_transcript(&challenge, reason);
+    let actual_keys = transcript
+        .as_object()
+        .ok_or_else(|| anyhow!("backup delete-intent transcript is not an object"))?
+        .keys()
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>();
+    let expected_keys = [
+        "context",
+        "operation",
+        "request_id",
+        "account_id",
+        "backup_id",
+        "reason",
+        "challenge_id",
+        "challenge",
+        "nonce",
+        "audience",
+        "service_id",
+        "issued_at",
+        "expires_at",
+    ]
+    .into_iter()
+    .collect::<BTreeSet<_>>();
+    if actual_keys != expected_keys {
+        bail!("backup delete-intent transcript fixed member set drifted");
+    }
     let context = transcript
         .get("context")
         .and_then(Value::as_str)
@@ -486,7 +503,7 @@ pub fn run_key_backup_delete_authority_vector() -> Result<()> {
         bail!("backup delete-intent context `{context}` is not a registered proof context");
     }
     let mut foreign_context = transcript.clone();
-    foreign_context["context"] = json!(arkret_wire::ProofContextId::AUTHORIZATION_LEASE_PROOF_V1);
+    foreign_context["context"] = json!(arkret_wire::ProofContextId::JOIN_GATE_PROOF_V1);
     let foreign_context_digest = arkret_canonical::canonical_sha256(&foreign_context)?;
     if foreign_context_digest == baseline {
         bail!(
@@ -499,30 +516,26 @@ pub fn run_key_backup_delete_authority_vector() -> Result<()> {
     mutations.push(foreign_context_digest);
     let mut backup = serde_json::to_value(&challenge)?;
     backup["backup_id"] = json!("ak:backup:0196419b-0000-7000-8000-000000000002");
-    mutations.push(
-        serde_json::from_value::<KeysBackupsDeleteChallenge>(backup)?
-            .delete_intent_digest(reason)?
-            .to_string(),
-    );
-    mutations.push(
-        challenge
-            .delete_intent_digest(Some("tampered-reason"))?
-            .to_string(),
-    );
+    mutations.push(key_backup_delete_intent_digest(
+        &serde_json::from_value::<KeysBackupsDeleteChallenge>(backup)?,
+        reason,
+    )?);
+    mutations.push(key_backup_delete_intent_digest(
+        &challenge,
+        Some("tampered-reason"),
+    )?);
     let mut audience = serde_json::to_value(&challenge)?;
     audience["audience"] = json!("https://other.example");
-    mutations.push(
-        serde_json::from_value::<KeysBackupsDeleteChallenge>(audience)?
-            .delete_intent_digest(reason)?
-            .to_string(),
-    );
+    mutations.push(key_backup_delete_intent_digest(
+        &serde_json::from_value::<KeysBackupsDeleteChallenge>(audience)?,
+        reason,
+    )?);
     let mut nonce = serde_json::to_value(&challenge)?;
     nonce["nonce"] = json!("EEEEEEEEEEEEEEEEEEEEEE");
-    mutations.push(
-        serde_json::from_value::<KeysBackupsDeleteChallenge>(nonce)?
-            .delete_intent_digest(reason)?
-            .to_string(),
-    );
+    mutations.push(key_backup_delete_intent_digest(
+        &serde_json::from_value::<KeysBackupsDeleteChallenge>(nonce)?,
+        reason,
+    )?);
     if mutations.iter().any(|digest| digest == &baseline) {
         bail!("backup_id/reason/audience/nonce mutation did not change the signed transcript");
     }
@@ -623,19 +636,111 @@ pub fn run_key_backup_delete_authority_vector() -> Result<()> {
     Ok(())
 }
 
+fn key_backup_delete_intent_transcript(
+    challenge: &arkret_models_crypto::KeysBackupsDeleteChallenge,
+    reason: Option<&str>,
+) -> Value {
+    serde_json::json!({
+        "context": arkret_models_crypto::KEY_BACKUP_DELETE_PROOF_CONTEXT,
+        "operation": challenge.operation,
+        "request_id": challenge.request_id,
+        "account_id": challenge.account_id,
+        "backup_id": challenge.backup_id,
+        "reason": reason,
+        "challenge_id": challenge.challenge_id,
+        "challenge": challenge.challenge,
+        "nonce": challenge.nonce,
+        "audience": challenge.audience,
+        "service_id": challenge.service_id,
+        "issued_at": challenge.issued_at,
+        "expires_at": challenge.expires_at,
+    })
+}
+
+fn key_backup_delete_intent_digest(
+    challenge: &arkret_models_crypto::KeysBackupsDeleteChallenge,
+    reason: Option<&str>,
+) -> Result<String> {
+    Ok(arkret_canonical::canonical_sha256(
+        &key_backup_delete_intent_transcript(challenge, reason),
+    )?)
+}
+
 pub fn run_key_backup_hardening_fixture_suite() -> Result<()> {
-    validate_key_backup_hardening_fixture_metadata(&key_backup_hardening_fixture()?)?;
+    run_key_backup_hardening_suite().map(|_| ())
+}
+
+/// Execute each canonical fixture case through its exact typed conformance
+/// runner. Unknown cases and any name/vector/kind drift fail closed.
+pub fn run_key_backup_hardening_suite() -> Result<super::SuiteExecutionResult> {
+    let fixture = key_backup_hardening_fixture()?;
     if ALL_KEY_BACKUP_HARDENING_VECTOR_IDS.len() != 3 {
         bail!(
             "expected 3 key backup hardening vector ids, got {}",
             ALL_KEY_BACKUP_HARDENING_VECTOR_IDS.len()
         );
     }
+    if fixture
+        .runner
+        .pointer("/entrypoint")
+        .and_then(Value::as_str)
+        != Some(KEY_BACKUP_HARDENING_ENTRYPOINT)
+    {
+        bail!("key backup hardening named-suite entrypoint drifted");
+    }
+    if fixture.cases.len() != 3 {
+        bail!(
+            "expected 3 key backup hardening cases, got {}",
+            fixture.cases.len()
+        );
+    }
 
-    run_key_backup_kdf_floor_rejected_vector()?;
-    run_key_backup_unlock_proof_vector()?;
-    run_key_backup_delete_authority_vector()?;
-    Ok(())
+    let mut results = Vec::with_capacity(fixture.cases.len());
+    for case in &fixture.cases {
+        let name = required_str(case, "name")?;
+        let vector_id = required_str(case, "vector_id")?;
+        let kind = required_str(case, "kind")?;
+        let (expected_vector, expected_kind, execute): (&str, &str, fn() -> Result<()>) = match name
+        {
+            "kdf_floor_rejected" => (
+                VECTOR_ID_KEY_BACKUP_KDF_FLOOR_REJECTED,
+                "passphrase_kdf_floor",
+                run_key_backup_kdf_floor_rejected_vector,
+            ),
+            "unlock_proof" => (
+                VECTOR_ID_KEY_BACKUP_UNLOCK_PROOF,
+                "unlock_proof_binding",
+                run_key_backup_unlock_proof_vector,
+            ),
+            "delete_authority" => (
+                VECTOR_ID_KEY_BACKUP_DELETE_AUTHORITY,
+                "active_series_tail_delete_authority",
+                run_key_backup_delete_authority_vector,
+            ),
+            other => bail!("unknown key backup hardening case {other}"),
+        };
+        if vector_id != expected_vector || kind != expected_kind {
+            bail!("key backup hardening case {name} dispatch metadata drifted");
+        }
+        execute()?;
+        let assertions = case
+            .get("assertions")
+            .and_then(Value::as_array)
+            .map(Vec::len)
+            .filter(|count| *count > 0)
+            .ok_or_else(|| anyhow!("key backup hardening case {name} has no assertions"))?;
+        results.push(super::CaseExecutionResult {
+            case_id: name.to_owned(),
+            assertions,
+        });
+    }
+    let execution = super::SuiteExecutionResult {
+        entrypoint: KEY_BACKUP_HARDENING_ENTRYPOINT,
+        fixture: KEY_BACKUP_HARDENING_FIXTURE_FILE,
+        cases: results,
+    };
+    execution.assert_complete_against_cases(&fixture.cases)?;
+    Ok(execution)
 }
 
 #[cfg(test)]
@@ -644,6 +749,8 @@ mod tests {
 
     #[test]
     fn key_backup_hardening_vectors_run_clean() {
-        run_key_backup_hardening_fixture_suite().unwrap();
+        let execution = run_key_backup_hardening_suite().unwrap();
+        assert_eq!(execution.cases.len(), 3);
+        assert!(execution.cases.iter().all(|case| case.assertions > 0));
     }
 }

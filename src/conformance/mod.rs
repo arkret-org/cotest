@@ -303,8 +303,9 @@ pub use invite_new_source_quota::{
     run_invite_new_source_quota_suite,
 };
 pub use key_backup_hardening::{
-    ALL_KEY_BACKUP_HARDENING_VECTOR_IDS, VECTOR_ID_KEY_BACKUP_DELETE_AUTHORITY,
-    run_key_backup_delete_authority_vector, run_key_backup_hardening_fixture_suite,
+    ALL_KEY_BACKUP_HARDENING_VECTOR_IDS, KEY_BACKUP_HARDENING_ENTRYPOINT,
+    VECTOR_ID_KEY_BACKUP_DELETE_AUTHORITY, run_key_backup_delete_authority_vector,
+    run_key_backup_hardening_fixture_suite, run_key_backup_hardening_suite,
     run_key_backup_kdf_floor_rejected_vector, run_key_backup_unlock_proof_vector,
 };
 pub use keypackage_lifecycle::{
