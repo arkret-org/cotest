@@ -14,7 +14,7 @@ use serde_json::Value;
 use super::{
     ACCOUNT_BLOCKLIST_PROJECTION_ENTRYPOINT, ACCOUNT_DATA_CAS_CONVERGENCE_ENTRYPOINT,
     AEAD_NONCE_REPLAY_ENTRYPOINT, AGENT_MLS_KEYPACKAGE_AUTHORIZATION_ENTRYPOINT,
-    BLOB_STREAM_AEAD_ENTRYPOINT, CALL_STATE_CORE_ENTRYPOINT,
+    BLOB_STREAM_AEAD_ENTRYPOINT, CALL_MEDIA_LIFECYCLE_ENTRYPOINT, CALL_STATE_CORE_ENTRYPOINT,
     CAPABILITY_RELINQUISH_AUTHORING_ENTRYPOINT, CRYPTO_HPKE_ENTRYPOINT, CURSOR_NEGATIVE_ENTRYPOINT,
     DETACHED_OBJECT_SIGNATURE_ENTRYPOINT, FRANKING_PROOF_ENTRYPOINT,
     KEYPACKAGE_WRITE_TRANSCRIPTS_ENTRYPOINT, OBJECT_IDENTITY_COLLISION_ENTRYPOINT,
@@ -26,9 +26,9 @@ use super::{
     run_account_data_cas_convergence_suite, run_account_status_issuer_ledger_vector,
     run_aead_nonce_replay_suite, run_agent_membership_cascade_suite,
     run_agent_mls_keypackage_authorization_suite, run_applet_registration_epoch_kat_suite,
-    run_authority_commit_suite, run_blob_stream_aead_suite, run_call_state_core_suite,
-    run_capability_relinquish_authoring_suite, run_crypto_hpke_suite, run_cursor_negative_suite,
-    run_detached_object_signature_suite, run_encoding_fixture_suite,
+    run_authority_commit_suite, run_blob_stream_aead_suite, run_call_media_lifecycle_suite,
+    run_call_state_core_suite, run_capability_relinquish_authoring_suite, run_crypto_hpke_suite,
+    run_cursor_negative_suite, run_detached_object_signature_suite, run_encoding_fixture_suite,
     run_event_envelope_fixture_suite, run_fanout_route_miss_suite,
     run_file_transfer_stream_aead_fixture_suite, run_franking_proof_suite,
     run_invite_new_source_quota_suite, run_keypackage_write_transcripts_suite,
@@ -47,7 +47,7 @@ const ACCOUNT_STATUS_ENTRYPOINT: &str = "ak.suite.account_status.issuer_ledger.v
 /// Exact acknowledged gap ledger. This is deliberately closed: adding or
 /// renaming a canonical named suite cannot remain invisible merely because the
 /// total number of unwired suites happened to stay constant.
-const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 33] = [
+const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 32] = [
     "ak.suite.agent.draft_pending_intent.v1",
     "ak.suite.agent.participation.v1",
     "ak.suite.agent.vectors.v1",
@@ -55,7 +55,6 @@ const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 33] = [
     "ak.suite.applet.revoke_saga.v1",
     "ak.suite.auth.session_proof.v1",
     "ak.suite.authz.approval_signature.v1",
-    "ak.suite.call.media_lifecycle.v1",
     "ak.suite.conformance.final_closure.v1",
     "ak.suite.consent.cache_invalidation.v1",
     "ak.suite.contact.bilateral_continuity_checkpoint.v1",
@@ -96,7 +95,7 @@ enum Runner {
     EvidenceMapped(fn() -> Result<()>),
 }
 
-const RUNNERS: [(&str, Runner); 40] = [
+const RUNNERS: [(&str, Runner); 41] = [
     (
         ACCOUNT_DATA_CAS_CONVERGENCE_ENTRYPOINT,
         Runner::Cases(run_account_data_cas_convergence_suite),
@@ -136,6 +135,10 @@ const RUNNERS: [(&str, Runner); 40] = [
     (
         CALL_STATE_CORE_ENTRYPOINT,
         Runner::Cases(run_call_state_core_suite),
+    ),
+    (
+        CALL_MEDIA_LIFECYCLE_ENTRYPOINT,
+        Runner::Cases(run_call_media_lifecycle_suite),
     ),
     (
         CAPABILITY_RELINQUISH_AUTHORING_ENTRYPOINT,

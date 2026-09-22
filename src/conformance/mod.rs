@@ -215,7 +215,8 @@ pub use call_state_core::{
 };
 pub use call_state_core_executable::{CALL_STATE_CORE_ENTRYPOINT, run_call_state_core_suite};
 pub use call_state_media_lifecycle::{
-    ALL_CALL_STATE_MEDIA_LIFECYCLE_VECTOR_IDS, run_call_state_media_lifecycle_vector_suite,
+    ALL_CALL_STATE_MEDIA_LIFECYCLE_VECTOR_IDS, CALL_MEDIA_LIFECYCLE_ENTRYPOINT,
+    run_call_media_lifecycle_suite, run_call_state_media_lifecycle_vector_suite,
     run_moderator_kick_ban_vector, run_p2p_to_sfu_upgrade_vector,
     run_recording_result_artifact_shape_vector, run_recording_retention_lock_vector,
     run_transcribe_lifecycle_vector,

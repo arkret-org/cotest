@@ -57,6 +57,7 @@ pub const ALL_CALL_STATE_MEDIA_LIFECYCLE_VECTOR_IDS: &[&str] = &[
 ];
 
 const CALL_STATE_MEDIA_LIFECYCLE_FIXTURE_FILE: &str = "call-state-media-lifecycle-fixture.json";
+pub const CALL_MEDIA_LIFECYCLE_ENTRYPOINT: &str = "ak.suite.call.media_lifecycle.v1";
 
 fn validate_call_state_media_lifecycle_fixture_metadata() -> Result<()> {
     let fixture = super::load_fixture_value(CALL_STATE_MEDIA_LIFECYCLE_FIXTURE_FILE)?;
@@ -774,6 +775,13 @@ pub fn run_p2p_to_sfu_upgrade_vector() -> Result<()> {
 /// Suite entry point — runs all 5 call-state media-lifecycle vectors back to
 /// back. One failure stops the run with full context.
 pub fn run_call_state_media_lifecycle_vector_suite() -> Result<()> {
+    run_call_media_lifecycle_suite().map(|_| ())
+}
+
+/// Named-suite entrypoint. Each canonical fixture case is dispatched to the
+/// exact typed SDK vector runner named by the fixture; unknown, reordered, or
+/// assertion-free cases fail closed.
+pub fn run_call_media_lifecycle_suite() -> Result<super::SuiteExecutionResult> {
     validate_call_state_media_lifecycle_fixture_metadata()?;
     if ALL_CALL_STATE_MEDIA_LIFECYCLE_VECTOR_IDS.len() != 5 {
         bail!(
@@ -781,12 +789,81 @@ pub fn run_call_state_media_lifecycle_vector_suite() -> Result<()> {
             ALL_CALL_STATE_MEDIA_LIFECYCLE_VECTOR_IDS.len()
         );
     }
-    run_recording_retention_lock_vector()?;
-    run_recording_result_artifact_shape_vector()?;
-    run_transcribe_lifecycle_vector()?;
-    run_moderator_kick_ban_vector()?;
-    run_p2p_to_sfu_upgrade_vector()?;
-    Ok(())
+    let fixture = super::load_fixture_value(CALL_STATE_MEDIA_LIFECYCLE_FIXTURE_FILE)?;
+    if fixture
+        .pointer("/runner/entrypoint")
+        .and_then(Value::as_str)
+        != Some(CALL_MEDIA_LIFECYCLE_ENTRYPOINT)
+    {
+        bail!("call-state media-lifecycle named-suite entrypoint drifted");
+    }
+    let cases = fixture
+        .get("cases")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow::anyhow!("call-state media-lifecycle fixture missing cases[]"))?;
+    let mut results = Vec::with_capacity(cases.len());
+    for case in cases {
+        let name = case
+            .get("name")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow::anyhow!("media-lifecycle case missing name"))?;
+        let vector_id = case
+            .get("vector_id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow::anyhow!("media-lifecycle case {name} missing vector_id"))?;
+        let runner = case
+            .get("runner")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow::anyhow!("media-lifecycle case {name} missing runner"))?;
+        let (expected_vector, expected_runner, execute): (&str, &str, fn() -> Result<()>) =
+            match name {
+                "recording_retention_lock" => (
+                    VECTOR_ID_RECORDING_RETENTION_LOCK,
+                    "cotest::conformance::call_state_media_lifecycle::run_recording_retention_lock_vector",
+                    run_recording_retention_lock_vector,
+                ),
+                "recording_result_artifact_shape" => (
+                    VECTOR_ID_RECORDING_RESULT_ARTIFACT_SHAPE,
+                    "cotest::conformance::call_state_media_lifecycle::run_recording_result_artifact_shape_vector",
+                    run_recording_result_artifact_shape_vector,
+                ),
+                "transcribe_lifecycle" => (
+                    VECTOR_ID_TRANSCRIBE_LIFECYCLE,
+                    "cotest::conformance::call_state_media_lifecycle::run_transcribe_lifecycle_vector",
+                    run_transcribe_lifecycle_vector,
+                ),
+                "moderator_kick_ban" => (
+                    VECTOR_ID_MODERATOR_KICK_BAN,
+                    "cotest::conformance::call_state_media_lifecycle::run_moderator_kick_ban_vector",
+                    run_moderator_kick_ban_vector,
+                ),
+                "p2p_to_sfu_upgrade" => (
+                    VECTOR_ID_P2P_TO_SFU_UPGRADE,
+                    "cotest::conformance::call_state_media_lifecycle::run_p2p_to_sfu_upgrade_vector",
+                    run_p2p_to_sfu_upgrade_vector,
+                ),
+                other => bail!("unknown call-state media-lifecycle case {other}"),
+            };
+        if vector_id != expected_vector || runner != expected_runner {
+            bail!("media-lifecycle case {name} dispatch metadata drifted");
+        }
+        execute()?;
+        let assertions = case
+            .get("assertions")
+            .and_then(Value::as_array)
+            .map(Vec::len)
+            .filter(|count| *count > 0)
+            .ok_or_else(|| anyhow::anyhow!("media-lifecycle case {name} has no assertions"))?;
+        results.push(super::CaseExecutionResult {
+            case_id: name.to_owned(),
+            assertions,
+        });
+    }
+    Ok(super::SuiteExecutionResult {
+        entrypoint: CALL_MEDIA_LIFECYCLE_ENTRYPOINT,
+        fixture: CALL_STATE_MEDIA_LIFECYCLE_FIXTURE_FILE,
+        cases: results,
+    })
 }
 
 #[cfg(test)]
@@ -795,6 +872,8 @@ mod tests {
 
     #[test]
     fn all_five_call_state_media_lifecycle_vectors_run_clean() {
-        run_call_state_media_lifecycle_vector_suite().unwrap();
+        let execution = run_call_media_lifecycle_suite().unwrap();
+        assert_eq!(execution.cases.len(), 5);
+        assert!(execution.cases.iter().all(|case| case.assertions > 0));
     }
 }

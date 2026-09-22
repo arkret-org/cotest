@@ -16,7 +16,7 @@ use cotest::conformance::{
     ALL_PRIMARY_HANDLE_VECTOR_IDS, ALL_SIDECAR_VECTOR_IDS, load_local_fixture_value,
     run_account_data_cas_convergence_suite, run_aead_nonce_replay_suite,
     run_agent_signer_evidence_vector_suite, run_agent_vector_suite, run_blob_stream_aead_suite,
-    run_call_signal_vector_suite, run_call_state_core_suite,
+    run_call_media_lifecycle_suite, run_call_signal_vector_suite, run_call_state_core_suite,
     run_call_state_media_lifecycle_vector_suite, run_capability_relinquish_authoring_suite,
     run_container_realm_control_payload_suite, run_crypto_hpke_suite, run_cursor_negative_suite,
     run_cursor_vector_suite, run_detached_object_signature_suite,
@@ -222,6 +222,15 @@ fn call_state_core_named_suite_executes_all_current_cases() -> Result<()> {
 }
 
 #[test]
+fn call_media_lifecycle_named_suite_executes_all_current_cases() -> Result<()> {
+    let execution = run_call_media_lifecycle_suite()?;
+    assert_eq!(execution.entrypoint, "ak.suite.call.media_lifecycle.v1");
+    assert_eq!(execution.cases.len(), 5);
+    assert!(execution.cases.iter().all(|case| case.assertions > 0));
+    Ok(())
+}
+
+#[test]
 fn capability_relinquish_authoring_named_suite_executes_all_current_cases() -> Result<()> {
     let execution = run_capability_relinquish_authoring_suite()?;
     assert_eq!(
@@ -242,8 +251,8 @@ fn registered_canonical_json_digest_constructions_match_known_answers() -> Resul
 fn named_suite_audit_executes_registered_runners_and_exposes_every_gap() -> Result<()> {
     let report = run_named_suite_audit()?;
     assert_eq!(report.fixture_count, 73);
-    assert_eq!(report.executed_entrypoints.len(), 40);
-    assert_eq!(report.unwired_entrypoints.len(), 33);
+    assert_eq!(report.executed_entrypoints.len(), 41);
+    assert_eq!(report.unwired_entrypoints.len(), 32);
     for required_gap in [
         "ak.suite.consent.cache_invalidation.v1",
         "ak.suite.direct_conversation.admission_producers.v1",
