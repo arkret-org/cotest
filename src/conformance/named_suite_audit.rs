@@ -18,7 +18,8 @@ use super::{
     CAPABILITY_RELINQUISH_AUTHORING_ENTRYPOINT, CRYPTO_HPKE_ENTRYPOINT, CURSOR_NEGATIVE_ENTRYPOINT,
     DETACHED_OBJECT_SIGNATURE_ENTRYPOINT, FRANKING_PROOF_ENTRYPOINT,
     KEY_BACKUP_HARDENING_ENTRYPOINT, KEYPACKAGE_WRITE_TRANSCRIPTS_ENTRYPOINT,
-    MEDIA_BINDING_ENTRYPOINT, OBJECT_IDENTITY_COLLISION_ENTRYPOINT, PRIVATE_VIEW_INBOX_ENTRYPOINT,
+    MEDIA_BINDING_ENTRYPOINT, MLS_GOVERNANCE_BINDING_ENTRYPOINT,
+    OBJECT_IDENTITY_COLLISION_ENTRYPOINT, PRIVATE_VIEW_INBOX_ENTRYPOINT,
     PRODUCER_IDENTITY_ENTRYPOINT, PROTOCOL_TIME_TOLERANCE_ENTRYPOINT, PROTOCOL_VERSION_ENTRYPOINT,
     PUSH_RULE_CORE_ENTRYPOINT, REALM_JOIN_CANDIDATE_ENTRYPOINT,
     RELATION_STRUCTURAL_REALM_ENTRYPOINT, SDK_PRECHECK_ENTRYPOINT, STRAND_WATCH_CURRENT_ENTRYPOINT,
@@ -34,10 +35,10 @@ use super::{
     run_file_transfer_stream_aead_fixture_suite, run_franking_proof_suite,
     run_invite_new_source_quota_suite, run_key_backup_hardening_suite,
     run_keypackage_write_transcripts_suite, run_media_binding_suite,
-    run_mls_creator_bootstrap_recovery_suite, run_object_identity_collision_suite,
-    run_private_view_inbox_suite, run_producer_identity_suite, run_protocol_time_tolerance_suite,
-    run_protocol_version_suite, run_push_rule_core_suite, run_realm_join_candidate_suite,
-    run_relation_structural_realm_suite, run_sdk_precheck_suite,
+    run_mls_creator_bootstrap_recovery_suite, run_mls_governance_binding_suite,
+    run_object_identity_collision_suite, run_private_view_inbox_suite, run_producer_identity_suite,
+    run_protocol_time_tolerance_suite, run_protocol_version_suite, run_push_rule_core_suite,
+    run_realm_join_candidate_suite, run_relation_structural_realm_suite, run_sdk_precheck_suite,
     run_security_transaction_resilience_joint_gate, run_session_grant_issuer_ledger_suite,
     run_signal_sequence_high_water_suite, run_strand_watch_current_suite, run_string_profile_suite,
     run_sync_fixture_suite, run_test_material_rejection_suite, run_view_write_contract_suite,
@@ -49,7 +50,7 @@ const ACCOUNT_STATUS_ENTRYPOINT: &str = "ak.suite.account_status.issuer_ledger.v
 /// Exact acknowledged gap ledger. This is deliberately closed: adding or
 /// renaming a canonical named suite cannot remain invisible merely because the
 /// total number of unwired suites happened to stay constant.
-const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 29] = [
+const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 28] = [
     "ak.suite.agent.draft_pending_intent.v1",
     "ak.suite.agent.participation.v1",
     "ak.suite.agent.vectors.v1",
@@ -70,7 +71,6 @@ const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 29] = [
     "ak.suite.identity.pcr_genesis.v1",
     "ak.suite.identity_link.invalidation.v1",
     "ak.suite.invite.claim_security.v1",
-    "ak.suite.mls.governance_binding_closure.v1",
     "ak.suite.mls.rfc9420_kat.v1",
     "ak.suite.peer.event_submit.semantic_union.v1",
     "ak.suite.privacy.security.v1",
@@ -94,7 +94,7 @@ enum Runner {
     EvidenceMapped(fn() -> Result<()>),
 }
 
-const RUNNERS: [(&str, Runner); 44] = [
+const RUNNERS: [(&str, Runner); 45] = [
     (
         ACCOUNT_DATA_CAS_CONVERGENCE_ENTRYPOINT,
         Runner::Cases(run_account_data_cas_convergence_suite),
@@ -177,6 +177,10 @@ const RUNNERS: [(&str, Runner); 44] = [
     (
         "ak.suite.mls.creator_bootstrap_recovery.v1",
         Runner::EvidenceMapped(run_mls_creator_bootstrap_recovery_suite),
+    ),
+    (
+        MLS_GOVERNANCE_BINDING_ENTRYPOINT,
+        Runner::Cases(run_mls_governance_binding_suite),
     ),
     (
         "ak.suite.security_transaction.resilience.v1",

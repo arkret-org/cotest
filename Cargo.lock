@@ -2848,6 +2848,7 @@ dependencies = [
  "cotest-cursor-negative-runner",
  "cotest-detached-object-signature-runner",
  "cotest-franking-proof-runner",
+ "cotest-mls-governance-binding-runner",
  "cotest-private-view-inbox-runner",
  "cotest-producer-identity-runner",
  "cotest-protocol-version-runner",
@@ -3029,6 +3030,19 @@ dependencies = [
  "arkret-models-collaboration",
  "arkret-signatures",
  "arkret-wire",
+ "serde_json",
+]
+
+[[package]]
+name = "cotest-mls-governance-binding-runner"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "arkret-mls",
+ "arkret-models-collaboration",
+ "arkret-models-crypto",
+ "arkret-wire",
+ "hex",
  "serde_json",
 ]
 

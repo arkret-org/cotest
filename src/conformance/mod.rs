@@ -66,6 +66,7 @@ mod member_roster_vectors;
 mod mention_rendering_vectors;
 mod mimi_provider_directory;
 mod mls_creator_bootstrap_recovery;
+mod mls_governance_binding;
 mod named_suite_audit;
 mod object_addressing_vectors;
 mod object_identity_collision;
@@ -360,6 +361,9 @@ pub use mimi_provider_directory::{
     VECTOR_ID_MIMI_PROVIDER_DIRECTORY_SIGNATURE, run_mimi_provider_directory_signature_vector,
 };
 pub use mls_creator_bootstrap_recovery::run_mls_creator_bootstrap_recovery_suite;
+pub use mls_governance_binding::{
+    MLS_GOVERNANCE_BINDING_ENTRYPOINT, run_mls_governance_binding_suite,
+};
 pub use named_suite_audit::{NamedSuiteAuditReport, run_named_suite_audit};
 pub use object_addressing_vectors::{
     ALL_OBJECT_ADDRESSING_VECTOR_IDS, run_grammar_fail_closed_vector,

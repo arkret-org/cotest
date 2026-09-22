@@ -48,6 +48,7 @@ members = [
     "crates/push-registration-handoff-runner",
     "crates/push-rule-core-runner",
     "crates/realm-join-candidate-runner",
+    "crates/mls-governance-binding-runner",
     "crates/relation-structural-realm-runner",
     "crates/sdk-precheck-runner",
     "crates/signal-wire-runner",
@@ -79,6 +80,7 @@ cotest-cursor-negative-runner = { path = "crates/cursor-negative-runner" }
 cotest-crypto-hpke-runner = { path = "crates/crypto-hpke-runner" }
 cotest-detached-object-signature-runner = { path = "crates/detached-object-signature-runner" }
 cotest-franking-proof-runner = { path = "crates/franking-proof-runner" }
+cotest-mls-governance-binding-runner = { path = "crates/mls-governance-binding-runner" }
 cotest-protocol-version-runner = { path = "crates/protocol-version-runner" }
 cotest-private-view-inbox-runner = { path = "crates/private-view-inbox-runner" }
 cotest-producer-identity-runner = { path = "crates/producer-identity-runner" }
@@ -104,6 +106,7 @@ arkret-hlc = { path = "../arkret-rust-sdk/crates/hlc" }
 arkret-http-client = { path = "../arkret-rust-sdk/crates/http-client" }
 arkret-identifiers = { path = "../arkret-rust-sdk/crates/identifiers" }
 arkret-identity = { path = "../arkret-rust-sdk/crates/identity" }
+arkret-mls = { path = "../arkret-rust-sdk/crates/mls" }
 arkret-models-collaboration = { path = "../arkret-rust-sdk/crates/models-collaboration" }
 arkret-models-crypto = { path = "../arkret-rust-sdk/crates/models-crypto" }
 arkret-models-discovery = { path = "../arkret-rust-sdk/crates/models-discovery" }
@@ -189,6 +192,7 @@ cotest-cursor-negative-runner = { workspace = true }
 cotest-crypto-hpke-runner = { workspace = true }
 cotest-detached-object-signature-runner = { workspace = true }
 cotest-franking-proof-runner = { workspace = true }
+cotest-mls-governance-binding-runner = { workspace = true }
 cotest-protocol-version-runner = { workspace = true }
 cotest-private-view-inbox-runner = { workspace = true }
 cotest-producer-identity-runner = { workspace = true }
