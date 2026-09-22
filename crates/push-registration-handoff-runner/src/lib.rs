@@ -114,7 +114,14 @@ pub fn run_push_registration_handoff_lifecycle_with_database_url(
     config.encryption_key_hex = Some(hex::encode([11_u8; 32]));
     config.receipt_signing_key_seed_hex = Some(hex::encode(RECEIPT_SEED));
     config.receipt_verification_method = Some(METHOD.to_owned());
-    let store = RegistrationHandoffStore::from_config(&config, gateway.clone())?
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?;
+    let store = runtime
+        .block_on(RegistrationHandoffStore::from_config(
+            &config,
+            gateway.clone(),
+        ))?
         .context("Floria handoff store was not enabled")?;
     let harness = Harness {
         url: url.to_owned(),
@@ -122,10 +129,7 @@ pub fn run_push_registration_handoff_lifecycle_with_database_url(
         gateway,
         store: Arc::new(store),
     };
-    tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()?
-        .block_on(execute(&harness, cases))
+    runtime.block_on(execute(&harness, cases))
 }
 
 async fn execute(h: &Harness, cases: Vec<Case>) -> Result<PushRegistrationHandoffExecution> {
