@@ -27,6 +27,7 @@ mod call_state_media_lifecycle;
 mod canonical_cross_lang;
 mod canonical_fixture;
 mod capability;
+mod capability_relinquish_authoring;
 mod coauth_lifecycle;
 mod crypto_hpke;
 mod cursor_negative;
@@ -220,6 +221,9 @@ pub use canonical_fixture::{
 pub use capability::{
     run_capability_boundary_fixture_suite, run_capability_facet_fixture_suite,
     run_capability_fixture_suite,
+};
+pub use capability_relinquish_authoring::{
+    CAPABILITY_RELINQUISH_AUTHORING_ENTRYPOINT, run_capability_relinquish_authoring_suite,
 };
 pub use coauth_lifecycle::run_coauth_account_lifecycle_fixture_suite;
 pub use crypto_hpke::{CRYPTO_HPKE_ENTRYPOINT, run_crypto_hpke_suite};

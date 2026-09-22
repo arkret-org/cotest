@@ -2782,6 +2782,7 @@ dependencies = [
  "cotest-agent-mls-keypackage-authorization-runner",
  "cotest-blob-stream-aead-runner",
  "cotest-call-state-core-runner",
+ "cotest-capability-relinquish-authoring-runner",
  "cotest-crypto-hpke-runner",
  "cotest-cursor-negative-runner",
  "cotest-detached-object-signature-runner",
@@ -2883,6 +2884,17 @@ dependencies = [
  "serde",
  "serde_json",
  "soland-domain",
+]
+
+[[package]]
+name = "cotest-capability-relinquish-authoring-runner"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "arkret-models-collaboration",
+ "arkret-wire",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

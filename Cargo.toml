@@ -35,6 +35,7 @@ members = [
     "crates/agent-mls-keypackage-authorization-runner",
     "crates/blob-stream-aead-runner",
     "crates/call-state-core-runner",
+    "crates/capability-relinquish-authoring-runner",
     "crates/cursor-negative-runner",
     "crates/crypto-hpke-runner",
     "crates/detached-object-signature-runner",
@@ -67,6 +68,7 @@ cotest-aead-nonce-replay-runner = { path = "crates/aead-nonce-replay-runner" }
 cotest-agent-mls-keypackage-authorization-runner = { path = "crates/agent-mls-keypackage-authorization-runner" }
 cotest-blob-stream-aead-runner = { path = "crates/blob-stream-aead-runner" }
 cotest-call-state-core-runner = { path = "crates/call-state-core-runner" }
+cotest-capability-relinquish-authoring-runner = { path = "crates/capability-relinquish-authoring-runner" }
 cotest-cursor-negative-runner = { path = "crates/cursor-negative-runner" }
 cotest-crypto-hpke-runner = { path = "crates/crypto-hpke-runner" }
 cotest-detached-object-signature-runner = { path = "crates/detached-object-signature-runner" }
@@ -170,6 +172,7 @@ cotest-aead-nonce-replay-runner = { workspace = true }
 cotest-agent-mls-keypackage-authorization-runner = { workspace = true }
 cotest-blob-stream-aead-runner = { workspace = true }
 cotest-call-state-core-runner = { workspace = true }
+cotest-capability-relinquish-authoring-runner = { workspace = true }
 cotest-cursor-negative-runner = { workspace = true }
 cotest-crypto-hpke-runner = { workspace = true }
 cotest-detached-object-signature-runner = { workspace = true }
