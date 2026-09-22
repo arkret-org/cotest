@@ -412,7 +412,11 @@ pub use protocol_time_tolerance::{
     PROTOCOL_TIME_TOLERANCE_ENTRYPOINT, run_protocol_time_tolerance_suite,
 };
 pub use protocol_version::{PROTOCOL_VERSION_ENTRYPOINT, run_protocol_version_suite};
-pub use push_route_revision::run_push_route_revision_suite;
+pub use push_route_revision::{
+    PUSH_REGISTRATION_HANDOFF_VECTOR_ID, PushRegistrationHandoffExecution,
+    run_push_registration_handoff_lifecycle_vector,
+    run_push_registration_handoff_lifecycle_with_database_url, run_push_route_revision_suite,
+};
 pub use push_rule_core::{
     PUSH_RULE_CORE_ENTRYPOINT, run_push_rule_client_only_vector, run_push_rule_core_fixture_suite,
     run_push_rule_core_suite,

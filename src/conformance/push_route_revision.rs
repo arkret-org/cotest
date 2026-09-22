@@ -1,12 +1,15 @@
 //! Production SDK runner for the device push-route revision-CAS fixture.
 
-use std::collections::BTreeSet;
-
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Context, Result, bail};
 use arkret_lattice_registry::{
     ActorPrivateCandidate, ActorPrivateMergeOutcome, build_actor_private_registry,
 };
 use arkret_models_identity::device_push_route::DevicePushRoutePayload;
+pub use cotest_push_registration_handoff_runner::{
+    PUSH_REGISTRATION_HANDOFF_VECTOR_ID, PushRegistrationHandoffExecution,
+    run_push_registration_handoff_lifecycle_vector,
+    run_push_registration_handoff_lifecycle_with_database_url,
+};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -30,72 +33,9 @@ struct PushNotifyOutcomeFixture {
     /// Free-form instances validated by their referenced JSON Schemas.
     schema_validation_cases: Vec<Value>,
     /// Trusted public push-gateway registration handoff lifecycle.
-    registration_handoff_lifecycle_cases: Vec<Value>,
+    #[serde(rename = "registration_handoff_lifecycle_cases")]
+    _registration_handoff_lifecycle_cases: Vec<Value>,
     device_push_route_revision_cases: Vec<Value>,
-}
-
-/// The closed registration-handoff lifecycle set.
-///
-/// Every entry describes a behaviour that only a real Station/gateway pair can
-/// exhibit -- a durable commit whose response was lost, a delayed install
-/// racing a tombstone, two tenants that must not share an index. None of that
-/// is decidable from artifacts, so this runner deliberately does **not** claim
-/// to verify it. What it does claim is narrower and still worth having: the set
-/// is closed, so a seventh case cannot arrive without someone deciding where it
-/// executes, and each case's declared outcome is checked against the generated
-/// constant it names rather than against a second spelling of it.
-const REGISTRATION_HANDOFF_LIFECYCLE_CASES: [&str; 6] = [
-    "exact_replay_after_lost_response",
-    "revoke_wins_over_delayed_install",
-    "same_registration_id_different_body_conflicts",
-    "source_destination_and_device_are_exact",
-    "successor_tombstones_predecessor_atomically",
-    "tenant_isolation",
-];
-
-fn verify_registration_handoff_lifecycle_closure(fixture: &PushNotifyOutcomeFixture) -> Result<()> {
-    let published = fixture
-        .registration_handoff_lifecycle_cases
-        .iter()
-        .map(|case| {
-            case.get("name")
-                .and_then(Value::as_str)
-                .context("registration handoff case name")
-        })
-        .collect::<Result<BTreeSet<_>>>()?;
-    if published != BTreeSet::from(REGISTRATION_HANDOFF_LIFECYCLE_CASES) {
-        bail!("registration handoff lifecycle is not the closed six-case set: {published:?}");
-    }
-    for case in &fixture.registration_handoff_lifecycle_cases {
-        let name = case
-            .get("name")
-            .and_then(Value::as_str)
-            .context("registration handoff case name")?;
-        // A case describes either an ordered lifecycle or a set of rejection
-        // variants. One of the two has to be there, or the row names an
-        // outcome without naming what produces it.
-        let steps = case.get("steps").and_then(Value::as_array);
-        let variants = case.get("variants").and_then(Value::as_array);
-        let described = steps.is_some_and(|rows| !rows.is_empty())
-            || variants.is_some_and(|rows| !rows.is_empty());
-        if !described {
-            bail!("registration handoff case {name} declares no steps and no variants");
-        }
-        let expected = case
-            .get("expected")
-            .and_then(Value::as_str)
-            .filter(|value| !value.trim().is_empty())
-            .ok_or_else(|| anyhow!("registration handoff case {name} declares no outcome"))?;
-        // The one outcome that names a wire code takes it from the generated
-        // constant, so a rename in the registry cannot leave this fixture
-        // asserting a code that no longer exists.
-        if name == "same_registration_id_different_body_conflicts"
-            && !expected.contains(arkret_wire::ErrorCode::DUPLICATE_CONFLICT)
-        {
-            bail!("registration handoff replay conflict no longer names the registered code");
-        }
-    }
-    Ok(())
 }
 
 fn candidate(value: Value, expected_revision: u64) -> ActorPrivateCandidate {
@@ -127,7 +67,6 @@ pub fn run_push_route_revision_suite() -> Result<()> {
         bail!("push notification fixture metadata drifted");
     }
     verify_closed_sdk_payloads(&fixture)?;
-    verify_registration_handoff_lifecycle_closure(&fixture)?;
     let registry = build_actor_private_registry()?;
     let cases = &fixture.device_push_route_revision_cases;
 

@@ -45,6 +45,7 @@ members = [
     "crates/protocol-version-runner",
     "crates/private-view-inbox-runner",
     "crates/producer-identity-runner",
+    "crates/push-registration-handoff-runner",
     "crates/push-rule-core-runner",
     "crates/relation-structural-realm-runner",
     "crates/sdk-precheck-runner",
@@ -80,6 +81,7 @@ cotest-franking-proof-runner = { path = "crates/franking-proof-runner" }
 cotest-protocol-version-runner = { path = "crates/protocol-version-runner" }
 cotest-private-view-inbox-runner = { path = "crates/private-view-inbox-runner" }
 cotest-producer-identity-runner = { path = "crates/producer-identity-runner" }
+cotest-push-registration-handoff-runner = { path = "crates/push-registration-handoff-runner" }
 cotest-push-rule-core-runner = { path = "crates/push-rule-core-runner" }
 cotest-relation-structural-realm-runner = { path = "crates/relation-structural-realm-runner" }
 cotest-test-support = { path = "crates/test-support" }
@@ -122,6 +124,7 @@ coauth-backend = { path = "../coauth/crates/backend" }
 coauth-data = { path = "../coauth/crates/data" }
 ed25519-dalek = { version = "3.0.0", default-features = false }
 fs2 = "0.4.3"
+floria = { path = "../floria" }
 # `native` gives us `NativeExecutor` and the durable `FileStore`, which are what
 # a headless Garth client host is composed from. Without it cotest can only
 # reach Garth's pure builders, which is how the client runtime ended up with
@@ -187,6 +190,7 @@ cotest-franking-proof-runner = { workspace = true }
 cotest-protocol-version-runner = { workspace = true }
 cotest-private-view-inbox-runner = { workspace = true }
 cotest-producer-identity-runner = { workspace = true }
+cotest-push-registration-handoff-runner = { workspace = true }
 cotest-push-rule-core-runner = { workspace = true }
 cotest-relation-structural-realm-runner = { workspace = true }
 cotest-sdk-precheck-runner = { workspace = true }

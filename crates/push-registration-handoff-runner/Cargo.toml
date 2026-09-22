@@ -1,0 +1,25 @@
+[package]
+name = "cotest-push-registration-handoff-runner"
+version = "0.3.0"
+edition = "2024"
+rust-version = "1.98"
+publish = false
+
+[dependencies]
+anyhow = { workspace = true }
+arkret-canonical = { workspace = true }
+arkret-models-integration = { workspace = true }
+arkret-signatures = { workspace = true, features = ["signer"] }
+arkret-wire = { workspace = true }
+ed25519-dalek = { workspace = true }
+floria = { workspace = true }
+hex = { workspace = true }
+postgres = { workspace = true }
+salvo = { workspace = true, features = ["test"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread"] }
+uuid = { version = "1.26.0", features = ["v4"] }
+
+[lints]
+workspace = true
