@@ -22,6 +22,10 @@ use serde::Deserialize;
 pub const PRODUCER_IDENTITY_ENTRYPOINT: &str = "ak.suite.identity.producer_allocated_collision.v1";
 pub const FIXTURE: &str = "producer-allocated-identity-fixture.json";
 const VECTOR_ID: &str = "ak.vector.identity.producer_allocated_collision.v1";
+pub const OBJECT_IDENTITY_COLLISION_ENTRYPOINT: &str =
+    "ak.suite.object_identity.producer_allocated_collision.v1";
+pub const OBJECT_IDENTITY_FIXTURE: &str = "producer-allocated-identity-collision-fixture.json";
+const OBJECT_IDENTITY_VECTOR_ID: &str = "ak.vector.object_identity.producer_allocated_collision.v1";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -88,6 +92,49 @@ struct Case {
     identity_key_template: Option<Vec<String>>,
     #[serde(default)]
     lookup_key: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ObjectIdentityFixture {
+    suite: String,
+    profile: String,
+    version: String,
+    runner: Runner,
+    covers_vectors: Vec<String>,
+    parameter_source: ParameterSource,
+    cases: Vec<ObjectIdentityCase>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ParameterSource {
+    registry: String,
+    filter: ObjectIdentityFilter,
+    identity_key: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ObjectIdentityFilter {
+    id_form: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ObjectIdentityCase {
+    name: String,
+    #[serde(default)]
+    same_mint_authority: Option<bool>,
+    #[serde(default)]
+    same_typed_id: Option<bool>,
+    #[serde(default)]
+    same_canonical_binding: Option<bool>,
+    #[serde(default)]
+    lookup_includes_mint_authority: Option<bool>,
+    #[serde(default)]
+    accepted_proof_signer_matches_mint_authority: Option<bool>,
+    expected: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -191,6 +238,14 @@ fn spec_artifacts_root() -> PathBuf {
 
 fn load_fixture() -> Result<FixtureRoot> {
     let path = spec_artifacts_root().join("fixtures").join(FIXTURE);
+    serde_json::from_slice(&std::fs::read(&path)?)
+        .with_context(|| format!("parse fixture {}", path.display()))
+}
+
+fn load_object_identity_fixture() -> Result<ObjectIdentityFixture> {
+    let path = spec_artifacts_root()
+        .join("fixtures")
+        .join(OBJECT_IDENTITY_FIXTURE);
     serde_json::from_slice(&std::fs::read(&path)?)
         .with_context(|| format!("parse fixture {}", path.display()))
 }
@@ -358,6 +413,14 @@ fn validate_driver(fixture: &FixtureRoot) -> Result<()> {
     Ok(())
 }
 
+fn producer_id_kinds() -> Vec<&'static str> {
+    REGISTERED_ID_KINDS
+        .iter()
+        .filter(|entry| entry.wire_form.ends_with(":<uuidv7>"))
+        .map(|entry| entry.kind)
+        .collect()
+}
+
 pub fn run_producer_identity_suite() -> Result<ProducerIdentityExecution> {
     let fixture = load_fixture()?;
     ensure!(fixture.version == "2026-09-22.1");
@@ -399,6 +462,133 @@ pub fn run_producer_identity_suite() -> Result<ProducerIdentityExecution> {
     })
 }
 
+fn object_expected_outcome(value: &str) -> Result<ReservationOutcome> {
+    match value {
+        "accept_and_reserve_atomically" => Ok(ReservationOutcome::Accepted),
+        "idempotent_replay" => Ok(ReservationOutcome::Idempotent),
+        "reject_and_quarantine" => Ok(ReservationOutcome::RejectAndQuarantine),
+        "distinct_identity" => Ok(ReservationOutcome::DistinctIdentity),
+        "reject" => Ok(ReservationOutcome::Rejected),
+        other => bail!("unknown object-identity outcome {other}"),
+    }
+}
+
+fn run_object_case_for_kind(
+    case: &ObjectIdentityCase,
+    kind: &str,
+    store: &mut ReservationStore,
+) -> Result<usize> {
+    const UUID_A: &str = "019b5c20-0000-7000-8000-000000000001";
+    const UUID_B: &str = "019b5c20-0000-7000-8000-000000000002";
+    const AUTHORITY_A: &str = "did:webvh:z6mkfixtureproduceraexample:producer-a.example";
+    const AUTHORITY_B: &str = "did:webvh:z6mkfixtureproducerbexample:producer-b.example";
+    const BINDING_A: &str =
+        "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const BINDING_B: &str =
+        "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+    let typed_id = format!(
+        "ak:{kind}:{}",
+        if case.same_typed_id == Some(false) {
+            UUID_B
+        } else {
+            UUID_A
+        }
+    );
+    parse_typed_id(kind, &typed_id)?;
+    let authority = Did::new(if case.same_mint_authority == Some(false) {
+        AUTHORITY_B
+    } else {
+        AUTHORITY_A
+    })?;
+    let binding = if case.same_canonical_binding == Some(false) {
+        BINDING_B
+    } else {
+        BINDING_A
+    };
+
+    if let Some(includes_authority) = case.lookup_includes_mint_authority {
+        let lookup = if includes_authority {
+            vec![authority.as_str().to_owned(), typed_id]
+        } else {
+            vec![typed_id]
+        };
+        ensure!(store.lookup(&lookup) == object_expected_outcome(&case.expected)?);
+        return Ok(3);
+    }
+
+    let proof_signer = Did::new(
+        if case.accepted_proof_signer_matches_mint_authority == Some(false) {
+            AUTHORITY_B
+        } else {
+            authority.as_str()
+        },
+    )?;
+    let before = store.bindings.clone();
+    let outcome = store.reserve(&authority, &typed_id, binding, &proof_signer);
+    ensure!(outcome == object_expected_outcome(&case.expected)?);
+    let mut assertions = 3;
+    if outcome == ReservationOutcome::RejectAndQuarantine {
+        ensure!(store.bindings == before);
+        ensure!(
+            store
+                .quarantined
+                .contains(&(authority.as_str().to_owned(), typed_id))
+        );
+        assertions += 2;
+    }
+    if outcome == ReservationOutcome::Rejected {
+        ensure!(store.bindings == before);
+        assertions += 1;
+    }
+    Ok(assertions)
+}
+
+pub fn run_object_identity_collision_suite() -> Result<ProducerIdentityExecution> {
+    let fixture = load_object_identity_fixture()?;
+    ensure!(fixture.suite == "producer_allocated_identity_collision");
+    ensure!(fixture.profile == "ak.vector_group.object_identity.producer_allocated.v1");
+    ensure!(fixture.version == "2026-08-08");
+    ensure!(fixture.runner.kind == "named_suite");
+    ensure!(fixture.runner.entrypoint == OBJECT_IDENTITY_COLLISION_ENTRYPOINT);
+    ensure!(fixture.covers_vectors == [OBJECT_IDENTITY_VECTOR_ID]);
+    ensure!(
+        fixture.parameter_source.registry
+            == "registry/contract-registry.json#id_kind_registry.id_kinds"
+    );
+    ensure!(fixture.parameter_source.filter.id_form == "producer_allocated");
+    ensure!(fixture.parameter_source.identity_key == ["mint_authority", "typed_id"]);
+
+    let kinds = producer_id_kinds();
+    let mut stores = kinds
+        .iter()
+        .map(|kind| (*kind, ReservationStore::default()))
+        .collect::<BTreeMap<_, _>>();
+    let mut results = Vec::with_capacity(fixture.cases.len());
+    for case in &fixture.cases {
+        let mut assertions = 0;
+        for kind in &kinds {
+            assertions += run_object_case_for_kind(
+                case,
+                kind,
+                stores
+                    .get_mut(kind)
+                    .context("object ID kind store missing")?,
+            )?;
+        }
+        results.push(CaseExecutionResult {
+            case_id: case.name.clone(),
+            assertions,
+        });
+    }
+    Ok(ProducerIdentityExecution {
+        entrypoint: OBJECT_IDENTITY_COLLISION_ENTRYPOINT,
+        fixture: OBJECT_IDENTITY_FIXTURE,
+        cases: results,
+        id_kinds_executed: kinds.len(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -432,5 +622,13 @@ mod tests {
             store.reserve(&b, id, "binding-b", &b),
             ReservationOutcome::DistinctIdentity
         );
+    }
+
+    #[test]
+    fn executes_all_object_identity_cases_for_every_producer_kind() {
+        let execution = run_object_identity_collision_suite().unwrap();
+        assert_eq!(execution.cases.len(), 6);
+        assert_eq!(execution.id_kinds_executed, 29);
+        assert!(execution.cases.iter().all(|case| case.assertions > 0));
     }
 }

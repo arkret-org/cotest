@@ -68,6 +68,7 @@ mod mimi_provider_directory;
 mod mls_creator_bootstrap_recovery;
 mod named_suite_audit;
 mod object_addressing_vectors;
+mod object_identity_collision;
 mod operation_clause_registry;
 mod operation_registry_gate;
 mod pcr_outward_exposure;
@@ -363,6 +364,9 @@ pub use object_addressing_vectors::{
     run_scope_confusion_replay_vector, run_scope_token_address_link_kind_wins_vector,
     run_target_digest_ignores_hints_vector, run_target_digest_omits_absent_vector,
     run_target_digest_tracks_object_vector,
+};
+pub use object_identity_collision::{
+    OBJECT_IDENTITY_COLLISION_ENTRYPOINT, run_object_identity_collision_suite,
 };
 pub use operation_clause_registry::validate_operation_clause_registry;
 pub use operation_registry_gate::{
