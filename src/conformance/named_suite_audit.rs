@@ -12,19 +12,20 @@ use anyhow::{Result, anyhow, ensure};
 use serde_json::Value;
 
 use super::{
-    ACCOUNT_BLOCKLIST_PROJECTION_ENTRYPOINT, AGENT_MLS_KEYPACKAGE_AUTHORIZATION_ENTRYPOINT,
-    BLOB_STREAM_AEAD_ENTRYPOINT, CALL_STATE_CORE_ENTRYPOINT, CRYPTO_HPKE_ENTRYPOINT,
-    CURSOR_NEGATIVE_ENTRYPOINT, DETACHED_OBJECT_SIGNATURE_ENTRYPOINT, FRANKING_PROOF_ENTRYPOINT,
+    ACCOUNT_BLOCKLIST_PROJECTION_ENTRYPOINT, AEAD_NONCE_REPLAY_ENTRYPOINT,
+    AGENT_MLS_KEYPACKAGE_AUTHORIZATION_ENTRYPOINT, BLOB_STREAM_AEAD_ENTRYPOINT,
+    CALL_STATE_CORE_ENTRYPOINT, CRYPTO_HPKE_ENTRYPOINT, CURSOR_NEGATIVE_ENTRYPOINT,
+    DETACHED_OBJECT_SIGNATURE_ENTRYPOINT, FRANKING_PROOF_ENTRYPOINT,
     KEYPACKAGE_WRITE_TRANSCRIPTS_ENTRYPOINT, PROTOCOL_TIME_TOLERANCE_ENTRYPOINT,
     PROTOCOL_VERSION_ENTRYPOINT, PUSH_RULE_CORE_ENTRYPOINT, RELATION_STRUCTURAL_REALM_ENTRYPOINT,
     SDK_PRECHECK_ENTRYPOINT, STRING_PROFILE_ENTRYPOINT, SuiteExecutionResult,
     TEST_MATERIAL_REJECTION_ENTRYPOINT, VIEW_WRITE_CONTRACT_ENTRYPOINT,
     run_account_blocklist_projection_vector, run_account_status_issuer_ledger_vector,
-    run_agent_membership_cascade_suite, run_agent_mls_keypackage_authorization_suite,
-    run_applet_registration_epoch_kat_suite, run_authority_commit_suite,
-    run_blob_stream_aead_suite, run_call_state_core_suite, run_crypto_hpke_suite,
-    run_cursor_negative_suite, run_detached_object_signature_suite, run_encoding_fixture_suite,
-    run_event_envelope_fixture_suite, run_fanout_route_miss_suite,
+    run_aead_nonce_replay_suite, run_agent_membership_cascade_suite,
+    run_agent_mls_keypackage_authorization_suite, run_applet_registration_epoch_kat_suite,
+    run_authority_commit_suite, run_blob_stream_aead_suite, run_call_state_core_suite,
+    run_crypto_hpke_suite, run_cursor_negative_suite, run_detached_object_signature_suite,
+    run_encoding_fixture_suite, run_event_envelope_fixture_suite, run_fanout_route_miss_suite,
     run_file_transfer_stream_aead_fixture_suite, run_franking_proof_suite,
     run_invite_new_source_quota_suite, run_keypackage_write_transcripts_suite,
     run_mls_creator_bootstrap_recovery_suite, run_protocol_time_tolerance_suite,
@@ -41,7 +42,7 @@ const ACCOUNT_STATUS_ENTRYPOINT: &str = "ak.suite.account_status.issuer_ledger.v
 /// Exact acknowledged gap ledger. This is deliberately closed: adding or
 /// renaming a canonical named suite cannot remain invisible merely because the
 /// total number of unwired suites happened to stay constant.
-const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 40] = [
+const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 39] = [
     "ak.suite.account_data.cas_convergence.v1",
     "ak.suite.account_data.private_view_inbox_binding.v1",
     "ak.suite.agent.draft_pending_intent.v1",
@@ -56,7 +57,6 @@ const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 40] = [
     "ak.suite.conformance.final_closure.v1",
     "ak.suite.consent.cache_invalidation.v1",
     "ak.suite.contact.bilateral_continuity_checkpoint.v1",
-    "ak.suite.crypto.aead_nonce_replay.v1",
     "ak.suite.crypto.key_backup_hardening.v1",
     "ak.suite.crypto.keypackage_lifecycle.v1",
     "ak.suite.direct_conversation.admission_producers.v1",
@@ -97,7 +97,7 @@ enum Runner {
     EvidenceMapped(fn() -> Result<()>),
 }
 
-const RUNNERS: [(&str, Runner); 33] = [
+const RUNNERS: [(&str, Runner); 34] = [
     (
         ACCOUNT_BLOCKLIST_PROJECTION_ENTRYPOINT,
         Runner::EvidenceMapped(run_account_blocklist_projection_vector),
@@ -133,6 +133,10 @@ const RUNNERS: [(&str, Runner); 33] = [
     (
         CALL_STATE_CORE_ENTRYPOINT,
         Runner::Cases(run_call_state_core_suite),
+    ),
+    (
+        AEAD_NONCE_REPLAY_ENTRYPOINT,
+        Runner::Cases(run_aead_nonce_replay_suite),
     ),
     (
         "ak.suite.crypto.signature.v1",

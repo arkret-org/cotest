@@ -1,5 +1,6 @@
 mod account_blocklist_projection;
 mod account_status_issuer_ledger;
+mod aead_nonce_replay;
 mod agent_draft_pending_intent_account_subscribe;
 mod agent_membership_cascade;
 mod agent_mls_keypackage_authorization;
@@ -84,9 +85,9 @@ mod push_route_revision;
 mod push_rule_core;
 mod read_receipt_signal;
 mod recovery_completion_grant;
-mod relation_structural_realm;
 pub mod recovery_transaction_faults;
 mod redaction;
+mod relation_structural_realm;
 mod scaffold_gate;
 mod scalability_limits;
 mod schema_validation;
@@ -134,6 +135,7 @@ pub use account_blocklist_projection::{
 pub use account_status_issuer_ledger::{
     VECTOR_ID_ACCOUNT_STATUS_ISSUER_LEDGER, run_account_status_issuer_ledger_vector,
 };
+pub use aead_nonce_replay::{AEAD_NONCE_REPLAY_ENTRYPOINT, run_aead_nonce_replay_suite};
 pub use agent_draft_pending_intent_account_subscribe::{
     AgentDraftPendingIntentAccountSubscribeCoverage,
     run_agent_draft_pending_intent_account_subscribe_conformance,
@@ -401,10 +403,10 @@ pub use read_receipt_signal::{
     run_read_receipt_round_trip_vector, run_read_receipt_signal_vector_suite,
 };
 pub use recovery_completion_grant::run_recovery_completion_grant_suite;
+pub use redaction::run_redaction_fixture_suite;
 pub use relation_structural_realm::{
     RELATION_STRUCTURAL_REALM_ENTRYPOINT, run_relation_structural_realm_suite,
 };
-pub use redaction::run_redaction_fixture_suite;
 pub use scaffold_gate::{
     run_live_describe_profile_gate_suite, run_scaffold_profile_gate_suite,
     validate_scaffold_profile_gate,

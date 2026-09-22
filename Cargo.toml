@@ -31,6 +31,7 @@ resolver = "3"
 # Inkson, Dioxus, a `soland-*` crate or the root package, by a normal, build or
 # (from the light edge itself) dev edge.
 members = [
+    "crates/aead-nonce-replay-runner",
     "crates/agent-mls-keypackage-authorization-runner",
     "crates/blob-stream-aead-runner",
     "crates/call-state-core-runner",
@@ -61,6 +62,7 @@ unimplemented = "deny"
 
 [workspace.dependencies]
 aes-gcm = "0.11.1"
+cotest-aead-nonce-replay-runner = { path = "crates/aead-nonce-replay-runner" }
 cotest-agent-mls-keypackage-authorization-runner = { path = "crates/agent-mls-keypackage-authorization-runner" }
 cotest-blob-stream-aead-runner = { path = "crates/blob-stream-aead-runner" }
 cotest-call-state-core-runner = { path = "crates/call-state-core-runner" }
@@ -162,6 +164,7 @@ test-with-containers = ["dep:testcontainers"]
 # this harness and the TypeScript suite consume it, and it must stay buildable
 # without Inkson.
 cotest-test-support = { workspace = true }
+cotest-aead-nonce-replay-runner = { workspace = true }
 cotest-agent-mls-keypackage-authorization-runner = { workspace = true }
 cotest-blob-stream-aead-runner = { workspace = true }
 cotest-call-state-core-runner = { workspace = true }
