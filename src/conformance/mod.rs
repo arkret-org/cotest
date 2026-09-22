@@ -78,6 +78,7 @@ mod privacy;
 mod privacy_security;
 mod private_chat_privacy;
 mod private_view_inbox;
+mod producer_identity;
 mod profile_matrix;
 mod profile_registry;
 mod proof_context_domain_separation;
@@ -390,6 +391,7 @@ pub use privacy::run_privacy_security_fixture_suite;
 pub use privacy_security::run_minimal_metadata_author_credential_vector;
 pub use private_chat_privacy::run_private_chat_privacy_contract_suite;
 pub use private_view_inbox::{PRIVATE_VIEW_INBOX_ENTRYPOINT, run_private_view_inbox_suite};
+pub use producer_identity::{PRODUCER_IDENTITY_ENTRYPOINT, run_producer_identity_suite};
 pub use profile_matrix::{run_profile_requirement_gate_suite, validate_server_profile_claims};
 pub use profile_registry::{
     ProfileGateEntry, ProfileGateReport, ProfileGateStatus, build_profile_gate_report,

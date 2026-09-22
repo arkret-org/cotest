@@ -2789,6 +2789,7 @@ dependencies = [
  "cotest-detached-object-signature-runner",
  "cotest-franking-proof-runner",
  "cotest-private-view-inbox-runner",
+ "cotest-producer-identity-runner",
  "cotest-protocol-version-runner",
  "cotest-push-rule-core-runner",
  "cotest-relation-structural-realm-runner",
@@ -2975,6 +2976,17 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "arkret-models-collaboration",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "cotest-producer-identity-runner"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "arkret-identifiers",
+ "arkret-schema",
  "serde",
  "serde_json",
 ]
