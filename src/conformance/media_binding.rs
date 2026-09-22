@@ -69,6 +69,7 @@ pub const ALL_MEDIA_BINDING_VECTOR_IDS: &[&str] = &[
 ];
 
 const MEDIA_BINDING_FIXTURE_FILE: &str = "media-binding-fixture.json";
+pub const MEDIA_BINDING_ENTRYPOINT: &str = "ak.suite.media.binding.v1";
 
 fn validate_media_binding_fixture_metadata() -> Result<()> {
     let fixture = super::load_fixture_value(MEDIA_BINDING_FIXTURE_FILE)?;
@@ -889,6 +890,13 @@ pub fn run_recording_exporter_label_vector() -> Result<()> {
 /// Suite entry point — runs all 10 media-binding vectors back to back.
 /// One failure stops the run with full context.
 pub fn run_media_binding_vector_suite() -> Result<()> {
+    run_media_binding_suite().map(|_| ())
+}
+
+/// Named-suite entrypoint. Each canonical fixture case is dispatched to the
+/// exact typed SDK vector runner named by the fixture; unknown, reordered, or
+/// assertion-free cases fail closed.
+pub fn run_media_binding_suite() -> Result<super::SuiteExecutionResult> {
     validate_media_binding_fixture_metadata()?;
     if ALL_MEDIA_BINDING_VECTOR_IDS.len() != 10 {
         bail!(
@@ -896,17 +904,106 @@ pub fn run_media_binding_vector_suite() -> Result<()> {
             ALL_MEDIA_BINDING_VECTOR_IDS.len()
         );
     }
-    run_focus_selection_oldest_membership_vector()?;
-    run_session_focus_no_split_brain_vector()?;
-    run_token_exchange_minimal_vector()?;
-    run_token_issuer_unauthorised_vector()?;
-    run_participant_binding_required_vector()?;
-    run_unknown_type_fail_closed_vector()?;
-    run_e2ee_key_source_vector()?;
-    run_participant_id_unrecognised_vector()?;
-    run_recording_artifact_via_arkret_blob_vector()?;
-    run_recording_exporter_label_vector()?;
-    Ok(())
+    let fixture = super::load_fixture_value(MEDIA_BINDING_FIXTURE_FILE)?;
+    if fixture
+        .pointer("/runner/entrypoint")
+        .and_then(Value::as_str)
+        != Some(MEDIA_BINDING_ENTRYPOINT)
+    {
+        bail!("media-binding named-suite entrypoint drifted");
+    }
+    let cases = fixture
+        .get("cases")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("media-binding fixture missing cases[]"))?;
+    let mut results = Vec::with_capacity(cases.len());
+    for case in cases {
+        let name = case
+            .get("name")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("media-binding case missing name"))?;
+        let vector_id = case
+            .get("vector_id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("media-binding case {name} missing vector_id"))?;
+        let runner = case
+            .get("runner")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("media-binding case {name} missing runner"))?;
+        let (expected_vector, expected_runner, execute): (&str, &str, fn() -> Result<()>) =
+            match name {
+                "focus_selection_oldest_membership" => (
+                    VECTOR_ID_FOCUS_SELECTION_OLDEST_MEMBERSHIP,
+                    "cotest::conformance::media_binding::run_focus_selection_oldest_membership_vector",
+                    run_focus_selection_oldest_membership_vector,
+                ),
+                "session_focus_no_split_brain" => (
+                    VECTOR_ID_SESSION_FOCUS_NO_SPLIT_BRAIN,
+                    "cotest::conformance::media_binding::run_session_focus_no_split_brain_vector",
+                    run_session_focus_no_split_brain_vector,
+                ),
+                "token_exchange_minimal" => (
+                    VECTOR_ID_TOKEN_EXCHANGE_MINIMAL,
+                    "cotest::conformance::media_binding::run_token_exchange_minimal_vector",
+                    run_token_exchange_minimal_vector,
+                ),
+                "token_issuer_unauthorised" => (
+                    VECTOR_ID_TOKEN_ISSUER_UNAUTHORISED,
+                    "cotest::conformance::media_binding::run_token_issuer_unauthorised_vector",
+                    run_token_issuer_unauthorised_vector,
+                ),
+                "participant_binding_required" => (
+                    VECTOR_ID_PARTICIPANT_BINDING_REQUIRED,
+                    "cotest::conformance::media_binding::run_participant_binding_required_vector",
+                    run_participant_binding_required_vector,
+                ),
+                "unknown_type_fail_closed" => (
+                    VECTOR_ID_UNKNOWN_TYPE_FAIL_CLOSED,
+                    "cotest::conformance::media_binding::run_unknown_type_fail_closed_vector",
+                    run_unknown_type_fail_closed_vector,
+                ),
+                "e2ee_key_source" => (
+                    VECTOR_ID_E2EE_KEY_SOURCE,
+                    "cotest::conformance::media_binding::run_e2ee_key_source_vector",
+                    run_e2ee_key_source_vector,
+                ),
+                "participant_id_unrecognised" => (
+                    VECTOR_ID_PARTICIPANT_ID_UNRECOGNISED,
+                    "cotest::conformance::media_binding::run_participant_id_unrecognised_vector",
+                    run_participant_id_unrecognised_vector,
+                ),
+                "recording_artifact_via_arkret_blob" => (
+                    VECTOR_ID_RECORDING_ARTIFACT_VIA_ARKRET_BLOB,
+                    "cotest::conformance::media_binding::run_recording_artifact_via_arkret_blob_vector",
+                    run_recording_artifact_via_arkret_blob_vector,
+                ),
+                "recording_exporter_label" => (
+                    VECTOR_ID_RECORDING_EXPORTER_LABEL,
+                    "cotest::conformance::media_binding::run_recording_exporter_label_vector",
+                    run_recording_exporter_label_vector,
+                ),
+                other => bail!("unknown media-binding case {other}"),
+            };
+        if vector_id != expected_vector || runner != expected_runner {
+            bail!("media-binding case {name} dispatch metadata drifted");
+        }
+        execute()?;
+        let assertions = case
+            .get("assertions")
+            .and_then(Value::as_array)
+            .map(Vec::len)
+            .filter(|count| *count > 0)
+            .ok_or_else(|| anyhow!("media-binding case {name} has no assertions"))?;
+        results.push(super::CaseExecutionResult {
+            case_id: name.to_owned(),
+            assertions,
+        });
+    }
+    Ok(super::SuiteExecutionResult {
+        entrypoint: MEDIA_BINDING_ENTRYPOINT,
+        fixture: MEDIA_BINDING_FIXTURE_FILE,
+        cases: results,
+    })
 }
 
 #[cfg(test)]
@@ -915,6 +1012,8 @@ mod tests {
 
     #[test]
     fn all_ten_media_binding_vectors_run_clean() {
-        run_media_binding_vector_suite().unwrap();
+        let execution = run_media_binding_suite().unwrap();
+        assert_eq!(execution.cases.len(), 10);
+        assert!(execution.cases.iter().all(|case| case.assertions > 0));
     }
 }

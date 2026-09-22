@@ -22,15 +22,15 @@ use cotest::conformance::{
     run_cursor_vector_suite, run_detached_object_signature_suite,
     run_digest_construction_known_answers, run_encoding_fixture_suite, run_franking_proof_suite,
     run_handle_claim_rejection_vector_suite, run_keypackage_write_transcripts_suite,
-    run_media_binding_vector_suite, run_member_identity_vector_suite,
-    run_member_roster_vector_suite, run_mention_rendering_vector_suite, run_named_suite_audit,
-    run_object_addressing_vector_suite, run_object_identity_collision_suite,
-    run_poll_reducer_fixture_suite, run_presence_signal_vector_suite,
-    run_primary_handle_vector_suite, run_private_view_inbox_suite, run_producer_identity_suite,
-    run_protocol_time_tolerance_suite, run_protocol_version_suite, run_push_rule_core_suite,
-    run_relation_structural_realm_suite, run_sdk_precheck_suite, run_sidecar_vector_suite,
-    run_strand_watch_current_suite, run_string_profile_suite,
-    run_test_material_rejection_suite_with_coverage, run_webrtc_media_plaintext_suite,
+    run_media_binding_suite, run_member_identity_vector_suite, run_member_roster_vector_suite,
+    run_mention_rendering_vector_suite, run_named_suite_audit, run_object_addressing_vector_suite,
+    run_object_identity_collision_suite, run_poll_reducer_fixture_suite,
+    run_presence_signal_vector_suite, run_primary_handle_vector_suite,
+    run_private_view_inbox_suite, run_producer_identity_suite, run_protocol_time_tolerance_suite,
+    run_protocol_version_suite, run_push_rule_core_suite, run_relation_structural_realm_suite,
+    run_sdk_precheck_suite, run_sidecar_vector_suite, run_strand_watch_current_suite,
+    run_string_profile_suite, run_test_material_rejection_suite_with_coverage,
+    run_webrtc_media_plaintext_suite,
 };
 use serde_json::{Value, json};
 
@@ -251,8 +251,8 @@ fn registered_canonical_json_digest_constructions_match_known_answers() -> Resul
 fn named_suite_audit_executes_registered_runners_and_exposes_every_gap() -> Result<()> {
     let report = run_named_suite_audit()?;
     assert_eq!(report.fixture_count, 73);
-    assert_eq!(report.executed_entrypoints.len(), 41);
-    assert_eq!(report.unwired_entrypoints.len(), 32);
+    assert_eq!(report.executed_entrypoints.len(), 42);
+    assert_eq!(report.unwired_entrypoints.len(), 31);
     for required_gap in [
         "ak.suite.consent.cache_invalidation.v1",
         "ak.suite.direct_conversation.admission_producers.v1",
@@ -407,9 +407,13 @@ fn poll_reducer_fixture_suite_runs_clean() {
 // ─── P0 / VECT-MB-1..10 — media binding vectors ─────────────────────────────
 
 #[test]
-fn media_binding_vector_suite_runs_clean() {
-    run_media_binding_vector_suite().expect("media-binding vectors must pass");
+fn media_binding_vector_suite_runs_clean() -> Result<()> {
+    let execution = run_media_binding_suite()?;
+    assert_eq!(execution.entrypoint, "ak.suite.media.binding.v1");
+    assert_eq!(execution.cases.len(), 10);
+    assert!(execution.cases.iter().all(|case| case.assertions > 0));
     assert_eq!(ALL_MEDIA_BINDING_VECTOR_IDS.len(), 10);
+    Ok(())
 }
 
 // ─── webrtc-signaling.md §5 — ak.call.signal receiver vectors ──────────────
