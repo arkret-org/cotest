@@ -18,8 +18,8 @@ use super::{
     DETACHED_OBJECT_SIGNATURE_ENTRYPOINT, FRANKING_PROOF_ENTRYPOINT,
     KEYPACKAGE_WRITE_TRANSCRIPTS_ENTRYPOINT, PROTOCOL_TIME_TOLERANCE_ENTRYPOINT,
     PROTOCOL_VERSION_ENTRYPOINT, PUSH_RULE_CORE_ENTRYPOINT, RELATION_STRUCTURAL_REALM_ENTRYPOINT,
-    SDK_PRECHECK_ENTRYPOINT, STRING_PROFILE_ENTRYPOINT, SuiteExecutionResult,
-    TEST_MATERIAL_REJECTION_ENTRYPOINT, VIEW_WRITE_CONTRACT_ENTRYPOINT,
+    SDK_PRECHECK_ENTRYPOINT, STRAND_WATCH_CURRENT_ENTRYPOINT, STRING_PROFILE_ENTRYPOINT,
+    SuiteExecutionResult, TEST_MATERIAL_REJECTION_ENTRYPOINT, VIEW_WRITE_CONTRACT_ENTRYPOINT,
     run_account_blocklist_projection_vector, run_account_status_issuer_ledger_vector,
     run_aead_nonce_replay_suite, run_agent_membership_cascade_suite,
     run_agent_mls_keypackage_authorization_suite, run_applet_registration_epoch_kat_suite,
@@ -32,9 +32,9 @@ use super::{
     run_protocol_version_suite, run_push_rule_core_suite, run_relation_structural_realm_suite,
     run_sdk_precheck_suite, run_security_transaction_resilience_joint_gate,
     run_session_grant_issuer_ledger_suite, run_signal_sequence_high_water_suite,
-    run_string_profile_suite, run_sync_fixture_suite, run_test_material_rejection_suite,
-    run_view_write_contract_suite, run_webrtc_media_plaintext_suite, run_websocket_binding_suite,
-    spec_artifacts_root,
+    run_strand_watch_current_suite, run_string_profile_suite, run_sync_fixture_suite,
+    run_test_material_rejection_suite, run_view_write_contract_suite,
+    run_webrtc_media_plaintext_suite, run_websocket_binding_suite, spec_artifacts_root,
 };
 
 const ACCOUNT_STATUS_ENTRYPOINT: &str = "ak.suite.account_status.issuer_ledger.v1";
@@ -42,7 +42,7 @@ const ACCOUNT_STATUS_ENTRYPOINT: &str = "ak.suite.account_status.issuer_ledger.v
 /// Exact acknowledged gap ledger. This is deliberately closed: adding or
 /// renaming a canonical named suite cannot remain invisible merely because the
 /// total number of unwired suites happened to stay constant.
-const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 39] = [
+const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 38] = [
     "ak.suite.account_data.cas_convergence.v1",
     "ak.suite.account_data.private_view_inbox_binding.v1",
     "ak.suite.agent.draft_pending_intent.v1",
@@ -80,7 +80,6 @@ const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 39] = [
     "ak.suite.scope.circle.v1",
     "ak.suite.sdk.event_type_axes.v1",
     "ak.suite.signer_key.historical_commit_coordinate.v1",
-    "ak.suite.state.strand_watch_current_read.v1",
     "ak.suite.visibility.policy.v1",
 ];
 
@@ -97,7 +96,7 @@ enum Runner {
     EvidenceMapped(fn() -> Result<()>),
 }
 
-const RUNNERS: [(&str, Runner); 34] = [
+const RUNNERS: [(&str, Runner); 35] = [
     (
         ACCOUNT_BLOCKLIST_PROJECTION_ENTRYPOINT,
         Runner::EvidenceMapped(run_account_blocklist_projection_vector),
@@ -226,6 +225,10 @@ const RUNNERS: [(&str, Runner); 34] = [
     (
         SDK_PRECHECK_ENTRYPOINT,
         Runner::Cases(run_sdk_precheck_suite),
+    ),
+    (
+        STRAND_WATCH_CURRENT_ENTRYPOINT,
+        Runner::Cases(run_strand_watch_current_suite),
     ),
     (
         STRING_PROFILE_ENTRYPOINT,

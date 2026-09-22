@@ -2790,6 +2790,7 @@ dependencies = [
  "cotest-push-rule-core-runner",
  "cotest-relation-structural-realm-runner",
  "cotest-sdk-precheck-runner",
+ "cotest-strand-watch-current-runner",
  "cotest-string-profile-runner",
  "cotest-test-material-runner",
  "cotest-test-support",
@@ -3000,6 +3001,16 @@ dependencies = [
  "arkret-wire",
  "chrono",
  "ed25519-dalek 3.0.0",
+ "serde_json",
+]
+
+[[package]]
+name = "cotest-strand-watch-current-runner"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "arkret-models-collaboration",
+ "serde",
  "serde_json",
 ]
 

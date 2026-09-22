@@ -104,6 +104,7 @@ mod signal_recipient;
 mod signal_sequence_high_water;
 mod spec_business_flow;
 mod station_certification;
+mod strand_watch_current;
 mod string_profiles;
 mod suite_execution;
 mod sync;
@@ -445,6 +446,7 @@ pub use signal_federation::{
 };
 pub use signal_sequence_high_water::run_signal_sequence_high_water_suite;
 pub use spec_business_flow::run_spec_business_flow_coverage_suite;
+pub use strand_watch_current::{STRAND_WATCH_CURRENT_ENTRYPOINT, run_strand_watch_current_suite};
 pub use string_profiles::{STRING_PROFILE_ENTRYPOINT, run_string_profile_suite};
 pub use suite_execution::{CaseExecutionResult, SuiteExecutionResult};
 pub use sync::{VECTOR_ID_CLIENT_ACCOUNT_STREAM, run_sync_fixture_suite};

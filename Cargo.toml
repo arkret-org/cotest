@@ -45,6 +45,7 @@ members = [
     "crates/relation-structural-realm-runner",
     "crates/sdk-precheck-runner",
     "crates/signal-wire-runner",
+    "crates/strand-watch-current-runner",
     "crates/string-profile-runner",
     "crates/test-support",
     "crates/test-material-runner",
@@ -75,6 +76,7 @@ cotest-push-rule-core-runner = { path = "crates/push-rule-core-runner" }
 cotest-relation-structural-realm-runner = { path = "crates/relation-structural-realm-runner" }
 cotest-test-support = { path = "crates/test-support" }
 cotest-sdk-precheck-runner = { path = "crates/sdk-precheck-runner" }
+cotest-strand-watch-current-runner = { path = "crates/strand-watch-current-runner" }
 cotest-string-profile-runner = { path = "crates/string-profile-runner" }
 cotest-test-material-runner = { path = "crates/test-material-runner" }
 cotest-view-write-contract-runner = { path = "crates/view-write-contract-runner" }
@@ -176,6 +178,7 @@ cotest-protocol-version-runner = { workspace = true }
 cotest-push-rule-core-runner = { workspace = true }
 cotest-relation-structural-realm-runner = { workspace = true }
 cotest-sdk-precheck-runner = { workspace = true }
+cotest-strand-watch-current-runner = { workspace = true }
 cotest-string-profile-runner = { workspace = true }
 cotest-view-write-contract-runner = { workspace = true }
 # CT-19 — `arbitrary` powers the wire-envelope fuzz harness in
