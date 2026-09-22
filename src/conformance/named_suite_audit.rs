@@ -17,26 +17,26 @@ use super::{
     BLOB_STREAM_AEAD_ENTRYPOINT, CALL_STATE_CORE_ENTRYPOINT,
     CAPABILITY_RELINQUISH_AUTHORING_ENTRYPOINT, CRYPTO_HPKE_ENTRYPOINT, CURSOR_NEGATIVE_ENTRYPOINT,
     DETACHED_OBJECT_SIGNATURE_ENTRYPOINT, FRANKING_PROOF_ENTRYPOINT,
-    KEYPACKAGE_WRITE_TRANSCRIPTS_ENTRYPOINT, PROTOCOL_TIME_TOLERANCE_ENTRYPOINT,
-    PROTOCOL_VERSION_ENTRYPOINT, PUSH_RULE_CORE_ENTRYPOINT, RELATION_STRUCTURAL_REALM_ENTRYPOINT,
-    SDK_PRECHECK_ENTRYPOINT, STRAND_WATCH_CURRENT_ENTRYPOINT, STRING_PROFILE_ENTRYPOINT,
-    SuiteExecutionResult, TEST_MATERIAL_REJECTION_ENTRYPOINT, VIEW_WRITE_CONTRACT_ENTRYPOINT,
-    run_account_blocklist_projection_vector, run_account_data_cas_convergence_suite,
-    run_account_status_issuer_ledger_vector, run_aead_nonce_replay_suite,
-    run_agent_membership_cascade_suite, run_agent_mls_keypackage_authorization_suite,
-    run_applet_registration_epoch_kat_suite, run_authority_commit_suite,
-    run_blob_stream_aead_suite, run_call_state_core_suite,
+    KEYPACKAGE_WRITE_TRANSCRIPTS_ENTRYPOINT, PRIVATE_VIEW_INBOX_ENTRYPOINT,
+    PROTOCOL_TIME_TOLERANCE_ENTRYPOINT, PROTOCOL_VERSION_ENTRYPOINT, PUSH_RULE_CORE_ENTRYPOINT,
+    RELATION_STRUCTURAL_REALM_ENTRYPOINT, SDK_PRECHECK_ENTRYPOINT, STRAND_WATCH_CURRENT_ENTRYPOINT,
+    STRING_PROFILE_ENTRYPOINT, SuiteExecutionResult, TEST_MATERIAL_REJECTION_ENTRYPOINT,
+    VIEW_WRITE_CONTRACT_ENTRYPOINT, run_account_blocklist_projection_vector,
+    run_account_data_cas_convergence_suite, run_account_status_issuer_ledger_vector,
+    run_aead_nonce_replay_suite, run_agent_membership_cascade_suite,
+    run_agent_mls_keypackage_authorization_suite, run_applet_registration_epoch_kat_suite,
+    run_authority_commit_suite, run_blob_stream_aead_suite, run_call_state_core_suite,
     run_capability_relinquish_authoring_suite, run_crypto_hpke_suite, run_cursor_negative_suite,
     run_detached_object_signature_suite, run_encoding_fixture_suite,
     run_event_envelope_fixture_suite, run_fanout_route_miss_suite,
     run_file_transfer_stream_aead_fixture_suite, run_franking_proof_suite,
     run_invite_new_source_quota_suite, run_keypackage_write_transcripts_suite,
-    run_mls_creator_bootstrap_recovery_suite, run_protocol_time_tolerance_suite,
-    run_protocol_version_suite, run_push_rule_core_suite, run_relation_structural_realm_suite,
-    run_sdk_precheck_suite, run_security_transaction_resilience_joint_gate,
-    run_session_grant_issuer_ledger_suite, run_signal_sequence_high_water_suite,
-    run_strand_watch_current_suite, run_string_profile_suite, run_sync_fixture_suite,
-    run_test_material_rejection_suite, run_view_write_contract_suite,
+    run_mls_creator_bootstrap_recovery_suite, run_private_view_inbox_suite,
+    run_protocol_time_tolerance_suite, run_protocol_version_suite, run_push_rule_core_suite,
+    run_relation_structural_realm_suite, run_sdk_precheck_suite,
+    run_security_transaction_resilience_joint_gate, run_session_grant_issuer_ledger_suite,
+    run_signal_sequence_high_water_suite, run_strand_watch_current_suite, run_string_profile_suite,
+    run_sync_fixture_suite, run_test_material_rejection_suite, run_view_write_contract_suite,
     run_webrtc_media_plaintext_suite, run_websocket_binding_suite, spec_artifacts_root,
 };
 
@@ -45,8 +45,7 @@ const ACCOUNT_STATUS_ENTRYPOINT: &str = "ak.suite.account_status.issuer_ledger.v
 /// Exact acknowledged gap ledger. This is deliberately closed: adding or
 /// renaming a canonical named suite cannot remain invisible merely because the
 /// total number of unwired suites happened to stay constant.
-const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 36] = [
-    "ak.suite.account_data.private_view_inbox_binding.v1",
+const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 35] = [
     "ak.suite.agent.draft_pending_intent.v1",
     "ak.suite.agent.participation.v1",
     "ak.suite.agent.vectors.v1",
@@ -97,7 +96,7 @@ enum Runner {
     EvidenceMapped(fn() -> Result<()>),
 }
 
-const RUNNERS: [(&str, Runner); 37] = [
+const RUNNERS: [(&str, Runner); 38] = [
     (
         ACCOUNT_DATA_CAS_CONVERGENCE_ENTRYPOINT,
         Runner::Cases(run_account_data_cas_convergence_suite),
@@ -218,6 +217,10 @@ const RUNNERS: [(&str, Runner); 37] = [
     (
         PROTOCOL_TIME_TOLERANCE_ENTRYPOINT,
         Runner::Cases(run_protocol_time_tolerance_suite),
+    ),
+    (
+        PRIVATE_VIEW_INBOX_ENTRYPOINT,
+        Runner::Cases(run_private_view_inbox_suite),
     ),
     (
         PROTOCOL_VERSION_ENTRYPOINT,

@@ -43,6 +43,7 @@ members = [
     "crates/device-verification-runner",
     "crates/franking-proof-runner",
     "crates/protocol-version-runner",
+    "crates/private-view-inbox-runner",
     "crates/push-rule-core-runner",
     "crates/relation-structural-realm-runner",
     "crates/sdk-precheck-runner",
@@ -76,6 +77,7 @@ cotest-crypto-hpke-runner = { path = "crates/crypto-hpke-runner" }
 cotest-detached-object-signature-runner = { path = "crates/detached-object-signature-runner" }
 cotest-franking-proof-runner = { path = "crates/franking-proof-runner" }
 cotest-protocol-version-runner = { path = "crates/protocol-version-runner" }
+cotest-private-view-inbox-runner = { path = "crates/private-view-inbox-runner" }
 cotest-push-rule-core-runner = { path = "crates/push-rule-core-runner" }
 cotest-relation-structural-realm-runner = { path = "crates/relation-structural-realm-runner" }
 cotest-test-support = { path = "crates/test-support" }
@@ -181,6 +183,7 @@ cotest-crypto-hpke-runner = { workspace = true }
 cotest-detached-object-signature-runner = { workspace = true }
 cotest-franking-proof-runner = { workspace = true }
 cotest-protocol-version-runner = { workspace = true }
+cotest-private-view-inbox-runner = { workspace = true }
 cotest-push-rule-core-runner = { workspace = true }
 cotest-relation-structural-realm-runner = { workspace = true }
 cotest-sdk-precheck-runner = { workspace = true }

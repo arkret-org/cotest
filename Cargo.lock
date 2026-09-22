@@ -2788,6 +2788,7 @@ dependencies = [
  "cotest-cursor-negative-runner",
  "cotest-detached-object-signature-runner",
  "cotest-franking-proof-runner",
+ "cotest-private-view-inbox-runner",
  "cotest-protocol-version-runner",
  "cotest-push-rule-core-runner",
  "cotest-relation-structural-realm-runner",
@@ -2965,6 +2966,16 @@ dependencies = [
  "arkret-models-collaboration",
  "arkret-signatures",
  "arkret-wire",
+ "serde_json",
+]
+
+[[package]]
+name = "cotest-private-view-inbox-runner"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "arkret-models-collaboration",
+ "serde",
  "serde_json",
 ]
 
