@@ -1,10 +1,9 @@
 //! Root-harness adapter for the standalone protocol-version runner.
 
 use anyhow::Result;
+pub use cotest_protocol_version_runner::PROTOCOL_VERSION_ENTRYPOINT;
 
 use super::{CaseExecutionResult, SuiteExecutionResult};
-
-pub use cotest_protocol_version_runner::PROTOCOL_VERSION_ENTRYPOINT;
 
 pub fn run_protocol_version_suite() -> Result<SuiteExecutionResult> {
     let execution = cotest_protocol_version_runner::run_protocol_version_suite()?;

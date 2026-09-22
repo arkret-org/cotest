@@ -1,10 +1,9 @@
 //! Root-harness adapter for the standalone franking-proof runner.
 
 use anyhow::Result;
+pub use cotest_franking_proof_runner::FRANKING_PROOF_ENTRYPOINT;
 
 use super::{CaseExecutionResult, SuiteExecutionResult};
-
-pub use cotest_franking_proof_runner::FRANKING_PROOF_ENTRYPOINT;
 
 pub fn run_franking_proof_suite() -> Result<SuiteExecutionResult> {
     let execution = cotest_franking_proof_runner::run_franking_proof_suite()?;

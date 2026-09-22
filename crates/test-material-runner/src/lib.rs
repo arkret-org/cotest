@@ -5,6 +5,8 @@
 //! case execution here must not be mistaken for a live WebSocket or Soland
 //! trust-admission test.
 
+use std::path::PathBuf;
+
 use anyhow::{Context, Result, ensure};
 use arkret_identity::VerifiedDidBindingStore as _;
 use arkret_identity::test_material::{
@@ -17,7 +19,6 @@ use ed25519_dalek::Signer as _;
 use p256::ecdsa::signature::Verifier as _;
 use p256::ecdsa::{Signature as P256Signature, VerifyingKey as P256VerifyingKey};
 use serde_json::Value;
-use std::path::PathBuf;
 
 pub const TEST_MATERIAL_REJECTION_ENTRYPOINT: &str = "ak.suite.identity.test_material_rejection.v1";
 const FIXTURE: &str = "test-material-rejection-fixture.json";

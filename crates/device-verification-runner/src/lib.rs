@@ -58,9 +58,7 @@ fn assert_live_source(
     })
 }
 
-fn live_facts(
-    source: DeviceSummaryVerificationSource,
-) -> DeviceCheckpointLiveFacts<'static> {
+fn live_facts(source: DeviceSummaryVerificationSource) -> DeviceCheckpointLiveFacts<'static> {
     DeviceCheckpointLiveFacts {
         lifecycle_active: true,
         verification_state: DeviceSummaryVerificationState::Verified,
@@ -82,8 +80,8 @@ fn live_facts(
 /// Both decisions are imported from Soland's production identity service;
 /// this runner contains fixtures and exact outcome assertions, not a second
 /// authorization policy.
-pub fn run_device_verification_checkpoint_contract()
--> Result<DeviceVerificationCheckpointCoverage> {
+pub fn run_device_verification_checkpoint_contract() -> Result<DeviceVerificationCheckpointCoverage>
+{
     let mut cases = vec![
         assert_live_source(
             "registration_anchor",
@@ -95,11 +93,7 @@ pub fn run_device_verification_checkpoint_contract()
             DeviceSummaryVerificationSource::PairingCode,
             2,
         )?,
-        assert_live_source(
-            "pcr_recovery",
-            DeviceSummaryVerificationSource::Recovery,
-            3,
-        )?,
+        assert_live_source("pcr_recovery", DeviceSummaryVerificationSource::Recovery, 3)?,
     ];
 
     let reference = authorization_ref(4);
@@ -208,12 +202,8 @@ pub fn run_device_verification_checkpoint_contract()
         assertions: 1,
     });
 
-    let (state, source) = fold_device_verification_checkpoint(
-        "verified",
-        true,
-        Some("server_asserted"),
-        false,
-    );
+    let (state, source) =
+        fold_device_verification_checkpoint("verified", true, Some("server_asserted"), false);
     ensure!(state == DeviceSummaryVerificationState::Unresolved);
     ensure!(source.is_none());
     validate_device_summary_evidence(state, source, None)?;

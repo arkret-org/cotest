@@ -1,10 +1,9 @@
 //! Root-harness adapter for the standalone Agent MLS KeyPackage authorization runner.
 
 use anyhow::Result;
+pub use cotest_agent_mls_keypackage_authorization_runner::AGENT_MLS_KEYPACKAGE_AUTHORIZATION_ENTRYPOINT;
 
 use super::{CaseExecutionResult, SuiteExecutionResult};
-
-pub use cotest_agent_mls_keypackage_authorization_runner::AGENT_MLS_KEYPACKAGE_AUTHORIZATION_ENTRYPOINT;
 
 pub fn run_agent_mls_keypackage_authorization_suite() -> Result<SuiteExecutionResult> {
     let execution = cotest_agent_mls_keypackage_authorization_runner::run_agent_mls_keypackage_authorization_suite()?;

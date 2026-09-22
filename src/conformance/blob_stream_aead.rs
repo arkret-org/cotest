@@ -1,12 +1,11 @@
 //! Root-harness adapter for the standalone blob stream-AEAD runner.
 
 use anyhow::Result;
-
-use super::{CaseExecutionResult, SuiteExecutionResult};
-
 pub use cotest_blob_stream_aead_runner::{
     ALL_BLOB_STREAM_AEAD_VECTOR_IDS, BLOB_STREAM_AEAD_ENTRYPOINT,
 };
+
+use super::{CaseExecutionResult, SuiteExecutionResult};
 
 pub fn run_blob_stream_aead_suite() -> Result<SuiteExecutionResult> {
     let execution = cotest_blob_stream_aead_runner::run_blob_stream_aead_suite()?;

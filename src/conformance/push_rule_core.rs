@@ -1,10 +1,9 @@
 //! Root-harness adapter for the standalone push-rule core runner.
 
 use anyhow::Result;
+pub use cotest_push_rule_core_runner::PUSH_RULE_CORE_ENTRYPOINT;
 
 use super::{CaseExecutionResult, SuiteExecutionResult};
-
-pub use cotest_push_rule_core_runner::PUSH_RULE_CORE_ENTRYPOINT;
 
 pub fn run_push_rule_core_suite() -> Result<SuiteExecutionResult> {
     let execution = cotest_push_rule_core_runner::run_push_rule_core_suite()?;

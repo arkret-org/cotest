@@ -1,10 +1,9 @@
 //! Root-harness adapter for the standalone string-profile runner.
 
 use anyhow::Result;
+pub use cotest_string_profile_runner::STRING_PROFILE_ENTRYPOINT;
 
 use super::{CaseExecutionResult, SuiteExecutionResult};
-
-pub use cotest_string_profile_runner::STRING_PROFILE_ENTRYPOINT;
 
 pub fn run_string_profile_suite() -> Result<SuiteExecutionResult> {
     let execution = cotest_string_profile_runner::run_string_profile_suite()?;

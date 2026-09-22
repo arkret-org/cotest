@@ -5,14 +5,16 @@
 //! Every rejection snapshots the affected projection facets, so an arbitrary
 //! error cannot satisfy the suite's zero-effect requirement.
 
-use std::{collections::BTreeSet, path::PathBuf};
+use std::collections::BTreeSet;
+use std::path::PathBuf;
 
 use anyhow::{Context, Result, ensure};
 use arkret::{
     MediaServiceAnchors, ParticipantBindingContext, call_media_token_exchange,
     participant_binding_signing_input, verify_call_media_token_outcome,
 };
-use arkret_canonical::{DigestSuite, base64url::base64url_encode};
+use arkret_canonical::DigestSuite;
+use arkret_canonical::base64url::base64url_encode;
 use arkret_event_draft::ProjectedEventOperation;
 use arkret_identifiers::{CallId, DeviceId, Did, DidCoreId, OperationId, RealmId};
 use arkret_models_collaboration::objects::media::{

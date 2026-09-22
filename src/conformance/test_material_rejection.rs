@@ -1,10 +1,9 @@
 //! Root-suite adapter for the independently buildable test-material runner.
 
 use anyhow::Result;
+pub use cotest_test_material_runner::TEST_MATERIAL_REJECTION_ENTRYPOINT;
 
 use super::{CaseExecutionResult, SuiteExecutionResult};
-
-pub use cotest_test_material_runner::TEST_MATERIAL_REJECTION_ENTRYPOINT;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TestMaterialRejectionCoverage {
