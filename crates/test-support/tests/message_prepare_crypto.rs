@@ -13,11 +13,11 @@ use arkret_models_crypto::{
     MlsGovernanceBindingPayload, MlsKeyPackageState,
 };
 use arkret_wire::{
-    AccountId, ActorId, Base64UrlString, CommitStreamRef, CommittedEventFullView,
+    AccountId, ActorId, Base64UrlString, BlobRef, CommitStreamRef, CommittedEventFullView,
     DetachedObjectSignature, DetachedSignatureAlgorithm, DetachedSignatureContext, DeviceId,
     DidCoreId, DidUrl, EncryptedPayloadScheme, EventCommitSubmission, EventId, Hash,
-    MlsWelcomeDelivery, MlsWelcomeDeliveryId, MlsWelcomeRecipientEndpoint, RealmCommit,
-    RealmCommitAuthorityRef, RealmCommitId, RealmId, ScopeRef, StrandId,
+    MlsGroupCurrent, MlsWelcomeDelivery, MlsWelcomeDeliveryId, MlsWelcomeRecipientEndpoint,
+    RealmCommit, RealmCommitAuthorityRef, RealmCommitId, RealmId, ScopeRef, StrandId,
 };
 
 const STATION: &str = "ak:did_core:web:station.example";
@@ -102,7 +102,7 @@ fn authored_message_decrypts_at_the_other_mls_member_without_reencrypting() {
     // The Commit Event, as the governance Station accepted it into the Realm's
     // own linear stream. One RealmCommit covers exactly one Event.
     let commit_payload = MlsCommitPayload::new(
-        base_group_state_ref,
+        base_group_state_ref.clone(),
         0,
         &added.commit,
         transition_binding.clone(),
@@ -131,7 +131,21 @@ fn authored_message_decrypts_at_the_other_mls_member_without_reencrypting() {
     // The producer installs its own transition only once the authority has
     // committed the Event that carried it, so the sender's epoch and the
     // Welcome's epoch cannot diverge.
-    assert_eq!(sender.install_accepted_commit(&accepted_commit).unwrap(), 1);
+    let base_current = MlsGroupCurrent {
+        effective_scope: scope.clone(),
+        genesis_event_ref: base_group_state_ref.clone(),
+        current_mls_commit_event_ref: base_group_state_ref,
+        epoch: 0,
+        current_key_access_revision: 0,
+        covered_key_access_revision: 0,
+        public_tree_ref: BlobRef::new(format!("ak:blob:sha256:{}", "55".repeat(32))).unwrap(),
+    };
+    assert_eq!(
+        sender
+            .install_accepted_commit(&accepted_commit, &base_current)
+            .unwrap(),
+        1
+    );
     sender.install_test_leaf_bindings(endpoints).unwrap();
 
     let delivery = MlsWelcomeDelivery {
