@@ -54,53 +54,6 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     }),
                 );
             }
-            // 2026-05-20: fixture case renamed from
-            // `hidden_space_resolve_indistinguishable` to
-            // `hidden_realm_resolve_indistinguishable`; the directory
-            // operation id is now canonical realm terminology.
-            "hidden_realm_resolve_indistinguishable" => {
-                let op_id = case.operation_id.as_deref();
-                let same_http_ok = case
-                    .expected
-                    .as_ref()
-                    .and_then(|expected| expected.get("same_http_status"))
-                    .and_then(Value::as_u64)
-                    == Some(404);
-                let op_ok = matches!(op_id, Some("ak.find.directory.read.resolve_realm.v1"));
-                if !op_ok || !same_http_ok {
-                    bail!(
-                        "privacy fixture {} no longer proves indistinguishable resolve errors",
-                        case.name
-                    );
-                }
-                record_vector_event(
-                    "privacy.hidden_realm_resolve_indistinguishable",
-                    &json!({"operation_id": case.operation_id.clone()}),
-                    &json!({
-                        "operation_id": "ak.find.directory.read.resolve_realm.v1",
-                        "same_http_status": 404,
-                    }),
-                    &json!({
-                        "operation_id": case.operation_id.clone(),
-                        "same_http_status": case
-                            .expected
-                            .as_ref()
-                            .and_then(|expected| expected.get("same_http_status"))
-                            .cloned(),
-                    }),
-                );
-            }
-            // 2026-06-24: directory resolve operations gained
-            // failure-blinding vectors. Missing / hidden / unauthorized
-            // resolutions MUST be indistinguishable — same 404 / not_found /
-            // body shape / timing class — and MUST NOT leak the listed
-            // binding fields.
-            "resolve_handle_failure_blinding" => {
-                validate_resolve_failure_blinding(&case)?;
-            }
-            "resolve_agent_selector_failure_blinding" => {
-                validate_resolve_failure_blinding(&case)?;
-            }
             "private_contact_discovery_padding_and_cardinality" => {
                 let input = case
                     .input
@@ -320,27 +273,33 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     }),
                 );
             }
-            "directory_query_and_ingest_vector_closure" => {
+            "directory_read_only_vector_closure" => {
                 let operation_ids = case.operation_ids.as_ref().ok_or_else(|| {
                     anyhow!("privacy fixture {} missing operation_ids", case.name)
                 })?;
-                for required in [
+                let expected_operations = [
                     "ak.find.directory.read.search_realms.v1",
                     "ak.find.directory.read.resolve_realm.v1",
-                    "ak.find.directory.command.announce.v1",
-                    "ak.find.directory.command.withdraw.v1",
-                ] {
-                    if !operation_ids.iter().any(|operation| operation == required) {
-                        bail!(
-                            "privacy fixture {} missing operation id {required}",
-                            case.name
-                        );
-                    }
+                ];
+                if !operation_ids
+                    .iter()
+                    .map(String::as_str)
+                    .eq(expected_operations)
+                {
+                    bail!("privacy fixture {} operation set drifted", case.name);
                 }
                 let covers_vectors = case.covers_vectors.as_ref().ok_or_else(|| {
                     anyhow!("privacy fixture {} missing covers_vectors", case.name)
                 })?;
-                if covers_vectors.len() < 8 {
+                let expected_vectors = [
+                    "ak.vector.directory.public_realm_search.v1",
+                    "ak.vector.directory.ttl_expiry_removal.v1",
+                ];
+                if !covers_vectors
+                    .iter()
+                    .map(String::as_str)
+                    .eq(expected_vectors)
+                {
                     bail!(
                         "privacy fixture {} no longer closes the public-Realm directory vector set",
                         case.name
@@ -352,10 +311,9 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     .ok_or_else(|| anyhow!("privacy fixture {} missing expected", case.name))?;
                 for required_flag in [
                     "query_results_are_closed_public_realm_metadata",
-                    "resolve_unknown_and_withdrawn_realms_are_indistinguishable",
-                    "ingest_requires_current_governance_station",
-                    "ingest_rejects_bad_signature_and_stale_signature",
-                    "withdraw_has_blinded_external_responses",
+                    "resolve_hidden_expired_and_unknown_realms_are_indistinguishable",
+                    "write_operations_are_unregistered",
+                    "query_results_are_not_authorization_evidence",
                 ] {
                     if expected.get(required_flag).and_then(Value::as_bool) != Some(true) {
                         bail!(
@@ -365,7 +323,7 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     }
                 }
                 record_vector_event(
-                    "privacy.directory_query_and_ingest_vector_closure",
+                    "privacy.directory_read_only_vector_closure",
                     &json!({
                         "operation_ids": operation_ids,
                         "covers_vectors": covers_vectors.len(),
@@ -382,9 +340,6 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                             .get("forbidden_resource_families"),
                     }),
                 );
-            }
-            "first_ingest_source_ref_access_is_current_exact_and_bounded" => {
-                validate_first_ingest_source_ref_access_bounds(&case)?;
             }
             "plaintext_visible_service_required_for_private_body_processing" => {
                 let expected = case
@@ -887,131 +842,6 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
     Ok(())
 }
 
-fn validate_first_ingest_source_ref_access_bounds(case: &super::NamedCase) -> Result<()> {
-    if case.vector_id.as_deref() != Some("ak.vector.directory.announce_source_ref_access_bounds.v1")
-        || case.operation_id.as_deref() != Some("ak.find.directory.command.announce.v1")
-    {
-        bail!("{} has an unexpected vector or operation id", case.name);
-    }
-    let input = case
-        .input
-        .as_ref()
-        .ok_or_else(|| anyhow!("{} is missing input", case.name))?;
-    let source_refs = input
-        .get("source_refs")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("{} is missing source_refs", case.name))?;
-    let selector = input
-        .get("first_ingest_selector")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("{} is missing first_ingest_selector", case.name))?;
-    let discovery_event_id = input
-        .get("discovery_event_id")
-        .and_then(Value::as_str)
-        .ok_or_else(|| anyhow!("{} is missing discovery_event_id", case.name))?;
-    let selector_is_exact_carrier_subset = !selector.is_empty()
-        && selector
-            .iter()
-            .all(|selected| source_refs.contains(selected))
-        && selector
-            .iter()
-            .any(|selected| selected.as_str() == Some(discovery_event_id));
-
-    let actor_keys = input
-        .get("same_principal_distinct_actor_keys")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("{} is missing actor-key fixtures", case.name))?;
-    let canonical_actor_keys = actor_keys
-        .iter()
-        .map(arkret_canonical::canonical_json_bytes)
-        .collect::<std::result::Result<BTreeSet<_>, _>>()?;
-    let principals = actor_keys
-        .iter()
-        .filter_map(|actor| {
-            actor
-                .pointer("/account_id/principal_id")
-                .and_then(Value::as_str)
-        })
-        .collect::<BTreeSet<_>>();
-
-    let required_mutations = [
-        "wrong_authenticated_source",
-        "wrong_authenticated_directory",
-        "empty_source_refs",
-        "selector_outside_carrier",
-        "discovery_event_mismatch",
-        "carrier_reused_from_another_announce",
-        "expired_carrier",
-        "discovery_withdrawn",
-        "discovery_superseded",
-    ];
-    let mutations = case
-        .mutations
-        .as_ref()
-        .ok_or_else(|| anyhow!("{} is missing mutations", case.name))?;
-    let expected = case
-        .expected
-        .as_ref()
-        .ok_or_else(|| anyhow!("{} is missing expected", case.name))?;
-    let valid = input
-        .get("authenticated_source_id")
-        .and_then(Value::as_str)
-        .is_some_and(|value| value.starts_with("ak:did_core:"))
-        && input
-            .get("authenticated_directory_id")
-            .and_then(Value::as_str)
-            .is_some_and(|value| value.starts_with("ak:did_core:"))
-        && selector_is_exact_carrier_subset
-        && canonical_actor_keys.len() == actor_keys.len()
-        && actor_keys.len() >= 2
-        && principals.len() == 1
-        && required_mutations
-            .iter()
-            .all(|required| mutations.iter().any(|value| value == required))
-        && expected.get("baseline_result").and_then(Value::as_str) == Some("accept")
-        && expected
-            .get("baseline_first_ingest_peer_exact_resolve_calls")
-            .and_then(Value::as_u64)
-            == Some(1)
-        && expected
-            .get("baseline_resolved_selector_is_carrier_subset")
-            .and_then(Value::as_bool)
-            == Some(true)
-        && expected.get("mutation_result").and_then(Value::as_str) == Some("reject")
-        && expected
-            .get("mutation_index_writes")
-            .and_then(Value::as_u64)
-            == Some(0)
-        && expected
-            .get("mutation_peer_history_scan_calls")
-            .and_then(Value::as_u64)
-            == Some(0)
-        && expected
-            .get("actor_keys_remain_distinct")
-            .and_then(Value::as_bool)
-            == Some(true);
-    if !valid {
-        bail!(
-            "{} no longer proves exact, current, bounded first-ingest source-ref access",
-            case.name
-        );
-    }
-
-    record_vector_event(
-        "privacy.first_ingest_source_ref_access_is_current_exact_and_bounded",
-        input,
-        expected,
-        &json!({
-            "exact_resolve_calls": 1,
-            "selector_is_carrier_subset": selector_is_exact_carrier_subset,
-            "mutation_index_writes": 0,
-            "mutation_peer_history_scan_calls": 0,
-            "actor_keys_remain_distinct": canonical_actor_keys.len() == actor_keys.len(),
-        }),
-    );
-    Ok(())
-}
-
 fn validate_actor_accountability_grant_required(case: &super::NamedCase) -> Result<()> {
     if case.vector_id.as_deref() != Some("ak.vector.actor.accountability_grant_required.v1") {
         bail!("{} has an unexpected vector_id", case.name);
@@ -1128,120 +958,6 @@ fn validate_actor_accountability_grant_required(case: &super::NamedCase) -> Resu
         &json!({"case_names": seen}),
         &json!({"all_accountability_checks_executed": true}),
         &json!({"all_accountability_checks_executed": true}),
-    );
-    Ok(())
-}
-
-/// Vectors `ak.vector.directory.resolve_handle_failure_blinding.v1` and
-/// `ak.vector.directory.resolve_agent_selector_failure_blinding.v1`.
-///
-/// A directory resolve over a missing, hidden, or unauthorized target MUST be
-/// externally indistinguishable: identical HTTP status (404), identical error
-/// code (`not_found`), identical body shape, identical timing class, and the
-/// response MUST NOT include any of the binding/identity fields that would let
-/// a probe distinguish "hidden" from "missing".
-fn validate_resolve_failure_blinding(case: &super::NamedCase) -> Result<()> {
-    let op_id = case.operation_id.as_deref();
-    if op_id.is_some() {
-        bail!(
-            "privacy fixture {} still carries retired operation_id {:?}",
-            case.name,
-            op_id
-        );
-    }
-    let inputs = case
-        .inputs
-        .as_ref()
-        .ok_or_else(|| anyhow!("privacy fixture {} missing inputs", case.name))?;
-    if inputs.len() < 3 {
-        bail!(
-            "privacy fixture {} must cover missing/hidden/unauthorized inputs",
-            case.name
-        );
-    }
-    let expected = case
-        .expected
-        .as_ref()
-        .ok_or_else(|| anyhow!("privacy fixture {} missing expected", case.name))?;
-
-    if expected.get("same_http_status").and_then(Value::as_u64) != Some(404) {
-        bail!("privacy fixture {} same_http_status is not 404", case.name);
-    }
-    if expected.get("same_error_code").and_then(Value::as_str) != Some("not_found") {
-        bail!(
-            "privacy fixture {} same_error_code is not not_found",
-            case.name
-        );
-    }
-    if expected
-        .get("timing_equivalence_group")
-        .and_then(Value::as_str)
-        != Some("directory_hidden_not_found")
-    {
-        bail!(
-            "privacy fixture {} timing_equivalence_group drifted",
-            case.name
-        );
-    }
-    let body_shape = expected
-        .get("same_body_shape")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("privacy fixture {} missing same_body_shape", case.name))?;
-    if body_shape.is_empty() {
-        bail!(
-            "privacy fixture {} same_body_shape must not be empty",
-            case.name
-        );
-    }
-    let must_not_include = expected
-        .get("must_not_include")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("privacy fixture {} missing must_not_include", case.name))?;
-    if must_not_include.is_empty() {
-        bail!(
-            "privacy fixture {} must_not_include must not be empty",
-            case.name
-        );
-    }
-
-    // `must_not_include` constrains the blinded *response*: the single shared
-    // 404 body shape must NOT carry any of these fields, regardless of the
-    // underlying failure reason (missing / hidden / unauthorized). The query
-    // inputs legitimately contain the looked-up selector fields (e.g.
-    // `controller_subject_id`), so the check is against `same_body_shape` — the
-    // declared response field set — not the request inputs.
-    let body_shape_fields: Vec<&str> = body_shape.iter().filter_map(Value::as_str).collect();
-    for field in must_not_include {
-        let field = field.as_str().ok_or_else(|| {
-            anyhow!(
-                "privacy fixture {} must_not_include entry must be string",
-                case.name
-            )
-        })?;
-        if body_shape_fields.contains(&field) {
-            bail!(
-                "privacy fixture {} blinded response body shape leaks forbidden field {field}",
-                case.name
-            );
-        }
-    }
-
-    record_vector_event(
-        "privacy.resolve_failure_blinding",
-        &json!({
-            "operation_id": expected_op,
-            "input_count": inputs.len(),
-        }),
-        &json!({
-            "same_http_status": 404,
-            "same_error_code": "not_found",
-            "timing_equivalence_group": "directory_hidden_not_found",
-        }),
-        &json!({
-            "operation_id": case.operation_id.clone(),
-            "same_http_status": expected.get("same_http_status").cloned(),
-            "must_not_include_count": must_not_include.len(),
-        }),
     );
     Ok(())
 }

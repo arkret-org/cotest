@@ -1,5 +1,4 @@
-//! Per-object-family proof-context domain separation for the directory
-//! (`discovery/discovery-directory.md` §9.0.1) and MIMI
+//! Per-object-family proof-context domain separation for MIMI
 //! (`extensions/mimi-interop.md` §5.1) request and outcome families.
 //!
 //! v1 has no `ak.directory_operation_proof.v1` / `ak.mimi_operation_proof.v1`.
@@ -7,7 +6,7 @@
 //! signature minted for one family can never be replayed onto another. This
 //! module drives that closure from three sides:
 //!
-//! 1. **Registry closure** — the eleven per-family contexts exist in `registry/proof-context-
+//! 1. **Registry closure** — the six per-family contexts exist in `registry/proof-context-
 //!    registry.json`, are bound to their own `object_family`, are pairwise distinct and are all
 //!    reachable through the shared [`ProofContextId`] vocabulary. The two retired over-broad
 //!    contexts resolve nowhere.
@@ -33,45 +32,15 @@ use arkret_models_collaboration::http_bodies::{
     MimiIdentifierQueryOutcome, MimiIdentifierQueryRequestBody, MimiKeyMaterialOutcome,
     MimiKeyMaterialRequestBody, MimiRequestConsentRequestBody,
 };
-use arkret_models_discovery::{
-    DirectoryListHandlesForSubjectRequestBody, DirectoryRequestProof,
-    DirectoryResolveAgentSelectorRequestBody, DirectoryResolveHandleRequestBody,
-    DirectoryResolveOrganizationRequestBody, DirectoryResolveTargetRequestBody,
-};
 use arkret_signatures::proof::sign_ed25519_detached_jws;
 use arkret_signatures::{PublicKeyMaterial, verify_ed25519_detached_jws_payload_proof};
 use arkret_wire::{
-    Audience, DidCoreId, DidUrl, DomainSeparationId, Hash, PayloadProof, ProofContextId, proof_kind,
+    Audience, DidUrl, DomainSeparationId, Hash, PayloadProof, ProofContextId, proof_kind,
 };
 use ed25519_dalek::SigningKey;
 use serde_json::{Value, json};
 
 use super::load_artifact_json;
-
-/// The five directory request families that replaced the retired over-broad
-/// `ak.directory_operation_proof.v1`.
-pub const DIRECTORY_PER_FAMILY_PROOF_CONTEXTS: &[(&str, &str)] = &[
-    (
-        DomainSeparationId::DIRECTORY_LIST_HANDLES_FOR_SUBJECT_REQUEST_PROOF_V1,
-        "directory_list_handles_for_subject_request",
-    ),
-    (
-        DomainSeparationId::DIRECTORY_RESOLVE_AGENT_SELECTOR_REQUEST_PROOF_V1,
-        "directory_resolve_agent_selector_request",
-    ),
-    (
-        DomainSeparationId::DIRECTORY_RESOLVE_HANDLE_REQUEST_PROOF_V1,
-        "directory_resolve_handle_request",
-    ),
-    (
-        DomainSeparationId::DIRECTORY_RESOLVE_ORGANIZATION_REQUEST_PROOF_V1,
-        "directory_resolve_organization_request",
-    ),
-    (
-        DomainSeparationId::DIRECTORY_RESOLVE_TARGET_REQUEST_PROOF_V1,
-        "directory_resolve_target_request",
-    ),
-];
 
 /// The six MIMI operation families that replaced the retired over-broad
 /// `ak.mimi_operation_proof.v1`.
@@ -110,7 +79,6 @@ const RETIRED_OVER_BROAD_CONTEXTS: &[&str] = &[
     "ak.mimi_operation_proof.v1",
 ];
 
-const DIRECTORY_AUDIENCE: &str = "ak:did_core:web:teabay.example";
 const MIMI_AUDIENCE: &str = "ak:did_core:web:provider.example";
 const MIMI_DOMAIN: &str = "https://provider.example";
 const REQUESTER_ID: &str = "ak:did_core:web:alice.example";
@@ -135,11 +103,6 @@ pub fn run_proof_context_domain_separation_vector() -> Result<()> {
         bytes: signing_key.verifying_key().to_bytes().to_vec(),
     };
 
-    let directory = directory_families()?;
-    assert_owner_closure(&directory, DIRECTORY_PER_FAMILY_PROOF_CONTEXTS, false)?;
-    assert_cross_family_theft_is_rejected(&directory, &signing_key, &public_key, false)?;
-    assert_context_alone_decides(&directory, &signing_key, &public_key, false)?;
-
     let mimi = mimi_families()?;
     assert_owner_closure(&mimi, MIMI_PER_FAMILY_PROOF_CONTEXTS, true)?;
     assert_cross_family_theft_is_rejected(&mimi, &signing_key, &public_key, true)?;
@@ -151,13 +114,8 @@ pub fn run_proof_context_domain_separation_vector() -> Result<()> {
 /// `object_family`, distinct from its siblings, and reachable through the shared
 /// vocabulary.
 ///
-/// The registry splits by *how the proof leaf is anchored*, not by family: a
-/// schema that reaches the shared `event-envelope.schema.json#/$defs/proof` leaf
-/// belongs in `contexts[]`, and one that declares its own local detached-proof
-/// leaf belongs in `domain_separations[]`. The five directory request families
-/// are locally anchored and the six MIMI families are not, so looking either
-/// group up in the other list is not a lenience to add -- it would accept
-/// exactly the ambiguity the split exists to remove.
+/// MIMI schemas reach the shared `event-envelope.schema.json#/$defs/proof`
+/// leaf and therefore belong in `contexts[]`, never `domain_separations[]`.
 fn assert_registry_closure() -> Result<()> {
     let registry = load_artifact_json("registry/proof-context-registry.json")?;
     let contexts = registry
@@ -170,61 +128,41 @@ fn assert_registry_closure() -> Result<()> {
         .ok_or_else(|| anyhow!("proof-context registry has no domain_separations[]"))?;
 
     let mut seen = BTreeSet::new();
-    for (list, key, families, locally_anchored) in [
-        (
-            separations,
-            "domain",
-            DIRECTORY_PER_FAMILY_PROOF_CONTEXTS,
-            true,
-        ),
-        (contexts, "context", MIMI_PER_FAMILY_PROOF_CONTEXTS, false),
-    ] {
-        let (list_name, other, other_key) = if locally_anchored {
-            ("domain_separations[]", contexts, "context")
-        } else {
-            ("contexts[]", separations, "domain")
-        };
-        for (context, object_family) in families {
-            if !seen.insert(*context) {
-                bail!("per-family proof context `{context}` is declared twice");
-            }
-            let row = list
-                .iter()
-                .find(|row| row.get(key).and_then(Value::as_str) == Some(*context))
-                .ok_or_else(|| {
-                    anyhow!(
-                        "proof-context registry does not publish per-family context \
-                         `{context}` in {list_name}"
-                    )
-                })?;
-            if other
-                .iter()
-                .any(|row| row.get(other_key).and_then(Value::as_str) == Some(*context))
-            {
-                bail!(
-                    "proof context `{context}` is registered in both lists; its anchoring \
+    for (context, object_family) in MIMI_PER_FAMILY_PROOF_CONTEXTS {
+        if !seen.insert(*context) {
+            bail!("per-family proof context `{context}` is declared twice");
+        }
+        let row = contexts
+            .iter()
+            .find(|row| row.get("context").and_then(Value::as_str) == Some(*context))
+            .ok_or_else(|| {
+                anyhow!(
+                    "proof-context registry does not publish per-family context \
+                         `{context}` in contexts[]"
+                )
+            })?;
+        if separations
+            .iter()
+            .any(|row| row.get("domain").and_then(Value::as_str) == Some(*context))
+        {
+            bail!(
+                "proof context `{context}` is registered in both lists; its anchoring \
                      must be decidable from the schema alone"
-                );
-            }
-            if row.get("object_family").and_then(Value::as_str) != Some(*object_family) {
-                bail!(
-                    "proof context `{context}` is not bound to object family `{object_family}`; a \
+            );
+        }
+        if row.get("object_family").and_then(Value::as_str) != Some(*object_family) {
+            bail!(
+                "proof context `{context}` is not bound to object family `{object_family}`; a \
                      context shared by two families is exactly the over-broad shape v1 removed"
-                );
-            }
-            let in_vocabulary = if locally_anchored {
-                DomainSeparationId::from_wire(context).is_some()
-            } else {
-                ProofContextId::from_wire(context).is_some()
-            };
-            if !in_vocabulary {
-                bail!("per-family proof context `{context}` is absent from the shared vocabulary");
-            }
+            );
+        }
+        if ProofContextId::from_wire(context).is_none() {
+            bail!("per-family proof context `{context}` is absent from the shared vocabulary");
         }
     }
-    if seen.len() != 11 {
+    if seen.len() != 6 {
         bail!(
-            "expected 11 per-family directory/MIMI proof contexts, found {}",
+            "expected 6 per-family MIMI proof contexts, found {}",
             seen.len()
         );
     }
@@ -424,16 +362,9 @@ fn unsigned_proof(payload_digest: &Hash, mimi: bool) -> Result<PayloadProof> {
         verification_method: DidUrl::new(VERIFICATION_METHOD).map_err(anyhow::Error::msg)?,
         payload_digest: payload_digest.clone(),
         created_at: PROOF_CREATED_AT.parse()?,
-        // The directory binding forbids `domain`; the MIMI binding requires it.
+        // The MIMI binding requires the provider domain and audience.
         domain: mimi.then(|| MIMI_DOMAIN.to_owned()),
-        audience: Some(Audience::Single(
-            if mimi {
-                MIMI_AUDIENCE
-            } else {
-                DIRECTORY_AUDIENCE
-            }
-            .to_owned(),
-        )),
+        audience: Some(Audience::Single(MIMI_AUDIENCE.to_owned())),
         proof_purpose: None,
         // The carrier is overwritten by the real detached JWS a line later,
         // but  now rejects anything that is not
@@ -453,82 +384,6 @@ fn signed_proof(
     proof.jws = sign_ed25519_detached_jws(signing_key, &binding)
         .map_err(|error| anyhow!("sign per-family proof transcript: {error}"))?;
     Ok(proof)
-}
-
-/// Adapt the common detached-JWS test carrier to the Directory-specific proof
-/// leaf. Directory v1 has exactly one canonical service audience and therefore
-/// uses `audience_id`; it does not use the generic proof's optional
-/// domain/audience vocabulary.
-fn directory_request_proof(proof: &PayloadProof) -> Result<DirectoryRequestProof> {
-    Ok(DirectoryRequestProof {
-        kind: arkret_models_discovery::DirectoryRequestProofKind::DetachedJws,
-        verification_method: proof.verification_method.clone(),
-        payload_digest: proof.payload_digest.clone(),
-        created_at: proof.created_at,
-        audience_id: DidCoreId::new(DIRECTORY_AUDIENCE).map_err(anyhow::Error::msg)?,
-        jws: proof.jws.clone(),
-    })
-}
-
-fn directory_families() -> Result<Vec<FamilyUnderTest>> {
-    let list_handles: DirectoryListHandlesForSubjectRequestBody = serde_json::from_value(json!({
-        "account_id": {"principal_id":"ak:did_core:web:bob.example", "station_id":"ak:did_core:web:station.example"},
-        "requester_id": REQUESTER_ID,
-    }))?;
-    let agent_selector: DirectoryResolveAgentSelectorRequestBody = serde_json::from_value(json!({
-        "controller_handle": "alice:alice.example",
-        "agent_slug": "scheduler",
-        "intent": "lookup",
-        "requester_id": REQUESTER_ID,
-    }))?;
-    let resolve_handle: DirectoryResolveHandleRequestBody = serde_json::from_value(json!({
-        "handle": "alice:alice.example",
-        "intent": "lookup",
-        "requester_id": REQUESTER_ID,
-    }))?;
-    let resolve_organization: DirectoryResolveOrganizationRequestBody =
-        serde_json::from_value(json!({
-            "organization_id": "ak:did_core:web:org.example",
-        }))?;
-    let resolve_target: DirectoryResolveTargetRequestBody = serde_json::from_value(json!({
-        "address": "arkret://alice.example/@alice",
-        "requester_id": REQUESTER_ID,
-    }))?;
-
-    Ok(vec![
-        family(
-            "directory_list_handles_for_subject_request",
-            DomainSeparationId::DIRECTORY_LIST_HANDLES_FOR_SUBJECT_REQUEST_PROOF_V1,
-            list_handles.payload_digest()?,
-            move |proof| Ok(list_handles.proof_binding_bytes(&directory_request_proof(proof)?)?),
-        ),
-        family(
-            "directory_resolve_agent_selector_request",
-            DomainSeparationId::DIRECTORY_RESOLVE_AGENT_SELECTOR_REQUEST_PROOF_V1,
-            agent_selector.payload_digest()?,
-            move |proof| Ok(agent_selector.proof_binding_bytes(&directory_request_proof(proof)?)?),
-        ),
-        family(
-            "directory_resolve_handle_request",
-            DomainSeparationId::DIRECTORY_RESOLVE_HANDLE_REQUEST_PROOF_V1,
-            resolve_handle.payload_digest()?,
-            move |proof| Ok(resolve_handle.proof_binding_bytes(&directory_request_proof(proof)?)?),
-        ),
-        family(
-            "directory_resolve_organization_request",
-            DomainSeparationId::DIRECTORY_RESOLVE_ORGANIZATION_REQUEST_PROOF_V1,
-            resolve_organization.payload_digest()?,
-            move |proof| {
-                Ok(resolve_organization.proof_binding_bytes(&directory_request_proof(proof)?)?)
-            },
-        ),
-        family(
-            "directory_resolve_target_request",
-            DomainSeparationId::DIRECTORY_RESOLVE_TARGET_REQUEST_PROOF_V1,
-            resolve_target.payload_digest()?,
-            move |proof| Ok(resolve_target.proof_binding_bytes(&directory_request_proof(proof)?)?),
-        ),
-    ])
 }
 
 fn mimi_families() -> Result<Vec<FamilyUnderTest>> {

@@ -49,29 +49,6 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     let bob_core_id = arkret_identifiers::project_did_to_core_id(&bob_did)?;
     let bob_account = arkret_wire::AccountId::new(bob_core_id.clone(), server.service_id().clone());
     let bob_actor = serde_json::to_value(arkret_wire::ActorId::account(bob_account.clone()))?;
-    let bob_account = serde_json::to_value(bob_account)?;
-    let hidden_bob = expect_json(
-        server
-            .http()
-            .post(server.url("/_arkret/find/directory/search-users"))
-            .json(&arkret_models_discovery::DirectorySearchUsersRequestBody {
-                query: BOB_HANDLE.trim_start_matches('@').to_owned(),
-                realm_id: None,
-                cursor: None,
-                limit: None,
-                intent: None,
-            }),
-        StatusCode::OK,
-    )
-    .await?;
-    let hidden_results = hidden_bob["users"]
-        .as_array()
-        .expect("search-users response users");
-    assert!(
-        !hidden_results
-            .iter()
-            .any(|result| result["account_id"] == bob_account)
-    );
 
     let me = expect_json(
         bob.authorize(
@@ -107,28 +84,6 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     bob.accept_contact(&alice).await?;
     seal_current_principal_control_frontier(&bob, &bob_device_key).await?;
 
-    let visible_bob = expect_json(
-        alice.post("/_arkret/find/directory/search-users").json(
-            &arkret_models_discovery::DirectorySearchUsersRequestBody {
-                query: BOB_HANDLE.trim_start_matches('@').to_owned(),
-                realm_id: None,
-                cursor: None,
-                limit: None,
-                intent: None,
-            },
-        ),
-        StatusCode::OK,
-    )
-    .await?;
-    assert!(
-        visible_bob["users"]
-            .as_array()
-            .expect("search-users response users")
-            .iter()
-            .any(|result| result["account_id"] == bob_account),
-        "accepted contact did not expose Bob in search-users: {visible_bob}"
-    );
-
     let realm_id = create_collaboration_realm(&alice).await?;
     let strand_id = alice.default_strand_id(&realm_id)?;
     let created_space = expect_json(
@@ -137,23 +92,6 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     )
     .await?;
     assert_eq!(created_space["owner_id"], alice_core_id);
-
-    expect_status(
-        server
-            .http()
-            .post(server.url("/_arkret/find/directory/resolve-realm"))
-            .json(&arkret_models_discovery::DirectoryResolveRealmRequestBody {
-                realm_id: Some(arkret_wire::RealmId::new(realm_id.clone())?),
-                alias: None,
-                invite_token: None,
-                signed_link: None,
-                requester_id: None,
-                proof_challenge: None,
-                claim_presentations: Vec::new(),
-            }),
-        StatusCode::NOT_FOUND,
-    )
-    .await?;
 
     let member_join = alice
         .submit_event(

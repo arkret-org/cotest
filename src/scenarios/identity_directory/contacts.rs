@@ -83,7 +83,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         .await_event_seal_coverage(&invite_realm_id, &invite_event_id)
         .await?;
     let invite_id = arkret_identifiers::InviteId::from_event_id(&invite_event_id).to_string();
-    let invite_token = dispatch_accepted_invite_and_read_token(
+    let _invite_token = dispatch_accepted_invite_and_read_token(
         &alice,
         &bob,
         invite_event_id.as_str(),
@@ -111,41 +111,6 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         "invite read model must not surface the private delivery token: {invites}"
     );
     assert_eq!(invites["invites"][0]["id"], invite_id);
-
-    expect_status(
-        server
-            .http()
-            .post(server.url("/_arkret/find/directory/resolve-realm"))
-            .json(&arkret_models_discovery::DirectoryResolveRealmRequestBody {
-                realm_id: None,
-                alias: None,
-                invite_token: Some("ak:invite-token:invalid".to_owned()),
-                signed_link: None,
-                requester_id: None,
-                proof_challenge: None,
-                claim_presentations: Vec::new(),
-            }),
-        StatusCode::NOT_FOUND,
-    )
-    .await?;
-
-    let invite_resolve = expect_json(
-        server
-            .http()
-            .post(server.url("/_arkret/find/directory/resolve-realm"))
-            .json(&arkret_models_discovery::DirectoryResolveRealmRequestBody {
-                realm_id: None,
-                alias: None,
-                invite_token: Some(invite_token),
-                signed_link: None,
-                requester_id: None,
-                proof_challenge: None,
-                claim_presentations: Vec::new(),
-            }),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(invite_resolve["realm_preview"]["realm_id"], invite_realm_id);
 
     let shared_realm_id = alice.create_realm("Workflow Export Realm").await?;
     let shared_strand_id = alice.default_strand_id(&shared_realm_id)?;

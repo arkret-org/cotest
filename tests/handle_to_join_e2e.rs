@@ -8,12 +8,8 @@
 //! happy path plus every negative against the typed models. It spawns nothing
 //! and reaches no network, so it runs in the default deterministic suite.
 //!
-//! It was previously `#[ignore]`d and documented as best-effort driving a live
-//! `POST /_arkret/find/directory/resolve-handle` against teabay. No such leg
-//! exists in the scenario — it has no HTTP client and no process spawn — so the
-//! gate excluded a pure contract test from every profile while claiming live
-//! coverage it never had. Live directory resolution is covered by
-//! `soland_teabay_directory_sync`, which really does bring the stack up.
+//! This is a local handle-to-membership contract. It intentionally makes no
+//! Directory claim: current-v1 Directory exposes public Realm metadata only.
 
 use anyhow::Result;
 

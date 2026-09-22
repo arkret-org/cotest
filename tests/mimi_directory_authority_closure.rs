@@ -1,7 +1,4 @@
-use arkret_models_collaboration::history_key::DirectorySourceRefAccess;
-use arkret_models_collaboration::http_bodies::{
-    MimiReportAbuseRequestBody, PeerEventsResolveRequestBody,
-};
+use arkret_models_collaboration::http_bodies::MimiReportAbuseRequestBody;
 use serde_json::json;
 
 #[test]
@@ -81,46 +78,4 @@ fn mimi_report_requires_closed_exact_actor_authority() {
     let mut mirrored = report;
     mirrored["reporter_id"] = json!("ak:did_core:web:alice.example");
     assert!(serde_json::from_value::<MimiReportAbuseRequestBody>(mirrored).is_err());
-}
-
-#[test]
-fn directory_carrier_is_bounded_and_exclusive_on_peer_resolve() {
-    let access_value = json!({
-        "kind": "directory_announce",
-        "source_id": "ak:did_core:web:station.example",
-        "directory_id": "ak:did_core:web:directory.example",
-        "realm_id": "ak:realm:AY789mrKRCQEVlbVgiTgLdjVO5oCMJiUCrF-D-JlRNxI",
-        "discovery_event_id": "ak:event:AZL87nwhLc8pnnvIhrfEQSfNkZvdPzaV3rFGVoJCQWW6",
-        "source_refs": [
-            "ak:event:AZL87nwhLc8pnnvIhrfEQSfNkZvdPzaV3rFGVoJCQWW6"
-        ],
-        "as_of": "2026-09-01T00:00:00.000Z",
-        "expires_at": "2026-09-01T00:05:00.000Z",
-        "proof": {
-            "kind": "detached_jws",
-            "verification_method": "did:web:station.example#notary-key",
-            "payload_digest": format!("sha256:{}", "0".repeat(64)),
-            "created_at": "2026-09-01T00:00:00.000Z",
-            "domain": "ak:trust_domain:example.com",
-            "audience": "ak:did_core:web:directory.example",
-            "jws": "e30..c2ln"
-        }
-    });
-    let access: DirectorySourceRefAccess = serde_json::from_value(access_value).unwrap();
-    access.validate().unwrap();
-
-    let request: PeerEventsResolveRequestBody = serde_json::from_value(json!({
-        "realm_id": access.realm_id.clone(),
-        "event_ids": access.source_refs.clone(),
-        "event_digests": [],
-        "directory_source_ref_access": access
-    }))
-    .unwrap();
-    request.validate().unwrap();
-
-    let mut unrelated = request.clone();
-    unrelated.event_ids = vec![
-        arkret_wire::EventId::new("ak:event:Adoyyx1AqvJH02hYxuUtpzuC-zpV8GxwFQ8XInZLbu3s").unwrap(),
-    ];
-    assert!(unrelated.validate().is_err());
 }

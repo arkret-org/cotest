@@ -14,8 +14,8 @@
 //! `*_BIN` env var was present. No such leg exists — the scenario has no HTTP
 //! client and no process spawn — so the gate excluded a pure contract test from
 //! every profile while claiming live coverage it never had. The real
-//! multi-service bring-up lives in `_bootstrap_smoke::joint_service_smoke` and
-//! `soland_teabay_directory_sync`, both selected by the `services-live` profile.
+//! multi-service bring-up lives in `_bootstrap_smoke::joint_service_smoke`,
+//! selected by the `services-live` profile.
 
 use anyhow::Result;
 

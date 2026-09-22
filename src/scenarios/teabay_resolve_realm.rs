@@ -1,117 +1,62 @@
-//! TB-2 — `ak.find.directory.read.resolve_realm.v1` three-lookup fixture for teabay.
-//!
-//! Per spec §9, `resolve_realm` accepts any of `realm_id`, `alias`,
-//! `invite_token`, or `signed_link` as the lookup key. **Per the current
-//! teabay implementation** (`crates/server/src/query/realm.rs::resolve_realm`,
-//! `directory_resources` row lookup), all four lookup parameters converge to a single
-//! `directory_resources.resource_id = $key` lookup. There is no separate
-//! alias / invite-token table walk yet.
-//!
-//! This fixture pins the **current** behaviour rather than the spec'd
-//! behaviour:
-//!
-//!   * `realm_id` lookup — happy path; a seeded resource_id is found.
-//!   * `alias` lookup — same code path; the alias string is matched against `resource_id`. So an
-//!     alias that doesn't equal the resource_id returns `not_found` (blinded). This is the
-//!     documented gap.
-//!   * `invite_token` lookup — same code path; same observation.
-//!
-//! When the implementation grows real alias / invite-token tables this
-//! fixture should flip to assert distinct happy paths; the test is the
-//! regression guard for that future split.
-//!
-//! Marked `#[ignore]` because it spawns a real `teabay` binary against a
-//! Postgres DSN — see `TEABAY_SPEC` for the env vars it requires (chiefly
-//! `DATABASE_URL` and `TEABAY_BIN`).
+//! Live current-v1 `resolve_realm` probe against a fresh read-only Directory.
 
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
-use serde_json::{Value, json};
+use arkret_models_discovery::DirectoryResolveRealmRequestBody;
+use arkret_wire::{Problem, RealmId, ServiceOperationId};
 
 use crate::scenarios::_helpers::external_binary::{TEABAY_SPEC, spawn_required};
 
-/// Issue three resolve-realm probes against a live teabay and assert the
-/// current single-lookup behaviour. The probe values are deliberately chosen
-/// so all three return blinded `not_found` against an empty / freshly-spun
-/// directory — what we're pinning is that the surface **accepts** each of
-/// the three parameter shapes (request validates, returns a structured
-/// response) rather than 4xx-ing on the input shape.
-pub async fn teabay_resolve_realm_three_lookups_run() -> Result<()> {
+pub async fn teabay_resolve_realm_unknown_is_blinded_run() -> Result<()> {
     let proc = spawn_required(&TEABAY_SPEC)
         .await
-        .context("spawn teabay binary for resolve-realm lookup-shape test")?;
+        .context("spawn teabay binary for resolve-realm test")?;
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(5))
         .build()?;
     let url = proc.url("/_arkret/find/directory/resolve-realm");
+    let request = DirectoryResolveRealmRequestBody {
+        realm_id: RealmId::new("ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1")?,
+    };
 
-    // --- by realm_id ------------------------------------------------------
-    let probe = json!({ "realm_id": "cotest-tb2-realm-id" });
-    let by_realm_id = client.post(&url).json(&probe).send().await?;
-    assert_resolved_or_blinded_not_found(by_realm_id, "realm_id").await?;
-
-    // --- by alias ---------------------------------------------------------
-    //
-    // Per current impl, alias is matched against `resource_id` directly.
-    // The probe value here is distinct from any seeded Realm -> blinded
-    // not_found. The test passes when teabay returns a structured response
-    // (any of: 200 envelope, 404 with not_found errcode). It fails if the
-    // surface 4xx's the input shape itself.
-    let probe = json!({ "alias": "cotest-tb2-alias" });
-    let by_alias = client.post(&url).json(&probe).send().await?;
-    assert_resolved_or_blinded_not_found(by_alias, "alias").await?;
-
-    // --- by invite_token --------------------------------------------------
-    let probe = json!({ "invite_token": "cotest-tb2-invite-token" });
-    let by_invite = client.post(&url).json(&probe).send().await?;
-    assert_resolved_or_blinded_not_found(by_invite, "invite_token").await?;
-
-    // --- empty body --------------------------------------------------------
-    // Negative control: no lookup key supplied. Should 400 with param_missing.
-    let probe = json!({});
-    let missing = client.post(&url).json(&probe).send().await?;
-    let missing_status = missing.status();
-    if missing_status.as_u16() != 400 {
-        let body = missing.text().await.unwrap_or_default();
+    let response = client
+        .post(&url)
+        .header(
+            "Arkret-Operation",
+            ServiceOperationId::FIND_DIRECTORY_READ_RESOLVE_REALM_V1,
+        )
+        .json(&request)
+        .send()
+        .await?;
+    let status = response.status();
+    let text = response.text().await.unwrap_or_default();
+    if status.as_u16() != 404 {
+        bail!("unknown Realm must return blinded 404, got {status}: {text}");
+    }
+    let problem: Problem = serde_json::from_str(&text)
+        .with_context(|| format!("resolve-realm 404 response is not JSON: {text}"))?;
+    if !problem.code().contains("not_found") {
         bail!(
-            "resolve-realm with empty body should 400 with param_missing, got {missing_status}: \
-             {body}"
+            "unknown Realm returned unexpected error code: {}",
+            problem.code()
         );
     }
 
+    let missing = client
+        .post(&url)
+        .header(
+            "Arkret-Operation",
+            ServiceOperationId::FIND_DIRECTORY_READ_RESOLVE_REALM_V1,
+        )
+        .json(&serde_json::json!({}))
+        .send()
+        .await?;
+    if missing.status().as_u16() != 400 {
+        bail!(
+            "resolve-realm without realm_id must fail validation, got {}",
+            missing.status()
+        );
+    }
     Ok(())
-}
-
-/// Accept either 200 (envelope) or 404 (blinded not-found). Reject 4xx
-/// responses that suggest the lookup-shape parameter itself was rejected
-/// (e.g. 400 param_missing when we DID supply a key).
-async fn assert_resolved_or_blinded_not_found(
-    resp: reqwest::Response,
-    lookup_field: &str,
-) -> Result<()> {
-    let status = resp.status();
-    let text = resp.text().await.unwrap_or_default();
-    if status.is_success() {
-        let body: Value = serde_json::from_str(&text)
-            .with_context(|| format!("{lookup_field} OK response is not JSON: {text}"))?;
-        // 200 response → must be a result envelope; surface its keys for clarity.
-        if !body.is_object() {
-            bail!("{lookup_field} returned 200 but body is not an object: {text}");
-        }
-        return Ok(());
-    }
-    if status.as_u16() == 404 {
-        // Blinded not_found is the expected outcome for an unknown key under
-        // current impl — verify the errcode is `not_found` (not e.g.
-        // `param_missing`, which would mean the body shape was wrong).
-        let problem: arkret_wire::Problem = serde_json::from_str(&text)
-            .with_context(|| format!("{lookup_field} 404 response is not JSON: {text}"))?;
-        let errcode = problem.code();
-        if !errcode.contains("not_found") {
-            bail!("{lookup_field} 404 expected `not_found` errcode, got `{errcode}`. body: {text}");
-        }
-        return Ok(());
-    }
-    bail!("resolve-realm by {lookup_field} returned unexpected status {status}. body: {text}")
 }

@@ -423,7 +423,12 @@ pub const TEABAY_SPEC: ExternalBinarySpec = ExternalBinarySpec {
     bind_arg: None,
     extra_env: &[
         ("TEABAY_PUBLIC_BASE_URL", "http://teabay.cotest.local"),
-        ("TEABAY_SERVICE_ID", "did:web:teabay.cotest.local"),
+        ("TEABAY_SERVICE_DID", "did:web:teabay.cotest.local"),
+        (
+            "TEABAY_SERVICE_METHOD_HISTORY_HEAD",
+            "cotest-directory-history-head",
+        ),
+        ("TEABAY_SERVICE_VERSION_ID", "cotest-directory-version"),
         ("TEABAY_DEVELOPMENT_MODE", "true"),
     ],
     extra_args: &[],

@@ -11,7 +11,6 @@ use arkret_models_collaboration::governance::agent_participation::{
     ParticipationNextReplaceInput, ParticipationScope, effective_participation, fold_ceiling_chain,
     validate_agent_participation_tightens,
 };
-use arkret_models_discovery::DirectoryAgentSelectorResolutionOutcome;
 use arkret_models_identity::claim_presentation::AgentSelectorClaim;
 use arkret_models_identity::handle::{Handle, HandleVisibility};
 use arkret_wire::{
@@ -185,7 +184,6 @@ fn selector_claim(
         vouching_id: Some(DidCoreId::new("ak:did_core:web:directory.acme.example")?),
         visibility: HandleVisibility::Restricted,
         audience: Some("ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1".to_owned()),
-        claim_scope: Default::default(),
         expires_at: None,
         created_at: Utc.with_ymd_and_hms(2026, 6, 19, 0, 0, 0).unwrap(),
         verified_at: Some(Utc.with_ymd_and_hms(2026, 6, 19, 0, 1, 0).unwrap()),
@@ -207,27 +205,15 @@ fn selector_claim(
     })
 }
 
-fn selector_outcome(claim: AgentSelectorClaim) -> Result<DirectoryAgentSelectorResolutionOutcome> {
-    let outcome = DirectoryAgentSelectorResolutionOutcome {
-        controller_subject_id: claim.controller_subject_id.clone(),
-        subject_account_id: claim
-            .subject_account_id
-            .clone()
-            .ok_or_else(|| anyhow!("unbound selector"))?,
-        agent_slug: claim.agent_slug.clone(),
-        selector_claim: claim,
-        source_refs: vec![arkret_wire::EventId::new(
-            "ak:event:AR4I3pqI_AE1Vxb4LEKq2azQxWXhHobgzwnTJmhVKJT-".to_owned(),
-        )?],
-        expires_at: None,
-    };
-    outcome.validate()?;
-    Ok(outcome)
+fn selector_outcome(claim: AgentSelectorClaim) -> Result<AgentSelectorClaim> {
+    claim.validate()?;
+    if claim.subject_account_id.is_none() {
+        bail!("unbound selector");
+    }
+    Ok(claim)
 }
 
-fn resolve_selector(
-    candidates: &[DirectoryAgentSelectorResolutionOutcome],
-) -> Option<&DirectoryAgentSelectorResolutionOutcome> {
+fn resolve_selector(candidates: &[AgentSelectorClaim]) -> Option<&AgentSelectorClaim> {
     let [candidate] = candidates else {
         return None;
     };
@@ -262,21 +248,24 @@ pub fn run_agent_mention_selector_vector() -> Result<()> {
     claim.validate()?;
     let outcome = selector_outcome(claim.clone())?;
 
-    if outcome.subject_account_id != expected_subject
+    if outcome.subject_account_id.as_ref() != Some(&expected_subject)
         || outcome.controller_subject_id != expected_controller.principal_id
     {
         bail!("fixture selector outcome and persisted mention name different targets");
     }
 
-    // A Directory that keeps the agent principal and swaps the Station is a
-    // different target, not the same one: the outcome must equal the claim.
+    // A label claim that keeps the agent principal and swaps the Station is a
+    // different signed payload, not the same target: the claim binds the full
+    // AccountId without relying on a Directory lookup.
+    let original_payload_digest = outcome.payload_digest()?;
     let mut retargeted = outcome.clone();
-    retargeted.subject_account_id = AccountId::new(
+    retargeted.subject_account_id = Some(AccountId::new(
         expected_subject.principal_id.clone(),
         DidCoreId::new("ak:did_core:web:other.example")?,
-    );
-    if retargeted.validate().is_ok() {
-        bail!("a selector outcome that retargets the Station must not validate");
+    ));
+    retargeted.validate()?;
+    if retargeted.payload_digest()? == original_payload_digest {
+        bail!("selector claim payload digest did not bind the Station");
     }
     let mention = Mention::new(expected_subject.clone())
         .with_agent_selector_metadata(
@@ -316,7 +305,7 @@ pub fn run_agent_mention_selector_vector() -> Result<()> {
         changed_subject,
         "changed_agent_slug",
     )?)?;
-    if changed.subject_account_id == mention.subject_account_id {
+    if changed.subject_account_id.as_ref() == Some(&mention.subject_account_id) {
         bail!("changed selector control must target a different agent account");
     }
     if mention.subject_account_id

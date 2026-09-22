@@ -619,9 +619,9 @@
       ]
     },
     {
-      "id": "directory_discovery_takedown",
-      "title": "Public Realm Directory search, resolve, announce, and withdraw",
-      "status": "partially_implemented",
+      "id": "directory_discovery",
+      "title": "Read-only public Realm Directory discovery",
+      "status": "implemented",
       "surfaces": [
         "directory_discovery"
       ],
@@ -643,41 +643,31 @@
           "surfaces": [
             "directory_discovery"
           ]
-        },
-        {
-          "operation_id": "ak.find.directory.command.announce.v1",
-          "surfaces": [
-            "directory_discovery"
-          ]
-        },
-        {
-          "operation_id": "ak.find.directory.command.withdraw.v1",
-          "surfaces": [
-            "directory_discovery"
-          ]
         }
       ],
       "coverage": [
         {
           "kind": "ordinary",
-          "path": "../teabay/crates/server/tests/it/conformance.rs",
+          "path": "../teabay/crates/server/tests/it/read_only.rs",
           "markers": [
+            "ak.operation_bundle.directory_service.public_read.v1",
             "/_arkret/find/directory/announce",
             "/_arkret/find/directory/withdraw"
           ]
         },
         {
           "kind": "joint_e2e",
-          "path": "src/scenarios/teabay_unsigned_ingest.rs",
+          "path": "src/scenarios/directory_service.rs",
           "markers": [
-            "/_arkret/find/directory/announce"
+            "ak.operation_bundle.directory_service.public_read.v1",
+            "retired_command"
           ]
         },
         {
           "kind": "conformance_fixture",
           "path": "src/conformance/privacy.rs",
           "markers": [
-            "ak.find.directory.read.resolve_realm.v1",
+            "directory_read_only_vector_closure",
             "query_results_are_closed_public_realm_metadata"
           ]
         }

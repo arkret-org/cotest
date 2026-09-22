@@ -4245,10 +4245,6 @@ try {
             $map.SOLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN = "ak:trust_domain:local.host"
             $map.SOLAND_OAUTH_CLIENT_ID = $CoauthOAuthClientId
         }
-        if ($TeabayBaseUrl) {
-            $teabayContainer = (Convert-ToContainerReachableUrl $TeabayBaseUrl).TrimEnd("/")
-            $map.SOLAND_DIRECTORY_ANNOUNCE_URL = "$teabayContainer/_arkret/find/directory/announce"
-        }
         if ($FederationPeers) {
             $parts = $FederationPeers -split "\|", 2
             $map.SOLAND_FEDERATION_PEERS = Convert-ToContainerReachableUrl $parts[0]
@@ -4315,9 +4311,6 @@ try {
             $values.SOLAND_INTERNAL_AUTHORITY_SHARED_SECRET = $InternalAuthoritySharedSecret
             $values.SOLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN = "ak:trust_domain:local.host"
             $values.SOLAND_OAUTH_CLIENT_ID = $CoauthOAuthClientId
-        }
-        if ($TeabayBaseUrl) {
-            $values.SOLAND_DIRECTORY_ANNOUNCE_URL = "$($TeabayBaseUrl.TrimEnd('/'))/_arkret/find/directory/announce"
         }
         if ($FederationPeers) {
             $values.SOLAND_FEDERATION_PEERS = $FederationPeers

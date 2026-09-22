@@ -1,10 +1,4 @@
-//! TB-2 — teabay resolve-realm three-lookup fixture (entrypoint).
-//!
-//! Verifies the resolve-realm surface accepts `realm_id` / `alias` /
-//! `invite_token` parameter shapes. See
-//! `cotest::scenarios::teabay_resolve_realm` for the actual probe logic and
-//! the codex-confirmed observation that all three currently converge to a
-//! single resource_id lookup.
+//! Teabay current-v1 exact Realm lookup and blinded-not-found entrypoint.
 //!
 //! Marked `#[ignore]` because the test spawns `teabay` against a Postgres
 //! DSN (`DATABASE_URL`, `TEABAY_BIN`); CI runners without one cleanly skip.
@@ -22,6 +16,6 @@ use serial_test::serial;
 #[tokio::test]
 #[ignore = "needs teabay binary + DATABASE_URL"]
 #[serial]
-async fn teabay_resolve_realm_three_lookups() -> Result<()> {
-    cotest::scenarios::teabay_resolve_realm::teabay_resolve_realm_three_lookups_run().await
+async fn teabay_resolve_realm_unknown_is_blinded() -> Result<()> {
+    cotest::scenarios::teabay_resolve_realm::teabay_resolve_realm_unknown_is_blinded_run().await
 }

@@ -40,8 +40,8 @@ holder 显式刷新快照。同时证明 `petname` 不随对方改名变化，�
 ## Edge cases
 
 - **profile 不可达**：无共同 Realm 时既不显示提醒也不显示首次确认入口，状态是 unknown，不得伪报 changed。
-- **Directory 正交**：bob 的 profile 写入不会让 alice 在 directory actor 搜索里看到 `D2`（由
-  `discovery/directory.spec.ts` 的 profile 用例覆盖，本场景不重复）。
+- **Directory 正交**：current-v1 Directory 没有 actor/profile 查询，因此 profile 写入不会形成
+  Directory 可发现性能力。
 
 ## Implementation notes
 

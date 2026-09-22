@@ -228,11 +228,6 @@
           "include_ignored": true
         },
         {
-          "target": "soland_teabay_directory_sync",
-          "filter": "profile_update_visible_in_teabay_search_within_30s",
-          "include_ignored": true
-        },
-        {
           "target": "coauth_session_grant_response_loss",
           "filter": "committed_issue_response_loss_restarts_and_replays_exactly",
           "include_ignored": true

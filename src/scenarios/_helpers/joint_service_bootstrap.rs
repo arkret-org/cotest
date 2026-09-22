@@ -46,11 +46,6 @@ pub struct JointServiceConfig {
     /// Bearer token soland presents when registering a did:webvh document
     /// against the embedded provider. Mirrors run-joint-e2e.ps1.
     pub embedded_webvh_registration_bearer: String,
-    /// When `true`, attempt to wire teabay's discovery ingest at the soland
-    /// announce stream. Implemented by exporting the soland public base URL
-    /// to teabay via `TEABAY_SOLAND_ANNOUNCE_URL` — teabay's optional
-    /// announce-ingest worker reads this when it boots.
-    pub wire_directory_ingest: bool,
     /// Optional durable Soland PostgreSQL store. Recovery restart tests set
     /// this so the coordinator process can be replaced without losing its
     /// transaction/session/receipt ledger.
@@ -63,7 +58,6 @@ impl JointServiceConfig {
             name: name.into(),
             internal_authority_shared_secret: "cotest-session-grant-introspection".to_owned(),
             embedded_webvh_registration_bearer: "cotest-webvh-registration".to_owned(),
-            wire_directory_ingest: true,
             soland_database_url: std::env::var("COTEST_SOLAND_DATABASE_URL").ok(),
         }
     }
@@ -209,19 +203,6 @@ pub async fn try_bootstrap(config: JointServiceConfig) -> Result<JointServiceSta
         ));
         soland_env.push(("SOLAND_ACCOUNT_AUTHORITY_URL".to_owned(), base.to_owned()));
     }
-    if let Some(teabay) = &teabay
-        && config.wire_directory_ingest
-    {
-        // Teabay-side wiring (announce ingest target) is handled via
-        // TEABAY_SPEC's env at spawn time; this just gives soland a hint
-        // about which directory to announce to. Soland's announce config
-        // key is optional (default: no announce), so unset is harmless.
-        soland_env.push((
-            "SOLAND_DIRECTORY_ANNOUNCE_URL".to_owned(),
-            format!("{}/_arkret/find/directory/announce", teabay.base_url),
-        ));
-    }
-
     // ArkretServer::spawn_with_env takes &[(&str, &str)] — borrow the owned
     // strings before passing.
     let env_borrowed: Vec<(&str, &str)> = soland_env
