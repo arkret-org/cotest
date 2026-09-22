@@ -1,0 +1,16 @@
+[package]
+name = "cotest-relation-structural-realm-runner"
+version = "0.3.0"
+edition = "2024"
+rust-version = "1.98"
+publish = false
+
+[dependencies]
+anyhow = { workspace = true }
+arkret-models-collaboration = { workspace = true }
+arkret-wire = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

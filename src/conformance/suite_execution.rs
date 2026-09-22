@@ -42,6 +42,7 @@ impl SuiteExecutionResult {
         for (index, (case, result)) in declared.iter().zip(&self.cases).enumerate() {
             let declared_id = case
                 .get("case_id")
+                .or_else(|| case.get("case"))
                 .or_else(|| case.get("name"))
                 .or_else(|| case.get("vector_id"))
                 .or_else(|| case.get("field"))

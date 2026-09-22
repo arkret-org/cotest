@@ -84,6 +84,7 @@ mod push_route_revision;
 mod push_rule_core;
 mod read_receipt_signal;
 mod recovery_completion_grant;
+mod relation_structural_realm;
 pub mod recovery_transaction_faults;
 mod redaction;
 mod scaffold_gate;
@@ -382,8 +383,7 @@ pub use profile_registry::{
     render_profile_gate_report_json, render_profile_gate_report_markdown,
 };
 pub use proof_context_domain_separation::{
-    DIRECTORY_PER_FAMILY_PROOF_CONTEXTS, MIMI_PER_FAMILY_PROOF_CONTEXTS,
-    run_proof_context_domain_separation_vector,
+    MIMI_PER_FAMILY_PROOF_CONTEXTS, run_proof_context_domain_separation_vector,
 };
 pub use protocol_gap_closure::run_protocol_gap_closure_fixture_suite;
 pub use protocol_time_tolerance::{
@@ -401,6 +401,9 @@ pub use read_receipt_signal::{
     run_read_receipt_round_trip_vector, run_read_receipt_signal_vector_suite,
 };
 pub use recovery_completion_grant::run_recovery_completion_grant_suite;
+pub use relation_structural_realm::{
+    RELATION_STRUCTURAL_REALM_ENTRYPOINT, run_relation_structural_realm_suite,
+};
 pub use redaction::run_redaction_fixture_suite;
 pub use scaffold_gate::{
     run_live_describe_profile_gate_suite, run_scaffold_profile_gate_suite,

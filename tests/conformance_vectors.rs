@@ -25,9 +25,9 @@ use cotest::conformance::{
     run_mention_rendering_vector_suite, run_named_suite_audit, run_object_addressing_vector_suite,
     run_poll_reducer_fixture_suite, run_presence_signal_vector_suite,
     run_primary_handle_vector_suite, run_protocol_time_tolerance_suite, run_protocol_version_suite,
-    run_push_rule_core_suite, run_sdk_precheck_suite, run_sidecar_vector_suite,
-    run_string_profile_suite, run_test_material_rejection_suite_with_coverage,
-    run_webrtc_media_plaintext_suite,
+    run_push_rule_core_suite, run_relation_structural_realm_suite, run_sdk_precheck_suite,
+    run_sidecar_vector_suite, run_string_profile_suite,
+    run_test_material_rejection_suite_with_coverage, run_webrtc_media_plaintext_suite,
 };
 use serde_json::{Value, json};
 
@@ -129,6 +129,18 @@ fn push_rule_core_named_suite_executes_all_current_cases() -> Result<()> {
 }
 
 #[test]
+fn relation_structural_realm_named_suite_executes_all_current_cases() -> Result<()> {
+    let execution = run_relation_structural_realm_suite()?;
+    assert_eq!(
+        execution.entrypoint,
+        "ak.suite.relation.structural_realm.v1"
+    );
+    assert_eq!(execution.cases.len(), 3);
+    assert!(execution.cases.iter().all(|case| case.assertions > 0));
+    Ok(())
+}
+
+#[test]
 fn call_state_core_named_suite_executes_all_current_cases() -> Result<()> {
     let execution = run_call_state_core_suite()?;
     assert_eq!(execution.entrypoint, "ak.suite.call.state_core.v1");
@@ -145,9 +157,9 @@ fn registered_canonical_json_digest_constructions_match_known_answers() -> Resul
 #[test]
 fn named_suite_audit_executes_registered_runners_and_exposes_every_gap() -> Result<()> {
     let report = run_named_suite_audit()?;
-    assert_eq!(report.fixture_count, 70);
-    assert_eq!(report.executed_entrypoints.len(), 32);
-    assert_eq!(report.unwired_entrypoints.len(), 38);
+    assert_eq!(report.fixture_count, 73);
+    assert_eq!(report.executed_entrypoints.len(), 33);
+    assert_eq!(report.unwired_entrypoints.len(), 40);
     for required_gap in [
         "ak.suite.consent.cache_invalidation.v1",
         "ak.suite.direct_conversation.admission_producers.v1",
@@ -158,6 +170,7 @@ fn named_suite_audit_executes_registered_runners_and_exposes_every_gap() -> Resu
         "ak.suite.peer.event_submit.semantic_union.v1",
         "ak.suite.realm_join_candidate.untrusted_locator.v1",
         "ak.suite.signer_key.historical_commit_coordinate.v1",
+        "ak.suite.state.strand_watch_current_read.v1",
     ] {
         assert!(
             report
