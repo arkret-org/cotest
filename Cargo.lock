@@ -2778,6 +2778,7 @@ dependencies = [
  "bip39",
  "chacha20poly1305 0.11.0",
  "chrono",
+ "cotest-account-data-cas-convergence-runner",
  "cotest-aead-nonce-replay-runner",
  "cotest-agent-mls-keypackage-authorization-runner",
  "cotest-blob-stream-aead-runner",
@@ -2830,6 +2831,16 @@ dependencies = [
  "unicode-normalization",
  "url",
  "zeroize",
+]
+
+[[package]]
+name = "cotest-account-data-cas-convergence-runner"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "arkret-models-collaboration",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

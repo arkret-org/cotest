@@ -14,8 +14,9 @@ use cotest::conformance::{
     ALL_MEMBER_IDENTITY_VECTOR_IDS, ALL_MEMBER_ROSTER_VECTOR_IDS, ALL_MENTION_RENDERING_VECTOR_IDS,
     ALL_OBJECT_ADDRESSING_VECTOR_IDS, ALL_PRESENCE_SIGNAL_VECTOR_IDS,
     ALL_PRIMARY_HANDLE_VECTOR_IDS, ALL_SIDECAR_VECTOR_IDS, load_local_fixture_value,
-    run_aead_nonce_replay_suite, run_agent_signer_evidence_vector_suite, run_agent_vector_suite,
-    run_blob_stream_aead_suite, run_call_signal_vector_suite, run_call_state_core_suite,
+    run_account_data_cas_convergence_suite, run_aead_nonce_replay_suite,
+    run_agent_signer_evidence_vector_suite, run_agent_vector_suite, run_blob_stream_aead_suite,
+    run_call_signal_vector_suite, run_call_state_core_suite,
     run_call_state_media_lifecycle_vector_suite, run_capability_relinquish_authoring_suite,
     run_container_realm_control_payload_suite, run_crypto_hpke_suite, run_cursor_negative_suite,
     run_cursor_vector_suite, run_detached_object_signature_suite,
@@ -36,6 +37,18 @@ use serde_json::{Value, json};
 fn keypackage_write_transcript_named_suite_returns_one_result_per_case() -> Result<()> {
     let execution = run_keypackage_write_transcripts_suite()?;
     assert_eq!(execution.cases.len(), 4);
+    Ok(())
+}
+
+#[test]
+fn account_data_cas_named_suite_executes_all_current_cases() -> Result<()> {
+    let execution = run_account_data_cas_convergence_suite()?;
+    assert_eq!(
+        execution.entrypoint,
+        "ak.suite.account_data.cas_convergence.v1"
+    );
+    assert_eq!(execution.cases.len(), 8);
+    assert!(execution.cases.iter().all(|case| case.assertions > 0));
     Ok(())
 }
 
@@ -192,8 +205,8 @@ fn registered_canonical_json_digest_constructions_match_known_answers() -> Resul
 fn named_suite_audit_executes_registered_runners_and_exposes_every_gap() -> Result<()> {
     let report = run_named_suite_audit()?;
     assert_eq!(report.fixture_count, 73);
-    assert_eq!(report.executed_entrypoints.len(), 36);
-    assert_eq!(report.unwired_entrypoints.len(), 37);
+    assert_eq!(report.executed_entrypoints.len(), 37);
+    assert_eq!(report.unwired_entrypoints.len(), 36);
     for required_gap in [
         "ak.suite.consent.cache_invalidation.v1",
         "ak.suite.direct_conversation.admission_producers.v1",

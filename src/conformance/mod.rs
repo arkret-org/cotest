@@ -1,4 +1,5 @@
 mod account_blocklist_projection;
+mod account_data_cas_convergence;
 mod account_status_issuer_ledger;
 mod aead_nonce_replay;
 mod agent_draft_pending_intent_account_subscribe;
@@ -133,6 +134,9 @@ const ARTIFACT_FIXTURES_DIR: &str = "fixtures";
 pub use account_blocklist_projection::{
     ACCOUNT_BLOCKLIST_PROJECTION_ENTRYPOINT, VECTOR_ID_ACCOUNT_BLOCKLIST_PROJECTION,
     run_account_blocklist_projection_vector,
+};
+pub use account_data_cas_convergence::{
+    ACCOUNT_DATA_CAS_CONVERGENCE_ENTRYPOINT, run_account_data_cas_convergence_suite,
 };
 pub use account_status_issuer_ledger::{
     VECTOR_ID_ACCOUNT_STATUS_ISSUER_LEDGER, run_account_status_issuer_ledger_vector,
