@@ -43,13 +43,18 @@ pub async fn teabay_resolve_realm_unknown_is_blinded_run() -> Result<()> {
         );
     }
 
+    let missing_realm_id = arkret_test_kit::wire_negative_from_sdk(&request, |body| {
+        body.as_object_mut()
+            .expect("SDK resolve-realm body is an object")
+            .remove("realm_id");
+    })?;
     let missing = client
         .post(&url)
         .header(
             "Arkret-Operation",
             ServiceOperationId::FIND_DIRECTORY_READ_RESOLVE_REALM_V1,
         )
-        .json(&serde_json::json!({}))
+        .json(&missing_realm_id)
         .send()
         .await?;
     if missing.status().as_u16() != 400 {

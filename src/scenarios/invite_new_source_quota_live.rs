@@ -20,8 +20,12 @@
 use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, ensure};
+use arkret_models_collaboration::consent_operations::ConsentRequestRequestBody;
 use arkret_models_collaboration::governance::invite_addressing::InviteReceivePolicy;
-use arkret_wire::{AccountDataKey, ConsentProfile, InviteReceiveAction, NewSourceQuotaOverride};
+use arkret_wire::{
+    AccountDataKey, AccountId, ConsentProfile, ConsentRequestScope, DidCoreId, InviteReceiveAction,
+    NewSourceQuotaOverride,
+};
 use reqwest::StatusCode;
 use serde_json::Value;
 
@@ -373,18 +377,17 @@ async fn request_consent(
     requester: &TestActorClient,
     holder: &TestActorClient,
     service_did: &str,
-    consent_scope: &str,
+    consent_scope: ConsentRequestScope,
 ) -> Result<()> {
+    let body = ConsentRequestRequestBody {
+        holder_account_id: AccountId::new(
+            DidCoreId::new(actor_core_id(&holder.actor)?)?,
+            DidCoreId::new(actor_core_id(service_did)?)?,
+        ),
+        consent_scope,
+    };
     let outcome = expect_json(
-        requester
-            .post("/_arkret/self/consent/request")
-            .json(&serde_json::json!({
-                "holder_account_id": {
-                    "principal_id": actor_core_id(&holder.actor)?,
-                    "station_id": actor_core_id(service_did)?,
-                },
-                "consent_scope": consent_scope,
-            })),
+        requester.post("/_arkret/self/consent/request").json(&body),
         StatusCode::OK,
     )
     .await?;
@@ -409,11 +412,17 @@ pub async fn consent_request_quarantine_branch_run() -> Result<()> {
     let requester = inviter(&server, "alice-consent-request", 0xf1).await?;
     let service_did = server.service_did().as_str().to_owned();
 
-    request_consent(&requester, &holder, &service_did, "direct_message").await?;
+    request_consent(
+        &requester,
+        &holder,
+        &service_did,
+        ConsentRequestScope::VideoCall,
+    )
+    .await?;
     let requester_core = actor_core_id(&requester.actor)?;
     ensure!(
         quarantine_entries_of(&holder, "consent_request").await?
-            == vec![(requester_core.clone(), "direct_message".to_owned())],
+            == vec![(requester_core.clone(), "video_call".to_owned())],
         "a consent request that cleared the chokepoint must write exactly one consent_request entry"
     );
     ensure!(
@@ -427,7 +436,13 @@ pub async fn consent_request_quarantine_branch_run() -> Result<()> {
     // uniqueness over (account_id, source_peer_principal_id, consent_scope).
     // The operation has no idempotency key and no nonce, so there is nothing
     // else it could dedupe on.
-    request_consent(&requester, &holder, &service_did, "direct_message").await?;
+    request_consent(
+        &requester,
+        &holder,
+        &service_did,
+        ConsentRequestScope::VideoCall,
+    )
+    .await?;
     ensure!(
         quarantine_entries_of(&holder, "consent_request")
             .await?
@@ -437,11 +452,17 @@ pub async fn consent_request_quarantine_branch_run() -> Result<()> {
     );
 
     // A different scope is a different live key, so it is a second pending item.
-    request_consent(&requester, &holder, &service_did, "voice_call").await?;
+    request_consent(
+        &requester,
+        &holder,
+        &service_did,
+        ConsentRequestScope::VoiceCall,
+    )
+    .await?;
     ensure!(
         quarantine_entries_of(&holder, "consent_request").await?
             == vec![
-                (requester_core.clone(), "direct_message".to_owned()),
+                (requester_core.clone(), "video_call".to_owned()),
                 (requester_core, "voice_call".to_owned()),
             ],
         "a second scope from the same requester is its own live key"
@@ -450,15 +471,19 @@ pub async fn consent_request_quarantine_branch_run() -> Result<()> {
     // The registered body pins the scope away from `invite`: an invite belongs
     // to invite delivery, and this branch has no representation for it. Caller
     // shape rejection is not a holder signal.
+    let baseline = ConsentRequestRequestBody {
+        holder_account_id: AccountId::new(
+            DidCoreId::new(actor_core_id(&holder.actor)?)?,
+            DidCoreId::new(actor_core_id(&service_did)?)?,
+        ),
+        consent_scope: ConsentRequestScope::VoiceCall,
+    };
+    let invalid_invite_scope = arkret_test_kit::wire_negative_from_sdk(&baseline, |body| {
+        body["consent_scope"] = serde_json::json!("invite");
+    })?;
     let refused = requester
         .post("/_arkret/self/consent/request")
-        .json(&serde_json::json!({
-            "holder_account_id": {
-                "principal_id": actor_core_id(&holder.actor)?,
-                "station_id": actor_core_id(&service_did)?,
-            },
-            "consent_scope": "invite",
-        }))
+        .json(&invalid_invite_scope)
         .send()
         .await?;
     ensure!(

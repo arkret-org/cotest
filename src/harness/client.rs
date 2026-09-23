@@ -16,9 +16,11 @@ use arkret_models_collaboration::events_payloads::{
 };
 use arkret_models_collaboration::governance::membership_invite::MembershipPayloadState;
 use arkret_models_collaboration::objects::profiles::StrandTrack;
+use arkret_models_collaboration::objects::read_receipts::ReadCursorAdvanceRequestBody;
 use arkret_models_collaboration::objects::strand::Strand;
 use arkret_wire::{
-    AccountId, ActorId, AuthContext, AuthorizationRef, Event, ProfileRef, SemanticRef,
+    AccountId, ActorId, AuthContext, AuthorizationRef, Event, EventCommitSubmission, ProfileRef,
+    SemanticRef,
 };
 use reqwest::StatusCode;
 use serde_json::{Value, json};
@@ -1300,9 +1302,10 @@ impl TestActorClient {
             .author_event(realm_id, "ak.read_cursor.advance", payload)
             .await?;
         expect_json(
-            self.post("/_arkret/self/read-cursors").json(&json!({
-                "advance_event": crate::publication::initial_submission(event, "")?
-            })),
+            self.post("/_arkret/self/read-cursors")
+                .json(&ReadCursorAdvanceRequestBody {
+                    advance_event: EventCommitSubmission::new(event),
+                }),
             StatusCode::OK,
         )
         .await

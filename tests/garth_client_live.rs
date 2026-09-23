@@ -31,6 +31,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use anyhow::{Context, Result};
 use arkret_identifiers::DeviceId;
+use arkret_models_collaboration::event_query::EventsQueryPostRequestBody;
 use cotest::harness::{ArkretServer, CanonicalClientRequest};
 use cotest_test_support::provisioning::{DeploymentEndpoints, MockEmailInbox};
 use garth::{ArkretClient, CursorScope, CursorStore, FileStore, NativeExecutor, SyncLoopControl};
@@ -465,7 +466,11 @@ async fn garth_delivers_an_authored_event_and_the_station_keeps_it() -> Result<(
     // queue that just claimed success.
     let events = client
         .query("/_arkret/self/events")
-        .json(&serde_json::json!({ "realm_ids": [realm_id], "limit": 50 }))
+        .json(&EventsQueryPostRequestBody {
+            realm_ids: vec![arkret_identifiers::RealmId::new(realm_id.clone())?],
+            limit: Some(50),
+            ..Default::default()
+        })
         .send()
         .await?;
     let listed = events.text().await?;

@@ -5,6 +5,7 @@ use arkret_wire::{
 use reqwest::{Client, StatusCode};
 use serde_json::Value as JsonValue;
 
+use crate::harness::NonProtocolTestBody;
 use crate::scenarios::_helpers::external_binary::{TEABAY_SPEC, try_spawn};
 
 enum DirectoryTarget {
@@ -132,7 +133,7 @@ pub async fn teabay_directory_service_profile_is_discoverable() -> Result<()> {
                 "Arkret-Operation",
                 format!("ak.find.directory.command.{retired_command}.v1"),
             )
-            .json(&serde_json::json!({}))
+            .json(&NonProtocolTestBody::new(serde_json::json!({})))
             .send()
             .await?;
         assert!(
