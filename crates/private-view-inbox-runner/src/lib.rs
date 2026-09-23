@@ -10,8 +10,8 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail, ensure};
 use arkret_models_collaboration::events_payloads::{
-    AccountDataSetPayload, notification_inbox_account_data_key_notification_id,
-    private_view_account_data_key_view_id,
+    AccountDataSetPayload, ViewCreatePayload, ViewDefinition, ViewUpdatePayload,
+    notification_inbox_account_data_key_notification_id, private_view_account_data_key_view_id,
 };
 use arkret_models_collaboration::objects::productivity::validate_private_account_data_key;
 use arkret_models_collaboration::objects::queries::View;
@@ -259,26 +259,57 @@ fn shared_view_surfaces(case: &Value, private_view_case: &Value) -> Result<CaseE
         .and_then(Value::as_object)
         .context("private View base missing")?;
     let mut create_object = private_base.clone();
-    create_object.remove("name");
-    create_object.remove("accepted");
-    create_object.remove("id");
+    // A shared Event authors only `view_definition`. The private Account Data
+    // fixture is a materialized View, so discard reducer-owned members before
+    // crossing the typed authoring boundary.
+    for field in [
+        "name",
+        "accepted",
+        "id",
+        "type",
+        "schema",
+        "realm_id",
+        "state",
+        "state_changed_at",
+        "created_by",
+        "created_at",
+        "updated_by",
+        "updated_at",
+    ] {
+        create_object.remove(field);
+    }
+    let definition: ViewDefinition = serde_json::from_value(Value::Object(create_object))?;
+    definition.validate()?;
+    let view_id = private_base
+        .get("id")
+        .cloned()
+        .context("private View id missing")?;
     let mut assertions = 0;
     for request in array(case, "requests")? {
         ensure!(string(request, "visibility")? == "private");
-        let object: arkret_models_collaboration::events_payloads::ViewCreateObject =
-            serde_json::from_value(Value::Object(create_object.clone()))?;
-        let error = object
+        let error = match string(request, "surface")? {
+            "ak.view.create" => ViewCreatePayload {
+                object: definition.clone(),
+            }
             .validate()
-            .expect_err("shared View accepted private visibility");
+            .expect_err("shared View create accepted private visibility")
+            .to_string(),
+            "ak.view.update" => {
+                let payload = json!({"view_id": view_id, "patch": {"visibility": "private"}});
+                match serde_json::from_value::<ViewUpdatePayload>(payload) {
+                    Ok(payload) => payload
+                        .validate()
+                        .expect_err("shared View update accepted private visibility")
+                        .to_string(),
+                    Err(error) => error.to_string(),
+                }
+            }
+            surface => bail!("unexpected shared View surface {surface}"),
+        };
         ensure!(
-            error
-                .to_string()
-                .contains("private_view_requires_account_data")
+            error.contains("private_view_requires_account_data"),
+            "shared View private rejection reason drifted: {error}"
         );
-        ensure!(matches!(
-            string(request, "surface")?,
-            "ak.view.create" | "ak.view.update"
-        ));
         assertions += 3;
     }
     let expected = object(case, "expected")?;
