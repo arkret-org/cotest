@@ -747,7 +747,9 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         print(f"checked {args.output}")
         return 0
-    args.output.write_text(generated, encoding="utf-8", newline="\n")
+    # `serialized` already supplies a single final LF. Writing UTF-8 bytes
+    # preserves that exact inventory on Python 3.9 as well as newer runtimes.
+    args.output.write_bytes(generated.encode("utf-8"))
     print(f"generated {args.output}")
     return 0
 

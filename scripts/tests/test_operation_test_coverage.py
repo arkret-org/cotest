@@ -61,7 +61,7 @@ class OperationTestCoverageTests(unittest.TestCase):
     def write(self, relative: str, content: str) -> None:
         path = self.root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content, encoding="utf-8", newline="\n")
+        path.write_bytes(content.encode("utf-8"))
 
     def test_generates_full_matrix_and_exact_duplicate_oracle(self) -> None:
         result = inventory.generate(self.root)
@@ -99,6 +99,16 @@ class OperationTestCoverageTests(unittest.TestCase):
         self.assertTrue(inventory.check_output(generated, output))
         output.write_text(generated + " ", encoding="utf-8")
         self.assertFalse(inventory.check_output(generated, output))
+
+    def test_main_generates_exact_utf8_inventory_on_supported_python(self) -> None:
+        output = self.root / "generated-inventory.json"
+        self.assertEqual(
+            inventory.main(["--workspace-root", str(self.root), "--output", str(output)]),
+            0,
+        )
+        expected = inventory.serialized(inventory.generate(self.root)).encode("utf-8")
+        self.assertEqual(output.read_bytes(), expected)
+        self.assertTrue(inventory.check_output(expected.decode("utf-8"), output))
 
     def test_unclassified_operation_shaped_literal_fails_closed(self) -> None:
         self.write(
