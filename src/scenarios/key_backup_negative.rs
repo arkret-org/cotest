@@ -237,8 +237,7 @@ fn backup_body(
         },
         contents: vec![SecretStorageContentIndex {
             item_kind: SecretStorageItemKind::MlsGroupSecretsBackupKey,
-            secret_id: None,
-            secret_version: None,
+            secret_id: "mls_group_secrets_backup_key".to_owned(),
         }],
         ciphertext: Base64UrlString::new("cotest-d3-ciphertext").map_err(|error| anyhow!(error))?,
         ciphertext_digest: Hash::new(

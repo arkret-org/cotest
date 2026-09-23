@@ -18,8 +18,7 @@ use arkret_models_collaboration::objects::profiles::StrandTrack;
 use arkret_models_collaboration::objects::read_receipts::ReadCursorAdvanceRequestBody;
 use arkret_models_collaboration::objects::strand::Strand;
 use arkret_wire::{
-    AccountId, ActorId, AuthContext, AuthorizationRef, Event, EventCommitSubmission, ProfileRef,
-    SemanticRef,
+    AccountId, ActorId, AuthorizationRef, Event, EventAdmissionSubmission, SemanticRef,
 };
 use reqwest::StatusCode;
 use serde_json::{Value, json};
@@ -955,7 +954,7 @@ impl TestActorClient {
         expect_json(
             self.post("/_arkret/self/read-cursors")
                 .json(&ReadCursorAdvanceRequestBody {
-                    advance_event: EventCommitSubmission::new(event),
+                    advance_event: EventAdmissionSubmission::new(event),
                 }),
             StatusCode::OK,
         )
