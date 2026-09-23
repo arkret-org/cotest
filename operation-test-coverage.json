@@ -19,9 +19,9 @@
       },
       "cotest_rust": {
         "source_file_count": 344,
-        "source_sha256": "d4e95202005c3ff71d01a6549b2b89b115ee46f863049313897428a0ee069510",
-        "evidence_count": 112,
-        "covered_operation_count": 60
+        "source_sha256": "3fd3d5f50d919ac9c4cf225f40d3aa3e554a86b578fce8b73d0416f1975690f7",
+        "evidence_count": 113,
+        "covered_operation_count": 61
       },
       "cotest_e2e": {
         "source_file_count": 105,
@@ -57,11 +57,10 @@
     "matrix_cell_count": 1025
   },
   "closure": {
-    "covered_operation_count": 148,
+    "covered_operation_count": 149,
     "uncovered_operation_ids": [
       "ak.edge.applet.managed_actor.command.author.v1",
       "ak.edge.push.command.apply_registration.v1",
-      "ak.edge.push.command.notify.v1",
       "ak.gate.account.command.abandon_identity_creation.v1",
       "ak.gate.account.command.finalize_device_pairing.v1",
       "ak.gate.account.command.issue_did_binding_challenge.v1",
@@ -1190,7 +1189,33 @@
         "http_binding": [],
         "product_flow": [],
         "fault_recovery": [],
-        "security_negative": []
+        "security_negative": [
+          {
+            "file": "cotest/crates/push-registration-handoff-runner/src/lib.rs",
+            "line": 638,
+            "scope": "notify_unknown_target_expands_formal_fixture_across_all_devices",
+            "scope_kind": "rust_test",
+            "occurrence_lines": [
+              642
+            ],
+            "protected_oracle": false,
+            "scope_sha256": "7f287c1d662a674e692fc52a4b5b2b88913e7c029275b7d859d18957cdcde3fa",
+            "input_sha256": "9d6aba3691b1d91a4bb214ba10b104a5e20a4f2ba2658fcc5948b81397ce3cc0",
+            "assertion_sha256": "1e0353a79b54a85f64c8988e65e93ad1d5801b9d5bd15f04041cb9e48e4cb31b",
+            "input_preview": [
+              "let operation = \"ak.edge.push.command.notify.v1\";",
+              "let fixture: serde_json::Value =",
+              "serde_json::from_slice(&std::fs::read(fixture_path()).unwrap()).unwrap();",
+              "let request: PushNotifyRequestBody ="
+            ],
+            "assertion_preview": [
+              "assert_eq!(operation, ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1);",
+              "assert_eq!(response.status_code, Some(StatusCode::OK));",
+              "assert_eq!(actual, expected);",
+              "assert_eq!(actual.outcomes.len(), request.notification.devices.len());"
+            ]
+          }
+        ]
       }
     },
     {

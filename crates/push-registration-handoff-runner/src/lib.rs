@@ -619,6 +619,11 @@ fn expected() -> Vec<Case> {
 
 #[cfg(test)]
 mod tests {
+    use arkret_models_integration::{
+        PushNotifyGatewayStatus, PushNotifyOutcome, PushNotifyReasonCode, PushNotifyRequestBody,
+    };
+    use salvo::test::ResponseExt;
+
     use super::*;
     #[test]
     fn fixture_mapping_is_closed() {
@@ -630,5 +635,93 @@ mod tests {
         let r = run_push_registration_handoff_lifecycle_vector().unwrap();
         assert_eq!(r.cases.len(), 6);
         assert!(r.cases.iter().all(|c| c.assertions > 0));
+    }
+
+    #[tokio::test]
+    async fn notify_unknown_target_expands_formal_fixture_across_all_devices() {
+        let operation = "ak.edge.push.command.notify.v1";
+        assert_eq!(operation, ServiceOperationId::EDGE_PUSH_COMMAND_NOTIFY_V1);
+        let fixture: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(fixture_path()).unwrap()).unwrap();
+        let request: PushNotifyRequestBody =
+            serde_json::from_value(fixture["request_context"]["instance"].clone()).unwrap();
+        let expected: PushNotifyOutcome = serde_json::from_value(
+            fixture["schema_validation_cases"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|case| case["name"] == "target_level_failure_is_expanded_per_device")
+                .unwrap()["instance"]
+                .clone(),
+        )
+        .unwrap();
+        let source = core("did:web:station-notify.example").unwrap();
+        let gateway = core(GATEWAY_DID).unwrap();
+        let signing = SigningKey::from_bytes(&SOURCE_SEED);
+        let mut principal = NotifyServicePrincipalConfig::default();
+        principal.signature_verification_method = Some(format!("{}#push", source.as_str()));
+        principal.signature_public_key_hex = Some(hex::encode(signing.verifying_key().to_bytes()));
+        principal.service_kind = Some("principal".to_owned());
+        let mut auth = NotifyAuthConfig::default();
+        auth.gateway_service_did = Some(GATEWAY_DID.to_owned());
+        auth.require_message_signatures = true;
+        auth.production_mode = true;
+        auth.replay_window_seconds = 300;
+        auth.service_principals = HashMap::from([(source.as_str().to_owned(), principal)]);
+        let mut state = AppState::new(Arc::new(PushkinRegistry::new(HashMap::new())));
+        state.notify_auth = auth;
+        state.notify_nonce_store = Some(Arc::new(NonceStore::memory(Duration::from_secs(300))));
+        let service = salvo::Service::new(build_router(Arc::new(state)));
+        let body = arkret_canonical::canonical::canonical_json_bytes(&request).unwrap();
+        let digest = ContentDigest::compute(&body, ContentDigestAlgorithm::Sha256).wire_value;
+        let url = "http://127.0.0.1/_arkret/edge/push/notify";
+        let parts = SignedRequestParts {
+            method: "POST".to_owned(),
+            target_uri: url.to_owned(),
+            authority: "127.0.0.1".to_owned(),
+            path: "/_arkret/edge/push/notify".to_owned(),
+            headers: vec![
+                ("arkret-operation".into(), operation.into()),
+                ("source-service-id".into(), source.as_str().into()),
+                ("destination-service-id".into(), gateway.as_str().into()),
+                ("idempotency-key".into(), "unknown-target-fixture".into()),
+                ("content-digest".into(), digest.clone()),
+            ],
+            body_digest: Some(digest.clone()),
+        };
+        let signed = sign_http_message_for_scenario(
+            &parts,
+            HttpSignatureScenario::ServiceToServiceV1,
+            &["content-digest", "idempotency-key"],
+            "sig1",
+            &format!("{}#push", source.as_str()),
+            now().unwrap(),
+            &signing,
+        )
+        .unwrap();
+        let mut response = TestClient::post(url)
+            .add_header("Arkret-Operation", operation, true)
+            .add_header(SOURCE_SERVICE_ID_HEADER, source.as_str(), true)
+            .add_header(DESTINATION_SERVICE_ID_HEADER, gateway.as_str(), true)
+            .add_header("Idempotency-Key", "unknown-target-fixture", true)
+            .add_header("Content-Digest", digest, true)
+            .add_header("Signature-Input", signed.signature_input_header, true)
+            .add_header("Signature", signed.signature_header, true)
+            .add_header("Content-Type", "application/json", true)
+            .body(body)
+            .send(&service)
+            .await;
+        assert_eq!(response.status_code, Some(StatusCode::OK));
+        let actual = response.take_json::<PushNotifyOutcome>().await.unwrap();
+        assert_eq!(actual, expected);
+        assert_eq!(actual.outcomes.len(), request.notification.devices.len());
+        for outcome in &actual.outcomes {
+            assert_eq!(outcome.gateway_status, PushNotifyGatewayStatus::Rejected);
+            assert_eq!(
+                outcome.reason_code,
+                Some(PushNotifyReasonCode::PushTargetUnknown)
+            );
+            assert!(outcome.retry_after_ms.is_none());
+        }
     }
 }
