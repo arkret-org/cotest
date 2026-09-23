@@ -11,7 +11,7 @@
 //!   * `arkret_policy::verify_realm_organization_statement` enforces the issuer-role / delegation /
 //!     proof / validity-window / scope / revocation invariants, fail-closed.
 //!
-//! COT-ORG-01 asserts the coverage fixture's active + revoked
+//! COT-ORG-01 asserts the organization fixture's active + revoked
 //! `RealmOrganizationPayload` shapes validate against the SDK validator and the
 //! pre-migration singleton shape is rejected.
 //!
@@ -72,33 +72,28 @@ fn strong_catalog() -> EventPayloadValidatorCatalog {
 // ── COT-ORG-01 — coverage fixture payloads validate via the SDK ────────────
 
 #[test]
-fn coverage_fixture_active_and_revoked_realm_organization_payloads_validate() -> Result<()> {
-    // This one is a spec artifact, not a cotest-local vector file. Reading it
-    // out of `tests/fixtures` looked for a copy that does not exist, so the
-    // suite failed on a missing file rather than on any payload it validates.
-    let fixture = load_spec_fixture("event-kind-payload-coverage-fixture.json")?;
+fn organization_fixture_active_and_revoked_payloads_validate() -> Result<()> {
+    let fixture = load_spec_fixture("realm-organization-fixture.json")?;
     let catalog = strong_catalog();
 
-    let positives = fixture
-        .get("positive_vectors")
+    let cases = fixture
+        .get("schema_validation_cases")
         .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("coverage fixture missing positive_vectors[]"))?;
+        .ok_or_else(|| anyhow!("organization fixture missing schema_validation_cases[]"))?;
 
     let mut active_seen = false;
     let mut revoked_seen = false;
-    for vector in positives {
-        if vector.get("event_kind").and_then(Value::as_str)
-            != Some(arkret_wire::event_kind_str::REALM_ORGANIZATION)
-        {
+    for case in cases {
+        if case.get("expect_valid").and_then(Value::as_bool) != Some(true) {
             continue;
         }
-        let name = vector
+        let name = case
             .get("name")
             .and_then(Value::as_str)
-            .ok_or_else(|| anyhow!("organization positive vector missing name"))?;
-        let payload = vector
-            .get("payload_shape")
-            .ok_or_else(|| anyhow!("vector {name} missing payload_shape"))?;
+            .ok_or_else(|| anyhow!("organization case missing name"))?;
+        let payload = case
+            .get("instance")
+            .ok_or_else(|| anyhow!("case {name} missing instance"))?;
 
         // Strong schema acceptance.
         catalog
@@ -131,11 +126,11 @@ fn coverage_fixture_active_and_revoked_realm_organization_payloads_validate() ->
 
     assert!(
         active_seen,
-        "coverage fixture must carry an active organization vector"
+        "organization fixture must carry an active organization case"
     );
     assert!(
         revoked_seen,
-        "coverage fixture must carry a revoked organization vector"
+        "organization fixture must carry a revoked organization case"
     );
     Ok(())
 }
