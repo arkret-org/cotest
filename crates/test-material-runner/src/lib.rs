@@ -186,6 +186,10 @@ fn p256_fixture_bytes_and_verify(crypto: &Value) -> Result<Vec<u8>> {
 
 fn coauth_websocket_rejects_before_state(websocket: &Value) -> Result<()> {
     use arkret_models_collaboration::sync_frames::websocket::WebSocketClientFrame;
+    use arkret_signatures::websocket_auth::{
+        WebSocketAuthProofRequest, WebSocketAuthVerificationRequest, build_websocket_auth_proof,
+        verify_websocket_auth_proof,
+    };
     use arkret_wire::WebOrigin;
     use arkret_wire::websocket_binding::WebSocketChallengeRecord;
     use coauth_backend::services::websocket_auth::{
@@ -260,6 +264,23 @@ fn coauth_websocket_rejects_before_state(websocket: &Value) -> Result<()> {
     };
     let mut state = JointWebSocketState::default();
     let runtime = tokio::runtime::Builder::new_current_thread().build()?;
+    // Verify the exact fixture frame through the production proof verifier.
+    // This checks signature, live challenge, grant hash, and holder binding,
+    // so the following terminal error can only come from material admission.
+    verify_websocket_auth_proof(&WebSocketAuthVerificationRequest {
+        compact_jws: kat["compact_jws"]
+            .as_str()
+            .context("WebSocket compact_jws")?,
+        connection_id: &challenge.connection_id,
+        session_grant: kat["session_grant"]
+            .as_str()
+            .context("WebSocket session_grant")?,
+        socket_origin: kat["origin"].as_str().context("WebSocket origin")?,
+        challenge: &challenge,
+        grant_cnf_jkt: kat["cnf_jkt"].as_str().context("WebSocket cnf_jkt")?,
+        replay_ledger_hit: false,
+        now: issued_at,
+    })?;
     let error = runtime
         .block_on(admit_websocket_authentication(
             &frame,
@@ -280,15 +301,50 @@ fn coauth_websocket_rejects_before_state(websocket: &Value) -> Result<()> {
     ensure!(state.replay_rows == 0);
     ensure!(state.cache_rows == 0);
     ensure!(state.auth_state_rows == 0);
+
+    // The same challenge and state port admit an ordinary key. A broad
+    // rejection or a hidden mutation from the preceding denial would fail.
+    let ordinary_key =
+        coauth_backend::arkret_key_bridge::sdk_signing_key_from_seed_bytes(&[91; 32]);
+    let ordinary_proof = build_websocket_auth_proof(
+        &WebSocketAuthProofRequest {
+            base_url: &challenge.canonical_base_url,
+            session_grant: kat["session_grant"]
+                .as_str()
+                .context("WebSocket session_grant")?,
+            nonce: &challenge.nonce,
+            issued_at,
+            jti: "d3MtYXV0aC1qdGktMDAwMg",
+        },
+        &ordinary_key,
+    )?;
+    let ordinary_frame = WebSocketClientFrame::Authenticate {
+        connection_id: challenge.connection_id.clone(),
+        session_grant: kat["session_grant"]
+            .as_str()
+            .context("WebSocket session_grant")?
+            .to_owned(),
+        dpop_proof: ordinary_proof.compact_jws,
+    };
+    runtime.block_on(admit_websocket_authentication(
+        &ordinary_frame,
+        kat["origin"].as_str().context("WebSocket origin")?,
+        &challenge,
+        &ordinary_proof.jkt,
+        issued_at,
+        &mut state,
+    ))?;
+    ensure!(state.commit_calls == 1);
+    ensure!(state.challenge_consumed);
+    ensure!(state.replay_rows == 1 && state.cache_rows == 1 && state.auth_state_rows == 1);
     Ok(())
 }
 
 fn coauth_rejects_before_binding_state(public_key: &[u8]) -> Result<()> {
     use arkret_identifiers::{Did, Hash, TrustDomainId};
     use arkret_identity::{
-        AcceptedDidBinding, DidBindingPurpose, DidBindingStatus, EvidenceReceipt,
-        InMemoryVerifiedDidBindingStore, LimitedTrust, MethodEvidence, VerifiedDidBinding,
-        VerifiedDidBindingDocumentInput, VerifiedDidBindingKey,
+        AcceptedDidBinding, DidBindingPurpose, DidBindingStatus, EvidenceReceipt, LimitedTrust,
+        MethodEvidence, VerifiedDidBinding, VerifiedDidBindingDocumentInput, VerifiedDidBindingKey,
     };
     use coauth_backend::handlers::arkret::{DidDocument, VerificationMethod};
     use coauth_backend::services::did_binding::{
@@ -389,7 +445,6 @@ fn coauth_rejects_before_binding_state(public_key: &[u8]) -> Result<()> {
         closed_method_evidence: None,
         identity_fact_rejection: None,
     };
-    let store = InMemoryVerifiedDidBindingStore::new(4);
     let error = binding_from_resolution(
         &resolution,
         trust_domain.clone(),
@@ -414,11 +469,6 @@ fn coauth_rejects_before_binding_state(public_key: &[u8]) -> Result<()> {
         policy_digest,
         verification_method: None,
     };
-    ensure!(
-        store.get(&key, now).is_none(),
-        "Coauth refusal left cache state"
-    );
-
     // Recreate a valid row accepted before the published-material rule existed.
     // Construction still goes through every SDK binding/digest invariant; only
     // today's Coauth formal-admission guard is deliberately bypassed.
@@ -555,7 +605,7 @@ pub fn run_test_material_rejection_suite_with_coverage() -> Result<TestMaterialR
 
     // 3: P-256 fixture signature verifies; both P-256 and ML-DSA use their
     // algorithm-defined bytes for the shared denial. ML-DSA production
-    // signature verification remains an explicit service gap below.
+    // signature verification is not applicable to the current-v1 profile.
     let p256 = p256_fixture_bytes_and_verify(&crypto)?;
     ensure!(denied(enforce_formal_test_material_policy(
         Some(&PublicKeyFingerprintInput::P256Sec1Uncompressed(&p256)),
@@ -709,10 +759,7 @@ pub fn run_test_material_rejection_suite_with_coverage() -> Result<TestMaterialR
     Ok(TestMaterialRejectionCoverage {
         execution,
         service_e2e_status: "partial",
-        service_e2e_gaps: vec![
-            "ML-DSA-65 production verifier consumer (SDK currently reserves but does not produce this algorithm)",
-            "Soland trust-admission and cross-service ledger/cache observation",
-        ],
+        service_e2e_gaps: vec!["Cross-service Soland trust-admission and ledger/cache observation"],
     })
 }
 
@@ -736,7 +783,7 @@ mod tests {
                 .all(|case| case.assertions > 0)
         );
         assert_eq!(coverage.service_e2e_status, "partial");
-        assert_eq!(coverage.service_e2e_gaps.len(), 2);
+        assert_eq!(coverage.service_e2e_gaps.len(), 1);
         Ok(())
     }
 }
