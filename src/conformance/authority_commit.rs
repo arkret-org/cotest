@@ -561,7 +561,7 @@ fn verify_scan_walks_one_stream_only(streams: &[DeclaredStream]) -> Result<()> {
         let request = StreamScanRequest {
             realm_id: stream.realm_id.clone(),
             stream_ref: stream.stream_ref.clone(),
-            after_position: None,
+            direction: arkret_wire::StreamScanDirection::After(None),
             limit: 1000,
         };
         let outcome = store
@@ -1082,7 +1082,7 @@ fn verify_snapshot_and_tails_are_complete(authority: &AuthorityFixture) -> Resul
         let request = StreamScanRequest {
             realm_id: stream.realm_id.clone(),
             stream_ref: stream.stream_ref.clone(),
-            after_position: None,
+            direction: arkret_wire::StreamScanDirection::After(None),
             limit: 1000,
         };
         let outcome = store
