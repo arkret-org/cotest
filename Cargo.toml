@@ -39,6 +39,7 @@ members = [
     "crates/capability-relinquish-authoring-runner",
     "crates/cursor-negative-runner",
     "crates/crypto-hpke-runner",
+    "crates/key-backup-kat-runner",
     "crates/detached-object-signature-runner",
     "crates/device-verification-runner",
     "crates/franking-proof-runner",

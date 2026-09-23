@@ -3033,6 +3033,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "cotest-key-backup-kat-runner"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "arkret-canonical",
+ "arkret-crypto",
+ "arkret-identity",
+ "arkret-models-crypto",
+ "base64 0.23.1",
+ "chacha20poly1305 0.11.0",
+ "ed25519-dalek 3.0.0",
+ "hex",
+ "serde_json",
+ "sha2 0.11.0",
+]
+
+[[package]]
 name = "cotest-mls-governance-binding-runner"
 version = "0.3.0"
 dependencies = [
