@@ -1,21 +1,18 @@
 //! Production SDK runner for the device push-route revision-CAS fixture.
 
 use anyhow::{Context, Result, bail};
-use arkret_lattice_registry::{
-    ActorPrivateCandidate, ActorPrivateMergeOutcome, build_actor_private_registry,
+use arkret_models_identity::device_push_route::{
+    DevicePushRoutePayload, ServerRevisionCasDecision, decide_server_revision_cas,
 };
-use arkret_models_identity::device_push_route::DevicePushRoutePayload;
 pub use cotest_push_registration_handoff_runner::{
     PUSH_REGISTRATION_HANDOFF_VECTOR_ID, PushRegistrationHandoffExecution,
     run_push_registration_handoff_lifecycle_vector,
     run_push_registration_handoff_lifecycle_with_database_url,
 };
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use super::load_artifact_json;
-
-const FAMILY: &str = "ak.private.device.push_route.v1";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -38,17 +35,6 @@ struct PushNotifyOutcomeFixture {
     device_push_route_revision_cases: Vec<Value>,
 }
 
-fn candidate(value: Value, expected_revision: u64) -> ActorPrivateCandidate {
-    ActorPrivateCandidate {
-        value,
-        revision: Some(expected_revision + 1),
-        expected_revision: Some(expected_revision),
-        causal_order: None,
-        hlc: None,
-        device_id: None,
-    }
-}
-
 pub fn run_push_route_revision_suite() -> Result<()> {
     let fixture: PushNotifyOutcomeFixture = serde_json::from_value(load_artifact_json(
         "fixtures/push-notify-outcome-fixture.json",
@@ -67,14 +53,14 @@ pub fn run_push_route_revision_suite() -> Result<()> {
         bail!("push notification fixture metadata drifted");
     }
     verify_closed_sdk_payloads(&fixture)?;
-    let registry = build_actor_private_registry()?;
     let cases = &fixture.device_push_route_revision_cases;
 
     let lifecycle = cases
         .iter()
         .find(|case| case["name"] == "create_rotate_revoke")
         .context("push fixture omits create_rotate_revoke")?;
-    let mut current = None;
+    let mut current_revision = None;
+    let mut current_value = None;
     let mut accepted = 0_u64;
     for write in lifecycle["writes"]
         .as_array()
@@ -83,22 +69,22 @@ pub fn run_push_route_revision_suite() -> Result<()> {
         let expected = write["expected_revision"]
             .as_u64()
             .context("write omits expected_revision")?;
-        let incoming = candidate(write.clone(), expected);
-        match registry.apply(FAMILY, current.as_ref(), incoming)? {
-            ActorPrivateMergeOutcome::Accepted(next) => {
-                current = Some(next);
+        match decide_server_revision_cas(current_revision, expected) {
+            ServerRevisionCasDecision::Accepted { next_revision } => {
+                current_revision = Some(next_revision);
+                current_value = Some(write);
                 accepted += 1;
             }
             other => bail!("conformant push-route lifecycle write was rejected: {other:?}"),
         }
     }
-    let final_value = current.context("push-route lifecycle produced no state")?;
+    let final_value = current_value.context("push-route lifecycle produced no state")?;
     if accepted
         != lifecycle["expected"]["accepted_writes"]
             .as_u64()
             .unwrap_or_default()
-        || final_value.revision != lifecycle["expected"]["final_revision"].as_u64()
-        || final_value.value["shape"] != lifecycle["expected"]["final_state"]
+        || current_revision != lifecycle["expected"]["final_revision"].as_u64()
+        || final_value["shape"] != lifecycle["expected"]["final_state"]
     {
         bail!("push-route create/rotate/revoke revision fixture drifted");
     }
@@ -108,7 +94,7 @@ pub fn run_push_route_revision_suite() -> Result<()> {
         .find(|case| case["name"] == "stale_sibling_and_replay_fail_closed")
         .context("push fixture omits stale_sibling_and_replay_fail_closed")?;
     let initial_revision = conflict["initial_revision"].as_u64().unwrap_or_default();
-    let mut current = Some(candidate(json!({"name": "initial"}), initial_revision - 1));
+    let mut current_revision = Some(initial_revision);
     for write in conflict["writes"]
         .as_array()
         .context("writes is not an array")?
@@ -116,21 +102,18 @@ pub fn run_push_route_revision_suite() -> Result<()> {
         let expected_revision = write["expected_revision"]
             .as_u64()
             .context("conflict write omits expected_revision")?;
-        let outcome = registry.apply(
-            FAMILY,
-            current.as_ref(),
-            candidate(write.clone(), expected_revision),
-        )?;
+        let outcome = decide_server_revision_cas(current_revision, expected_revision);
         match (write["expected"].as_str(), outcome) {
-            (Some("accepted"), ActorPrivateMergeOutcome::Accepted(next)) => current = Some(next),
-            (Some("cas_conflict"), ActorPrivateMergeOutcome::Conflict) => {}
+            (Some("accepted"), ServerRevisionCasDecision::Accepted { next_revision }) => {
+                current_revision = Some(next_revision)
+            }
+            (Some("cas_conflict"), ServerRevisionCasDecision::Conflict) => {}
             (expected, observed) => {
                 bail!("push-route conflict case expected {expected:?}, got {observed:?}");
             }
         }
     }
-    if current.as_ref().and_then(|value| value.revision)
-        != conflict["expected"]["final_revision"].as_u64()
+    if current_revision != conflict["expected"]["final_revision"].as_u64()
         || conflict["expected"]["rejected_write_side_effects"].as_u64() != Some(0)
     {
         bail!("push-route sibling/replay conflict fixture drifted");
@@ -141,18 +124,13 @@ pub fn run_push_route_revision_suite() -> Result<()> {
         .find(|case| case["name"] == "privacy_gc_keeps_revision_high_water")
         .context("push fixture omits privacy_gc_keeps_revision_high_water")?;
     let revision = gc["initial"]["revision"].as_u64().unwrap_or_default();
-    let current = candidate(json!({"shape": "revoked"}), revision - 1);
     let stale_expected = gc["stale_write_expected_revision"]
         .as_u64()
         .unwrap_or_default();
     if !matches!(
-        registry.apply(
-            FAMILY,
-            Some(&current),
-            candidate(json!({"shape": "active"}), stale_expected),
-        )?,
-        ActorPrivateMergeOutcome::Conflict
-    ) || current.revision != gc["expected"]["final_revision"].as_u64()
+        decide_server_revision_cas(Some(revision), stale_expected),
+        ServerRevisionCasDecision::Conflict
+    ) || Some(revision) != gc["expected"]["final_revision"].as_u64()
     {
         bail!("push-route privacy GC lost its revision high-water mark");
     }

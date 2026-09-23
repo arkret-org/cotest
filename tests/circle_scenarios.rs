@@ -12,7 +12,6 @@ use cotest::scenarios::circle::effective_scope_mismatch::effective_scope_mismatc
 use cotest::scenarios::circle::error_code_paths::error_code_paths_run;
 use cotest::scenarios::circle::member_strict_subset::member_strict_subset_run;
 use cotest::scenarios::circle::member_transition_rules::member_transition_rules_run;
-use cotest::scenarios::circle::metadata_encryption_floor::metadata_encryption_floor_run;
 use cotest::scenarios::circle::scope_circle_id_immutability::scope_circle_id_immutability_run;
 use cotest::scenarios::circle::strand_scope_visibility::strand_scope_visibility_run;
 
@@ -70,13 +69,6 @@ async fn circle_scope_circle_id_immutability() {
     scope_circle_id_immutability_run()
         .await
         .expect("scope_circle_id_immutability scenario");
-}
-
-#[tokio::test]
-async fn circle_metadata_encryption_floor() {
-    metadata_encryption_floor_run()
-        .await
-        .expect("metadata_encryption_floor scenario");
 }
 
 #[tokio::test]

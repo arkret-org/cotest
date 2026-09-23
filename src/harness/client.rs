@@ -9,31 +9,27 @@ use arkret::{
     ContactIntroductionEvidence, IdempotencyKey, PreparedEventDraft, ProtocolOperationId,
 };
 use arkret_http_client::Client as SdkClient;
-use arkret_identifiers::{Did, DidCoreId, EventId, Hash, Hlc, RealmId, project_did_to_core_id};
-use arkret_models_collaboration::event_query::SealFrontierRequestBody;
+use arkret_identifiers::{Did, DidCoreId, EventId, Hash, RealmId, project_did_to_core_id};
 use arkret_models_collaboration::events_payloads::{
     CapabilityRevokePayload, RealmSetDefaultStrandPayload, StrandCreatePayload,
 };
 use arkret_models_collaboration::governance::membership_invite::MembershipPayloadState;
 use arkret_models_collaboration::objects::profiles::StrandTrack;
 use arkret_models_collaboration::objects::strand::Strand;
-use arkret_wire::{
-    AccountId, ActorId, AuthContext, AuthorizationRef, Event, ProfileRef, SemanticRef,
-};
+use arkret_wire::{AccountId, ActorId, AuthorizationRef, Event, SemanticRef};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 use url::Url;
 
 use super::assertions::{account_subscribe_delta_from_text, expect_json, expect_response};
 use super::event_builder::{
-    event_envelope_with_causal_refs_for_device, event_envelope_with_chain_for_device,
-    event_signing_identity_for_device, realm_bootstrap_event_batch_for_device,
+    event_envelope_with_causal_refs_for_device, event_signing_identity_for_device,
+    realm_bootstrap_event_batch_for_device,
 };
 use super::server::OperationSelectingHttpClient;
 use super::{
-    events_frontier_request_body, member_join_payload, member_transition_payload,
-    message_create_text_payload, next_typed_id, query_method, realm_create_payload_with_notary,
-    refresh_typed_event_proof_with_signing_seed,
+    member_join_payload, member_transition_payload, message_create_text_payload, next_typed_id,
+    query_method, realm_create_payload_for_station, refresh_typed_event_proof_with_signing_seed,
 };
 
 #[derive(Clone)]
@@ -42,7 +38,6 @@ pub struct TestActorClient {
     pub(super) sdk: SdkClient,
     pub(super) base_url: Url,
     pub(super) service_id: String,
-    pub(super) service_notary_signer: arkret_wire::NotarySignerDescriptor,
     pub actor: String,
     pub device_id: String,
     /// How this client authenticates.
@@ -160,7 +155,6 @@ impl TestActorClient {
                 &event_draft,
                 arkret_wire::event_kind_str::CONTACT_REQUESTED,
             )?,
-            control_proposal_ack: None,
         });
         let accepted = self.sdk.contacts_request(&commit).await?;
         let accepted_replay = self.sdk.contacts_request(&commit).await?;
@@ -252,7 +246,6 @@ impl TestActorClient {
                 &event_draft,
                 arkret_wire::event_kind_str::CONTACT_ACCEPTED,
             )?,
-            control_proposal_ack: None,
         });
         match self.sdk.contacts_respond(&commit).await? {
             ContactOperationOutcome::Accepted {
@@ -282,14 +275,10 @@ impl TestActorClient {
             Did::new(self.actor.clone())?,
             verification_method.clone(),
         );
-        let signer_evidence_ref =
-            crate::fixture_signer_evidence_ref(format!("contact:{}", event.event_id()));
         arkret_signatures::sign_event(
             &mut event,
             &signer,
-            &verification_method,
-            arkret_signatures::SignEventOptions::new(signer_evidence_ref)
-                .with_created_at(created_at),
+            arkret_signatures::SignEventOptions::new().with_created_at(created_at),
         )?;
         if Hash::new(event.event_digest_with_digest_suite(draft.event_digest.digest_suite()?)?)?
             != draft.event_digest
@@ -299,68 +288,22 @@ impl TestActorClient {
         Ok(event.into_event())
     }
 
-    /// Read the Realm Seal frontier, waiting out the control-seal coordinator.
-    ///
-    /// Control Move finality belongs to the durable coordinator, which runs
-    /// asynchronously: between accepting a Realm genesis unit and publishing
-    /// the Seal that covers it, the frontier answers `503
-    /// frontier_unavailable`. That is a transient state a client waits out,
-    /// not an error — every Realm-scoped Seal read here therefore retries it.
+    /// Read the committed Realm stream from its retained floor to its head.
+    /// Callers that still inspect the retired Seal JSON shape must migrate to
+    /// the `committed_events[]` and `RealmCommit` fields returned here.
     pub async fn realm_seal_frontier(&self, realm_id: &str) -> Result<Value> {
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-        loop {
-            let response = expect_response(
-                self.query("/_arkret/self/seals/frontier")
-                    .json(&SealFrontierRequestBody {
-                        realm_id: RealmId::new(realm_id.to_owned())?,
-                    }),
-                StatusCode::OK,
+        let realm_id = RealmId::new(realm_id.to_owned())?;
+        let outcome = self
+            .sdk
+            .scan_commit_stream_to_head(
+                realm_id.clone(),
+                arkret_wire::CommitStreamRef::Realm { realm_id },
+                None,
+                1000,
             )
-            .await;
-            match response {
-                Ok(response) => return response.json(),
-                Err(error) if std::time::Instant::now() < deadline => {
-                    let detail = format!("{error}");
-                    if !detail.contains("frontier_unavailable")
-                        && !detail.contains("realm not found")
-                    {
-                        return Err(error);
-                    }
-                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-                }
-                Err(error) => return Err(error),
-            }
-        }
+            .await?;
+        Ok(serde_json::to_value(outcome)?)
     }
-
-    async fn events_frontier_with_retry(
-        &self,
-        actor_did: &str,
-        realm_id: Option<&str>,
-    ) -> Result<Value> {
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-        loop {
-            let response =
-                expect_response(
-                    self.query("/_arkret/self/events/frontier").json(
-                        &events_frontier_request_body(actor_did, &self.service_id, realm_id)?,
-                    ),
-                    StatusCode::OK,
-                )
-                .await;
-            match response {
-                Ok(response) => return response.json(),
-                Err(error) if std::time::Instant::now() < deadline => {
-                    if !format!("{error}").contains("frontier_unavailable") {
-                        return Err(error);
-                    }
-                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-                }
-                Err(error) => return Err(error),
-            }
-        }
-    }
-
     /// Record a grant this actor now holds in `realm_id`, so its later Events
     /// name it as their covering authority.
     pub fn remember_grant(&self, realm_id: &str, grant_id: &str, actions: &[&str]) {
@@ -405,158 +348,78 @@ impl TestActorClient {
         subject: &TestActorClient,
         actions: &[&str],
     ) -> Result<String> {
-        let before = self.realm_seal_id(realm_id).await?;
-        let (grant_id, response) = self
+        let (grant_id, _response) = self
             .grant_realm_actions_to(realm_id, &subject.actor, actions)
             .await?;
-        let proposal_digest = response["control_proposal_acks"][0]["proposal_digest"]
-            .as_str()
-            .ok_or_else(|| {
-                anyhow!("grant response omitted its Control Proposal Ack: {response}")
-            })?;
-        self.await_control_proposal_settled(realm_id, proposal_digest, &before)
+        let grant_id_typed = arkret_identifiers::GrantId::new(grant_id.clone())?;
+        let grant_event_id = EventId::from_token_bytes(grant_id_typed.token_bytes())?;
+        self.await_event_seal_coverage(realm_id, &grant_event_id)
             .await?;
         subject.remember_grant(realm_id, &grant_id, actions);
         Ok(grant_id)
     }
 
-    /// Wait until one exact accepted Control proposal leaves the pending set.
-    ///
-    /// A different pending proposal may advance the Realm frontier first, so a
-    /// bare `seal_id != previous` check is not a finality witness for the Event
-    /// just submitted. The proposal's signed Ack digest is the stable identity
-    /// exposed by governance health. The caller obtained that signed Ack from
-    /// the accepted submit response, which already proves the digest entered
-    /// pending; polling waits for the exact digest to leave the pending set
-    /// together with a successor Seal.
+    /// Wait for one exact Event to appear in the signed RealmCommit stream.
+    /// Legacy callers must pass an EventId and a previous CommitId; the old
+    /// proposal digest and Seal identity have no current protocol meaning.
     pub(crate) async fn await_control_proposal_settled(
         &self,
         realm_id: &str,
-        proposal_digest: &str,
-        previous_seal_id: &str,
+        event_id: &str,
+        previous_commit_id: &str,
     ) -> Result<String> {
+        let event_id = EventId::new(event_id.to_owned())?;
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
         loop {
-            if let Ok(frontier) = self.realm_seal_frontier(realm_id).await {
-                let state: arkret_models_collaboration::event_sync::SealFrontierState =
-                    serde_json::from_value(frontier)?;
-                let frontier = state.frontier;
-                let pending = frontier
-                    .governance_health
-                    .pending_proposals
-                    .iter()
-                    .any(|pending| {
-                        pending.control_proposal_ack.proposal_digest.as_str() == proposal_digest
-                    });
-                let leaf = frontier.sole_leaf()?.clone();
-                if !pending && leaf.as_str() != previous_seal_id {
-                    return Ok(leaf.to_string());
-                }
+            let realm = RealmId::new(realm_id.to_owned())?;
+            let outcome = self
+                .sdk
+                .scan_commit_stream_to_head(
+                    realm.clone(),
+                    arkret_wire::CommitStreamRef::Realm { realm_id: realm },
+                    None,
+                    1000,
+                )
+                .await?;
+            if let Some(item) = outcome.committed_events.iter().find(|item| {
+                item.commit().event_ref == event_id
+                    && item.commit().commit_id.as_str() != previous_commit_id
+            }) {
+                return Ok(item.commit().commit_id.to_string());
             }
             if std::time::Instant::now() >= deadline {
                 return Err(anyhow!(
-                    "Control proposal {proposal_digest} did not settle into a successor Seal for {realm_id}"
+                    "Event {event_id} did not appear after Commit {previous_commit_id} in Realm {realm_id}"
                 ));
             }
             tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         }
     }
 
-    /// Wait until the accepted Realm frontier Seal covers one exact Event.
-    ///
-    /// An unrelated pending Event can advance the frontier first, while an
-    /// admission response can also arrive before the Seal worker publishes
-    /// the successor that covers this Event. Resolving the current leaf and
-    /// checking its delta is therefore the finality witness; comparing Seal
-    /// ids alone is not.
+    /// Wait for exact signed commit inclusion of one Event in this Realm.
     pub(crate) async fn await_event_seal_coverage(
         &self,
         realm_id: &str,
         event_id: &EventId,
     ) -> Result<String> {
-        let realm_id = RealmId::new(realm_id.to_owned())?;
-        let event_digest = event_id.event_digest();
+        let expected_realm = RealmId::new(realm_id.to_owned())?;
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
-        // A frontier read can fail for reasons that have nothing to do with Seal
-        // coverage -- a registered cross-Cell domain diagnostic can make this
-        // endpoint answer 409. Swallowing that made a permanent server-side
-        // rejection look byte-for-byte like "the Seal has not caught up yet",
-        // so the last error is kept and reported with the timeout.
-        let mut last_frontier_error: Option<String> = None;
         loop {
-            let frontier = match self.realm_seal_frontier(realm_id.as_str()).await {
-                Ok(frontier) => Some(frontier),
-                Err(error) => {
-                    last_frontier_error = Some(error.to_string());
-                    None
+            if let Ok(item) = self.sdk.committed_event_get(event_id).await {
+                item.validate_shape()?;
+                if item.commit().realm_id == expected_realm {
+                    return Ok(item.commit().commit_id.to_string());
                 }
-            };
-            if let Some(frontier) = frontier {
-                let state: arkret_models_collaboration::event_sync::SealFrontierState =
-                    serde_json::from_value(frontier)?;
-                let frontier_leaf = state.frontier.sole_leaf()?.clone();
-                let mut pending = vec![frontier_leaf.clone()];
-                let mut visited = std::collections::BTreeSet::new();
-                while let Some(seal_ref) = pending.pop() {
-                    if !visited.insert(seal_ref.to_string()) {
-                        continue;
-                    }
-                    let resolved: arkret_models_collaboration::http_bodies::SealResolveOutcome =
-                        serde_json::from_value(
-                            expect_json(
-                                self.query("/_arkret/self/seals/resolve").json(
-                                    &arkret_models_collaboration::http_bodies::SelfSealResolveRequestBody {
-                                        realm_id: realm_id.clone(),
-                                        selection: arkret_models_collaboration::http_bodies::SealResolveSelection::SealRefs {
-                                            seal_refs: vec![seal_ref.clone()],
-                                        },
-                                        history_traversal_access: None,
-                                    },
-                                ),
-                                StatusCode::OK,
-                            )
-                            .await?,
-                        )?;
-                    let arkret_models_collaboration::http_bodies::SealResolveOutcome::Seals {
-                        seals,
-                        ..
-                    } = resolved
-                    else {
-                        continue;
-                    };
-                    let Some(seal) = seals.into_iter().find(|seal| seal.id == seal_ref) else {
-                        continue;
-                    };
-                    if seal.delta.contains(&event_digest) {
-                        return Ok(frontier_leaf.to_string());
-                    }
-                    pending.extend(seal.predecessor_ref);
-                }
+                return Err(anyhow!("Event {event_id} committed in another Realm"));
             }
             if std::time::Instant::now() >= deadline {
-                return Err(match last_frontier_error {
-                    Some(error) => anyhow!(
-                        "accepted Event {event_id} never reached the Realm frontier Seal for \
-                         {realm_id}; the frontier read kept failing: {error}"
-                    ),
-                    None => anyhow!(
-                        "accepted Event {event_id} was not covered by the Realm frontier Seal \
-                         for {realm_id}"
-                    ),
-                });
+                return Err(anyhow!(
+                    "Event {event_id} has no accepted RealmCommit in {realm_id}"
+                ));
             }
             tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         }
     }
-
-    async fn realm_seal_id(&self, realm_id: &str) -> Result<String> {
-        let frontier = self.realm_seal_frontier(realm_id).await?;
-        frontier["frontier"]["seal_basis"]["leaves"][0]
-            .as_str()
-            .map(ToOwned::to_owned)
-            .ok_or_else(|| anyhow!("Realm frontier has no seal_id: {frontier}"))
-    }
-
     pub fn controls_realm_authority_root(&self, realm_id: &str) -> bool {
         self.controlled_realms
             .lock()
@@ -690,14 +553,9 @@ impl TestActorClient {
         )?;
         let event_response = bootstrap["event_response"].clone();
         let strand_id = self.create_default_strand(realm_id.as_str()).await?;
-        // An ordinary Event that writes a cell has to name a covering authority in
-        // `semantic_refs[role=authorized_by]` / `authorization_ref`. For the creator that
-        // authority is the Realm authority-root cell the create contract wrote,
-        // not a grant id: v1 genesis issues no capability grant at all.
         Ok(json!({
             "realm_id": realm_id,
             "default_strand_id": strand_id,
-            "authority_root_ref": arkret_wire::REALM_AUTHORITY_ROOT_CELL,
             "event_response": event_response,
         }))
     }
@@ -745,124 +603,33 @@ impl TestActorClient {
     /// for the bootstrap Seal before authoring their first ordinary Event, without
     /// racing the convenience helper's default Discussion Strand.
     pub async fn create_realm_bootstrap_with(&self, body: Value) -> Result<Value> {
-        let draft = realm_create_payload_with_notary(
-            &self.service_id,
-            &body,
-            self.service_notary_signer.clone(),
-        )?;
-        let (realm_id, mut events) = realm_bootstrap_event_batch_for_device(
+        let draft = realm_create_payload_for_station(&self.service_id, &body)?;
+        let (realm_id, events) = realm_bootstrap_event_batch_for_device(
             &self.actor,
             &self.device_id,
             &DidCoreId::new(self.service_id.clone())?,
             draft,
         )?;
-        let control_evidence_ref = self.control_signer_evidence_ref().await?;
-        let data_evidence_ref = self.data_signer_evidence_ref().await?;
-        let (signing_seed, _) = event_signing_identity_for_device(&self.actor, &self.device_id);
-        for event in &mut events {
-            let evidence_ref = if arkret_schema::classify_event_execution(event)?
-                == Some(arkret_wire::CbsEffectPlane::Control)
-            {
-                &control_evidence_ref
-            } else {
-                &data_evidence_ref
-            };
-            event
-                .producer_proof
-                .as_mut()
-                .expect("producer proof")
-                .signer_resolution_evidence_ref = Some(evidence_ref.clone());
-            refresh_typed_event_proof_with_signing_seed(event, signing_seed)?;
-        }
         self.controlled_realms
             .lock()
             .expect("cotest controlled-Realm set is not poisoned")
             .insert(realm_id.clone());
-        let events = events
-            .into_iter()
-            .map(arkret_wire::EventInitialSubmission::online)
-            .collect();
-        let request = arkret_wire::EventsSubmitBatchRequestBody { events };
+        let request = super::event_builder::ordinary_realm_bootstrap_submission(events)?;
+        request.validate()?;
         let event_response = expect_json(
             self.post("/_arkret/self/events").json(&request),
             StatusCode::OK,
         )
         .await?;
-        let typed_outcome: arkret_models_collaboration::http_bodies::EventsSubmitOutcome =
+        let typed_outcome: arkret_models_collaboration::authority_commit::SelfAuthoritySubmitOutcome =
             serde_json::from_value(event_response.clone())
                 .context("Realm bootstrap response is not the closed SDK outcome")?;
-        anyhow::ensure!(
-            typed_outcome.accepted.len() + typed_outcome.duplicate.len() == request.events.len()
-                && typed_outcome.rejections.is_empty(),
-            "Realm bootstrap did not accept every Event: {event_response}"
-        );
+        typed_outcome.validate_for_request(&arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest::OrdinaryRealmBootstrap(request))?;
         let realm_id = arkret_identifiers::RealmId::new(realm_id.clone())?;
         Ok(json!({
             "realm_id": realm_id,
-            "authority_root_ref": arkret_wire::REALM_AUTHORITY_ROOT_CELL,
             "event_response": event_response,
         }))
-    }
-
-    async fn control_signer_evidence_ref(&self) -> Result<arkret_wire::SignerEvidenceRef> {
-        let viewer: arkret_models_collaboration::account_operations::AccountView =
-            serde_json::from_value(
-                expect_json(self.get("/_arkret/self/account/viewer"), StatusCode::OK).await?,
-            )
-            .context("account viewer is not the closed SDK outcome")?;
-        let expected_principal = project_did_to_core_id(&Did::new(self.actor.clone())?)?;
-        anyhow::ensure!(
-            viewer.principal_id == expected_principal,
-            "account viewer returned another principal"
-        );
-        let expected_device = arkret_identifiers::DeviceId::new(self.device_id.clone())?;
-        let device = viewer
-            .devices
-            .iter()
-            .find(|device| device.device_id == expected_device)
-            .context("account viewer omitted the active session device")?;
-        device.validate()?;
-        anyhow::ensure!(
-            device.status == arkret_models_identity::DeviceSummaryStatus::Active
-                && device.verification_state
-                    == arkret_models_identity::DeviceSummaryVerificationState::Verified,
-            "account viewer session device is not verified and active"
-        );
-        device
-            .signer_resolution_evidence_ref
-            .clone()
-            .context("verified account viewer device omits Control signer evidence")
-    }
-
-    async fn data_signer_evidence_ref(&self) -> Result<arkret_wire::SignerEvidenceRef> {
-        let principal_id = project_did_to_core_id(&Did::new(self.actor.clone())?)?;
-        let account_id = arkret_wire::AccountId::new(
-            principal_id,
-            arkret_wire::DidCoreId::new(self.service_id.clone())?,
-        );
-        let device_id = arkret_identifiers::DeviceId::new(self.device_id.clone())?;
-        let outcome: arkret_models_crypto::KeysQueryOutcome = serde_json::from_value(
-            expect_json(
-                self.post("/_arkret/self/keys/query").json(
-                    &arkret_models_crypto::KeysQueryRequestBody {
-                        device_keys: vec![arkret_models_crypto::QueryAccountDeviceSelector {
-                            account_id: account_id.clone(),
-                            device_ids: vec![device_id.clone()],
-                        }],
-                        timeout_ms: None,
-                    },
-                ),
-                StatusCode::OK,
-            )
-            .await?,
-        )
-        .context("self keys/query is not the closed SDK outcome")?;
-        outcome.validate()?;
-        outcome
-            .devices_for(&account_id)
-            .and_then(|devices| devices.get(&device_id))
-            .map(|device| device.signer_evidence_ref.clone())
-            .context("self keys/query omitted the active device signer evidence")
     }
 
     pub async fn add_member(&self, realm_id: &str, member: &TestActorClient) -> Result<Value> {
@@ -918,10 +685,10 @@ impl TestActorClient {
             return;
         }
         if self.controls_realm_authority_root(realm_id) {
-            event.authorization_ref = Some(
-                AuthorizationRef::new(arkret_wire::REALM_AUTHORITY_ROOT_CELL)
-                    .expect("Realm authority root is an AuthorizationRef"),
-            );
+            let genesis_event_id = RealmId::new(realm_id.to_owned())
+                .expect("controlled Realm has a typed id")
+                .event_id();
+            event.authorization_ref = Some(AuthorizationRef::from(genesis_event_id));
         }
     }
 
@@ -999,8 +766,8 @@ impl TestActorClient {
             constraints,
             issuer_authority_refs: vec![arkret::IssuerAuthorityRef::RealmRoot {
                 realm_id: arkret_identifiers::RealmId::new(realm_id.to_owned())?,
-                cell_ref: "ak:cell:ak.component.realm.authority_root.v1:null".to_owned(),
-                controller_epoch_at_issuance: 0,
+                authority_event_ref: arkret_identifiers::RealmId::new(realm_id.to_owned())?
+                    .event_id(),
                 authority_generation: 0,
             }],
             issued_at,
@@ -1027,12 +794,18 @@ impl TestActorClient {
     /// Revoke an exact accepted grant through the current Event carrier.
     pub async fn revoke_realm_grant(&self, realm_id: &str, grant_id: &str) -> Result<Value> {
         let grant_id = arkret_identifiers::GrantId::new(grant_id.to_owned())?;
+        let grant_event_id = EventId::from_token_bytes(grant_id.token_bytes())?;
+        let accepted = self.sdk.committed_event_get(&grant_event_id).await?;
+        let commit = accepted.commit();
         self.submit_event(
             realm_id,
             arkret_wire::event_kind_str::CAPABILITY_REVOKE,
             serde_json::to_value(CapabilityRevokePayload {
-                grant_ref: None,
                 grant_id,
+                expected_revision: arkret_wire::CurrentRevision {
+                    commit_id: commit.commit_id.clone(),
+                    stream_position: commit.stream_position,
+                },
                 reason: Some("revoked_by_realm_owner".to_owned()),
             })?,
         )
@@ -1095,9 +868,8 @@ impl TestActorClient {
         Ok(body)
     }
 
-    /// Authors, but does not submit, an Event carrying explicit semantic
-    /// causal edges. Keeping authoring separate lets convergence tests prepare
-    /// genuinely concurrent Events before either client sends one.
+    /// Author the signed producer Event. Commit order and admission authority
+    /// are resolved by the governing Station when it signs the RealmCommit.
     pub async fn author_event_with_causal_refs(
         &self,
         realm_id: &str,
@@ -1106,18 +878,11 @@ impl TestActorClient {
         causal_refs: Vec<String>,
         capability_refs: Vec<String>,
     ) -> Result<Event> {
-        let frontier = self
-            .events_frontier_with_retry(self.actor.as_str(), Some(realm_id))
-            .await?;
-        let state: arkret_models_collaboration::event_sync::EventsFrontierState =
-            serde_json::from_value(frontier)?;
-        let arkret_models_collaboration::event_sync::EventsFrontierView::RealmActor(frontier) =
-            state.frontier
-        else {
-            return Err(anyhow!(
-                "combined selector returned the wrong frontier variant"
-            ));
-        };
+        anyhow::ensure!(
+            causal_refs.is_empty(),
+            "producer Event has no causal_refs; migrate this case to committed RealmCommit references"
+        );
+        self.ensure_authority_for_kind(realm_id, kind).await?;
         let mut event = event_envelope_with_causal_refs_for_device(
             &self.actor,
             &self.device_id,
@@ -1125,163 +890,47 @@ impl TestActorClient {
             realm_id,
             kind,
             payload,
-            Some(frontier.next_actor_seq),
-            frontier
-                .frontier_event_ids
-                .iter()
-                .map(|event_id| {
-                    arkret_identifiers::EventId::new(event_id.as_str().to_owned())
-                        .expect("frontier event id")
-                })
-                .collect(),
-            causal_refs,
+            None,
+            Vec::new(),
+            Vec::new(),
         );
-        let is_ordinary_event = arkret_wire::EventKind::from(kind).is_data_plane();
-        if is_ordinary_event {
-            let seal_frontier = self.realm_seal_frontier(realm_id).await?;
-            let state: arkret_models_collaboration::event_sync::SealFrontierState =
-                serde_json::from_value(seal_frontier.clone()).map_err(|error| {
-                    anyhow!("invalid Realm frontier response `{seal_frontier}`: {error}")
-                })?;
-            let frontier = state.frontier;
-            // Capability coverage is per ordinary Event: the reducer checks that a
-            // named grant actually covers this action on this target.
-            event.data_basis = Some(frontier.sole_leaf()?.clone());
-            event.auth_context = Some(AuthContext {
-                authority_refs: frontier.seal_basis.leaves,
-            });
-            if capability_refs.is_empty() {
-                self.stamp_authority(&mut event, realm_id, kind, true);
-            }
+        if kind != arkret_wire::event_kind_str::SELF_MODERATION_REPORT {
+            self.stamp_authority(&mut event, realm_id, kind, true);
+        }
+        if !capability_refs.is_empty() {
             event.semantic_refs = capability_refs
                 .into_iter()
                 .map(|grant_id| {
                     SemanticRef::new(grant_id, arkret_wire::SEMANTIC_REF_ROLE_AUTHORIZED_BY)
                 })
                 .collect();
-            if kind == arkret_wire::event_kind_str::STRAND_UPDATE
-                && event
-                    .payload
-                    .get("patch")
-                    .is_some_and(|patch| payload_patch_touches_calendar(&json!({"patch": patch})))
-            {
-                event.requirements.schema_profile_refs = vec![
-                    ProfileRef::new("ak.schema.calendar_event.v1")
-                        .expect("calendar schema profile is registered"),
-                ];
-            }
-            let (signing_seed, _) = event_signing_identity_for_device(&self.actor, &self.device_id);
-            refresh_typed_event_proof_with_signing_seed(&mut event, signing_seed)?;
         }
-        Ok(event)
-    }
-
-    pub async fn author_event(&self, realm_id: &str, kind: &str, payload: Value) -> Result<Event> {
-        self.author_event_with_preconditions(realm_id, kind, payload, Vec::new())
-            .await
-    }
-
-    /// Author an Event that carries its own guards.
-    ///
-    /// A precondition is inside the bytes the caller signs, so a surface that
-    /// requires one can only get it
-    /// from the caller. Attaching it here rather than in the scenario is what
-    /// keeps it on the same envelope that already resolves `seal_basis` from
-    /// the Realm Seal frontier: a Control Move authored without that basis is
-    /// refused before any guard is even looked at.
-    pub async fn author_event_with_preconditions(
-        &self,
-        realm_id: &str,
-        kind: &str,
-        payload: Value,
-        preconditions: Vec<arkret_wire::cbs::Precondition>,
-    ) -> Result<Event> {
-        self.ensure_authority_for_kind(realm_id, kind).await?;
-        let frontier = self
-            .events_frontier_with_retry(self.actor.as_str(), Some(realm_id))
-            .await?;
-        let state: arkret_models_collaboration::event_sync::EventsFrontierState =
-            serde_json::from_value(frontier)?;
-        let arkret_models_collaboration::event_sync::EventsFrontierView::RealmActor(frontier) =
-            state.frontier
-        else {
-            return Err(anyhow!(
-                "combined selector returned the wrong frontier variant"
-            ));
-        };
-        frontier.validate()?;
-        let expected_actor_id = ActorId::account(AccountId::new(
-            project_did_to_core_id(&Did::new(self.actor.clone())?)?,
-            DidCoreId::new(self.service_id.clone())?,
-        ));
-        if frontier.realm_id.as_str() != realm_id || frontier.actor_id != expected_actor_id {
-            return Err(anyhow!("combined selector returned the wrong actor scope"));
-        }
-        let mut event = event_envelope_with_chain_for_device(
-            &self.actor,
-            &self.device_id,
-            &DidCoreId::new(self.service_id.clone())?,
-            realm_id,
-            kind,
-            payload,
-            frontier.next_actor_seq,
-        );
-        event.prev_refs = frontier.frontier_event_ids;
-        // Keep the guards the builder already derived from the registered
-        // contract (the invite live-target `head_eq`) and let the caller
-        // override only the cells it names itself, which is how a negative case
-        // proves a wrong guard is refused.
-        let mut merged = preconditions;
-        for derived in std::mem::take(&mut event.preconditions) {
-            if !merged
-                .iter()
-                .any(|existing| existing.cell_id == derived.cell_id)
-            {
-                merged.push(derived);
-            }
-        }
-        event.preconditions = merged;
-        let event_kind = arkret_wire::EventKind::from(kind);
-        let is_control_move = event_kind.is_control_plane();
-        let is_ordinary_event = event_kind.is_data_plane();
-        if is_control_move || is_ordinary_event {
-            let seal_frontier = self.realm_seal_frontier(realm_id).await?;
-            let state: arkret_models_collaboration::event_sync::SealFrontierState =
-                serde_json::from_value(seal_frontier.clone()).map_err(|error| {
-                    anyhow!("invalid Realm frontier response `{seal_frontier}`: {error}")
-                })?;
-            let frontier = state.frontier;
-            if is_control_move {
-                event.seal_basis = Some(frontier.seal_basis());
-                let physical_millis = chrono::Utc::now().timestamp_millis();
-                event.hlc = Some(Hlc::new(format!("{physical_millis:012x}-0000-a13f9c2e"))?);
-            } else {
-                event.data_basis = Some(frontier.sole_leaf()?.clone());
-                event.auth_context = Some(AuthContext {
-                    authority_refs: frontier.seal_basis.leaves,
-                });
-            }
-            // Self moderation reports use their holder proof as the complete
-            // admission regime. The self endpoint forbids Realm authority or
-            // grant attribution on the signed Event.
-            if kind != arkret_wire::event_kind_str::SELF_MODERATION_REPORT {
-                self.stamp_authority(&mut event, realm_id, kind, is_ordinary_event);
-            }
-        }
-        event
-            .producer_proof
-            .as_mut()
-            .expect("producer proof")
-            .signer_resolution_evidence_ref = Some(if is_control_move {
-            self.control_signer_evidence_ref().await?
-        } else {
-            self.data_signer_evidence_ref().await?
-        });
         let (signing_seed, _) = event_signing_identity_for_device(&self.actor, &self.device_id);
         refresh_typed_event_proof_with_signing_seed(&mut event, signing_seed)?;
         Ok(event)
     }
 
+    pub async fn author_event(&self, realm_id: &str, kind: &str, payload: Value) -> Result<Event> {
+        self.author_event_with_causal_refs(realm_id, kind, payload, Vec::new(), Vec::new())
+            .await
+    }
+
+    /// A producer Event cannot carry the retired Cell precondition array.
+    /// Keep this entry point only so old negative cases fail explicitly until
+    /// they are rewritten against the typed current revision carried by payload.
+    pub async fn author_event_with_preconditions<P: serde::Serialize>(
+        &self,
+        realm_id: &str,
+        kind: &str,
+        payload: Value,
+        preconditions: Vec<P>,
+    ) -> Result<Event> {
+        anyhow::ensure!(
+            preconditions.is_empty(),
+            "producer Event has no Cell preconditions; use payload expected_revision"
+        );
+        self.author_event(realm_id, kind, payload).await
+    }
     /// Author and submit one actor-private `ak.read_cursor.advance`.
     ///
     /// `read-receipts.md` §6.6 keeps this Event off the shared Realm timeline:

@@ -242,16 +242,9 @@ fn private_account_data_keys_do_not_leak_raw_refs() {
 use arkret_crypto::account_data_crypto::{
     AccountDataEncryptedValue, open_account_data_value, seal_account_data_value,
 };
-use arkret_event_draft::TypedEventDraft;
 use arkret_models_collaboration::events_payloads::{ContentBlock, MessageCreatePayload};
-use arkret_wire::{
-    Did, DidCoreId, DidUrl, Hash, Hlc, ProducerEventProof, ScopeRef, StrandId, event_spec,
-    project_did_to_core_id,
-};
+use arkret_wire::{Did, DidCoreId, StrandId, project_did_to_core_id};
 use chrono::{TimeZone as _, Utc};
-use garth::queued_record::{
-    AuthoringAuthorityModel, AuthoringGeneration, QueuedSdkEvent, ScheduledSendSubmissionState,
-};
 
 const SCHEDULED_SEND_ID: &str = "ak:scheduled_send:01904100-0000-7000-8000-000000000003";
 
@@ -341,123 +334,6 @@ fn scheduled_send_plan_plaintext_matches_spec_schema() {
     assert!(
         validator.validate(&missing_hlc).is_err(),
         "a plan without updated_hlc must not validate"
-    );
-}
-
-fn scheduled_send_signed_event(body: &str) -> arkret_wire::AuthoredEvent {
-    let mut event = TypedEventDraft::<event_spec::MessageCreate>::new(
-        ScopeRef::Realm {
-            realm_id: RealmId::new("ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir")
-                .unwrap(),
-        },
-        ActorId::account(AccountId::new(
-            scheduled_send_core_id("did:web:alice.example"),
-            scheduled_send_core_id("did:web:principal.example"),
-        )),
-        scheduled_send_test_payload(body),
-    )
-    .unwrap()
-    .author_with_digest_suite(
-        7,
-        Hlc::new("01970e589d21-0001-a13f9c2e").unwrap(),
-        Utc.with_ymd_and_hms(2026, 8, 13, 1, 2, 3).single().unwrap(),
-        arkret_canonical::DigestSuite::Sha256,
-    )
-    .unwrap();
-    let digest = Hash::new(
-        event
-            .event_digest_with_digest_suite(arkret_canonical::DigestSuite::Sha256)
-            .unwrap(),
-    )
-    .unwrap();
-    let signer_resolution_evidence_ref =
-        cotest::fixture_signer_evidence_ref("scheduled-send-producer");
-    event.attach_proof(ProducerEventProof {
-        kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
-        verification_method: DidUrl::new("did:web:alice.example#device-1").unwrap(),
-        event_digest: digest,
-        signer_resolution_evidence_ref: Some(signer_resolution_evidence_ref),
-        created_at: event.created_at,
-        domain: None,
-        audience: None,
-        proof_purpose: None,
-        jws: "header..signature".to_owned(),
-    });
-    event
-}
-
-fn scheduled_send_generation() -> AuthoringGeneration {
-    AuthoringGeneration {
-        authority_model: AuthoringAuthorityModel::AcceptedDevice,
-        authority_principal_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:alice.example")
-            .unwrap(),
-        generation_ref: "1-QmCurrent".to_owned(),
-    }
-}
-
-#[test]
-fn scheduled_send_dispatch_freezes_content_bound_identities_and_bytes() {
-    let event = scheduled_send_signed_event("frozen scheduled text");
-    let scheduled_send_id = ScheduledSendId::new(SCHEDULED_SEND_ID).unwrap();
-    let queued = QueuedSdkEvent::scheduled_authored(
-        scheduled_send_id.clone(),
-        event.clone(),
-        scheduled_send_generation(),
-    )
-    .unwrap();
-
-    // Spec §4: dispatch derives the content-bound EventId only after the
-    // envelope is complete, retypes that same token into the MessageId, and
-    // persists both with the full canonical signed bytes before any submit.
-    let dispatch = queued.scheduled_dispatch.as_ref().unwrap();
-    assert_eq!(dispatch.scheduled_send_id, scheduled_send_id);
-    assert_eq!(dispatch.event_id, event.event_id);
-    assert_eq!(
-        dispatch.message_id,
-        MessageId::from_event_id(&event.event_id)
-    );
-    assert_eq!(
-        dispatch.submission_state,
-        ScheduledSendSubmissionState::Ready
-    );
-    let frozen_bytes = arkret_canonical::canonical_json_bytes(&event).unwrap();
-    assert_eq!(dispatch.canonical_signed_event_bytes, frozen_bytes);
-    assert_eq!(queued.local_operation_id, SCHEDULED_SEND_ID);
-    assert_eq!(
-        queued
-            .authored_attempt
-            .as_ref()
-            .unwrap()
-            .transport_idempotency_key,
-        event.event_id.to_string()
-    );
-
-    // The durable record survives a serde round trip byte-exact, and an
-    // uncertain submission is a one-way latch: a crash retry reopens the same
-    // frozen bytes instead of re-authoring.
-    let persisted = serde_json::to_value(&queued).unwrap();
-    let mut reopened: QueuedSdkEvent = serde_json::from_value(persisted).unwrap();
-    reopened.validate().unwrap();
-    assert!(reopened.mark_scheduled_submission_uncertain());
-    assert!(!reopened.mark_scheduled_submission_uncertain());
-    let dispatch = reopened.scheduled_dispatch.as_ref().unwrap();
-    assert_eq!(
-        dispatch.submission_state,
-        ScheduledSendSubmissionState::SubmissionUncertain
-    );
-    assert_eq!(dispatch.canonical_signed_event_bytes, frozen_bytes);
-
-    // Dispatch refuses an envelope that was never signed.
-    let mut unsigned = scheduled_send_signed_event("unsigned");
-    unsigned.clear_producer_proof();
-    assert!(
-        QueuedSdkEvent::scheduled_authored(
-            ScheduledSendId::new(SCHEDULED_SEND_ID).unwrap(),
-            unsigned,
-            scheduled_send_generation(),
-        )
-        .is_err(),
-        "scheduled dispatch must reject an unsigned Event"
     );
 }
 

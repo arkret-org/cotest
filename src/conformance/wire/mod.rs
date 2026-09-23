@@ -16,6 +16,7 @@ mod interop;
 mod key_backup;
 mod mimi;
 mod multisig;
+mod payload_coverage;
 
 use std::path::PathBuf;
 
@@ -42,6 +43,7 @@ pub use mimi::{
 pub use multisig::{
     run_multi_admin_distinct_approver_gate_check, run_production_signing_fixture_suite,
 };
+pub use payload_coverage::run_event_kind_payload_coverage_fixture_suite;
 use serde_json::{Value, json};
 
 use crate::transcripts::{is_active, record_vector_event};

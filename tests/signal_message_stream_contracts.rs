@@ -1,13 +1,10 @@
 use arkret::{
-    AccountId, ActorId, DeviceId, DidCoreId, Event, Hlc, MessageCreatePayload, MessageId,
+    AccountId, ActorId, DeviceId, DidCoreId, Event, MessageCreatePayload, MessageId,
     MessageStreamDelta, MessageStreamFormat, MessageStreamFrame, MessageStreamId,
-    MessageStreamKeyframe, MessageStreamProducer, RealmId, ScopeRef, SealId,
-    SignalPlaintext as SignalPayload, StrandId,
+    MessageStreamKeyframe, MessageStreamProducer, RealmId, ScopeRef, StrandId,
 };
 use chrono::{DateTime, Utc};
-use garth::{
-    MESSAGE_STREAM_KIND, MessageStreamApplyOutcome, MessageStreamProjection, SignalPlaintext,
-};
+use garth::{MessageStreamApplyOutcome, MessageStreamProjection, SignalSequenceDomain};
 use serde_json::{Value, json};
 
 fn principal() -> DidCoreId {
@@ -44,8 +41,6 @@ fn final_event() -> Event {
         ScopeRef::Realm { realm_id: realm() },
         principal(),
         DidCoreId::new("ak:did_core:web:principal.example").unwrap(),
-        1,
-        Hlc::new("01970e589d21-0000-a13f9c2e").unwrap(),
         payload.to_value().unwrap(),
         at(3),
     )
@@ -63,26 +58,15 @@ fn at(seconds: i64) -> DateTime<Utc> {
         + chrono::Duration::seconds(seconds)
 }
 
-fn plaintext(frame: MessageStreamFrame) -> SignalPlaintext {
-    let payload_sequence = frame.payload_sequence();
-    SignalPlaintext {
-        kind: MESSAGE_STREAM_KIND.to_owned(),
-        actor_id: actor(),
-        payload_sequence,
-        ttl_ms: None,
-        // The typed profile the receiver dispatched to (`signal.md` §1.1).
-        payload: SignalPayload::MessageStream(frame),
-        sent_at: at(0),
-        expires_at: at(30),
+fn domain() -> SignalSequenceDomain {
+    SignalSequenceDomain {
+        sender_actor_id: actor(),
+        endpoint: arkret::SignalSequenceEndpoint::AccountDevice { device_id: device() },
         scope_ref: ScopeRef::Realm { realm_id: realm() },
-        seal_ref: SealId::new(format!("ak:seal:sha256:{}", "a".repeat(64))).unwrap(),
-        sender_endpoint: arkret::SignalSequenceEndpoint::AccountDevice {
-            device_id: device(),
-        },
     }
 }
 
-fn authorize_frame(_: &SignalPlaintext, _: &MessageStreamFrame) -> bool {
+fn authorize_frame(_: &SignalSequenceDomain, _: &MessageStreamFrame) -> bool {
     true
 }
 
@@ -104,7 +88,7 @@ fn producer_and_consumer_self_heal_then_bind_direct_final() {
     let mut projection = MessageStreamProjection::new();
     assert_eq!(
         projection
-            .apply(&plaintext(initial), &authorize_frame, at(0))
+            .apply(&domain(), &initial, &authorize_frame, at(0))
             .unwrap(),
         MessageStreamApplyOutcome::Activated
     );
@@ -126,7 +110,7 @@ fn producer_and_consumer_self_heal_then_bind_direct_final() {
     );
     assert!(matches!(
         projection
-            .apply(&plaintext(gap), &authorize_frame, at(1))
+            .apply(&domain(), &gap, &authorize_frame, at(1))
             .unwrap(),
         MessageStreamApplyOutcome::Ignored(_)
     ));
@@ -146,13 +130,13 @@ fn producer_and_consumer_self_heal_then_bind_direct_final() {
     );
     assert_eq!(
         projection
-            .apply(&plaintext(recovery), &authorize_frame, at(2))
+            .apply(&domain(), &recovery, &authorize_frame, at(2))
             .unwrap(),
         MessageStreamApplyOutcome::Updated
     );
 
     let removed = projection
-        .bind_verified_final(
+        .bind_committed_final(
             &final_event,
             &arkret::SignalSequenceEndpoint::AccountDevice {
                 device_id: device(),

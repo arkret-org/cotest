@@ -13,12 +13,8 @@
 
 use anyhow::{Result, anyhow};
 use arkret_identifiers::{DidCoreId, RealmId, TrustDomainId};
-use arkret_models_collaboration::governance::circle::EncryptionFloor;
 use arkret_models_collaboration::objects::realm::Realm;
-use arkret_wire::{
-    AccountId, ActorId, Discoverability, EncryptionProfile, FederationPolicy, HistoryAccess,
-    JoinRule, SecurityClass,
-};
+use arkret_wire::{AccountId, ActorId, FederationPolicy, SecurityClass};
 
 const REALM_ID: &str = "ak:realm:AWdkiR5jlnGgdx6sVlaEmGK5CATkDmi21Mn8gxnUmrZe";
 
@@ -42,58 +38,21 @@ fn build_realm(
     // domain id here so the high-assurance policy scenario stays representative.
     let trust_domain = TrustDomainId::new("ak:trust_domain:example.net".to_owned())
         .map_err(|err| anyhow!("invalid trust_domain literal: {err}"))?;
-    Ok(Realm {
-        schema: "ak.schema.realm.v1".to_owned(),
-        // Materialised-object fixture, so it carries an id; a create payload
-        // would leave this `None` (spec realm-and-space.md section 2.5.0).
-        id: Some(id),
-        title: "Compliance Vault".to_owned(),
+    let station_id = DidCoreId::new("ak:did_core:web:station.example")?;
+    let mut realm = Realm::new(
+        id,
+        "Compliance Vault",
+        ActorId::account(AccountId::new(principal, station_id.clone())),
         trust_domain,
-        summary: None,
-        security_class,
-        created_by: ActorId::account(AccountId::new(
-            principal.clone(),
-            DidCoreId::new("ak:did_core:web:station.example")?,
-        )),
-        owning_organization_ids: Vec::new(),
-        schema_refs: vec!["ak.profile.realm.v1".to_owned()],
-        policy_id: None,
-        preview_policy_id: None,
-        default_strand_id: None,
-        default_discoverability: Discoverability::InviteOnly,
-        default_join_rule: JoinRule::Invite,
-        history_access: HistoryAccess::SinceJoin,
-        reducer_profile: arkret_wire::CORE_REDUCER_PROFILE.to_owned(),
-        encryption_profile: EncryptionProfile::None,
-        content_encryption_floor: Some(EncryptionFloor::AllowPlaintext),
-        metadata_encryption_floor: Some(EncryptionFloor::AllowPlaintext),
-        agent_participation: None,
-        content_scheme: None,
-        durability_policy: None,
-        federation_policy,
-        digest_algorithm: arkret_canonical::DigestSuite::Sha256,
-        retention_policy_id: None,
-        avatar_blob_ref: None,
-        created_at: chrono::Utc::now(),
-        updated_by: None,
-        updated_at: None,
-        availability_policy: None,
-        notary: crate::fixture_notary_configuration(principal.clone()),
-        fields: Default::default(),
-        proposal_intake_sla_ms: None,
-        proposal_decision_window_ms: None,
-        proposal_absolute_deadline_ms: None,
-        max_proposal_defers: None,
-        seal_compaction_max_interval_ms: None,
-        max_authority_lifetime_ms: 86_400_000,
-        bottom_escalation_after_ms: None,
-    })
+        station_id,
+    );
+    realm.security_class = security_class;
+    realm.federation_policy = federation_policy;
+    Ok(realm)
 }
 
 /// R3.4 — a high_assurance Realm + federation_policy=open MUST be
-/// rejected by the SDK invariant validator. The reason code is plain
-/// text per SDK style; soland's wire counterpart returns the canonical
-/// `high_assurance_federation_policy_invalid`.
+/// rejected by the SDK invariant validator.
 pub fn run_high_assurance_rejects_open_federation() -> Result<()> {
     let realm = build_realm(
         Some(SecurityClass::HighAssurance),

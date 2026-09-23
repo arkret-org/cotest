@@ -153,8 +153,9 @@ fn agent_welcome_is_not_consumed_by_human_device_recovery() -> Result<()> {
             .map_err(anyhow::Error::msg)?,
         arkret::EventId::new("ak:event:AZ405CdsF4uWwxBhArLvqgzVvWHWYcB3QJ6845E-2ET3")?,
     )?;
-    let welcome = arkret::MlsWelcomeEnvelope {
-        group_id: "cotest-agent".to_owned(),
+    let welcome = arkret_models_crypto::MlsWelcomeEnvelope {
+        group_id: arkret_wire::MlsGroupId::new("QjKOSorlqs3IquY7OikTUTy_Z0mMiL0X2mK4jAOT4R4")
+            .map_err(anyhow::Error::msg)?,
         epoch: 1,
         recipient: endpoint,
         welcome: "AA".to_owned(),

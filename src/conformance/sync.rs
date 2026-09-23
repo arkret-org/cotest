@@ -589,7 +589,7 @@ fn commit_for(
         stream_position: declared.stream_position,
         previous_commit_ref: declared.previous_commit_ref.clone(),
         event_ref: event.event_id.clone(),
-        authority_generation: 0,
+        governance_generation: 0,
         authority_ref: RealmCommitAuthorityRef::GenesisOrChangeEvent(event.event_id.clone()),
         committed_at: fixed_time(1),
         signature: authority_signature()?,

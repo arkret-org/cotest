@@ -778,6 +778,7 @@ async function deliverInvite(
     invite_commit: inviteCommit,
     authority_locator_hints: [
       {
+        service_kind: "station",
         service_id: solandServiceId(args.originServer),
         source: "invite",
       },

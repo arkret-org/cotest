@@ -38,17 +38,17 @@ pub use event_builder::{
     add_member, create_realm, create_realm_with_signing_seed, default_event_verification_method,
     dev_login, device_message_send_request, encrypted_envelope, event_envelope,
     event_envelope_at_frontier_with_signing_seed, event_envelope_with_signing_seed,
-    event_envelope_with_signing_seed_and_verification_method, head_eq_precondition,
-    moderation_report_request, realm_bootstrap_event_batch,
-    realm_bootstrap_event_batch_with_signing_seed, register_account_via_dev_login,
-    register_account_with_localpart_via_dev_login, register_event_signing_identity, send_message,
-    submit_event, submit_event_with_signing_seed_and_verification_method,
+    event_envelope_with_signing_seed_and_verification_method, moderation_report_request,
+    realm_bootstrap_event_batch, realm_bootstrap_event_batch_with_signing_seed,
+    register_account_via_dev_login, register_account_with_localpart_via_dev_login,
+    register_event_signing_identity, send_message, submit_event,
+    submit_event_with_signing_seed_and_verification_method,
 };
 pub(crate) use event_builder::{
-    event_envelope_with_chain, invite_create_payload, member_join_payload_value,
-    member_transition_payload, message_create_text_payload, message_create_text_payload_for_strand,
-    message_redact_payload, message_revise_text_payload, parse_strand_id,
-    prepare_event_submission_with_signing_identity,
+    event_envelope_with_chain, event_signing_identity_for_device, invite_create_payload,
+    member_join_payload_value, member_transition_payload, message_create_text_payload,
+    message_create_text_payload_for_strand, message_redact_payload, message_revise_text_payload,
+    parse_strand_id, prepare_event_submission_with_signing_identity,
 };
 pub use invite_delivery::dispatch_accepted_invite_and_read_token;
 pub use principal::ProvisionedTestPrincipal;
@@ -97,26 +97,6 @@ pub fn submitted_event_id(outcome: &Value) -> Result<arkret_identifiers::EventId
         );
     }
     Ok(arkret_identifiers::EventId::new(first.to_owned())?)
-}
-
-pub fn events_frontier_request_body(
-    actor_did: &str,
-    station_id: &str,
-    realm_id: Option<&str>,
-) -> Result<arkret_models_collaboration::event_query::EventsFrontierRequestBody> {
-    let actor_did = arkret_identifiers::Did::new(actor_did.to_owned())?;
-    let account_id = arkret_wire::AccountId::new(
-        arkret_identifiers::project_did_to_core_id(&actor_did)?,
-        arkret_identifiers::DidCoreId::new(station_id.to_owned())?,
-    );
-    Ok(
-        arkret_models_collaboration::event_query::EventsFrontierRequestBody {
-            actor_id: arkret_wire::ActorId::account(account_id),
-            realm_id: realm_id
-                .map(|value| arkret_identifiers::RealmId::new(value.to_owned()))
-                .transpose()?,
-        },
-    )
 }
 
 pub fn events_query_for_realm(
@@ -241,18 +221,12 @@ pub struct RealmBootstrapDraft {
 }
 
 pub fn realm_create_payload(service_id: &str, input: &Value) -> Result<RealmBootstrapDraft> {
-    let notary_actor_id = arkret_identifiers::DidCoreId::new(service_id.to_owned())?;
-    realm_create_payload_with_notary(
-        service_id,
-        input,
-        crate::fixture_notary_signer(notary_actor_id),
-    )
+    realm_create_payload_for_station(service_id, input)
 }
 
-pub fn realm_create_payload_with_notary(
+pub fn realm_create_payload_for_station(
     service_id: &str,
     input: &Value,
-    notary_signer: arkret_wire::NotarySignerDescriptor,
 ) -> Result<RealmBootstrapDraft> {
     let title = input
         .get("title")
@@ -299,6 +273,12 @@ pub fn realm_create_payload_with_notary(
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_else(|| vec![json!("ak.schema.realm.v1")]);
+    if schema_refs != [json!("ak.schema.realm.v1")] {
+        anyhow::bail!("Realm bootstrap harness has no current schema-ref facet authoring path");
+    }
+    if encryption_profile != "none" {
+        anyhow::bail!("Realm MLS activation requires an accepted ak.mls.genesis Event");
+    }
     let plaintext_visible_services = input
         .get("plaintext_visible_services")
         .cloned()
@@ -318,7 +298,6 @@ pub fn realm_create_payload_with_notary(
         arkret_models_collaboration::governance::plaintext_visibility::PlaintextVisibleServicesPayload::new(services)
     });
 
-    let notary = arkret_wire::notary::NotaryValue::new(notary_signer, 0)?;
     let genesis_salt = input
         .get("genesis_salt")
         .and_then(Value::as_str)
@@ -329,16 +308,17 @@ pub fn realm_create_payload_with_notary(
         .get("trust_domain")
         .and_then(Value::as_str)
         .unwrap_or("ak:trust_domain:soland.local");
-    let genesis = arkret_models_collaboration::events_payloads::RealmGenesis::event_derived(
+    let genesis = arkret_models_collaboration::events_payloads::RealmGenesis::new(
         arkret_models_collaboration::events_payloads::RealmPurpose::Collaboration,
         genesis_salt,
         arkret_identifiers::TrustDomainId::new(trust_domain.to_owned())?,
-        serde_json::from_value(Value::Array(schema_refs))?,
-        arkret_wire::CORE_REDUCER_PROFILE,
-        arkret_canonical::DigestSuite::Sha256,
         serde_json::from_value(json!("standard"))?,
-        serde_json::from_value(json!(encryption_profile))?,
-        notary,
+        arkret_identifiers::DidCoreId::new(service_id.to_owned())?,
+        serde_json::from_value(json!(join_rule))?,
+        serde_json::from_value(json!(history_access_value))?,
+        serde_json::from_value(json!(discoverability))?,
+        None,
+        None,
     )?;
     let mut profile = arkret_models_collaboration::events_payloads::RealmProfile::new(title)?;
     profile.summary = Some(summary.to_owned());
@@ -346,13 +326,6 @@ pub fn realm_create_payload_with_notary(
         arkret_models_collaboration::events_payloads::realm::RealmPolicyBundlePayload::new(1);
     // `content_scheme` is frozen by the accepted MLS group Genesis and is not a
     // policy-bundle component (realm-and-space.md section 2.3).
-    let encryption_floor = if encryption_profile == "mls_rfc9420" {
-        arkret_models_collaboration::governance::circle::EncryptionFloor::E2eeRequired
-    } else {
-        arkret_models_collaboration::governance::circle::EncryptionFloor::AllowPlaintext
-    };
-    policy_bundle.content_encryption_floor = Some(encryption_floor);
-    policy_bundle.metadata_encryption_floor = Some(encryption_floor);
     policy_bundle.federation_policy = Some(serde_json::from_value(
         input
             .get("federation_policy")

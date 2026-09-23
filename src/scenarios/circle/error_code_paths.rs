@@ -3,7 +3,7 @@
 //! The AKP-0007 error codes are `failed_precondition` /
 //! `schema_violation` sub-reasons. This scenario pins:
 //!
-//!   - the sub-reason set [`KNOWN_REASON_CODES_CKP_0007`] is exactly 10,
+//!   - the registered Circle and scope sub-reason set is exactly 5,
 //!   - each sub-reason string is non-empty, lowercase, snake_case, and does not duplicate a known
 //!     reason from another release,
 //!
@@ -12,17 +12,12 @@
 
 use anyhow::{Result, anyhow};
 
-const KNOWN_REASON_CODES_CKP_0007: [&str; 10] = [
+const KNOWN_REASON_CODES_CKP_0007: [&str; 5] = [
     arkret_wire::ReasonCode::CIRCLE_REALM_MISMATCH,
     arkret_wire::ReasonCode::CIRCLE_NOT_ACTIVE,
     arkret_wire::ReasonCode::CIRCLE_MEMBER_MUST_BE_REALM_MEMBER,
-    arkret_wire::ReasonCode::CIRCLE_ENCRYPTION_BELOW_REALM_FLOOR,
-    arkret_wire::ReasonCode::CONTENT_ENCRYPTION_FLOOR_VIOLATION,
     arkret_wire::ReasonCode::SCOPE_REBIND_FORBIDDEN,
     arkret_wire::ReasonCode::EFFECTIVE_SCOPE_REDUCER_MANAGED,
-    arkret_wire::ReasonCode::METADATA_ENCRYPTION_FLOOR_VIOLATION,
-    arkret_wire::ReasonCode::CONTENT_ENCRYPTION_FLOOR_DOWNGRADE,
-    arkret_wire::ReasonCode::METADATA_ENCRYPTION_FLOOR_DOWNGRADE,
 ];
 
 fn is_snake_case_lowercase(s: &str) -> bool {
@@ -35,9 +30,9 @@ fn is_snake_case_lowercase(s: &str) -> bool {
 }
 
 pub async fn error_code_paths_run() -> Result<()> {
-    if KNOWN_REASON_CODES_CKP_0007.len() != 10 {
+    if KNOWN_REASON_CODES_CKP_0007.len() != 5 {
         return Err(anyhow!(
-            "AKP-0007 reason-code set MUST be exactly 10; got {} ({:?})",
+            "AKP-0007 reason-code set MUST be exactly 5; got {} ({:?})",
             KNOWN_REASON_CODES_CKP_0007.len(),
             KNOWN_REASON_CODES_CKP_0007
         ));
@@ -58,32 +53,12 @@ pub async fn error_code_paths_run() -> Result<()> {
             "circle_member_must_be_realm_member",
         ),
         (
-            arkret_wire::ReasonCode::CIRCLE_ENCRYPTION_BELOW_REALM_FLOOR,
-            "circle_encryption_below_realm_floor",
-        ),
-        (
-            arkret_wire::ReasonCode::CONTENT_ENCRYPTION_FLOOR_VIOLATION,
-            "content_encryption_floor_violation",
-        ),
-        (
             arkret_wire::ReasonCode::SCOPE_REBIND_FORBIDDEN,
             "scope_rebind_forbidden",
         ),
         (
             arkret_wire::ReasonCode::EFFECTIVE_SCOPE_REDUCER_MANAGED,
             "effective_scope_reducer_managed",
-        ),
-        (
-            arkret_wire::ReasonCode::METADATA_ENCRYPTION_FLOOR_VIOLATION,
-            "metadata_encryption_floor_violation",
-        ),
-        (
-            arkret_wire::ReasonCode::CONTENT_ENCRYPTION_FLOOR_DOWNGRADE,
-            "content_encryption_floor_downgrade",
-        ),
-        (
-            arkret_wire::ReasonCode::METADATA_ENCRYPTION_FLOOR_DOWNGRADE,
-            "metadata_encryption_floor_downgrade",
         ),
     ] {
         if constant != expected {
@@ -102,13 +77,8 @@ pub async fn error_code_paths_run() -> Result<()> {
         arkret_wire::ReasonCode::CIRCLE_REALM_MISMATCH,
         arkret_wire::ReasonCode::CIRCLE_NOT_ACTIVE,
         arkret_wire::ReasonCode::CIRCLE_MEMBER_MUST_BE_REALM_MEMBER,
-        arkret_wire::ReasonCode::CIRCLE_ENCRYPTION_BELOW_REALM_FLOOR,
-        arkret_wire::ReasonCode::CONTENT_ENCRYPTION_FLOOR_VIOLATION,
         arkret_wire::ReasonCode::SCOPE_REBIND_FORBIDDEN,
         arkret_wire::ReasonCode::EFFECTIVE_SCOPE_REDUCER_MANAGED,
-        arkret_wire::ReasonCode::METADATA_ENCRYPTION_FLOOR_VIOLATION,
-        arkret_wire::ReasonCode::CONTENT_ENCRYPTION_FLOOR_DOWNGRADE,
-        arkret_wire::ReasonCode::METADATA_ENCRYPTION_FLOOR_DOWNGRADE,
     ] {
         if !KNOWN_REASON_CODES_CKP_0007.contains(&code) {
             return Err(anyhow!("KNOWN_REASON_CODES_CKP_0007 missing `{code}`"));

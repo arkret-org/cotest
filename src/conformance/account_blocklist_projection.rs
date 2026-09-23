@@ -392,7 +392,7 @@ fn verify_security_evidence_mapping(fixture: &Value) -> Result<()> {
         evidence_rows.len() == 1,
         "blocklist fixture must have one evidence row"
     );
-    let evidence = evidence_rows[0];
+    let evidence = &evidence_rows[0];
     ensure!(required_str(evidence, "vector_id")? == VECTOR_ID_ACCOUNT_BLOCKLIST_PROJECTION);
     ensure!(required_str(evidence, "clause_id")? == "AK-NC-072");
     let expected: BTreeMap<&str, &[&str]> = BTreeMap::from([
@@ -407,7 +407,7 @@ fn verify_security_evidence_mapping(fixture: &Value) -> Result<()> {
         required_field(evidence, "decision_points")?,
         "decision_points",
     )? {
-        let id = required_str(point, "id")?;
+        let id = required_str(&point, "id")?;
         ensure!(observed.insert(id), "duplicate decision point {id}");
         let expected_pointers = expected
             .get(id)

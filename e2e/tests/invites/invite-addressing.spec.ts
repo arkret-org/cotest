@@ -226,7 +226,7 @@ function peerDeliveryBody(
       inviteEvent as InviteDeliveryRequestBodyBodyBody["invite_event"],
     invite_commit: fixture.inviteCommit,
     authority_locator_hints: [
-      { service_id: solandServiceId(), source: "invite" },
+      { service_kind: "station", service_id: solandServiceId(), source: "invite" },
     ],
     invite_address: fixture.inviteAddress,
     introduction_evidence: fixture.evidence,
@@ -273,7 +273,7 @@ test.describe("invite addressing", () => {
           fixture.inviteEvent as InviteDeliveryRequestBodyBodyBody["invite_event"],
         invite_commit: fixture.inviteCommit,
         authority_locator_hints: [
-          { service_id: solandServiceId(), source: "invite" },
+          { service_kind: "station", service_id: solandServiceId(), source: "invite" },
         ],
         invite_address: fixture.inviteAddress,
         introduction_evidence: fixture.evidence,

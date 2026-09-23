@@ -126,11 +126,6 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
             .post(server.url("/_arkret/find/directory/search-realms"))
             .json(&arkret_models_discovery::DirectorySearchRealmsRequestBody {
                 query: Some("Private Space".to_owned()),
-                organization_id: None,
-                source_realm_id: None,
-                requester_id: None,
-                proof_challenge: None,
-                claim_presentations: Vec::new(),
                 cursor: None,
                 limit: None,
             }),
@@ -221,18 +216,8 @@ fn rebind_authored_event(event: &mut arkret_wire::Event, actor: &str) -> Result<
         arkret_identifiers::project_did_to_core_id(&actor_did)?,
         event.actor_id.route_service_id().clone(),
     ));
-    event.actor_seq = 0;
-    event.prev_refs.clear();
-    let authority_refs = event
-        .auth_context
-        .as_ref()
-        .map(|context| context.authority_refs.clone())
-        .unwrap_or_default();
-    if event.kind.is_control_plane() {
-        event.auth_context = None;
-    } else {
-        event.auth_context = Some(arkret_wire::AuthContext { authority_refs });
-    }
+    event.authorization_ref = None;
+    event.semantic_refs.clear();
     event
         .producer_proof
         .as_mut()
@@ -246,10 +231,14 @@ async fn current_seal_id(
     client: &crate::harness::TestActorClient,
     realm_id: &str,
 ) -> Result<String> {
-    client.realm_seal_frontier(realm_id).await?["frontier"]["seal_basis"]["leaves"][0]
-        .as_str()
+    client.realm_seal_frontier(realm_id).await?["committed_events"]
+        .as_array()
+        .and_then(|events| events.last())
+        .and_then(|event| event.get("commit"))
+        .and_then(|commit| commit.get("commit_id"))
+        .and_then(serde_json::Value::as_str)
         .map(ToOwned::to_owned)
-        .ok_or_else(|| anyhow!("Realm frontier omitted seal_id"))
+        .ok_or_else(|| anyhow!("Realm stream omitted current commit_id"))
 }
 
 async fn await_seal_advance(

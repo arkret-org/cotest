@@ -6,16 +6,16 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Context as _, Result, anyhow, bail};
-use arkret_identifiers::{DeviceId, Did, DidCoreId, Hash, RealmId};
-use arkret_models_collaboration::events_payloads::{
-    MlsKeypackagePayload, MlsWelcomePayload, MlsWelcomeRecipient,
-    validate_mls_welcome_claim_envelope,
-};
+use arkret_identifiers::{DeviceId, Did, DidCoreId, RealmId};
+use arkret_models_collaboration::device_messages::RecipientDelivery;
+use arkret_models_collaboration::events_payloads::MlsKeypackagePayload;
 use arkret_models_crypto::{KeyPackagesClaimOutcome, KeyPackagesUploadOutcome};
-use arkret_wire::{DidUrl, ProfileId};
+use arkret_wire::{DidUrl, MlsWelcomeDelivery, ProfileId};
+use base64::Engine as _;
 use chrono::{DateTime, Duration, Utc};
 use serde::Deserialize;
 use serde_json::{Value, json};
+use sha2::Digest as _;
 
 use super::schema_validation_fixture::{schema_invalid, schema_valid};
 use super::{expected_bool, expected_str, expected_u64, required_str, required_u64};
@@ -31,8 +31,6 @@ pub const VECTOR_ID_KEYPACKAGE_LAST_RESORT_AFFINITY_AND_OPTIONALITY: &str =
 pub const VECTOR_ID_MLS_WELCOME_KEYPACKAGE_HASH: &str = "ak.vector.mls.welcome_keypackage_hash.v1";
 pub const VECTOR_ID_KEYPACKAGE_SELF_CLAIM_AUTHORIZATION_IDEMPOTENCY: &str =
     "ak.vector.keypackage.self_claim_authorization_idempotency.v1";
-pub const VECTOR_ID_KEYPACKAGE_MINIMAL_METADATA_PAIRWISE_FULL_LIFECYCLE: &str =
-    "ak.vector.keypackage.minimal_metadata_pairwise_full_lifecycle.v1";
 
 pub const ALL_KEYPACKAGE_LIFECYCLE_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_KEYPACKAGE_EXHAUSTION_CLAIM_LIMITS,
@@ -40,7 +38,6 @@ pub const ALL_KEYPACKAGE_LIFECYCLE_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_KEYPACKAGE_LAST_RESORT_FORCED_ROTATION,
     VECTOR_ID_KEYPACKAGE_LAST_RESORT_AFFINITY_AND_OPTIONALITY,
     VECTOR_ID_KEYPACKAGE_SELF_CLAIM_AUTHORIZATION_IDEMPOTENCY,
-    VECTOR_ID_KEYPACKAGE_MINIMAL_METADATA_PAIRWISE_FULL_LIFECYCLE,
     VECTOR_ID_MLS_WELCOME_KEYPACKAGE_HASH,
 ];
 
@@ -49,8 +46,7 @@ const KEY_PACKAGES_UPLOAD_OUTCOME_SCHEMA: &str =
     "schemas/keypackage-operations.schema.json#/$defs/keypackages_upload_outcome";
 const KEY_PACKAGES_CLAIM_OUTCOME_SCHEMA: &str =
     "schemas/keypackage-operations.schema.json#/$defs/keypackages_claim_outcome";
-const MLS_WELCOME_PAYLOAD_SCHEMA: &str =
-    "schemas/event-payload.schema.json#/$defs/mls_welcome_payload";
+const MLS_WELCOME_DELIVERY_SCHEMA: &str = "schemas/mls-welcome-delivery.schema.json";
 const MLS_KEYPACKAGE_PAYLOAD_SCHEMA: &str =
     "schemas/event-payload.schema.json#/$defs/mls_keypackage_payload";
 const LAST_RESORT_FEATURE: &str = "ak.feature.mls_last_resort_keypackage.v1";
@@ -114,18 +110,6 @@ struct ExpirySecurityExpectation {
     historical_confidentiality_restored: bool,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct PairwiseWelcomeFixture {
-    profile: String,
-    version: String,
-    suite: String,
-    runner: Value,
-    covers_vectors: Vec<String>,
-    /// Free-form protocol instances validated by their referenced JSON Schemas.
-    schema_validation_cases: Vec<Value>,
-}
-
 fn keypackage_fixture() -> Result<KeypackageLifecycleFixture> {
     let fixture: KeypackageLifecycleFixture = serde_json::from_value(super::load_fixture_value(
         KEYPACKAGE_LIFECYCLE_FIXTURE_FILE,
@@ -137,7 +121,7 @@ fn keypackage_fixture() -> Result<KeypackageLifecycleFixture> {
 fn validate_keypackage_lifecycle_fixture_metadata(
     fixture: &KeypackageLifecycleFixture,
 ) -> Result<()> {
-    if fixture.profile != ProfileId::MLS_GOVERNANCE_BINDING_FULL_V1
+    if fixture.profile != ProfileId::E2EE_CLIENT_V1
         || fixture.suite != "keypackage_lifecycle"
         || fixture.version.trim().is_empty()
         || fixture.runner.is_null()
@@ -1175,290 +1159,106 @@ fn keypackage_payload_value(keypackage_ref: &str, keypackage_digest: &str) -> Va
     })
 }
 
-#[derive(Clone, Copy)]
-struct WelcomePayloadFixture<'a> {
-    keypackage_ref: &'a str,
-    claim_digest: &'a str,
-    envelope_digest: &'a str,
-    capabilities_digest: &'a str,
-    claim_id: &'a str,
-    device_authorize_event_id: &'a str,
-    requester_device_id: &'a str,
-    intended_realm_id: &'a str,
-    requester_actor_id: &'a arkret_wire::ActorId,
-    requester_verification_method: &'a str,
-    claim_receipt: &'a Value,
-    welcome_digest: &'a str,
-}
-
-fn welcome_payload_value(fixture: WelcomePayloadFixture<'_>) -> Value {
-    json!({
-        "recipient_principal_id": "ak:did_core:web:alice.example",
-        "recipient_device_id": "ak:device:0196419b-0000-7000-8000-000000000001",
-        "keypackage_ref": fixture.keypackage_ref,
-        "claim_id": fixture.claim_id,
-        "claim_ref": {
-            "claim_id": fixture.claim_id,
-            "keypackage_ref": fixture.keypackage_ref,
-            "keypackage_digest": fixture.claim_digest,
-            "capabilities_digest": fixture.capabilities_digest,
-            "device_authorize_event_id": fixture.device_authorize_event_id
-        },
-        "claim_envelope": {
-            "keypackage_ref": fixture.keypackage_ref,
-            "keypackage_digest": fixture.envelope_digest,
-            "intended_realm_id": fixture.intended_realm_id,
-            "claim_id": fixture.claim_id,
-            "requester_actor_id": fixture.requester_actor_id,
-            "requester_device_id": fixture.requester_device_id,
-            "requester_device_authorize_event_id": fixture.device_authorize_event_id,
-            "welcome_digest": fixture.welcome_digest,
-            "created_at": "2026-05-25T00:00:00.000Z",
-            "signature": {
-                "kid": fixture.requester_verification_method,
-                "signature_algorithm": "Ed25519",
-                "sig": "c2ln"
-            }
-        },
-        "claim_receipt": fixture.claim_receipt,
-        "commit_ref": "ak:event:AR8j96rkirO3GDtvwgRddZScc5YX1AgFEOGO5Bs1wrgC",
-        "governance_binding": {
-            "binding_version": 1,
-            "encoding_profile": "cbor-deterministic-rfc8949-v1",
-            "effective_scope": {
-                "kind": "realm",
-                "realm_id": fixture.intended_realm_id
-            },
-            "previous_epoch": 0,
-            "next_epoch": 1,
-            "security_frontier_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-            "content_scheme": "mls_rfc9420",
-            "binding_profile": "ak.profile.mls_governance_binding.full.v1",
-            "reducer_profile": "ak.reducer.core.v1"
-        },
-        "ciphertext": "AQID",
-        "expires_at": "2100-01-01T00:00:00.000Z"
-    })
-}
-
+/// Welcome is a recipient-private signed delivery, never an Event payload.
 pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
     let fixture = keypackage_fixture()?;
     let vector = case(&fixture, VECTOR_ID_MLS_WELCOME_KEYPACKAGE_HASH)?;
-    let keypackage_ref = required_str(vector, "keypackage_ref")?;
+    let claim_id = required_str(vector, "claim_id")?;
     let digest = required_str(vector, "keypackage_digest")?;
     let mismatched_digest = required_str(vector, "mismatched_keypackage_digest")?;
-    let capabilities_digest = required_str(vector, "capabilities_digest")?;
-    let claim_id = required_str(vector, "claim_id")?;
-    let intended_realm_id = required_str(vector, "intended_realm_id")?;
-    let requester_actor: arkret_wire::ActorId = serde_json::from_value(
-        vector
-            .get("requester_actor_id")
-            .cloned()
-            .ok_or_else(|| anyhow!("case missing requester_actor_id"))?,
-    )?;
-    let requester_verification_method = required_str(vector, "requester_verification_method")?;
-    let claim_request_id = required_str(vector, "claim_request_id")?;
-    let welcome_digest = required_str(vector, "welcome_digest")?;
-    let device_authorize_event_id = required_str(vector, "device_authorization_event_id")?;
-    let requester_device_id = required_str(vector, "requester_device_id")?;
-    arkret_wire::EventId::new(device_authorize_event_id.to_owned())?;
-    device(requester_device_id)?;
-    require_model_generation_ref(vector, "model_generation_ref")?;
-    let intended_realm_id = realm(intended_realm_id)?;
-    let requester_verification_method = verification_method(requester_verification_method)?;
-    let (requester_method_controller, requester_method_fragment) = requester_verification_method
-        .as_str()
-        .rsplit_once('#')
-        .ok_or_else(|| anyhow!("requester verification method omits fragment"))?;
-    // The claim envelope binds `requester_actor_id`, a core id (encryption-and-audit.md:576).
-    // The DID exists only inside the verification method controller, so derive it there
-    // and prove the two agree instead of carrying a second copy in the vector.
-    let requester_did = did(requester_method_controller)?;
-    let requester_core_id = arkret_identifiers::project_did_to_core_id(&requester_did)?;
-    if &requester_core_id != requester_actor.signing_principal_id()
-        || requester_method_fragment != requester_device_id
-    {
-        bail!("requester verification method does not bind requester actor id and device");
+    let delivery_value = fixture
+        .schema_validation_cases
+        .iter()
+        .find(|row| row.get("name").and_then(Value::as_str) == Some("mls_welcome_delivery_valid"))
+        .and_then(|row| row.get("instance"))
+        .cloned()
+        .ok_or_else(|| anyhow!("fixture omits the canonical MLS Welcome delivery"))?;
+    schema_valid(MLS_WELCOME_DELIVERY_SCHEMA, &delivery_value)?;
+    let delivery: MlsWelcomeDelivery = serde_json::from_value(delivery_value.clone())?;
+    delivery.validate_shape()?;
+    if delivery.keypackage_claim_ref.as_str() != required_str(vector, "keypackage_claim_ref")? {
+        bail!("Welcome delivery does not bind the fixture's exact claim reference");
     }
-    let welcome_digest = Hash::new(welcome_digest.to_owned())?;
 
-    let principal_id = core_did("ak:did_core:web:alice.example")?;
-    let device_id = device("ak:device:0196419b-0000-7000-8000-000000000001")?;
     let claim_record = claim_record_value(ClaimRecordInput {
         claim_id,
-        keypackage_ref,
-        principal_id: &principal_id,
-        device_id: &device_id,
-        device_authorize_event_id,
+        keypackage_ref: required_str(vector, "keypackage_ref")?,
+        principal_id: &core_did("ak:did_core:web:alice.example")?,
+        device_id: &device("ak:device:0196419b-0000-7000-8000-000000000001")?,
+        device_authorize_event_id: required_str(vector, "device_authorization_event_id")?,
         last_resort: false,
         expires_at: parse_time("2100-01-01T00:00:00.000Z")?,
     });
     let claim_outcome = parse_claim_outcome(claim_outcome_value(claim_record))?;
-    let claim_receipt = serde_json::to_value(&claim_outcome.claim_receipt)?;
     let claim = claim_outcome
         .claims
-        .into_iter()
-        .next()
+        .first()
         .ok_or_else(|| anyhow!("claim outcome missing record"))?;
-    let published_value = keypackage_payload_value(keypackage_ref, digest);
-    schema_valid(MLS_KEYPACKAGE_PAYLOAD_SCHEMA, &published_value)?;
-    let published: MlsKeypackagePayload = serde_json::from_value(published_value)?;
-
-    let good_welcome = WelcomePayloadFixture {
-        keypackage_ref,
-        claim_digest: digest,
-        envelope_digest: digest,
-        capabilities_digest,
-        claim_id,
-        device_authorize_event_id,
-        requester_device_id,
-        intended_realm_id: intended_realm_id.as_str(),
-        requester_actor_id: &requester_actor,
-        requester_verification_method: requester_verification_method.as_str(),
-        claim_receipt: &claim_receipt,
-        welcome_digest: welcome_digest.as_str(),
-    };
-    let good_value = welcome_payload_value(good_welcome);
-    schema_valid(MLS_WELCOME_PAYLOAD_SCHEMA, &good_value)?;
-    let good: MlsWelcomePayload = serde_json::from_value(good_value)?;
-    validate_mls_welcome_claim_envelope(
-        &good,
-        &claim,
-        &published,
-        &intended_realm_id,
-        &requester_actor,
-        &welcome_digest,
-        Some(device_authorize_event_id),
-        None,
-        Some(requester_device_id),
-        Some(device_authorize_event_id),
-    )
-    .map_err(|reason| anyhow!("good welcome rejected: {reason}"))?;
-
-    if !expected_bool(vector, "reject_before_decrypt")? {
-        bail!("welcome vector must reject before decrypt");
+    let keypackage_bytes =
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(claim.keypackage.as_bytes())?;
+    let recomputed = format!(
+        "sha256:{}",
+        hex::encode(sha2::Sha256::digest(&keypackage_bytes))
+    );
+    if recomputed != digest || recomputed == mismatched_digest {
+        bail!("fixture KeyPackage digest does not match claimed bytes");
+    }
+    if claim.claim_id != claim_id || claim.keypackage_ref != required_str(vector, "keypackage_ref")?
+    {
+        bail!("Welcome claim ledger reference is inconsistent");
     }
 
-    let bad_claim_ref_value = welcome_payload_value(WelcomePayloadFixture {
-        claim_digest: mismatched_digest,
-        ..good_welcome
-    });
-    schema_valid(MLS_WELCOME_PAYLOAD_SCHEMA, &bad_claim_ref_value)?;
-    let claim_ref_rejected = match parse_welcome_with_early_binding_rejection(bad_claim_ref_value)?
-    {
-        Ok(bad_claim_ref) => validate_mls_welcome_claim_envelope(
-            &bad_claim_ref,
-            &claim,
-            &published,
-            &intended_realm_id,
-            &requester_actor,
-            &welcome_digest,
-            Some(device_authorize_event_id),
-            None,
-            Some(requester_device_id),
-            Some(device_authorize_event_id),
-        )
-        .is_err(),
-        Err(reason) => reason == arkret_wire::ReasonCode::KEYPACKAGE_WELCOME_ENVELOPE_MISMATCH,
-    };
-    if !claim_ref_rejected {
-        bail!("mismatched claim_ref keypackage_digest was accepted");
+    let queue_value = json!({"delivery_kind": "mls_welcome", "mls_welcome": delivery_value});
+    let queued: RecipientDelivery = serde_json::from_value(queue_value.clone())?;
+    if !matches!(queued, RecipientDelivery::MlsWelcome { mls_welcome } if mls_welcome == delivery) {
+        bail!("recipient delivery queue changed the signed Welcome object");
     }
-    if expected_str(vector, "reason")?
-        != arkret_wire::ReasonCode::KEYPACKAGE_WELCOME_ENVELOPE_MISMATCH
-    {
-        bail!("welcome mismatch reason drifted");
-    }
-    let bad_realm_value = welcome_payload_value(WelcomePayloadFixture {
-        intended_realm_id: "ak:realm:AYmzq24KUdbYXjZtMiyVdibogezW-fCFD3oy0iviR-UD",
-        ..good_welcome
-    });
-    schema_valid(MLS_WELCOME_PAYLOAD_SCHEMA, &bad_realm_value)?;
-    let bad_realm: MlsWelcomePayload = serde_json::from_value(bad_realm_value)?;
-    if validate_mls_welcome_claim_envelope(
-        &bad_realm,
-        &claim,
-        &published,
-        &intended_realm_id,
-        &requester_actor,
-        &welcome_digest,
-        Some(device_authorize_event_id),
-        None,
-        Some(requester_device_id),
-        Some(device_authorize_event_id),
-    )
-    .is_ok()
-    {
-        bail!("mismatched claim_envelope intended_realm_id was accepted");
-    }
-    let bad_welcome_digest = Hash::new(
-        "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee".to_owned(),
-    )?;
-    let bad_welcome_digest_value = welcome_payload_value(WelcomePayloadFixture {
-        welcome_digest: bad_welcome_digest.as_str(),
-        ..good_welcome
-    });
-    schema_valid(MLS_WELCOME_PAYLOAD_SCHEMA, &bad_welcome_digest_value)?;
-    if serde_json::from_value::<MlsWelcomePayload>(bad_welcome_digest_value).is_ok() {
-        bail!("mismatched claim_envelope welcome_digest was accepted");
+    for retired_field in [
+        "claim_ref",
+        "claim_envelope",
+        "claim_receipt",
+        "ciphertext",
+        "expires_at",
+    ] {
+        let mut invalid = delivery_value.clone();
+        invalid[retired_field] = json!("retired");
+        schema_invalid(MLS_WELCOME_DELIVERY_SCHEMA, &invalid)?;
+        if serde_json::from_value::<MlsWelcomeDelivery>(invalid).is_ok() {
+            bail!("retired Welcome member was accepted: {retired_field}");
+        }
     }
     for invalid_ciphertext in ["AA==", "AB", "A"] {
-        let mut invalid_value = welcome_payload_value(good_welcome);
-        invalid_value["ciphertext"] = Value::String(invalid_ciphertext.to_owned());
-        schema_invalid(MLS_WELCOME_PAYLOAD_SCHEMA, &invalid_value)?;
-        if serde_json::from_value::<MlsWelcomePayload>(invalid_value).is_ok() {
-            bail!("non-canonical Welcome ciphertext was accepted: {invalid_ciphertext}");
+        let mut invalid = delivery_value.clone();
+        invalid["ciphertext_b64"] = json!(invalid_ciphertext);
+        if invalid_ciphertext == "AA==" {
+            schema_invalid(MLS_WELCOME_DELIVERY_SCHEMA, &invalid)?;
+        }
+        let rejected = match serde_json::from_value::<MlsWelcomeDelivery>(invalid) {
+            Ok(delivery) => delivery.validate_shape().is_err(),
+            Err(_) => true,
+        };
+        if !rejected {
+            bail!("noncanonical Welcome ciphertext was accepted: {invalid_ciphertext}");
         }
     }
-    for retired_field in ["welcome_ref", "encrypted_welcome_ref"] {
-        let mut invalid_value = welcome_payload_value(good_welcome);
-        invalid_value[retired_field] = Value::String(
-            "ak:blob:sha256:8888888888888888888888888888888888888888888888888888888888888888"
-                .to_owned(),
-        );
-        schema_invalid(MLS_WELCOME_PAYLOAD_SCHEMA, &invalid_value)?;
-        if serde_json::from_value::<MlsWelcomePayload>(invalid_value).is_ok() {
-            bail!("retired Welcome carrier field was accepted: {retired_field}");
-        }
+    let mut wrong_context = delivery_value.clone();
+    wrong_context["producer_proof"]["context"] = json!("ak.realm_commit_signature.v1");
+    schema_invalid(MLS_WELCOME_DELIVERY_SCHEMA, &wrong_context)?;
+    let mut wrong_scope = delivery_value.clone();
+    wrong_scope["realm_id"] = json!("ak:realm:AYmzq24KUdbYXjZtMiyVdibogezW-fCFD3oy0iviR-UD");
+    schema_valid(MLS_WELCOME_DELIVERY_SCHEMA, &wrong_scope)?;
+    serde_json::from_value::<MlsWelcomeDelivery>(wrong_scope)?
+        .validate_shape()
+        .expect_err("cross-Realm scope must be rejected");
+    let mut wrong_branch = queue_value;
+    wrong_branch["delivery_kind"] = json!("device_message");
+    if serde_json::from_value::<RecipientDelivery>(wrong_branch).is_ok() {
+        bail!("Welcome parsed as a DeviceMessage queue branch");
     }
-    let mut retired_nonce = welcome_payload_value(good_welcome);
-    retired_nonce["claim_envelope"]["nonce"] = json!(claim_request_id);
-    schema_invalid(MLS_WELCOME_PAYLOAD_SCHEMA, &retired_nonce)?;
-    if serde_json::from_value::<MlsWelcomePayload>(retired_nonce).is_ok() {
-        bail!("retired claim_envelope nonce was accepted");
+    if !expected_bool(vector, "reject_before_decrypt")? {
+        bail!("Welcome vector must reject mismatched claim ledger before decrypt");
     }
-    let mut mismatched_receipt_context = welcome_payload_value(good_welcome);
-    mismatched_receipt_context["claim_receipt"]["request"]["claim_request_id"] =
-        json!("AAAAAAAAAAAAAAAAAAAAAg");
-    schema_valid(MLS_WELCOME_PAYLOAD_SCHEMA, &mismatched_receipt_context)?;
-    if serde_json::from_value::<MlsWelcomePayload>(mismatched_receipt_context).is_ok() {
-        bail!("mismatched claim receipt/request id context was accepted");
-    }
-    if expected_bool(vector, "all_digest_fields_equal")?
-        && good.claim_ref.keypackage_digest.as_str() != digest
-    {
-        bail!("good welcome digest binding drifted");
-    }
-    Hash::new(digest.to_owned())?;
     Ok(())
-}
-
-fn parse_welcome_with_early_binding_rejection(
-    value: Value,
-) -> Result<std::result::Result<MlsWelcomePayload, &'static str>> {
-    match serde_json::from_value(value) {
-        Ok(payload) => Ok(Ok(payload)),
-        Err(error)
-            if error
-                .to_string()
-                .contains("claim bindings do not match top-level fields") =>
-        {
-            Ok(Err(
-                arkret_wire::ReasonCode::KEYPACKAGE_WELCOME_ENVELOPE_MISMATCH,
-            ))
-        }
-        Err(error) => Err(error.into()),
-    }
 }
 
 /// Exact runner for `ak.vector.keypackage.self_claim_authorization_idempotency.v1`.
@@ -1672,106 +1472,6 @@ fn validate_unsigned_selector_transcripts(fixture: &KeypackageLifecycleFixture) 
     Ok(())
 }
 
-/// Closed-XOR model coverage for the pairwise publish/claim/Welcome/consume
-/// chain. Live cross-process coverage builds on the same SDK values; this
-/// runner prevents either endpoint branch from silently widening back to a
-/// Device/Account carrier.
-pub fn run_keypackage_minimal_metadata_pairwise_full_lifecycle_vector() -> Result<()> {
-    let fixture = keypackage_fixture()?;
-    let _vector = case(
-        &fixture,
-        VECTOR_ID_KEYPACKAGE_MINIMAL_METADATA_PAIRWISE_FULL_LIFECYCLE,
-    )?;
-    let cases = &fixture.schema_validation_cases;
-    for name in [
-        "minimal_metadata_pairwise_keypackage_upload_valid",
-        "minimal_metadata_pairwise_claim_selects_exact_target_authority",
-        "minimal_metadata_pairwise_claim_record_has_reconstructible_facts_only",
-        "minimal_metadata_pairwise_consume_single_claim_valid",
-    ] {
-        let row = cases
-            .iter()
-            .find(|row| row.get("name").and_then(Value::as_str) == Some(name))
-            .ok_or_else(|| anyhow!("pairwise lifecycle fixture missing {name}"))?;
-        schema_valid(
-            required_str(row, "schema_ref")?,
-            row.get("instance")
-                .ok_or_else(|| anyhow!("pairwise lifecycle case {name} missing instance"))?,
-        )?;
-    }
-    for name in [
-        "minimal_metadata_pairwise_upload_rejects_device_mixture",
-        "claim_record_rejects_unreconstructible_upload_signature_echo",
-        "minimal_metadata_pairwise_consume_rejects_device_mixture",
-    ] {
-        let row = cases
-            .iter()
-            .find(|row| row.get("name").and_then(Value::as_str) == Some(name))
-            .ok_or_else(|| anyhow!("pairwise lifecycle fixture missing {name}"))?;
-        schema_invalid(
-            required_str(row, "schema_ref")?,
-            row.get("instance")
-                .ok_or_else(|| anyhow!("pairwise lifecycle case {name} missing instance"))?,
-        )?;
-    }
-
-    let claim_value = cases
-        .iter()
-        .find(|row| {
-            row.get("name").and_then(Value::as_str)
-                == Some("minimal_metadata_pairwise_claim_selects_exact_target_authority")
-        })
-        .and_then(|row| row.get("instance"))
-        .cloned()
-        .ok_or_else(|| anyhow!("pairwise claim instance is missing"))?;
-    let claim: arkret_models_crypto::KeyPackagesClaimRequestBody =
-        serde_json::from_value(claim_value)?;
-    claim.validate_shape().map_err(anyhow::Error::msg)?;
-    if !matches!(
-        claim.requester_authorization,
-        arkret_models_crypto::PeerKeyPackageRequesterAuthorization::MinimalMetadataPairwise { .. }
-    ) || claim.target_pairwise_verification_method.is_none()
-        || !claim.target_device_ids.is_empty()
-        || claim.target_agent_id.is_some()
-    {
-        bail!("pairwise claim did not deserialize to the exact pairwise endpoint branch");
-    }
-
-    let welcome_fixture: PairwiseWelcomeFixture = serde_json::from_value(
-        super::load_fixture_value("keypackage-pairwise-welcome-fixture.json")?,
-    )?;
-    if welcome_fixture.profile != ProfileId::MLS_GOVERNANCE_BINDING_FULL_V1
-        || welcome_fixture.version.trim().is_empty()
-        || welcome_fixture.suite.trim().is_empty()
-        || welcome_fixture.runner.is_null()
-        || welcome_fixture.covers_vectors.is_empty()
-    {
-        bail!("pairwise Welcome fixture metadata drifted");
-    }
-    let welcome_cases = &welcome_fixture.schema_validation_cases;
-    let valid_welcome = welcome_cases
-        .iter()
-        .find(|row| {
-            row.get("name").and_then(Value::as_str)
-                == Some("minimal_metadata_pairwise_welcome_valid")
-        })
-        .and_then(|row| row.get("instance"))
-        .cloned()
-        .ok_or_else(|| anyhow!("pairwise Welcome positive instance is missing"))?;
-    schema_valid(MLS_WELCOME_PAYLOAD_SCHEMA, &valid_welcome)?;
-    let welcome: MlsWelcomePayload = serde_json::from_value(valid_welcome.clone())?;
-    if !matches!(
-        welcome.recipient,
-        MlsWelcomeRecipient::MinimalMetadataPairwise { .. }
-    ) {
-        bail!("pairwise Welcome did not deserialize to the exact pairwise recipient branch");
-    }
-    let mut mixed_welcome = valid_welcome;
-    mixed_welcome["recipient_device_id"] = json!("ak:device:0196419b-0000-7000-8000-000000000001");
-    schema_invalid(MLS_WELCOME_PAYLOAD_SCHEMA, &mixed_welcome)?;
-    Ok(())
-}
-
 pub fn run_keypackage_lifecycle_fixture_suite() -> Result<()> {
     validate_keypackage_lifecycle_fixture_metadata(&keypackage_fixture()?)?;
 
@@ -1785,8 +1485,6 @@ pub fn run_keypackage_lifecycle_fixture_suite() -> Result<()> {
         .context("keypackage last-resort affinity/optionality vector")?;
     run_keypackage_self_claim_authorization_idempotency_vector()
         .context("keypackage self-claim authorization/idempotency vector")?;
-    run_keypackage_minimal_metadata_pairwise_full_lifecycle_vector()
-        .context("minimal-metadata pairwise KeyPackage full-lifecycle vector")?;
     run_mls_welcome_keypackage_hash_vector().context("MLS welcome KeyPackage hash vector")?;
     Ok(())
 }

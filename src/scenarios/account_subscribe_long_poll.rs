@@ -19,8 +19,8 @@ use serde_json::Value;
 use crate::fixtures::TestActorBuilder;
 use crate::harness::{
     account_subscribe_delta_from_text, actor_core_id, dispatch_accepted_invite_and_read_token,
-    events_frontier_request_body, eventually, expect_account_subscribe_delta,
-    expect_account_subscribe_realm_delta, invite_create_payload, message_create_text_payload,
+    eventually, expect_account_subscribe_delta, expect_account_subscribe_realm_delta,
+    invite_create_payload, message_create_text_payload,
 };
 use crate::scenarios::_helpers::protocol_values::submitted_event_id;
 use crate::scenarios::identity_test_support::{
@@ -312,10 +312,7 @@ pub async fn invited_members_exchange_post_join_messages_over_account_subscribe(
             let invite_id = invite_id.clone();
             let realm_id = realm_id.clone();
             async move {
-                let invites = bob_client
-                    .sdk()
-                    .authz_invites(&client_account_id(bob_client)?, Some(&realm_id), None)
-                    .await?;
+                let invites = authz_invites(bob_client, bob_client, &realm_id).await?;
                 if invites
                     .invites
                     .iter()
@@ -367,14 +364,8 @@ pub async fn invited_members_exchange_post_join_messages_over_account_subscribe(
             let invite_id = invite_id.clone();
             let alice = alice.clone();
             async move {
-                let bob_invites = bob_client
-                    .sdk()
-                    .authz_invites(&client_account_id(bob_client)?, Some(&realm_id), None)
-                    .await?;
-                let alice_view = alice
-                    .sdk()
-                    .authz_invites(&client_account_id(bob_client)?, Some(&realm_id), None)
-                    .await?;
+                let bob_invites = authz_invites(bob_client, bob_client, &realm_id).await?;
+                let alice_view = authz_invites(&alice, bob_client, &realm_id).await?;
                 if bob_invites.invites.is_empty() && alice_view.invites.is_empty() {
                     Ok(())
                 } else {
@@ -496,10 +487,7 @@ pub async fn cancelled_pending_invite_disappears_from_invite_views() -> Result<(
             let invite_id = invite_id.clone();
             let realm_id = realm_id.clone();
             async move {
-                let invites = bob_client
-                    .sdk()
-                    .authz_invites(&client_account_id(bob_client)?, Some(&realm_id), None)
-                    .await?;
+                let invites = authz_invites(bob_client, bob_client, &realm_id).await?;
                 if invites
                     .invites
                     .iter()
@@ -525,14 +513,8 @@ pub async fn cancelled_pending_invite_disappears_from_invite_views() -> Result<(
             let invite_id = invite_id.clone();
             let alice = alice.clone();
             async move {
-                let bob_invites = bob_client
-                    .sdk()
-                    .authz_invites(&client_account_id(bob_client)?, Some(&realm_id), None)
-                    .await?;
-                let alice_view = alice
-                    .sdk()
-                    .authz_invites(&client_account_id(bob_client)?, Some(&realm_id), None)
-                    .await?;
+                let bob_invites = authz_invites(bob_client, bob_client, &realm_id).await?;
+                let alice_view = authz_invites(&alice, bob_client, &realm_id).await?;
                 if bob_invites.invites.is_empty() && alice_view.invites.is_empty() {
                     Ok(())
                 } else {
@@ -561,6 +543,24 @@ async fn fetch_account_subscribe(
         StatusCode::OK,
     )
     .await
+}
+
+async fn authz_invites(
+    viewer: &crate::harness::TestActorClient,
+    subject: &crate::harness::TestActorClient,
+    realm_id: &str,
+) -> Result<arkret_models_collaboration::governance::authorization::AuthzInviteList> {
+    let account = client_account_id(subject)?;
+    let response = crate::harness::expect_json(
+        viewer.get("/_arkret/self/authz/invites").query(&[
+            ("subject", account.principal_id.as_str()),
+            ("subject_station_id", account.station_id.as_str()),
+            ("realm_id", realm_id),
+        ]),
+        StatusCode::OK,
+    )
+    .await?;
+    Ok(serde_json::from_value(response)?)
 }
 
 async fn fetch_account_subscribe_frontier(
@@ -719,76 +719,7 @@ async fn submit_event_now(
     kind: &str,
     payload: Value,
 ) -> Result<Value> {
-    let frontier = crate::harness::expect_json(
-        actor
-            .query("/_arkret/self/events/frontier")
-            .json(&events_frontier_request_body(
-                actor.actor.as_str(),
-                actor.service_id(),
-                Some(realm_id),
-            )?),
-        StatusCode::OK,
-    )
-    .await?;
-    let state: arkret_models_collaboration::event_sync::EventsFrontierState =
-        serde_json::from_value(frontier)?;
-    let arkret_models_collaboration::event_sync::EventsFrontierView::RealmActor(frontier) =
-        state.frontier
-    else {
-        return Err(anyhow::anyhow!(
-            "combined selector returned the wrong frontier variant"
-        ));
-    };
-    frontier.validate()?;
-    let created_at = arkret_canonical::format_timestamp_canonical(chrono::Utc::now());
-    let mut event = crate::harness::event_envelope_with_chain(
-        &actor.actor,
-        realm_id,
-        kind,
-        payload,
-        frontier.next_actor_seq,
-        None,
-    );
-    event.prev_refs = frontier.frontier_event_ids;
-    event.created_at = DateTime::parse_from_rfc3339(&created_at)?.with_timezone(&Utc);
-    let event_kind = arkret_wire::EventKind::from(kind);
-    let is_control_move = event_kind.is_control_plane();
-    let is_ordinary_event = event_kind.is_data_plane();
-    if is_control_move || is_ordinary_event {
-        let seal_frontier = seal_source.realm_seal_frontier(realm_id).await?;
-        let state: arkret_models_collaboration::event_sync::SealFrontierState =
-            serde_json::from_value(seal_frontier)?;
-        let frontier = state.frontier;
-        if is_ordinary_event {
-            event.auth_context = Some(arkret_wire::AuthContext {
-                authority_refs: frontier.seal_basis.leaves,
-            });
-            if actor.controls_realm_authority_root(realm_id) {
-                event.authorization_ref = Some(
-                    arkret_wire::AuthorizationRef::new(arkret_wire::REALM_AUTHORITY_ROOT_CELL)
-                        .map_err(anyhow::Error::msg)?,
-                );
-            } else {
-                event.semantic_refs = actor
-                    .covering_grants_for(realm_id, kind)
-                    .into_iter()
-                    .map(|grant_id| {
-                        arkret_wire::SemanticRef::new(
-                            grant_id,
-                            arkret_wire::SEMANTIC_REF_ROLE_AUTHORIZED_BY,
-                        )
-                    })
-                    .collect();
-            }
-        } else {
-            event.seal_basis = Some(frontier.seal_basis());
-            let physical_millis = chrono::Utc::now().timestamp_millis();
-            event.hlc = Some(arkret_identifiers::Hlc::new(format!(
-                "{physical_millis:012x}-0000-a13f9c2e"
-            ))?);
-        }
-    }
-    crate::harness::refresh_typed_event_proof(&mut event)?;
+    let event = actor.author_event(realm_id, kind, payload).await?;
     let response = crate::harness::expect_json(
         actor
             .post("/_arkret/self/events")
@@ -796,11 +727,9 @@ async fn submit_event_now(
         StatusCode::OK,
     )
     .await?;
-    if is_control_move {
-        seal_source
-            .await_event_seal_coverage(realm_id, &event.event_id)
-            .await?;
-    }
+    seal_source
+        .await_event_seal_coverage(realm_id, &event.event_id)
+        .await?;
     Ok(response)
 }
 

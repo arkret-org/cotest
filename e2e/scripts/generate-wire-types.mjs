@@ -65,6 +65,7 @@ const TARGETS = [
   { file: "realm-genesis.schema.json", typeName: "RealmGenesisObject" },
   { file: "space.schema.json", typeName: "SpaceObject" },
   { file: "capability-grant.schema.json", typeName: "CapabilityGrantObject" },
+  { file: "event-payload.schema.json", pointer: "#/$defs/capability_grant_payload", typeName: "CapabilityGrantPayload" },
   {
     file: "invite-delivery-request.schema.json",
     typeName: "InviteDeliveryRequestBody",
@@ -90,8 +91,8 @@ const TARGETS = [
   },
   {
     file: "service-operation-dtos.schema.json",
-    pointer: "#/$defs/EventCommitSubmission",
-    typeName: "EventCommitSubmission",
+    pointer: "#/$defs/EventAdmissionSubmission",
+    typeName: "EventAdmissionSubmission",
   },
 ];
 

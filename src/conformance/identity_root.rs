@@ -8,25 +8,22 @@ use arkret::identity_root::{
     derive_identity_recovery_key_material_from_bip39,
 };
 use arkret_bootstrap::{
-    DID_INCEPTION_REF_ROLE, SelfPrincipalPcrCreateInput, build_self_principal_pcr_create,
-    build_self_principal_pcr_genesis_unit, validate_self_principal_pcr_genesis_unit,
+    DID_INCEPTION_REF_ROLE, SelfPrincipalPcrCreateInput, build_pcr_genesis_unit,
+    build_self_principal_pcr_create,
 };
 use arkret_event_draft::EventPayloadExt;
-use arkret_identifiers::{
-    DeviceId, Did, DidCoreId, Hash, Hlc, TrustDomainId, project_did_to_core_id,
-};
+use arkret_identifiers::{DeviceId, Did, DidCoreId, TrustDomainId, project_did_to_core_id};
 use arkret_models_collaboration::events_payloads::device_identity::{
     DeviceAuthorizationBindingKind, DeviceAuthorizePayload, DeviceOrPrincipalRef,
-    DeviceReanchorPayload, UnsignedDeviceAuthorizePayload, typed_device_authorize_payload_digest,
-    validate_device_reanchor_recovery_first_seal,
+    DeviceReanchorPayload, typed_device_authorize_payload_digest,
 };
 use arkret_models_collaboration::events_payloads::{
     FoundingDeviceDescriptor, FoundingDeviceHpkeKeyAlgorithm, FoundingDeviceKeyAlgorithm,
     FoundingDeviceKeyPurpose, SignatureMaterial, device_authorize_payload_digest,
 };
 use arkret_wire::{
-    AccountId, Audience, AuthoredEvent, DidUrl, Event, NonEmptyString, RecoverySessionId,
-    SemanticRef,
+    AccountId, Audience, AuthoredEvent, DidUrl, Discoverability, Event, HistoryAccess, JoinRule,
+    NonEmptyString, RecoverySessionId, SemanticRef,
 };
 use base64::Engine as _;
 use ed25519_dalek::{Signer as _, SigningKey};
@@ -271,12 +268,13 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
         device_public_key_did: device_public_key.clone(),
         hpke_key: hpke_key.clone(),
         algorithms: algorithms.clone(),
-        device_key_algorithm: Some(non_empty("Ed25519")?),
+        device_key_algorithm: non_empty("Ed25519")?,
         authorized_by: DeviceOrPrincipalRef::Principal(principal.clone()),
         scopes: None,
         not_before: created_at,
         expires_at: None,
         authorization_binding_kind: DeviceAuthorizationBindingKind::RegistrationAnchor,
+        authorized_generation_ref: 1,
         device_signature: SignatureMaterial::NonEmptyString(non_empty("pending")?),
         recovery_session_id: None,
         // `registration_anchor` is one of the three branches that MUST NOT
@@ -309,29 +307,27 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
             arkret_canonical::DigestSuite::Sha256,
         )?,
     };
-    let create = build_self_principal_pcr_create(
-        SelfPrincipalPcrCreateInput {
-            principal_id: principal.clone(),
-            station_id: DidCoreId::new("ak:did_core:web:principal.example")?,
-            principal_did: principal_did.clone(),
-            notary: crate::fixture_notary_configuration(principal.clone()),
-            initial_resolution: arkret_models_identity::ResolutionCommitment {
-                did: principal_did,
-                method_history_head: format!("sha256:{}", "1".repeat(64)),
-                version_id: "1-Qmfixture".to_owned(),
-            },
-            genesis_salt: arkret_wire::GenesisSalt::generate()?,
-            trust_domain: TrustDomainId::new("ak:trust_domain:example.net")?,
-            did_inception_ref: SemanticRef::new(
-                "did:webvh:z6mkfixture:alice.example#entry-0",
-                DID_INCEPTION_REF_ROLE,
-            ),
-            founding_device_descriptor: descriptor,
-            created_at,
-            hlc: Hlc::new("01970e589d21-0001-a13f9c2e")?,
+    let create = build_self_principal_pcr_create(SelfPrincipalPcrCreateInput {
+        principal_id: principal.clone(),
+        governance_station_id: DidCoreId::new("ak:did_core:web:principal.example")?,
+        principal_did: principal_did.clone(),
+        initial_resolution: arkret_models_identity::ResolutionCommitment {
+            did: principal_did,
+            method_history_head: format!("sha256:{}", "1".repeat(64)),
+            version_id: "1-Qmfixture".to_owned(),
         },
-        &crate::publication::project_cells,
-    )?;
+        genesis_salt: arkret_wire::GenesisSalt::generate()?,
+        trust_domain: TrustDomainId::new("ak:trust_domain:example.net")?,
+        did_inception_ref: SemanticRef::new(
+            "did:webvh:z6mkfixture:alice.example#entry-0",
+            DID_INCEPTION_REF_ROLE,
+        ),
+        founding_device_descriptor: descriptor,
+        initial_join_rule: JoinRule::Invite,
+        initial_history_access: HistoryAccess::SinceJoin,
+        initial_discoverability: Discoverability::InviteOnly,
+        created_at,
+    })?;
     let root_key = SigningKey::from_bytes(&[0x24; 32]);
     let root_multibase =
         arkret_canonical::ed25519_pubkey_to_did_key_multibase(&root_key.verifying_key().to_bytes());
@@ -339,36 +335,27 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
         .map_err(anyhow::Error::msg)?;
     let create = with_native_unit_proof(create.into_event(), &root_method, &root_key)?;
     let realm_id = create.realm_id.clone();
-    let mut authorize = arkret_wire::test_support::raw_event(
+    let authorize = arkret_wire::test_support::raw_event_at(
         arkret_wire::EventKind::DeviceAuthorize.as_str(),
         arkret_wire::ScopeRef::Realm { realm_id },
         principal.clone(),
         DidCoreId::new("ak:did_core:web:principal.example")?,
-        1,
-        Hlc::new("01970e589d21-0002-a13f9c2e")?,
         authorize_value,
+        created_at,
     )?;
-    authorize.created_at = created_at;
-    authorize.prev_refs = vec![create.event_id.clone()];
-    authorize = with_native_unit_proof(authorize, &device_verification_method, &device_key)?;
-    let unit = build_self_principal_pcr_genesis_unit(
-        create.clone(),
-        authorize.clone(),
-        &crate::publication::project_cells,
-    )?;
+    let authorize = with_native_unit_proof(authorize, &device_verification_method, &device_key)?;
+    let unit = build_pcr_genesis_unit(create.clone(), authorize.clone())?;
     unit.validate_ordered_envelopes()?;
-    validate_self_principal_pcr_genesis_unit(
-        &create,
-        &authorize,
-        &crate::publication::project_cells,
-    )?;
-
-    let mut split = authorize.clone();
-    split.prev_refs.clear();
-    if validate_self_principal_pcr_genesis_unit(&create, &split, &crate::publication::project_cells)
-        .is_ok()
-    {
-        bail!("PCR genesis accepted a split create/authorize unit");
+    if build_pcr_genesis_unit(authorize.clone(), create.clone()).is_ok() {
+        bail!("PCR genesis accepted a reversed create/authorize unit");
+    }
+    let mut missing_proof = authorize.clone();
+    missing_proof.producer_proof = None;
+    if build_pcr_genesis_unit(create.clone(), missing_proof).is_ok() {
+        bail!("PCR genesis accepted an unsigned founding authorization");
+    }
+    if serde_json::from_value::<arkret_wire::PcrGenesisUnit>(json!({"events": [create]})).is_ok() {
+        bail!("PCR genesis accepted a partial create-only unit");
     }
 
     let mut tampered: DeviceAuthorizePayload =
@@ -392,36 +379,12 @@ fn validate_reanchor_helpers() -> Result<()> {
         "recovery_session_id": "ak:recovery_session:01904100-0000-7000-8000-000000000002",
         "previous_device_generation": 1,
         "new_device_generation": 2,
-        "pre_fence_seal_frontier": null,
         "replacement_authorize_payload_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     });
     let payload: DeviceReanchorPayload = serde_json::from_value(value.clone())?;
-    let reanchor_digest = Hash::new(format!("sha256:{}", "1".repeat(64)))?;
-    let authorize_digest = Hash::new(format!("sha256:{}", "2".repeat(64)))?;
-    // A Seal `delta` entry is a bare digest: `move` is no longer an id kind.
-    let delta = vec![reanchor_digest.clone(), authorize_digest.clone()];
-    validate_device_reanchor_recovery_first_seal(
-        &payload,
-        None,
-        &delta,
-        &reanchor_digest,
-        &authorize_digest,
-    )?;
-    if validate_device_reanchor_recovery_first_seal(
-        &payload,
-        None,
-        &delta[..1],
-        &reanchor_digest,
-        &authorize_digest,
-    )
-    .is_ok()
-    {
-        bail!("recovery-first Seal accepted a partial re-anchor unit");
-    }
-
-    // The re-anchor payload MUST NOT carry the authorize Event id or envelope
-    // digest: the authorize envelope names the re-anchor in prev_refs, so an id
-    // binding would make the two Events preimages of each other.
+    // A recovery transaction now commits two consecutive Events. The payload
+    // binds the replacement authorization by payload digest; commit references
+    // are supplied by the Station only after both Events have been accepted.
     let mut carries_event_id = value.clone();
     carries_event_id["replacement_authorize_event_id"] =
         json!("ak:event:AXlG8yvLUgeROF13vorAuw0LMlE4uhRoHybH_PZB3WFx");
@@ -429,8 +392,8 @@ fn validate_reanchor_helpers() -> Result<()> {
         bail!("device re-anchor accepted a replacement Event id binding");
     }
 
-    validate_generation_fence_is_the_unsealed_successor(&payload)?;
-    validate_recovery_first_seal_signer_comes_from_the_fence()?;
+    validate_generation_fence_is_the_committed_successor(&payload)?;
+    validate_recovery_candidate_key_from_frozen_unit()?;
 
     let mut mismatched = value;
     mismatched["new_device_generation"] = json!(3);
@@ -440,21 +403,19 @@ fn validate_reanchor_helpers() -> Result<()> {
     Ok(())
 }
 
-/// The B-model generation state a Station consults while admitting a Seal.
-///
-/// `current` is the **Seal-confirmed** generation, which is the only generation
-/// a Station can report before the first new-generation Seal commits.
+/// Local checkpoint for the PCR generation value before and after an atomic
+/// recovery transaction. The actual committed result is written by the
+/// service's RealmCommit transaction, not this test model.
 #[derive(Clone, Debug)]
 struct GenerationFenceState {
     current: u64,
-    /// The `new_device_generation` every accepted re-anchor in this Realm
-    /// declares.
-    declared_by_accepted_reanchors: Vec<u64>,
+    /// The `new_device_generation` declared by the candidate recovery unit.
+    declared_by_candidate_reanchors: Vec<u64>,
 }
 
 impl GenerationFenceState {
     fn select(&self, wanted: u64) -> Vec<u64> {
-        self.declared_by_accepted_reanchors
+        self.declared_by_candidate_reanchors
             .iter()
             .copied()
             .filter(|generation| *generation == wanted)
@@ -462,24 +423,9 @@ impl GenerationFenceState {
     }
 }
 
-/// Fixed vector: the generation fence selects the successor that is **accepted
-/// but not yet sealed**, which is `current + 1`.
-///
-/// The property is an off-by-one that is invisible in review and silent at
-/// runtime. `DeviceReanchorPayload` already forces `new == previous + 1`, and a
-/// Station's `current` is the Seal-confirmed generation, so during the exact
-/// window the fence exists for — successor accepted, first Seal not yet
-/// committed — canonical history contains a re-anchor declaring `current + 1`
-/// and none declaring `current`. A predicate written against `current` is
-/// therefore not a stricter fence: it selects nothing at all, and can only ever
-/// match a re-anchor whose own Seal has already been accepted. That is the same
-/// observable behaviour as having no fence, which is why nothing failed when it
-/// was wrong.
-///
-/// The vector pins both halves — the fence engages on `current + 1`, and it
-/// releases by itself once that Seal makes the successor the confirmed
-/// generation — so neither "fix" can be undone without this failing.
-fn validate_generation_fence_is_the_unsealed_successor(
+/// This checks the exact successor assertion and stale-generation rejection
+/// without pretending to execute the Station's durable commit provider.
+fn validate_generation_fence_is_the_committed_successor(
     payload: &DeviceReanchorPayload,
 ) -> Result<()> {
     if payload.new_device_generation != payload.previous_device_generation + 1 {
@@ -487,29 +433,26 @@ fn validate_generation_fence_is_the_unsealed_successor(
     }
     let pending = GenerationFenceState {
         current: payload.previous_device_generation,
-        declared_by_accepted_reanchors: vec![payload.new_device_generation],
+        declared_by_candidate_reanchors: vec![payload.new_device_generation],
     };
     if !pending.select(pending.current).is_empty() {
-        bail!(
-            "a re-anchor declared the Seal-confirmed generation: the off-by-one predicate is no longer structurally empty"
-        );
+        bail!("a re-anchor declared the already committed generation");
     }
     if pending.select(pending.current + 1) != vec![payload.new_device_generation] {
-        bail!("the generation fence did not engage on the accepted but unsealed successor");
+        bail!("the generation fence did not select the immediate successor");
     }
 
-    let sealed = GenerationFenceState {
+    let committed = GenerationFenceState {
         current: payload.new_device_generation,
-        declared_by_accepted_reanchors: vec![payload.new_device_generation],
+        declared_by_candidate_reanchors: vec![payload.new_device_generation],
     };
-    if !sealed.select(sealed.current + 1).is_empty() {
-        bail!("the generation fence did not release once its own first Seal committed");
+    if !committed.select(committed.current + 1).is_empty() {
+        bail!("the generation fence did not release after the recovery unit committed");
     }
     Ok(())
 }
 
-/// One row of the PCR device directory as it stands while the first
-/// new-generation Seal is being admitted.
+/// One row of the PCR device directory before the recovery transaction commits.
 #[derive(Clone, Debug)]
 struct PcrDeviceDirectoryRow {
     device_public_key_did: String,
@@ -519,29 +462,28 @@ struct PcrDeviceDirectoryRow {
 }
 
 impl PcrDeviceDirectoryRow {
-    /// The signer predicate every *ordinary* B-model Seal uses.
+    /// The signer predicate for an ordinary accepted producer Event.
     fn can_sign_at(&self, current_generation: u64) -> bool {
         self.verified && !self.revoked && self.generation == current_generation
     }
 }
 
-/// Fixed vector: the first new-generation Seal's signer is the key the fence
-/// froze, not a `verified` current-generation inventory row.
+/// Fixed vector: both recovery Event signatures use the key frozen by the
+/// session, before the replacement device is marked verified.
 ///
 /// `security-transactions.md` section 2.3 step 4 makes the replacement device
-/// `active + verified + current generation` **as a consequence of this Seal**.
+/// `active + verified + current generation` when the transaction commits.
 /// So requiring an already-verified current-generation row here is not a strict
 /// check that happens to fail — it is a circular impossibility: the state it
 /// demands is the state this operation produces, and fresh-device recovery can
 /// never reach a Standard grant.
 ///
-/// The authority used instead is not weaker, and this vector is what says so:
-/// the frozen `(device id, public key)` pair comes from the accepted re-anchor
-/// unit's own replacement authorization, and the re-anchor payload's
+/// The frozen `(device id, public key)` pair comes from the recovery unit's
+/// replacement authorization, and the re-anchor payload's
 /// `replacement_authorize_payload_digest` already commits to exactly that
 /// payload. Substituting any other key therefore names a different unit, which
 /// the vector proves by recomputing the digest.
-fn validate_recovery_first_seal_signer_comes_from_the_fence() -> Result<()> {
+fn validate_recovery_candidate_key_from_frozen_unit() -> Result<()> {
     let suite = arkret_canonical::DigestSuite::Sha256;
     let principal = DidCoreId::new("ak:did_core:webvh:z6mkfixture")?;
     let subject_account_id = AccountId::new(
@@ -557,44 +499,30 @@ fn validate_recovery_first_seal_signer_comes_from_the_fence() -> Result<()> {
     ))?;
     let device_id = DeviceId::new("ak:device:019a4100-0000-7000-8000-00000000000a")?;
     let not_before = arkret_canonical::parse_timestamp_canonical("2026-09-15T00:00:00.000Z")?;
-    let unsigned = UnsignedDeviceAuthorizePayload::new(
-        device_id.clone(),
-        replacement_public_key.clone(),
-        non_empty("z6LSCotestRecoveryReplacementHpkeKey")?,
-        vec![non_empty("ak.hpke_x25519_aead_chacha20poly1305.v1")?],
-        Some(non_empty("Ed25519")?),
-        DeviceOrPrincipalRef::Principal(principal.clone()),
-        None,
-        not_before,
-        None,
-        DeviceAuthorizationBindingKind::PcrRecovery,
-        Some(RecoverySessionId::new(
-            "ak:recovery_session:01904100-0000-7000-8000-000000000002",
-        )?),
-        None,
-    )?;
-    let signature =
-        replacement_key.sign(&unsigned.device_possession_signature_input(&subject_account_id)?);
-    let replacement_authorize = DeviceAuthorizePayload {
+    let mut replacement_authorize = DeviceAuthorizePayload {
         device_id: device_id.clone(),
         device_public_key_did: replacement_public_key.clone(),
         hpke_key: non_empty("z6LSCotestRecoveryReplacementHpkeKey")?,
         algorithms: vec![non_empty("ak.hpke_x25519_aead_chacha20poly1305.v1")?],
-        device_key_algorithm: Some(non_empty("Ed25519")?),
+        device_key_algorithm: non_empty("Ed25519")?,
         authorized_by: DeviceOrPrincipalRef::Principal(principal),
         scopes: None,
         not_before,
         expires_at: None,
         authorization_binding_kind: DeviceAuthorizationBindingKind::PcrRecovery,
-        device_signature: SignatureMaterial::NonEmptyString(non_empty(
-            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(signature.to_bytes()),
-        )?),
+        authorized_generation_ref: 2,
+        device_signature: SignatureMaterial::NonEmptyString(non_empty("pending")?),
         recovery_session_id: Some(RecoverySessionId::new(
             "ak:recovery_session:01904100-0000-7000-8000-000000000002",
         )?),
         pairing_challenge_transcript_digest: None,
         applet_id: None,
     };
+    let signature = replacement_key
+        .sign(&replacement_authorize.device_possession_signature_input(&subject_account_id)?);
+    replacement_authorize.device_signature = SignatureMaterial::NonEmptyString(non_empty(
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(signature.to_bytes()),
+    )?);
     arkret_signatures::verify_device_authorize_possession(
         &replacement_authorize,
         &subject_account_id,
@@ -604,7 +532,7 @@ fn validate_recovery_first_seal_signer_comes_from_the_fence() -> Result<()> {
 
     let previous_generation = 1u64;
     let new_generation = 2u64;
-    // Every directory shape reachable *before* this Seal commits. The
+    // Every directory shape reachable before the recovery transaction commits. The
     // replacement row is either absent or present-but-unverified at the
     // outgoing generation; in neither case does the ordinary predicate have a
     // witness, which is the circularity stated as a fact rather than as prose.
@@ -636,7 +564,7 @@ fn validate_recovery_first_seal_signer_comes_from_the_fence() -> Result<()> {
     for directory in &reachable_directories {
         if directory.iter().any(|row| row.can_sign_at(new_generation)) {
             bail!(
-                "the ordinary verified-current-generation signer predicate found a witness before the Seal that creates it"
+                "the ordinary verified-current-generation signer predicate found a witness before the recovery transaction commits"
             );
         }
     }
@@ -652,11 +580,11 @@ fn validate_recovery_first_seal_signer_comes_from_the_fence() -> Result<()> {
         })
         .context("the reachable directory lost its staged replacement device row")?;
     if staged.verified || staged.can_sign_at(new_generation) {
-        bail!("the replacement device was already verified before the Seal that verifies it");
+        bail!("the replacement device was already verified before the transaction verifies it");
     }
 
     // What the fence froze, and what it is worth. The frozen key is the one the
-    // re-anchor payload digest already commits to, so a Seal signed by any
+    // re-anchor payload digest already commits to, so an Event signed by any
     // other key belongs to a different re-anchor unit.
     let frozen_public_key = replacement_authorize.device_public_key_did.clone();
     if frozen_public_key != replacement_public_key {
@@ -778,8 +706,7 @@ fn with_native_unit_proof(
     arkret_signatures::sign_event(
         &mut authored,
         &signer,
-        verification_method,
-        arkret_signatures::SignEventOptions::for_native_unit()
+        arkret_signatures::SignEventOptions::new()
             .with_created_at(created_at)
             .with_audience(Audience::Single(realm_id)),
     )?;

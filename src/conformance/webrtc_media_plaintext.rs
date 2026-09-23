@@ -7,8 +7,13 @@
 
 use std::cell::Cell;
 
-use anyhow::{Result, ensure};
+use anyhow::{Result, anyhow, ensure};
 use arkret_crypto::sframe::MlsExporterSource;
+use arkret_models_collaboration::governance::plaintext_visibility::{
+    PlaintextServiceVisibility, PlaintextVisibleService, PlaintextVisibleServicesPayload,
+};
+use arkret_models_crypto::MlsGovernanceBindingPayload;
+use arkret_wire::PlaintextDataClassKind;
 use inkson::media::rtc::{
     DesiredMedia, MediaGovernanceEvidence, MediaJoinRequest, RtcClientError, authorize_media_join,
 };
@@ -126,8 +131,10 @@ pub fn run_webrtc_media_plaintext_suite() -> Result<SuiteExecutionResult> {
         None,
     )?;
     let authorized = media_join_request(true, true, true)?;
-    let permit = authorize_media_join(&authorized)?;
-    let key = permit.publish_frame_key(&exporter, PARTICIPANT_ID)?;
+    let permit = authorize_media_join(&authorized).map_err(|error| anyhow!(error.as_wire()))?;
+    let key = permit
+        .publish_frame_key(&exporter, PARTICIPANT_ID)
+        .map_err(|error| anyhow!(error.as_wire()))?;
     ensure!(
         key.len() == 32,
         "authorized media frame key is not 32 bytes"
@@ -174,12 +181,15 @@ fn media_join_request(
     service_allowlisted: bool,
     warning_acknowledged: bool,
 ) -> Result<MediaJoinRequest> {
-    let realm_id = arkret_sdk::RealmId::new(
+    let realm_id = arkret_wire::RealmId::new(
         "ak:realm:AVxu7KCm9qmiOqakDKBXUia9rbZ3NBurP875XbqG1rbs".to_owned(),
     )?;
-    let governance_binding = arkret_sdk::MlsGovernanceBindingPayload::realm(
+    let governance_binding = MlsGovernanceBindingPayload::realm(
         realm_id,
-        Some(arkret_sdk::EventId::from_digest([0x42; 32])),
+        Some(arkret_wire::EventId::from_digest(
+            arkret_canonical::DigestSuite::Sha256,
+            [0x42; 32],
+        )),
         6,
         7,
         3,
@@ -188,17 +198,15 @@ fn media_join_request(
         "policy_revision": 3,
         "media_service_decrypts": policy_authorized
     }));
-    let media_service_id = arkret_sdk::DidCoreId::new("ak:did_core:web:media.example".to_owned())?;
+    let media_service_id = arkret_wire::DidCoreId::new("ak:did_core:web:media.example".to_owned())?;
     let plaintext_visible_services_payload = service_allowlisted.then(|| {
-        arkret_sdk::PlaintextVisibleServicesPayload::new(vec![
-            arkret_sdk::PlaintextVisibleService::new(
-                media_service_id,
-                "media_service",
-                vec![arkret_sdk::PlaintextDataClassKind::MediaPlaintext],
-                vec!["video_transcoding".to_owned()],
-                arkret_sdk::PlaintextServiceVisibility::PrivatePlaintext,
-            ),
-        ])
+        PlaintextVisibleServicesPayload::new(vec![PlaintextVisibleService::new(
+            media_service_id,
+            "media_service",
+            vec![PlaintextDataClassKind::MediaPlaintext],
+            vec!["video_transcoding".to_owned()],
+            PlaintextServiceVisibility::PrivatePlaintext,
+        )])
     });
     Ok(MediaJoinRequest {
         realm_id: "ak:realm:AVxu7KCm9qmiOqakDKBXUia9rbZ3NBurP875XbqG1rbs".to_owned(),

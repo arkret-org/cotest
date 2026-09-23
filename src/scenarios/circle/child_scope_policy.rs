@@ -3,9 +3,8 @@
 //! Spec §3.4.2 normative rules:
 //!
 //! - `allow_any` — no additional constraint on the child's `effective_scope` / `scope_circle_id`.
-//! - `require_e2ee` — child's `effective_scope` MUST be MLS-backed: it MUST be an MLS Circle scope,
-//!   or the Realm-default MLS scope when the parent Realm declares
-//!   `Realm.encryption_profile=mls_rfc9420`.
+//! - `require_e2ee` — the selected child scope MUST have an active, governance-committed MLS
+//!   binding.
 //! - `require_same_scope` — child's `scope_circle_id` MUST equal the parent Space's
 //!   `scope_circle_id` (including both being `None`).
 //! - `require_scope_circle_id` — child's `scope_circle_id` MUST equal the named Circle in the
@@ -16,11 +15,8 @@
 
 use anyhow::{Result, anyhow};
 use arkret_identifiers::CircleId;
-use arkret_models_collaboration::governance::circle::{
-    enforce_child_scope_policy, enforce_child_scope_policy_with_circle_profile,
-};
+use arkret_models_collaboration::governance::circle::enforce_child_scope_policy;
 use arkret_models_collaboration::objects::space::ChildScopePolicy;
-use arkret_wire::EncryptionProfile;
 
 fn circle_a() -> Result<CircleId> {
     CircleId::new("ak:circle:AXqScWrSVbMRHSSnD37HwS-fgoTGt3HbHkvBV3SttpCU".to_owned())
@@ -64,33 +60,21 @@ pub async fn child_scope_policy_run() -> Result<()> {
 
     // ── allow_any: accepts both unscoped and any Circle scope.
     let allow_any = ChildScopePolicy::AllowAny {};
-    enforce_child_scope_policy(&allow_any, None, None, &EncryptionProfile::None)
+    enforce_child_scope_policy(&allow_any, None, None, false)
         .map_err(|e| anyhow!("allow_any MUST accept unscoped child; got: {e}"))?;
-    enforce_child_scope_policy(
-        &allow_any,
-        Some(&circle_a()?),
-        None,
-        &EncryptionProfile::None,
-    )
-    .map_err(|e| anyhow!("allow_any MUST accept circle_a child; got: {e}"))?;
+    enforce_child_scope_policy(&allow_any, Some(&circle_a()?), None, false)
+        .map_err(|e| anyhow!("allow_any MUST accept circle_a child; got: {e}"))?;
 
     // ── require_e2ee:
-    //    accept: child has an MLS-backed Circle scope.
-    //    accept: child is Realm-default AND Realm.encryption_profile=MlsRfc9420.
-    //    reject: child is Realm-default AND Realm.encryption_profile=None.
+    //    accept: selected Circle or Realm-default scope has an active committed MLS binding.
+    //    reject: selected scope has no active committed MLS binding.
     let require_e2ee = ChildScopePolicy::RequireE2ee {};
-    enforce_child_scope_policy_with_circle_profile(
-        &require_e2ee,
-        Some(&circle_a()?),
-        None,
-        &EncryptionProfile::None,
-        Some(&EncryptionProfile::MlsRfc9420),
-    )
-    .map_err(|e| anyhow!("require_e2ee MUST accept Circle-scoped child; got: {e}"))?;
-    enforce_child_scope_policy(&require_e2ee, None, None, &EncryptionProfile::MlsRfc9420).map_err(
-        |e| anyhow!("require_e2ee MUST accept Realm-default child under MLS Realm; got: {e}"),
-    )?;
-    match enforce_child_scope_policy(&require_e2ee, None, None, &EncryptionProfile::None) {
+    enforce_child_scope_policy(&require_e2ee, Some(&circle_a()?), None, true)
+        .map_err(|e| anyhow!("require_e2ee MUST accept Circle-scoped child; got: {e}"))?;
+    enforce_child_scope_policy(&require_e2ee, None, None, true).map_err(|e| {
+        anyhow!("require_e2ee MUST accept Realm-default child under MLS Realm; got: {e}")
+    })?;
+    match enforce_child_scope_policy(&require_e2ee, None, None, false) {
         Ok(()) => {
             return Err(anyhow!(
                 "require_e2ee MUST reject Realm-default child under non-MLS Realm; got accept"
@@ -109,35 +93,18 @@ pub async fn child_scope_policy_run() -> Result<()> {
     //    reject: parent_space=circle_a, child=circle_b.
     //    reject: parent_space=circle_a, child=None.
     let require_same = ChildScopePolicy::RequireSameScope {};
-    enforce_child_scope_policy(
-        &require_same,
-        Some(&circle_a()?),
-        Some(&circle_a()?),
-        &EncryptionProfile::None,
-    )
-    .map_err(|e| anyhow!("require_same_scope MUST accept matching scopes; got: {e}"))?;
-    enforce_child_scope_policy(&require_same, None, None, &EncryptionProfile::None)
+    enforce_child_scope_policy(&require_same, Some(&circle_a()?), Some(&circle_a()?), false)
+        .map_err(|e| anyhow!("require_same_scope MUST accept matching scopes; got: {e}"))?;
+    enforce_child_scope_policy(&require_same, None, None, false)
         .map_err(|e| anyhow!("require_same_scope MUST accept None == None; got: {e}"))?;
-    if enforce_child_scope_policy(
-        &require_same,
-        Some(&circle_b()?),
-        Some(&circle_a()?),
-        &EncryptionProfile::None,
-    )
-    .is_ok()
+    if enforce_child_scope_policy(&require_same, Some(&circle_b()?), Some(&circle_a()?), false)
+        .is_ok()
     {
         return Err(anyhow!(
             "require_same_scope MUST reject mismatched scopes (a vs b); got accept"
         ));
     }
-    if enforce_child_scope_policy(
-        &require_same,
-        None,
-        Some(&circle_a()?),
-        &EncryptionProfile::None,
-    )
-    .is_ok()
-    {
+    if enforce_child_scope_policy(&require_same, None, Some(&circle_a()?), false).is_ok() {
         return Err(anyhow!(
             "require_same_scope MUST reject None child vs circle_a parent; got accept"
         ));
@@ -150,26 +117,14 @@ pub async fn child_scope_policy_run() -> Result<()> {
     let require_id = ChildScopePolicy::RequireScopeCircleId {
         scope_circle_id: circle_a()?,
     };
-    enforce_child_scope_policy(
-        &require_id,
-        Some(&circle_a()?),
-        None,
-        &EncryptionProfile::None,
-    )
-    .map_err(|e| anyhow!("require_scope_circle_id MUST accept matching circle; got: {e}"))?;
-    if enforce_child_scope_policy(
-        &require_id,
-        Some(&circle_b()?),
-        None,
-        &EncryptionProfile::None,
-    )
-    .is_ok()
-    {
+    enforce_child_scope_policy(&require_id, Some(&circle_a()?), None, false)
+        .map_err(|e| anyhow!("require_scope_circle_id MUST accept matching circle; got: {e}"))?;
+    if enforce_child_scope_policy(&require_id, Some(&circle_b()?), None, false).is_ok() {
         return Err(anyhow!(
             "require_scope_circle_id MUST reject wrong circle; got accept"
         ));
     }
-    if enforce_child_scope_policy(&require_id, None, None, &EncryptionProfile::None).is_ok() {
+    if enforce_child_scope_policy(&require_id, None, None, false).is_ok() {
         return Err(anyhow!(
             "require_scope_circle_id MUST reject None child; got accept"
         ));

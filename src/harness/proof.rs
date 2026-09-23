@@ -70,11 +70,6 @@ pub fn refresh_typed_event_proof_with_signing_seed(
         .as_ref()
         .map(|proof| proof.verification_method.clone())
         .ok_or_else(|| anyhow!("Event {} has no signing proof", event.event_id))?;
-    let signer_evidence_ref = event
-        .producer_proof
-        .as_ref()
-        .and_then(|proof| proof.signer_resolution_evidence_ref.clone())
-        .ok_or_else(|| anyhow!("Event {} has no signer evidence", event.event_id))?;
     let signer_did = controller_did(&verification_method)?;
     let created_at = event.created_at;
     event.producer_proof = None;
@@ -93,8 +88,7 @@ pub fn refresh_typed_event_proof_with_signing_seed(
     arkret::signatures::sign_event(
         &mut authored,
         &signer,
-        &verification_method,
-        arkret::signatures::SignEventOptions::new(signer_evidence_ref).with_created_at(created_at),
+        arkret::signatures::SignEventOptions::new().with_created_at(created_at),
     )
     .with_context(|| format!("SDK Event signer rejected {}", authored.event_id()))?;
     *event = authored.into_event();
@@ -243,7 +237,7 @@ mod tests {
                 }
             },
             "sender_device_id": "ak:device:019f3b1c-76c8-7000-8000-000000000001",
-            "stream_head_ref": "ak:realm_commit:Ac08ROpjn3Ilj_UaM-_XLY93u4SUTptG0-Q-_CUDb5aS",
+            "authority_commit_id": "ak:realm_commit:Ac08ROpjn3Ilj_UaM-_XLY93u4SUTptG0-Q-_CUDb5aS",
             "signal_class": "session",
             "sent_at": "2026-07-07T00:00:00.000Z",
             "expires_at": "2026-07-07T00:00:30.000Z",

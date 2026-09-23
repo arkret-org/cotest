@@ -43,7 +43,7 @@ impl ConsumerSink {
             signal,
             authority,
             &signal.encrypted_payload.key_ref.group_state_ref,
-            &signal.stream_head_ref,
+            &signal.authority_commit_id,
             replay,
         )?;
         self.plaintexts.push(plaintext);
@@ -140,7 +140,7 @@ fn template() -> Result<SignalEnvelope> {
             DidCoreId::new("ak:did_core:web:station-a.example".to_owned())?,
         )),
         sender_device_id: Some(device.clone()),
-        stream_head_ref: RealmCommitId::new(
+        authority_commit_id: RealmCommitId::new(
             "ak:realm_commit:Ac08ROpjn3Ilj_UaM-_XLY93u4SUTptG0-Q-_CUDb5aS".to_owned(),
         )?,
         signal_class: SignalClass::Session,
@@ -222,7 +222,7 @@ fn assert_aad_field_binding(signal: &SignalEnvelope) -> Result<usize> {
             serde_json::json!("ak:device:01904100-0000-7000-8000-cccccccccccc"),
         ),
         (
-            "/stream_head_ref",
+            "/authority_commit_id",
             serde_json::json!("ak:realm_commit:AZ08ROpjn3Ilj_UaM-_XLY93u4SUTptG0-Q-_CUDb5aS"),
         ),
         ("/signal_class", serde_json::json!("setup")),

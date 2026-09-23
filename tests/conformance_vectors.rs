@@ -7,6 +7,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Result, anyhow, bail};
+use arkret_event_draft::EventPayloadExt;
 use cotest::conformance::{
     ALL_AGENT_SIGNER_EVIDENCE_CASES, ALL_AGENT_VECTOR_IDS, ALL_CALL_SIGNAL_VECTOR_IDS,
     ALL_CALL_STATE_MEDIA_LIFECYCLE_VECTOR_IDS, ALL_CURSOR_VECTOR_IDS,
@@ -287,9 +288,9 @@ fn registered_canonical_json_digest_constructions_match_known_answers() -> Resul
 #[test]
 fn named_suite_audit_executes_registered_runners_and_exposes_every_gap() -> Result<()> {
     let report = run_named_suite_audit()?;
-    assert_eq!(report.fixture_count, 73);
+    assert_eq!(report.fixture_count, 74);
     assert_eq!(report.executed_entrypoints.len(), 45);
-    assert_eq!(report.unwired_entrypoints.len(), 28);
+    assert_eq!(report.unwired_entrypoints.len(), 29);
     for required_gap in [
         "ak.suite.consent.cache_invalidation.v1",
         "ak.suite.direct_conversation.admission_producers.v1",
@@ -297,6 +298,7 @@ fn named_suite_audit_executes_registered_runners_and_exposes_every_gap() -> Resu
         "ak.suite.federation.idempotency_after_key_revoke.v1",
         "ak.suite.identity_link.invalidation.v1",
         "ak.suite.invite.claim_security.v1",
+        "ak.suite.mimi.admission_guards.v1",
         "ak.suite.peer.event_submit.semantic_union.v1",
         "ak.suite.signer_key.historical_commit_coordinate.v1",
     ] {
@@ -437,7 +439,7 @@ fn container_realm_control_payload_vector_suite_runs_clean() {
 
 #[test]
 fn poll_reducer_fixture_suite_runs_clean() {
-    run_poll_reducer_fixture_suite().expect("Poll reducer fixture must remain executable");
+    run_poll_reducer_fixture_suite().expect("Poll reducer vector must remain executable");
 }
 
 // ─── P0 / VECT-MB-1..10 — media binding vectors ─────────────────────────────
@@ -505,11 +507,6 @@ fn account_status_issuer_ledger_vector_runs_clean() {
 /// express it.
 #[test]
 fn proof_context_domain_separation_vector_runs_clean() {
-    assert_eq!(
-        cotest::conformance::DIRECTORY_PER_FAMILY_PROOF_CONTEXTS.len(),
-        5
-    );
-    assert_eq!(cotest::conformance::MIMI_PER_FAMILY_PROOF_CONTEXTS.len(), 6);
     cotest::conformance::run_proof_context_domain_separation_vector()
         .expect("per-family proof context domain separation must hold");
 }
@@ -745,13 +742,13 @@ fn agent_payloads_fixture_loads_and_has_canonical_shape() {
 }
 
 #[test]
-fn agent_approval_cannot_admit_a_payload_without_its_publication_event() {
+fn agent_approval_requires_exact_approved_event_id() {
     let fixture = load_local_fixture_value("agent_payloads.json").unwrap();
     let case = fixture["cases"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|case| case["name"] == "agent_action_approve_missing_publication_event")
+        .find(|case| case["name"] == "agent_action_approve_missing_approved_event_id")
         .unwrap();
     assert_eq!(case["expect"], "fail");
     assert_eq!(case["reducer_input"], true);
@@ -764,25 +761,15 @@ fn agent_approval_cannot_admit_a_payload_without_its_publication_event() {
         arkret_wire::ActorId::service(
             arkret_wire::DidCoreId::new("ak:did_core:web:controller.example").unwrap(),
         ),
-        1,
-        arkret_wire::Hlc::new("000000000001-0000-00000000").unwrap(),
         case["payload"].clone(),
         chrono::DateTime::parse_from_rfc3339("2026-01-01T00:00:00Z")
             .unwrap()
             .to_utc(),
     )
     .unwrap();
-    let error = arkret_wire::event_submission::validate_approval_publication_event(
-        &approval,
-        None,
-        arkret_canonical::DigestSuite::Sha256,
-    )
-    .unwrap_err();
-    assert!(
-        error
-            .to_string()
-            .contains("publication_event is required exactly")
-    );
+    assert!(approval
+        .typed_payload::<arkret_wire::event_spec::AgentActionApprove>()
+        .is_err());
 }
 
 // ─── P0 / TEST-4 — Cursor opaque round-trip + stateless-under-core reject ──

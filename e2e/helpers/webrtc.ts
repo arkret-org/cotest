@@ -128,7 +128,7 @@ export function buildSignalEnvelope(args: {
     scope_ref: args.scopeRef ?? { kind: "realm", realm_id: args.realmId },
     sender_actor_id: accountActorId(args.actorId),
     sender_device_id: args.deviceId,
-    stream_head_ref:
+    authority_commit_id:
       "ak:realm_commit:Ac08ROpjn3Ilj_UaM-_XLY93u4SUTptG0-Q-_CUDb5aS",
     signal_class: signalClass,
     sent_at: canonicalTimestamp(sentAt),
@@ -251,7 +251,7 @@ export async function prepareSignalEnvelope(
     if (!head) {
       throw new Error(`seeded Realm ${realmId} has no accepted commit head`);
     }
-    envelope.stream_head_ref = head.commit_id;
+    envelope.authority_commit_id = head.commit_id;
   }
   const mlsBasis = await ensureSignalMlsBasis(
     request,

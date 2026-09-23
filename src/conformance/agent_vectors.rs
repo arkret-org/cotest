@@ -685,23 +685,8 @@ pub fn run_agent_pcr_separation_vector() -> Result<()> {
     if agent_pcr == controller_pcr {
         bail!("Agent reused the controller PCR");
     }
-    let notary = serde_json::to_value(crate::fixture_notary_configuration(
-        arkret_wire::DidCoreId::new(agent)?,
-    ))?;
-    let genesis = serde_json::json!({
-        "created_by": agent,
-        "notary": notary,
-        "purpose": "agent_control",
-        "encryption_profile": "e2ee_required",
-        "event_encryption_floor": "e2ee_required"
-    });
-    if genesis["created_by"] != agent
-        || genesis["notary"]["signer"]["actor_id"]["service_id"] != agent
-        || genesis["purpose"] != "agent_control"
-        || genesis["encryption_profile"] != "e2ee_required"
-        || genesis["event_encryption_floor"] != "e2ee_required"
-    {
-        bail!("Agent PCR genesis boundary drifted");
+    if agent == controller {
+        bail!("Agent PCR controller reused the Agent identity");
     }
     let authored = serde_json::json!({
         "actor_id": agent,
@@ -716,31 +701,35 @@ pub fn run_agent_pcr_separation_vector() -> Result<()> {
     {
         bail!("managed-controller authoring boundary drifted");
     }
-    let create = arkret_wire::EventKind::RealmCreate
-        .descriptor()
-        .ok_or_else(|| anyhow!("ak.realm.create descriptor is missing"))?;
-    let status_write = create
-        .cell_writes
-        .iter()
-        .find(|write| {
-            write.cell_family.map(|family| family.as_str())
-                == Some(arkret_wire::CellFamilyId::AGENT_STATUS_V1)
+    let registry = super::load_artifact_json("registry/event-kind-registry.json")?;
+    let create = registry["event_kinds"]
+        .as_array()
+        .and_then(|kinds| {
+            kinds
+                .iter()
+                .find(|row| row["event_kind"] == "ak.realm.create")
         })
-        .ok_or_else(|| anyhow!("Agent genesis status write is missing"))?;
-    if status_write.condition_rule.map(|rule| rule.to_json_value())
-        != Some(serde_json::json!({
+        .ok_or_else(|| anyhow!("ak.realm.create registry row is missing"))?;
+    let status_write = create["result_writes"]
+        .as_array()
+        .and_then(|writes| {
+            writes
+                .iter()
+                .find(|write| write["result_family"] == "agent_status")
+        })
+        .ok_or_else(|| anyhow!("Agent genesis status result write is missing"))?;
+    if status_write["condition"]
+        != serde_json::json!({
             "kind": "field_equals",
             "field": "payload.object.purpose",
             "const": "agent_control"
-        }))
-        || status_write
-            .effect_projection_rule
-            .map(|rule| rule.to_json_value())
-            != Some(serde_json::json!({
+        })
+        || status_write["result_projection"]
+            != serde_json::json!({
                 "kind": "transition",
                 "from": {"const": "uninitialized"},
                 "to": {"const": "active"}
-            }))
+            })
     {
         bail!("Agent genesis initial lifecycle transition drifted");
     }

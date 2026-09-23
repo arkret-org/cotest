@@ -10,7 +10,6 @@ use arkret::{
 use arkret_identifiers::{
     Did, DidCoreId, EventId, Hash, Hlc, MessageId, RealmId, StrandId, project_did_to_core_id,
 };
-use arkret_models_collaboration::event_query::SealFrontierRequestBody;
 use arkret_models_collaboration::events_payloads::{
     ContentBlock, MessageCreatePayload, MessageRedactPayload, MessageRevisePayload,
 };
@@ -20,7 +19,7 @@ use arkret_models_collaboration::governance::membership_invite::{
 use arkret_models_collaboration::governance::moderation::{
     ModerationReportAcceptedTargetBasis, ModerationReportRequestBody,
 };
-use arkret_wire::{AccountId, ActorId, AuthContext, DidUrl, Event, ScopeRef};
+use arkret_wire::{AccountId, ActorId, DidUrl, Event, ScopeRef};
 use chrono::{DateTime, Utc};
 use reqwest::StatusCode;
 use serde::Serialize;
@@ -31,8 +30,8 @@ use super::client::TestActorClient;
 use super::proof::refresh_typed_event_proof_with_signing_seed;
 use super::server::ArkretServer;
 use super::{
-    NEXT_EVENT_SEQ, RealmBootstrapDraft, canonical_device_id, events_frontier_request_body,
-    member_join_payload, query_method, realm_create_payload_with_notary,
+    NEXT_EVENT_SEQ, RealmBootstrapDraft, canonical_device_id, member_join_payload, query_method,
+    realm_create_payload_for_station,
 };
 
 type RegisteredEventSigner = ([u8; 32], DidUrl, DidCoreId);
@@ -274,7 +273,7 @@ pub async fn create_realm(
     actor: &str,
     title: &str,
 ) -> Result<String> {
-    let draft = realm_create_payload_with_notary(
+    let draft = realm_create_payload_for_station(
         server.service_id().as_str(),
         &json!({
             "title": title,
@@ -282,14 +281,10 @@ pub async fn create_realm(
             "public": false,
             "plaintext_visible_services": [server.service_id()]
         }),
-        server.service_notary_signer().clone(),
     )?;
     let (realm_id, events) = realm_bootstrap_event_batch(actor, draft)?;
-    let events = events
-        .into_iter()
-        .map(arkret_wire::EventInitialSubmission::online)
-        .collect();
-    let request = arkret_wire::EventsSubmitBatchRequestBody { events };
+    let request = ordinary_realm_bootstrap_submission(events)?;
+    request.validate()?;
     expect_json(
         server
             .http()
@@ -332,7 +327,7 @@ pub async fn moderation_report_request(
         payload["effective_scope"] = serde_json::to_value(&effective_scope)?;
     }
     let request = ModerationReportRequestBody {
-        report_event: arkret_wire::EventInitialSubmission::online(
+        report_event: arkret_wire::EventAdmissionSubmission::new(
             actor
                 .author_event(
                     realm_id,
@@ -348,7 +343,6 @@ pub async fn moderation_report_request(
             target_ref: target_ref.to_owned(),
             effective_scope,
         },
-        arkret_canonical::DigestSuite::Sha256,
     )?;
     Ok(request)
 }
@@ -360,7 +354,7 @@ pub async fn create_realm_with_signing_seed(
     title: &str,
     signing_seed: [u8; 32],
 ) -> Result<String> {
-    let draft = realm_create_payload_with_notary(
+    let draft = realm_create_payload_for_station(
         server.service_id().as_str(),
         &json!({
             "title": title,
@@ -368,7 +362,6 @@ pub async fn create_realm_with_signing_seed(
             "public": false,
             "plaintext_visible_services": [server.service_id()]
         }),
-        server.service_notary_signer().clone(),
     )?;
     let (realm_id, events) = realm_bootstrap_event_batch_with_signing_seed(
         actor,
@@ -376,11 +369,8 @@ pub async fn create_realm_with_signing_seed(
         signing_seed,
         &verification_method_for_actor(actor),
     )?;
-    let events = events
-        .into_iter()
-        .map(arkret_wire::EventInitialSubmission::online)
-        .collect();
-    let request = arkret_wire::EventsSubmitBatchRequestBody { events };
+    let request = ordinary_realm_bootstrap_submission(events)?;
+    request.validate()?;
     expect_json(
         server
             .http()
@@ -417,53 +407,28 @@ pub(crate) fn realm_bootstrap_event_batch_for_device(
     )
 }
 
-/// The ordinary Realm genesis unit (`models/realm-and-space.md` section 2.5).
-///
-/// The `head_eq null` Control Move precondition every Realm genesis write
-/// carries: each of these cells is written exactly once, at genesis.
-fn head_eq_null_precondition(cell: &str) -> Result<arkret_wire::cbs::Precondition> {
-    Ok(arkret_wire::cbs::Precondition {
-        cell_id: arkret_wire::CellRef::new(cell.to_owned())?,
-        predicate: arkret_wire::cbs::Predicate {
-            op: arkret_wire::cbs::PredicateOp::HeadEq,
-            value: Some(Value::Null),
-            values: None,
-            predicate_id: None,
-        },
-    })
-}
-
 #[allow(clippy::too_many_arguments)]
 fn realm_bootstrap_followup_event(
     actor: &str,
     realm_id: &str,
     kind: &str,
     payload: Value,
-    actor_seq: u64,
-    predecessor: EventId,
-    cell: &str,
     signing_seed: [u8; 32],
     verification_method: &DidUrl,
     station_id: Option<&DidCoreId>,
 ) -> Result<Event> {
-    let mut event = event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
+    let event = event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
         actor,
         realm_id,
         kind,
         payload,
-        Some(actor_seq),
-        vec![predecessor],
+        None,
+        Vec::new(),
         signing_seed,
         verification_method,
         station_id,
         Vec::new(),
-        vec![head_eq_null_precondition(cell)?],
     );
-    event.authorization_ref = Some(
-        arkret_wire::AuthorizationRef::new(arkret_wire::REALM_AUTHORITY_ROOT_CELL)
-            .map_err(anyhow::Error::msg)?,
-    );
-    refresh_typed_event_proof_with_signing_seed(&mut event, signing_seed)?;
     Ok(event)
 }
 
@@ -493,6 +458,24 @@ pub fn realm_bootstrap_event_batch_with_signing_seed(
     )
 }
 
+pub(crate) fn ordinary_realm_bootstrap_submission(
+    events: Vec<Event>,
+) -> Result<arkret_models_collaboration::authority_commit::OrdinaryRealmBootstrapUnitSubmission> {
+    let millis = u64::try_from(Utc::now().timestamp_millis())?;
+    let sequence = NEXT_EVENT_SEQ.fetch_add(1, Ordering::Relaxed);
+    let key = format!(
+        "{:08x}-{:04x}-7000-8000-{:012x}",
+        millis >> 16,
+        millis & 0xffff,
+        sequence
+    );
+    Ok(arkret_models_collaboration::authority_commit::OrdinaryRealmBootstrapUnitSubmission {
+        unit_kind: arkret_models_collaboration::authority_commit::OrdinaryRealmBootstrapUnitKind::OrdinaryRealmBootstrap,
+        idempotency_key: arkret_wire::UuidV7::new(key.parse()?)?,
+        events: events.into_iter().map(arkret_wire::EventAdmissionSubmission::new).collect(),
+    })
+}
+
 fn realm_bootstrap_event_batch_with_signing_identity(
     actor: &str,
     draft: RealmBootstrapDraft,
@@ -517,32 +500,24 @@ fn realm_bootstrap_event_batch_with_signing_identity(
         "ak:realm:AbJKasiJAuypE52tDrie6RY7PJds4G20xbtLIvYRInJk",
         "ak.realm.create",
         create.to_value()?,
-        Some(0),
+        None,
         Vec::new(),
         signing_seed,
         verification_method,
         station_id,
         Vec::new(),
-        vec![head_eq_null_precondition(
-            "ak:cell:ak.component.realm.create.v1:null",
-        )?],
     );
     // The genesis carries no realm_id; the SDK resolved it from the Event, and
     // every follow-up in this batch MUST name that derived value or admission
     // reports `out_of_order_bootstrap`.
     let derived_realm_id = realm_event.realm_id.to_string();
     let mut events = vec![realm_event];
-    let mut push_followup = |kind: &str, payload: Value, cell: String| -> Result<EventId> {
-        let actor_seq = events.len() as u64;
-        let predecessor = events.last().expect("Realm create exists").event_id.clone();
+    let mut push_followup = |kind: &str, payload: Value| -> Result<EventId> {
         let event = realm_bootstrap_followup_event(
             actor,
             &derived_realm_id,
             kind,
             payload,
-            actor_seq,
-            predecessor,
-            &cell,
             signing_seed,
             verification_method,
             station_id,
@@ -554,76 +529,42 @@ fn realm_bootstrap_event_batch_with_signing_identity(
     push_followup(
         arkret_wire::event_kind_str::REALM_PROFILE,
         profile.to_value()?,
-        arkret_wire::null_subject_cell(arkret_wire::CellFamilyId::REALM_PROFILE_V1),
     )?;
     push_followup(
         arkret_wire::event_kind_str::REALM_POLICY_BUNDLE,
         policy_bundle.to_value()?,
-        arkret_wire::null_subject_cell(arkret_wire::CellFamilyId::REALM_POLICY_BUNDLE_V1),
     )?;
     push_followup(
         arkret_wire::event_kind_str::REALM_JOIN_RULE,
         join_rule.to_value()?,
-        arkret_wire::null_subject_cell(arkret_wire::CellFamilyId::REALM_JOIN_RULE_V1),
     )?;
     push_followup(
         arkret_wire::event_kind_str::REALM_HISTORY_ACCESS,
         history_access.to_value()?,
-        arkret_wire::null_subject_cell(arkret_wire::CellFamilyId::REALM_HISTORY_ACCESS_V1),
     )?;
     push_followup(
         arkret_wire::event_kind_str::REALM_DISCOVERY,
         discovery.to_value()?,
-        arkret_wire::null_subject_cell(arkret_wire::CellFamilyId::REALM_DISCOVERY_V1),
     )?;
     if let Some(alias) = alias {
-        push_followup(
-            arkret_wire::event_kind_str::REALM_ALIAS,
-            alias.to_value()?,
-            arkret_wire::null_subject_cell(arkret_wire::CellFamilyId::REALM_ALIAS_V1),
-        )?;
+        push_followup(arkret_wire::event_kind_str::REALM_ALIAS, alias.to_value()?)?;
     }
     if let Some(services) = plaintext_visible_services {
         push_followup(
             arkret_wire::event_kind_str::REALM_PLAINTEXT_VISIBLE_SERVICES,
             services.to_value()?,
-            arkret_wire::null_subject_cell(
-                arkret_wire::CellFamilyId::REALM_PLAINTEXT_VISIBLE_SERVICES_V1,
-            ),
         )?;
     };
     let creator_core_id = project_did_to_core_id(&Did::new(actor.to_owned())?)?;
     let creator_station_id = station_id
         .cloned()
         .unwrap_or_else(|| event_station_id(actor));
-    let creator_actor_id = ActorId::account(AccountId::new(creator_core_id, creator_station_id));
-    let creator_subject = arkret_canonical::canonical::canonical_json_bytes(&creator_actor_id)?;
-    let creator_subject = String::from_utf8(creator_subject)?;
-    let creator_cell_subject = arkret_wire::composite_subject(&[creator_subject])?;
+    let _creator_actor_id = ActorId::account(AccountId::new(creator_core_id, creator_station_id));
     push_followup(
         arkret_wire::event_kind_str::MEMBER_STATE,
         creator_member_join_payload_value(&derived_realm_id, actor, station_id)?,
-        arkret_wire::subject_cell(
-            arkret_wire::CellFamilyId::MEMBER_STATE_V1,
-            &creator_cell_subject,
-        ),
     )?;
-    for followup in &events[1..] {
-        arkret_schema::validate_registered_cell_writes_in_context(
-            followup,
-            arkret_schema::EventCellContractContext::OrdinaryRealmBootstrap,
-            arkret_canonical::DigestSuite::Sha256,
-        )
-        .map_err(|error| {
-            anyhow!(
-                "Realm bootstrap {} cell-write contract failed: {}",
-                followup.kind,
-                error
-            )
-        })?;
-    }
-    arkret_policy::realm_bootstrap::validate_realm_bootstrap_unit(&events)
-        .map_err(|error| anyhow!("Realm bootstrap validation failed: {error}"))?;
+    ordinary_realm_bootstrap_submission(events.clone())?.validate()?;
     Ok((derived_realm_id, events))
 }
 
@@ -737,7 +678,7 @@ pub async fn submit_event_with_signing_seed_and_verification_method(
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn prepare_event_submission_with_signing_identity(
     server: &ArkretServer,
-    token: &str,
+    _token: &str,
     actor: &str,
     realm_id: &str,
     kind: &str,
@@ -745,103 +686,18 @@ pub(crate) async fn prepare_event_submission_with_signing_identity(
     signing_seed: [u8; 32],
     verification_method: &DidUrl,
 ) -> Result<Event> {
-    let frontier = expect_json(
-        server
-            .http()
-            .request(query_method(), server.url("/_arkret/self/events/frontier"))
-            .json(&events_frontier_request_body(
-                actor,
-                server.service_id().as_str(),
-                Some(realm_id),
-            )?)
-            .bearer_auth(token),
-        StatusCode::OK,
-    )
-    .await?;
-    let state: arkret_models_collaboration::event_sync::EventsFrontierState =
-        serde_json::from_value(frontier.clone())?;
-    let arkret_models_collaboration::event_sync::EventsFrontierView::RealmActor(frontier) =
-        state.frontier
-    else {
-        return Err(anyhow!(
-            "combined selector returned the wrong frontier variant"
-        ));
-    };
-    frontier.validate()?;
-    let expected_actor_id = ActorId::account(AccountId::new(
-        project_did_to_core_id(&Did::new(actor.to_owned())?)?,
-        server.service_id().clone(),
-    ));
-    if frontier.realm_id.as_str() != realm_id || frontier.actor_id != expected_actor_id {
-        return Err(anyhow!("combined selector returned the wrong actor scope"));
-    }
-    let mut event = event_envelope_with_chain_and_signing_identity(
+    let event = event_envelope_with_chain_and_signing_identity(
         actor,
         realm_id,
         kind,
         payload,
-        Some(frontier.next_actor_seq),
-        frontier.frontier_event_ids,
+        None,
+        Vec::new(),
         signing_seed,
         verification_method,
         Some(server.service_id()),
     );
-    let event_kind = arkret_wire::EventKind::from(kind);
-    let is_control_move = event_kind.is_control_plane();
-    let is_ordinary_event = event_kind.is_data_plane();
-    if is_control_move || is_ordinary_event {
-        let seal_frontier =
-            realm_seal_frontier_for(server, token, realm_id, Duration::from_secs(10)).await?;
-        let state: arkret_models_collaboration::event_sync::SealFrontierState =
-            serde_json::from_value(seal_frontier)?;
-        let frontier = state.frontier;
-        if is_control_move {
-            event.seal_basis = Some(frontier.seal_basis());
-            let physical_millis = chrono::Utc::now().timestamp_millis();
-            event.hlc = Some(Hlc::new(format!("{physical_millis:012x}-0000-a13f9c2e"))?);
-        } else {
-            event.auth_context = Some(AuthContext {
-                authority_refs: frontier.seal_basis.leaves,
-            });
-        }
-        refresh_typed_event_proof_with_signing_seed(&mut event, signing_seed)?;
-    }
     Ok(event)
-}
-
-async fn realm_seal_frontier_for(
-    server: &ArkretServer,
-    token: &str,
-    realm_id: &str,
-    timeout: Duration,
-) -> Result<Value> {
-    let deadline = Instant::now() + timeout;
-    loop {
-        let response = server
-            .http()
-            .request(query_method(), server.url("/_arkret/self/seals/frontier"))
-            .json(&SealFrontierRequestBody {
-                realm_id: RealmId::new(realm_id.to_owned())?,
-            })
-            .bearer_auth(token)
-            .send()
-            .await?;
-        let status = response.status();
-        if status == StatusCode::OK {
-            return Ok(response.json().await?);
-        }
-        let body = response.text().await.unwrap_or_default();
-        if status == StatusCode::SERVICE_UNAVAILABLE
-            && body.contains("frontier_unavailable")
-            && Instant::now() < deadline
-        {
-            tokio::time::sleep(Duration::from_millis(50)).await;
-            continue;
-        }
-        return Err(anyhow!(
-            "expected Realm frontier HTTP 200, got {status}: {body}"
-        ));
-    }
 }
 
 pub fn event_envelope(actor: &str, realm_id: &str, kind: &str, payload: Value) -> Event {
@@ -854,16 +710,6 @@ pub fn event_envelope(actor: &str, realm_id: &str, kind: &str, payload: Value) -
         signing_seed,
         &verification_method,
     )
-}
-
-/// The `head_eq` guard naming the complete settled value a Control Move
-/// replaces.
-pub fn head_eq_precondition(cell: &str, settled_value: Value) -> arkret_wire::cbs::Precondition {
-    serde_json::from_value(json!({
-        "cell_id": cell,
-        "predicate": { "op": "head_eq", "value": settled_value },
-    }))
-    .expect("cotest head_eq precondition")
 }
 
 pub fn event_envelope_with_signing_seed(
@@ -977,7 +823,6 @@ fn event_envelope_with_chain_and_signing_identity_and_causal_refs(
         verification_method,
         station_id,
         causal_refs,
-        Vec::new(),
     )
 }
 
@@ -1001,46 +846,6 @@ fn harness_event_created_at() -> DateTime<Utc> {
     CLOCK()
 }
 
-/// Preconditions are signed content, so a Control Move that needs one has to
-/// declare it here rather than have it stamped onto an already-signed envelope.
-/// The `ak.component.invite.live_target.v1` `head_eq` this invite Move owes,
-/// read out of the registered contract.
-///
-/// `ak.invite.create` claims a free slot, so it asserts the registered free
-/// value. Every registered release (`accept` / `cancel` / `revoke` carrying
-/// `invitee_account_id`) asserts the slot's stored value, which is the
-/// occupying create Event id in `ak:event:` form — the SDK helper performs that
-/// retype so no call site can spell it `ak:invite:`. A Move that derives no
-/// slot write (a third-party invite, or a `send_failed` revoke, both of which
-/// omit the account) owes nothing.
-fn invite_live_target_preconditions(event: &Event) -> Vec<arkret_wire::cbs::Precondition> {
-    let Some(invitee) = event
-        .payload
-        .get("invitee_account_id")
-        .and_then(|value| serde_json::from_value::<arkret_wire::AccountId>(value.clone()).ok())
-    else {
-        return Vec::new();
-    };
-    let slot = match event.kind.as_str() {
-        arkret_wire::event_kind_str::INVITE_CREATE => arkret_schema::InviteLiveTargetSlot::Free,
-        arkret_wire::event_kind_str::INVITE_ACCEPT
-        | arkret_wire::event_kind_str::INVITE_CANCEL
-        | arkret_wire::event_kind_str::INVITE_REVOKE => {
-            let Some(invite_id) = event
-                .payload
-                .get("invite_id")
-                .and_then(Value::as_str)
-                .and_then(|value| arkret_identifiers::InviteId::new(value.to_owned()).ok())
-            else {
-                return Vec::new();
-            };
-            arkret_schema::InviteLiveTargetSlot::held_by_invite(&invite_id)
-        }
-        _ => return Vec::new(),
-    };
-    slot.precondition(&invitee).into_iter().collect()
-}
-
 #[allow(clippy::too_many_arguments)]
 fn event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
     actor: &str,
@@ -1053,12 +858,11 @@ fn event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
     verification_method: &DidUrl,
     station_id: Option<&DidCoreId>,
     causal_refs: Vec<String>,
-    preconditions: Vec<arkret_wire::cbs::Precondition>,
 ) -> Event {
-    let unique_seq = NEXT_EVENT_SEQ.fetch_add(1, Ordering::Relaxed);
-    let actor_seq = actor_seq.unwrap_or(unique_seq);
-    let hlc_logical = unique_seq & 0xffff;
-    let suffix = format!("01999999-0000-7000-8000-{unique_seq:012x}");
+    assert!(
+        actor_seq.is_none() && prev_event_ids.is_empty() && causal_refs.is_empty(),
+        "actor frontier and causal references belong to committed RealmCommit ordering, not producer Events"
+    );
     // A static timestamp cannot stay behind a causal predecessor: the Realm
     // bootstrap the SDK submits is stamped with the real clock, so any harness
     // Event pinned to a fixed past date lands before the Event it names in
@@ -1072,10 +876,7 @@ fn event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
     let station_id = station_id
         .cloned()
         .unwrap_or_else(|| event_station_id(actor));
-    // The `suffix` is no longer an id: spec encoding.md section 4.0 derives
-    // `event_id` from the Event's own content, so the harness builds with the
-    // derived constructor and callers read the id back off the built Event.
-    let mut event = arkret_wire::test_support::raw_event_at(
+    let event = arkret_wire::test_support::raw_event_at(
         kind,
         // A Realm genesis carries the closed genesis scope and no realm_id;
         // the Realm's id is derived from the Event (spec realm-and-space.md
@@ -1089,43 +890,10 @@ fn event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
         },
         actor_id.clone(),
         station_id,
-        actor_seq,
-        arkret_test_kit::pinned_hlc(u16::try_from(hlc_logical).expect("masked HLC counter")),
         payload,
         created_at,
     )
     .expect("SDK Event builder accepts cotest envelope");
-    event.prev_refs = prev_event_ids;
-    // governance-objects.md section 5.3: every registered write on the
-    // `ak.component.invite.live_target.v1` slot MUST carry that cell's
-    // `head_eq`. Deriving it here from the registered contract keeps every
-    // invite Move the harness builds conformant without each scenario
-    // re-spelling the cell — and, critically, without any of them spelling the
-    // stored value as `ak:invite:`, which never compares equal and would strand
-    // the slot. A caller that passed its own precondition for the same cell
-    // (a negative case proving the wrong spelling is refused) keeps it.
-    let mut preconditions = preconditions;
-    for derived in invite_live_target_preconditions(&event) {
-        if !preconditions
-            .iter()
-            .any(|existing| existing.cell_id == derived.cell_id)
-        {
-            preconditions.push(derived);
-        }
-    }
-    event.preconditions = preconditions;
-    event.causal_refs = causal_refs
-        .into_iter()
-        .map(|value| arkret_identifiers::Hash::new(value).expect("cotest causal ref digest"))
-        .collect();
-    // No cell writes are stamped here. The v1 Event wire has no producer
-    // `effects[]`: reducer writes are derived from `kind + payload` through the
-    // contract registry, so a client that tried to declare them would be
-    // asserting something the wire cannot carry.
-    event.unsigned.insert(
-        "local_operation_idempotency_alias".to_owned(),
-        json!(format!("ak:operation:{suffix}")),
-    );
     let signer = arkret_test_kit::seeded_signer_for_seed(
         signing_seed,
         actor_did,
@@ -1523,34 +1291,10 @@ mod realm_bootstrap_tests {
             Some(&json!("join")),
             "the bootstrap membership slot is a join"
         );
-        // The slot is the genesis write of the creator's own member cell, so it
-        // MUST carry `head_eq null`.
-        assert_eq!(
-            membership.preconditions.len(),
-            1,
-            "the creator member cell genesis write carries exactly one precondition"
-        );
-        let precondition = &membership.preconditions[0];
-        let actor_id = ActorId::account(AccountId::new(
-            DidCoreId::new(ACTOR_CORE.to_owned()).expect("valid actor id"),
-            DidCoreId::new(DEFAULT_STATION.to_owned()).expect("valid Station id"),
-        ));
-        let actor_json = String::from_utf8(
-            arkret_canonical::canonical::canonical_json_bytes(&actor_id)
-                .expect("canonical actor id"),
-        )
-        .expect("actor id is UTF-8");
-        let cell_subject =
-            arkret_wire::composite_subject(&[actor_json]).expect("canonical member subject");
-        assert_eq!(
-            precondition.cell_id.as_str(),
-            arkret_wire::subject_cell(arkret_wire::CellFamilyId::MEMBER_STATE_V1, &cell_subject,)
-        );
-        assert_eq!(
-            precondition.predicate.op,
-            arkret_wire::cbs::PredicateOp::HeadEq
-        );
-        assert_eq!(precondition.predicate.value, Some(Value::Null));
+        ordinary_realm_bootstrap_submission(events.clone())
+            .expect("typed submission")
+            .validate()
+            .expect("registered atomic unit accepts creator member slot");
         assert!(!membership.payload.contains_key("delivery_status"));
         assert!(!membership.payload.contains_key("delivery_binding"));
     }
@@ -1579,13 +1323,20 @@ mod realm_bootstrap_tests {
         let mut missing_profile = events.clone();
         missing_profile.remove(1);
         assert!(
-            arkret_policy::realm_bootstrap::validate_realm_bootstrap_unit(&missing_profile)
+            ordinary_realm_bootstrap_submission(missing_profile)
+                .expect("typed submission")
+                .validate()
                 .is_err()
         );
 
         let mut reordered = events;
         reordered.swap(1, 2);
-        assert!(arkret_policy::realm_bootstrap::validate_realm_bootstrap_unit(&reordered).is_err());
+        assert!(
+            ordinary_realm_bootstrap_submission(reordered)
+                .expect("typed submission")
+                .validate()
+                .is_err()
+        );
     }
 
     #[test]
