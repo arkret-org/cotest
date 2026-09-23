@@ -59,7 +59,7 @@ fn verify_signature(key: &VerifyingKey, bytes: &[u8], encoded: &str) -> Result<(
 pub fn run_unlock_proof_crypto_kat() -> Result<()> {
     let fixture: Value = serde_json::from_slice(&std::fs::read(fixture_path())?)?;
     ensure!(
-        fixture["version"] == "2026-09-24.2",
+        fixture["version"] == "2026-09-24.3",
         "fixture version drifted"
     );
     let case = fixture["cases"]
@@ -69,7 +69,7 @@ pub fn run_unlock_proof_crypto_kat() -> Result<()> {
         .find(|case| case["name"] == "unlock_proof")
         .context("unlock_proof case missing")?;
     ensure!(
-        case["expected"]["valid_unlock"] == "test_material_denied",
+        case["expected"]["valid_unlock"] == "test_signing_material_denied",
         "published key live expectation drifted"
     );
     let transcript = &case["crypto_transcript"];
