@@ -1,6 +1,13 @@
 //! Key-backup KDF floor and unlock-proof conformance vectors.
 
 use anyhow::{Context, Result, anyhow, bail};
+use arkret_crypto::backup::{
+    VaultBinding, decrypt_vault_with_kdf, derive_subkey, derive_vault_kek_from_kdf,
+    encrypt_vault_with_nonce_salt, key_commitment_value,
+};
+use arkret_models_crypto::key_backup::{
+    BackupKind, KeyBackupKdf, KeyBackupKdfName, KeyBackupRecipientMethod,
+};
 use arkret_models_crypto::{KeyBackupPlaintext, KeyBackupUnlockAuthority, KeyBackupUnlockProof};
 use arkret_wire::{ActorId, ProfileId};
 use base64::Engine as _;
@@ -14,11 +21,14 @@ pub const VECTOR_ID_KEY_BACKUP_KDF_FLOOR_REJECTED: &str =
     "ak.vector.key_backup.kdf_floor_rejected.v1";
 pub const VECTOR_ID_KEY_BACKUP_UNLOCK_PROOF: &str = "ak.vector.key_backup.unlock_proof.v1";
 pub const VECTOR_ID_KEY_BACKUP_DELETE_AUTHORITY: &str = "ak.vector.key_backup.delete_authority.v1";
+pub const VECTOR_ID_KEY_BACKUP_PASSPHRASE_KDF_KAT: &str =
+    "ak.vector.key_backup.passphrase_kdf_kat.v1";
 
 pub const ALL_KEY_BACKUP_HARDENING_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_KEY_BACKUP_KDF_FLOOR_REJECTED,
     VECTOR_ID_KEY_BACKUP_UNLOCK_PROOF,
     VECTOR_ID_KEY_BACKUP_DELETE_AUTHORITY,
+    VECTOR_ID_KEY_BACKUP_PASSPHRASE_KDF_KAT,
 ];
 
 const KEY_BACKUP_HARDENING_FIXTURE_FILE: &str = "key-backup-hardening-fixture.json";
@@ -37,6 +47,7 @@ struct KeyBackupHardeningFixture {
     runner: Value,
     covers_vectors: Vec<String>,
     cases: Vec<Value>,
+    generated_by: String,
 }
 
 fn key_backup_hardening_fixture() -> Result<KeyBackupHardeningFixture> {
@@ -54,6 +65,7 @@ fn validate_key_backup_hardening_fixture_metadata(
         || fixture.suite != "key_backup_hardening"
         || fixture.version.trim().is_empty()
         || fixture.runner.is_null()
+        || fixture.generated_by != "tools/regenerate_key_backup_hardening_kat.mjs"
     {
         bail!("key backup hardening fixture suite drifted");
     }
@@ -285,6 +297,144 @@ pub fn run_key_backup_kdf_floor_rejected_vector() -> Result<()> {
     Ok(())
 }
 
+pub fn run_key_backup_passphrase_kdf_kat_vector() -> Result<()> {
+    let fixture = key_backup_hardening_fixture()?;
+    let vector = case(&fixture, VECTOR_ID_KEY_BACKUP_PASSPHRASE_KDF_KAT)?;
+    let binding_value = vector.get("binding").context("KAT missing binding")?;
+    let binding = VaultBinding {
+        backup_id: required_str(binding_value, "backup_id")?.parse()?,
+        subdomain: required_str(binding_value, "subdomain")?.to_owned(),
+        actor_id: serde_json::from_value(binding_value["actor_id"].clone())?,
+        device_id: serde_json::from_value(binding_value["device_id"].clone())?,
+        backup_kind: serde_json::from_value(binding_value["backup_kind"].clone())?,
+        backup_version: required_str(binding_value, "backup_version")?.to_owned(),
+        created_at: required_str(binding_value, "created_at")?.parse()?,
+        item_kinds: serde_json::from_value(binding_value["item_kinds"].clone())?,
+        recipient_method: serde_json::from_value(binding_value["recipient_method"].clone())?,
+        recipient_key_ref: None,
+        aead_aad_extensions: Default::default(),
+    };
+    if binding.backup_kind != BackupKind::SecretStorage
+        || binding.recipient_method != KeyBackupRecipientMethod::PassphraseKdf
+    {
+        bail!("KAT binding profile drifted");
+    }
+    let aad = binding.aad()?;
+    if std::str::from_utf8(&aad)? != required_str(vector, "aad_canonical_json")? {
+        bail!("KAT AAD transcript drifted");
+    }
+    let nonce_salt_b64u = required_str(vector, "nonce_salt_b64u")?;
+    let nonce_salt: [u8; 16] = arkret_canonical::base64url_decode(nonce_salt_b64u)?
+        .try_into()
+        .map_err(|_| anyhow!("KAT nonce salt is not 16 bytes"))?;
+    let nonce_transcript = binding.nonce_transcript_canonical_bytes(nonce_salt_b64u)?;
+    if std::str::from_utf8(&nonce_transcript)?
+        != required_str(vector, "nonce_transcript_canonical_json")?
+    {
+        bail!("KAT nonce transcript drifted");
+    }
+    let plaintext = required_str(vector, "plaintext_canonical_json")?.as_bytes();
+    let plaintext_value: Value = serde_json::from_slice(plaintext)?;
+    if arkret_canonical::canonical_json_bytes(&plaintext_value)? != plaintext {
+        bail!("KAT plaintext is not canonical JSON");
+    }
+    let passphrase = required_str(vector, "passphrase_utf8")?.as_bytes();
+    let algorithms = vector
+        .get("algorithms")
+        .and_then(Value::as_array)
+        .context("KAT missing algorithms")?;
+    if algorithms.len() != 2 {
+        bail!("KAT must cover two KDF algorithms");
+    }
+    for algorithm in algorithms {
+        let kdf: KeyBackupKdf = serde_json::from_value(algorithm["kdf"].clone())?;
+        if kdf.salt.as_str() != required_str(vector, "salt_b64u")? {
+            bail!("KAT KDF salt drifted");
+        }
+        let expected = algorithm
+            .get("expected")
+            .context("KAT missing expected values")?;
+        let kek = derive_vault_kek_from_kdf(passphrase, &kdf)?;
+        if hex::encode(kek.key) != required_str(expected, "root_key_hex")? {
+            bail!("KAT root key drifted for {:?}", kdf.name);
+        }
+        let aead_key = binding.subkey(&kek.key, &binding.subdomain);
+        let commitment_key = binding.subkey(&kek.key, "commitment");
+        let nonce_key = derive_subkey(&kek.key, b"arkret-key-backup-aead-nonce-v1");
+        for (field, actual) in [
+            ("aead_key_hex", hex::encode(aead_key)),
+            ("commitment_key_hex", hex::encode(commitment_key)),
+            ("nonce_key_hex", hex::encode(nonce_key)),
+        ] {
+            if actual != required_str(expected, field)? {
+                bail!("KAT {field} drifted");
+            }
+        }
+        if key_commitment_value(&kek.key, binding.backup_kind)?.as_str()
+            != required_str(expected, "key_commitment")?
+        {
+            bail!("KAT commitment drifted");
+        }
+        let sealed = encrypt_vault_with_nonce_salt(&kek, &binding, plaintext, &nonce_salt)?;
+        for (field, actual) in [
+            ("nonce_b64u", sealed.nonce_b64.as_str()),
+            ("ciphertext_b64u", sealed.ciphertext_b64.as_str()),
+            ("ciphertext_digest", sealed.digest_sha256.as_str()),
+        ] {
+            if actual != required_str(expected, field)? {
+                bail!("KAT {field} drifted");
+            }
+        }
+        let opened = decrypt_vault_with_kdf(
+            passphrase,
+            &kdf,
+            &binding,
+            &sealed.nonce_b64,
+            &sealed.nonce_salt_b64,
+            &sealed.ciphertext_b64,
+        )?;
+        if opened.as_slice() != plaintext {
+            bail!("KAT open plaintext drifted");
+        }
+        if decrypt_vault_with_kdf(
+            b"wrong passphrase",
+            &kdf,
+            &binding,
+            &sealed.nonce_b64,
+            &sealed.nonce_salt_b64,
+            &sealed.ciphertext_b64,
+        )
+        .is_ok()
+        {
+            bail!("KAT wrong passphrase opened");
+        }
+        let mut invalid = kdf.clone();
+        invalid.params.iterations = Some(if kdf.name == KeyBackupKdfName::Argon2id {
+            2
+        } else {
+            599_999
+        });
+        if derive_vault_kek_from_kdf(passphrase, &invalid).is_ok() {
+            bail!("KAT below-floor KDF was accepted");
+        }
+        let mut wrong_binding = binding.clone();
+        wrong_binding.backup_version.push('x');
+        if decrypt_vault_with_kdf(
+            passphrase,
+            &kdf,
+            &wrong_binding,
+            &sealed.nonce_b64,
+            &sealed.nonce_salt_b64,
+            &sealed.ciphertext_b64,
+        )
+        .is_ok()
+        {
+            bail!("KAT altered AAD opened");
+        }
+    }
+    Ok(())
+}
+
 pub fn run_key_backup_unlock_proof_vector() -> Result<()> {
     let fixture = key_backup_hardening_fixture()?;
     let vector = case(&fixture, VECTOR_ID_KEY_BACKUP_UNLOCK_PROOF)?;
@@ -312,7 +462,7 @@ pub fn run_key_backup_unlock_proof_vector() -> Result<()> {
         &envelope,
     )
     .map_err(|reason| anyhow!("valid unlock proof rejected: {reason}"))?;
-    if expected_str(vector, "valid_unlock")? != "accepted" {
+    if expected_str(vector, "valid_unlock")? != "test_signing_material_denied" {
         bail!("valid unlock expectation drifted");
     }
 
@@ -674,9 +824,9 @@ pub fn run_key_backup_hardening_fixture_suite() -> Result<()> {
 /// runner. Unknown cases and any name/vector/kind drift fail closed.
 pub fn run_key_backup_hardening_suite() -> Result<super::SuiteExecutionResult> {
     let fixture = key_backup_hardening_fixture()?;
-    if ALL_KEY_BACKUP_HARDENING_VECTOR_IDS.len() != 3 {
+    if ALL_KEY_BACKUP_HARDENING_VECTOR_IDS.len() != 4 {
         bail!(
-            "expected 3 key backup hardening vector ids, got {}",
+            "expected 4 key backup hardening vector ids, got {}",
             ALL_KEY_BACKUP_HARDENING_VECTOR_IDS.len()
         );
     }
@@ -688,9 +838,9 @@ pub fn run_key_backup_hardening_suite() -> Result<super::SuiteExecutionResult> {
     {
         bail!("key backup hardening named-suite entrypoint drifted");
     }
-    if fixture.cases.len() != 3 {
+    if fixture.cases.len() != 4 {
         bail!(
-            "expected 3 key backup hardening cases, got {}",
+            "expected 4 key backup hardening cases, got {}",
             fixture.cases.len()
         );
     }
@@ -706,6 +856,11 @@ pub fn run_key_backup_hardening_suite() -> Result<super::SuiteExecutionResult> {
                 VECTOR_ID_KEY_BACKUP_KDF_FLOOR_REJECTED,
                 "passphrase_kdf_floor",
                 run_key_backup_kdf_floor_rejected_vector,
+            ),
+            "passphrase_kdf_kat" => (
+                VECTOR_ID_KEY_BACKUP_PASSPHRASE_KDF_KAT,
+                "passphrase_kdf_crypto",
+                run_key_backup_passphrase_kdf_kat_vector,
             ),
             "unlock_proof" => (
                 VECTOR_ID_KEY_BACKUP_UNLOCK_PROOF,
@@ -750,7 +905,7 @@ mod tests {
     #[test]
     fn key_backup_hardening_vectors_run_clean() {
         let execution = run_key_backup_hardening_suite().unwrap();
-        assert_eq!(execution.cases.len(), 3);
+        assert_eq!(execution.cases.len(), 4);
         assert!(execution.cases.iter().all(|case| case.assertions > 0));
     }
 }

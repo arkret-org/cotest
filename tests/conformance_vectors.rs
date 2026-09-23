@@ -50,7 +50,7 @@ fn key_backup_hardening_named_suite_executes_all_cases() -> Result<()> {
         execution.entrypoint,
         "ak.suite.crypto.key_backup_hardening.v1"
     );
-    assert_eq!(execution.cases.len(), 3);
+    assert_eq!(execution.cases.len(), 4);
     assert!(execution.cases.iter().all(|case| case.assertions > 0));
     Ok(())
 }

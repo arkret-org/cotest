@@ -239,7 +239,7 @@ argon2 = { workspace = true, default-features = false, features = ["alloc", "pas
 arkret = { workspace = true }
 arkret-bootstrap = { workspace = true }
 arkret-canonical = { workspace = true }
-arkret-crypto = { workspace = true, features = ["blob-aead", "secret-share"] }
+arkret-crypto = { workspace = true, features = ["backup", "blob-aead", "secret-share"] }
 arkret-event-draft = { workspace = true, features = ["test-support"] }
 arkret-hlc = { workspace = true }
 arkret-http-client = { workspace = true }
