@@ -73,7 +73,9 @@ Assert-True ($runnerScript -match 'initialize-joint-e2e-environment\.ps1') "the 
 Assert-True ($runnerScript -notmatch '\[switch\]\$SkipPreflight') "the test entry must not expose a bootstrap bypass"
 Assert-True ($runnerScript -match 'postgres:18\.6-alpine') "the runner must pin PostgreSQL 18.6 Alpine"
 Assert-True ($runnerScript -match 'GetEnvironmentVariable\("Path", "Machine"\)' -and $runnerScript -match 'GetEnvironmentVariable\("Path", "User"\)') "the entry must refresh PATH after child-process installation"
-Assert-True ($runnerScript -match '\$resolvedStationUrls = @\(if ' -and $runnerScript -match '\$resolvedInksonUrls = @\(if ') "single-server URL collections must remain arrays under strict mode"
+Assert-True ($runnerScript -match '\$allSolandBaseUrls = @\(\$SolandBaseUrl, \$solandServer2BaseUrl\) \+ @\(\$additionalServers \| ForEach-Object \{ \$_.SolandBaseUrl \}\) \| Where-Object \{ \$_ \}' -and
+    $runnerScript -match 'New-StationInternalChannelBindings\s+`\s*-StationBaseUrls \$allSolandBaseUrls' -and
+    $runnerScript -match '\$resolvedInksonUrls = @\(if ') "single-server Station and Inkson URL collections must remain arrays and feed indexed Station bindings under strict mode"
 Assert-True ($runnerScript -match '\$ServerCount -lt 3.*@three-server-p0') "broad runs without three servers must not select the fail-closed three-server P0 block"
 Assert-True ($runnerScript -match 'System\.IO\.StreamWriter' -and $runnerScript -match 'Write-Host \$safeLine') "Playwright output must stream while the suite is running"
 Assert-True ($runnerScript -match 'authorization\\s\*.*\[redacted\\\]') "streamed Playwright output must redact authorization credentials before display and persistence"

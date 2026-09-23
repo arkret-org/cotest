@@ -140,31 +140,40 @@ try {
         throw "Identity bootstrap must not guess an Account Authority identity"
     }
     if ($bootstrapConfig -notmatch 'SOLAND_ACCOUNT_AUTHORITY_URL="https://coauth.joint.example"') {
-        throw "Identity bootstrap must bind the managed Account Authority endpoint to its pinned key"
+        throw "Identity bootstrap must bind the managed Account Authority endpoint"
     }
-    if ($bootstrapConfig -notmatch 'SOLAND_ACCOUNT_AUTHORITY_PUBLIC_KEY_MULTIBASE=') {
-        throw "Station inception must preauthorize the deployment Account Authority public key"
+    if ($bootstrapConfig -match 'SOLAND_ACCOUNT_AUTHORITY_PUBLIC_KEY_MULTIBASE=') {
+        throw "Station must discover the Account Authority assertion key from its bound endpoint"
     }
     if ($bootstrapConfig -notmatch 'SOLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN="ak:trust_domain:local.host"' -or
         $bootstrapConfig -notmatch 'SOLAND_INTERNAL_AUTHORITY_SHARED_SECRET="test-introspection-server1"') {
         throw "Process identity bootstrap must emit the minimal internal authority peer binding"
     }
-    # The runner fills CoauthCommand after generating its managed config.
-    # That mutation must not erase the previously selected signing delegation.
+    # Filling the managed command must preserve the Account Authority origin and
+    # its bearer-protected operation URLs without restoring a runner-side key pin.
     $CoauthCommand = "generated-managed-coauth-command"
     Build-SolandCommand @processArguments | Out-Null
-    if ((Get-Content -LiteralPath $configPath -Raw) -notmatch 'SOLAND_ACCOUNT_AUTHORITY_PUBLIC_KEY_MULTIBASE=') {
-        throw "Generated CoauthCommand must preserve the managed authority delegation"
+    $generatedConfig = Get-Content -LiteralPath $configPath -Raw
+    if ($generatedConfig -notmatch 'SOLAND_ACCOUNT_AUTHORITY_URL="https://coauth.joint.example"' -or
+        $generatedConfig -notmatch 'SOLAND_SESSION_GRANT_INTROSPECTION_URL="https://coauth.joint.example/_arkret/gate/account/session-grants/introspect"' -or
+        $generatedConfig -notmatch 'SOLAND_AUTH_SESSION_LOGOUT_URL="https://coauth.joint.example/_arkret/gate/account/auth-sessions/logout"' -or
+        $generatedConfig -match 'SOLAND_ACCOUNT_AUTHORITY_PUBLIC_KEY_MULTIBASE=') {
+        throw "Generated CoauthCommand must preserve the bound Account Authority origin and operation URLs without a key pin"
     }
     $script:UseManagedCoauthAssertionKey = $false
     Build-SolandCommand @processArguments | Out-Null
-    if ((Get-Content -LiteralPath $configPath -Raw) -match 'SOLAND_ACCOUNT_AUTHORITY_PUBLIC_KEY_MULTIBASE=') {
-        throw "Caller-owned Coauth must not receive a fixture signing delegation"
+    $callerOwnedConfig = Get-Content -LiteralPath $configPath -Raw
+    if ($callerOwnedConfig -notmatch 'SOLAND_ACCOUNT_AUTHORITY_URL="https://coauth.joint.example"' -or
+        $callerOwnedConfig -match 'SOLAND_ACCOUNT_AUTHORITY_PUBLIC_KEY_MULTIBASE=') {
+        throw "Caller-owned Coauth must retain the same authority origin without a fixture key pin"
     }
     $script:UseManagedCoauthAssertionKey = $true
     $bootstrapDocker = Build-SolandDockerEnvironment @dockerArguments
     if ($bootstrapDocker.SOLAND_ACCOUNT_AUTHORITY_URL -ne $CoauthBaseUrl) {
-        throw "Docker identity bootstrap must bind the managed Account Authority endpoint to its pinned key"
+        throw "Docker identity bootstrap must bind the managed Account Authority endpoint"
+    }
+    if ($bootstrapDocker.Contains("SOLAND_ACCOUNT_AUTHORITY_PUBLIC_KEY_MULTIBASE")) {
+        throw "Docker Station must discover the Account Authority assertion key from its bound endpoint"
     }
     if ($bootstrapDocker.SOLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN -ne "ak:trust_domain:local.host" -or
         $bootstrapDocker.SOLAND_INTERNAL_AUTHORITY_SHARED_SECRET -ne "test-introspection-server1") {
