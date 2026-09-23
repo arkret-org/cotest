@@ -35,7 +35,7 @@ pub(super) fn envelope() -> Result<SignalEnvelope> {
         sender_device_id: Some(DeviceId::new(
             "ak:device:01904100-0000-7000-8000-bbbbbbbbbbbb",
         )?),
-        stream_head_ref: RealmCommitId::new(
+        authority_commit_id: RealmCommitId::new(
             "ak:realm_commit:Ac08ROpjn3Ilj_UaM-_XLY93u4SUTptG0-Q-_CUDb5aS",
         )?,
         signal_class: SignalClass::Session,

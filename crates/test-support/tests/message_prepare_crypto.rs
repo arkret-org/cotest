@@ -15,7 +15,7 @@ use arkret_models_crypto::{
 use arkret_wire::{
     AccountId, ActorId, Base64UrlString, BlobRef, CommitStreamRef, CommittedEventFullView,
     DetachedObjectSignature, DetachedSignatureAlgorithm, DetachedSignatureContext, DeviceId,
-    DidCoreId, DidUrl, EncryptedPayloadScheme, EventCommitSubmission, EventId, Hash,
+    DidCoreId, DidUrl, EncryptedPayloadScheme, EventAdmissionSubmission, EventId, Hash,
     MlsGroupCurrent, MlsWelcomeDelivery, MlsWelcomeDeliveryId, MlsWelcomeRecipientEndpoint,
     RealmCommit, RealmCommitAuthorityRef, RealmCommitId, RealmId, ScopeRef, StrandId,
 };
@@ -285,7 +285,7 @@ fn message_submission_admits_only_the_message_create_kind() {
     let event_id = EventId::from_digest(DigestSuite::Sha256, [23; 32]);
     let binding = MlsGovernanceBindingPayload::realm(realm.clone(), None, 0, 0, 0).unwrap();
     let wrong_kind = MessageSubmitRequestBody {
-        submission: EventCommitSubmission::new(mls_commit_like_event(
+        submission: EventAdmissionSubmission::new(mls_commit_like_event(
             &realm, &scope, &event_id, &binding,
         )),
     };

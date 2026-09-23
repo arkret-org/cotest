@@ -1,7 +1,7 @@
 {
   "profile": "ak.profile.mimi_components_vectors.v1",
   "version": "2026-05-07",
-  "comment": "MIMI <-> Arkret policy-component round-trip vectors per spec/v1/zh/extensions/mimi-interop.md §9.1 (component_type translation) + §9.2 (criticality translation). Each vector either declares a bidirectional mapping or marks a Arkret-only component that the facade must emit as application/vnd.arkret.component+json with appropriate MIMI unknown-handling. Round-trip means: (a) a Arkret component_type emitted to MIMI must round-trip back to the same component_type when ingested; (b) criticality preserved on both legs.",
+  "comment": "MIMI <-> Arkret typed current result family vectors per spec/v1/zh/extensions/mimi-interop.md §9.1 and criticality vectors per §9.2. Each event kind must write its registered result family. Arkret-only values use the private facade media type; criticality is preserved on both legs.",
   "criticality_mapping": {
     "comment": "Spec §9.2: Arkret criticality enum and the corresponding MIMI policy-component unknown-handling field.",
     "vectors": [
@@ -11,18 +11,17 @@
     ]
   },
   "component_mapping": {
-    "comment": "Selected entries from §9.1. `direction` values: bidirectional (round-trip-safe), arkret_only (facade emits private extension, no inverse), mimi_only (Arkret has no native form, MIMI ingestion only).",
+    "comment": "Selected registered result families from §9.1. `direction` values: bidirectional (round-trip-safe), arkret_only (facade emits private extension, no inverse).",
     "vectors": [
-      { "arkret_component_type": "ak.component.realm.join_rule.v1",            "arkret_kind": "ak.realm.join_rule",            "mimi_path": "participation.join_policy",                 "direction": "bidirectional" },
-      { "arkret_component_type": "ak.component.realm.history_access.v1",       "arkret_kind": "ak.realm.history_access",       "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json" },
-      { "arkret_component_type": "ak.component.realm.discovery.v1",            "arkret_kind": "ak.realm.discovery",            "mimi_path": "participation.discoverability",             "direction": "bidirectional" },
-      { "arkret_component_type": "ak.component.realm.asset_privacy_policy.v1", "arkret_kind": "ak.realm.asset_privacy_policy", "mimi_path": "asset",                                     "direction": "bidirectional" },
-      { "arkret_component_type": "ak.component.realm.policy_bundle.v1",    "arkret_kind": "ak.realm.policy_bundle",    "mimi_path": "policy_bundle",                          "direction": "bidirectional" },
-      { "arkret_component_type": "ak.component.realm.policy.v1",               "arkret_kind": "ak.realm.policy",               "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json" },
-      { "arkret_component_type": "ak.component.realm.plaintext_visible_services.v1", "arkret_kind": "ak.realm.plaintext_visible_services", "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json" },
-      { "arkret_component_type": "ak.component.realm.media_service.v1",        "arkret_kind": "ak.realm.media_service",        "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json" },
-      { "arkret_component_type": "ak.component.realm.schema.v1",               "arkret_kind": "ak.realm.schema",               "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json" },
-      { "arkret_component_type": "ak.component.consent.grant.v1",              "arkret_kind": "ak.consent.grant",              "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json", "comment": "Holder-private consent cell (or_set). MIMI consent operations map to grant/revoke Events on this cell; cross-protocol semantics is the resolved cell value, not a discrete component." }
+      { "arkret_result_family": "realm_join_rule",                     "arkret_kind": "ak.realm.join_rule",                   "mimi_path": "participation.join_policy",     "direction": "bidirectional" },
+      { "arkret_result_family": "realm_history_access",                "arkret_kind": "ak.realm.history_access",              "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json" },
+      { "arkret_result_family": "realm_discovery",                     "arkret_kind": "ak.realm.discovery",                   "mimi_path": "participation.discoverability", "direction": "bidirectional" },
+      { "arkret_result_family": "realm_asset_privacy_policy",          "arkret_kind": "ak.realm.asset_privacy_policy",        "mimi_path": "asset",                         "direction": "bidirectional" },
+      { "arkret_result_family": "realm_policy_bundle",                 "arkret_kind": "ak.realm.policy_bundle",               "mimi_path": "participation",                 "direction": "bidirectional" },
+      { "arkret_result_family": "realm_policy",                        "arkret_kind": "ak.realm.policy",                      "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json" },
+      { "arkret_result_family": "realm_plaintext_visible_services",    "arkret_kind": "ak.realm.plaintext_visible_services", "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json" },
+      { "arkret_result_family": "realm_media_service",                 "arkret_kind": "ak.realm.media_service",               "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json" },
+      { "arkret_result_family": "realm_schema",                        "arkret_kind": "ak.realm.schema",                      "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json" }
     ]
   }
 }

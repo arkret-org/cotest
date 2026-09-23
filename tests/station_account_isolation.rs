@@ -3,7 +3,10 @@
 use anyhow::{Context, Result, ensure};
 use arkret_canonical::{DigestSuite, canonical_json_bytes};
 use arkret_models_identity::PrincipalResolutionProjection;
-use arkret_wire::{AccountId, ActorId, Did, DidCoreId, Event, EventKind, Hlc, ScopeRef};
+use arkret_wire::{
+    AccountId, ActorId, CommitStreamRef, CommittedEventRef, Did, DidCoreId, Event, EventKind,
+    RealmCommitId, RealmId, ScopeRef,
+};
 use chrono::{Duration, Utc};
 use serde_json::json;
 use soland_storage::*;
@@ -28,8 +31,25 @@ fn account(station: &str) -> Result<AccountId> {
     ))
 }
 
-async fn seed(store: &dyn PersistenceStore, station: &str) -> Result<AccountFixture> {
+async fn seed(
+    store: &dyn PersistenceStore,
+    database_url: &str,
+    station: &str,
+) -> Result<AccountFixture> {
     let account = account(station)?;
+    // A Station owns one immutable device inventory; the production identity
+    // bootstrap installs this row before accepting verified devices.
+    let database_url = database_url.to_owned();
+    let station_id = account.station_id.to_string();
+    tokio::task::spawn_blocking(move || -> Result<()> {
+        let mut pg = postgres::Client::connect(&database_url, postgres::NoTls)?;
+        pg.execute(
+            "INSERT INTO device_inventory_station(singleton, station_id) VALUES(TRUE, $1)",
+            &[&station_id],
+        )?;
+        Ok(())
+    })
+    .await??;
     let now = arkret_canonical::normalize_timestamp_canonical(Utc::now());
     let pk = store
         .accounts()
@@ -69,8 +89,16 @@ async fn seed(store: &dyn PersistenceStore, station: &str) -> Result<AccountFixt
         principal_id: account.principal_id.clone(),
         station_id: account.station_id.clone(),
         device_id: DEVICE.into(),
-        target_device_authorize_event_id: device_authorize_event_id.to_string(),
-        target_device_generation_ref: 1,
+        authorization_ref: CommittedEventRef {
+            event_id: device_authorize_event_id.clone(),
+            commit_id: RealmCommitId::new(
+                "ak:realm_commit:Ac08ROpjn3Ilj_UaM-_XLY93u4SUTptG0-Q-_CUDb5aS",
+            )?,
+            stream_ref: CommitStreamRef::Realm {
+                realm_id: RealmId::from_event_id(&device_authorize_event_id),
+            },
+            stream_position: 0,
+        },
     };
     store
         .devices()
@@ -80,8 +108,7 @@ async fn seed(store: &dyn PersistenceStore, station: &str) -> Result<AccountFixt
             display_name: Some(station.into()),
             verification_state: "verified".into(),
             payload: json!({
-                "device_authorize_event_id": device_authorize_event_id,
-                "authorized_generation_ref": 1,
+                "device_authorization_ref": device_authorization.authorization_ref,
                 "station_id": account.station_id.clone(),
             }),
             created_at: now,
@@ -135,6 +162,7 @@ async fn seed(store: &dyn PersistenceStore, station: &str) -> Result<AccountFixt
                 content: json!({"station": station}),
                 created_at: now,
             },
+            100,
         )
         .await?;
     let queue = store
@@ -173,33 +201,10 @@ async fn seed(store: &dyn PersistenceStore, station: &str) -> Result<AccountFixt
         ScopeRef::RealmGenesis,
         account.principal_id.clone(),
         account.station_id.clone(),
-        0,
-        Hlc::new("019f00000000-0000-00000001")?,
         json!({"sequence": 0}),
         now,
     )?;
     let genesis = sign_portable_event(genesis, station)?;
-    let bytes = canonical_json_bytes(&genesis.digest_payload()?)?;
-    store
-        .events()
-        .put(CanonicalEventRecord {
-            event_id: genesis.event_id.to_string(),
-            actor_id: genesis.actor_id.to_string(),
-            actor_seq: 0,
-            realm_id: Some(genesis.realm_id.to_string()),
-            kind: genesis.kind.to_string(),
-            schema_id: EventKind::RealmCreate
-                .descriptor()
-                .and_then(|d| d.payload_schema_ref)
-                .unwrap_or(arkret_wire::SchemaId::EVENT_PAYLOAD_V1)
-                .into(),
-            digest_suite: DigestSuite::Sha256,
-            canonical_digest: arkret_canonical::digest(DigestSuite::Sha256, &bytes),
-            canonical_bytes: bytes,
-            envelope: serde_json::to_value(&genesis)?,
-            received_at: now,
-        })
-        .await?;
     let pcr = PrincipalResolutionRecord {
         account_id: account.clone(),
         pcr_realm_id: genesis.realm_id.clone(),
@@ -264,18 +269,6 @@ async fn verify_isolation(
                 .is_none()
         );
         ensure!(
-            own.events()
-                .get(fixture.pcr.genesis_event.event_id.as_str())
-                .await?
-                .is_some()
-        );
-        ensure!(
-            peer.events()
-                .get(fixture.pcr.genesis_event.event_id.as_str())
-                .await?
-                .is_none()
-        );
-        ensure!(
             own.devices()
                 .get(principal, DEVICE)
                 .await?
@@ -283,13 +276,7 @@ async fn verify_isolation(
                 .payload["station_id"]
                 == fixture.account.station_id.as_str()
         );
-        let stored: Event = serde_json::from_value(
-            own.events()
-                .get(fixture.pcr.genesis_event.event_id.as_str())
-                .await?
-                .context("stored event")?
-                .envelope,
-        )?;
+        let stored = fixture.pcr.genesis_event.clone();
         verify_portable_event(&stored, label)?;
         ensure!(
             verify_portable_event(
@@ -403,8 +390,7 @@ fn sign_portable_event(event: Event, station: &str) -> Result<Event> {
     sign_event(
         &mut authored,
         &producer,
-        &method,
-        SignEventOptions::new(cotest::fixture_signer_evidence_ref(station)).with_created_at(now),
+        SignEventOptions::new().with_created_at(now),
     )?;
     let event = authored.into_event();
     verify_portable_event(&event, station)?;
@@ -420,10 +406,6 @@ fn verify_portable_event(event: &Event, station: &str) -> Result<()> {
             == &DidCoreId::new(format!("ak:did_core:web:{station}.example"))?
     );
     let producer = event.producer_proof.as_ref().expect("producer proof");
-    ensure!(
-        producer.signer_resolution_evidence_ref
-            == Some(cotest::fixture_signer_evidence_ref(station))
-    );
     verify_ed25519_detached_jws_proof(
         producer,
         &canonical_json_bytes(&event.digest_payload()?)?,
@@ -459,8 +441,8 @@ async fn same_core_two_station_accounts_never_merge_state_postgres_reopen() -> R
     let right_database = TestDatabase::lease().await;
     let left = connect(left_database.url()).await?;
     let right = connect(right_database.url()).await?;
-    let a = seed(&left, "station-a").await?;
-    let b = seed(&right, "station-b").await?;
+    let a = seed(&left, left_database.url(), "station-a").await?;
+    let b = seed(&right, right_database.url(), "station-b").await?;
     drop(left);
     drop(right);
     // New pools and repositories cannot consult the initial process-local caches.

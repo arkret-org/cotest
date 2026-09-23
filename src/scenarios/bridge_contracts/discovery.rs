@@ -38,10 +38,9 @@ pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
     assert_eq!(integration["service_kind"], "station");
     assert_eq!(
         integration["dependencies"][0]["required_contract"],
-        // This is soland's private integration manifest (`/_soland/*`), not a
-        // spec-normative surface. soland declares the introspection dependency
-        // with the protocol-native operation id rather than a private alias.
-        arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_INTROSPECT_SESSION_GRANT_V1
+        // The private integration manifest discovers the configured peer
+        // through its canonical service description operation.
+        arkret_wire::ServiceOperationId::SERVER_READ_DESCRIBE_V1
     );
     assert_eq!(
         integration["surfaces"][0]["path"],

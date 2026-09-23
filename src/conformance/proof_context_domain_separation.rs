@@ -28,7 +28,7 @@
 use std::collections::BTreeSet;
 
 use anyhow::{Result, anyhow, bail};
-use arkret_models_collaboration::http_bodies::{
+use arkret_models_collaboration::mimi_operations::{
     MimiIdentifierQueryOutcome, MimiIdentifierQueryRequestBody, MimiKeyMaterialOutcome,
     MimiKeyMaterialRequestBody, MimiRequestConsentRequestBody,
 };
@@ -403,7 +403,8 @@ fn mimi_families() -> Result<Vec<FamilyUnderTest>> {
         }],
         "requester_id": REQUESTER_ID
     }))?;
-    let key_material_outcome: MimiKeyMaterialOutcome = serde_json::from_value(json!({}))?;
+    let key_material_outcome: MimiKeyMaterialOutcome =
+        serde_json::from_value(json!({"failures": []}))?;
     let key_material_request: MimiKeyMaterialRequestBody = serde_json::from_value(json!({
         "requester_id": REQUESTER_ID,
         "strand_id": "ak:strand:Aepgr15HbtERKfqPAh9SrfWBdihSvX_c94JvujvBS2f-",

@@ -30,8 +30,9 @@ import type {
   ActorId,
   InviteObject,
   CapabilityGrantObject,
+  CapabilityGrantPayload,
   CommitStreamHead,
-  EventCommitSubmission,
+  EventAdmissionSubmission,
   InviteDeliveryRequestBody,
   RealmGenesisObject,
   RealmObject,
@@ -911,7 +912,7 @@ export async function grantServiceCapabilityApi(
   // `capability-grant.schema.json` is a closed object; annotating the literal
   // makes an unregistered member or a misspelled resource kind a `tsc` error
   // instead of a reducer rejection. `proofs` is attached after signing.
-  const unsignedGrant: Omit<CapabilityGrantObject, "id" | "proofs"> = {
+  const unsignedGrant: CapabilityGrantPayload["grant"] = {
     schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
     issuer_id: accountActorId(args.ownerId, args.server),
@@ -1001,7 +1002,7 @@ export function buildCapabilityGrantEnvelope(args: CapabilityGrantEventArgs): {
   // `capability-grant.schema.json` is a closed object; annotating the literal
   // makes an unregistered member or a misspelled resource kind a `tsc` error
   // instead of a reducer rejection. `proofs` is attached after signing.
-  const unsignedGrant: Omit<CapabilityGrantObject, "id" | "proofs"> = {
+  const unsignedGrant: CapabilityGrantPayload["grant"] = {
     schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
     issuer_id: accountActorId(args.ownerId, args.server),
@@ -1196,6 +1197,7 @@ export async function acceptPreparedInviteApi(
       invite_token: delivery!.invite_token,
       authority_locator_hints: [
         {
+          service_kind: "station",
           service_id: solandServiceId(opts.server),
           source: "invite",
           endpoint_url: solandBaseUrl(opts.server),
@@ -2204,7 +2206,9 @@ export function commitStreamRefForScope(
   }
 }
 
-/// The `EventCommitSubmission` DTO: one producer Event and nothing else.
+/// The `EventAdmissionSubmission` DTO: one producer Event and any required
+/// approval signatures. This helper is used only for events without an
+/// approval-layer requirement.
 ///
 /// There is exactly one Event submission shape in the authority-commit
 /// protocol. A prepared submission therefore carries no lease, no precondition
@@ -2219,12 +2223,10 @@ export async function prepareSignedEventSubmissionApi(
   return { event: envelope };
 }
 
-/// Prepare several `EventCommitSubmission` bodies.
+/// Prepare several independent `EventAdmissionSubmission` bodies.
 ///
-/// This is not a batch submission: one `RealmCommit` admits exactly one Event.
-/// Callers that need several Events atomically rely on the Station's own
-/// transaction (MLS Commit plus its Welcome deliveries is the one wire shape
-/// that carries more than one object), not on a client-side batch.
+/// This helper returns separate requests. Registered atomic units use the
+/// closed branches of `self_submit_request` and must be constructed explicitly.
 export async function prepareSignedEventBatchSubmissionsApi(
   _request: APIRequestContext,
   _token: string,

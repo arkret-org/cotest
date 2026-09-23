@@ -77,11 +77,12 @@ fn inkson_rsvp_payload(
 ) -> Result<Value> {
     let calendar_fields =
         serde_json::from_value(calendar_subtree(attendees.0, attendees.1, attendees.2)?)?;
-    let basis = basis
-        .iter()
-        .cloned()
-        .map(arkret_identifiers::Hash::new)
-        .collect::<Result<Vec<_>, _>>()?;
+    let [basis_event_id] = basis else {
+        return Err(anyhow!(
+            "RSVP requires exactly one accepted schedule EventId"
+        ));
+    };
+    let basis_event_id = arkret_wire::EventId::new(basis_event_id.clone())?;
     // The RSVP is a write: its payload is settled before authoring, and the
     // submit path positions it on the actor chain.
     let operation = inkson::calendar::build_calendar_rsvp_event(
@@ -91,8 +92,7 @@ fn inkson_rsvp_payload(
         status,
         None,
         &calendar_fields,
-        basis,
-        None,
+        basis_event_id,
     )?;
     Ok(serde_json::to_value(operation.payload())?)
 }
@@ -126,33 +126,9 @@ async fn read_soland_product_projection_strand(
     .await
 }
 
-async fn inkson_schedule_frontier(
-    client: &TestActorClient,
-    realm_id: &str,
-    strand_id: &str,
-) -> Result<Vec<String>> {
-    let events = client
-        .sdk()
-        .events_read_all_pages(realm_id)
-        .await?
-        .events
-        .into_iter()
-        .enumerate()
-        .map(|(index, row)| {
-            row.into_event().ok_or_else(|| {
-                anyhow!(
-                    "calendar schedule frontier requires complete Events; row {index} is redacted or reference-locked"
-                )
-            })
-        })
-        .collect::<Result<Vec<_>>>()?;
+fn accepted_schedule_basis(submitted: &Value) -> Result<Vec<String>> {
     Ok(vec![
-        inkson::calendar::schedule_revision_winner(
-            &events,
-            strand_id,
-            arkret_canonical::DigestSuite::Sha256,
-        )?
-        .to_string(),
+        crate::harness::submitted_event_id(submitted)?.to_string(),
     ])
 }
 
@@ -202,13 +178,10 @@ async fn wait_for_bootstrap_seal(client: &TestActorClient, realm_id: &str) -> Re
         Duration::from_millis(100),
         || async {
             let frontier = client.realm_seal_frontier(realm_id).await?;
-            let state: arkret_models_collaboration::event_sync::SealFrontierState =
-                serde_json::from_value(frontier)?;
-            let frontier = state.frontier;
-            frontier
-                .sole_leaf()
-                .map(ToString::to_string)
-                .map_err(Into::into)
+            frontier["frontier"]["seal_basis"]["leaves"][0]
+                .as_str()
+                .map(ToOwned::to_owned)
+                .ok_or_else(|| anyhow!("Realm frontier has no seal_id"))
         },
     )
     .await
@@ -458,7 +431,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
         ));
     }
 
-    let create_frontier = inkson_schedule_frontier(&alice, &realm_id, &strand_id).await?;
+    let create_frontier = accepted_schedule_basis(&created)?;
     if create_frontier.is_empty() {
         return Err(anyhow!(
             "calendar create must publish a schedule revision head; without it a client cannot \
@@ -471,7 +444,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
     // blocklist and push rules remain holder-encrypted, so cross-recipient
     // Calendar fanout correctly fails closed until an authorized minimal
     // policy projection exists.
-    alice
+    let updated = alice
         .submit_event_with_causal_refs(
             &realm_id,
             "ak.strand.update",
@@ -501,7 +474,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
             calendar_grant_refs.clone(),
         )
         .await?;
-    let frontier = inkson_schedule_frontier(&alice, &realm_id, &strand_id).await?;
+    let frontier = accepted_schedule_basis(&updated)?;
 
     bob.submit_event_with_causal_refs(
         &realm_id,
@@ -816,7 +789,7 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
             "unknown namespaced display metadata was lost on decode/store/read: {projected}"
         ));
     }
-    let frontier = inkson_schedule_frontier(&alice, &realm_id, &strand_id).await?;
+    let frontier = accepted_schedule_basis(&created)?;
     let accepted = alice
         .author_event_with_causal_refs(
             &realm_id,
@@ -1004,7 +977,7 @@ pub async fn calendar_rsvp_without_cell_effect_is_rejected() -> Result<()> {
         .await?;
     let strand_id = created_strand_id(&strand_created)?;
 
-    let frontier = inkson_schedule_frontier(&alice, &realm_id, &strand_id).await?;
+    let frontier = accepted_schedule_basis(&strand_created)?;
 
     let event = alice
         .author_event(

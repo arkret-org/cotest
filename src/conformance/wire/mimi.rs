@@ -446,12 +446,11 @@ fn require_expected(case: &Value, expected: &str) -> Result<()> {
 
 /// W8 — MIMI Room Policy Component round-trip matrix.
 ///
-/// Spec extensions/mimi-interop.md §9.1 defines the Arkret `component_type`
+/// Spec extensions/mimi-interop.md §9.1 defines the Arkret typed result family
 /// ↔ MIMI policy-component mapping; §9.2 defines the criticality ↔ MIMI
-/// unknown-handling mapping. The cotest test cross-references every Arkret
-/// component named in the fixture against the active event-kind registry's
-/// component_type set, asserts that bidirectional vectors carry both legs
-/// (`arkret_component_type` + `mimi_path`), and asserts that
+/// unknown-handling mapping. The test cross-references each result family
+/// against the active event-kind registry's result_writes, asserts that
+/// bidirectional vectors carry both legs, and asserts that
 /// `direction = arkret_only` vectors declare the private facade media-type so
 /// the facade cannot silently impersonate a standard MIMI component.
 pub fn run_mimi_components_fixture_suite() -> Result<()> {
@@ -492,7 +491,7 @@ pub fn run_mimi_components_fixture_suite() -> Result<()> {
         }
     }
 
-    // §9.1 component_type round-trip
+    // §9.1 typed result family round-trip
     let component_section = fixture
         .get("component_mapping")
         .ok_or_else(|| anyhow!("mimi_components fixture missing component_mapping"))?;
@@ -501,22 +500,34 @@ pub fn run_mimi_components_fixture_suite() -> Result<()> {
         .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("component_mapping missing vectors"))?;
 
+    let registry = crate::conformance::load_artifact_json("registry/event-kind-registry.json")?;
+    let registered = registry["event_kinds"]
+        .as_array()
+        .ok_or_else(|| anyhow!("event-kind registry missing event_kinds[]"))?;
     let mut bidirectional = 0usize;
     let mut arkret_only = 0usize;
     for vector in component_vectors {
-        let component_type = required_str(vector, "arkret_component_type")?;
+        let component_type = required_str(vector, "arkret_result_family")?;
         let event_kind = required_str(vector, "arkret_kind")?;
         let descriptor = arkret_wire::EventKind::try_new(event_kind)
             .and_then(|kind| kind.descriptor())
             .ok_or_else(|| {
                 anyhow!("mimi component vector references unknown event kind {event_kind}")
             })?;
-        let writes_component = descriptor.cell_family == Some(component_type)
-            || descriptor.cell_writes.iter().any(|write| {
-                write.cell_family.map(|family| family.as_str()) == Some(component_type)
+        let writes_component = descriptor.reducer_input
+            && registered.iter().any(|row| {
+                row["event_kind"].as_str() == Some(event_kind)
+                    && row["status"].as_str() == Some("active")
+                    && row["result_writes"].as_array().is_some_and(|writes| {
+                        writes
+                            .iter()
+                            .any(|write| write["result_family"].as_str() == Some(component_type))
+                    })
             });
         if !writes_component {
-            bail!("mimi event kind {event_kind} does not write SDK component {component_type}");
+            bail!(
+                "mimi event kind {event_kind} does not write registered result family {component_type}"
+            );
         }
         let direction = required_str(vector, "direction")?;
         match direction {

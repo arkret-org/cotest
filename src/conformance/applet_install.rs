@@ -5,7 +5,6 @@ use arkret_identifiers::{AppletId, DeviceId, DidCoreId, Hash};
 use arkret_models_collaboration::events_payloads::SignatureMaterial;
 use arkret_models_collaboration::events_payloads::device_identity::{
     DeviceAuthorizationBindingKind, DeviceAuthorizePayload, DeviceOrPrincipalRef,
-    UnsignedDeviceAuthorizePayload,
 };
 use arkret_models_collaboration::governance::grant_constraint::GrantConstraint;
 use arkret_wire::{AccountId, NonEmptyString, RecoverySessionId};
@@ -533,7 +532,7 @@ fn build_delegated_device_payload(
     let device_id = DeviceId::new("ak:device:019a4100-0000-7000-8000-000000000001")?;
     let hpke_key = non_empty("z6LSCotestAppletDelegatedHpkeKey")?;
     let algorithms = vec![non_empty("ak.hpke_x25519_aead_chacha20poly1305.v1")?];
-    let device_key_algorithm = Some(non_empty("Ed25519")?);
+    let device_key_algorithm = non_empty("Ed25519")?;
     let not_before = arkret_canonical::parse_timestamp_canonical("2026-09-15T00:00:00.000Z")?;
     let authorized_by = DeviceOrPrincipalRef::Principal(match mutation {
         DelegatedDeviceMutation::AuthorizedByRegistrationService => service_id.clone(),
@@ -563,25 +562,7 @@ fn build_delegated_device_payload(
         _ => None,
     };
 
-    let mut unsigned = UnsignedDeviceAuthorizePayload::new(
-        device_id.clone(),
-        device_public_key_did.clone(),
-        hpke_key.clone(),
-        algorithms.clone(),
-        device_key_algorithm.clone(),
-        authorized_by.clone(),
-        scopes.clone(),
-        not_before,
-        expires_at,
-        DeviceAuthorizationBindingKind::AppletManagedDelegation,
-        recovery_session_id.clone(),
-        Some(applet_id.clone()),
-    )?;
-    if let Some(digest) = pairing_challenge_transcript_digest.clone() {
-        unsigned = unsigned.with_pairing_challenge_transcript_digest(digest);
-    }
-    let signature = device_key.sign(&unsigned.device_possession_signature_input(account_id)?);
-    let payload = DeviceAuthorizePayload {
+    let mut payload = DeviceAuthorizePayload {
         device_id,
         device_public_key_did,
         hpke_key,
@@ -592,13 +573,16 @@ fn build_delegated_device_payload(
         not_before,
         expires_at,
         authorization_binding_kind: DeviceAuthorizationBindingKind::AppletManagedDelegation,
-        device_signature: SignatureMaterial::NonEmptyString(non_empty(
-            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(signature.to_bytes()),
-        )?),
+        authorized_generation_ref: 1,
+        device_signature: SignatureMaterial::NonEmptyString(non_empty("unsigned")?),
         recovery_session_id,
         pairing_challenge_transcript_digest,
         applet_id: Some(applet_id.clone()),
     };
+    let signature = device_key.sign(&payload.device_possession_signature_input(account_id)?);
+    payload.device_signature = SignatureMaterial::NonEmptyString(non_empty(
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(signature.to_bytes()),
+    )?);
     // The signed type carries one rule the unsigned one cannot: the pairing
     // transcript digest belongs to `accepted_device` and to nothing else.
     payload

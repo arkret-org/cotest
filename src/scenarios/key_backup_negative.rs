@@ -3,12 +3,11 @@ use arkret_identifiers::{
     BackupId, BackupSeriesId, DeviceId, Did, EventId, project_did_to_core_id,
 };
 use arkret_models_crypto::{
-    BackupKind, HistorySecretRangeIndex, HistorySecretRangesItemKind, KeyBackup, KeyBackupAead,
-    KeyBackupAeadName, KeyBackupContentIndex, KeyBackupDomainSeparation, KeyBackupEncryption,
-    KeyBackupRecipientMethod, KeyBackupSignatureAlgorithm, UnsignedKeyBackup,
-    UnsignedKeyBackupAuthData,
+    BackupKind, KeyBackup, KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData,
+    KeyBackupDomainSeparation, KeyBackupEncryption, KeyBackupRecipientMethod,
+    KeyBackupSignatureAlgorithm, SecretStorageContentIndex, SecretStorageItemKind,
 };
-use arkret_wire::{Base64UrlString, DidUrl, EpochRange, HistoryEffectiveScope, RealmId, ScopeRef};
+use arkret_wire::{Base64UrlString, DidUrl, Hash};
 use chrono::{DateTime, Utc};
 use reqwest::StatusCode;
 use serde_json::Value;
@@ -201,18 +200,14 @@ fn backup_body(
 ) -> Result<KeyBackup> {
     let created_at = ts("2026-05-18T00:00:00.000Z")?;
     let actor_id = project_did_to_core_id(&Did::new(actor.to_owned())?)?;
-    let effective_scope = ScopeRef::Realm {
-        realm_id: RealmId::new("ak:realm:Aa1JCF6pnQnSgl8DnT6vNtPcFGPCxLnEY130o2lmyDSh".to_owned())?,
-    };
-    let history_scope = HistoryEffectiveScope::try_from(effective_scope)?;
-    let backup = KeyBackup {
+    let mut backup = KeyBackup {
         backup_id: BackupId::new(backup_id.to_owned())?,
         actor_id: arkret_wire::ActorId::account(arkret_wire::AccountId::new(
             actor_id.clone(),
             station_id.clone(),
         )),
         device_id: Some(DeviceId::new(device_id.to_owned())?),
-        backup_kind: BackupKind::MlsHistory,
+        backup_kind: BackupKind::SecretStorage,
         mixed_secret_storage: false,
         backup_version: "kb_1".to_owned(),
         created_at,
@@ -240,40 +235,44 @@ fn backup_body(
             subdomain: "test".to_owned(),
             aead_aad_extensions: Default::default(),
         },
-        contents: vec![KeyBackupContentIndex::HistorySecretRanges(
-            HistorySecretRangeIndex {
-                item_kind: HistorySecretRangesItemKind::Value,
-                effective_scope: history_scope,
-                ranges: vec![EpochRange {
-                    from_epoch: 0,
-                    to_epoch: 0,
-                }],
-                extra: Default::default(),
-            },
-        )],
-        ciphertext: "cotest-d3-ciphertext".to_owned(),
-        ciphertext_digest:
-            "sha256:099bf8f3386d21514c1fbd8282454fb2485018aa4cc3ede46d7f1fa6c3287d40".to_owned(),
+        contents: vec![SecretStorageContentIndex {
+            item_kind: SecretStorageItemKind::MlsGroupSecretsBackupKey,
+            secret_id: None,
+            secret_version: None,
+        }],
+        ciphertext: Base64UrlString::new("cotest-d3-ciphertext").map_err(|error| anyhow!(error))?,
+        ciphertext_digest: Hash::new(
+            "sha256:099bf8f3386d21514c1fbd8282454fb2485018aa4cc3ede46d7f1fa6c3287d40",
+        )?,
         plaintext_commitment: None,
-        auth_data: None,
+        auth_data: KeyBackupAuthData {
+            device_id: DeviceId::new(device_id.to_owned())?,
+            verification_method: DidUrl::new(format!("{actor}#device"))
+                .map_err(|error| anyhow!(error))?,
+            signature_algorithm: KeyBackupSignatureAlgorithm::Ed25519,
+            signature: Base64UrlString::new("AA").map_err(|error| anyhow!(error))?,
+            device_authorize_event_id: EventId::new(
+                "ak:event:ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM",
+            )?,
+        },
         retention: None,
         series_id: BackupSeriesId::new(backup_id.replacen("ak:backup:", "ak:backup_series:", 1))?,
         series_seq: 0,
         supersedes_id: None,
         supersedes_digest: None,
-        frontier_ref: None,
+        source_commit_ref: None,
         recovery_policy_ref: None,
         extra: Default::default(),
     };
-    let auth_data = UnsignedKeyBackupAuthData::new(
-        DeviceId::new(device_id.to_owned())?,
-        DidUrl::new(format!("{actor}#device")).map_err(|error| anyhow!(error))?,
-        KeyBackupSignatureAlgorithm::Ed25519,
-        EventId::new("ak:event:ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM")?,
-    )?;
-    UnsignedKeyBackup::new(backup, auth_data)?
-        .attach_signature(Base64UrlString::new("c2lnbmF0dXJl").map_err(|error| anyhow!(error))?)
-        .map_err(anyhow::Error::from)
+    let (signing_seed, _) = crate::harness::event_signing_identity_for_device(actor, device_id);
+    let signing_key = ed25519_dalek::SigningKey::from_bytes(&signing_seed);
+    let signature = ed25519_dalek::Signer::sign(&signing_key, &backup.signing_payload_bytes()?);
+    backup.auth_data.signature = Base64UrlString::new(base64::Engine::encode(
+        &base64::engine::general_purpose::URL_SAFE_NO_PAD,
+        signature.to_bytes(),
+    ))
+    .map_err(|error| anyhow!(error))?;
+    Ok(backup)
 }
 
 fn ts(value: &str) -> Result<DateTime<Utc>> {

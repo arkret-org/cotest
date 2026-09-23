@@ -6,7 +6,7 @@ use arkret_models_collaboration::governance::realm_lifecycle::{
 };
 use arkret_wire::{
     AccountId, ActorId, ConfidentialityClass, Did, DidCoreId, Event, EventKind, ExtensionManifest,
-    Hash, Hlc, ManifestResourceLimits, ProtocolLayerKind, RealmId, RegistryContentRef, ScopeRef,
+    Hash, ManifestResourceLimits, ProtocolLayerKind, RealmId, RegistryContentRef, ScopeRef,
     StrandId, WireError, event_spec,
 };
 use chrono::{TimeZone as _, Utc};
@@ -15,7 +15,6 @@ const REALM_ID: &str = "ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir";
 const ACTOR_DID: &str = "did:webvh:z6mkfixture:alice.example";
 const ACTOR_ID: &str = "ak:did_core:webvh:z6mkfixture";
 const STRAND_ID: &str = "ak:strand:AT3ARBdH1FM6GjXK9ulTx-YMvQOXys39dlUzZV6KyID9";
-const HLC: &str = "01970e589d21-0001-a13f9c2e";
 
 fn scope() -> ScopeRef {
     ScopeRef::Realm {
@@ -45,7 +44,7 @@ fn message_event() -> Event {
     );
     TypedEventDraft::<event_spec::MessageCreate>::new(scope(), actor(), payload)
         .unwrap()
-        .author_with_digest_suite(7, Hlc::new(HLC).unwrap(), created_at(), DigestSuite::Sha256)
+        .author_with_digest_suite(created_at(), DigestSuite::Sha256)
         .unwrap()
         .into_event()
 }
@@ -68,26 +67,26 @@ fn typed_event_cross_family_canonical_kats_are_fixed() {
         },
     )
     .unwrap()
-    .author_with_digest_suite(7, Hlc::new(HLC).unwrap(), created_at(), DigestSuite::Sha256)
+    .author_with_digest_suite(created_at(), DigestSuite::Sha256)
     .unwrap();
 
     let message_bytes = canonical_json_bytes(&message.digest_payload().unwrap()).unwrap();
     let policy_bytes = canonical_json_bytes(&policy.digest_payload().unwrap()).unwrap();
     assert_eq!(
         message_bytes,
-        br#"{"actor_id":{"account_id":{"principal_id":"ak:did_core:webvh:z6mkfixture","station_id":"ak:did_core:web:principal.example"},"kind":"account"},"actor_seq":7,"created_at":"2026-08-09T01:02:03.000Z","hlc":"01970e589d21-0001-a13f9c2e","kind":"ak.message.create","payload":{"content":{"body":"typed authoring KAT","format":"plain","kind":"ak.content.text"},"strand_id":"ak:strand:AT3ARBdH1FM6GjXK9ulTx-YMvQOXys39dlUzZV6KyID9","track_name":"main"},"prev_refs":[],"realm_id":"ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir","scope_ref":{"kind":"realm","realm_id":"ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir"}}"#
+        br#"{"actor_id":{"account_id":{"principal_id":"ak:did_core:webvh:z6mkfixture","station_id":"ak:did_core:web:principal.example"},"kind":"account"},"created_at":"2026-08-09T01:02:03.000Z","kind":"ak.message.create","payload":{"content":{"body":"typed authoring KAT","format":"plain","kind":"ak.content.text"},"strand_id":"ak:strand:AT3ARBdH1FM6GjXK9ulTx-YMvQOXys39dlUzZV6KyID9","track_name":"main"},"realm_id":"ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir","scope_ref":{"kind":"realm","realm_id":"ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir"}}"#
     );
     assert_eq!(
         policy_bytes,
-        br#"{"actor_id":{"account_id":{"principal_id":"ak:did_core:webvh:z6mkfixture","station_id":"ak:did_core:web:principal.example"},"kind":"account"},"actor_seq":7,"created_at":"2026-08-09T01:02:03.000Z","hlc":"01970e589d21-0001-a13f9c2e","kind":"ak.realm.policy","payload":{"state":"active","value":{"policy_id":"ak:policy:01964137-0000-7000-8000-000000000001"}},"prev_refs":[],"realm_id":"ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir","scope_ref":{"kind":"realm","realm_id":"ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir"}}"#
+        br#"{"actor_id":{"account_id":{"principal_id":"ak:did_core:webvh:z6mkfixture","station_id":"ak:did_core:web:principal.example"},"kind":"account"},"created_at":"2026-08-09T01:02:03.000Z","kind":"ak.realm.policy","payload":{"state":"active","value":{"policy_id":"ak:policy:01964137-0000-7000-8000-000000000001"}},"realm_id":"ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir","scope_ref":{"kind":"realm","realm_id":"ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir"}}"#
     );
     assert_eq!(
         message.event_id.as_str(),
-        "ak:event:AWikb5OPAa26egg-osb9gFqgnUudPtdwILWVjOXTpcBH"
+        "ak:event:AQYQ-dOi59Eekerc6JagP9RAtSGa_jBhUjm_ybcPiH0B"
     );
     assert_eq!(
         policy.event_id.as_str(),
-        "ak:event:AW6r1cwp6xMj-WGK8njECpbQJvrYUJDhmNIdRqoH0cJ6"
+        "ak:event:AcwJFM37TbVr8hSpP44P2tZnFYPumWNhhV34IRrbUpQD"
     );
     assert_ne!(message_bytes, policy_bytes);
 }
@@ -166,8 +165,6 @@ fn extension_authoring_keeps_unknown_kinds_open_but_manifest_bound() {
         .author(arkret_event_draft::EventAuthoringContext {
             scope_ref: scope(),
             actor_id: actor(),
-            actor_seq: 7,
-            hlc: Hlc::new(HLC).unwrap(),
             created_at: created_at(),
             digest_suite: DigestSuite::Sha256,
         })

@@ -21,13 +21,12 @@
 //! cancel envelope is an idempotent duplicate rather than a second transition.
 
 use anyhow::{Result, anyhow};
-use chrono::{DateTime, Duration as ChronoDuration, Utc};
+use chrono::Duration as ChronoDuration;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{
-    CanonicalJsonBody, TestActorClient, TestServerGroup, actor_core_id, event_envelope_with_chain,
-    events_frontier_request_body, events_query_for_realm, expect_json, refresh_typed_event_proof,
+    CanonicalJsonBody, TestActorClient, TestServerGroup, actor_core_id, expect_json,
 };
 use crate::transcripts::record_vector_event;
 
@@ -36,7 +35,7 @@ use crate::transcripts::record_vector_event;
 #[derive(Debug, PartialEq, Eq)]
 struct RealmObservation {
     event_ids: Vec<String>,
-    seal_id: String,
+    commit_head_id: String,
     invite_states: Vec<Value>,
 }
 
@@ -45,24 +44,19 @@ async fn observe(
     realm_id: &str,
     invite_subject: &str,
 ) -> Result<RealmObservation> {
-    let listed = expect_json(
-        client
-            .query("/_arkret/self/events")
-            .json(&events_query_for_realm(realm_id, 200)?),
-        StatusCode::OK,
-    )
-    .await?;
-    let event_ids = listed["events"]
+    let committed = client.realm_seal_frontier(realm_id).await?;
+    let events = committed["committed_events"]
         .as_array()
-        .ok_or_else(|| anyhow!("events query missing events array: {listed}"))?
+        .ok_or_else(|| anyhow!("committed stream scan missing events: {committed}"))?;
+    let event_ids = events
         .iter()
-        .filter_map(|event| event["event_id"].as_str().map(ToOwned::to_owned))
+        .filter_map(|item| item["commit"]["event_ref"].as_str().map(ToOwned::to_owned))
         .collect();
-    let frontier = client.realm_seal_frontier(realm_id).await?;
-    let state: arkret_models_collaboration::event_sync::SealFrontierState =
-        serde_json::from_value(frontier.clone())
-            .map_err(|error| anyhow!("invalid Realm frontier `{frontier}`: {error}"))?;
-    let seal_frontier = state.frontier;
+    let commit_head_id = events
+        .last()
+        .and_then(|item| item["commit"]["commit_id"].as_str())
+        .ok_or_else(|| anyhow!("committed Realm stream has no head: {committed}"))?
+        .to_owned();
     let invites = expect_json(
         client.get("/_arkret/self/authz/invites").query(&[
             ("subject", invite_subject),
@@ -90,7 +84,7 @@ async fn observe(
         .unwrap_or_default();
     Ok(RealmObservation {
         event_ids,
-        seal_id: seal_frontier.sole_leaf()?.to_string(),
+        commit_head_id,
         invite_states,
     })
 }
@@ -104,47 +98,7 @@ async fn author_invite_move(
     kind: &str,
     payload: Value,
 ) -> Result<arkret_wire::Event> {
-    let frontier = expect_json(
-        actor
-            .query("/_arkret/self/events/frontier")
-            .json(&events_frontier_request_body(
-                actor.actor.as_str(),
-                actor.service_id(),
-                Some(realm_id),
-            )?),
-        StatusCode::OK,
-    )
-    .await?;
-    let state: arkret_models_collaboration::event_sync::EventsFrontierState =
-        serde_json::from_value(frontier)?;
-    let arkret_models_collaboration::event_sync::EventsFrontierView::RealmActor(actor_frontier) =
-        state.frontier
-    else {
-        return Err(anyhow!("combined selector returned the wrong variant"));
-    };
-    actor_frontier.validate()?;
-    let created_at = arkret_canonical::format_timestamp_canonical(chrono::Utc::now());
-    let mut event = event_envelope_with_chain(
-        &actor.actor,
-        realm_id,
-        kind,
-        payload,
-        actor_frontier.next_actor_seq,
-        None,
-    );
-    event.prev_refs = actor_frontier.frontier_event_ids;
-    event.created_at = DateTime::parse_from_rfc3339(&created_at)?.with_timezone(&Utc);
-    let seal_frontier = actor.realm_seal_frontier(realm_id).await?;
-    let state: arkret_models_collaboration::event_sync::SealFrontierState =
-        serde_json::from_value(seal_frontier)?;
-    let seal_frontier = state.frontier;
-    event.seal_basis = Some(seal_frontier.seal_basis());
-    let physical_millis = chrono::Utc::now().timestamp_millis();
-    event.hlc = Some(arkret_identifiers::Hlc::new(format!(
-        "{physical_millis:012x}-0000-a13f9c2e"
-    ))?);
-    refresh_typed_event_proof(&mut event)?;
-    Ok(event)
+    actor.author_event(realm_id, kind, payload).await
 }
 
 async fn submit_invite_move(
@@ -222,6 +176,14 @@ pub async fn invite_frozen_prestate_is_enforced_before_acceptance() -> Result<()
     assert_eq!(status, StatusCode::OK, "invite create: {body}");
     let create_event_id = crate::harness::submitted_event_id(&body)?;
     let invite_id = arkret_identifiers::InviteId::from_event_id(&create_event_id).to_string();
+
+    // Provision cancel authority before the zero-write baseline. The harness
+    // would otherwise issue its narrow self-grant while authoring the first
+    // negative Event, making the baseline change for an unrelated reason.
+    let (cancel_grant_id, _) = alice
+        .grant_realm_actions_to(&realm_id, &alice.actor, &["ak.invite.cancel"])
+        .await?;
+    alice.remember_grant(&realm_id, &cancel_grant_id, &["ak.invite.cancel"]);
 
     // Predicate 1 — a directed cancel with NO `payload.invitee_account_id`.
     let before = observe(&alice, &realm_id, &bob_core_id).await?;
@@ -371,13 +333,13 @@ pub async fn invite_frozen_prestate_is_enforced_before_acceptance() -> Result<()
                 "status": missing_status.as_u16(),
                 "reason": error_reason(&missing_body),
                 "events_appended": after_missing.event_ids.len() - before.event_ids.len(),
-                "seal_advanced": before.seal_id != after_missing.seal_id,
+                "commit_advanced": before.commit_head_id != after_missing.commit_head_id,
             },
             "mismatched_invitee": {
                 "status": mismatch_status.as_u16(),
                 "reason": error_reason(&mismatch_body),
                 "events_appended": after_mismatch.event_ids.len() - before.event_ids.len(),
-                "seal_advanced": before.seal_id != after_mismatch.seal_id,
+                "commit_advanced": before.commit_head_id != after_mismatch.commit_head_id,
             },
             "inkson_direct_cancel_invitee": inkson_payload["invitee_account_id"].clone(),
             "accepted_events_appended": after_accept.event_ids.len() - before.event_ids.len(),

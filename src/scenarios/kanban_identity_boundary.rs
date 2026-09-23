@@ -12,9 +12,9 @@
 //!    identifier.
 //! 2. **receipt** — the accepted `event_id` is the authored one, verbatim, and the List / Card ids
 //!    are `retype(event_id)` of their own creates.
-//! 3. **backfill** — the events read view carries exactly one create per object, and echoes
-//!    `unsigned.local_operation_idempotency_alias` verbatim, which is what joins a live-sync
-//!    backfill row to the optimistic row instead of materializing a second object.
+//! 3. **backfill** — each authored Event ID resolves to exactly one accepted RealmCommit in its
+//!    scope stream. The holder joins its local operation handle to that canonical Event ID when it
+//!    receives the submit receipt.
 //! 4. **retry** — a byte-identical resubmit is an idempotent duplicate of the SAME `event_id`: one
 //!    user operation, not a second one.
 
@@ -23,7 +23,7 @@ use arkret_wire::Event;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
-use crate::harness::{TestActorClient, TestServerGroup, events_query_for_realm, expect_json};
+use crate::harness::{TestActorClient, TestServerGroup, expect_json};
 use crate::scenarios::identity_test_support::actor_did_for_service_did;
 
 pub async fn kanban_creates_keep_one_identity_across_receipt_backfill_and_retry() -> Result<()> {
@@ -54,7 +54,7 @@ pub async fn kanban_creates_keep_one_identity_across_receipt_backfill_and_retry(
     .map_err(|error| anyhow!("inkson board builder: {error:#}"))?
     .build_sdk_event("cotest")
     .map_err(|error| anyhow!("inkson board build: {error:#}"))?;
-    let (board_event_id, _) = submit_operation(&alice, &realm_id, &board).await?;
+    let (board_event_id, board_envelope) = submit_operation(&alice, &realm_id, &board).await?;
     let board_space_id = arkret::SpaceId::from_event_id(&board_event_id).to_string();
 
     let list = inkson::operation::ak_ops::space_create(
@@ -91,7 +91,7 @@ pub async fn kanban_creates_keep_one_identity_across_receipt_backfill_and_retry(
         !card.local_operation_id().as_str().starts_with("ak:"),
         "the holder-local operation id must not impersonate an Arkret identifier"
     );
-    let (card_event_id, _) = submit_operation(&alice, &realm_id, &card).await?;
+    let (card_event_id, card_envelope) = submit_operation(&alice, &realm_id, &card).await?;
     let card_strand_id = arkret::StrandId::from_event_id(&card_event_id).to_string();
     let card_move = inkson::operation::ak_ops::strand_position_update(
         &realm_id,
@@ -105,7 +105,8 @@ pub async fn kanban_creates_keep_one_identity_across_receipt_backfill_and_retry(
     .map_err(|error| anyhow!("inkson card move builder: {error:#}"))?
     .build_sdk_event("cotest")
     .map_err(|error| anyhow!("inkson card move build: {error:#}"))?;
-    let (card_move_event_id, _) = submit_operation(&alice, &realm_id, &card_move).await?;
+    let (card_move_event_id, card_move_envelope) =
+        submit_operation(&alice, &realm_id, &card_move).await?;
 
     // ---- retry: byte-identical resubmit is the SAME user operation ----------
     let retry = expect_json(
@@ -128,73 +129,62 @@ pub async fn kanban_creates_keep_one_identity_across_receipt_backfill_and_retry(
         "the duplicate must name the SAME accepted Event: {retry}"
     );
 
-    // ---- backfill: one create per object, alias echoed verbatim -------------
-    let listed = expect_json(
-        alice
-            .query("/_arkret/self/events")
-            .json(&events_query_for_realm(&realm_id, 200)?),
-        StatusCode::OK,
-    )
-    .await?;
-    let rows = listed["events"]
-        .as_array()
-        .ok_or_else(|| anyhow!("events read returned no rows: {listed}"))?;
-    for (kind, event_id, operation) in [
-        ("ak.space.create", &board_event_id, &board),
-        ("ak.space.create", &list_event_id, &list),
-        ("ak.strand.create", &card_event_id, &card),
-        ("ak.strand.move", &card_move_event_id, &card_move),
+    // ---- backfill: exact committed Event and one Commit per scope stream --
+    let mut local_to_event = std::collections::BTreeMap::new();
+    for (kind, event_id, operation, envelope) in [
+        ("ak.space.create", &board_event_id, &board, &board_envelope),
+        ("ak.space.create", &list_event_id, &list, &list_envelope),
+        ("ak.strand.create", &card_event_id, &card, &card_envelope),
+        (
+            "ak.strand.move",
+            &card_move_event_id,
+            &card_move,
+            &card_move_envelope,
+        ),
     ] {
-        let matching: Vec<&Value> = rows
-            .iter()
-            .filter(|row| {
-                row["kind"].as_str() == Some(kind)
-                    && row["event_id"].as_str() == Some(event_id.as_str())
-            })
-            .collect();
+        let accepted = alice.sdk().committed_event_get(event_id).await?;
+        accepted.validate_shape()?;
+        let accepted_event = accepted
+            .reducer_input()
+            .ok_or_else(|| anyhow!("holder's authored {kind} Event was withheld"))?;
+        assert_eq!(accepted_event, envelope);
+        assert_eq!(accepted_event.kind.as_str(), kind);
+        let stream_ref = arkret_wire::CommitStreamRef::from_scope(
+            &envelope.scope_ref,
+            Some(envelope.realm_id.clone()),
+        )?;
+        let scan = alice
+            .sdk()
+            .scan_commit_stream_to_head(envelope.realm_id.clone(), stream_ref, None, 1000)
+            .await?;
         assert_eq!(
-            matching.len(),
+            scan.committed_events
+                .iter()
+                .filter(|item| item.commit().event_ref == *event_id)
+                .count(),
             1,
             "backfill must carry exactly one {kind} named {event_id}"
         );
-        // The alias is the holder-local reconciliation key: the server echoes
-        // it verbatim, and it never becomes a protocol identity.
-        assert_eq!(
-            matching[0]["unsigned"]["local_operation_idempotency_alias"].as_str(),
-            Some(operation.local_operation_id().as_str()),
-            "the backfill row must echo the producer's holder-local alias verbatim"
+        assert!(
+            local_to_event
+                .insert(
+                    operation.local_operation_id().to_string(),
+                    event_id.to_string()
+                )
+                .is_none(),
+            "holder-local operation id was reused"
         );
     }
-    // No second object materialized for any of the three writes: nothing else
-    // in the realm carries their holder-local aliases.
-    for operation in [&board, &list, &card, &card_move] {
-        let alias_rows = rows
-            .iter()
-            .filter(|row| {
-                row["unsigned"]["local_operation_idempotency_alias"].as_str()
-                    == Some(operation.local_operation_id().as_str())
-            })
-            .count();
-        assert_eq!(
-            alias_rows, 1,
-            "each user operation must appear exactly once in the backfill"
-        );
-    }
+    assert_eq!(local_to_event.len(), 4);
 
     // ---- placement references only the accepted Strand and containers -------
-    let card_row = rows
-        .iter()
-        .find(|row| row["event_id"].as_str() == Some(card_event_id.as_str()))
-        .ok_or_else(|| anyhow!("card create missing from backfill"))?;
+    let card_row = serde_json::to_value(&card_envelope)?;
     assert!(
         card_row["payload"]["object"]["metadata"]["fields"]
             .get("list_space_id")
             .is_none()
     );
-    let move_row = rows
-        .iter()
-        .find(|row| row["event_id"].as_str() == Some(card_move_event_id.as_str()))
-        .ok_or_else(|| anyhow!("card placement move missing from backfill"))?;
+    let move_row = serde_json::to_value(&card_move_envelope)?;
     assert_eq!(move_row["payload"]["strand_id"], card_strand_id);
     assert_eq!(move_row["payload"]["target_space_id"], list_space_id);
     assert!(
@@ -206,25 +196,19 @@ pub async fn kanban_creates_keep_one_identity_across_receipt_backfill_and_retry(
 
 /// Author and submit one inkson-built write the way the client pipeline does:
 /// the intent is positioned on the accepted actor chain, finalized ONCE, the
-/// holder-local alias rides `unsigned`, and the receipt is the authored id.
+/// the receipt maps the holder-local operation to the authored Event ID.
 async fn submit_operation(
     alice: &TestActorClient,
     realm_id: &str,
     operation: &inkson::operation::LocalOperation,
 ) -> Result<(arkret_identifiers::EventId, Event)> {
-    let mut event = alice
+    let event = alice
         .author_event(
             realm_id,
             operation.kind().as_str(),
             serde_json::to_value(operation.payload())?,
         )
         .await?;
-    // Holder-local reconciliation only: `unsigned` is outside the digest
-    // preimage, so attaching it cannot move the identity authored above.
-    event.unsigned.insert(
-        "local_operation_idempotency_alias".to_owned(),
-        Value::String(operation.local_operation_id().to_string()),
-    );
     let authored_event_id = event.event_id.clone();
     let accepted = expect_json(
         alice

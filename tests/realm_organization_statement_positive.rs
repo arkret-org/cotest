@@ -61,7 +61,7 @@ fn active_statement() -> RealmOrganizationPayload {
         expires_at: None,
         supersedes_statement_id: None,
         revokes_statement_id: None,
-        realm_frontier_digest: None,
+        realm_commit_ref: None,
         organization_policy_ref: None,
         authorization: RealmOrganizationAuthorization {
             issuer_id: DidCoreId::new(ORG_DID).unwrap(),

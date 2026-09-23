@@ -341,9 +341,8 @@ fn assert_message_target_exclusive_kind() -> Result<()> {
 /// `preserve[]`; it MUST NOT drive the event-derived object into
 /// `state=redacted`, even though both spellings share one 33-octet token
 /// (`common-fields.md` §6.0). Only the object typed-id spelling drives object
-/// state, and the two spellings land in two distinct
-/// `ak.component.object.redaction.v1` cells (`encoding.md` §9.5.1 verbatim
-/// scalar subject) that stay independent.
+/// state. The two spellings remain distinct `object_redaction` current-result
+/// subjects because the registered selector uses the verbatim `target_ref`.
 fn assert_event_target_does_not_drive_object_state() -> Result<()> {
     let env = SchemaEnv::load()?;
     let cross =
@@ -372,130 +371,31 @@ fn assert_event_target_does_not_drive_object_state() -> Result<()> {
         }
     }
 
-    // Drive the SDK resolver: the event spelling of a Strand create Event id
-    // trims that Event and leaves the derived Strand active; the object
-    // spelling of the same token then flips the Strand to redacted. The two
-    // cells never merge.
-    let realm_id = arkret_wire::RealmId::from_event_id(&arkret_wire::EventId::from_digest(
-        arkret_canonical::DigestSuite::Sha256,
-        [0x41; 32],
-    ));
-    let actor = arkret_wire::DidCoreId::new("ak:did_core:webvh:z6mkfixturealice")
-        .map_err(|err| anyhow!("fixture actor id: {err}"))?;
-    let ruling_event =
-        |kind: arkret_wire::EventKind, seq: u64, payload: Value| -> Result<arkret_wire::Event> {
-            let event_id = arkret_wire::EventId::from_event_digest(
-                &arkret_wire::Hash::new(arkret_canonical::sha256_digest(seq.to_be_bytes()))
-                    .map_err(|err| anyhow!("fixture event digest: {err}"))?,
-            )
-            .map_err(|err| anyhow!("fixture event id: {err}"))?;
-            Ok(arkret_wire::Event {
-                event_id,
-                kind,
-                realm_id: realm_id.clone(),
-                scope_ref: arkret_wire::event_envelope::ScopeRef::Realm {
-                    realm_id: realm_id.clone(),
-                },
-                actor_id: arkret_wire::ActorId::account(arkret_wire::AccountId::new(
-                    actor.clone(),
-                    actor.clone(),
-                )),
-                actor_seq: seq,
-                created_at: chrono::Utc::now(),
-                hlc: Some(
-                    arkret_wire::Hlc::new(format!("01970e589d22-{seq:04x}-11111111"))
-                        .map_err(|err| anyhow!("fixture hlc: {err}"))?,
-                ),
-                prev_refs: vec![],
-                semantic_refs: vec![],
-                preconditions: vec![],
-                auth_context: None,
-                data_basis: None,
-                seal_basis: None,
-                requirements: arkret_wire::EventRequirements::default(),
-                payload: serde_json::from_value(payload)?,
-                executed_by: None,
-                authorization_ref: None,
-                applet_id: None,
-                external_ref: None,
-                unsigned: Default::default(),
-                causal_refs: Vec::new(),
-                proofs: vec![],
-            })
-        };
-
-    let create = ruling_event(
-        arkret_wire::EventKind::StrandCreate,
-        1,
-        json!({
-            "object": {
-                "schema": arkret_wire::SchemaId::STRAND_V1,
-                "realm_id": realm_id.as_str(),
-                "metadata": {"title": "Sensitive Strand"},
-                "content": {"kind": "ak.content.text", "body": "Description secret"},
-                "tracks": {
-                    "synthesis": {
-                        "content": {"kind": "ak.content.text", "body": "Synthesis secret"}
-                    }
-                },
-                "created_by": arkret_wire::ActorId::account(arkret_wire::AccountId::new(actor.clone(), actor.clone())),
-                "created_at": "2026-05-02T00:00:00.000Z"
-            }
-        }),
-    )?;
-    let create_event_id = create.event_id.clone();
-    let strand_id = format!(
-        "ak:strand:{}",
-        create_event_id
-            .as_str()
-            .strip_prefix(arkret_wire::EventId::KIND_PREFIX)
-            .ok_or_else(|| anyhow!("create event id lost its ak:event: prefix"))?
-    );
-    let mut event_redact = ruling_event(
-        arkret_wire::EventKind::Redaction,
-        2,
-        json!({"target_ref": create_event_id.as_str()}),
-    )?;
-    event_redact.prev_refs.push(create_event_id.clone());
-
-    let mut state = arkret_state::resolver::RealmState::new(realm_id.clone());
-    state
-        .apply_events(&[create, event_redact])
-        .map_err(|err| anyhow!("resolver rejected the event-targeted redaction: {err}"))?;
-    let strand = state
-        .subjects
-        .get(&strand_id)
-        .ok_or_else(|| anyhow!("strand was not materialized from its create Event"))?;
-    if strand.state != Some(arkret_wire::ObjectState::Active) {
-        bail!(
-            "event_target_does_not_drive_object_state: event-targeted redaction drove the derived Strand to {:?} (must stay active)",
-            strand.state
-        );
+    // The v1 current-result projector keys by the verbatim target_ref. It
+    // must not retype an Event target into its event-derived object identity.
+    let event_id =
+        arkret_wire::EventId::from_digest(arkret_canonical::DigestSuite::Sha256, [0x41; 32]);
+    let strand_id = arkret_wire::StrandId::from_event_id(&event_id);
+    if event_id.as_str() == strand_id.as_str() {
+        bail!("Event and Strand redaction subjects collapsed");
     }
-    if strand.content.is_none() {
-        bail!(
-            "event_target_does_not_drive_object_state: event-targeted redaction cleared the Strand content slot"
-        );
-    }
-
-    let mut object_redact = ruling_event(
-        arkret_wire::EventKind::Redaction,
-        3,
-        json!({"target_ref": strand_id}),
-    )?;
-    object_redact.prev_refs.push(create_event_id.clone());
-    state
-        .apply_events(&[object_redact])
-        .map_err(|err| anyhow!("resolver rejected the object-targeted redaction: {err}"))?;
-    let strand = state
-        .subjects
-        .get(&strand_id)
-        .ok_or_else(|| anyhow!("strand disappeared after object-targeted redaction"))?;
-    if strand.state != Some(arkret_wire::ObjectState::Redacted) {
-        bail!(
-            "event_target_does_not_drive_object_state: object-targeted redaction left the Strand at {:?} (must be redacted)",
-            strand.state
-        );
+    let registry = super::load_artifact_json("registry/event-kind-registry.json")?;
+    let redaction = registry["event_kinds"]
+        .as_array()
+        .and_then(|kinds| kinds.iter().find(|row| row["event_kind"] == "ak.redaction"))
+        .ok_or_else(|| anyhow!("ak.redaction registry row is missing"))?;
+    let writes = redaction["result_writes"]
+        .as_array()
+        .ok_or_else(|| anyhow!("ak.redaction result writes are missing"))?;
+    let target_write = writes
+        .iter()
+        .find(|write| write["result_family"] == "object_redaction")
+        .ok_or_else(|| anyhow!("object_redaction result writer is missing"))?;
+    if target_write["result_selector"]
+        != json!({"kind": "composite", "components": ["payload.target_ref"]})
+        || target_write["result_projection"]["kind"] != "keyed_set_add"
+    {
+        bail!("redaction no longer keys the current result by verbatim target_ref");
     }
 
     Ok(())

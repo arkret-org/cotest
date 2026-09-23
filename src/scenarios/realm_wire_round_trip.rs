@@ -18,7 +18,7 @@
 
 use anyhow::{Result, anyhow};
 use arkret_canonical::{canonical_json_bytes, canonical_sha256};
-use arkret_identifiers::{Did, DidCoreId, Hlc, RealmId, project_did_to_core_id};
+use arkret_identifiers::{Did, DidCoreId, RealmId, project_did_to_core_id};
 use arkret_wire::Event;
 use arkret_wire::events::EventProductClass;
 use serde_json::{Value, json};
@@ -31,8 +31,6 @@ fn build_event(kind: &str, realm_id: &RealmId, payload: Value) -> Result<Event> 
     let actor_did = Did::new("did:web:alice.example".to_owned())
         .map_err(|err| anyhow!("invalid actor did: {err}"))?;
     let actor_id = project_did_to_core_id(&actor_did)?;
-    let hlc = Hlc::new("01970e589d21-0001-a13f9c2e".to_owned())
-        .map_err(|err| anyhow!("invalid hlc: {err}"))?;
     arkret_wire::test_support::raw_event(
         kind.to_owned(),
         arkret_wire::ScopeRef::Realm {
@@ -40,8 +38,6 @@ fn build_event(kind: &str, realm_id: &RealmId, payload: Value) -> Result<Event> 
         },
         actor_id,
         DidCoreId::new("ak:did_core:web:principal.example")?,
-        1,
-        hlc,
         payload,
     )
     .map_err(|err| anyhow!("failed to build event: {err}"))

@@ -233,7 +233,7 @@ pub fn run_proof_detached_jws_vector() -> Result<()> {
             json!("ak:device:01964137-0000-7000-8000-000000000001"),
         ),
         (
-            "/stream_head_ref",
+            "/authority_commit_id",
             json!("ak:realm_commit:ARNRmzDi2r78zveOLmoHOb6AephFMwVuGE1fwXmCoeo4"),
         ),
         ("/signal_class", json!("moderation")),
@@ -465,7 +465,7 @@ fn signed_call_signal_envelope(
         scope_ref: ScopeRef::Realm { realm_id },
         sender_actor_id: actor_id.clone(),
         sender_device_id: Some(device_id.clone()),
-        stream_head_ref: RealmCommitId::new(
+        authority_commit_id: RealmCommitId::new(
             "ak:realm_commit:Ac08ROpjn3Ilj_UaM-_XLY93u4SUTptG0-Q-_CUDb5aS",
         )?,
         signal_class,

@@ -143,7 +143,7 @@ fn validate_founding_transcript_vector(vector: &FoundingTranscriptVector) -> Res
         bail!("Cotest founding-unit transcript digest drifted");
     }
 
-    let event_ids = vector
+    let event_ids: [EventId; 4] = vector
         .event_ids
         .clone()
         .map(EventId::new)
@@ -557,11 +557,24 @@ fn validate_binding_payload(
 ) -> Result<()> {
     validate_event_id(binding_event_ref)?;
     let binding = serde_json::from_value::<
-        arkret_models_collaboration::events_payloads::device_identity::DirectConversationBoundPayload,
+        arkret_models_collaboration::events_payloads::direct_conversation::DirectConversationBoundPayload,
     >(payload.clone())?;
     let trust_domain = arkret::TrustDomainId::new(trust_domain.to_owned())
         .map_err(|err| anyhow!("invalid trust domain: {err}"))?;
-    binding.validate_pair_key(trust_domain)?;
+    binding.validate_shape()?;
+    let [left, right]: [_; 2] = binding
+        .unordered_participant_ids
+        .clone()
+        .try_into()
+        .map_err(|_| anyhow!("binding must contain exactly two participants"))?;
+    let expected_pair_key = arkret_models_collaboration::objects::direct_conversation::direct_conversation_pair_key(
+        trust_domain,
+        arkret_models_collaboration::objects::direct_conversation::DirectConversationPairKeyParticipant::unmapped(left),
+        arkret_models_collaboration::objects::direct_conversation::DirectConversationPairKeyParticipant::unmapped(right),
+    )?;
+    if binding.pair_key != expected_pair_key {
+        bail!("direct conversation binding pair_key mismatch");
+    }
     Ok(())
 }
 

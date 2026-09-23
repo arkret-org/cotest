@@ -151,8 +151,6 @@ pub fn run_genesis_join_policy_bundle_vector() -> Result<()> {
         }]
     });
     let mut bundle = RealmPolicyBundlePayload::new(1);
-    bundle.content_encryption_floor =
-        Some(arkret_models_collaboration::governance::circle::EncryptionFloor::E2eeRequired);
     bundle.join_policy = Some(serde_json::from_value(join_policy)?);
 
     let wire = bundle.to_value()?;
@@ -172,18 +170,13 @@ pub fn run_genesis_join_policy_bundle_vector() -> Result<()> {
     // them, which makes the complete-restatement requirement visible at the
     // call site.
     let next = bundle.restate(2);
-    if next.join_policy.is_none()
-        || next.content_encryption_floor != bundle.content_encryption_floor
-    {
+    if next.join_policy != bundle.join_policy {
         bail!(
             "{VECTOR_ID_GENESIS_JOIN_POLICY_BUNDLE}: restating a revision must carry every \
              component forward"
         );
     }
-    if RealmPolicyBundlePayload::new(2)
-        .content_encryption_floor
-        .is_some()
-    {
+    if RealmPolicyBundlePayload::new(2).join_policy.is_some() {
         bail!(
             "{VECTOR_ID_GENESIS_JOIN_POLICY_BUNDLE}: a bare revision must start with no components \
              so the clearing hazard stays visible at the call site"

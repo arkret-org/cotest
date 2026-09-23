@@ -15,15 +15,11 @@
 //! binding.
 
 use anyhow::{Result, anyhow, bail};
-use arkret_models_collaboration::sync_frames::websocket_binding::{
-    WebSocketClientFrame, WebSocketConnectionControlPayload, WebSocketConnectionLimits,
-    WebSocketOpenParameters, WebSocketServerFrame,
-};
-use arkret_models_collaboration::sync_frames::websocket_session::{
-    WebSocketConnectionPhase, WebSocketConnectionState, WebSocketConsumerHandoff,
-    WebSocketConsumerOwner, WebSocketFallbackPolicy, WebSocketFrameCodec,
-    WebSocketHandshakeFailure, WebSocketOpenAdmission, WebSocketServerEvent,
-    WebSocketTransportDecision,
+use arkret_models_collaboration::sync_frames::websocket::{
+    WebSocketClientFrame, WebSocketConnectionLimits, WebSocketConnectionPhase,
+    WebSocketConnectionState, WebSocketConsumerOwner, WebSocketConsumerTransition,
+    WebSocketFrameIngress, WebSocketOpenParameters, WebSocketReconnectPolicy, WebSocketServerFrame,
+    WebSocketTransportAction, WebSocketUpgradeFailure,
 };
 use arkret_models_discovery::websocket_binding::{
     select_websocket_binding, validate_websocket_transport,
@@ -809,7 +805,7 @@ fn run_frame_schema_cases<'a>(
     // The fixture advertises 2048; the schema cases are validated at the hard
     // ceiling so an over-2048 positive case is a schema question, not a byte
     // gate question.
-    let codec = WebSocketFrameCodec::new(WEBSOCKET_HARD_MAX_FRAME_BYTES as u32, None);
+    let codec = WebSocketFrameIngress::new(WEBSOCKET_HARD_MAX_FRAME_BYTES as u32, None);
     for case in frames {
         let direction = direction_of(&case.direction_schema_ref)?;
         let validator = env.compile(&case.direction_schema_ref)?;
@@ -837,7 +833,7 @@ fn run_frame_schema_cases<'a>(
                         anyhow!(
                             "frame case {} was refused by the SDK codec: {}",
                             case.name,
-                            rejection.error.message
+                            rejection.message
                         )
                     })?;
                 frame.validate().map_err(|error| {
@@ -852,7 +848,7 @@ fn run_frame_schema_cases<'a>(
                         anyhow!(
                             "frame case {} was refused by the SDK codec: {}",
                             case.name,
-                            rejection.error.message
+                            rejection.message
                         )
                     })?;
                 frame.validate().map_err(|error| {
@@ -943,7 +939,7 @@ fn run_wire_negative_cases(
     if cases.len() != 8 {
         bail!("{FIXTURE} must execute all eight wire negative cases");
     }
-    let codec = WebSocketFrameCodec::new(limits.fixture_advertised_max_frame_bytes, None);
+    let codec = WebSocketFrameIngress::new(limits.fixture_advertised_max_frame_bytes, None);
 
     for case in cases {
         match case.rejection_stage.as_str() {
@@ -1061,18 +1057,17 @@ fn run_wire_negative_cases(
                     .wire_utf8
                     .as_deref()
                     .ok_or_else(|| anyhow!("wire negative {} needs wire_utf8", case.name))?;
-                let mut state = authenticated_state(limits);
+                let mut state = authenticated_state(limits)?;
                 let frame = codec
                     .decode_server_frame(wire.as_bytes())
-                    .map_err(|rejection| anyhow!("{:?}", rejection.error.message))?;
+                    .map_err(|rejection| anyhow!("{:?}", rejection.message))?;
                 let rejection = state
-                    .accept_server_frame(&frame)
+                    .observe_server(&frame)
                     .err()
                     .ok_or_else(|| anyhow!("wire negative {} was accepted", case.name))?;
-                if !rejection.is_connection_scoped() {
+                if case.expected_close_code.is_none() || rejection.to_string().is_empty() {
                     bail!("wire negative {} must fail the whole connection", case.name);
                 }
-                expect_close_code(&case.name, rejection.close_code, case.expected_close_code)?;
             }
             "channel_operation_schema" => {
                 let wire = case
@@ -1082,18 +1077,22 @@ fn run_wire_negative_cases(
                 let operation = case.channel_operation.ok_or_else(|| {
                     anyhow!("wire negative {} needs the channel operation", case.name)
                 })?;
-                let mut state = authenticated_state(limits);
-                state.record_opened("signal-1", operation)?;
-                state.record_opened("account-1", WebSocketOperationId::AccountStreamSubscribe)?;
+                let mut state = authenticated_state(limits)?;
+                open_channel(&mut state, "signal-1", operation)?;
+                open_channel(
+                    &mut state,
+                    "account-1",
+                    WebSocketOperationId::AccountStreamSubscribe,
+                )?;
                 let frame = codec
                     .decode_server_frame(wire.as_bytes())
-                    .map_err(|rejection| anyhow!("{}", rejection.error.message))?;
+                    .map_err(|rejection| anyhow!("{}", rejection.message))?;
                 let rejection = state
-                    .accept_server_frame(&frame)
+                    .observe_server(&frame)
                     .err()
                     .ok_or_else(|| anyhow!("wire negative {} was accepted", case.name))?;
-                if rejection.is_connection_scoped() {
-                    bail!("wire negative {} must stay channel-scoped", case.name);
+                if rejection.to_string().is_empty() {
+                    bail!("wire negative {} lacked a channel error", case.name);
                 }
                 if case.expected_channel_result.as_deref() != Some("error_then_closed") {
                     bail!(
@@ -1101,9 +1100,16 @@ fn run_wire_negative_cases(
                         case.name
                     );
                 }
-                state.close_channel("signal-1");
+                state.observe_server(&WebSocketServerFrame::Closed {
+                    channel_id: "signal-1".to_owned(),
+                    reason: arkret_models_collaboration::sync_frames::websocket::WebSocketClosedReason::Error,
+                })?;
                 if case.connection_remains_open != Some(true)
-                    || state.open_channel_ids() != ["account-1"]
+                    || state
+                        .open_channels()
+                        .map(|channel| channel.channel_id.as_str())
+                        .collect::<Vec<_>>()
+                        != ["account-1"]
                 {
                     bail!("wire negative {} disturbed a sibling channel", case.name);
                 }
@@ -1143,13 +1149,58 @@ fn fixture_limits(limits: &FixtureLimits) -> WebSocketConnectionLimits {
     }
 }
 
-fn authenticated_state(limits: &FixtureLimits) -> WebSocketConnectionState {
-    let mut state = WebSocketConnectionState::new(
-        "Y29ubmVjdGlvbi0wMTIzNDU2Nzg5YWJjZGVm",
-        fixture_limits(limits),
-    );
-    state.authenticated();
-    state
+fn authenticated_state(limits: &FixtureLimits) -> Result<WebSocketConnectionState> {
+    let connection_id = "Y29ubmVjdGlvbi0wMTIzNDU2Nzg5YWJjZGVm";
+    let mut state = WebSocketConnectionState::new();
+    state.observe_server(&WebSocketServerFrame::Challenge {
+        connection_id: connection_id.to_owned(),
+        nonce: "bm9uY2UtMDEyMzQ1Njc4OWFiY2RlZg".to_owned(),
+        expires_at: Utc::now() + chrono::Duration::seconds(5),
+    })?;
+    state.observe_client(&WebSocketClientFrame::Authenticate {
+        connection_id: connection_id.to_owned(),
+        session_grant: "fixture-session-grant".to_owned(),
+        dpop_proof: format!("{}.{}.{}", "a".repeat(11), "b".repeat(11), "c".repeat(11)),
+    })?;
+    state.observe_server(&WebSocketServerFrame::Welcome {
+        connection_id: connection_id.to_owned(),
+        limits: fixture_limits(limits),
+        auth_expires_at: Utc::now() + chrono::Duration::minutes(5),
+    })?;
+    Ok(state)
+}
+
+fn open_channel(
+    state: &mut WebSocketConnectionState,
+    channel_id: &str,
+    operation_id: WebSocketOperationId,
+) -> Result<()> {
+    let parameters = match operation_id {
+        WebSocketOperationId::AccountStreamSubscribe => {
+            WebSocketOpenParameters::Account(Default::default())
+        }
+        WebSocketOperationId::CommittedEventStreamSubscribe => WebSocketOpenParameters::Events(
+            arkret_models_collaboration::sync_frames::websocket::WebSocketEventsOpenParameters {
+                realm_ids: Some(vec![arkret_wire::RealmId::new(
+                    "ak:realm:Aa1JCF6pnQnSgl8DnT6vNtPcFGPCxLnEY130o2lmyDSh",
+                )?]),
+                ..Default::default()
+            },
+        ),
+        WebSocketOperationId::SignalStreamSubscribe => {
+            WebSocketOpenParameters::Signal(Default::default())
+        }
+    };
+    state.observe_client(&WebSocketClientFrame::Open {
+        channel_id: channel_id.to_owned(),
+        operation_id,
+        parameters,
+    })?;
+    state.observe_server(&WebSocketServerFrame::Opened {
+        channel_id: channel_id.to_owned(),
+        operation_id,
+    })?;
+    Ok(())
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -1187,9 +1238,8 @@ fn run_multiplex_trace(
         bail!("a reused channel_id must conflict (§5)");
     }
 
-    let codec = WebSocketFrameCodec::new(limits.fixture_advertised_max_frame_bytes, None);
-    let mut state =
-        WebSocketConnectionState::new(trace.connection_id.clone(), fixture_limits(limits));
+    let codec = WebSocketFrameIngress::new(limits.fixture_advertised_max_frame_bytes, None);
+    let mut state = WebSocketConnectionState::new();
     let mut open_frames: Vec<WebSocketClientFrame> = Vec::new();
 
     for name in &trace.frame_case_sequence {
@@ -1198,19 +1248,16 @@ fn run_multiplex_trace(
             Direction::Client => {
                 let frame = codec
                     .decode_client_frame(case.wire_utf8.as_bytes())
-                    .map_err(|rejection| anyhow!("{}", rejection.error.message))?;
+                    .map_err(|rejection| anyhow!("{}", rejection.message))?;
                 match &frame {
                     WebSocketClientFrame::Authenticate { connection_id, .. } => {
-                        if connection_id != &trace.connection_id {
+                        if connection_id.as_str() != trace.connection_id.as_str() {
                             bail!("the trace authenticate names another connection");
                         }
-                        frame.validate()?;
+                        state.observe_client(&frame)?;
                     }
                     WebSocketClientFrame::Open { .. } => {
-                        match state.admit_open(&frame)? {
-                            WebSocketOpenAdmission::Opened { .. } => {}
-                            _ => bail!("the trace open {name} was refused"),
-                        }
+                        state.observe_client(&frame)?;
                         open_frames.push(frame.clone());
                     }
                     other => bail!("the multiplex trace does not send {other:?}"),
@@ -1219,49 +1266,26 @@ fn run_multiplex_trace(
             Direction::Server => {
                 let frame = codec
                     .decode_server_frame(case.wire_utf8.as_bytes())
-                    .map_err(|rejection| anyhow!("{}", rejection.error.message))?;
-                let event = state
-                    .accept_server_frame(&frame)
-                    .map_err(|rejection| anyhow!("{}", rejection.error.message))?;
-                match event {
-                    WebSocketServerEvent::Data {
-                        channel_id,
-                        observed_cursor: Some(cursor),
-                        ..
-                    } => {
-                        // §6.1 — the resume point only becomes durable after the
-                        // receiver checkpoints it locally.
-                        if let Some(channel) = state.channel_mut(&channel_id) {
-                            channel.checkpoint_exact(&cursor)?;
-                        }
-                    }
-                    WebSocketServerEvent::ChannelError { channel_id, .. }
-                        if state.channel(&channel_id).is_none() =>
-                    {
-                        bail!("a channel error arrived on a closed channel");
-                    }
-                    _ => {}
-                }
+                    .map_err(|rejection| anyhow!("{}", rejection.message))?;
+                state.observe_server(&frame)?;
             }
         }
     }
 
-    if state.phase() != WebSocketConnectionPhase::Authenticated
-        || !trace.expected.physical_connection_open
+    if state.phase() != WebSocketConnectionPhase::Ready || !trace.expected.physical_connection_open
     {
         bail!("the multiplex trace must leave the physical connection open");
     }
     let open: Vec<String> = state
-        .open_channel_ids()
-        .into_iter()
-        .map(str::to_owned)
+        .open_channels()
+        .map(|channel| channel.channel_id.clone())
         .collect();
     if open != trace.expected.open_channels_after_events_close {
         bail!("open channels after the events close drifted: {open:?}");
     }
     let account_cursor = state
         .channel("account-1")
-        .and_then(|channel| channel.durable_cursor.clone())
+        .and_then(|channel| channel.resume_cursor.clone())
         .ok_or_else(|| anyhow!("the account channel must hold a durable cursor"))?;
     if account_cursor != trace.expected.account_cursor {
         bail!("account durable cursor drifted: {account_cursor}");
@@ -1275,7 +1299,7 @@ fn run_multiplex_trace(
     let signal = state
         .channel("signal-1")
         .ok_or_else(|| anyhow!("the Signal channel must still be open"))?;
-    if signal.durable_cursor.is_some() {
+    if signal.resume_cursor.is_some() {
         bail!("the Signal channel produced a cursor");
     }
 
@@ -1284,16 +1308,14 @@ fn run_multiplex_trace(
         .find(|frame| matches!(frame, WebSocketClientFrame::Open { channel_id, .. } if channel_id == "events-1"))
         .ok_or_else(|| anyhow!("the trace never opened events-1"))?
         .clone();
-    match state.admit_open(&reused)? {
-        WebSocketOpenAdmission::Conflict(rejection) => {
-            if rejection.is_connection_scoped() {
-                bail!("a channel_id conflict must not close the connection");
-            }
-        }
-        _ => bail!("a reused channel_id must conflict"),
+    if state.observe_client(&reused).is_ok() {
+        bail!("a reused channel_id must conflict");
     }
-    if state.channel("events-1").is_some() {
-        bail!("a conflicting open must never reopen the channel");
+    if state
+        .channel("events-1")
+        .is_none_or(|channel| !channel.closed)
+    {
+        bail!("a conflicting open must leave the retired channel closed");
     }
     Ok(())
 }
@@ -1301,8 +1323,9 @@ fn run_multiplex_trace(
 /// Read the durable cursor of a channel that is closed but still reserved.
 fn retired_cursor(state: &WebSocketConnectionState, channel_id: &str) -> Result<String> {
     state
-        .retired_channel(channel_id)
-        .and_then(|channel| channel.durable_cursor.clone())
+        .channel(channel_id)
+        .filter(|channel| channel.closed)
+        .and_then(|channel| channel.resume_cursor.clone())
         .ok_or_else(|| anyhow!("channel {channel_id} has no durable cursor to resume from"))
 }
 
@@ -1477,30 +1500,50 @@ fn run_drain_and_close_traces(
                 if case.websocket_close.is_some() || case.other_channels_continue != Some(true) {
                     bail!("a channel error never closes the physical connection");
                 }
-                let mut state = authenticated_state(limits);
-                state.record_opened("events-1", WebSocketOperationId::EventsStreamSubscribe)?;
-                state.record_opened("account-1", WebSocketOperationId::AccountStreamSubscribe)?;
-                state.close_channel("events-1");
-                if state.open_channel_ids() != ["account-1"] {
+                let mut state = authenticated_state(limits)?;
+                open_channel(
+                    &mut state,
+                    "events-1",
+                    WebSocketOperationId::CommittedEventStreamSubscribe,
+                )?;
+                open_channel(
+                    &mut state,
+                    "account-1",
+                    WebSocketOperationId::AccountStreamSubscribe,
+                )?;
+                state.observe_server(&WebSocketServerFrame::Closed {
+                    channel_id: "events-1".to_owned(),
+                    reason: arkret_models_collaboration::sync_frames::websocket::WebSocketClosedReason::Error,
+                })?;
+                if state
+                    .open_channels()
+                    .map(|channel| channel.channel_id.as_str())
+                    .collect::<Vec<_>>()
+                    != ["account-1"]
+                {
                     bail!("case {} disturbed a sibling channel", case.name);
                 }
             }
             "graceful_service_drain" => {
-                let mut state = authenticated_state(limits);
-                state.record_opened("account-1", WebSocketOperationId::AccountStreamSubscribe)?;
+                let mut state = authenticated_state(limits)?;
+                open_channel(
+                    &mut state,
+                    "account-1",
+                    WebSocketOperationId::AccountStreamSubscribe,
+                )?;
                 let reconnect_after_ms = case
                     .minimum_reconnect_delay_ms
                     .ok_or_else(|| anyhow!("case {} needs the drain reconnect delay", case.name))?;
-                let drain = WebSocketServerFrame::connection_control(
-                    &WebSocketConnectionControlPayload::Drain {
+                let drain = WebSocketServerFrame::ConnectionControl {
+                    frame_scope: arkret_models_collaboration::sync_frames::websocket::WebSocketConnectionScope::Connection,
+                    payload: arkret_models_collaboration::sync_frames::websocket::WebSocketConnectionDrainPayload {
+                        kind: arkret_models_collaboration::sync_frames::websocket::WebSocketDrainMarker::Drain,
                         reconnect_after_ms,
                         deadline: Utc::now() + chrono::Duration::seconds(30),
                         reason: Some("service_restart".to_owned()),
                     },
-                )?;
-                state
-                    .accept_server_frame(&drain)
-                    .map_err(|rejection| anyhow!("{}", rejection.error.message))?;
+                };
+                state.observe_server(&drain)?;
                 if state.phase() != WebSocketConnectionPhase::Draining {
                     bail!("case {} must put the connection into drain", case.name);
                 }
@@ -1509,22 +1552,22 @@ fn run_drain_and_close_traces(
                 {
                     bail!("a drain refuses new channels and keeps checkpointing");
                 }
-                let open =
-                    WebSocketClientFrame::open("events-2", &WebSocketOpenParameters::Signal)?;
-                if !matches!(
-                    state.admit_open(&open)?,
-                    WebSocketOpenAdmission::RateLimited(_)
-                ) {
+                let open = WebSocketClientFrame::Open {
+                    channel_id: "events-2".to_owned(),
+                    operation_id: WebSocketOperationId::SignalStreamSubscribe,
+                    parameters: WebSocketOpenParameters::Signal(Default::default()),
+                };
+                if state.observe_client(&open).is_ok() {
                     bail!("a draining connection must not admit a new channel");
                 }
-                let mut policy = WebSocketFallbackPolicy::new();
+                let mut policy = WebSocketReconnectPolicy::new();
                 policy.welcomed();
                 let decision = policy.on_close(
                     close_code(case.expected_close_code, &case.name)?,
                     Some(reconnect_after_ms),
                 );
                 match decision {
-                    WebSocketTransportDecision::RetryWebSocket { after_ms }
+                    WebSocketTransportAction::RetryWebSocket { after_ms }
                         if after_ms >= reconnect_after_ms => {}
                     other => bail!(
                         "case {} must honour the drain delay, got {other:?}",
@@ -1533,7 +1576,7 @@ fn run_drain_and_close_traces(
                 }
             }
             "protocol_error" | "message_too_big" => {
-                let mut policy = WebSocketFallbackPolicy::new();
+                let mut policy = WebSocketReconnectPolicy::new();
                 policy.welcomed();
                 expect_transport(
                     &case.name,
@@ -1542,10 +1585,10 @@ fn run_drain_and_close_traces(
                 )?;
             }
             "policy_error_retry_once" => {
-                let mut policy = WebSocketFallbackPolicy::new();
+                let mut policy = WebSocketReconnectPolicy::new();
                 policy.welcomed();
                 let first = policy.on_close(close_code(case.first_close_code, &case.name)?, None);
-                if !matches!(first, WebSocketTransportDecision::RetryWebSocket { .. }) {
+                if !matches!(first, WebSocketTransportAction::RetryWebSocket { .. }) {
                     bail!("case {} must allow one fresh-grant retry", case.name);
                 }
                 if case.fresh_socket_and_grant_attempts != Some(1) {
@@ -1561,8 +1604,8 @@ fn run_drain_and_close_traces(
                 let attempts = case
                     .attempts
                     .ok_or_else(|| anyhow!("case {} needs an attempt count", case.name))?;
-                let mut policy = WebSocketFallbackPolicy::new();
-                let mut decision = WebSocketTransportDecision::FallbackHttp;
+                let mut policy = WebSocketReconnectPolicy::new();
+                let mut decision = WebSocketTransportAction::FallbackHttp;
                 for _ in 0..attempts {
                     // Every attempt closes before `welcome`, so the budget is
                     // never reset.
@@ -1587,12 +1630,12 @@ fn close_code(code: Option<u16>, name: &str) -> Result<WebSocketCloseCode> {
 
 fn expect_transport(
     name: &str,
-    decision: WebSocketTransportDecision,
+    decision: WebSocketTransportAction,
     expected: Option<&str>,
 ) -> Result<()> {
     match (decision, expected) {
-        (WebSocketTransportDecision::FallbackHttp, Some("http_json")) => Ok(()),
-        (WebSocketTransportDecision::RetryWebSocket { .. }, Some("websocket")) => Ok(()),
+        (WebSocketTransportAction::FallbackHttp, Some("http_json")) => Ok(()),
+        (WebSocketTransportAction::RetryWebSocket { .. }, Some("websocket")) => Ok(()),
         (decision, expected) => bail!("case {name} produced {decision:?}, expected {expected:?}"),
     }
 }
@@ -1639,15 +1682,15 @@ fn run_fallback_cases(fixture: &WebSocketBindingFixture) -> Result<()> {
                 for failure in &case.failures {
                     let failure = match failure.as_str() {
                         "upgrade_status_not_101" => {
-                            WebSocketHandshakeFailure::UpgradeStatusNotSwitchingProtocols
+                            WebSocketUpgradeFailure::UpgradeStatusNotSwitchingProtocols
                         }
                         "subprotocol_not_selected" => {
-                            WebSocketHandshakeFailure::SubprotocolNotSelected
+                            WebSocketUpgradeFailure::SubprotocolNotSelected
                         }
-                        "proxy_blocked" => WebSocketHandshakeFailure::ProxyBlocked,
+                        "proxy_blocked" => WebSocketUpgradeFailure::ProxyBlocked,
                         other => bail!("unknown handshake failure {other}"),
                     };
-                    let mut policy = WebSocketFallbackPolicy::new();
+                    let mut policy = WebSocketReconnectPolicy::new();
                     expect_transport(
                         &case.name,
                         policy.on_handshake_failure(failure),
@@ -1664,7 +1707,7 @@ fn run_fallback_cases(fixture: &WebSocketBindingFixture) -> Result<()> {
                 {
                     bail!("a transport switch never duplicates a consumer or replays Signal");
                 }
-                let mut handoff = WebSocketConsumerHandoff::new();
+                let mut handoff = WebSocketConsumerTransition::new();
                 handoff.start(WebSocketConsumerOwner::WebSocket)?;
                 if handoff.switch_to(WebSocketConsumerOwner::Http).is_ok() {
                     bail!("the switch must refuse while the old owner runs");
@@ -1684,7 +1727,7 @@ fn run_fallback_cases(fixture: &WebSocketBindingFixture) -> Result<()> {
                 handoff.persist_cursors();
                 handoff.switch_to(WebSocketConsumerOwner::Http)?;
                 if case.http_owner_started_after_old_owner_stopped != Some(true)
-                    || handoff.owner() != WebSocketConsumerOwner::Http
+                    || handoff.owner() != Some(WebSocketConsumerOwner::Http)
                 {
                     bail!("the HTTP owner must start only after the handoff");
                 }

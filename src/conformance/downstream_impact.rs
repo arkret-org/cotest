@@ -125,8 +125,8 @@ pub fn run_error_status_context_vector() -> Result<()> {
             403
         );
     }
-    if ErrorCode::UpstreamUnavailable.http_status() != 503 {
-        return Err(anyhow!("upstream_unavailable must map to HTTP 503"));
+    if ErrorCode::ServiceUnavailable.http_status() != 503 {
+        return Err(anyhow!("service_unavailable must map to HTTP 503"));
     }
     Ok(())
 }

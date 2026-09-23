@@ -89,50 +89,6 @@ pub fn run_container_realm_control_payload_suite() -> Result<()> {
             }),
             false,
         ),
-        (
-            "ak.cotest_vector.realm.notary.accept.v1",
-            "ak.realm.notary",
-            json!({
-                "realm_id": "ak:realm:AZpEa1TBWdyQensfzl-MJg8_sdcSNKSeAKHbyCN5ZXjb",
-                "notary": serde_json::to_value(crate::fixture_notary_configuration(
-                    arkret_wire::DidCoreId::new("ak:did_core:web:notary.example")?
-                ))?
-            }),
-            true,
-        ),
-        (
-            "ak.cotest_vector.realm.digest_transition.accept.v1",
-            "ak.realm.digest_suite_transition",
-            json!({
-                "from_digest_algorithm": "sha256",
-                "to_digest_algorithm": "blake3",
-                "transition_realm_state_snapshot_ref": "ak:realm_state_snapshot:01904100-0000-7000-8000-000000000301",
-                "realm_state_snapshot_commitment": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-            }),
-            true,
-        ),
-        (
-            "ak.cotest_vector.realm.digest_transition.downgrade_rejected.v1",
-            "ak.realm.digest_suite_transition",
-            json!({
-                "from_digest_algorithm": "blake3",
-                "to_digest_algorithm": "sha256",
-                "transition_realm_state_snapshot_ref": "ak:realm_state_snapshot:01904100-0000-7000-8000-000000000302",
-                "realm_state_snapshot_commitment": "blake3:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-            }),
-            false,
-        ),
-        (
-            "ak.cotest_vector.realm.digest_transition.noop_rejected.v1",
-            "ak.realm.digest_suite_transition",
-            json!({
-                "from_digest_algorithm": "sha256",
-                "to_digest_algorithm": "sha256",
-                "transition_realm_state_snapshot_ref": "ak:realm_state_snapshot:01904100-0000-7000-8000-000000000303",
-                "realm_state_snapshot_commitment": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
-            }),
-            false,
-        ),
     ];
 
     for (id, kind, payload, expected_accept) in vectors {
@@ -686,10 +642,12 @@ fn validate_event_envelope(
             "Event.content must be an object",
         ));
     }
-    value_object(
-        required_field(event, "producer_proof")?,
-        "event.producer_proof",
-    )?;
+    if !required_field(event, "producer_proof")?.is_object() {
+        return Ok(EventEnvelopeDecision::reject(
+            "schema_violation",
+            "event.producer_proof must be an object",
+        ));
+    }
 
     if event
         .get("prev_ref_count")
@@ -892,18 +850,6 @@ fn validate_event_payload(kind: &str, content: &Value) -> Option<String> {
         .err(),
         "ak.container.rebalance" => serde_json::from_value::<
             arkret_models_collaboration::events_payloads::ContainerRebalancePayload,
-        >(content.clone())
-        .map_err(|error| error.to_string())
-        .and_then(|payload| payload.validate().map_err(|error| error.to_string()))
-        .err(),
-        "ak.realm.notary" => serde_json::from_value::<
-            arkret_models_collaboration::events_payloads::RealmNotaryPayload,
-        >(content.clone())
-        .map_err(|error| error.to_string())
-        .and_then(|payload| payload.validate().map_err(|error| error.to_string()))
-        .err(),
-        "ak.realm.digest_suite_transition" => serde_json::from_value::<
-            arkret_models_collaboration::events_payloads::RealmDigestSuiteTransitionPayload,
         >(content.clone())
         .map_err(|error| error.to_string())
         .and_then(|payload| payload.validate().map_err(|error| error.to_string()))

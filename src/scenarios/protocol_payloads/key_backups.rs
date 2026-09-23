@@ -21,16 +21,14 @@ use arkret_identifiers::{
     BackupId, BackupSeriesId, DeviceId, Did, DidCoreId, EventId, project_did_to_core_id,
 };
 use arkret_models_crypto::{
-    BackupKind, HistorySecretRangeIndex, HistorySecretRangesItemKind, KeyBackup, KeyBackupAead,
-    KeyBackupAeadName, KeyBackupContentIndex, KeyBackupDomainSeparation, KeyBackupEncryption,
-    KeyBackupRecipientMethod, KeyBackupRetention, KeyBackupSignatureAlgorithm,
-    KeyBackupUnlockAuthority, KeyBackupUnlockProof, KeysBackupsIssueUnlockChallengeRequestBody,
-    KeysBackupsUnlockChallenge, KeysBackupsUnlockRequestBody, UnsignedKeyBackup,
-    UnsignedKeyBackupAuthData, UnsignedKeyBackupUnlockProof, UnsignedKeyBackupUnlockProofAuthData,
+    BackupKind, KeyBackup, KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData,
+    KeyBackupDomainSeparation, KeyBackupEncryption, KeyBackupRecipientMethod, KeyBackupRetention,
+    KeyBackupSignatureAlgorithm, KeyBackupUnlockAuthority, KeyBackupUnlockProof,
+    KeyBackupUnlockProofAuthData, KeysBackupsIssueUnlockChallengeRequestBody,
+    KeysBackupsUnlockChallenge, KeysBackupsUnlockRequestBody, SecretStorageContentIndex,
+    SecretStorageItemKind,
 };
-use arkret_wire::{
-    AccountId, Base64UrlString, DidUrl, EpochRange, HistoryEffectiveScope, RealmId, ScopeRef,
-};
+use arkret_wire::{AccountId, Base64UrlString, DidUrl, Hash};
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, Utc};
@@ -93,18 +91,14 @@ fn signed_backup_envelope(actor_id: &str, station_id: &DidCoreId) -> Result<KeyB
     let multibase = ed25519_pubkey_to_did_key_multibase(signing_key.verifying_key().as_bytes());
     let verification_method = format!("did:key:{multibase}#{multibase}");
     let created_at = ts("2026-04-26T00:00:00.000Z")?;
-    let effective_scope = ScopeRef::Realm {
-        realm_id: RealmId::new("ak:realm:Aa1JCF6pnQnSgl8DnT6vNtPcFGPCxLnEY130o2lmyDSh".to_owned())?,
-    };
-    let history_scope = HistoryEffectiveScope::try_from(effective_scope)?;
-    let envelope = KeyBackup {
+    let mut envelope = KeyBackup {
         backup_id: backup_id(BACKUP_ID)?,
         actor_id: arkret_wire::ActorId::account(arkret_wire::AccountId::new(
             did(actor_id)?,
             station_id.clone(),
         )),
         device_id: Some(device_id(ENVELOPE_DEVICE_ID)?),
-        backup_kind: BackupKind::MlsHistory,
+        backup_kind: BackupKind::SecretStorage,
         mixed_secret_storage: false,
         backup_version: "kb_1".to_owned(),
         created_at,
@@ -130,21 +124,24 @@ fn signed_backup_envelope(actor_id: &str, station_id: &DidCoreId) -> Result<KeyB
             subdomain: "test".to_owned(),
             aead_aad_extensions: Default::default(),
         },
-        contents: vec![KeyBackupContentIndex::HistorySecretRanges(
-            HistorySecretRangeIndex {
-                item_kind: HistorySecretRangesItemKind::Value,
-                effective_scope: history_scope,
-                ranges: vec![EpochRange {
-                    from_epoch: 0,
-                    to_epoch: 0,
-                }],
-                extra: Default::default(),
-            },
-        )],
-        ciphertext: "Y2lwaGVydGV4dA".to_owned(),
-        ciphertext_digest: CIPHERTEXT_DIGEST.to_owned(),
+        contents: vec![SecretStorageContentIndex {
+            item_kind: SecretStorageItemKind::MlsGroupSecretsBackupKey,
+            secret_id: None,
+            secret_version: None,
+        }],
+        ciphertext: Base64UrlString::new("Y2lwaGVydGV4dA").map_err(|error| anyhow!(error))?,
+        ciphertext_digest: Hash::new(CIPHERTEXT_DIGEST)?,
         plaintext_commitment: None,
-        auth_data: None,
+        auth_data: KeyBackupAuthData {
+            device_id: device_id(ENVELOPE_DEVICE_ID)?,
+            verification_method: DidUrl::new(verification_method)
+                .map_err(|error| anyhow!(error))?,
+            signature_algorithm: KeyBackupSignatureAlgorithm::Ed25519,
+            signature: Base64UrlString::new("AA").map_err(|error| anyhow!(error))?,
+            device_authorize_event_id: EventId::new(
+                "ak:event:ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM",
+            )?,
+        },
         retention: Some(KeyBackupRetention {
             delete_after: Some(ts("2020-01-01T00:00:00.000Z")?),
             legal_hold: Some(false),
@@ -154,24 +151,15 @@ fn signed_backup_envelope(actor_id: &str, station_id: &DidCoreId) -> Result<KeyB
         series_seq: 0,
         supersedes_id: None,
         supersedes_digest: None,
-        frontier_ref: None,
+        source_commit_ref: None,
         recovery_policy_ref: None,
         extra: Default::default(),
     };
-    let auth_data = UnsignedKeyBackupAuthData::new(
-        device_id(ENVELOPE_DEVICE_ID)?,
-        DidUrl::new(verification_method).map_err(|error| anyhow!(error))?,
-        KeyBackupSignatureAlgorithm::Ed25519,
-        EventId::new("ak:event:ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM")?,
-    )?;
-    let unsigned = UnsignedKeyBackup::new(envelope, auth_data)?;
-    let signature = signing_key.sign(&unsigned.signing_payload_bytes()?);
-    unsigned
-        .attach_signature(
-            Base64UrlString::new(URL_SAFE_NO_PAD.encode(signature.to_bytes()))
-                .map_err(|error| anyhow!(error))?,
-        )
-        .map_err(anyhow::Error::from)
+    let signature = signing_key.sign(&envelope.signing_payload_bytes()?);
+    envelope.auth_data.signature =
+        Base64UrlString::new(URL_SAFE_NO_PAD.encode(signature.to_bytes()))
+            .map_err(|error| anyhow!(error))?;
+    Ok(envelope)
 }
 
 async fn list_backups(server: &ArkretServer, token: &str) -> Result<()> {
@@ -308,35 +296,34 @@ async fn unlock_proof(
     let signing_key = device_signing_key();
     let multibase = ed25519_pubkey_to_did_key_multibase(signing_key.verifying_key().as_bytes());
     let verification_method = format!("did:key:{multibase}#{multibase}");
-    let auth_data = UnsignedKeyBackupUnlockProofAuthData::new(
-        DidUrl::new(verification_method).map_err(|error| anyhow!(error))?,
-        KeyBackupSignatureAlgorithm::Ed25519,
-    )?;
-    let unsigned = UnsignedKeyBackupUnlockProof::new(
-        KeyBackupUnlockAuthority::CurrentDevice {
+    let mut proof = KeyBackupUnlockProof {
+        schema: KeyBackupUnlockProof::SCHEMA.to_owned(),
+        authority: KeyBackupUnlockAuthority::CurrentDevice {
             challenge_id: challenge.challenge_id,
             nonce: challenge.nonce,
         },
-        challenge.account_id,
-        challenge.requesting_device_id,
-        challenge.backup_id,
-        BackupKind::MlsHistory,
-        challenge.series_id,
-        challenge.ciphertext_digest,
-        challenge.challenge,
-        challenge.service_id,
-        challenge.audience,
-        challenge.issued_at,
-        challenge.expires_at,
-        auth_data,
-    )?;
-    let signature = signing_key.sign(&unsigned.signing_payload_bytes()?);
-    unsigned
-        .attach_signature(
-            Base64UrlString::new(URL_SAFE_NO_PAD.encode(signature.to_bytes()))
+        account_id: challenge.account_id,
+        requesting_device_id: challenge.requesting_device_id,
+        backup_id: challenge.backup_id,
+        backup_kind: BackupKind::SecretStorage,
+        series_id: challenge.series_id,
+        ciphertext_digest: challenge.ciphertext_digest,
+        challenge: challenge.challenge,
+        service_id: challenge.service_id,
+        audience: challenge.audience,
+        issued_at: challenge.issued_at,
+        expires_at: challenge.expires_at,
+        auth_data: KeyBackupUnlockProofAuthData {
+            verification_method: DidUrl::new(verification_method)
                 .map_err(|error| anyhow!(error))?,
-        )
-        .map_err(anyhow::Error::from)
+            signature_algorithm: KeyBackupSignatureAlgorithm::Ed25519,
+            signature: Base64UrlString::new("AA").map_err(|error| anyhow!(error))?,
+        },
+    };
+    let signature = signing_key.sign(&proof.signing_payload_bytes()?);
+    proof.auth_data.signature = Base64UrlString::new(URL_SAFE_NO_PAD.encode(signature.to_bytes()))
+        .map_err(|error| anyhow!(error))?;
+    Ok(proof)
 }
 
 fn ts(value: &str) -> Result<DateTime<Utc>> {

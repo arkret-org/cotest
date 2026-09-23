@@ -12,7 +12,7 @@ use arkret_models_collaboration::authority_commit::{
     DirectConversationFoundingDependencyMissingProblem, PeerAuthoritySubmitOutcome,
     PeerAuthoritySubmitRequest, SelfAuthoritySubmitRequest,
 };
-use arkret_wire::EventCommitSubmission;
+use arkret_wire::EventAdmissionSubmission;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 
@@ -133,7 +133,7 @@ fn assert_canonical_semantic_ledger(fixture: &Value) -> Result<()> {
 
 fn assert_endpoint_unions_and_approval(approved: &Value) -> Result<usize> {
     schema_valid(SELF_REQUEST, approved)?;
-    assert_roundtrip::<EventCommitSubmission>(approved)?;
+    assert_roundtrip::<EventAdmissionSubmission>(approved)?;
     assert_roundtrip::<SelfAuthoritySubmitRequest>(approved)?;
     ensure!(
         approved["approval_signatures"]

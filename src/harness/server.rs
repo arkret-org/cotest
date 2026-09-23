@@ -148,7 +148,6 @@ pub struct ArkretServer {
     base_url: Url,
     service_id: DidCoreId,
     service_did: Did,
-    service_notary_signer: arkret_wire::NotarySignerDescriptor,
     trust_domain: TrustDomainId,
     account_authority_origin: String,
     blob_root: Option<PathBuf>,
@@ -316,26 +315,6 @@ fn test_service_signing_key(name: &str) -> (String, [u8; 32]) {
     (BASE64_STANDARD.encode(seed), seed)
 }
 
-fn test_service_notary_signer(
-    service_id: &DidCoreId,
-    service_did: &Did,
-    signing_seed: [u8; 32],
-) -> Result<arkret_wire::NotarySignerDescriptor> {
-    let public_key = ed25519_dalek::SigningKey::from_bytes(&signing_seed)
-        .verifying_key()
-        .to_bytes();
-    let descriptor = arkret_wire::NotarySignerDescriptor {
-        actor_id: arkret_wire::ActorId::service(service_id.clone()),
-        verification_method: arkret_wire::DidUrl::new(format!("{service_did}#notary-key"))
-            .map_err(anyhow::Error::msg)?,
-        key_kind: arkret_wire::NotaryKeyKind::Ed25519Raw32,
-        jose_algorithm: arkret_wire::NotaryJoseAlgorithm::Ed25519,
-        frozen_public_key_b64u: URL_SAFE_NO_PAD.encode(public_key),
-    };
-    descriptor.validate()?;
-    Ok(descriptor)
-}
-
 /// Every cotest SUT delegates its Account Authority assertion key to the harness so the
 /// canonical actor bootstrap can relay PCR genesis units no matter which spawn
 /// path produced the process. Callers that wire a real Account Authority
@@ -378,7 +357,7 @@ impl ArkretServer {
     /// as `COTEST_SOLAND_NOTARY_SIGNING_KEY`.
     pub async fn attach(
         base_url: &str,
-        notary_signing_key_b64: &str,
+        _notary_signing_key_b64: &str,
         ca_pem_path: Option<&Path>,
     ) -> Result<Self> {
         let base_url = Url::parse(base_url)
@@ -389,17 +368,6 @@ impl ArkretServer {
         };
         let (service_id, service_did, trust_domain) =
             fetch_service_identity(&base_url, tls.as_deref()).await?;
-        let notary_seed_bytes = BASE64_STANDARD
-            .decode(notary_signing_key_b64)
-            .context("decode the attached Station notary signing key")?;
-        let notary_seed: [u8; 32] = notary_seed_bytes.as_slice().try_into().map_err(|_| {
-            anyhow::anyhow!(
-                "attached Station notary signing key is {} bytes, not 32",
-                notary_seed_bytes.len()
-            )
-        })?;
-        let service_notary_signer =
-            test_service_notary_signer(&service_id, &service_did, notary_seed)?;
         Ok(Self {
             handle: SutHandle::Attached,
             http_client: probe_http_client(tls.as_deref())?,
@@ -407,7 +375,6 @@ impl ArkretServer {
             base_url,
             service_id,
             service_did,
-            service_notary_signer,
             trust_domain,
             account_authority_origin: HARNESS_ACCOUNT_AUTHORITY_ORIGIN.to_owned(),
             blob_root: None,
@@ -509,7 +476,7 @@ impl ArkretServer {
         let metrics_bind = format!("127.0.0.1:{}", metrics_port.port());
         let metrics_bind_for_handle = metrics_bind.clone();
         let base_url = Url::parse(&format!("https://127.0.0.1:{}/", port.port()))?;
-        let (notary_signing_key, notary_signing_seed) = test_service_signing_key(name);
+        let (notary_signing_key, _) = test_service_signing_key(name);
         let blob_root = std::env::temp_dir().join(format!("cotest-{name}-{}-blobs", port.port()));
         let _ = fs::remove_dir_all(&blob_root);
         fs::create_dir_all(&blob_root)?;
@@ -603,8 +570,6 @@ impl ArkretServer {
                     return Err(error);
                 }
             };
-        let service_notary_signer =
-            test_service_notary_signer(&service_id, &service_did, notary_signing_seed)?;
 
         Ok(Self {
             handle: SutHandle::Local(child),
@@ -623,7 +588,6 @@ impl ArkretServer {
             base_url,
             service_id,
             service_did,
-            service_notary_signer,
             trust_domain,
             account_authority_origin: extra_env
                 .iter()
@@ -660,7 +624,7 @@ impl ArkretServer {
         let container_port = sut_container_port();
         let alias = sanitize_runtime_name(name);
         let base_url = Url::parse(&format!("http://127.0.0.1:{}/", host_port.port()))?;
-        let (notary_signing_key, notary_signing_seed) = test_service_signing_key(name);
+        let (notary_signing_key, _) = test_service_signing_key(name);
         let public_base_url = if docker_network.is_some() {
             format!("http://{alias}:{container_port}/")
         } else {
@@ -753,8 +717,6 @@ impl ArkretServer {
                     return Err(error);
                 }
             };
-        let service_notary_signer =
-            test_service_notary_signer(&service_id, &service_did, notary_signing_seed)?;
 
         Ok(Self {
             handle: SutHandle::Docker { container_name },
@@ -763,7 +725,6 @@ impl ArkretServer {
             base_url,
             service_id,
             service_did,
-            service_notary_signer,
             trust_domain,
             account_authority_origin: extra_env
                 .iter()
@@ -797,10 +758,6 @@ impl ArkretServer {
 
     pub fn service_did(&self) -> &Did {
         &self.service_did
-    }
-
-    pub fn service_notary_signer(&self) -> &arkret_wire::NotarySignerDescriptor {
-        &self.service_notary_signer
     }
 
     pub fn trust_domain(&self) -> &TrustDomainId {
@@ -1367,7 +1324,6 @@ impl ArkretServer {
             sdk,
             base_url: self.base_url(),
             service_id: self.service_id.to_string(),
-            service_notary_signer: self.service_notary_signer.clone(),
             actor: actor.to_owned(),
             device_id: device_id.to_owned(),
             session,

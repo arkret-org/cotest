@@ -1,8 +1,18 @@
-use arkret_models_collaboration::http_bodies::MimiReportAbuseRequestBody;
+use arkret_models_collaboration::mimi_operations::MimiReportAbuseRequestBody;
+use arkret_wire::{CommitStreamRef, CommittedEventRef, EventId, RealmCommitId, RealmId, ScopeRef};
 use serde_json::json;
 
 #[test]
 fn mimi_report_requires_closed_exact_actor_authority() {
+    let realm_id = RealmId::new("ak:realm:AY789mrKRCQEVlbVgiTgLdjVO5oCMJiUCrF-D-JlRNxI").unwrap();
+    let reference = |byte, position| CommittedEventRef {
+        event_id: EventId::from_digest(arkret_canonical::DigestSuite::Sha256, [byte; 32]),
+        commit_id: RealmCommitId::from_digest([byte; 32]),
+        stream_ref: CommitStreamRef::Realm {
+            realm_id: realm_id.clone(),
+        },
+        stream_position: position,
+    };
     let report = json!({
         "reporter_authority": {
             "actor_id": {
@@ -12,61 +22,57 @@ fn mimi_report_requires_closed_exact_actor_authority() {
                     "station_id": "ak:did_core:web:station.example"
                 }
             },
-            "membership_event_id": "ak:event:AZL87nwhLc8pnnvIhrfEQSfNkZvdPzaV3rFGVoJCQWW6",
-            "room_binding_event_id": "ak:event:Adoyyx1AqvJH02hYxuUtpzuC-zpV8GxwFQ8XInZLbu3s",
-            "expires_at": "2026-09-01T00:05:00.000Z",
+            "membership_ref": reference(0x11, 7),
+            "room_binding_ref": reference(0x22, 8),
+            "expires_at": "2026-09-23T13:40:00.000Z",
             "proof": {
                 "kind": "detached_jws",
                 "verification_method": "did:web:alice.example#device-1",
                 "payload_digest": format!("sha256:{}", "0".repeat(64)),
-                "created_at": "2026-09-01T00:00:00.000Z",
-                "domain": "ak:trust_domain:example.com",
+                "created_at": "2026-09-23T13:30:00.000Z",
+                "domain": "ak.mimi_reporter_authority_proof.v1",
                 "audience": "ak:did_core:web:provider.example",
-                "jws": "e30..c2ln"
+                "jws": "eyJhbGciOiJFZERTQSJ9..c2ln"
             }
         },
-        "report_event": {
-            "event": {
-                "event_id": "ak:event:AZL87nwhLc8pnnvIhrfEQSfNkZvdPzaV3rFGVoJCQWW6",
-                "kind": "ak.self.moderation.report",
-                "realm_id": "ak:realm:AY789mrKRCQEVlbVgiTgLdjVO5oCMJiUCrF-D-JlRNxI",
-                "scope_ref": {
-                    "kind": "realm",
-                    "realm_id": "ak:realm:AY789mrKRCQEVlbVgiTgLdjVO5oCMJiUCrF-D-JlRNxI"
-                },
-                "actor_id": {
-                    "kind": "account",
-                    "account_id": {
-                        "principal_id": "ak:did_core:web:alice.example",
-                        "station_id": "ak:did_core:web:station.example"
-                    }
-                },
-                "actor_seq": 1,
-                "created_at": "2026-09-01T00:00:00.000Z",
-                "prev_refs": [],
-                "requirements": {},
-                "payload": {
-                    "realm_id": "ak:realm:AY789mrKRCQEVlbVgiTgLdjVO5oCMJiUCrF-D-JlRNxI",
-                    "effective_scope": {
-                        "kind": "realm",
-                        "realm_id": "ak:realm:AY789mrKRCQEVlbVgiTgLdjVO5oCMJiUCrF-D-JlRNxI"
-                    },
-                    "target_ref": "ak:realm:AY789mrKRCQEVlbVgiTgLdjVO5oCMJiUCrF-D-JlRNxI",
-                    "report_reason_code": "spam",
-                    "reporter_id": "ak:did_core:web:alice.example",
-                    "provenance": "mimi_facade",
-                    "source_provider_id": "ak:did_core:web:provider.example"
-                },
-                "proofs": []
-            }
+        "report_claim": {
+            "realm_id": realm_id,
+            "scope_ref": ScopeRef::Realm { realm_id: realm_id.clone() },
+            "target_ref": EventId::from_digest(arkret_canonical::DigestSuite::Sha256, [0x33; 32]),
+            "report_reason_code": "spam"
         }
     });
-    let parsed: MimiReportAbuseRequestBody = serde_json::from_value(report.clone()).unwrap();
+    let mut parsed: MimiReportAbuseRequestBody = serde_json::from_value(report.clone()).unwrap();
+    parsed.reporter_authority.proof.payload_digest = parsed.payload_digest().unwrap();
+    parsed.validate().unwrap();
+    let bound = parsed.reporter_authority_binding_bytes().unwrap();
+    assert!(!bound.is_empty());
+    assert_eq!(parsed.report_claim.realm_id, realm_id);
     assert_eq!(
-        &parsed.report_event.event.actor_id,
-        &parsed.reporter_authority.actor_id
+        parsed
+            .reporter_authority
+            .membership_ref
+            .stream_ref
+            .realm_id(),
+        &realm_id
     );
-    assert!(parsed.report_payload().is_ok());
+    assert_eq!(
+        parsed
+            .reporter_authority
+            .room_binding_ref
+            .stream_ref
+            .realm_id(),
+        &realm_id
+    );
+
+    parsed.report_claim.target_ref =
+        EventId::from_digest(arkret_canonical::DigestSuite::Sha256, [0x44; 32]).to_string();
+    assert!(
+        parsed.validate().is_err(),
+        "claim mutation must invalidate proof digest"
+    );
+    parsed.reporter_authority.proof.payload_digest = parsed.payload_digest().unwrap();
+    assert_ne!(bound, parsed.reporter_authority_binding_bytes().unwrap());
 
     let mut missing = report.clone();
     missing
@@ -74,6 +80,10 @@ fn mimi_report_requires_closed_exact_actor_authority() {
         .unwrap()
         .remove("reporter_authority");
     assert!(serde_json::from_value::<MimiReportAbuseRequestBody>(missing).is_err());
+
+    let mut retired = report.clone();
+    retired["report_event"] = json!({});
+    assert!(serde_json::from_value::<MimiReportAbuseRequestBody>(retired).is_err());
 
     let mut mirrored = report;
     mirrored["reporter_id"] = json!("ak:did_core:web:alice.example");

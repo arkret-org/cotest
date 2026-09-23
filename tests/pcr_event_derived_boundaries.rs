@@ -2,23 +2,36 @@ use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde_json::json;
 
+fn realm_genesis_baseline() -> serde_json::Value {
+    json!({
+        "schema": "ak.schema.realm_genesis.v1",
+        "purpose": "collaboration",
+        "genesis_salt": "X-kS8-uBvWQ_iuRqO7Rsv0WGBjZG2S2wJ533Tk2SJJ4",
+        "trust_domain": "ak:trust_domain:did.webvh.alice.example",
+        "security_class": "standard",
+        "governance_station_id": "ak:did_core:webvh:z6mkfixturestationexample",
+        "initial_join_rule": "closed",
+        "initial_history_access": "since_join",
+        "initial_discoverability": "secret"
+    })
+}
+
 #[test]
-fn notary_value_uses_core_actor_id_and_rejects_did_spelling() {
-    let actor_id = arkret_wire::DidCoreId::new("ak:did_core:web:notary.example").unwrap();
-
-    let notary = cotest::fixture_notary_configuration(actor_id.clone());
-    let authority = serde_json::to_value(notary).expect("notary authority serializes");
-    assert_eq!(
-        authority["signer"]["actor_id"],
-        json!(arkret_wire::ActorId::service(actor_id.clone()))
+fn realm_genesis_rejects_retired_notary_field() {
+    let mut genesis = realm_genesis_baseline();
+    assert!(
+        serde_json::from_value::<arkret_models_collaboration::events_payloads::RealmGenesis>(
+            genesis.clone()
+        )
+        .is_ok()
     );
-    assert_eq!(authority["max_clock_error_ms"], json!(0));
-    assert!(authority["signer"].get("did").is_none());
-    assert!(authority.get("kind").is_none());
-    assert!(authority.get("fault_tolerance").is_none());
-
-    let missing_signer = json!({"max_clock_error_ms": 0});
-    assert!(serde_json::from_value::<arkret_wire::NotaryValue>(missing_signer).is_err());
+    genesis["notary"] = json!({"signer": "retired"});
+    assert!(
+        serde_json::from_value::<arkret_models_collaboration::events_payloads::RealmGenesis>(
+            genesis
+        )
+        .is_err()
+    );
 }
 
 #[test]
@@ -31,21 +44,14 @@ fn realm_id_rejects_reserved_high_nibble_one() {
 
 #[test]
 fn realm_genesis_rejects_missing_genesis_salt() {
-    let notary = serde_json::to_value(cotest::fixture_notary_configuration(
-        arkret_wire::DidCoreId::new("ak:did_core:webvh:z6mkfixture").unwrap(),
-    ))
-    .unwrap();
-    let missing = json!({
-        "schema": "ak.schema.realm_genesis.v1",
-        "purpose": "collaboration",
-        "trust_domain": "ak:trust_domain:example.test",
-        "schema_refs": ["ak.schema.realm.v1"],
-        "reducer_profile": "ak.profile.reducer.core.v1",
-        "digest_algorithm": "sha256",
-        "security_class": "standard",
-        "encryption_profile": "mls_rfc9420",
-        "notary": notary
-    });
+    let mut missing = realm_genesis_baseline();
+    assert!(
+        serde_json::from_value::<arkret_models_collaboration::events_payloads::RealmGenesis>(
+            missing.clone()
+        )
+        .is_ok()
+    );
+    missing.as_object_mut().unwrap().remove("genesis_salt");
     assert!(
         serde_json::from_value::<arkret_models_collaboration::events_payloads::RealmGenesis>(
             missing

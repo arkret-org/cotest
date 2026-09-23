@@ -544,53 +544,12 @@ fn collect_plain_refs(requirement: &Value, field: &str) -> Result<BTreeSet<Strin
 fn collect_cell_refs(
     requirement: &Value,
     field: &str,
-    require_cell_prefix: bool,
+    _require_cell_prefix: bool,
 ) -> Result<BTreeSet<String>> {
-    let mut refs = BTreeSet::new();
-    for value in string_array_field(requirement, field)? {
-        if value.trim().is_empty() {
-            bail!("requirement {field} contains an empty value");
-        }
-        if require_cell_prefix
-            && arkret_identifiers::CellRef::new(value.to_owned()).is_err()
-            && !is_template_cell_ref(value)
-        {
-            bail!(
-                "requirement {field} references non-canonical cell value {value}; expected ak:cell:ak.component.*.v<n>:<subject>"
-            );
-        }
-        refs.insert(value.to_owned());
+    if let Some(value) = string_array_field(requirement, field)?.first() {
+        bail!("retired {field} requirement still references {value}");
     }
-    Ok(refs)
-}
-
-/// Profile requirement blocks may describe a cell family with a symbolic
-/// subject (for example `...:<realm_id>` or `...:<mls_group_id>`).  These are
-/// templates, not wire values, so the typed CellRef parser quite correctly
-/// rejects the angle-bracket subject.  Validate the family and placeholder
-/// shape here while preserving the template for profile matching.
-fn is_template_cell_ref(value: &str) -> bool {
-    let Some(rest) = value.strip_prefix("ak:cell:") else {
-        return false;
-    };
-    let Some((family, subject)) = rest.rsplit_once(':') else {
-        return false;
-    };
-    if !family.starts_with("ak.component.") {
-        return false;
-    }
-    let Some(version) = family.rsplit_once(".v").map(|(_, v)| v) else {
-        return false;
-    };
-    if version.is_empty() || !version.chars().all(|c| c.is_ascii_digit()) {
-        return false;
-    }
-    let inner = subject.strip_prefix('<').and_then(|s| s.strip_suffix('>'));
-    inner.is_some_and(|s| {
-        !s.is_empty()
-            && s.chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
-    })
+    Ok(BTreeSet::new())
 }
 
 fn collect_required_fixtures(requirement: &Value, profile: &str) -> Result<BTreeSet<String>> {

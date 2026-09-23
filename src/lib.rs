@@ -210,59 +210,6 @@ pub fn fixture_did_url(value: impl Into<String>) -> arkret_wire::DidUrl {
         .unwrap_or_else(|error| panic!("cotest fixture verification method {value:?}: {error}"))
 }
 
-/// Build a deterministic frozen Ed25519 notary signer for fixtures.
-#[track_caller]
-pub fn fixture_notary_signer(
-    actor_id: arkret_wire::DidCoreId,
-) -> arkret_wire::NotarySignerDescriptor {
-    let controller = actor_id
-        .as_str()
-        .strip_prefix("ak:did_core:")
-        .unwrap_or_else(|| panic!("fixture notary actor is not a DID-core id: {actor_id}"))
-        .to_owned();
-    // A WebVH core intentionally retains only the SCID, so prefix
-    // substitution cannot recreate a resolvable DID. Fixtures still need
-    // a syntactically complete verification-method controller that projects
-    // back to the same core; use a closed test-only method coordinate for it.
-    let controller = if controller.starts_with("webvh:") {
-        format!("{controller}:cotest.invalid:webvh:notary-fixture")
-    } else {
-        controller
-    };
-    fixture_notary_signer_for_method(
-        actor_id,
-        fixture_did_url(format!("did:{controller}#notary-key-1")),
-    )
-}
-
-/// Build a deterministic frozen Ed25519 notary signer for an exact fixture
-/// verification method.
-#[track_caller]
-pub fn fixture_notary_signer_for_method(
-    actor_id: arkret_wire::DidCoreId,
-    verification_method: arkret_wire::DidUrl,
-) -> arkret_wire::NotarySignerDescriptor {
-    use base64::Engine as _;
-    use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-    use sha2::{Digest, Sha256};
-
-    let public_key: [u8; 32] = Sha256::digest(actor_id.as_str().as_bytes()).into();
-    let frozen_public_key_b64u = URL_SAFE_NO_PAD.encode(public_key);
-    arkret_wire::NotarySignerDescriptor {
-        actor_id: arkret_wire::ActorId::service(actor_id),
-        verification_method,
-        key_kind: arkret_wire::NotaryKeyKind::Ed25519Raw32,
-        jose_algorithm: arkret_wire::NotaryJoseAlgorithm::Ed25519,
-        frozen_public_key_b64u,
-    }
-}
-
-#[track_caller]
-pub fn fixture_notary_configuration(actor_id: arkret_wire::DidCoreId) -> arkret_wire::NotaryValue {
-    arkret_wire::NotaryValue::new(fixture_notary_signer(actor_id), 0)
-        .expect("single-authority fixture is valid")
-}
-
 /// Build a deterministic content-addressed signer-evidence reference pair for
 /// Event fixtures whose sole producer proof needs portable signer evidence.
 #[track_caller]

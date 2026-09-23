@@ -24,7 +24,7 @@ use arkret_models_collaboration::mimi_operations::{
     MimiConsentDecision, MimiRequestConsentRequestBody, MimiUpdateConsentRequestBody,
 };
 use arkret_wire::{
-    AccountId, Audience, AuditReasonText, CommittedEventRef, DidUrl, Event, EventCommitSubmission,
+    AccountId, Audience, AuditReasonText, DidUrl, Event, EventAdmissionSubmission, EventId,
     NonEmptyString, PayloadProof, ProducerEventProof, SecurityClass, proof_kind,
 };
 use base64::Engine as _;
@@ -162,7 +162,7 @@ struct ManagedActorAuthorInput {
     actor_id: arkret_wire::ActorId,
     initial_resolution: arkret::ResolutionCommitment,
     method_history_evidence: arkret::ResolutionMethodHistoryEvidence,
-    registration_ref: CommittedEventRef,
+    registration_ref: EventId,
     service_signing_seed_b64url: String,
     service_verification_method: DidUrl,
     station_id: DidCoreId,
@@ -1102,7 +1102,7 @@ pub fn mimi_consent_proof(input: Value) -> Result<Value> {
         decision: serde_json::from_value::<MimiConsentDecision>(decision)
             .context("parse consent decision")?,
         actor_id,
-        consent_event: serde_json::from_value::<EventCommitSubmission>(consent_event)
+        consent_event: serde_json::from_value::<EventAdmissionSubmission>(consent_event)
             .context("parse MIMI consent Event")?,
         signature: PayloadProof {
             kind: proof_kind::DETACHED_JWS.to_owned(),

@@ -41,6 +41,10 @@ macro_rules! conformance_async_test {
     };
 }
 
+fn run_call_state_core_current_suite() -> Result<()> {
+    cotest::conformance::run_call_state_core_suite().map(|_| ())
+}
+
 conformance_test!(
     schema_validation_suite_matches_reference_semantics,
     "schema_validation",
@@ -367,13 +371,6 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// C1 — constraint family coverage.
-    constraint_family_fixture_suite_matches_reference_semantics,
-    "constraint_family_fixture",
-    cotest::conformance::run_constraint_family_fixture_suite,
-);
-
-conformance_test!(
     /// A5 — device-message / key-verification / key-backup negatives.
     device_message_negative_fixture_suite_matches_reference_semantics,
     "device_message_negative_fixture",
@@ -400,14 +397,6 @@ conformance_test!(
     key_backup_encryption_fixture_suite_matches_reference_semantics,
     "key_backup_encryption_fixture",
     cotest::conformance::run_key_backup_encryption_fixture_suite,
-);
-
-conformance_test!(
-    /// C2 — constraint evaluation_class fast-path coverage — smoke
-    /// validation.
-    constraint_evaluation_class_fixture_suite_matches_reference_semantics,
-    "constraint_evaluation_class_fixture",
-    cotest::conformance::run_constraint_evaluation_class_fixture_suite,
 );
 
 conformance_test!(
@@ -506,13 +495,11 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// Call-state core vectors promoted to spec artifacts. Asserts
-    /// participant-binding admission maps semantic failures to
-    /// participant_binding_invalid and the call lifecycle keeps initial,
-    /// transition, terminal, replay, and competing-predecessor behavior aligned.
-    call_state_core_fixture_suite_matches_reference_semantics,
+    /// Execute the seven current call-state cases through the production
+    /// participant-binding gate and sequenced reducer.
+    call_state_core_fixture_suite_executes_current_cases,
     "call_state_core_fixture",
-    cotest::conformance::run_call_state_core_fixture_suite,
+    run_call_state_core_current_suite,
 );
 
 conformance_test!(

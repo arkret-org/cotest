@@ -13,16 +13,12 @@ mod agent_signer_evidence;
 mod agent_vectors;
 mod applet_install;
 mod arkret_private_kdf_and_durability;
-mod audit_release;
 mod auth_session_proof;
 mod authority_commit;
 mod authority_event_submit_carriers;
-mod authorization_lease_issuance;
-mod authorization_lease_issuance_reference;
 mod blind_payload;
 mod blob_stream_aead;
 mod call_signal;
-mod call_state_core;
 mod call_state_core_executable;
 mod call_state_media_lifecycle;
 mod canonical_cross_lang;
@@ -180,12 +176,6 @@ pub use applet_install::{
     run_applet_registration_epoch_kat_suite,
 };
 pub use arkret_private_kdf_and_durability::run_arkret_private_kdf_and_durability_suite;
-pub use audit_release::{
-    ALL_AUDIT_RELEASE_VECTOR_IDS, run_audit_release_vector_suite,
-    run_binding_and_authorization_gate_vector, run_binding_transitions_vector,
-    run_close_release_concurrency_vector, run_release_recipient_binding_vector,
-    run_release_window_vector, run_ryw_before_output_vector, run_session_transitions_vector,
-};
 pub use auth_session_proof::{
     ALL_AUTH_SESSION_PROOF_VECTOR_IDS, run_auth_session_grant_audience_binding_vector,
     run_auth_session_proof_fixture_suite, run_http_signature_freshness_boundaries_vector,
@@ -197,7 +187,6 @@ pub use authority_commit::{
 pub use authority_event_submit_carriers::{
     AuthorityEventSubmitCarrierCoverage, run_authority_event_submit_carrier_conformance,
 };
-pub use authorization_lease_issuance::run_authorization_lease_issuance_joint_gate;
 pub use blind_payload::{
     run_blind_payload_sanitizer_suite, run_blind_payload_sanitizer_suite_counts,
 };
@@ -208,12 +197,6 @@ pub use blob_stream_aead::{
 pub use call_signal::{
     ALL_CALL_SIGNAL_VECTOR_IDS, run_call_signal_vector_suite, run_plaintext_closed_schema_vector,
     run_proof_detached_jws_vector, run_seq_monotonic_vector, run_signal_kind_enum_vector,
-};
-pub use call_state_core::{
-    ALL_CALL_STATE_CORE_VECTOR_IDS, run_axis_cell_split_vector, run_call_state_core_fixture_suite,
-    run_initial_state_accepts_allowed_vector, run_ordered_competing_transitions_vector,
-    run_participant_binding_invalid_vector, run_replay_same_state_noop_vector,
-    run_terminal_absorbing_vector, run_transition_matrix_vector,
 };
 pub use call_state_core_executable::{CALL_STATE_CORE_ENTRYPOINT, run_call_state_core_suite};
 pub use call_state_media_lifecycle::{
@@ -400,7 +383,6 @@ pub use primary_handle_vectors::{
     run_tie_break_by_claim_digest_vector, run_tie_break_by_created_at_vector,
 };
 pub use privacy::run_privacy_security_fixture_suite;
-pub use privacy_security::run_minimal_metadata_author_credential_vector;
 pub use private_chat_privacy::run_private_chat_privacy_contract_suite;
 pub use private_view_inbox::{PRIVATE_VIEW_INBOX_ENTRYPOINT, run_private_view_inbox_suite};
 pub use producer_identity::{PRODUCER_IDENTITY_ENTRYPOINT, run_producer_identity_suite};
@@ -475,6 +457,7 @@ pub use signal_federation::{
 };
 pub use signal_sequence_high_water::run_signal_sequence_high_water_suite;
 pub use spec_business_flow::run_spec_business_flow_coverage_suite;
+pub use station_certification::run_station_certification_gate_suite;
 pub use strand_watch_current::{STRAND_WATCH_CURRENT_ENTRYPOINT, run_strand_watch_current_suite};
 pub use string_profiles::{STRING_PROFILE_ENTRYPOINT, run_string_profile_suite};
 pub use suite_execution::{CaseExecutionResult, SuiteExecutionResult};
@@ -491,21 +474,13 @@ pub use vector_registry_gate::{
     validate_vector_registry_gate_report_with_mode,
 };
 pub use view_write_contract::{VIEW_WRITE_CONTRACT_ENTRYPOINT, run_view_write_contract_suite};
-pub use visibility_policy::{
-    ALL_VISIBILITY_POLICY_VECTOR_IDS, run_circle_content_floor_below_realm_rejected_vector,
-    run_content_floor_downgrade_rejected_vector,
-    run_directory_visibility_members_indistinguishable_vector,
-    run_directory_visibility_realm_members_indistinguishable_vector,
-    run_in_place_e2ee_enable_vector, run_metadata_floor_downgrade_rejected_vector,
-    run_visibility_policy_fixture_suite,
-};
+pub use visibility_policy::run_visibility_policy_fixture_suite;
 pub use webrtc_media_plaintext::{
     WEBRTC_MEDIA_PLAINTEXT_ENTRYPOINT, run_webrtc_media_plaintext_suite,
 };
 pub use websocket_binding::run_websocket_binding_suite;
 pub use wire::{
     run_composite_state_key_encoding_fixture_suite, run_composite_state_subject_fixture_suite,
-    run_constraint_evaluation_class_fixture_suite, run_constraint_family_fixture_suite,
     run_device_message_negative_fixture_suite, run_discovery_profile_fixture_suite,
     run_event_kind_payload_coverage_fixture_suite, run_facet_renderer_query_fixture_suite,
     run_interop_downgrade_fixture_suite, run_key_backup_aead_round_trip_check,

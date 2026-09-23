@@ -29,7 +29,7 @@ use arkret_state::{
 use arkret_wire::{
     ActorId, AuthorityBundleRequest, AuthoritySubmitOutcome, AuthoritySubmitRequest,
     Base64UrlString, CommitStreamHead, CommitStreamRef, CommittedEventRef, DetachedObjectSignature,
-    DetachedSignatureAlgorithm, DetachedSignatureContext, DidUrl, Event, EventCommitSubmission,
+    DetachedSignatureAlgorithm, DetachedSignatureContext, DidUrl, Event, EventAdmissionSubmission,
     EventKind, Hash, HistoryAccess, MlsCommitSubmission, MlsWelcomeDelivery,
     MlsWelcomeRecipientEndpoint, RealmAuthorityBundle, RealmAuthorityCurrentAssertion,
     RealmAuthorityHandoff, RealmAuthorityTransition, RealmCommit, RealmCommitAuthorityRef,
@@ -691,7 +691,7 @@ fn verify_event_commit_submission_is_the_only_event_dto() -> Result<()> {
         commits: Vec::new(),
     };
     let event = signed_event(producer_event(&stream, 2)?)?;
-    let submission = EventCommitSubmission::new(event.clone());
+    let submission = EventAdmissionSubmission::new(event.clone());
     let encoded = serde_json::to_value(&submission)?;
     ensure!(
         encoded
@@ -700,7 +700,7 @@ fn verify_event_commit_submission_is_the_only_event_dto() -> Result<()> {
             .keys()
             .map(String::as_str)
             .eq(["event"]),
-        "EventCommitSubmission is closed over exactly one member"
+        "EventAdmissionSubmission is closed over exactly one member"
     );
 
     for extra in [
@@ -716,7 +716,7 @@ fn verify_event_commit_submission_is_the_only_event_dto() -> Result<()> {
             .ok_or_else(|| anyhow!("tampered submission is not an object"))?
             .insert(extra.to_owned(), json!(null));
         ensure!(
-            serde_json::from_value::<EventCommitSubmission>(tampered).is_err(),
+            serde_json::from_value::<EventAdmissionSubmission>(tampered).is_err(),
             "the submission DTO must reject {extra}"
         );
     }

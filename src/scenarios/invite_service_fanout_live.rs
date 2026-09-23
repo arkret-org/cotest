@@ -10,9 +10,9 @@
 //!
 //! Both active holder devices independently read account-data list/resource
 //! state and their own live queue. Every envelope is deserialized through the
-//! SDK's closed `DeviceMessageEnvelope` XOR and must carry the local Principal
-//! Server as sender, the holder as both sender and recipient principal, and the
-//! exact revision/content returned by account-data CAS. The notify branch also
+//! SDK's recipient-delivery branch and must carry the local Station as sender,
+//! the holder account as recipient, and the exact revision/content returned by
+//! account-data CAS. The notify branch also
 //! keeps an account-subscribe long poll open before dispatch and proves that the
 //! durable fanout wakes it with the invite-delivery update.
 
@@ -24,22 +24,19 @@ use arkret_models_collaboration::consent_operations::{
     ConsentGrantRequestBody, ConsentRevokeRequestBody, ConsentView,
 };
 use arkret_models_collaboration::device_messages::{
-    DeviceMessageSender, DeviceMessagesAckRequestBody, DeviceMessagesGetOutcome,
+    DeviceMessageEnvelope, DeviceMessageSender, DeviceMessagesAckRequestBody,
+    DeviceMessagesGetOutcome, RecipientDelivery,
 };
 use arkret_models_collaboration::events_payloads::ConsentGrantPayload;
 use arkret_models_collaboration::events_payloads::consent::ConsentPeer;
 use arkret_models_collaboration::governance::invite_addressing::{
     IntroductionEvidence, InviteAddress, InviteReceivePolicy, SelfInviteDispatchRequestBody,
 };
-use arkret_models_collaboration::governance_payloads::{ConsentObservedDot, ConsentRevokePayload};
-use arkret_models_collaboration::sync_frames::account_sync::{
-    ActorPrivateAccountDataOperation, DeviceMessageContent,
-};
+use arkret_models_collaboration::governance_payloads::ConsentRevokePayload;
 use arkret_models_identity::ServiceResolutionCarrier;
 use arkret_models_identity::account::{AccountDataList, AccountDataRow};
-use arkret_wire::cbs::SealBasis;
 use arkret_wire::{
-    AccountDataKey, AccountId, ActorId, ConsentScope, EventInitialSubmission, InviteReceiveAction,
+    AccountDataKey, AccountId, ActorId, ConsentScope, EventAdmissionSubmission, InviteReceiveAction,
 };
 use chrono::{Duration as ChronoDuration, Utc};
 use reqwest::StatusCode;
@@ -47,11 +44,23 @@ use serde_json::{Value, json};
 
 use crate::harness::{
     TestActorClient, TestServerGroup, actor_core_id, expect_account_subscribe_delta, expect_json,
-    invite_create_payload, next_typed_id, refresh_typed_event_proof_with_signing_seed,
+    invite_create_payload, next_typed_id,
 };
-use crate::scenarios::identity_test_support::{
-    actor_did_for_service_did, seal_principal_control_frontier_with_pending_events,
-};
+use crate::scenarios::identity_test_support::actor_did_for_service_did;
+
+fn account_data_update_matches(envelope: &DeviceMessageEnvelope, row: &AccountDataRow) -> bool {
+    envelope.kind.as_str() == "ak.account_data.update"
+        && envelope.content.get("operation").and_then(Value::as_str) == Some("put")
+        && envelope
+            .content
+            .get("account_data_key")
+            .and_then(Value::as_str)
+            == Some(row.account_data_key.as_str())
+        && envelope.content.get("revision").and_then(Value::as_u64) == Some(row.revision)
+        && envelope.content.get("content") == Some(&row.content)
+        && envelope.content.get("updated_at").and_then(Value::as_str)
+            == Some(arkret_canonical::format_timestamp_canonical(row.updated_at).as_str())
+}
 
 #[derive(Debug)]
 pub(crate) struct DispatchedInvite {
@@ -239,22 +248,19 @@ async fn assert_service_account_data_fanout(
         .with_context(|| format!("to-device response is not closed SDK wire data: {polled}"))?;
     let holder_core_id = actor_core_id(&holder.actor)?;
     let mut matched = None;
-    for envelope in &outcome.messages {
-        if envelope.kind.as_str() != "ak.account_data.update" {
-            continue;
-        }
-        let DeviceMessageContent::AccountDataUpdate(update) = &envelope.content else {
+    for delivery in &outcome.deliveries {
+        let RecipientDelivery::DeviceMessage {
+            device_message: envelope,
+        } = delivery
+        else {
             continue;
         };
-        let update = update.clone();
-        if update.account_data_key == expected_row.account_data_key
-            && update.revision == expected_row.revision
-        {
-            matched = Some((envelope, update));
+        if account_data_update_matches(envelope, expected_row) {
+            matched = Some(envelope);
             break;
         }
     }
-    let (envelope, update) = matched.ok_or_else(|| {
+    let envelope = matched.ok_or_else(|| {
         anyhow!(
             "no account-data fanout for {} revision {}: {}",
             expected_row.account_data_key,
@@ -265,7 +271,7 @@ async fn assert_service_account_data_fanout(
     ensure!(
         matches!(
             &envelope.sender,
-            DeviceMessageSender::Service { sender_id }
+            DeviceMessageSender::Station { sender_id }
                 if sender_id.as_str() == expected_service_id
         ),
         "actor-private account-data fanout did not use the local Service sender"
@@ -280,9 +286,7 @@ async fn assert_service_account_data_fanout(
         "Service fanout reached the wrong holder device"
     );
     ensure!(
-        update.operation == ActorPrivateAccountDataOperation::Put
-            && update.content.as_ref() == Some(&expected_row.content)
-            && update.updated_at == expected_row.updated_at,
+        account_data_update_matches(envelope, expected_row),
         "to-device revision/content differs from account-data CAS row"
     );
 
@@ -349,10 +353,7 @@ async fn grant_then_revoke_invite_consent(
             serde_json::to_value(grant_payload)?,
         )
         .await?;
-    let grant_event_id = grant_event.event_id.clone();
-    let pending_grant_event = grant_event.clone();
-    let grant_submission: EventInitialSubmission =
-        crate::publication::initial_submission(grant_event, "")?;
+    let grant_submission = EventAdmissionSubmission::new(grant_event);
     let granted = expect_json(
         holder
             .post("/_arkret/self/consent/cells/grant")
@@ -364,46 +365,25 @@ async fn grant_then_revoke_invite_consent(
     .await?;
     let granted: ConsentView =
         serde_json::from_value(granted).context("consent grant response is not a ConsentView")?;
-    let expected_dot = format!("{}:0", grant_event_id.as_str());
     ensure!(
-        granted
-            .active_grant_dots
-            .iter()
-            .any(|dot| dot == &expected_dot),
-        "consent grant projection omitted its Event-derived dot: {granted:?}"
+        granted.state == arkret_models_collaboration::consent_operations::ConsentState::Active,
+        "consent grant did not produce active current state: {granted:?}"
     );
-    let device_signing_key = principal.device_signing_key.clone();
-    let grant_seal = seal_principal_control_frontier_with_pending_events(
-        holder,
-        &device_signing_key,
-        std::slice::from_ref(&pending_grant_event),
-    )
-    .await?;
 
     let revoke_payload = ConsentRevokePayload {
         consent_id,
-        observed_dot_ids: granted
-            .active_grant_dots
-            .iter()
-            .cloned()
-            .map(ConsentObservedDot::new)
-            .collect::<arkret_wire::Result<Vec<_>>>()?,
+        expected_revision: granted.revision,
         revoked_at: Some(Utc::now()),
         reason: Some("cotest_holder_quarantine_invalidation".to_owned()),
     };
-    let mut revoke_event = holder
+    let revoke_event = holder
         .author_event(
             principal.pcr_realm_id.as_str(),
             "ak.consent.revoke",
             serde_json::to_value(revoke_payload)?,
         )
         .await?;
-    revoke_event.seal_basis = Some(SealBasis {
-        leaves: vec![grant_seal],
-    });
-    refresh_typed_event_proof_with_signing_seed(&mut revoke_event, device_signing_key.to_bytes())?;
-    let revoke_submission: EventInitialSubmission =
-        crate::publication::initial_submission(revoke_event, "")?;
+    let revoke_submission = EventAdmissionSubmission::new(revoke_event);
     let revoked = expect_json(
         holder
             .post("/_arkret/self/consent/cells/revoke")
@@ -489,14 +469,11 @@ async fn assert_notify_invite_wakes_account_subscribe(
     )
     .with_context(|| format!("invite wake delta has invalid to_device data: {invite_delta}"))?;
     ensure!(
-        subscribe_messages.messages.iter().any(|envelope| {
+        subscribe_messages.deliveries.iter().any(|delivery| {
             matches!(
-                &envelope.content,
-                DeviceMessageContent::AccountDataUpdate(update)
-                    if envelope.kind.as_str() == "ak.account_data.update"
-                        && update.account_data_key == AccountDataKey::ACCOUNT_INVITE_DELIVERY
-                        && update.revision == delivery_row.revision
-                        && update.content.as_ref() == Some(&delivery_row.content)
+                delivery,
+                RecipientDelivery::DeviceMessage { device_message }
+                    if account_data_update_matches(device_message, &delivery_row)
             )
         }),
         "account subscribe woke without the durable invite-delivery update: {invite_delta}"
@@ -637,8 +614,8 @@ pub async fn invite_service_fanout_live_run() -> Result<()> {
 
     let revoked = grant_then_revoke_invite_consent(&holder, &inviter).await?;
     ensure!(
-        revoked.active_grant_dots.is_empty(),
-        "consent revoke left active grant dots: {revoked:?}"
+        revoked.state == arkret_models_collaboration::consent_operations::ConsentState::Revoked,
+        "consent revoke did not produce revoked current state: {revoked:?}"
     );
     let invalidated_row = account_data_row_on_both_devices(
         &holder,
@@ -675,7 +652,7 @@ pub async fn invite_service_fanout_live_run() -> Result<()> {
         )
         .await?;
         let drained: DeviceMessagesGetOutcome = serde_json::from_value(drained)?;
-        if !drained.messages.is_empty() {
+        if !drained.deliveries.is_empty() {
             bail!(
                 "acked actor-private fanout queue did not drain for {}: {drained:?}",
                 active_holder.device_id

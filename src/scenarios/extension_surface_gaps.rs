@@ -2,6 +2,9 @@ use anyhow::Result;
 use arkret::{
     AgentKeyScope, AgentKeyScopeResource, AgentKeyScopeResourceKind, AgentProvisionRequestBody, Did,
 };
+use arkret_models_collaboration::agent_operations::{
+    AgentProvisionPreparePhase, AgentProvisionPrepareRequestBody,
+};
 use arkret_models_collaboration::device_pairing::{
     DevicePairingNonce, DevicePairingResolveRequestBody, DevicePairingStageOutcome,
     DevicePairingStageRequestBody, DevicePairingState, DevicePairingStatusOutcome,
@@ -141,7 +144,8 @@ pub async fn agent_lifecycle_surfaces_are_advertised_when_routes_exist() -> Resu
     );
 
     let requested_operation = "ak.self.events.command.submit.v1";
-    let provision = AgentProvisionRequestBody::Prepare {
+    let provision = AgentProvisionRequestBody::Prepare(AgentProvisionPrepareRequestBody {
+        phase: AgentProvisionPreparePhase::Prepare,
         operation_id: arkret::ProtocolOperationId::new(
             "ak:operation:extension-surface-agent-provision",
         )
@@ -167,7 +171,7 @@ pub async fn agent_lifecycle_surfaces_are_advertised_when_routes_exist() -> Resu
             constraints: Vec::new(),
         },
         pairing_ttl_ms: None,
-    };
+    });
     let provision_error = expect_api_error(
         alice.post("/_arkret/self/agents").json(&provision),
         StatusCode::CONFLICT,
@@ -257,7 +261,7 @@ pub async fn device_pairing_handoff_bundle_selects_all_canonical_routes() -> Res
             .http()
             .post(server.url("/_arkret/open/device-pairing/resolve"))
             .json(&DevicePairingResolveRequestBody {
-                pairing_token: token,
+                pairing_token: NonEmptyString::new(token).map_err(anyhow::Error::msg)?,
             }),
         StatusCode::NOT_FOUND,
         "not_found",
