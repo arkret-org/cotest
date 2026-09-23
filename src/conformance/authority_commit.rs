@@ -346,7 +346,7 @@ fn commit_for(
         stream_position: declared.stream_position,
         previous_commit_ref: declared.previous_commit_ref.clone(),
         event_ref: event.event_id.clone(),
-        authority_generation: generation,
+        governance_generation: generation,
         authority_ref: RealmCommitAuthorityRef::GenesisOrChangeEvent(event.event_id.clone()),
         committed_at: fixed_time(1),
         signature: authority_signature(DetachedSignatureContext::RealmCommit, authority_did)?,
@@ -571,14 +571,14 @@ fn verify_scan_walks_one_stream_only(streams: &[DeclaredStream]) -> Result<()> {
             .validate_for_request(&request)
             .map_err(|error| anyhow!("stream scan outcome is not a contiguous chain: {error}"))?;
         ensure!(
-            outcome.commits.len() == stream.commits.len(),
+            outcome.committed_events.len() == stream.commits.len(),
             "a scan must return exactly its own stream's commits"
         );
         ensure!(
             outcome
-                .commits
+                .committed_events
                 .iter()
-                .all(|item| item.commit.stream_ref == stream.stream_ref),
+                .all(|item| item.commit().stream_ref == stream.stream_ref),
             "a scan must never leak another stream's commits"
         );
     }
@@ -662,7 +662,7 @@ fn commit_member_names() -> Result<Vec<String>> {
         stream_position: 0,
         previous_commit_ref: None,
         event_ref: EventId::from_digest(DigestSuite::Sha256, [0x43; 32]),
-        authority_generation: 0,
+        governance_generation: 0,
         authority_ref: RealmCommitAuthorityRef::GenesisOrChangeEvent(EventId::from_digest(
             DigestSuite::Sha256,
             [0x44; 32],
@@ -827,7 +827,7 @@ fn build_authority_fixture(declared: &[DeclaredStream]) -> Result<AuthorityFixtu
         stream_position: 0,
         previous_commit_ref: None,
         event_ref: genesis_event.event_id.clone(),
-        authority_generation: 0,
+        governance_generation: 0,
         authority_ref: RealmCommitAuthorityRef::GenesisOrChangeEvent(
             genesis_event.event_id.clone(),
         ),
@@ -851,7 +851,7 @@ fn build_authority_fixture(declared: &[DeclaredStream]) -> Result<AuthorityFixtu
         stream_position: 1,
         previous_commit_ref: Some(genesis_commit.commit_id.clone()),
         event_ref: change_event.event_id.clone(),
-        authority_generation: 0,
+        governance_generation: 0,
         authority_ref: RealmCommitAuthorityRef::GenesisOrChangeEvent(change_event.event_id.clone()),
         committed_at: fixed_time(11),
         signature: authority_signature(DetachedSignatureContext::RealmCommit, OLD_AUTHORITY_DID)?,
@@ -888,7 +888,7 @@ fn build_authority_fixture(declared: &[DeclaredStream]) -> Result<AuthorityFixtu
     let snapshot = RealmStateSnapshot {
         snapshot_id: RealmSnapshotId::from_digest(Sha256::digest(b"cotest-snapshot").into()),
         realm_id: realm_id.clone(),
-        authority_generation: 0,
+        governance_generation: 0,
         visible_stream_heads: final_stream_heads.clone(),
         current_state_entries: Vec::new(),
         retention_and_history_floor: RetentionAndHistoryFloor {
@@ -1092,12 +1092,12 @@ fn verify_snapshot_and_tails_are_complete(authority: &AuthorityFixture) -> Resul
             .validate_for_request(&request)
             .map_err(|error| anyhow!("tail is not a verifiable contiguous chain: {error}"))?;
         let last = outcome
-            .commits
+            .committed_events
             .last()
             .ok_or_else(|| anyhow!("an approved tail must not be empty"))?;
         ensure!(
-            last.commit.commit_id == head.commit_id
-                && last.commit.stream_position == head.stream_position,
+            last.commit().commit_id == head.commit_id
+                && last.commit().stream_position == head.stream_position,
             "the tail must reach the head the snapshot binds"
         );
     }
@@ -1188,23 +1188,23 @@ fn verify_old_authority_writes_are_rejected(authority: &AuthorityFixture) -> Res
         stream_position: head.stream_position + 1,
         previous_commit_ref: Some(head.commit_id.clone()),
         event_ref: event.event_id.clone(),
-        authority_generation: authority.handoff.from_generation,
+        governance_generation: authority.handoff.from_generation,
         authority_ref: RealmCommitAuthorityRef::Handoff(authority.handoff.handoff_id.clone()),
         committed_at: fixed_time(60),
         signature: authority_signature(DetachedSignatureContext::RealmCommit, OLD_AUTHORITY_DID)?,
     };
 
     ensure!(
-        commit_generation_is_current(&authority.bundle, &late_write).is_err(),
+        commit_governance_generation_is_current(&authority.bundle, &late_write).is_err(),
         "a commit signed by the superseded generation must be rejected after handoff"
     );
 
     let accepted = RealmCommit {
-        authority_generation: authority.bundle.current_generation,
+        governance_generation: authority.bundle.current_generation,
         signature: authority_signature(DetachedSignatureContext::RealmCommit, NEW_AUTHORITY_DID)?,
         ..late_write
     };
-    commit_generation_is_current(&authority.bundle, &accepted).map_err(|error| {
+    commit_governance_generation_is_current(&authority.bundle, &accepted).map_err(|error| {
         anyhow!("the incoming authority's own commit must be accepted: {error}")
     })?;
     Ok(())
@@ -1212,7 +1212,10 @@ fn verify_old_authority_writes_are_rejected(authority: &AuthorityFixture) -> Res
 
 /// The §6 step-1 check: the commit's generation and signing service must be the
 /// ones the genesis-plus-handoff chain currently authorizes.
-fn commit_generation_is_current(bundle: &RealmAuthorityBundle, commit: &RealmCommit) -> Result<()> {
+fn commit_governance_generation_is_current(
+    bundle: &RealmAuthorityBundle,
+    commit: &RealmCommit,
+) -> Result<()> {
     bundle
         .validate_shape()
         .map_err(|error| anyhow!("authority bundle is invalid: {error}"))?;
@@ -1221,9 +1224,9 @@ fn commit_generation_is_current(bundle: &RealmAuthorityBundle, commit: &RealmCom
         "commit belongs to another Realm"
     );
     ensure!(
-        commit.authority_generation == bundle.current_generation,
-        "commit generation {} is not the current generation {}",
-        commit.authority_generation,
+        commit.governance_generation == bundle.current_generation,
+        "commit governance generation {} is not the current generation {}",
+        commit.governance_generation,
         bundle.current_generation
     );
     let signing_service = commit
@@ -1258,7 +1261,7 @@ fn verify_new_generation_continues_imported_heads(authority: &AuthorityFixture) 
             stream_position: head.stream_position + 1,
             previous_commit_ref: Some(head.commit_id.clone()),
             event_ref: event.event_id.clone(),
-            authority_generation: authority.bundle.current_generation,
+            governance_generation: authority.bundle.current_generation,
             authority_ref: RealmCommitAuthorityRef::Handoff(authority.handoff.handoff_id.clone()),
             committed_at: fixed_time(70),
             signature: authority_signature(
@@ -1457,7 +1460,7 @@ fn submit_mls_commit(
         stream_position: position,
         previous_commit_ref: None,
         event_ref: submission.commit_event.event_id.clone(),
-        authority_generation: 0,
+        governance_generation: 0,
         authority_ref: RealmCommitAuthorityRef::GenesisOrChangeEvent(
             submission.commit_event.event_id.clone(),
         ),
