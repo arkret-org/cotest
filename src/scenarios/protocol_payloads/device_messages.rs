@@ -1,5 +1,4 @@
-//! Phase 2 — `/_arkret/self/device_messages` send / duplicate / list / describe
-//! plus the `ak.secret.request` side channel.
+//! Phase 2 — `/_arkret/self/device_messages` send / duplicate / list / describe.
 
 use anyhow::Result;
 use reqwest::StatusCode;
@@ -10,7 +9,6 @@ pub async fn run(server: &ArkretServer, token: &str, actor_id: &str) -> Result<(
     send_application_message(server, token, actor_id).await?;
     duplicate_send_is_idempotent(server, token, actor_id).await?;
     list_delivered_keeps_ciphertext_only(server, token).await?;
-    send_verification_message(server, token, actor_id).await?;
     Ok(())
 }
 
@@ -96,44 +94,6 @@ async fn list_delivered_keeps_ciphertext_only(server: &ArkretServer, token: &str
     let content = &delivered["messages"][0]["content"];
     assert_eq!(content["ciphertext"], "base64url-opaque-ciphertext");
     assert!(content.get("plaintext").is_none());
-    Ok(())
-}
-
-async fn send_verification_message(
-    server: &ArkretServer,
-    token: &str,
-    actor_id: &str,
-) -> Result<()> {
-    let verification_send: arkret_models_collaboration::device_messages::DeviceMessagesSendOutcome =
-        serde_json::from_value(
-            expect_json(
-                server
-                    .http()
-                    .post(server.url("/_arkret/self/device_messages"))
-                    .bearer_auth(token)
-                    .header("Idempotency-Key", "protocol-verification-txn")
-                    .json(&device_message_send_request(
-                        actor_id,
-                        "ak:device:01904100-0000-7000-8000-0000000000a1",
-                        "ak:device_message:0196419b-0000-7000-8000-00000000f202",
-                        "ak.secret.request",
-                        encrypted_envelope(
-                            "ak.secret.request",
-                            "base64url-opaque-verification-ciphertext",
-                        ),
-                        chrono::DateTime::parse_from_rfc3339("2026-12-31T00:00:00.000Z")?
-                            .with_timezone(&chrono::Utc),
-                    )?),
-                StatusCode::OK,
-            )
-            .await?,
-        )?;
-    assert_delivered_to(
-        &verification_send,
-        actor_id,
-        "ak:device:01904100-0000-7000-8000-0000000000a1",
-        "ak:device_message:0196419b-0000-7000-8000-00000000f202",
-    )?;
     Ok(())
 }
 

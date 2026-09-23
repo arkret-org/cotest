@@ -125,6 +125,42 @@ fn run_signal(case: &Value) -> Result<()> {
     if key == peer_key {
         bail!("different verified senders reused a Signal key");
     }
+    let wrong_label = arkret_crypto::mls_exporter::mls_expand_with_label(
+        &root,
+        "ak.content-v1",
+        sender,
+        key_len,
+    )?;
+    let empty_context = arkret_crypto::mls_exporter::mls_expand_with_label(
+        &root,
+        ExporterLabelId::SIGNAL_V1,
+        b"",
+        key_len,
+    )?;
+    let mut next_epoch_exporter = exporter_secret(input)?;
+    next_epoch_exporter[0] ^= 1;
+    let next_epoch_root = arkret::mls::mls_exporter_from_secret(
+        &next_epoch_exporter,
+        ExporterLabelId::SIGNAL_ROOT_V1,
+        &scope_context,
+        arkret::mls::MLS_HASH_LEN,
+    )?;
+    let next_epoch_key = arkret::mls::expand_with_registered_label(
+        &next_epoch_root,
+        ExporterLabelId::SignalV1,
+        sender,
+        key_len,
+    )?;
+    if key.as_slice() == wrong_label.as_slice()
+        || key.as_slice() == empty_context.as_slice()
+        || key.as_slice() == next_epoch_key.as_slice()
+    {
+        bail!("Signal label, context, or epoch mutation reused the accepted key");
+    }
+    let forced_nonce = hex::decode(required_str(expected, "forced_equal_nonce_hex")?)?;
+    if forced_nonce.len() != 12 || expected["same_raw_aead_key"] != false {
+        bail!("Signal forced-equal-nonce negative control drifted");
+    }
     Ok(())
 }
 

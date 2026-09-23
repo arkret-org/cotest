@@ -61,7 +61,9 @@ fn at(seconds: i64) -> DateTime<Utc> {
 fn domain() -> SignalSequenceDomain {
     SignalSequenceDomain {
         sender_actor_id: actor(),
-        endpoint: arkret::SignalSequenceEndpoint::AccountDevice { device_id: device() },
+        endpoint: arkret::SignalSequenceEndpoint::AccountDevice {
+            device_id: device(),
+        },
         scope_ref: ScopeRef::Realm { realm_id: realm() },
     }
 }

@@ -35,18 +35,33 @@ fn invite_create_claims_one_typed_live_target_slot() {
         .iter()
         .map(|write| write["result_family"].as_str().expect("result family"))
         .collect::<Vec<_>>();
-    assert_eq!(families, ["invite_lifecycle", "invite_directed_invitee", "invite_live_target"]);
+    assert_eq!(
+        families,
+        [
+            "invite_lifecycle",
+            "invite_directed_invitee",
+            "invite_live_target"
+        ]
+    );
     let slot = &create["result_writes"][2];
-    assert_eq!(slot["result_selector"]["components"][0]["field"], "payload.invitee_account_id");
-    assert_eq!(slot["result_projection"]["value_projection"]["members"][0]["envelope_field"], "event_id");
+    assert_eq!(
+        slot["result_selector"]["components"][0]["field"],
+        "payload.invitee_account_id"
+    );
+    assert_eq!(
+        slot["result_projection"]["value_projection"]["members"][0]["envelope_field"],
+        "event_id"
+    );
 
-    let event_id = arkret_identifiers::EventId::new(
-        "ak:event:AUf4Nwr-Lqj1RlqDi4awPbskicm37buT2CswWBfZbgLe",
-    )
-    .expect("fixture create Event id");
+    let event_id =
+        arkret_identifiers::EventId::new("ak:event:AUf4Nwr-Lqj1RlqDi4awPbskicm37buT2CswWBfZbgLe")
+            .expect("fixture create Event id");
     let details = arkret_wire::InviteLiveTargetOccupiedProblem::new(event_id.clone());
     assert_eq!(details.create_event_id(), &event_id);
-    assert_eq!(details.invite_id().as_str(), "ak:invite:AUf4Nwr-Lqj1RlqDi4awPbskicm37buT2CswWBfZbgLe");
+    assert_eq!(
+        details.invite_id().as_str(),
+        "ak:invite:AUf4Nwr-Lqj1RlqDi4awPbskicm37buT2CswWBfZbgLe"
+    );
 }
 
 #[test]
@@ -54,17 +69,24 @@ fn directed_invite_terminal_events_release_the_typed_slot() {
     let registry = read_json("registry/contract-registry.json");
     for kind in ["ak.invite.accept", "ak.invite.cancel", "ak.invite.revoke"] {
         let row = event_kind(&registry, kind);
-        assert!(row["result_writes"]
-            .as_array()
-            .expect("typed result writes")
-            .iter()
-            .any(|write| write["result_family"] == "invite_live_target"), "{kind} omits live-target release");
+        assert!(
+            row["result_writes"]
+                .as_array()
+                .expect("typed result writes")
+                .iter()
+                .any(|write| write["result_family"] == "invite_live_target"),
+            "{kind} omits live-target release"
+        );
     }
     let vector = read_json("registry/vector-registry.json");
-    assert!(vector["vectors"]
-        .as_array()
-        .expect("vector registry")
-        .iter()
-        .any(|row| row["vector_id"] == "ak.vector.invite.live_target_uniqueness.v1"
-            && row["status"] == "active"));
+    assert!(
+        vector["vectors"]
+            .as_array()
+            .expect("vector registry")
+            .iter()
+            .any(
+                |row| row["vector_id"] == "ak.vector.invite.live_target_uniqueness.v1"
+                    && row["status"] == "active"
+            )
+    );
 }

@@ -23,11 +23,35 @@ pub fn run_device_revocation_pending_suite() -> Result<()> {
         result.validate_for_request(&request)?;
         let admitted = result.session_grant_admission(&request, at(1)?)?;
         match (decision, admitted) {
-            (DeviceRevocationAdmissionDecision::Allow, SessionGrantAdmission::Authorized { device_generation_ref: 7, .. })
-            | (DeviceRevocationAdmissionDecision::AuthorityMismatch, SessionGrantAdmission::DeviceSetupRequired)
-            | (DeviceRevocationAdmissionDecision::RevocationPending, SessionGrantAdmission::Blocked { reason: SessionGrantAdmissionBlockReason::RevocationPending })
-            | (DeviceRevocationAdmissionDecision::Revoked, SessionGrantAdmission::Blocked { reason: SessionGrantAdmissionBlockReason::Revoked })
-            | (DeviceRevocationAdmissionDecision::GenerationMismatch, SessionGrantAdmission::Blocked { reason: SessionGrantAdmissionBlockReason::GenerationMismatch }) => {}
+            (
+                DeviceRevocationAdmissionDecision::Allow,
+                SessionGrantAdmission::Authorized {
+                    device_generation_ref: 7,
+                    ..
+                },
+            )
+            | (
+                DeviceRevocationAdmissionDecision::AuthorityMismatch,
+                SessionGrantAdmission::DeviceSetupRequired,
+            )
+            | (
+                DeviceRevocationAdmissionDecision::RevocationPending,
+                SessionGrantAdmission::Blocked {
+                    reason: SessionGrantAdmissionBlockReason::RevocationPending,
+                },
+            )
+            | (
+                DeviceRevocationAdmissionDecision::Revoked,
+                SessionGrantAdmission::Blocked {
+                    reason: SessionGrantAdmissionBlockReason::Revoked,
+                },
+            )
+            | (
+                DeviceRevocationAdmissionDecision::GenerationMismatch,
+                SessionGrantAdmission::Blocked {
+                    reason: SessionGrantAdmissionBlockReason::GenerationMismatch,
+                },
+            ) => {}
             _ => bail!("revocation admission decision did not preserve typed issuer control flow"),
         }
         if result.session_grant_admission(&request, at(31)?).is_ok() {
@@ -109,9 +133,15 @@ fn event_id() -> Result<EventId> {
 }
 
 fn hash(byte: char) -> Result<Hash> {
-    Ok(Hash::new(format!("sha256:{}", byte.to_string().repeat(64)))?)
+    Ok(Hash::new(format!(
+        "sha256:{}",
+        byte.to_string().repeat(64)
+    ))?)
 }
 
 fn at(seconds: i64) -> Result<DateTime<Utc>> {
-    Ok(Utc.timestamp_opt(1_776_000_000 + seconds, 0).single().ok_or_else(|| anyhow::anyhow!("invalid timestamp"))?)
+    Ok(Utc
+        .timestamp_opt(1_776_000_000 + seconds, 0)
+        .single()
+        .ok_or_else(|| anyhow::anyhow!("invalid timestamp"))?)
 }

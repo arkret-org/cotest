@@ -38,18 +38,28 @@ pub fn run_security_transaction_resilience_joint_gate() -> Result<()> {
     // independent runner still exercises every published fault projection.
     let recovery_steps = serde_json::to_value(arkret_models_crypto::RECOVERY_STEP_ORDER)?;
     let rotation_steps = serde_json::to_value(arkret_models_crypto::SECURITY_ROTATION_STEP_ORDER)?;
-    ensure!(recovery_steps == serde_json::json!(["commit_recovery_unit"]),
-        "SDK recovery step order drifted");
-    ensure!(rotation_steps == serde_json::json!([
-        "revoke", "upload_new_material", "switch_authoritative_pointer",
-        "erase_old_material", "local_commit"
-    ]), "SDK security rotation step order drifted");
+    ensure!(
+        recovery_steps == serde_json::json!(["commit_recovery_unit"]),
+        "SDK recovery step order drifted"
+    );
+    ensure!(
+        rotation_steps
+            == serde_json::json!([
+                "revoke",
+                "upload_new_material",
+                "switch_authoritative_pointer",
+                "erase_old_material",
+                "local_commit"
+            ]),
+        "SDK security rotation step order drifted"
+    );
     ensure!(
         reference.len() == 55,
         "reference runner did not execute all 55 security-transaction scenarios"
     );
     ensure!(
-        reference.iter()
+        reference
+            .iter()
             .map(|projection| projection.scenario.as_str())
             .collect::<BTreeSet<_>>()
             .len()

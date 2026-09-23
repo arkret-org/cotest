@@ -767,9 +767,11 @@ fn agent_approval_requires_exact_approved_event_id() {
             .to_utc(),
     )
     .unwrap();
-    assert!(approval
-        .typed_payload::<arkret_wire::event_spec::AgentActionApprove>()
-        .is_err());
+    assert!(
+        approval
+            .typed_payload::<arkret_wire::event_spec::AgentActionApprove>()
+            .is_err()
+    );
 }
 
 // ─── P0 / TEST-4 — Cursor opaque round-trip + stateless-under-core reject ──

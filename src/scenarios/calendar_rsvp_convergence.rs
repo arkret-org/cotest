@@ -78,7 +78,9 @@ fn inkson_rsvp_payload(
     let calendar_fields =
         serde_json::from_value(calendar_subtree(attendees.0, attendees.1, attendees.2)?)?;
     let [basis_event_id] = basis else {
-        return Err(anyhow!("RSVP requires exactly one accepted schedule EventId"));
+        return Err(anyhow!(
+            "RSVP requires exactly one accepted schedule EventId"
+        ));
     };
     let basis_event_id = arkret_wire::EventId::new(basis_event_id.clone())?;
     // The RSVP is a write: its payload is settled before authoring, and the
@@ -125,7 +127,9 @@ async fn read_soland_product_projection_strand(
 }
 
 fn accepted_schedule_basis(submitted: &Value) -> Result<Vec<String>> {
-    Ok(vec![crate::harness::submitted_event_id(submitted)?.to_string()])
+    Ok(vec![
+        crate::harness::submitted_event_id(submitted)?.to_string(),
+    ])
 }
 
 fn winner_for(strand: &Value, actor: &arkret_wire::ActorId) -> Option<Value> {

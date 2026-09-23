@@ -132,8 +132,6 @@ const ARTIFACT_FIXTURES_DIR: &str = "fixtures";
 
 // ── Public suite re-exports ─────────────────────────────────────────────────
 
-pub use station_certification::run_station_certification_gate_suite;
-
 pub use account_blocklist_projection::{
     ACCOUNT_BLOCKLIST_PROJECTION_ENTRYPOINT, VECTOR_ID_ACCOUNT_BLOCKLIST_PROJECTION,
     run_account_blocklist_projection_vector,
@@ -459,6 +457,7 @@ pub use signal_federation::{
 };
 pub use signal_sequence_high_water::run_signal_sequence_high_water_suite;
 pub use spec_business_flow::run_spec_business_flow_coverage_suite;
+pub use station_certification::run_station_certification_gate_suite;
 pub use strand_watch_current::{STRAND_WATCH_CURRENT_ENTRYPOINT, run_strand_watch_current_suite};
 pub use string_profiles::{STRING_PROFILE_ENTRYPOINT, run_string_profile_suite};
 pub use suite_execution::{CaseExecutionResult, SuiteExecutionResult};
