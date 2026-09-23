@@ -1060,6 +1060,69 @@
           ]
         }
       ]
+    },
+    {
+      "id": "realm_join_intake",
+      "title": "Realm join target and authority candidate verification before intake",
+      "status": "partially_implemented",
+      "surfaces": ["realm_join_intake"],
+      "operation_spine": [
+        {
+          "operation_id": "ak.self.realm_join.command.prepare.v1",
+          "surfaces": ["realm_join_intake"]
+        },
+        {
+          "operation_id": "ak.peer.realm_join.read.bootstrap.v1",
+          "surfaces": ["realm_join_intake"]
+        }
+      ],
+      "coverage": [
+        {
+          "kind": "conformance_fixture",
+          "path": "crates/realm-join-candidate-runner/src/lib.rs",
+          "markers": [
+            "run_realm_join_candidate_suite",
+            "verify_realm_authority_bundle",
+            "RealmJoinCandidateServiceKind::Station"
+          ]
+        },
+        {
+          "kind": "conformance_fixture",
+          "path": "tests/conformance_vectors.rs",
+          "markers": ["realm_join_candidate_named_suite_executes_all_current_cases"]
+        }
+      ]
+    },
+    {
+      "id": "third_party_invite_handoff",
+      "title": "Third-party invite token presentation and account binding",
+      "status": "partially_implemented",
+      "surfaces": ["third_party_invite_handoff"],
+      "operation_spine": [
+        {
+          "operation_id": "ak.open.third_party_invite.command.present_token.v1",
+          "surfaces": ["third_party_invite_handoff"]
+        },
+        {
+          "operation_id": "ak.self.third_party_invite.read.acceptance_attestation.v1",
+          "surfaces": ["third_party_invite_handoff"]
+        }
+      ],
+      "coverage": [
+        {
+          "kind": "conformance_fixture",
+          "path": "tests/spec_business_flows.rs",
+          "markers": [
+            "third_party_invite_present_body_matches_canonical_schema",
+            "validate_present_request_schema"
+          ]
+        },
+        {
+          "kind": "ordinary",
+          "path": "../soland/crates/http/src/routing/invites.rs",
+          "markers": ["ak.open.third_party_invite.command.present_token"]
+        }
+      ]
     }
   ]
 }
