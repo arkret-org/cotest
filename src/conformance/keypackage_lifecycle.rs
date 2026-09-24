@@ -6,7 +6,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Context as _, Result, anyhow, bail};
-use arkret_identifiers::{DeviceId, Did, DidCoreId, RealmId};
+use arkret_identifiers::{DeviceId, DidCoreId, RealmId};
 use arkret_models_collaboration::device_messages::RecipientDelivery;
 use arkret_models_crypto::{KeyPackagesClaimOutcome, KeyPackagesUploadOutcome, MlsKeyPackageState};
 use arkret_wire::{DidUrl, MlsWelcomeDelivery, ProfileId};
@@ -196,10 +196,6 @@ fn core_did(value: &str) -> Result<DidCoreId> {
     DidCoreId::new(value.to_owned()).map_err(Into::into)
 }
 
-fn did(value: &str) -> Result<Did> {
-    Did::new(value.to_owned()).map_err(Into::into)
-}
-
 fn verification_method(value: &str) -> Result<DidUrl> {
     DidUrl::new(value.to_owned()).map_err(|error| anyhow!(error))
 }
@@ -345,7 +341,6 @@ enum MiniKeypackageState {
     Claimed,
     Consumed,
     Revoked,
-    Retired,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -361,7 +356,6 @@ impl MiniKeypackageState {
             Self::Claimed => "claimed",
             Self::Consumed => "consumed",
             Self::Revoked => "revoked",
-            Self::Retired => "retired",
         }
     }
 }
@@ -490,14 +484,11 @@ impl MiniKeypackage {
             (false, MiniKeypackageState::Consumed) => Ok(MiniConsumeDecision::Rejected(
                 arkret_wire::ErrorCode::KEYPACKAGE_ALREADY_CONSUMED.to_owned(),
             )),
-            (
-                _,
-                MiniKeypackageState::Revoked
-                | MiniKeypackageState::Retired
-                | MiniKeypackageState::Consumed,
-            ) => Ok(MiniConsumeDecision::Rejected(
-                arkret_wire::ErrorCode::KEYPACKAGE_UNKNOWN.to_owned(),
-            )),
+            (_, MiniKeypackageState::Revoked | MiniKeypackageState::Consumed) => {
+                Ok(MiniConsumeDecision::Rejected(
+                    arkret_wire::ErrorCode::KEYPACKAGE_UNKNOWN.to_owned(),
+                ))
+            }
             (false, MiniKeypackageState::Published) => Ok(MiniConsumeDecision::Rejected(
                 arkret_wire::ErrorCode::KEYPACKAGE_UNKNOWN.to_owned(),
             )),
@@ -1109,7 +1100,11 @@ pub fn run_keypackage_last_resort_affinity_and_optionality_vector() -> Result<()
         r1.clone(),
         expires_at,
     );
-    let cross_realm = package.consume("ak:keypackage_claim:0199c001-0000-7000-8000-000000000005", &r2, expires_at)?;
+    let cross_realm = package.consume(
+        "ak:keypackage_claim:0199c001-0000-7000-8000-000000000005",
+        &r2,
+        expires_at,
+    )?;
     if cross_realm
         != MiniConsumeDecision::Rejected(expected_str(vector, "cross_realm_reason")?.to_owned())
     {
@@ -1388,7 +1383,9 @@ pub fn run_keypackage_self_claim_authorization_idempotency_vector() -> Result<()
 fn validate_unsigned_selector_transcripts(fixture: &KeypackageLifecycleFixture) -> Result<()> {
     let rows = &fixture.unsigned_selector_transcripts;
     if rows.len() != 2 {
-        bail!("unsigned selector transcript fixture must cover exactly the device and agent branches");
+        bail!(
+            "unsigned selector transcript fixture must cover exactly the device and agent branches"
+        );
     }
 
     let mut seen = BTreeSet::new();

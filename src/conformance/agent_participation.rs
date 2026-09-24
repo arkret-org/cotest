@@ -1,6 +1,6 @@
 //! Agent participation policy conformance vectors.
 //!
-//! Covers controller-scoped agent selector mentions and AKP-0010 participation
+//! Covers known-Agent picker label verification and AKP-0010 participation
 //! policy semantics by exercising the SDK wire DTOs and reducer-pure helpers.
 
 use anyhow::{Result, anyhow, bail};
@@ -12,7 +12,7 @@ use arkret_models_collaboration::governance::agent_participation::{
     validate_agent_participation_tightens,
 };
 use arkret_models_identity::claim_presentation::AgentSelectorClaim;
-use arkret_models_identity::handle::{Handle, HandleVisibility};
+use arkret_models_identity::handle::HandleVisibility;
 use arkret_wire::{
     AccountId, ActorId, Audience, PayloadProof, PayloadProofPurpose, ProfileId, SchemaId,
 };
@@ -23,7 +23,8 @@ use serde_json::Value;
 use super::schema_validation_fixture::SchemaEnv;
 use super::{expected_bool, expected_str, required_str, required_u64};
 
-pub const VECTOR_ID_AGENT_MENTION_SELECTOR: &str = "ak.vector.agent.mention_selector.v1";
+pub const VECTOR_ID_AGENT_SELECTOR_LABEL_KNOWN_ACCOUNT: &str =
+    "ak.vector.agent.selector_label_known_account.v1";
 pub const VECTOR_ID_AGENT_PARTICIPATION_CEILING_TIGHTEN: &str =
     "ak.vector.agent.participation.ceiling_tighten.v1";
 pub const VECTOR_ID_AGENT_PARTICIPATION_EFFECTIVE_INTERSECTION: &str =
@@ -36,7 +37,7 @@ pub const VECTOR_ID_AGENT_PARTICIPATION_THIRD_PARTY_MENTION_GATE: &str =
     "ak.vector.agent.participation.third_party_mention_gate.v1";
 
 pub const ALL_AGENT_PARTICIPATION_VECTOR_IDS: &[&str] = &[
-    VECTOR_ID_AGENT_MENTION_SELECTOR,
+    VECTOR_ID_AGENT_SELECTOR_LABEL_KNOWN_ACCOUNT,
     VECTOR_ID_AGENT_PARTICIPATION_CEILING_TIGHTEN,
     VECTOR_ID_AGENT_PARTICIPATION_EFFECTIVE_INTERSECTION,
     VECTOR_ID_AGENT_PARTICIPATION_SELECTION_CAS,
@@ -205,20 +206,41 @@ fn selector_claim(
     })
 }
 
-fn selector_outcome(claim: AgentSelectorClaim) -> Result<AgentSelectorClaim> {
-    claim.validate()?;
-    if claim.subject_account_id.is_none() {
-        bail!("unbound selector");
-    }
-    Ok(claim)
+/// Label verification for a known-Agent picker. The mention target is always
+/// the exact full Agent AccountId an authorized source already supplied; a
+/// signed selector claim can only verify the label shown for that target. It
+/// verifies only when exactly one current claim is visible and its signed
+/// `subject_account_id` equals the known target over both components.
+#[derive(Debug, Eq, PartialEq)]
+enum SelectorLabel {
+    Verified,
+    Unverified,
 }
 
-fn resolve_selector(candidates: &[AgentSelectorClaim]) -> Option<&AgentSelectorClaim> {
-    let [candidate] = candidates else {
-        return None;
+fn verify_selector_label(known: &AccountId, visible: &[AgentSelectorClaim]) -> SelectorLabel {
+    let [claim] = visible else {
+        return SelectorLabel::Unverified;
     };
-    candidate.validate().ok()?;
-    Some(candidate)
+    if claim.validate().is_err() || claim.subject_account_id.as_ref() != Some(known) {
+        return SelectorLabel::Unverified;
+    }
+    SelectorLabel::Verified
+}
+
+/// Persist a known-Agent mention. The target is the known AccountId whatever
+/// the label verdict; a verified label only adds audit metadata.
+fn known_agent_mention(
+    known: &AccountId,
+    label: &SelectorLabel,
+    controller: &AccountId,
+    slug: &str,
+) -> Mention {
+    let mut mention = Mention::new(known.clone());
+    if *label == SelectorLabel::Verified {
+        mention.controller_subject_account_id = Some(controller.clone());
+        mention.agent_slug_at_time = Some(slug.to_owned());
+    }
+    mention
 }
 
 /// The `identity-handles.md` §3.8.2 step-1 join: keep the MemberIdentity
@@ -235,112 +257,150 @@ fn member_identity_join<'a>(
         .collect()
 }
 
-pub fn run_agent_mention_selector_vector() -> Result<()> {
+pub fn run_agent_selector_label_known_account_vector() -> Result<()> {
     let fixture = participation_fixture()?;
-    let vector = case(&fixture, VECTOR_ID_AGENT_MENTION_SELECTOR)?;
-    // The signed claim names one complete AccountId and the mention copies it
-    // verbatim; the Station is no longer supplied by the consumer. Ruling
-    // `tasks/spec-done/2026-09-05-1310-agent-selector-mention-has-no-normative-station-source.md`.
+    let vector = case(&fixture, VECTOR_ID_AGENT_SELECTOR_LABEL_KNOWN_ACCOUNT)?;
+    if expected_str(vector, "mention_target_source")? != "known_authorized_agent_account_id" {
+        bail!("mention target source drifted from the known authorized Agent AccountId");
+    }
+    let known = account_pointer(vector, "/known_authorized_agent_account_id")?;
     let expected_subject = account_pointer(vector, "/persisted_mention/subject_account_id")?;
     let expected_controller =
         account_pointer(vector, "/persisted_mention/controller_subject_account_id")?;
-    let claim = selector_claim(vector, expected_subject.clone(), "agent_slug_at_time")?;
-    claim.validate()?;
-    let outcome = selector_outcome(claim.clone())?;
-
-    if outcome.subject_account_id.as_ref() != Some(&expected_subject)
-        || outcome.controller_subject_id != expected_controller.principal_id
-    {
-        bail!("fixture selector outcome and persisted mention name different targets");
+    if expected_subject != known {
+        bail!("persisted mention target is not the known authorized Agent AccountId");
     }
 
-    // A label claim that keeps the agent principal and swaps the Station is a
-    // different signed payload, not the same target: the claim binds the full
-    // AccountId without relying on a Directory lookup.
-    let original_payload_digest = outcome.payload_digest()?;
-    let mut retargeted = outcome.clone();
+    // The Agent Station is derived from the accepted provision reconciled with
+    // the Agent PCR genesis actor account, never asserted by the consumer.
+    let genesis_account = account_pointer(
+        vector,
+        "/agent_provision/agent_pcr_genesis_actor_account_id",
+    )?;
+    let provision_agent = DidCoreId::new(
+        vector
+            .pointer("/agent_provision/payload_agent_id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("agent_provision.payload_agent_id missing"))?,
+    )?;
+    if genesis_account.principal_id != provision_agent || genesis_account != known {
+        bail!("known Agent AccountId is not the provision reconciled with its PCR genesis");
+    }
+
+    // Exactly one current claim that names the known target verifies the label.
+    let claim_subject = account_pointer(vector, "/selector_claim/subject_account_id")?;
+    let claim = selector_claim(vector, claim_subject, "agent_slug_at_time")?;
+    claim.validate()?;
+    let label = verify_selector_label(&known, std::slice::from_ref(&claim));
+    let disclosure_matches = vector
+        .pointer("/selector_claim_disclosure/target_matches_known_account")
+        .and_then(Value::as_bool)
+        .ok_or_else(|| anyhow!("selector_claim_disclosure.target_matches_known_account missing"))?;
+    if (label == SelectorLabel::Verified) != disclosure_matches {
+        bail!("selector label verdict disagrees with the fixture disclosure");
+    }
+    let slug = required_str(vector, "agent_slug_at_time")?;
+    let mention = known_agent_mention(&known, &label, &expected_controller, slug);
+    let node = MentionNode::mention(mention.clone());
+    if mention.subject_account_id != expected_subject
+        || node.target() != MentionTarget::Subject(&expected_subject)
+        || mention.controller_subject_account_id.as_ref() != Some(&expected_controller)
+        || mention.agent_slug_at_time.as_deref() != Some(slug)
+        || mention.mention_text_original.is_some()
+    {
+        bail!("verified known-Agent mention drifted from the persisted fixture mention");
+    }
+
+    // Swapping the Station is a different signed payload and never verifies
+    // the label for the known target; the mention target does not move.
+    let mut retargeted = claim.clone();
     retargeted.subject_account_id = Some(AccountId::new(
-        expected_subject.principal_id.clone(),
+        known.principal_id.clone(),
         DidCoreId::new("ak:did_core:web:other.example")?,
     ));
     retargeted.validate()?;
-    if retargeted.payload_digest()? == original_payload_digest {
+    if retargeted.payload_digest()? == claim.payload_digest()? {
         bail!("selector claim payload digest did not bind the Station");
     }
-    let mention = Mention::new(expected_subject.clone())
-        .with_agent_selector_metadata(
-            expected_controller.clone(),
-            Handle::parse(required_str(vector, "controller_handle")?)?,
-            outcome.agent_slug.clone(),
-        )
-        .with_mention_text_original(required_str(vector, "mention_text_original")?)
-        .with_resolved_at(Utc.with_ymd_and_hms(2026, 6, 19, 0, 2, 0).unwrap());
-    let node = MentionNode::mention(mention.clone());
-
-    if mention.subject_account_id != expected_subject
-        || node.target() != MentionTarget::Subject(&expected_subject)
+    if expected_str(vector, "claim_not_equal_to_known_account")? != "reject_label"
+        || verify_selector_label(&known, std::slice::from_ref(&retargeted))
+            != SelectorLabel::Unverified
     {
-        bail!(
-            "agent selector mention did not persist the agent's complete AccountId as authoritative subject_account_id"
-        );
-    }
-    if mention.controller_subject_account_id.as_ref() != Some(&expected_controller) {
-        bail!("agent selector mention lost controller audit metadata");
-    }
-    if mention.agent_slug_at_time.as_deref() != Some(required_str(vector, "agent_slug_at_time")?) {
-        bail!("agent selector mention lost agent slug snapshot");
-    }
-    if mention.mention_text_original.as_deref()
-        != Some(required_str(vector, "mention_text_original")?)
-    {
-        bail!("agent selector mention lost original text snapshot");
+        bail!("a claim naming another account verified the known-Agent label");
     }
 
+    // Two current claims for the same principal on two Stations are never
+    // deduplicated: the label stays unverified and no target is selected.
+    if expected_str(vector, "two_current_claims_same_principal_two_stations")?
+        != "unverified_label_no_target_selection"
+        || verify_selector_label(&known, &[claim.clone(), retargeted.clone()])
+            != SelectorLabel::Unverified
+    {
+        bail!("ambiguous selector claims verified a label");
+    }
     let changed_subject = AccountId::new(
         did_field(vector, "changed_agent_subject")?,
-        expected_subject.station_id.clone(),
+        known.station_id.clone(),
     );
-    let changed = selector_outcome(selector_claim(
-        vector,
-        changed_subject,
-        "changed_agent_slug",
-    )?)?;
-    if changed.subject_account_id.as_ref() == Some(&mention.subject_account_id) {
-        bail!("changed selector control must target a different agent account");
+    let changed = selector_claim(vector, changed_subject, "changed_agent_slug")?;
+    changed.validate()?;
+    let ambiguous = verify_selector_label(&known, &[claim.clone(), changed.clone()]);
+    if expected_str(vector, "ambiguous_label")? != "unverified_label_without_retargeting"
+        || ambiguous != SelectorLabel::Unverified
+        || known_agent_mention(&known, &ambiguous, &expected_controller, slug).subject_account_id
+            != known
+    {
+        bail!("ambiguous label verified or retargeted the known-Agent mention");
     }
-    if mention.subject_account_id
-        != account_pointer(vector, "/expected/historical_target_after_slug_change")?
+    let unavailable = verify_selector_label(&known, &[]);
+    let unlabelled = known_agent_mention(&known, &unavailable, &expected_controller, slug);
+    if expected_str(vector, "unavailable_label")? != "ordinary_known_account_mention_unaffected"
+        || unavailable != SelectorLabel::Unverified
+        || unlabelled != Mention::new(known.clone())
+    {
+        bail!("an unavailable label changed the ordinary known-account mention");
+    }
+
+    // Slug changes do not rewrite the historical target.
+    if changed.subject_account_id.as_ref() == Some(&mention.subject_account_id)
+        || mention.subject_account_id
+            != account_pointer(vector, "/expected/historical_target_after_slug_change")?
     {
         bail!("historical mention target was rewritten after slug change");
     }
 
-    if resolve_selector(&[outcome.clone(), changed]).is_some() {
-        bail!("ambiguous agent selector resolution did not fail closed");
+    // Free-text composite input is plain text: no mention node is produced.
+    let free_text = required_str(vector, "unsupported_free_text_input")?;
+    if expected_str(vector, "free_text_composite_input")?
+        != "plain_text_no_mention_no_directed_notification"
+    {
+        bail!("free-text composite input semantics drifted");
     }
-    if resolve_selector(&[]).is_some() {
-        bail!("unavailable agent selector resolution did not fail closed");
+    let plain_body = serde_json::json!({
+        "kind": "paragraph",
+        "children": [{ "kind": "text", "text": free_text }]
+    });
+    if !arkret_models_collaboration::events_payloads::mention::collect_mention_nodes(&plain_body)
+        .map_err(|error| anyhow!("{error:?}"))?
+        .is_empty()
+    {
+        bail!("free-text composite selector produced a mention node");
     }
 
-    // Step 6 (negative, normative) — a Realm member sharing the agent's
-    // principal but hosted by another Station MUST NOT match this mention:
-    // no notification target, no authorization hit, and no §3.8.2
-    // MemberIdentity join hit.
+    // A same-principal account on another Station never matches the mention.
     let other_station = account_pointer(vector, "/expected/same_principal_other_station_account")?;
     if expected_bool(vector, "same_principal_other_station_matches")? {
         bail!("fixture must assert that a same-principal other-Station account does not match");
     }
-    if other_station.principal_id != expected_subject.principal_id
-        || other_station.station_id == expected_subject.station_id
-    {
-        bail!("fixture negative account must share the principal and differ in Station");
-    }
-    if other_station == mention.subject_account_id
+    if other_station.principal_id != known.principal_id
+        || other_station.station_id == known.station_id
+        || other_station == mention.subject_account_id
         || MentionTarget::Subject(&other_station) == node.target()
     {
         bail!("mention target equality MUST cover principal_id and station_id");
     }
     let roster = vec![
-        ActorId::account(expected_subject.clone()),
+        ActorId::account(known.clone()),
         ActorId::account(other_station.clone()),
         ActorId::service(DidCoreId::new("ak:did_core:web:station.acme.example")?),
     ];
@@ -615,7 +675,7 @@ pub fn run_agent_participation_fixture_suite() -> Result<()> {
         );
     }
 
-    run_agent_mention_selector_vector()?;
+    run_agent_selector_label_known_account_vector()?;
     run_agent_participation_ceiling_tighten_vector()?;
     run_agent_participation_effective_intersection_vector()?;
     run_agent_participation_selection_cas_vector()?;

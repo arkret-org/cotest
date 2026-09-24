@@ -470,11 +470,13 @@ fn run_schema_semantic_cases(cases: &[SchemaSemanticCase]) -> Result<()> {
             // The subject/value identity equality is a semantic admission rule,
             // so the case runs the SDK's typed decode plus its payload
             // validator, the same path Station admission and reducers use.
-            "policy_set_subject_matches_value_identity" => arkret_event_draft::validate_event_payload(
-                &arkret_wire::EventKind::PolicySet,
-                &case.instance,
-            )
-            .is_ok(),
+            "policy_set_subject_matches_value_identity" => {
+                arkret_event_draft::validate_event_payload(
+                    &arkret_wire::EventKind::PolicySet,
+                    &case.instance,
+                )
+                .is_ok()
+            }
             rule => bail!("{} has unknown semantic_rule {rule}", case.name),
         };
         let expected_accept = match case.semantic_outcome.as_str() {

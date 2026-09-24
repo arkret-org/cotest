@@ -153,7 +153,7 @@ pub use agent_mls_keypackage_authorization::{
 };
 pub use agent_pairing_coordination::run_agent_pairing_durable_coordination_matrix;
 pub use agent_participation::{
-    ALL_AGENT_PARTICIPATION_VECTOR_IDS, run_agent_mention_selector_vector,
+    ALL_AGENT_PARTICIPATION_VECTOR_IDS, run_agent_selector_label_known_account_vector,
     run_agent_participation_ceiling_tighten_vector,
     run_agent_participation_effective_intersection_vector, run_agent_participation_fixture_suite,
     run_agent_participation_selection_cas_vector, run_agent_participation_session_overlay_vector,
