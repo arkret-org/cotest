@@ -217,6 +217,7 @@ function peerDeliveryBody(
   fixture: AcceptedInviteFixture,
   label: string,
   inviteEvent: Record<string, unknown> = fixture.inviteEvent,
+  inviteCommit: InviteDeliveryRequestBodyBodyBody["invite_commit"] = fixture.inviteCommit,
 ): InviteDeliveryRequestBodyBodyBody {
   return {
     schema: "ak.schema.invite_delivery_request.v1",
@@ -224,7 +225,7 @@ function peerDeliveryBody(
     // envelope itself to the generated type is the remaining B3 item.
     invite_event:
       inviteEvent as InviteDeliveryRequestBodyBodyBody["invite_event"],
-    invite_commit: fixture.inviteCommit,
+    invite_commit: inviteCommit,
     authority_locator_hints: [
       { service_kind: "station", service_id: solandServiceId(), source: "invite" },
     ],
@@ -597,25 +598,64 @@ test.describe("invite addressing", () => {
     expect(realm.status(), "notification does not grant Realm read authority").toBe(404);
   });
 
-  test("notification rejects an invalid producer signature", async ({ request }) => {
-      test.skip(
-        !hasServerCount(2),
-        "requires two-server topology — pass -ServerCount 2 to scripts/run-joint-e2e.ps1",
-      );
-      const fixture = await acceptedInviteFixture(request, "producer-signature", "server2");
+  // federation.md section 3 / invite-addressing.md step 4 (decision 0107
+  // section 6): the invitee Station does not govern the Realm, so it never
+  // resolves the inviter's foreign human device key. It checks only that the
+  // producer proof is self-consistent and that invite_commit is signed by the
+  // Realm's current governance Station; each defect below is one of those
+  // checks failing, and each is refused before any holder-private write.
+  test("notification is judged by proof self-consistency and the governance commit", async ({ request }) => {
+    test.skip(
+      !hasServerCount(2),
+      "requires two-server topology — pass -ServerCount 2 to scripts/run-joint-e2e.ps1",
+    );
+    const fixture = await acceptedInviteFixture(request, "non-governance-receiver", "server2");
+    const withProof = (
+      mutate: (proof: Record<string, unknown>) => void,
+    ): Record<string, unknown> => {
       const event = structuredClone(fixture.inviteEvent);
       const proofs = event.proofs as Array<Record<string, unknown>>;
       expect(proofs).toHaveLength(1);
-      const signature = proofs[0]!.jws as string;
-      const parts = signature.split(".");
-      expect(parts).toHaveLength(3);
-      parts[2] = (parts[2]![0] === "A" ? "B" : "A") + parts[2]!.slice(1);
-      proofs[0]!.jws = parts.join(".");
+      mutate(proofs[0]!);
+      return event;
+    };
+    const cases: Array<[string, Record<string, unknown>, InviteDeliveryRequestBodyBodyBody["invite_commit"]]> = [
+      [
+        "event-digest-mismatch",
+        withProof((proof) => {
+          proof.event_digest = `sha256:${"0".repeat(64)}`;
+        }),
+        fixture.inviteCommit,
+      ],
+      [
+        "fragment-not-device-id",
+        withProof((proof) => {
+          const [did, fragment] = String(proof.verification_method).split("#");
+          expect(fragment?.startsWith("ak:device:"), "inviter signs with a human device").toBe(true);
+          proof.verification_method = `${did}#${fragment!.slice(0, "ak:device:".length + 8)}`;
+        }),
+        fixture.inviteCommit,
+      ],
+      [
+        "governance-signature-invalid",
+        fixture.inviteEvent,
+        (() => {
+          const commit = structuredClone(fixture.inviteCommit) as unknown as {
+            signature: { sig: string };
+          };
+          const sig = commit.signature.sig;
+          commit.signature.sig = (sig[0] === "A" ? "B" : "A") + sig.slice(1);
+          return commit as unknown as InviteDeliveryRequestBodyBodyBody["invite_commit"];
+        })(),
+      ],
+    ];
+    for (const [label, event, commit] of cases) {
       const response = await rawSubmitPeerInviteDeliveryApi(
-        request, peerDeliveryBody(fixture, "bad-producer-signature", event),
+        request, peerDeliveryBody(fixture, label, event, commit),
         { origin: solandServiceId(), destination: solandServiceId("server2"), server: "server2" },
       );
-      expect(await peerRejection(response)).toMatchObject({ status: 401, code: "signature_invalid" });
-      await assertNoHolderPrivateWrite(request, fixture, "invalid notification signature", { server: "server2" });
-    });
+      expect(await peerRejection(response), label).toMatchObject({ status: 401, code: "signature_invalid" });
+      await assertNoHolderPrivateWrite(request, fixture, label, { server: "server2" });
+    }
+  });
 });

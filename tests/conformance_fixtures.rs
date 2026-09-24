@@ -93,6 +93,14 @@ conformance_test!(
 );
 
 conformance_test!(
+    /// Decision 0107 section 6: a non-governance receiver trusts the
+    /// governance RealmCommit for a foreign human device.
+    non_governance_receiver_trusts_governance_commit_executes_registered_variants,
+    "non_governance_receiver_trusts_governance_commit",
+    cotest::conformance::run_non_governance_receiver_trusts_governance_commit_vector,
+);
+
+conformance_test!(
     device_pairing_code_claim_executes_registered_variants,
     "device_pairing_code_claim",
     cotest::conformance::run_device_pairing_code_claim_suite,

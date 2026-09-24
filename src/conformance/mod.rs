@@ -64,6 +64,7 @@ mod mention_rendering_vectors;
 mod mls_creator_bootstrap_recovery;
 mod mls_governance_binding;
 mod named_suite_audit;
+mod non_governance_receiver;
 mod object_addressing_vectors;
 mod object_identity_collision;
 mod operation_clause_registry;
@@ -344,6 +345,10 @@ pub use mls_governance_binding::{
     MLS_GOVERNANCE_BINDING_ENTRYPOINT, run_mls_governance_binding_suite,
 };
 pub use named_suite_audit::{NamedSuiteAuditReport, run_named_suite_audit};
+pub use non_governance_receiver::{
+    VECTOR_ID_NON_GOVERNANCE_RECEIVER_TRUSTS_GOVERNANCE_COMMIT,
+    run_non_governance_receiver_trusts_governance_commit_vector,
+};
 pub use object_addressing_vectors::{
     ALL_OBJECT_ADDRESSING_VECTOR_IDS, run_grammar_fail_closed_vector,
     run_object_addressing_vector_suite, run_realm_id_vs_alias_vector,

@@ -44,9 +44,10 @@ use arkret_signatures::{
     Ed25519DetachedJwsSigner, EventProofBuilder, PublicKeyMaterial, SignEventOptions, sign_event,
 };
 use arkret_wire::{
-    AccountId, ActorId, AuthoredEvent, DeviceId, Did, DidCoreId, DidKey, DidUrl, ErrorCode, Event,
-    EventAdmissionSubmission, EventId, EventKind, HumanDeviceProducer, MlsCommitSubmission,
-    NonEmptyString, RealmId, ScopeRef, ServiceKind, SignerEvidenceRef,
+    AccountId, ActorId, AuthoredEvent, DeviceId, DeviceRevocationAdmissionDecision, Did, DidCoreId,
+    DidKey, DidUrl, ErrorCode, Event, EventAdmissionSubmission, EventId, EventKind,
+    HumanDeviceProducer, MlsCommitSubmission, NonEmptyString, RealmId, ScopeRef, ServiceKind,
+    SignerEvidenceRef,
 };
 use chrono::{DateTime, Duration, Utc};
 use ed25519_dalek::SigningKey;
@@ -422,16 +423,45 @@ impl LiveDeviceState {
         })
     }
 
-    /// device-lifecycle §8.2.2 error table: only an active device passes.
-    const fn gate(self) -> std::result::Result<(), ErrorCode> {
+    /// The current-device admission decision this state yields at one durable
+    /// cut, or `None` when the Station cannot read its gate at all.
+    const fn admission_decision(self) -> Option<DeviceRevocationAdmissionDecision> {
         match self {
-            Self::Active => Ok(()),
-            Self::Revoked => Err(ErrorCode::DeviceRevoked),
-            Self::RevocationPending => Err(ErrorCode::DeviceRevocationPending),
-            Self::GenerationFenced => Err(ErrorCode::DeviceGenerationFenced),
-            Self::MaterialUnavailable => Err(ErrorCode::TemporarilyUnavailable),
+            Self::Active => Some(DeviceRevocationAdmissionDecision::Allow),
+            Self::Revoked => Some(DeviceRevocationAdmissionDecision::Revoked),
+            Self::RevocationPending => Some(DeviceRevocationAdmissionDecision::RevocationPending),
+            Self::GenerationFenced => Some(DeviceRevocationAdmissionDecision::GenerationMismatch),
+            Self::MaterialUnavailable => None,
         }
     }
+}
+
+/// Gate one exact human-device producer against a Station's own device
+/// record at every instant the admission must cover.
+///
+/// The decision is the model's; the protocol code it surfaces is the SDK's
+/// single mapping (`DeviceRevocationAdmissionDecision::error_code`). A missing
+/// or foreign record and an instant outside the authorization window are the
+/// "no complete current accepted authorization" decision. A Station that cannot
+/// read its own gate is `temporarily_unavailable` (decision 0107 section 4).
+fn device_gate(
+    record: Option<&DeviceRecord>,
+    producer: &HumanDeviceProducer,
+    instants: &[DateTime<Utc>],
+) -> std::result::Result<(), ErrorCode> {
+    let decision = match record.filter(|record| record.is(producer)) {
+        None => DeviceRevocationAdmissionDecision::AuthorityMismatch,
+        Some(record) => match record.state.admission_decision() {
+            None => return Err(ErrorCode::TemporarilyUnavailable),
+            Some(DeviceRevocationAdmissionDecision::Allow)
+                if !instants.iter().all(|at| record.covers(*at)) =>
+            {
+                DeviceRevocationAdmissionDecision::AuthorityMismatch
+            }
+            Some(decision) => decision,
+        },
+    };
+    decision.error_code().map_or(Ok(()), Err)
 }
 
 /// The typed current device authorization of one exact device.
@@ -510,22 +540,8 @@ impl<'a> AccountStation<'a> {
         let Some(producer) = producer else {
             return Ok(None);
         };
-        if !self.device.is(&producer) {
-            return Err(rejected(
-                RejectedBy::AccountStation,
-                ErrorCode::DeviceUnauthorized,
-            ));
-        }
-        self.device
-            .state
-            .gate()
+        device_gate(Some(&self.device), &producer, &[attempt_at])
             .map_err(|code| rejected(RejectedBy::AccountStation, code))?;
-        if !self.device.covers(attempt_at) {
-            return Err(rejected(
-                RejectedBy::AccountStation,
-                ErrorCode::DeviceUnauthorized,
-            ));
-        }
         let expires_at = match self.device.window.expires_at {
             Some(end) => (attempt_at + self.attestation_ttl).min(end),
             None => attempt_at + self.attestation_ttl,
@@ -672,23 +688,10 @@ impl GovernanceStation {
         if let Some(index) = self.original(&event.event_id) {
             return Ok(Admission::Original(index));
         }
-        let record = self
-            .local_pcr
-            .iter()
-            .find(|record| record.is(&producer))
-            .ok_or_else(|| {
-                rejected(RejectedBy::GovernanceStation, ErrorCode::DeviceUnauthorized)
-            })?;
-        record
-            .state
-            .gate()
+        let record = self.local_pcr.iter().find(|record| record.is(&producer));
+        device_gate(record, &producer, &[event.created_at, now])
             .map_err(|code| rejected(RejectedBy::GovernanceStation, code))?;
-        if !record.covers(event.created_at) || !record.covers(now) {
-            return Err(rejected(
-                RejectedBy::GovernanceStation,
-                ErrorCode::DeviceUnauthorized,
-            ));
-        }
+        let record = record.context("an admitted producer has a local PCR record")?;
         verify_producer_proof(event, &record.signing_key_did)
             .map_err(|_| rejected(RejectedBy::GovernanceStation, ErrorCode::SignatureInvalid))?;
         self.transactions.push(AcceptanceTransaction {
@@ -755,7 +758,7 @@ impl GovernanceStation {
     }
 }
 
-fn verify_producer_proof(event: &Event, key: &DidKey) -> Result<()> {
+pub(super) fn verify_producer_proof(event: &Event, key: &DidKey) -> Result<()> {
     let proof = event
         .producer_proof
         .as_ref()
@@ -1016,7 +1019,7 @@ impl World {
     }
 }
 
-fn sign(
+pub(super) fn sign(
     event: Event,
     verification_method: &str,
     seed: [u8; 32],

@@ -115,6 +115,7 @@ fn assert_canonical_semantic_ledger(fixture: &Value) -> Result<()> {
                 "founding_authoring_material_non_echo",
                 "membership_compensation",
                 "authority_forward_producer_device_evidence",
+                "non_governance_receiver_trusts_governance_commit",
             ],
         "canonical semantic case registry drifted"
     );
@@ -128,6 +129,8 @@ fn assert_canonical_semantic_ledger(fixture: &Value) -> Result<()> {
         "peer_source_committed_compensation",
         "cross_station_forward_with_fresh_evidence_accepted",
         "human_producer_without_evidence",
+        "foreign_human_producer_replica_stored",
+        "local_account_producer_verified_against_local_pcr",
     ] {
         ensure!(contains_string(fixture, required_variant));
     }

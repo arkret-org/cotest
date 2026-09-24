@@ -167,25 +167,26 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
     Ok(())
 }
 
-/// A recipient without Alice's signer cache asks its own Station for the
-/// current signer bound to the accepted cross-Station membership history.
-pub async fn run_current_signer_evidence_live() -> Result<()> {
-    let source_ephemeral = match std::env::var("COTEST_CURRENT_SIGNER_SOURCE_DATABASE_URL") {
+/// `ak.self.signer_keys.read.resolve.v1`: a recipient without Alice's signer
+/// cache asks its own Station for the `current_admission` signing key bound to
+/// the accepted cross-Station membership history.
+pub async fn run_signer_keys_query_live() -> Result<()> {
+    let source_ephemeral = match std::env::var("COTEST_SIGNER_KEYS_SOURCE_DATABASE_URL") {
         Ok(_) => None,
         Err(_) => crate::scenarios::_helpers::coauth_bootstrap::spawn_ephemeral_postgres()?,
     };
-    let target_ephemeral = match std::env::var("COTEST_CURRENT_SIGNER_TARGET_DATABASE_URL") {
+    let target_ephemeral = match std::env::var("COTEST_SIGNER_KEYS_TARGET_DATABASE_URL") {
         Ok(_) => None,
         Err(_) => crate::scenarios::_helpers::coauth_bootstrap::spawn_ephemeral_postgres()?,
     };
-    let source_database_url = std::env::var("COTEST_CURRENT_SIGNER_SOURCE_DATABASE_URL")
+    let source_database_url = std::env::var("COTEST_SIGNER_KEYS_SOURCE_DATABASE_URL")
         .ok()
         .or_else(|| {
             source_ephemeral
                 .as_ref()
                 .map(|database| database.connect_url.clone())
         });
-    let target_database_url = std::env::var("COTEST_CURRENT_SIGNER_TARGET_DATABASE_URL")
+    let target_database_url = std::env::var("COTEST_SIGNER_KEYS_TARGET_DATABASE_URL")
         .ok()
         .or_else(|| {
             target_ephemeral
@@ -197,9 +198,9 @@ pub async fn run_current_signer_evidence_live() -> Result<()> {
     else {
         ensure!(
             std::env::var("COTEST_REQUIRE_LIVE").as_deref() != Ok("1"),
-            "required live current-signer evidence needs two PostgreSQL databases"
+            "required live signer-keys query needs two PostgreSQL databases"
         );
-        eprintln!("skipping current-signer evidence live E2E: databases unavailable");
+        eprintln!("skipping signer-keys query live E2E: databases unavailable");
         return Ok(());
     };
     ensure!(source_database_url != target_database_url);
@@ -208,25 +209,24 @@ pub async fn run_current_signer_evidence_live() -> Result<()> {
         federation_node_env(target_database_url),
     ];
     let Some(mut group) =
-        TestServerGroup::try_multi_external_with_node_envs("current-signer-evidence", &node_envs)
-            .await?
+        TestServerGroup::try_multi_external_with_node_envs("signer-keys-query", &node_envs).await?
     else {
         ensure!(
             std::env::var("COTEST_REQUIRE_LIVE").as_deref() != Ok("1"),
-            "required live current-signer evidence needs a prebuilt Soland"
+            "required live signer-keys query needs a prebuilt Soland"
         );
-        eprintln!("skipping current-signer evidence live E2E: prebuilt Soland unavailable");
+        eprintln!("skipping signer-keys query live E2E: prebuilt Soland unavailable");
         return Ok(());
     };
-    let alice_did = actor_did_for_service_did(group.server(0).service_did(), "evidence-alice")?;
-    let bob_did = actor_did_for_service_did(group.server(1).service_did(), "evidence-bob")?;
+    let alice_did = actor_did_for_service_did(group.server(0).service_did(), "signer-keys-alice")?;
+    let bob_did = actor_did_for_service_did(group.server(1).service_did(), "signer-keys-bob")?;
     let alice = group
         .server(0)
-        .register_client(&alice_did, "evidence-alice", ALICE_DEVICE)
+        .register_client(&alice_did, "signer-keys-alice", ALICE_DEVICE)
         .await?;
     let bob = group
         .server(1)
-        .register_client(&bob_did, "evidence-bob", BOB_DEVICE)
+        .register_client(&bob_did, "signer-keys-bob", BOB_DEVICE)
         .await?;
     let alice_principal = alice.principal.as_ref().context("source PCR bootstrap")?;
     let bob_principal = bob.principal.as_ref().context("recipient PCR bootstrap")?;
@@ -238,7 +238,7 @@ pub async fn run_current_signer_evidence_live() -> Result<()> {
         bob_principal.core_id.clone(),
         group.server(1).service_id().clone(),
     );
-    let realm_id = create_realm(&alice, "Current signer evidence").await?;
+    let realm_id = create_realm(&alice, "Signer keys query").await?;
     let bob_join = member_payload(
         &realm_id,
         &bob_did,
