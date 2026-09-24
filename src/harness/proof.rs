@@ -1,8 +1,8 @@
 use anyhow::{Context, Result, anyhow};
 use serde_json::Value;
 
-/// Canonical `event_digest` over an Event envelope with `proofs`/`unsigned`
-/// stripped, hashed via the SDK's canonical (sorted-key, integer-number)
+/// Canonical `event_digest` over an Event envelope without its producer
+/// proof, hashed via the SDK's canonical (sorted-key, integer-number)
 /// encoding so every Arkret implementation agrees on the bytes. Shared by all
 /// cotest event builders — do not re-implement a `serde_json::to_vec` variant,
 /// which preserves insertion order and would diverge from the SDK.
@@ -19,32 +19,23 @@ pub(crate) fn canonical_event_digest(event: &Value) -> Result<String> {
 
 #[cfg(test)]
 fn event_value_with_parseable_proof_digests(event: &Value) -> Value {
+    // The producer proof's `event_digest` is excluded from the digest input,
+    // so an unsigned fixture may leave it empty; give it a parseable digest
+    // so the value decodes into the SDK Event before hashing.
     let mut typed_value = event.clone();
-    if let Value::Object(object) = &mut typed_value {
-        match object.get_mut("proofs") {
-            Some(Value::Array(proofs)) => {
-                for proof in proofs {
-                    if let Value::Object(proof_object) = proof {
-                        let missing_or_empty = proof_object
-                            .get("event_digest")
-                            .and_then(Value::as_str)
-                            .is_none_or(str::is_empty);
-                        if missing_or_empty {
-                            proof_object.insert(
-                                "event_digest".to_owned(),
-                                Value::String(
-                                    "sha256:0000000000000000000000000000000000000000000000000000000000000000"
-                                        .to_owned(),
-                                ),
-                            );
-                        }
-                    }
-                }
-            }
-            Some(_) => {}
-            None => {
-                object.insert("proofs".to_owned(), Value::Array(Vec::new()));
-            }
+    if let Some(Value::Object(proof)) = typed_value.get_mut("producer_proof") {
+        let missing_or_empty = proof
+            .get("event_digest")
+            .and_then(Value::as_str)
+            .is_none_or(str::is_empty);
+        if missing_or_empty {
+            proof.insert(
+                "event_digest".to_owned(),
+                Value::String(
+                    "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+                        .to_owned(),
+                ),
+            );
         }
     }
     typed_value
@@ -183,14 +174,7 @@ mod tests {
                     "station_id": "ak:did_core:web:principal.example"
                 }
             },
-            "actor_seq": 1,
             "created_at": "2026-07-07T00:00:00.000Z",
-            "hlc": "019f3b1c76c8-0000-ac7eadec",
-            "prev_refs": [],
-            "requirements": {
-                "features": [],
-                "critical_extensions": []
-            },
             "payload": {
                 "content": {"kind": "ak.content.text", "body": "hello"},
                 "message_id": "ak:message:AWb5Nken0jbCnqSrJsuRfB0gnGenpREJucvnn6MsxwLz",
