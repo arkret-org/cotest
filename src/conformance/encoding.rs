@@ -12,6 +12,11 @@ struct EncodingArtifactFixture {
     version: String,
     description: String,
     generator_semantics: String,
+    covers_vectors: Vec<String>,
+    security_evidence: Vec<super::SecurityEvidenceRow>,
+    /// Always empty here: every vector is carried in `vectors[]` and listed in
+    /// `covers_vectors`.
+    applies_to_vectors: Vec<String>,
     vectors: Vec<Value>,
     rank_order: Vec<Value>,
     expected_order: Vec<String>,
@@ -19,7 +24,13 @@ struct EncodingArtifactFixture {
 
 pub fn run_encoding_fixture_suite() -> Result<()> {
     let value = load_fixture_value("encoding-fixture.json")?;
-    let fixture: EncodingArtifactFixture = serde_json::from_value(value)?;
+    let fixture: EncodingArtifactFixture = serde_json::from_value(value.clone())?;
+    super::verify_security_evidence(
+        "encoding-fixture.json",
+        &value,
+        &fixture.security_evidence,
+        &fixture.covers_vectors,
+    )?;
     run_encoding_artifact_suite(&fixture)
 }
 
@@ -31,6 +42,24 @@ fn run_encoding_artifact_suite(fixture: &EncodingArtifactFixture) -> Result<()> 
         || fixture.runner.is_null()
     {
         bail!("encoding artifact metadata drifted");
+    }
+    let carried = fixture
+        .vectors
+        .iter()
+        .map(|vector| {
+            vector
+                .get("vector_id")
+                .and_then(Value::as_str)
+                .ok_or_else(|| anyhow!("encoding vector without vector_id"))
+        })
+        .collect::<Result<std::collections::BTreeSet<_>>>()?;
+    let covered = fixture
+        .covers_vectors
+        .iter()
+        .map(String::as_str)
+        .collect::<std::collections::BTreeSet<_>>();
+    if carried != covered || !fixture.applies_to_vectors.is_empty() {
+        bail!("encoding fixture covers_vectors drifted from its carried vectors");
     }
     let mut sorted = fixture.rank_order.clone();
     sorted.sort_by(|left, right| {
