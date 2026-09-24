@@ -372,8 +372,7 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
         arkret_wire::OpaqueLocalId::new("pairing_request:01964137-0000-7000-8000-000000000000")
             .map_err(|error| anyhow!(error))?;
     let typed_verification_method =
-        arkret_wire::DidUrl::new(runtime_method)
-            .map_err(|error| anyhow!(error))?;
+        arkret_wire::DidUrl::new(runtime_method).map_err(|error| anyhow!(error))?;
     let binding = arkret_models_collaboration::agent_scope::agent_runtime_key_binding_digest(
         &agent_id,
         &typed_pairing_request_id,
