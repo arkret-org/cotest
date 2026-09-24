@@ -73,30 +73,17 @@ pub fn actor_core_id(actor: &str) -> Result<String> {
 
 /// Read the one canonical Event id from a single-Event submit outcome.
 ///
-/// Exact replay reports the id in `duplicate[]`; first admission reports it in
-/// `accepted[]`. The retired top-level `event_id` mirror is deliberately not
-/// recognized.
+/// First admission and exact replay both bind the Event through the accepted
+/// RealmCommit. The retired accepted/duplicate Event arrays are not recognized.
 pub fn submitted_event_id(outcome: &Value) -> Result<arkret_identifiers::EventId> {
-    let accepted = outcome
-        .get("accepted")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten();
-    let duplicate = outcome
-        .get("duplicate")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten();
-    let mut ids = accepted.chain(duplicate);
-    let first = ids.next().and_then(Value::as_str).ok_or_else(|| {
-        anyhow::anyhow!("single-Event submit outcome names no accepted/duplicate Event: {outcome}")
-    })?;
-    if ids.next().is_some() {
-        anyhow::bail!(
-            "single-Event submit outcome names multiple accepted/duplicate Events: {outcome}"
-        );
+    let parsed: arkret_wire::AuthoritySubmitOutcome = serde_json::from_value(outcome.clone())?;
+    parsed.validate_shape()?;
+    match parsed {
+        arkret_wire::AuthoritySubmitOutcome::Accepted { commit, .. } => Ok(commit.event_ref),
+        arkret_wire::AuthoritySubmitOutcome::Rejected { reason_code, .. } => {
+            anyhow::bail!("single-Event submit was rejected: {reason_code}")
+        }
     }
-    Ok(arkret_identifiers::EventId::new(first.to_owned())?)
 }
 
 pub fn events_query_for_realm(
