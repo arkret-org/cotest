@@ -12729,6 +12729,7 @@ dependencies = [
  "arkret-models-integration",
  "arkret-policy",
  "arkret-schema",
+ "arkret-signatures",
  "arkret-state",
  "arkret-wire",
  "async-trait",
