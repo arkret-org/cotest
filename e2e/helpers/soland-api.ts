@@ -116,7 +116,6 @@ type RegisteredEventSigner = {
   verificationMethod: string;
   signingSeedB64url?: string;
   dataSignerEvidenceRef?: string;
-  controlSignerEvidenceRef?: string;
 };
 
 const registeredEventSigners = new Map<
@@ -162,7 +161,6 @@ export function registerEventSigner(args: {
   verificationMethod: string;
   signingSeedB64url?: string;
   dataSignerEvidenceRef?: string;
-  controlSignerEvidenceRef?: string;
 }): void {
   const actorId = requireDidCoreId(args.actorId);
   if (!args.verificationMethod.endsWith(`#${args.deviceId}`)) {
@@ -185,8 +183,6 @@ export function registerEventSigner(args: {
         : undefined),
     dataSignerEvidenceRef:
       args.dataSignerEvidenceRef ?? previous?.dataSignerEvidenceRef,
-    controlSignerEvidenceRef:
-      args.controlSignerEvidenceRef ?? previous?.controlSignerEvidenceRef,
   };
   byMethod.set(args.verificationMethod, signer);
   registeredEventSigners.set(actorId, byMethod);
@@ -1724,7 +1720,6 @@ export async function currentActorIdApi(
 
 export type HumanDeviceSignerEvidenceRefs = {
   dataSignerEvidenceRef: string;
-  controlSignerEvidenceRef: string;
 };
 
 type AccountCoordinate = { principal_id: string; station_id: string };
@@ -1740,10 +1735,11 @@ function requireSignerEvidenceRef(value: unknown, context: string): string {
 }
 
 /**
- * Install the two intentionally different portable roots for one exact human
- * account-device signer.  device-lifecycle.md sections 8.2 and 8.2.2 make the
- * sources non-interchangeable: Data comes from the exact keys/query row while
- * generic Control comes from the exact post-confirmation account viewer row.
+ * Install the portable Data root for one exact human account-device signer.
+ * device-lifecycle.md section 8.2 delivers it only on the exact keys/query row.
+ * The account viewer `device_summary` carries no signer evidence (section 10.1),
+ * and v1 has no carrier for the section 8.2.2 `account_device_control` root, so
+ * no Control root is installed and human Control Events fail closed.
  */
 export async function hydrateRegisteredEventSignerEvidenceApi(
   request: APIRequestContext,
@@ -1768,7 +1764,6 @@ export async function hydrateRegisteredEventSignerEvidenceApi(
       status?: unknown;
       verification_state?: unknown;
       authorized_event_ref?: unknown;
-      signer_resolution_evidence_ref?: unknown;
     }>;
   }>(
     await request.get(viewerUrl, {
@@ -1802,10 +1797,11 @@ export async function hydrateRegisteredEventSignerEvidenceApi(
       `verified account viewer row for ${args.deviceId} omitted authorized_event_ref`,
     );
   }
-  const controlSignerEvidenceRef = requireSignerEvidenceRef(
-    viewerRow.signer_resolution_evidence_ref,
-    `verified account viewer row for ${args.deviceId}`,
-  );
+  if (Object.hasOwn(viewerRow, "signer_resolution_evidence_ref")) {
+    throw new Error(
+      `account viewer row for ${args.deviceId} carries the retired signer_resolution_evidence_ref`,
+    );
+  }
 
   const keysUrl = `${solandBaseUrl(args.server)}/_arkret/self/keys/query`;
   const keys = await expectJsonOk<{
@@ -1895,9 +1891,8 @@ export async function hydrateRegisteredEventSignerEvidenceApi(
     deviceId: args.deviceId,
     verificationMethod: args.verificationMethod,
     dataSignerEvidenceRef,
-    controlSignerEvidenceRef,
   });
-  return { dataSignerEvidenceRef, controlSignerEvidenceRef };
+  return { dataSignerEvidenceRef };
 }
 
 export function signedEventEnvelope(
@@ -2046,10 +2041,15 @@ function eventEnvelopeProof(args: {
       `Event kind ${kind} has no registered plane; a wire-negative fixture must declare signerEvidenceAuthority explicitly`,
     );
   }
-  const signerResolutionEvidenceRef =
-    signerEvidenceAuthority === "account_device_data"
-      ? registeredSigner?.dataSignerEvidenceRef
-      : registeredSigner?.controlSignerEvidenceRef;
+  if (signerEvidenceAuthority === "account_device_control") {
+    // device-lifecycle.md section 8.2.2: v1 has no closed carrier for the
+    // human Control root, so a human-device Control Event fails closed and
+    // no Data evidence, session or current key may stand in for it.
+    throw new Error(
+      `${kind} needs account_device_control evidence, which v1 does not carry; human Control Events fail closed`,
+    );
+  }
+  const signerResolutionEvidenceRef = registeredSigner?.dataSignerEvidenceRef;
   if (!signerResolutionEvidenceRef) {
     throw new Error(
       `registered signer ${verificationMethod} has no real ${signerEvidenceAuthority} evidence ref for ${kind}`,

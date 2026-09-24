@@ -3055,6 +3055,7 @@ name = "cotest-mls-governance-binding-runner"
 version = "0.3.0"
 dependencies = [
  "anyhow",
+ "arkret-canonical",
  "arkret-mls",
  "arkret-models-collaboration",
  "arkret-models-crypto",

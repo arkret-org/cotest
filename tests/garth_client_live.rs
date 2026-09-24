@@ -8,8 +8,8 @@
 //!
 //! 1. `ArkretServer::attach` + `canonical_client` produce a real principal on the deployment this
 //!    run owns, with a canonical DPoP session.
-//! 2. `AccountSubscription::new(NativeExecutor, FileStore)` is the headless runner.
-//!    `FileStore` is Garth's native durable store.
+//! 2. `AccountSubscription::new(NativeExecutor, FileStore)` is the headless runner. `FileStore` is
+//!    Garth's native durable store.
 //! 3. `AccountSubscription::run` drives one real account-subscribe round against the Station.
 //! 4. The store is reopened from the same path to prove the cursor survived, which is the claim
 //!    `file_store_noop` only tests the negative half of.

@@ -7,6 +7,7 @@ publish = false
 
 [dependencies]
 anyhow = { workspace = true }
+arkret-canonical = { workspace = true }
 arkret-mls = { workspace = true }
 arkret-models-collaboration = { workspace = true }
 arkret-models-crypto = { workspace = true }

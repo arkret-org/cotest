@@ -70,6 +70,21 @@ conformance_test!(
 );
 
 conformance_test!(
+    /// Decision 0106: `expires_at` against the covering RealmCommit only.
+    agent_action_approve_expiry_executes_registered_variants,
+    "agent_action_approve_expiry",
+    cotest::conformance::run_agent_action_approve_expiry_vector,
+);
+
+conformance_test!(
+    /// Decision 0106: whole-request `param_invalid`, exact retry first,
+    /// reason-free unknown rows.
+    device_message_send_admission_executes_registered_variants,
+    "device_message_send_admission",
+    cotest::conformance::run_device_message_send_admission_vector,
+);
+
+conformance_test!(
     device_pairing_code_claim_executes_registered_variants,
     "device_pairing_code_claim",
     cotest::conformance::run_device_pairing_code_claim_suite,

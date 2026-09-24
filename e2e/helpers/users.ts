@@ -143,9 +143,6 @@ export type DpopUserSession = {
   /// Exact immutable account_device evidence retained from self/keys/query.
   /// It authorizes Data/history proof verification only.
   dataSignerEvidenceRef: string;
-  /// Exact immutable account_device_control evidence retained from the
-  /// post-confirmation account viewer. It authorizes generic human Control.
-  controlSignerEvidenceRef: string;
   deviceKey: DpopDeviceKey;
   recoveryKey?: string;
   principalControlRealmId: string;
@@ -1799,7 +1796,6 @@ export async function createDpopUserSessionForAccount(
     dpopSeedB64url: dpopDeviceSeedB64url(deviceKey),
     eventSigningSeedB64url,
     dataSignerEvidenceRef: "",
-    controlSignerEvidenceRef: "",
     deviceKey,
     recoveryKey: claimsPrincipalGenesis ? account.recoveryKey : undefined,
     principalControlRealmId: "",
@@ -1879,10 +1875,10 @@ export async function createDpopUserSessionForAccount(
     sealResponse.ok(),
     `principal bootstrap Seal returned ${sealResponse.status()}: ${await sealResponse.text()}`,
   ).toBeTruthy();
-  // device-lifecycle.md section 8.2.2: only the successful committed Seal may
-  // materialize the account_device_control root. Re-read the typed viewer after
-  // that boundary, select this session's exact device (never devices[0]), and
-  // separately retain the Data root returned by this account's keys/query row.
+  // Re-read the typed viewer after the committed Seal, select this session's
+  // exact device (never devices[0]), and retain the Data root returned by this
+  // account's keys/query row. device-lifecycle.md section 8.2.2 has no v1
+  // carrier for a human Control root, so none is retained.
   const signerEvidence = await hydrateRegisteredEventSignerEvidenceApi(
     request,
     session.grantJwt,
@@ -1895,7 +1891,6 @@ export async function createDpopUserSessionForAccount(
     },
   );
   session.dataSignerEvidenceRef = signerEvidence.dataSignerEvidenceRef;
-  session.controlSignerEvidenceRef = signerEvidence.controlSignerEvidenceRef;
   return session;
 }
 

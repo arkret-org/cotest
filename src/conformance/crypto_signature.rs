@@ -64,7 +64,7 @@ fn verify_detached_jws(jws: &str, signing_input: &str, jwk: &Value) -> Result<Ve
     let header: Value = serde_json::from_slice(&b64u(protected_b64)?)?;
     let alg = header["alg"].as_str().unwrap_or_default();
     let registered = registered_jose_algorithms()?;
-    let Some((_, status, kty)) = registered.iter().find(|(name, _, _)| name == alg) else {
+    let Some((_, status, kty)) = registered.iter().find(|(name, ..)| name == alg) else {
         return Ok(Verdict::Rejected("unsupported_signature_alg"));
     };
     if status != "active" {
@@ -166,7 +166,7 @@ fn run_positive_vector(vector: &Value) -> Result<()> {
         );
         let status = registered_jose_algorithms()?
             .into_iter()
-            .find(|(alg, _, _)| alg == "ML-DSA-65")
+            .find(|(alg, ..)| alg == "ML-DSA-65")
             .map(|(_, status, _)| status);
         ensure!(
             status.as_deref() == Some("reserved")

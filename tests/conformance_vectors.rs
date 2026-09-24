@@ -554,12 +554,12 @@ fn agent_vector_suite_runs_clean() {
     assert_eq!(ALL_AGENT_VECTOR_IDS.len(), 10);
 }
 
-// ─── P0 / VECT-SC-1..18 — sidecar vectors ──────────────────────────────────
+// ─── Sidecar pre-activation checks (all 17 rows reserved) ─────────────────
 
 #[test]
 fn sidecar_vector_suite_runs_clean() {
-    run_sidecar_vector_suite().expect("sidecar vectors must pass");
-    assert_eq!(ALL_SIDECAR_VECTOR_IDS.len(), 18);
+    run_sidecar_vector_suite().expect("sidecar pre-activation checks must pass");
+    assert_eq!(ALL_SIDECAR_VECTOR_IDS.len(), 17);
 }
 
 // ─── P0 / VECT-CUR-1 — cursor vectors ──────────────────────────────────────
@@ -733,26 +733,38 @@ fn agent_approval_requires_exact_approved_event_id() {
         .unwrap();
     assert_eq!(case["expect"], "fail");
     assert_eq!(case["reducer_input"], true);
-    let approval = arkret_wire::test_support::raw_event_for_actor_at(
-        "ak.agent.action_approve",
-        arkret_wire::ScopeRef::Realm {
-            realm_id: serde_json::from_value(case["payload"]["target"]["realm_id"].clone())
-                .unwrap(),
-        },
-        arkret_wire::ActorId::service(
-            arkret_wire::DidCoreId::new("ak:did_core:web:controller.example").unwrap(),
-        ),
-        case["payload"].clone(),
-        chrono::DateTime::parse_from_rfc3339("2026-01-01T00:00:00Z")
-            .unwrap()
-            .to_utc(),
-    )
-    .unwrap();
-    assert!(
-        approval
-            .typed_payload::<arkret_wire::event_spec::AgentActionApprove>()
-            .is_err()
-    );
+    let approval = |payload: Value| {
+        arkret_wire::test_support::raw_event_for_actor_at(
+            "ak.agent.action_approve",
+            arkret_wire::ScopeRef::Realm {
+                realm_id: serde_json::from_value(case["payload"]["target"]["realm_id"].clone())
+                    .unwrap(),
+            },
+            arkret_wire::ActorId::service(
+                arkret_wire::DidCoreId::new("ak:did_core:web:controller.example").unwrap(),
+            ),
+            payload,
+            chrono::DateTime::parse_from_rfc3339("2026-01-01T00:00:00Z")
+                .unwrap()
+                .to_utc(),
+        )
+        .unwrap()
+        .typed_payload::<arkret_wire::event_spec::AgentActionApprove>()
+    };
+    assert!(approval(case["payload"].clone()).is_err());
+
+    // The same payload with the exact approved Event is the minimal valid
+    // confirmation, so the rejection above is the missing binding alone.
+    let mut bound = case["payload"].clone();
+    bound["approved_event_id"] =
+        serde_json::json!("ak:event:AfAnsJqSlM9bHVI7P1QBMOEW3p5P1PNQu7BBMpiSnD_e");
+    assert!(approval(bound.clone()).is_ok());
+
+    // Decision 0106: `approved_at` is removed; the window is `expires_at`
+    // judged against the covering RealmCommit only.
+    let mut retired = bound;
+    retired["approved_at"] = serde_json::json!("2026-05-27T07:02:00.000Z");
+    assert!(approval(retired).is_err());
 }
 
 // ─── P0 / TEST-4 — Cursor opaque round-trip + stateless-under-core reject ──

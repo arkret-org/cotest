@@ -313,8 +313,8 @@ fn current_spec_vector_registry_artifact_gate_validates() -> Result<()> {
     );
     for (vector_id, expected_fixture_ref) in [
         (
-            "ak.vector.capability.approval_constraint.v1",
-            "spec/v1/artifacts/fixtures/capability-fixture.json",
+            "ak.vector.encoding.cursor_opaque.core.v1",
+            "spec/v1/artifacts/fixtures/encoding-fixture.json",
         ),
         (
             "ak.vector.redaction.preserve_fields.v1",
@@ -339,6 +339,20 @@ fn current_spec_vector_registry_artifact_gate_validates() -> Result<()> {
             "{vector_id} must stay backed by {expected_fixture_ref}"
         );
     }
+    // The negative cursor fixture serves only reject_invalid_cursor; the
+    // opaque round-trip vector is carried by the encoding fixture alone.
+    let cursor_opaque = report
+        .entries
+        .iter()
+        .find(|entry| entry.vector_id == "ak.vector.encoding.cursor_opaque.core.v1")
+        .expect("cursor_opaque must be registered");
+    assert!(
+        !cursor_opaque
+            .fixture_refs
+            .iter()
+            .any(|fixture_ref| fixture_ref.ends_with("/cursor-negative-fixture.json")),
+        "cursor_opaque must not claim the negative cursor fixture"
+    );
     Ok(())
 }
 

@@ -1,9 +1,11 @@
-//! Conformance checks for the current native Sidecar wire contract.
+//! Pre-activation checks for the current native Sidecar wire contract.
 //!
-//! The vector registry owns the 18 vector identities. The previous runner
-//! depended on an untracked `agent-sidecar-fixture.json` and on pre-Commit
-//! Sidecar/CBS types that are absent from the v1 SDK. These checks exercise
-//! the closed current DTOs and signed MLS binding instead.
+//! The vector registry owns the 17 Sidecar vector identities, all `reserved`:
+//! no spec fixture carries them yet, so they are non-gating and this suite
+//! claims none of them. These checks exercise the closed current DTOs and the
+//! signed MLS binding so the SDK surface stays executable until a fixture
+//! returns a row to `active`; that change must move the row to fixture-backed
+//! execution, which is why an active row fails `validate_registry`.
 
 use std::collections::BTreeSet;
 
@@ -48,7 +50,6 @@ pub const VECTOR_ID_SIDECAR_REVOKE_FAIL_CLOSED: &str = "ak.vector.sidecar.revoke
 pub const VECTOR_ID_SIDECAR_EXPLICIT_PUBLISH: &str = "ak.vector.sidecar.explicit_publish.v1";
 pub const VECTOR_ID_SIDECAR_ACCEPTED_REQUEST_IDENTITY: &str =
     "ak.vector.sidecar.accepted_request_identity.v1";
-pub const VECTOR_ID_SIDECAR_HOSTED_UI_MATRIX: &str = "ak.vector.sidecar.hosted_ui_matrix.v1";
 
 pub const ALL_SIDECAR_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_SIDECAR_MLS_BOOTSTRAP_BINDING,
@@ -68,7 +69,6 @@ pub const ALL_SIDECAR_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_SIDECAR_REVOKE_FAIL_CLOSED,
     VECTOR_ID_SIDECAR_EXPLICIT_PUBLISH,
     VECTOR_ID_SIDECAR_ACCEPTED_REQUEST_IDENTITY,
-    VECTOR_ID_SIDECAR_HOSTED_UI_MATRIX,
 ];
 
 fn event_id(byte: u8) -> EventId {
@@ -184,16 +184,26 @@ fn validate_registry() -> Result<()> {
     let vectors = registry["vectors"]
         .as_array()
         .ok_or_else(|| anyhow!("vector registry has no vectors array"))?;
+    let registered = vectors
+        .iter()
+        .filter(|entry| {
+            entry["vector_id"]
+                .as_str()
+                .is_some_and(|id| id.starts_with("ak.vector.sidecar."))
+        })
+        .collect::<Vec<_>>();
     ensure!(
-        ALL_SIDECAR_VECTOR_IDS.len() == 18,
-        "Sidecar vector count drifted"
+        registered.len() == ALL_SIDECAR_VECTOR_IDS.len() && ALL_SIDECAR_VECTOR_IDS.len() == 17,
+        "Sidecar vector set drifted"
     );
     for id in ALL_SIDECAR_VECTOR_IDS {
         ensure!(
-            vectors
-                .iter()
-                .any(|entry| entry["vector_id"] == *id && entry["status"] == "active"),
-            "Sidecar vector {id} is absent or inactive"
+            registered.iter().any(|entry| entry["vector_id"] == *id
+                && entry["status"] == "reserved"
+                && entry["description"]
+                    .as_str()
+                    .is_some_and(|description| description.contains("Activation:"))),
+            "Sidecar vector {id} is not a reserved row with an activation condition"
         );
     }
     Ok(())
@@ -561,21 +571,7 @@ pub fn run_sidecar_accepted_request_identity_vector() -> Result<()> {
     Ok(())
 }
 
-pub fn run_sidecar_hosted_ui_matrix_vector() -> Result<()> {
-    let mut merged = view_state();
-    let first: AgentSidecarViewState = serde_json::from_value(merged.clone())?;
-    first.validate_shape()?;
-    merged["display_mode"] = json!("sidecar_only");
-    let second: AgentSidecarViewState = serde_json::from_value(merged)?;
-    second.validate_shape()?;
-    ensure!(
-        first.sidecar_id == second.sidecar_id && first.context_ref == second.context_ref,
-        "display mode changed hosted Sidecar coordinates"
-    );
-    Ok(())
-}
-
-/// Executes each currently registered Sidecar vector once.
+/// Executes the pre-activation check of each reserved Sidecar vector once.
 pub fn run_sidecar_vector_suite() -> Result<()> {
     validate_registry()?;
     for (name, run) in [
@@ -646,10 +642,6 @@ pub fn run_sidecar_vector_suite() -> Result<()> {
         (
             VECTOR_ID_SIDECAR_ACCEPTED_REQUEST_IDENTITY,
             run_sidecar_accepted_request_identity_vector,
-        ),
-        (
-            VECTOR_ID_SIDECAR_HOSTED_UI_MATRIX,
-            run_sidecar_hosted_ui_matrix_vector,
         ),
     ] {
         run().map_err(|error| anyhow!("{name}: {error}"))?;

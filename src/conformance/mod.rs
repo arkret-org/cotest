@@ -2,6 +2,7 @@ mod account_blocklist_projection;
 mod account_data_cas_convergence;
 mod account_status_issuer_ledger;
 mod aead_nonce_replay;
+mod agent_action_approve_expiry;
 mod agent_draft_pending_intent_account_subscribe;
 mod agent_membership_cascade;
 mod agent_mls_keypackage_authorization;
@@ -30,6 +31,7 @@ mod crypto_signature;
 mod cursor_negative;
 mod cursor_vectors;
 mod detached_object_signature;
+mod device_message_send_admission;
 mod device_pairing_code_claim;
 mod device_revocation_pending;
 mod did_binding_digests;
@@ -139,6 +141,9 @@ pub use account_status_issuer_ledger::{
     VECTOR_ID_ACCOUNT_STATUS_ISSUER_LEDGER, run_account_status_issuer_ledger_vector,
 };
 pub use aead_nonce_replay::{AEAD_NONCE_REPLAY_ENTRYPOINT, run_aead_nonce_replay_suite};
+pub use agent_action_approve_expiry::{
+    VECTOR_ID_AGENT_ACTION_APPROVE_EXPIRY, run_agent_action_approve_expiry_vector,
+};
 pub use agent_draft_pending_intent_account_subscribe::{
     AgentDraftPendingIntentAccountSubscribeCoverage,
     run_agent_draft_pending_intent_account_subscribe_conformance,
@@ -216,6 +221,9 @@ pub use cursor_vectors::{
 };
 pub use detached_object_signature::{
     DETACHED_OBJECT_SIGNATURE_ENTRYPOINT, run_detached_object_signature_suite,
+};
+pub use device_message_send_admission::{
+    VECTOR_ID_DEVICE_MESSAGE_SEND_ADMISSION, run_device_message_send_admission_vector,
 };
 pub use device_pairing_code_claim::run_device_pairing_code_claim_suite;
 pub use device_revocation_pending::run_device_revocation_pending_suite;
@@ -428,10 +436,10 @@ pub use sidecar_vectors::{
     run_sidecar_exchange_binding_containment_vector,
     run_sidecar_exchange_projection_recovery_vector, run_sidecar_existence_privacy_vector,
     run_sidecar_explicit_publish_vector, run_sidecar_hosted_projection_vector,
-    run_sidecar_hosted_ui_matrix_vector, run_sidecar_mls_bootstrap_binding_vector,
-    run_sidecar_mls_effective_access_vector, run_sidecar_multi_agent_publish_vector,
-    run_sidecar_non_disclosure_surface_matrix_vector, run_sidecar_revoke_fail_closed_vector,
-    run_sidecar_union_history_frontier_vector, run_sidecar_vector_suite,
+    run_sidecar_mls_bootstrap_binding_vector, run_sidecar_mls_effective_access_vector,
+    run_sidecar_multi_agent_publish_vector, run_sidecar_non_disclosure_surface_matrix_vector,
+    run_sidecar_revoke_fail_closed_vector, run_sidecar_union_history_frontier_vector,
+    run_sidecar_vector_suite,
 };
 pub use signal_federation::{
     VECTOR_ID_SIGNAL_DEVICE_AUTHORIZATION_DOMAIN, run_signal_device_authorization_domain_vector,
