@@ -46,28 +46,29 @@ async fn submit_adapter_event(
     event_client: &TestActorClient,
 ) -> Result<(TestActorClient, String, String)> {
     let actor = event_client.clone();
-    let realm_id = actor
+    let created = actor
         .create_realm_with(json!({
             "title": "Adapter Event Space",
             "summary": "Adapter Event Space",
             "public": true,
             "plaintext_visible_services": [server.service_id()]
         }))
-        .await?["realm_id"]
+        .await?;
+    let realm_id = created["realm_id"]
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("adapter Realm create omitted realm_id"))?
         .to_owned();
+    let strand_id = created["default_strand_id"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("adapter Realm create omitted default_strand_id"))?;
     let submit = actor
         .submit_event(
             &realm_id,
             "ak.message.create",
-            message_create_text_payload_for_strand(
-                parse_strand_id("ak:strand:Aepgr15HbtERKfqPAh9SrfWBdihSvX_c94JvujvBS2f-")?,
-                "hello",
-            )?,
+            message_create_text_payload_for_strand(parse_strand_id(strand_id)?, "hello")?,
         )
         .await?;
-    assert_eq!(submit["status"], "accepted");
+    assert_eq!(submit["status"], "committed");
     let event_id = crate::harness::submitted_event_id(&submit)?;
     Ok((actor, realm_id, event_id.to_string()))
 }
