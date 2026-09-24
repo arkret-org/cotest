@@ -104,9 +104,6 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
 /// member). The set mirrors Soland's own ratchet and may only shrink.
 const KNOWN_ADVERTISED_UNMOUNTED: &[arkret_wire::ServiceOperationId] = &[
     arkret_wire::ServiceOperationId::EdgeAppletManagedActorCommandAuthorV1,
-    arkret_wire::ServiceOperationId::GateAccountCommandFinalizeDevicePairingV1,
-    arkret_wire::ServiceOperationId::GateAccountReadClaimDevicePairingCodeV1,
-    arkret_wire::ServiceOperationId::PeerMlsReadGroupStateMaterialV1,
     arkret_wire::ServiceOperationId::PeerRealmJoinReadApplicationStatusV1,
     arkret_wire::ServiceOperationId::PeerRealmJoinReadPreviewV1,
     arkret_wire::ServiceOperationId::SelfCurrentResultsReadExactV1,
@@ -185,8 +182,8 @@ async fn probe_operation(
 
 /// Live Describe versus mounted routes: every JSON member of every advertised
 /// bundle is dispatched by the fresh Station (outside the shrinking known
-/// set), the http_core peer stream scan is among them, and the core
-/// delivery-status read that no bundle carries is admitted by the selector.
+/// set), and the http_core peer stream scan and delivery-status read are
+/// among them.
 pub async fn advertised_operations_are_mounted_and_selectable() -> Result<()> {
     let scaffold = TestScaffold::fresh("advertised-mounted").await?;
     let server = scaffold.server();
@@ -230,16 +227,14 @@ pub async fn advertised_operations_are_mounted_and_selectable() -> Result<()> {
         "the advertised peer stream scan must be mounted"
     );
 
-    // delivery-status is core (events_sync) and in no registered bundle; the
-    // live selector admits it and dispatches to the authenticated read.
+    // The delivery-status read is a member of the advertised
+    // `http_core_current` bundle, so it was probed above and must be mounted.
     let delivery_status = arkret_wire::ServiceOperationId::SelfEventsReadDeliveryStatusV1;
     anyhow::ensure!(
-        !description.supports_operation(delivery_status),
-        "delivery-status now belongs to an advertised bundle"
-    );
-    anyhow::ensure!(
-        probe_operation(server, delivery_status).await? == ProbeOutcome::Dispatched,
-        "the core delivery-status read must be selectable"
+        description.supports_operation(delivery_status)
+            && probed.contains(&delivery_status)
+            && !unmounted.contains(&delivery_status),
+        "the advertised delivery-status read must be mounted and selectable"
     );
     Ok(())
 }
