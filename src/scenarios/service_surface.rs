@@ -97,3 +97,149 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
 
     Ok(())
 }
+
+/// Advertised JSON bundle members the live Station does not mount. Each is a
+/// false Describe claim (`service-surface.md` §3: only bundles the deployment
+/// really implements may be advertised, and a frozen bundle cannot drop a
+/// member). The set mirrors Soland's own ratchet and may only shrink.
+const KNOWN_ADVERTISED_UNMOUNTED: &[arkret_wire::ServiceOperationId] = &[
+    arkret_wire::ServiceOperationId::EdgeAppletManagedActorCommandAuthorV1,
+    arkret_wire::ServiceOperationId::GateAccountCommandFinalizeDevicePairingV1,
+    arkret_wire::ServiceOperationId::GateAccountReadClaimDevicePairingCodeV1,
+    arkret_wire::ServiceOperationId::PeerMlsReadGroupStateMaterialV1,
+    arkret_wire::ServiceOperationId::PeerRealmJoinReadApplicationStatusV1,
+    arkret_wire::ServiceOperationId::PeerRealmJoinReadPreviewV1,
+    arkret_wire::ServiceOperationId::SelfCurrentResultsReadExactV1,
+    arkret_wire::ServiceOperationId::SelfMediaServiceBindingReadResolveV1,
+    arkret_wire::ServiceOperationId::SelfRealmReadStreamsV1,
+    arkret_wire::ServiceOperationId::SelfRealmJoinReadApplicationStatusV1,
+    arkret_wire::ServiceOperationId::SelfRealmJoinReadPreviewV1,
+    arkret_wire::ServiceOperationId::SelfStrandWatchReadCurrentV1,
+];
+
+/// How the live router answered one unauthenticated, selector-carrying probe.
+#[derive(Debug, PartialEq, Eq)]
+enum ProbeOutcome {
+    /// Dispatched to a handler (any refusal after the selector gate).
+    Dispatched,
+    /// No route: `unrecognized_endpoint` or `method_not_allowed`.
+    Unmounted,
+    /// Routed, but the selector refused the advertised operation id.
+    SelectorRefused,
+}
+
+async fn probe_operation(
+    server: &crate::harness::ArkretServer,
+    operation: arkret_wire::ServiceOperationId,
+) -> Result<ProbeOutcome> {
+    let descriptor = operation.descriptor();
+    // Concrete placeholder segments; the probe carries no credential, so a
+    // mounted handler refuses it (auth, peer signature or closed schema)
+    // before any state is read or written.
+    let path = descriptor
+        .http_path
+        .split('/')
+        .map(|segment| {
+            if segment.starts_with('{') {
+                "cotest-probe"
+            } else {
+                segment
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("/");
+    let method = reqwest::Method::from_bytes(descriptor.http_method.as_bytes())?;
+    // The raw client: the probe names its own exact selector instead of the
+    // path-derived one the selecting wrapper would add.
+    let http = server.http();
+    let raw: &reqwest::Client = &http;
+    let mut request = raw
+        .request(method.clone(), server.url(&path))
+        .header(arkret_http_client::HEADER_OPERATION, operation.as_str());
+    if !matches!(method.as_str(), "GET" | "HEAD" | "DELETE") {
+        request = request
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body("{}");
+    }
+    let response = request.send().await?;
+    let status = response.status();
+    let body = response.text().await.unwrap_or_default();
+    let code = serde_json::from_str::<serde_json::Value>(&body)
+        .ok()
+        .and_then(|problem| {
+            problem["type"]
+                .as_str()
+                .and_then(|kind| kind.rsplit('/').next())
+                .map(str::to_owned)
+        })
+        .unwrap_or_default();
+    Ok(match code.as_str() {
+        "unrecognized_endpoint" | "method_not_allowed" => ProbeOutcome::Unmounted,
+        "unsupported_operation_version" | "operation_selector_required" => {
+            ProbeOutcome::SelectorRefused
+        }
+        _ if status == StatusCode::NOT_FOUND && body.is_empty() => ProbeOutcome::Unmounted,
+        _ => ProbeOutcome::Dispatched,
+    })
+}
+
+/// Live Describe versus mounted routes: every JSON member of every advertised
+/// bundle is dispatched by the fresh Station (outside the shrinking known
+/// set), the http_core peer stream scan is among them, and the core
+/// delivery-status read that no bundle carries is admitted by the selector.
+pub async fn advertised_operations_are_mounted_and_selectable() -> Result<()> {
+    let scaffold = TestScaffold::fresh("advertised-mounted").await?;
+    let server = scaffold.server();
+    let description = server.sdk()?.describe().await?;
+    description.validate()?;
+
+    let mut unmounted = Vec::new();
+    let mut refused = Vec::new();
+    let mut probed = std::collections::BTreeSet::new();
+    for bundle_id in &description.supported_operation_bundles {
+        let bundle = arkret_wire::operation_bundle_descriptor(bundle_id).ok_or_else(|| {
+            anyhow::anyhow!("Describe advertises unregistered bundle {bundle_id}")
+        })?;
+        for member in bundle.members {
+            if member.binding_kind != arkret_wire::BindingKind::HttpJson
+                || !probed.insert(member.operation_id)
+            {
+                continue;
+            }
+            match probe_operation(server, member.operation_id).await? {
+                ProbeOutcome::Dispatched => {}
+                ProbeOutcome::Unmounted => unmounted.push(member.operation_id),
+                ProbeOutcome::SelectorRefused => refused.push(member.operation_id),
+            }
+        }
+    }
+    unmounted.sort_by_key(|operation| operation.as_str());
+    let mut known = KNOWN_ADVERTISED_UNMOUNTED.to_vec();
+    known.sort_by_key(|operation| operation.as_str());
+    anyhow::ensure!(
+        refused.is_empty(),
+        "advertised operations refused by the live selector: {refused:?}"
+    );
+    anyhow::ensure!(
+        unmounted == known,
+        "advertised but unmounted operations changed: {unmounted:?}"
+    );
+    anyhow::ensure!(
+        probed.contains(&arkret_wire::ServiceOperationId::PeerCommittedEventReadScanV1)
+            && !unmounted.contains(&arkret_wire::ServiceOperationId::PeerCommittedEventReadScanV1),
+        "the advertised peer stream scan must be mounted"
+    );
+
+    // delivery-status is core (events_sync) and in no registered bundle; the
+    // live selector admits it and dispatches to the authenticated read.
+    let delivery_status = arkret_wire::ServiceOperationId::SelfEventsReadDeliveryStatusV1;
+    anyhow::ensure!(
+        !description.supports_operation(delivery_status),
+        "delivery-status now belongs to an advertised bundle"
+    );
+    anyhow::ensure!(
+        probe_operation(server, delivery_status).await? == ProbeOutcome::Dispatched,
+        "the core delivery-status read must be selectable"
+    );
+    Ok(())
+}
