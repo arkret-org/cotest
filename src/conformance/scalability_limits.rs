@@ -279,6 +279,14 @@ fn run_case(case: &Value) -> Result<()> {
             validate_decoded_canonical_size_matrix(case, generator)?;
             return Ok(());
         }
+        "realm_snapshot_maximal_disclosure_projection" => {
+            validate_snapshot_inline_capacity(case, generator)?;
+            return Ok(());
+        }
+        "concurrent_realm_snapshot_capacity_candidates" => {
+            validate_concurrent_snapshot_capacity(case, generator)?;
+            return Ok(());
+        }
         other => bail!("{name} uses unknown generated limit kind {other}"),
     };
     let expected = case
@@ -702,6 +710,62 @@ fn validate_mls_governance_exact_query_matrix(case: &Value, generator: &Value) -
             != Some("mls_governance_proof_bounds_exceeded")
     {
         bail!("{name} exact-query expectations drifted");
+    }
+    Ok(())
+}
+
+/// Inline Realm snapshot capacity: RFC 8785 canonical bytes of the complete
+/// signed body after the candidate Commit, never paged or truncated.
+const REALM_SNAPSHOT_INLINE_CAPACITY_BYTES: u64 = 8 * 1024 * 1024;
+
+fn validate_snapshot_inline_capacity(case: &Value, generator: &Value) -> Result<()> {
+    let name = case["name"].as_str().unwrap_or("snapshot capacity case");
+    let bytes = generator["canonical_signed_body_bytes_after_candidate_commit"]
+        .as_u64()
+        .ok_or_else(|| anyhow!("{name} missing canonical signed body size"))?;
+    let expected = &case["expected"];
+    if bytes <= REALM_SNAPSHOT_INLINE_CAPACITY_BYTES {
+        if expected["decision"] != "accept_when_all_other_admission_checks_pass"
+            || expected["paging_or_truncation_used"] != false
+        {
+            bail!("{name}: a snapshot within capacity must admit whole, without paging");
+        }
+    } else if expected["decision"] != "reject"
+        || expected["error_code"] != "failed_precondition"
+        || expected["reason_code"] != arkret_wire::ReasonCode::SNAPSHOT_CAPACITY_EXCEEDED
+        || expected["state_unchanged"] != true
+        || expected["partial_snapshot_or_hidden_overflow"] != false
+    {
+        bail!("{name}: an over-capacity candidate must reject atomically");
+    }
+    Ok(())
+}
+
+/// Concurrent candidates that each fit the old cut serialize at one admission
+/// boundary: the loser re-checks the current cut and is refused.
+fn validate_concurrent_snapshot_capacity(case: &Value, generator: &Value) -> Result<()> {
+    let name = case["name"]
+        .as_str()
+        .unwrap_or("concurrent snapshot capacity case");
+    if generator["each_candidate_individually_fits_old_cut"] != true {
+        bail!("{name}: candidates must each fit the old cut");
+    }
+    let combined = generator["combined_canonical_signed_body_bytes"]
+        .as_u64()
+        .ok_or_else(|| anyhow!("{name} missing combined size"))?;
+    let winners = if combined > REALM_SNAPSHOT_INLINE_CAPACITY_BYTES {
+        1
+    } else {
+        2
+    };
+    let expected = &case["expected"];
+    if expected["accepted_winners"].as_u64() != Some(winners)
+        || expected["loser_rechecks_current_cut"] != true
+        || expected["loser_error_code"] != "failed_precondition"
+        || expected["loser_reason_code"] != arkret_wire::ReasonCode::SNAPSHOT_CAPACITY_EXCEEDED
+        || expected["final_state_within_limit"] != true
+    {
+        bail!("{name}: concurrent snapshot candidates did not share one admission boundary");
     }
     Ok(())
 }
