@@ -22,6 +22,7 @@ async fn key_backup_active_pointer_is_committed_and_listed_at_its_pcr_cut() -> R
 }
 
 #[tokio::test]
-async fn security_rotation_revokes_uploads_switches_and_erases() -> Result<()> {
-    cotest::scenarios::security_rotation_live::security_rotation_revokes_uploads_switches_and_erases().await
+async fn security_rotation_runs_worker_steps_to_local_commit() -> Result<()> {
+    cotest::scenarios::security_rotation_live::security_rotation_runs_worker_steps_to_local_commit()
+        .await
 }

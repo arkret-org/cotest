@@ -1,7 +1,8 @@
 //! A complete SecurityRotation of one Account over live HTTP against a fresh
 //! Soland binary and PostgreSQL: the Station's durable worker drives
-//! `revoke → upload_new_material → switch_authoritative_pointer`, and the
-//! transaction-bound `backup-series/erase` then removes the old series.
+//! `revoke → upload_new_material → switch_authoritative_pointer →
+//! erase_old_material`, and the authorizing device then completes the
+//! rotation with its client-attested `local_commit`.
 //!
 //! Device A founds the PCR through the ordinary signed genesis. Devices B and
 //! C are **labelled fixtures**: Soland has no accepted-device pairing
@@ -22,20 +23,21 @@ use arkret_models_collaboration::events_payloads::{
 };
 use arkret_models_crypto::{
     BackupActiveSeriesPointer, BackupKind, BackupObjectRef, BackupRotationBinding,
-    BackupRotationKind, BackupRotationPlan, BackupSeriesEraseOutcome,
-    BackupSeriesEraseRequestBody, BackupSeriesEraseStatus, KeyBackup, KeyBackupAead,
-    KeyBackupAeadName, KeyBackupAuthData, KeyBackupDomainSeparation, KeyBackupEncryption,
-    KeyBackupRecipientMethod, KeyBackupSignatureAlgorithm, KeysBackupsList,
-    PreparedEventBatchRequest, PreparedEventUnit, SecretStorageContentIndex,
-    SecretStorageItemKind, SecurityRotationRevokeCommandResult,
-    SecurityRotationTransactionCreateRequest, SecurityTransaction,
-    SecurityTransactionCreateRequest, SecurityTransactionTerminalOutcome,
+    BackupRotationKind, BackupRotationPlan, BackupSeriesEraseOutcome, BackupSeriesEraseRequestBody,
+    BackupSeriesEraseStatus, ClientStepAttestation, ClientStepAttestationArtifact,
+    ClientStepAttestationAuthData, KeyBackup, KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData,
+    KeyBackupDomainSeparation, KeyBackupEncryption, KeyBackupRecipientMethod,
+    KeyBackupSignatureAlgorithm, KeysBackupsList, PreparedEventBatchRequest, PreparedEventUnit,
+    SecretStorageContentIndex, SecretStorageItemKind, SecurityRotationLocalCommit,
+    SecurityRotationRevokeCommandResult, SecurityRotationTransactionCreateRequest,
+    SecurityTransaction, SecurityTransactionContinueRequest, SecurityTransactionCreateRequest,
+    SecurityTransactionStep, SecurityTransactionTerminalOutcome,
 };
 use arkret_wire::{
-    AccountId, ActorId, AuthorityCommitStatus, AuthoritySubmitOutcome, BackupId,
-    BackupSeriesId, Base64UrlString, CanonicalPublicMaterial, CommitStreamRef, DeviceId,
-    DidCoreId, DidUrl, Event, EventId, Hash, NonEmptyString, RealmCommit,
-    RealmCommitAuthorityRef, RealmCommitId, RealmId, TransactionId,
+    AccountId, ActorId, AuthorityCommitStatus, AuthoritySubmitOutcome, BackupId, BackupSeriesId,
+    Base64UrlString, CanonicalPublicMaterial, CommitStreamRef, DeviceId, DidCoreId, DidUrl, Event,
+    EventId, Hash, NonEmptyString, RealmCommit, RealmCommitAuthorityRef, RealmCommitId, RealmId,
+    TransactionId,
 };
 use chrono::{DateTime, Utc};
 use ed25519_dalek::{Signer, SigningKey};
@@ -200,24 +202,23 @@ impl RotationAuthor {
         source: &RealmCommitId,
     ) -> Result<(SecurityTransactionCreateRequest, BackupRotationBinding)> {
         let now = arkret::canonical::normalize_timestamp_canonical(Utc::now());
-        let revoke =
-            crate::harness::event_envelope_with_chain_and_signing_identity_and_causal_refs(
-                &self.actor,
-                self.principal.pcr_realm_id.as_str(),
-                arkret_wire::EventKind::DeviceRevoke.as_str(),
-                serde_json::json!({
-                    "device_id": target,
-                    "revoked_by": DEVICE_A,
-                    "revoked_at": arkret_canonical::format_timestamp_canonical(now),
-                    "reason": "security_rotation",
-                }),
-                None,
-                Vec::new(),
-                revoke_seed,
-                &self.method,
-                Some(&self.station),
-                Vec::new(),
-            );
+        let revoke = crate::harness::event_envelope_with_chain_and_signing_identity_and_causal_refs(
+            &self.actor,
+            self.principal.pcr_realm_id.as_str(),
+            arkret_wire::EventKind::DeviceRevoke.as_str(),
+            serde_json::json!({
+                "device_id": target,
+                "revoked_by": DEVICE_A,
+                "revoked_at": arkret_canonical::format_timestamp_canonical(now),
+                "reason": "security_rotation",
+            }),
+            None,
+            Vec::new(),
+            revoke_seed,
+            &self.method,
+            Some(&self.station),
+            Vec::new(),
+        );
         let series = BackupSeriesId::new(format!(
             "ak:backup_series:01904100-0000-7000-8000-{suffix}00000001"
         ))?;
@@ -227,12 +228,7 @@ impl RotationAuthor {
             format!("rotated-{suffix}").as_bytes(),
             backup_seed,
         )?;
-        let pointer = self.pointer(
-            &series,
-            2,
-            vec![BackupSeriesId::new(SERIES_ONE)?],
-            source,
-        )?;
+        let pointer = self.pointer(&series, 2, vec![BackupSeriesId::new(SERIES_ONE)?], source)?;
         let binding = BackupRotationBinding {
             backup_kind: BackupRotationKind::SecretStorage,
             previous_series_id: BackupSeriesId::new(SERIES_ONE)?,
@@ -278,7 +274,7 @@ impl RotationAuthor {
     }
 }
 
-pub async fn security_rotation_revokes_uploads_switches_and_erases() -> Result<()> {
+pub async fn security_rotation_runs_worker_steps_to_local_commit() -> Result<()> {
     let database = spawn_ephemeral_postgres_for("COTEST_SOLAND_DATABASE_URL")?.context(
         "the rotation scenario needs PostgreSQL; set COTEST_SOLAND_DATABASE_URL or make Docker available",
     )?;
@@ -455,11 +451,9 @@ pub async fn security_rotation_revokes_uploads_switches_and_erases() -> Result<(
     let stopped = create(&client_a, &bad_material).await?;
     ensure!(
         stopped.accepted_steps.len() == 1
-            && stopped
-                .revoke_command_outcome
-                .as_ref()
-                .is_some_and(|outcome| outcome.result
-                    == SecurityRotationRevokeCommandResult::Accepted)
+            && stopped.revoke_command_outcome.as_ref().is_some_and(
+                |outcome| outcome.result == SecurityRotationRevokeCommandResult::Accepted
+            )
             && aborted_with(&stopped, "proof_invalid"),
         "a forged replacement was not refused after the accepted revoke: {stopped:?}"
     );
@@ -472,7 +466,10 @@ pub async fn security_rotation_revokes_uploads_switches_and_erases() -> Result<(
         after_refusal.active_series
     );
     ensure!(
-        !lists(&after_refusal, bad_binding.new_backups[0].backup_id.as_str()),
+        !lists(
+            &after_refusal,
+            bad_binding.new_backups[0].backup_id.as_str()
+        ),
         "a refused upload stored its replacement envelope"
     );
     ensure!(
@@ -506,8 +503,8 @@ pub async fn security_rotation_revokes_uploads_switches_and_erases() -> Result<(
     );
     ensure!(listing(&client_a).await?.active_series == after_refusal.active_series);
 
-    // 3. The genuine rotation revokes B; the worker uploads the replacement
-    //    and switches the pointer in the same create.
+    // 3. The genuine rotation revokes B; the worker uploads the replacement,
+    //    switches the pointer and erases the old series in the same create.
     let (request, binding) = signer.rotation(
         "f003",
         DEVICE_B,
@@ -516,111 +513,199 @@ pub async fn security_rotation_revokes_uploads_switches_and_erases() -> Result<(
         &old,
         &after_refusal.active_series.authority_commit_id,
     )?;
-    let switched = create(&client_a, &request).await?;
-    let outcome = switched
+    let erased = create(&client_a, &request).await?;
+    let outcome = erased
         .revoke_command_outcome
         .clone()
         .context("the worker did not decide the revoke proposal")?;
     ensure!(
         outcome.result == SecurityRotationRevokeCommandResult::Accepted
-            && switched.accepted_steps.len() == 3
-            && switched.terminal_outcome.is_none(),
-        "the worker did not reach erase: {switched:?}"
+            && erased.accepted_steps.len() == 4
+            && erased.terminal_outcome.is_none(),
+        "the worker did not reach the local commit: {erased:?}"
     );
-    ensure!(switched.accepted_steps[1].output_ref == binding.new_series_id.as_str());
-    let after_switch = listing(&client_a).await?;
+    ensure!(erased.accepted_steps[1].output_ref == binding.new_series_id.as_str());
+    let SecurityTransactionCreateRequest::SecurityRotation(rotation) = &request else {
+        unreachable!("rotation request")
+    };
     ensure!(
-        after_switch.active_series.authority_commit_id.as_str()
-            == switched.accepted_steps[2].output_ref
-            && pointer_is(&after_switch, binding.new_series_id.as_str(), 2),
+        erased.accepted_steps[3].output_digest == rotation.prepared_plan.erase_confirmation_digest,
+        "the erase step is not the reserved erase confirmation: {:?}",
+        erased.accepted_steps[3]
+    );
+    let after_erase = listing(&client_a).await?;
+    ensure!(
+        after_erase.active_series.authority_commit_id.as_str()
+            == erased.accepted_steps[2].output_ref
+            && pointer_is(&after_erase, binding.new_series_id.as_str(), 2),
         "the switch Commit is not the listed pointer basis: {:?}",
-        after_switch.active_series
+        after_erase.active_series
     );
     ensure!(
-        lists(&after_switch, binding.new_backups[0].backup_id.as_str())
-            && lists(&after_switch, OLD_BACKUP),
-        "the replacement or the old envelope is missing before erase"
+        !lists(&after_erase, OLD_BACKUP)
+            && lists(&after_erase, binding.new_backups[0].backup_id.as_str()),
+        "the worker erased the wrong envelopes"
     );
-    ensure!(refused(&client_b).await?, "the revoked device still authenticates");
+    ensure!(
+        refused(&client_b).await?,
+        "the revoked device still authenticates"
+    );
 
-    // 4. Erase is refused at a basis that is no longer current, and deletes
-    //    nothing.
+    // 4. The erase operation is the worker's: a client cannot drive it. The
+    //    exact request the worker built from the saved plan replays its
+    //    complete outcome; any other bytes are a conflict and change nothing.
     let erase = |authority_commit_id: RealmCommitId| -> Result<BackupSeriesEraseRequestBody> {
-        let SecurityTransactionCreateRequest::SecurityRotation(rotation) = &request else {
-            unreachable!("rotation request")
-        };
         Ok(BackupSeriesEraseRequestBody {
-            transaction_id: switched.transaction_id.clone(),
-            transaction_request_digest: switched.request_digest.clone(),
-            prepared_plan_digest: switched.prepared_plan_digest.clone(),
+            transaction_id: erased.transaction_id.clone(),
+            transaction_request_digest: erased.request_digest.clone(),
+            prepared_plan_digest: erased.prepared_plan_digest.clone(),
             erase_confirmation_digest: rotation.prepared_plan.erase_confirmation_digest.clone(),
             series: vec![binding.clone()],
             authority_commit_id,
         })
     };
-    let stale = canonical_post(
+    let foreign = canonical_post(
         &client_a,
         "/_arkret/self/keys/backup-series/erase",
         &erase(commit.commit_id.clone())?,
     )?
     .send()
     .await?;
-    let stale_status = stale.status();
-    let stale_body = stale.text().await.unwrap_or_default();
+    let foreign_status = foreign.status();
+    let foreign_body = foreign.text().await.unwrap_or_default();
     ensure!(
-        stale_status.is_client_error() && stale_body.contains("failed_precondition"),
-        "a stale erase basis was not refused: {stale_status} {stale_body}"
+        foreign_status == StatusCode::CONFLICT && foreign_body.contains("duplicate_conflict"),
+        "a client erase request was not refused: {foreign_status} {foreign_body}"
     );
-    ensure!(lists(&listing(&client_a).await?, OLD_BACKUP));
+    let replay: BackupSeriesEraseOutcome = serde_json::from_value(
+        expect_json(
+            canonical_post(
+                &client_a,
+                "/_arkret/self/keys/backup-series/erase",
+                &erase(after_erase.active_series.authority_commit_id.clone())?,
+            )?,
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    ensure!(
+        replay.status == BackupSeriesEraseStatus::Complete && replay.confirmation.is_some(),
+        "the worker's erase outcome did not replay: {replay:?}"
+    );
+    let unchanged = listing(&client_a).await?;
+    ensure!(
+        unchanged.active_series == after_erase.active_series
+            && !lists(&unchanged, OLD_BACKUP)
+            && lists(&unchanged, binding.new_backups[0].backup_id.as_str()),
+        "a refused or replayed request changed the backup listing"
+    );
 
-    // 5. Erase at the switch basis removes exactly the old series and
-    //    accepts the erase step; an exact replay reads the same outcome.
-    let body = erase(after_switch.active_series.authority_commit_id.clone())?;
-    let erased = expect_json(
-        canonical_post(&client_a, "/_arkret/self/keys/backup-series/erase", &body)?,
-        StatusCode::OK,
-    )
-    .await?;
-    let typed: BackupSeriesEraseOutcome = serde_json::from_value(erased.clone())?;
-    ensure!(
-        typed.status == BackupSeriesEraseStatus::Complete && typed.confirmation.is_some(),
-        "the erase did not complete: {erased}"
+    // 5. local_commit: A attests the terminal step with its authorized
+    //    device key under its account DID URL. A forged signature is refused
+    //    and writes nothing; the genuine one completes the rotation.
+    let local_commit = |seed: [u8; 32]| -> Result<SecurityTransactionContinueRequest> {
+        let artifact = SecurityRotationLocalCommit {
+            schema: arkret_wire::SchemaId::SECURITY_ROTATION_LOCAL_COMMIT_V1.to_owned(),
+            transaction_id: erased.transaction_id.clone(),
+            transaction_request_digest: erased.request_digest.clone(),
+            prepared_plan_digest: erased.prepared_plan_digest.clone(),
+            local_commit_digest: rotation.prepared_plan.local_commit_digest.clone(),
+            device_id: principal.device_id.clone(),
+            committed_at: arkret::canonical::normalize_timestamp_canonical(Utc::now()),
+        };
+        let mut attestation = ClientStepAttestation {
+            step: SecurityTransactionStep::LocalCommit,
+            output_ref: rotation.prepared_plan.local_commit_digest.to_string(),
+            transaction_id: erased.transaction_id.clone(),
+            transaction_request_digest: erased.request_digest.clone(),
+            prepared_plan_digest: erased.prepared_plan_digest.clone(),
+            artifact: ClientStepAttestationArtifact::SecurityRotation(artifact),
+            auth_data: ClientStepAttestationAuthData {
+                verification_method: signer.method.clone(),
+                signature_algorithm: "Ed25519".to_owned(),
+                signature: Base64UrlString::new("AA").map_err(anyhow::Error::msg)?,
+            },
+        };
+        let signature = SigningKey::from_bytes(&seed).sign(&attestation.signing_bytes()?);
+        attestation.auth_data.signature =
+            Base64UrlString::new(arkret_canonical::base64url_encode(signature.to_bytes()))
+                .map_err(anyhow::Error::msg)?;
+        Ok(SecurityTransactionContinueRequest {
+            request_digest: erased.request_digest.clone(),
+            prepared_plan_digest: erased.prepared_plan_digest.clone(),
+            expected_accepted_step_count: 4,
+            client_attestation: attestation,
+        })
+    };
+    let continue_path = format!(
+        "/_arkret/self/security-transactions/{}/continue",
+        erased.transaction_id
     );
-    let replay = expect_json(
-        canonical_post(&client_a, "/_arkret/self/keys/backup-series/erase", &body)?,
-        StatusCode::OK,
-    )
-    .await?;
-    ensure!(replay == erased, "an exact erase replay changed the outcome");
-    let after_erase = listing(&client_a).await?;
+    let forged = canonical_post(&client_a, &continue_path, &local_commit(FORGED_SEED)?)?
+        .send()
+        .await?;
+    let forged_status = forged.status();
+    let forged_body = forged.text().await.unwrap_or_default();
     ensure!(
-        !lists(&after_erase, OLD_BACKUP)
-            && lists(&after_erase, binding.new_backups[0].backup_id.as_str())
-            && after_erase.active_series == after_switch.active_series,
-        "erase removed the wrong envelopes or moved the pointer"
+        forged_status.is_client_error() && forged_body.contains("failed_precondition"),
+        "a forged local commit was not refused: {forged_status} {forged_body}"
+    );
+    let genuine = local_commit(seed_a)?;
+    let completed: SecurityTransaction = serde_json::from_value(
+        expect_json(
+            canonical_post(&client_a, &continue_path, &genuine)?,
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    ensure!(
+        completed.accepted_steps.len() == 5
+            && completed.accepted_steps[..4] == erased.accepted_steps[..]
+            && completed.accepted_steps[4].output_ref
+                == rotation.prepared_plan.local_commit_digest.as_str()
+            && matches!(
+                completed.terminal_outcome,
+                Some(SecurityTransactionTerminalOutcome::Completed { .. })
+            ),
+        "the local commit did not complete the rotation: {completed:?}"
+    );
+    let replayed: SecurityTransaction = serde_json::from_value(
+        expect_json(
+            canonical_post(&client_a, &continue_path, &genuine)?,
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    ensure!(
+        replayed == completed,
+        "an exact local commit replay changed the resource"
     );
     let fetched: SecurityTransaction = serde_json::from_value(
         expect_json(
             client_a.get(&format!(
                 "/_arkret/self/security-transactions/{}",
-                switched.transaction_id
+                erased.transaction_id
             )),
             StatusCode::OK,
         )
         .await?,
     )?;
     ensure!(
-        fetched.accepted_steps.len() == 4
-            && fetched.accepted_steps[..3] == switched.accepted_steps[..]
-            && fetched.terminal_outcome.is_none(),
-        "the durable resource does not end at the local commit: {fetched:?}"
+        fetched == completed,
+        "the durable resource is not the completed rotation"
     );
     // An exact create replay reads the durable resource and writes nothing.
     ensure!(
         create(&client_a, &request).await? == fetched,
         "an exact create replay changed the resource"
     );
-    ensure!(listing(&client_a).await?.active_series == after_switch.active_series);
+    let unchanged = listing(&client_a).await?;
+    ensure!(
+        unchanged.active_series == after_erase.active_series
+            && !lists(&unchanged, OLD_BACKUP)
+            && lists(&unchanged, binding.new_backups[0].backup_id.as_str()),
+        "a refused or replayed request changed the backup listing"
+    );
     drop(server);
     drop(database);
     Ok(())
@@ -644,7 +729,9 @@ async fn create(
 ) -> Result<SecurityTransaction> {
     Ok(serde_json::from_value(
         expect_json(
-            client.post("/_arkret/self/security-transactions").json(request),
+            client
+                .post("/_arkret/self/security-transactions")
+                .json(request),
             StatusCode::OK,
         )
         .await?,
@@ -674,7 +761,12 @@ fn lists(list: &KeysBackupsList, backup_id: &str) -> bool {
 }
 
 async fn refused(client: &TestActorClient) -> Result<bool> {
-    Ok(client.get("/_arkret/self/keys/backups").send().await?.status() == StatusCode::UNAUTHORIZED)
+    Ok(client
+        .get("/_arkret/self/keys/backups")
+        .send()
+        .await?
+        .status()
+        == StatusCode::UNAUTHORIZED)
 }
 
 async fn listing(client: &TestActorClient) -> Result<KeysBackupsList> {

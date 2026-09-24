@@ -1,9 +1,9 @@
 use anyhow::{Context as _, Result, anyhow};
 use arkret_identifiers::{BackupId, BackupSeriesId, DeviceId, Did, project_did_to_core_id};
 use arkret_models_crypto::{
-    BackupKind, KeyBackup, KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData,
-    KeyBackupDomainSeparation, KeyBackupEncryption, KeyBackupRecipientMethod,
-    KeyBackupSignatureAlgorithm, SecretStorageContentIndex, SecretStorageItemKind,
+    BackupActiveSeriesPointer, BackupKind, KeyBackup, KeyBackupAead, KeyBackupAeadName,
+    KeyBackupAuthData, KeyBackupDomainSeparation, KeyBackupEncryption, KeyBackupRecipientMethod,
+    KeyBackupSignatureAlgorithm, KeysBackupsList, SecretStorageContentIndex, SecretStorageItemKind,
 };
 use arkret_wire::{Base64UrlString, Hash};
 use chrono::{DateTime, Utc};
@@ -162,16 +162,22 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
     )
     .await?;
 
-    // Until the durable same-cut active-series provider is available, the
-    // Station cannot prove an absent pointer for Bob's empty backup class.
-    // A 503 is the required fail-closed result; 2011 owns the eventual list
-    // and cross-account isolation assertion.
-    expect_backup_error(
-        bob.get("/_arkret/self/keys/backups"),
-        StatusCode::SERVICE_UNAVAILABLE,
-        "revision_unavailable",
-    )
-    .await?;
+    // The list is served at one confirmed PCR cut of the caller's own
+    // Account: Bob sees his absent pointer and an empty page, never Alice's
+    // stored envelope.
+    let listed: KeysBackupsList = serde_json::from_value(
+        expect_json(bob.get("/_arkret/self/keys/backups"), StatusCode::OK).await?,
+    )?;
+    let bob_principal = project_did_to_core_id(&Did::new(bob_did.clone())?)?;
+    anyhow::ensure!(
+        listed.active_series.account_id.principal_id == bob_principal
+            && matches!(
+                listed.active_series.secret_storage,
+                BackupActiveSeriesPointer::Absent { .. }
+            )
+            && listed.backups.is_empty(),
+        "Bob's list is not his own absent pointer and empty page: {listed:?}"
+    );
 
     reject_wrong_device_on_put(server, &alice).await?;
     reject_digest_mismatch_on_put(server, &alice).await?;
