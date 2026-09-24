@@ -57,22 +57,22 @@ fn registry_and_schema_pin_the_exact_signed_report_event() {
         event["properties"]["kind"]["const"],
         "ak.self.moderation.report"
     );
-    // Mirrors `moderation-report.schema.json`. `seal_ref` left this list when
-    // the envelope moved to portable events and scoped Seals; the basis now
-    // rides the envelope rather than being re-required per submission.
+    // Mirrors `moderation-report.schema.json`: a direct-holder signed Event
+    // whose current authorization and scope the governance Station resolves,
+    // so the submission carries no caller-selected authorization basis.
     assert_eq!(
         event["required"],
-        json!([
-            "kind",
-            "realm_id",
-            "scope_ref",
-            "actor_id",
-            "payload",
-            "auth_context"
-        ])
+        json!(["kind", "realm_id", "scope_ref", "actor_id", "payload"])
     );
-    assert!(event["not"].to_string().contains("preconditions"));
-    assert!(event["not"].to_string().contains("seal_basis"));
+    assert_eq!(
+        event["not"],
+        json!({"anyOf": [
+            {"required": ["executed_by"]},
+            {"required": ["authorization_ref"]},
+            {"required": ["applet_id"]},
+            {"required": ["preconditions"]}
+        ]})
+    );
 }
 
 #[test]
@@ -83,11 +83,11 @@ fn sdk_and_cotest_keep_full_proof_urls_and_core_reporter_ids() {
         "pub struct ModerationReportRequestBody",
         "pub struct ModerationReportAcceptedTargetBasis",
     );
-    assert!(body.contains("pub report_event: EventInitialSubmission"));
+    assert!(body.contains("pub report_event: EventAdmissionSubmission"));
     assert!(!body.contains("pub target_ref:"));
     assert!(!body.contains("pub reporter:"));
     assert!(model.contains("impl ModerationReportRequestBody"));
-    assert!(model.contains("pub fn validate(&self, digest_suite: arkret_canonical::DigestSuite)"));
+    assert!(model.contains("pub fn validate(&self) -> Result<()>"));
     assert!(model.contains("pub fn validate_authoring_context("));
     assert!(model.contains("ReportId::from_event_id"));
     let status = source_between(
@@ -99,13 +99,12 @@ fn sdk_and_cotest_keep_full_proof_urls_and_core_reporter_ids() {
     assert!(!status.contains("Resolved"));
 
     let client = read("arkret-rust-sdk/crates/http-client/src/endpoints/moderation.rs");
-    let method = source_between(
-        &client,
-        "pub async fn moderation_report(",
-        "/// Fetch and verify",
-    );
-    assert!(method.contains("request.validate(digest_suite)?"));
-    assert!(method.contains("request.report_id(digest_suite)?"));
+    let method = client
+        .split("pub async fn moderation_report(")
+        .nth(1)
+        .expect("moderation report client method");
+    assert!(method.contains("request.validate()?"));
+    assert!(method.contains("request.report_id()?"));
     assert!(method.contains(".post("));
     assert!(method.contains("\"/_arkret/self/moderation/report\""));
     assert!(method.contains("request)"));
@@ -119,7 +118,7 @@ fn sdk_and_cotest_keep_full_proof_urls_and_core_reporter_ids() {
         "pub async fn create_realm_with_signing_seed(",
     );
     assert!(helper.contains("project_did_to_core_id"));
-    assert!(helper.contains("EventInitialSubmission::online"));
+    assert!(helper.contains("EventAdmissionSubmission::new"));
     assert!(helper.contains("author_event("));
     assert!(helper.contains("validate_authoring_context"));
     assert!(!helper.contains("verification_method"));
