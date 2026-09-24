@@ -148,3 +148,43 @@ pub async fn key_backup_replace_with_authorized_device_works() -> Result<()> {
     )
     .await
 }
+
+pub async fn key_backup_list_absent_at_confirmed_pcr_genesis() -> Result<()> {
+    let server = spawn_with_harness_account_authority(
+        "protocol-key-backup-list-absent",
+        &[("SOLAND_DID_RESOLVER_ALLOW_METHODS", "web,webvh,key,uuid")],
+    )
+    .await?;
+    let actor_id = actor_did_for_service_did(server.service_did(), "key-backup-list-alice")?;
+    let client = server
+        .demo_client(&actor_id, "ak:device:01904100-0000-7000-8000-0000000000a1")
+        .await?;
+    let body = crate::harness::expect_json(
+        server
+            .http()
+            .get(server.url("/_arkret/self/keys/backups"))
+            .bearer_auth(client.expect_dev_bearer()),
+        reqwest::StatusCode::OK,
+    )
+    .await?;
+    let listing: arkret_models_crypto::KeysBackupsList = serde_json::from_value(body)?;
+    assert!(listing.backups.is_empty());
+    assert!(matches!(
+        listing.active_series.secret_storage,
+        arkret_models_crypto::BackupActiveSeriesPointer::Absent {}
+    ));
+    assert_eq!(
+        listing.active_series.control_realm_id,
+        client.principal.as_ref().unwrap().pcr_realm_id
+    );
+    assert!(
+        !listing
+            .active_series
+            .authority_commit_id
+            .as_str()
+            .is_empty()
+    );
+    assert!(listing.next_cursor.is_none());
+    assert!(!listing.has_more);
+    Ok(())
+}
