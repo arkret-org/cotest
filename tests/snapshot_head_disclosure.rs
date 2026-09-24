@@ -14,3 +14,10 @@ async fn exact_snapshot_by_ref_reads_through_garth_with_historical_station_key()
     cotest::scenarios::protocol_payloads::exact_snapshot_by_ref_reads_through_garth_with_historical_station_key()
         .await
 }
+
+#[tokio::test]
+#[serial]
+async fn limited_account_window_names_issued_basis_or_is_preview_only() -> Result<()> {
+    cotest::scenarios::protocol_payloads::limited_account_window_names_issued_basis_or_is_preview_only()
+        .await
+}

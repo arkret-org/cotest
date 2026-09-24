@@ -47,6 +47,7 @@ pub use authority_reads::live_authority_bundle_and_scan_verify_through_garth;
 pub use key_backup_pointer::key_backup_active_pointer_is_committed_and_listed_at_its_pcr_cut;
 pub use snapshot_head_disclosure::{
     exact_snapshot_by_ref_reads_through_garth_with_historical_station_key,
+    limited_account_window_names_issued_basis_or_is_preview_only,
     narrow_snapshot_head_discloses_only_complete_creator_cut,
 };
 

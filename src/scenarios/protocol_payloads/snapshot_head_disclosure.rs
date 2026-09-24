@@ -374,6 +374,279 @@ pub async fn exact_snapshot_by_ref_reads_through_garth_with_historical_station_k
     Ok(())
 }
 
+/// One fresh Account subscribe with a Realm-detail filter; returns the whole
+/// first frame after it passes the SDK's closed frame contract.
+async fn account_detail_frame(
+    client: &crate::harness::TestActorClient,
+    filter: serde_json::Value,
+) -> Result<arkret_models_collaboration::sync_frames::account_subscribe::AccountSubscribeFrame> {
+    let filter = String::from_utf8(arkret_canonical::canonical_json_bytes(&filter)?)?;
+    let response = client
+        .get("/_arkret/self/account/subscribe")
+        .query(&[("filter", filter.as_str())])
+        .send()
+        .await?;
+    let status = response.status();
+    let body = response.text().await?;
+    ensure!(
+        status == StatusCode::OK,
+        "account subscribe {status}: {body}"
+    );
+    let line = body
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .context("account subscribe returned no frame")?;
+    let frame: arkret_models_collaboration::sync_frames::account_subscribe::AccountSubscribeFrame =
+        serde_json::from_str(line).with_context(|| format!("closed Account frame: {line}"))?;
+    frame
+        .validate()
+        .map_err(|error| anyhow::anyhow!("Account frame contract: {error}: {line}"))?;
+    Ok(frame)
+}
+
+fn realm_detail(
+    frame: &arkret_models_collaboration::sync_frames::account_subscribe::AccountSubscribeFrame,
+    realm_id: &str,
+) -> Result<arkret_models_collaboration::sync_frames::account_subscribe::RealmSyncEntry> {
+    ensure!(
+        frame.kind
+            == arkret_models_collaboration::sync_frames::account_subscribe::AccountSubscribeFrameKind::Delta,
+        "Realm detail must arrive in a delta frame: {:?}",
+        frame.kind
+    );
+    frame
+        .realms
+        .as_ref()
+        .and_then(|realms| realms.entries.get(realm_id))
+        .cloned()
+        .context("the requested Realm detail is absent")
+}
+
+fn window_positions(
+    entry: &arkret_models_collaboration::sync_frames::account_subscribe::RealmSyncEntry,
+) -> Vec<u64> {
+    entry
+        .committed_events
+        .iter()
+        .flatten()
+        .map(|row| row.commit().stream_position)
+        .collect()
+}
+
+/// Fresh Soland + real PostgreSQL: an Account frame filtered to one Realm with
+/// a limited `window_limit` names an `after_committed_prefix` basis only when
+/// `/head` already issued the exact snapshot at the window's anchor; that
+/// `snapshot_ref` reads back by reference as the same signed object. Without
+/// a prior issuance the limited window is `preview_only` with no basis. The
+/// retired `timeline_limit` member and an unprovable Circle selection are
+/// refused rather than degraded.
+pub async fn limited_account_window_names_issued_basis_or_is_preview_only() -> Result<()> {
+    use arkret_models_collaboration::sync_frames::account_sync::StreamWindowAnchorKind;
+
+    let SnapshotAuthor {
+        _coauth,
+        server: _server,
+        author,
+    } = snapshot_author("account-window-basis", "window-erin").await?;
+    let bootstrap = author
+        .create_realm_bootstrap_with(json!({
+            "title": "Window basis",
+            "summary": "Window basis",
+            "public": false,
+            "plaintext_visible_services": []
+        }))
+        .await?;
+    let realm_id = bootstrap["realm_id"]
+        .as_str()
+        .context("realm_id")?
+        .to_owned();
+    let issued: arkret_wire::RealmStateSnapshot = serde_json::from_value(
+        expect_json(
+            author
+                .get("/_arkret/self/realm-state-snapshot/head")
+                .query(&[("realm_id", realm_id.as_str())]),
+            StatusCode::OK,
+        )
+        .await?,
+    )
+    .context("issued head must be a closed signed snapshot")?;
+    let anchor = issued
+        .visible_stream_heads
+        .first()
+        .cloned()
+        .context("issued head names its stream head")?;
+    ensure!(anchor.stream_position == 6, "bootstrap head is position 6");
+    author.create_default_strand(&realm_id).await?;
+
+    let frame =
+        account_detail_frame(&author, json!({"realm_ids": [realm_id], "window_limit": 2})).await?;
+    let entry = realm_detail(&frame, &realm_id)?;
+    let [window] = entry.streams.as_deref().context("stream windows")? else {
+        anyhow::bail!("a single-member Realm has exactly its Realm stream window");
+    };
+    ensure!(
+        window.limited && window.complete && window.window_limit == 2,
+        "the limited window must be complete at its own ceiling: {window:?}"
+    );
+    ensure!(window.next_position == 9, "window head is position 8");
+    ensure!(
+        window.preview_only.is_none(),
+        "an exact reserved basis is not preview: {window:?}"
+    );
+    let basis = window
+        .window_start_basis
+        .as_ref()
+        .context("an issued anchor snapshot yields a basis")?;
+    ensure!(
+        basis.anchor_kind == StreamWindowAnchorKind::AfterCommittedPrefix
+            && basis.anchor_position == Some(anchor.stream_position)
+            && basis.anchor_commit_ref.as_ref() == Some(&anchor.commit_id)
+            && basis.snapshot_ref == issued.snapshot_id
+            && basis.governance_generation == issued.governance_generation,
+        "the basis must name the exact issued anchor snapshot: {basis:?}"
+    );
+    ensure!(
+        window_positions(&entry) == vec![7, 8],
+        "the window delivers the last two Commits"
+    );
+    let first = entry
+        .committed_events
+        .as_ref()
+        .and_then(|rows| rows.first())
+        .context("window rows")?;
+    ensure!(
+        first.commit().previous_commit_ref.as_ref() == Some(&anchor.commit_id),
+        "the first window row continues the basis anchor"
+    );
+    ensure!(
+        entry.window_snapshot_cursor.is_some(),
+        "the frozen window names its identity"
+    );
+    let current = entry.current.as_ref().context("same-cut current")?;
+    ensure!(
+        current.realm_id.as_str() == realm_id
+            && current.governance_generation == issued.governance_generation
+            && current.stream_heads.len() == 1
+            && current.stream_heads[0].stream_position == 8
+            && current.stream_heads[0].commit_id == window.head_commit_ref,
+        "current must be the window head cut: {current:?}"
+    );
+    // The basis reads back by reference as the exact issued signed object.
+    // (This Station's notary seed is not the one `read_by_ref` pins, so the
+    // exact-object comparison against the verified `/head` body stands in.)
+    let by_ref: arkret_wire::RealmStateSnapshot = serde_json::from_value(
+        expect_json(
+            by_ref_request(&author, &basis.snapshot_ref, &realm_id),
+            StatusCode::OK,
+        )
+        .await?,
+    )
+    .context("by-ref body must be a closed signed snapshot")?;
+    ensure_same_object(&issued, &by_ref)?;
+    // The window's current equals the signed current of a fresh head at 8.
+    let at_head: arkret_wire::RealmStateSnapshot = serde_json::from_value(
+        expect_json(
+            author
+                .get("/_arkret/self/realm-state-snapshot/head")
+                .query(&[("realm_id", realm_id.as_str())]),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    ensure!(
+        at_head.current_state_entries == current.entries,
+        "window current differs from the signed head current at the same cut"
+    );
+
+    // The whole readable history fits: not limited, no basis needed.
+    let whole = realm_detail(
+        &account_detail_frame(&author, json!({"realm_ids": [realm_id]})).await?,
+        &realm_id,
+    )?;
+    let whole_window = &whole.streams.as_deref().context("window")?[0];
+    ensure!(
+        !whole_window.limited
+            && whole_window.preview_only.is_none()
+            && whole_window.window_start_basis.is_none()
+            && window_positions(&whole) == (0..=8).collect::<Vec<_>>(),
+        "default window_limit 20 delivers the whole stream: {whole_window:?}"
+    );
+
+    // No snapshot was ever issued for this Realm: preview only.
+    let unissued = author
+        .create_realm_bootstrap_with(json!({
+            "title": "Window preview",
+            "summary": "Window preview",
+            "public": false,
+            "plaintext_visible_services": []
+        }))
+        .await?;
+    let unissued_id = unissued["realm_id"]
+        .as_str()
+        .context("realm_id")?
+        .to_owned();
+    author.create_default_strand(&unissued_id).await?;
+    let preview = realm_detail(
+        &account_detail_frame(
+            &author,
+            json!({
+                "realm_ids": [unissued_id],
+                "stream_refs": [{"kind": "realm", "realm_id": unissued_id}],
+                "window_limit": 2
+            }),
+        )
+        .await?,
+        &unissued_id,
+    )?;
+    let preview_window = &preview.streams.as_deref().context("window")?[0];
+    ensure!(
+        preview_window.limited
+            && preview_window.preview_only == Some(true)
+            && preview_window.window_start_basis.is_none()
+            && window_positions(&preview) == vec![7, 8],
+        "a limited window without an issued anchor is preview only: {preview_window:?}"
+    );
+
+    // An unprovable Circle selection is refused, not silently dropped.
+    let circle = arkret_wire::CircleId::from_event_id(&arkret_wire::EventId::from_digest(
+        arkret_canonical::DigestSuite::Sha256,
+        [0x5c; 32],
+    ));
+    let refused = realm_detail(
+        &account_detail_frame(
+            &author,
+            json!({
+                "realm_ids": [realm_id],
+                "stream_refs": [{"kind": "circle", "realm_id": realm_id, "circle_id": circle}]
+            }),
+        )
+        .await?,
+        &realm_id,
+    )?;
+    ensure!(
+        refused.streams.is_none()
+            && refused.unavailable.is_some_and(|unavailable| {
+                unavailable.error_code
+                    == arkret_models_collaboration::sync_frames::demand_sync::RealmDetailErrorCode::TemporarilyUnavailable
+            }),
+        "an unserved Circle selection is an explicit unavailable detail"
+    );
+
+    // The retired filter member has no alias.
+    let retired = String::from_utf8(arkret_canonical::canonical_json_bytes(
+        &json!({"realm_ids": [realm_id], "timeline_limit": 2}),
+    )?)?;
+    expect_status(
+        author
+            .get("/_arkret/self/account/subscribe")
+            .query(&[("filter", retired.as_str())]),
+        StatusCode::BAD_REQUEST,
+    )
+    .await?;
+    Ok(())
+}
+
 fn by_ref_request(
     client: &crate::harness::TestActorClient,
     snapshot_id: &arkret_wire::RealmSnapshotId,

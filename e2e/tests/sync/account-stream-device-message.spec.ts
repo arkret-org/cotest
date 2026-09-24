@@ -232,13 +232,13 @@ test.describe("account stream + device-message convergence", () => {
     expectCatchup(complete);
     expect(messageIds(complete, realmId)).toEqual([...ids].sort());
     const limited = await accountSubscribeFramesApi(request, token, {
-      filter: { realm_ids: [realmId], timeline_limit: 2 },
+      filter: { realm_ids: [realmId], window_limit: 2 },
     });
     expectCatchup(limited);
     const buckets = realmBuckets(limited).filter(([id]) => id === realmId);
     expect(buckets.length, "the selected Realm must still be present").toBeGreaterThan(0);
     for (const [, bucket] of buckets) {
-      expect(bucket.timeline?.events?.length, "per-frame timeline_limit must be enforced").toBeLessThanOrEqual(2);
+      expect(bucket.timeline?.events?.length, "per-stream window_limit must be enforced").toBeLessThanOrEqual(2);
       if (bucket.timeline?.limited === true) {
         expect(bucket.state_at_window_start != null || bucket.timeline?.preview_only === true,
           "a truncated timeline needs window-start state or preview_only").toBe(true);
@@ -307,8 +307,8 @@ test.describe("account stream + device-message convergence", () => {
   test("account stream invalid filters fail before widening the subscription", async ({ request }) => {
     const { token } = await accountSession(request, "account-invalid-filter");
     for (const query of [
-      "filter.timeline_limit=invalid", "filter.timeline_limit=-1",
-      "filter.timeline_limit=1&filter.timeline_limit=2", "filter.realms=invalid",
+      "filter.window_limit=invalid", "filter.window_limit=-1",
+      "filter.window_limit=1&filter.window_limit=2", "filter.realms=invalid",
       "filter.event_kinds=", "filter.lazy_load_members=invalid", "filter.realm_ids=invalid",
       `filter=${encodeURIComponent(JSON.stringify({ realm_ids: ["ak:realm:duplicate", "ak:realm:duplicate"] }))}`,
     ]) {
@@ -348,7 +348,7 @@ test.describe("account stream + device-message convergence", () => {
       const owner = await accountSession(request, `cursor-${binding}-owner`);
       const other = binding === "account" ? await accountSession(request, "cursor-other") : owner;
       const realmId = await createRealmApi(request, owner.token, { title: `cursor ${binding}`, ownerId: owner.user.id });
-      const filter = { realm_ids: [realmId], timeline_limit: 100 };
+      const filter = { realm_ids: [realmId], window_limit: 100 };
       const baseline = await accountSubscribeFramesApi(request, owner.token, { filter });
       expectCatchup(baseline);
       const after = latestCursor(baseline);
@@ -359,7 +359,7 @@ test.describe("account stream + device-message convergence", () => {
         "filter",
         JSON.stringify({
           ...filter,
-          timeline_limit: binding === "filter" ? 99 : filter.timeline_limit,
+          window_limit: binding === "filter" ? 99 : filter.window_limit,
         }),
       );
       const response = await request.get(url.toString(), {
