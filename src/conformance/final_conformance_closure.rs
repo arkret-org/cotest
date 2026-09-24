@@ -9,7 +9,7 @@ use serde_json::{Map, Value, json};
 use super::helpers::assert_expected_subset;
 use super::{
     expected, required_array, required_bool, required_object, required_str, required_str_obj,
-    required_u64, required_u64_obj, string_set, string_vec,
+    required_u64, string_set, string_vec,
 };
 use crate::transcripts::record_vector_event;
 
@@ -18,14 +18,16 @@ pub const VECTOR_ID_APPLET_TRANSACTION_DELIVERY_AUTHENTICATION_RECORD_DIGEST: &s
 pub const VECTOR_ID_CALENDAR_RSVP_OCCURRENCE_KEY: &str =
     "ak.vector.calendar.rsvp_occurrence_key.v1";
 pub const VECTOR_ID_FEDERATION_TIMING_BUCKET: &str = "ak.vector.federation.timing_bucket.v1";
-pub const VECTOR_ID_MLS_SECURITY_FRONTIER: &str =
-    "ak.vector.mls.security_frontier_key_access_only.v1";
-pub const VECTOR_ID_MLS_GOVERNANCE_EPOCH_BINDING: &str =
-    "ak.vector.mls.governance_epoch_binding.v1";
+pub const VECTOR_ID_MLS_KEY_ACCESS_REVISION: &str =
+    "ak.vector.mls.key_access_revision_key_access_only.v1";
+pub const VECTOR_ID_MLS_PROPOSAL_PRODUCER_BINDING: &str =
+    "ak.vector.mls.proposal_producer_binding.v1";
 pub const VECTOR_ID_MODERATION_FRANKING_ROUNDTRIP: &str =
     "ak.vector.moderation.franking_roundtrip.v1";
 pub const VECTOR_ID_MODERATION_EVIDENCE_PACKAGE_MINIMAL_DISCLOSURE: &str =
     "ak.vector.moderation.evidence_package_minimal_disclosure.v1";
+pub const VECTOR_ID_MODERATION_REVIEW_RESOLUTION_FOLD: &str =
+    "ak.vector.moderation.review_resolution_fold.v1";
 pub const VECTOR_ID_RELATION_REFERENCE_PROJECTION_INDISTINGUISHABLE: &str =
     "ak.vector.relation.reference_projection_indistinguishable.v1";
 
@@ -33,10 +35,11 @@ pub const ALL_FINAL_CONFORMANCE_CLOSURE_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_APPLET_TRANSACTION_DELIVERY_AUTHENTICATION_RECORD_DIGEST,
     VECTOR_ID_CALENDAR_RSVP_OCCURRENCE_KEY,
     VECTOR_ID_FEDERATION_TIMING_BUCKET,
-    VECTOR_ID_MLS_SECURITY_FRONTIER,
-    VECTOR_ID_MLS_GOVERNANCE_EPOCH_BINDING,
+    VECTOR_ID_MLS_KEY_ACCESS_REVISION,
+    VECTOR_ID_MLS_PROPOSAL_PRODUCER_BINDING,
     VECTOR_ID_MODERATION_FRANKING_ROUNDTRIP,
     VECTOR_ID_MODERATION_EVIDENCE_PACKAGE_MINIMAL_DISCLOSURE,
+    VECTOR_ID_MODERATION_REVIEW_RESOLUTION_FOLD,
     VECTOR_ID_RELATION_REFERENCE_PROJECTION_INDISTINGUISHABLE,
 ];
 
@@ -78,8 +81,15 @@ pub fn run_final_conformance_closure_fixture_suite() -> Result<()> {
     )?)?;
     run_calendar_rsvp_occurrence_key_case(case(&fixture, VECTOR_ID_CALENDAR_RSVP_OCCURRENCE_KEY)?)?;
     run_federation_timing_bucket_case(case(&fixture, VECTOR_ID_FEDERATION_TIMING_BUCKET)?)?;
-    run_mls_security_frontier_case(case(&fixture, VECTOR_ID_MLS_SECURITY_FRONTIER)?)?;
-    run_mls_governance_epoch_binding_case(case(&fixture, VECTOR_ID_MLS_GOVERNANCE_EPOCH_BINDING)?)?;
+    run_mls_key_access_revision_cases(&fixture)?;
+    run_mls_proposal_producer_binding_case(case(
+        &fixture,
+        VECTOR_ID_MLS_PROPOSAL_PRODUCER_BINDING,
+    )?)?;
+    run_moderation_review_resolution_fold_case(case(
+        &fixture,
+        VECTOR_ID_MODERATION_REVIEW_RESOLUTION_FOLD,
+    )?)?;
     run_moderation_franking_roundtrip_case(case(
         &fixture,
         VECTOR_ID_MODERATION_FRANKING_ROUNDTRIP,
@@ -113,14 +123,21 @@ pub fn run_federation_timing_bucket_vector() -> Result<()> {
     run_federation_timing_bucket_case(case(&fixture, VECTOR_ID_FEDERATION_TIMING_BUCKET)?)
 }
 
-pub fn run_mls_governance_epoch_binding_vector() -> Result<()> {
+pub fn run_mls_proposal_producer_binding_vector() -> Result<()> {
     let fixture = final_conformance_closure_fixture()?;
-    run_mls_governance_epoch_binding_case(case(&fixture, VECTOR_ID_MLS_GOVERNANCE_EPOCH_BINDING)?)
+    run_mls_proposal_producer_binding_case(case(&fixture, VECTOR_ID_MLS_PROPOSAL_PRODUCER_BINDING)?)
 }
 
-pub fn run_mls_security_frontier_vector() -> Result<()> {
+pub fn run_mls_key_access_revision_vector() -> Result<()> {
+    run_mls_key_access_revision_cases(&final_conformance_closure_fixture()?)
+}
+
+pub fn run_moderation_review_resolution_fold_vector() -> Result<()> {
     let fixture = final_conformance_closure_fixture()?;
-    run_mls_security_frontier_case(case(&fixture, VECTOR_ID_MLS_SECURITY_FRONTIER)?)
+    run_moderation_review_resolution_fold_case(case(
+        &fixture,
+        VECTOR_ID_MODERATION_REVIEW_RESOLUTION_FOLD,
+    )?)
 }
 
 pub fn run_moderation_franking_roundtrip_vector() -> Result<()> {
@@ -217,7 +234,6 @@ fn run_applet_transaction_delivery_authentication_record_digest_case(case: &Valu
             "active_install_and_actor_namespace_required",
         ],
     )?;
-    let inferred_anchor_by_name = inferred_delivery_authentication_record_digests(case)?;
     let mut cache = BTreeMap::new();
     let mut identity_by_name = BTreeMap::new();
     let mut seen = BTreeSet::new();
@@ -231,7 +247,6 @@ fn run_applet_transaction_delivery_authentication_record_digest_case(case: &Valu
             transaction,
             &mut cache,
             &mut identity_by_name,
-            &inferred_anchor_by_name,
         )?;
         assert_expected_subset(name, expected(transaction)?, &observed)?;
         record_step(
@@ -264,7 +279,6 @@ fn evaluate_applet_transaction(
     transaction: &Value,
     cache: &mut BTreeMap<AppletTransactionReplayIdentity, AppletTransactionReplayRecord>,
     identity_by_name: &mut BTreeMap<String, AppletTransactionReplayIdentity>,
-    inferred_anchor_by_name: &BTreeMap<String, String>,
 ) -> Result<Value> {
     if let Some(replay_of) = transaction.get("replay_of").and_then(Value::as_str) {
         let original_identity = identity_by_name
@@ -275,8 +289,14 @@ fn evaluate_applet_transaction(
             return Ok(json!({"decision": "reject", "reason": "duplicate_conflict"}));
         }
         let body_digest = required_str(transaction, "body_digest")?;
-        let delivery_authentication_record_digest =
-            required_str(transaction, "delivery_authentication_record_digest")?;
+        // A replay presenting its own record is re-derived; otherwise it names
+        // the digest its receiver derived at verification time.
+        let delivery_authentication_record_digest = match transaction
+            .get("delivery_authentication_record")
+        {
+            Some(record) => delivery_authentication_record_digest(record)?,
+            None => required_str(transaction, "delivery_authentication_record_digest")?.to_owned(),
+        };
         return match cache.get(original_identity) {
             Some(record)
                 if record.body_digest == body_digest
@@ -363,11 +383,10 @@ fn evaluate_applet_transaction(
 
     let idempotency_key = required_str(transaction, "idempotency_key")?;
     let body_digest = required_str(transaction, "body_digest")?;
-    let delivery_authentication_record_digest =
-        delivery_authentication_record_digest_for_transaction(
-            transaction,
-            inferred_anchor_by_name,
-        )?;
+    let record = derive_delivery_authentication_record(active_install, transaction)?;
+    let record_bytes = arkret_canonical::canonical_json_bytes(&record)?;
+    let delivery_authentication_record_digest = delivery_authentication_record_digest(&record)?;
+    let delivery_authentication_record_digest = delivery_authentication_record_digest.as_str();
     let replay_identity = applet_transaction_replay_identity(
         transaction,
         source_header,
@@ -401,6 +420,8 @@ fn evaluate_applet_transaction(
     Ok(json!({
         "decision": "accept",
         "delivery_authentication_record_persisted": true,
+        "delivery_authentication_record": record,
+        "delivery_authentication_record_canonical_bytes_utf8": String::from_utf8(record_bytes)?,
         "delivery_authentication_record_digest": delivery_authentication_record_digest,
         "side_effects_applied": true,
     }))
@@ -416,49 +437,45 @@ fn assert_required_assertions(case: &Value, required: &[&str]) -> Result<()> {
     Ok(())
 }
 
-fn inferred_delivery_authentication_record_digests(
-    case: &Value,
-) -> Result<BTreeMap<String, String>> {
-    let mut anchors = BTreeMap::new();
-    for transaction in required_array(case, "transactions")? {
-        let Some(replay_of) = transaction.get("replay_of").and_then(Value::as_str) else {
-            continue;
-        };
-        if expected(transaction)?
-            .get("decision")
-            .and_then(Value::as_str)
-            != Some("accept_cached")
-        {
-            continue;
-        }
-        let anchor = required_str(transaction, "delivery_authentication_record_digest")?;
-        match anchors.insert(replay_of.to_owned(), anchor.to_owned()) {
-            Some(previous) if previous != anchor => {
-                bail!("accepted replay anchor for {replay_of} drifted: {previous} != {anchor}")
-            }
-            _ => {}
-        }
+const DELIVERY_AUTHENTICATION_RECORD_DOMAIN: &[u8] =
+    b"ak.applet.delivery_authentication_record.v1\n";
+
+/// Receiver-derived closed `delivery_authentication_record`
+/// (`applet-integration.md` 投递认证记录): taken from the verified message,
+/// the effective registration and the actual verification key, never from a
+/// caller-supplied value.
+fn derive_delivery_authentication_record(
+    active_install: &Map<String, Value>,
+    transaction: &Value,
+) -> Result<Value> {
+    let operation_id = required_str(transaction, "arkret_operation")?;
+    if operation_id != arkret_wire::ServiceOperationId::EDGE_APPLET_COMMAND_TRANSACTION_V1 {
+        bail!("applet transaction selected operation {operation_id}");
     }
-    Ok(anchors)
+    Ok(json!({
+        "operation_id": operation_id,
+        "direction": APPLET_TRANSACTION_DEFAULT_DIRECTION,
+        "source_id": required_str(transaction, "source_id_header")?,
+        "destination_id": required_str(transaction, "destination_id_header")?,
+        "signature_label": required_str(transaction, "signature_label")?,
+        "verification_method": required_str(transaction, "keyid")?,
+        "verification_key_digest": required_str(transaction, "verification_key_digest")?,
+        "signature_algorithm": required_str(transaction, "signature_algorithm")?,
+        "registration_epoch": required_str_obj(active_install, "registration_epoch")?,
+        "idempotency_key": required_str(transaction, "idempotency_key")?,
+        "content_digest": required_str(transaction, "content_digest")?,
+        "covered_components": string_vec(transaction, "covered_components")?,
+        "created": required_u64(transaction, "created")?,
+        "expires": required_u64(transaction, "expires")?,
+    }))
 }
 
-fn delivery_authentication_record_digest_for_transaction<'a>(
-    transaction: &'a Value,
-    inferred_anchor_by_name: &'a BTreeMap<String, String>,
-) -> Result<&'a str> {
-    if let Some(anchor) = transaction
-        .get("delivery_authentication_record_digest")
-        .and_then(Value::as_str)
-    {
-        return Ok(anchor);
-    }
-    let name = required_str(transaction, "name")?;
-    inferred_anchor_by_name
-        .get(name)
-        .map(String::as_str)
-        .ok_or_else(|| {
-            anyhow!("accepted transaction {name} missing delivery authentication record digest")
-        })
+fn delivery_authentication_record_digest(record: &Value) -> Result<String> {
+    use sha2::{Digest as _, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(DELIVERY_AUTHENTICATION_RECORD_DOMAIN);
+    hasher.update(arkret_canonical::canonical_json_bytes(record)?);
+    Ok(format!("sha256:{}", hex::encode(hasher.finalize())))
 }
 
 fn applet_transaction_replay_identity(
@@ -664,94 +681,328 @@ fn latency_diff(values: &[u64]) -> u64 {
     max.saturating_sub(min)
 }
 
-fn run_mls_security_frontier_case(case: &Value) -> Result<()> {
+/// Typed results whose change moves the MLS key-access revision: they change
+/// which leaves may hold the group's keys. Ordinary governance, message
+/// metadata, grants and roster display never do.
+const KEY_ACCESS_BEARING_RESULTS: &[&str] = &["agent_key", "device_key", "member_key_access"];
+
+fn key_access_revision_changed(scenario: &Value) -> Result<bool> {
+    let changed = scenario
+        .get("changed_results")
+        .map(|_| required_array(scenario, "changed_results"))
+        .transpose()?
+        .unwrap_or_default();
+    Ok(changed
+        .iter()
+        .filter_map(Value::as_str)
+        .any(|result| KEY_ACCESS_BEARING_RESULTS.contains(&result)))
+}
+
+fn run_mls_key_access_revision_cases(fixture: &FinalConformanceClosureFixture) -> Result<()> {
+    let rows = fixture
+        .cases
+        .iter()
+        .filter(|case| {
+            case.get("vector_id").and_then(Value::as_str) == Some(VECTOR_ID_MLS_KEY_ACCESS_REVISION)
+        })
+        .collect::<Vec<_>>();
     let mut seen = BTreeSet::new();
-    for scenario in required_array(case, "cases")? {
-        let name = required_str(scenario, "name")?;
-        seen.insert(name.to_owned());
-        let observed = match name {
-            "valid_security_frontier_commit" => json!({
-                "decision": if scenario
-                    .get("security_frontier_matches_accepted_key_access_state")
-                    .and_then(Value::as_bool)
-                    == Some(true)
-                {
-                    "accept"
-                } else {
-                    "reject"
-                },
-                "mls_epoch_cell_advanced": true,
-                "active_epoch_advanced": true,
-            }),
-            "unrelated_governance_and_new_seal_ref" => json!({
-                "decision": "accept",
-                "security_frontier_changed": false,
-            }),
-            "active_leaf_revoke_pauses_sending" => json!({
-                "decision": "reject",
-                "reason": "mls_governance_binding_stale",
-                "security_frontier_changed": true,
-                "self_heal_commit_required": true,
-            }),
-            other => bail!("unknown MLS security frontier closure case {other}"),
+    for row in &rows {
+        let scenarios = match (row.get("cases"), row.get("samples")) {
+            (Some(_), None) => required_array(row, "cases")?,
+            (None, Some(_)) => required_array(row, "samples")?,
+            _ => bail!("key-access revision row must carry exactly one of cases or samples"),
         };
-        assert_expected_subset(name, expected(scenario)?, &observed)?;
-        record_step(VECTOR_ID_MLS_SECURITY_FRONTIER, name, scenario, &observed);
+        for scenario in scenarios {
+            let name = required_str(scenario, "name")?;
+            seen.insert(name.to_owned());
+            let changed = key_access_revision_changed(scenario)?;
+            let observed = match name {
+                "valid_key_access_revision_commit" => {
+                    let current = scenario
+                        .get("key_access_revision_matches_accepted_key_access_state")
+                        .and_then(Value::as_bool)
+                        == Some(true);
+                    json!({
+                        "decision": if current { "accept" } else { "reject" },
+                        "mls_epoch_result_advanced": current,
+                        "active_epoch_advanced": current,
+                    })
+                }
+                "unrelated_governance_and_new_commit_ref"
+                | "membership_change_without_key_access_effect" => json!({
+                    "decision": if changed { "reject" } else { "accept" },
+                    "key_access_revision_changed": changed,
+                }),
+                "active_leaf_revoke_pauses_sending" => {
+                    if changed {
+                        json!({
+                            "decision": "reject",
+                            "reason": "mls_governance_binding_stale",
+                            "key_access_revision_changed": true,
+                            "self_heal_commit_required": true,
+                        })
+                    } else {
+                        json!({"decision": "accept", "key_access_revision_changed": false})
+                    }
+                }
+                // Authorization is decided by current membership, never by the
+                // key-access revision, and a membership rejection is not an
+                // MLS reason.
+                "current_revision_does_not_authorize_a_non_member_producer" => {
+                    if required_bool(scenario, "producer_current_authorized")? {
+                        json!({"decision": "accept", "mls_reason_emitted": false})
+                    } else {
+                        json!({
+                            "decision": "reject",
+                            "reason": "not_member",
+                            "mls_reason_emitted": false,
+                        })
+                    }
+                }
+                "advanced_revision_admits_nobody_by_itself" => json!({
+                    "decision": "accept",
+                    "membership_admitted_by_revision":
+                        required_bool(scenario, "membership_decision_changed")?,
+                }),
+                other => bail!("unknown MLS key-access revision closure case {other}"),
+            };
+            assert_expected_subset(name, expected(scenario)?, &observed)?;
+            record_step(VECTOR_ID_MLS_KEY_ACCESS_REVISION, name, scenario, &observed);
+        }
     }
     for required in [
-        "valid_security_frontier_commit",
-        "unrelated_governance_and_new_seal_ref",
+        "valid_key_access_revision_commit",
+        "unrelated_governance_and_new_commit_ref",
         "active_leaf_revoke_pauses_sending",
+        "membership_change_without_key_access_effect",
+        "current_revision_does_not_authorize_a_non_member_producer",
+        "advanced_revision_admits_nobody_by_itself",
     ] {
         if !seen.contains(required) {
-            bail!("MLS security frontier closure vector missing case {required}");
+            bail!("MLS key-access revision closure vector missing case {required}");
         }
     }
     Ok(())
 }
 
-fn run_mls_governance_epoch_binding_case(case: &Value) -> Result<()> {
-    let commit = case
-        .get("commit")
-        .ok_or_else(|| anyhow!("MLS governance vector missing commit"))?;
-    required_object(case, "commit")?;
-    let observed = evaluate_mls_governance_epoch_binding(commit)?;
-    assert_expected_subset("mls_governance_epoch_binding", expected(case)?, &observed)?;
-    record_step(
-        VECTOR_ID_MLS_GOVERNANCE_EPOCH_BINDING,
-        "commit",
-        commit,
-        &observed,
-    );
+/// Standard proposal types a member sender may carry.
+const MEMBER_PROPOSAL_TYPES: &[&str] = &[
+    "add",
+    "update",
+    "remove",
+    "psk",
+    "reinit",
+    "group_context_extensions",
+];
+/// RFC 9420 `external_senders` GroupContext extension code point.
+const EXTERNAL_SENDERS_EXTENSION: &str = "0x0004";
+
+fn proposal_rejection(reason_code: &str) -> Value {
+    json!({
+        "decision": "reject",
+        "reason_code": reason_code,
+        "durable_proposal_written": false,
+    })
+}
+
+fn evaluate_proposal_producer_binding(scenario: &Value) -> Result<Value> {
+    if let Some(kind) = scenario.get("transition_kind").and_then(Value::as_str) {
+        let staged = required_str(scenario, "staged_group_context_extension")?;
+        if kind != "ak.mls.commit" {
+            bail!("unexpected MLS transition kind {kind}");
+        }
+        return Ok(if staged == EXTERNAL_SENDERS_EXTENSION {
+            json!({
+                "decision": "reject",
+                "reason_code": "unsupported_feature",
+                "active_epoch_advanced": false,
+            })
+        } else {
+            json!({"decision": "accept", "active_epoch_advanced": true})
+        });
+    }
+    // External senders, self-add proposals and external commits are not a
+    // supported producer class; they are an unsupported feature, never a
+    // schema violation, whatever else the proposal carries.
+    if required_str(scenario, "sender_class")? != "member" {
+        return Ok(proposal_rejection("unsupported_feature"));
+    }
+    let types = match scenario.get("proposal_types") {
+        Some(_) => required_array(scenario, "proposal_types")?
+            .iter()
+            .map(|value| {
+                value
+                    .as_str()
+                    .ok_or_else(|| anyhow!("proposal type must be a string"))
+            })
+            .collect::<Result<Vec<_>>>()?,
+        None => vec![required_str(scenario, "proposal_type")?],
+    };
+    if types
+        .iter()
+        .any(|proposal_type| !MEMBER_PROPOSAL_TYPES.contains(proposal_type))
+    {
+        return Ok(proposal_rejection("unsupported_feature"));
+    }
+    if !required_bool(scenario, "sender_leaf_occupied_in_exact_base")? {
+        return Ok(proposal_rejection("failed_precondition"));
+    }
+    if !required_bool(scenario, "leaf_credential_equals_verified_producer")? {
+        return Ok(proposal_rejection("signature_invalid"));
+    }
+    Ok(json!({"decision": "accept", "durable_proposal_written": true}))
+}
+
+fn run_mls_proposal_producer_binding_case(case: &Value) -> Result<()> {
+    let mut seen = BTreeSet::new();
+    for scenario in required_array(case, "cases")? {
+        let name = required_str(scenario, "name")?;
+        seen.insert(name.to_owned());
+        let observed = evaluate_proposal_producer_binding(scenario)?;
+        assert_expected_subset(name, expected(scenario)?, &observed)?;
+        record_step(
+            VECTOR_ID_MLS_PROPOSAL_PRODUCER_BINDING,
+            name,
+            scenario,
+            &observed,
+        );
+    }
+    for required in [
+        "member_remove_bound_to_verified_producer",
+        "member_standard_types_remain_admissible",
+        "external_sender_configured_and_authorized",
+        "new_member_proposal_self_add",
+        "external_init_decoded_before_declared_token_mismatch",
+        "app_custom_codepoint_not_registered",
+        "member_leaf_absent_from_exact_base",
+        "member_leaf_credential_not_verified_producer",
+        "transition_installs_external_senders_extension",
+    ] {
+        if !seen.contains(required) {
+            bail!("MLS proposal producer binding vector missing case {required}");
+        }
+    }
     Ok(())
 }
 
-fn evaluate_mls_governance_epoch_binding(commit: &Value) -> Result<Value> {
-    let governance = required_object(commit, "governance_binding")?;
-    let epoch_matches = required_u64(commit, "base_epoch")?
-        == required_u64_obj(governance, "previous_epoch")?
-        && required_u64(commit, "next_epoch")? == required_u64_obj(governance, "next_epoch")?;
-    if !epoch_matches {
+/// Strictness order of active moderation verdicts; the effective verdict is
+/// the strictest active one, never a split.
+fn moderation_strictness(verdict: &str) -> Result<u8> {
+    Ok(match verdict {
+        "none" => 0,
+        "require_review" => 1,
+        "quarantine" => 2,
+        "hard_deny" => 3,
+        other => bail!("unknown moderation verdict {other}"),
+    })
+}
+
+fn strictest(verdicts: &[&str]) -> Result<String> {
+    let mut best = "none";
+    for verdict in verdicts {
+        if moderation_strictness(verdict)? > moderation_strictness(best)? {
+            best = verdict;
+        }
+    }
+    Ok(best.to_owned())
+}
+
+fn evaluate_review_resolution(scenario: &Value) -> Result<Value> {
+    if scenario
+        .get("same_add_identity_conflicting_canonical_bytes")
+        .and_then(Value::as_bool)
+        == Some(true)
+    {
         return Ok(json!({
-            "decision": "reject",
-            "reason": "epoch_update_required",
-            "mls_epoch_cell_advanced": false,
-            "active_epoch_advanced": false,
+            "decision": "fail_closed",
+            "reason": "moderation_state_conflict",
+            "moderation_control_split": true,
         }));
     }
-    if commit.get("other_checks_valid").and_then(Value::as_bool) != Some(true) {
+    let active = required_array(scenario, "active_decisions")?
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .ok_or_else(|| anyhow!("decision must be a string"))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let effective = strictest(&active)?;
+    let Some(lifts) = scenario
+        .get("same_batch_review_lifts")
+        .and_then(Value::as_u64)
+    else {
+        return Ok(json!({
+            "effective_verdict": effective,
+            "moderation_control_split": false,
+            "candidate_effective": effective == "none",
+        }));
+    };
+    let reviews = active
+        .iter()
+        .filter(|verdict| **verdict == "require_review")
+        .count() as u64;
+    // A resolution lifts every active review gate in one batch or nothing.
+    if lifts != reviews {
         return Ok(json!({
             "decision": "reject",
-            "reason": "failed_precondition",
-            "mls_epoch_cell_advanced": false,
-            "active_epoch_advanced": false,
+            "effective_verdict": effective,
+            "partial_state_written": false,
         }));
     }
+    let mut remaining = active
+        .iter()
+        .copied()
+        .filter(|verdict| *verdict != "require_review")
+        .collect::<Vec<_>>();
+    let replacement = scenario
+        .get("same_batch_replacement")
+        .and_then(Value::as_str);
+    if let Some(replacement) = replacement {
+        moderation_strictness(replacement)?;
+        remaining.push(replacement);
+    }
+    let after = strictest(&remaining)?;
     Ok(json!({
         "decision": "accept",
-        "mls_epoch_cell_advanced": true,
-        "active_epoch_advanced": true,
+        "effective_verdict_after_batch": after,
+        // Lifting review never auto-accepts the candidate; it re-enters the
+        // current authorization check.
+        "candidate_auto_accepted": false,
+        "current_authz_recheck_required": replacement.is_none(),
+        "review_decision_active": false,
+        "replacement_decision_active": replacement.is_some(),
     }))
+}
+
+fn run_moderation_review_resolution_fold_case(case: &Value) -> Result<()> {
+    let mut seen = BTreeSet::new();
+    for scenario in required_array(case, "cases")? {
+        let name = required_str(scenario, "name")?;
+        seen.insert(name.to_owned());
+        let observed = evaluate_review_resolution(scenario)?;
+        assert_expected_subset(name, expected(scenario)?, &observed)?;
+        record_step(
+            VECTOR_ID_MODERATION_REVIEW_RESOLUTION_FOLD,
+            name,
+            scenario,
+            &observed,
+        );
+    }
+    for required in [
+        "two_review_adds_are_joinable",
+        "quarantine_is_stricter_than_review",
+        "allow_lifts_all_review_adds",
+        "partial_review_lift_rejected",
+        "deny_replacement_is_atomic",
+        "same_add_identity_different_bytes_is_split",
+    ] {
+        if !seen.contains(required) {
+            bail!("moderation review resolution fold vector missing case {required}");
+        }
+    }
+    Ok(())
 }
 
 fn run_moderation_franking_roundtrip_case(case: &Value) -> Result<()> {
@@ -771,7 +1022,7 @@ fn run_moderation_franking_roundtrip_case(case: &Value) -> Result<()> {
     for required in [
         "roundtrip_valid",
         "target_event_commitment_mismatch",
-        "retired_mirror_violation",
+        "unknown_field_violation",
     ] {
         if !seen.contains(required) {
             bail!("moderation franking vector missing case {required}");
@@ -781,13 +1032,13 @@ fn run_moderation_franking_roundtrip_case(case: &Value) -> Result<()> {
 }
 
 fn evaluate_moderation_franking_roundtrip(scenario: &Value) -> Result<Value> {
-    let retired_proof_fields = string_set(scenario, "retired_proof_fields")?;
+    let unexpected_fields = string_set(scenario, "unexpected_fields")?;
     let evidence_forbidden_secret_fields = scenario
         .get("evidence_forbidden_secret_fields")
         .and_then(Value::as_array)
         .is_some_and(|fields| !fields.is_empty());
 
-    if !retired_proof_fields.is_empty()
+    if !unexpected_fields.is_empty()
         || required_bool(scenario, "proof_contains_plaintext_body")?
         || evidence_forbidden_secret_fields
     {
@@ -828,7 +1079,6 @@ fn run_moderation_evidence_package_minimal_disclosure_case(case: &Value) -> Resu
     }
     for required in [
         "targeted_encrypted_package_valid",
-        "history_key_release_rejected",
         "unrelated_message_plaintext_rejected",
         "recipient_binding_missing_rejected",
     ] {
