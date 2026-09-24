@@ -308,7 +308,7 @@ enum SutRuntimeMode {
     Docker,
 }
 
-fn test_service_signing_key(name: &str) -> (String, [u8; 32]) {
+pub(crate) fn test_service_signing_key(name: &str) -> (String, [u8; 32]) {
     let digest = Sha256::digest(format!("cotest:notary:{name}").as_bytes());
     let mut seed = [0_u8; 32];
     seed.copy_from_slice(&digest);

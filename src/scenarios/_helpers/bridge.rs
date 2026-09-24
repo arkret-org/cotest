@@ -48,7 +48,7 @@ const SELF_REPORTED_IDENTITY_HEADERS: [&str; 3] = [
 #[derive(Clone)]
 struct CoauthIntrospectionState {
     internal_secret: String,
-    binding: Arc<Mutex<Option<CoauthGrantBinding>>>,
+    bindings: Arc<Mutex<Vec<CoauthGrantBinding>>>,
     requests: Arc<Mutex<Vec<Value>>>,
     channel: Arc<Mutex<Vec<ChannelObservation>>>,
 }
@@ -56,7 +56,7 @@ struct CoauthIntrospectionState {
 pub struct MockCoauthIntrospectionServer {
     origin: String,
     url: String,
-    binding: Arc<Mutex<Option<CoauthGrantBinding>>>,
+    bindings: Arc<Mutex<Vec<CoauthGrantBinding>>>,
     requests: Arc<Mutex<Vec<Value>>>,
     channel: Arc<Mutex<Vec<ChannelObservation>>>,
     _server: super::mock_http::MockServer,
@@ -72,11 +72,11 @@ impl MockCoauthIntrospectionServer {
 
     pub async fn spawn_with_internal_secret(internal_secret: &str) -> Result<Self> {
         let requests: Arc<Mutex<Vec<Value>>> = Arc::new(Mutex::new(Vec::new()));
-        let binding: Arc<Mutex<Option<CoauthGrantBinding>>> = Arc::new(Mutex::new(None));
+        let bindings: Arc<Mutex<Vec<CoauthGrantBinding>>> = Arc::new(Mutex::new(Vec::new()));
         let channel: Arc<Mutex<Vec<ChannelObservation>>> = Arc::new(Mutex::new(Vec::new()));
         let state = CoauthIntrospectionState {
             internal_secret: internal_secret.to_owned(),
-            binding: Arc::clone(&binding),
+            bindings: Arc::clone(&bindings),
             requests: Arc::clone(&requests),
             channel: Arc::clone(&channel),
         };
@@ -89,7 +89,7 @@ impl MockCoauthIntrospectionServer {
         Ok(Self {
             origin,
             url,
-            binding,
+            bindings,
             requests,
             channel,
             _server: server,
@@ -122,14 +122,19 @@ impl MockCoauthIntrospectionServer {
                 serde_json::to_string(&json!({ "crv": "Ed25519", "kty": "OKP", "x": x }))?,
             )?
             .into_string();
-        *self.binding.lock().expect("coauth mock binding lock") = Some(CoauthGrantBinding {
+        let binding = CoauthGrantBinding {
             grant_jwt: grant_jwt.to_owned(),
             subject: subject.to_owned(),
             device_id: device_id.to_owned(),
             authorization_event_id: authorization_event_id.to_owned(),
             cnf_jkt,
             session_public_key,
-        });
+        };
+        // Each exact credential is its own ledger record, so a second device
+        // of the same principal can hold a grant beside the first one.
+        let mut bindings = self.bindings.lock().expect("coauth mock binding lock");
+        bindings.retain(|existing| existing.grant_jwt != binding.grant_jwt);
+        bindings.push(binding);
         Ok(())
     }
 
@@ -199,20 +204,24 @@ async fn coauth_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respo
         res.render(Json(json!({ "error": "invalid_typed_request" })));
         return;
     };
-    let Some(binding) = state
-        .binding
+    let bindings = state
+        .bindings
         .lock()
         .expect("coauth mock binding lock")
-        .clone()
-    else {
+        .clone();
+    if bindings.is_empty() {
         res.status_code(salvo::http::StatusCode::SERVICE_UNAVAILABLE);
         res.render(Json(json!({ "error": "grant_not_bound" })));
         return;
-    };
+    }
     // Exact-token authority: only the complete credential the ledger recorded
     // is active. A token that merely parses, or that reuses a known `jti` under
     // re-signed claims, has no active record here.
-    if by_jwt.grant_jwt != binding.grant_jwt {
+    let Some((index, binding)) = bindings
+        .iter()
+        .enumerate()
+        .find(|(_, binding)| binding.grant_jwt == by_jwt.grant_jwt)
+    else {
         res.render(Json(json!({
             "active": false,
             "status": "not_found",
@@ -220,18 +229,30 @@ async fn coauth_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respo
             "one_time_use_consumed": false
         })));
         return;
-    }
+    };
     let audience = by_jwt
         .audience_id
         .map(|value| value.as_str().to_owned())
         .unwrap_or_default();
+    // The first recorded grant keeps its historical id; later grants get an
+    // id derived from their exact credential so records stay distinct.
+    let grant_id = if index == 0 {
+        "ak:session_grant:AREUYrj1_BH7OOg12-uDdXYf2SrPpdqagciUGa9tJ-nD".to_owned()
+    } else {
+        let mut token = vec![0x01];
+        token.extend(arkret_canonical::sha256_bytes(binding.grant_jwt.as_bytes()));
+        format!(
+            "ak:session_grant:{}",
+            arkret_canonical::base64url_encode(token)
+        )
+    };
     res.render(Json(json!({
         "active": true,
         "status": "active",
         "proof_required": false,
         "one_time_use_consumed": false,
         "grant": {
-            "id": "ak:session_grant:AREUYrj1_BH7OOg12-uDdXYf2SrPpdqagciUGa9tJ-nD",
+            "id": grant_id,
             "issuer_id": "ak:did_core:web:coauth.cotest.local",
             "account_id": {
                 "principal_id": binding.subject,

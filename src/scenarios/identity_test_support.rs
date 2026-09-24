@@ -69,6 +69,26 @@ pub async fn spawn_with_harness_account_authority(
     name: &str,
     extra_env: &[(&str, &str)],
 ) -> Result<ArkretServer> {
+    ArkretServer::spawn_with_env(name, &harness_account_authority_env(extra_env)).await
+}
+
+/// [`spawn_with_harness_account_authority`] on a database the caller owns, for
+/// scenarios that must install a labelled fixture row the Station has no
+/// admission unit for yet.
+pub async fn spawn_with_harness_account_authority_at(
+    name: &str,
+    database_url: &str,
+    extra_env: &[(&str, &str)],
+) -> Result<ArkretServer> {
+    ArkretServer::spawn_with_database_url(
+        name,
+        database_url,
+        &harness_account_authority_env(extra_env),
+    )
+    .await
+}
+
+fn harness_account_authority_env<'a>(extra_env: &[(&'a str, &'a str)]) -> Vec<(&'a str, &'a str)> {
     let mut env = Vec::with_capacity(extra_env.len() + 3);
     let authority_url = extra_env
         .iter()
@@ -89,7 +109,7 @@ pub async fn spawn_with_harness_account_authority(
             .copied()
             .filter(|(key, _)| *key != "SOLAND_ACCOUNT_AUTHORITY_URL"),
     );
-    ArkretServer::spawn_with_env(name, &env).await
+    env
 }
 
 fn test_device_record_signing_key() -> SigningKey {

@@ -800,7 +800,7 @@ fn event_envelope_with_chain_and_signing_identity(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn event_envelope_with_chain_and_signing_identity_and_causal_refs(
+pub(crate) fn event_envelope_with_chain_and_signing_identity_and_causal_refs(
     actor: &str,
     realm_id: &str,
     kind: &str,
