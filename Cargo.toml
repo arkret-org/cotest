@@ -275,6 +275,7 @@ hpke-rs-crypto = { workspace = true }
 hpke-rs-rust-crypto = { workspace = true }
 inkson = { workspace = true }
 jsonschema = { workspace = true, default-features = false, features = ["resolve-file"] }
+p256 = { workspace = true }
 postgres = { workspace = true }
 rand_chacha = { workspace = true }
 rcgen = { workspace = true }

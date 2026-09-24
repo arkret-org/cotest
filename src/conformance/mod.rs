@@ -27,6 +27,7 @@ mod capability;
 mod capability_relinquish_authoring;
 mod coauth_lifecycle;
 mod crypto_hpke;
+mod crypto_signature;
 mod cursor_negative;
 mod cursor_vectors;
 mod decision_0017_vectors;

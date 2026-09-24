@@ -1,12 +1,11 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap};
 
 use anyhow::{Result, anyhow, bail};
 use serde_json::{Value, json};
 
 use super::{
     canonical_json, load_artifact_json, load_fixture_value, looks_like_sha256_digest,
-    required_field, required_str, sha256_prefixed, validate_profile, value_array, value_field_str,
-    value_field_u64,
+    required_field, required_str, validate_profile, value_array, value_field_str,
 };
 use crate::transcripts::record_vector_event;
 
@@ -16,22 +15,7 @@ pub fn run_event_envelope_fixture_suite() -> Result<()> {
 
     let crypto_fixture = load_fixture_value("crypto-signature-fixture.json")?;
     validate_profile(&crypto_fixture, "ak.vector_group.crypto_signature.v1")?;
-    for vector in crypto_fixture
-        .get("vectors")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("crypto signature fixture missing vectors"))?
-    {
-        validate_crypto_signature_event_vector(vector, &event_kinds)?;
-    }
-
-    let negative_fixture = load_fixture_value("event-envelope-negative-fixture.json")?;
-    for case in negative_fixture
-        .get("cases")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("event envelope negative fixture missing cases"))?
-    {
-        validate_event_envelope_negative_case(case, &event_kinds)?;
-    }
+    super::crypto_signature::run_crypto_signature_fixture(&crypto_fixture)?;
     validate_synthetic_event_envelope_negatives(&event_kinds)?;
 
     Ok(())
@@ -108,225 +92,11 @@ pub fn run_container_realm_control_payload_suite() -> Result<()> {
 
 // ── Internal validation functions ───────────────────────────────────────────
 
-fn validate_crypto_signature_event_vector(
-    vector: &Value,
-    event_kinds: &HashMap<String, EventKindInfo>,
-) -> Result<()> {
-    let name = required_str(vector, "name")?;
-    let event_without_producer_proof = required_field(vector, "event_without_producer_proof")?;
-    let canonical = canonical_event_payload(event_without_producer_proof)?;
-    let expected_canonical = required_str(vector, "canonical_event_payload")?;
-    if canonical != expected_canonical {
-        bail!("crypto vector {name} canonical event payload drifted");
-    }
-    if vector.get("payload_digest").is_some() {
-        bail!("crypto vector {name} carries retired Event proof field payload_digest");
-    }
-    let event_digest = sha256_prefixed(canonical.as_bytes());
-    let expected_event_digest = required_str(vector, "event_digest")?;
-    if event_digest != expected_event_digest {
-        bail!(
-            "crypto vector {name} event hash drifted: expected {expected_event_digest}, got {event_digest}"
-        );
-    }
-
-    let binding = required_field(vector, "binding_object")?;
-    let canonical_binding = canonical_json(binding)?;
-    if canonical_binding != required_str(vector, "canonical_binding_payload")? {
-        bail!("crypto vector {name} canonical binding payload drifted");
-    }
-    if sha256_prefixed(canonical_binding.as_bytes()) != required_str(vector, "binding_digest")? {
-        bail!("crypto vector {name} binding digest drifted");
-    }
-
-    if let Some(event_with_proof) = vector.get("event_with_proof") {
-        let mut context = EventEnvelopeContext::default_for_durable_history();
-        context
-            .supported_features
-            .extend(event_feature_ids(event_with_proof)?);
-        let decision = validate_event_envelope(event_with_proof, event_kinds, &context)?;
-        assert_event_decision(&decision, "accept", None, name)?;
-        let digest = canonical_event_digest(event_with_proof)?;
-        if !looks_like_sha256_digest(&digest) {
-            bail!("crypto vector {name} canonical event digest was invalid");
-        }
-    } else {
-        let proof_kind = required_str(vector, "proof_kind")?;
-        if proof_kind != "raw_detached_signature" {
-            bail!("crypto vector {name} missing event_with_proof for proof_kind {proof_kind}");
-        }
-        let signature_algorithm = required_str(vector, "signature_algorithm")?;
-        if signature_algorithm.is_empty() {
-            bail!("crypto vector {name} missing signature algorithm");
-        }
-        let signature = required_str(vector, "signature_b64u")?;
-        if signature.is_empty() {
-            bail!("crypto vector {name} missing raw detached signature");
-        }
-    }
-
-    Ok(())
-}
-
-fn validate_event_envelope_negative_case(
-    case: &Value,
-    event_kinds: &HashMap<String, EventKindInfo>,
-) -> Result<()> {
-    let name = required_str(case, "name")?;
-    let input = required_field(case, "input")?;
-    let expected = required_field(case, "expected")?;
-
-    if let (Some(stored), Some(incoming)) = (
-        input.get("stored_event").and_then(Value::as_object),
-        input.get("incoming_event").and_then(Value::as_object),
-    ) {
-        let stored_id = stored
-            .get("event_id")
-            .and_then(Value::as_str)
-            .ok_or_else(|| anyhow!("negative vector {name} stored_event missing event_id"))?;
-        let incoming_id = incoming
-            .get("event_id")
-            .and_then(Value::as_str)
-            .ok_or_else(|| anyhow!("negative vector {name} incoming_event missing event_id"))?;
-        let stored_digest = stored
-            .get("canonical_digest")
-            .and_then(Value::as_str)
-            .ok_or_else(|| {
-                anyhow!("negative vector {name} stored_event missing canonical_digest")
-            })?;
-        let incoming_digest = incoming
-            .get("canonical_digest")
-            .and_then(Value::as_str)
-            .ok_or_else(|| {
-                anyhow!("negative vector {name} incoming_event missing canonical_digest")
-            })?;
-        let decision = if stored_id == incoming_id && stored_digest != incoming_digest {
-            EventEnvelopeDecision::quarantine(
-                "duplicate_conflict",
-                "same event_id different canonical bytes",
-            )
-        } else {
-            EventEnvelopeDecision::accept()
-        };
-        return assert_event_decision(
-            &decision,
-            required_str(expected, "decision")?,
-            expected.get("error_code").and_then(Value::as_str),
-            name,
-        );
-    }
-
-    let generated_event;
-    let event = if let Some(generator) = input.get("generator") {
-        generated_event = generate_negative_envelope_event(generator)?;
-        &generated_event
-    } else {
-        required_field(input, "event")?
-    };
-    let mut context = EventEnvelopeContext::default_for_durable_history();
-    if let Some(scope) = input.get("wire_scope").and_then(Value::as_str) {
-        context.durable_history = matches!(scope, "durable_event" | "durable_history");
-    }
-    if let Some(features) = input.get("supported_features").and_then(Value::as_array) {
-        context.supported_features = features
-            .iter()
-            .filter_map(Value::as_str)
-            .map(ToOwned::to_owned)
-            .collect();
-    }
-    if let Some(frontier) = input.get("actor_frontier") {
-        context.actor_frontier = Some(ActorFrontier {
-            actor_id: super::value_field_actor(frontier, "actor_id")?,
-            actor_seq: value_field_u64(frontier, "actor_seq")?,
-        });
-    }
-
-    let decision = validate_event_envelope(event, event_kinds, &context)?;
-    assert_event_decision(
-        &decision,
-        required_str(expected, "decision")?,
-        expected.get("error_code").and_then(Value::as_str),
-        name,
-    )
-}
-
-fn generate_negative_envelope_event(generator: &Value) -> Result<Value> {
-    let kind = required_str(generator, "kind")?;
-    let target_canonical_bytes = value_field_u64(generator, "target_canonical_bytes")? as usize;
-    let filler_json_pointer = required_str(generator, "filler_json_pointer")?;
-    let filler_char = required_str(generator, "filler_char")?;
-    if filler_char.len() != 1 || !filler_char.is_ascii() {
-        bail!("generator filler_char must be one ASCII byte");
-    }
-    let base_event = required_field(generator, "base_event")?;
-
-    let mut low = 0usize;
-    let mut high = target_canonical_bytes + 1024;
-    while low < high {
-        let mid = low + (high - low) / 2;
-        let candidate = apply_negative_envelope_filler(
-            base_event,
-            kind,
-            filler_json_pointer,
-            filler_char,
-            mid,
-        )?;
-        if canonical_json(&candidate)?.len() >= target_canonical_bytes {
-            high = mid;
-        } else {
-            low = mid + 1;
-        }
-    }
-
-    let event =
-        apply_negative_envelope_filler(base_event, kind, filler_json_pointer, filler_char, low)?;
-    let canonical_len = canonical_json(&event)?.len();
-    if canonical_len < target_canonical_bytes {
-        bail!(
-            "generator {kind} produced {canonical_len} canonical bytes, below target {target_canonical_bytes}"
-        );
-    }
-    Ok(event)
-}
-
-fn apply_negative_envelope_filler(
-    base_event: &Value,
-    kind: &str,
-    pointer: &str,
-    filler_char: &str,
-    repeat: usize,
-) -> Result<Value> {
-    let mut event = base_event.clone();
-    let filler = filler_char.repeat(repeat);
-    match kind {
-        "oversize_envelope" | "long_string_value" => {
-            let target = event
-                .pointer_mut(pointer)
-                .ok_or_else(|| anyhow!("generator pointer {pointer} did not resolve"))?;
-            if !target.is_string() {
-                bail!("generator pointer {pointer} must target a string");
-            }
-            *target = Value::String(filler);
-        }
-        "long_object_key" => {
-            let target = event
-                .pointer_mut(pointer)
-                .and_then(Value::as_object_mut)
-                .ok_or_else(|| anyhow!("generator pointer {pointer} must target an object"))?;
-            target.insert(filler, json!(1));
-        }
-        _ => bail!("unknown event envelope negative generator kind {kind}"),
-    }
-    Ok(event)
-}
-
 fn validate_synthetic_event_envelope_negatives(
     event_kinds: &HashMap<String, EventKindInfo>,
 ) -> Result<()> {
     let base = sample_envelope_event(
         "ak.message.create",
-        1,
-        "01970e589d21-0001-a13f9c2e",
         "2026-05-02T00:00:00.000Z",
         json!({
             "strand_id": "ak:strand:AXYlSrZyrvLo7DtDjCwS6u7unEkJVXS12FTvdJM5AlGa",
@@ -352,8 +122,6 @@ fn validate_synthetic_event_envelope_negatives(
 
     let duplicate_a = sample_envelope_event(
         "ak.message.create",
-        2,
-        "01970e589d22-0001-a13f9c2e",
         "2026-05-02T00:00:01.000Z",
         json!({
             "strand_id": "ak:strand:AXYlSrZyrvLo7DtDjCwS6u7unEkJVXS12FTvdJM5AlGa",
@@ -365,8 +133,6 @@ fn validate_synthetic_event_envelope_negatives(
     );
     let duplicate_b = sample_envelope_event(
         "ak.message.create",
-        2,
-        "01970e589d22-0001-a13f9c2e",
         "2026-05-02T00:00:01.000Z",
         json!({
             "strand_id": "ak:strand:AXYlSrZyrvLo7DtDjCwS6u7unEkJVXS12FTvdJM5AlGa",
@@ -383,65 +149,11 @@ fn validate_synthetic_event_envelope_negatives(
         bail!("same event_id different canonical bytes did not produce distinct digests");
     }
 
-    let mut future_context = EventEnvelopeContext::default_for_durable_history();
-    future_context.now_hlc_ms = Some(0x01970e589d21);
-    let future = sample_envelope_event(
-        "ak.message.create",
-        3,
-        "01970e700000-0001-a13f9c2e",
-        "2026-05-02T00:30:00.000Z",
-        json!({
-            "strand_id": "ak:strand:AXYlSrZyrvLo7DtDjCwS6u7unEkJVXS12FTvdJM5AlGa",
-            "content": {
-                "kind": "ak.content.text",
-                "body": "future"
-            }
-        }),
-    );
-    let future_decision = validate_event_envelope(&future, event_kinds, &future_context)?;
-    assert_event_decision(
-        &future_decision,
-        "reject",
-        Some("invalid_timestamp"),
-        "hlc_future_drift",
-    )?;
-
-    let mut revoked_context = EventEnvelopeContext::default_for_durable_history();
-    revoked_context.revoked_at_by_actor.insert(
-        arkret_wire::ActorId::account(arkret_wire::AccountId::new(
-            arkret_wire::DidCoreId::new("ak:did_core:web:alice.example")?,
-            arkret_wire::DidCoreId::new("ak:did_core:web:principal.example")?,
-        )),
-        "2026-05-02T00:05:00.000Z".to_owned(),
-    );
-    let backdated = sample_envelope_event(
-        "ak.message.create",
-        4,
-        "01970e589d23-0001-a13f9c2e",
-        "2026-05-02T00:00:02.000Z",
-        json!({
-            "strand_id": "ak:strand:AXYlSrZyrvLo7DtDjCwS6u7unEkJVXS12FTvdJM5AlGa",
-            "content": {
-                "kind": "ak.content.text",
-                "body": "backdated"
-            }
-        }),
-    );
-    let backdated_decision = validate_event_envelope(&backdated, event_kinds, &revoked_context)?;
-    assert_event_decision(
-        &backdated_decision,
-        "reject",
-        Some("authorization_denied"),
-        "backdated_event_after_revoke",
-    )?;
-
     // Unknown top-level field MUST be rejected (envelope root is
     // `additionalProperties:false`). Inject an unregistered field
     // (`space_id`) onto an otherwise-valid event and assert hard rejection.
     let mut unknown_field_event = sample_envelope_event(
         "ak.message.create",
-        5,
-        "01970e589d24-0001-a13f9c2e",
         "2026-05-02T00:00:03.000Z",
         json!({
             "strand_id": "ak:strand:AXYlSrZyrvLo7DtDjCwS6u7unEkJVXS12FTvdJM5AlGa",
@@ -484,6 +196,27 @@ fn registered_event_envelope_fields() -> Result<&'static BTreeSet<String>> {
         .cloned()
         .collect::<BTreeSet<_>>();
     Ok(FIELDS.get_or_init(|| fields))
+}
+
+fn registered_event_envelope_required() -> Result<&'static Vec<String>> {
+    static REQUIRED: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+    if let Some(required) = REQUIRED.get() {
+        return Ok(required);
+    }
+    let schema = load_artifact_json("schemas/event-envelope.schema.json")?;
+    let required = schema
+        .get("required")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("event-envelope.schema.json declares no required set"))?
+        .iter()
+        .map(|field| {
+            field
+                .as_str()
+                .map(str::to_owned)
+                .ok_or_else(|| anyhow!("required Event field must be a string"))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    Ok(REQUIRED.get_or_init(|| required))
 }
 
 fn validate_event_envelope(
@@ -562,22 +295,10 @@ fn validate_event_envelope(
         ));
     }
 
-    // Spec event-envelope.schema.json required fields:
-    //   event_id, kind, realm_id, actor_id, actor_seq, created_at,
-    //   prev_refs, payload, proofs. `semantic_refs` and `causal_refs` are optional but,
-    //   when present, must be non-empty. `prev_refs` is required and may be
-    //   empty.
-    for field in [
-        "event_id",
-        "realm_id",
-        "actor_id",
-        "actor_seq",
-        "created_at",
-        "prev_refs",
-        "payload",
-        "proofs",
-    ] {
-        if event.get(field).is_none() {
+    // The required set is read from event-envelope.schema.json, like the
+    // closed property set above.
+    for field in registered_event_envelope_required()? {
+        if event.get(field.as_str()).is_none() {
             return Ok(EventEnvelopeDecision::reject(
                 "schema_violation",
                 format!("missing required Event field {field}"),
@@ -590,7 +311,11 @@ fn validate_event_envelope(
             "invalid event_id",
         ));
     }
-    if !value_field_str(event, "realm_id")?.starts_with("ak:realm:") {
+    if event
+        .get("realm_id")
+        .and_then(Value::as_str)
+        .is_some_and(|realm| !realm.starts_with("ak:realm:"))
+    {
         return Ok(EventEnvelopeDecision::reject(
             "schema_violation",
             "invalid realm_id",
@@ -605,13 +330,6 @@ fn validate_event_envelope(
             ));
         }
     };
-    let actor_seq = value_field_u64(event, "actor_seq")?;
-    let prev_refs = value_array(
-        event
-            .get("prev_refs")
-            .ok_or_else(|| anyhow!("event.prev_refs missing after required-field check"))?,
-        "event.prev_refs",
-    )?;
     let extra_refs: &[Value] = if let Some(refs) = event.get("semantic_refs") {
         let refs = value_array(refs, "event.semantic_refs")?;
         if refs.is_empty() {
@@ -649,23 +367,9 @@ fn validate_event_envelope(
         ));
     }
 
-    if event
-        .get("prev_ref_count")
-        .and_then(Value::as_u64)
-        .unwrap_or(prev_refs.len() as u64)
-        > context.max_prev_refs as u64
-    {
-        return Ok(EventEnvelopeDecision::reject(
-            "schema_violation",
-            "prev_refs_too_large",
-        ));
-    }
-    let event_id = value_field_str(event, "event_id")?;
     // `semantic_refs[]` entries MUST be typed-ref objects
     // `{id: "ak:<kind>:<ulid>", role, critical, ...}`. v1 is unreleased,
     // so no dual-pattern accommodation: bare string entries fail loudly.
-    // `prev_refs[]` is a bare-string list of `ak:event:` ids per spec
-    // §refs.
     let valid_ref = |s: &str| s.starts_with("ak:");
     let extra_refs_invalid = extra_refs.iter().any(|value| {
         value
@@ -673,15 +377,10 @@ fn validate_event_envelope(
             .and_then(Value::as_str)
             .is_none_or(|id| !valid_ref(id))
     });
-    let prev_refs_invalid = prev_refs.iter().any(|value| {
-        value
-            .as_str()
-            .is_none_or(|event_ref| !event_ref.starts_with("ak:event:"))
-    });
-    if extra_refs_invalid || prev_refs_invalid {
+    if extra_refs_invalid {
         return Ok(EventEnvelopeDecision::reject(
             "schema_violation",
-            "prev_refs / semantic_refs must contain typed ak: refs",
+            "semantic_refs must contain typed ak: refs",
         ));
     }
     if extra_refs.iter().any(|reference| {
@@ -696,45 +395,6 @@ fn validate_event_envelope(
             "semantic_refs[role=authorized_by] must contain immutable ak:grant: ids",
         ));
     }
-    if prev_refs
-        .iter()
-        .any(|value| value.as_str() == Some(event_id))
-    {
-        return Ok(EventEnvelopeDecision::reject(
-            "causal_conflict",
-            "prev_refs MUST NOT contain the event's own event_id",
-        ));
-    }
-
-    if let Some(frontier) = &context.actor_frontier
-        && frontier.actor_id == actor_id
-        && actor_seq <= frontier.actor_seq
-    {
-        return Ok(EventEnvelopeDecision::reject(
-            "causal_conflict",
-            "actor_seq must monotonically advance actor frontier",
-        ));
-    }
-
-    if let Some(now_hlc_ms) = context.now_hlc_ms {
-        let event_hlc_ms = parse_hlc_millis(value_field_str(event, "hlc")?)?;
-        if event_hlc_ms > now_hlc_ms + context.max_future_drift_ms {
-            return Ok(EventEnvelopeDecision::reject(
-                "invalid_timestamp",
-                "HLC future drift exceeded limit",
-            ));
-        }
-    }
-
-    if let Some(revoked_at) = context.revoked_at_by_actor.get(&actor_id)
-        && value_field_str(event, "created_at")? <= revoked_at.as_str()
-    {
-        return Ok(EventEnvelopeDecision::reject(
-            "authorization_denied",
-            "backdated event after revoke",
-        ));
-    }
-
     if declares_unsupported_critical_extension(event, context)? {
         return Ok(EventEnvelopeDecision::reject(
             "unsupported_feature",
@@ -925,42 +585,10 @@ pub(crate) fn canonical_event_digest(event: &Value) -> Result<String> {
     ))
 }
 
-pub(crate) fn event_feature_ids(event: &Value) -> Result<BTreeSet<String>> {
-    let mut ids = BTreeSet::new();
-    // Check both top-level and requirements-level feature fields
-    let sources: Vec<&Value> = vec![event]
-        .into_iter()
-        .chain(event.get("requirements"))
-        .collect();
-    for source in &sources {
-        for field in ["required_features", "critical_extensions"] {
-            for value in source
-                .get(field)
-                .and_then(Value::as_array)
-                .into_iter()
-                .flatten()
-            {
-                if let Some(id) = value
-                    .as_str()
-                    .or_else(|| value.get("id").and_then(Value::as_str))
-                {
-                    ids.insert(id.to_owned());
-                }
-            }
-        }
-    }
-    Ok(ids)
-}
-
 struct EventEnvelopeContext {
     durable_history: bool,
     supported_features: BTreeSet<String>,
-    actor_frontier: Option<ActorFrontier>,
-    revoked_at_by_actor: BTreeMap<arkret_wire::ActorId, String>,
     max_canonical_bytes: usize,
-    max_prev_refs: usize,
-    now_hlc_ms: Option<u64>,
-    max_future_drift_ms: u64,
 }
 
 impl EventEnvelopeContext {
@@ -968,19 +596,9 @@ impl EventEnvelopeContext {
         Self {
             durable_history: true,
             supported_features: BTreeSet::new(),
-            actor_frontier: None,
-            revoked_at_by_actor: BTreeMap::new(),
             max_canonical_bytes: 1_048_576,
-            max_prev_refs: 128,
-            now_hlc_ms: None,
-            max_future_drift_ms: 5 * 60 * 1000,
         }
     }
-}
-
-struct ActorFrontier {
-    actor_id: arkret_wire::ActorId,
-    actor_seq: u64,
 }
 
 struct EventEnvelopeDecision {
@@ -1005,34 +623,18 @@ impl EventEnvelopeDecision {
             reason: reason.into(),
         }
     }
-
-    fn quarantine(error_code: &'static str, reason: impl Into<String>) -> Self {
-        Self {
-            decision: "quarantine",
-            error_code: Some(error_code),
-            reason: reason.into(),
-        }
-    }
 }
 
-fn sample_envelope_event(
-    kind: &str,
-    actor_seq: u64,
-    hlc: &str,
-    created_at: &str,
-    content: Value,
-) -> Value {
+fn sample_envelope_event(kind: &str, created_at: &str, content: Value) -> Value {
     // Synthetic events emit the active spec shape directly (top-level fields
     // restricted to the canonical envelope property set — no `schema`).
     let mut event = json!({
         "event_id": "ak:event:AbmZo_Q7CHRfJYVqari3NAaEZm6tfSbZppTL7IsJJ7Gl",
         "kind": kind,
         "realm_id": "ak:realm:AXvhSdy6b-PYcJNuFcYsp-gKHjg-PECuUtuV08YJYwhK",
+        "scope_ref": {"kind": "realm", "realm_id": "ak:realm:AXvhSdy6b-PYcJNuFcYsp-gKHjg-PECuUtuV08YJYwhK"},
         "actor_id": {"kind":"account", "account_id":{"principal_id":"ak:did_core:web:alice.example", "station_id":"ak:did_core:web:principal.example"}},
-        "actor_seq": actor_seq,
         "created_at": created_at,
-        "hlc": hlc,
-        "prev_refs": [],
         "semantic_refs": [{
             "id": "ak:event:AVkkQ3SRXwZhSvXw0hnu-AeFeMX_3g54oqAZWM4qri4H",
             "role": "reply_to",
@@ -1056,14 +658,6 @@ fn sample_envelope_event(
         canonical_event_payload_digest(&event).expect("synthetic event is canonicalizable");
     event["producer_proof"]["event_digest"] = Value::String(digest);
     event
-}
-
-fn parse_hlc_millis(hlc: &str) -> Result<u64> {
-    let millis = hlc
-        .split_once('-')
-        .map(|(millis, _)| millis)
-        .ok_or_else(|| anyhow!("invalid HLC shape"))?;
-    u64::from_str_radix(millis, 16).map_err(|error| anyhow!("invalid HLC millis: {error}"))
 }
 
 /// Whether the Event declares a fail-closed critical extension this receiver
