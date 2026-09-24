@@ -55,8 +55,6 @@ pub(crate) const HARNESS_ACCOUNT_AUTHORITY_KEY_SEED: [u8; 32] = [0xac; 32];
 pub(crate) const HARNESS_ACCOUNT_AUTHORITY_ORIGIN: &str = "https://account-authority.cotest.local";
 pub(crate) const HARNESS_INTERNAL_AUTHORITY_SECRET: &str =
     "cotest-principal-genesis-private-channel";
-const HARNESS_ACCOUNT_AUTHORITY_TRUST_DOMAIN: &str =
-    "ak:trust_domain:account-authority.cotest.local";
 pub(crate) fn harness_account_authority_public_key_multibase() -> String {
     ed25519_pubkey_to_did_key_multibase(
         &SigningKey::from_bytes(&HARNESS_ACCOUNT_AUTHORITY_KEY_SEED)
@@ -65,11 +63,18 @@ pub(crate) fn harness_account_authority_public_key_multibase() -> String {
     )
 }
 
+/// A Station behind the harness Account Authority.
+///
+/// Every harness spawn path already registers the Authority endpoint, its
+/// delegated assertion key and the deployment-internal channel (secret plus the
+/// Authority's own trust domain) unless the caller supplies them
+/// (`harness::server::harness_account_authority_env`), so `extra_env` passes
+/// through unchanged and the channel values have exactly one source.
 pub async fn spawn_with_harness_account_authority(
     name: &str,
     extra_env: &[(&str, &str)],
 ) -> Result<ArkretServer> {
-    ArkretServer::spawn_with_env(name, &harness_account_authority_env(extra_env)).await
+    ArkretServer::spawn_with_env(name, extra_env).await
 }
 
 /// A Station behind the harness Account Authority whose issuer ledger answers
@@ -150,36 +155,7 @@ pub async fn spawn_with_harness_account_authority_at(
     database_url: &str,
     extra_env: &[(&str, &str)],
 ) -> Result<ArkretServer> {
-    ArkretServer::spawn_with_database_url(
-        name,
-        database_url,
-        &harness_account_authority_env(extra_env),
-    )
-    .await
-}
-
-fn harness_account_authority_env<'a>(extra_env: &[(&'a str, &'a str)]) -> Vec<(&'a str, &'a str)> {
-    let mut env = Vec::with_capacity(extra_env.len() + 3);
-    let authority_url = extra_env
-        .iter()
-        .find(|(key, _)| *key == "SOLAND_ACCOUNT_AUTHORITY_URL")
-        .map_or(HARNESS_ACCOUNT_AUTHORITY_ORIGIN, |(_, value)| *value);
-    env.push(("SOLAND_ACCOUNT_AUTHORITY_URL", authority_url));
-    env.push((
-        "SOLAND_INTERNAL_AUTHORITY_SHARED_SECRET",
-        HARNESS_INTERNAL_AUTHORITY_SECRET,
-    ));
-    env.push((
-        "SOLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN",
-        HARNESS_ACCOUNT_AUTHORITY_TRUST_DOMAIN,
-    ));
-    env.extend(
-        extra_env
-            .iter()
-            .copied()
-            .filter(|(key, _)| *key != "SOLAND_ACCOUNT_AUTHORITY_URL"),
-    );
-    env
+    ArkretServer::spawn_with_database_url(name, database_url, extra_env).await
 }
 
 fn test_device_record_signing_key() -> SigningKey {
