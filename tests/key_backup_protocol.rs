@@ -11,6 +11,12 @@ async fn key_backup_list_absent_at_confirmed_pcr_genesis() -> Result<()> {
 }
 
 #[tokio::test]
+async fn key_backup_list_serves_stored_backup_as_closed_metadata() -> Result<()> {
+    cotest::scenarios::protocol_payloads::key_backup_list_serves_stored_backup_as_closed_metadata()
+        .await
+}
+
+#[tokio::test]
 async fn key_backup_active_pointer_is_committed_and_listed_at_its_pcr_cut() -> Result<()> {
     cotest::scenarios::protocol_payloads::key_backup_active_pointer_is_committed_and_listed_at_its_pcr_cut().await
 }

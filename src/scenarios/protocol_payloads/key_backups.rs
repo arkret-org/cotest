@@ -24,7 +24,7 @@ use arkret_models_crypto::{
     BackupKind, KeyBackup, KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData,
     KeyBackupDomainSeparation, KeyBackupEncryption, KeyBackupRecipientMethod, KeyBackupRetention,
     KeyBackupSignatureAlgorithm, KeyBackupUnlockAuthority, KeyBackupUnlockProof,
-    KeyBackupUnlockProofAuthData, KeysBackupsIssueUnlockChallengeRequestBody,
+    KeyBackupUnlockProofAuthData, KeysBackupsIssueUnlockChallengeRequestBody, KeysBackupsList,
     KeysBackupsUnlockChallenge, KeysBackupsUnlockRequestBody, SecretStorageContentIndex,
     SecretStorageItemKind,
 };
@@ -178,8 +178,32 @@ fn signed_backup_envelope(
     Ok(envelope)
 }
 
-async fn list_backups(server: &ArkretServer, token: &str) -> Result<()> {
-    let backup_list = expect_json(
+/// `backup_metadata` members (keys-operations.schema.json, closed).
+const BACKUP_METADATA_MEMBERS: &[&str] = &[
+    "backup_id",
+    "actor_id",
+    "device_id",
+    "backup_kind",
+    "backup_version",
+    "series_id",
+    "series_seq",
+    "supersedes_id",
+    "supersedes_digest",
+    "source_commit_ref",
+    "recovery_policy_ref",
+    "expires_at",
+    "created_at",
+    "updated_at",
+    "ciphertext_digest",
+    "encryption",
+    "retention",
+];
+
+/// A non-empty list is the closed `KeysBackupsList` over HTTP 200: the stored
+/// envelope appears as its `backup_metadata` projection and decodes as the SDK
+/// DTO, with no envelope-only member (`auth_data`, `contents`, ...) leaking.
+pub(super) async fn list_backups(server: &ArkretServer, token: &str) -> Result<()> {
+    let body = expect_json(
         server
             .http()
             .get(server.url("/_arkret/self/keys/backups"))
@@ -187,7 +211,51 @@ async fn list_backups(server: &ArkretServer, token: &str) -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert!(!backup_list["backups"].as_array().unwrap().is_empty());
+    let rows = body["backups"]
+        .as_array()
+        .context("list carries backups[]")?;
+    let row = rows
+        .iter()
+        .find(|row| row["backup_id"] == BACKUP_ID)
+        .with_context(|| format!("stored backup is listed: {body}"))?;
+    for member in row.as_object().context("list row is an object")?.keys() {
+        anyhow::ensure!(
+            BACKUP_METADATA_MEMBERS.contains(&member.as_str()),
+            "list row carries non-metadata member {member}: {row}"
+        );
+    }
+    anyhow::ensure!(
+        row["encryption"]
+            == serde_json::json!({
+                "recipient_method": "secret_storage_key",
+                "recipient_key_ref": "mls_group_secrets_backup_key"
+            }),
+        "list row encryption is not the recipient summary: {row}"
+    );
+    let listing: KeysBackupsList = serde_json::from_value(body.clone())
+        .with_context(|| format!("list decodes as the SDK KeysBackupsList: {body}"))?;
+    let summary = listing
+        .backups
+        .iter()
+        .find(|summary| summary.backup_id.as_str() == BACKUP_ID)
+        .context("decoded list names the stored backup")?;
+    anyhow::ensure!(summary.backup_kind == BackupKind::SecretStorage);
+    anyhow::ensure!(summary.series_id.as_str() == SERIES_ID && summary.series_seq == 0);
+    anyhow::ensure!(summary.backup_version.as_str() == "kb_1");
+    anyhow::ensure!(summary.ciphertext_digest.as_str() == CIPHERTEXT_DIGEST);
+    anyhow::ensure!(summary.created_at == ts("2026-04-26T00:00:00.000Z")?);
+    anyhow::ensure!(summary.supersedes_id.is_none() && summary.supersedes_digest.is_none());
+    anyhow::ensure!(
+        summary.encryption.recipient_method == KeyBackupRecipientMethod::SecretStorageKey
+    );
+    anyhow::ensure!(
+        summary
+            .retention
+            .as_ref()
+            .is_some_and(|retention| retention.get("legal_hold") == Some(&false.into())),
+        "retention is listed verbatim: {row}"
+    );
+    anyhow::ensure!(listing.next_cursor.is_none() && !listing.has_more);
     Ok(())
 }
 

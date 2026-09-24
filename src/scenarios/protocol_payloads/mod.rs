@@ -151,6 +151,32 @@ pub async fn key_backup_replace_with_authorized_device_works() -> Result<()> {
     .await
 }
 
+/// A stored envelope makes the list non-empty; it must still be the closed
+/// `KeysBackupsList` over HTTP 200 with a `backup_metadata` row.
+pub async fn key_backup_list_serves_stored_backup_as_closed_metadata() -> Result<()> {
+    let server = spawn_with_harness_account_authority(
+        "protocol-key-backup-list-metadata",
+        &[("SOLAND_DID_RESOLVER_ALLOW_METHODS", "web,webvh,key,uuid")],
+    )
+    .await?;
+    let actor_id = actor_did_for_service_did(server.service_did(), "key-backup-list-row-alice")?;
+    let client = server
+        .demo_client(&actor_id, "ak:device:01904100-0000-7000-8000-0000000000a1")
+        .await?;
+    let token = client.expect_dev_bearer();
+    key_backups::put_backup(
+        &server,
+        token,
+        &actor_id,
+        client
+            .principal
+            .as_ref()
+            .context("client carries its provisioned principal")?,
+    )
+    .await?;
+    key_backups::list_backups(&server, token).await
+}
+
 pub async fn key_backup_list_absent_at_confirmed_pcr_genesis() -> Result<()> {
     let server = spawn_with_harness_account_authority(
         "protocol-key-backup-list-absent",
