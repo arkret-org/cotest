@@ -36,11 +36,13 @@ mod backup_delete;
 mod blob;
 mod device_messages;
 mod events_keys_setup;
+mod key_backup_pointer;
 mod key_backups;
 mod moderation;
 mod push;
 mod snapshot_head_disclosure;
 
+pub use key_backup_pointer::key_backup_active_pointer_is_committed_and_listed_at_its_pcr_cut;
 pub use snapshot_head_disclosure::narrow_snapshot_head_discloses_only_complete_creator_cut;
 
 pub async fn events_keys_device_blob_push_and_moderation_surfaces_work() -> Result<()> {
