@@ -2872,6 +2872,7 @@ dependencies = [
  "hpke-rs-rust-crypto",
  "inkson",
  "jsonschema",
+ "p256 0.14.0",
  "postgres",
  "proptest",
  "rand_chacha 0.10.0",

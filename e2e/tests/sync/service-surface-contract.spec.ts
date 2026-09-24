@@ -227,7 +227,7 @@ test.describe("describes soland surface @fully-implemented", () => {
       "ak.operation_bundle.station.describe.v1",
     );
     expect(body.supported_operation_bundles, "exposes principal HTTP core bundle").toContain(
-      "ak.operation_bundle.station.http_core.v1",
+      "ak.operation_bundle.station.http_core_current.v1",
     );
 
     await testInfo.attach("soland-describe", {

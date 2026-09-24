@@ -500,8 +500,8 @@ pub async fn limited_account_window_names_issued_basis_or_is_preview_only() -> R
         .context("an issued anchor snapshot yields a basis")?;
     ensure!(
         basis.anchor_kind == StreamWindowAnchorKind::AfterCommittedPrefix
-            && basis.anchor_position == Some(anchor.stream_position)
-            && basis.anchor_commit_ref.as_ref() == Some(&anchor.commit_id)
+            && basis.anchor_position == anchor.stream_position
+            && basis.anchor_commit_ref == anchor.commit_id
             && basis.snapshot_ref == issued.snapshot_id
             && basis.governance_generation == issued.governance_generation,
         "the basis must name the exact issued anchor snapshot: {basis:?}"
@@ -957,9 +957,14 @@ pub async fn limited_window_strand_tail_folds_to_exact_current_through_inkson() 
             == vec![7, 8],
         "the verified tail is exactly the two Commits after the issued head"
     );
-    let folded = verified
-        .floor_current(&typed_realm)
-        .context("the verified floor and tail install an exact current")?;
+    let product_frame = verified.product_frame(&frame);
+    let product_entry = realm_detail(&product_frame, &realm_id)?;
+    let folded = product_entry
+        .current
+        .as_ref()
+        .context("the verified floor and tail admit an exact current")?
+        .entries
+        .as_slice();
     ensure!(
         folded.len() == 10 && folded == current.entries.as_slice(),
         "the installed current must be the Station's same-cut current: {folded:?}"

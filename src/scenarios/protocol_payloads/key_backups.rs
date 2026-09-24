@@ -189,8 +189,6 @@ const BACKUP_METADATA_MEMBERS: &[&str] = &[
     "series_seq",
     "supersedes_id",
     "supersedes_digest",
-    "source_commit_ref",
-    "recovery_policy_ref",
     "expires_at",
     "created_at",
     "updated_at",

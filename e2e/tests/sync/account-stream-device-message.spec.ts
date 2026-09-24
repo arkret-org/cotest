@@ -254,50 +254,18 @@ test.describe("account stream + device-message convergence", () => {
     }
   });
 
-  test("Complement: event kind filters exclude timeline messages without losing the Realm baseline", async ({ request }) => {
-    const { user, token } = await accountSession(request, "account-kind-filter");
-    const realmId = await createRealmApi(request, token, { title: "kind filter", ownerId: user.id });
-    const sent = await sendMessageApi(request, token, realmId, "kind-filter sentinel");
-    const included = await accountFramesWithMessages(request, token, realmId, [sent.event_id], {
-      filter: { realm_ids: [realmId], event_kinds: ["ak.message.create"] },
-      waitFor: sent.cursor,
-    });
-    expectCatchup(included);
-    expect(messageIds(included, realmId)).toEqual([sent.event_id]);
-    const excluded = await accountSubscribeFramesApi(request, token, {
-      filter: { realm_ids: [realmId], not_event_kinds: ["ak.message.create"] },
-    });
-    expectCatchup(excluded);
-    expect(realmBuckets(excluded).some(([id]) => id === realmId), "timeline filter must not erase current Realm metadata").toBe(true);
-    expect(messageIds(excluded, realmId)).toEqual([]);
-    const otherKind = await accountSubscribeFramesApi(request, token, {
-      filter: { realm_ids: [realmId], event_kinds: ["ak.reaction.add"] },
-    });
-    expectCatchup(otherKind);
-    expect(messageIds(otherKind, realmId)).toEqual([]);
-    const deniedWins = await accountSubscribeFramesApi(request, token, {
-      filter: {
-        realm_ids: [realmId],
-        event_kinds: ["ak.message.create"],
-        not_event_kinds: ["ak.message.create"],
-      },
-    });
-    expectCatchup(deniedWins);
-    expect(messageIds(deniedWins, realmId)).toEqual([]);
-  });
-
   test("account stream filter set order preserves cursor scope", async ({ request }) => {
     const { user, token } = await accountSession(request, "account-filter-set");
     const first = await createRealmApi(request, token, { title: "filter set first", ownerId: user.id });
     const second = await createRealmApi(request, token, { title: "filter set second", ownerId: user.id });
     const baseline = await accountSubscribeFramesApi(request, token, {
-      filter: { realm_ids: [second, first], event_kinds: ["ak.reaction.add", "ak.message.create"] },
+      filter: { realm_ids: [second, first] },
     });
     expectCatchup(baseline);
     const sent = await sendMessageApi(request, token, first, "equivalent filter sentinel");
     const resumed = await accountFramesWithMessages(request, token, first, [sent.event_id], {
       after: latestCursor(baseline),
-      filter: { realm_ids: [first, second], event_kinds: ["ak.message.create", "ak.reaction.add"] },
+      filter: { realm_ids: [first, second] },
       waitFor: sent.cursor,
     });
     expectCatchup(resumed);
@@ -309,7 +277,8 @@ test.describe("account stream + device-message convergence", () => {
     for (const query of [
       "filter.window_limit=invalid", "filter.window_limit=-1",
       "filter.window_limit=1&filter.window_limit=2", "filter.realms=invalid",
-      "filter.event_kinds=", "filter.lazy_load_members=invalid", "filter.realm_ids=invalid",
+      "filter.event_kinds=ak.message.create", "filter.not_event_kinds=ak.message.create",
+      "filter.strand_ids=ak:strand:retired", "filter.lazy_load_members=invalid", "filter.realm_ids=invalid",
       `filter=${encodeURIComponent(JSON.stringify({ realm_ids: ["ak:realm:duplicate", "ak:realm:duplicate"] }))}`,
     ]) {
       const url = `${solandBaseUrl()}/_arkret/self/account/subscribe?catchup=true&${query}`;

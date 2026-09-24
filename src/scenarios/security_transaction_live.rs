@@ -1,13 +1,17 @@
 use anyhow::Result;
 use arkret_models_crypto::{
-    BackupObjectRef, BackupRotationBinding, BackupRotationKind, BackupRotationPlan,
-    PreparedEventBatchRequest, PreparedEventUnit, SecurityRotationTransactionCreateRequest,
-    SecurityTransactionCreateRequest,
+    BackupKind, BackupObjectRef, BackupRotationBinding, BackupRotationKind, BackupRotationPlan,
+    KeyBackup, KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData, KeyBackupDomainSeparation,
+    KeyBackupEncryption, KeyBackupRecipientMethod, KeyBackupSignatureAlgorithm,
+    PreparedEventBatchRequest, PreparedEventUnit, SecretStorageContentIndex, SecretStorageItemKind,
+    SecurityRotationTransactionCreateRequest, SecurityTransactionCreateRequest,
 };
 use arkret_wire::{
-    BackupId, BackupSeriesId, CanonicalPublicMaterial, Did, DidCoreId, Event, Hash, ScopeRef,
+    AccountId, ActorId, BackupId, BackupSeriesId, Base64UrlString, DeviceId, Did, DidCoreId,
+    DidUrl, Event, EventId, Hash, ScopeRef,
 };
 use chrono::Utc;
+use ed25519_dalek::{Signer, SigningKey};
 use reqwest::StatusCode;
 use serde_json::json;
 
@@ -39,6 +43,11 @@ pub async fn security_transaction_create_is_durable_on_live_soland() -> Result<(
         &pcr_realm,
         &client.device_id,
         signing_seed,
+        &client
+            .principal
+            .as_ref()
+            .unwrap()
+            .founding_authorize_event_id,
     )?;
 
     let first = expect_json(
@@ -96,6 +105,7 @@ fn rotation_create_request(
     pcr_realm: &str,
     device_id: &str,
     signing_seed: [u8; 32],
+    device_authorize_event_id: &EventId,
 ) -> Result<SecurityTransactionCreateRequest> {
     let principal = Did::new(actor.to_owned())?;
     let principal_id = arkret_wire::project_did_to_core_id(&principal)?;
@@ -120,6 +130,7 @@ fn rotation_create_request(
                 suffix,
                 signing_seed,
                 device_id,
+                device_authorize_event_id,
             )
         })
         .collect::<Result<Vec<_>>>()?;
@@ -144,6 +155,7 @@ fn rotation_plan(
     suffix: &str,
     signing_seed: [u8; 32],
     device_id: &str,
+    device_authorize_event_id: &EventId,
 ) -> Result<BackupRotationPlan> {
     let active_series_submission = event_submission(
         principal,
@@ -154,7 +166,7 @@ fn rotation_plan(
         device_id,
     )?;
     let active_series_event_id = active_series_submission.event_id.clone();
-    let binding = BackupRotationBinding {
+    let mut binding = BackupRotationBinding {
         backup_kind: kind,
         previous_series_id: BackupSeriesId::new(format!(
             "ak:backup_series:01975510-0000-7000-8000-0000000000{suffix}1"
@@ -176,21 +188,76 @@ fn rotation_plan(
             ciphertext_digest: hash('9')?,
         }],
     };
-    let backup_kind = "secret_storage";
+    let ciphertext = b"rotation-create-backup";
     let principal_id = arkret_wire::project_did_to_core_id(principal)?;
-    let material = CanonicalPublicMaterial::canonical_json(json!({
-        "backups": [{
-            "actor_id": principal_id,
-            "backup_id": binding.new_backups[0].backup_id,
-            "backup_kind": backup_kind,
-            "ciphertext_digest": binding.new_backups[0].ciphertext_digest,
-            "series_id": binding.new_series_id,
-        }]
-    }))?;
+    let device_id = DeviceId::new(device_id.to_owned())?;
+    let mut envelope = KeyBackup {
+        backup_id: binding.new_backups[0].backup_id.clone(),
+        actor_id: ActorId::account(AccountId::new(
+            principal_id,
+            DidCoreId::new(station_id.to_owned())?,
+        )),
+        device_id: Some(device_id.clone()),
+        backup_kind: BackupKind::SecretStorage,
+        mixed_secret_storage: false,
+        backup_version: "kb_1".to_owned(),
+        created_at: arkret::canonical::normalize_timestamp_canonical(Utc::now()),
+        updated_at: None,
+        expires_at: None,
+        encryption: KeyBackupEncryption {
+            recipient_method: KeyBackupRecipientMethod::SecretStorageKey,
+            recipient_key_ref: Some("mls_group_secrets_backup_key".to_owned()),
+            kdf: None,
+            aead: KeyBackupAead {
+                name: KeyBackupAeadName::Xchacha20Poly1305,
+                aead_profile: Some("ak.aead.xchacha20_poly1305.v1".to_owned()),
+                nonce_salt: None,
+                nonce: Some(Base64UrlString::new("nonce").map_err(anyhow::Error::msg)?),
+                enc: None,
+                extra: Default::default(),
+            },
+            key_commitment: None,
+            hpke_suite: None,
+            extra: Default::default(),
+        },
+        domain_separation: KeyBackupDomainSeparation {
+            subdomain: "rotation".to_owned(),
+            aead_aad_extensions: Default::default(),
+        },
+        contents: vec![SecretStorageContentIndex {
+            item_kind: SecretStorageItemKind::MlsGroupSecretsBackupKey,
+            secret_id: "mls_group_secrets_backup_key".to_owned(),
+        }],
+        ciphertext: Base64UrlString::new(arkret_canonical::base64url_encode(ciphertext))
+            .map_err(anyhow::Error::msg)?,
+        ciphertext_digest: Hash::new(arkret_canonical::sha256_digest(ciphertext))?,
+        plaintext_commitment: None,
+        auth_data: KeyBackupAuthData {
+            device_id: device_id.clone(),
+            verification_method: DidUrl::new(format!("{principal}#{device_id}"))
+                .map_err(anyhow::Error::msg)?,
+            signature_algorithm: KeyBackupSignatureAlgorithm::Ed25519,
+            signature: Base64UrlString::new("AA").map_err(anyhow::Error::msg)?,
+            device_authorize_event_id: device_authorize_event_id.clone(),
+        },
+        retention: None,
+        series_id: binding.new_series_id.clone(),
+        series_seq: 0,
+        supersedes_id: None,
+        supersedes_digest: None,
+        source_commit_ref: None,
+        recovery_policy_ref: None,
+        extra: Default::default(),
+    };
+    let signature = SigningKey::from_bytes(&signing_seed).sign(&envelope.signing_payload_bytes()?);
+    envelope.auth_data.signature =
+        Base64UrlString::new(arkret_canonical::base64url_encode(signature.to_bytes()))
+            .map_err(anyhow::Error::msg)?;
+    binding.new_backups[0].ciphertext_digest = envelope.ciphertext_digest.clone();
     Ok(BackupRotationPlan {
-        active_series_unit: event_unit(active_series_submission)?,
-        encrypted_backup_material: material,
         binding,
+        new_backup_envelopes: vec![envelope],
+        active_series_unit: event_unit(active_series_submission)?,
     })
 }
 

@@ -57,7 +57,7 @@ pub fn profile_claim_gate_negative_claims_fail_closed() -> Result<()> {
         "supported_profiles": ["ak.profile.core_event_store.v1"],
         "supported_operation_bundles": operation_bundles(&[
             "ak.operation_bundle.station.describe.v1",
-            "ak.operation_bundle.station.http_core.v1"
+            "ak.operation_bundle.station.http_core_current.v1"
         ]),
         "supported_event_kinds": [
             "ak.space.create",
@@ -110,7 +110,7 @@ pub fn profile_claim_gate_negative_claims_fail_closed() -> Result<()> {
         "supported_profiles": ["ak.profile.mls_governance_binding.full.v1"],
         "supported_operation_bundles": operation_bundles(&[
             "ak.operation_bundle.station.describe.v1",
-            "ak.operation_bundle.station.http_core.v1",
+            "ak.operation_bundle.station.http_core_current.v1",
         ]),
         "supported_cells": [],
     });
@@ -120,7 +120,7 @@ pub fn profile_claim_gate_negative_claims_fail_closed() -> Result<()> {
         "supported_profiles": ["ak.vector_group.capability.v1"],
         "supported_operation_bundles": operation_bundles(&[
             "ak.operation_bundle.station.describe.v1",
-            "ak.operation_bundle.station.http_core.v1"
+            "ak.operation_bundle.station.http_core_current.v1"
         ]),
         "verified_fixtures": [],
     });

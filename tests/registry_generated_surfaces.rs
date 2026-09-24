@@ -8,12 +8,55 @@ use arkret_schema::{
 };
 use arkret_wire::events::{EventKind, EventProductClass, EventRegistryCategory};
 use arkret_wire::{
-    CapabilityActionId, DIGEST_SUITES, EXPORTER_LABELS, ErrorCode, ExporterLabelId, HPKE_SUITES,
-    MLS_CIPHERSUITES, PROOF_CONTEXTS, ProofContextId, RELATION_KIND_DESCRIPTORS, RelationKind,
-    SERVICE_KIND_DESCRIPTORS, SERVICE_OPERATION_DESCRIPTORS, SIGNATURE_ALGORITHMS, ServiceKind,
-    ServiceOperationId,
+    BindingKind, CapabilityActionId, DIGEST_SUITES, EXPORTER_LABELS, ErrorCode, ExporterLabelId,
+    HPKE_SUITES, MLS_CIPHERSUITES, PROOF_CONTEXTS, ProofContextId, RELATION_KIND_DESCRIPTORS,
+    RelationKind, SERVICE_KIND_DESCRIPTORS, SERVICE_OPERATION_DESCRIPTORS, SIGNATURE_ALGORITHMS,
+    ServiceKind, ServiceOperationId, operation_bundle_descriptor,
 };
 use serde_json::Value;
+
+#[test]
+fn adjudicated_station_bundles_and_erase_retirement_are_exact() {
+    assert!(operation_bundle_descriptor("ak.operation_bundle.station.http_core.v1").is_none());
+    assert!(
+        ServiceOperationId::from_wire(&format!(
+            "ak.self.keys.backup_series.command.{}.v1",
+            "erase"
+        ))
+        .is_none()
+    );
+    let core = operation_bundle_descriptor("ak.operation_bundle.station.http_core_current.v1")
+        .expect("current Station core bundle");
+    assert_eq!(core.service_kind, ServiceKind::Station);
+    for (bundle_id, member) in [
+        (
+            "ak.operation_bundle.station.invite_delivery.v1",
+            ServiceOperationId::SelfInvitesCommandDispatchV1,
+        ),
+        (
+            "ak.operation_bundle.station.realm_authority_handoff.v1",
+            ServiceOperationId::PeerRealmAuthorityCommandHandoffV1,
+        ),
+    ] {
+        let bundle = operation_bundle_descriptor(bundle_id).expect("optional Station bundle");
+        assert_eq!(bundle.service_kind, ServiceKind::Station);
+        assert_eq!(bundle.members.len(), 1);
+        assert!(bundle.contains(member, BindingKind::HttpJson));
+    }
+    let pairing =
+        operation_bundle_descriptor("ak.operation_bundle.station.account_gate_pairing.v1")
+            .expect("Station Account gate pairing bundle");
+    assert_eq!(pairing.service_kind, ServiceKind::Station);
+    assert_eq!(pairing.members.len(), 2);
+    assert!(pairing.contains(
+        ServiceOperationId::GateAccountCommandFinalizeDevicePairingV1,
+        BindingKind::HttpJson
+    ));
+    assert!(pairing.contains(
+        ServiceOperationId::GateAccountReadClaimDevicePairingCodeV1,
+        BindingKind::HttpJson
+    ));
+}
 
 #[test]
 fn generated_registry_sets_are_complete_and_unique() {

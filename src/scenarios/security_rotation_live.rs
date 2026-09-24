@@ -23,8 +23,7 @@ use arkret_models_collaboration::events_payloads::{
 };
 use arkret_models_crypto::{
     BackupActiveSeriesPointer, BackupKind, BackupObjectRef, BackupRotationBinding,
-    BackupRotationKind, BackupRotationPlan, BackupSeriesEraseOutcome, BackupSeriesEraseRequestBody,
-    BackupSeriesEraseStatus, ClientStepAttestation, ClientStepAttestationArtifact,
+    BackupRotationKind, BackupRotationPlan, ClientStepAttestation, ClientStepAttestationArtifact,
     ClientStepAttestationAuthData, KeyBackup, KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData,
     KeyBackupDomainSeparation, KeyBackupEncryption, KeyBackupRecipientMethod,
     KeyBackupSignatureAlgorithm, KeysBackupsList, PreparedEventBatchRequest, PreparedEventUnit,
@@ -35,9 +34,8 @@ use arkret_models_crypto::{
 };
 use arkret_wire::{
     AccountId, ActorId, AuthorityCommitStatus, AuthoritySubmitOutcome, BackupId, BackupSeriesId,
-    Base64UrlString, CanonicalPublicMaterial, CommitStreamRef, DeviceId, DidCoreId, DidUrl, Event,
-    EventId, Hash, NonEmptyString, RealmCommit, RealmCommitAuthorityRef, RealmCommitId, RealmId,
-    TransactionId,
+    Base64UrlString, CommitStreamRef, DeviceId, DidCoreId, DidUrl, Event, EventId, Hash,
+    NonEmptyString, RealmCommit, RealmCommitAuthorityRef, RealmCommitId, RealmId, TransactionId,
 };
 use chrono::{DateTime, Utc};
 use ed25519_dalek::{Signer, SigningKey};
@@ -286,9 +284,7 @@ impl RotationAuthor {
                 hash("rotated-secret")?,
                 vec![BackupRotationPlan {
                     binding: binding.clone(),
-                    encrypted_backup_material: CanonicalPublicMaterial::canonical_json(
-                        serde_json::json!({ "backups": [replacement] }),
-                    )?,
+                    new_backup_envelopes: vec![replacement],
                     active_series_unit: unit(pointer)?,
                 }],
             )?,
@@ -496,8 +492,8 @@ pub async fn security_rotation_runs_worker_steps_to_local_commit() -> Result<()>
         selected,
     } = live_rotation(SERVER_NAME, &[]).await?;
 
-    // 1. A revoke not signed by A's current key aborts with no proposal,
-    //    Commit or effect on its target.
+    // 1. A revoke not signed by A's current key aborts with no proposal, Commit or effect on its
+    //    target.
     let (forged, _) = signer.rotation(
         "f001",
         DEVICE_B,
@@ -517,9 +513,9 @@ pub async fn security_rotation_runs_worker_steps_to_local_commit() -> Result<()>
     ensure!(listing(&client_a).await?.active_series == selected.active_series);
     ensure!(listing(&client_b).await?.active_series == selected.active_series);
 
-    // 2. Replacement material not signed by A: the worker accepts the revoke
-    //    of C, the upload unit refuses the envelope, and the rotation stops
-    //    with its revoke kept and no backup, pointer or step written.
+    // 2. Replacement material not signed by A: the worker accepts the revoke of C, the upload unit
+    //    refuses the envelope, and the rotation stops with its revoke kept and no backup, pointer
+    //    or step written.
     let (bad_material, bad_binding) = signer.rotation(
         "f002",
         DEVICE_C,
@@ -540,8 +536,11 @@ pub async fn security_rotation_runs_worker_steps_to_local_commit() -> Result<()>
     let after_refusal = listing(&client_a).await?;
     ensure!(
         pointer_is(&after_refusal, SERIES_ONE, 1)
-            && after_refusal.active_series.authority_commit_id.as_str()
-                == stopped.accepted_steps[0].output_ref,
+            && stopped
+                .revoke_command_outcome
+                .as_ref()
+                .is_some_and(|outcome| after_refusal.active_series.authority_commit_id
+                    == outcome.covering_commit_id),
         "a refused upload moved the pointer: {:?}",
         after_refusal.active_series
     );
@@ -583,8 +582,8 @@ pub async fn security_rotation_runs_worker_steps_to_local_commit() -> Result<()>
     );
     ensure!(listing(&client_a).await?.active_series == after_refusal.active_series);
 
-    // 3. The genuine rotation revokes B; the worker uploads the replacement,
-    //    switches the pointer and erases the old series in the same create.
+    // 3. The genuine rotation revokes B; the worker uploads the replacement, switches the pointer
+    //    and erases the old series in the same create.
     let (request, binding) = signer.rotation(
         "f003",
         DEVICE_B,
@@ -604,19 +603,13 @@ pub async fn security_rotation_runs_worker_steps_to_local_commit() -> Result<()>
             && erased.terminal_outcome.is_none(),
         "the worker did not reach the local commit: {erased:?}"
     );
-    ensure!(erased.accepted_steps[1].output_ref == binding.new_series_id.as_str());
     let SecurityTransactionCreateRequest::SecurityRotation(rotation) = &request else {
         unreachable!("rotation request")
     };
-    ensure!(
-        erased.accepted_steps[3].output_digest == rotation.prepared_plan.erase_confirmation_digest,
-        "the erase step is not the reserved erase confirmation: {:?}",
-        erased.accepted_steps[3]
-    );
     let after_erase = listing(&client_a).await?;
     ensure!(
-        after_erase.active_series.authority_commit_id.as_str()
-            == erased.accepted_steps[2].output_ref
+        after_erase.active_series.authority_commit_id
+            != after_refusal.active_series.authority_commit_id
             && pointer_is(&after_erase, binding.new_series_id.as_str(), 2),
         "the switch Commit is not the listed pointer basis: {:?}",
         after_erase.active_series
@@ -631,58 +624,31 @@ pub async fn security_rotation_runs_worker_steps_to_local_commit() -> Result<()>
         "the revoked device still authenticates"
     );
 
-    // 4. The erase operation is the worker's: a client cannot drive it. The
-    //    exact request the worker built from the saved plan replays its
-    //    complete outcome; any other bytes are a conflict and change nothing.
-    let erase = |authority_commit_id: RealmCommitId| -> Result<BackupSeriesEraseRequestBody> {
-        Ok(BackupSeriesEraseRequestBody {
-            transaction_id: erased.transaction_id.clone(),
-            transaction_request_digest: erased.request_digest.clone(),
-            prepared_plan_digest: erased.prepared_plan_digest.clone(),
-            erase_confirmation_digest: rotation.prepared_plan.erase_confirmation_digest.clone(),
-            series: vec![binding.clone()],
-            authority_commit_id,
-        })
-    };
+    // 4. The worker owns erase; no public self HTTP binding remains.
     let foreign = canonical_post(
         &client_a,
-        "/_arkret/self/keys/backup-series/erase",
-        &erase(commit.commit_id.clone())?,
+        &format!("/_arkret/self/keys/backup-series/{}", "erase"),
+        &serde_json::json!({}),
     )?
     .send()
     .await?;
     let foreign_status = foreign.status();
     let foreign_body = foreign.text().await.unwrap_or_default();
     ensure!(
-        foreign_status == StatusCode::CONFLICT && foreign_body.contains("duplicate_conflict"),
-        "a client erase request was not refused: {foreign_status} {foreign_body}"
-    );
-    let replay: BackupSeriesEraseOutcome = serde_json::from_value(
-        expect_json(
-            canonical_post(
-                &client_a,
-                "/_arkret/self/keys/backup-series/erase",
-                &erase(after_erase.active_series.authority_commit_id.clone())?,
-            )?,
-            StatusCode::OK,
-        )
-        .await?,
-    )?;
-    ensure!(
-        replay.status == BackupSeriesEraseStatus::Complete && replay.confirmation.is_some(),
-        "the worker's erase outcome did not replay: {replay:?}"
+        foreign_status == StatusCode::NOT_FOUND && foreign_body.contains("unrecognized_endpoint"),
+        "the retired erase route was still reachable: {foreign_status} {foreign_body}"
     );
     let unchanged = listing(&client_a).await?;
     ensure!(
         unchanged.active_series == after_erase.active_series
             && !lists(&unchanged, OLD_BACKUP)
             && lists(&unchanged, binding.new_backups[0].backup_id.as_str()),
-        "a refused or replayed request changed the backup listing"
+        "a retired erase request changed the backup listing"
     );
 
-    // 5. local_commit: A attests the terminal step with its authorized
-    //    device key under its account DID URL. A forged signature is refused
-    //    and writes nothing; the genuine one completes the rotation.
+    // 5. local_commit: A attests the terminal step with its authorized device key under its account
+    //    DID URL. A forged signature is refused and writes nothing; the genuine one completes the
+    //    rotation.
     let local_commit = |seed: [u8; 32]| -> Result<SecurityTransactionContinueRequest> {
         let artifact = SecurityRotationLocalCommit {
             schema: arkret_wire::SchemaId::SECURITY_ROTATION_LOCAL_COMMIT_V1.to_owned(),
@@ -741,8 +707,6 @@ pub async fn security_rotation_runs_worker_steps_to_local_commit() -> Result<()>
     ensure!(
         completed.accepted_steps.len() == 5
             && completed.accepted_steps[..4] == erased.accepted_steps[..]
-            && completed.accepted_steps[4].output_ref
-                == rotation.prepared_plan.local_commit_digest.as_str()
             && matches!(
                 completed.terminal_outcome,
                 Some(SecurityTransactionTerminalOutcome::Completed { .. })
