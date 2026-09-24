@@ -80,6 +80,10 @@ pub async fn narrow_snapshot_head_discloses_only_complete_creator_cut() -> Resul
         "seven-Commit creator cut is incomplete: {genesis_snapshot}"
     );
     verify_test_notary_snapshot(&genesis_typed)?;
+    // The head was issued at its cut: the exact original object is now
+    // readable by reference, byte-for-byte, and never re-signed.
+    let genesis_by_ref = read_by_ref(&author, &genesis_typed.snapshot_id, realm_id).await?;
+    ensure_same_object(&genesis_typed, &genesis_by_ref)?;
     author.create_default_strand(realm_id).await?;
     let snapshot = expect_json(
         author.get(head_path).query(&[("realm_id", realm_id)]),
@@ -117,6 +121,37 @@ pub async fn narrow_snapshot_head_discloses_only_complete_creator_cut() -> Resul
         "unsigned snapshot: {snapshot}"
     );
     verify_test_notary_snapshot(&typed)?;
+    // A newer head does not replace the earlier exact reference: both stay
+    // readable while the creator's join revision is unchanged.
+    ensure!(
+        typed.snapshot_id != genesis_typed.snapshot_id,
+        "a later cut must be a distinct exact snapshot"
+    );
+    ensure_same_object(
+        &genesis_typed,
+        &read_by_ref(&author, &genesis_typed.snapshot_id, realm_id).await?,
+    )?;
+    ensure_same_object(
+        &typed,
+        &read_by_ref(&author, &typed.snapshot_id, realm_id).await?,
+    )?;
+    let never_issued = arkret_wire::RealmSnapshotId::from_digest([0x5a; 32]);
+    expect_status(
+        by_ref_request(&author, &never_issued, realm_id),
+        StatusCode::SERVICE_UNAVAILABLE,
+    )
+    .await?;
+    let stranger = server
+        .demo_client(
+            &actor_did_for_service_did(server.service_did(), "snapshot-mallory")?,
+            "ak:device:01904100-0000-7000-8000-0000000000a2",
+        )
+        .await?;
+    expect_status(
+        by_ref_request(&stranger, &genesis_typed.snapshot_id, realm_id),
+        StatusCode::NOT_FOUND,
+    )
+    .await?;
 
     let with_plaintext = author
         .create_realm_with(json!({
@@ -142,6 +177,58 @@ pub async fn narrow_snapshot_head_discloses_only_complete_creator_cut() -> Resul
         StatusCode::SERVICE_UNAVAILABLE,
     )
     .await?;
+    // An exact ref is bound to its Realm: naming it under another Realm the
+    // caller can read is unavailable, never a substitute object.
+    expect_status(
+        by_ref_request(&author, &genesis_typed.snapshot_id, with_plaintext_id),
+        StatusCode::SERVICE_UNAVAILABLE,
+    )
+    .await?;
+    Ok(())
+}
+
+fn by_ref_request(
+    client: &crate::harness::TestActorClient,
+    snapshot_id: &arkret_wire::RealmSnapshotId,
+    realm_id: &str,
+) -> reqwest::RequestBuilder {
+    client
+        .get(&format!(
+            "/_arkret/self/realm-state-snapshot/{}",
+            snapshot_id.as_str()
+        ))
+        .query(&[("realm_id", realm_id)])
+}
+
+async fn read_by_ref(
+    client: &crate::harness::TestActorClient,
+    snapshot_id: &arkret_wire::RealmSnapshotId,
+    realm_id: &str,
+) -> Result<arkret_wire::RealmStateSnapshot> {
+    let body = expect_json(
+        by_ref_request(client, snapshot_id, realm_id),
+        StatusCode::OK,
+    )
+    .await?;
+    let snapshot: arkret_wire::RealmStateSnapshot =
+        serde_json::from_value(body).context("by-ref body must be a closed signed snapshot")?;
+    ensure!(
+        &snapshot.snapshot_id == snapshot_id && snapshot.realm_id.as_str() == realm_id,
+        "by-ref response IDs differ from the request"
+    );
+    verify_test_notary_snapshot(&snapshot)?;
+    Ok(snapshot)
+}
+
+fn ensure_same_object(
+    issued: &arkret_wire::RealmStateSnapshot,
+    read: &arkret_wire::RealmStateSnapshot,
+) -> Result<()> {
+    ensure!(
+        arkret_canonical::canonical_json_bytes(issued)?
+            == arkret_canonical::canonical_json_bytes(read)?,
+        "by-ref must return the exact issued signed object"
+    );
     Ok(())
 }
 
