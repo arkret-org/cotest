@@ -186,11 +186,30 @@ fn sdk_role_table_matches_spec_artifact() {
 #[test]
 fn role_table_has_every_documented_role() {
     let table = ProfileRoleTable::load().expect("artifact loads");
-    assert!(
-        table.len() >= 80,
-        "expected >=80 roles, got {}",
-        table.len()
-    );
+    // Every documented profile carries exactly one role: the role table and
+    // the profile requirement table name the same profile ids.
+    let artifact: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(
+            cotest::conformance::spec_artifacts_root()
+                .join("profiles")
+                .join("conformance-profiles.json"),
+        )
+        .expect("read conformance profiles"),
+    )
+    .expect("parse conformance profiles");
+    let documented = artifact["profile_requirements"]
+        .as_object()
+        .expect("profile_requirements object")
+        .keys()
+        .cloned()
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(table.len(), documented.len());
+    for profile_id in &documented {
+        assert!(
+            table.role_of(profile_id).is_some(),
+            "documented profile {profile_id} has no role"
+        );
+    }
     for role in [
         ServiceRole::Client,
         ServiceRole::Server,
