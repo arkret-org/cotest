@@ -66,9 +66,9 @@ pub fn run_push_route_revision_suite() -> Result<()> {
         .as_array()
         .context("writes is not an array")?
     {
-        let expected = write["expected_revision"]
+        let expected = write["expected_server_revision"]
             .as_u64()
-            .context("write omits expected_revision")?;
+            .context("write omits expected_server_revision")?;
         match decide_server_revision_cas(current_revision, expected) {
             ServerRevisionCasDecision::Accepted { next_revision } => {
                 current_revision = Some(next_revision);
@@ -99,9 +99,9 @@ pub fn run_push_route_revision_suite() -> Result<()> {
         .as_array()
         .context("writes is not an array")?
     {
-        let expected_revision = write["expected_revision"]
+        let expected_revision = write["expected_server_revision"]
             .as_u64()
-            .context("conflict write omits expected_revision")?;
+            .context("conflict write omits expected_server_revision")?;
         let outcome = decide_server_revision_cas(current_revision, expected_revision);
         match (write["expected"].as_str(), outcome) {
             (Some("accepted"), ServerRevisionCasDecision::Accepted { next_revision }) => {
