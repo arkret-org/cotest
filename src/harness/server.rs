@@ -25,7 +25,8 @@ use super::client::TestActorClient;
 use super::principal::ProvisionedTestPrincipal;
 use crate::scenarios::_helpers::coauth_bootstrap::{EphemeralPg, spawn_ephemeral_postgres_for};
 use crate::scenarios::identity_test_support::{
-    ActorBootstrapRegistration, HARNESS_ACCOUNT_AUTHORITY_ORIGIN, bootstrap_registered_actor,
+    ActorBootstrapRegistration, HARNESS_ACCOUNT_AUTHORITY_ORIGIN,
+    HARNESS_INTERNAL_AUTHORITY_SECRET, bootstrap_registered_actor,
     harness_account_authority_public_key_multibase,
 };
 
@@ -315,12 +316,35 @@ pub(crate) fn test_service_signing_key(name: &str) -> (String, [u8; 32]) {
     (BASE64_STANDARD.encode(seed), seed)
 }
 
-/// Every cotest SUT delegates its Account Authority assertion key to the harness so the
-/// canonical actor bootstrap can relay PCR genesis units no matter which spawn
-/// path produced the process. Callers that wire a real Account Authority
-/// (joint stack, durable federation lives) keep their own values.
+/// Source trust domain of the harness Account Authority on its registered
+/// channel. It is the Authority's own domain, never this Station's.
+const HARNESS_ACCOUNT_AUTHORITY_TRUST_DOMAIN: &str =
+    "ak:trust_domain:account-authority.cotest.local";
+
+/// Every cotest SUT is configured the way a split Account Authority deployment is
+/// (`soland/DEPLOYMENT.md`): the Authority endpoint, its delegated assertion
+/// key, and the registered deployment-internal channel (shared per-edge secret
+/// plus the Authority's own trust domain). The canonical actor bootstrap acts as
+/// that Authority and admits PCR genesis over the channel, so it must be
+/// registered no matter which spawn path produced the process. Callers that
+/// wire a real Account Authority (joint stack, durable federation lives) keep
+/// their own values; the channel pair is only supplied when the caller sets
+/// neither half, so a caller's own secret is never paired with the harness
+/// trust domain.
 fn harness_account_authority_env(has: impl Fn(&str) -> bool) -> Vec<(String, String)> {
     let mut env = Vec::new();
+    if !has("SOLAND_INTERNAL_AUTHORITY_SHARED_SECRET")
+        && !has("SOLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN")
+    {
+        env.push((
+            "SOLAND_INTERNAL_AUTHORITY_SHARED_SECRET".to_owned(),
+            HARNESS_INTERNAL_AUTHORITY_SECRET.to_owned(),
+        ));
+        env.push((
+            "SOLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN".to_owned(),
+            HARNESS_ACCOUNT_AUTHORITY_TRUST_DOMAIN.to_owned(),
+        ));
+    }
     if !has("SOLAND_ACCOUNT_AUTHORITY_URL") {
         env.push((
             "SOLAND_ACCOUNT_AUTHORITY_URL".to_owned(),
