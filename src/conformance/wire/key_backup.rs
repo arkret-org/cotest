@@ -292,6 +292,18 @@ fn assert_passphrase_kdf_envelope_valid_via_sdk(
         .get("parallelism")
         .and_then(Value::as_u64)
         .ok_or_else(|| anyhow!("vector {name} kdf missing parallelism"))?;
+    // key-management.md 7.5.1: root key from Argon2id over the wire params,
+    // commitment_key = HKDF-SHA256(root, info=".../commitment/v1"), and
+    // key_commitment = sha256 of the raw commitment_key bytes.
+    let key_commitment = passphrase_kdf_key_commitment(
+        b"cotest key backup passphrase",
+        &base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(salt_b64)
+            .map_err(|e| anyhow!("vector {name} salt is not base64url: {e}"))?,
+        u32::try_from(memory_kib)?,
+        u32::try_from(iterations)?,
+        u32::try_from(parallelism)?,
+    )?;
     let encryption_json = json!({
         "recipient_method": "passphrase_kdf",
         "kdf": {
@@ -308,6 +320,7 @@ fn assert_passphrase_kdf_envelope_valid_via_sdk(
             "nonce": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
             "nonce_salt": salt_b64,
         },
+        "key_commitment": key_commitment,
     });
     let encryption: arkret_models_crypto::KeyBackupEncryption =
         serde_json::from_value(encryption_json).map_err(|e| {
@@ -336,29 +349,78 @@ fn assert_passphrase_kdf_envelope_valid_via_sdk(
 /// deserialize/validate shim. Guards against the SDK validator silently going
 /// permissive underneath cotest's positive assertions.
 fn assert_sdk_rejects_malformed_passphrase_kdf_envelopes() -> Result<()> {
+    let control = json!({
+        "recipient_method": "passphrase_kdf",
+        "kdf": {"name": "argon2id", "salt": "AAAAAAAAAAAAAAAAAAAAAA",
+                "params": {"memory_kib": 65536, "iterations": 3, "parallelism": 1}},
+        "aead": {"name": "xchacha20_poly1305", "nonce": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                 "nonce_salt": "AAAAAAAAAAAAAAAAAAAAAA"},
+        "key_commitment": format!("sha256:{}", "0".repeat(64)),
+    });
+    if !sdk_accepts_key_backup_encryption(control) {
+        bail!("SDK KeyBackupEncryption rejected the well-formed negative-case control");
+    }
     let missing_nonce_salt = json!({
         "recipient_method": "passphrase_kdf",
-        "kdf": {"name": "argon2id", "salt": "AAAA",
+        "kdf": {"name": "argon2id", "salt": "AAAAAAAAAAAAAAAAAAAAAA",
                 "params": {"memory_kib": 65536, "iterations": 3, "parallelism": 1}},
-        "aead": {"name": "xchacha20_poly1305", "nonce": "AAAA"},
+        "aead": {"name": "xchacha20_poly1305", "nonce": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"},
+        // Every other member is well formed, so only the missing nonce_salt
+        // can reject it.
+        "key_commitment": format!("sha256:{}", "0".repeat(64)),
     });
-    if serde_json::from_value::<arkret_models_crypto::KeyBackupEncryption>(missing_nonce_salt)
-        .is_ok()
-    {
+    if sdk_accepts_key_backup_encryption(missing_nonce_salt) {
         bail!("SDK KeyBackupEncryption accepted a passphrase_kdf envelope missing aead.nonce_salt");
     }
     let stray_hpke_suite = json!({
         "recipient_method": "passphrase_kdf",
-        "kdf": {"name": "argon2id", "salt": "AAAA",
+        "kdf": {"name": "argon2id", "salt": "AAAAAAAAAAAAAAAAAAAAAA",
                 "params": {"memory_kib": 65536, "iterations": 3, "parallelism": 1}},
-        "aead": {"name": "xchacha20_poly1305", "nonce": "AAAA", "nonce_salt": "AAAAAAAAAAAAAAAA"},
+        "aead": {"name": "xchacha20_poly1305", "nonce": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                 "nonce_salt": "AAAAAAAAAAAAAAAAAAAAAA"},
         "hpke_suite": "ak.hpke_x25519_aead_chacha20poly1305.v1",
+        "key_commitment": format!("sha256:{}", "0".repeat(64)),
     });
-    if serde_json::from_value::<arkret_models_crypto::KeyBackupEncryption>(stray_hpke_suite).is_ok()
-    {
+    if sdk_accepts_key_backup_encryption(stray_hpke_suite) {
         bail!("SDK KeyBackupEncryption accepted a passphrase_kdf envelope carrying hpke_suite");
     }
     Ok(())
+}
+
+/// The SDK closes the envelope in two steps: typed decode, then
+/// `KeyBackupEncryption::validate`. Admission runs both.
+fn sdk_accepts_key_backup_encryption(value: Value) -> bool {
+    serde_json::from_value::<arkret_models_crypto::KeyBackupEncryption>(value)
+        .is_ok_and(|encryption| encryption.validate().is_ok())
+}
+
+fn passphrase_kdf_key_commitment(
+    passphrase: &[u8],
+    salt: &[u8],
+    memory_kib: u32,
+    iterations: u32,
+    parallelism: u32,
+) -> Result<String> {
+    use argon2::{Algorithm, Argon2, Params, Version};
+    use sha2::{Digest as _, Sha256};
+
+    let params = Params::new(memory_kib, iterations, parallelism, Some(32))
+        .map_err(|e| anyhow!("Argon2id params: {e}"))?;
+    let mut root = [0u8; 32];
+    Argon2::new(Algorithm::Argon2id, Version::V0x13, params)
+        .hash_password_into(passphrase, salt, &mut root)
+        .map_err(|e| anyhow!("Argon2id derive: {e}"))?;
+    let mut commitment_key = [0u8; 32];
+    hkdf::Hkdf::<Sha256>::new(None, &root)
+        .expand(
+            b"arkret-key-backup/secret_storage/commitment/v1",
+            &mut commitment_key,
+        )
+        .map_err(|e| anyhow!("HKDF commitment key: {e}"))?;
+    Ok(format!(
+        "sha256:{}",
+        hex::encode(Sha256::digest(commitment_key))
+    ))
 }
 
 fn derive_argon2id_key(passphrase: &[u8], salt: &[u8]) -> Result<[u8; 32]> {
