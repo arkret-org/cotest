@@ -60,7 +60,6 @@ mod media_binding;
 mod member_identity_vectors;
 mod member_roster_vectors;
 mod mention_rendering_vectors;
-mod mimi_provider_directory;
 mod mls_creator_bootstrap_recovery;
 mod mls_governance_binding;
 mod named_suite_audit;
@@ -68,7 +67,6 @@ mod object_addressing_vectors;
 mod object_identity_collision;
 mod operation_clause_registry;
 mod operation_registry_gate;
-mod pcr_outward_exposure;
 mod poll_reducer;
 mod presence_signal;
 mod primary_handle_vectors;
@@ -153,11 +151,11 @@ pub use agent_mls_keypackage_authorization::{
 };
 pub use agent_pairing_coordination::run_agent_pairing_durable_coordination_matrix;
 pub use agent_participation::{
-    ALL_AGENT_PARTICIPATION_VECTOR_IDS, run_agent_selector_label_known_account_vector,
-    run_agent_participation_ceiling_tighten_vector,
+    ALL_AGENT_PARTICIPATION_VECTOR_IDS, run_agent_participation_ceiling_tighten_vector,
     run_agent_participation_effective_intersection_vector, run_agent_participation_fixture_suite,
     run_agent_participation_selection_cas_vector, run_agent_participation_session_overlay_vector,
     run_agent_participation_third_party_mention_gate_vector,
+    run_agent_selector_label_known_account_vector,
 };
 pub use agent_signer_evidence::{
     AGENT_SIGNER_EVIDENCE_FIXTURE, AGENT_SIGNER_EVIDENCE_SUITE, ALL_AGENT_SIGNER_EVIDENCE_CASES,
@@ -341,9 +339,6 @@ pub use mention_rendering_vectors::{
     run_render_fallback_unresolved_vector, run_render_step1_multi_to_step2_live_vector,
     run_render_step1_unique_success_vector,
 };
-pub use mimi_provider_directory::{
-    VECTOR_ID_MIMI_PROVIDER_DIRECTORY_SIGNATURE, run_mimi_provider_directory_signature_vector,
-};
 pub use mls_creator_bootstrap_recovery::run_mls_creator_bootstrap_recovery_suite;
 pub use mls_governance_binding::{
     MLS_GOVERNANCE_BINDING_ENTRYPOINT, run_mls_governance_binding_suite,
@@ -367,7 +362,6 @@ pub use operation_registry_gate::{
     build_operation_registry_gate_report_from_paths, validate_operation_registry_gate,
     validate_operation_registry_gate_report,
 };
-pub use pcr_outward_exposure::run_pcr_outward_exposure_suite;
 pub use poll_reducer::run_poll_reducer_fixture_suite;
 pub use presence_signal::{
     ALL_PRESENCE_SIGNAL_VECTOR_IDS, run_last_active_at_bucket_vector,
@@ -487,10 +481,10 @@ pub use wire::{
     run_interop_downgrade_fixture_suite, run_key_backup_aead_round_trip_check,
     run_key_backup_encryption_fixture_suite, run_megolm_ratchet_kdf_chain_check,
     run_megolm_ratcheting_fixture_suite, run_mimi_components_fixture_suite,
-    run_mimi_interop_fixture_suite, run_multi_admin_distinct_approver_gate_check,
-    run_production_signing_fixture_suite, run_read_receipt_policy_fixture_suite,
-    run_recovery_bridge_full_chain_fixture_suite, run_recovery_ticket_state_machine_check,
-    run_redacted_cross_server_fixture_suite, run_restore_full_workflows_fixture_suite,
+    run_multi_admin_distinct_approver_gate_check, run_production_signing_fixture_suite,
+    run_read_receipt_policy_fixture_suite, run_recovery_bridge_full_chain_fixture_suite,
+    run_recovery_ticket_state_machine_check, run_redacted_cross_server_fixture_suite,
+    run_restore_full_workflows_fixture_suite,
 };
 
 // ── Shared fixture types ────────────────────────────────────────────────────

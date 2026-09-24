@@ -36,10 +36,7 @@ pub use key_backup::{
     run_recovery_bridge_full_chain_fixture_suite, run_recovery_ticket_state_machine_check,
     run_restore_full_workflows_fixture_suite,
 };
-pub use mimi::{
-    run_mimi_components_fixture_suite, run_mimi_interop_fixture_suite,
-    run_read_receipt_policy_fixture_suite,
-};
+pub use mimi::{run_mimi_components_fixture_suite, run_read_receipt_policy_fixture_suite};
 pub use multisig::{
     run_multi_admin_distinct_approver_gate_check, run_production_signing_fixture_suite,
 };

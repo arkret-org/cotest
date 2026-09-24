@@ -310,16 +310,6 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// CES-03 - MIMI Provider Facade artifact vectors from arkret-spec.
-    /// Covers draft pinning, room binding, KeyPackage claim lifecycle,
-    /// content mapping, identifier privacy, consent isolation, proxy download,
-    /// and unsupported-draft fail-closed behavior.
-    mimi_interop_fixture_suite_matches_reference_semantics,
-    "mimi_interop_fixture",
-    cotest::conformance::run_mimi_interop_fixture_suite,
-);
-
-conformance_test!(
     mimi_components_fixture_suite_matches_reference_semantics,
     "mimi_components_fixture",
     cotest::conformance::run_mimi_components_fixture_suite,

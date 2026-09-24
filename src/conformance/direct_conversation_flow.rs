@@ -1,91 +1,16 @@
-//! End-to-end state-machine coverage for Direct Conversation founding
-//! durability and MLS finality fences.
+//! Direct Conversation continuity and MLS finality fences.
+//!
+//! The formal `direct-conversation-fixture.json` was retired upstream; its
+//! founding, crash-replay, founder-loss and Contact prepare vectors are
+//! registry-only now and have no machine fixture to execute. What remains
+//! executable here is the bilateral continuity checkpoint fixture and the
+//! Commit/Welcome covering-Seal fence ordering.
 
 use anyhow::{Result, anyhow, bail};
-use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use super::load_artifact_json;
 use crate::transcripts::record_vector_event;
-
-const FOUNDER_LOSS_VECTOR: &str = "ak.vector.direct_conversation.founder_loss_terminality.v1";
-const CONTACT_PREPARE_VECTOR: &str = "ak.vector.contact.pending_incoming_prepare.v1";
-
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct DirectConversationFixture {
-    suite: String,
-    fixture_kind: String,
-    profile: String,
-    covers_vectors: Vec<String>,
-    version: String,
-    spec_anchor: String,
-    source_refs: Vec<Value>,
-    description: String,
-    runner: Value,
-    /// Free-form protocol instances validated by their referenced JSON Schemas.
-    schema_validation_cases: Vec<Value>,
-    semantic_cases: Vec<Value>,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum DurableFoundingStage {
-    Prepared,
-    ResponsePersisted,
-    FoundingFinalityConfirmed,
-    Sent,
-    Rejected,
-}
-
-#[derive(Clone, Debug)]
-struct DurableFoundingProbe {
-    canonical_unit: Vec<u8>,
-    receipt: Option<Vec<u8>>,
-    stage: DurableFoundingStage,
-}
-
-impl DurableFoundingProbe {
-    fn prepared(unit: &Value) -> Result<Self> {
-        Ok(Self {
-            canonical_unit: arkret_canonical::canonical_json_bytes(unit)?,
-            receipt: None,
-            stage: DurableFoundingStage::Prepared,
-        })
-    }
-
-    fn persist_response(&mut self, receipt: &Value) -> Result<()> {
-        if self.stage != DurableFoundingStage::Prepared {
-            bail!("founding response may only close a prepared exact unit");
-        }
-        self.receipt = Some(arkret_canonical::canonical_json_bytes(receipt)?);
-        self.stage = DurableFoundingStage::ResponsePersisted;
-        Ok(())
-    }
-
-    fn mark_sent(&mut self) -> Result<()> {
-        if self.stage != DurableFoundingStage::FoundingFinalityConfirmed || self.receipt.is_none() {
-            bail!("founding cannot become sent before its receipt and covering Seals are durable");
-        }
-        self.stage = DurableFoundingStage::Sent;
-        Ok(())
-    }
-
-    fn confirm_covering_seals(&mut self) -> Result<()> {
-        if self.stage != DurableFoundingStage::ResponsePersisted || self.receipt.is_none() {
-            bail!("founding finality requires the persisted acceptance receipt first");
-        }
-        self.stage = DurableFoundingStage::FoundingFinalityConfirmed;
-        Ok(())
-    }
-
-    fn reject(&mut self) -> Result<()> {
-        if self.stage != DurableFoundingStage::Prepared {
-            bail!("only an unaccepted founding attempt can be rejected");
-        }
-        self.stage = DurableFoundingStage::Rejected;
-        Ok(())
-    }
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum AdmissionStage {
@@ -107,217 +32,6 @@ fn advance_admission(stage: AdmissionStage, observation: &str) -> Result<Admissi
         (WelcomesAuthored, "welcome_rejected") => Ok(WelcomesAuthored),
         _ => bail!("MLS admission attempted to cross a missing exact finality fence"),
     }
-}
-
-fn validate_founder_loss_terminality(fixture: &DirectConversationFixture) -> Result<()> {
-    let covered = &fixture.covers_vectors;
-    if !covered.iter().any(|value| value == FOUNDER_LOSS_VECTOR) {
-        bail!("Direct Conversation fixture does not cover {FOUNDER_LOSS_VECTOR}");
-    }
-
-    let cases = &fixture.semantic_cases;
-    let selected = cases
-        .iter()
-        .filter(|case| case["vector_id"] == FOUNDER_LOSS_VECTOR)
-        .collect::<Vec<_>>();
-    let expected = [
-        (
-            "same_founder_authority_recovery_is_not_succession",
-            "accept",
-        ),
-        ("founder_loss_never_transfers_the_same_pair_slot", "reject"),
-        (
-            "different_stable_identity_creates_a_new_non_continuous_pair",
-            "accept",
-        ),
-        (
-            "all_members_private_state_loss_permanently_suspends_same_pair",
-            "reject",
-        ),
-        (
-            "offline_member_or_late_backup_means_state_was_not_globally_lost",
-            "accept_existing_only",
-        ),
-    ];
-    if selected.len() != expected.len() {
-        bail!("founder-loss vector must expose exactly five closed paths");
-    }
-    for (name, outcome) in expected {
-        let case = selected
-            .iter()
-            .find(|case| case["name"] == name)
-            .ok_or_else(|| anyhow!("founder-loss vector missing case {name}"))?;
-        if case["semantic_outcome"] != outcome {
-            bail!("founder-loss case {name} has the wrong semantic outcome");
-        }
-    }
-
-    let schema = load_artifact_json("schemas/direct-conversation-operations.schema.json")?;
-    let states = schema["$defs"]["direct_conversation_resolve_outcome"]["oneOf"]
-        .as_array()
-        .ok_or_else(|| anyhow!("resolver outcome is not a closed oneOf"))?
-        .iter()
-        .filter_map(|branch| branch["properties"]["state"]["const"].as_str())
-        .collect::<Vec<_>>();
-    if states.contains(&"founder_unrecoverable") {
-        bail!("v1 resolver reintroduced a founder_unrecoverable consensus state");
-    }
-    Ok(())
-}
-
-fn validate_contact_server_prepare_contract(fixture: &DirectConversationFixture) -> Result<()> {
-    let covered = &fixture.covers_vectors;
-    if !covered.iter().any(|value| value == CONTACT_PREPARE_VECTOR) {
-        bail!("Direct Conversation fixture does not cover {CONTACT_PREPARE_VECTOR}");
-    }
-    let expected = [
-        (
-            "contact_incoming_prepared_from_server_evidence",
-            "accept",
-            [
-                "exact request reference",
-                "no Event resolve",
-                "atomically validates",
-            ],
-        ),
-        (
-            "contact_incoming_prepare_binding_and_terminal",
-            "reject",
-            ["No writes", "Glare remains", "client rejects"],
-        ),
-        (
-            "contact_mirror_not_exposed",
-            "reject",
-            [
-                "grants no Event access",
-                "reveals no private",
-                "Unverified ingest",
-            ],
-        ),
-    ];
-    for (name, outcome, required_assertions) in expected {
-        let case = semantic_case(fixture, name)?;
-        if case["vector_id"] != CONTACT_PREPARE_VECTOR || case["semantic_outcome"] != outcome {
-            bail!("Contact prepare case {name} has the wrong vector or outcome");
-        }
-        let assertions = case["assertions"]
-            .as_array()
-            .ok_or_else(|| anyhow!("Contact prepare case {name} omits assertions[]"))?;
-        for required in required_assertions {
-            if !assertions
-                .iter()
-                .filter_map(Value::as_str)
-                .any(|assertion| assertion.contains(required))
-            {
-                bail!("Contact prepare case {name} omits assertion `{required}`");
-            }
-        }
-    }
-    Ok(())
-}
-
-fn semantic_case<'a>(fixture: &'a DirectConversationFixture, name: &str) -> Result<&'a Value> {
-    fixture
-        .semantic_cases
-        .iter()
-        .find(|case| case.get("name").and_then(Value::as_str) == Some(name))
-        .ok_or_else(|| anyhow!("Direct Conversation fixture omits semantic case `{name}`"))
-}
-
-fn validate_event_id_digest_mirror_removal(fixture: &DirectConversationFixture) -> Result<()> {
-    const REMOVED_PAIRS: [(&str, &str); 6] = [
-        ("head_event_ref", "head_digest"),
-        ("request_event_ref", "request_digest"),
-        ("response_event_ref", "response_digest"),
-        ("reject_event_ref", "reject_digest"),
-        ("signed_event_ref", "signed_event_digest"),
-        ("agent_provision_ref", "agent_provision_digest"),
-    ];
-
-    fn reject_mirrors(value: &Value, path: &str) -> Result<()> {
-        match value {
-            Value::Object(object) => {
-                for (event_ref, digest) in REMOVED_PAIRS {
-                    if object.contains_key(event_ref) && object.contains_key(digest) {
-                        bail!("{path} reintroduces redundant {event_ref}/{digest} wire fields");
-                    }
-                }
-                for (key, child) in object {
-                    reject_mirrors(child, &format!("{path}.{key}"))?;
-                }
-            }
-            Value::Array(array) => {
-                for (index, child) in array.iter().enumerate() {
-                    reject_mirrors(child, &format!("{path}[{index}]"))?;
-                }
-            }
-            _ => {}
-        }
-        Ok(())
-    }
-
-    reject_mirrors(&serde_json::to_value(fixture)?, "$")?;
-    let event_id =
-        arkret_wire::EventId::new("ak:event:AWAIb405aEEenVBHYRG-ZfDs-f9_j3E67tWGI36uYxFJ")?;
-    if event_id.event_digest().as_str()
-        != "sha256:60086f8d3968411e9d50476111be65f0ecf9ff7f8f713aeed586237eae631149"
-    {
-        bail!("EventId digest decoding no longer matches the fixture KAT");
-    }
-    Ok(())
-}
-
-fn validate_founding_and_crash_replay(fixture: &DirectConversationFixture) -> Result<()> {
-    for name in [
-        "founding_coordinates_are_derived_from_unit_bytes",
-        "founding_unit_strand_uses_bootstrap_no_basis_shape",
-        "founder_multi_device_concurrency_admits_first_valid_unit",
-        "exact_unit_replay_returns_byte_identical_receipt",
-        "same_idempotency_key_different_unit_conflicts",
-    ] {
-        semantic_case(fixture, name)?;
-    }
-
-    let unit = json!({
-        "unit_kind": "direct_conversation_founding",
-        "idempotency_key": "01JDCFLOW000000000000000001",
-        "events": [
-            "create-bytes",
-            "peer-join-bytes",
-            "main-strand-bytes",
-            "founder-join-bytes"
-        ]
-    });
-    let receipt = json!({
-        "status": "accepted",
-        "accepted_at": "2026-08-10T00:00:00Z",
-        "founding_unit_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-    });
-    let prepared = DurableFoundingProbe::prepared(&unit)?;
-    let crash_before_write = prepared.clone();
-    if crash_before_write.canonical_unit != prepared.canonical_unit {
-        bail!("pre-submit recovery reauthored the founding unit");
-    }
-    let mut response_persisted = prepared.clone();
-    response_persisted.persist_response(&receipt)?;
-    let crash_after_response = response_persisted.clone();
-    if crash_after_response.canonical_unit != prepared.canonical_unit
-        || crash_after_response.receipt != response_persisted.receipt
-    {
-        bail!("post-response recovery changed unit or receipt bytes");
-    }
-    let mut premature_sent = response_persisted.clone();
-    if premature_sent.mark_sent().is_ok() {
-        bail!("founding ingress acceptance crossed its exact covering-Seal fence");
-    }
-    response_persisted.confirm_covering_seals()?;
-    response_persisted.mark_sent()?;
-    let mut rejected = prepared;
-    rejected.reject()?;
-    if rejected.stage != DurableFoundingStage::Rejected || rejected.receipt.is_some() {
-        bail!("rejected founding attempt acquired acceptance evidence");
-    }
-    Ok(())
 }
 
 fn validate_bilateral_continuity_checkpoint_fixture() -> Result<()> {
@@ -440,37 +154,14 @@ fn validate_commit_welcome_fences() -> Result<()> {
 }
 
 pub fn run_direct_conversation_flow_suite() -> Result<()> {
-    let fixture: DirectConversationFixture = serde_json::from_value(load_artifact_json(
-        "fixtures/direct-conversation-fixture.json",
-    )?)?;
-    if fixture.suite != "direct_conversation_realm_conformance"
-        || fixture.fixture_kind.trim().is_empty()
-        || fixture.profile.trim().is_empty()
-        || fixture.version.trim().is_empty()
-        || fixture.spec_anchor.trim().is_empty()
-        || fixture.source_refs.is_empty()
-        || fixture.description.trim().is_empty()
-        || fixture.runner.is_null()
-        || fixture.schema_validation_cases.is_empty()
-    {
-        bail!("Direct Conversation fixture metadata drifted");
-    }
-    validate_event_id_digest_mirror_removal(&fixture)?;
-    validate_founding_and_crash_replay(&fixture)?;
     validate_bilateral_continuity_checkpoint_fixture()?;
-    validate_contact_server_prepare_contract(&fixture)?;
-    validate_founder_loss_terminality(&fixture)?;
     validate_commit_welcome_fences()?;
     record_vector_event(
         "direct_conversation.end_to_end_flow",
-        &json!({"fixture": "direct-conversation-fixture.json"}),
+        &json!({"fixture": "bilateral-continuity-checkpoint-fixture.json"}),
         &json!({
-            "flow_002": "single_scope_group_since_join_history",
-            "flow_004_008": "exact_four_event_first_valid_unit_and_byte_identical_retry",
             "continuity": "bilateral_checkpoint_plus_bounded_tail_reaches_unique_root",
-            "contact_mirror": "exact_event_from_verified_pending_mirror_without_seal_then_missing_after_terminal",
-            "flow_005": "commit_and_welcome_each_wait_for_exact_covering_seal",
-            "founder_loss": "same_authority_recovers_other_authorities_reject_new_identity_is_new_pair"
+            "flow_005": "commit_and_welcome_each_wait_for_exact_covering_seal"
         }),
         &json!({"status": "validated"}),
     );
