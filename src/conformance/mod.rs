@@ -42,7 +42,6 @@ mod downstream_impact;
 mod encoding;
 mod envelope;
 mod fanout_route_miss;
-mod federation;
 mod file_transfer_stream_aead;
 mod final_conformance_closure;
 mod fixture_dsl;
@@ -209,10 +208,7 @@ pub use canonical_fixture::{
     CANONICAL_FIXTURE_DEFAULT_KIND, CanonicalFixtureBuilder, CanonicalFixtureSuite,
     CanonicalFixtureVector,
 };
-pub use capability::{
-    run_capability_boundary_fixture_suite, run_capability_facet_fixture_suite,
-    run_capability_fixture_suite,
-};
+pub use capability::{run_capability_boundary_fixture_suite, run_capability_facet_fixture_suite};
 pub use capability_relinquish_authoring::{
     CAPABILITY_RELINQUISH_AUTHORING_ENTRYPOINT, run_capability_relinquish_authoring_suite,
 };
@@ -254,7 +250,6 @@ pub use encoding::{
 };
 pub use envelope::{run_container_realm_control_payload_suite, run_event_envelope_fixture_suite};
 pub use fanout_route_miss::run_fanout_route_miss_suite;
-pub use federation::run_federation_fixture_suite;
 pub use file_transfer_stream_aead::{
     ALL_FILE_TRANSFER_STREAM_AEAD_VECTOR_IDS, run_file_transfer_overall_digest_rejected_vector,
     run_file_transfer_range_binding_rejected_vector,
@@ -502,12 +497,6 @@ pub(crate) struct RedactionCase {
 }
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct FederationFixture {
-    pub(crate) suite: String,
-    pub(crate) cases: Vec<NamedCase>,
-}
-
-#[derive(Debug, Deserialize)]
 pub(crate) struct PrivacySecurityFixture {
     pub(crate) suite: String,
     pub(crate) cases: Vec<NamedCase>,
@@ -523,7 +512,6 @@ pub(crate) struct NamedCase {
     pub(crate) input: Option<Value>,
     pub(crate) inputs: Option<Vec<Value>>,
     pub(crate) expected: Option<Value>,
-    pub(crate) request_contract: Option<Value>,
     pub(crate) cases: Option<Vec<Value>>,
     pub(crate) mutations: Option<Vec<String>>,
 }

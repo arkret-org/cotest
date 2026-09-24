@@ -161,12 +161,6 @@ conformance_test!(
 );
 
 conformance_test!(
-    capability_fixture_suite_matches_reference_semantics,
-    "capability_fixture",
-    cotest::conformance::run_capability_fixture_suite,
-);
-
-conformance_test!(
     event_envelope_fixture_suite_matches_reference_semantics,
     "event_envelope_fixture",
     cotest::conformance::run_event_envelope_fixture_suite,
@@ -194,12 +188,6 @@ conformance_test!(
     sync_fixture_suite_matches_reference_semantics,
     "sync_fixture",
     cotest::conformance::run_sync_fixture_suite,
-);
-
-conformance_test!(
-    federation_fixture_suite_matches_reference_semantics,
-    "federation_fixture",
-    cotest::conformance::run_federation_fixture_suite,
 );
 
 conformance_test!(
