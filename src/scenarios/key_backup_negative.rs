@@ -10,18 +10,19 @@ use chrono::{DateTime, Utc};
 use reqwest::StatusCode;
 use serde_json::Value;
 
-use crate::harness::{
-    ArkretServer, TestActorClient, TestServerGroup, expect_api_error, expect_json,
+use crate::harness::{ArkretServer, TestActorClient, expect_api_error, expect_json};
+use crate::scenarios::identity_test_support::{
+    actor_did_for_service_did, spawn_with_harness_account_authority,
 };
-use crate::scenarios::identity_test_support::actor_did_for_service_did;
 
 const BACKUP_ID: &str = "ak:backup:01975510-0000-7000-8000-0000000000d3";
 const DEVICE_A: &str = "ak:device:01975510-0000-7000-8000-0000000000a1";
 const DEVICE_B: &str = "ak:device:01975510-0000-7000-8000-0000000000b2";
 
 pub async fn key_backup_put_get_negative_run() -> Result<()> {
-    let group = TestServerGroup::single("d3-key-backup-negative").await?;
-    let server = group.server(0);
+    let server_instance =
+        spawn_with_harness_account_authority("d3-key-backup-negative", &[]).await?;
+    let server = &server_instance;
     let alice_did = actor_did_for_service_did(server.service_did(), "alice-d3")?;
     let alice = server
         .register_client(&alice_did, "@alice-d3", DEVICE_A)

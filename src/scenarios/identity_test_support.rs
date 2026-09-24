@@ -933,7 +933,7 @@ async fn submit_harness_pcr_genesis(
     let value = expect_json(
         server
             .http()
-            .post(server.url("/account-authority/principal-genesis/admit"))
+            .post(server.url("/_soland/account-authority/principal-genesis/admit"))
             .bearer_auth(HARNESS_INTERNAL_AUTHORITY_SECRET)
             .header("idempotency-key", request.idempotency_key.as_str())
             .json(request),
