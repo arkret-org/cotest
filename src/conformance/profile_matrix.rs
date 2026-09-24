@@ -592,9 +592,17 @@ fn collect_must_requirement_blocks(requirement: &Value, profile: &str) -> Result
         {
             bail!("{profile} additional requirement block {id} must be snake_case ASCII");
         }
-        let text = value.as_str().ok_or_else(|| {
-            anyhow!("{profile} additional requirement block {id} must be a string")
-        })?;
+        // A block is either a normative sentence or a structured projection
+        // (for example the covered components the contract registry gates)
+        // whose own `statement` carries the normative sentence.
+        let text = value
+            .as_str()
+            .or_else(|| value.get("statement").and_then(Value::as_str))
+            .ok_or_else(|| {
+                anyhow!(
+                    "{profile} additional requirement block {id} must be a string or carry a string statement"
+                )
+            })?;
         if text.trim().is_empty() {
             bail!("{profile} additional requirement block {id} must not be empty");
         }
