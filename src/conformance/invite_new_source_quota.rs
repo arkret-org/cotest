@@ -273,8 +273,8 @@ struct ConcurrencyExpectation {
 #[derive(Debug, Deserialize)]
 struct ChokepointContract {
     converging_surface_operation_ids: Vec<String>,
-    evaluated_exactly_once_before_cell_cas_write: bool,
-    reevaluated_inside_cell_cas_retry_loop: bool,
+    evaluated_exactly_once_before_result_cas_write: bool,
+    reevaluated_inside_result_cas_retry_loop: bool,
     cas_retry_exhaustion_refunds_the_charge: bool,
     substitutable_by_generic_endpoint_rate_limit: bool,
     substitutable_by_directory_psi_device_quota: bool,
@@ -298,7 +298,7 @@ struct LedgerContract {
     row_fields: Vec<String>,
     source_id_participates_in_identity_key: bool,
     wire_readable: bool,
-    is_account_data_cell: bool,
+    is_account_data_result: bool,
     holder_observable_surface: String,
     source_column_storage: String,
     retention_seconds_is_both_ledger_lifetime_and_long_window: bool,
@@ -869,10 +869,10 @@ fn check_chokepoint_contract(contract: &ChokepointContract) -> Result<()> {
         "the quota chokepoint must stay the single convergence point of exactly the three declared surfaces"
     );
     ensure!(
-        contract.evaluated_exactly_once_before_cell_cas_write
-            && !contract.reevaluated_inside_cell_cas_retry_loop
+        contract.evaluated_exactly_once_before_result_cas_write
+            && !contract.reevaluated_inside_result_cas_retry_loop
             && !contract.cas_retry_exhaustion_refunds_the_charge,
-        "quota evaluation runs exactly once before the cell CAS write, never inside its retry loop, and is not refunded"
+        "quota evaluation runs exactly once before the typed-result CAS write, never inside its retry loop, and is not refunded"
     );
     ensure!(
         !contract.substitutable_by_generic_endpoint_rate_limit
@@ -957,7 +957,7 @@ fn check_ledger_contract(contract: &LedgerContract) -> Result<()> {
     );
     ensure!(
         !contract.wire_readable
-            && !contract.is_account_data_cell
+            && !contract.is_account_data_result
             && contract.holder_observable_surface == "ak.account.holder_quarantine",
         "the ledger has no wire carrier; the quarantine cell stays the holder's only observable surface"
     );
