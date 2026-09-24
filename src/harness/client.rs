@@ -571,6 +571,8 @@ impl TestActorClient {
             DidCoreId::new(self.service_id.clone())?,
         ));
         let mut strand = Strand::new_create(realm_id.clone(), "Discussion", actor_id);
+        // The create payload cannot carry the reducer-derived stage axis.
+        strand.stage = None;
         strand.tracks.clear();
         strand
             .tracks
