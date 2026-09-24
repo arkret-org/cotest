@@ -183,11 +183,11 @@ pub async fn try_bootstrap(config: JointServiceConfig) -> Result<JointServiceSta
         let base = base.trim_end_matches('/');
         soland_env.push((
             "SOLAND_SESSION_GRANT_INTROSPECTION_URL".to_owned(),
-            format!("{base}/_arkret/gate/account/session-grants/introspect"),
+            format!("{base}/_coauth/internal/session-grants/introspect"),
         ));
         soland_env.push((
             "SOLAND_AUTH_SESSION_LOGOUT_URL".to_owned(),
-            format!("{base}/_arkret/gate/account/auth-sessions/logout"),
+            format!("{base}/_coauth/internal/auth-sessions/logout"),
         ));
         soland_env.push((
             "SOLAND_INTERNAL_AUTHORITY_SHARED_SECRET".to_owned(),
