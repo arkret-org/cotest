@@ -24,7 +24,7 @@ use super::{
     PUSH_RULE_CORE_ENTRYPOINT, REALM_JOIN_CANDIDATE_ENTRYPOINT,
     RELATION_STRUCTURAL_REALM_ENTRYPOINT, SDK_PRECHECK_ENTRYPOINT, STRAND_WATCH_CURRENT_ENTRYPOINT,
     STRING_PROFILE_ENTRYPOINT, SuiteExecutionResult, TEST_MATERIAL_REJECTION_ENTRYPOINT,
-    VIEW_WRITE_CONTRACT_ENTRYPOINT, run_account_blocklist_projection_vector,
+    VIEW_WRITE_CONTRACT_ENTRYPOINT, run_account_blocklist_projection_suite,
     run_account_data_cas_convergence_suite, run_account_status_issuer_ledger_vector,
     run_aead_nonce_replay_suite, run_agent_membership_cascade_suite,
     run_agent_mls_keypackage_authorization_suite, run_applet_registration_epoch_kat_suite,
@@ -102,7 +102,7 @@ const RUNNERS: [(&str, Runner); 45] = [
     ),
     (
         ACCOUNT_BLOCKLIST_PROJECTION_ENTRYPOINT,
-        Runner::EvidenceMapped(run_account_blocklist_projection_vector),
+        Runner::Cases(run_account_blocklist_projection_suite),
     ),
     (
         "ak.suite.agent.membership_cascade.v1",

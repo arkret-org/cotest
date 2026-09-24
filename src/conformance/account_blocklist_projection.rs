@@ -128,6 +128,12 @@ enum RecipientState {
 
 /// Execute every canonical blocklist case against the state machines above.
 pub fn run_account_blocklist_projection_vector() -> Result<()> {
+    run_account_blocklist_projection_suite().map(|_| ())
+}
+
+/// Execute every declared case and report one result per case, so the named
+/// suite audit can match the fixture's `cases[]` one for one.
+pub fn run_account_blocklist_projection_suite() -> Result<super::SuiteExecutionResult> {
     let fixture = load_fixture_value(FIXTURE)?;
     verify_fixture_identity(&fixture)?;
     verify_registry_contract()?;
@@ -139,6 +145,7 @@ pub fn run_account_blocklist_projection_vector() -> Result<()> {
         "blocklist fixture must carry exactly 8 cases"
     );
     let mut executed = BTreeSet::new();
+    let mut results = Vec::with_capacity(cases.len());
     for case in cases {
         let name = required_str(case, "name")?;
         ensure!(executed.insert(name), "duplicate blocklist case {name}");
@@ -155,8 +162,16 @@ pub fn run_account_blocklist_projection_vector() -> Result<()> {
             "an_unsynced_device_treats_freshness_as_unknown" => stale_device(case)?,
             other => return Err(anyhow!("unexecuted blocklist fixture case {other}")),
         }
+        results.push(super::CaseExecutionResult {
+            case_id: name.to_owned(),
+            assertions: 1,
+        });
     }
-    Ok(())
+    Ok(super::SuiteExecutionResult {
+        entrypoint: ACCOUNT_BLOCKLIST_PROJECTION_ENTRYPOINT,
+        fixture: FIXTURE,
+        cases: results,
+    })
 }
 
 fn assert_case(case: &Value, decision: &str, reason: Option<&str>) -> Result<()> {
