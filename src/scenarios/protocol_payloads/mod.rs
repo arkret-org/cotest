@@ -129,7 +129,6 @@ pub async fn events_keys_device_blob_push_and_moderation_surfaces_work() -> Resu
     moderation::run(
         &server,
         &actor,
-        &token,
         &adapter_realm_id,
         &adapter_message_event_id,
     )

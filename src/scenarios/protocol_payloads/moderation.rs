@@ -12,7 +12,6 @@ use crate::harness::{
 pub async fn run(
     server: &ArkretServer,
     actor: &TestActorClient,
-    token: &str,
     target_realm_id: &str,
     target_event_id: &str,
 ) -> Result<()> {
@@ -59,11 +58,14 @@ pub async fn run(
         .as_str()
         .context("report outcome carries report_id")?
         .replacen("ak:report:", "ak:moderation_queue_item:", 1);
+    // The Realm root controller reads it over its standard DPoP session: the
+    // admin gate authenticates the request and consumes its proof once.
     let queue = expect_json(
-        server
-            .http()
-            .get(server.url("/_soland/admin/moderation/queue"))
-            .bearer_auth(token),
+        actor.authorize(
+            server
+                .http()
+                .get(server.url("/_soland/admin/moderation/queue")),
+        ),
         StatusCode::OK,
     )
     .await?;
