@@ -28,3 +28,10 @@ async fn preview_account_window_backfills_without_failing_its_sibling_realm() ->
     cotest::scenarios::protocol_payloads::preview_account_window_backfills_without_failing_its_sibling_realm()
         .await
 }
+
+#[tokio::test]
+#[serial]
+async fn limited_window_strand_tail_folds_to_exact_current_through_inkson() -> Result<()> {
+    cotest::scenarios::protocol_payloads::limited_window_strand_tail_folds_to_exact_current_through_inkson()
+        .await
+}

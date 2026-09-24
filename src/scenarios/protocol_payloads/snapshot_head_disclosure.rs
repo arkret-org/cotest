@@ -870,6 +870,162 @@ pub async fn preview_account_window_backfills_without_failing_its_sibling_realm(
     Ok(())
 }
 
+/// Fresh Soland + real PostgreSQL, the live floor-tail shape: `/head` signs
+/// the seven-Commit creator bootstrap, the creator then adds a default
+/// Strand (StrandCreate + `ak.realm.set_default_strand`), and a
+/// `window_limit` 2 Account window names that issued snapshot as its
+/// `after_committed_prefix` basis. Inkson's Account frame verifier reads the
+/// basis by reference through Garth, verifies the two-Commit tail and folds
+/// it through the typed Strand and default-Strand reducers to exactly the
+/// Station's same-cut current (the signed `/head` at the window head),
+/// without failing the frame. A current that contradicts the fold still
+/// fails closed.
+pub async fn limited_window_strand_tail_folds_to_exact_current_through_inkson() -> Result<()> {
+    use arkret_models_collaboration::sync_frames::account_sync::StreamWindowAnchorKind;
+
+    let SnapshotAuthor {
+        _coauth,
+        server: _server,
+        author,
+    } = snapshot_author("account-window-strand-tail", "window-grace").await?;
+    let bootstrap = author
+        .create_realm_bootstrap_with(json!({
+            "title": "Strand tail",
+            "summary": "Strand tail",
+            "public": false,
+            "plaintext_visible_services": []
+        }))
+        .await?;
+    let realm_id = bootstrap["realm_id"]
+        .as_str()
+        .context("realm_id")?
+        .to_owned();
+    let issued: arkret_wire::RealmStateSnapshot = serde_json::from_value(
+        expect_json(
+            author
+                .get("/_arkret/self/realm-state-snapshot/head")
+                .query(&[("realm_id", realm_id.as_str())]),
+            StatusCode::OK,
+        )
+        .await?,
+    )
+    .context("issued head must be a closed signed snapshot")?;
+    ensure!(
+        issued.visible_stream_heads.len() == 1
+            && issued.visible_stream_heads[0].stream_position == 6,
+        "bootstrap head is position 6"
+    );
+    let strand_id = author.create_default_strand(&realm_id).await?;
+
+    let frame =
+        account_detail_frame(&author, json!({"realm_ids": [realm_id], "window_limit": 2})).await?;
+    let entry = realm_detail(&frame, &realm_id)?;
+    let [window] = entry.streams.as_deref().context("stream windows")? else {
+        anyhow::bail!("a single-member Realm has exactly its Realm stream window");
+    };
+    ensure!(
+        window.preview_only.is_none()
+            && window.window_start_basis.as_ref().is_some_and(|basis| {
+                basis.anchor_kind == StreamWindowAnchorKind::AfterCommittedPrefix
+                    && basis.snapshot_ref == issued.snapshot_id
+            })
+            && window_positions(&entry) == vec![7, 8],
+        "the window must name the issued anchor and carry the Strand tail: {window:?}"
+    );
+    let current = entry.current.as_ref().context("same-cut current")?;
+
+    let http = author.sdk();
+    let verified = inkson::realm_events_engine::verify_account_frame_commits(&http, &frame)
+        .await
+        .context("a StrandCreate/default-Strand tail must fold, not fail the frame")?;
+    let typed_realm = arkret_wire::RealmId::new(realm_id.clone())?;
+    let stream = arkret_wire::CommitStreamRef::Realm {
+        realm_id: typed_realm.clone(),
+    };
+    ensure!(
+        verified.unresolved_streams().is_empty() && verified.preview_streams().is_empty(),
+        "the snapshot window settles as exact"
+    );
+    ensure!(
+        verified
+            .pages()
+            .iter()
+            .flat_map(|page| page.rows())
+            .filter(|row| row.commit().stream_ref == stream)
+            .map(|row| row.commit().stream_position)
+            .collect::<Vec<_>>()
+            == vec![7, 8],
+        "the verified tail is exactly the two Commits after the issued head"
+    );
+    let folded = verified
+        .floor_current(&typed_realm)
+        .context("the verified floor and tail install an exact current")?;
+    ensure!(
+        folded.len() == 10 && folded == current.entries.as_slice(),
+        "the installed current must be the Station's same-cut current: {folded:?}"
+    );
+    let strand = arkret_wire::StrandId::new(strand_id)?;
+    ensure!(
+        folded.iter().any(|row| matches!(
+            row,
+            arkret_wire::TypedCurrentResult::Value {
+                selector: arkret_wire::CurrentSelector::RealmSetDefaultStrand,
+                value,
+                ..
+            } if value == &json!({"default_strand_id": strand})
+        )) && folded.iter().any(|row| matches!(
+            row,
+            arkret_wire::TypedCurrentResult::Value {
+                selector: arkret_wire::CurrentSelector::Strand { strand_id },
+                ..
+            } if strand_id == &strand
+        )),
+        "the fold must carry the new Strand and the default pointer"
+    );
+    let at_head: arkret_wire::RealmStateSnapshot = serde_json::from_value(
+        expect_json(
+            author
+                .get("/_arkret/self/realm-state-snapshot/head")
+                .query(&[("realm_id", realm_id.as_str())]),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    ensure!(
+        at_head.current_state_entries.len() == folded.len()
+            && folded
+                .iter()
+                .all(|row| at_head.current_state_entries.contains(row)),
+        "the fold must equal the signed head current at the window head"
+    );
+    ensure!(
+        realm_detail(&verified.product_frame(&frame), &realm_id)?.current == entry.current,
+        "the exact window keeps its same-cut current"
+    );
+
+    let mut forged = frame.clone();
+    forged
+        .realms
+        .as_mut()
+        .and_then(|realms| realms.entries.get_mut(&realm_id))
+        .and_then(|entry| entry.current.as_mut())
+        .context("forged current")?
+        .entries
+        .pop();
+    let Err(error) =
+        inkson::realm_events_engine::verify_account_frame_commits(&http, &forged).await
+    else {
+        anyhow::bail!("a current that contradicts the verified fold must fail closed");
+    };
+    ensure!(
+        error
+            .to_string()
+            .contains("verified floor and readable tail"),
+        "forged current failed for another reason: {error}"
+    );
+    Ok(())
+}
+
 fn by_ref_request(
     client: &crate::harness::TestActorClient,
     snapshot_id: &arkret_wire::RealmSnapshotId,
