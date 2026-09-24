@@ -88,13 +88,13 @@ fn completion_vector() -> Result<CompletionVector> {
     let stream_ref = CommitStreamRef::Realm { realm_id };
     let reanchor_event_ref = CommittedEventRef {
         event_id: "ak:event:AZk4PXzJ6MpkxXnYTUmgXzeIYNd0Wfnz3N0hwLHNV6Xq".parse()?,
-        commit_id: format!("ak:realm_commit:sha256:{}", "5".repeat(64)).parse()?,
+        commit_id: arkret_identifiers::RealmCommitId::from_digest([0x55; 32]),
         stream_ref: stream_ref.clone(),
         stream_position: 8,
     };
     let device_authorization_event_ref = CommittedEventRef {
         event_id: authorization_event_id.parse()?,
-        commit_id: format!("ak:realm_commit:sha256:{}", "6".repeat(64)).parse()?,
+        commit_id: arkret_identifiers::RealmCommitId::from_digest([0x66; 32]),
         stream_ref,
         stream_position: 9,
     };
@@ -399,7 +399,7 @@ fn validate_mutation_matrix(vector: &CompletionVector) -> Result<()> {
         .request
         .completion_attestation
         .reanchor_event_ref
-        .commit_id = format!("ak:realm_commit:sha256:{}", "9".repeat(64)).parse()?;
+        .commit_id = arkret_identifiers::RealmCommitId::from_digest([0x99; 32]);
     reanchor_commit.request.canonical_request_digest = reanchor_commit
         .request
         .expected_canonical_request_digest()?;
