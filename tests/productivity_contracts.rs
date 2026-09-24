@@ -93,7 +93,8 @@ fn productivity_registry_entries_are_present_and_exact() {
 fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
     let catalog = event_payload_validator_catalog_from_spec_artifacts(artifacts_root()).unwrap();
 
-    const BASIS: &str = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    // Schedule basis refs are the accepted schedule-defining Event IDs.
+    const BASIS: &str = "ak:event:AZk4PXzJ6MpkxXnYTUmgXzeIYNd0Wfnz3N0hwLHNV6Xq";
     // The response lives inside the complete entry together with the schedule
     // basis, so both converge as one lattice value.
     catalog
