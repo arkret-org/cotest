@@ -61,11 +61,16 @@ pub fn run_protocol_gap_closure_fixture_suite() -> Result<()> {
         "erased_series_never_becomes_active_again",
         "public_store_log_telemetry_and_crash_artifact_contain_no_secret_material",
         // The recovery half of the suite: the whole point of collapsing
-        // recovery into one step is that the Seal has exactly one entrance and
-        // that every authoritative result crosses the same boundary at once.
-        "recovery_first_generation_seal_enters_only_through_commit_recovery_unit",
+        // recovery into one step is that both recovery RealmCommits have
+        // exactly one entrance and every authoritative result crosses the same
+        // boundary at once.
+        "governance_station_issues_both_recovery_realm_commits_only_inside_commit_recovery_unit",
         "recovery_authoritative_results_are_all_invisible_before_the_commit_and_all_visible_after",
-        "only_the_atomic_generation_cas_winner_commits_a_first_generation_seal",
+        "only_the_atomic_generation_cas_winner_commits_a_reanchor_commit",
+        // Rotation revoke: a pending proposal and its single terminal result
+        // are two durable boundaries (decision 0102).
+        "accepted_revoke_proposal_has_exact_covering_commit_and_pending_without_outcome",
+        "accepted_or_rejected_revoke_outcome_is_atomic_with_step_or_abort_expiry",
     ] {
         require(&assertions, required, "assertion")?;
     }
@@ -85,22 +90,48 @@ fn validate_rotation_cases(value: &Value) -> Result<()> {
         .iter()
         .find(|case| case["name"] == "partial_secret_storage_erase_then_restart")
         .ok_or_else(|| anyhow!("missing partial erase/restart case"))?;
-    if partial["expected_after_restart"]["secret_storage"] != "erased"
-        || partial["expected_after_restart"]["mls_history"] != "erased"
-        || partial["expected_after_restart"]["confirmation_emitted_once"] != true
-        || partial["expected_after_restart"]["accepted_erase_step_count"] != 1
+    // v1 has exactly one backup class (decision 0097): the restart
+    // expectation names secret_storage and nothing else.
+    let after_restart = partial["expected_after_restart"]
+        .as_object()
+        .ok_or_else(|| anyhow!("partial erase/restart case has no restart expectation"))?;
+    if after_restart.len() != 3
+        || after_restart.get("secret_storage") != Some(&Value::from("erased"))
+        || after_restart.get("confirmation_emitted_once") != Some(&Value::Bool(true))
+        || after_restart.get("accepted_erase_step_count") != Some(&Value::from(1))
     {
         bail!("partial erase/restart case does not converge monotonically");
     }
-    let early = cases
+    if partial["authoritative_new_pointers"] != serde_json::json!(["secret_storage"]) {
+        bail!("partial erase/restart case names a backup class other than secret_storage");
+    }
+    for (name, missing) in [
+        (
+            "erase_before_secret_storage_pointer_switch",
+            "erase-before-pointer",
+        ),
+        (
+            "erase_after_authorizing_device_revoked",
+            "erase-after-revoked-authorizer",
+        ),
+    ] {
+        let case = cases
+            .iter()
+            .find(|case| case["name"] == name)
+            .ok_or_else(|| anyhow!("missing {missing} case"))?;
+        if case["expected"]["decision"] != "reject"
+            || case["expected"]["reason"] != "failed_precondition"
+            || case["expected"]["old_backup_deleted"] != false
+        {
+            bail!("{missing} case is not fail closed");
+        }
+    }
+    let revoked = cases
         .iter()
-        .find(|case| case["name"] == "erase_before_both_pointer_switches")
-        .ok_or_else(|| anyhow!("missing erase-before-pointer case"))?;
-    if early["expected"]["decision"] != "reject"
-        || early["expected"]["reason"] != "failed_precondition"
-        || early["expected"]["old_backup_deleted"] != false
-    {
-        bail!("erase-before-pointer case is not fail closed");
+        .find(|case| case["name"] == "erase_after_authorizing_device_revoked")
+        .expect("checked above");
+    if revoked["authorizing_device_current"] != false {
+        bail!("erase-after-revoked-authorizer case does not revoke the authorizing device");
     }
     Ok(())
 }
