@@ -53,3 +53,9 @@ async fn concurrent_device_message_retries_enqueue_once() -> Result<()> {
 async fn device_message_id_conflict_cannot_redirect_delivery() -> Result<()> {
     cotest::scenarios::to_device_offline_ordering::device_message_id_conflict_cannot_redirect_delivery().await
 }
+
+#[tokio::test(flavor = "multi_thread")]
+#[serial]
+async fn device_message_survives_station_restart() -> Result<()> {
+    cotest::scenarios::to_device_offline_ordering::device_message_survives_station_restart().await
+}

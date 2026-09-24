@@ -38,11 +38,13 @@ use serde_json::Value;
 use crate::harness::{
     ArkretServer, device_message_send_request, encrypted_envelope, expect_api_error, expect_json,
 };
-use crate::scenarios::identity_test_support::actor_did_for_service_did;
+use crate::scenarios::identity_test_support::{
+    actor_did_for_service_did, spawn_with_harness_account_authority,
+};
 
 /// CT-10 scenario probe — see module docs for the 10-step walk-through.
 pub async fn to_device_offline_ordering_run() -> Result<()> {
-    let server = ArkretServer::spawn("to-device-offline-ordering").await?;
+    let server = spawn_with_harness_account_authority("to-device-offline-ordering", &[]).await?;
 
     // ── Setup: alice (sender), bob (recipient, single device).
     let alice_did = actor_did_for_service_did(server.service_did(), "offline-ordering-alice")?;
@@ -53,6 +55,7 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
     let bob_did = actor_did_for_service_did(server.service_did(), "bob-offline-ordering")?;
     let bob_device = "ak:device:01904100-0000-7000-8000-0000000000ba";
     let bob = server.demo_client(&bob_did, bob_device).await?;
+    acknowledge_bootstrap_messages(&bob).await?;
     let bob_token = bob.expect_dev_bearer().to_owned();
     let expires_at = queue_expiry()?;
     // ── Step 2: alice sends msg 1 to bob's device.
@@ -73,10 +76,7 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
 
     // ── Step 3: bob polls, receives msg 1. Keep cursor but do NOT ack.
     let first_poll = poll_to_device(&server, &bob_token, None).await?;
-    let events1 = first_poll["messages"]
-        .as_array()
-        .cloned()
-        .unwrap_or_default();
+    let events1 = application_messages(&first_poll)?;
     if events1.len() != 1 {
         bail!("expected exactly 1 event in first poll, got {events1:?}");
     }
@@ -119,10 +119,7 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
     // ack_position=0, returning all queued events. msg 1 may still be in
     // the queue until explicit ack; msg 2 and 3 follow it.
     let reconnect = poll_to_device(&server, &bob_token, None).await?;
-    let events_after = reconnect["messages"]
-        .as_array()
-        .cloned()
-        .unwrap_or_default();
+    let events_after = application_messages(&reconnect)?;
 
     let cipher_order: Vec<String> = events_after
         .iter()
@@ -144,7 +141,7 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
         .to_owned();
     ack_to_device(&server, &bob_token, &ack_token).await?;
     let drained = poll_to_device(&server, &bob_token, None).await?;
-    let drained_events = drained["messages"].as_array().cloned().unwrap_or_default();
+    let drained_events = application_messages(&drained)?;
     if !drained_events.is_empty() {
         bail!("expected empty event list after ack of latest cursor, got {drained_events:?}");
     }
@@ -166,10 +163,7 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
     )
     .await?;
     let after_replay = poll_to_device(&server, &bob_token, None).await?;
-    let replay_events = after_replay["messages"]
-        .as_array()
-        .cloned()
-        .unwrap_or_default();
+    let replay_events = application_messages(&after_replay)?;
     if !replay_events.is_empty() {
         bail!("logical message replay after ack MUST NOT re-deliver, got {replay_events:?}");
     }
@@ -241,14 +235,7 @@ async fn send_to_device(
     .await?;
     if expect_delivery {
         let recipient_core_id = crate::harness::actor_core_id(recipient)?;
-        let delivered = response["delivered"][&recipient_core_id]
-            .as_array()
-            .cloned()
-            .unwrap_or_default();
-        if !delivered
-            .iter()
-            .any(|device| device.as_str() == Some(device_id))
-        {
+        if response["delivered"][&recipient_core_id][device_id]["status"] != "delivered" {
             bail!("send_to_device did not deliver to {recipient}/{device_id}: {response}");
         }
     }
@@ -309,7 +296,7 @@ fn assert_message_ciphertext(event: &Value, expected: &str) -> Result<()> {
 // Arkret deliberately uses explicit acknowledgement instead of Matrix's
 // implicit sync acknowledgement: client-sync §10.1 and device-lifecycle §7.
 pub async fn device_message_pagination_is_read_only_and_ack_is_cumulative() -> Result<()> {
-    let server = ArkretServer::spawn("device-ack-pagination").await?;
+    let server = spawn_with_harness_account_authority("device-ack-pagination", &[]).await?;
     let did = actor_did_for_service_did(server.service_did(), "device-ack-owner")?;
     let device = "ak:device:01904100-0000-7000-8000-0000000000a1";
     let owner = server.demo_client(&did, device).await?;
@@ -397,11 +384,14 @@ pub async fn device_message_pagination_is_read_only_and_ack_is_cumulative() -> R
 }
 
 pub async fn device_ack_rejects_cross_binding_without_pruning(same_account: bool) -> Result<()> {
-    let server = ArkretServer::spawn(if same_account {
-        "device-ack-device-binding"
-    } else {
-        "device-ack-account-binding"
-    })
+    let server = spawn_with_harness_account_authority(
+        if same_account {
+            "device-ack-device-binding"
+        } else {
+            "device-ack-account-binding"
+        },
+        &[],
+    )
     .await?;
     let did = actor_did_for_service_did(server.service_did(), "ack-recipient")?;
     let other_did = if same_account {
@@ -459,7 +449,8 @@ pub async fn device_ack_rejects_cross_binding_without_pruning(same_account: bool
 }
 
 pub async fn concurrent_device_message_retries_enqueue_once() -> Result<()> {
-    let server = ArkretServer::spawn("device-message-concurrent-replay").await?;
+    let server =
+        spawn_with_harness_account_authority("device-message-concurrent-replay", &[]).await?;
     let did = actor_did_for_service_did(server.service_did(), "device-concurrent")?;
     let device = "ak:device:01904100-0000-7000-8000-0000000000a1";
     let owner = server.demo_client(&did, device).await?;
@@ -485,7 +476,8 @@ pub async fn concurrent_device_message_retries_enqueue_once() -> Result<()> {
 }
 
 pub async fn device_message_id_conflict_cannot_redirect_delivery() -> Result<()> {
-    let server = ArkretServer::spawn("device-message-target-conflict").await?;
+    let server =
+        spawn_with_harness_account_authority("device-message-target-conflict", &[]).await?;
     let did = actor_did_for_service_did(server.service_did(), "target-conflict")?;
     let first_device = "ak:device:01904100-0000-7000-8000-0000000000a1";
     let second_device = "ak:device:01904100-0000-7000-8000-0000000000b1";
@@ -574,23 +566,32 @@ async fn send_exact_message(
     assert_eq!(outcome["unknown_devices"], serde_json::json!({}));
     for (recipient, targets) in &body.messages {
         for device in targets.keys() {
-            assert!(
-                outcome["delivered"][recipient.as_str()]
-                    .as_array()
-                    .is_some_and(|devices| devices
-                        .iter()
-                        .any(|value| value.as_str() == Some(device.as_str()))),
-                "valid target was not delivered"
+            assert_eq!(
+                outcome["delivered"][recipient.as_str()][device.as_str()]["status"],
+                "delivered",
+                "valid target was not delivered: {outcome}"
             );
         }
     }
     Ok(outcome)
 }
 
-fn queue_ids(page: &Value) -> Result<Vec<String>> {
-    page["messages"]
+/// The application DeviceMessage envelopes of one queue page, in queue order.
+/// Account bootstrap may queue actor-private updates; they are not the
+/// messages under test.
+fn application_messages(page: &Value) -> Result<Vec<Value>> {
+    Ok(page["deliveries"]
         .as_array()
-        .ok_or_else(|| anyhow!("device queue omitted messages"))?
+        .ok_or_else(|| anyhow!("device queue omitted deliveries: {page}"))?
+        .iter()
+        .filter(|delivery| delivery["delivery_kind"] == "device_message")
+        .map(|delivery| delivery["device_message"].clone())
+        .filter(|message| message["kind"] == "ak.mls.application")
+        .collect())
+}
+
+fn queue_ids(page: &Value) -> Result<Vec<String>> {
+    application_messages(page)?
         .iter()
         .map(|message| {
             message["device_message_id"]
@@ -627,18 +628,164 @@ async fn acknowledge_bootstrap_messages(client: &crate::harness::TestActorClient
     // Pairing can enqueue actor-private device updates before the queue under
     // test is seeded. Consume them through the same explicit ack contract.
     let page = expect_json(client.get("/_arkret/self/device_messages"), StatusCode::OK).await?;
-    let count = queue_ids(&page)?.len();
+    let count = page["deliveries"]
+        .as_array()
+        .ok_or_else(|| anyhow!("device queue omitted deliveries: {page}"))?
+        .len();
     if count > 0 {
         assert_eq!(
             ack_count(client, &delivery_token(&page)?).await?,
             count as u64
         );
     }
-    assert!(
-        queue_ids(
-            &expect_json(client.get("/_arkret/self/device_messages"), StatusCode::OK).await?
-        )?
-        .is_empty()
+    let drained = expect_json(client.get("/_arkret/self/device_messages"), StatusCode::OK).await?;
+    assert_eq!(drained["deliveries"], serde_json::json!([]), "{drained}");
+    Ok(())
+}
+
+/// `device-lifecycle.md` §7: an unacknowledged DeviceMessage persists until
+/// the recipient endpoint's cumulative ACK cancels it. After the Station
+/// process restarts over the same durable database, the recipient reads the
+/// byte-identical closed envelope (including the queue-materialized
+/// `sent_at`), the send replays its stored outcome without a second enqueue,
+/// and the ACK token issued after the restart still prunes exactly it.
+pub async fn device_message_survives_station_restart() -> Result<()> {
+    let ephemeral = crate::scenarios::_helpers::coauth_bootstrap::spawn_ephemeral_postgres_for(
+        "COTEST_SOLAND_DATABASE_URL",
+    )?
+    .ok_or_else(|| anyhow!("device-message restart requires isolated PostgreSQL"))?;
+    let keystore_dir = tempfile::tempdir()?;
+    let keystore_path = keystore_dir
+        .path()
+        .join("soland.v1")
+        .to_string_lossy()
+        .into_owned();
+    let keystore_env = [
+        ("SOLAND_KEYSTORE_BACKEND", "encrypted_file"),
+        ("SOLAND_KEYSTORE_PATH", keystore_path.as_str()),
+        (
+            "SOLAND_KEYSTORE_MASTER_KEY",
+            "UlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlI=",
+        ),
+    ];
+    let mut server =
+        crate::scenarios::identity_test_support::spawn_with_harness_account_authority_at(
+            "device-message-restart",
+            &ephemeral.connect_url,
+            &keystore_env,
+        )
+        .await?;
+    let did = actor_did_for_service_did(server.service_did(), "device-restart-owner")?;
+    let owner = server
+        .register_client(
+            &did,
+            "device-restart-owner",
+            "ak:device:01904100-0000-7000-8000-0000000000e1",
+        )
+        .await?;
+    let queued_before = restart_application_messages(&owner).await?;
+    anyhow::ensure!(
+        queued_before.is_empty(),
+        "a fresh endpoint starts without application messages: {queued_before:?}"
+    );
+
+    let id = "ak:device_message:0196419b-0000-7000-8000-00000000e701";
+    let body = device_message_send_request(
+        &owner.actor,
+        &owner.device_id,
+        id,
+        "ak.mls.application",
+        encrypted_envelope("ak.mls.application", "cmVzdGFydA"),
+        queue_expiry()?,
+    )?;
+    let sent = restart_send(&owner, &body, "restart-send").await?;
+    let before = restart_application_messages(&owner).await?;
+    anyhow::ensure!(
+        before.len() == 1 && before[0]["device_message_id"] == id,
+        "the sent message is queued before restart: {before:?}"
+    );
+
+    server.restart_external_process().await?;
+
+    let after = restart_application_messages(&owner).await?;
+    anyhow::ensure!(
+        after == before,
+        "the restarted Station must serve the identical closed envelope:\nbefore={before:?}\nafter={after:?}"
+    );
+    let replay = restart_send(&owner, &body, "restart-send").await?;
+    anyhow::ensure!(
+        replay == sent,
+        "an exact HTTP retry after restart replays the stored outcome: {sent} vs {replay}"
+    );
+    anyhow::ensure!(
+        restart_application_messages(&owner).await? == before,
+        "a replay after restart must not enqueue a second copy"
+    );
+
+    let page = expect_json(owner.get("/_arkret/self/device_messages"), StatusCode::OK).await?;
+    let pruned = ack_count(&owner, &delivery_token(&page)?).await?;
+    anyhow::ensure!(
+        pruned >= 1,
+        "the post-restart ACK must cancel the queued message"
+    );
+    anyhow::ensure!(
+        restart_application_messages(&owner).await?.is_empty(),
+        "the ACKed message is no longer served after restart"
     );
     Ok(())
+}
+
+async fn restart_send(
+    client: &crate::harness::TestActorClient,
+    body: &DeviceMessagesSendRequestBody,
+    key: &str,
+) -> Result<Value> {
+    let outcome = expect_json(
+        client
+            .post("/_arkret/self/device_messages")
+            .header("Idempotency-Key", key)
+            .json(body),
+        StatusCode::OK,
+    )
+    .await?;
+    let typed: arkret_models_collaboration::device_messages::DeviceMessagesSendOutcome =
+        serde_json::from_value(outcome.clone())?;
+    anyhow::ensure!(
+        typed.unknown_devices.is_empty(),
+        "the owner's accepted device must be deliverable: {outcome}"
+    );
+    for (recipient, targets) in &body.messages {
+        for (device, target) in targets {
+            let row = typed
+                .delivered
+                .get(recipient)
+                .and_then(|devices| devices.get(device))
+                .ok_or_else(|| anyhow!("{recipient}/{device} was not delivered: {outcome}"))?;
+            anyhow::ensure!(row.device_message_id == target.device_message_id);
+        }
+    }
+    Ok(outcome)
+}
+
+/// The application DeviceMessage envelopes the endpoint's queue serves, in
+/// queue order. Account bootstrap may queue actor-private updates; they are
+/// not the messages under test.
+async fn restart_application_messages(
+    client: &crate::harness::TestActorClient,
+) -> Result<Vec<Value>> {
+    let page: arkret_models_collaboration::device_messages::DeviceMessagesGetOutcome =
+        serde_json::from_value(
+            expect_json(client.get("/_arkret/self/device_messages"), StatusCode::OK).await?,
+        )?;
+    let mut messages = Vec::new();
+    for delivery in page.deliveries {
+        if let arkret_models_collaboration::device_messages::RecipientDelivery::DeviceMessage {
+            device_message,
+        } = delivery
+            && device_message.kind.as_str() == "ak.mls.application"
+        {
+            messages.push(serde_json::to_value(&device_message)?);
+        }
+    }
+    Ok(messages)
 }

@@ -34,8 +34,7 @@ async fn send_application_message(
                         "ak:device_message:0196419b-0000-7000-8000-00000000f201",
                         "ak.mls.application",
                         encrypted_envelope("ak.mls.application", "base64url-opaque-ciphertext"),
-                        chrono::DateTime::parse_from_rfc3339("2026-12-31T00:00:00.000Z")?
-                            .with_timezone(&chrono::Utc),
+                        protocol_expiry()?,
                     )?),
                 StatusCode::OK,
             )
@@ -69,8 +68,7 @@ async fn duplicate_send_is_idempotent(
                         "ak:device_message:0196419b-0000-7000-8000-00000000f201",
                         "ak.mls.application",
                         encrypted_envelope("ak.mls.application", "base64url-opaque-ciphertext"),
-                        chrono::DateTime::parse_from_rfc3339("2026-12-31T00:00:00.000Z")?
-                            .with_timezone(&chrono::Utc),
+                        protocol_expiry()?,
                     )?),
                 StatusCode::OK,
             )
@@ -179,6 +177,15 @@ async fn list_delivered_keeps_ciphertext_only(
         "ACKed delivery is still served"
     );
     Ok(())
+}
+
+/// An expiry inside the default 24 hour enqueue TTL (`device-lifecycle.md`
+/// §7), fixed per process so the duplicate send repeats the exact intent.
+fn protocol_expiry() -> Result<chrono::DateTime<chrono::Utc>> {
+    static EXPIRY: std::sync::OnceLock<i64> = std::sync::OnceLock::new();
+    let millis = *EXPIRY
+        .get_or_init(|| (chrono::Utc::now() + chrono::Duration::hours(1)).timestamp_millis());
+    chrono::DateTime::from_timestamp_millis(millis).context("expiry outside timestamp range")
 }
 
 /// `DeviceMessagesSendOutcome.delivered` is now keyed by `DeviceId` and carries a

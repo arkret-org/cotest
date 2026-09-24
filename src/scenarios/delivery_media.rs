@@ -168,11 +168,25 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
 }
 
 pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Result<()> {
-    let server = ArkretServer::spawn("device-delivery").await?;
+    let server = spawn_with_harness_account_authority("device-delivery", &[]).await?;
     let alice_did = actor_did_for_service_did(server.service_did(), "delivery-to-device")?;
     let alice_device = "ak:device:01904100-0000-7000-8000-0000000000a1";
     let alice = server.demo_client(&alice_did, alice_device).await?;
     let token = alice.expect_dev_bearer().to_owned();
+    // Account bootstrap may queue actor-private updates; consume them through
+    // the same explicit ACK so the queue under test starts empty.
+    let bootstrap = expect_json(alice.get("/_arkret/self/device_messages"), StatusCode::OK).await?;
+    if let Some(ack_token) = bootstrap["ack_token"].as_str() {
+        expect_json(
+            alice
+                .post("/_arkret/self/device_messages/ack")
+                .json(&DeviceMessagesAckRequestBody {
+                    ack_token: ack_token.to_owned(),
+                }),
+            StatusCode::OK,
+        )
+        .await?;
+    }
 
     expect_api_error(
         server
@@ -199,8 +213,11 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
     )
     .await?;
 
-    let expires_at = chrono::DateTime::parse_from_rfc3339("2026-12-31T00:00:00.000Z")?
-        .with_timezone(&chrono::Utc);
+    // Inside the default 24 hour enqueue TTL (`device-lifecycle.md` §7).
+    let expires_at = chrono::DateTime::from_timestamp_millis(
+        (chrono::Utc::now() + chrono::Duration::hours(1)).timestamp_millis(),
+    )
+    .ok_or_else(|| anyhow::anyhow!("expiry outside timestamp range"))?;
     let request = device_message_send_request(
         &alice_did,
         alice_device,
@@ -220,7 +237,11 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
     )
     .await?;
     let alice_core_id = crate::harness::actor_core_id(&alice_did)?;
-    assert_eq!(send["delivered"][alice_core_id][0], alice_device);
+    assert_eq!(
+        send["delivered"][alice_core_id.as_str()][alice_device]["status"],
+        "delivered",
+        "{send}"
+    );
 
     let duplicate = expect_json(
         server
@@ -245,15 +266,12 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
         StatusCode::OK,
     )
     .await?;
+    let delivered_message = &delivered["deliveries"][0]["device_message"];
     assert_eq!(
-        delivered["messages"][0]["content"]["ciphertext"],
-        "opaque-to-device"
+        delivered_message["content"]["ciphertext"], "opaque-to-device",
+        "{delivered}"
     );
-    assert!(
-        delivered["messages"][0]["content"]
-            .get("plaintext")
-            .is_none()
-    );
+    assert!(delivered_message["content"].get("plaintext").is_none());
 
     let ack: arkret_models_collaboration::device_messages::DeviceMessagesAckOutcome =
         serde_json::from_value(
@@ -280,7 +298,7 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
     )
     .await?;
     assert!(
-        drained["messages"].as_array().unwrap().is_empty(),
+        drained["deliveries"].as_array().unwrap().is_empty(),
         "acknowledged messages were delivered again: first={delivered}, next={drained}"
     );
 
@@ -304,7 +322,7 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
     )
     .await?;
     assert!(
-        after_message_replay["messages"]
+        after_message_replay["deliveries"]
             .as_array()
             .unwrap()
             .is_empty()
@@ -482,7 +500,7 @@ async fn create_blob_access_realm(
 }
 
 pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
-    let server = ArkretServer::spawn("push-moderation").await?;
+    let server = spawn_with_harness_account_authority("push-moderation", &[]).await?;
     let alice_did = actor_did_for_service_did(server.service_did(), "alice-moderation")?;
     let alice_client = server
         .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
