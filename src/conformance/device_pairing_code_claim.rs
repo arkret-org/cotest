@@ -35,6 +35,56 @@ const ATTESTATION_VECTOR: &str = "ak.vector.device_pairing.accepted_device_attes
 /// Wall-clock model: the fixture only needs an ordering, so time is an integer
 /// tick and the pending TTL is a constant number of ticks.
 const PAIRING_TTL: u64 = 600;
+/// Counted failures per exact located `device_pairing_request_id`; the tenth
+/// atomically expires the pending record.
+const FAILURE_BUDGET_LIMIT: u32 = 10;
+
+/// The Station TCB's private current-device decision for the claiming device.
+/// `None` models a caller that presents only a SessionGrant snapshot.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CurrentDeviceDecision {
+    Allow,
+    RevocationPending,
+    Revoked,
+    GenerationMismatch,
+    ReceiptMismatchOrExpired,
+    Unavailable,
+}
+
+/// What the claim caller presents before any pairing state is touched.
+#[derive(Clone, Copy, Debug)]
+struct ClaimGate {
+    /// Standard human SessionGrant with an exact HTTP DPoP JTI.
+    standard_session_with_dpop: bool,
+    /// The action class the grant authorizes; only the pairing claim class
+    /// admits a claim, an Event-write class never substitutes for it.
+    action_class_is_pairing_claim: bool,
+    current_device: Option<CurrentDeviceDecision>,
+}
+
+impl ClaimGate {
+    fn allowed() -> Self {
+        Self {
+            standard_session_with_dpop: true,
+            action_class_is_pairing_claim: true,
+            current_device: Some(CurrentDeviceDecision::Allow),
+        }
+    }
+
+    fn admits(self) -> bool {
+        self.standard_session_with_dpop
+            && self.action_class_is_pairing_claim
+            && self.current_device == Some(CurrentDeviceDecision::Allow)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum GatedClaimRefusal {
+    /// Fail closed before pending lookup: no code-dependent disclosure and no
+    /// failure-budget write.
+    GateClosed,
+    NotFound,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum PairingState {
@@ -94,6 +144,10 @@ struct PairingService {
     /// report the same number, which is the modelable half of "no observable
     /// difference in timing".
     last_refusal_work: u64,
+    /// Service-private failure ledger keyed by exact located request id.
+    failure_budget: BTreeMap<String, u32>,
+    /// Pending lookups performed; a closed gate must not add one.
+    pending_lookups: u64,
 }
 
 impl PairingService {
@@ -202,6 +256,51 @@ impl PairingService {
         })
     }
 
+    /// Count one failure against an exact located request. The increment, the
+    /// tenth-failure pending-to-expired transition, code consumption and the
+    /// tombstone are one durable transaction: when `commit` fails, none of it
+    /// is observable. Terminal and authorized outcomes are never rewritten.
+    fn count_located_failure(&mut self, request_id: &str, now: u64, commit: bool) {
+        let Some(record) = self.records.get(request_id) else {
+            return;
+        };
+        let pending = matches!(
+            record.state,
+            PairingState::Staged | PairingState::ReadyForClaim
+        ) && !record.accepted
+            && record.expires_at > now;
+        if !pending {
+            return;
+        }
+        let count = self.failure_budget.get(request_id).copied().unwrap_or(0) + 1;
+        let mut next = record.clone();
+        if count >= FAILURE_BUDGET_LIMIT {
+            next.state = PairingState::Expired;
+            next.tombstone_until = Some(next.expires_at);
+        }
+        if !commit {
+            return;
+        }
+        self.failure_budget.insert(request_id.to_owned(), count);
+        self.records.insert(request_id.to_owned(), next);
+    }
+
+    /// Claim behind the Station TCB gate: authentication, transport buckets and
+    /// a fresh current-device decision all come before any pairing-code lookup.
+    fn claim_gated(
+        &mut self,
+        gate: ClaimGate,
+        code: &str,
+        account_id: &str,
+        now: u64,
+    ) -> Result<ClaimBootstrap, GatedClaimRefusal> {
+        if !gate.admits() {
+            return Err(GatedClaimRefusal::GateClosed);
+        }
+        self.claim(code, account_id, now)
+            .map_err(|UniformNotFound| GatedClaimRefusal::NotFound)
+    }
+
     /// Authenticated code claim. Every failure is the same `not_found`, and the
     /// work counter proves the branches are not separable by cost.
     fn claim(
@@ -211,6 +310,7 @@ impl PairingService {
         now: u64,
     ) -> Result<ClaimBootstrap, UniformNotFound> {
         self.last_refusal_work = 0;
+        self.pending_lookups += 1;
         let candidate = self
             .records
             .values()
@@ -224,7 +324,11 @@ impl PairingService {
         });
         if !admitted {
             // One shared exit for unknown, wrong, expired, superseded,
-            // cross-account, unfinalized and consumed codes alike.
+            // cross-account, unfinalized and consumed codes alike. Only a code
+            // that located an exact retained request is counted.
+            if let Some(located) = &candidate {
+                self.count_located_failure(&located.request_id, now, true);
+            }
             self.last_refusal_work = 1;
             return Err(UniformNotFound);
         }
@@ -785,6 +889,162 @@ fn run_variant(variant: &str) -> Result<()> {
                 "an exhausted failure budget must lock the request rather than keep answering"
             );
         }
+        "claim_current_device_gate_allow" => {
+            let (mut service, staged) = finalized(account, now)?;
+            let bootstrap = service
+                .claim_gated(ClaimGate::allowed(), &staged.pairing_code, account, now)
+                .map_err(|refusal| anyhow::anyhow!("allowed gate refused: {refusal:?}"))?;
+            ensure!(
+                bootstrap.request_id == staged.request_id,
+                "an allowed current-device decision claims the exact request"
+            );
+        }
+        "claim_current_device_gate_revocation_pending"
+        | "claim_current_device_gate_revoked"
+        | "claim_current_device_gate_generation_mismatch"
+        | "claim_current_device_gate_receipt_mismatch_or_expired"
+        | "claim_current_device_gate_unavailable"
+        | "claim_event_write_action_class_substitution"
+        | "claim_session_grant_snapshot_only" => {
+            let mut gate = ClaimGate::allowed();
+            match variant {
+                "claim_current_device_gate_revocation_pending" => {
+                    gate.current_device = Some(CurrentDeviceDecision::RevocationPending);
+                }
+                "claim_current_device_gate_revoked" => {
+                    gate.current_device = Some(CurrentDeviceDecision::Revoked);
+                }
+                "claim_current_device_gate_generation_mismatch" => {
+                    gate.current_device = Some(CurrentDeviceDecision::GenerationMismatch);
+                }
+                "claim_current_device_gate_receipt_mismatch_or_expired" => {
+                    gate.current_device = Some(CurrentDeviceDecision::ReceiptMismatchOrExpired);
+                }
+                "claim_current_device_gate_unavailable" => {
+                    gate.current_device = Some(CurrentDeviceDecision::Unavailable);
+                }
+                "claim_event_write_action_class_substitution" => {
+                    gate.action_class_is_pairing_claim = false;
+                }
+                _ => gate.current_device = None,
+            }
+            // A valid, finalized code: the refusal must come from the gate
+            // alone, before the code is looked up.
+            let (mut service, staged) = finalized(account, now)?;
+            let lookups = service.pending_lookups;
+            ensure!(
+                service.claim_gated(gate, &staged.pairing_code, account, now)
+                    == Err(GatedClaimRefusal::GateClosed),
+                "{variant} must fail closed at the current-device gate"
+            );
+            ensure!(
+                service.pending_lookups == lookups && service.failure_budget.is_empty(),
+                "{variant} must refuse before pending lookup and without a failure-budget write"
+            );
+            ensure!(
+                service.status(&staged.request_id, &staged.pairing_code, now)
+                    == Some(PairingState::ReadyForClaim),
+                "{variant} must leave the pending record untouched"
+            );
+        }
+        "failure_budget_ninth_failure_preserves_pending_state"
+        | "failure_budget_tenth_failure_atomically_expires" => {
+            let (mut service, staged) = finalized(account, now)?;
+            let failures = if variant.contains("ninth") {
+                FAILURE_BUDGET_LIMIT - 1
+            } else {
+                FAILURE_BUDGET_LIMIT
+            };
+            for _ in 0..failures {
+                ensure!(
+                    service.claim(&staged.pairing_code, other_account, now) == Err(UniformNotFound),
+                    "a located cross-account claim must refuse uniformly"
+                );
+            }
+            ensure!(
+                service.failure_budget.get(&staged.request_id) == Some(&failures),
+                "each located failure must be counted once"
+            );
+            let state = service.status(&staged.request_id, &staged.pairing_code, now);
+            if failures < FAILURE_BUDGET_LIMIT {
+                ensure!(
+                    state == Some(PairingState::ReadyForClaim)
+                        && service.claim(&staged.pairing_code, account, now).is_ok(),
+                    "nine counted failures must leave the pending record claimable"
+                );
+            } else {
+                ensure!(
+                    state == Some(PairingState::Expired)
+                        && service.records[&staged.request_id]
+                            .tombstone_until
+                            .is_some()
+                        && service.claim(&staged.pairing_code, account, now)
+                            == Err(UniformNotFound),
+                    "the tenth failure must expire, consume and tombstone the request at once"
+                );
+            }
+        }
+        "failure_budget_unknown_id_or_code_creates_no_row" => {
+            let (mut service, _staged) = finalized(account, now)?;
+            ensure!(
+                service.claim("CODE9999", account, now) == Err(UniformNotFound)
+                    && service.resolve("ak:device_pairing_request:999999999999", "CODE9999", now)
+                        == Err(UniformNotFound),
+                "unknown ids and codes must refuse uniformly"
+            );
+            ensure!(
+                service.failure_budget.is_empty(),
+                "a failure that located no exact request must create no ledger row"
+            );
+        }
+        "failure_budget_exact_success_retry_does_not_count" => {
+            let mut service = PairingService::default();
+            let staged = service.stage("key-a", now);
+            let proof = proof_for(account, "a");
+            let first = service
+                .finalize(&staged.request_id, account, &proof, now)
+                .map_err(|refusal| anyhow::anyhow!("finalize refused: {refusal:?}"))?;
+            let retry = service
+                .finalize(&staged.request_id, account, &proof, now)
+                .map_err(|refusal| anyhow::anyhow!("finalize retry refused: {refusal:?}"))?;
+            ensure!(
+                first.state == retry.state && service.failure_budget.is_empty(),
+                "a byte-identical successful retry must never count as a failure"
+            );
+        }
+        "failure_budget_authorized_outcome_is_immutable" => {
+            let (mut service, staged) = finalized(account, now)?;
+            let event_ref = service
+                .pair_device(&staged.request_id, &staged.pairing_code, now)
+                .map_err(|_| anyhow::anyhow!("pair_device must accept"))?;
+            for _ in 0..FAILURE_BUDGET_LIMIT {
+                let _ = service.claim(&staged.pairing_code, other_account, now);
+            }
+            ensure!(
+                service.status(&staged.request_id, &staged.pairing_code, now)
+                    == Some(PairingState::Authorized)
+                    && service.records[&staged.request_id]
+                        .authorized_event_ref
+                        .as_deref()
+                        == Some(event_ref.as_str())
+                    && service.failure_budget.is_empty(),
+                "later failures must never rewrite an authorized outcome"
+            );
+        }
+        "failure_budget_transaction_rollback_is_atomic" => {
+            let (mut service, staged) = finalized(account, now)?;
+            for _ in 0..FAILURE_BUDGET_LIMIT - 1 {
+                let _ = service.claim(&staged.pairing_code, other_account, now);
+            }
+            // The tenth count's transaction fails to commit.
+            service.count_located_failure(&staged.request_id, now, false);
+            ensure!(
+                service.failure_budget.get(&staged.request_id) == Some(&(FAILURE_BUDGET_LIMIT - 1))
+                    && service.status(&staged.request_id, &staged.pairing_code, now)
+                        == Some(PairingState::ReadyForClaim),
+                "a failed counter transaction must roll back the increment and the transition"
+            );
+        }
         other => bail!("device pairing code-claim variant has no executor: {other}"),
     }
     Ok(())
@@ -844,6 +1104,16 @@ fn claim_refusal_setup<'a>(
         }
         other => bail!("no uniform-refusal setup for {other}"),
     })
+}
+
+/// One finalized, claimable record.
+fn finalized(account: &str, now: u64) -> Result<(PairingService, PendingRecord)> {
+    let mut service = PairingService::default();
+    let staged = service.stage("key-a", now);
+    service
+        .finalize(&staged.request_id, account, &proof_for(account, "a"), now)
+        .map_err(|refusal| anyhow::anyhow!("finalize refused: {refusal:?}"))?;
+    Ok((service, staged))
 }
 
 /// One account, two finalized records: the first is superseded by the second.
