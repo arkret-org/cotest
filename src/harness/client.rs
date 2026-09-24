@@ -577,13 +577,30 @@ impl TestActorClient {
         strand
             .tracks
             .insert("discussion".to_owned(), StrandTrack::discussion_primary());
-        let created = self
-            .submit_event(
+        let mut strand_event = self
+            .author_event(
                 realm_id.as_str(),
                 arkret_wire::event_kind_str::STRAND_CREATE,
                 serde_json::to_value(StrandCreatePayload { object: strand })?,
             )
             .await?;
+        let event_created_at = serde_json::to_value(strand_event.created_at)?;
+        // The authored Strand's creation time is the signed Event time. Set it
+        // after the envelope clock is chosen, then rederive the Event id/proof.
+        strand_event
+            .payload
+            .get_mut("object")
+            .and_then(Value::as_object_mut)
+            .context("Strand create payload object")?
+            .insert("created_at".to_owned(), event_created_at);
+        let (signing_seed, _) = event_signing_identity_for_device(&self.actor, &self.device_id);
+        refresh_typed_event_proof_with_signing_seed(&mut strand_event, signing_seed)?;
+        let created = expect_json(
+            self.post("/_arkret/self/events")
+                .json(&crate::publication::initial_submission(strand_event, "")?),
+            StatusCode::OK,
+        )
+        .await?;
         let strand_event_id = super::submitted_event_id(&created)?;
         let strand_id = arkret_identifiers::StrandId::from_event_id(&strand_event_id);
         self.submit_event(
