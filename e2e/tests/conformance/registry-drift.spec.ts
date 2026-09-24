@@ -320,11 +320,9 @@ test.describe("conformance registry drift @fully-implemented", () => {
       actorId: alice.id,
       realmId: "ak:realm:AWKBMlbiCDVvdxpftc7u00CFiTYThQbKQJCj2gi91O9H",
       kind: removed!.id,
-      // The kind is intentionally absent from the active registry, so the
-      // helper cannot derive a plane. Keep the proof otherwise valid and make
-      // this wire-negative's authority class explicit; unknown kinds never
-      // inherit a Data/Control fallback.
-      signerEvidenceAuthority: "account_device_data",
+      // The kind is intentionally absent from the active registry. The proof
+      // is otherwise valid: human-device producer proofs do not depend on the
+      // Event kind (device-lifecycle.md section 8.2.2).
       payload: {},
     });
     const resp = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {

@@ -2,12 +2,15 @@ use std::collections::BTreeSet;
 
 use anyhow::{Context as _, Result, anyhow, bail};
 use arkret_identifiers::{AppletId, DeviceId, DidCoreId, Hash};
+use arkret_identity::{
+    DidDocument, DidVerificationRelationship, validate_verification_method_relationship,
+};
 use arkret_models_collaboration::events_payloads::SignatureMaterial;
 use arkret_models_collaboration::events_payloads::device_identity::{
     DeviceAuthorizationBindingKind, DeviceAuthorizePayload, DeviceOrPrincipalRef,
 };
 use arkret_models_collaboration::governance::grant_constraint::GrantConstraint;
-use arkret_wire::{AccountId, NonEmptyString, RecoverySessionId};
+use arkret_wire::{AccountId, Did, DidUrl, NonEmptyString, RecoverySessionId};
 use base64::Engine as _;
 use chrono::Duration;
 use ed25519_dalek::{Signer as _, SigningKey};
@@ -52,7 +55,7 @@ const MANAGED_ACTOR_CASES: [&str; 36] = [
     "revoked_applet_history_read",
     "delegated_device_authorize_is_ordinary_successor",
     "delegated_device_authorize_cannot_join_closed_aggregate",
-    "delegated_device_authorize_requires_signer_resolution_evidence_ref",
+    "delegated_device_authorize_resolves_signer_only_from_accepted_resolution",
     "delegated_device_authorize_authorized_by_must_self_anchor",
     "delegated_device_authorize_requires_bounded_delegation",
     "delegated_device_follows_install_revoke_fence",
@@ -325,7 +328,7 @@ fn consume_managed_actor_case(
         }
         "delegated_device_authorize_is_ordinary_successor"
         | "delegated_device_authorize_cannot_join_closed_aggregate"
-        | "delegated_device_authorize_requires_signer_resolution_evidence_ref"
+        | "delegated_device_authorize_resolves_signer_only_from_accepted_resolution"
         | "delegated_device_authorize_authorized_by_must_self_anchor"
         | "delegated_device_authorize_requires_bounded_delegation"
         | "delegated_device_follows_install_revoke_fence" => {
@@ -367,9 +370,10 @@ enum DelegatedDeviceMutation {
     /// Carried as a fifth Event of the Ghost authoring bundle, or as a seventh
     /// fact of the Bot install fixed set.
     InsideClosedAggregate,
-    /// `proof.signer_resolution_evidence_ref` omitted, with the controller
-    /// method resolved through a unit-local candidate overlay instead.
-    OmitsSignerResolutionEvidenceRef,
+    /// Signed with a controller method that exists only in a unit-local
+    /// candidate overlay, not in the managed principal's accepted current
+    /// resolution.
+    SignerOnlyInCandidateOverlay,
     /// `authorized_by` names the Applet registration service.
     AuthorizedByRegistrationService,
     /// `authorized_by` names the Applet controller DID.
@@ -386,19 +390,6 @@ enum DelegatedDeviceMutation {
     /// The exact install this delegation names is no longer effective.
     InstallRevoked,
 }
-
-/// The admission classes that may omit `proof.signer_resolution_evidence_ref`.
-///
-/// `encoding.md` section 4 publishes this as a closed **two-entry** table, and
-/// `device-lifecycle.md` section 5.3 forbids adding the delegation branch to
-/// it. There is no machine artifact for the table, so it is modelled here as a
-/// fixed-length array of the shared binding-kind enum: a third entry cannot be
-/// introduced by relaxing a predicate, only by editing a list whose own type
-/// says how long it is.
-const SIGNER_EVIDENCE_OMISSION_CLASSES: [DeviceAuthorizationBindingKind; 2] = [
-    DeviceAuthorizationBindingKind::RegistrationAnchor,
-    DeviceAuthorizationBindingKind::PcrRecovery,
-];
 
 /// The single self-anchor failure section 5.2.3 defines. It is raised while
 /// building the possession transcript, because that is the only place the
@@ -430,8 +421,8 @@ fn delegated_device_mutations(name: &str) -> Result<Vec<DelegatedDeviceMutation>
         "delegated_device_authorize_cannot_join_closed_aggregate" => {
             vec![DelegatedDeviceMutation::InsideClosedAggregate]
         }
-        "delegated_device_authorize_requires_signer_resolution_evidence_ref" => {
-            vec![DelegatedDeviceMutation::OmitsSignerResolutionEvidenceRef]
+        "delegated_device_authorize_resolves_signer_only_from_accepted_resolution" => {
+            vec![DelegatedDeviceMutation::SignerOnlyInCandidateOverlay]
         }
         "delegated_device_authorize_authorized_by_must_self_anchor" => vec![
             DelegatedDeviceMutation::AuthorizedByRegistrationService,
@@ -468,15 +459,9 @@ fn delegated_device_authorize_verdict(
             require_closed_carriers_have_no_device_authorize_slot()?;
             return Ok("schema_violation");
         }
-        DelegatedDeviceMutation::OmitsSignerResolutionEvidenceRef => {
-            if SIGNER_EVIDENCE_OMISSION_CLASSES
-                .contains(&DeviceAuthorizationBindingKind::AppletManagedDelegation)
-            {
-                bail!(
-                    "the signer-evidence omission table grew a third entry: this branch already has an accepted signer projection before the Event"
-                );
-            }
-            return Ok("schema_violation");
+        DelegatedDeviceMutation::SignerOnlyInCandidateOverlay => {
+            require_signer_only_from_accepted_resolution()?;
+            return Ok("signature_invalid");
         }
         _ => {}
     }
@@ -601,6 +586,63 @@ fn non_empty(value: impl Into<String>) -> Result<NonEmptyString> {
 /// `account_id` never appears in the payload: section 5.2.3 injects it from the
 /// Event envelope, which is why the self-anchor comparison can only happen once
 /// a caller supplies it.
+/// `device-lifecycle.md` section 5.3: the delegated authorize's controller
+/// method resolves only through the managed principal's accepted current
+/// resolution. A unit-local candidate overlay may name another method, and that
+/// overlay would authorize it, but the accepted resolution does not, so the
+/// producer proof has no signer and the Event is `signature_invalid`.
+fn require_signer_only_from_accepted_resolution() -> Result<()> {
+    let did = "did:webvh:zExampleManagedActorScid:actors.calendar.example:ghost-1";
+    let accepted_method = format!("{did}#controller-1");
+    let overlay_method = format!("{did}#overlay-1");
+    let method_entry = |id: &str, seed: u8| {
+        json!({
+            "id": id,
+            "type": "Multikey",
+            "controller": did,
+            "publicKeyMultibase": arkret_canonical::ed25519_pubkey_to_did_key_multibase(
+                &SigningKey::from_bytes(&[seed; 32]).verifying_key().to_bytes()
+            ),
+        })
+    };
+    let document = |methods: &[(&str, u8)]| -> Result<DidDocument> {
+        Ok(serde_json::from_value(json!({
+            "@context": ["https://www.w3.org/ns/did/v1"],
+            "id": did,
+            "verificationMethod": methods
+                .iter()
+                .map(|(id, seed)| method_entry(id, *seed))
+                .collect::<Vec<_>>(),
+            "assertionMethod": methods.iter().map(|(id, _)| *id).collect::<Vec<_>>(),
+        }))?)
+    };
+    let accepted = document(&[(accepted_method.as_str(), 0x31)])?;
+    let overlay = document(&[
+        (accepted_method.as_str(), 0x31),
+        (overlay_method.as_str(), 0x32),
+    ])?;
+    let authority = Did::new(did)?;
+    let authorizes = |document: &DidDocument, method: &str| -> Result<bool> {
+        Ok(validate_verification_method_relationship(
+            document,
+            &DidUrl::new(method.to_owned()).map_err(|error| anyhow!("{error}"))?,
+            &authority,
+            DidVerificationRelationship::AssertionMethod,
+        )
+        .is_ok())
+    };
+    if !authorizes(&accepted, &accepted_method)? {
+        bail!("the accepted resolution does not authorize its own controller method");
+    }
+    if !authorizes(&overlay, &overlay_method)? {
+        bail!("the candidate overlay does not even carry the overlay method");
+    }
+    if authorizes(&accepted, &overlay_method)? {
+        bail!("an overlay-only controller method resolved through the accepted resolution");
+    }
+    Ok(())
+}
+
 fn managed_principal_account_id() -> Result<AccountId> {
     Ok(AccountId::new(
         DidCoreId::new("ak:did_core:webvh:zExampleManagedActorScid")?,

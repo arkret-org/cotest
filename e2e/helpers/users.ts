@@ -38,13 +38,13 @@ import {
   accountActorId,
   canonicalJson,
   cotestWire,
-  hydrateRegisteredEventSignerEvidenceApi,
   projectDidToCoreId,
   registerEventSigner,
   registerPrincipalControlRealm,
   registerPrincipalControlEvents,
   registerRequestAuth,
   typedId,
+  verifyRegisteredEventSignerDeviceApi,
 } from "./soland-api";
 import {
   ProvisioningLedger,
@@ -140,9 +140,6 @@ export type DpopUserSession = {
   grantAudience: string;
   dpopSeedB64url: string;
   eventSigningSeedB64url: string;
-  /// Exact immutable account_device evidence retained from self/keys/query.
-  /// It authorizes Data/history proof verification only.
-  dataSignerEvidenceRef: string;
   deviceKey: DpopDeviceKey;
   recoveryKey?: string;
   principalControlRealmId: string;
@@ -1795,7 +1792,6 @@ export async function createDpopUserSessionForAccount(
     grantAudience: grant.audience,
     dpopSeedB64url: dpopDeviceSeedB64url(deviceKey),
     eventSigningSeedB64url,
-    dataSignerEvidenceRef: "",
     deviceKey,
     recoveryKey: claimsPrincipalGenesis ? account.recoveryKey : undefined,
     principalControlRealmId: "",
@@ -1875,11 +1871,11 @@ export async function createDpopUserSessionForAccount(
     sealResponse.ok(),
     `principal bootstrap Seal returned ${sealResponse.status()}: ${await sealResponse.text()}`,
   ).toBeTruthy();
-  // Re-read the typed viewer after the committed Seal, select this session's
-  // exact device (never devices[0]), and retain the Data root returned by this
-  // account's keys/query row. device-lifecycle.md section 8.2.2 has no v1
-  // carrier for a human Control root, so none is retained.
-  const signerEvidence = await hydrateRegisteredEventSignerEvidenceApi(
+  // Re-read the typed viewer after the committed Seal and confirm this
+  // session's exact device (never devices[0]) is the current signer. Every
+  // Event it signs, Control or Data, then uses the same producer proof
+  // (device-lifecycle.md section 8.2.2).
+  await verifyRegisteredEventSignerDeviceApi(
     request,
     session.grantJwt,
     {
@@ -1890,7 +1886,6 @@ export async function createDpopUserSessionForAccount(
       server: opts.server,
     },
   );
-  session.dataSignerEvidenceRef = signerEvidence.dataSignerEvidenceRef;
   return session;
 }
 

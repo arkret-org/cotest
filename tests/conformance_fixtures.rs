@@ -85,6 +85,14 @@ conformance_test!(
 );
 
 conformance_test!(
+    /// Decision 0107: one human-device producer rule; cross-Station
+    /// `authority_forward` carries fresh `producer_device_evidence`.
+    authority_forward_producer_device_evidence_executes_registered_variants,
+    "authority_forward_producer_device_evidence",
+    cotest::conformance::run_authority_forward_producer_device_evidence_vector,
+);
+
+conformance_test!(
     device_pairing_code_claim_executes_registered_variants,
     "device_pairing_code_claim",
     cotest::conformance::run_device_pairing_code_claim_suite,

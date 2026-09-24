@@ -114,6 +114,7 @@ fn assert_canonical_semantic_ledger(fixture: &Value) -> Result<()> {
                 "direct_conversation_founding",
                 "founding_authoring_material_non_echo",
                 "membership_compensation",
+                "authority_forward_producer_device_evidence",
             ],
         "canonical semantic case registry drifted"
     );
@@ -125,6 +126,8 @@ fn assert_canonical_semantic_ledger(fixture: &Value) -> Result<()> {
         "dependency_missing_closed_details",
         "self_terminal_failure_compensation",
         "peer_source_committed_compensation",
+        "cross_station_forward_with_fresh_evidence_accepted",
+        "human_producer_without_evidence",
     ] {
         ensure!(contains_string(fixture, required_variant));
     }
@@ -152,6 +155,9 @@ fn assert_endpoint_unions_and_approval(approved: &Value) -> Result<usize> {
     let peer = json!({"branch": "authority_forward", "event_submission": approved});
     schema_valid(PEER_REQUEST, &peer)?;
     assert_roundtrip::<PeerAuthoritySubmitRequest>(&peer)?;
+    // The approval fixture is signed by a principal method, not a human
+    // device, so its forward carries no producer_device_evidence.
+    serde_json::from_value::<PeerAuthoritySubmitRequest>(peer.clone())?.validate()?;
 
     let mut mixed = peer;
     mixed["mls_submission"] = json!({});
@@ -161,6 +167,34 @@ fn assert_endpoint_unions_and_approval(approved: &Value) -> Result<usize> {
         &json!({"branch": "future_branch", "event_submission": approved}),
     )?;
     Ok(10)
+}
+
+/// A schema-valid one-item `committed_replication` request.
+pub(super) fn committed_replication_request_baseline() -> Result<Value> {
+    Ok(replication_request(vec![replication_item(
+        approved_event_submission()?,
+    )]))
+}
+
+/// A schema-valid `registered_atomic_unit` membership compensation request.
+pub(super) fn registered_atomic_unit_request_baseline() -> Result<Value> {
+    Ok(membership_compensation_peer_request(
+        &approved_event_submission()?,
+    ))
+}
+
+fn membership_compensation_peer_request(approved: &Value) -> Value {
+    json!({
+        "branch": "registered_atomic_unit",
+        "unit": {
+            "unit_kind": "membership_compensation",
+            "committed_event": {
+                "event_submission": approved,
+                "source_commit": realm_commit(0)
+            },
+            "membership_compensation_evidence": compensation_evidence()
+        }
+    })
 }
 
 fn assert_replication_carrier(approved: &Value) -> Result<usize> {
@@ -275,17 +309,7 @@ fn assert_membership_compensation_carriers(approved: &Value) -> Result<usize> {
     schema_valid(SELF_REQUEST, &self_request)?;
     assert_roundtrip::<SelfAuthoritySubmitRequest>(&self_request)?;
 
-    let peer_request = json!({
-        "branch": "registered_atomic_unit",
-        "unit": {
-            "unit_kind": "membership_compensation",
-            "committed_event": {
-                "event_submission": approved,
-                "source_commit": realm_commit(0)
-            },
-            "membership_compensation_evidence": compensation_evidence()
-        }
-    });
+    let peer_request = membership_compensation_peer_request(approved);
     schema_valid(PEER_REQUEST, &peer_request)?;
     assert_roundtrip::<PeerAuthoritySubmitRequest>(&peer_request)?;
 

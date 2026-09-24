@@ -55,17 +55,17 @@ use crate::scenarios::identity_test_support::{
 };
 
 const SERVER_NAME: &str = "security-rotation-two-devices";
-const DEVICE_A: &str = "ak:device:01904100-0000-7000-8000-0000000000a1";
+pub(crate) const DEVICE_A: &str = "ak:device:01904100-0000-7000-8000-0000000000a1";
 const DEVICE_B: &str = "ak:device:01904100-0000-7000-8000-0000000000b2";
-const DEVICE_C: &str = "ak:device:01904100-0000-7000-8000-0000000000c3";
+pub(crate) const DEVICE_C: &str = "ak:device:01904100-0000-7000-8000-0000000000c3";
 const DEVICE_B_SEED: [u8; 32] = [0xb2; 32];
-const DEVICE_C_SEED: [u8; 32] = [0xc3; 32];
+pub(crate) const DEVICE_C_SEED: [u8; 32] = [0xc3; 32];
 const FORGED_SEED: [u8; 32] = [0x66; 32];
 const SERIES_ONE: &str = "ak:backup_series:01904100-0000-7000-8000-0000000000e1";
 const OLD_BACKUP: &str = "ak:backup:01904100-0000-7000-8000-0000000000e2";
 
 /// A's signing identity: the device key signs Events, envelopes and records.
-struct RotationAuthor {
+pub(crate) struct RotationAuthor {
     actor: String,
     station: DidCoreId,
     account: AccountId,
@@ -190,7 +190,7 @@ impl RotationAuthor {
     /// A's rotation revoking `target`: one replacement envelope of a fresh
     /// series signed with `backup_seed`, and pointer version 2 over
     /// `SERIES_ONE` anchored at `source`. `revoke_seed` signs the revoke.
-    fn rotation(
+    pub(crate) fn rotation(
         &self,
         suffix: &str,
         target: &str,
@@ -320,26 +320,92 @@ async fn live_rotation(server_name: &str, extra_env: &[(&str, &str)]) -> Result<
         HARNESS_INTERNAL_AUTHORITY_SECRET,
     )
     .await?;
-    let authority_origin = coauth.origin();
-    let introspection_url = coauth.url();
-    let server = spawn_with_harness_account_authority_at(
+    let env = rotation_station_env(&coauth);
+    let env = env
+        .iter()
+        .map(|(key, value)| (key.as_str(), value.as_str()))
+        .chain(extra_env.iter().copied())
+        .collect::<Vec<_>>();
+    let server =
+        spawn_with_harness_account_authority_at(server_name, &database.connect_url, &env).await?;
+    let RotationFixture {
+        client_a,
+        client_b,
+        client_c,
+        events_a,
+        principal,
+        signer,
+        seed_a,
+        old,
+        commit,
+        selected,
+    } = rotation_fixture(
+        &server,
         server_name,
         &database.connect_url,
-        &[
-            &[
-                ("SOLAND_ACCOUNT_AUTHORITY_URL", authority_origin.as_str()),
-                ("SOLAND_DID_RESOLVER_ALLOW_METHODS", "web,webvh,key,uuid"),
-                (
-                    "SOLAND_SESSION_GRANT_INTROSPECTION_URL",
-                    introspection_url.as_str(),
-                ),
-            ],
-            extra_env,
-        ]
-        .concat(),
+        &coauth,
+        "rotation-alice",
     )
     .await?;
-    let actor = actor_did_for_service_did(server.service_did(), "rotation-alice")?;
+    Ok(LiveRotation {
+        server,
+        _coauth: coauth,
+        database,
+        client_a,
+        client_b,
+        client_c,
+        events_a,
+        principal,
+        signer,
+        seed_a,
+        old,
+        commit,
+        selected,
+    })
+}
+
+/// The two accepted fixture devices B and C next to A's founding device, on
+/// an already running Station whose Account Authority is `coauth`, with A's
+/// old envelope stored and `SERIES_ONE` selected.
+pub(crate) struct RotationFixture {
+    pub(crate) client_a: TestActorClient,
+    pub(crate) client_b: TestActorClient,
+    pub(crate) client_c: TestActorClient,
+    pub(crate) events_a: TestActorClient,
+    pub(crate) principal: ProvisionedTestPrincipal,
+    pub(crate) signer: RotationAuthor,
+    pub(crate) seed_a: [u8; 32],
+    pub(crate) old: KeyBackup,
+    pub(crate) commit: RealmCommit,
+    pub(crate) selected: KeysBackupsList,
+}
+
+/// The environment a Station needs so that `rotation_fixture` can run on it:
+/// `coauth` is its Account Authority and session-grant introspection.
+pub(crate) fn rotation_station_env(
+    coauth: &MockCoauthIntrospectionServer,
+) -> Vec<(String, String)> {
+    vec![
+        ("SOLAND_ACCOUNT_AUTHORITY_URL".to_owned(), coauth.origin()),
+        (
+            "SOLAND_DID_RESOLVER_ALLOW_METHODS".to_owned(),
+            "web,webvh,key,uuid".to_owned(),
+        ),
+        (
+            "SOLAND_SESSION_GRANT_INTROSPECTION_URL".to_owned(),
+            coauth.url(),
+        ),
+    ]
+}
+
+pub(crate) async fn rotation_fixture(
+    server: &ArkretServer,
+    server_name: &str,
+    database_url: &str,
+    coauth: &MockCoauthIntrospectionServer,
+    actor_label: &str,
+) -> Result<RotationFixture> {
+    let actor = actor_did_for_service_did(server.service_did(), actor_label)?;
     let client_a = server.demo_client(&actor, DEVICE_A).await?;
     let principal = client_a
         .principal
@@ -351,8 +417,9 @@ async fn live_rotation(server_name: &str, extra_env: &[(&str, &str)]) -> Result<
     // Fixtures: B and C are accepted devices of A's current generation.
     let session_for = async |device: &str, seed: [u8; 32]| -> Result<TestActorClient> {
         let authorize = install_accepted_device_fixture(
-            &server,
-            &database.connect_url,
+            server,
+            server_name,
+            database_url,
             &actor,
             &principal,
             &account,
@@ -458,10 +525,7 @@ async fn live_rotation(server_name: &str, extra_env: &[(&str, &str)]) -> Result<
     );
     ensure!(listing(&client_b).await?.active_series == selected.active_series);
 
-    Ok(LiveRotation {
-        server,
-        _coauth: coauth,
-        database,
+    Ok(RotationFixture {
         client_a,
         client_b,
         client_c,
@@ -878,7 +942,7 @@ fn canonical_post(
         .body(arkret_canonical::canonical_json_bytes(body)?))
 }
 
-async fn create(
+pub(crate) async fn create(
     client: &TestActorClient,
     request: &SecurityTransactionCreateRequest,
 ) -> Result<SecurityTransaction> {
@@ -915,7 +979,7 @@ fn lists(list: &KeysBackupsList, backup_id: &str) -> bool {
         .any(|row| row.backup_id.as_str() == backup_id)
 }
 
-async fn refused(client: &TestActorClient) -> Result<bool> {
+pub(crate) async fn refused(client: &TestActorClient) -> Result<bool> {
     Ok(client
         .get("/_arkret/self/keys/backups")
         .send()
@@ -1010,6 +1074,7 @@ struct CommitUnsignedBody<'a> {
 /// signed with this harness Station's notary key.
 fn station_successor(
     server: &ArkretServer,
+    server_name: &str,
     head: &RealmCommit,
     event: &Event,
 ) -> Result<RealmCommit> {
@@ -1027,7 +1092,7 @@ fn station_successor(
         committed_at,
     })?;
     let commit_id = RealmCommitId::from_digest(arkret_canonical::sha256_bytes(&identity));
-    let (_, seed) = crate::harness::test_service_signing_key(SERVER_NAME);
+    let (_, seed) = crate::harness::test_service_signing_key(server_name);
     let signature = arkret_signatures::detached_object::sign_detached_object(
         &CommitUnsignedBody {
             commit_id: &commit_id,
@@ -1066,6 +1131,7 @@ fn station_successor(
 /// at the current PCR head, and return its authorization Event id.
 async fn install_accepted_device_fixture(
     server: &ArkretServer,
+    server_name: &str,
     database_url: &str,
     actor: &str,
     principal: &ProvisionedTestPrincipal,
@@ -1101,7 +1167,7 @@ async fn install_accepted_device_fixture(
         Vec::new(),
         Vec::new(),
     );
-    let commit = station_successor(server, &head, &event)?;
+    let commit = station_successor(server, server_name, &head, &event)?;
 
     let token = arkret_canonical::base64url_decode(
         event

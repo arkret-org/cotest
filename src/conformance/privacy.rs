@@ -887,6 +887,19 @@ fn validate_account_device_evidence_exact_closure(case: &Value) -> Result<()> {
     {
         bail!("account-device evidence negatives must mint no synthetic evidence ref");
     }
+    // Decision 0107: there is one human-device producer rule and no Control
+    // root; the same evidence is what authority_forward carries.
+    if case.to_string().contains("account_device_control") {
+        bail!("account-device evidence closure still names the removed Control root");
+    }
+    if !case["positive"].as_array().is_some_and(|rows| {
+        rows.iter().any(|row| {
+            row.as_str()
+                .is_some_and(|row| row.contains("producer_device_evidence"))
+        })
+    }) {
+        bail!("account-device evidence closure does not bind the authority_forward carrier");
+    }
     Ok(())
 }
 

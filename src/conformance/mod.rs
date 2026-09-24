@@ -16,6 +16,7 @@ mod arkret_private_kdf_and_durability;
 mod auth_session_proof;
 mod authority_commit;
 mod authority_event_submit_carriers;
+mod authority_forward_producer_device_evidence;
 mod blind_payload;
 mod blob_stream_aead;
 mod call_signal;
@@ -183,6 +184,10 @@ pub use authority_commit::{
 };
 pub use authority_event_submit_carriers::{
     AuthorityEventSubmitCarrierCoverage, run_authority_event_submit_carrier_conformance,
+};
+pub use authority_forward_producer_device_evidence::{
+    VECTOR_ID_AUTHORITY_FORWARD_PRODUCER_DEVICE_EVIDENCE,
+    run_authority_forward_producer_device_evidence_vector,
 };
 pub use blind_payload::{
     run_blind_payload_sanitizer_suite, run_blind_payload_sanitizer_suite_counts,

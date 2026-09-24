@@ -67,7 +67,6 @@ export function sdkEventEnvelopeProof(args: {
   event: Record<string, unknown>;
   verificationMethod: string;
   createdAt: string;
-  signerResolutionEvidenceRef: string;
   signingSeedB64url?: string;
 }): Record<string, unknown> {
   assertJsonTransportable(args.event, "$.event");
@@ -81,7 +80,6 @@ export function sdkEventEnvelopeProof(args: {
     event: args.event,
     verification_method: args.verificationMethod,
     created_at: args.createdAt,
-    signer_resolution_evidence_ref: args.signerResolutionEvidenceRef,
     signing_seed_b64url: args.signingSeedB64url,
   });
 }

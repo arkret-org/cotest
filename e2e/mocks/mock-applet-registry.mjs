@@ -508,9 +508,6 @@ function detachedEventProof(
     actor_did: actorDid,
     verification_method: verificationMethod,
     created_at: createdAt,
-    signer_resolution_evidence_ref: `ak:signer_evidence:sha256:${createHash("sha256")
-      .update(verificationMethod)
-      .digest("hex")}`,
     event,
     signing_seed_b64url: signingJwk.d,
   });
@@ -1083,9 +1080,6 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
       data_basis: managedActorSealLeaves[0],
       service_signing_seed_b64url: servicePrivateJwk.d,
       service_verification_method: packageInfo.verificationMethod,
-      signer_resolution_evidence_ref: `ak:signer_evidence:sha256:${createHash("sha256")
-        .update(packageInfo.verificationMethod)
-        .digest("hex")}`,
       station_id: stationId(),
       station_verification_method:
         currentStationVerificationMethod,

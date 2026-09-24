@@ -6,6 +6,7 @@
 //! input of a positive vector and must fail closed with the registered code.
 
 use anyhow::{Context as _, Result, anyhow, bail, ensure};
+use arkret_wire::{ActorId, ProducerEventProof};
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use p256::ecdsa::signature::Verifier as _;
@@ -142,7 +143,31 @@ fn check_binding(vector: &Value, name: &str) -> Result<String> {
         payload_b64 == required_str(vector, "detached_payload_b64u")?,
         "{name}: detached payload is not the canonical binding"
     );
+    if let Some(proof) = vector.get("proof") {
+        check_sdk_producer_proof(proof, binding, &canonical, name)?;
+    }
     Ok(payload_b64)
+}
+
+/// The published proof must be the closed SDK `ProducerEventProof`, whose own
+/// binding transcript equals the fixture binding byte for byte. A member the
+/// closed proof does not define (for example the retired
+/// `signer_resolution_evidence_ref`) fails here rather than being signed over.
+fn check_sdk_producer_proof(
+    proof: &Value,
+    binding: &Value,
+    canonical: &str,
+    name: &str,
+) -> Result<()> {
+    let typed: ProducerEventProof = serde_json::from_value(proof.clone())
+        .with_context(|| format!("{name}: proof is not the closed SDK producer proof"))?;
+    let actor: ActorId = serde_json::from_value(binding["actor_id"].clone())
+        .with_context(|| format!("{name}: binding actor_id is not an SDK ActorId"))?;
+    ensure!(
+        typed.canonical_binding_bytes(&actor)? == canonical.as_bytes(),
+        "{name}: the SDK producer-proof binding differs from the fixture binding"
+    );
+    Ok(())
 }
 
 fn run_positive_vector(vector: &Value) -> Result<()> {

@@ -101,13 +101,6 @@ type SignedEventEnvelopeArgs = {
   /// actor_id.account_id, never an independent Event envelope member.
   stationId?: string;
   server?: SolandKey;
-  /**
-   * Explicit evidence authority for a wire-negative Event whose kind is
-   * intentionally absent from the active registry.  Active kinds are always
-   * classified by their registry `plane`; an explicit value may not override
-   * that classification.
-   */
-  signerEvidenceAuthority?: "account_device_data" | "account_device_control";
 };
 type EventProofMode = "dev-proof" | "detached-jws";
 
@@ -115,7 +108,6 @@ type RegisteredEventSigner = {
   deviceId: string;
   verificationMethod: string;
   signingSeedB64url?: string;
-  dataSignerEvidenceRef?: string;
 };
 
 const registeredEventSigners = new Map<
@@ -160,7 +152,6 @@ export function registerEventSigner(args: {
   deviceId: string;
   verificationMethod: string;
   signingSeedB64url?: string;
-  dataSignerEvidenceRef?: string;
 }): void {
   const actorId = requireDidCoreId(args.actorId);
   if (!args.verificationMethod.endsWith(`#${args.deviceId}`)) {
@@ -181,8 +172,6 @@ export function registerEventSigner(args: {
       (previous?.verificationMethod === args.verificationMethod
         ? previous.signingSeedB64url
         : undefined),
-    dataSignerEvidenceRef:
-      args.dataSignerEvidenceRef ?? previous?.dataSignerEvidenceRef,
   };
   byMethod.set(args.verificationMethod, signer);
   registeredEventSigners.set(actorId, byMethod);
@@ -1718,10 +1707,6 @@ export async function currentActorIdApi(
   return requireDidCoreId(body.principal_id);
 }
 
-export type HumanDeviceSignerEvidenceRefs = {
-  dataSignerEvidenceRef: string;
-};
-
 type AccountCoordinate = { principal_id: string; station_id: string };
 
 function requireSignerEvidenceRef(value: unknown, context: string): string {
@@ -1735,13 +1720,19 @@ function requireSignerEvidenceRef(value: unknown, context: string): string {
 }
 
 /**
- * Install the portable Data root for one exact human account-device signer.
- * device-lifecycle.md section 8.2 delivers it only on the exact keys/query row.
- * The account viewer `device_summary` carries no signer evidence (section 10.1),
- * and v1 has no carrier for the section 8.2.2 `account_device_control` root, so
- * no Control root is installed and human Control Events fail closed.
+ * Confirm that one exact human account-device signer is current before the
+ * harness authors Events with it.
+ *
+ * device-lifecycle.md section 8.2.2 has a single producer rule for every Event
+ * a human device signs, whatever its kind: the governance Station resolves the
+ * signer from its own PCR (same Station) or from `authority_forward`
+ * `producer_device_evidence` (cross Station). The producer proof carries no
+ * evidence ref, so nothing is installed on the signer. This only checks that
+ * the account viewer row is active and verified and that the keys/query row
+ * projects the same authorization at the current generation with its complete
+ * section 8.2 signer evidence ref.
  */
-export async function hydrateRegisteredEventSignerEvidenceApi(
+export async function verifyRegisteredEventSignerDeviceApi(
   request: APIRequestContext,
   token: string,
   args: {
@@ -1751,7 +1742,7 @@ export async function hydrateRegisteredEventSignerEvidenceApi(
     verificationMethod: string;
     server?: SolandKey;
   },
-): Promise<HumanDeviceSignerEvidenceRefs> {
+): Promise<void> {
   if (args.accountId.principal_id !== args.actorId) {
     throw new Error("signer evidence account principal does not match actor");
   }
@@ -1838,7 +1829,7 @@ export async function hydrateRegisteredEventSignerEvidenceApi(
         ],
       }),
     }),
-    `query Data signer evidence for ${args.deviceId}`,
+    `query signer device row for ${args.deviceId}`,
   );
   const accountKey = canonicalJson(args.accountId);
   const keyEntries = (keys.device_keys ?? []).filter(
@@ -1882,17 +1873,10 @@ export async function hydrateRegisteredEventSignerEvidenceApi(
       `keys/query generation does not authorize session device ${args.deviceId}`,
     );
   }
-  const dataSignerEvidenceRef = requireSignerEvidenceRef(
+  requireSignerEvidenceRef(
     dataRow.signer_evidence_ref,
     `keys/query row for ${args.deviceId}`,
   );
-  registerEventSigner({
-    actorId: args.actorId,
-    deviceId: args.deviceId,
-    verificationMethod: args.verificationMethod,
-    dataSignerEvidenceRef,
-  });
-  return { dataSignerEvidenceRef };
 }
 
 export function signedEventEnvelope(
@@ -1942,7 +1926,6 @@ export function signedEventEnvelope(
         actorId: eventSigningPrincipalId(event),
         event,
         verificationMethod: args.proofVerificationMethod,
-        signerEvidenceAuthority: args.signerEvidenceAuthority,
       }),
     ],
   };
@@ -1995,7 +1978,6 @@ function eventEnvelopeProof(args: {
   actorId: string;
   event: Record<string, unknown>;
   verificationMethod?: string;
-  signerEvidenceAuthority?: "account_device_data" | "account_device_control";
 }): Record<string, unknown> {
   const mode = eventProofMode();
   const registeredSigner = eventSignerFor(
@@ -2019,41 +2001,12 @@ function eventEnvelopeProof(args: {
         "with a DID URL verification method before authoring its Events",
     );
   }
-  const kind = stringValue(args.event.kind);
-  if (!kind) {
+  // device-lifecycle.md section 8.2.2: every Event a human device signs uses
+  // the same producer proof, whatever its kind. There is no Control/Data split
+  // and the proof carries no signer evidence ref; the governance Station
+  // resolves the signer itself.
+  if (!stringValue(args.event.kind)) {
     throw new Error("event proof requires a string Event kind");
-  }
-  const descriptor = eventKindDescriptor(kind);
-  const registryAuthority = registryHumanDeviceAuthority(kind, args.event);
-  if (
-    registryAuthority &&
-    args.signerEvidenceAuthority &&
-    registryAuthority !== args.signerEvidenceAuthority
-  ) {
-    throw new Error(
-      `explicit signer evidence authority ${args.signerEvidenceAuthority} conflicts with registry plane ${descriptor!.plane} for ${kind}`,
-    );
-  }
-  const signerEvidenceAuthority =
-    registryAuthority ?? args.signerEvidenceAuthority;
-  if (!signerEvidenceAuthority) {
-    throw new Error(
-      `Event kind ${kind} has no registered plane; a wire-negative fixture must declare signerEvidenceAuthority explicitly`,
-    );
-  }
-  if (signerEvidenceAuthority === "account_device_control") {
-    // device-lifecycle.md section 8.2.2: v1 has no closed carrier for the
-    // human Control root, so a human-device Control Event fails closed and
-    // no Data evidence, session or current key may stand in for it.
-    throw new Error(
-      `${kind} needs account_device_control evidence, which v1 does not carry; human Control Events fail closed`,
-    );
-  }
-  const signerResolutionEvidenceRef = registeredSigner?.dataSignerEvidenceRef;
-  if (!signerResolutionEvidenceRef) {
-    throw new Error(
-      `registered signer ${verificationMethod} has no real ${signerEvidenceAuthority} evidence ref for ${kind}`,
-    );
   }
   const createdAt = canonicalEventTimestamp();
 
@@ -2063,7 +2016,6 @@ function eventEnvelopeProof(args: {
       type: "dev-proof",
       verification_method: verificationMethod,
       event_digest: eventDigest,
-      signer_resolution_evidence_ref: signerResolutionEvidenceRef,
     };
   }
 
@@ -2076,7 +2028,6 @@ function eventEnvelopeProof(args: {
     event: args.event,
     verificationMethod,
     createdAt,
-    signerResolutionEvidenceRef,
     signingSeedB64url: registeredSigner?.signingSeedB64url,
   });
 }
@@ -2911,116 +2862,6 @@ const SPEC_ARTIFACTS_ROOT = resolve(
   "v1",
   "artifacts",
 );
-
-type EventKindRegistryRow = {
-  event_kind?: string;
-  reducer_input?: boolean;
-  plane?: "control" | "data" | "conditional";
-  cell_writes?: Array<{
-    execution?: "security" | "data";
-    condition?: {
-      kind?: "field_present" | "field_absent" | "field_equals";
-      field?: string;
-      const?: unknown;
-    };
-  }>;
-};
-
-let eventKindRegistryCache: Map<string, EventKindRegistryRow> | undefined;
-
-function eventKindDescriptor(kind: string): EventKindRegistryRow | undefined {
-  if (!eventKindRegistryCache) {
-    const registry = JSON.parse(
-      readFileSync(
-        join(SPEC_ARTIFACTS_ROOT, "registry", "event-kind-registry.json"),
-        "utf8",
-      ),
-    ) as { event_kinds?: EventKindRegistryRow[] };
-    eventKindRegistryCache = new Map(
-      (registry.event_kinds ?? [])
-        .filter(
-          (row): row is EventKindRegistryRow & { event_kind: string } =>
-            typeof row.event_kind === "string",
-        )
-        .map((row) => [row.event_kind, row]),
-    );
-  }
-  return eventKindRegistryCache.get(kind);
-}
-
-type HumanDeviceEvidenceAuthority =
-  | "account_device_data"
-  | "account_device_control";
-
-// These registered actor-private kinds do not participate in CBS and therefore
-// have no registry `plane`. Their human-device signer authority is nevertheless
-// closed and explicit: they consume the Data/history account_device root, never
-// the generic-Control root. Agent and service-authored private kinds are
-// deliberately absent because this helper must not recast them as human events.
-const actorPrivateHumanDeviceAuthorities = new Map<
-  string,
-  HumanDeviceEvidenceAuthority
->([
-  ["ak.account.blocklist", "account_device_data"],
-  ["ak.account_data.set", "account_device_data"],
-  ["ak.device.push_route", "account_device_data"],
-  ["ak.read_cursor.advance", "account_device_data"],
-]);
-
-function registryFieldValue(
-  event: Record<string, unknown>,
-  path: string,
-): { present: boolean; value: unknown } {
-  let value: unknown = event;
-  for (const segment of path.split(".")) {
-    if (
-      typeof value !== "object" ||
-      value === null ||
-      !Object.prototype.hasOwnProperty.call(value, segment)
-    ) {
-      return { present: false, value: undefined };
-    }
-    value = (value as Record<string, unknown>)[segment];
-  }
-  return { present: true, value };
-}
-
-function registryCellWriteMatches(
-  event: Record<string, unknown>,
-  condition: NonNullable<
-    NonNullable<EventKindRegistryRow["cell_writes"]>[number]["condition"]
-  > | undefined,
-): boolean {
-  if (!condition) return true;
-  if (!condition.field || !condition.kind) return false;
-  const field = registryFieldValue(event, condition.field);
-  if (condition.kind === "field_present") return field.present;
-  if (condition.kind === "field_absent") return !field.present;
-  return field.present && canonicalJson(field.value) === canonicalJson(condition.const);
-}
-
-function registryHumanDeviceAuthority(
-  kind: string,
-  event: Record<string, unknown>,
-): HumanDeviceEvidenceAuthority | undefined {
-  const descriptor = eventKindDescriptor(kind);
-  if (!descriptor) return undefined;
-  if (descriptor.plane === "data") return "account_device_data";
-  if (descriptor.plane === "control") return "account_device_control";
-  if (descriptor.plane === "conditional") {
-    const matchingExecutions = (descriptor.cell_writes ?? [])
-      .filter((write) => registryCellWriteMatches(event, write.condition))
-      .map((write) => write.execution);
-    if (matchingExecutions.includes("security")) {
-      return "account_device_control";
-    }
-    if (matchingExecutions.includes("data")) {
-      return "account_device_data";
-    }
-    return undefined;
-  }
-  return actorPrivateHumanDeviceAuthorities.get(kind);
-}
 
 let fixtureCapabilityActionCache: Map<string, string> | undefined;
 let realmRootAuthorableEventKinds: Set<string> | undefined;

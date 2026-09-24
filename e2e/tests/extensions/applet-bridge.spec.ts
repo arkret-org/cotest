@@ -568,7 +568,8 @@ test.describe("applet bridge", () => {
       expect(bridgedMessage?.executed_by).toEqual(serviceActorId(String(signed.applet_package.service_id)));
       const messageProofs = bridgedMessage?.proofs as Array<Record<string, unknown>>;
       expect(messageProofs.map((proof) => proof.kind)).toEqual(["detached_jws"]);
-      expect(messageProofs[0].signer_resolution_evidence_ref).toMatch(/^ak:signer_evidence:/);
+      // The producer proof is closed and carries no signer evidence ref.
+      expect(messageProofs[0]).not.toHaveProperty("signer_resolution_evidence_ref");
       const ghostProfile = acceptedEvents.find(
         (event) =>
           event.kind === "ak.profile.create" &&
@@ -1417,7 +1418,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
     const proofs = accepted?.proofs as Array<Record<string, unknown>>;
     expect(proofs.map((proof) => proof.kind)).toEqual(["detached_jws"]);
     expect(proofs[0]).toEqual(body.events[0].proofs[0]);
-    expect(proofs[0].signer_resolution_evidence_ref).toMatch(/^ak:signer_evidence:/);
+    expect(proofs[0]).not.toHaveProperty("signer_resolution_evidence_ref");
 
     const deliver = async (payload: Record<string, unknown>, key: string) => request.post(targetUri, {
       headers: signedAppletTransactionHeaders({
@@ -2706,9 +2707,6 @@ function appletEventProof(
     event,
     verificationMethod,
     createdAt: canonicalEventTimestamp(),
-    signerResolutionEvidenceRef: `ak:signer_evidence:sha256:${createHash("sha256")
-      .update(verificationMethod)
-      .digest("hex")}`,
     signingSeedB64url,
   });
 }
