@@ -175,6 +175,7 @@ fn current_wire(stream_position: u64, value: Value) -> Value {
         "stream_head": head_wire(12),
         "result": {
             "selector": selector_wire(),
+            "source_stream_ref": {"kind": "realm", "realm_id": REALM},
             "revision": {"commit_id": COMMIT, "stream_position": stream_position},
             "value": value
         }
@@ -465,6 +466,30 @@ mod tests {
         let mut wire = current_wire(12, Value::Null);
         wire["result"].as_object_mut().unwrap().remove("value");
         assert!(serde_json::from_value::<StrandWatchCurrentOutcome>(wire).is_err());
+    }
+
+    #[test]
+    fn closed_outcome_rejects_an_omitted_source_stream() {
+        let mut wire = current_wire(12, Value::Null);
+        wire["result"]
+            .as_object_mut()
+            .unwrap()
+            .remove("source_stream_ref");
+        assert!(serde_json::from_value::<StrandWatchCurrentOutcome>(wire).is_err());
+    }
+
+    #[test]
+    fn consumer_guard_rejects_a_row_from_another_stream() {
+        let request: StrandWatchCurrentRequestBody =
+            serde_json::from_value(request_wire()).unwrap();
+        let mut wire = current_wire(12, Value::Null);
+        wire["result"]["source_stream_ref"] = json!({
+            "kind": "circle",
+            "realm_id": REALM,
+            "circle_id": "ak:circle:AT3ARBdH1FM6GjXK9ulTx-YMvQOXys39dlUzZV6KyID9"
+        });
+        let outcome: StrandWatchCurrentOutcome = serde_json::from_value(wire).unwrap();
+        assert!(outcome.validate_for_request(&request).is_err());
     }
 
     #[test]
