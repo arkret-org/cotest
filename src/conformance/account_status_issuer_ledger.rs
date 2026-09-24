@@ -131,7 +131,15 @@ pub fn run_account_status_issuer_ledger_vector() -> Result<()> {
 /// execution ownership, rather than treating a resolvable JSON Pointer as
 /// evidence by itself.
 fn verify_security_evidence_mapping(fixture: &Value) -> Result<()> {
-    let evidence = required_field(fixture, "security_evidence")?;
+    let rows = value_array(
+        required_field(fixture, "security_evidence")?,
+        "security_evidence",
+    )?;
+    ensure!(
+        rows.len() == 1,
+        "issuer-ledger fixture must carry exactly one security evidence row"
+    );
+    let evidence = &rows[0];
     ensure!(
         required_str(evidence, "vector_id")? == VECTOR_ID_ACCOUNT_STATUS_ISSUER_LEDGER,
         "issuer-ledger security evidence vector drifted"
