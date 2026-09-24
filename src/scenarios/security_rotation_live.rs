@@ -201,6 +201,29 @@ impl RotationAuthor {
         old: &KeyBackup,
         source: &RealmCommitId,
     ) -> Result<(SecurityTransactionCreateRequest, BackupRotationBinding)> {
+        self.rotation_until(
+            suffix,
+            target,
+            revoke_seed,
+            backup_seed,
+            old,
+            source,
+            chrono::Duration::hours(1),
+        )
+    }
+
+    /// [`Self::rotation`] whose transaction expires `lifetime` after now.
+    #[allow(clippy::too_many_arguments)]
+    fn rotation_until(
+        &self,
+        suffix: &str,
+        target: &str,
+        revoke_seed: [u8; 32],
+        backup_seed: [u8; 32],
+        old: &KeyBackup,
+        source: &RealmCommitId,
+        lifetime: chrono::Duration,
+    ) -> Result<(SecurityTransactionCreateRequest, BackupRotationBinding)> {
         let now = arkret::canonical::normalize_timestamp_canonical(Utc::now());
         let revoke = crate::harness::event_envelope_with_chain_and_signing_identity_and_causal_refs(
             &self.actor,
@@ -258,7 +281,7 @@ impl RotationAuthor {
                 ))?,
                 self.account.clone(),
                 self.principal.device_id.clone(),
-                now + chrono::Duration::hours(1),
+                now + lifetime,
                 unit(revoke)?,
                 hash("rotated-secret")?,
                 vec![BackupRotationPlan {
@@ -274,7 +297,26 @@ impl RotationAuthor {
     }
 }
 
-pub async fn security_rotation_runs_worker_steps_to_local_commit() -> Result<()> {
+/// The live two-device fixture every rotation scenario starts from: A founds
+/// the PCR, B and C are accepted fixture devices with their own sessions, and
+/// A stores its old envelope and selects `SERIES_ONE` (pointer version 1).
+struct LiveRotation {
+    server: ArkretServer,
+    _coauth: MockCoauthIntrospectionServer,
+    database: crate::scenarios::_helpers::coauth_bootstrap::EphemeralPg,
+    client_a: TestActorClient,
+    client_b: TestActorClient,
+    client_c: TestActorClient,
+    events_a: TestActorClient,
+    principal: ProvisionedTestPrincipal,
+    signer: RotationAuthor,
+    seed_a: [u8; 32],
+    old: KeyBackup,
+    commit: RealmCommit,
+    selected: KeysBackupsList,
+}
+
+async fn live_rotation(server_name: &str, extra_env: &[(&str, &str)]) -> Result<LiveRotation> {
     let database = spawn_ephemeral_postgres_for("COTEST_SOLAND_DATABASE_URL")?.context(
         "the rotation scenario needs PostgreSQL; set COTEST_SOLAND_DATABASE_URL or make Docker available",
     )?;
@@ -285,16 +327,20 @@ pub async fn security_rotation_runs_worker_steps_to_local_commit() -> Result<()>
     let authority_origin = coauth.origin();
     let introspection_url = coauth.url();
     let server = spawn_with_harness_account_authority_at(
-        SERVER_NAME,
+        server_name,
         &database.connect_url,
         &[
-            ("SOLAND_ACCOUNT_AUTHORITY_URL", authority_origin.as_str()),
-            ("SOLAND_DID_RESOLVER_ALLOW_METHODS", "web,webvh,key,uuid"),
-            (
-                "SOLAND_SESSION_GRANT_INTROSPECTION_URL",
-                introspection_url.as_str(),
-            ),
-        ],
+            &[
+                ("SOLAND_ACCOUNT_AUTHORITY_URL", authority_origin.as_str()),
+                ("SOLAND_DID_RESOLVER_ALLOW_METHODS", "web,webvh,key,uuid"),
+                (
+                    "SOLAND_SESSION_GRANT_INTROSPECTION_URL",
+                    introspection_url.as_str(),
+                ),
+            ],
+            extra_env,
+        ]
+        .concat(),
     )
     .await?;
     let actor = actor_did_for_service_did(server.service_did(), "rotation-alice")?;
@@ -415,6 +461,40 @@ pub async fn security_rotation_runs_worker_steps_to_local_commit() -> Result<()>
         selected.active_series
     );
     ensure!(listing(&client_b).await?.active_series == selected.active_series);
+
+    Ok(LiveRotation {
+        server,
+        _coauth: coauth,
+        database,
+        client_a,
+        client_b,
+        client_c,
+        events_a,
+        principal,
+        signer,
+        seed_a,
+        old,
+        commit,
+        selected,
+    })
+}
+
+pub async fn security_rotation_runs_worker_steps_to_local_commit() -> Result<()> {
+    let LiveRotation {
+        server,
+        _coauth,
+        database,
+        client_a,
+        client_b,
+        client_c,
+        events_a,
+        principal,
+        signer,
+        seed_a,
+        old,
+        commit,
+        selected,
+    } = live_rotation(SERVER_NAME, &[]).await?;
 
     // 1. A revoke not signed by A's current key aborts with no proposal,
     //    Commit or effect on its target.
@@ -705,6 +785,117 @@ pub async fn security_rotation_runs_worker_steps_to_local_commit() -> Result<()>
             && !lists(&unchanged, OLD_BACKUP)
             && lists(&unchanged, binding.new_backups[0].backup_id.as_str()),
         "a refused or replayed request changed the backup listing"
+    );
+    drop(server);
+    drop(database);
+    Ok(())
+}
+
+/// A revoke proposal whose decision never lands before expiry ends
+/// `rejected` (decision 0102): the target device is refused while the
+/// proposal is pending and authenticates again once the rotation expired with
+/// its rejected result. The development failpoint defers every revoke
+/// decision on this dedicated server, standing in for a worker that crashed
+/// between the proposal and its terminal write.
+pub async fn security_rotation_rejected_revoke_restores_the_target_device() -> Result<()> {
+    let LiveRotation {
+        server,
+        _coauth,
+        database,
+        client_a,
+        client_b,
+        signer,
+        old,
+        selected,
+        ..
+    } = live_rotation(
+        "security-rotation-rejected-revoke",
+        &[(
+            "SOLAND_FAILPOINTS",
+            "security_rotation_revoke_terminal=fail_after_durable_steps:0",
+        )],
+    )
+    .await?;
+    ensure!(
+        !refused(&client_b).await?,
+        "B does not authenticate before the rotation"
+    );
+
+    let (request, _) = signer.rotation_until(
+        "f004",
+        DEVICE_B,
+        signer.seed,
+        signer.seed,
+        &old,
+        &selected.active_series.authority_commit_id,
+        chrono::Duration::seconds(3),
+    )?;
+    let pending = create(&client_a, &request).await?;
+    ensure!(
+        pending.revoke_proposal.is_some()
+            && pending.revoke_command_outcome.is_none()
+            && pending.accepted_steps.is_empty()
+            && pending.terminal_outcome.is_none(),
+        "the revoke proposal is not pending: {pending:?}"
+    );
+    ensure!(
+        refused(&client_b).await?,
+        "a device with a pending revoke proposal still authenticates"
+    );
+
+    // The worker sweeps every few seconds; after expiry it must write the
+    // rejected result with the expired terminal, exactly once.
+    let path = format!(
+        "/_arkret/self/security-transactions/{}",
+        pending.transaction_id
+    );
+    let mut expired = None;
+    for _ in 0..40 {
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        let current: SecurityTransaction =
+            serde_json::from_value(expect_json(client_a.get(&path), StatusCode::OK).await?)?;
+        if current.terminal_outcome.is_some() {
+            expired = Some(current);
+            break;
+        }
+    }
+    let expired = expired.context("the expired rotation was never terminated by the worker")?;
+    ensure!(
+        matches!(
+            expired.terminal_outcome,
+            Some(SecurityTransactionTerminalOutcome::Expired { .. })
+        ) && expired.accepted_steps.is_empty()
+            && expired
+                .revoke_command_outcome
+                .as_ref()
+                .is_some_and(|outcome| outcome.result
+                    == SecurityRotationRevokeCommandResult::Rejected
+                    && Some(&outcome.proposal_event_id)
+                        == pending
+                            .revoke_proposal
+                            .as_ref()
+                            .map(|proposal| &proposal.proposal_event_id)),
+        "the expired rotation did not record its rejected revoke: {expired:?}"
+    );
+
+    // The rejected proposal has no effect: B authenticates and lists again,
+    // and A's pointer and envelopes are untouched. Only the PCR head moved,
+    // to the Commit that covers the immutable proposal Event.
+    ensure!(
+        !refused(&client_b).await?,
+        "the target of a rejected revoke is still refused"
+    );
+    let after = listing(&client_b).await?;
+    ensure!(
+        pointer_is(&after, SERIES_ONE, 1)
+            && lists(&after, OLD_BACKUP)
+            && Some(&after.active_series.authority_commit_id)
+                == pending
+                    .revoke_proposal
+                    .as_ref()
+                    .map(|proposal| &proposal.covering_commit_id),
+        "a rejected rotation moved the pointer or envelopes: {:?}",
+        after.active_series
     );
     drop(server);
     drop(database);
