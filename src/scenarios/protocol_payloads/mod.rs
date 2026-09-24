@@ -15,7 +15,8 @@
 //!   operation advertisement.
 //! - [`backup_delete`] — terminal `DELETE /_arkret/self/keys/backups/{id}`.
 //! - [`blob`] — `/_arkret/self/blob/{upload,get}` (sha mismatch + happy-path range).
-//! - [`push`] — `/_arkret/edge/push/{register-device,notify}` happy + missing-device rejection.
+//! - [`push`] — `/_arkret/edge/push/{register-device,unregister-device}` fail-closed registration
+//!   against a non-onboarded Gateway plus idempotent unregistration.
 //! - [`moderation`] — `/_arkret/self/moderation/report` queueing.
 //!
 //! No private cross-phase helpers exist — every phase function takes only
