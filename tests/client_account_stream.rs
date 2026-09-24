@@ -4,7 +4,7 @@
 //! `timeline_window_completion`, `realm_detail_baseline_singletons`) whose
 //! vectors and `sync-fixture.json` were withdrawn from the spec registry with
 //! the authority-commit protocol. The Station-CAS account-data capability keeps
-//! its runner in `conformance::decision_0017_vectors`
+//! its runner in `conformance::account_data_cas_convergence`
 //! (`account-data-cas-convergence-fixture.json`); baseline-versus-incremental
 //! ordering is now a section of the client-sync fixture executed here.
 #[test]

@@ -29,7 +29,6 @@ mod crypto_hpke;
 mod crypto_signature;
 mod cursor_negative;
 mod cursor_vectors;
-mod decision_0017_vectors;
 mod detached_object_signature;
 mod device_pairing_code_claim;
 mod device_revocation_pending;
@@ -214,9 +213,6 @@ pub use cursor_negative::{CURSOR_NEGATIVE_ENTRYPOINT, run_cursor_negative_suite}
 pub use cursor_vectors::{
     ALL_CURSOR_VECTOR_IDS, run_cursor_handle_reject_vector, run_cursor_opaque_core_vector,
     run_cursor_vector_suite,
-};
-pub use decision_0017_vectors::{
-    run_account_data_cas_convergence_vector_suite, run_read_cursor_multi_device_merge_vector_suite,
 };
 pub use detached_object_signature::{
     DETACHED_OBJECT_SIGNATURE_ENTRYPOINT, run_detached_object_signature_suite,
