@@ -235,24 +235,6 @@ pub async fn bootstrap_registered_actor(
                 record.additional_devices.get(&device_id).cloned(),
             )
         });
-    let token = match registration {
-        ActorBootstrapRegistration::DevLogin => dev_login(server, actor, &device_id).await?,
-        ActorBootstrapRegistration::Account { handle } if cached.is_none() => {
-            register_account_via_dev_login(server, actor, handle, &device_id).await?
-        }
-        ActorBootstrapRegistration::AccountWithLocalpart { handle, localpart }
-            if cached.is_none() =>
-        {
-            register_account_with_localpart_via_dev_login(
-                server, actor, handle, localpart, &device_id,
-            )
-            .await?
-        }
-        ActorBootstrapRegistration::Account { .. }
-        | ActorBootstrapRegistration::AccountWithLocalpart { .. } => {
-            dev_login(server, actor, &device_id).await?
-        }
-    };
     if let Some((founding, additional)) = cached {
         if device_id == founding.device_id.as_str() {
             register_event_signing_identity(
@@ -261,6 +243,7 @@ pub async fn bootstrap_registered_actor(
                 device_method.as_str().to_owned(),
                 server.service_id().clone(),
             );
+            let token = dev_login(server, actor, &device_id).await?;
             return Ok((founding, token));
         }
         if let Some((additional_key, authorize_event_id)) = additional {
@@ -270,6 +253,7 @@ pub async fn bootstrap_registered_actor(
                 device_method.as_str().to_owned(),
                 server.service_id().clone(),
             );
+            let token = dev_login(server, actor, &device_id).await?;
             return Ok((
                 ProvisionedTestPrincipal {
                     device_id: DeviceId::new(device_id.clone())?,
@@ -310,6 +294,7 @@ pub async fn bootstrap_registered_actor(
                 device_id.clone(),
                 (device_key.clone(), authorize_event_id.clone()),
             );
+        let token = dev_login(server, actor, &device_id).await?;
         return Ok((
             ProvisionedTestPrincipal {
                 device_id: DeviceId::new(device_id)?,
@@ -321,15 +306,9 @@ pub async fn bootstrap_registered_actor(
         ));
     }
     let prepared = install_test_principal_control_document(server, actor).await?;
-    let bootstrap = bootstrap_test_device_authorization(
-        server,
-        &token,
-        actor,
-        &device_id,
-        &device_key,
-        &prepared,
-    )
-    .await?;
+    let bootstrap =
+        bootstrap_test_device_authorization(server, actor, &device_id, &device_key, &prepared)
+            .await?;
     register_event_signing_identity(
         actor,
         device_key.to_bytes(),
@@ -346,6 +325,25 @@ pub async fn bootstrap_registered_actor(
         pcr_realm_id: bootstrap.pcr_realm_id,
         founding_authorize_event_id: bootstrap.authorize_event_id,
     };
+    let token = match registration {
+        ActorBootstrapRegistration::DevLogin => {
+            dev_login(server, actor, principal.device_id.as_str()).await?
+        }
+        ActorBootstrapRegistration::Account { handle } => {
+            register_account_via_dev_login(server, actor, handle, principal.device_id.as_str())
+                .await?
+        }
+        ActorBootstrapRegistration::AccountWithLocalpart { handle, localpart } => {
+            register_account_with_localpart_via_dev_login(
+                server,
+                actor,
+                handle,
+                localpart,
+                principal.device_id.as_str(),
+            )
+            .await?
+        }
+    };
     PROVISIONED_PRINCIPALS
         .lock()
         .expect("provisioned principal lock")
@@ -356,16 +354,7 @@ pub async fn bootstrap_registered_actor(
                 additional_devices: BTreeMap::new(),
             },
         );
-    // The credential used to submit PCR genesis predates the immutable
-    // principal/device binding.  It is bootstrap-only: once the genesis unit
-    // and its first Seal are durably accepted, obtain a fresh session whose
-    // grant is issued against that confirmed history.  Reusing `token` here
-    // would silently turn a pre-genesis development credential into a
-    // Standard session without a new issuance decision.
-    let confirmed_token = dev_login(server, actor, principal.device_id.as_str())
-        .await
-        .context("issue post-genesis session from confirmed PCR history")?;
-    Ok((principal, confirmed_token))
+    Ok((principal, token))
 }
 
 /// Admit an additional device of an already-provisioned principal into its PCR
@@ -692,7 +681,6 @@ struct TestDeviceAuthorizationBootstrap {
 
 async fn bootstrap_test_device_authorization(
     server: &ArkretServer,
-    _token: &str,
     actor: &str,
     device_id: &str,
     device_signing_key: &SigningKey,

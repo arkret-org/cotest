@@ -137,11 +137,21 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
     .await?;
     assert_eq!(replayed, accepted, "same key and body must replay exactly");
 
-    let conflicting = arkret_test_kit::wire_negative_from_sdk(&accepted_body, |value| {
-        value["plaintext_commitment"] = Value::String(
-            "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned(),
-        );
-    })?;
+    let mut conflicting = accepted_body.clone();
+    conflicting.plaintext_commitment = Some(Hash::new(
+        "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    )?);
+    let signing_key = &alice
+        .principal
+        .as_ref()
+        .context("client has a provisioned principal")?
+        .device_signing_key;
+    let signature = ed25519_dalek::Signer::sign(signing_key, &conflicting.signing_payload_bytes()?);
+    conflicting.auth_data.signature = Base64UrlString::new(base64::Engine::encode(
+        &base64::engine::general_purpose::URL_SAFE_NO_PAD,
+        signature.to_bytes(),
+    ))
+    .map_err(|error| anyhow!(error))?;
     expect_backup_error(
         alice
             .put(&format!("/_arkret/self/keys/backups/{BACKUP_ID}"))
