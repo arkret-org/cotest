@@ -70,10 +70,11 @@ pub async fn spawn_with_harness_account_authority(
     extra_env: &[(&str, &str)],
 ) -> Result<ArkretServer> {
     let mut env = Vec::with_capacity(extra_env.len() + 3);
-    env.push((
-        "SOLAND_ACCOUNT_AUTHORITY_URL",
-        HARNESS_ACCOUNT_AUTHORITY_ORIGIN,
-    ));
+    let authority_url = extra_env
+        .iter()
+        .find(|(key, _)| *key == "SOLAND_ACCOUNT_AUTHORITY_URL")
+        .map_or(HARNESS_ACCOUNT_AUTHORITY_ORIGIN, |(_, value)| *value);
+    env.push(("SOLAND_ACCOUNT_AUTHORITY_URL", authority_url));
     env.push((
         "SOLAND_INTERNAL_AUTHORITY_SHARED_SECRET",
         HARNESS_INTERNAL_AUTHORITY_SECRET,
@@ -82,7 +83,12 @@ pub async fn spawn_with_harness_account_authority(
         "SOLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN",
         HARNESS_ACCOUNT_AUTHORITY_TRUST_DOMAIN,
     ));
-    env.extend_from_slice(extra_env);
+    env.extend(
+        extra_env
+            .iter()
+            .copied()
+            .filter(|(key, _)| *key != "SOLAND_ACCOUNT_AUTHORITY_URL"),
+    );
     ArkretServer::spawn_with_env(name, &env).await
 }
 

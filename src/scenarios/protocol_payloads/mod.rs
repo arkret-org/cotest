@@ -45,10 +45,15 @@ pub async fn events_keys_device_blob_push_and_moderation_surfaces_work() -> Resu
         HARNESS_INTERNAL_AUTHORITY_SECRET,
     )
     .await?;
+    let account_authority_origin = coauth.origin();
     let introspection_url = coauth.url();
     let server = spawn_with_harness_account_authority(
         "protocol-payloads",
         &[
+            (
+                "SOLAND_ACCOUNT_AUTHORITY_URL",
+                account_authority_origin.as_str(),
+            ),
             ("SOLAND_DID_RESOLVER_ALLOW_METHODS", "web,webvh,key,uuid"),
             (
                 "SOLAND_SESSION_GRANT_INTROSPECTION_URL",

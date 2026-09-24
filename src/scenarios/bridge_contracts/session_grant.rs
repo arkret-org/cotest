@@ -4,9 +4,12 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::harness::{ArkretServer, expect_json, expect_status};
+use crate::harness::expect_status;
 use crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
-use crate::scenarios::identity_test_support::actor_did_for_service_did;
+use crate::scenarios::identity_test_support::{
+    HARNESS_INTERNAL_AUTHORITY_SECRET, actor_did_for_service_did,
+    spawn_with_harness_account_authority,
+};
 
 /// A grant-shaped bearer credential (JWT with `kind = "ak.session.grant"`).
 /// The mock never verifies its signature; the shape only matters so the SUT
@@ -45,7 +48,10 @@ fn grant_shaped_jwt(subject: &str, device_id: &str, audience: &str, signature_by
 
 pub async fn session_grant_presentation_uses_configured_coauth_introspection() -> Result<()> {
     // The mock must exist before the SUT boots so its URL lands in the SUT env.
-    let coauth = MockCoauthIntrospectionServer::spawn().await?;
+    let coauth = MockCoauthIntrospectionServer::spawn_with_internal_secret(
+        HARNESS_INTERNAL_AUTHORITY_SECRET,
+    )
+    .await?;
     let account_authority_origin = coauth.origin();
     let introspection_url = coauth.url();
     let extra_env = [
@@ -57,13 +63,9 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
             "SOLAND_SESSION_GRANT_INTROSPECTION_URL",
             introspection_url.as_str(),
         ),
-        ("SOLAND_INTERNAL_AUTHORITY_SHARED_SECRET", "principal-token"),
-        (
-            "SOLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN",
-            "ak:trust_domain:mock-coauth.local",
-        ),
     ];
-    let server = ArkretServer::spawn_with_env("session-grant-presentation", &extra_env).await?;
+    let server =
+        spawn_with_harness_account_authority("session-grant-presentation", &extra_env).await?;
 
     // Canonical self-sovereign principal: deterministic did:webvh plus the
     // closed §5.1 genesis unit, so the grant's device selector replays a real
@@ -110,38 +112,19 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
         &arkret_signatures::DpopProofRequest::new("POST", &push_url).access_token(&grant_jwt),
         &holder_key,
     )?;
-    let push: arkret_models_integration::PushRegisterDeviceOutcome = serde_json::from_value(
-        expect_json(
-            server
-                .http()
-                .post(&push_url)
-                .header(reqwest::header::AUTHORIZATION, format!("DPoP {grant_jwt}"))
-                .header("DPoP", &dpop.header_value)
-                .json(&push_body),
-            StatusCode::OK,
-        )
-        .await?,
-    )?;
-    // soland derives the registration_id as an unlinkable, salt-epoch-bound
-    // handle spelled from the same pairwise HMAC tag as the push target
-    // pseudonym (push.rs `push_registration_id`). The tag is keyed, so it is
-    // not predictable from the request. The wire member is closed by
-    // `push-operations.schema.json#/$defs/registration_id` as an
-    // opaque_correlation carrier outside the `ak:` typed-ID namespace; assert
-    // that shape instead of an exact value.
-    let registration_id = push
-        .registration_id
-        .as_ref()
-        .expect("registration_id must be present")
-        .as_str();
-    assert!(
-        (1..=128).contains(&registration_id.len())
-            && !registration_id.starts_with("ak:")
-            && registration_id
-                .bytes()
-                .all(|b| { b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b':' | b'-') }),
-        "registration_id must match the opaque_correlation profile, got: {registration_id}"
-    );
+    // This fixture does not onboard a Push Gateway. A valid presentation
+    // therefore reaches the gateway dependency gate (409); invalid grants
+    // below must fail authentication first (401).
+    expect_status(
+        server
+            .http()
+            .post(&push_url)
+            .header(reqwest::header::AUTHORIZATION, format!("DPoP {grant_jwt}"))
+            .header("DPoP", &dpop.header_value)
+            .json(&push_body),
+        StatusCode::CONFLICT,
+    )
+    .await?;
 
     let requests = coauth.requests();
     assert!(

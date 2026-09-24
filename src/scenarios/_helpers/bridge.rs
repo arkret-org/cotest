@@ -80,12 +80,12 @@ impl MockCoauthIntrospectionServer {
             requests: Arc::clone(&requests),
             channel: Arc::clone(&channel),
         };
-        let router = Router::with_path("_arkret/gate/account/session-grants/introspect")
+        let router = Router::with_path("_coauth/internal/session-grants/introspect")
             .hoop(affix_state::inject(state))
             .post(coauth_introspect);
         let server = super::mock_http::spawn_mock(router).await?;
         let origin = format!("http://{}", server.addr());
-        let url = format!("{origin}/_arkret/gate/account/session-grants/introspect");
+        let url = format!("{origin}/_coauth/internal/session-grants/introspect");
         Ok(Self {
             origin,
             url,
@@ -248,7 +248,7 @@ async fn coauth_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respo
                 chrono::Utc::now() + chrono::Duration::minutes(10)
             ),
             "revoked_at": null,
-            "revocation_ref": "ak:session:mock",
+            "revocation_ref": "org.arkret.coauth.browser_session:cotest-mock",
             "credential_class": "standard",
             "cnf_jkt": binding.cnf_jkt,
             "session_public_key": binding.session_public_key,
