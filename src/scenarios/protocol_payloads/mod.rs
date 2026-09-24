@@ -25,8 +25,11 @@
 
 use anyhow::{Context, Result};
 
+use crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
+use crate::scenarios::bridge_contracts::session_grant::mock_session_grant_jwt;
 use crate::scenarios::identity_test_support::{
-    actor_did_for_service_did, spawn_with_harness_account_authority,
+    HARNESS_INTERNAL_AUTHORITY_SECRET, actor_did_for_service_did,
+    spawn_with_harness_account_authority,
 };
 
 mod backup_delete;
@@ -38,9 +41,20 @@ mod moderation;
 mod push;
 
 pub async fn events_keys_device_blob_push_and_moderation_surfaces_work() -> Result<()> {
+    let coauth = MockCoauthIntrospectionServer::spawn_with_internal_secret(
+        HARNESS_INTERNAL_AUTHORITY_SECRET,
+    )
+    .await?;
+    let introspection_url = coauth.url();
     let server = spawn_with_harness_account_authority(
         "protocol-payloads",
-        &[("SOLAND_DID_RESOLVER_ALLOW_METHODS", "web,webvh,key,uuid")],
+        &[
+            ("SOLAND_DID_RESOLVER_ALLOW_METHODS", "web,webvh,key,uuid"),
+            (
+                "SOLAND_SESSION_GRANT_INTROSPECTION_URL",
+                introspection_url.as_str(),
+            ),
+        ],
     )
     .await?;
     let actor_id = actor_did_for_service_did(server.service_did(), "protocol-payloads-alice")?;
@@ -48,9 +62,26 @@ pub async fn events_keys_device_blob_push_and_moderation_surfaces_work() -> Resu
         .demo_client(&actor_id, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
     let token = client.expect_dev_bearer().to_owned();
+    let principal = client
+        .principal
+        .as_ref()
+        .context("client carries its provisioned principal")?;
+    let grant = mock_session_grant_jwt(
+        principal.core_id.as_str(),
+        principal.device_id.as_str(),
+        server.service_id().as_str(),
+    );
+    coauth.bind_founding_device_grant(
+        &grant,
+        principal.core_id.as_str(),
+        principal.device_id.as_str(),
+        principal.founding_authorize_event_id.as_str(),
+        &principal.device_signing_key.verifying_key(),
+    )?;
+    let event_client = server.client_with_founding_device_grant(principal, grant)?;
 
     let (actor, adapter_realm_id, adapter_message_event_id) =
-        events_keys_setup::run(&server, &client)
+        events_keys_setup::run(&server, &client, &event_client)
             .await
             .context("protocol payload event/key setup")?;
     device_messages::run(&server, &token, &actor_id)

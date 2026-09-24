@@ -19,22 +19,22 @@ const KEYS_DEVICE_ID: &str = "ak:device:01904100-0000-7000-8000-0000000000a1";
 
 pub async fn run(
     server: &ArkretServer,
-    client: &TestActorClient,
+    dev_client: &TestActorClient,
+    event_client: &TestActorClient,
 ) -> Result<(TestActorClient, String, String)> {
     // The bootstrap already authorized the founding device; sign the upload
     // with its provisioned key.
-    let device_key = client
+    let device_key = dev_client
         .principal
         .as_ref()
         .context("client carries its provisioned principal")?
         .device_signing_key
         .clone();
-    let (actor, realm_id, message_event_id) =
-        submit_adapter_event(server, client.expect_dev_bearer(), &client.actor).await?;
+    let (actor, realm_id, message_event_id) = submit_adapter_event(server, event_client).await?;
     upload_and_inspect_keys(
         server,
-        client.expect_dev_bearer(),
-        &client.actor,
+        dev_client.expect_dev_bearer(),
+        &dev_client.actor,
         &device_key,
     )
     .await?;
@@ -43,10 +43,9 @@ pub async fn run(
 
 async fn submit_adapter_event(
     server: &ArkretServer,
-    token: &str,
-    actor_id: &str,
+    event_client: &TestActorClient,
 ) -> Result<(TestActorClient, String, String)> {
-    let actor = server.client_with_token(actor_id, KEYS_DEVICE_ID, token.to_owned())?;
+    let actor = event_client.clone();
     let realm_id = actor
         .create_realm_with(json!({
             "title": "Adapter Event Space",

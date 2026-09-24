@@ -47,6 +47,7 @@ const SELF_REPORTED_IDENTITY_HEADERS: [&str; 3] = [
 
 #[derive(Clone)]
 struct CoauthIntrospectionState {
+    internal_secret: String,
     binding: Arc<Mutex<Option<CoauthGrantBinding>>>,
     requests: Arc<Mutex<Vec<Value>>>,
     channel: Arc<Mutex<Vec<ChannelObservation>>>,
@@ -66,10 +67,15 @@ impl MockCoauthIntrospectionServer {
     /// SUT environment; bind the provisioned principal afterwards through
     /// [`Self::bind_founding_device_grant`].
     pub async fn spawn() -> Result<Self> {
+        Self::spawn_with_internal_secret("principal-token").await
+    }
+
+    pub async fn spawn_with_internal_secret(internal_secret: &str) -> Result<Self> {
         let requests: Arc<Mutex<Vec<Value>>> = Arc::new(Mutex::new(Vec::new()));
         let binding: Arc<Mutex<Option<CoauthGrantBinding>>> = Arc::new(Mutex::new(None));
         let channel: Arc<Mutex<Vec<ChannelObservation>>> = Arc::new(Mutex::new(Vec::new()));
         let state = CoauthIntrospectionState {
+            internal_secret: internal_secret.to_owned(),
             binding: Arc::clone(&binding),
             requests: Arc::clone(&requests),
             channel: Arc::clone(&channel),
@@ -157,11 +163,7 @@ async fn coauth_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respo
         .headers()
         .get(salvo::http::header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
-        .is_some_and(|value| {
-            value
-                .to_ascii_lowercase()
-                .contains("bearer principal-token")
-        });
+        .is_some_and(|value| value == format!("Bearer {}", state.internal_secret));
     state
         .channel
         .lock()

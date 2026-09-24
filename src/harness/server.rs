@@ -1113,6 +1113,27 @@ impl ArkretServer {
         )
     }
 
+    /// Present an issuer-ledger-bound grant for an already founded test device.
+    /// The caller must configure the Account Authority introspection endpoint
+    /// and register this exact grant there before using the client.
+    pub fn client_with_founding_device_grant(
+        &self,
+        principal: &ProvisionedTestPrincipal,
+        grant: String,
+    ) -> Result<TestActorClient> {
+        let client = self.actor_client(
+            principal.did.as_str(),
+            principal.device_id.as_str(),
+            crate::harness::ClientSession::Canonical {
+                grant,
+                signing_key: Arc::new(principal.device_signing_key.clone()),
+            },
+            Some(principal.clone()),
+        )?;
+        client.track_controlled_realm(&principal.pcr_realm_id);
+        Ok(client)
+    }
+
     /// A client whose principal was founded through the canonical chain.
     ///
     /// This is the entry point the dev-seam ones are measured against. The

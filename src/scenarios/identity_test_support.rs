@@ -53,7 +53,8 @@ use crate::harness::{
 
 pub(crate) const HARNESS_ACCOUNT_AUTHORITY_KEY_SEED: [u8; 32] = [0xac; 32];
 pub(crate) const HARNESS_ACCOUNT_AUTHORITY_ORIGIN: &str = "https://account-authority.cotest.local";
-const HARNESS_INTERNAL_AUTHORITY_SECRET: &str = "cotest-principal-genesis-private-channel";
+pub(crate) const HARNESS_INTERNAL_AUTHORITY_SECRET: &str =
+    "cotest-principal-genesis-private-channel";
 const HARNESS_ACCOUNT_AUTHORITY_TRUST_DOMAIN: &str =
     "ak:trust_domain:account-authority.cotest.local";
 pub(crate) fn harness_account_authority_public_key_multibase() -> String {
