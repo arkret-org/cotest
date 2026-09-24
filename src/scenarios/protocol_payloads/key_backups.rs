@@ -18,7 +18,7 @@ use std::collections::BTreeMap;
 use anyhow::{Context as _, Result, anyhow};
 use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_identifiers::{
-    BackupId, BackupSeriesId, DeviceId, Did, DidCoreId, EventId, project_did_to_core_id,
+    BackupId, BackupSeriesId, DeviceId, Did, DidCoreId, project_did_to_core_id,
 };
 use arkret_models_crypto::{
     BackupKind, KeyBackup, KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData,
@@ -35,7 +35,7 @@ use chrono::{DateTime, Utc};
 use ed25519_dalek::{Signer as _, SigningKey};
 use reqwest::StatusCode;
 
-use crate::harness::{ArkretServer, expect_json};
+use crate::harness::{ArkretServer, ProvisionedTestPrincipal, expect_json};
 
 pub const BACKUP_ID: &str = "ak:backup:01964137-0000-7000-8000-000000000000";
 
@@ -45,20 +45,23 @@ pub const BACKUP_ID: &str = "ak:backup:01964137-0000-7000-8000-000000000000";
 /// device.
 const DEVICE_ID: &str = "ak:device:01904100-0000-7000-8000-0000000000a1";
 const SERIES_ID: &str = "ak:backup_series:01964137-0000-7000-8000-000000000000";
-/// Typed device id carried inside the envelope (`auth_data.device_id` must be
-/// a `ak:device:` typed id; it is not required to equal the session device).
+/// A different device id used only to exercise the unlock session binding.
 const ENVELOPE_DEVICE_ID: &str = "ak:device:01964137-0000-7000-8000-000000000000";
 const CIPHERTEXT_DIGEST: &str =
     "sha256:305531dcc50ebca31cf1d5b31e9fc76ed51f66b3b6dd5a030c6539ae6532f979";
 
-/// Deterministic Ed25519 device key shared by the envelope `auth_data`
-/// signature and the unlock-proof transcript signature.
+/// A separate Ed25519 key for the rejected unlock proof.
 fn device_signing_key() -> SigningKey {
     SigningKey::from_bytes(&[7u8; 32])
 }
 
-pub async fn run(server: &ArkretServer, token: &str, actor_id: &str) -> Result<()> {
-    put_backup(server, token, actor_id).await?;
+pub async fn run(
+    server: &ArkretServer,
+    token: &str,
+    actor_id: &str,
+    principal: &ProvisionedTestPrincipal,
+) -> Result<()> {
+    put_backup(server, token, actor_id, principal).await?;
     list_backups(server, token).await?;
     describe_backup_operations(server).await?;
     unlock_backup_requires_body_proof(server, token, actor_id).await?;
@@ -67,14 +70,23 @@ pub async fn run(server: &ArkretServer, token: &str, actor_id: &str) -> Result<(
     Ok(())
 }
 
-async fn put_backup(server: &ArkretServer, token: &str, actor_id: &str) -> Result<()> {
+async fn put_backup(
+    server: &ArkretServer,
+    token: &str,
+    actor_id: &str,
+    principal: &ProvisionedTestPrincipal,
+) -> Result<()> {
     let backup_put = expect_json(
         server
             .http()
             .put(server.url(&format!("/_arkret/self/keys/backups/{BACKUP_ID}")))
             .bearer_auth(token)
             .header("Idempotency-Key", "protocol-payloads-key-backup-put")
-            .json(&signed_backup_envelope(actor_id, server.service_id())?),
+            .json(&signed_backup_envelope(
+                actor_id,
+                server.service_id(),
+                principal,
+            )?),
         StatusCode::OK,
     )
     .await?;
@@ -86,10 +98,17 @@ async fn put_backup(server: &ArkretServer, token: &str, actor_id: &str) -> Resul
 /// Build the `ak.schema.key_backup.v1` envelope including the §7.4.1
 /// `auth_data` device-signature block. The device authorization Event is the
 /// trust anchor for this signature.
-fn signed_backup_envelope(actor_id: &str, station_id: &DidCoreId) -> Result<KeyBackup> {
-    let signing_key = device_signing_key();
-    let multibase = ed25519_pubkey_to_did_key_multibase(signing_key.verifying_key().as_bytes());
-    let verification_method = format!("did:key:{multibase}#{multibase}");
+fn signed_backup_envelope(
+    actor_id: &str,
+    station_id: &DidCoreId,
+    principal: &ProvisionedTestPrincipal,
+) -> Result<KeyBackup> {
+    let signing_key = &principal.device_signing_key;
+    let verification_method = format!(
+        "{}#{}",
+        principal.did.as_str(),
+        principal.device_id.as_str()
+    );
     let created_at = ts("2026-04-26T00:00:00.000Z")?;
     let mut envelope = KeyBackup {
         backup_id: backup_id(BACKUP_ID)?,
@@ -97,7 +116,7 @@ fn signed_backup_envelope(actor_id: &str, station_id: &DidCoreId) -> Result<KeyB
             did(actor_id)?,
             station_id.clone(),
         )),
-        device_id: Some(device_id(ENVELOPE_DEVICE_ID)?),
+        device_id: Some(principal.device_id.clone()),
         backup_kind: BackupKind::SecretStorage,
         mixed_secret_storage: false,
         backup_version: "kb_1".to_owned(),
@@ -132,14 +151,12 @@ fn signed_backup_envelope(actor_id: &str, station_id: &DidCoreId) -> Result<KeyB
         ciphertext_digest: Hash::new(CIPHERTEXT_DIGEST)?,
         plaintext_commitment: None,
         auth_data: KeyBackupAuthData {
-            device_id: device_id(ENVELOPE_DEVICE_ID)?,
+            device_id: principal.device_id.clone(),
             verification_method: DidUrl::new(verification_method)
                 .map_err(|error| anyhow!(error))?,
             signature_algorithm: KeyBackupSignatureAlgorithm::Ed25519,
             signature: Base64UrlString::new("AA").map_err(|error| anyhow!(error))?,
-            device_authorize_event_id: EventId::new(
-                "ak:event:ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM",
-            )?,
+            device_authorize_event_id: principal.founding_authorize_event_id.clone(),
         },
         retention: Some(KeyBackupRetention {
             delete_after: Some(ts("2020-01-01T00:00:00.000Z")?),
@@ -236,18 +253,16 @@ async fn current_device_unlock_rejects_wrong_device_before_signature_trust(
     token: &str,
     actor_id: &str,
 ) -> Result<()> {
-    // The proof uses the deterministic backup-envelope key, not the
-    // authenticated session's current device key. Device binding is the first
-    // authorization gate, so the request must fail before evaluating whether
-    // that unrelated signature is otherwise well formed.
+    // Device binding is the first authorization gate. Change the challenge's
+    // bound device id to another device while preserving its other fields.
+    let mut proof = unlock_proof(server, token, actor_id).await?;
+    proof.requesting_device_id = device_id(ENVELOPE_DEVICE_ID)?;
     crate::harness::expect_api_error(
         server
             .http()
             .post(server.url(&format!("/_arkret/self/keys/backups/{BACKUP_ID}/unlock")))
             .bearer_auth(token)
-            .json(&KeysBackupsUnlockRequestBody {
-                proof: unlock_proof(server, token, actor_id).await?,
-            }),
+            .json(&KeysBackupsUnlockRequestBody { proof }),
         StatusCode::FORBIDDEN,
         "capability_denied",
     )

@@ -56,9 +56,17 @@ pub async fn events_keys_device_blob_push_and_moderation_surfaces_work() -> Resu
     device_messages::run(&server, &token, &actor_id)
         .await
         .context("protocol payload device messages")?;
-    key_backups::run(&server, &token, &actor_id)
-        .await
-        .context("protocol payload key backups")?;
+    key_backups::run(
+        &server,
+        &token,
+        &actor_id,
+        client
+            .principal
+            .as_ref()
+            .context("client carries its provisioned principal")?,
+    )
+    .await
+    .context("protocol payload key backups")?;
     backup_delete::run(&server, &token, &actor_id)
         .await
         .context("protocol payload backup deletion")?;
