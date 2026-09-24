@@ -242,6 +242,19 @@ pub async fn declared_durable_effects_match_live_producers() -> Result<()> {
         .await?;
     let push_status = response.status();
     let push_body = response.json::<Value>().await.unwrap_or(Value::Null);
+    // push-notifications.md §3.3: this Station has onboarded no public
+    // Gateway, so the bare URL fails closed with the operation's registered
+    // `push_gateway_unreachable`; the refusal must still leave no durable
+    // Event behind.
+    assert_eq!(
+        push_status,
+        StatusCode::SERVICE_UNAVAILABLE,
+        "{push_operation} with a non-onboarded Gateway must fail closed: {push_body}"
+    );
+    assert_eq!(
+        push_body["type"], "https://arkret.org/problems/push_gateway_unreachable",
+        "{push_operation} refusal code: {push_body}"
+    );
     let after = realm_event_kinds(&alice, &realm_id).await?;
     let push_appended = appended_kinds(&before, &after);
     assert!(

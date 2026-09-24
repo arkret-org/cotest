@@ -272,34 +272,41 @@ pub async fn push_and_ice_contracts_work() -> Result<()> {
     // all in v1. Presence rides the encrypted Signal rail
     // (`profiles-presence.md` §3.1), whose plaintext the Sync Service may not
     // decrypt, aggregate or project (§3.3); the receiver-side contract is
-    // covered by `conformance::presence_signal`.
-    expect_status(
-        server
-            .http()
-            .get(server.url("/_arkret/self/account/subscribe?catchup=true&set_presence=online")),
-        StatusCode::UNAUTHORIZED,
+    // covered by `conformance::presence_signal`. An authenticated caller that
+    // names the parameter is refused instead of having it silently ignored.
+    expect_api_error(
+        alice.get("/_arkret/self/account/subscribe?catchup=true&set_presence=online"),
+        StatusCode::BAD_REQUEST,
+        "param_invalid",
     )
     .await?;
 
-    let push_registration: arkret_models_integration::PushRegisterDeviceOutcome =
-        serde_json::from_value(
-            expect_json(
-                alice.post("/_arkret/edge/push/register-device").json(
-                    &PushRegisterDeviceRequestBody {
-                        device_id: DeviceId::new(alice.device_id.clone())?,
-                        push_gateway_url: "https://push.example".to_owned(),
-                        push_key: PushKey::new("opaque").map_err(anyhow::Error::msg)?,
-                        platform: Some("desktop".to_owned()),
-                        app_id: Some("inkson".to_owned()),
-                        display_name: None,
-                        visible_notification_opt_in: false,
-                    },
-                ),
-                StatusCode::OK,
-            )
-            .await?,
-        )?;
-    assert!(!push_registration.push_target_id.as_str().is_empty());
+    // push-notifications.md §3.3: a bare `push_gateway_url` never establishes
+    // trust. This Station has onboarded no public Gateway, so registration
+    // fails closed with the operation's registered `push_gateway_unreachable`
+    // and installs nothing; §3.2 unregistration of the same device is then
+    // the idempotent 204. The onboarded-Gateway success path belongs to the
+    // joint registration handoff run, which supplies a live Gateway.
+    let refused = expect_api_error(
+        alice
+            .post("/_arkret/edge/push/register-device")
+            .json(&PushRegisterDeviceRequestBody {
+                device_id: DeviceId::new(alice.device_id.clone())?,
+                push_gateway_url: "https://push.example".to_owned(),
+                push_key: PushKey::new("opaque").map_err(anyhow::Error::msg)?,
+                platform: Some("desktop".to_owned()),
+                app_id: Some("inkson".to_owned()),
+                display_name: None,
+                visible_notification_opt_in: false,
+            }),
+        StatusCode::SERVICE_UNAVAILABLE,
+        "push_gateway_unreachable",
+    )
+    .await?;
+    assert!(
+        !serde_json::to_string(&refused)?.contains("opaque"),
+        "a refused registration must not echo the provider route: {refused:?}"
+    );
 
     expect_status(
         alice
