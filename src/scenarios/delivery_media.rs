@@ -10,12 +10,12 @@ use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{
-    ArkretServer, TestActorClient, device_message_send_request, encrypted_envelope,
-    expect_api_error, expect_indistinguishable_api_errors, expect_json, expect_response,
-    expect_text,
+    TestActorClient, device_message_send_request, encrypted_envelope, expect_api_error,
+    expect_indistinguishable_api_errors, expect_json, expect_response, expect_text,
 };
 use crate::scenarios::identity_test_support::{
     actor_did_for_service_did, signed_keys_upload_body, spawn_with_harness_account_authority,
+    spawn_with_standard_grant_authority,
 };
 
 pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
@@ -365,11 +365,14 @@ pub(crate) fn blob_upload_form(bytes: &[u8], media_type: &str) -> Result<reqwest
 }
 
 pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
-    let server = ArkretServer::spawn("blob-media").await?;
+    let station = spawn_with_standard_grant_authority("blob-media", &[]).await?;
+    let server = &station.server;
     let alice_did = actor_did_for_service_did(server.service_did(), "alice-blob")?;
-    let alice = server
+    let alice_bearer = server
         .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
+    // Alice founds the Realm, which needs her Standard SessionGrant.
+    let alice = station.standard_grant_client(&alice_bearer)?;
     let bob_did = actor_did_for_service_did(server.service_did(), "bob-blob")?;
     let bob = server
         .register_client(
@@ -405,8 +408,8 @@ pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
                 "sha256:deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
             )
             .multipart(blob_upload_form(b"blob-bytes", "text/plain")?),
-        StatusCode::CONFLICT,
-        "digest_mismatch",
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "blob_digest_mismatch",
     )
     .await?;
 
@@ -451,7 +454,7 @@ pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
     expect_api_error(
         server.http().get(server.url(&format!(
             "/_arkret/self/blob/get?blob_ref={blob_ref}&purpose=message.attachment&access_token={}",
-            alice.expect_dev_bearer()
+            alice_bearer.expect_dev_bearer()
         ))),
         StatusCode::UNAUTHORIZED,
         "unauthenticated",
@@ -500,12 +503,16 @@ async fn create_blob_access_realm(
 }
 
 pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
-    let server = spawn_with_harness_account_authority("push-moderation", &[]).await?;
+    let station = spawn_with_standard_grant_authority("push-moderation", &[]).await?;
+    let server = &station.server;
     let alice_did = actor_did_for_service_did(server.service_did(), "alice-moderation")?;
-    let alice_client = server
+    let alice_bearer = server
         .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
-    let alice = alice_client.expect_dev_bearer().to_owned();
+    let alice = alice_bearer.expect_dev_bearer().to_owned();
+    // Alice founds the fixture Realm and signs the report Event, which needs
+    // her Standard SessionGrant.
+    let alice_client = station.standard_grant_client(&alice_bearer)?;
     let bob_did = actor_did_for_service_did(server.service_did(), "bob-delivery")?;
     let bob = server
         .register_client(

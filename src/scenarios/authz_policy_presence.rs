@@ -9,24 +9,27 @@ use arkret_wire::{
     StrandId, WireResourceSelector,
 };
 use reqwest::StatusCode;
-use serde_json::json;
 
 use crate::harness::{
-    TestActorClient, actor_core_id, expect_api_error, expect_json, expect_status, submit_event,
+    TestActorClient, actor_core_id, expect_api_error, expect_json, expect_status,
 };
 use crate::scenarios::identity_test_support::{
-    actor_did_for_service_did, spawn_with_harness_account_authority,
+    actor_did_for_service_did, spawn_with_standard_grant_authority,
 };
 
 pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
-    let server = spawn_with_harness_account_authority("authz-grants", &[]).await?;
+    let station = spawn_with_standard_grant_authority("authz-grants", &[]).await?;
+    let server = &station.server;
     let alice_actor = actor_did_for_service_did(server.service_did(), "authz-alice")?;
-    let alice = server
-        .demo_client(
-            &alice_actor,
-            "ak:device:01904100-0000-7000-8000-a11ce0000001",
-        )
-        .await?;
+    // Alice authors Realm Events, which needs her Standard SessionGrant.
+    let alice = station.standard_grant_client(
+        &server
+            .demo_client(
+                &alice_actor,
+                "ak:device:01904100-0000-7000-8000-a11ce0000001",
+            )
+            .await?,
+    )?;
     let _presence_realm = alice.create_realm("Presence Policy Realm").await?;
     let bob_did = actor_did_for_service_did(server.service_did(), "authz-bob")?;
     let bob = server
@@ -196,16 +199,9 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
         expect_authz_check_hard_deny(&bob, &bob_core_id, action, resource, reason_code).await?;
     }
 
-    let revoked_manage = submit_event(
-        &server,
-        alice.expect_dev_bearer(),
-        &alice.actor,
-        &realm_id,
-        "ak.capability.revoke",
-        json!({ "grant_id": manage_grant_id }),
-        StatusCode::OK,
-    )
-    .await?;
+    let revoked_manage = alice
+        .revoke_realm_grant(&realm_id, &manage_grant_id)
+        .await?;
     assert_eq!(revoked_manage["status"], "accepted");
 
     let denied_after_revoke = expect_json(
@@ -257,14 +253,18 @@ async fn expect_authz_check_hard_deny(
 }
 
 pub async fn push_and_ice_contracts_work() -> Result<()> {
-    let server = spawn_with_harness_account_authority("presence-policy", &[]).await?;
+    let station = spawn_with_standard_grant_authority("presence-policy", &[]).await?;
+    let server = &station.server;
     let alice_actor = actor_did_for_service_did(server.service_did(), "presence-alice")?;
-    let alice = server
-        .demo_client(
-            &alice_actor,
-            "ak:device:01904100-0000-7000-8000-a11ce0000001",
-        )
-        .await?;
+    // Alice creates a Realm below, which needs her Standard SessionGrant.
+    let alice = station.standard_grant_client(
+        &server
+            .demo_client(
+                &alice_actor,
+                "ak:device:01904100-0000-7000-8000-a11ce0000001",
+            )
+            .await?,
+    )?;
     let alice_core_id = actor_core_id(&alice.actor)?;
 
     // client-sync.md: the account subscribe surface is read-only — there is no

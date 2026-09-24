@@ -24,11 +24,10 @@ use chrono::Duration as ChronoDuration;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
-use crate::harness::{
-    CanonicalJsonBody, TestActorClient, TestServerGroup, events_query_for_realm, expect_json,
-    moderation_report_request,
+use crate::harness::{CanonicalJsonBody, TestActorClient, moderation_report_request};
+use crate::scenarios::identity_test_support::{
+    actor_did_for_service_did, spawn_with_standard_grant_authority,
 };
-use crate::scenarios::identity_test_support::actor_did_for_service_did;
 use crate::transcripts::record_vector_event;
 
 const OPERATION_REGISTRY_REF: &str = "registry/operation-registry.json";
@@ -95,24 +94,27 @@ fn declared_effect(registry: &Value, operation_id: &str) -> Result<DeclaredEffec
 }
 
 async fn realm_event_kinds(client: &TestActorClient, realm_id: &str) -> Result<Vec<String>> {
-    let listed = expect_json(
-        client
-            .query("/_arkret/self/events")
-            .json(&events_query_for_realm(realm_id, 200)?),
-        StatusCode::OK,
-    )
-    .await?;
-    Ok(listed["events"]
-        .as_array()
-        .ok_or_else(|| anyhow!("events query missing events array: {listed}"))?
+    // `ak.self.committed_event.read.scan.v1` is the member read of the shared
+    // Realm log: every accepted Event on the Realm commit stream, in order.
+    let realm_id = arkret_wire::RealmId::new(realm_id.to_owned())?;
+    let scanned = client
+        .sdk()
+        .scan_commit_stream_to_head(
+            realm_id.clone(),
+            arkret_wire::CommitStreamRef::Realm { realm_id },
+            None,
+            200,
+        )
+        .await?;
+    scanned
+        .committed_events
         .iter()
-        .filter_map(|event| {
-            event["kind"]
-                .as_str()
-                .or_else(|| event["event_kind"].as_str())
-                .map(ToOwned::to_owned)
+        .map(|item| {
+            item.reducer_input()
+                .map(|event| event.kind.as_str().to_owned())
+                .ok_or_else(|| anyhow!("the Realm owner was shown a withheld committed Event"))
         })
-        .collect())
+        .collect()
 }
 
 /// Assert the shared Realm log gained exactly the declared kinds.
@@ -155,12 +157,16 @@ fn appended_kinds(before: &[String], after: &[String]) -> BTreeSet<String> {
 /// one's `durable_effect` against the stream it names.
 pub async fn declared_durable_effects_match_live_producers() -> Result<()> {
     let registry = load_operation_registry()?;
-    let group = TestServerGroup::single("durable-effect-spotcheck").await?;
-    let server = group.server(0);
+    // Accounts are founded through the harness Account Authority, and Alice
+    // authors every Event below over her Standard SessionGrant.
+    let station = spawn_with_standard_grant_authority("durable-effect-spotcheck", &[]).await?;
+    let server = &station.server;
     let alice_did = actor_did_for_service_did(server.service_did(), "alice-durable-effect")?;
-    let alice = server
-        .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
-        .await?;
+    let alice = station.standard_grant_client(
+        &server
+            .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
+            .await?,
+    )?;
     let bob_did = actor_did_for_service_did(server.service_did(), "bob-durable-effect")?;
     let bob = server
         .register_client(

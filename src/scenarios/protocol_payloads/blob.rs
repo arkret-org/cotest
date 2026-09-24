@@ -1,13 +1,14 @@
 //! Phase 8 — `/_arkret/self/blob/{upload,get}`.
 //!
-//! Confirms that a sha-mismatch upload is rejected with `409`, then runs the
+//! Confirms that a sha-mismatch upload is rejected with the operation's
+//! registered `blob_digest_mismatch` (`422`), then runs the
 //! happy-path upload + range GET. The returned `blob_ref` is consumed by the
 //! range GET in the same phase, so no state escapes.
 
 use anyhow::Result;
 use reqwest::StatusCode;
 
-use crate::harness::{ArkretServer, expect_json, expect_status, expect_text};
+use crate::harness::{ArkretServer, expect_api_error, expect_json, expect_text};
 
 pub async fn run(server: &ArkretServer, token: &str) -> Result<()> {
     sha_mismatch_is_rejected(server, token).await?;
@@ -16,7 +17,9 @@ pub async fn run(server: &ArkretServer, token: &str) -> Result<()> {
 }
 
 async fn sha_mismatch_is_rejected(server: &ArkretServer, token: &str) -> Result<()> {
-    expect_status(
+    // operations-error-mapping: `ak.self.blob.upload.create.v1` names
+    // `blob_digest_mismatch`, whose registry status is 422.
+    expect_api_error(
         server
             .http()
             .post(server.url("/_arkret/self/blob/upload"))
@@ -29,7 +32,8 @@ async fn sha_mismatch_is_rejected(server: &ArkretServer, token: &str) -> Result<
                 b"encrypted-bytes",
                 "text/plain",
             )?),
-        StatusCode::CONFLICT,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "blob_digest_mismatch",
     )
     .await?;
     Ok(())

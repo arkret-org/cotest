@@ -72,6 +72,76 @@ pub async fn spawn_with_harness_account_authority(
     ArkretServer::spawn_with_env(name, &harness_account_authority_env(extra_env)).await
 }
 
+/// A Station behind the harness Account Authority whose issuer ledger answers
+/// SessionGrant introspection, so its principals can hold a Standard grant.
+///
+/// A self Event requires the authenticated Standard SessionGrant of the exact
+/// Account (`account-lifecycle.md` step 8, `api-conventions.md`). The
+/// development bearer that `demo_client` / `register_client` return carries no
+/// grant, so a scenario that authors Events presents the founding device's
+/// grant through [`Self::standard_grant_client`]. Keep this value alive for the
+/// whole scenario: dropping it stops the issuer ledger.
+pub struct StandardGrantStation {
+    pub server: ArkretServer,
+    coauth: crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer,
+}
+
+impl StandardGrantStation {
+    /// Bind the founding device of `client`'s provisioned principal to one
+    /// exact issuer-ledger grant and return a DPoP client presenting it.
+    pub fn standard_grant_client(&self, client: &TestActorClient) -> Result<TestActorClient> {
+        let principal = client
+            .principal
+            .as_ref()
+            .context("a Standard grant needs the client's provisioned principal")?;
+        let grant = crate::scenarios::bridge_contracts::session_grant::mock_session_grant_jwt(
+            principal.core_id.as_str(),
+            principal.device_id.as_str(),
+            self.server.service_id().as_str(),
+        );
+        self.coauth.bind_founding_device_grant(
+            &grant,
+            principal.core_id.as_str(),
+            principal.device_id.as_str(),
+            principal.founding_authorize_event_id.as_str(),
+            &principal.device_signing_key.verifying_key(),
+        )?;
+        self.server
+            .client_with_founding_device_grant(principal, grant)
+    }
+}
+
+pub async fn spawn_with_standard_grant_authority(
+    name: &str,
+    extra_env: &[(&str, &str)],
+) -> Result<StandardGrantStation> {
+    let coauth =
+        crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer::spawn_with_internal_secret(
+            HARNESS_INTERNAL_AUTHORITY_SECRET,
+        )
+        .await?;
+    let origin = coauth.origin();
+    let introspection = coauth.url();
+    let mut env = vec![
+        ("SOLAND_ACCOUNT_AUTHORITY_URL", origin.as_str()),
+        ("SOLAND_DID_RESOLVER_ALLOW_METHODS", "web,webvh,key,uuid"),
+        (
+            "SOLAND_SESSION_GRANT_INTROSPECTION_URL",
+            introspection.as_str(),
+        ),
+    ];
+    env.extend(extra_env.iter().copied().filter(|(key, _)| {
+        !matches!(
+            *key,
+            "SOLAND_ACCOUNT_AUTHORITY_URL"
+                | "SOLAND_DID_RESOLVER_ALLOW_METHODS"
+                | "SOLAND_SESSION_GRANT_INTROSPECTION_URL"
+        )
+    }));
+    let server = spawn_with_harness_account_authority(name, &env).await?;
+    Ok(StandardGrantStation { server, coauth })
+}
+
 /// [`spawn_with_harness_account_authority`] on a database the caller owns, for
 /// scenarios that must install a labelled fixture row the Station has no
 /// admission unit for yet.
