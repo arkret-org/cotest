@@ -6,10 +6,10 @@
 
 use anyhow::{Result, ensure};
 use arkret_models_identity::{
-    DeviceSummaryVerificationSource, DeviceSummaryVerificationState,
+    DeviceSummaryStatus, DeviceSummaryVerificationSource, DeviceSummaryVerificationState,
     validate_device_summary_evidence,
 };
-use arkret_wire::{CommitStreamRef, CommittedEventRef, EventId, RealmCommitId, RealmId};
+use arkret_wire::{EventId, SignerEvidenceRef};
 use soland_services::identity::{
     DeviceCheckpointIneligibility, DeviceCheckpointLiveFacts,
     evaluate_device_checkpoint_live_eligibility, fold_device_verification_checkpoint,
@@ -27,16 +27,17 @@ pub struct DeviceVerificationCheckpointCoverage {
     pub remaining_production_gaps: Vec<&'static str>,
 }
 
-fn authorization_ref(seed: u8) -> CommittedEventRef {
-    let event_id = EventId::from_digest(arkret_canonical::DigestSuite::Sha256, [seed; 32]);
-    CommittedEventRef {
-        event_id: event_id.clone(),
-        commit_id: RealmCommitId::from_digest([seed; 32]),
-        stream_ref: CommitStreamRef::Realm {
-            realm_id: RealmId::from_event_id(&event_id),
-        },
-        stream_position: u64::from(seed),
-    }
+fn authorization_event_id(seed: u8) -> EventId {
+    EventId::from_digest(arkret_canonical::DigestSuite::Sha256, [seed; 32])
+}
+
+/// Materialized `account_device_control` evidence for the exact committed
+/// authorization; it stays historical provenance after generation fencing.
+fn signer_evidence(seed: u8) -> Result<SignerEvidenceRef> {
+    Ok(SignerEvidenceRef::new(format!(
+        "ak:signer_evidence:sha256:{}",
+        format!("{seed:02x}").repeat(32)
+    ))?)
 }
 
 fn assert_live_source(
@@ -48,8 +49,16 @@ fn assert_live_source(
         fold_device_verification_checkpoint("verified", true, Some(binding_kind), false);
     ensure!(state == DeviceSummaryVerificationState::Verified);
     ensure!(source == Some(expected));
-    let reference = authorization_ref(seed);
-    validate_device_summary_evidence(state, source, Some(&reference))?;
+    let reference = authorization_event_id(seed);
+    let evidence = signer_evidence(seed)?;
+    validate_device_summary_evidence(
+        DeviceSummaryStatus::Active,
+        state,
+        source,
+        Some(&reference),
+        Some(&evidence),
+        None,
+    )?;
     evaluate_device_checkpoint_live_eligibility(live_facts(expected))
         .map_err(|reason| anyhow::anyhow!("live source was rejected: {reason:?}"))?;
     Ok(CheckpointCaseResult {
@@ -96,12 +105,16 @@ pub fn run_device_verification_checkpoint_contract() -> Result<DeviceVerificatio
         assert_live_source("pcr_recovery", DeviceSummaryVerificationSource::Recovery, 3)?,
     ];
 
-    let reference = authorization_ref(4);
+    let reference = authorization_event_id(4);
+    let evidence = signer_evidence(4)?;
     ensure!(
         validate_device_summary_evidence(
+            DeviceSummaryStatus::Active,
             DeviceSummaryVerificationState::Verified,
             None,
             Some(&reference),
+            Some(&evidence),
+            None,
         )
         .is_err()
     );
@@ -112,8 +125,11 @@ pub fn run_device_verification_checkpoint_contract() -> Result<DeviceVerificatio
 
     ensure!(
         validate_device_summary_evidence(
+            DeviceSummaryStatus::Active,
             DeviceSummaryVerificationState::Unresolved,
             Some(DeviceSummaryVerificationSource::PairingCode),
+            None,
+            None,
             None,
         )
         .is_err()
@@ -138,7 +154,14 @@ pub fn run_device_verification_checkpoint_contract() -> Result<DeviceVerificatio
             fold_device_verification_checkpoint("verified", true, Some(binding_kind), true);
         ensure!(state == DeviceSummaryVerificationState::Stale);
         ensure!(source == Some(expected_source));
-        validate_device_summary_evidence(state, source, Some(&reference))?;
+        validate_device_summary_evidence(
+            DeviceSummaryStatus::GenerationFenced,
+            state,
+            source,
+            Some(&reference),
+            Some(&evidence),
+            None,
+        )?;
     }
     cases.push(CheckpointCaseResult {
         case_id: "generation_fence_stales_all_sources_and_retains_provenance",
@@ -206,7 +229,7 @@ pub fn run_device_verification_checkpoint_contract() -> Result<DeviceVerificatio
         fold_device_verification_checkpoint("verified", true, Some("server_asserted"), false);
     ensure!(state == DeviceSummaryVerificationState::Unresolved);
     ensure!(source.is_none());
-    validate_device_summary_evidence(state, source, None)?;
+    validate_device_summary_evidence(DeviceSummaryStatus::Active, state, source, None, None, None)?;
     cases.push(CheckpointCaseResult {
         case_id: "unknown_source_cannot_mint_a_checkpoint",
         assertions: 3,

@@ -159,8 +159,15 @@ async fn seed(
                 device_id: DEVICE.into(),
                 recipient_device_authorization: device_authorization.clone(),
                 position: 1,
-                content: json!({"station": station}),
-                created_at: now,
+                envelope: {
+                    let mut envelope = soland_storage::contract_tests::test_device_message_envelope(
+                        &device_authorization,
+                        &device_authorization,
+                        now,
+                    );
+                    envelope.content.insert("station".into(), json!(station));
+                    envelope
+                },
             },
             100,
         )
@@ -329,7 +336,7 @@ async fn verify_isolation(
             .device_messages()
             .list_after(principal, DEVICE, 0, 100)
             .await?;
-        ensure!(queue.len() == 1 && queue[0].content["station"] == label);
+        ensure!(queue.len() == 1 && queue[0].envelope.content["station"] == label);
         ensure!(
             own.push_devices().snapshot_all().await?[0]["account_id"]["station_id"]
                 == fixture.account.station_id.as_str()
