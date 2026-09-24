@@ -43,7 +43,10 @@ mod push;
 mod snapshot_head_disclosure;
 
 pub use key_backup_pointer::key_backup_active_pointer_is_committed_and_listed_at_its_pcr_cut;
-pub use snapshot_head_disclosure::narrow_snapshot_head_discloses_only_complete_creator_cut;
+pub use snapshot_head_disclosure::{
+    exact_snapshot_by_ref_reads_through_garth_with_historical_station_key,
+    narrow_snapshot_head_discloses_only_complete_creator_cut,
+};
 
 pub async fn events_keys_device_blob_push_and_moderation_surfaces_work() -> Result<()> {
     let coauth = MockCoauthIntrospectionServer::spawn_with_internal_secret(

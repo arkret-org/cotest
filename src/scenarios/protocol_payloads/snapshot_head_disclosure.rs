@@ -4,7 +4,7 @@ use reqwest::StatusCode;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 
-use crate::harness::{expect_json, expect_status};
+use crate::harness::{ArkretServer, TestActorClient, expect_json, expect_status};
 use crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
 use crate::scenarios::bridge_contracts::session_grant::mock_session_grant_jwt;
 use crate::scenarios::identity_test_support::{
@@ -12,7 +12,15 @@ use crate::scenarios::identity_test_support::{
     spawn_with_harness_account_authority,
 };
 
-pub async fn narrow_snapshot_head_discloses_only_complete_creator_cut() -> Result<()> {
+/// A Station behind the harness Coauth plus one founding-device author whose
+/// standard DPoP session grant is bound at that Coauth.
+struct SnapshotAuthor {
+    _coauth: MockCoauthIntrospectionServer,
+    server: ArkretServer,
+    author: TestActorClient,
+}
+
+async fn snapshot_author(server_name: &str, actor: &str) -> Result<SnapshotAuthor> {
     let coauth = MockCoauthIntrospectionServer::spawn_with_internal_secret(
         HARNESS_INTERNAL_AUTHORITY_SECRET,
     )
@@ -20,7 +28,7 @@ pub async fn narrow_snapshot_head_discloses_only_complete_creator_cut() -> Resul
     let origin = coauth.origin();
     let introspection = coauth.url();
     let server = spawn_with_harness_account_authority(
-        "snapshot-head-disclosure",
+        server_name,
         &[
             ("SOLAND_ACCOUNT_AUTHORITY_URL", origin.as_str()),
             ("SOLAND_DID_RESOLVER_ALLOW_METHODS", "web,webvh,key,uuid"),
@@ -31,7 +39,7 @@ pub async fn narrow_snapshot_head_discloses_only_complete_creator_cut() -> Resul
         ],
     )
     .await?;
-    let actor_id = actor_did_for_service_did(server.service_did(), "snapshot-alice")?;
+    let actor_id = actor_did_for_service_did(server.service_did(), actor)?;
     let client = server
         .demo_client(&actor_id, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
@@ -49,6 +57,19 @@ pub async fn narrow_snapshot_head_discloses_only_complete_creator_cut() -> Resul
         &principal.device_signing_key.verifying_key(),
     )?;
     let author = server.client_with_founding_device_grant(principal, grant)?;
+    Ok(SnapshotAuthor {
+        _coauth: coauth,
+        server,
+        author,
+    })
+}
+
+pub async fn narrow_snapshot_head_discloses_only_complete_creator_cut() -> Result<()> {
+    let SnapshotAuthor {
+        _coauth,
+        server,
+        author,
+    } = snapshot_author("snapshot-head-disclosure", "snapshot-alice").await?;
     let bootstrap = author
         .create_realm_bootstrap_with(json!({
             "title": "Snapshot disclosure",
@@ -184,6 +205,172 @@ pub async fn narrow_snapshot_head_discloses_only_complete_creator_cut() -> Resul
         StatusCode::SERVICE_UNAVAILABLE,
     )
     .await?;
+    Ok(())
+}
+
+/// A Snapshot issued at `/head` is read back through Garth's typed by-ref
+/// client only because the live describe advertises the exact-read bundle,
+/// byte-identical to the issued object even after the Realm moves on, and its
+/// signature verifies under the Station key taken from the Station's complete
+/// live did:webvh history at the Snapshot's signing time (no test constant,
+/// no current document). Registered refusals surface as typed Garth refusals.
+///
+/// The fresh authority bundle and verified tail are not exercised here: the
+/// live Station does not route `POST /_arkret/open/realm-authority/bundle` or
+/// `POST /_arkret/self/streams/scan`, so the generation-bound
+/// `install_verified_*` path stays covered by Garth and Inkson unit tests.
+pub async fn exact_snapshot_by_ref_reads_through_garth_with_historical_station_key() -> Result<()> {
+    let SnapshotAuthor {
+        _coauth,
+        server,
+        author,
+    } = snapshot_author("snapshot-by-ref-typed", "snapshot-carol").await?;
+    let bootstrap = author
+        .create_realm_bootstrap_with(json!({
+            "title": "Snapshot by ref",
+            "summary": "Snapshot by ref",
+            "public": false,
+            "plaintext_visible_services": []
+        }))
+        .await?;
+    let realm = bootstrap["realm_id"].as_str().context("realm_id")?;
+    let realm_id = arkret_wire::RealmId::new(realm.to_owned())?;
+    let issued: arkret_wire::RealmStateSnapshot = serde_json::from_value(
+        expect_json(
+            author
+                .get("/_arkret/self/realm-state-snapshot/head")
+                .query(&[("realm_id", realm)]),
+            StatusCode::OK,
+        )
+        .await?,
+    )
+    .context("issued head must be a closed signed snapshot")?;
+    // The earlier exact reference stays readable after the Realm moves on.
+    author.create_default_strand(realm).await?;
+
+    let http = author.sdk();
+    let describe = http
+        .describe_for_role(arkret_wire::ServiceKind::Station)
+        .await
+        .context("live Station describe")?;
+    ensure!(
+        garth::exact_snapshot_read_advertised(&describe),
+        "live Station must advertise the exact snapshot read bundle"
+    );
+    let authority = garth::AuthorityClient::new(http.clone());
+    let snapshot = authority
+        .exact_snapshot(&describe, &realm_id, &issued.snapshot_id)
+        .await
+        .context("typed by-ref read")?;
+    ensure_same_object(&issued, &snapshot)?;
+
+    let signer_did =
+        arkret_identity::verification_method_did(snapshot.signature.verification_method.as_str())?;
+    ensure!(
+        signer_did.as_str().starts_with("did:webvh:"),
+        "the Station must sign with a method-native historical DID: {signer_did}"
+    );
+    let signer_id = arkret_wire::project_did_to_core_id(&signer_did)?;
+    ensure!(
+        signer_id.as_str() == server.service_id().as_str(),
+        "the Snapshot signer must be the governing Station"
+    );
+    let resolution = http
+        .open_service_resolution(&signer_id)
+        .await
+        .context("live Station service resolution")?;
+    let document = arkret_identity::authenticated_service_document_at(
+        &resolution,
+        &signer_id,
+        snapshot.signature.created_at,
+    )
+    .context("Station history at the Snapshot signing time")?;
+    arkret_identity::validate_verification_method_relationship(
+        &document,
+        &snapshot.signature.verification_method,
+        &signer_did,
+        arkret_identity::DidVerificationRelationship::AssertionMethod,
+    )?;
+    let key = arkret_identity::resolve_verification_method_key_from_document(
+        &document,
+        snapshot.signature.verification_method.as_str(),
+    )?
+    .public_key;
+    let unsigned = arkret_canonical::unsigned_value(&snapshot, &["signature"])?;
+    arkret_signatures::detached_object::verify_detached_object_signature(
+        &snapshot.signature,
+        &unsigned,
+        arkret_wire::DetachedSignatureContext::RealmSnapshot,
+        &key,
+    )
+    .context("Snapshot must verify under the historical Station key")?;
+    let mut tampered = snapshot.clone();
+    tampered.signature.signed_digest =
+        arkret_wire::Hash::new(format!("sha256:{}", "f".repeat(64)))?;
+    ensure!(
+        arkret_signatures::detached_object::verify_detached_object_signature(
+            &tampered.signature,
+            &arkret_canonical::unsigned_value(&tampered, &["signature"])?,
+            arkret_wire::DetachedSignatureContext::RealmSnapshot,
+            &key,
+        )
+        .is_err(),
+        "a tampered by-ref object must not verify"
+    );
+    ensure!(
+        arkret_identity::authenticated_service_document_at(
+            &resolution,
+            &signer_id,
+            snapshot.signature.created_at - chrono::Duration::days(3650),
+        )
+        .is_err(),
+        "no Station key exists before the Station's inception"
+    );
+
+    let never_issued = arkret_wire::RealmSnapshotId::from_digest([0x5b; 32]);
+    let unavailable = authority
+        .exact_snapshot(&describe, &realm_id, &never_issued)
+        .await
+        .unwrap_err();
+    ensure!(
+        matches!(
+            unavailable,
+            garth::Error::ExactSnapshotRefused(garth::ExactSnapshotRefusal::Unavailable)
+        ),
+        "never-issued ref must be the registered unavailable refusal: {unavailable}"
+    );
+    let stranger = server
+        .demo_client(
+            &actor_did_for_service_did(server.service_did(), "snapshot-dave")?,
+            "ak:device:01904100-0000-7000-8000-0000000000a3",
+        )
+        .await?;
+    let hidden = garth::AuthorityClient::new(stranger.sdk())
+        .exact_snapshot(&describe, &realm_id, &snapshot.snapshot_id)
+        .await
+        .unwrap_err();
+    ensure!(
+        matches!(
+            hidden,
+            garth::Error::ExactSnapshotRefused(garth::ExactSnapshotRefusal::NotVisible)
+        ),
+        "another Account must receive the registered not-visible refusal: {hidden}"
+    );
+    let mut unadvertised = describe.clone();
+    unadvertised
+        .supported_operation_bundles
+        .retain(|bundle| bundle != "ak.operation_bundle.station.snapshot_exact_read.v1");
+    let not_advertised = authority
+        .exact_snapshot(&unadvertised, &realm_id, &snapshot.snapshot_id)
+        .await
+        .unwrap_err();
+    ensure!(
+        matches!(
+            not_advertised,
+            garth::Error::ExactSnapshotRefused(garth::ExactSnapshotRefusal::NotAdvertised)
+        ),
+        "without the advertised bundle the by-ref read must not be attempted"
+    );
     Ok(())
 }
 
