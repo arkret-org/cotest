@@ -345,7 +345,18 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
             })
         })
         .ok_or_else(|| anyhow!("runtime-key-binding vector case missing"))?;
-    let agent_id = DidCoreId::new("ak:did_core:webvh:z6mkagent")?;
+    let binding_input = case
+        .get("pairing_request_binding_input")
+        .ok_or_else(|| anyhow!("pairing_request_binding_input missing"))?;
+    let agent_id_str = binding_input
+        .get("agent_id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("pairing agent_id missing"))?;
+    let runtime_method = binding_input
+        .get("verification_method")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("pairing verification_method missing"))?;
+    let agent_id = DidCoreId::new(agent_id_str)?;
     let public_key = case
         .get("source_public_key")
         .ok_or_else(|| anyhow!("runtime-key-binding source_public_key missing"))?;
@@ -361,7 +372,7 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
         arkret_wire::OpaqueLocalId::new("pairing_request:01964137-0000-7000-8000-000000000000")
             .map_err(|error| anyhow!(error))?;
     let typed_verification_method =
-        arkret_wire::DidUrl::new("did:webvh:z6mkagent:agent.example#runtime-1")
+        arkret_wire::DidUrl::new(runtime_method)
             .map_err(|error| anyhow!(error))?;
     let binding = arkret_models_collaboration::agent_scope::agent_runtime_key_binding_digest(
         &agent_id,
@@ -385,7 +396,7 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
         "kind": "ak.agent.runtime_key_binding.v1",
         "pairing_request_id": "pairing_request:01964137-0000-7000-8000-000000000000",
         "public_key_digest": public_digest,
-        "verification_method": "did:webvh:z6mkagent:agent.example#runtime-1",
+        "verification_method": runtime_method,
     });
     let canonical = String::from_utf8(arkret_canonical::canonical_json_bytes(&canonical)?)?;
     if case.get("canonical_binding_json").and_then(Value::as_str) != Some(canonical.as_str()) {
@@ -598,7 +609,7 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
     let restart_binding = arkret_signatures::agent::agent_runtime_key_binding_digest(
         &agent_id,
         "pairing_request:01964137-0000-7000-8000-000000000000",
-        "did:webvh:z6mkagent:agent.example#runtime-1",
+        runtime_method,
         public_key,
         attestation,
     )?;
@@ -619,7 +630,7 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
     let different = arkret_signatures::agent::agent_runtime_key_binding_digest(
         &agent_id,
         "pairing_request:01964137-0000-7000-8000-000000000000",
-        "did:webvh:z6mkagent:agent.example#runtime-1",
+        runtime_method,
         &different_key,
         None,
     )?;
@@ -635,7 +646,7 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
         } else {
             serde_json::json!({
                 "approval_request_id": "agent_runtime_approval:01964137-0000-7000-8000-000000000000",
-                "agent_id": "ak:did_core:webvh:z6mkagent",
+                "agent_id": agent_id_str,
                 "requested_at": "2026-07-13T10:00:00.000Z",
                 "expires_at": "2026-07-13T10:15:00.000Z"
             })
