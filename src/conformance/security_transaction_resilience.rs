@@ -54,8 +54,8 @@ pub fn run_security_transaction_resilience_joint_gate() -> Result<()> {
         "SDK security rotation step order drifted"
     );
     ensure!(
-        reference.len() == 55,
-        "reference runner did not execute all 55 security-transaction scenarios"
+        reference.len() == 56,
+        "reference runner did not execute all 56 security-transaction scenarios"
     );
     ensure!(
         reference

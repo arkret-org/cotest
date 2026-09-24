@@ -177,10 +177,13 @@ fn is_digest(value: Option<&Value>) -> bool {
 
 fn validate_schema_cases(fixture: &SecurityTransactionResilienceFixture) -> Result<(), String> {
     let cases = &fixture.schema_validation_cases;
-    if cases.len() != 2 {
-        return Err("fixture must contain two schema cases".to_owned());
-    }
-    let binding_value = cases[0]
+    let named = |name: &str| {
+        cases
+            .iter()
+            .find(|case| case.get("name").and_then(Value::as_str) == Some(name))
+            .ok_or_else(|| format!("fixture is missing schema case {name}"))
+    };
+    let binding_value = named("backup_rotation_binding_is_closed_per_kind")?
         .get("instance")
         .ok_or_else(|| "backup binding schema instance is missing".to_owned())?;
     let binding = binding_value
@@ -214,7 +217,7 @@ fn validate_schema_cases(fixture: &SecurityTransactionResilienceFixture) -> Resu
         return Err("backup binding schema case is not closed".to_owned());
     }
 
-    let outcome_value = cases[1]
+    let outcome_value = named("partial_series_erase_outcome_has_no_confirmation")?
         .get("instance")
         .ok_or_else(|| "erase outcome schema instance is missing".to_owned())?;
     let outcome = outcome_value
@@ -284,22 +287,28 @@ fn validate_fixture(fixture: &SecurityTransactionResilienceFixture) -> Result<()
     // for an added assertion as loudly as for a deleted one, and says nothing
     // about which.
     const EXPECTED_ASSERTIONS: &[&str] = &[
+        "accepted_or_rejected_revoke_outcome_is_atomic_with_step_or_abort_expiry",
+        "accepted_revoke_proposal_has_exact_covering_commit_and_pending_without_outcome",
         "accepted_webvh_entry_resumes_the_same_reanchor_unit",
+        "authorization_lease_is_not_issued_or_accepted",
         "conflicting_replay_returns_duplicate_conflict",
         "continue_accepts_only_a_terminal_ready_client_attestation",
         "coordinator_owned_prefix_is_advanced_only_by_the_durable_worker",
         "device_attestation_readiness_is_derived_from_canonical_next_step",
+        "erase_rechecks_live_transaction_active_account_non_revoked_authorizing_device_and_current_authority_commit",
         "erased_series_never_becomes_active_again",
         "exact_replay_returns_the_stored_outcome",
+        "governance_station_issues_both_recovery_realm_commits_only_inside_commit_recovery_unit",
         "one_transaction_id_and_one_reserved_id_set",
         "only_the_atomic_generation_cas_winner_commits_a_reanchor_commit",
         "pointer_switch_precedes_every_old_series_erase",
         "public_store_log_telemetry_and_crash_artifact_contain_no_secret_material",
         "recovery_authoritative_results_are_all_invisible_before_the_commit_and_all_visible_after",
-        "recovery_create_freezes_one_unsigned_commit_body_with_no_recovery_effect",
-        "recovery_reanchor_commit_enters_only_through_commit_recovery_unit",
+        "recovery_create_freezes_two_signed_events_current_predecessor_and_ordered_digests_with_no_recovery_effect",
         "recovery_stored_outcome_is_checked_before_consumed_session_refusal",
         "request_plan_step_outputs_and_first_terminal_outcome_are_durable",
+        "security_rotation_create_requires_fresh_high_risk_authentication_and_binds_the_authenticated_authorizing_device",
+        "verified_pcr_fork_index_is_same_snapshot_and_rebuilt_after_restart",
     ];
     let assertions = fixture
         .assertions
@@ -327,9 +336,26 @@ fn run_rotation_cases(
     fixture: &SecurityTransactionResilienceFixture,
 ) -> Result<Vec<ReferenceProjection>, String> {
     let cases = &fixture.rotation_cases;
-    if cases.len() != 2
+    let rejects_without_delete = |case: &Value, name: &str| {
+        case.get("name").and_then(Value::as_str) == Some(name)
+            && case.pointer("/expected/decision").and_then(Value::as_str) == Some("reject")
+            && case.pointer("/expected/reason").and_then(Value::as_str)
+                == Some("failed_precondition")
+            && case
+                .pointer("/expected/old_backup_deleted")
+                .and_then(Value::as_bool)
+                == Some(false)
+    };
+    if cases.len() != 3
         || cases[0].get("name").and_then(Value::as_str)
             != Some("partial_secret_storage_erase_then_restart")
+        || cases[0]
+            .pointer("/expected_after_restart/secret_storage")
+            .and_then(Value::as_str)
+            != Some("erased")
+        || cases[0]
+            .pointer("/expected_after_restart/mls_history")
+            .is_some()
         || cases[0]
             .pointer("/expected_after_restart/confirmation_emitted_once")
             .and_then(Value::as_bool)
@@ -338,10 +364,10 @@ fn run_rotation_cases(
             .pointer("/expected_after_restart/accepted_erase_step_count")
             .and_then(Value::as_u64)
             != Some(1)
-        || cases[1].get("name").and_then(Value::as_str)
-            != Some("erase_before_both_pointer_switches")
-        || cases[1]
-            .pointer("/expected/old_backup_deleted")
+        || !rejects_without_delete(&cases[1], "erase_before_secret_storage_pointer_switch")
+        || !rejects_without_delete(&cases[2], "erase_after_authorizing_device_revoked")
+        || cases[2]
+            .get("authorizing_device_current")
             .and_then(Value::as_bool)
             != Some(false)
     {
@@ -354,10 +380,19 @@ fn run_rotation_cases(
             steps("security_rotation")?,
             "completed",
         )?,
+        // The pointer switch has not been accepted: revoke and upload only.
         projection(
-            "rotation/erase_before_both_pointer_switches".to_owned(),
+            "rotation/erase_before_secret_storage_pointer_switch".to_owned(),
             "security_rotation",
             steps("security_rotation")?.into_iter().take(2).collect(),
+            "failed_precondition",
+        )?,
+        // The switch was accepted, then the authorizing device stopped being
+        // current: erase is refused before any old backup is deleted.
+        projection(
+            "rotation/erase_after_authorizing_device_revoked".to_owned(),
+            "security_rotation",
+            steps("security_rotation")?.into_iter().take(3).collect(),
             "failed_precondition",
         )?,
     ])
