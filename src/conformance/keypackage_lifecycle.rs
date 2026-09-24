@@ -8,8 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use anyhow::{Context as _, Result, anyhow, bail};
 use arkret_identifiers::{DeviceId, Did, DidCoreId, RealmId};
 use arkret_models_collaboration::device_messages::RecipientDelivery;
-use arkret_models_collaboration::events_payloads::MlsKeypackagePayload;
-use arkret_models_crypto::{KeyPackagesClaimOutcome, KeyPackagesUploadOutcome};
+use arkret_models_crypto::{KeyPackagesClaimOutcome, KeyPackagesUploadOutcome, MlsKeyPackageState};
 use arkret_wire::{DidUrl, MlsWelcomeDelivery, ProfileId};
 use base64::Engine as _;
 use chrono::{DateTime, Duration, Utc};
@@ -47,8 +46,6 @@ const KEY_PACKAGES_UPLOAD_OUTCOME_SCHEMA: &str =
 const KEY_PACKAGES_CLAIM_OUTCOME_SCHEMA: &str =
     "schemas/keypackage-operations.schema.json#/$defs/keypackages_claim_outcome";
 const MLS_WELCOME_DELIVERY_SCHEMA: &str = "schemas/mls-welcome-delivery.schema.json";
-const MLS_KEYPACKAGE_PAYLOAD_SCHEMA: &str =
-    "schemas/event-payload.schema.json#/$defs/mls_keypackage_payload";
 const LAST_RESORT_FEATURE: &str = "ak.feature.mls_last_resort_keypackage.v1";
 const EXPIRY_SECURITY_CASE_NAME: &str = "last_resort_expiry_blocks_new_claim_not_old_decryption";
 const EXPIRY_SECURITY_CASE_KIND: &str = "last_resort_expiry_security";
@@ -69,6 +66,7 @@ struct KeypackageLifecycleFixture {
     /// Free-form protocol instances validated by their referenced JSON Schemas.
     schema_validation_cases: Vec<Value>,
     covers_vectors: Vec<String>,
+    security_evidence: Vec<super::SecurityEvidenceRow>,
     unsigned_selector_transcripts: Vec<Value>,
     cases: Vec<Value>,
     expiry_security_case: ExpirySecurityCase,
@@ -111,10 +109,15 @@ struct ExpirySecurityExpectation {
 }
 
 fn keypackage_fixture() -> Result<KeypackageLifecycleFixture> {
-    let fixture: KeypackageLifecycleFixture = serde_json::from_value(super::load_fixture_value(
-        KEYPACKAGE_LIFECYCLE_FIXTURE_FILE,
-    )?)?;
+    let raw = super::load_fixture_value(KEYPACKAGE_LIFECYCLE_FIXTURE_FILE)?;
+    let fixture: KeypackageLifecycleFixture = serde_json::from_value(raw.clone())?;
     validate_keypackage_lifecycle_fixture_metadata(&fixture)?;
+    super::verify_security_evidence(
+        KEYPACKAGE_LIFECYCLE_FIXTURE_FILE,
+        &raw,
+        &fixture.security_evidence,
+        &fixture.covers_vectors,
+    )?;
     Ok(fixture)
 }
 
@@ -232,6 +235,13 @@ fn claim_record_value(input: ClaimRecordInput<'_>) -> Value {
     let mut value = json!({
         "claim_id": claim_id,
         "keypackage_ref": keypackage_ref,
+        "actor_id": {
+            "kind": "account",
+            "account_id": {
+                "principal_id": principal_id.as_str(),
+                "station_id": "ak:did_core:webvh:z6mkfixtureservice"
+            }
+        },
         "principal_id": principal_id.as_str(),
         "device_id": device_id.as_str(),
         "keypackage": "AQID",
@@ -263,7 +273,7 @@ fn claim_receipt_value(claims: &[Value]) -> Value {
             "principal_id": "ak:did_core:webvh:z6mkfixture",
             "station_id": "ak:did_core:webvh:z6mkfixtureservice"
         },
-        "mls_group_id": "fixture-group",
+        "mls_group_id": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
         "claim_purpose": "realm_membership",
         "required_capabilities": ["ak.content.v1"],
         "expires_at": "2026-01-01T00:05:00.000Z",
@@ -675,16 +685,13 @@ fn validate_wire_state_cases(vector: &Value) -> Result<()> {
         if from != "published" {
             bail!("wire-state fixture currently requires a published source state");
         }
-        if to == "retired" && MiniKeypackageState::Retired.as_str() != to {
-            bail!("mini lifecycle model does not expose the retired wire state");
+        if to == "revoked" && MiniKeypackageState::Revoked.as_str() != to {
+            bail!("mini lifecycle model does not expose the revoked wire state");
         }
-        let mut payload = keypackage_payload_value(
-            "sha256:1111111111111111111111111111111111111111111111111111111111111111",
-            "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-        );
-        payload["state"] = json!(to);
-        let accepted = schema_valid(MLS_KEYPACKAGE_PAYLOAD_SCHEMA, &payload).is_ok()
-            && serde_json::from_value::<MlsKeypackagePayload>(payload).is_ok();
+        // KeyPackage lifecycle state is no longer an Event payload; the closed
+        // wire state set (device-lifecycle.md 9.1) is the SDK's
+        // MlsKeyPackageState, which carries it on every KeyPackage record.
+        let accepted = serde_json::from_value::<MlsKeyPackageState>(json!(to)).is_ok();
         let expected = required_str(case, "expected")?;
         if accepted != (expected == "accepted") {
             bail!(
@@ -697,8 +704,8 @@ fn validate_wire_state_cases(vector: &Value) -> Result<()> {
             );
         }
     }
-    if !seen.contains(&("published", "retired")) || !seen.contains(&("published", "expired")) {
-        bail!("keypackage wire-state cases must cover retired acceptance and expired rejection");
+    if !seen.contains(&("published", "revoked")) || !seen.contains(&("published", "expired")) {
+        bail!("keypackage wire-state cases must cover revoked acceptance and expired rejection");
     }
     Ok(())
 }
@@ -740,7 +747,7 @@ pub fn run_keypackage_last_resort_claim_and_reuse_vector() -> Result<()> {
     let normal_claim = parse_claim_outcome(claim_from_pool(
         &mut pool,
         &realm,
-        "mls-keypackage-claim-normal-1",
+        "ak:keypackage_claim:0199c001-0000-7000-8000-000000000001",
         true,
         false,
     )?)?;
@@ -868,7 +875,7 @@ pub fn run_keypackage_last_resort_forced_rotation_vector() -> Result<()> {
     let claim = parse_claim_outcome(claim_from_pool(
         &mut pool,
         &realm,
-        "mls-keypackage-claim-after-rotation",
+        "ak:keypackage_claim:0199c001-0000-7000-8000-000000000002",
         true,
         true,
     )?)?;
@@ -1031,7 +1038,7 @@ fn run_last_resort_expiry_security_case(fixture: &KeypackageLifecycleFixture) ->
     let welcome_claim = parse_claim_outcome(claim_from_pool(
         &mut pool,
         &realm,
-        "mls-keypackage-claim-before-expiry",
+        "ak:keypackage_claim:0199c001-0000-7000-8000-000000000003",
         true,
         true,
     )?)?;
@@ -1042,7 +1049,7 @@ fn run_last_resort_expiry_security_case(fixture: &KeypackageLifecycleFixture) ->
     // `welcome_day` — well before expiry. Claiming alone would leave the audit
     // trail empty and make the invariant below vacuous.
     if pool[0].consume(
-        "mls-keypackage-claim-before-expiry",
+        "ak:keypackage_claim:0199c001-0000-7000-8000-000000000003",
         &realm,
         day(evidence.welcome_day)?,
     )? != MiniConsumeDecision::Consumed("ak:keypackage:expiring-last-resort".to_owned())
@@ -1063,7 +1070,7 @@ fn run_last_resort_expiry_security_case(fixture: &KeypackageLifecycleFixture) ->
     assert_claim_failed(&claim_from_pool(
         &mut pool,
         &realm,
-        "mls-keypackage-claim-after-expiry",
+        "ak:keypackage_claim:0199c001-0000-7000-8000-000000000004",
         true,
         true,
     )?)?;
@@ -1102,7 +1109,7 @@ pub fn run_keypackage_last_resort_affinity_and_optionality_vector() -> Result<()
         r1.clone(),
         expires_at,
     );
-    let cross_realm = package.consume("mls-keypackage-claim-x", &r2, expires_at)?;
+    let cross_realm = package.consume("ak:keypackage_claim:0199c001-0000-7000-8000-000000000005", &r2, expires_at)?;
     if cross_realm
         != MiniConsumeDecision::Rejected(expected_str(vector, "cross_realm_reason")?.to_owned())
     {
@@ -1112,7 +1119,7 @@ pub fn run_keypackage_last_resort_affinity_and_optionality_vector() -> Result<()
     let unsupported = claim_from_pool(
         &mut [],
         &r1,
-        "mls-keypackage-claim-unsupported",
+        "ak:keypackage_claim:0199c001-0000-7000-8000-000000000006",
         false,
         true,
     )?;
@@ -1131,7 +1138,7 @@ pub fn run_keypackage_last_resort_affinity_and_optionality_vector() -> Result<()
     let missing_r2 = claim_from_pool(
         &mut r1_only_pool,
         &r2,
-        "mls-keypackage-claim-r2-missing",
+        "ak:keypackage_claim:0199c001-0000-7000-8000-000000000007",
         true,
         true,
     )?;
@@ -1141,22 +1148,6 @@ pub fn run_keypackage_last_resort_affinity_and_optionality_vector() -> Result<()
         bail!("claim Realm affinity requirement drifted");
     }
     Ok(())
-}
-
-fn keypackage_payload_value(keypackage_ref: &str, keypackage_digest: &str) -> Value {
-    json!({
-        "keypackage_id": "ak:mls:kp:0196419b-0000-7000-8000-000000000001",
-        "principal_id": "ak:did_core:web:alice.example",
-        "device_id": "ak:device:0196419b-0000-7000-8000-000000000001",
-        "device_authorize_event_id": "ak:event:ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM",
-        "keypackage_ref": keypackage_ref,
-        "keypackage_digest": keypackage_digest,
-        "cipher_suites": ["MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519"],
-        "capabilities": ["ak.content.v1"],
-        "state": "published",
-        "expires_at": "2100-01-01T00:00:00.000Z",
-        "created_at": "2026-06-19T00:00:00.000Z"
-    })
 }
 
 /// Welcome is a recipient-private signed delivery, never an Event payload.
@@ -1396,8 +1387,8 @@ pub fn run_keypackage_self_claim_authorization_idempotency_vector() -> Result<()
 
 fn validate_unsigned_selector_transcripts(fixture: &KeypackageLifecycleFixture) -> Result<()> {
     let rows = &fixture.unsigned_selector_transcripts;
-    if rows.len() != 3 {
-        bail!("unsigned selector transcript fixture must cover exactly three branches");
+    if rows.len() != 2 {
+        bail!("unsigned selector transcript fixture must cover exactly the device and agent branches");
     }
 
     let mut seen = BTreeSet::new();
@@ -1424,13 +1415,6 @@ fn validate_unsigned_selector_transcripts(fixture: &KeypackageLifecycleFixture) 
                     && request.target_agent_key_authorize_event_id.is_some()
                     && request.target_pairwise_verification_method.is_none()
             }
-            "minimal_metadata_pairwise" => {
-                request.target_device_ids.is_empty()
-                    && request.target_agent_id.is_none()
-                    && request.target_agent_verification_method.is_none()
-                    && request.target_agent_key_authorize_event_id.is_none()
-                    && request.target_pairwise_verification_method.is_some()
-            }
             other => bail!("unknown unsigned selector transcript branch {other}"),
         };
         if !exact_branch || !seen.insert(branch) {
@@ -1455,18 +1439,13 @@ fn validate_unsigned_selector_transcripts(fixture: &KeypackageLifecycleFixture) 
                 changed["target_agent_key_authorize_event_id"] =
                     json!("ak:event:Aao964Xuq1Q7PmnLt9I97ih00Qs2N6qMkBgKgYCvUFFe");
             }
-            "minimal_metadata_pairwise" => {
-                changed["target_pairwise_verification_method"] = json!(
-                    "did:key:z6MkrJVnaZkeFzdQyUQ5mZKfNA8ZtQZVQzVQzVQzVQzVQzVQ#z6MkrJVnaZkeFzdQyUQ5mZKfNA8ZtQZVQzVQzVQzVQzVQzVQ"
-                );
-            }
             _ => unreachable!(),
         }
         if arkret_canonical::canonical_sha256(&changed)? == digest {
             bail!("{branch} selector mutation did not change the idempotency digest");
         }
     }
-    if seen != BTreeSet::from(["device", "agent", "minimal_metadata_pairwise"]) {
+    if seen != BTreeSet::from(["device", "agent"]) {
         bail!("unsigned selector transcript branch set is incomplete");
     }
     Ok(())

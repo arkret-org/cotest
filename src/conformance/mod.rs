@@ -632,6 +632,84 @@ where
         .map_err(|error| anyhow!("failed to parse fixture {file_name}: {error}"))
 }
 
+/// One `security_evidence[]` row of a formal fixture: a normative clause and
+/// vector mapped to the decision points the fixture's own cases evidence.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SecurityEvidenceRow {
+    pub(crate) vector_id: String,
+    pub(crate) clause_id: String,
+    pub(crate) decision_points: Vec<SecurityDecisionPoint>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SecurityDecisionPoint {
+    pub(crate) id: String,
+    pub(crate) requirement: String,
+    pub(crate) evidence: Vec<String>,
+}
+
+/// Every evidence row names a vector the fixture covers and a clause, every
+/// decision point is unique and non-empty, and every evidence pointer resolves
+/// inside the same fixture document.
+pub(crate) fn verify_security_evidence(
+    file_name: &str,
+    fixture: &Value,
+    rows: &[SecurityEvidenceRow],
+    covers_vectors: &[String],
+) -> Result<()> {
+    if rows.is_empty() {
+        bail!("{file_name} security_evidence must not be empty");
+    }
+    for row in rows {
+        if !covers_vectors.iter().any(|vector| vector == &row.vector_id) {
+            bail!(
+                "{file_name} security_evidence vector {} is not in covers_vectors",
+                row.vector_id
+            );
+        }
+        if !row.clause_id.starts_with("AK-") {
+            bail!(
+                "{file_name} security_evidence {} has malformed clause_id {}",
+                row.vector_id,
+                row.clause_id
+            );
+        }
+        if row.decision_points.is_empty() {
+            bail!(
+                "{file_name} security_evidence {} has no decision points",
+                row.vector_id
+            );
+        }
+        let mut seen = std::collections::BTreeSet::new();
+        for point in &row.decision_points {
+            if !seen.insert(point.id.as_str()) {
+                bail!(
+                    "{file_name} security_evidence {} repeats decision point {}",
+                    row.vector_id,
+                    point.id
+                );
+            }
+            if point.requirement.trim().is_empty() || point.evidence.is_empty() {
+                bail!(
+                    "{file_name} decision point {} lacks a requirement or evidence",
+                    point.id
+                );
+            }
+            for pointer in &point.evidence {
+                if fixture.pointer(pointer).is_none() {
+                    bail!(
+                        "{file_name} decision point {} evidence pointer {pointer} does not resolve",
+                        point.id
+                    );
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn load_artifact_json(relative_path: &str) -> Result<Value> {
     let path = spec_artifacts_root().join(relative_path);
     let raw = fs::read_to_string(&path)?;

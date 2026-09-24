@@ -57,13 +57,20 @@ struct AuthSessionProofFixture {
     suite: String,
     runner: Value,
     covers_vectors: Vec<String>,
+    security_evidence: Vec<super::SecurityEvidenceRow>,
     cases: Vec<Value>,
 }
 
 fn auth_session_proof_fixture() -> Result<AuthSessionProofFixture> {
-    let fixture: AuthSessionProofFixture =
-        serde_json::from_value(super::load_fixture_value(AUTH_SESSION_PROOF_FIXTURE_FILE)?)?;
+    let raw = super::load_fixture_value(AUTH_SESSION_PROOF_FIXTURE_FILE)?;
+    let fixture: AuthSessionProofFixture = serde_json::from_value(raw.clone())?;
     validate_auth_session_proof_fixture_metadata(&fixture)?;
+    super::verify_security_evidence(
+        AUTH_SESSION_PROOF_FIXTURE_FILE,
+        &raw,
+        &fixture.security_evidence,
+        &fixture.covers_vectors,
+    )?;
     Ok(fixture)
 }
 
@@ -717,7 +724,7 @@ fn run_http_signature_boundary_rows(vector: &Value, field: &str) -> Result<()> {
             params_value: String::new(),
         };
         let accepted = policy.validate(&input, None, now).is_ok();
-        let expected = expected_str(row, "expected")? == "accepted";
+        let expected = required_str(row, "expected")? == "accepted";
         if accepted != expected {
             bail!(
                 "HTTP signature freshness row {} observed accepted={accepted}, expected {expected}",

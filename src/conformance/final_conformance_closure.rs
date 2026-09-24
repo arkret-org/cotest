@@ -51,6 +51,7 @@ struct FinalConformanceClosureFixture {
     suite: String,
     runner: Value,
     covers_vectors: Vec<String>,
+    security_evidence: Vec<super::SecurityEvidenceRow>,
     cases: Vec<Value>,
 }
 
@@ -144,10 +145,15 @@ pub fn run_relation_reference_projection_indistinguishable_vector() -> Result<()
 }
 
 fn final_conformance_closure_fixture() -> Result<FinalConformanceClosureFixture> {
-    let fixture: FinalConformanceClosureFixture = serde_json::from_value(
-        super::load_fixture_value(FINAL_CONFORMANCE_CLOSURE_FIXTURE_FILE)?,
-    )?;
+    let raw = super::load_fixture_value(FINAL_CONFORMANCE_CLOSURE_FIXTURE_FILE)?;
+    let fixture: FinalConformanceClosureFixture = serde_json::from_value(raw.clone())?;
     validate_final_conformance_closure_fixture_metadata(&fixture)?;
+    super::verify_security_evidence(
+        FINAL_CONFORMANCE_CLOSURE_FIXTURE_FILE,
+        &raw,
+        &fixture.security_evidence,
+        &fixture.covers_vectors,
+    )?;
     Ok(fixture)
 }
 
