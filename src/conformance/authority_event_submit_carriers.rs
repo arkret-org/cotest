@@ -177,19 +177,21 @@ fn assert_replication_carrier(approved: &Value) -> Result<usize> {
     schema_invalid(PEER_REQUEST, &hundred_one)?;
 
     let mut missing_commit = request.clone();
-    missing_commit["submissions"][0]["committed_event"]
+    missing_commit["replications"][0]
         .as_object_mut()
-        .expect("committed event object")
+        .expect("replication item object")
         .remove("source_commit");
     schema_invalid(PEER_REQUEST, &missing_commit)?;
 
-    let mut missing_witness = request;
-    missing_witness["submissions"][0]
-        .as_object_mut()
-        .expect("replication item object")
-        .remove("recipient_witnesses");
-    schema_invalid(PEER_REQUEST, &missing_witness)?;
-    Ok(7)
+    // The replication item is closed: a retired recipient witness list or
+    // per-item processing mode cannot ride along.
+    let mut stray_witness = request.clone();
+    stray_witness["replications"][0]["recipient_witnesses"] = json!([]);
+    schema_invalid(PEER_REQUEST, &stray_witness)?;
+    let mut stray_processing = request;
+    stray_processing["processing"] = json!("per_item");
+    schema_invalid(PEER_REQUEST, &stray_processing)?;
+    Ok(8)
 }
 
 fn assert_direct_conversation_carriers(approved: &Value) -> Result<usize> {
@@ -340,26 +342,17 @@ fn approved_event_submission() -> Result<Value> {
         .ok_or_else(|| anyhow!("approval fixture lost submission_with_evidence"))
 }
 
-fn replication_request(submissions: Vec<Value>) -> Value {
+fn replication_request(replications: Vec<Value>) -> Value {
     json!({
         "branch": "committed_replication",
-        "processing": "per_item",
-        "submissions": submissions
+        "replications": replications
     })
 }
 
 fn replication_item(submission: Value) -> Value {
     json!({
-        "committed_event": {
-            "event_submission": submission,
-            "source_commit": realm_commit(0)
-        },
-        "recipient_witnesses": [{
-            "realm_id": REALM_ID,
-            "member_id": actor_id(),
-            "membership_event_ref": EVENT_ID,
-            "recipient_service_id": "ak:did_core:web:recipient.example"
-        }]
+        "event_submission": submission,
+        "source_commit": realm_commit(0)
     })
 }
 
@@ -400,7 +393,8 @@ fn realm_commit(position: u64) -> Value {
             "verification_method": "did:web:station.example#authority",
             "signed_digest": format!("sha256:{}", "4".repeat(64)),
             "created_at": "2026-09-20T00:00:00.000Z",
-            "sig": "c2ln"
+            // Shape only: a raw 64-byte Ed25519 signature is 86 base64url chars.
+            "sig": "A".repeat(86)
         }
     })
 }
