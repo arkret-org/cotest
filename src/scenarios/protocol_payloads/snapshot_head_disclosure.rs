@@ -647,6 +647,229 @@ pub async fn limited_account_window_names_issued_basis_or_is_preview_only() -> R
     Ok(())
 }
 
+/// Every frame of one bounded Account subscribe, each past the SDK's closed
+/// frame contract.
+async fn account_detail_frames(
+    client: &crate::harness::TestActorClient,
+    filter: &serde_json::Value,
+    after: Option<&str>,
+) -> Result<Vec<arkret_models_collaboration::sync_frames::account_subscribe::AccountSubscribeFrame>>
+{
+    let filter = String::from_utf8(arkret_canonical::canonical_json_bytes(filter)?)?;
+    let mut query = vec![("filter", filter.as_str())];
+    if let Some(after) = after {
+        query.push(("after", after));
+    }
+    let response = client
+        .get("/_arkret/self/account/subscribe")
+        .query(&query)
+        .send()
+        .await?;
+    let status = response.status();
+    let body = response.text().await?;
+    ensure!(
+        status == StatusCode::OK,
+        "account subscribe {status}: {body}"
+    );
+    body.lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(|line| {
+            let frame: arkret_models_collaboration::sync_frames::account_subscribe::AccountSubscribeFrame =
+                serde_json::from_str(line).with_context(|| format!("closed Account frame: {line}"))?;
+            frame
+                .validate()
+                .map_err(|error| anyhow::anyhow!("Account frame contract: {error}: {line}"))?;
+            Ok(frame)
+        })
+        .collect()
+}
+
+/// Fresh Soland + real PostgreSQL, one Account batch over two Realms with a
+/// limited `window_limit`: a Realm with more Commits than the window and no
+/// issued anchor snapshot arrives `preview_only`, beside a Realm whose whole
+/// history fits. Inkson's Account frame verifier must not reject the batch:
+/// it backfills the preview stream with a verified replay from genesis over
+/// the live scan and authority bundle and only then treats that stream as
+/// exact, while the sibling Realm verifies as ordinary full history. A forged
+/// preview row still fails closed.
+///
+/// Soland currently proves Account windows only for the single-member
+/// bootstrap cut (seven or nine Commits), so the product's 20-row window
+/// cannot be exceeded live yet; `window_limit` 8 produces the same shape.
+pub async fn preview_account_window_backfills_without_failing_its_sibling_realm() -> Result<()> {
+    let SnapshotAuthor {
+        _coauth,
+        server: _server,
+        author,
+    } = snapshot_author("account-window-preview-backfill", "window-frank").await?;
+    let bootstrap = |title: &str| {
+        json!({
+            "title": title,
+            "summary": title,
+            "public": false,
+            "plaintext_visible_services": []
+        })
+    };
+    let preview_id = author
+        .create_realm_bootstrap_with(bootstrap("Preview backfill"))
+        .await?["realm_id"]
+        .as_str()
+        .context("preview realm_id")?
+        .to_owned();
+    author.create_default_strand(&preview_id).await?;
+    let sibling_id = author
+        .create_realm_bootstrap_with(bootstrap("Verified sibling"))
+        .await?["realm_id"]
+        .as_str()
+        .context("sibling realm_id")?
+        .to_owned();
+
+    // Soland answers one Realm detail per subscribe turn; continue on the
+    // returned cursor until both details arrived, as one projected batch.
+    let filter = json!({"realm_ids": [preview_id, sibling_id], "window_limit": 8});
+    let mut batch = Vec::new();
+    let mut after: Option<String> = None;
+    for _ in 0..4 {
+        for frame in account_detail_frames(&author, &filter, after.as_deref()).await? {
+            after = frame.cursor.clone().or(after);
+            batch.push(frame);
+        }
+        let seen = |realm: &str| {
+            batch.iter().any(|frame| {
+                frame
+                    .realms
+                    .as_ref()
+                    .is_some_and(|realms| realms.entries.contains_key(realm))
+            })
+        };
+        if seen(&preview_id) && seen(&sibling_id) {
+            break;
+        }
+    }
+    let frame_of = |realm: &str| {
+        batch
+            .iter()
+            .find(|frame| {
+                frame
+                    .realms
+                    .as_ref()
+                    .is_some_and(|realms| realms.entries.contains_key(realm))
+            })
+            .with_context(|| format!("the Account batch carries the {realm} detail"))
+    };
+    let preview_frame = frame_of(&preview_id)?;
+    let sibling_frame = frame_of(&sibling_id)?;
+    let preview = realm_detail(preview_frame, &preview_id)?;
+    let preview_window = &preview
+        .streams
+        .as_deref()
+        .with_context(|| format!("preview window: {preview:?}"))?[0];
+    ensure!(
+        preview_window.limited
+            && preview_window.preview_only == Some(true)
+            && preview_window.window_start_basis.is_none()
+            && window_positions(&preview) == (1..=8).collect::<Vec<_>>()
+            && preview.current.is_some(),
+        "a limited window without an issued anchor is preview only: {preview_window:?}"
+    );
+    let sibling = realm_detail(sibling_frame, &sibling_id)?;
+    let sibling_window = &sibling
+        .streams
+        .as_deref()
+        .with_context(|| format!("sibling window: {sibling:?}"))?[0];
+    ensure!(
+        !sibling_window.limited
+            && sibling_window.preview_only.is_none()
+            && window_positions(&sibling) == (0..=6).collect::<Vec<_>>(),
+        "the seven-Commit sibling fits its window: {sibling_window:?}"
+    );
+
+    let http = author.sdk();
+    // Inkson verifies every frame of the batch before projecting any; a
+    // preview frame must not reject the batch.
+    let mut verified = Vec::new();
+    for frame in &batch {
+        verified.push(
+            inkson::realm_events_engine::verify_account_frame_commits(&http, frame)
+                .await
+                .context("a preview window must not fail the Account batch")?,
+        );
+    }
+    let proof_of = |target: &arkret_models_collaboration::sync_frames::account_subscribe::AccountSubscribeFrame| {
+        batch
+            .iter()
+            .position(|frame| std::ptr::eq(frame, target))
+            .map(|index| &verified[index])
+            .context("verified frame")
+    };
+    let sibling_proof = proof_of(sibling_frame)?;
+    let verified = proof_of(preview_frame)?;
+    let preview_stream = arkret_wire::CommitStreamRef::Realm {
+        realm_id: arkret_wire::RealmId::new(preview_id.clone())?,
+    };
+    let sibling_stream = arkret_wire::CommitStreamRef::Realm {
+        realm_id: arkret_wire::RealmId::new(sibling_id.clone())?,
+    };
+    ensure!(
+        verified.preview_streams().is_empty()
+            && verified.resolved_preview_streams()
+                == &std::collections::BTreeSet::from([preview_stream.clone()]),
+        "the creator's genesis replay settles the preview stream as exact"
+    );
+    let positions = |stream: &arkret_wire::CommitStreamRef| {
+        verified
+            .pages()
+            .iter()
+            .chain(sibling_proof.pages())
+            .flat_map(|page| page.rows())
+            .filter(|row| &row.commit().stream_ref == stream)
+            .map(|row| row.commit().stream_position)
+            .collect::<Vec<_>>()
+    };
+    ensure!(
+        positions(&preview_stream) == (0..=8).collect::<Vec<_>>()
+            && positions(&sibling_stream) == (0..=6).collect::<Vec<_>>(),
+        "both streams are verified from genesis through their window heads"
+    );
+    ensure!(
+        sibling_proof.preview_streams().is_empty()
+            && sibling_proof.resolved_preview_streams().is_empty(),
+        "the full-history sibling has no preview stream"
+    );
+    ensure!(
+        realm_detail(&verified.product_frame(preview_frame), &preview_id)?.current
+            == preview.current
+            && realm_detail(&sibling_proof.product_frame(sibling_frame), &sibling_id)?.current
+                == sibling.current,
+        "a backfilled preview stream keeps its same-cut current"
+    );
+
+    let mut forged = preview_frame.clone();
+    let rows = forged
+        .realms
+        .as_mut()
+        .and_then(|realms| realms.entries.get_mut(&preview_id))
+        .and_then(|entry| entry.committed_events.as_mut())
+        .context("preview rows")?;
+    let arkret_wire::CommittedEventView::Full(row) = &mut rows[0] else {
+        anyhow::bail!("the creator reads full preview rows");
+    };
+    row.commit.commit_id = arkret_wire::RealmCommitId::from_digest([0x5d; 32]);
+    let Err(error) =
+        inkson::realm_events_engine::verify_account_frame_commits(&http, &forged).await
+    else {
+        anyhow::bail!("a forged preview row must fail closed");
+    };
+    ensure!(
+        error
+            .to_string()
+            .contains("differs from verified stream row"),
+        "forged preview row failed for another reason: {error}"
+    );
+    Ok(())
+}
+
 fn by_ref_request(
     client: &crate::harness::TestActorClient,
     snapshot_id: &arkret_wire::RealmSnapshotId,

@@ -21,3 +21,10 @@ async fn limited_account_window_names_issued_basis_or_is_preview_only() -> Resul
     cotest::scenarios::protocol_payloads::limited_account_window_names_issued_basis_or_is_preview_only()
         .await
 }
+
+#[tokio::test]
+#[serial]
+async fn preview_account_window_backfills_without_failing_its_sibling_realm() -> Result<()> {
+    cotest::scenarios::protocol_payloads::preview_account_window_backfills_without_failing_its_sibling_realm()
+        .await
+}
