@@ -285,16 +285,15 @@ fn consume_managed_actor_case(
             }
         }
         "pcr_genesis_materializes_resolution_and_history_only" => {
-            let cells = case["expect_cells"]
+            let results = case["expect_results"]
                 .as_array()
-                .context("expected PCR cells")?;
-            let forbidden = case["forbid_cells"]
+                .context("expected PCR typed results")?;
+            let forbidden = case["forbid_results"]
                 .as_array()
-                .context("forbidden PCR cells")?;
-            if cells.len() != 2
-                || !forbidden
-                    .iter()
-                    .any(|value| value == "ak.component.agent.status.v1")
+                .context("forbidden PCR typed results")?;
+            if results.len() != 2
+                || !results.iter().any(|value| value == "identity_resolution")
+                || !forbidden.iter().any(|value| value == "agent_status")
             {
                 bail!("managed PCR component projection widened");
             }
