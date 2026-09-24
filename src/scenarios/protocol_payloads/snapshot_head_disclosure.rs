@@ -14,13 +14,13 @@ use crate::scenarios::identity_test_support::{
 
 /// A Station behind the harness Coauth plus one founding-device author whose
 /// standard DPoP session grant is bound at that Coauth.
-struct SnapshotAuthor {
-    _coauth: MockCoauthIntrospectionServer,
-    server: ArkretServer,
-    author: TestActorClient,
+pub(super) struct SnapshotAuthor {
+    pub(super) _coauth: MockCoauthIntrospectionServer,
+    pub(super) server: ArkretServer,
+    pub(super) author: TestActorClient,
 }
 
-async fn snapshot_author(server_name: &str, actor: &str) -> Result<SnapshotAuthor> {
+pub(super) async fn snapshot_author(server_name: &str, actor: &str) -> Result<SnapshotAuthor> {
     let coauth = MockCoauthIntrospectionServer::spawn_with_internal_secret(
         HARNESS_INTERNAL_AUTHORITY_SECRET,
     )
@@ -168,9 +168,11 @@ pub async fn narrow_snapshot_head_discloses_only_complete_creator_cut() -> Resul
             "ak:device:01904100-0000-7000-8000-0000000000a2",
         )
         .await?;
+    // Every authorization failure of the exact read is the universal
+    // capability_denied surface; the operation registers no not_found.
     expect_status(
         by_ref_request(&stranger, &genesis_typed.snapshot_id, realm_id),
-        StatusCode::NOT_FOUND,
+        StatusCode::FORBIDDEN,
     )
     .await?;
 
@@ -215,10 +217,8 @@ pub async fn narrow_snapshot_head_discloses_only_complete_creator_cut() -> Resul
 /// live did:webvh history at the Snapshot's signing time (no test constant,
 /// no current document). Registered refusals surface as typed Garth refusals.
 ///
-/// The fresh authority bundle and verified tail are not exercised here: the
-/// live Station does not route `POST /_arkret/open/realm-authority/bundle` or
-/// `POST /_arkret/self/streams/scan`, so the generation-bound
-/// `install_verified_*` path stays covered by Garth and Inkson unit tests.
+/// The fresh authority bundle and verified Realm tail over the same live
+/// Station are exercised by `authority_reads`.
 pub async fn exact_snapshot_by_ref_reads_through_garth_with_historical_station_key() -> Result<()> {
     let SnapshotAuthor {
         _coauth,
@@ -352,9 +352,9 @@ pub async fn exact_snapshot_by_ref_reads_through_garth_with_historical_station_k
     ensure!(
         matches!(
             hidden,
-            garth::Error::ExactSnapshotRefused(garth::ExactSnapshotRefusal::NotVisible)
+            garth::Error::ExactSnapshotRefused(garth::ExactSnapshotRefusal::CapabilityDenied)
         ),
-        "another Account must receive the registered not-visible refusal: {hidden}"
+        "another Account must receive the universal capability_denied refusal: {hidden}"
     );
     let mut unadvertised = describe.clone();
     unadvertised

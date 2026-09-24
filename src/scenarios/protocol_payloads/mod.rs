@@ -32,6 +32,7 @@ use crate::scenarios::identity_test_support::{
     spawn_with_harness_account_authority,
 };
 
+mod authority_reads;
 mod backup_delete;
 mod blob;
 mod device_messages;
@@ -42,6 +43,7 @@ mod moderation;
 mod push;
 mod snapshot_head_disclosure;
 
+pub use authority_reads::live_authority_bundle_and_scan_verify_through_garth;
 pub use key_backup_pointer::key_backup_active_pointer_is_committed_and_listed_at_its_pcr_cut;
 pub use snapshot_head_disclosure::{
     exact_snapshot_by_ref_reads_through_garth_with_historical_station_key,
