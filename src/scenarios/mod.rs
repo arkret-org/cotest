@@ -41,7 +41,7 @@ pub mod profile_claim_gate;
 pub mod protocol_payloads;
 pub mod realm_wire_round_trip;
 pub mod schema_policy_realtime;
-pub mod security_rotation_revoke_live;
+pub mod security_rotation_live;
 pub mod security_transaction_live;
 pub mod service_surface;
 pub mod space_permissions;

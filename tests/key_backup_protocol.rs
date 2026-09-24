@@ -22,6 +22,6 @@ async fn key_backup_active_pointer_is_committed_and_listed_at_its_pcr_cut() -> R
 }
 
 #[tokio::test]
-async fn security_rotation_revoke_stops_only_its_target_device() -> Result<()> {
-    cotest::scenarios::security_rotation_revoke_live::security_rotation_revoke_stops_only_its_target_device().await
+async fn security_rotation_revokes_uploads_switches_and_erases() -> Result<()> {
+    cotest::scenarios::security_rotation_live::security_rotation_revokes_uploads_switches_and_erases().await
 }
