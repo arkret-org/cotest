@@ -80,7 +80,7 @@
 
 ### Phase D — alice 处理：capability 检查 + Seal-confirmed ban
 
-10. **alice** 调用实现私有 `GET /_soland/admin/reports` → 能看到 bob 提交的这个 report
+10. **alice** 调用实现私有 `GET /_soland/admin/reports` → 能看到 bob 提交的这个 report 对应的 queue View item
 11. **alice** 决定 ban mallory:
     - 调用 `ak.member.state` Move,membership = `ban`,subject = mallory.did
     - 该 Move 必须签名 + 引用 `ak.moderation.decision` capability grant
@@ -136,7 +136,7 @@
 
 ## Implementation notes
 
-- **soland report privacy**:`POST /_arkret/self/moderation/report` 是唯一标准 reporter 写入口;v1 没有注册 `GET /_arkret/self/moderation/reports`。dev-mode `GET /_soland/admin/reports` 是实现私有调试投影,只向 realm owner、配置的 admin principal 或持有 moderation review/decision 权限的 actor 返回 report;避免 reporter、被举报人或普通成员枚举 report。
+- **soland report privacy**:`POST /_arkret/self/moderation/report` 是唯一标准 reporter 写入口;v1 没有注册 `GET /_arkret/self/moderation/reports`。dev-mode `GET /_soland/admin/reports` 是实现私有调试入口,返回由 `moderation_report` typed current family 同 cut 派生的 moderation queue View item(`id` 为 report Event token retype 成 `ak:moderation_queue_item:`),只向该 Realm 在同一 cut 可证明的 moderator(当前 Realm root controller)返回;部署 admin 身份不授予 Realm moderation 可见性,reporter、被举报人或普通成员无法枚举 report。
 - **ban Move 权限**:`soland` 对 direct submit 的 `ak.member.state{membership="ban"}` 执行 owner/moderation gate;bob 这类非 moderator 被 `missing_capability` 拒绝,alice 作为 owner 可接受。
 - **inkson owner ban UI**：`/realms/:id/admin/members` 的 `member-row[data-member-did]` + `ban-member-button` 现在作为 live 路径，owner 点击后提交 canonical `ak.member.state` Control Move；confirmed Seal 推进 membership revision 后，server projection 移除被封禁成员。
 - **重复 ban**：第二条 `ak.member.state{membership="ban"}` 基于旧或同状态 revision 时以 `failed_precondition/invalid_membership_transition` 持久拒绝且零写入，最终成员列表不重复，也不恢复被 ban 成员。

@@ -1,6 +1,7 @@
 //! Phase 10 — `/_arkret/self/moderation/report` submission.
 
-use anyhow::Result;
+use anyhow::{Context as _, Result};
+use arkret_models_collaboration::governance::moderation_queue::ModerationQueueItem;
 use arkret_wire::ScopeRef;
 use reqwest::StatusCode;
 
@@ -11,6 +12,7 @@ use crate::harness::{
 pub async fn run(
     server: &ArkretServer,
     actor: &TestActorClient,
+    token: &str,
     target_realm_id: &str,
     target_event_id: &str,
 ) -> Result<()> {
@@ -48,6 +50,38 @@ pub async fn run(
     )
     .await?;
     assert_eq!(replay, report);
+
+    // The moderation queue is a same-cut View over the accepted
+    // `moderation_report` family: the Realm root controller sees exactly one
+    // item whose id is the report Event token retyped to
+    // `moderation_queue_item` and whose report is the signed payload.
+    let queue_item_id = report["report_id"]
+        .as_str()
+        .context("report outcome carries report_id")?
+        .replacen("ak:report:", "ak:moderation_queue_item:", 1);
+    let queue = expect_json(
+        server
+            .http()
+            .get(server.url("/_soland/admin/moderation/queue"))
+            .bearer_auth(token),
+        StatusCode::OK,
+    )
+    .await?;
+    let items = queue["items"]
+        .as_array()
+        .context("moderation queue carries items")?
+        .iter()
+        .filter(|item| item["id"] == queue_item_id.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(items.len(), 1, "{queue}");
+    let item: ModerationQueueItem = serde_json::from_value(items[0].clone())
+        .context("queue item is a closed moderation-queue-item")?;
+    assert_eq!(item.id.as_str(), queue_item_id);
+    assert_eq!(
+        serde_json::to_value(&item.report)?,
+        serde_json::to_value(&request.report_event.event.payload)?
+    );
+    assert_eq!(items[0]["status"], "submitted");
 
     // An absent target is the single anti-oracle not_found with zero writes.
     let absent = arkret_wire::EventId::from_digest(

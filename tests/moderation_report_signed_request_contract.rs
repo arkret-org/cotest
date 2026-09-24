@@ -131,7 +131,7 @@ fn service_must_validate_and_forward_instead_of_authoring_a_report_event() {
     let handler = source_between(
         &service,
         "async fn moderation_report(",
-        "pub(crate) async fn visible_reports_for_actor(",
+        "pub(crate) async fn moderation_queue_for_session(",
     );
     assert!(handler.contains("report_event"));
     assert!(handler.contains("submit_initial_event_submission"));

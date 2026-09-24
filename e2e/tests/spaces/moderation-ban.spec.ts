@@ -120,30 +120,36 @@ test.describe("moderation and ban", () => {
     const reportBody = JSON.parse(reportText);
     expect(reportBody.report_id).toMatch(/^ak:report:/);
     expect(reportBody.status).toBe("submitted");
+    // The queue is a View over the accepted report: its item id is the same
+    // report Event token retyped to moderation_queue_item.
+    const queueItemId = String(reportBody.report_id).replace(
+      /^ak:report:/,
+      "ak:moderation_queue_item:",
+    );
 
     const reporterReports = await request.get(`${solandBaseUrl()}/_soland/admin/reports`, {
       headers: authHeaders(bobToken),
     });
     expect(reporterReports.ok()).toBeTruthy();
-    expect(JSON.stringify(await reporterReports.json())).not.toContain(reportBody.report_id);
+    expect(JSON.stringify(await reporterReports.json())).not.toContain(queueItemId);
 
     const targetReports = await request.get(`${solandBaseUrl()}/_soland/admin/reports`, {
       headers: authHeaders(malloryToken),
     });
     expect(targetReports.ok()).toBeTruthy();
-    expect(JSON.stringify(await targetReports.json())).not.toContain(reportBody.report_id);
+    expect(JSON.stringify(await targetReports.json())).not.toContain(queueItemId);
 
     const bystanderReports = await request.get(`${solandBaseUrl()}/_soland/admin/reports`, {
       headers: authHeaders(carolToken),
     });
     expect(bystanderReports.ok()).toBeTruthy();
-    expect(JSON.stringify(await bystanderReports.json())).not.toContain(reportBody.report_id);
+    expect(JSON.stringify(await bystanderReports.json())).not.toContain(queueItemId);
 
     const ownerReports = await request.get(`${solandBaseUrl()}/_soland/admin/reports`, {
       headers: authHeaders(aliceToken),
     });
     expect(ownerReports.ok()).toBeTruthy();
-    expect(JSON.stringify(await ownerReports.json())).toContain(reportBody.report_id);
+    expect(JSON.stringify(await ownerReports.json())).toContain(queueItemId);
 
     const unauthorizedBanEvent = signedEventEnvelope({
       actorId: bob.id,
@@ -177,7 +183,7 @@ test.describe("moderation and ban", () => {
       headers: authHeaders(aliceToken),
     });
     expect(reports.ok()).toBeTruthy();
-    expect(JSON.stringify(await reports.json())).toContain(reportBody.report_id);
+    expect(JSON.stringify(await reports.json())).toContain(queueItemId);
 
     const banEvent = signedEventEnvelope({
       actorId: alice.id,
