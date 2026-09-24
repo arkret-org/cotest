@@ -87,3 +87,25 @@ pub async fn events_keys_device_blob_push_and_moderation_surfaces_work() -> Resu
 
     Ok(())
 }
+
+pub async fn key_backup_replace_with_authorized_device_works() -> Result<()> {
+    let server = spawn_with_harness_account_authority(
+        "protocol-key-backup-replace",
+        &[("SOLAND_DID_RESOLVER_ALLOW_METHODS", "web,webvh,key,uuid")],
+    )
+    .await?;
+    let actor_id = actor_did_for_service_did(server.service_did(), "key-backup-alice")?;
+    let client = server
+        .demo_client(&actor_id, "ak:device:01904100-0000-7000-8000-0000000000a1")
+        .await?;
+    key_backups::put_backup(
+        &server,
+        client.expect_dev_bearer(),
+        &actor_id,
+        client
+            .principal
+            .as_ref()
+            .context("client carries its provisioned principal")?,
+    )
+    .await
+}

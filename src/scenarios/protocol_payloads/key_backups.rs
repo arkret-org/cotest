@@ -70,7 +70,7 @@ pub async fn run(
     Ok(())
 }
 
-async fn put_backup(
+pub(super) async fn put_backup(
     server: &ArkretServer,
     token: &str,
     actor_id: &str,
