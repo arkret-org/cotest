@@ -59,7 +59,7 @@ fn verify_signature(key: &VerifyingKey, bytes: &[u8], encoded: &str) -> Result<(
 pub fn run_unlock_proof_crypto_kat() -> Result<()> {
     let fixture: Value = serde_json::from_slice(&std::fs::read(fixture_path())?)?;
     ensure!(
-        fixture["version"] == "2026-09-24.3",
+        fixture["version"] == "2026-09-24.4",
         "fixture version drifted"
     );
     let case = fixture["cases"]
