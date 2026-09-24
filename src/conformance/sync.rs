@@ -942,6 +942,31 @@ fn verify_only_an_explicit_ack_cancels_a_delivery(fixture: &Value) -> Result<()>
 
         let action = required_str(case, "action")?;
         let durably_processed = required_bool(case, "durably_processed")?;
+        let expected = required_str(case, "expected")?;
+        if action == "enqueue_new_delivery_at_full_capacity" {
+            // Endpoint capacity is an enqueue precondition (client-sync.md
+            // 10.1): at capacity the new delivery is refused with
+            // quota_exceeded in the same atomic boundary, no queued delivery
+            // is evicted, and the request's idempotency identity is not spent.
+            let capacity = queue.len();
+            let new_delivery = format!("{message_id}#new");
+            let admitted = queue.len() < capacity && queue.insert(new_delivery);
+            let idempotency_written = admitted;
+            ensure!(
+                !admitted && queue.contains(&message_id),
+                "{name}: a full endpoint queue admitted a new delivery or evicted an old one"
+            );
+            ensure!(
+                flag(case, "request_idempotency_written") == Some(idempotency_written),
+                "{name}: a capacity refusal must not consume the request idempotency identity"
+            );
+            ensure!(
+                expected == "rejected_quota_exceeded_with_old_delivery_still_queued",
+                "{name}: capacity refusal drifted to {expected}"
+            );
+            retained += 1;
+            continue;
+        }
         let removed = action.starts_with("ack") && durably_processed;
         if removed {
             queue.remove(&message_id);
@@ -950,7 +975,6 @@ fn verify_only_an_explicit_ack_cancels_a_delivery(fixture: &Value) -> Result<()>
             retained += 1;
         }
 
-        let expected = required_str(case, "expected")?;
         let observed = if queue.contains(&message_id) {
             "still_queued"
         } else {
