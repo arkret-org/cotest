@@ -71,7 +71,7 @@
     {
       "name": "delegated_role_unresolvable_delegation_fails_closed",
       "surface": "verifier",
-      "comment": "governance_service with a delegation_ref that does not resolve fails closed; upstream grant is treated as revoked/absent.",
+      "comment": "governance_service with a delegation_ref that does not resolve fails closed with the generic organization-consent code; the reserved grant_revoked_upstream is never emitted (authz/capabilities.md).",
       "mutation": {
         "set": {
           "authorization.issuer_role": "governance_service",
@@ -79,12 +79,12 @@
         }
       },
       "resolver": "no_delegation",
-      "expected": { "outcome": "reject", "reason_code": "grant_revoked_upstream" }
+      "expected": { "outcome": "reject", "reason_code": "realm_organization_authorization_invalid" }
     },
     {
       "name": "delegated_role_not_live_delegation",
       "surface": "verifier",
-      "comment": "Delegation resolves but is_live=false (expired/revoked upstream) ⇒ grant_revoked_upstream.",
+      "comment": "Delegation resolves but is_live=false (expired/revoked upstream) ⇒ generic realm_organization_authorization_invalid; the reserved grant_revoked_upstream is never emitted.",
       "mutation": {
         "set": {
           "authorization.issuer_role": "governance_service",
@@ -92,7 +92,7 @@
         }
       },
       "resolver": "delegation_not_live",
-      "expected": { "outcome": "reject", "reason_code": "grant_revoked_upstream" }
+      "expected": { "outcome": "reject", "reason_code": "realm_organization_authorization_invalid" }
     },
     {
       "name": "delegation_scope_not_covering_official_badge",
@@ -124,10 +124,10 @@
     {
       "name": "expired_statement",
       "surface": "verifier",
-      "comment": "expires_at <= now ⇒ the statement is no longer in effect (ttl_expired). An expired endorsement does not grant official badge or governance policy.",
+      "comment": "expires_at <= now ⇒ the statement is no longer in effect (realm_organization_expired; ttl_expired is reserved). An expired endorsement does not grant official badge or governance policy.",
       "mutation": { "set": { "expires_at": "2026-06-25T06:00:00.000Z" } },
       "resolver": "no_delegation",
-      "expected": { "outcome": "reject", "reason_code": "ttl_expired" }
+      "expected": { "outcome": "reject", "reason_code": "realm_organization_expired" }
     },
     {
       "name": "not_yet_valid_statement",
