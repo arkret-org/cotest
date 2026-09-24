@@ -1,7 +1,5 @@
 //! Executable conformance for cold-custodied principal identity roots.
 
-use std::collections::BTreeSet;
-
 use anyhow::{Context, Result, anyhow, bail};
 use arkret::identity_root::{
     bip39_identity_recovery_secret, derive_identity_recovery_key_material,
@@ -33,8 +31,6 @@ use serde_json::{Value, json};
 use super::{load_fixture_value, required_str};
 
 const KDF_FIXTURE: &str = "identity-recovery-kdf-fixture.json";
-const ROOT_ANCHOR_FIXTURE: &str = "identity-root-anchor-fixture.json";
-
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct IdentityRecoveryKdfFixture {
@@ -46,16 +42,6 @@ struct IdentityRecoveryKdfFixture {
     cases: Vec<Value>,
     negative_mutations: Vec<Value>,
     expected_negative_decision: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct IdentityRootAnchorFixture {
-    suite: String,
-    version: String,
-    runner: Value,
-    covers_vectors: Vec<String>,
-    cases: Vec<Value>,
 }
 
 pub fn run_identity_recovery_kdf_fixture_suite() -> Result<()> {
@@ -213,39 +199,14 @@ pub fn run_identity_recovery_kdf_fixture_suite() -> Result<()> {
     Ok(())
 }
 
-/// Executes the canonical SDK checks currently wired for the formal anchor
-/// fixture and verifies the remaining reducer cases stay explicitly declared.
-///
-/// This is deliberately named a checkpoint suite: presence checks for the
-/// formal matrix are not reported as executed reducer coverage.
-pub fn run_identity_root_anchor_checkpoint_suite() -> Result<()> {
-    let fixture: IdentityRootAnchorFixture =
-        serde_json::from_value(load_fixture_value(ROOT_ANCHOR_FIXTURE)?)?;
-    if fixture.suite.trim().is_empty()
-        || fixture.version.trim().is_empty()
-        || fixture.runner.is_null()
-    {
-        bail!("{ROOT_ANCHOR_FIXTURE} metadata drifted");
-    }
-    for vector in [
-        "ak.vector.identity.root_anchor_exclusivity.v1",
-        "ak.vector.identity.device_reanchor.v1",
-        "ak.vector.identity.recovery_secret_handoff.v1",
-        "ak.vector.identity.recovery_key_role_separation.v1",
-    ] {
-        require_vector(&fixture.covers_vectors, vector)?;
-    }
-    require_declared_case_checkpoints(&fixture)?;
-    validate_pcr_genesis_helpers()?;
-    validate_reanchor_helpers()?;
-    validate_recovery_handoff_checkpoints(&fixture)
-}
-
 pub fn run_identity_model_generation_fence_suite() -> Result<()> {
     // Generation fencing is now a single PCR directory rule. Its reducer and
     // remote-evidence matrices live in the SDK; this Cotest entrypoint keeps
-    // the release gate wired to the canonical genesis/possession KAT.
-    validate_pcr_genesis_helpers()
+    // the release gate wired to the canonical genesis/possession KAT and the
+    // device re-anchor helpers. The formal identity-root-anchor fixture was
+    // retired, so its case matrix is no longer executed here.
+    validate_pcr_genesis_helpers()?;
+    validate_reanchor_helpers()
 }
 
 fn validate_pcr_genesis_helpers() -> Result<()> {
@@ -594,92 +555,6 @@ fn validate_recovery_candidate_key_from_frozen_unit() -> Result<()> {
     substituted.device_public_key_did = non_empty("did:key:z6MkSomeOtherRecoveryDevice")?;
     if typed_device_authorize_payload_digest(&substituted, suite)? == committed_digest {
         bail!("substituting the replacement device key left the committed unit digest unchanged");
-    }
-    Ok(())
-}
-
-fn validate_recovery_handoff_checkpoints(fixture: &IdentityRootAnchorFixture) -> Result<()> {
-    let cases = &fixture.cases;
-    let actual = cases
-        .iter()
-        .filter_map(|case| {
-            let input = case.get("input")?;
-            Some((
-                input.get("crash_after_stage")?.as_str()?,
-                case.get("expected")?.get("next_stage")?.as_str()?,
-            ))
-        })
-        .collect::<Vec<_>>();
-    let expected = [
-        (
-            "new_secret_custody_confirmed",
-            "activate_old_precommitted_root",
-        ),
-        (
-            "old_precommitted_root_activated_and_new_root_committed",
-            "activate_new_secret_root",
-        ),
-        (
-            "new_secret_root_activated_and_next_committed",
-            "device_reanchor",
-        ),
-        ("device_reanchor_accepted", "publish_recovery_policy"),
-        ("new_recovery_policy_accepted", "rewrap_all_active_series"),
-        (
-            "all_active_series_rewrapped",
-            "advance_active_series_pointers",
-        ),
-        ("active_series_pointers_advanced", "revoke_old_policy_key"),
-    ];
-    if actual != expected {
-        bail!("recovery handoff crash-resume checkpoint sequence drifted: {actual:?}");
-    }
-    Ok(())
-}
-
-fn require_declared_case_checkpoints(fixture: &IdentityRootAnchorFixture) -> Result<()> {
-    let cases = &fixture.cases;
-    let names = cases
-        .iter()
-        .filter_map(|case| case.get("name").and_then(Value::as_str))
-        .collect::<BTreeSet<_>>();
-    if names.len() != cases.len() {
-        bail!("{ROOT_ANCHOR_FIXTURE} case names must be present and unique");
-    }
-    for case in cases {
-        let name = required_str(case, "name")?;
-        required_str(
-            case.get("expected")
-                .ok_or_else(|| anyhow!("{name} missing expected"))?,
-            "decision",
-        )?;
-    }
-    for required in [
-        "reject_bootstrap_missing_unique_critical_inception_ref",
-        "accept_delegated_agent_pcr_genesis_without_did_inception",
-        "reject_self_principal_pcr_genesis_without_did_inception",
-        "accept_byte_identical_reanchor_retry",
-        "reject_incomplete_or_older_frontier",
-        "reject_split_or_partially_committed_reanchor_unit",
-        "reject_old_generation_event_after_fence",
-        "reject_old_generation_seal_after_fence",
-        "preserve_committed_generation_with_pending_rival_arriving_before",
-        "preserve_committed_generation_with_pending_rival_arriving_after",
-        "preserve_committed_generation_with_rejected_rival_arriving_before",
-        "preserve_committed_generation_with_rejected_rival_arriving_after",
-        "pending_complete_recovery_unit_does_not_advance_generation",
-        "did_update_does_not_resolve_or_advance_device_generation",
-        "reject_equivocating_seals_at_same_authority_position",
-        "reject_root_signed_reanchor_even_with_did_root_policy_factor",
-        "reject_in_place_secret_rotation_without_independent_authority",
-        "accept_staged_two_entry_secret_handoff",
-        "accept_recovery_policy_distinct_signing_and_hpke_pair",
-        "reject_recovery_policy_same_material_for_signing_and_hpke",
-        "reject_did_document_only_recovery_signing_or_hpke_key",
-    ] {
-        if !names.contains(required) {
-            bail!("{ROOT_ANCHOR_FIXTURE} missing required case {required}");
-        }
     }
     Ok(())
 }

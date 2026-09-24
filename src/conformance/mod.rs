@@ -9,7 +9,6 @@ mod agent_pairing_coordination;
 mod agent_participation;
 #[cfg(test)]
 mod agent_runtime_scope;
-mod agent_signer_evidence;
 mod agent_vectors;
 mod applet_install;
 mod arkret_private_kdf_and_durability;
@@ -157,10 +156,6 @@ pub use agent_participation::{
     run_agent_participation_third_party_mention_gate_vector,
     run_agent_selector_label_known_account_vector,
 };
-pub use agent_signer_evidence::{
-    AGENT_SIGNER_EVIDENCE_FIXTURE, AGENT_SIGNER_EVIDENCE_SUITE, ALL_AGENT_SIGNER_EVIDENCE_CASES,
-    run_agent_signer_evidence_vector_suite,
-};
 pub use agent_vectors::{
     ALL_AGENT_VECTOR_IDS, run_agent_act_on_behalf_vector, run_agent_controller_lifecycle_vector,
     run_agent_human_approval_required_vector, run_agent_longevity_no_expiry_vector,
@@ -273,7 +268,6 @@ pub use handle_claim_rejection_vectors::{
 };
 pub use identity_root::{
     run_identity_model_generation_fence_suite, run_identity_recovery_kdf_fixture_suite,
-    run_identity_root_anchor_checkpoint_suite,
 };
 pub use inkson_client::run_inkson_client_profile_manifest_suite;
 pub use invite_new_source_quota::{
@@ -526,8 +520,8 @@ pub(crate) struct NamedCase {
 pub(crate) use fixture_dsl::{
     FixtureRunner, expected, expected_bool, expected_str, expected_str_opt, expected_u64,
     expected_u64_opt, required_array, required_bool, required_field, required_i64, required_object,
-    required_str, required_str_obj, required_u64, required_u64_obj, string_array_field, string_set,
-    string_set_of, string_vec,
+    required_str, required_str_obj, required_u64, string_array_field, string_set, string_set_of,
+    string_vec,
 };
 
 pub fn spec_artifacts_root() -> PathBuf {

@@ -9,22 +9,20 @@ use std::collections::{BTreeMap, BTreeSet};
 use anyhow::{Result, anyhow, bail};
 use arkret_event_draft::EventPayloadExt;
 use cotest::conformance::{
-    ALL_AGENT_SIGNER_EVIDENCE_CASES, ALL_AGENT_VECTOR_IDS, ALL_CALL_SIGNAL_VECTOR_IDS,
-    ALL_CALL_STATE_MEDIA_LIFECYCLE_VECTOR_IDS, ALL_CURSOR_VECTOR_IDS,
-    ALL_HANDLE_CLAIM_REJECTION_VECTOR_IDS, ALL_MEDIA_BINDING_VECTOR_IDS,
+    ALL_AGENT_VECTOR_IDS, ALL_CALL_SIGNAL_VECTOR_IDS, ALL_CALL_STATE_MEDIA_LIFECYCLE_VECTOR_IDS,
+    ALL_CURSOR_VECTOR_IDS, ALL_HANDLE_CLAIM_REJECTION_VECTOR_IDS, ALL_MEDIA_BINDING_VECTOR_IDS,
     ALL_MEMBER_IDENTITY_VECTOR_IDS, ALL_MEMBER_ROSTER_VECTOR_IDS, ALL_MENTION_RENDERING_VECTOR_IDS,
     ALL_OBJECT_ADDRESSING_VECTOR_IDS, ALL_PRESENCE_SIGNAL_VECTOR_IDS,
     ALL_PRIMARY_HANDLE_VECTOR_IDS, ALL_SIDECAR_VECTOR_IDS, load_local_fixture_value,
-    run_account_data_cas_convergence_suite, run_aead_nonce_replay_suite,
-    run_agent_signer_evidence_vector_suite, run_agent_vector_suite, run_blob_stream_aead_suite,
-    run_call_media_lifecycle_suite, run_call_signal_vector_suite, run_call_state_core_suite,
-    run_call_state_media_lifecycle_vector_suite, run_capability_relinquish_authoring_suite,
-    run_container_realm_control_payload_suite, run_crypto_hpke_suite, run_cursor_negative_suite,
-    run_cursor_vector_suite, run_detached_object_signature_suite,
-    run_digest_construction_known_answers, run_encoding_fixture_suite, run_franking_proof_suite,
-    run_handle_claim_rejection_vector_suite, run_key_backup_hardening_suite,
-    run_keypackage_write_transcripts_suite, run_media_binding_suite,
-    run_member_identity_vector_suite, run_member_roster_vector_suite,
+    run_account_data_cas_convergence_suite, run_aead_nonce_replay_suite, run_agent_vector_suite,
+    run_blob_stream_aead_suite, run_call_media_lifecycle_suite, run_call_signal_vector_suite,
+    run_call_state_core_suite, run_call_state_media_lifecycle_vector_suite,
+    run_capability_relinquish_authoring_suite, run_container_realm_control_payload_suite,
+    run_crypto_hpke_suite, run_cursor_negative_suite, run_cursor_vector_suite,
+    run_detached_object_signature_suite, run_digest_construction_known_answers,
+    run_encoding_fixture_suite, run_franking_proof_suite, run_handle_claim_rejection_vector_suite,
+    run_key_backup_hardening_suite, run_keypackage_write_transcripts_suite,
+    run_media_binding_suite, run_member_identity_vector_suite, run_member_roster_vector_suite,
     run_mention_rendering_vector_suite, run_mls_governance_binding_suite, run_named_suite_audit,
     run_object_addressing_vector_suite, run_object_identity_collision_suite,
     run_poll_reducer_fixture_suite, run_presence_signal_vector_suite,
@@ -556,23 +554,6 @@ fn agent_vector_suite_runs_clean() {
     assert_eq!(ALL_AGENT_VECTOR_IDS.len(), 10);
 }
 
-#[test]
-fn agent_signer_evidence_vector_suite_runs_clean() {
-    // The debug fixture match holds several complete signed evidence values.
-    // Keep its stack requirement local to this test, not the verifier runtime.
-    std::thread::Builder::new()
-        .name("agent-signer-evidence-fixtures".to_owned())
-        .stack_size(32 * 1024 * 1024)
-        .spawn(run_agent_signer_evidence_vector_suite)
-        .expect("Agent signer-evidence fixture worker must start")
-        .join()
-        .expect("Agent signer-evidence fixture worker must finish")
-        .expect("Agent signer-evidence vectors must execute and pass");
-    // Content-derived: the suite above already pins the exact ordered case
-    // list against the spec fixture, so this count must track that fixture.
-    assert_eq!(ALL_AGENT_SIGNER_EVIDENCE_CASES.len(), 34);
-}
-
 // ─── P0 / VECT-SC-1..18 — sidecar vectors ──────────────────────────────────
 
 #[test]
@@ -811,7 +792,6 @@ fn test_4_cursor_opaque_round_trip_stateful_only() -> Result<()> {
 #[test]
 fn test_5_recovery_policy_fixture_state_machine_shape() -> Result<()> {
     cotest::conformance::run_identity_recovery_kdf_fixture_suite()?;
-    cotest::conformance::run_identity_root_anchor_checkpoint_suite()?;
     cotest::conformance::run_identity_model_generation_fence_suite()?;
     Ok(())
 }

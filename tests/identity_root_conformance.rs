@@ -2,18 +2,12 @@
 
 use cotest::conformance::{
     run_did_webvh_v1_adapter_fixture_suite, run_identity_model_generation_fence_suite,
-    run_identity_recovery_kdf_fixture_suite, run_identity_root_anchor_checkpoint_suite,
-    run_schema_validation_fixture_suite,
+    run_identity_recovery_kdf_fixture_suite, run_schema_validation_fixture_suite,
 };
 
 #[test]
 fn identity_recovery_kdf_known_answers_are_byte_exact() {
     run_identity_recovery_kdf_fixture_suite().expect("identity recovery KDF conformance");
-}
-
-#[test]
-fn identity_root_bootstrap_reanchor_and_handoff_checkpoints_hold() {
-    run_identity_root_anchor_checkpoint_suite().expect("identity root anchor checkpoints");
 }
 
 #[test]

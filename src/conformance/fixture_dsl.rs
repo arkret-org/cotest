@@ -94,13 +94,6 @@ pub(crate) fn required_str_obj<'a>(value: &'a Map<String, Value>, field: &str) -
         .ok_or_else(|| anyhow!("missing string field {field}"))
 }
 
-pub(crate) fn required_u64_obj(value: &Map<String, Value>, field: &str) -> Result<u64> {
-    value
-        .get(field)
-        .and_then(Value::as_u64)
-        .ok_or_else(|| anyhow!("missing u64 field {field}"))
-}
-
 // ── The `expected` block ────────────────────────────────────────────────────
 
 /// Borrow a case's `expected` block.
