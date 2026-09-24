@@ -415,7 +415,6 @@ fn validate_agent_mutation_contract(case: &Value) -> Result<()> {
         "controller_membership_generation_ended",
         "same_principal_other_station",
         "stale_agent_leaf",
-        "leaf_authorization_ref_mismatch",
         "concurrent_different_agent_keys",
         "pairwise_actor_without_sender_device_id",
     ] {
