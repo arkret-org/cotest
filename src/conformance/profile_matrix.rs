@@ -94,7 +94,7 @@ pub fn run_profile_requirement_gate_suite() -> Result<()> {
     for inherited in [
         "ak.profile.chat_mvp.v1",
         "ak.profile.kanban_mvp.v1",
-        "ak.profile.core_event_store.v1",
+        "ak.profile.minimal_client.v1",
     ] {
         if !full_client_closure.contains(inherited) {
             bail!("profile graph inheritance did not expand full_client to {inherited}");
@@ -112,40 +112,15 @@ pub fn run_profile_requirement_gate_suite() -> Result<()> {
         bail!("profile graph missing push_gateway -> blind_wakeup dependency");
     }
 
-    let relaxed = matrix
-        .requirements
-        .get("ak.profile.e2ee_relaxed.v1")
-        .ok_or_else(|| anyhow!("missing e2ee_relaxed requirement block"))?;
-    if !relaxed
-        .required_features
-        .contains("ak.feature.e2ee_relaxed.v1")
-    {
-        bail!("e2ee_relaxed requirement block missing required feature");
-    }
-    if !relaxed
-        .mutually_exclusive_profiles
-        .contains("ak.profile.mls_governance_binding.full.v1")
-    {
-        bail!("profile graph missing e2ee_relaxed mutual exclusion");
-    }
-
-    let mls_binding = matrix
-        .requirements
-        .get("ak.profile.mls_governance_binding.full.v1")
-        .ok_or_else(|| anyhow!("missing mls governance binding requirement block"))?;
-    for required in [
-        "ak:cell:ak.component.mls.epoch.v1:<mls_group_id>",
-        "ak:cell:ak.component.mls.key_schedule.v1:<mls_group_id>",
+    // The relaxed-E2EE and MLS governance-binding profiles were retired;
+    // neither may reappear as a declared profile.
+    for retired in [
+        "ak.profile.e2ee_relaxed.v1",
+        "ak.profile.mls_governance_binding.full.v1",
     ] {
-        if !mls_binding.required_cells.contains(required) {
-            bail!("mls governance binding requirement block missing {required}");
+        if matrix.declared_profiles.contains(retired) || matrix.requirements.contains_key(retired) {
+            bail!("retired profile {retired} is declared again");
         }
-    }
-    if mls_binding
-        .required_features
-        .contains("security_frontier_digest")
-    {
-        bail!("feature_discovery evidence leaked into runtime required_features");
     }
     let chat = matrix
         .requirements
