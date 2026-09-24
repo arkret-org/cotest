@@ -188,10 +188,29 @@ fn assert_replication_carrier(approved: &Value) -> Result<usize> {
     let mut stray_witness = request.clone();
     stray_witness["replications"][0]["recipient_witnesses"] = json!([]);
     schema_invalid(PEER_REQUEST, &stray_witness)?;
-    let mut stray_processing = request;
+    ensure!(serde_json::from_value::<PeerAuthoritySubmitRequest>(stray_witness).is_err());
+    let mut stray_processing = request.clone();
     stray_processing["processing"] = json!("per_item");
     schema_invalid(PEER_REQUEST, &stray_processing)?;
-    Ok(8)
+    ensure!(serde_json::from_value::<PeerAuthoritySubmitRequest>(stray_processing).is_err());
+
+    // Outcomes are same-order rows with no index or committed_ref echo.
+    let outcome = json!({
+        "branch": "committed_replication",
+        "replication_outcomes": [{"status": "stored"}]
+    });
+    schema_valid(PEER_OUTCOME, &outcome)?;
+    assert_roundtrip::<PeerAuthoritySubmitOutcome>(&outcome)?;
+    let parsed_request: PeerAuthoritySubmitRequest = serde_json::from_value(request)?;
+    serde_json::from_value::<PeerAuthoritySubmitOutcome>(outcome)?
+        .validate_for_request(&parsed_request)?;
+    let echoed = json!({
+        "branch": "committed_replication",
+        "replication_outcomes": [{"status": "stored", "index": 0}]
+    });
+    schema_invalid(PEER_OUTCOME, &echoed)?;
+    ensure!(serde_json::from_value::<PeerAuthoritySubmitOutcome>(echoed).is_err());
+    Ok(15)
 }
 
 fn assert_direct_conversation_carriers(approved: &Value) -> Result<usize> {
@@ -367,6 +386,43 @@ fn direct_conversation_events(approved: &Value) -> Vec<Value> {
     .map(|kind| {
         let mut submission = approved.clone();
         submission["event"]["kind"] = json!(kind);
+        // The Event envelope dispatches payload by kind, so a relabelled
+        // strand.create payload would not be a valid realm create or join.
+        match kind {
+            "ak.realm.create" => {
+                // realm-and-space.md §2.5.0: the genesis Event omits
+                // realm_id and uses the realm_genesis scope.
+                let event = submission["event"].as_object_mut().expect("event object");
+                event.remove("realm_id");
+                event.insert("scope_ref".to_owned(), json!({"kind": "realm_genesis"}));
+                submission["event"]["payload"] = json!({"object": {
+                    "schema": "ak.schema.realm_genesis.v1",
+                    "purpose": "direct_conversation",
+                    "genesis_salt": "A".repeat(43),
+                    "trust_domain": "ak:trust_domain:station.example",
+                    "security_class": "standard",
+                    "governance_station_id": "ak:did_core:webvh:z6mkfixturestationexample",
+                    "initial_join_rule": "invite",
+                    "initial_history_access": "since_join",
+                    "initial_discoverability": "secret"
+                }});
+                // A direct_conversation genesis names exactly one critical
+                // founding authority source (here the Contact round).
+                submission["event"]["semantic_refs"] = json!([{
+                    "id": "ak:event:AdP2S6y0Ms7yp9-GNvXZ3sVfvTEo8mtnV3G_RfApIOn0",
+                    "role": "direct_conversation_contact_round",
+                    "critical": true
+                }]);
+            }
+            "ak.member.state" => {
+                submission["event"]["payload"] = json!({
+                    "realm_id": REALM_ID,
+                    "member_id": actor_id(),
+                    "membership": "join"
+                });
+            }
+            _ => {}
+        }
         submission
             .as_object_mut()
             .unwrap()
