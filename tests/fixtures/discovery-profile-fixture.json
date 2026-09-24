@@ -11,6 +11,7 @@
   "surface_catalog": {
     "comment": "Spec authority: registry/operation-registry.json `surface_groups[]`. Each entry pairs a canonical surface name with its surface_class; the validator uses this to detect drift between the fixture and the live operation registry.",
     "core": [
+      "authority_commit",
       "service_discovery",
       "identity_registry",
       "security_transactions",
@@ -30,7 +31,6 @@
       "device_and_keys",
       "device_pairing_handoff",
       "directory_discovery",
-      "history_key_recovery",
       "identity_resolution",
       "invite_locator_handoff",
       "moderation_reports",
