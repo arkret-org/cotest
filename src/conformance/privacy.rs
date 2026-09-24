@@ -11,6 +11,7 @@ use crate::transcripts::record_vector_event;
 
 pub fn run_privacy_security_fixture_suite() -> Result<()> {
     let value = load_fixture_value("privacy-security-fixture.json")?;
+    let raw_cases = value["cases"].clone();
     let fixture: PrivacySecurityFixture =
         parse_fixture_value("privacy-security-fixture.json", value)?;
     if fixture.suite != "privacy_security" {
@@ -829,10 +830,63 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
             "remote_directory_unavailable_is_not_an_empty_device_list" => {
                 validate_remote_directory_unavailable_is_distinguishable(&case)?;
             }
+            "account_device_evidence_exact_closure" => {
+                let raw = raw_cases
+                    .as_array()
+                    .and_then(|cases| cases.iter().find(|raw| raw["name"] == case.name.as_str()))
+                    .ok_or_else(|| anyhow!("privacy fixture {} has no raw case", case.name))?;
+                validate_account_device_evidence_exact_closure(raw)?;
+            }
             _ => bail!("unknown privacy fixture case {}", case.name),
         }
     }
 
+    Ok(())
+}
+
+/// `ak.vector.device.account_device_signer_evidence.v1`: the evidence root is
+/// the closed two-member schema object, content-addressed as a whole, and
+/// every negative leaves no usable row and no synthetic ref.
+fn validate_account_device_evidence_exact_closure(case: &Value) -> Result<()> {
+    if case["vector_id"] != "ak.vector.device.account_device_signer_evidence.v1" {
+        bail!("account-device evidence closure has an unexpected vector_id");
+    }
+    let schema_name = case["evidence_schema"]
+        .as_str()
+        .ok_or_else(|| anyhow!("account-device evidence closure names no schema"))?;
+    let schema = super::load_artifact_json(&format!("schemas/{schema_name}"))?;
+    let root_members = case["root_members"]
+        .as_array()
+        .ok_or_else(|| anyhow!("account-device evidence closure has no root_members"))?;
+    let schema_required = schema["required"]
+        .as_array()
+        .ok_or_else(|| anyhow!("{schema_name} declares no required root"))?;
+    let schema_properties = schema["properties"]
+        .as_object()
+        .ok_or_else(|| anyhow!("{schema_name} declares no root properties"))?;
+    if schema["additionalProperties"] != false
+        || schema_required != root_members
+        || schema_properties.len() != root_members.len()
+    {
+        bail!("account-device signer evidence root is not the closed two-member object");
+    }
+    if !case["content_address_rule"]
+        .as_str()
+        .is_some_and(|rule| rule.contains("complete root"))
+    {
+        bail!("account-device signer evidence ref must address the complete root");
+    }
+    for side in ["positive", "negative"] {
+        if case[side].as_array().is_none_or(Vec::is_empty) {
+            bail!("account-device evidence closure has no {side} rows");
+        }
+    }
+    if !case["expected"]
+        .as_str()
+        .is_some_and(|expected| expected.contains("no synthetic evidence ref"))
+    {
+        bail!("account-device evidence negatives must mint no synthetic evidence ref");
+    }
     Ok(())
 }
 
@@ -898,7 +952,7 @@ fn validate_actor_accountability_grant_required(case: &super::NamedCase) -> Resu
                     .and_then(Value::as_str)
                     != Some("accountability_grant_missing")
                     || subcase
-                        .pointer("/expected/profile_cell_unchanged")
+                        .pointer("/expected/profile_result_unchanged")
                         .and_then(Value::as_bool)
                         != Some(true)
                 {

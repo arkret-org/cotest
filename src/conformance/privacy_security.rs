@@ -103,7 +103,7 @@ pub fn run_actor_accountability_grant_required_vector() -> Result<()> {
                 bail!("{name} no longer preserves the exact signed profile value");
             }
         } else if expected["reason_code"].as_str() != Some("accountability_grant_missing")
-            || expected["profile_cell_unchanged"].as_bool() != Some(true)
+            || expected["profile_result_unchanged"].as_bool() != Some(true)
             || expected["must_not_accept_stripped_projection"].as_bool() == Some(false)
         {
             bail!("{name} no longer requires whole-event rejection without field stripping");
@@ -115,7 +115,7 @@ pub fn run_actor_accountability_grant_required_vector() -> Result<()> {
             &json!({
                 "decision": if accepted { "accept" } else { "failed_precondition" },
                 "reason_code": if accepted { Value::Null } else { json!("accountability_grant_missing") },
-                "profile_cell_unchanged": !accepted,
+                "profile_result_unchanged": !accepted,
                 "stored_accountable_principal_ids_equal_signed_payload": accepted,
             }),
         );
