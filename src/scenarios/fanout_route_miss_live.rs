@@ -28,6 +28,7 @@ use serde_json::{Value, json};
 use crate::harness::{ArkretServer, TestActorClient, TestServerGroup, message_create_text_payload};
 use crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
 use crate::scenarios::_helpers::live_gate::skip_or_fail;
+use crate::scenarios::cross_station_invite_join::wait_for_member_scan;
 use crate::scenarios::human_device_producer_live::{
     create_realm_with_join_rule, database, ensure_commit_signed_by, ensure_same_commit,
     membership_payload, prepare_join, standard_client, station_env, submit_and_expect_commit,
@@ -35,9 +36,11 @@ use crate::scenarios::human_device_producer_live::{
 use crate::scenarios::identity_test_support::{
     HARNESS_ACCOUNT_AUTHORITY_ORIGIN, HARNESS_INTERNAL_AUTHORITY_SECRET, actor_did_for_service_did,
 };
+use crate::scenarios::protocol_payloads::account_summary::{account_frames, listed_row};
 
 const ALICE_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002002";
 const BOB_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002003";
+const CAROL_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002004";
 
 /// The committed-replication failure matrix between a governance Station X
 /// and a member Station Y (`federation.md` §3, §4.1.1).
@@ -49,11 +52,16 @@ const BOB_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002003";
 /// 3. An exact replay of that replication body is `duplicate`, twice.
 /// 4. The same body naming another destination, a Commit paired with another Event, and a body a
 ///    Station that does not govern the Realm signs as its source are refused with nothing stored.
-/// 5. With Y down, a Message owed to Y through Bob's basis is followed by Bob's removal: the intent
-///    is cancelled and Y never receives it; a later Commit whose predecessor Y does not hold is
-///    `dependency_missing`.
+/// 5. With Y down, a Message owed to Y through Bob's basis is followed by Bob's removal: the
+///    Message's intent is cancelled, but the removal itself is owed to Y (decision 0116 §0355). Y
+///    pulls the cancelled predecessor through the peer scan, stores the removal and withdraws Bob's
+///    realm list row; exact replays of both are `duplicate`, and a later Commit is refused because
+///    Y no longer hosts a joined member.
 /// 6. A plaintext Message of a Realm that does not list Y as a plaintext Station is never
-///    replicated to Y, although Bob is joined there.
+///    replicated to Y, although Bob is joined there; the same Message validly signed by X and sent
+///    to Y is refused by Y's own re-verification against its anchored typed current (§0356). A
+///    later Commit owed to Y still arrives: Y keeps the withheld Message as a continuity-only chain
+///    node and reads it only as the withheld branch (§0357).
 pub async fn run_fanout_route_miss_live() -> Result<()> {
     const GROUP: &str = "fanout-route-miss";
     let Some(governance_database) = database(GROUP)? else {
@@ -174,11 +182,29 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
             )?,
         )
         .await?;
-    submit_and_expect_commit(&alice, &alice_account, ALICE_DEVICE, &removal).await?;
+    let removal_commit =
+        submit_and_expect_commit(&alice, &alice_account, ALICE_DEVICE, &removal).await?;
     let after = alice_message(&alice, &alice_account, &realm, &strand, "after Bob left").await?;
     group.server_mut(1).start_external_process().await?;
-    ensure_not_held(&bob, &owed.0.event_id, NOT_HELD_WINDOW).await?;
-    ensure_not_held(&bob, &after.0.event_id, Duration::ZERO).await?;
+    // Y learns Bob's removal only after it filled the cancelled Message in
+    // front of it; the replays prove it holds both exactly.
+    wait_not_listed(&bob, &realm, ROUTE_MISS_WINDOW).await?;
+    for (event, commit) in [(&owed.0, &owed.1), (&removal, &removal_commit)] {
+        let outcomes = replicate(
+            group.server(1),
+            group.server(0),
+            &replication_body(event, commit)?,
+        )
+        .await?;
+        ensure!(
+            matches!(
+                outcomes.as_slice(),
+                [PeerCommittedReplicationOutcomeRecord::Duplicate {}]
+            ),
+            "Y does not hold {} after Bob's removal: {outcomes:?}",
+            event.event_id
+        );
+    }
     let after_body = replication_body(&after.0, &after.1)?;
     // A Station that does not govern the Realm cannot be its source.
     ensure_not_stored(group.server(1), group.server(1), &after_body).await?;
@@ -187,11 +213,10 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
         matches!(
             outcomes.as_slice(),
             [PeerCommittedReplicationOutcomeRecord::Rejected { reason_code }]
-                if reason_code == "dependency_missing"
+                if reason_code == "capability_denied"
         ),
-        "a Commit after an unheld predecessor is not dependency_missing: {outcomes:?}"
+        "a Commit after Bob's removal was not refused for want of a hosted member: {outcomes:?}"
     );
-    ensure_not_held(&bob, &after.0.event_id, Duration::ZERO).await?;
 
     // (6) A restricted plaintext Message is not replicated.
     let restricted = create_realm_with_join_rule(
@@ -210,6 +235,7 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
         "ak:request:019b0000-0000-7000-8000-000000002502",
     )
     .await?;
+    wait_for_member_scan(&bob, &RealmId::new(restricted.clone())?).await?;
     let plaintext = alice_message(
         &alice,
         &alice_account,
@@ -222,15 +248,71 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
         &plaintext.1,
         &wait_held(&alice, &plaintext.0.event_id, HELD_WINDOW).await?,
     )?;
-    ensure_not_held(&bob, &plaintext.0.event_id, NOT_HELD_WINDOW).await?;
+    let forged = replicate(
+        group.server(1),
+        group.server(0),
+        &replication_body(&plaintext.0, &plaintext.1)?,
+    )
+    .await?;
+    ensure!(
+        matches!(
+            forged.as_slice(),
+            [PeerCommittedReplicationOutcomeRecord::Rejected { reason_code }]
+                if reason_code == "capability_denied"
+        ),
+        "Y stored a plaintext Message its Realm does not let it hold: {forged:?}"
+    );
+    ensure_not_held(&bob, &plaintext.0.event_id, Duration::ZERO).await?;
+    // Carol joins on X; her join is owed to Y after the withheld Message.
+    let (carol, carol_account) =
+        standard_client(group.server(0), &coauth, "fanout-carol", CAROL_DEVICE).await?;
+    let carol_join = carol
+        .author_event(
+            &restricted,
+            EventKind::MemberState.as_str(),
+            membership_payload(
+                &restricted,
+                carol_account.clone(),
+                MembershipPayloadState::Join,
+                "local member after the plaintext",
+            )?,
+        )
+        .await?;
+    let carol_commit =
+        submit_and_expect_commit(&carol, &carol_account, CAROL_DEVICE, &carol_join).await?;
+    ensure_same_commit(
+        &carol_commit,
+        &wait_held(&bob, &carol_join.event_id, ROUTE_MISS_WINDOW).await?,
+    )?;
+    match bob.sdk().committed_event_get(&plaintext.0.event_id).await? {
+        CommittedEventView::Withheld(view) => ensure!(
+            view.commit == plaintext.1,
+            "Y's chain node is not the Message's exact Commit"
+        ),
+        CommittedEventView::Full(_) => bail!("Y holds the restricted plaintext Message in full"),
+    }
     drop(coauth);
     Ok(())
+}
+
+/// Poll `client`'s realm list on its Station until it no longer names
+/// `realm_id`.
+async fn wait_not_listed(client: &TestActorClient, realm_id: &str, window: Duration) -> Result<()> {
+    let deadline = Instant::now() + window;
+    loop {
+        if listed_row(&account_frames(client, None).await?, realm_id).is_err() {
+            return Ok(());
+        }
+        if Instant::now() >= deadline {
+            bail!("the member Station still lists {realm_id} after the removal");
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
 }
 
 const PEER_EVENTS: &str = "/_arkret/peer/events";
 const ROUTE_MISS_WINDOW: Duration = Duration::from_secs(360);
 const HELD_WINDOW: Duration = Duration::from_secs(120);
-const NOT_HELD_WINDOW: Duration = Duration::from_secs(15);
 
 /// Bob prepares on Y, signs his own `join` and submits it to Y, which forwards
 /// it to X; X's committed join then reaches Y by committed replication.

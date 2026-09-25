@@ -13,7 +13,10 @@
 //!    replicates the committed accept to Y, where it opens Y's held Realm stream with the exact
 //!    source Commit; the membership current Y derives from it lists the Realm as joined in Bob's
 //!    realm list on Y.
-//! 5. Joining grants no writing: Bob's Message is refused by X and relayed by Y. After Alice's
+//! 5. Y anchors its held stream on X's bootstrap snapshot (`federation.md` §4.1.1, member Station
+//!    bootstrap): Bob's own scan on Y is served from his accept Commit (`membership_join`), and his
+//!    realm list on Y carries the Realm title from the installed typed current.
+//! 6. Joining grants no writing: Bob's Message is refused by X and relayed by Y. After Alice's
 //!    grant, Bob's Message submitted to Y is committed by X, Alice's scan on X returns it in full,
 //!    and X replicates it back to Y.
 
@@ -25,7 +28,10 @@ use arkret_models_collaboration::governance::membership_invite::{
 };
 use arkret_models_collaboration::governance::realm_join_intake::RealmJoinIntent;
 use arkret_models_collaboration::sync_frames::demand_sync::RealmListMembership;
-use arkret_wire::{ActorId, CommitStreamRef, EventKind, InviteId, ReadableFloorReason, RealmId};
+use arkret_wire::{
+    ActorId, CommitStreamRef, EventKind, InviteId, ReadableFloorReason, RealmId,
+    StreamScanDirection, StreamScanOutcome, StreamScanRequest,
+};
 use chrono::{Duration as ChronoDuration, Utc};
 use reqwest::StatusCode;
 use serde_json::Value;
@@ -85,6 +91,54 @@ async fn wait_for_joined_row(client: &TestActorClient, realm_id: &str) -> Result
         }
         if Instant::now() >= deadline {
             bail!("Bob's realm list on his Station never named the joined Realm");
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+}
+
+/// Poll Bob's own Realm stream scan on his Station until the held stream is
+/// anchored and served, and return that first page.
+pub(crate) async fn wait_for_member_scan(
+    client: &TestActorClient,
+    realm_id: &RealmId,
+) -> Result<StreamScanOutcome> {
+    let request = StreamScanRequest {
+        realm_id: realm_id.clone(),
+        stream_ref: CommitStreamRef::Realm {
+            realm_id: realm_id.clone(),
+        },
+        direction: StreamScanDirection::After(None),
+        limit: 50,
+    };
+    let deadline = Instant::now() + Duration::from_secs(120);
+    loop {
+        match client.sdk().scan_commit_stream(&request).await {
+            Ok(page) => return Ok(page),
+            Err(error) if Instant::now() >= deadline => {
+                bail!("Bob's scan on his Station was never served: {error}");
+            }
+            Err(_) => tokio::time::sleep(Duration::from_millis(500)).await,
+        }
+    }
+}
+
+/// Poll Bob's realm list on his Station until the Realm's row carries
+/// `title`.
+async fn wait_for_titled_row(client: &TestActorClient, realm_id: &str, title: &str) -> Result<()> {
+    let deadline = Instant::now() + Duration::from_secs(120);
+    loop {
+        let frames = account_frames(client, None).await?;
+        if let Ok(row) = listed_row(&frames, realm_id)
+            && row.title.as_deref() == Some(title)
+        {
+            ensure!(
+                row.membership == RealmListMembership::Join,
+                "Bob's titled realm row names another membership: {row:?}"
+            );
+            return Ok(());
+        }
+        if Instant::now() >= deadline {
+            bail!("Bob's realm list on his Station never carried the Realm title");
         }
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
@@ -203,7 +257,27 @@ pub async fn cross_station_invite_join_run() -> Result<()> {
     )?;
     wait_for_joined_row(&bob, &realm).await?;
 
-    // (5) Joining grants no writing; X refuses and Y relays the refusal.
+    // (5) Y anchors its held stream: Bob's own scan starts at his accept.
+    let page = wait_for_member_scan(&bob, &realm_id).await?;
+    let floor = page
+        .readable_floor
+        .as_ref()
+        .context("Bob's scan on Y names no readable floor")?;
+    ensure!(
+        floor.oldest_position == accept_commit.stream_position
+            && floor.floor_commit_id == accept_commit.commit_id
+            && floor.floor_reason == ReadableFloorReason::MembershipJoin,
+        "Bob's scan on Y does not start at his accept Commit: {floor:?}"
+    );
+    ensure!(
+        page.committed_events
+            .first()
+            .is_some_and(|item| item.commit() == &accept_commit),
+        "Bob's scan on Y does not begin with his accept"
+    );
+    wait_for_titled_row(&bob, &realm, TITLE).await?;
+
+    // (6) Joining grants no writing; X refuses and Y relays the refusal.
     let early = bob
         .author_event(
             &realm,
