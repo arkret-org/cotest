@@ -193,13 +193,70 @@ pub async fn narrow_snapshot_head_discloses_only_complete_creator_cut() -> Resul
             .is_some_and(|commits| commits.len() == 8),
         "facet bootstrap must accept eight Events before the Strand pair: {with_plaintext}"
     );
-    expect_status(
+    // The optional plaintext-services facet is a disclosed Realm singleton:
+    // eight bootstrap Commits plus the Strand pair are a complete cut.
+    let facet_snapshot = expect_json(
         author
             .get(head_path)
             .query(&[("realm_id", with_plaintext_id)]),
-        StatusCode::SERVICE_UNAVAILABLE,
+        StatusCode::OK,
     )
     .await?;
+    let facet_typed: arkret_wire::RealmStateSnapshot =
+        serde_json::from_value(facet_snapshot.clone())
+            .context("facet head must be a signed wire snapshot")?;
+    ensure!(
+        facet_typed.visible_stream_heads.len() == 1
+            && facet_typed.visible_stream_heads[0].stream_position == 9
+            && facet_typed.current_state_entries.len() == 11
+            && facet_typed.current_state_entries.iter().any(|row| matches!(
+                row,
+                arkret_wire::TypedCurrentResult::Value {
+                    selector: arkret_wire::CurrentSelector::RealmPlaintextVisibleServices,
+                    ..
+                }
+            )),
+        "facet cut must disclose the plaintext-services row: {facet_snapshot}"
+    );
+    verify_test_notary_snapshot(&facet_typed)?;
+    // A plain-text message (the facet admits this Station for message
+    // content) is part of the same founder cut: the next head carries its
+    // `message_revision` row at the message Commit.
+    let strand_id = author.default_strand_id(with_plaintext_id)?;
+    author
+        .send_message(with_plaintext_id, &strand_id, "hello")
+        .await?;
+    let with_message: arkret_wire::RealmStateSnapshot = serde_json::from_value(
+        expect_json(
+            author
+                .get(head_path)
+                .query(&[("realm_id", with_plaintext_id)]),
+            StatusCode::OK,
+        )
+        .await?,
+    )
+    .context("head after a message must be a signed wire snapshot")?;
+    ensure!(
+        with_message.visible_stream_heads[0].stream_position == 10
+            && with_message.current_state_entries.len() == 12
+            && with_message
+                .current_state_entries
+                .iter()
+                .any(|row| matches!(
+                    row,
+                    arkret_wire::TypedCurrentResult::Value {
+                        selector: arkret_wire::CurrentSelector::MessageRevision { .. },
+                        revision,
+                        ..
+                    } if revision.stream_position == 10
+                )),
+        "head after a message must disclose its message_revision: {with_message:?}"
+    );
+    verify_test_notary_snapshot(&with_message)?;
+    ensure_same_object(
+        &with_message,
+        &read_by_ref(&author, &with_message.snapshot_id, with_plaintext_id).await?,
+    )?;
     // An exact ref is bound to its Realm: naming it under another Realm the
     // caller can read is unavailable, never a substitute object.
     expect_status(
@@ -692,11 +749,9 @@ async fn account_detail_frames(
 /// it backfills the preview stream with a verified replay from genesis over
 /// the live scan and authority bundle and only then treats that stream as
 /// exact, while the sibling Realm verifies as ordinary full history. A forged
-/// preview row still fails closed.
-///
-/// Soland currently proves Account windows only for the single-member
-/// bootstrap cut (seven or nine Commits), so the product's 20-row window
-/// cannot be exceeded live yet; `window_limit` 8 produces the same shape.
+/// preview row still fails closed. `window_limit` 8 keeps the Realm short;
+/// the product's 20-row window over a longer message tail is exercised by
+/// `message_tail_window_beyond_twenty_commits_verifies_through_inkson`.
 pub async fn preview_account_window_backfills_without_failing_its_sibling_realm() -> Result<()> {
     let SnapshotAuthor {
         _coauth,
@@ -875,12 +930,12 @@ pub async fn preview_account_window_backfills_without_failing_its_sibling_realm(
 /// Strand (StrandCreate + `ak.realm.set_default_strand`), and a
 /// `window_limit` 2 Account window names that issued snapshot as its
 /// `after_committed_prefix` basis. Inkson's Account frame verifier reads the
-/// basis by reference through Garth, verifies the two-Commit tail and folds
-/// it through the typed Strand and default-Strand reducers to exactly the
-/// Station's same-cut current (the signed `/head` at the window head),
-/// without failing the frame. A current that contradicts the fold still
-/// fails closed.
-pub async fn limited_window_strand_tail_folds_to_exact_current_through_inkson() -> Result<()> {
+/// basis by reference through Garth, verifies the two-Commit tail and keeps
+/// the Station's same-cut current (equal to the signed `/head` at the window
+/// head) without failing the frame; the client never folds typed current
+/// itself. A current row sourced outside the verified cut fails closed.
+pub async fn limited_window_strand_tail_verifies_with_same_cut_current_through_inkson() -> Result<()>
+{
     use arkret_models_collaboration::sync_frames::account_sync::StreamWindowAnchorKind;
 
     let SnapshotAuthor {
@@ -937,7 +992,7 @@ pub async fn limited_window_strand_tail_folds_to_exact_current_through_inkson() 
     let http = author.sdk();
     let verified = inkson::realm_events_engine::verify_account_frame_commits(&http, &frame)
         .await
-        .context("a StrandCreate/default-Strand tail must fold, not fail the frame")?;
+        .context("a StrandCreate/default-Strand tail must verify, not fail the frame")?;
     let typed_realm = arkret_wire::RealmId::new(realm_id.clone())?;
     let stream = arkret_wire::CommitStreamRef::Realm {
         realm_id: typed_realm.clone(),
@@ -1008,25 +1063,211 @@ pub async fn limited_window_strand_tail_folds_to_exact_current_through_inkson() 
         "the exact window keeps its same-cut current"
     );
 
+    // The client does not fold typed current (client-sync §5.1); it binds the
+    // Station's current to the verified cut. A row sourced from a stream the
+    // frame never settled fails the whole frame closed.
     let mut forged = frame.clone();
-    forged
+    let forged_entries = &mut forged
         .realms
         .as_mut()
         .and_then(|realms| realms.entries.get_mut(&realm_id))
         .and_then(|entry| entry.current.as_mut())
         .context("forged current")?
-        .entries
-        .pop();
+        .entries;
+    if let Some(arkret_wire::TypedCurrentResult::Value {
+        source_stream_ref, ..
+    }) = forged_entries.first_mut()
+    {
+        *source_stream_ref = arkret_wire::CommitStreamRef::Circle {
+            realm_id: typed_realm.clone(),
+            circle_id: arkret_wire::CircleId::from_event_id(&arkret_wire::EventId::from_digest(
+                arkret_canonical::DigestSuite::Sha256,
+                [0x6f; 32],
+            )),
+        };
+    }
     let Err(error) =
         inkson::realm_events_engine::verify_account_frame_commits(&http, &forged).await
     else {
-        anyhow::bail!("a current that contradicts the verified fold must fail closed");
+        anyhow::bail!("a current row outside the verified cut must fail closed");
     };
     ensure!(
         error
             .to_string()
-            .contains("verified floor and readable tail"),
+            .contains("Account current cut differs from signed floor snapshot"),
         "forged current failed for another reason: {error}"
+    );
+    Ok(())
+}
+
+/// Fresh Soland + real PostgreSQL, a founder Realm longer than the product's
+/// default 20-row Account window: the plaintext-facet bootstrap, a default
+/// Strand and one message, a `/head` issued at that message Commit (position
+/// 10), then twenty more messages. The default window delivers positions
+/// 11..=30 and names the
+/// issued snapshot, which already carries a `message_revision` row, as its
+/// `after_committed_prefix` basis. Inkson verifies the signed floor rows, the
+/// twenty-Commit message tail and the same-cut current without failing the
+/// frame, and the fresh signed head at the window head equals that current.
+pub async fn message_tail_window_beyond_twenty_commits_verifies_through_inkson() -> Result<()> {
+    use arkret_models_collaboration::sync_frames::account_sync::StreamWindowAnchorKind;
+
+    let SnapshotAuthor {
+        _coauth,
+        server,
+        author,
+    } = snapshot_author("account-window-message-tail", "window-heidi").await?;
+    // Plain-text messages need this Station in the plaintext-services facet;
+    // the helper also creates the default Strand (positions 8 and 9).
+    let created = author
+        .create_realm_with(json!({
+            "title": "Message tail",
+            "summary": "Message tail",
+            "public": false,
+            "plaintext_visible_services": [server.service_id()]
+        }))
+        .await?;
+    let realm_id = created["realm_id"].as_str().context("realm_id")?.to_owned();
+    let strand_id = author.default_strand_id(&realm_id)?;
+    author.send_message(&realm_id, &strand_id, "anchor").await?;
+    let issued: arkret_wire::RealmStateSnapshot = serde_json::from_value(
+        expect_json(
+            author
+                .get("/_arkret/self/realm-state-snapshot/head")
+                .query(&[("realm_id", realm_id.as_str())]),
+            StatusCode::OK,
+        )
+        .await?,
+    )
+    .context("issued head must be a closed signed snapshot")?;
+    ensure!(
+        issued.visible_stream_heads[0].stream_position == 10
+            && issued.current_state_entries.len() == 12,
+        "the anchor snapshot is the message cut at position 10: {issued:?}"
+    );
+    for index in 0..20 {
+        author
+            .send_message(&realm_id, &strand_id, &format!("tail {index}"))
+            .await?;
+    }
+
+    let frame = account_detail_frame(&author, json!({"realm_ids": [realm_id]})).await?;
+    let entry = realm_detail(&frame, &realm_id)?;
+    let [window] = entry.streams.as_deref().context("stream windows")? else {
+        anyhow::bail!("a founder Realm has exactly its Realm stream window");
+    };
+    ensure!(
+        window.limited
+            && window.complete
+            && window.preview_only.is_none()
+            && window.next_position == 31
+            && window.window_start_basis.as_ref().is_some_and(|basis| {
+                basis.anchor_kind == StreamWindowAnchorKind::AfterCommittedPrefix
+                    && basis.anchor_position == 10
+                    && basis.snapshot_ref == issued.snapshot_id
+            })
+            && window_positions(&entry) == (11..=30).collect::<Vec<_>>(),
+        "the default window must carry the twenty-message tail on the issued anchor: {window:?}"
+    );
+    let current = entry.current.as_ref().context("same-cut current")?;
+    ensure!(
+        current.entries.len() == 32
+            && current
+                .entries
+                .iter()
+                .filter(|row| matches!(
+                    row,
+                    arkret_wire::TypedCurrentResult::Value {
+                        selector: arkret_wire::CurrentSelector::MessageRevision { .. },
+                        ..
+                    }
+                ))
+                .count()
+                == 21,
+        "the same-cut current carries every message revision: {current:?}"
+    );
+
+    let http = author.sdk();
+    let verified = inkson::realm_events_engine::verify_account_frame_commits(&http, &frame)
+        .await
+        .context("a message tail on a message-bearing floor must verify")?;
+    ensure!(
+        verified.unresolved_streams().is_empty() && verified.preview_streams().is_empty(),
+        "the anchored window settles as exact"
+    );
+    let product_frame = verified.product_frame(&frame);
+    ensure!(
+        realm_detail(&product_frame, &realm_id)?.current == entry.current,
+        "the verified window keeps the Station's same-cut current"
+    );
+    let at_head: arkret_wire::RealmStateSnapshot = serde_json::from_value(
+        expect_json(
+            author
+                .get("/_arkret/self/realm-state-snapshot/head")
+                .query(&[("realm_id", realm_id.as_str())]),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    ensure!(
+        at_head.visible_stream_heads[0].stream_position == 30
+            && at_head.current_state_entries == current.entries,
+        "the signed head at the window head equals the same-cut current"
+    );
+
+    // Live delta: two more messages continue the delivered window. The next
+    // frame on the same cursor carries exactly those two Commits on an exact
+    // snapshot at the delivered head 30, and still verifies through Inkson.
+    let delivered_head = window.head_commit_ref.clone();
+    for index in 0..2 {
+        author
+            .send_message(&realm_id, &strand_id, &format!("live {index}"))
+            .await?;
+    }
+    let cursor = frame
+        .cursor
+        .clone()
+        .context("the window frame names its cursor")?;
+    let delta_frame = account_detail_frames(
+        &author,
+        &json!({"realm_ids": [realm_id]}),
+        Some(cursor.as_str()),
+    )
+    .await?
+    .into_iter()
+    .find(|frame| {
+        frame
+            .realms
+            .as_ref()
+            .is_some_and(|realms| realms.entries.contains_key(&realm_id))
+    })
+    .context("the continued subscribe delivers the Realm delta")?;
+    let delta = realm_detail(&delta_frame, &realm_id)?;
+    let [delta_window] = delta.streams.as_deref().context("delta stream windows")? else {
+        anyhow::bail!("a founder Realm delta has exactly its Realm stream window");
+    };
+    ensure!(
+        delta_window.preview_only.is_none()
+            && delta_window.next_position == 33
+            && delta_window
+                .window_start_basis
+                .as_ref()
+                .is_some_and(|basis| {
+                    basis.anchor_kind == StreamWindowAnchorKind::AfterCommittedPrefix
+                        && basis.anchor_position == 30
+                        && basis.anchor_commit_ref == delivered_head
+                })
+            && window_positions(&delta) == vec![31, 32],
+        "the live delta must continue after the delivered head: {delta_window:?}"
+    );
+    let verified_delta =
+        inkson::realm_events_engine::verify_account_frame_commits(&http, &delta_frame)
+            .await
+            .context("a live delta on the auto-issued head snapshot must verify")?;
+    ensure!(
+        verified_delta.unresolved_streams().is_empty()
+            && verified_delta.preview_streams().is_empty(),
+        "the live delta settles as exact"
     );
     Ok(())
 }

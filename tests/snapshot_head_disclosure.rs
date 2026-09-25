@@ -31,7 +31,14 @@ async fn preview_account_window_backfills_without_failing_its_sibling_realm() ->
 
 #[tokio::test]
 #[serial]
-async fn limited_window_strand_tail_folds_to_exact_current_through_inkson() -> Result<()> {
-    cotest::scenarios::protocol_payloads::limited_window_strand_tail_folds_to_exact_current_through_inkson()
+async fn limited_window_strand_tail_verifies_with_same_cut_current_through_inkson() -> Result<()> {
+    cotest::scenarios::protocol_payloads::limited_window_strand_tail_verifies_with_same_cut_current_through_inkson()
+        .await
+}
+
+#[tokio::test]
+#[serial]
+async fn message_tail_window_beyond_twenty_commits_verifies_through_inkson() -> Result<()> {
+    cotest::scenarios::protocol_payloads::message_tail_window_beyond_twenty_commits_verifies_through_inkson()
         .await
 }

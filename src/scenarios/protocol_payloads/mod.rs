@@ -51,7 +51,8 @@ pub use key_backup_pointer::key_backup_active_pointer_is_committed_and_listed_at
 pub use snapshot_head_disclosure::{
     exact_snapshot_by_ref_reads_through_garth_with_historical_station_key,
     limited_account_window_names_issued_basis_or_is_preview_only,
-    limited_window_strand_tail_folds_to_exact_current_through_inkson,
+    limited_window_strand_tail_verifies_with_same_cut_current_through_inkson,
+    message_tail_window_beyond_twenty_commits_verifies_through_inkson,
     narrow_snapshot_head_discloses_only_complete_creator_cut,
     preview_account_window_backfills_without_failing_its_sibling_realm,
 };
