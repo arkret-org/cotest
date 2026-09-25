@@ -7,7 +7,6 @@ use super::{
     canonical_json, load_artifact_json, load_fixture_value, looks_like_sha256_digest,
     required_field, required_str, validate_profile, value_array, value_field_str,
 };
-use crate::transcripts::record_vector_event;
 
 pub fn run_event_envelope_fixture_suite() -> Result<()> {
     let event_kind_registry = load_artifact_json("registry/event-kind-registry.json")?;

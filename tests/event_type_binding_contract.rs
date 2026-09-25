@@ -77,7 +77,7 @@ fn typed_event_cross_family_canonical_kats_are_fixed() {
     );
     assert_eq!(
         join_rule.event_id.as_str(),
-        "ak:event:JOIN_RULE_EVENT_ID_PLACEHOLDER"
+        "ak:event:ATAC78rBcGy-Wl_jOu8g6_VeXuagxDExHJ7HLuX3p0Gn"
     );
     assert_ne!(message_bytes, join_rule_bytes);
 }
