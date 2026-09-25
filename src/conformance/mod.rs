@@ -254,7 +254,7 @@ pub use downstream_impact::{
 pub use encoding::{
     run_encoding_fixture_suite, run_projection_position_discriminator_fixture_suite,
 };
-pub use envelope::{run_container_realm_control_payload_suite, run_event_envelope_fixture_suite};
+pub use envelope::run_event_envelope_fixture_suite;
 pub use fanout_route_miss::run_fanout_route_miss_suite;
 pub use file_transfer_stream_aead::{
     ALL_FILE_TRANSFER_STREAM_AEAD_VECTOR_IDS, run_file_transfer_overall_digest_rejected_vector,

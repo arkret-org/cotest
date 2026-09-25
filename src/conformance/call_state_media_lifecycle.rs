@@ -2,7 +2,7 @@
 //!
 //! 5 vectors covering the recording-retention / recording-result artifact /
 //! transcribe / moderation /
-//! P2P→SFU-upgrade additions to `ak.call.state` and `ak.call.summary`:
+//! P2P→SFU-upgrade additions to `ak.call.state`:
 //!
 //! - `ak.vector.call_state.recording_retention_lock.v1`
 //! - `ak.vector.call_state.recording_result_artifact_shape.v1`
@@ -15,7 +15,7 @@
 //! transcript / recording MLS-Exporter labels and their distinct Context
 //! field shapes (`exporter-label-registry.json`), the audit-lock-over-TTL
 //! deletion gate, the moderation OR-Set token-reissue gate,
-//! and the oldest-membership P2P→SFU upgrade / summary terminal-state gate, so
+//! and the oldest-membership P2P→SFU upgrade, so
 //! a downstream soland reducer regression hard-fails before reaching a live
 //! integration target (see the `#[ignore]` live legs under `tests/`).
 //!
@@ -104,10 +104,6 @@ fn validate_call_state_media_lifecycle_fixture_metadata() -> Result<()> {
 // `arkret_wire::error_codes` (imported above) instead of local pins.
 
 // ── Exporter-label pins (exporter-label-registry.json) ──────────────────────
-
-/// Terminal call states (`call-state.md` §4.2). `ak.call.summary` is gated on
-/// the call head being one of these.
-const TERMINAL_CALL_STATES: &[&str] = &["ended", "missed", "failed", "cancelled"];
 
 // ─── §12.16 — recording_retention_lock ─────────────────────────────────────
 
@@ -714,7 +710,7 @@ pub fn run_moderator_kick_ban_vector() -> Result<()> {
     Ok(())
 }
 
-// ─── §12.19 — p2p_to_sfu_upgrade & summary gate ────────────────────────────
+// ─── §12.19 — p2p_to_sfu_upgrade ───────────────────────────────────────────
 
 /// P2P calls MUST converge to SFU once the active leg exceeds two; mode MUST
 /// NOT auto-downgrade back to p2p within the same lifecycle.
@@ -725,20 +721,6 @@ fn resolve_mode(initial_mode: &str, active_participants: usize) -> &'static str 
         "p2p"
     } else {
         "sfu"
-    }
-}
-
-fn is_terminal_call_state(state: &str) -> bool {
-    TERMINAL_CALL_STATES.contains(&state)
-}
-
-/// `ak.call.summary` is accepted only when its `final_state` is terminal and
-/// matches the call head; otherwise `call_summary_invalid`.
-fn summary_accepted(final_state: &str) -> std::result::Result<(), &'static str> {
-    if is_terminal_call_state(final_state) {
-        Ok(())
-    } else {
-        Err(arkret_wire::ReasonCode::CALL_SUMMARY_INVALID)
     }
 }
 
@@ -755,19 +737,6 @@ pub fn run_p2p_to_sfu_upgrade_vector() -> Result<()> {
     // Two-party p2p stays p2p.
     if resolve_mode("p2p", 2) != "p2p" {
         bail!("two-party p2p must stay p2p");
-    }
-
-    // Step 4 — summary on a terminal call is accepted; on an active call it is
-    // call_summary_invalid.
-    for terminal in TERMINAL_CALL_STATES {
-        summary_accepted(terminal)
-            .map_err(|code| anyhow::anyhow!("summary on terminal {terminal} rejected: {code}"))?;
-    }
-    for non_terminal in ["scheduled", "ringing", "connecting", "active"] {
-        match summary_accepted(non_terminal) {
-            Err(code) if code == arkret_wire::ReasonCode::CALL_SUMMARY_INVALID => {}
-            other => bail!("summary on {non_terminal} must be call_summary_invalid, got {other:?}"),
-        }
     }
     Ok(())
 }

@@ -21,75 +21,6 @@ pub fn run_event_envelope_fixture_suite() -> Result<()> {
     Ok(())
 }
 
-pub fn run_container_realm_control_payload_suite() -> Result<()> {
-    let vectors = [
-        (
-            "ak.cotest_vector.container.move_item.accept.v1",
-            "ak.container.move_item",
-            json!({
-                "item_ref": "ak:morph:AXh0mpVGb536xVxbSPfM4Wc_1WuXAxTYgmtXEncKM9T0",
-                "container_ref": "ak:morph:AfqXI4jyBJWA5HRhSr3SdFP5Qb_2V210Q00mFqUjA7_z",
-                "relation_kind": "contains",
-                "rank": "A"
-            }),
-            true,
-        ),
-        (
-            "ak.cotest_vector.container.move_item.unregistered_fields_rejected.v1",
-            "ak.container.move_item",
-            json!({
-                "object_ref": "ak:morph:AXh0mpVGb536xVxbSPfM4Wc_1WuXAxTYgmtXEncKM9T0",
-                "to_container_id": "ak:morph:AfqXI4jyBJWA5HRhSr3SdFP5Qb_2V210Q00mFqUjA7_z",
-                "relation_kind": "contains",
-                "rank": "A"
-            }),
-            false,
-        ),
-        (
-            "ak.cotest_vector.container.rebalance.accept.v1",
-            "ak.container.rebalance",
-            json!({
-                "container_ref": "ak:morph:AfqXI4jyBJWA5HRhSr3SdFP5Qb_2V210Q00mFqUjA7_z",
-                "relation_kind": "contains",
-                "positions": [
-                    {"item_ref": "ak:morph:AXh0mpVGb536xVxbSPfM4Wc_1WuXAxTYgmtXEncKM9T0", "rank": "A"},
-                    {"item_ref": "ak:morph:AaIJHtxd23N3TkS66mYyI4XGESjS7Gjt_fonMdJe9inQ", "rank": "B"}
-                ],
-                "expected_order_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-            }),
-            true,
-        ),
-        (
-            "ak.cotest_vector.container.rebalance.duplicate_rank_rejected.v1",
-            "ak.container.rebalance",
-            json!({
-                "container_ref": "ak:morph:AfqXI4jyBJWA5HRhSr3SdFP5Qb_2V210Q00mFqUjA7_z",
-                "relation_kind": "contains",
-                "positions": [
-                    {"item_ref": "ak:morph:AXh0mpVGb536xVxbSPfM4Wc_1WuXAxTYgmtXEncKM9T0", "rank": "A"},
-                    {"item_ref": "ak:morph:AaIJHtxd23N3TkS66mYyI4XGESjS7Gjt_fonMdJe9inQ", "rank": "A"}
-                ],
-                "expected_order_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-            }),
-            false,
-        ),
-    ];
-
-    for (id, kind, payload, expected_accept) in vectors {
-        let accepted = validate_event_payload(kind, &payload).is_none();
-        if accepted != expected_accept {
-            bail!("{id} expected accept={expected_accept}, got accept={accepted}");
-        }
-        record_vector_event(
-            id,
-            &json!({"kind": kind, "payload": payload}),
-            &json!({"accept": expected_accept}),
-            &json!({"accept": accepted}),
-        );
-    }
-    Ok(())
-}
-
 // ── Internal validation functions ───────────────────────────────────────────
 
 fn validate_synthetic_event_envelope_negatives(
@@ -502,18 +433,6 @@ fn validate_event_payload(kind: &str, content: &Value) -> Option<String> {
         "ak.strand.reorder" => {
             missing_payload_fields(content, &["board_id", "strand_id", "list_id", "rank"])
         }
-        "ak.container.move_item" => serde_json::from_value::<
-            arkret_models_collaboration::events_payloads::ContainerMoveItemPayload,
-        >(content.clone())
-        .map_err(|error| error.to_string())
-        .and_then(|payload| payload.validate().map_err(|error| error.to_string()))
-        .err(),
-        "ak.container.rebalance" => serde_json::from_value::<
-            arkret_models_collaboration::events_payloads::ContainerRebalancePayload,
-        >(content.clone())
-        .map_err(|error| error.to_string())
-        .and_then(|payload| payload.validate().map_err(|error| error.to_string()))
-        .err(),
         "ak.member.state" => {
             if let Some(err) = missing_payload_fields(content, &["member_id", "membership"]) {
                 return Some(err);

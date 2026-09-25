@@ -18,7 +18,6 @@
       { "arkret_result_family": "realm_discovery",                     "arkret_kind": "ak.realm.discovery",                   "mimi_path": "participation.discoverability", "direction": "bidirectional" },
       { "arkret_result_family": "realm_asset_privacy_policy",          "arkret_kind": "ak.realm.asset_privacy_policy",        "mimi_path": "asset",                         "direction": "bidirectional" },
       { "arkret_result_family": "realm_policy_bundle",                 "arkret_kind": "ak.realm.policy_bundle",               "mimi_path": "participation",                 "direction": "bidirectional" },
-      { "arkret_result_family": "realm_policy",                        "arkret_kind": "ak.realm.policy",                      "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json" },
       { "arkret_result_family": "realm_plaintext_visible_services",    "arkret_kind": "ak.realm.plaintext_visible_services", "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json" },
       { "arkret_result_family": "realm_media_service",                 "arkret_kind": "ak.realm.media_service",               "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json" },
       { "arkret_result_family": "realm_schema",                        "arkret_kind": "ak.realm.schema",                      "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json" }

@@ -2,7 +2,7 @@ use arkret_canonical::{DigestSuite, canonical_json_bytes};
 use arkret_event_draft::{EventPayloadExt, TypedEventDraft, ValidatedExtensionPayload};
 use arkret_models_collaboration::events_payloads::{ContentBlock, MessageCreatePayload};
 use arkret_models_collaboration::governance::realm_lifecycle::{
-    RealmPolicyPayload, RealmPolicyValue,
+    RealmJoinRulePayload, RealmJoinRuleValue,
 };
 use arkret_wire::{
     AccountId, ActorId, ConfidentialityClass, Did, DidCoreId, Event, EventKind, ExtensionManifest,
@@ -52,58 +52,49 @@ fn message_event() -> Event {
 #[test]
 fn typed_event_cross_family_canonical_kats_are_fixed() {
     let message = message_event();
-    let policy = TypedEventDraft::<event_spec::RealmPolicy>::new(
+    let join_rule = TypedEventDraft::<event_spec::RealmJoinRule>::new(
         scope(),
         actor(),
-        RealmPolicyPayload {
-            value: RealmPolicyValue {
-                policy_id: arkret_wire::PolicyId::new(
-                    "ak:policy:01964137-0000-7000-8000-000000000001",
-                )
-                .unwrap(),
-            },
-            state: Some("active".to_owned()),
-            reason: None,
-        },
+        RealmJoinRulePayload::new(RealmJoinRuleValue::Invite),
     )
     .unwrap()
     .author_with_digest_suite(created_at(), DigestSuite::Sha256)
     .unwrap();
 
     let message_bytes = canonical_json_bytes(&message.digest_payload().unwrap()).unwrap();
-    let policy_bytes = canonical_json_bytes(&policy.digest_payload().unwrap()).unwrap();
+    let join_rule_bytes = canonical_json_bytes(&join_rule.digest_payload().unwrap()).unwrap();
     assert_eq!(
         message_bytes,
         br#"{"actor_id":{"account_id":{"principal_id":"ak:did_core:webvh:z6mkfixture","station_id":"ak:did_core:web:principal.example"},"kind":"account"},"created_at":"2026-08-09T01:02:03.000Z","kind":"ak.message.create","payload":{"content":{"body":"typed authoring KAT","format":"plain","kind":"ak.content.text"},"strand_id":"ak:strand:AT3ARBdH1FM6GjXK9ulTx-YMvQOXys39dlUzZV6KyID9","track_name":"main"},"realm_id":"ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir","scope_ref":{"kind":"realm","realm_id":"ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir"}}"#
     );
     assert_eq!(
-        policy_bytes,
-        br#"{"actor_id":{"account_id":{"principal_id":"ak:did_core:webvh:z6mkfixture","station_id":"ak:did_core:web:principal.example"},"kind":"account"},"created_at":"2026-08-09T01:02:03.000Z","kind":"ak.realm.policy","payload":{"state":"active","value":{"policy_id":"ak:policy:01964137-0000-7000-8000-000000000001"}},"realm_id":"ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir","scope_ref":{"kind":"realm","realm_id":"ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir"}}"#
+        join_rule_bytes,
+        br#"{"actor_id":{"account_id":{"principal_id":"ak:did_core:webvh:z6mkfixture","station_id":"ak:did_core:web:principal.example"},"kind":"account"},"created_at":"2026-08-09T01:02:03.000Z","kind":"ak.realm.join_rule","payload":{"value":"invite"},"realm_id":"ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir","scope_ref":{"kind":"realm","realm_id":"ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir"}}"#
     );
     assert_eq!(
         message.event_id.as_str(),
         "ak:event:AQYQ-dOi59Eekerc6JagP9RAtSGa_jBhUjm_ybcPiH0B"
     );
     assert_eq!(
-        policy.event_id.as_str(),
-        "ak:event:AcwJFM37TbVr8hSpP44P2tZnFYPumWNhhV34IRrbUpQD"
+        join_rule.event_id.as_str(),
+        "ak:event:JOIN_RULE_EVENT_ID_PLACEHOLDER"
     );
-    assert_ne!(message_bytes, policy_bytes);
+    assert_ne!(message_bytes, join_rule_bytes);
 }
 
 #[test]
 fn checked_accessor_separates_kind_mismatch_from_payload_invalid() {
     let message = message_event();
     assert!(matches!(
-        message.typed_payload::<event_spec::RealmPolicy>(),
+        message.typed_payload::<event_spec::RealmJoinRule>(),
         Err(WireError::PayloadKindMismatch { .. })
     ));
 
     let mut wrong_family_wire = serde_json::to_value(&message).unwrap();
-    wrong_family_wire["kind"] = serde_json::json!(event_spec::RealmPolicy::KIND_STR);
+    wrong_family_wire["kind"] = serde_json::json!(event_spec::RealmJoinRule::KIND_STR);
     let wrong_family: Event = serde_json::from_value(wrong_family_wire).unwrap();
     assert!(matches!(
-        wrong_family.typed_payload::<event_spec::RealmPolicy>(),
+        wrong_family.typed_payload::<event_spec::RealmJoinRule>(),
         Err(WireError::PayloadInvalid { .. })
     ));
 }

@@ -19,7 +19,7 @@
 //!     "main",
 //!     ContentBlock::text("wrong family"),
 //! );
-//! let _ = TypedEventDraft::<event_spec::RealmPolicy>::new(
+//! let _ = TypedEventDraft::<event_spec::RealmJoinRule>::new(
 //!     scope,
 //!     DidCoreId::new("ak:did_core:webvh:z6mkfixture").unwrap(),
 //!     DidCoreId::new("ak:did_core:web:principal.example").unwrap(),

@@ -4,19 +4,16 @@
 //! policy semantics by exercising the SDK wire DTOs and reducer-pure helpers.
 
 use anyhow::{Result, anyhow, bail};
-use arkret_identifiers::{DidCoreId, Hash, RealmId};
+use arkret_identifiers::{DidCoreId, RealmId};
 use arkret_models_collaboration::events_payloads::mention::{Mention, MentionNode, MentionTarget};
 use arkret_models_collaboration::governance::agent_participation::{
     AgentParticipationEntry, AgentParticipationError, AgentParticipationOutcome, ParticipationBits,
     ParticipationNextReplaceInput, ParticipationScope, effective_participation, fold_ceiling_chain,
     validate_agent_participation_tightens,
 };
-use arkret_models_identity::claim_presentation::AgentSelectorClaim;
+use arkret_models_identity::claim_presentation::AgentSelectorClaimValue;
 use arkret_models_identity::handle::HandleVisibility;
-use arkret_wire::{
-    AccountId, ActorId, Audience, PayloadProof, PayloadProofPurpose, ProfileId, SchemaId,
-};
-use chrono::{TimeZone, Utc};
+use arkret_wire::{AccountId, ActorId, ProfileId};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -171,45 +168,18 @@ fn expect_reason(error: AgentParticipationError, expected: &str) -> Result<()> {
     Ok(())
 }
 
-fn selector_claim(
-    case: &Value,
-    subject_account_id: AccountId,
-    slug_field: &str,
-) -> Result<AgentSelectorClaim> {
-    Ok(AgentSelectorClaim {
-        schema: SchemaId::AGENT_SELECTOR_CLAIM_V1.to_owned(),
-        controller_subject_id: did_field(case, "controller_subject")?,
-        agent_slug: required_str(case, slug_field)?.to_owned(),
-        subject_account_id: Some(subject_account_id),
-        issuer_id: did_field(case, "controller_subject")?,
-        vouching_id: Some(DidCoreId::new("ak:did_core:web:directory.acme.example")?),
+fn selector_value(subject_account_id: AccountId) -> AgentSelectorClaimValue {
+    AgentSelectorClaimValue {
+        subject_account_id,
         visibility: HandleVisibility::Restricted,
         audience: Some("ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1".to_owned()),
-        expires_at: None,
-        created_at: Utc.with_ymd_and_hms(2026, 6, 19, 0, 0, 0).unwrap(),
-        verified_at: Some(Utc.with_ymd_and_hms(2026, 6, 19, 0, 1, 0).unwrap()),
-        source_refs: vec!["ak:event:AR4I3pqI_AE1Vxb4LEKq2azQxWXhHobgzwnTJmhVKJT-".to_owned()],
-        proofs: vec![PayloadProof {
-            kind: "detached_jws".to_owned(),
-            verification_method: crate::fixture_did_url("did:web:directory.acme.example#key-1"),
-            payload_digest: Hash::new(
-                "sha256:0000000000000000000000000000000000000000000000000000000000000001",
-            )?,
-            created_at: Utc.with_ymd_and_hms(2026, 6, 19, 0, 0, 0).unwrap(),
-            domain: None,
-            audience: Some(Audience::Single(
-                "ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1".to_owned(),
-            )),
-            proof_purpose: Some(PayloadProofPurpose::IssuerAttestation),
-            jws: "fixture.signature.value".to_owned(),
-        }],
-    })
+    }
 }
 
 /// Label verification for a known-Agent picker. The mention target is always
-/// the exact full Agent AccountId an authorized source already supplied; a
-/// signed selector claim can only verify the label shown for that target. It
-/// verifies only when exactly one current claim is visible and its signed
+/// the exact full Agent AccountId an authorized source already supplied; the
+/// provision-written selector value can only verify the label shown for that
+/// target. It verifies only when exactly one current value is visible and its
 /// `subject_account_id` equals the known target over both components.
 #[derive(Debug, Eq, PartialEq)]
 enum SelectorLabel {
@@ -217,11 +187,11 @@ enum SelectorLabel {
     Unverified,
 }
 
-fn verify_selector_label(known: &AccountId, visible: &[AgentSelectorClaim]) -> SelectorLabel {
-    let [claim] = visible else {
+fn verify_selector_label(known: &AccountId, visible: &[AgentSelectorClaimValue]) -> SelectorLabel {
+    let [value] = visible else {
         return SelectorLabel::Unverified;
     };
-    if claim.validate().is_err() || claim.subject_account_id.as_ref() != Some(known) {
+    if value.subject_account_id != *known {
         return SelectorLabel::Unverified;
     }
     SelectorLabel::Verified
@@ -287,10 +257,10 @@ pub fn run_agent_selector_label_known_account_vector() -> Result<()> {
         bail!("known Agent AccountId is not the provision reconciled with its PCR genesis");
     }
 
-    // Exactly one current claim that names the known target verifies the label.
+    // Exactly one current selector value that names the known target verifies
+    // the label.
     let claim_subject = account_pointer(vector, "/selector_claim/subject_account_id")?;
-    let claim = selector_claim(vector, claim_subject, "agent_slug_at_time")?;
-    claim.validate()?;
+    let claim = selector_value(claim_subject);
     let label = verify_selector_label(&known, std::slice::from_ref(&claim));
     let disclosure_matches = vector
         .pointer("/selector_claim_disclosure/target_matches_known_account")
@@ -311,17 +281,12 @@ pub fn run_agent_selector_label_known_account_vector() -> Result<()> {
         bail!("verified known-Agent mention drifted from the persisted fixture mention");
     }
 
-    // Swapping the Station is a different signed payload and never verifies
-    // the label for the known target; the mention target does not move.
-    let mut retargeted = claim.clone();
-    retargeted.subject_account_id = Some(AccountId::new(
+    // A value naming the same principal on another Station never verifies the
+    // label for the known target; the mention target does not move.
+    let retargeted = selector_value(AccountId::new(
         known.principal_id.clone(),
         DidCoreId::new("ak:did_core:web:other.example")?,
     ));
-    retargeted.validate()?;
-    if retargeted.payload_digest()? == claim.payload_digest()? {
-        bail!("selector claim payload digest did not bind the Station");
-    }
     if expected_str(vector, "claim_not_equal_to_known_account")? != "reject_label"
         || verify_selector_label(&known, std::slice::from_ref(&retargeted))
             != SelectorLabel::Unverified
@@ -342,8 +307,7 @@ pub fn run_agent_selector_label_known_account_vector() -> Result<()> {
         did_field(vector, "changed_agent_subject")?,
         known.station_id.clone(),
     );
-    let changed = selector_claim(vector, changed_subject, "changed_agent_slug")?;
-    changed.validate()?;
+    let changed = selector_value(changed_subject);
     let ambiguous = verify_selector_label(&known, &[claim.clone(), changed.clone()]);
     if expected_str(vector, "ambiguous_label")? != "unverified_label_without_retargeting"
         || ambiguous != SelectorLabel::Unverified
@@ -362,7 +326,7 @@ pub fn run_agent_selector_label_known_account_vector() -> Result<()> {
     }
 
     // Slug changes do not rewrite the historical target.
-    if changed.subject_account_id.as_ref() == Some(&mention.subject_account_id)
+    if changed.subject_account_id == mention.subject_account_id
         || mention.subject_account_id
             != account_pointer(vector, "/expected/historical_target_after_slug_change")?
     {

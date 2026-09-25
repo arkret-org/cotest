@@ -17,12 +17,12 @@ use cotest::conformance::{
     run_account_data_cas_convergence_suite, run_aead_nonce_replay_suite, run_agent_vector_suite,
     run_blob_stream_aead_suite, run_call_media_lifecycle_suite, run_call_signal_vector_suite,
     run_call_state_core_suite, run_call_state_media_lifecycle_vector_suite,
-    run_capability_relinquish_authoring_suite, run_container_realm_control_payload_suite,
-    run_crypto_hpke_suite, run_cursor_negative_suite, run_cursor_vector_suite,
-    run_detached_object_signature_suite, run_digest_construction_known_answers,
-    run_encoding_fixture_suite, run_franking_proof_suite, run_handle_claim_rejection_vector_suite,
-    run_key_backup_hardening_suite, run_keypackage_write_transcripts_suite,
-    run_media_binding_suite, run_member_identity_vector_suite, run_member_roster_vector_suite,
+    run_capability_relinquish_authoring_suite, run_crypto_hpke_suite, run_cursor_negative_suite,
+    run_cursor_vector_suite, run_detached_object_signature_suite,
+    run_digest_construction_known_answers, run_encoding_fixture_suite, run_franking_proof_suite,
+    run_handle_claim_rejection_vector_suite, run_key_backup_hardening_suite,
+    run_keypackage_write_transcripts_suite, run_media_binding_suite,
+    run_member_identity_vector_suite, run_member_roster_vector_suite,
     run_mention_rendering_vector_suite, run_mls_governance_binding_suite, run_named_suite_audit,
     run_object_addressing_vector_suite, run_object_identity_collision_suite,
     run_poll_reducer_fixture_suite, run_presence_signal_vector_suite,
@@ -430,12 +430,6 @@ fn account_stream_and_device_message_replay_vectors_converge() {
 }
 
 #[test]
-fn container_realm_control_payload_vector_suite_runs_clean() {
-    run_container_realm_control_payload_suite()
-        .expect("container and Realm control payload vectors must pass");
-}
-
-#[test]
 fn poll_reducer_fixture_suite_runs_clean() {
     run_poll_reducer_fixture_suite().expect("Poll reducer vector must remain executable");
 }
@@ -528,7 +522,7 @@ fn presence_signal_receiver_vector_suite_runs_clean() {
 // additions for recording retention + audit lock, ready recording artifact
 // binding, the transcribe pipeline + dedicated exporter label, moderator
 // kick/ban + moderation OR-Set token-reissue gating, and the P2P→SFU
-// upgrade + ak.call.summary terminal-state gate.
+// upgrade.
 
 #[test]
 fn call_state_media_lifecycle_vector_suite_runs_clean() {

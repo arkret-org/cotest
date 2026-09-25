@@ -20,7 +20,7 @@
     },
     {
       "name": "realm_policy_default",
-      "kind": "ak.realm.policy",
+      "kind": "ak.realm.policy_bundle",
       "components_array": ["ak:realm:AaRfbi5sqNgNzzcqaDDsD5tsVkRS_qMFGKFnTcnsjmVG", "default"],
       "components_order_source": "[realm_id, policy_name]",
       "expected_canonical_json": "[\"ak:realm:AaRfbi5sqNgNzzcqaDDsD5tsVkRS_qMFGKFnTcnsjmVG\",\"default\"]",
@@ -45,7 +45,7 @@
     },
     {
       "name": "wrong_component_order_must_differ_realm_policy",
-      "kind": "ak.realm.policy",
+      "kind": "ak.realm.policy_bundle",
       "components_array": ["default", "ak:realm:AaRfbi5sqNgNzzcqaDDsD5tsVkRS_qMFGKFnTcnsjmVG"],
       "comment": "Second ordering negative on a different kind: policy_name before realm_id MUST NOT collide with realm_policy_default's canonical subject.",
       "must_differ_from": "lg6PHAc3ue-WsHPT_NvGrMC_fgLfnYW9Lgn-9rlFiC4"
