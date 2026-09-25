@@ -3,14 +3,14 @@
 //! The canonical fixture is intentionally semantic: its cases describe a
 //! holder-private CAS register and a client projection, not a second wire
 //! protocol.  This runner therefore executes those state transitions.  It
-//! also uses the SDK's closed `AccountBlocklistPayload` target union for the
+//! also uses the SDK's closed `AccountBlocklistValue` target union for the
 //! target-closure case, so accepting a Realm/Organization target cannot be
 //! hidden by a harness-only model.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Result, anyhow, ensure};
-use arkret_models_collaboration::objects::productivity::AccountBlocklistPayload;
+use arkret_models_collaboration::objects::productivity::AccountBlocklistValue;
 use serde_json::{Value, json};
 
 use super::{
@@ -46,20 +46,17 @@ impl WholeValueRegister {
         }
     }
 
-    /// Both `ak.account.blocklist` and `ak.account_data.set` reach this exact
-    /// operation. There is no per-event-kind revision lane and no entry merge.
+    /// `ak.account_data.set` on key `ak.account.blocklist` is the only write:
+    /// one per-key revision, whole-value replacement, no entry merge.
     fn replace(
         &mut self,
         expected_server_revision: u64,
-        declared_version: u64,
         entries: impl IntoIterator<Item = &'static str>,
     ) -> Result<u64, WriteError> {
-        if expected_server_revision != self.revision
-            || declared_version != self.revision.saturating_add(1)
-        {
+        if expected_server_revision != self.revision {
             return Err(WriteError::CasConflict);
         }
-        self.revision = declared_version;
+        self.revision = self.revision.saturating_add(1);
         self.entries = entries.into_iter().map(str::to_owned).collect();
         Ok(self.revision)
     }
@@ -150,9 +147,11 @@ pub fn run_account_blocklist_projection_suite() -> Result<super::SuiteExecutionR
         let name = required_str(case, "name")?;
         ensure!(executed.insert(name), "duplicate blocklist case {name}");
         match name {
-            "whole_value_cas_rejects_a_skipped_revision" => skipped_revision(case)?,
+            "whole_value_cas_rejects_a_stale_expected_revision" => stale_revision(case)?,
             "whole_value_cas_rejects_a_stale_concurrent_write" => concurrent_write(case)?,
-            "account_data_set_shares_the_one_revision_counter" => shared_counter(case)?,
+            "unregistered_blocklist_event_kind_is_not_an_authoring_surface" => {
+                unregistered_kind(case)?
+            }
             "target_closure_rejects_realm_and_organization_targets" => target_closure(case)?,
             "shared_history_is_received_then_filtered_by_the_holder" => {
                 receive_before_filter(case)?
@@ -200,13 +199,13 @@ fn assert_case(case: &Value, decision: &str, reason: Option<&str>) -> Result<()>
     Ok(())
 }
 
-fn skipped_revision(case: &Value) -> Result<()> {
+fn stale_revision(case: &Value) -> Result<()> {
     assert_case(case, "reject", Some("cas_conflict"))?;
     let before = WholeValueRegister::at(7, ["alice"]);
     let mut register = before.clone();
     ensure!(
-        register.replace(7, 9, ["bob"]) == Err(WriteError::CasConflict),
-        "a skipped revision was accepted"
+        register.replace(6, ["bob"]) == Err(WriteError::CasConflict),
+        "a stale expected_server_revision was accepted"
     );
     ensure!(register == before, "a rejected write changed the register");
     Ok(())
@@ -215,10 +214,10 @@ fn skipped_revision(case: &Value) -> Result<()> {
 fn concurrent_write(case: &Value) -> Result<()> {
     assert_case(case, "reject", Some("cas_conflict"))?;
     let mut register = WholeValueRegister::at(7, ["alice"]);
-    ensure!(register.replace(7, 8, ["bob"]) == Ok(8));
+    ensure!(register.replace(7, ["bob"]) == Ok(8));
     let winner = register.clone();
     ensure!(
-        register.replace(7, 8, ["carol"]) == Err(WriteError::CasConflict),
+        register.replace(7, ["carol"]) == Err(WriteError::CasConflict),
         "the stale concurrent write was merged"
     );
     ensure!(
@@ -228,15 +227,21 @@ fn concurrent_write(case: &Value) -> Result<()> {
     Ok(())
 }
 
-fn shared_counter(case: &Value) -> Result<()> {
-    assert_case(case, "reject", Some("cas_conflict"))?;
-    let mut register = WholeValueRegister::at(7, ["alice"]);
-    // First write models `ak.account.blocklist`; the second models
-    // `ak.account_data.set`. Both deliberately call the same register method.
-    ensure!(register.replace(7, 8, ["bob"]) == Ok(8));
+fn unregistered_kind(case: &Value) -> Result<()> {
+    assert_case(case, "reject", Some("unsupported_event_kind"))?;
+    let registry = load_artifact_json("registry/event-kind-registry.json")?;
+    let kinds = value_array(required_field(&registry, "event_kinds")?, "event_kinds")?;
     ensure!(
-        register.replace(7, 8, ["carol"]) == Err(WriteError::CasConflict),
-        "the two authoring surfaces acquired independent revision lanes"
+        !kinds
+            .iter()
+            .any(|row| row.get("event_kind").and_then(Value::as_str) == Some(BLOCKLIST_KEY)),
+        "ak.account.blocklist is still a registered Event kind"
+    );
+    ensure!(
+        !arkret_wire::EventKind::ALL
+            .iter()
+            .any(|kind| kind.as_str() == BLOCKLIST_KEY),
+        "the SDK still exposes ak.account.blocklist as an Event kind"
     );
     Ok(())
 }
@@ -244,7 +249,6 @@ fn shared_counter(case: &Value) -> Result<()> {
 fn target_closure(case: &Value) -> Result<()> {
     assert_case(case, "reject", Some("schema_violation"))?;
     let valid = json!({
-        "version": 1,
         "entries": [{
             "target": {"kind": "handle", "value": "alice:example.test"},
             "mode": "block",
@@ -252,7 +256,7 @@ fn target_closure(case: &Value) -> Result<()> {
             "created_at": "2026-09-20T00:00:00.000Z"
         }]
     });
-    let valid: AccountBlocklistPayload = serde_json::from_value(valid)?;
+    let valid: AccountBlocklistValue = serde_json::from_value(valid)?;
     valid.validate()?;
 
     for forbidden in [
@@ -260,7 +264,6 @@ fn target_closure(case: &Value) -> Result<()> {
         json!({"kind": "organization", "value": "ak:org:forbidden"}),
     ] {
         let value = json!({
-            "version": 1,
             "entries": [{
                 "target": forbidden,
                 "mode": "block",
@@ -269,7 +272,7 @@ fn target_closure(case: &Value) -> Result<()> {
             }]
         });
         ensure!(
-            serde_json::from_value::<AccountBlocklistPayload>(value).is_err(),
+            serde_json::from_value::<AccountBlocklistValue>(value).is_err(),
             "the SDK accepted an unregistered Realm/Organization target"
         );
     }
@@ -392,7 +395,7 @@ fn verify_registry_contract() -> Result<()> {
         .filter_map(Value::as_str)
         .collect::<BTreeSet<_>>();
     ensure!(
-        writers == BTreeSet::from(["ak.account.blocklist", "ak.account_data.set"]),
+        writers == BTreeSet::from(["ak.account_data.set"]),
         "blocklist authoring surfaces drifted: {writers:?}"
     );
     Ok(())
