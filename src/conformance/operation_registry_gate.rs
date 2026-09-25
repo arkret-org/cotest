@@ -445,8 +445,7 @@ fn validate_durable_effects(
 
 /// Validate one `durable_effect` object against the closed union in
 /// `operation-registry.json`. `nested` marks the effects reached through a
-/// `branched` effect's `effect_branches[]`, which are the only place where a
-/// branch may pin the request member carrying the submitted Event.
+/// `branched` effect's `effect_branches[]`; a branched node cannot nest.
 fn validate_durable_effect(
     operation_id: &str,
     effect: &Value,
@@ -474,21 +473,12 @@ fn validate_durable_effect(
                 "cross_service_effects",
                 "irreversibility_note",
             ],
-            "event_log" if nested => &[
-                "kind",
-                "event_kinds",
-                "event_kind_source",
-                "event_kind_sources",
-                "event_submission_path",
-                "rationale",
-                "cross_service_effects",
-                "irreversibility_note",
-            ],
             "event_log" => &[
                 "kind",
                 "event_kinds",
                 "event_kind_source",
                 "event_kind_sources",
+                "event_submission_path",
                 "rationale",
                 "cross_service_effects",
                 "irreversibility_note",
@@ -601,9 +591,7 @@ fn validate_durable_effect(
                     }
                 }
                 if let Some(source) = dynamic_source
-                    && (!source.starts_with("$request.")
-                        || !source.ends_with(".event.kind")
-                        || source.contains(char::is_whitespace))
+                    && !is_request_event_kind_path(source)
                 {
                     failures.push(format!(
                         "{operation_id} has an unresolvable event_kind_source {source}",
@@ -617,10 +605,7 @@ fn validate_durable_effect(
                     }
                     for source in sources {
                         match source.as_str() {
-                            Some(source)
-                                if source.starts_with("$request.")
-                                    && source.ends_with(".event.kind")
-                                    && !source.contains(char::is_whitespace) => {}
+                            Some(source) if is_request_event_kind_path(source) => {}
                             Some(source) => failures.push(format!(
                                 "{operation_id} has an unresolvable event_kind_sources entry {source}",
                             )),
@@ -672,7 +657,7 @@ fn validate_durable_effect(
                     return;
                 };
                 if contract
-                    .get("cell_family")
+                    .get("result_family")
                     .and_then(Value::as_str)
                     .is_none_or(|family| !family.starts_with("ak.private."))
                 {
@@ -765,6 +750,14 @@ fn validate_durable_effect(
             _ => unreachable!(),
         }
     }
+}
+
+/// A dynamic event-kind source is a `$request.` JSON path ending at an Event
+/// `kind` member (`api-conventions.md` section 2.4.1).
+fn is_request_event_kind_path(source: &str) -> bool {
+    source.starts_with("$request.")
+        && source.ends_with(".kind")
+        && !source.contains(char::is_whitespace)
 }
 
 fn load_openapi_operations(path: &Path) -> Result<BTreeMap<OperationKey, String>> {

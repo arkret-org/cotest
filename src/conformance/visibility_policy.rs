@@ -13,6 +13,7 @@ const FIXTURE: &str = "visibility-policy-fixture.json";
 const VECTOR_IDS: &[&str] = &[
     "ak.vector.e2ee.mls_activation_irreversible.v1",
     "ak.vector.e2ee.plaintext_write_after_activation_rejected.v1",
+    "ak.vector.e2ee.ciphertext_write_before_activation_rejected.v1",
     "ak.vector.circle.activation_independent_of_realm.v1",
     "ak.vector.circle.directory_visibility_members_indistinguishable.v1",
     "ak.vector.circle.directory_visibility_realm_members_indistinguishable.v1",
@@ -72,6 +73,13 @@ fn assert_activation() -> Result<()> {
         )
     {
         bail!("activated scope plaintext-write gate drifted");
+    }
+    // A definitely inactive scope refuses ciphertext as a generic
+    // failed_precondition that names no reason code.
+    match validate_scope_mls_activation(None, true) {
+        Err(error @ CircleScopeError::MlsScopeInactive)
+            if !error.to_string().contains("reason=") => {}
+        _ => bail!("inactive scope ciphertext-write gate drifted"),
     }
     // The selected Circle scope is evaluated independently of the parent Realm.
     if validate_scope_mls_activation(None, false).is_err()
@@ -158,6 +166,16 @@ pub fn run_visibility_policy_fixture_suite() -> Result<()> {
         let _ = case(&fixture, vector_id)?;
     }
     assert_activation()?;
+    let inactive = case(
+        &fixture,
+        "ak.vector.e2ee.ciphertext_write_before_activation_rejected.v1",
+    )?;
+    if inactive["expected"]["outcome"] != "failed_precondition"
+        || inactive["expected"].get("reason").is_some()
+        || inactive["expected"]["durable_writes"] != 0
+    {
+        bail!("inactive scope ciphertext refusal contract drifted");
+    }
     assert_directory_visibility(&fixture)?;
     let history = case(
         &fixture,
