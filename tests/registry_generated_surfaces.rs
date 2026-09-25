@@ -74,7 +74,9 @@ fn generated_registry_sets_are_complete_and_unique() {
         "operations",
         "operation_id",
     );
-    assert_generated_set(
+    // Reserved codes carry only an activation condition and are never emitted,
+    // so the generated enum is exactly the active set.
+    assert_generated_active_set(
         "error codes",
         ErrorCode::ALL.iter().map(|code| code.as_str()),
         "error-code-registry.json",

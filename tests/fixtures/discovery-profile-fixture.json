@@ -20,6 +20,7 @@
     ],
     "extension": [
       "account_data",
+      "actor_private_events",
       "agent_pairing_handoff",
       "agent_runtime",
       "applet_install",

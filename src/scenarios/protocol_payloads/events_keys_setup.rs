@@ -5,6 +5,9 @@
 //! the upload is visible.
 
 use anyhow::{Context, Result};
+use arkret_models_identity::account::{
+    AccountDataDeleteRequestBody, AccountDataReplaceRequestBody,
+};
 use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
 use serde_json::json;
@@ -109,7 +112,7 @@ async fn account_data_round_trip(server: &ArkretServer, actor: &TestActorClient)
             json!({"key": key, "expected_server_revision": 0, "body": first_value}),
         )
         .await?;
-    let body = json!({"set_event": set});
+    let body = AccountDataReplaceRequestBody { set_event: set };
     let created = expect_json(actor.put(&path).json(&body), StatusCode::CREATED)
         .await
         .context("account data create")?;
@@ -129,7 +132,9 @@ async fn account_data_round_trip(server: &ArkretServer, actor: &TestActorClient)
         )
         .await?;
     crate::harness::expect_api_error(
-        actor.put(&path).json(&json!({"set_event": stale})),
+        actor
+            .put(&path)
+            .json(&AccountDataReplaceRequestBody { set_event: stale }),
         StatusCode::CONFLICT,
         "cas_conflict",
     )
@@ -146,7 +151,9 @@ async fn account_data_round_trip(server: &ArkretServer, actor: &TestActorClient)
         )
         .await?;
     let deleted = expect_json(
-        actor.delete(&path).json(&json!({"set_event": tombstone})),
+        actor.delete(&path).json(&AccountDataDeleteRequestBody {
+            set_event: tombstone,
+        }),
         StatusCode::OK,
     )
     .await

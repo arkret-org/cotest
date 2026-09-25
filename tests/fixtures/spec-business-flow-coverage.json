@@ -1110,6 +1110,32 @@
           "markers": ["verify_realm_authority_bundle"]
         }
       ]
+    },
+    {
+      "id": "actor_private_event_submit",
+      "title": "Caller-signed actor-private Events: push route, Agent action request/reject and draft proposal",
+      "status": "partially_implemented",
+      "surfaces": [
+        "actor_private_events"
+      ],
+      "operation_spine": [
+        {
+          "operation_id": "ak.self.actor_private_events.command.submit.v1",
+          "surfaces": [
+            "actor_private_events"
+          ]
+        }
+      ],
+      "coverage": [
+        {
+          "kind": "ordinary",
+          "path": "../arkret-rust-sdk/crates/wire/src/authority_commit.rs",
+          "markers": [
+            "pub struct ActorPrivateEventSubmitRequestBody",
+            "fn actor_private_submit_outcome_is_closed_per_event_kind"
+          ]
+        }
+      ]
     }
   ]
 }
