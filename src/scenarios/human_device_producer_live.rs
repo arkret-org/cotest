@@ -588,7 +588,7 @@ pub(crate) fn database(scenario: &str) -> Result<Option<EphemeralPg>> {
     Ok(database)
 }
 
-fn membership_payload(
+pub(crate) fn membership_payload(
     realm_id: &str,
     member: AccountId,
     membership: MembershipPayloadState,

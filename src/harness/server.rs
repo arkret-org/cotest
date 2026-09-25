@@ -825,6 +825,112 @@ impl ArkretServer {
         }
     }
 
+    /// The Ed25519 key this harness configured as the Station's notary and
+    /// federation signing key. Only a Station the harness spawned has one.
+    fn federation_signing_key(&self) -> Result<ed25519_dalek::SigningKey> {
+        let config = self
+            .external_restart
+            .as_ref()
+            .context("only a harness-spawned Station has a known federation key")?;
+        let seed: [u8; 32] = BASE64_STANDARD
+            .decode(&config.notary_signing_key)?
+            .try_into()
+            .map_err(|_| anyhow!("the harness notary seed is not 32 bytes"))?;
+        Ok(ed25519_dalek::SigningKey::from_bytes(&seed))
+    }
+
+    /// POST `body` to this Station's peer `path` as a request `source` signs
+    /// with its own federation key under the service-to-service RFC 9421
+    /// profile (`federation.md` §3.2), naming `destination` as the
+    /// Destination-Service-ID. A scenario uses it to put exact or deliberately
+    /// broken peer bodies in front of the receiver's own checks.
+    pub async fn signed_peer_post(
+        &self,
+        source: &ArkretServer,
+        path: &str,
+        body: &[u8],
+        destination: &DidCoreId,
+    ) -> Result<(StatusCode, Vec<u8>)> {
+        use arkret_signatures::http_signature::{
+            Component, ContentDigest, ContentDigestAlgorithm, SignedRequestParts,
+            canonical_message, format_signature_input_component_list, parse_signature_input,
+            sign_message,
+        };
+        let target = self.url(path);
+        let authority = match (self.base_url.host_str(), self.base_url.port()) {
+            (Some(host), Some(port)) => format!("{host}:{port}"),
+            (Some(host), None) => host.to_owned(),
+            (None, _) => return Err(anyhow!("the Station base URL has no host")),
+        };
+        let content_digest =
+            ContentDigest::compute(body, ContentDigestAlgorithm::Sha256).wire_value;
+        let mut headers = vec![
+            ("content-type".to_owned(), "application/json".to_owned()),
+            ("content-digest".to_owned(), content_digest.clone()),
+            (
+                "source-service-id".to_owned(),
+                source.service_id().to_string(),
+            ),
+            ("destination-service-id".to_owned(), destination.to_string()),
+            (
+                "source-trust-domain".to_owned(),
+                source.trust_domain().to_string(),
+            ),
+            (
+                "destination-trust-domain".to_owned(),
+                self.trust_domain().to_string(),
+            ),
+        ];
+        let mut covered = vec![
+            Component::Method,
+            Component::TargetUri,
+            Component::Authority,
+            Component::Header("content-digest".to_owned()),
+            Component::Header("source-service-id".to_owned()),
+            Component::Header("destination-service-id".to_owned()),
+            Component::Header("source-trust-domain".to_owned()),
+            Component::Header("destination-trust-domain".to_owned()),
+        ];
+        if let Some(operation) = arkret_wire::ServiceOperationId::from_http_request("POST", path) {
+            headers.push(("arkret-operation".to_owned(), operation.as_str().to_owned()));
+            covered.push(Component::Header("arkret-operation".to_owned()));
+        }
+        let created = Utc::now().timestamp();
+        let keyid = format!("{}#federation-fanout-key", source.service_did());
+        let signature_input = format!(
+            "{};created={created};expires={};keyid=\"{keyid}\";alg=\"ed25519\"",
+            format_signature_input_component_list("sig1", &covered)
+                .map_err(|error| anyhow!("{error}"))?,
+            created + 300,
+        );
+        let parsed = parse_signature_input(&signature_input).map_err(|error| anyhow!("{error}"))?;
+        let base = canonical_message(
+            &SignedRequestParts {
+                method: "POST".to_owned(),
+                target_uri: target.clone(),
+                authority,
+                path: String::new(),
+                headers: headers.clone(),
+                body_digest: Some(content_digest),
+            },
+            &parsed,
+        )
+        .map_err(|error| anyhow!("{error}"))?;
+        let signature = sign_message(&base, &source.federation_signing_key()?);
+        let mut request = self.http_client.post(&target).body(body.to_vec());
+        for (name, value) in headers {
+            request = request.header(name, value);
+        }
+        let response = request
+            .header("signature-input", signature_input)
+            .header("signature", format!("sig1=:{signature}:"))
+            .send()
+            .await
+            .with_context(|| format!("signed peer POST {path}"))?;
+        let status = response.status();
+        Ok((status, response.bytes().await?.to_vec()))
+    }
+
     /// Build a request for Soland's deployment-local account projection fixture.
     /// Canonical Account Authority registration is not owned by a Station; live Cotest setup
     /// materializes its result through `/_soland`.
