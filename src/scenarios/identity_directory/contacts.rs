@@ -5,7 +5,7 @@ use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{
-    account_subscribe_delta_from_text, dispatch_accepted_invite_and_read_token,
+    account_subscribe_delta_from_text, dispatch_accepted_invite_and_await_delivery,
     expect_audit_action, expect_json, expect_response, expect_status, invite_create_payload,
     submitted_event_id,
 };
@@ -83,7 +83,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         .await_event_seal_coverage(&invite_realm_id, &invite_event_id)
         .await?;
     let invite_id = arkret_identifiers::InviteId::from_event_id(&invite_event_id).to_string();
-    let _invite_token = dispatch_accepted_invite_and_read_token(
+    dispatch_accepted_invite_and_await_delivery(
         &alice,
         &bob,
         invite_event_id.as_str(),

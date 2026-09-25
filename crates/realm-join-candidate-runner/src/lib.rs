@@ -516,7 +516,6 @@ fn target(authority_locator_hints: Vec<RealmJoinCandidate>) -> RealmJoinTarget {
     RealmJoinTarget {
         realm_id: realm_id(),
         invite_id: None,
-        invite_token: None,
         authority_locator_hints,
     }
 }

@@ -53,11 +53,11 @@ pub fn run_security_transaction_resilience_joint_gate() -> Result<()> {
             ]),
         "SDK security rotation step order drifted"
     );
-    // 2 kinds x 3 fault positions x 7 faults, 8 rotation cases and 11
+    // 2 kinds x 3 fault positions x 7 faults, 10 rotation cases and 11
     // recovery terminal-commit cases, each pinned by name in the runner.
     ensure!(
-        reference.len() == 61,
-        "reference runner did not execute all 61 security-transaction scenarios"
+        reference.len() == 63,
+        "reference runner did not execute all 63 security-transaction scenarios"
     );
     ensure!(
         reference

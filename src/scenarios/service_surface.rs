@@ -104,12 +104,10 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
 /// member). The set mirrors Soland's own ratchet and may only shrink.
 const KNOWN_ADVERTISED_UNMOUNTED: &[arkret_wire::ServiceOperationId] = &[
     arkret_wire::ServiceOperationId::EdgeAppletManagedActorCommandAuthorV1,
-    arkret_wire::ServiceOperationId::PeerRealmJoinReadApplicationStatusV1,
     arkret_wire::ServiceOperationId::PeerRealmJoinReadPreviewV1,
     arkret_wire::ServiceOperationId::SelfCurrentResultsReadExactV1,
     arkret_wire::ServiceOperationId::SelfMediaServiceBindingReadResolveV1,
     arkret_wire::ServiceOperationId::SelfRealmReadStreamsV1,
-    arkret_wire::ServiceOperationId::SelfRealmJoinReadApplicationStatusV1,
     arkret_wire::ServiceOperationId::SelfRealmJoinReadPreviewV1,
     arkret_wire::ServiceOperationId::SelfStrandWatchReadCurrentV1,
 ];

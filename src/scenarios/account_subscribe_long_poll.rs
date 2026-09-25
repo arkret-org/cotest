@@ -18,7 +18,7 @@ use serde_json::Value;
 
 use crate::fixtures::TestActorBuilder;
 use crate::harness::{
-    account_subscribe_delta_from_text, actor_core_id, dispatch_accepted_invite_and_read_token,
+    account_subscribe_delta_from_text, actor_core_id, dispatch_accepted_invite_and_await_delivery,
     eventually, expect_account_subscribe_delta, expect_account_subscribe_realm_delta,
     invite_create_payload, message_create_text_payload,
 };
@@ -635,7 +635,7 @@ async fn create_invite_now(
     let invite_id =
         arkret_identifiers::InviteId::from_event_id(&arkret_identifiers::EventId::new(event_id)?)
             .to_string();
-    let invite_token = dispatch_accepted_invite_and_read_token(
+    dispatch_accepted_invite_and_await_delivery(
         inviter,
         invitee,
         event_id,
@@ -643,11 +643,6 @@ async fn create_invite_now(
         introduction_evidence,
     )
     .await?;
-    if invite_token.is_empty() {
-        return Err(anyhow!(
-            "formal invite dispatch returned an empty private token for {invite_id}"
-        ));
-    }
     Ok(invite_id)
 }
 

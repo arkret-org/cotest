@@ -23,19 +23,19 @@ use reqwest::StatusCode;
 use super::{TestActorClient, actor_core_id, expect_json};
 
 /// Run the §7 client dispatch for an already-accepted `ak.invite.create` on a
-/// same-service target and read the delivered invite token back from the
-/// invitee's actor-private account-data cell.
+/// same-service target and confirm the delivery entry reached the invitee's
+/// actor-private account-data cell. A directed invite carries no bearer token.
 ///
 /// `invite_event_id` is the accepted Event id; `invite_id` is its
 /// `InviteId::from_event_id` projection. The holder list is intentionally not
 /// visible until this dispatch materializes the private delivery cell.
-pub async fn dispatch_accepted_invite_and_read_token(
+pub async fn dispatch_accepted_invite_and_await_delivery(
     inviter: &TestActorClient,
     invitee: &TestActorClient,
     invite_event_id: &str,
     invite_id: &str,
     introduction_evidence: IntroductionEvidence,
-) -> Result<String> {
+) -> Result<()> {
     opt_in_introduction_kind(invitee, introduction_evidence.kind()).await?;
     dispatch_invite(
         inviter,
@@ -45,7 +45,7 @@ pub async fn dispatch_accepted_invite_and_read_token(
         invite_event_id,
     )
     .await?;
-    read_delivered_invite_token(invitee, invite_id).await
+    read_delivered_invite_entry(invitee, invite_id).await
 }
 
 /// §5 — the protocol default receive policy fails closed on unknown
@@ -128,12 +128,12 @@ async fn dispatch_invite(
     Ok(())
 }
 
-/// Read the delivered credential from the invitee's holder-private
+/// Find the delivered invite in the invitee's holder-private
 /// account-data cell. The cell is the durable source of truth; the to-device
 /// `ak.account_data.update` fanout is only a nudge, and the holder-readable
 /// list surface (`ak.self.account_data.read.list.v1`) returns every non-internal
 /// cell without the single-key registration gate.
-async fn read_delivered_invite_token(invitee: &TestActorClient, invite_id: &str) -> Result<String> {
+async fn read_delivered_invite_entry(invitee: &TestActorClient, invite_id: &str) -> Result<()> {
     let listed_value =
         expect_json(invitee.get("/_arkret/self/account_data"), StatusCode::OK).await?;
     let listed: AccountDataList = serde_json::from_value(listed_value)
@@ -142,21 +142,20 @@ async fn read_delivered_invite_token(invitee: &TestActorClient, invite_id: &str)
         .account_data_entries
         .iter()
         .find(|entry| entry.account_data_key == AccountDataKey::ACCOUNT_INVITE_DELIVERY);
-    let token = match cell {
+    let delivered = match cell {
         Some(cell) => {
             let delivery: InviteDelivery = serde_json::from_value(cell.content.clone())
                 .context("invite_delivery account-data cell is not an InviteDelivery")?;
             delivery
                 .delivery_entries
-                .into_iter()
-                .find(|entry| entry.invite_id.as_str() == invite_id)
-                .map(|entry| entry.invite_token)
+                .iter()
+                .any(|entry| entry.invite_id.as_str() == invite_id)
         }
-        None => None,
+        None => false,
     };
-    token.ok_or_else(|| {
+    delivered.then_some(()).ok_or_else(|| {
         anyhow::anyhow!(
-            "no delivered invite credential for {invite_id} in the invitee account-data list: {}",
+            "no delivered invite for {invite_id} in the invitee account-data list: {}",
             serde_json::to_string_pretty(&listed.account_data_entries).unwrap_or_default()
         )
     })

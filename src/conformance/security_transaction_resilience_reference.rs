@@ -317,7 +317,7 @@ fn validate_fixture(fixture: &SecurityTransactionResilienceFixture) -> Result<()
         "coordinator_owned_prefix_is_advanced_only_by_the_durable_worker",
         "device_attestation_readiness_is_derived_from_canonical_next_step",
         "erase_is_only_worker_executed_and_has_no_public_self_operation",
-        "erase_rechecks_live_transaction_active_account_non_revoked_authorizing_device_and_current_authority_commit",
+        "erase_rechecks_live_transaction_active_account_non_revoked_authorizing_device_current_pointer_and_generation",
         "erased_series_never_becomes_active_again",
         "exact_replay_returns_the_stored_outcome",
         "governance_station_issues_both_recovery_realm_commits_only_inside_commit_recovery_unit",
@@ -331,7 +331,6 @@ fn validate_fixture(fixture: &SecurityTransactionResilienceFixture) -> Result<()
         "request_plan_effect_results_accepted_positions_and_first_terminal_outcome_are_durable",
         "reserved_plan_ids_and_digests_alone_never_prove_a_completed_effect",
         "security_rotation_create_requires_fresh_high_risk_authentication_and_binds_the_authenticated_authorizing_device",
-        "verified_pcr_fork_index_is_same_snapshot_and_rebuilt_after_restart",
     ];
     let assertions = fixture
         .assertions
@@ -373,6 +372,12 @@ const EXPECTED_ROTATION_CASES: &[(&str, usize)] = &[
     ("local_commit_method_uses_wrong_device_fragment", 4),
     ("local_commit_method_key_revoked_at_accepted_pcr_cut", 4),
     ("partial_secret_storage_erase_then_restart", 5),
+    // An unrelated PCR Commit between attempts does not stale the frozen
+    // old-backup manifest: the resume reuses the first request bytes.
+    ("partial_erase_resumes_after_unrelated_pcr_commit", 5),
+    // The secret_storage pointer changed between attempts: the resume stops
+    // before any further old backup is deleted.
+    ("erase_resume_after_secret_storage_pointer_changed", 3),
     // The pointer switch has not been accepted: revoke and upload only.
     ("erase_before_secret_storage_pointer_switch", 2),
     // The switch was accepted, then the authorizing device stopped being
@@ -447,6 +452,59 @@ fn validate_rotation_case(case: &Value, name: &str) -> Result<String, String> {
                     .and_then(Value::as_u64)
                     == Some(1)
         }
+        "partial_erase_resumes_after_unrelated_pcr_commit" => {
+            members(case, "authoritative_new_pointers") == ["secret_storage"]
+                && case
+                    .pointer("/first_outcome/secret_storage")
+                    .and_then(Value::as_str)
+                    == Some("failed_retryable")
+                && case
+                    .pointer("/between_attempts/unrelated_pcr_commit_accepted")
+                    .and_then(Value::as_bool)
+                    == Some(true)
+                && case
+                    .pointer("/between_attempts/secret_storage_pointer_changed")
+                    .and_then(Value::as_bool)
+                    == Some(false)
+                && case
+                    .pointer("/between_attempts/device_generation_changed")
+                    .and_then(Value::as_bool)
+                    == Some(false)
+                && case
+                    .pointer("/expected_after_restart/secret_storage")
+                    .and_then(Value::as_str)
+                    == Some("erased")
+                && case
+                    .pointer("/expected_after_restart/request_bytes_reused")
+                    .and_then(Value::as_bool)
+                    == Some(true)
+                && case
+                    .pointer("/expected_after_restart/confirmation_emitted_once")
+                    .and_then(Value::as_bool)
+                    == Some(true)
+                && case
+                    .pointer("/expected_after_restart/accepted_erase_step_count")
+                    .and_then(Value::as_u64)
+                    == Some(1)
+        }
+        "erase_resume_after_secret_storage_pointer_changed" => {
+            members(case, "authoritative_new_pointers") == ["secret_storage"]
+                && case
+                    .pointer("/first_outcome/secret_storage")
+                    .and_then(Value::as_str)
+                    == Some("failed_retryable")
+                && case
+                    .pointer("/between_attempts/secret_storage_pointer_changed")
+                    .and_then(Value::as_bool)
+                    == Some(true)
+                && case.pointer("/expected/decision").and_then(Value::as_str) == Some("reject")
+                && case.pointer("/expected/reason").and_then(Value::as_str)
+                    == Some("failed_precondition")
+                && case
+                    .pointer("/expected/further_old_backup_deleted")
+                    .and_then(Value::as_bool)
+                    == Some(false)
+        }
         "erase_before_secret_storage_pointer_switch" => rejects_without_delete(case),
         "erase_after_authorizing_device_revoked" => {
             rejects_without_delete(case)
@@ -463,7 +521,8 @@ fn validate_rotation_case(case: &Value, name: &str) -> Result<String, String> {
     // A refusal names its reason; a case with no terminal decision keeps its
     // fixture label, as the recovery cases do.
     Ok(match name {
-        "partial_secret_storage_erase_then_restart" => "completed".to_owned(),
+        "partial_secret_storage_erase_then_restart"
+        | "partial_erase_resumes_after_unrelated_pcr_commit" => "completed".to_owned(),
         _ => case
             .pointer("/expected/reason")
             .or_else(|| case.get("expected"))

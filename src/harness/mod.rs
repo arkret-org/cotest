@@ -52,7 +52,7 @@ pub(crate) use event_builder::{
     message_redact_payload, message_revise_text_payload, parse_strand_id,
     prepare_event_submission_with_signing_identity,
 };
-pub use invite_delivery::dispatch_accepted_invite_and_read_token;
+pub use invite_delivery::dispatch_accepted_invite_and_await_delivery;
 pub use principal::ProvisionedTestPrincipal;
 pub use proof::{
     attach_signal_proof, attach_signal_proof_value, refresh_typed_event_proof,
