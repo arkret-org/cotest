@@ -321,6 +321,11 @@ pub fn realm_create_payload_for_station(
             .cloned()
             .unwrap_or_else(|| json!("restricted")),
     )?);
+    policy_bundle.join_policy = input
+        .get("join_policy")
+        .cloned()
+        .map(serde_json::from_value)
+        .transpose()?;
     policy_bundle.validate()?;
     let history_access =
         arkret_models_collaboration::governance::realm_lifecycle::HistoryAccessPayload::initialize(

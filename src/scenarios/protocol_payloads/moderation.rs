@@ -85,6 +85,76 @@ pub async fn run(
     );
     assert_eq!(items[0]["status"], "submitted");
 
+    // A committed dismiss naming the report Event writes its moderation_state
+    // assertion; the same View now folds the item to resolved.
+    let issuer = crate::harness::actor_core_id(&actor.actor)?;
+    let dismissed = actor
+        .submit_event(
+            target_realm_id,
+            "ak.moderation.decision",
+            serde_json::json!({
+                "target_ref": request.report_event.event.event_id,
+                "decision": "dismiss",
+                "issuer_id": issuer,
+                "request_canonical_digest": format!("sha256:{}", "0".repeat(64)),
+            }),
+        )
+        .await
+        .context("moderation dismiss decision")?;
+    assert_eq!(dismissed["status"], "committed", "{dismissed}");
+    let queue = expect_json(
+        actor.authorize(
+            server
+                .http()
+                .get(server.url("/_soland/admin/moderation/queue")),
+        ),
+        StatusCode::OK,
+    )
+    .await?;
+    let resolved = queue["items"]
+        .as_array()
+        .context("moderation queue carries items")?
+        .iter()
+        .filter(|item| item["id"] == queue_item_id.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(resolved.len(), 1, "{queue}");
+    assert_eq!(resolved[0]["status"], "resolved", "{queue}");
+
+    // A committed dismiss naming the report Event writes its moderation_state
+    // assertion; the same View now folds the item to resolved.
+    let issuer = crate::harness::actor_core_id(&actor.actor)?;
+    let dismissed = actor
+        .submit_event(
+            target_realm_id,
+            "ak.moderation.decision",
+            serde_json::json!({
+                "target_ref": request.report_event.event.event_id,
+                "decision": "dismiss",
+                "issuer_id": issuer,
+                "request_canonical_digest": format!("sha256:{}", "0".repeat(64)),
+            }),
+        )
+        .await
+        .context("moderation dismiss decision")?;
+    assert_eq!(dismissed["status"], "committed", "{dismissed}");
+    let queue = expect_json(
+        actor.authorize(
+            server
+                .http()
+                .get(server.url("/_soland/admin/moderation/queue")),
+        ),
+        StatusCode::OK,
+    )
+    .await?;
+    let resolved = queue["items"]
+        .as_array()
+        .context("moderation queue carries items")?
+        .iter()
+        .filter(|item| item["id"] == queue_item_id.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(resolved.len(), 1, "{queue}");
+    assert_eq!(resolved[0]["status"], "resolved", "{queue}");
+
     // An absent target is the single anti-oracle not_found with zero writes.
     let absent = arkret_wire::EventId::from_digest(
         arkret_canonical::DigestSuite::Sha256,

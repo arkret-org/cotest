@@ -654,6 +654,26 @@ impl TestActorClient {
         }))
     }
 
+    /// Submit one ordinary Realm bootstrap unit and return the raw response,
+    /// for scenarios that assert a refusal instead of an accepted unit.
+    pub async fn post_realm_bootstrap(&self, body: Value) -> Result<reqwest::Response> {
+        let draft = realm_create_payload_for_station(&self.service_id, &body)?;
+        let (_, events) = realm_bootstrap_event_batch_for_device(
+            &self.actor,
+            &self.device_id,
+            &DidCoreId::new(self.service_id.clone())?,
+            draft,
+        )?;
+        let request = super::event_builder::ordinary_realm_bootstrap_submission(events)?;
+        request.validate()?;
+        Ok(self
+            .post("/_arkret/self/events")
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(arkret_canonical::canonical_json_bytes(&request)?)
+            .send()
+            .await?)
+    }
+
     pub async fn add_member(&self, realm_id: &str, member: &TestActorClient) -> Result<Value> {
         self.submit_event(
             realm_id,

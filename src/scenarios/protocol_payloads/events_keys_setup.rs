@@ -70,7 +70,64 @@ async fn submit_adapter_event(
         .await?;
     assert_eq!(submit["status"], "committed");
     let event_id = crate::harness::submitted_event_id(&submit)?;
+    advance_read_cursor_to(server, &actor, &realm_id, &event_id.to_string()).await?;
     Ok((actor, realm_id, event_id.to_string()))
+}
+
+/// `ak.self.read_cursor.command.advance.v1` on the committed Message: the
+/// actor-private winner is stored at the owner's Station, a byte-identical
+/// retry returns the first outcome, and the list reads the durable winner
+/// with `updated_at` from the advance envelope (read-receipts.md §6.1, §6.6).
+async fn advance_read_cursor_to(
+    server: &ArkretServer,
+    actor: &TestActorClient,
+    realm_id: &str,
+    message_event_id: &str,
+) -> Result<()> {
+    let actor_id = arkret_wire::ActorId::account(arkret_wire::AccountId::new(
+        arkret_identifiers::DidCoreId::new(crate::harness::actor_core_id(&actor.actor)?)?,
+        server.service_id().clone(),
+    ));
+    let event = actor
+        .author_event(
+            realm_id,
+            "ak.read_cursor.advance",
+            json!({
+                "schema": "ak.schema.read_cursor.v1",
+                "actor_id": actor_id,
+                "device_id": actor.device_id,
+                "realm_id": realm_id,
+                "read_scope": {"kind": "realm"},
+                "position": {
+                    "event_id": message_event_id,
+                    "hlc": "019041000000-0001-1dae0001"
+                }
+            }),
+        )
+        .await?;
+    let created_at = arkret_canonical::format_timestamp_canonical(event.created_at);
+    let body = arkret_models_collaboration::objects::read_receipts::ReadCursorAdvanceRequestBody {
+        advance_event: arkret_wire::EventAdmissionSubmission::new(event),
+    };
+    let first = expect_json(
+        actor.post("/_arkret/self/read-cursors").json(&body),
+        StatusCode::OK,
+    )
+    .await
+    .context("read cursor advance")?;
+    assert_eq!(first["position"]["event_id"], message_event_id, "{first}");
+    assert_eq!(first["device_id"], actor.device_id.as_str(), "{first}");
+    assert_eq!(first["updated_at"], created_at.as_str(), "{first}");
+    let replay = expect_json(
+        actor.post("/_arkret/self/read-cursors").json(&body),
+        StatusCode::OK,
+    )
+    .await
+    .context("exact read cursor advance retry")?;
+    assert_eq!(replay, first, "exact retry must return the first outcome");
+    let listed = actor.read_cursors(realm_id).await?;
+    assert_eq!(listed["markers"], json!([first]), "{listed}");
+    Ok(())
 }
 
 async fn upload_and_inspect_keys(
