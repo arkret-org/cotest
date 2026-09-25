@@ -103,34 +103,56 @@ fn account_profile_registry_and_schema_require_one_signed_create_or_update_event
 }
 
 #[test]
-fn sdk_keeps_profile_event_closed_and_separates_wire_from_accepted_basis() {
-    let model = read("arkret-rust-sdk/crates/models-collaboration/src/account_lifecycle.rs");
+fn sdk_keeps_profile_event_closed_and_returns_the_covering_commit() {
+    let model = read("arkret-rust-sdk/crates/models-collaboration/src/account_operations.rs");
     let body = source_between(
         &model,
         "pub struct AccountUpdateProfileRequestBody",
-        "pub struct AccountProfileAcceptedBasis",
+        "impl AccountUpdateProfileRequestBody",
     );
-    assert!(body.contains("pub profile_event: EventInitialSubmission"));
+    assert!(body.contains("pub profile_event: EventAdmissionSubmission"));
     assert!(!body.contains("pub patch:"));
-    assert!(!body.contains("accepted_basis"));
-    assert!(model.contains("pub fn validate(&self) -> Result<()>"));
-    assert!(model.contains("pub fn validate_authoring_context("));
-    assert!(model.contains("EventKind::ProfileCreate"));
-    assert!(model.contains("EventKind::ProfileUpdate"));
-    assert!(model.contains("ActorProfileId::from_event_id"));
-    assert!(model.contains("pub profile: Option<AccountMaterializedProfile>"));
-    assert!(model.contains("ak.profile.update target_ref does not match"));
-    assert!(model.contains("direct holder-authored Event"));
+    let validate = source_between(
+        &model,
+        "impl AccountUpdateProfileRequestBody",
+        "event.validate_for_submit_structural()",
+    );
+    assert!(validate.contains("direct holder-authored Event"));
+    assert!(validate.contains("EventKind::ProfileCreate"));
+    assert!(validate.contains("EventKind::ProfileUpdate"));
+    assert!(validate.contains("validate_for_account_self_service"));
+    assert!(validate.contains("object.principal_id != account.principal_id"));
 
-    let materialized = read("arkret-rust-sdk/crates/models-identity/src/actor_profile.rs");
-    assert!(materialized.contains("pub struct AccountMaterializedProfile"));
-    assert!(materialized.contains("materialized account profile requires id and realm_id"));
+    // The create author region is the closed actor_profile_definition, not the
+    // materialized object: schema, realm, times and id are reducer outputs.
+    let identity = read("arkret-rust-sdk/crates/models-identity/src/actor_profile.rs");
+    let definition = source_between(
+        &identity,
+        "pub struct ActorProfileDefinition",
+        "impl ActorProfileDefinition",
+    );
+    for reducer_member in ["pub schema", "pub realm_id", "pub created_at", "pub id:"] {
+        assert!(!definition.contains(reducer_member), "{reducer_member}");
+    }
+    assert!(identity.contains("pub struct AccountMaterializedProfile"));
+    assert!(identity.contains("materialized account profile requires id and realm_id"));
+    assert!(!identity.contains("pub status: Option<ActorStatus>"));
 
     let payload =
         read("arkret-rust-sdk/crates/models-collaboration/src/events_payloads/actor_profile.rs");
+    assert!(payload.contains("pub object: ActorProfileDefinition"));
     assert!(payload.contains("pub struct ActorProfileUpdatePayload"));
     assert!(payload.contains("validate_for_account_self_service"));
     assert!(payload.contains("profile_fields."));
+
+    let outcome = read("arkret-rust-sdk/crates/models-identity/src/account.rs");
+    let outcome = source_between(
+        &outcome,
+        "pub struct AccountUpdateProfileOutcome",
+        "pub enum CursorRevokeScope",
+    );
+    assert!(outcome.contains("AccountMaterializedProfile"));
+    assert!(outcome.contains("pub commit: arkret_wire::RealmCommit"));
 
     let client = read("arkret-rust-sdk/crates/http-client/src/endpoints/account.rs");
     let method = source_between(
@@ -139,8 +161,7 @@ fn sdk_keeps_profile_event_closed_and_separates_wire_from_accepted_basis() {
         "pub async fn account_device_pair(",
     );
     assert!(method.contains("request: &AccountUpdateProfileRequestBody"));
-    assert!(method.contains("digest_suite: arkret_canonical::DigestSuite"));
-    assert!(method.contains("request.validate(digest_suite)?"));
+    assert!(method.contains("request.validate()?"));
     assert!(method.contains("self.post(\"/_arkret/self/account/profile\", request)"));
 
     let transport = read("arkret-rust-sdk/crates/http-client/src/request.rs");
@@ -156,8 +177,8 @@ fn actor_profile_resolve_carries_the_event_without_a_seal_and_one_failure_value(
     let row = &schema["$defs"]["resolved_actor_profile"];
     assert_eq!(
         row["required"],
-        json!(["actor_id", "actor_profile", "profile_event"]),
-        "the row is the projection plus its exact Event; there is no Seal member"
+        json!(["actor_id", "actor_profile", "profile_event", "profile_commit"]),
+        "the row is the projection, its exact Event and that Event's covering RealmCommit"
     );
     assert_eq!(row["additionalProperties"], false);
     assert_eq!(
@@ -174,10 +195,9 @@ fn actor_profile_resolve_carries_the_event_without_a_seal_and_one_failure_value(
         "arkret-spec/spec/v1/artifacts/registry/operations-error-mapping.json",
     ))
     .expect("operation error mapping is JSON");
-    let entry = mapping
-        .as_object()
-        .and_then(|root| root.values().find_map(|value| value.as_array()))
-        .expect("error mapping rows")
+    let entry = mapping["operations"]
+        .as_array()
+        .expect("error mapping operation rows")
         .iter()
         .find(|row| row["operation_id"] == "ak.self.actor_profile.read.resolve.v1")
         .expect("resolve operation error mapping");
@@ -190,8 +210,12 @@ fn actor_profile_resolve_carries_the_event_without_a_seal_and_one_failure_value(
     );
 
     // The shared consumer rule, so no host re-derives what a row proves.
+    let row_type = read("arkret-rust-sdk/crates/models-identity/src/actor_profile_operations.rs");
+    assert!(row_type.contains("pub profile_commit: RealmCommit"));
+    assert!(row_type.contains("pub account_status: Option<AccountStatusProjection>"));
     let sdk = read("arkret-rust-sdk/crates/models-collaboration/src/actor_profile_resolution.rs");
     assert!(sdk.contains("pub fn validate_resolved_actor_profile("));
+    assert!(sdk.contains("commit.event_ref != event.event_id"));
     assert!(sdk.contains("pub fn validate_actor_profile_resolve_outcome("));
     assert!(sdk.contains("pub fn classify_confirmed_display_name("));
     assert!(sdk.contains("pub fn contact_accept_may_initialize_confirmation("));
@@ -236,25 +260,39 @@ fn actor_profile_resolve_carries_the_event_without_a_seal_and_one_failure_value(
 }
 
 #[test]
-fn service_and_product_do_not_keep_the_unsigned_patch_wrapper() {
+fn service_admits_the_signed_event_through_the_pcr_unit_and_product_authors_the_definition() {
     let service = read("soland/crates/http/src/routing/identity/account.rs");
     let handler = source_between(
         &service,
         "async fn update_profile(",
-        "struct AcceptedAccountProfile",
+        "fn validate_profile_request(",
     );
     assert!(handler.contains("profile_event"));
-    assert!(handler.contains("submit_initial_event_submission"));
-    // Profile is ordinary causal state: the outcome is returned from the
-    // materialized projection after durable admission, and the handler neither
-    // waits for a covering Seal nor names one. `ak.profile.*` is `sealed: false`
-    // in the event-kind registry.
-    assert!(handler.contains("accepted_account_profile_in_realm"));
-    assert!(!handler.contains("seal_covering_event"));
+    assert!(handler.contains("prepare_self_event_transaction"));
+    assert!(handler.contains("admit_actor_profile"));
+    assert!(handler.contains("commit: record.commit"));
+    assert!(!handler.contains("TemporarilyUnavailable"));
     assert!(!handler.contains("let patch = body.patch"));
-    assert!(!handler.contains("save_account(current.clone())"));
-    assert!(!handler.contains("append_audit_log"));
+    assert!(!handler.contains("save_account("));
     assert!(!handler.contains("arkret_signatures::sign_event"));
+    let reads = source_between(
+        &service,
+        "pub(crate) async fn accepted_account_profile(",
+        "async fn resolve_actor_profiles(",
+    );
+    assert!(reads.contains("current_actor_profile"));
+    assert!(reads.contains("profile_commit: record.commit"));
+    assert!(!reads.contains("current provider is unavailable"));
+
+    // The accountability decision is taken at the accepting Commit inside the
+    // PCR unit, against committed identity_accountability rows.
+    let unit = read("soland/crates/storage-postgres/src/actor_profiles.rs");
+    assert!(unit.contains("accountability_holds_in_connection"));
+    assert!(unit.contains("commit.committed_at"));
+    assert!(unit.contains("FOR SHARE"));
+    let schema = read("soland/crates/storage-postgres/migrations/00000000000000_initial/up.sql");
+    assert!(schema.contains("CREATE TABLE actor_profile_current_results ("));
+    assert!(schema.contains("CREATE TABLE identity_accountability_current_results ("));
 
     let product = read("inkson/src/transport/account.rs");
     let authoring = source_between(
@@ -262,13 +300,10 @@ fn service_and_product_do_not_keep_the_unsigned_patch_wrapper() {
         "pub async fn update_profile(",
         "pub async fn respond_contact(",
     );
-    assert!(authoring.contains("AccountProfileAcceptedBasis"));
     assert!(authoring.contains("RecoveryMaterialEvidence"));
     assert!(authoring.contains("profile_event"));
-    assert!(authoring.contains("validate_authoring_context"));
-    // The single finalize boundary: the write is authored (actor frontier,
-    // HLC, CBS) and signed in one step; nothing prepares an already-identified
-    // Event any more.
+    assert!(authoring.contains("ActorProfileDefinition"));
     assert!(authoring.contains("author_for_direct_submission"));
     assert!(!authoring.contains("AccountUpdateProfileRequestBody { patch }"));
+    assert!(!authoring.contains("created_at: crate::clock::now_utc()"));
 }
