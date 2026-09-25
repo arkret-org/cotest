@@ -1,34 +1,47 @@
 //! Stateful consumers of the same-core/two-Station account isolation invariant.
 //! PostgreSQL execution is explicit and fails if its prerequisites are absent.
+//!
+//! Each Station accepts the principal's PCR genesis through its registered
+//! unit, so the device every consumer below stands on is one the Station
+//! decided, and every device selector comes from that admission result.
+#[path = "../../soland/crates/test-support/src/device_authorization_history.rs"]
+#[allow(dead_code)]
+mod device_authorization_history;
+#[path = "../../soland/crates/test-support/src/pcr_genesis.rs"]
+#[allow(dead_code)]
+mod pcr_genesis;
+
 use anyhow::{Context, Result, ensure};
 use arkret_canonical::{DigestSuite, canonical_json_bytes};
-use arkret_models_identity::PrincipalResolutionProjection;
-use arkret_wire::{
-    AccountId, ActorId, CommitStreamRef, CommittedEventRef, Did, DidCoreId, Event, EventKind,
-    RealmCommitId, RealmId, ScopeRef,
-};
+use arkret_wire::{AccountId, ActorId, Did, DidCoreId, Event};
 use chrono::{Duration, Utc};
+use device_authorization_history::DeviceHistoryFixtureOptions;
+use pcr_genesis::PcrGenesisFixture;
 use serde_json::json;
 use soland_storage::*;
 use soland_storage_postgres::test_database::TestDatabase;
 use soland_storage_postgres::{Db, PgPersistenceStore, PoolTuning};
 
-const DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002002";
+/// The founding device the fixture's PCR genesis authorizes.
+const DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000000001";
 const DATA_KEY: &str = "ak.read_receipt.preferences";
+/// One WebVH local id and root key for both Stations: the same principal.
+const LOCAL_ID: &str = "station-isolation";
+const ROOT_SEED: [u8; 32] = [70; 32];
 
 struct AccountFixture {
     account: AccountId,
+    device_authorization: DeviceRevocationGateSelector,
     pcr: PrincipalResolutionRecord,
     ack: String,
     token: String,
     cursor: String,
 }
 
-fn account(station: &str) -> Result<AccountId> {
-    Ok(AccountId::new(
-        DidCoreId::new("ak:did_core:web:station-isolation.example")?,
-        DidCoreId::new(format!("ak:did_core:web:{station}.example"))?,
-    ))
+fn station_core(station: &str) -> Result<DidCoreId> {
+    Ok(DidCoreId::new(format!(
+        "ak:did_core:web:{station}.example"
+    ))?)
 }
 
 async fn seed(
@@ -36,7 +49,16 @@ async fn seed(
     database_url: &str,
     station: &str,
 ) -> Result<AccountFixture> {
-    let account = account(station)?;
+    let fixture = PcrGenesisFixture::new_with(
+        Did::new(format!("did:web:{station}.example"))?,
+        DeviceHistoryFixtureOptions {
+            local_id: LOCAL_ID.into(),
+            root_seed: ROOT_SEED,
+            ..Default::default()
+        },
+    );
+    let account = fixture.history.account.clone();
+    ensure!(account.station_id == station_core(station)?);
     // A Station owns one immutable device inventory; the production identity
     // bootstrap installs this row before accepting verified devices.
     let database_url = database_url.to_owned();
@@ -50,6 +72,11 @@ async fn seed(
         Ok(())
     })
     .await??;
+    let device_authorization = fixture
+        .admit_founding_device(store)
+        .await
+        .context("Station accepts the PCR genesis")?;
+    ensure!(device_authorization.device_id == DEVICE);
     let now = arkret_canonical::normalize_timestamp_canonical(Utc::now());
     let pk = store
         .accounts()
@@ -81,41 +108,6 @@ async fn seed(
             .await?,
         AccountDataCasResult::Applied(_)
     ));
-    let device_authorize_event_id = arkret_wire::EventId::from_digest(
-        DigestSuite::Sha256,
-        arkret_canonical::digest_bytes(DigestSuite::Sha256, station.as_bytes()),
-    );
-    let device_authorization = DeviceRevocationGateSelector {
-        principal_id: account.principal_id.clone(),
-        station_id: account.station_id.clone(),
-        device_id: DEVICE.into(),
-        authorization_ref: CommittedEventRef {
-            event_id: device_authorize_event_id.clone(),
-            commit_id: RealmCommitId::new(
-                "ak:realm_commit:Ac08ROpjn3Ilj_UaM-_XLY93u4SUTptG0-Q-_CUDb5aS",
-            )?,
-            stream_ref: CommitStreamRef::Realm {
-                realm_id: RealmId::from_event_id(&device_authorize_event_id),
-            },
-            stream_position: 0,
-        },
-    };
-    store
-        .devices()
-        .seed_test_record(&DeviceInventoryRecord {
-            actor: account.principal_id.to_string(),
-            device_id: DEVICE.into(),
-            display_name: Some(station.into()),
-            verification_state: "verified".into(),
-            payload: json!({
-                "device_authorization_ref": device_authorization.authorization_ref,
-                "station_id": account.station_id.clone(),
-            }),
-            created_at: now,
-            updated_at: now,
-            revoked_at: None,
-        })
-        .await?;
     let token = format!("session-{station}");
     store
         .sessions()
@@ -203,37 +195,14 @@ async fn seed(
             }),
         )
         .await?;
-    let genesis = arkret_wire::test_support::raw_event_at(
-        EventKind::RealmCreate.as_str(),
-        ScopeRef::RealmGenesis,
-        account.principal_id.clone(),
-        account.station_id.clone(),
-        json!({"sequence": 0}),
-        now,
-    )?;
-    let genesis = sign_portable_event(genesis, station)?;
-    let pcr = PrincipalResolutionRecord {
-        account_id: account.clone(),
-        pcr_realm_id: genesis.realm_id.clone(),
-        genesis_event: genesis.clone(),
-        current_event: genesis.clone(),
-        projection: PrincipalResolutionProjection {
-            did: Did::new("did:web:station-isolation.example")?,
-            method_history_head: format!("head-{station}"),
-            version_id: "1".into(),
-            resolution_event_ref: genesis.event_id.to_string(),
-            updated_at: now,
-        },
-    };
-    ensure!(matches!(
-        store
-            .principal_resolutions()
-            .compare_and_set(None, pcr.clone())
-            .await?,
-        PrincipalResolutionCasResult::Applied(_)
-    ));
+    let pcr = store
+        .principal_resolutions()
+        .by_account_id(&account)
+        .await?
+        .context("the accepted genesis installs the principal resolution")?;
     Ok(AccountFixture {
         account,
+        device_authorization,
         pcr,
         ack,
         token,
@@ -280,8 +249,12 @@ async fn verify_isolation(
                 .get(principal, DEVICE)
                 .await?
                 .context("device")?
-                .payload["station_id"]
-                == fixture.account.station_id.as_str()
+                .payload["device_authorization_ref"]
+                == serde_json::to_value(&fixture.device_authorization.authorization_ref)?
+        );
+        ensure!(
+            fixture.device_authorization.authorization_ref
+                != other.device_authorization.authorization_ref
         );
         let stored = fixture.pcr.genesis_event.clone();
         verify_portable_event(&stored, label)?;
@@ -386,43 +359,24 @@ async fn verify_isolation(
     Ok(())
 }
 
-fn sign_portable_event(event: Event, station: &str) -> Result<Event> {
-    use arkret_signatures::{Ed25519PayloadSigner, SignEventOptions, sign_event};
-    use arkret_wire::{AuthoredEvent, DidUrl};
-    let did = Did::new("did:web:station-isolation.example")?;
-    let method = DidUrl::new(format!("{did}#device")).map_err(anyhow::Error::msg)?;
-    let producer = Ed25519PayloadSigner::from_did_key_seed([40; 32], did, method.clone());
-    let mut authored = AuthoredEvent::from_verified_with_digest_suite(event, DigestSuite::Sha256)?;
-    let now = authored.created_at;
-    sign_event(
-        &mut authored,
-        &producer,
-        SignEventOptions::new().with_created_at(now),
-    )?;
-    let event = authored.into_event();
-    verify_portable_event(&event, station)?;
-    Ok(event)
-}
-
+/// Verify a stored PCR genesis create: its Event id matches its content, it
+/// is routed through `station`, and its producer proof verifies under the
+/// principal root key that signed it.
 fn verify_portable_event(event: &Event, station: &str) -> Result<()> {
-    use arkret_signatures::proof::{PublicKeyMaterial, verify_ed25519_detached_jws_proof};
     event.validate_proof_bindings_with_digest_suite(DigestSuite::Sha256)?;
-    ensure!(event.producer_proof.is_some());
-    ensure!(
-        event.actor_id.route_service_id()
-            == &DidCoreId::new(format!("ak:did_core:web:{station}.example"))?
-    );
-    let producer = event.producer_proof.as_ref().expect("producer proof");
-    verify_ed25519_detached_jws_proof(
+    ensure!(event.actor_id.route_service_id() == &station_core(station)?);
+    let producer = event.producer_proof.as_ref().context("producer proof")?;
+    arkret_signatures::verify_ed25519_detached_jws_proof_with_digest_suite(
         producer,
-        &canonical_json_bytes(&event.digest_payload()?)?,
+        &arkret_signatures::EventProofBuilder::new().envelope_bytes(event)?,
         &event.actor_id,
-        &PublicKeyMaterial::Ed25519Raw {
-            bytes: ed25519_dalek::SigningKey::from_bytes(&[40; 32])
+        &arkret_signatures::PublicKeyMaterial::Ed25519Raw {
+            bytes: ed25519_dalek::SigningKey::from_bytes(&ROOT_SEED)
                 .verifying_key()
                 .to_bytes()
                 .to_vec(),
         },
+        DigestSuite::Sha256,
     )?;
     Ok(())
 }

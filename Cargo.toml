@@ -304,6 +304,9 @@ zeroize = { workspace = true }
 proptest = { workspace = true, default-features = false, features = ["std"] }
 salvo = { workspace = true, features = ["test"] }
 serial_test = { workspace = true }
+# `Uuid::now_v7` in the soland PCR genesis fixture that
+# `tests/station_account_isolation.rs` includes by path.
+uuid = { version = "1.26.0", features = ["v7"] }
 
 [lints]
 workspace = true
