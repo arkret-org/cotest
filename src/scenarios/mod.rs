@@ -37,6 +37,7 @@ pub mod joint_service_smoke;
 pub mod kanban_identity_boundary;
 pub mod key_backup_negative;
 pub mod local_invite_accept_join;
+pub mod message_edit_and_retract;
 pub mod minimal_metadata_pairwise_keypackage_live;
 pub mod owner_authority_restart;
 pub mod production_rejects_placeholder_proof_e2e;
