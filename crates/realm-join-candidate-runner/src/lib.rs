@@ -816,9 +816,7 @@ fn freshness() -> RealmAuthorityFreshness {
     RealmAuthorityFreshness::new(
         now(),
         Base64UrlString::new(NONCE.to_owned()).expect("fixed nonce"),
-        Duration::seconds(300),
     )
-    .expect("fixed positive freshness window")
 }
 
 fn verify(chain: &SignedChain) -> Result<VerifiedRealmAuthority, RealmAuthorityChainError> {

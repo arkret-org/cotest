@@ -80,11 +80,8 @@ pub async fn live_authority_bundle_and_scan_verify_through_garth() -> Result<()>
             && bundle.realm_stream_head.stream_position == 8,
         "bundle must bind genesis to the current nine-Commit head"
     );
-    let freshness = arkret_identity::RealmAuthorityFreshness::new(
-        chrono::Utc::now(),
-        nonce.clone(),
-        chrono::Duration::minutes(5),
-    )?;
+    let freshness =
+        arkret_identity::RealmAuthorityFreshness::new(chrono::Utc::now(), nonce.clone());
     let keys = garth::fetch_historical_station_key_directory(&http, &bundle, None, None).await?;
     let mut replica = garth::RealmReplica::new(realm_id.clone());
     replica.install_verified_authority(&request, bundle.clone(), &freshness, &keys)?;
@@ -92,8 +89,7 @@ pub async fn live_authority_bundle_and_scan_verify_through_garth() -> Result<()>
     let stale = arkret_identity::RealmAuthorityFreshness::new(
         chrono::Utc::now(),
         fresh_nonce("another request")?,
-        chrono::Duration::minutes(5),
-    )?;
+    );
     ensure!(
         garth::RealmReplica::new(realm_id.clone())
             .install_verified_authority(&request, bundle.clone(), &stale, &keys)

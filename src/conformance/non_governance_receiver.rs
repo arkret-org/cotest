@@ -514,9 +514,7 @@ impl World {
         let governance_keys = RealmAuthorityKeyMap::new()
             .with_key(&method(STATION_A)?, public(&self.key_a))
             .with_key(&method(STATION_B)?, public(&self.key_b));
-        let freshness =
-            RealmAuthorityFreshness::new(self.now(), b64u(NONCE.to_owned())?, Duration::minutes(5))
-                .map_err(|error| anyhow!("{error}"))?;
+        let freshness = RealmAuthorityFreshness::new(self.now(), b64u(NONCE.to_owned())?);
         let authority = verify_realm_authority_bundle(&self.bundle, &freshness, &governance_keys)
             .map_err(|error| anyhow!("authority chain does not verify: {error}"))?;
         ensure!(authority.current_service_id() == &core_id(STATION_B)?);
