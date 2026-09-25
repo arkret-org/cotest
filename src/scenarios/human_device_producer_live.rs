@@ -11,8 +11,8 @@
 //!   is refused by A with `device_revoked` and B never commits it.
 //!
 //! The cross-Station leg revokes a device through the live SecurityRotation
-//! path, so Station A carries the same two accepted fixture devices as
-//! `security_rotation_live`.
+//! path, so Station A carries the same two accepted devices B and C, admitted
+//! through its accepted-device unit, as `security_rotation_live`.
 
 use std::time::{Duration, Instant};
 
@@ -165,14 +165,7 @@ pub async fn run_cross_station_authority_forward_live() -> Result<()> {
         old,
         selected,
         ..
-    } = rotation_fixture(
-        account_station,
-        &format!("{FORWARD_GROUP}-0"),
-        &account_database.connect_url,
-        &coauth,
-        "forward-alice",
-    )
-    .await?;
+    } = rotation_fixture(account_station, &coauth, "forward-alice").await?;
     let alice_account = AccountId::new(
         principal.core_id.clone(),
         account_station.service_id().clone(),

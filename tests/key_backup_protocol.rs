@@ -31,3 +31,8 @@ async fn security_rotation_runs_worker_steps_to_local_commit() -> Result<()> {
 async fn security_rotation_rejected_revoke_restores_the_target_device() -> Result<()> {
     cotest::scenarios::security_rotation_live::security_rotation_rejected_revoke_restores_the_target_device().await
 }
+
+#[tokio::test]
+async fn security_rotation_erase_resumes_after_a_partial_failure() -> Result<()> {
+    cotest::scenarios::security_rotation_live::security_rotation_erase_resumes_after_a_partial_failure().await
+}

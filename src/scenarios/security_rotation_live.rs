@@ -5,16 +5,14 @@
 //! rotation with its client-attested `local_commit`.
 //!
 //! Device A founds the PCR through the ordinary signed genesis. Devices B and
-//! C are **labelled fixtures**: Soland has no accepted-device pairing
-//! admission unit yet (the pairing finalize step is blocked, see
-//! `identity_test_support::authorize_additional_principal_device`), so the
-//! scenario writes exactly the rows that unit must produce -- each device's
-//! committed `ak.device.authorize` Event, a Station-signed successor
-//! RealmCommit, its typed authorization current value, the advanced
-//! conflict-index marker and the local device mirror. Nothing else bypasses
-//! the Station: A stores its old backup through the self PUT, selects the
-//! first series through the self Event surface, and creates every rotation
-//! through `ak.self.security_transaction.command.create.v1`.
+//! C are approved by A: each A-signed `accepted_device` authorization, with
+//! the target device's own possession signature, is admitted by the owning
+//! Station's accepted-device unit over the Account Authority private
+//! admission channel. The Account Authority's pairing ledger in front of that
+//! channel is not part of this scenario. Nothing bypasses the Station: A
+//! stores its old backup through the self PUT, selects the first series
+//! through the self Event surface, and creates every rotation through
+//! `ak.self.security_transaction.command.create.v1`.
 
 use anyhow::{Context, Result, ensure};
 use arkret_models_collaboration::events_payloads::{
@@ -34,8 +32,8 @@ use arkret_models_crypto::{
 };
 use arkret_wire::{
     AccountId, ActorId, AuthorityCommitStatus, AuthoritySubmitOutcome, BackupId, BackupSeriesId,
-    Base64UrlString, CommitStreamRef, DeviceId, DidCoreId, DidUrl, Event, EventId, Hash,
-    NonEmptyString, RealmCommit, RealmCommitAuthorityRef, RealmCommitId, RealmId, TransactionId,
+    Base64UrlString, DeviceId, DidCoreId, DidUrl, Event, EventId, Hash, NonEmptyString,
+    RealmCommit, RealmCommitId, TransactionId,
 };
 use chrono::{DateTime, Utc};
 use ed25519_dalek::{Signer, SigningKey};
@@ -63,6 +61,9 @@ pub(crate) const DEVICE_C_SEED: [u8; 32] = [0xc3; 32];
 const FORGED_SEED: [u8; 32] = [0x66; 32];
 const SERIES_ONE: &str = "ak:backup_series:01904100-0000-7000-8000-0000000000e1";
 const OLD_BACKUP: &str = "ak:backup:01904100-0000-7000-8000-0000000000e2";
+const OLD_SUCCESSOR: &str = "ak:backup:01904100-0000-7000-8000-0000000000e3";
+const INACTIVE_SERIES: &str = "ak:backup_series:01904100-0000-7000-8000-0000000000e4";
+const INACTIVE_BACKUP: &str = "ak:backup:01904100-0000-7000-8000-0000000000e5";
 
 /// A's signing identity: the device key signs Events, envelopes and records.
 pub(crate) struct RotationAuthor {
@@ -145,6 +146,28 @@ impl RotationAuthor {
         Ok(envelope)
     }
 
+    /// The next envelope of `previous`'s series, chained by its id and the
+    /// digest of its signed payload and signed with `seed`.
+    fn successor(
+        &self,
+        backup_id: &str,
+        previous: &KeyBackup,
+        ciphertext: &[u8],
+        seed: [u8; 32],
+    ) -> Result<KeyBackup> {
+        let mut envelope = self.backup(backup_id, &previous.series_id, ciphertext, seed)?;
+        envelope.series_seq = previous.series_seq + 1;
+        envelope.supersedes_id = Some(previous.backup_id.clone());
+        envelope.supersedes_digest = Some(Hash::new(arkret_canonical::sha256_digest(
+            previous.signing_payload_bytes()?,
+        ))?);
+        let signature = SigningKey::from_bytes(&seed).sign(&envelope.signing_payload_bytes()?);
+        envelope.auth_data.signature =
+            Base64UrlString::new(arkret_canonical::base64url_encode(signature.to_bytes()))
+                .map_err(anyhow::Error::msg)?;
+        Ok(envelope)
+    }
+
     /// A's `ak.key_backup.active_series` Event selecting `series`.
     fn pointer(
         &self,
@@ -204,13 +227,14 @@ impl RotationAuthor {
             target,
             revoke_seed,
             backup_seed,
-            old,
+            std::slice::from_ref(old),
             source,
             chrono::Duration::hours(1),
         )
     }
 
-    /// [`Self::rotation`] whose transaction expires `lifetime` after now.
+    /// [`Self::rotation`] over every envelope in `old`, whose transaction
+    /// expires `lifetime` after now.
     #[allow(clippy::too_many_arguments)]
     fn rotation_until(
         &self,
@@ -218,7 +242,7 @@ impl RotationAuthor {
         target: &str,
         revoke_seed: [u8; 32],
         backup_seed: [u8; 32],
-        old: &KeyBackup,
+        old: &[KeyBackup],
         source: &RealmCommitId,
         lifetime: chrono::Duration,
     ) -> Result<(SecurityTransactionCreateRequest, BackupRotationBinding)> {
@@ -259,10 +283,13 @@ impl RotationAuthor {
                 ciphertext_digest: replacement.ciphertext_digest.clone(),
             }],
             active_series_event_id: pointer.event_id.clone(),
-            old_backups: vec![BackupObjectRef {
-                backup_id: old.backup_id.clone(),
-                ciphertext_digest: old.ciphertext_digest.clone(),
-            }],
+            old_backups: old
+                .iter()
+                .map(|old| BackupObjectRef {
+                    backup_id: old.backup_id.clone(),
+                    ciphertext_digest: old.ciphertext_digest.clone(),
+                })
+                .collect(),
         };
         let unit = |event: Event| {
             PreparedEventUnit::new(
@@ -294,7 +321,7 @@ impl RotationAuthor {
 }
 
 /// The live two-device fixture every rotation scenario starts from: A founds
-/// the PCR, B and C are accepted fixture devices with their own sessions, and
+/// the PCR, B and C are devices A approved, each with its own session, and
 /// A stores its old envelope and selects `SERIES_ONE` (pointer version 1).
 struct LiveRotation {
     server: ArkretServer,
@@ -339,14 +366,7 @@ async fn live_rotation(server_name: &str, extra_env: &[(&str, &str)]) -> Result<
         old,
         commit,
         selected,
-    } = rotation_fixture(
-        &server,
-        server_name,
-        &database.connect_url,
-        &coauth,
-        "rotation-alice",
-    )
-    .await?;
+    } = rotation_fixture(&server, &coauth, "rotation-alice").await?;
     Ok(LiveRotation {
         server,
         _coauth: coauth,
@@ -364,7 +384,7 @@ async fn live_rotation(server_name: &str, extra_env: &[(&str, &str)]) -> Result<
     })
 }
 
-/// The two accepted fixture devices B and C next to A's founding device, on
+/// The two accepted devices B and C next to A's founding device, on
 /// an already running Station whose Account Authority is `coauth`, with A's
 /// old envelope stored and `SERIES_ONE` selected.
 pub(crate) struct RotationFixture {
@@ -400,8 +420,6 @@ pub(crate) fn rotation_station_env(
 
 pub(crate) async fn rotation_fixture(
     server: &ArkretServer,
-    server_name: &str,
-    database_url: &str,
     coauth: &MockCoauthIntrospectionServer,
     actor_label: &str,
 ) -> Result<RotationFixture> {
@@ -414,19 +432,10 @@ pub(crate) async fn rotation_fixture(
         .clone();
     let account = AccountId::new(principal.core_id.clone(), server.service_id().clone());
 
-    // Fixtures: B and C are accepted devices of A's current generation.
+    // B and C are accepted devices A approves under the current generation.
     let session_for = async |device: &str, seed: [u8; 32]| -> Result<TestActorClient> {
-        let authorize = install_accepted_device_fixture(
-            server,
-            server_name,
-            database_url,
-            &actor,
-            &principal,
-            &account,
-            device,
-            seed,
-        )
-        .await?;
+        let authorize =
+            admit_accepted_device(server, &actor, &principal, &account, device, seed).await?;
         let key = SigningKey::from_bytes(&seed);
         let grant = mock_session_grant_jwt(
             principal.core_id.as_str(),
@@ -556,6 +565,75 @@ pub async fn security_rotation_runs_worker_steps_to_local_commit() -> Result<()>
         selected,
     } = live_rotation(SERVER_NAME, &[]).await?;
 
+    // 0. Ordinary unlock at the selected pointer: A and the accepted device B each release the
+    //    active-series envelope with a proof over the Station's single-use challenge; an envelope
+    //    outside the active series is refused as `backup_revision_stale`.
+    let released = unlock(
+        &client_a,
+        OLD_BACKUP,
+        "cm90YXRpb24tdW5sb2NrLWEtMDAwMQ",
+        &signer.method,
+        seed_a,
+    )
+    .await?;
+    ensure!(
+        released.status() == StatusCode::OK,
+        "A could not unlock its active envelope: {} {}",
+        released.status(),
+        released.text().await.unwrap_or_default()
+    );
+    ensure!(
+        released.json::<KeyBackup>().await? == old,
+        "unlock released another envelope"
+    );
+    let method_b =
+        DidUrl::new(format!("{}#{DEVICE_B}", signer.actor)).map_err(anyhow::Error::msg)?;
+    let released_b = unlock(
+        &client_b,
+        OLD_BACKUP,
+        "cm90YXRpb24tdW5sb2NrLWItMDAwMQ",
+        &method_b,
+        DEVICE_B_SEED,
+    )
+    .await?;
+    ensure!(
+        released_b.status() == StatusCode::OK,
+        "the accepted device B could not unlock: {} {}",
+        released_b.status(),
+        released_b.text().await.unwrap_or_default()
+    );
+    let inactive = signer.backup(
+        INACTIVE_BACKUP,
+        &BackupSeriesId::new(INACTIVE_SERIES)?,
+        b"inactive-series",
+        seed_a,
+    )?;
+    let stored = expect_json(
+        client_a
+            .put(&format!("/_arkret/self/keys/backups/{INACTIVE_BACKUP}"))
+            .header("Idempotency-Key", "rotation-inactive-backup")
+            .json(&inactive),
+        StatusCode::OK,
+    )
+    .await?;
+    ensure!(stored["status"] == "accepted", "inactive PUT: {stored}");
+    let stale = unlock(
+        &client_a,
+        INACTIVE_BACKUP,
+        "cm90YXRpb24tdW5sb2NrLWEtMDAwMg",
+        &signer.method,
+        seed_a,
+    )
+    .await?;
+    let stale_status = stale.status();
+    let stale_body: serde_json::Value = stale.json().await?;
+    ensure!(
+        stale_status == StatusCode::CONFLICT
+            && stale_body["type"] == "https://arkret.org/problems/failed_precondition"
+            && stale_body["reason_code"] == "backup_revision_stale",
+        "an envelope outside the active series was released: {stale_status} {stale_body}"
+    );
+
     // 1. A revoke not signed by A's current key aborts with no proposal, Commit or effect on its
     //    target.
     let (forged, _) = signer.rotation(
@@ -682,6 +760,21 @@ pub async fn security_rotation_runs_worker_steps_to_local_commit() -> Result<()>
         !lists(&after_erase, OLD_BACKUP)
             && lists(&after_erase, binding.new_backups[0].backup_id.as_str()),
         "the worker erased the wrong envelopes"
+    );
+    // The replacement envelope of the switched series is released to A.
+    let rotated = unlock(
+        &client_a,
+        binding.new_backups[0].backup_id.as_str(),
+        "cm90YXRpb24tdW5sb2NrLWEtMDAwMw",
+        &signer.method,
+        seed_a,
+    )
+    .await?;
+    ensure!(
+        rotated.status() == StatusCode::OK,
+        "A could not unlock the switched series: {} {}",
+        rotated.status(),
+        rotated.text().await.unwrap_or_default()
     );
     ensure!(
         refused(&client_b).await?,
@@ -854,7 +947,7 @@ pub async fn security_rotation_rejected_revoke_restores_the_target_device() -> R
         DEVICE_B,
         signer.seed,
         signer.seed,
-        &old,
+        std::slice::from_ref(&old),
         &selected.active_series.authority_commit_id,
         chrono::Duration::seconds(3),
     )?;
@@ -928,6 +1021,179 @@ pub async fn security_rotation_rejected_revoke_restores_the_target_device() -> R
     drop(server);
     drop(database);
     Ok(())
+}
+
+/// A storage failure in the middle of `erase_old_material` leaves the
+/// rotation resumable (security-transactions.md §3): the first worker attempt
+/// erases one of the two planned old envelopes and records the other as
+/// `failed_retryable`, the step stays unaccepted, and a later sweep resumes
+/// the same durable request, erases the rest and accepts the step. The
+/// development failpoint arms only the first erase attempt of a transaction.
+pub async fn security_rotation_erase_resumes_after_a_partial_failure() -> Result<()> {
+    let LiveRotation {
+        server,
+        _coauth,
+        database,
+        client_a,
+        client_b,
+        signer,
+        seed_a,
+        old,
+        selected,
+        ..
+    } = live_rotation(
+        "security-rotation-erase-resume",
+        &[(
+            "SOLAND_FAILPOINTS",
+            "backup_series_erase_durable_step=fail_after_durable_steps:1",
+        )],
+    )
+    .await?;
+
+    // A second envelope of SERIES_ONE, so the erase has two durable steps.
+    let second = signer.successor(OLD_SUCCESSOR, &old, b"old-successor", seed_a)?;
+    let stored = expect_json(
+        client_a
+            .put(&format!("/_arkret/self/keys/backups/{OLD_SUCCESSOR}"))
+            .header("Idempotency-Key", "rotation-old-successor")
+            .json(&second),
+        StatusCode::OK,
+    )
+    .await?;
+    ensure!(stored["status"] == "accepted", "successor PUT: {stored}");
+    let olds = [old, second];
+    let (request, binding) = signer.rotation_until(
+        "f005",
+        DEVICE_B,
+        seed_a,
+        seed_a,
+        &olds,
+        &selected.active_series.authority_commit_id,
+        chrono::Duration::hours(1),
+    )?;
+    let partial = create(&client_a, &request).await?;
+    ensure!(
+        partial.accepted_steps.len() == 3 && partial.terminal_outcome.is_none(),
+        "a partial erase must leave the step unaccepted and the rotation live: {partial:?}"
+    );
+    let after_partial = listing(&client_a).await?;
+    let still_listed = olds
+        .iter()
+        .filter(|old| lists(&after_partial, old.backup_id.as_str()))
+        .count();
+    ensure!(
+        still_listed == 1
+            && pointer_is(&after_partial, binding.new_series_id.as_str(), 2)
+            && lists(&after_partial, binding.new_backups[0].backup_id.as_str()),
+        "the first erase attempt did not stop after exactly one durable step: {:?}",
+        after_partial.backups
+    );
+
+    // The worker resumes the same durable request on a later sweep.
+    let path = format!(
+        "/_arkret/self/security-transactions/{}",
+        partial.transaction_id
+    );
+    let mut resumed = None;
+    for _ in 0..40 {
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        let current: SecurityTransaction =
+            serde_json::from_value(expect_json(client_a.get(&path), StatusCode::OK).await?)?;
+        if current.accepted_steps.len() == 4 || current.terminal_outcome.is_some() {
+            resumed = Some(current);
+            break;
+        }
+    }
+    let resumed = resumed.context("the worker never resumed the partial erase")?;
+    ensure!(
+        resumed.accepted_steps.len() == 4
+            && resumed.accepted_steps[..3] == partial.accepted_steps[..]
+            && resumed.terminal_outcome.is_none(),
+        "the resumed erase did not accept exactly the erase step: {resumed:?}"
+    );
+    let after_resume = listing(&client_a).await?;
+    ensure!(
+        olds.iter()
+            .all(|old| !lists(&after_resume, old.backup_id.as_str()))
+            && lists(&after_resume, binding.new_backups[0].backup_id.as_str())
+            && after_resume.active_series.secret_storage
+                == after_partial.active_series.secret_storage,
+        "the resumed erase left planned envelopes or moved the pointer: {:?}",
+        after_resume.backups
+    );
+    ensure!(
+        refused(&client_b).await?,
+        "the revoked device still authenticates"
+    );
+    drop(server);
+    drop(database);
+    Ok(())
+}
+
+/// Ordinary current-device unlock of `backup_id` (key-management.md
+/// §7.7.1, §7.8.2): take the Station's single-use challenge for this
+/// device, sign the closed unlock proof with `seed` under `method`, and
+/// submit it. Returns the raw unlock response.
+async fn unlock(
+    client: &TestActorClient,
+    backup_id: &str,
+    request_id: &str,
+    method: &DidUrl,
+    seed: [u8; 32],
+) -> Result<reqwest::Response> {
+    use arkret_models_crypto::{
+        KeyBackupUnlockAuthority, KeyBackupUnlockProof, KeyBackupUnlockProofAuthData,
+        KeysBackupsIssueUnlockChallengeRequestBody, KeysBackupsUnlockChallenge,
+        KeysBackupsUnlockRequestBody,
+    };
+
+    let challenge: KeysBackupsUnlockChallenge = serde_json::from_value(
+        expect_json(
+            client
+                .post(&format!(
+                    "/_arkret/self/keys/backups/{backup_id}/unlock-challenge"
+                ))
+                .json(&KeysBackupsIssueUnlockChallengeRequestBody {
+                    request_id: Base64UrlString::new(request_id).map_err(anyhow::Error::msg)?,
+                }),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    let mut proof = KeyBackupUnlockProof {
+        schema: KeyBackupUnlockProof::SCHEMA.to_owned(),
+        authority: KeyBackupUnlockAuthority::CurrentDevice {
+            challenge_id: challenge.challenge_id,
+            nonce: challenge.nonce,
+        },
+        account_id: challenge.account_id,
+        requesting_device_id: challenge.requesting_device_id,
+        backup_id: challenge.backup_id,
+        backup_kind: BackupKind::SecretStorage,
+        series_id: challenge.series_id,
+        ciphertext_digest: challenge.ciphertext_digest,
+        challenge: challenge.challenge,
+        service_id: challenge.service_id,
+        audience: challenge.audience,
+        issued_at: challenge.issued_at,
+        expires_at: challenge.expires_at,
+        auth_data: KeyBackupUnlockProofAuthData {
+            verification_method: method.clone(),
+            signature_algorithm: KeyBackupSignatureAlgorithm::Ed25519,
+            signature: Base64UrlString::new("AA").map_err(anyhow::Error::msg)?,
+        },
+    };
+    let signature = SigningKey::from_bytes(&seed).sign(&proof.signing_payload_bytes()?);
+    proof.auth_data.signature =
+        Base64UrlString::new(arkret_canonical::base64url_encode(signature.to_bytes()))
+            .map_err(anyhow::Error::msg)?;
+    Ok(canonical_post(
+        client,
+        &format!("/_arkret/self/keys/backups/{backup_id}/unlock"),
+        &KeysBackupsUnlockRequestBody { proof },
+    )?
+    .send()
+    .await?)
 }
 
 /// A POST whose body is the exact RFC 8785 bytes the operation requires.
@@ -1045,203 +1311,53 @@ fn device_authorization(
     Ok(payload)
 }
 
-#[derive(Serialize)]
-struct CommitIdentityBody<'a> {
-    realm_id: &'a RealmId,
-    stream_ref: &'a CommitStreamRef,
-    stream_position: u64,
-    previous_commit_ref: &'a Option<RealmCommitId>,
-    event_ref: &'a EventId,
-    governance_generation: u64,
-    authority_ref: &'a RealmCommitAuthorityRef,
-    committed_at: DateTime<Utc>,
-}
-
-#[derive(Serialize)]
-struct CommitUnsignedBody<'a> {
-    commit_id: &'a RealmCommitId,
-    realm_id: &'a RealmId,
-    stream_ref: &'a CommitStreamRef,
-    stream_position: u64,
-    previous_commit_ref: &'a Option<RealmCommitId>,
-    event_ref: &'a EventId,
-    governance_generation: u64,
-    authority_ref: &'a RealmCommitAuthorityRef,
-    committed_at: DateTime<Utc>,
-}
-
-/// The successor RealmCommit the governing Station would sign for `event`,
-/// signed with this harness Station's notary key.
-fn station_successor(
+/// Admit `device` as an `accepted_device` of A's current generation through
+/// the owning Station's registered accepted-device unit, over the Account
+/// Authority private admission channel the pairing ledger relays through
+/// (device-lifecycle.md §2.1.1 clause 6, §5.4). A signs the complete Event;
+/// the target device signs its possession object. Returns the accepted
+/// authorization Event id.
+async fn admit_accepted_device(
     server: &ArkretServer,
-    server_name: &str,
-    head: &RealmCommit,
-    event: &Event,
-) -> Result<RealmCommit> {
-    let committed_at = arkret::canonical::normalize_timestamp_canonical(Utc::now());
-    let previous_commit_ref = Some(head.commit_id.clone());
-    let stream_position = head.stream_position + 1;
-    let identity = arkret_canonical::canonical_json_bytes(&CommitIdentityBody {
-        realm_id: &head.realm_id,
-        stream_ref: &head.stream_ref,
-        stream_position,
-        previous_commit_ref: &previous_commit_ref,
-        event_ref: &event.event_id,
-        governance_generation: head.governance_generation,
-        authority_ref: &head.authority_ref,
-        committed_at,
-    })?;
-    let commit_id = RealmCommitId::from_digest(arkret_canonical::sha256_bytes(&identity));
-    let (_, seed) = crate::harness::test_service_signing_key(server_name);
-    let signature = arkret_signatures::detached_object::sign_detached_object(
-        &CommitUnsignedBody {
-            commit_id: &commit_id,
-            realm_id: &head.realm_id,
-            stream_ref: &head.stream_ref,
-            stream_position,
-            previous_commit_ref: &previous_commit_ref,
-            event_ref: &event.event_id,
-            governance_generation: head.governance_generation,
-            authority_ref: &head.authority_ref,
-            committed_at,
-        },
-        arkret_wire::DetachedSignatureContext::RealmCommit,
-        DidUrl::new(format!("{}#federation-fanout-key", server.service_did()))
-            .map_err(anyhow::Error::msg)?,
-        committed_at,
-        &SigningKey::from_bytes(&seed),
-    )?;
-    let commit = RealmCommit {
-        commit_id,
-        realm_id: head.realm_id.clone(),
-        stream_ref: head.stream_ref.clone(),
-        stream_position,
-        previous_commit_ref,
-        event_ref: event.event_id.clone(),
-        governance_generation: head.governance_generation,
-        authority_ref: head.authority_ref.clone(),
-        committed_at,
-        signature,
-    };
-    commit.validate_shape()?;
-    Ok(commit)
-}
-
-/// Write the rows an accepted-device pairing unit would commit for `device`,
-/// at the current PCR head, and return its authorization Event id.
-async fn install_accepted_device_fixture(
-    server: &ArkretServer,
-    server_name: &str,
-    database_url: &str,
     actor: &str,
     principal: &ProvisionedTestPrincipal,
     account: &AccountId,
     device: &str,
     seed: [u8; 32],
 ) -> Result<EventId> {
-    let realm = principal.pcr_realm_id.to_string();
-    let head_url = database_url.to_owned();
-    let head_realm = realm.clone();
-    let head_json = tokio::task::spawn_blocking(move || -> Result<String> {
-        let mut database = postgres::Client::connect(&head_url, postgres::NoTls)?;
-        Ok(database
-            .query_one(
-                "SELECT commit_json::text FROM realm_commits WHERE realm_id=$1 \
-                 ORDER BY stream_position DESC LIMIT 1",
-                &[&head_realm],
-            )?
-            .get(0))
-    })
-    .await??;
-    let head: RealmCommit = serde_json::from_str(&head_json)?;
     let station = DidCoreId::new(server.service_id().as_str().to_owned())?;
     let payload = device_authorization(account, device, seed, Utc::now())?;
     let event = event_envelope_with_causal_refs_for_device(
         actor,
         DEVICE_A,
         &station,
-        &realm,
+        principal.pcr_realm_id.as_str(),
         arkret_wire::EventKind::DeviceAuthorize.as_str(),
         serde_json::to_value(&payload)?,
         None,
         Vec::new(),
         Vec::new(),
     );
-    let commit = station_successor(server, server_name, &head, &event)?;
-
-    let token = arkret_canonical::base64url_decode(
-        event
-            .event_id
-            .as_str()
-            .strip_prefix("ak:event:")
-            .context("Event id has its typed prefix")?,
-    )?;
+    let AuthoritySubmitOutcome::Accepted { status, commit } = serde_json::from_value(
+        expect_json(
+            server
+                .http()
+                .post(server.url("/_soland/account-authority/events/admit"))
+                .bearer_auth(HARNESS_INTERNAL_AUTHORITY_SECRET)
+                .header("idempotency-key", event.event_id.as_str())
+                .json(&arkret_wire::EventAdmissionSubmission::new(event.clone())),
+            StatusCode::OK,
+        )
+        .await?,
+    )?
+    else {
+        anyhow::bail!("the accepted-device authorization of {device} was not accepted");
+    };
     ensure!(
-        token.len() == 33,
-        "Event id token is not suite byte plus digest"
+        status == AuthorityCommitStatus::Committed
+            && commit.event_ref == event.event_id
+            && commit.realm_id == principal.pcr_realm_id,
+        "the accepted-device authorization of {device} was not committed on A's PCR: {commit:?}"
     );
-    let canonical = arkret_canonical::canonical_json_bytes(&event.digest_payload()?)?;
-    let envelope = serde_json::to_string(&event)?;
-    let scope_ref = serde_json::to_string(&event.scope_ref)?;
-    let stream_key = arkret_canonical::canonical_json_string(&commit.stream_ref)?;
-    let stream_ref = serde_json::to_string(&commit.stream_ref)?;
-    let commit_json = serde_json::to_string(&commit)?;
-    let mut value = serde_json::to_value(&payload)?;
-    value
-        .as_object_mut()
-        .context("authorization payload is an object")?
-        .remove("device_id");
-    value["device_authorize_event_id"] = serde_json::to_value(&event.event_id)?;
-    let value = value.to_string();
-    let committed_at = arkret_canonical::format_timestamp_canonical(commit.committed_at);
-    let actor_id = event.actor_id.to_string();
-    let kind = event.kind.as_str().to_owned();
-    let event_id = event.event_id.to_string();
-    let commit_id = commit.commit_id.to_string();
-    let previous = head.commit_id.to_string();
-    let position = i64::try_from(commit.stream_position)?;
-    let generation = i64::try_from(commit.governance_generation)?;
-    let url = database_url.to_owned();
-    let device = device.to_owned();
-    tokio::task::spawn_blocking(move || -> Result<()> {
-        let mut database = postgres::Client::connect(&url, postgres::NoTls)?;
-        let mut tx = database.transaction()?;
-        tx.execute(
-            "INSERT INTO canonical_events \
-             (id,digest_suite,digest,actor_id,realm_id,scope_ref,kind,canonical_bytes,envelope,state,received_at,committed_at) \
-             VALUES($1,1,$2,$3,$4,$5::text::jsonb,$6,$7,$8::text::jsonb,'committed',$9::text::timestamptz,$9::text::timestamptz)",
-            &[&token, &token[1..].to_vec(), &actor_id, &realm, &scope_ref, &kind, &canonical, &envelope, &committed_at],
-        )?;
-        tx.execute(
-            "INSERT INTO realm_commits \
-             (commit_id,realm_id,stream_key,stream_ref,stream_position,previous_commit_ref,event_pk,governance_generation,commit_json,committed_at) \
-             SELECT $1,$2,$3,$4::text::jsonb,$5,$6,pk,$7,$8::text::jsonb,$9::text::timestamptz \
-             FROM canonical_events WHERE id=$10",
-            &[&commit_id, &realm, &stream_key, &stream_ref, &position, &previous, &generation, &commit_json, &committed_at, &token],
-        )?;
-        tx.execute(
-            "INSERT INTO pcr_device_authorization_current_results \
-             (realm_id,device_id,current_commit_id,current_stream_position,value,updated_at) \
-             VALUES($1,$2,$3,$4,$5::text::jsonb,$6::text::timestamptz)",
-            &[&realm, &device, &commit_id, &position, &value, &committed_at],
-        )?;
-        let advanced = tx.execute(
-            "UPDATE pcr_device_conflict_index_cuts SET pcr_head_commit_id=$2,updated_at=$4::text::timestamptz \
-             WHERE realm_id=$1 AND pcr_head_commit_id=$3",
-            &[&realm, &commit_id, &previous, &committed_at],
-        )?;
-        ensure!(advanced == 1, "the conflict-index marker was not at the prior head");
-        let mirrored = tx.execute(
-            "INSERT INTO devices (id,actor_id,device_id,device_key,verification_state,payload) \
-             SELECT gen_random_uuid(),actor_id,$2,NULL,'verified', \
-                    payload || jsonb_build_object('device_authorize_event_id',$3::text,'authorized_generation_ref',1) \
-             FROM devices WHERE device_id=$1",
-            &[&DEVICE_A, &device, &event_id],
-        )?;
-        ensure!(mirrored == 1, "device A has no local mirror row to model the fixture on");
-        tx.commit()?;
-        Ok(())
-    })
-    .await??;
     Ok(event.event_id)
 }
