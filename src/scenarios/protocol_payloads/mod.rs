@@ -33,6 +33,7 @@ use crate::scenarios::identity_test_support::{
     spawn_with_harness_account_authority,
 };
 
+mod account_summary;
 mod authority_reads;
 mod backup_delete;
 mod blob;
@@ -45,6 +46,7 @@ mod moderation;
 mod push;
 mod snapshot_head_disclosure;
 
+pub use account_summary::account_summary_follows_bootstrap_default_strand_and_restart;
 pub use authority_reads::live_authority_bundle_and_scan_verify_through_garth;
 pub use bootstrap_variants::ordinary_bootstrap_admits_a_restricted_join_policy_and_refuses_unprovable_gates;
 pub use key_backup_pointer::key_backup_active_pointer_is_committed_and_listed_at_its_pcr_cut;
