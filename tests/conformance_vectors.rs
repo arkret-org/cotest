@@ -284,6 +284,19 @@ fn registered_canonical_json_digest_constructions_match_known_answers() -> Resul
 }
 
 #[test]
+fn expected_state_digest_known_answers_recompute_every_fold() -> Result<()> {
+    assert_eq!(
+        cotest::conformance::VECTOR_ID_EXPECTED_STATE_DIGEST,
+        "ak.vector.current_results.expected_state_digest.v1"
+    );
+    assert_eq!(
+        cotest::conformance::run_expected_state_digest_known_answers()?,
+        5
+    );
+    Ok(())
+}
+
+#[test]
 fn named_suite_audit_executes_registered_runners_and_exposes_every_gap() -> Result<()> {
     let report = run_named_suite_audit()?;
     assert_eq!(report.fixture_count, 76);

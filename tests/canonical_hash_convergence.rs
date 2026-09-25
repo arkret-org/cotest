@@ -335,21 +335,17 @@ fn pinned_r3_2_inputs() -> (
 #[test]
 fn r3_2_identity_digests_match_pinned_baseline() {
     use arkret_models_identity::{
-        MemberIdentitySegment, member_display_state_digest, member_identity_effective_set_digest,
+        member_display_state_digest, member_identity_effective_set_digest,
     };
     let (realm, actor, events, claims) = pinned_r3_2_inputs();
 
-    // `expected_state_digest` — writer-observed effective-set guard.
-    let effective_set = member_identity_effective_set_digest(
-        &realm,
-        &actor,
-        MemberIdentitySegment::MemberIdentity,
-        &events,
-    )
-    .expect("effective-set digest");
+    // `expected_state_digest` — writer-observed effective-set guard over the
+    // exact signed payloads (decision 0115); its byte-exact known answers live
+    // in expected-state-digest-kat-fixture.json. The empty set digests `[]`.
+    let effective_set = member_identity_effective_set_digest(&[]).expect("effective-set digest");
     assert_eq!(
-        effective_set, "sha256:3bc181a943263724f6ec892fb01e624c2310b1bb54de1c79bbecef7a6dd6ac20",
-        "member_identity_effective_set_digest baseline drifted (R3.2 VECT-COT-5)"
+        effective_set, "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "member_identity_effective_set_digest of the empty set drifted"
     );
 
     // roster `member_display_state_digest` — folds visible handle claims.
@@ -374,16 +370,10 @@ fn r3_2_identity_digests_match_pinned_baseline() {
 #[ignore = "diagnostic — run with --nocapture to regenerate the R3.2 identity digest baseline"]
 fn dump_r3_2_identity_digests() {
     use arkret_models_identity::{
-        MemberIdentitySegment, member_display_state_digest, member_identity_effective_set_digest,
+        member_display_state_digest, member_identity_effective_set_digest,
     };
     let (realm, actor, events, claims) = pinned_r3_2_inputs();
-    let effective_set = member_identity_effective_set_digest(
-        &realm,
-        &actor,
-        MemberIdentitySegment::MemberIdentity,
-        &events,
-    )
-    .expect("effective-set digest");
+    let effective_set = member_identity_effective_set_digest(&[]).expect("effective-set digest");
     let display_state =
         member_display_state_digest(&realm, &actor, &events, &claims).expect("display digest");
     println!("member_identity_effective_set_digest => {effective_set}");

@@ -44,6 +44,7 @@ mod direct_conversation_flow;
 mod downstream_impact;
 mod encoding;
 mod envelope;
+mod expected_state_digest;
 mod fanout_route_miss;
 mod file_transfer_stream_aead;
 mod final_conformance_closure;
@@ -260,6 +261,9 @@ pub use encoding::{
     run_encoding_fixture_suite, run_projection_position_discriminator_fixture_suite,
 };
 pub use envelope::run_event_envelope_fixture_suite;
+pub use expected_state_digest::{
+    VECTOR_ID_EXPECTED_STATE_DIGEST, run_expected_state_digest_known_answers,
+};
 pub use fanout_route_miss::run_fanout_route_miss_suite;
 pub use file_transfer_stream_aead::{
     ALL_FILE_TRANSFER_STREAM_AEAD_VECTOR_IDS, run_file_transfer_overall_digest_rejected_vector,

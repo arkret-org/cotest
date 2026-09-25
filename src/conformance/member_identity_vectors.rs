@@ -196,18 +196,9 @@ pub fn run_member_identity_update_initial_vector() -> Result<()> {
     // `expected_state_digest` projection over the single effective entry
     // MUST be a sha256-prefixed digest. Per R3.2 it differs from the
     // locally derived per-event carrier digest.
-    let entry = EffectiveIdentityEntry {
-        event_id: event_a.clone(),
-        segment: MemberIdentitySegment::MemberIdentity,
-        payload_digest: payload_digest_hash,
-    };
-    let projected = member_identity_effective_set_digest(
-        &fake_realm()?,
-        &fake_actor()?,
-        MemberIdentitySegment::MemberIdentity,
-        &[entry],
-    )
-    .map_err(|e| anyhow!("member_identity_effective_set_digest: {e}"))?;
+    let signed_payload = serde_json::to_value(effective[0].1)?;
+    let projected = member_identity_effective_set_digest(&[(&event_a, &signed_payload)])
+        .map_err(|e| anyhow!("member_identity_effective_set_digest: {e}"))?;
     if !projected.starts_with("sha256:") {
         bail!("VECT-MID-1: effective-set digest must be sha256:<hex>; got {projected}");
     }
@@ -369,18 +360,12 @@ pub fn run_member_identity_expected_state_digest_mismatch_vector() -> Result<()>
     // The "fresh" effective-set digest a server would have computed over a
     // single prior event.
     let prior_event = fake_event(0xd11)?;
-    let fresh_entry = EffectiveIdentityEntry {
-        event_id: prior_event,
-        segment: MemberIdentitySegment::MemberIdentity,
-        payload_digest: carrier_digest,
-    };
-    let fresh_digest = member_identity_effective_set_digest(
-        &fake_realm()?,
-        &fake_actor()?,
-        MemberIdentitySegment::MemberIdentity,
-        &[fresh_entry],
-    )
-    .map_err(|e| anyhow!("member_identity_effective_set_digest: {e}"))?;
+    let prior_payload = serde_json::json!({
+        "segment": "member_identity",
+        "identity_payload": { "carrier_digest": carrier_digest.as_str() },
+    });
+    let fresh_digest = member_identity_effective_set_digest(&[(&prior_event, &prior_payload)])
+        .map_err(|e| anyhow!("member_identity_effective_set_digest: {e}"))?;
 
     // A stale writer carries an effective-set digest that no longer matches
     // the server-observed one. Use a deliberately-wrong pinned digest.
