@@ -1180,6 +1180,210 @@ pub async fn security_rotation_erase_resumes_after_a_partial_failure() -> Result
     Ok(())
 }
 
+/// What happens between the first, partial erase attempt and the worker's
+/// resume (security-transactions.md §3; decision 0108 §0931).
+enum BetweenAttempts {
+    /// A accepts an unrelated PCR Commit: the frozen basis is still current.
+    UnrelatedPcrCommit,
+    /// A moves the `secret_storage` pointer: the resume must stop.
+    SecretStoragePointerChanged,
+}
+
+/// Leave a SecurityRotation with exactly one of its two old envelopes erased
+/// and the erase step unaccepted, apply `between`, then wait for the worker's
+/// next sweep. The worker interval is long enough that the between-attempt
+/// write lands before any resume.
+async fn erase_resume_across(between: BetweenAttempts, name: &str) -> Result<()> {
+    let LiveRotation {
+        server,
+        _coauth,
+        database,
+        client_a,
+        events_a,
+        signer,
+        seed_a,
+        old,
+        selected,
+        ..
+    } = live_rotation(
+        name,
+        &[
+            (
+                "SOLAND_FAILPOINTS",
+                "backup_series_erase_durable_step=fail_after_durable_steps:1",
+            ),
+            ("SOLAND_SECURITY_ROTATION_WORKER_INTERVAL_SECONDS", "30"),
+        ],
+    )
+    .await?;
+    let second = signer.successor(OLD_SUCCESSOR, &old, b"old-successor", seed_a)?;
+    let stored = expect_json(
+        client_a
+            .put(&format!("/_arkret/self/keys/backups/{OLD_SUCCESSOR}"))
+            .header("Idempotency-Key", "rotation-old-successor")
+            .json(&second),
+        StatusCode::OK,
+    )
+    .await?;
+    ensure!(stored["status"] == "accepted", "successor PUT: {stored}");
+    let olds = [old, second];
+    let (request, binding) = signer.rotation_until(
+        "f006",
+        DEVICE_B,
+        seed_a,
+        seed_a,
+        &olds,
+        &selected.active_series.authority_commit_id,
+        chrono::Duration::hours(1),
+    )?;
+    let partial = create(&client_a, &request).await?;
+    ensure!(
+        partial.accepted_steps.len() == 3 && partial.terminal_outcome.is_none(),
+        "a partial erase must leave the step unaccepted and the rotation live: {partial:?}"
+    );
+    let after_partial = listing(&client_a).await?;
+    let survivor = olds
+        .iter()
+        .find(|old| lists(&after_partial, old.backup_id.as_str()))
+        .context("the first erase attempt erased every planned envelope")?
+        .backup_id
+        .clone();
+    ensure!(
+        olds.iter()
+            .filter(|old| lists(&after_partial, old.backup_id.as_str()))
+            .count()
+            == 1
+            && pointer_is(&after_partial, binding.new_series_id.as_str(), 2),
+        "the first erase attempt did not stop after exactly one durable step"
+    );
+
+    let path = format!(
+        "/_arkret/self/security-transactions/{}",
+        partial.transaction_id
+    );
+    match between {
+        BetweenAttempts::UnrelatedPcrCommit => {
+            // A recovery policy publication is an ordinary PCR Commit that
+            // touches neither the pointer nor the device generation.
+            let policy = signer.recovery_policy(
+                "ak:policy:01904100-0000-7000-8000-0000000000f6",
+                1,
+                None,
+                2,
+                &[DEVICE_A, DEVICE_C],
+                &signer.method,
+                seed_a,
+            )?;
+            let published = publish_recovery_policy(&events_a, &policy).await?;
+            ensure!(
+                published.status() == StatusCode::OK,
+                "the unrelated PCR Commit was not accepted: {} {}",
+                published.status(),
+                published.text().await.unwrap_or_default()
+            );
+            let moved = listing(&client_a).await?;
+            ensure!(
+                moved.active_series.authority_commit_id
+                    != after_partial.active_series.authority_commit_id
+                    && moved.active_series.secret_storage
+                        == after_partial.active_series.secret_storage,
+                "the PCR head did not move past the frozen cut with the pointer unchanged"
+            );
+        }
+        BetweenAttempts::SecretStoragePointerChanged => {
+            let pointer = signer.pointer(
+                &BackupSeriesId::new(INACTIVE_SERIES)?,
+                3,
+                vec![binding.new_series_id.clone()],
+                &after_partial.active_series.authority_commit_id,
+            )?;
+            let AuthoritySubmitOutcome::Accepted { status, .. } = serde_json::from_value(
+                expect_json(
+                    events_a
+                        .post("/_arkret/self/events")
+                        .json(&crate::publication::initial_submission(pointer, "")?),
+                    StatusCode::OK,
+                )
+                .await?,
+            )?
+            else {
+                anyhow::bail!("the pointer change was not accepted");
+            };
+            ensure!(status == AuthorityCommitStatus::Committed);
+            ensure!(
+                pointer_is(&listing(&client_a).await?, INACTIVE_SERIES, 3),
+                "the pointer did not move before the resume"
+            );
+        }
+    }
+    let unchanged: SecurityTransaction =
+        serde_json::from_value(expect_json(client_a.get(&path), StatusCode::OK).await?)?;
+    ensure!(
+        unchanged.accepted_steps.len() == 3 && unchanged.terminal_outcome.is_none(),
+        "the worker resumed before the between-attempt write: {unchanged:?}"
+    );
+
+    let mut settled = None;
+    for _ in 0..90 {
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        let current: SecurityTransaction =
+            serde_json::from_value(expect_json(client_a.get(&path), StatusCode::OK).await?)?;
+        if current.accepted_steps.len() == 4 || current.terminal_outcome.is_some() {
+            settled = Some(current);
+            break;
+        }
+    }
+    let settled = settled.context("the worker never revisited the partial erase")?;
+    let after = listing(&client_a).await?;
+    match between {
+        BetweenAttempts::UnrelatedPcrCommit => {
+            ensure!(
+                settled.accepted_steps.len() == 4 && settled.terminal_outcome.is_none(),
+                "an unrelated PCR Commit stopped the resume: {settled:?}"
+            );
+            ensure!(
+                olds.iter()
+                    .all(|old| !lists(&after, old.backup_id.as_str())),
+                "the resumed erase left a planned envelope"
+            );
+        }
+        BetweenAttempts::SecretStoragePointerChanged => {
+            ensure!(
+                settled.accepted_steps.len() == 3 && aborted_with(&settled, "failed_precondition"),
+                "a changed pointer did not stop the resume: {settled:?}"
+            );
+            ensure!(
+                lists(&after, survivor.as_str()),
+                "the stopped resume still erased the remaining envelope"
+            );
+        }
+    }
+    drop(server);
+    drop(database);
+    Ok(())
+}
+
+/// decision 0108 §0931: an unrelated PCR Commit between attempts does not
+/// stale the frozen old-backup manifest; the worker resumes and erases the
+/// rest with the first request bytes.
+pub async fn security_rotation_erase_resumes_after_an_unrelated_pcr_commit() -> Result<()> {
+    erase_resume_across(
+        BetweenAttempts::UnrelatedPcrCommit,
+        "security-rotation-erase-unrelated-commit",
+    )
+    .await
+}
+
+/// decision 0108 §0931: a `secret_storage` pointer change between attempts
+/// stops the resume before any further erasure.
+pub async fn security_rotation_erase_resume_stops_after_a_pointer_change() -> Result<()> {
+    erase_resume_across(
+        BetweenAttempts::SecretStoragePointerChanged,
+        "security-rotation-erase-pointer-change",
+    )
+    .await
+}
+
 /// Ordinary current-device unlock of `backup_id` (key-management.md
 /// §7.7.1, §7.8.2): take the Station's single-use challenge for this
 /// device, sign the closed unlock proof with `seed` under `method`, and
@@ -1436,7 +1640,8 @@ async fn quorum_delete(
     signers: &[(&str, [u8; 32])],
 ) -> Result<reqwest::Response> {
     use arkret_models_crypto::{
-        KeysBackupsDeleteChallenge, KeysBackupsIssueDeleteChallengeRequestBody,
+        KeyBackupDeleteProof, KeyBackupDeleteQuorumSignature, KeysBackupsDeleteChallenge,
+        KeysBackupsDeleteRequestBody, KeysBackupsIssueDeleteChallengeRequestBody,
     };
     use arkret_wire::{AuditReasonText, PayloadProof, PayloadProofPurpose, proof_kind};
 
@@ -1461,30 +1666,35 @@ async fn quorum_delete(
     let digest = challenge.delete_intent_digest(Some(reason.as_str()))?;
     let signatures = signers
         .iter()
-        .map(|(device, seed)| -> Result<serde_json::Value> {
-            let proof = PayloadProof {
-                kind: proof_kind::DETACHED_JWS.to_owned(),
-                verification_method: DidUrl::new(format!("{actor}#{device}"))
-                    .map_err(anyhow::Error::msg)?,
-                payload_digest: digest.clone(),
-                created_at: challenge.issued_at,
-                domain: None,
-                audience: None,
-                proof_purpose: Some(PayloadProofPurpose::IssuerAttestation),
-                jws: arkret_signatures::sign_ed25519_detached_jws(
-                    &SigningKey::from_bytes(seed),
-                    &canonical,
-                )?,
-            };
-            Ok(serde_json::json!({"device_id": device, "proof": proof}))
+        .map(|(device, seed)| -> Result<KeyBackupDeleteQuorumSignature> {
+            Ok(KeyBackupDeleteQuorumSignature {
+                device_id: DeviceId::new((*device).to_owned())?,
+                proof: PayloadProof {
+                    kind: proof_kind::DETACHED_JWS.to_owned(),
+                    verification_method: DidUrl::new(format!("{actor}#{device}"))
+                        .map_err(anyhow::Error::msg)?,
+                    payload_digest: digest.clone(),
+                    created_at: challenge.issued_at,
+                    domain: None,
+                    audience: None,
+                    proof_purpose: Some(PayloadProofPurpose::IssuerAttestation),
+                    jws: arkret_signatures::sign_ed25519_detached_jws(
+                        &SigningKey::from_bytes(seed),
+                        &canonical,
+                    )?,
+                },
+            })
         })
         .collect::<Result<Vec<_>>>()?;
-    let body = serde_json::json!({
-        "request_id": request_id,
-        "challenge_id": challenge.challenge_id,
-        "proof": {"kind": "device_quorum", "threshold": 2, "signatures": signatures},
-        "reason": reason,
-    });
+    let body = KeysBackupsDeleteRequestBody {
+        request_id,
+        challenge_id: challenge.challenge_id,
+        proof: KeyBackupDeleteProof::DeviceQuorum {
+            threshold: 2,
+            signatures,
+        },
+        reason: Some(reason),
+    };
     Ok(client
         .delete(&format!("/_arkret/self/keys/backups/{backup_id}"))
         .header(reqwest::header::CONTENT_TYPE, "application/json")
