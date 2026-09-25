@@ -18,9 +18,7 @@ type CotestWireCommand =
   | "account-handoff-outcome"
   | "account-handoff-request"
   | "principal-registration-fixture"
-  | "identity-creation-register-request"
-  | "principal-bootstrap-seal"
-  | "principal-successor-seal";
+  | "identity-creation-register-request";
 
 type CotestWireCanonicalJson = { canonical: string };
 type CotestWireDigest = { digest: string; digest_hex: string };

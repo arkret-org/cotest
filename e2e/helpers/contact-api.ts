@@ -126,7 +126,6 @@ type InviteDeliveryOutcome = InviteDeliveryOutcomeView;
 type InviteConsentGrant = {
   consentId: string;
   eventRef: string;
-  dot: string;
 };
 
 export async function grantInviteConsentArkret(
@@ -160,27 +159,28 @@ export async function grantInviteConsentArkret(
     context: `grant invite consent to ${peerId}`,
   });
   const eventRef = String(envelope.event_id);
-  const dot = `${eventRef}:0`;
+  // `ak.self.consent.resource.get.v1`: the holder reads the typed current
+  // Consent result selected by peer and scope.
   await expect
     .poll(
       async () => {
-        const cellUrl =
-          `${solandBaseUrl(opts.server)}/_arkret/self/consent/cell` +
+        const resultUrl =
+          `${solandBaseUrl(opts.server)}/_arkret/self/consent/result` +
           `?peer=${encodeURIComponent(canonicalJson(peer))}&consent_scope=invite`;
-        const response = await request.get(cellUrl, {
-          headers: authHeaders(token, "GET", cellUrl),
+        const response = await request.get(resultUrl, {
+          headers: authHeaders(token, "GET", resultUrl),
         });
         if (!response.ok()) return false;
         const body = (await response.json()) as {
+          consent_id?: string;
           state?: string;
-          active_grant_dots?: string[];
         };
-        return body.state === "active" && body.active_grant_dots?.includes(dot);
+        return body.state === "active" && body.consent_id === consentId;
       },
       { timeout: 30_000, intervals: [250, 500, 1_000, 2_000] },
     )
     .toBe(true);
-  return { consentId, eventRef, dot };
+  return { consentId, eventRef };
 }
 
 // ── Contact request / respond / list / tombstone. ──

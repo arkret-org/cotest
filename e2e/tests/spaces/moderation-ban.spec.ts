@@ -16,8 +16,8 @@ import {
   canonicalJson,
   createRealmApi,
   grantCapabilityEventApi,
-  issueAuthorizationLeasesApi,
   queryRealmEventsApi,
+  rawSubmitSignedEventApi,
   refreshEventEnvelopeProof,
   resolveDefaultStrandId,
   sendMessageApi,
@@ -162,21 +162,18 @@ test.describe("moderation and ban", () => {
         reason: "non_moderator_attempt",
       },
     });
-    const leaseUrl = `${solandBaseUrl()}/_arkret/self/authorization-leases`;
-    const unauthorizedBan = await request.post(leaseUrl, {
-      headers: {
-        ...authHeaders(bobToken, "POST", leaseUrl),
-        "content-type": "application/json",
-        "idempotency-key": `cotest-unauthorized-ban-${unauthorizedBanEvent.event_id}`,
-      },
-      data: canonicalJson({ submissions: [{ event: unauthorizedBanEvent }] }),
-    });
-    // Lease issuance runs the same read-only admission as final submission;
-    // it may narrow existing authority but must never mint Realm admin rights.
+    // `ak.self.events.command.submit.v1`: the governance Station refuses a
+    // non-moderator ban at admission; membership never mints Realm admin
+    // rights.
+    const unauthorizedBan = await rawSubmitSignedEventApi(
+      request,
+      bobToken,
+      unauthorizedBanEvent,
+    );
     const unauthorizedText = await unauthorizedBan.text();
     expect(unauthorizedBan.status(), unauthorizedText).toBe(403);
-    expect(unauthorizedText).toContain(
-      "missing_capability",
+    expect(wireErrCode(JSON.parse(unauthorizedText)), unauthorizedText).toBe(
+      "capability_denied",
     );
 
     const reports = await request.get(`${solandBaseUrl()}/_soland/admin/reports`, {
@@ -301,16 +298,16 @@ test.describe("moderation and ban", () => {
     await submitSignedEventApi(request, aliceToken, firstBan, {
       context: `first ban ${mallory.id}`,
     });
-    const secondBanLease = await issueAuthorizationLeasesApi(
+    const secondBanSubmit = await rawSubmitSignedEventApi(
       request,
       aliceToken,
-      [secondBan],
+      secondBan,
     );
-    const secondBanProblem = (await secondBanLease.json()) as {
+    const secondBanProblem = (await secondBanSubmit.json()) as {
       type?: string;
       reason_code?: string;
     };
-    expect(secondBanLease.status()).toBe(409);
+    expect(secondBanSubmit.status()).toBe(409);
     expect(wireErrCode(secondBanProblem)).toBe("failed_precondition");
     expect(secondBanProblem.reason_code).toBe("invalid_membership_transition");
 

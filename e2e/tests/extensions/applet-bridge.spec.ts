@@ -37,8 +37,8 @@ import {
   createRealmApi,
   currentActorIdApi,
   grantCapabilityEventApi,
-  issueAuthorizationLeasesApi,
   queryRealmEventsApi,
+  rawSubmitSignedEventApi,
   registerEventSigner,
   plaintextVisibleServiceDeclarations,
   prepareSignedEventBatchSubmissionsApi,
@@ -349,13 +349,13 @@ test.describe("applet bridge", () => {
           membership: "join",
         },
       });
-      const preInstallLease = await issueAuthorizationLeasesApi(
+      const preInstallSubmit = await rawSubmitSignedEventApi(
         request,
         botToken,
-        [preInstallMembership],
+        preInstallMembership,
       );
-      expect(preInstallLease.status()).not.toBe(200);
-      expect(wireErrCode(await preInstallLease.json())).toBe(
+      expect(preInstallSubmit.status()).not.toBe(200);
+      expect(wireErrCode(await preInstallSubmit.json())).toBe(
         "applet_registration_unauthorized",
       );
       const registration = await installApplet(
@@ -395,9 +395,9 @@ test.describe("applet bridge", () => {
           membership: "join",
         },
       });
-      const selfJoinLease = await issueAuthorizationLeasesApi(request, botToken, [botSelfJoinAttempt]);
-      expect(selfJoinLease.status()).toBe(403);
-      expect(wireErrCode(await selfJoinLease.json())).toBe("policy_violation");
+      const selfJoinSubmit = await rawSubmitSignedEventApi(request, botToken, botSelfJoinAttempt);
+      expect(selfJoinSubmit.status()).toBe(403);
+      expect(wireErrCode(await selfJoinSubmit.json())).toBe("policy_violation");
 
       // Membership management maps to ak.realm.admin in the capability
       // registry. The human administrator signs the canonical member Event.
@@ -496,17 +496,18 @@ test.describe("applet bridge", () => {
         externalUser,
         registrationRef: registrationCommitRef(registration),
       });
-      const leaseResponse = await issueAuthorizationLeasesApi(
+      const standaloneGenesis = await rawSubmitSignedEventApi(
         request,
         aliceToken,
-        [ghostCreation.managed_actor_bundle.pcr_genesis_event],
+        ghostCreation.managed_actor_bundle.pcr_genesis_event,
       );
-      const leaseText = await leaseResponse.text();
+      const standaloneGenesisText = await standaloneGenesis.text();
       // Managed PCR founding is one closed aggregate. A standalone create
-      // cannot obtain an ordinary lease or become a federatable accepted Event.
-      expect(leaseResponse.status(), leaseText).toBe(422);
-      expect(wireErrCode(JSON.parse(leaseText))).toBe("schema_violation");
-      expect(JSON.parse(leaseText).detail).toContain("not_ordinary_realm_bootstrap");
+      // cannot be admitted through ordinary Event submission or become a
+      // federatable accepted Event.
+      expect(standaloneGenesis.status(), standaloneGenesisText).toBe(422);
+      expect(wireErrCode(JSON.parse(standaloneGenesisText))).toBe("schema_violation");
+      expect(JSON.parse(standaloneGenesisText).detail).toContain("not_ordinary_realm_bootstrap");
       const provision = await request.post(`${registryBase}/external-event`, {
         headers: authHeaders(aliceToken),
         data: {
@@ -703,37 +704,6 @@ test.describe("applet bridge", () => {
         .toBe("capability_denied");
       expect(JSON.stringify(await queryRealmEventsApi(request, aliceToken, realmId)))
         .not.toContain(`direct self write after revoke ${stamp}`);
-
-      const pcrRealmId = String(provisionBody.principal_control_realm_id);
-      const combinedFrontierUrl = `${solandBaseUrl()}/_arkret/self/events/frontier`;
-      const revokedAuthoringFrontier = await request.fetch(
-        combinedFrontierUrl,
-        {
-          method: "QUERY",
-          headers: {
-            ...authHeaders(appletServiceToken, "QUERY", combinedFrontierUrl),
-            "content-type": "application/json",
-          },
-          data: canonicalJson({
-            actor_id: ghostActorId,
-            realm_id: pcrRealmId,
-          }),
-        },
-      );
-      expect(revokedAuthoringFrontier.status()).toBe(404);
-
-      const aggregateFrontierUrl = `${solandBaseUrl()}/_arkret/self/events/frontier`;
-      const historicalFrontier = await request.fetch(aggregateFrontierUrl, {
-        method: "QUERY",
-        headers: {
-          ...authHeaders(appletServiceToken, "QUERY", aggregateFrontierUrl),
-          "content-type": "application/json",
-        },
-        data: canonicalJson({ actor_id: ghostActorId }),
-      });
-      const historicalFrontierText = await historicalFrontier.text();
-      expect(historicalFrontier.status(), historicalFrontierText).toBe(200);
-      expect(historicalFrontierText).toContain(pcrRealmId);
     } finally {
       await alicePage.close();
     }

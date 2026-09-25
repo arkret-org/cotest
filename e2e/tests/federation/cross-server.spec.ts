@@ -1027,7 +1027,7 @@ test.describe("prepared authoring and join", () => {
       if (charlie && charlieToken) {
         const invitation = await waitForInviteDeliveryApi(request, charlieToken, charlie.id, realmId, "server1");
         const beforeJoin = await readCommitStreamHeadApi(request, aliceToken, realmId, { server: "server1" });
-        const joined = await acceptPreparedInviteApi(request, charlieToken, charlie.id, realmId, invitation.id, { server: "server1", waitForStatus: false });
+        const joined = await acceptPreparedInviteApi(request, charlieToken, charlie.id, realmId, invitation.id, { server: "server1" });
         // The join advanced the Realm's own stream by exactly the commits it
         // caused, and the accepted head is a later position than before it.
         const afterJoin = await readCommitStreamHeadApi(request, aliceToken, realmId, { server: "server1" });

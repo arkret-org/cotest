@@ -12,47 +12,6 @@ return async ({ jointUsers, request }: { jointUsers: JointUsersFixture; request:
   const { alicePage, bobPage, aliceSession, bobSession } = jointUsers;
   const alice = alicePage.page;
   const bob = bobPage.page;
-  const historyProofFailures: string[] = [];
-  const missingRetainedSeals: string[] = [];
-  const historyChunkDigests = new Set<string>();
-  const processedHistoryDigests = new Set<string>();
-  const rejectedHistoryDigests = new Set<string>();
-  for (const page of [alice, bob]) {
-    page.on("response", async response => {
-      if (new URL(response.url()).pathname === "/_arkret/self/history-key-responses/ack" && response.ok()) {
-        const body = response.request().postDataJSON() as { entries: { kind: string; status: string; record_digest: string }[] };
-        for (const entry of body.entries.filter(entry => entry.kind === "record")) {
-          if (entry.status === "installed" || entry.status === "superseded_duplicate") {
-            processedHistoryDigests.add(entry.record_digest);
-          }
-          if (entry.status === "cryptographically_rejected") rejectedHistoryDigests.add(entry.record_digest);
-        }
-        return;
-      }
-      if (new URL(response.url()).pathname === "/_arkret/self/history-key-responses/read" && response.request().method() === "POST" && response.ok()) {
-        const body = await response.json().catch(() => ({ entries: [] })) as {
-          entries: { kind: string; record?: { record_digest: string; source_record: { content: { chunk_index?: number } } } }[];
-        };
-        for (const entry of body.entries) {
-          if (entry.kind === "record" && entry.record?.source_record.content.chunk_index !== undefined) {
-            historyChunkDigests.add(entry.record.record_digest);
-          }
-        }
-        return;
-      }
-      if (new URL(response.url()).pathname === "/_arkret/self/seals/resolve" && response.ok()) {
-        const request = response.request().postDataJSON() as { history_traversal_access?: unknown };
-        if (request.history_traversal_access) {
-          const body = await response.json().catch(() => ({})) as { missing_seal_refs?: string[] };
-          missingRetainedSeals.push(...(body.missing_seal_refs ?? []));
-        }
-        return;
-      }
-      if (new URL(response.url()).pathname !== "/_arkret/self/history-key-responses" || response.status() !== 403) return;
-      const body = await response.text().catch(() => "");
-      if (body.includes("history source proof is invalid")) historyProofFailures.push(body);
-    });
-  }
   const interruptPreparation = mode !== "normal";
   await Promise.all([
     alicePage.completeRecoveryKeySetupIfPrompted(30_000),
@@ -117,7 +76,7 @@ return async ({ jointUsers, request }: { jointUsers: JointUsersFixture; request:
     if (mode === "interrupted") {
       await expect.poll(() => interruptedWelcomeEpochs.get(directRealm) ?? 0, { timeout: 120_000 }).toBeGreaterThan(0);
       // The peer can observe Welcome before the founder has replayed the
-      // covering Commit Seal. Reopen the founder while consume stays blocked;
+      // covering MLS Commit. Reopen the founder while consume stays blocked;
       // its durable admission must restore the post-Add sending state.
       await bob.reload();
       await expect.poll(async () => Number(await bob.getByTestId("chat-panel").getAttribute("data-mls-epoch")), { timeout: 180_000 }).toBeGreaterThan(0);
@@ -221,17 +180,6 @@ return async ({ jointUsers, request }: { jointUsers: JointUsersFixture; request:
     const presence = page.locator(`[data-testid="presence-row"][data-actor-id=${JSON.stringify(canonicalJson(accountActorId(peer)))}]`);
     await expect.soft(presence).toHaveAttribute("data-presence-state", "online", { timeout: 90_000 });
   }
-  expect(historyProofFailures, "background history recovery must use verifiable source proofs").toEqual([]);
-  expect(missingRetainedSeals, "an accepted receipt must resolve its exact retained Seal cut").toEqual([]);
-  // Aborting consume does not remove the recipient's durable Welcome/state.
-  // Encryption spec section 6 permits recovery from that state without a
-  // history transfer. Any chunks actually received still require durable ack
-  // (history-visibility section 6), including already installed duplicates.
-  await expect.poll(() => [...historyChunkDigests].filter(digest => !processedHistoryDigests.has(digest)), {
-    message: "received history chunks must reach a successful durable disposition",
-    timeout: 90_000,
-  }).toEqual([]);
-  expect([...rejectedHistoryDigests], "valid history responses must not be cryptographically rejected").toEqual([]);
 };
 }
 

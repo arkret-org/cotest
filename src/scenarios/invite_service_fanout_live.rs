@@ -356,7 +356,7 @@ async fn grant_then_revoke_invite_consent(
     let grant_submission = EventAdmissionSubmission::new(grant_event);
     let granted = expect_json(
         holder
-            .post("/_arkret/self/consent/cells/grant")
+            .post("/_arkret/self/consent/results/grant")
             .json(&ConsentGrantRequestBody {
                 grant_event: grant_submission,
             }),
@@ -386,7 +386,7 @@ async fn grant_then_revoke_invite_consent(
     let revoke_submission = EventAdmissionSubmission::new(revoke_event);
     let revoked = expect_json(
         holder
-            .post("/_arkret/self/consent/cells/revoke")
+            .post("/_arkret/self/consent/results/revoke")
             .json(&ConsentRevokeRequestBody {
                 revoke_event: revoke_submission,
             }),

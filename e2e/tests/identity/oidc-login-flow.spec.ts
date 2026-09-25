@@ -57,8 +57,8 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
       browser,
       request,
     }) => {
-      // A cold joint stack may compile/load WASM and materialize the first PCR
-      // successor Seal. Keep the test-level deadline above its longest explicit
+      // A cold joint stack may compile/load WASM and publish the first
+      // recovery policy. Keep the test-level deadline above its longest explicit
       // assertion so Playwright cannot abort a healthy flow at the global 180s
       // default while that assertion is still waiting.
       test.setTimeout(360_000);
@@ -138,7 +138,7 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
           .getByTestId("onboarding-recovery-key-confirm")
           .fill(recoveryKey);
 
-        let interruptedBootstrapSeal = false;
+        let interruptedRecoveryPolicyPublish = false;
         const challengeAttempts: Array<{ body: string; at: number }> = [];
         const challengeRetryAfterMs = 1_000;
         await page.route("**/_arkret/gate/account/identity-binding-challenges", async (route) => {
@@ -169,22 +169,25 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
           }
           await route.continue();
         });
-        const interruptFirstBootstrapSeal = async (
+        // `ak.root.identity.recovery_policy.command.publish.v1` is the first
+        // recovery-material write after the Account Authority accepts the
+        // identity; failing it once must leave a resumable onboarding state.
+        const interruptFirstRecoveryPolicyPublish = async (
           route: import("@playwright/test").Route,
         ) => {
           if (
-            !interruptedBootstrapSeal &&
+            !interruptedRecoveryPolicyPublish &&
             route.request().method() === "POST"
           ) {
-            interruptedBootstrapSeal = true;
+            interruptedRecoveryPolicyPublish = true;
             await route.abort("connectionfailed");
             return;
           }
           await route.continue();
         };
         await page.route(
-          "**/_arkret/self/seals",
-          interruptFirstBootstrapSeal,
+          "**/_arkret/root/identity/recovery-policy",
+          interruptFirstRecoveryPolicyPublish,
         );
         await page.getByTestId("onboarding-bind-identity").click();
 
@@ -197,7 +200,7 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
         ).toBeVisible({ timeout: 240_000 });
         await expect(page.getByTestId("retry-onboarding-resume")).toBeVisible();
         expect(
-          interruptedBootstrapSeal,
+          interruptedRecoveryPolicyPublish,
           "the test must interrupt the recovery-material gate after account acceptance",
         ).toBe(true);
         if (injectChallengeRateLimit) {
@@ -217,8 +220,8 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
           identityCreationRequests.length;
 
         await page.unroute(
-          "**/_arkret/self/seals",
-          interruptFirstBootstrapSeal,
+          "**/_arkret/root/identity/recovery-policy",
+          interruptFirstRecoveryPolicyPublish,
         );
         await page.reload({ waitUntil: "domcontentloaded" });
         await expect(

@@ -24,7 +24,7 @@ import {
   type JointUserPage,
   uniqueUser,
 } from "../../helpers/users";
-import { canonicalJson } from "../../helpers/soland-api";
+import { canonicalJson, typedId } from "../../helpers/soland-api";
 
 test.describe.configure({ mode: "serial" });
 
@@ -171,7 +171,7 @@ test.describe("fresh-browser device entry paths @fully-implemented", () => {
     );
     expect(
       foundingSession,
-      "the recovery account must have a sealed PCR genesis",
+      "the recovery account must have a committed PCR genesis",
     ).toBeTruthy();
     const foundingFlow = await openDpopUserPageFromSession(
       browser,
@@ -259,22 +259,17 @@ test.describe("fresh-browser device entry paths @fully-implemented", () => {
       expectSuccessfulPathMatch(responses, "POST", continuePath);
       expectExactlyOnePathMatch(responses, "POST", continuePath);
 
-      // Both re-anchor Events, the first new-generation Seal and the terminal
-      // result all enter through that one commit. Before it there is no
-      // accepted Event and no Seal to be had: recovery never submits through
-      // the ordinary Event or Seal surfaces, and the recovery grant's closed
-      // operation set does not contain Seal prepare or submit at all.
+      // Both re-anchor Events and the terminal result enter through that one
+      // continue step, as two consecutive Principal Control Realm Commits.
+      // Before it there is no accepted Event: recovery never submits through
+      // the ordinary Event surface.
       const beforeCommit = responses.slice(
         0,
         responses.findIndex(
           (hit) => hit.method === "POST" && continuePath.test(hit.pathname),
         ),
       );
-      expectNoWriteToPaths(beforeCommit, [
-        "/_arkret/self/events",
-        "/_arkret/self/seals",
-      ]);
-      expectNoWriteToPaths(responses, ["/_arkret/self/seals"]);
+      expectNoWriteToPaths(beforeCommit, ["/_arkret/self/events"]);
 
       expectSuccessfulOperation(
         responses,
@@ -295,20 +290,19 @@ test.describe("fresh-browser device entry paths @fully-implemented", () => {
       // Re-anchor changes the durable device generation. A non-GET request
       // forces fresh grant introspection, so the superseded founding device
       // cannot survive through a resource-server cache window.
-      const oldGenerationProbeUrl = `${solandBaseUrl()}/_arkret/self/events/frontier`;
-      const oldGenerationProbe = await request.fetch(oldGenerationProbeUrl, {
-        method: "QUERY",
+      const oldGenerationProbeUrl = `${solandBaseUrl()}/_arkret/self/account/current-principal`;
+      const oldGenerationProbe = await request.post(oldGenerationProbeUrl, {
         headers: {
           ...selfPathHeadersForDpopSession(
             foundingSession!,
-            "QUERY",
+            "POST",
             oldGenerationProbeUrl,
           ),
           "content-type": "application/json",
         },
         data: canonicalJson({
-          actor_id: foundingSession!.user.id,
-          realm_id: foundingSession!.principalControlRealmId,
+          request_id: typedId("request"),
+          account_id: foundingSession!.accountId,
         }),
       });
       expect(
@@ -440,7 +434,7 @@ function expectExactlyOnePathMatch(
  * Assert that no accepted write reached any of `prefixes`.
  *
  * Reads are allowed through: the point is that recovery produces no
- * authoritative Event or Seal outside its own terminal commit, not that the
+ * authoritative Event outside its own terminal commit, not that the
  * client never looks at those surfaces.
  */
 function expectNoWriteToPaths(

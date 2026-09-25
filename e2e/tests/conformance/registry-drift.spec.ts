@@ -362,11 +362,12 @@ test.describe("conformance registry drift @fully-implemented", () => {
     const auth = { authorization: `Bearer ${token}` };
 
     // Submit a benign event so the write receipt is part of the scan surface.
+    const probeRealmId = "ak:realm:AV1vAwt2NWgRW6lXhHcPfu4l8U3dkzSjWbQ_xXTw370Q";
     const submitReceipt = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
       headers: auth,
       data: { event: signedEventEnvelope({
         actorId: alice.id,
-        realmId: "ak:realm:AV1vAwt2NWgRW6lXhHcPfu4l8U3dkzSjWbQ_xXTw370Q",
+        realmId: probeRealmId,
         kind: "ak.read_cursor.advance",
         payload: {},
       }) },
@@ -377,7 +378,7 @@ test.describe("conformance registry drift @fully-implemented", () => {
       { name: "health", response: await request.get(`${solandBaseUrl()}/health`), requireOk: true },
       { name: "directory.describe", response: await request.get(`${solandBaseUrl()}/_arkret/find/directory/describe`) },
       { name: "account.viewer", response: await request.get(`${solandBaseUrl()}/_arkret/self/account/viewer`, { headers: auth }) },
-      { name: "events.read", response: await request.fetch(`${solandBaseUrl()}/_arkret/self/events`, { method: "QUERY", data: { limit: 20 }, headers: auth }) },
+      { name: "streams.scan", response: await request.fetch(`${solandBaseUrl()}/_arkret/self/streams/scan`, { method: "POST", data: { realm_id: probeRealmId, stream_ref: { kind: "realm", realm_id: probeRealmId }, limit: 20 }, headers: auth }) },
       { name: "notifications", response: await request.get(`${solandBaseUrl()}/_arkret/self/notifications`, { headers: auth }) },
       { name: "events.submit.receipt", response: submitReceipt },
     ];

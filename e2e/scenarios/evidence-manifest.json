@@ -118,36 +118,6 @@
       ]
     },
     {
-      "scenario_key": "discovery/organization-verified-badge",
-      "suite_kind": "joint-e2e",
-      "realism_level": "fixture-only",
-      "evidence_class": "fixture-only",
-      "real_services": [
-        "inkson",
-        "soland",
-        "teabay"
-      ],
-      "mocks": [],
-      "identity_establishment": [
-        "session_injection"
-      ],
-      "protocol_object_producers": [
-        "cotest_wire_oracle",
-        "inkson_product_client",
-        "raw_http_fixture"
-      ],
-      "declared_test_bypasses": [
-        "raw_http_fixture_or_oracle",
-        "session_injection",
-        "test_only_signer_or_wire_builder"
-      ],
-      "claims_excluded": [
-        "product_protocol_object_generation",
-        "registration_login_authorization",
-        "ui_driven_business_flow_for_raw_http_steps"
-      ]
-    },
-    {
       "scenario_key": "encryption/audited-e2ee",
       "suite_kind": "joint-e2e",
       "realism_level": "server-contract",

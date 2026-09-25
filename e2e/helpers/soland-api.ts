@@ -1169,7 +1169,7 @@ export async function acceptPreparedInviteApi(
   actorId: string,
   realmId: string,
   inviteId: string,
-  opts: { server?: SolandKey; waitForStatus?: boolean } = {},
+  opts: { server?: SolandKey } = {},
 ) {
   const account = accountActorId(actorId, opts.server).account_id;
   const delivery = await readOwnInviteDeliveryApi(request, token, realmId, opts, inviteId);
@@ -1221,23 +1221,14 @@ export async function acceptPreparedInviteApi(
     headers: { ...authHeaders(token, "POST", submitUrl), "content-type": "application/json" },
     data: signed,
   });
+  // Submission is synchronous: the governance Station answers committed or
+  // duplicate, and an exact retry of the same bytes is the only status read.
   const accepted = await expectJsonOk<Record<string, any>>(await submit(), "prepared join submit");
   expect(accepted.status).toBe("committed");
   expect(accepted.commit?.event_ref).toBe(event.event_id);
   const replay = await expectJsonOk<Record<string, any>>(await submit(), "exact join submit replay");
   expect(replay.status).toBe("duplicate");
   expect(replay.commit?.commit_id).toBe(accepted.commit?.commit_id);
-  if (opts.waitForStatus !== false) {
-    const statusUrl = `${solandBaseUrl(opts.server)}/_arkret/self/realm-joins/application-status`;
-    await expect.poll(async () => {
-      const response = await request.post(statusUrl, {
-        headers: { ...authHeaders(token, "POST", statusUrl), "content-type": "application/json" },
-        data: { request_id: typedId("request"), realm_id: realmId, event_id: event.event_id },
-      });
-      const status = await expectJsonOk<Record<string, any>>(response, "own join application status");
-      return status.status;
-    }, { timeout: 120_000, intervals: [1000, 2000, 5000] }).toBe("committed");
-  }
   return event;
 }
 
@@ -2209,49 +2200,6 @@ export async function rawSubmitSignedEventApi(
     },
     data: canonicalJson({ event: envelope }),
   });
-}
-
-export async function issueAuthorizationLeasesApi(
-  request: APIRequestContext,
-  token: string,
-  events: Array<Record<string, unknown>>,
-  server?: SolandKey,
-): Promise<APIResponse> {
-  const requestBody = {
-    submissions: events.map((event) => ({ event })),
-  };
-  const requestDigest = sha256CanonicalJson(requestBody);
-  const url = `${solandBaseUrl(server)}/_arkret/self/authorization-leases`;
-  return await request.post(url, {
-    headers: {
-      ...authHeaders(token, "POST", url),
-      "content-type": "application/json",
-      "idempotency-key": `cotest-lease-${requestDigest}`,
-    },
-    data: canonicalJson(requestBody),
-  });
-}
-
-export function authorizationLeasesFromIssueOutcome(
-  text: string,
-  expectedCount: number,
-  context: string,
-): Array<Record<string, unknown>> {
-  const body = parseJsonOrRaw(text);
-  const leases =
-    body &&
-    typeof body === "object" &&
-    Array.isArray((body as Record<string, unknown>).authorization_leases)
-      ? ((body as Record<string, unknown>).authorization_leases as Array<
-          Record<string, unknown>
-        >)
-      : undefined;
-  if (!leases || leases.length !== expectedCount) {
-    throw new Error(
-      `${context} lease issuance returned ${leases?.length ?? 0} leases for ${expectedCount} Events: ${text}`,
-    );
-  }
-  return leases;
 }
 
 function parseJsonOrRaw(text: string): unknown {

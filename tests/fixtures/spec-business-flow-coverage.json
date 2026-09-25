@@ -216,7 +216,8 @@
           "kind": "ordinary",
           "path": "../coauth/crates/backend/src/handlers/arkret/tests.rs",
           "markers": [
-            "/_arkret/gate/account/session-grants/introspect"
+            "fn session_grant_is_signed_for_the_bound_principal_id",
+            "issue_session_grant("
           ]
         },
         {
@@ -232,7 +233,23 @@
           "path": "../soland/crates/server/tests/account_data_sync.rs",
           "markers": [
             "account_data",
-            "ak.read_cursor.advance"
+            "/_arkret/self/account_data/"
+          ]
+        },
+        {
+          "kind": "ordinary",
+          "path": "../soland/crates/http/src/routing/spaces/read_cursor.rs",
+          "markers": [
+            "ak.self.read_cursor.command.advance.v1",
+            "fn accepts_exact_holder_and_session_device_binding"
+          ]
+        },
+        {
+          "kind": "joint_e2e",
+          "path": "src/scenarios/protocol_payloads/events_keys_setup.rs",
+          "markers": [
+            "async fn advance_read_cursor_to",
+            "actor.post(\"/_arkret/self/read-cursors\")"
           ]
         },
         {
@@ -414,7 +431,6 @@
           "kind": "joint_e2e",
           "path": "src/scenarios/collaboration_workflow.rs",
           "markers": [
-            "/_arkret/find/directory/resolve-realm",
             "/_arkret/self/realms/{realm_id}"
           ]
         },
@@ -586,18 +602,34 @@
         },
         {
           "kind": "ordinary",
-          "path": "../soland/crates/server/tests/http_api/push_keys/keys_devices.rs",
+          "path": "../soland/crates/server/tests/http_api/blob_resumable.rs",
           "markers": [
-            "/_arkret/self/keys/upload",
+            "fn resumable_chunked_upload_matches_canonical_blob_ref",
             "/_arkret/self/blob/upload"
           ]
         },
         {
           "kind": "ordinary",
-          "path": "../soland/crates/server/tests/http_api/push_keys/device_messages.rs",
+          "path": "../soland/crates/server/tests/http_api/device_message_send_admission.rs",
           "markers": [
-            "/_arkret/self/device_messages",
-            "/_arkret/self/device_messages/ack"
+            "fn device_message_outside_the_enqueue_window_is_refused_with_zero_writes",
+            "/_arkret/self/device_messages"
+          ]
+        },
+        {
+          "kind": "joint_e2e",
+          "path": "src/scenarios/protocol_payloads/events_keys_setup.rs",
+          "markers": [
+            "async fn upload_and_inspect_keys",
+            "/_arkret/self/keys/upload"
+          ]
+        },
+        {
+          "kind": "joint_e2e",
+          "path": "src/scenarios/invite_service_fanout_live.rs",
+          "markers": [
+            "holder.get(\"/_arkret/self/device_messages\")",
+            ".post(\"/_arkret/self/device_messages/ack\")"
           ]
         },
         {
@@ -651,8 +683,8 @@
           "path": "../teabay/crates/server/tests/it/read_only.rs",
           "markers": [
             "ak.operation_bundle.directory_service.public_read.v1",
-            "/_arkret/find/directory/announce",
-            "/_arkret/find/directory/withdraw"
+            "ServiceOperationId::FindDirectoryReadSearchRealmsV1",
+            "ServiceOperationId::FindDirectoryReadResolveRealmV1"
           ]
         },
         {
@@ -730,10 +762,10 @@
         },
         {
           "kind": "ordinary",
-          "path": "../soland/crates/server/tests/http_api/push_keys/push_profile.rs",
+          "path": "../soland/crates/server/tests/http_api/push_registration_onboarding.rs",
           "markers": [
-            "/_arkret/edge/push/register-device",
-            "/_arkret/edge/push/notify"
+            "fn register_with_not_onboarded_gateway_fails_closed_without_writes",
+            "/_arkret/edge/push/register-device"
           ]
         },
         {
@@ -968,95 +1000,16 @@
           "path": "../soland/crates/server/tests/extensions_smoke.rs",
           "markers": [
             "applet_protocol_describe_smoke",
-            "applet_install_package_registers_bot_projection_smoke",
-            "applet_ghost_actor_provision_writes_durable_four_event_unit",
-            "applet_bridge_register_ghost_route_revoke_smoke"
-          ]
-        },
-        {
-          "kind": "conformance_fixture",
-          "path": "src/conformance/wire/mimi.rs",
-          "markers": [
-            "ak.open.mimi.exchange.request_key_material.v1"
-          ]
-        }
-      ]
-    },
-    {
-      "id": "history_key_recovery_and_direct_traversal",
-      "title": "History-key request, response, archive recovery, and bounded direct traversal",
-      "status": "partially_implemented",
-      "surfaces": [
-        "history_key_recovery"
-      ],
-      "operation_spine": [
-        {
-          "operation_id": "ak.self.history_key_requests.command.create.v1",
-          "surfaces": ["history_key_recovery"]
-        },
-        {
-          "operation_id": "ak.self.history_key_requests.read.list.v1",
-          "surfaces": ["history_key_recovery"]
-        },
-        {
-          "operation_id": "ak.self.history_key_responses.command.send.v1",
-          "surfaces": ["history_key_recovery"]
-        },
-        {
-          "operation_id": "ak.self.history_key_responses.read.list.v1",
-          "surfaces": ["history_key_recovery"]
-        },
-        {
-          "operation_id": "ak.self.history_key_responses.command.ack.v1",
-          "surfaces": ["history_key_recovery"]
-        },
-        {
-          "operation_id": "ak.self.organization_recovery_archives.read.list.v1",
-          "surfaces": ["history_key_recovery"]
-        },
-        {
-          "operation_id": "ak.peer.history_key_requests.command.replicate.v1",
-          "surfaces": ["history_key_recovery"]
-        },
-        {
-          "operation_id": "ak.peer.history_key_responses.command.relay.v1",
-          "surfaces": ["history_key_recovery"]
-        },
-        {
-          "operation_id": "ak.peer.seals.read.mls_governance_proof.v1",
-          "surfaces": ["history_key_recovery"]
-        },
-        {
-          "operation_id": "ak.peer.seals.read.governance_dependencies.v1",
-          "surfaces": ["history_key_recovery"]
-        },
-        {
-          "operation_id": "ak.peer.organization_recovery_archives.command.replicate.v1",
-          "surfaces": ["history_key_recovery"]
-        }
-      ],
-      "coverage": [
-        {
-          "kind": "ordinary",
-          "path": "../soland/crates/http/src/routing/governance_history.rs",
-          "markers": [
-            "ak.self.history_key_requests.command.create.v1",
-            "ak.peer.history_key_responses.command.relay.v1"
+            "applet_transaction_requires_signature_before_typed_body_validation"
           ]
         },
         {
           "kind": "ordinary",
-          "path": "../soland/crates/http/src/routing/governance_history/stream.rs",
+          "path": "../soland/crates/http/src/routing/extensions/applet_bridge/endpoints.rs",
           "markers": [
-            "ack_history_key_responses"
-          ]
-        },
-        {
-          "kind": "conformance_fixture",
-          "path": "src/conformance/history_key_direct_traversal.rs",
-          "markers": [
-            "ak.vector.history_key.frontier_traversal_split.v1",
-            "run_history_key_direct_traversal_suite"
+            "operation_id = \"ak.self.applet.command.install\"",
+            "fn first_install_commit_rejects_expiry_but_exact_success_replay_does_not",
+            "fn successful_install_replay_rejects_changed_body"
           ]
         }
       ]
@@ -1116,11 +1069,45 @@
             "third_party_invite_present_body_matches_canonical_schema",
             "validate_present_request_schema"
           ]
+        }
+      ]
+    },
+    {
+      "id": "realm_authority_bundle_and_handoff",
+      "title": "Nonce-bound Realm authority bundle and planned governance Station handoff",
+      "status": "partially_implemented",
+      "surfaces": ["authority_commit"],
+      "operation_spine": [
+        {
+          "operation_id": "ak.open.realm_authority.read.bundle.v1",
+          "surfaces": ["authority_commit"]
         },
         {
+          "operation_id": "ak.peer.realm_authority.command.handoff.v1",
+          "surfaces": ["authority_commit"]
+        }
+      ],
+      "coverage": [
+        {
           "kind": "ordinary",
-          "path": "../soland/crates/http/src/routing/invites.rs",
-          "markers": ["ak.open.third_party_invite.command.present_token"]
+          "path": "../soland/crates/http/src/routing/authority_commit.rs",
+          "markers": [
+            "fn mounted_authority_reads_gate_before_delegating",
+            "\"/_arkret/open/realm-authority/bundle\""
+          ]
+        },
+        {
+          "kind": "joint_e2e",
+          "path": "src/scenarios/protocol_payloads/authority_reads.rs",
+          "markers": [
+            "pub async fn live_authority_bundle_and_scan_verify_through_garth",
+            ".post(server.url(\"/_arkret/open/realm-authority/bundle\"))"
+          ]
+        },
+        {
+          "kind": "conformance_fixture",
+          "path": "crates/realm-join-candidate-runner/src/lib.rs",
+          "markers": ["verify_realm_authority_bundle"]
         }
       ]
     }

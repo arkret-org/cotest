@@ -335,29 +335,13 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
         "Realm bootstrap/write event ingress was not observed",
       ).toBe(true);
       expect(
-        protocolHits.some(
-          (hit) => hit.path === "/_arkret/self/seals" && hit.status < 400,
-        ),
-        "Recovery/Realm Seal submission was not observed",
-      ).toBe(true);
-      expect(
         protocolHits.filter(
           (hit) =>
             hit.status >= 500 &&
-            !isExpectedFrontierPending(hit),
+            !isExpectedRecoveryPolicyPending(hit),
         ),
         "unexpected Arkret 5xx responses",
       ).toEqual([]);
-      expect(
-        protocolHits.some(
-          (hit) =>
-            hit.method === "POST" &&
-            hit.path === "/_arkret/root/identity/recovery-policy" &&
-            hit.status === 503 &&
-            hit.errorCode === "frontier_unavailable",
-        ),
-        "unsealed recovery-policy publication must expose the normative pending response",
-      ).toBe(true);
       expect(protocolDiagnostics, protocolDiagnostics.join("\n")).toEqual([]);
     } finally {
       await jointPage.close();
@@ -372,7 +356,7 @@ function observeProtocol(
 ): void {
   page.on("console", (message) => {
     if (
-      /retry.*exhaust|frontier_unavailable|MLS runtime|session coordinator|session_state|session boot|onboarding/i.test(
+      /retry.*exhaust|MLS runtime|session coordinator|session_state|session boot|onboarding/i.test(
         message.text(),
       )
     ) {
@@ -456,12 +440,14 @@ function errorCode(
   return undefined;
 }
 
-function isExpectedFrontierPending(hit: ProtocolHit): boolean {
-  if (hit.errorCode !== "frontier_unavailable") return false;
+// `ak.root.identity.recovery_policy.command.publish.v1` answers the retry-safe
+// `revision_unavailable` until its Principal Control Realm Commit materializes;
+// Inkson retries the same Event, so that 503 is not a service failure.
+function isExpectedRecoveryPolicyPending(hit: ProtocolHit): boolean {
   return (
-    (hit.method === "POST" &&
-      hit.path === "/_arkret/root/identity/recovery-policy") ||
-    (hit.method === "QUERY" && hit.path === "/_arkret/self/seals/frontier")
+    hit.errorCode === "revision_unavailable" &&
+    hit.method === "POST" &&
+    hit.path === "/_arkret/root/identity/recovery-policy"
   );
 }
 

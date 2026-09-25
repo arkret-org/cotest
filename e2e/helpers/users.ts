@@ -37,7 +37,6 @@ import {
   authHeaders,
   accountActorId,
   canonicalJson,
-  cotestWire,
   projectDidToCoreId,
   registerEventSigner,
   registerPrincipalControlRealm,
@@ -851,8 +850,8 @@ export class JointUserPage {
         .click({ timeout: 10_000 })
         .catch(() => undefined);
     }
-    // Recovery policy publication intentionally retries a pending Control Seal
-    // frontier for up to 30 seconds.  Give that protocol retry a full window,
+    // Recovery policy publication intentionally retries the retry-safe
+    // revision_unavailable answer for up to 30 seconds.  Give that protocol retry a full window,
     // plus one locator-handler retry and UI propagation time, before failing.
     await expect(dialog).toBeHidden({ timeout: 90_000 });
     return keyReadable ? recoveryKey : undefined;
@@ -1499,7 +1498,7 @@ export async function ensureRegistered(
   // When coauth is reachable, registration goes through the canonical
   // co-located provisioning (account → PCR genesis → verified binding) instead
   // of the bare gate register, so the principal exists with its real DID
-  // document, founding device authorization, and bootstrap Seal. The caller's
+  // document, founding device authorization, and committed PCR genesis. The caller's
   // `user` is rebound to the account-bound identity the ceremony returns.
   const coauth = coauthBaseUrl(opts.server);
   if (coauth) {
@@ -1839,39 +1838,34 @@ export async function createDpopUserSessionForAccount(
   session.principalControlRealmId = principalControlRealmId;
   registerPrincipalControlRealm(user.id, principalControlRealmId);
   registerPrincipalControlEvents(user.id, session.principalControlEvents);
-  const bootstrapSeal = cotestWire<Record<string, unknown>>(
-    "principal-bootstrap-seal",
-    {
-      pcr_genesis_unit: checkpoint.pcr_genesis_unit,
-      device_signing_seed_b64url: checkpoint.device_signing_seed_b64url,
-    },
-  );
+  // Registration already committed the closed PCR genesis unit as two
+  // consecutive Principal Control Realm Commits. Carry their exact committed
+  // coordinates as the recovery-material evidence; there is no separate
+  // bootstrap write after acceptance.
+  const pcrGenesisCommits = account.pcrGenesisCommits.map((commit) => ({
+    event_id: commit.event_ref,
+    commit_id: commit.commit_id,
+    stream_ref: commit.stream_ref,
+    stream_position: commit.stream_position,
+  }));
+  if (pcrGenesisCommits.length !== 2) {
+    throw new Error(
+      "principal registration outcome omitted its two PCR genesis Commits",
+    );
+  }
   session.recoveryMaterialEvidence = {
-    principal_id: user.id,
     account_id: session.accountId,
     principal_did: user.did,
     device_id: user.deviceId,
     principal_control_realm_id: principalControlRealmId,
     pcr_genesis_unit: checkpoint.pcr_genesis_unit,
-    bootstrap_seal: bootstrapSeal,
+    pcr_genesis_commits: pcrGenesisCommits,
     // Agent provisioning is controller-authority bound.  The browser fixture
     // must carry the exact Station-qualified authority proven by the handoff
     // grant instead of relying on the serde compatibility default (`None`).
     controller_authority: session.accountId,
   };
-  const sealUrl = `${solandBaseUrl(opts.server)}/_arkret/self/seals`;
-  const sealResponse = await request.post(sealUrl, {
-    headers: {
-      ...selfPathHeadersForDpopSession(session, "POST", sealUrl),
-      "content-type": "application/json",
-    },
-    data: canonicalJson(bootstrapSeal),
-  });
-  expect(
-    sealResponse.ok(),
-    `principal bootstrap Seal returned ${sealResponse.status()}: ${await sealResponse.text()}`,
-  ).toBeTruthy();
-  // Re-read the typed viewer after the committed Seal and confirm this
+  // Re-read the typed viewer after the committed genesis and confirm this
   // session's exact device (never devices[0]) is the current signer. Every
   // Event it signs, Control or Data, then uses the same producer proof
   // (device-lifecycle.md section 8.2.2).
@@ -2355,7 +2349,7 @@ export async function openUser(
           .last()
           .click({ timeout: 10_000 })
           .catch(() => undefined);
-        // A pending Control Seal is reported as a transient publication
+        // A pending recovery policy Commit is reported as a transient publication
         // outcome and re-enables this button. With noWaitAfter, Playwright can
         // retry the blocked action; if the modal is still present the locator
         // handler runs again and resubmits the same confirmed key.

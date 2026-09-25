@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 // T-P0-05 joint harness smoke.
 // Contract: true inkson UI + true soland process create a realm and render messages.
 
@@ -21,153 +20,10 @@ import {
 } from "../../helpers/users";
 import { coauthBaseUrl } from "../../helpers/env";
 import { grantInviteConsentArkret } from "../../helpers/contact-api";
-import {
-  decodeEventIngressBody,
-  ingressEvents,
-  type IngressEvent,
-} from "../../helpers/event-ingress";
 
 test.describe.configure({ mode: "serial" });
 
 test.describe("joint-inkson smoke @fully-implemented", () => {
-  test("creates a Realm without probing its nonexistent actor frontier", async ({
-    browser,
-    request,
-  }) => {
-    test.setTimeout(360_000);
-    const flow = await openDpopUserPage(
-      browser,
-      request,
-      `joint-realm-genesis-${Date.now()}`,
-      { prepareMlsDevice: false },
-    );
-    if (!flow) {
-      assertJointStackNotRequired("joint-inkson Realm genesis browser login");
-      test.skip(
-        true,
-        "coauth DPoP session-grant login is required for joint UI",
-      );
-      return;
-    }
-
-    const frontierRequests: Array<{
-      body: Record<string, unknown>;
-      ordinal: number;
-    }> = [];
-    const eventBatches: Array<{
-      body: Record<string, unknown>;
-      ordinal: number;
-    }> = [];
-    let requestOrdinal = 0;
-    flow.page.page.on("request", (observed) => {
-      const ordinal = requestOrdinal++;
-      const url = new URL(observed.url());
-      if (
-        observed.method() === "QUERY" &&
-        url.pathname === "/_arkret/self/events/frontier"
-      ) {
-        try {
-          frontierRequests.push({
-            body: observed.postDataJSON() as Record<string, unknown>,
-            ordinal,
-          });
-        } catch {
-          // A malformed request is not a valid registered frontier preflight.
-        }
-      }
-      if (
-        observed.method() === "POST" &&
-        url.pathname === "/_arkret/self/events"
-      ) {
-        try {
-          const body = observed.postDataJSON() as Record<string, unknown>;
-          eventBatches.push({ body, ordinal });
-        } catch {
-          // Non-JSON traffic is irrelevant to the Event batch contract.
-        }
-      }
-    });
-
-    try {
-      const realmId = await flow.page.createRealm({
-        title: `joint Realm genesis ${Date.now()}`,
-        summary: "regression for local Realm genesis authoring",
-        discoverability: "listed",
-        joinRule: "invite",
-        historyAccess: "all_history_for_current_members",
-        mlsActivated: false,
-      });
-      const batchEvents = (body: Record<string, unknown>): IngressEvent[] =>
-        ingressEvents(
-          decodeEventIngressBody(body, { context: "Realm bootstrap ingress" }),
-        );
-      const bootstrapBatch = eventBatches.find(({ body }) => {
-        const events = batchEvents(body);
-        return events[0]?.kind === "ak.realm.create";
-      });
-      const bootstrap = bootstrapBatch && batchEvents(bootstrapBatch.body);
-      expect(bootstrap, "Inkson Realm bootstrap POST batch").toBeTruthy();
-      expect(bootstrap![0].realm_id).toBeUndefined();
-      expect(bootstrap![0].event_id?.replace(/^ak:event:/, "ak:realm:")).toBe(
-        realmId,
-      );
-      expect(bootstrap![0].actor_seq).toBe(0);
-      expect(bootstrap![0].prev_refs).toEqual([]);
-      // realm-and-space.md section 2.5: create is followed only by the closed
-      // bootstrap facet whitelist. v1 has no founding `ak.capability.grant`;
-      // the creator's root authority is the authority-root cell the create
-      // Event's registered reducer contract writes.
-      expect(
-        bootstrap!.some((event) => event.kind === "ak.capability.grant"),
-        "genesis batch carries no capability grant",
-      ).toBe(false);
-      // `artifacts/registry/contract-registry.json`
-      // `realm_bootstrap_registry.ordinary_collaboration.ordered_slots`: the
-      // slot after `ak.realm.create` is `ak.realm.profile` (join_rule is slot
-      // 3, after policy_bundle).
-      expect(bootstrap![1].kind).toBe("ak.realm.profile");
-      expect(bootstrap![1].actor_seq).toBe(1);
-      expect(bootstrap![1].prev_refs).toEqual([bootstrap![0].event_id]);
-
-      // realm-and-space.md section 2.7: the creator's membership comes only
-      // from the unit's LAST standalone `ak.member.state{membership="join"}`,
-      // which is the genesis write of that member cell and MUST carry
-      // `head_eq null`. `ak.realm.create` never writes membership implicitly.
-      const creatorMembership = bootstrap!.at(-1)!;
-      const creatorId = bootstrap![0].actor_id;
-      expect(creatorMembership.kind).toBe("ak.member.state");
-      expect(creatorMembership.actor_id).toEqual(creatorId);
-      expect(creatorMembership.payload).toMatchObject({
-        realm_id: realmId,
-        member_id: creatorId,
-        membership: "join",
-      });
-      expect(creatorMembership.preconditions).toEqual([
-        {
-          cell_id: `ak:cell:ak.component.member.state.v1:${createHash("sha256").update(canonicalJson([canonicalJson(creatorId)])).digest("base64url")}`,
-          predicate: { op: "head_eq", value: null },
-        },
-      ]);
-      expect(
-        bootstrap!.filter((event) => event.kind === "ak.member.state"),
-        "genesis carries exactly one membership write",
-      ).toHaveLength(1);
-
-      const preflightForNewRealm = frontierRequests.filter(
-        (observed) =>
-          observed.ordinal < bootstrapBatch!.ordinal &&
-          observed.body.realm_id === realmId &&
-          observed.body.actor_id !== undefined,
-      );
-      expect(
-        preflightForNewRealm,
-        "registered Realm genesis must be authored locally before submit",
-      ).toEqual([]);
-    } finally {
-      await flow.page.page.context().close();
-    }
-  });
-
   // Inkson consumes the accepted default-Strand projection. The Realm token
   // is never retyped into a Strand token; this smoke test resolves the exact
   // projected coordinate before submitting the message.
@@ -556,13 +412,6 @@ async function submitSignedEvent(
   payload: Record<string, unknown>,
 ): Promise<string> {
   const url = `${serverUrl}/_arkret/self/events`;
-  const frontier = await readRealmActorFrontier(
-    request,
-    session,
-    actorId,
-    serverUrl,
-    realmId,
-  );
   const envelope = signedEventEnvelope({
     actorId,
     realmId,
@@ -586,70 +435,6 @@ async function submitSignedEvent(
     throw new Error(`derived ${kind} Event is missing event_id`);
   }
   return eventId;
-}
-
-async function readRealmActorFrontier(
-  request: APIRequestContext,
-  session: DpopUserSession,
-  actorId: string,
-  serverUrl: string,
-  realmId: string,
-): Promise<{ nextActorSeq: number; frontierEventIds: string[] }> {
-  const actor = accountActorId(actorId, undefined, session.accountId.station_id);
-  const href = new URL("/_arkret/self/events/frontier", serverUrl).toString();
-  const response = await request.fetch(href, {
-    method: "QUERY",
-    headers: {
-      ...selfPathHeadersForDpopSession(session, "QUERY", href),
-      "content-type": "application/json",
-    },
-    data: canonicalJson({ actor_id: actor, realm_id: realmId }),
-  });
-  const text = await response.text();
-  expect(
-    response.ok(),
-    `read actor frontier returned ${response.status()}: ${text}`,
-  ).toBeTruthy();
-  const body = JSON.parse(text) as {
-    frontier?: {
-      actor_id?: unknown;
-      next_actor_seq?: unknown;
-      frontier_event_ids?: unknown;
-    };
-  };
-  const frontier = body.frontier;
-  expect(frontier?.actor_id, "actor frontier identity").toEqual(actor);
-  const nextActorSeq = frontier?.next_actor_seq;
-  expect(
-    typeof nextActorSeq === "number" &&
-      Number.isSafeInteger(nextActorSeq) &&
-      nextActorSeq >= 0,
-    `actor frontier sequence is invalid: ${text}`,
-  ).toBeTruthy();
-  if (
-    typeof nextActorSeq !== "number" ||
-    !Number.isSafeInteger(nextActorSeq) ||
-    nextActorSeq < 0
-  ) {
-    throw new Error(`actor frontier sequence is invalid: ${text}`);
-  }
-  const frontierEventIds = frontier?.frontier_event_ids;
-  expect(Array.isArray(frontierEventIds), "actor frontier event ids").toBe(
-    true,
-  );
-  if (!Array.isArray(frontierEventIds)) {
-    throw new Error(`actor frontier event ids are invalid: ${text}`);
-  }
-  expect(frontierEventIds.every((eventId) => typeof eventId === "string")).toBe(
-    true,
-  );
-  expect([...frontierEventIds].sort()).toEqual(frontierEventIds);
-  expect(new Set(frontierEventIds).size).toBe(frontierEventIds.length);
-  expect(frontierEventIds.length === 0).toBe(nextActorSeq === 0);
-  return {
-    nextActorSeq,
-    frontierEventIds: frontierEventIds as string[],
-  };
 }
 
 function canonicalHandle(handle: string, serverUrl: string): string {
