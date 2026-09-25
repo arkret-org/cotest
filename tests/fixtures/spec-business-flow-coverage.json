@@ -1114,7 +1114,7 @@
     {
       "id": "actor_private_event_submit",
       "title": "Caller-signed actor-private Events: push route, Agent action request/reject and draft proposal",
-      "status": "partially_implemented",
+      "status": "implemented",
       "surfaces": [
         "actor_private_events"
       ],
@@ -1133,6 +1133,24 @@
           "markers": [
             "pub struct ActorPrivateEventSubmitRequestBody",
             "fn actor_private_submit_outcome_is_closed_per_event_kind"
+          ]
+        },
+        {
+          "kind": "ordinary",
+          "path": "../soland/crates/storage-postgres/tests/actor_private_event_submit.rs",
+          "markers": [
+            "fn push_route_revision_cas_replays_exactly_and_refuses_stale_writes_with_zero_writes",
+            "fn action_request_and_rejection_are_create_once_and_the_target_state_is_terminal",
+            "fn draft_proposal_creates_one_available_pending_intent_without_a_realm_commit"
+          ]
+        },
+        {
+          "kind": "joint_e2e",
+          "path": "src/scenarios/protocol_payloads/events_keys_setup.rs",
+          "markers": [
+            "async fn actor_private_push_route_round_trip",
+            "\"/_arkret/self/actor-private-events\"",
+            "\"unsupported_event_kind\""
           ]
         }
       ]

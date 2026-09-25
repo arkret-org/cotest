@@ -75,6 +75,7 @@ async fn submit_adapter_event(
     let event_id = crate::harness::submitted_event_id(&submit)?;
     advance_read_cursor_to(server, &actor, &realm_id, &event_id.to_string()).await?;
     account_data_round_trip(server, &actor).await?;
+    actor_private_push_route_round_trip(server, &actor).await?;
     Ok((actor, realm_id, event_id.to_string()))
 }
 
@@ -162,6 +163,158 @@ async fn account_data_round_trip(server: &ArkretServer, actor: &TestActorClient)
     crate::harness::expect_api_error(actor.get(&path), StatusCode::NOT_FOUND, "not_found")
         .await
         .context("tombstoned account data read")?;
+    Ok(())
+}
+
+/// `ak.self.actor_private_events.command.submit.v1` with the owner-signed
+/// `ak.device.push_route` (actor-private-effects.md §2.1, §3.3): the route
+/// revision CAS applies once and returns `{event_kind, accepted_event_id,
+/// revision}`, a byte-identical retry returns the first outcome, a stale
+/// revision is `cas_conflict`, an owner on another Station is `param_invalid`,
+/// and the shared self Event submit refuses the kind as
+/// `unsupported_event_kind`. None of these writes produce a RealmCommit.
+async fn actor_private_push_route_round_trip(
+    server: &ArkretServer,
+    actor: &TestActorClient,
+) -> Result<()> {
+    const PATH: &str = "/_arkret/self/actor-private-events";
+    let principal = actor
+        .principal
+        .as_ref()
+        .context("event client carries its provisioned principal")?;
+    let pcr_realm_id = principal.pcr_realm_id.to_string();
+    let account_id = arkret_wire::AccountId::new(
+        arkret_identifiers::DidCoreId::new(crate::harness::actor_core_id(&actor.actor)?)?,
+        server.service_id().clone(),
+    );
+    let route = |account_id: &arkret_wire::AccountId, expected: u64, revoked: bool| {
+        if revoked {
+            json!({
+                "account_id": account_id,
+                "device_id": actor.device_id,
+                "push_route": "apns_main",
+                "revoked": true,
+                "expected_server_revision": expected,
+            })
+        } else {
+            json!({
+                "account_id": account_id,
+                "device_id": actor.device_id,
+                "push_route": "apns_main",
+                "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
+                "push_gateway_id": "ak:did_core:web:gateway.example",
+                "encryption_key": "base64url-public-key",
+                "capabilities": ["chat"],
+                "expected_server_revision": expected,
+            })
+        }
+    };
+    let create = actor
+        .author_event(
+            &pcr_realm_id,
+            "ak.device.push_route",
+            route(&account_id, 0, false),
+        )
+        .await?;
+    let body = arkret_wire::ActorPrivateEventSubmitRequestBody::new(create.clone());
+    let first = expect_json(actor.post(PATH).json(&body), StatusCode::OK)
+        .await
+        .context("push route create")?;
+    assert_eq!(
+        first,
+        json!({
+            "event_kind": "ak.device.push_route",
+            "accepted_event_id": create.event_id,
+            "revision": 1,
+        }),
+        "{first}"
+    );
+    let replay = expect_json(actor.post(PATH).json(&body), StatusCode::OK)
+        .await
+        .context("exact push route retry")?;
+    assert_eq!(replay, first, "exact retry must return the first outcome");
+
+    let stale = actor
+        .author_event(
+            &pcr_realm_id,
+            "ak.device.push_route",
+            route(&account_id, 0, true),
+        )
+        .await?;
+    crate::harness::expect_api_error(
+        actor
+            .post(PATH)
+            .json(&arkret_wire::ActorPrivateEventSubmitRequestBody::new(stale)),
+        StatusCode::CONFLICT,
+        "cas_conflict",
+    )
+    .await
+    .context("stale push route revision")?;
+
+    let foreign_owner = arkret_wire::AccountId::new(
+        account_id.principal_id.clone(),
+        arkret_identifiers::DidCoreId::new("ak:did_core:web:other-station.example")?,
+    );
+    let foreign = actor
+        .author_event(
+            &pcr_realm_id,
+            "ak.device.push_route",
+            route(&foreign_owner, 1, true),
+        )
+        .await?;
+    crate::harness::expect_api_error(
+        actor
+            .post(PATH)
+            .json(&arkret_wire::ActorPrivateEventSubmitRequestBody::new(
+                foreign,
+            )),
+        StatusCode::BAD_REQUEST,
+        "param_invalid",
+    )
+    .await
+    .context("push route owned by another Station")?;
+
+    let revoke = actor
+        .author_event(
+            &pcr_realm_id,
+            "ak.device.push_route",
+            route(&account_id, 1, true),
+        )
+        .await?;
+    let revoked = expect_json(
+        actor
+            .post(PATH)
+            .json(&arkret_wire::ActorPrivateEventSubmitRequestBody::new(
+                revoke.clone(),
+            )),
+        StatusCode::OK,
+    )
+    .await
+    .context("push route revoke")?;
+    assert_eq!(revoked["revision"], 2, "{revoked}");
+    assert_eq!(
+        revoked["accepted_event_id"],
+        json!(revoke.event_id),
+        "{revoked}"
+    );
+
+    // The shared self Event submit never admits an actor-private kind.
+    let shared = actor
+        .author_event(
+            &pcr_realm_id,
+            "ak.device.push_route",
+            route(&account_id, 2, false),
+        )
+        .await?;
+    crate::harness::expect_api_error(
+        actor
+            .post("/_arkret/self/events")
+            .json(&arkret_wire::EventAdmissionSubmission::new(shared)),
+        StatusCode::NOT_IMPLEMENTED,
+        "unsupported_event_kind",
+    )
+    .await
+    .context("actor-private kind on the shared self Event submit")?;
     Ok(())
 }
 
