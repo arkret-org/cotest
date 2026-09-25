@@ -303,12 +303,13 @@ pub use key_backup_hardening::{
     run_key_backup_passphrase_kdf_kat_vector, run_key_backup_unlock_proof_vector,
 };
 pub use keypackage_lifecycle::{
-    ALL_KEYPACKAGE_LIFECYCLE_VECTOR_IDS, VECTOR_ID_KEYPACKAGE_SELF_CLAIM_AUTHORIZATION_IDEMPOTENCY,
+    ALL_KEYPACKAGE_LIFECYCLE_VECTOR_IDS, KEYPACKAGE_LIFECYCLE_ENTRYPOINT,
+    VECTOR_ID_KEYPACKAGE_SELF_CLAIM_AUTHORIZATION_IDEMPOTENCY,
     run_keypackage_exhaustion_claim_limits_vector,
     run_keypackage_last_resort_affinity_and_optionality_vector,
     run_keypackage_last_resort_claim_and_reuse_vector,
     run_keypackage_last_resort_forced_rotation_vector, run_keypackage_lifecycle_fixture_suite,
-    run_keypackage_self_claim_authorization_idempotency_vector,
+    run_keypackage_lifecycle_suite, run_keypackage_self_claim_authorization_idempotency_vector,
     run_mls_welcome_keypackage_hash_vector,
 };
 pub use keypackage_write_transcripts::{

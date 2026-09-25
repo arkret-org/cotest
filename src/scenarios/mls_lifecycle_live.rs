@@ -19,7 +19,7 @@
 //!   into the activated scope is `mls_activation_required`.
 //! * Consume of the claim after the durable group state stays fail closed: the durable receipt's
 //!   `welcome_digest` and the Station's Welcome binding for consume are not defined by the
-//!   specification yet (spec-open 0650), and the Station refuses rather than guess.
+//!   specification yet (spec-open 0715), and the Station refuses rather than guess.
 //! * After a Station restart the claim ledger replays byte-identically and the ACKed Welcome is not
 //!   delivered again.
 //!

@@ -647,6 +647,23 @@
             "/_arkret/self/blob/upload",
             "/_arkret/self/blob/get"
           ]
+        },
+        {
+          "kind": "joint_e2e",
+          "path": "src/scenarios/mls_lifecycle_live.rs",
+          "markers": [
+            "/_arkret/self/keys/keypackages/upload",
+            "/_arkret/self/keys/keypackages/claim",
+            "/_arkret/self/keys/keypackages/consume"
+          ]
+        },
+        {
+          "kind": "conformance_fixture",
+          "path": "src/conformance/keypackage_lifecycle_cases.rs",
+          "markers": [
+            "ak.suite.crypto.keypackage_lifecycle.v1",
+            "fn run_keypackage_lifecycle_suite"
+          ]
         }
       ]
     },

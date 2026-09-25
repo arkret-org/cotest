@@ -30,15 +30,52 @@ pub const VECTOR_ID_KEYPACKAGE_LAST_RESORT_AFFINITY_AND_OPTIONALITY: &str =
 pub const VECTOR_ID_MLS_WELCOME_KEYPACKAGE_HASH: &str = "ak.vector.mls.welcome_keypackage_hash.v1";
 pub const VECTOR_ID_KEYPACKAGE_SELF_CLAIM_AUTHORIZATION_IDEMPOTENCY: &str =
     "ak.vector.keypackage.self_claim_authorization_idempotency.v1";
+pub const VECTOR_ID_KEYPACKAGE_PEER_CLAIM_ATOMIC_IDEMPOTENCY: &str =
+    "ak.vector.keypackage.peer_claim_atomic_idempotency.v1";
+pub const VECTOR_ID_KEYPACKAGE_PEER_CLAIM_DOUBLE_AUTHORIZATION_PRIVACY: &str =
+    "ak.vector.keypackage.peer_claim_double_authorization_privacy.v1";
+pub const VECTOR_ID_KEYPACKAGE_GROUP_CAPABILITY_FLOOR: &str =
+    "ak.vector.keypackage.group_capability_floor.v1";
+pub const VECTOR_ID_MLS_KEYPACKAGE_ACTOR_AND_CIPHERSUITE_CLOSURE: &str =
+    "ak.vector.mls.keypackage_actor_and_ciphersuite_closure.v1";
+pub const KEYPACKAGE_LIFECYCLE_ENTRYPOINT: &str = "ak.suite.crypto.keypackage_lifecycle.v1";
 
 pub const ALL_KEYPACKAGE_LIFECYCLE_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_KEYPACKAGE_EXHAUSTION_CLAIM_LIMITS,
     VECTOR_ID_KEYPACKAGE_LAST_RESORT_CLAIM_AND_REUSE,
     VECTOR_ID_KEYPACKAGE_LAST_RESORT_FORCED_ROTATION,
     VECTOR_ID_KEYPACKAGE_LAST_RESORT_AFFINITY_AND_OPTIONALITY,
+    VECTOR_ID_KEYPACKAGE_PEER_CLAIM_ATOMIC_IDEMPOTENCY,
+    VECTOR_ID_KEYPACKAGE_PEER_CLAIM_DOUBLE_AUTHORIZATION_PRIVACY,
     VECTOR_ID_KEYPACKAGE_SELF_CLAIM_AUTHORIZATION_IDEMPOTENCY,
     VECTOR_ID_MLS_WELCOME_KEYPACKAGE_HASH,
+    VECTOR_ID_KEYPACKAGE_GROUP_CAPABILITY_FLOOR,
+    VECTOR_ID_MLS_KEYPACKAGE_ACTOR_AND_CIPHERSUITE_CLOSURE,
 ];
+
+#[path = "keypackage_lifecycle_cases.rs"]
+mod cases;
+
+pub use cases::run_keypackage_lifecycle_suite;
+
+/// Executed assertions of one fixture case. A case result counts only checks
+/// that ran and held; the first failing one aborts the case.
+#[derive(Debug, Default)]
+pub(crate) struct Tally(usize);
+
+impl Tally {
+    pub(crate) fn check(&mut self, holds: bool, message: impl FnOnce() -> String) -> Result<()> {
+        if !holds {
+            bail!(message());
+        }
+        self.0 += 1;
+        Ok(())
+    }
+
+    pub(crate) fn count(&self) -> usize {
+        self.0
+    }
+}
 
 const KEYPACKAGE_LIFECYCLE_FIXTURE_FILE: &str = "keypackage-lifecycle-fixture.json";
 const KEY_PACKAGES_UPLOAD_OUTCOME_SCHEMA: &str =
@@ -164,12 +201,21 @@ fn validate_keypackage_lifecycle_fixture_metadata(
     Ok(())
 }
 
-fn case<'a>(fixture: &'a KeypackageLifecycleFixture, vector_id: &str) -> Result<&'a Value> {
+fn case_named<'a>(fixture: &'a KeypackageLifecycleFixture, name: &str) -> Result<&'a Value> {
     fixture
         .cases
         .iter()
-        .find(|case| case.get("vector_id").and_then(Value::as_str) == Some(vector_id))
-        .ok_or_else(|| anyhow!("keypackage lifecycle fixture missing case {vector_id}"))
+        .find(|case| case.get("name").and_then(Value::as_str) == Some(name))
+        .ok_or_else(|| anyhow!("keypackage lifecycle fixture missing case {name}"))
+}
+
+/// Run one named fixture case on its own, for the vector-level entry points.
+fn run_single_case(
+    name: &str,
+    run: impl FnOnce(&KeypackageLifecycleFixture, &Value, &mut Tally) -> Result<()>,
+) -> Result<()> {
+    let fixture = keypackage_fixture()?;
+    run(&fixture, case_named(&fixture, name)?, &mut Tally::default())
 }
 
 fn required_account_principal<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
@@ -573,9 +619,7 @@ fn rotate_last_resort(
     Ok(commits)
 }
 
-pub fn run_keypackage_exhaustion_claim_limits_vector() -> Result<()> {
-    let fixture = keypackage_fixture()?;
-    let vector = case(&fixture, VECTOR_ID_KEYPACKAGE_EXHAUSTION_CLAIM_LIMITS)?;
+fn exhaustion_claim_limits_case(vector: &Value, tally: &mut Tally) -> Result<()> {
     let min_available = vector
         .get("keypackage_min_available")
         .and_then(Value::as_u64)
@@ -584,17 +628,17 @@ pub fn run_keypackage_exhaustion_claim_limits_vector() -> Result<()> {
         .get("local_usable_count")
         .and_then(Value::as_u64)
         .ok_or_else(|| anyhow!("exhaustion vector missing local_usable_count"))?;
-    if local_usable_count >= min_available {
-        bail!("exhaustion vector must start below keypackage_min_available");
-    }
+    tally.check(local_usable_count < min_available, || {
+        "exhaustion vector must start below keypackage_min_available".to_owned()
+    })?;
     let refill_count = min_available - local_usable_count;
-    if vector
-        .pointer("/expected/bounded_refill_count")
-        .and_then(Value::as_u64)
-        != Some(refill_count)
-    {
-        bail!("local KeyPackage refill must equal the startup deficit");
-    }
+    tally.check(
+        !(vector
+            .pointer("/expected/bounded_refill_count")
+            .and_then(Value::as_u64)
+            != Some(refill_count)),
+        || "local KeyPackage refill must equal the startup deficit".to_owned(),
+    )?;
 
     let upload_value = json!({
         "accepted": refill_count,
@@ -611,17 +655,19 @@ pub fn run_keypackage_exhaustion_claim_limits_vector() -> Result<()> {
         .pointer("/claim_rate_limit/attempt")
         .and_then(Value::as_u64)
         .ok_or_else(|| anyhow!("exhaustion vector missing claim_rate_limit.attempt"))?;
-    if attempt <= limit {
-        bail!("rate-limit control must exceed the allowed claim count");
-    }
+    tally.check(attempt > limit, || {
+        "rate-limit control must exceed the allowed claim count".to_owned()
+    })?;
     let rate_limited = claim_failure_outcome_value();
     assert_claim_failed(&rate_limited)?;
-    if expected_str(vector, "rate_limit_audit_reason")? != "keypackage_claim_rate_limited" {
-        bail!("keypackage claim rate-limit audit reason drifted");
-    }
-    if expected_str(vector, "rate_limit_external_failure")? != "anti_enumeration" {
-        bail!("rate-limit external failure semantics drifted");
-    }
+    tally.check(
+        expected_str(vector, "rate_limit_audit_reason")? == "keypackage_claim_rate_limited",
+        || "keypackage claim rate-limit audit reason drifted".to_owned(),
+    )?;
+    tally.check(
+        expected_str(vector, "rate_limit_external_failure")? == "anti_enumeration",
+        || "rate-limit external failure semantics drifted".to_owned(),
+    )?;
 
     let principal = core_did(required_account_principal(vector, "target_account_id")?)?;
     let signer = verification_method(
@@ -647,21 +693,22 @@ pub fn run_keypackage_exhaustion_claim_limits_vector() -> Result<()> {
         &realm,
         parse_time(required_str(expired, "consume_at")?)?,
     )?;
-    if package.state.as_str() != expected_str(vector, "expired_status")? {
-        bail!("expired claimed keypackage did not become revoked");
-    }
-    if consume
-        != MiniConsumeDecision::Rejected(
-            expected_str(vector, "expired_external_reason")?.to_owned(),
-        )
-    {
-        bail!("expired keypackage consume did not reject with expected reason");
-    }
-    validate_wire_state_cases(vector)?;
+    tally.check(
+        package.state.as_str() == expected_str(vector, "expired_status")?,
+        || "expired claimed keypackage did not become revoked".to_owned(),
+    )?;
+    tally.check(
+        !(consume
+            != MiniConsumeDecision::Rejected(
+                expected_str(vector, "expired_external_reason")?.to_owned(),
+            )),
+        || "expired keypackage consume did not reject with expected reason".to_owned(),
+    )?;
+    validate_wire_state_cases(vector, tally)?;
     Ok(())
 }
 
-fn validate_wire_state_cases(vector: &Value) -> Result<()> {
+fn validate_wire_state_cases(vector: &Value, tally: &mut Tally) -> Result<()> {
     let cases = vector
         .get("wire_state_cases")
         .and_then(Value::as_array)
@@ -670,43 +717,47 @@ fn validate_wire_state_cases(vector: &Value) -> Result<()> {
     for case in cases {
         let from = required_str(case, "from")?;
         let to = required_str(case, "to")?;
-        if !seen.insert((from, to)) {
-            bail!("duplicate keypackage wire transition {from}->{to}");
-        }
-        if from != "published" {
-            bail!("wire-state fixture currently requires a published source state");
-        }
-        if to == "revoked" && MiniKeypackageState::Revoked.as_str() != to {
-            bail!("mini lifecycle model does not expose the revoked wire state");
-        }
+        tally.check(seen.insert((from, to)), || {
+            format!("duplicate keypackage wire transition {from}->{to}")
+        })?;
+        tally.check(from == "published", || {
+            "wire-state fixture currently requires a published source state".to_owned()
+        })?;
+        tally.check(
+            !(to == "revoked" && MiniKeypackageState::Revoked.as_str() != to),
+            || "mini lifecycle model does not expose the revoked wire state".to_owned(),
+        )?;
         // KeyPackage lifecycle state is no longer an Event payload; the closed
         // wire state set (device-lifecycle.md 9.1) is the SDK's
         // MlsKeyPackageState, which carries it on every KeyPackage record.
         let accepted = serde_json::from_value::<MlsKeyPackageState>(json!(to)).is_ok();
         let expected = required_str(case, "expected")?;
-        if accepted != (expected == "accepted") {
-            bail!(
+        tally.check(!(accepted != (expected == "accepted")), || {
+            format!(
                 "keypackage wire transition {from}->{to} produced {}, expected {expected}",
                 if accepted {
                     "accepted"
                 } else {
                     "schema_violation"
                 },
-            );
-        }
+            )
+        })?;
     }
-    if !seen.contains(&("published", "revoked")) || !seen.contains(&("published", "expired")) {
-        bail!("keypackage wire-state cases must cover revoked acceptance and expired rejection");
-    }
+    tally.check(
+        !(!seen.contains(&("published", "revoked")) || !seen.contains(&("published", "expired"))),
+        || {
+            "keypackage wire-state cases must cover revoked acceptance and expired rejection"
+                .to_owned()
+        },
+    )?;
     Ok(())
 }
 
-pub fn run_keypackage_last_resort_claim_and_reuse_vector() -> Result<()> {
-    let fixture = keypackage_fixture()?;
-    let vector = case(&fixture, VECTOR_ID_KEYPACKAGE_LAST_RESORT_CLAIM_AND_REUSE)?;
-    if required_str(vector, "feature")? != LAST_RESORT_FEATURE {
-        bail!("last-resort feature id drifted");
-    }
+fn last_resort_claim_and_reuse_case(vector: &Value, tally: &mut Tally) -> Result<()> {
+    tally.check(
+        required_str(vector, "feature")? == LAST_RESORT_FEATURE,
+        || "last-resort feature id drifted".to_owned(),
+    )?;
     let principal = core_did(required_account_principal(vector, "target_account_id")?)?;
     let signer = verification_method(
         "did:webvh:z6mkfixture:alice.example#ak:device:0196419b-0000-7000-8000-000000000001",
@@ -742,11 +793,12 @@ pub fn run_keypackage_last_resort_claim_and_reuse_vector() -> Result<()> {
         true,
         false,
     )?)?;
-    if expected_bool(vector, "normal_preferred_when_available")?
-        && normal_claim.claims[0].keypackage_ref != required_str(vector, "normal_keypackage_ref")?
-    {
-        bail!("single-use package was not preferred while available");
-    }
+    tally.check(
+        !(expected_bool(vector, "normal_preferred_when_available")?
+            && normal_claim.claims[0].keypackage_ref
+                != required_str(vector, "normal_keypackage_ref")?),
+        || "single-use package was not preferred while available".to_owned(),
+    )?;
 
     let claim_ids = vector
         .get("last_resort_claim_ids")
@@ -762,12 +814,12 @@ pub fn run_keypackage_last_resort_claim_and_reuse_vector() -> Result<()> {
         true,
         true,
     )?)?;
-    if last_resort_claim.claims[0].keypackage_ref
-        != required_str(vector, "last_resort_keypackage_ref")?
-        || last_resort_claim.claims[0].last_resort != Some(true)
-    {
-        bail!("empty single-use pool did not return last_resort=true claim record");
-    }
+    tally.check(
+        !(last_resort_claim.claims[0].keypackage_ref
+            != required_str(vector, "last_resort_keypackage_ref")?
+            || last_resort_claim.claims[0].last_resort != Some(true)),
+        || "empty single-use pool did not return last_resort=true claim record".to_owned(),
+    )?;
 
     let last_resort = pool
         .iter_mut()
@@ -778,38 +830,40 @@ pub fn run_keypackage_last_resort_claim_and_reuse_vector() -> Result<()> {
             .as_str()
             .ok_or_else(|| anyhow!("last-resort claim id must be string"))?;
         let consume = last_resort.consume(claim_id, &realm, expires_at)?;
-        if consume != MiniConsumeDecision::Consumed(last_resort.keypackage_ref.clone()) {
-            bail!("last-resort consume did not return idempotent success");
-        }
+        tally.check(
+            consume == MiniConsumeDecision::Consumed(last_resort.keypackage_ref.clone()),
+            || "last-resort consume did not return idempotent success".to_owned(),
+        )?;
     }
-    if last_resort.state.as_str() != expected_str(vector, "state_after_consume")? {
-        bail!("last-resort consume changed package state");
-    }
-    if expected_bool(vector, "last_resort_consume_idempotent")?
-        && last_resort
-            .audit_records
-            .iter()
-            .any(|record| !record.last_resort)
-    {
-        bail!("last-resort audit record lost last_resort=true marker");
-    }
-    if last_resort.audit_records.len() as u64 != expected_u64(vector, "audit_records")? {
-        bail!("last-resort consume audit record count drifted");
-    }
-    if expected_str(vector, "forbidden_reason")?
-        != arkret_wire::ErrorCode::KEYPACKAGE_ALREADY_CONSUMED
-    {
-        bail!("last-resort forbidden reason constant drifted");
-    }
+    tally.check(
+        last_resort.state.as_str() == expected_str(vector, "state_after_consume")?,
+        || "last-resort consume changed package state".to_owned(),
+    )?;
+    tally.check(
+        !(expected_bool(vector, "last_resort_consume_idempotent")?
+            && last_resort
+                .audit_records
+                .iter()
+                .any(|record| !record.last_resort)),
+        || "last-resort audit record lost last_resort=true marker".to_owned(),
+    )?;
+    tally.check(
+        last_resort.audit_records.len() as u64 == expected_u64(vector, "audit_records")?,
+        || "last-resort consume audit record count drifted".to_owned(),
+    )?;
+    tally.check(
+        !(expected_str(vector, "forbidden_reason")?
+            != arkret_wire::ErrorCode::KEYPACKAGE_ALREADY_CONSUMED),
+        || "last-resort forbidden reason constant drifted".to_owned(),
+    )?;
     Ok(())
 }
 
-pub fn run_keypackage_last_resort_forced_rotation_vector() -> Result<()> {
-    let fixture = keypackage_fixture()?;
-    let vector = case(&fixture, VECTOR_ID_KEYPACKAGE_LAST_RESORT_FORCED_ROTATION)?;
-    if required_str(vector, "feature")? != LAST_RESORT_FEATURE {
-        bail!("last-resort feature id drifted");
-    }
+fn last_resort_forced_rotation_case(vector: &Value, tally: &mut Tally) -> Result<()> {
+    tally.check(
+        required_str(vector, "feature")? == LAST_RESORT_FEATURE,
+        || "last-resort feature id drifted".to_owned(),
+    )?;
     let principal = core_did("ak:did_core:web:alice.example")?;
     let signer = verification_method(
         "did:web:alice.example#ak:device:0196419b-0000-7000-8000-000000000001",
@@ -851,17 +905,19 @@ pub fn run_keypackage_last_resort_forced_rotation_vector() -> Result<()> {
                 == required_str(vector, "old_last_resort_keypackage_ref").unwrap()
         })
         .ok_or_else(|| anyhow!("old package missing after rotation"))?;
-    if old.state.as_str() != expected_str(vector, "old_state")? {
-        bail!("old last-resort package was not revoked after rotation");
-    }
-    if commits.len() as u64 != expected_u64(vector, "self_update_commits")? {
-        bail!("rotation did not emit one MLS self-update per joined group");
-    }
-    if expected_str(vector, "rotation_reason")?
-        != arkret_wire::ReasonCode::LAST_RESORT_ROTATION_REQUIRED
-    {
-        bail!("last-resort rotation reason drifted");
-    }
+    tally.check(
+        old.state.as_str() == expected_str(vector, "old_state")?,
+        || "old last-resort package was not revoked after rotation".to_owned(),
+    )?;
+    tally.check(
+        commits.len() as u64 == expected_u64(vector, "self_update_commits")?,
+        || "rotation did not emit one MLS self-update per joined group".to_owned(),
+    )?;
+    tally.check(
+        !(expected_str(vector, "rotation_reason")?
+            != arkret_wire::ReasonCode::LAST_RESORT_ROTATION_REQUIRED),
+        || "last-resort rotation reason drifted".to_owned(),
+    )?;
 
     let claim = parse_claim_outcome(claim_from_pool(
         &mut pool,
@@ -870,11 +926,12 @@ pub fn run_keypackage_last_resort_forced_rotation_vector() -> Result<()> {
         true,
         true,
     )?)?;
-    if expected_bool(vector, "old_not_distributed_after_rotation")?
-        && claim.claims[0].keypackage_ref != required_str(vector, "new_last_resort_keypackage_ref")?
-    {
-        bail!("rotated old last-resort package was still distributed");
-    }
+    tally.check(
+        !(expected_bool(vector, "old_not_distributed_after_rotation")?
+            && claim.claims[0].keypackage_ref
+                != required_str(vector, "new_last_resort_keypackage_ref")?),
+        || "rotated old last-resort package was still distributed".to_owned(),
+    )?;
     let new = pool
         .iter()
         .find(|package| {
@@ -882,10 +939,11 @@ pub fn run_keypackage_last_resort_forced_rotation_vector() -> Result<()> {
                 == required_str(vector, "new_last_resort_keypackage_ref").unwrap()
         })
         .ok_or_else(|| anyhow!("new package missing after rotation"))?;
-    if new.state.as_str() != expected_str(vector, "new_state")? {
-        bail!("replacement last-resort package is not published");
-    }
-    run_last_resort_expiry_security_case(&fixture)
+    tally.check(
+        new.state.as_str() == expected_str(vector, "new_state")?,
+        || "replacement last-resort package is not published".to_owned(),
+    )?;
+    Ok(())
 }
 
 /// Execute the Station half of
@@ -901,17 +959,21 @@ pub fn run_keypackage_last_resort_forced_rotation_vector() -> Result<()> {
 /// claim: expiry MUST block a new claim, expiry MUST NOT reach backwards into a
 /// captured Welcome, and a later secret update MUST NOT restore confidentiality
 /// that was already lost.
-fn run_last_resort_expiry_security_case(fixture: &KeypackageLifecycleFixture) -> Result<()> {
+fn last_resort_expiry_security_case(
+    fixture: &KeypackageLifecycleFixture,
+    lifecycle: &Value,
+    tally: &mut Tally,
+) -> Result<()> {
     let evidence = &fixture.expiry_security_case;
-    if evidence.runner != EXPIRY_SECURITY_EVIDENCE_RUNNER {
-        bail!(
+    tally.check(evidence.runner == EXPIRY_SECURITY_EVIDENCE_RUNNER, || {
+        format!(
             "expiry security evidence runner drifted: {}",
             evidence.runner
-        );
-    }
-    if evidence.evidence_scope.trim().is_empty() {
-        bail!("expiry security evidence must state what it does and does not cover");
-    }
+        )
+    })?;
+    tally.check(!(evidence.evidence_scope.trim().is_empty()), || {
+        "expiry security evidence must state what it does and does not cover".to_owned()
+    })?;
     for (field, value, exact_len) in [
         (
             "recipient_private_key_hex",
@@ -932,9 +994,9 @@ fn run_last_resort_expiry_security_case(fixture: &KeypackageLifecycleFixture) ->
         ),
     ] {
         let bytes = hex::decode(value).map_err(|error| anyhow!("{field} is not hex: {error}"))?;
-        if bytes.is_empty() {
-            bail!("{field} carries no material");
-        }
+        tally.check(!(bytes.is_empty()), || {
+            format!("{field} carries no material")
+        })?;
         if let Some(len) = exact_len
             && bytes.len() != len
         {
@@ -945,68 +1007,60 @@ fn run_last_resort_expiry_security_case(fixture: &KeypackageLifecycleFixture) ->
     // hides. Without this the fixture could carry the plaintext twice and the
     // registered runner's "recovers the captured GroupSecrets" result would be
     // vacuous.
-    if hex::decode(&evidence.captured_ciphertext_hex)?.len()
-        <= hex::decode(&evidence.group_secrets_hex)?.len()
-    {
-        bail!("captured ciphertext is not an AEAD expansion of the GroupSecrets plaintext");
-    }
-    if !(evidence.created_day <= evidence.welcome_day
+    tally.check(
+        !(hex::decode(&evidence.captured_ciphertext_hex)?.len()
+            <= hex::decode(&evidence.group_secrets_hex)?.len()),
+        || "captured ciphertext is not an AEAD expansion of the GroupSecrets plaintext".to_owned(),
+    )?;
+    tally.check(!(!(evidence.created_day <= evidence.welcome_day
         && evidence.welcome_day < evidence.expires_day
-        && evidence.expires_day < evidence.compromise_day)
-    {
-        bail!(
-            "expiry security timeline must capture the Welcome before expiry and compromise it after"
-        );
-    }
+        && evidence.expires_day < evidence.compromise_day)), || "expiry security timeline must capture the Welcome before expiry and compromise it after".to_owned())?;
 
-    let lifecycle = fixture
-        .cases
-        .iter()
-        .find(|case| case.get("name").and_then(Value::as_str) == Some(EXPIRY_SECURITY_CASE_NAME))
-        .ok_or_else(|| {
-            anyhow!("keypackage lifecycle fixture missing case {EXPIRY_SECURITY_CASE_NAME}")
-        })?;
-    if required_str(lifecycle, "kind")? != EXPIRY_SECURITY_CASE_KIND {
-        bail!("{EXPIRY_SECURITY_CASE_NAME} is no longer a last-resort expiry security case");
-    }
-    if required_str(lifecycle, "vector_id")? != VECTOR_ID_KEYPACKAGE_LAST_RESORT_FORCED_ROTATION {
-        bail!("{EXPIRY_SECURITY_CASE_NAME} moved to another vector");
-    }
+    tally.check(
+        required_str(lifecycle, "kind")? == EXPIRY_SECURITY_CASE_KIND,
+        || format!("{EXPIRY_SECURITY_CASE_NAME} is no longer a last-resort expiry security case"),
+    )?;
+    tally.check(
+        required_str(lifecycle, "vector_id")? == VECTOR_ID_KEYPACKAGE_LAST_RESORT_FORCED_ROTATION,
+        || format!("{EXPIRY_SECURITY_CASE_NAME} moved to another vector"),
+    )?;
     for (field, declared) in [
         ("created_day", evidence.created_day),
         ("welcome_day", evidence.welcome_day),
         ("expires_day", evidence.expires_day),
         ("compromise_day", evidence.compromise_day),
     ] {
-        if required_u64(lifecycle, field)? != declared {
-            bail!("{EXPIRY_SECURITY_CASE_NAME} and its crypto evidence disagree about {field}");
-        }
+        tally.check(required_u64(lifecycle, field)? == declared, || {
+            format!("{EXPIRY_SECURITY_CASE_NAME} and its crypto evidence disagree about {field}")
+        })?;
     }
-    if (evidence.expected.new_claim_at_or_after_expiry == "reject")
-        == expected_bool(lifecycle, "new_claim_returns_old_package")?
-    {
-        bail!("expiry claim verdict disagrees with its crypto evidence block");
-    }
-    if evidence
-        .expected
-        .matching_private_key_recovers_captured_group_secrets
-        != expected_bool(
-            lifecycle,
-            "captured_welcome_decryptable_with_matching_private_key",
-        )?
-    {
-        bail!("captured-Welcome recovery verdict disagrees with its crypto evidence block");
-    }
-    if evidence.expected.expiry_revokes_historical_decryption
-        || evidence.expected.historical_confidentiality_restored
-    {
-        bail!(
+    tally.check(
+        !((evidence.expected.new_claim_at_or_after_expiry == "reject")
+            == expected_bool(lifecycle, "new_claim_returns_old_package")?),
+        || "expiry claim verdict disagrees with its crypto evidence block".to_owned(),
+    )?;
+    tally.check(
+        !(evidence
+            .expected
+            .matching_private_key_recovers_captured_group_secrets
+            != expected_bool(
+                lifecycle,
+                "captured_welcome_decryptable_with_matching_private_key",
+            )?),
+        || "captured-Welcome recovery verdict disagrees with its crypto evidence block".to_owned(),
+    )?;
+    tally.check(
+        !(evidence.expected.expiry_revokes_historical_decryption
+            || evidence.expected.historical_confidentiality_restored),
+        || {
             "expiry security evidence claims retrospective secrecy the protocol does not provide"
-        );
-    }
-    if evidence.expected.future_epoch_recovery.trim().is_empty() {
-        bail!("expiry security evidence must state the future-epoch condition");
-    }
+                .to_owned()
+        },
+    )?;
+    tally.check(
+        !(evidence.expected.future_epoch_recovery.trim().is_empty()),
+        || "expiry security evidence must state the future-epoch condition".to_owned(),
+    )?;
 
     // The half cotest owns: at `compromise_day` the package is past its own
     // `expires_day`, so it leaves the distributable pool with the registered
@@ -1033,9 +1087,9 @@ fn run_last_resort_expiry_security_case(fixture: &KeypackageLifecycleFixture) ->
         true,
         true,
     )?)?;
-    if welcome_claim.claims.len() != 1 {
-        bail!("last-resort package was not claimable before its own expiry");
-    }
+    tally.check(welcome_claim.claims.len() == 1, || {
+        "last-resort package was not claimable before its own expiry".to_owned()
+    })?;
     // The Welcome the attacker captures is sealed against this consumption, at
     // `welcome_day` — well before expiry. Claiming alone would leave the audit
     // trail empty and make the invariant below vacuous.
@@ -1050,14 +1104,15 @@ fn run_last_resort_expiry_security_case(fixture: &KeypackageLifecycleFixture) ->
     let reason = pool[0]
         .expire(day(evidence.compromise_day)?)
         .ok_or_else(|| anyhow!("package past its expires_day did not expire"))?;
-    if reason != arkret_wire::ReasonCode::KEYPACKAGE_EXPIRED
-        || reason != expected_str(lifecycle, "revocation_reason")?
-    {
-        bail!("expired last-resort package did not carry the registered expiry reason");
-    }
-    if pool[0].state.as_str() != expected_str(lifecycle, "state_after_expiry")? {
-        bail!("expired last-resort package did not reach the declared state");
-    }
+    tally.check(
+        !(reason != arkret_wire::ReasonCode::KEYPACKAGE_EXPIRED
+            || reason != expected_str(lifecycle, "revocation_reason")?),
+        || "expired last-resort package did not carry the registered expiry reason".to_owned(),
+    )?;
+    tally.check(
+        pool[0].state.as_str() == expected_str(lifecycle, "state_after_expiry")?,
+        || "expired last-resort package did not reach the declared state".to_owned(),
+    )?;
     assert_claim_failed(&claim_from_pool(
         &mut pool,
         &realm,
@@ -1068,21 +1123,17 @@ fn run_last_resort_expiry_security_case(fixture: &KeypackageLifecycleFixture) ->
     // Expiry revoked the distributable package without touching the audit
     // record the pre-expiry claim produced: the captured Welcome keeps whatever
     // confidentiality it already had, no more and no less.
-    if pool[0].audit_records.len() != 1 {
-        bail!("expiry rewrote the pre-expiry claim audit history");
-    }
+    tally.check(pool[0].audit_records.len() == 1, || {
+        "expiry rewrote the pre-expiry claim audit history".to_owned()
+    })?;
     Ok(())
 }
 
-pub fn run_keypackage_last_resort_affinity_and_optionality_vector() -> Result<()> {
-    let fixture = keypackage_fixture()?;
-    let vector = case(
-        &fixture,
-        VECTOR_ID_KEYPACKAGE_LAST_RESORT_AFFINITY_AND_OPTIONALITY,
+fn last_resort_affinity_and_optionality_case(vector: &Value, tally: &mut Tally) -> Result<()> {
+    tally.check(
+        required_str(vector, "feature")? == LAST_RESORT_FEATURE,
+        || "last-resort feature id drifted".to_owned(),
     )?;
-    if required_str(vector, "feature")? != LAST_RESORT_FEATURE {
-        bail!("last-resort feature id drifted");
-    }
     let principal = core_did("ak:did_core:web:alice.example")?;
     let signer = verification_method(
         "did:web:alice.example#ak:device:0196419b-0000-7000-8000-000000000001",
@@ -1105,11 +1156,13 @@ pub fn run_keypackage_last_resort_affinity_and_optionality_vector() -> Result<()
         &r2,
         expires_at,
     )?;
-    if cross_realm
-        != MiniConsumeDecision::Rejected(expected_str(vector, "cross_realm_reason")?.to_owned())
-    {
-        bail!("cross-Realm last-resort reuse did not fail with affinity violation");
-    }
+    tally.check(
+        !(cross_realm
+            != MiniConsumeDecision::Rejected(
+                expected_str(vector, "cross_realm_reason")?.to_owned(),
+            )),
+        || "cross-Realm last-resort reuse did not fail with affinity violation".to_owned(),
+    )?;
 
     let unsupported = claim_from_pool(
         &mut [],
@@ -1139,16 +1192,19 @@ pub fn run_keypackage_last_resort_affinity_and_optionality_vector() -> Result<()
     )?;
     assert_claim_failed(&missing_r2)?;
     let _internal_missing_reason = expected_str(vector, "no_cross_realm_fallback_reason")?;
-    if !expected_bool(vector, "claim_realm_matches_intended_realm")? {
-        bail!("claim Realm affinity requirement drifted");
-    }
+    tally.check(
+        expected_bool(vector, "claim_realm_matches_intended_realm")?,
+        || "claim Realm affinity requirement drifted".to_owned(),
+    )?;
     Ok(())
 }
 
 /// Welcome is a recipient-private signed delivery, never an Event payload.
-pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
-    let fixture = keypackage_fixture()?;
-    let vector = case(&fixture, VECTOR_ID_MLS_WELCOME_KEYPACKAGE_HASH)?;
+fn welcome_keypackage_hash_case(
+    fixture: &KeypackageLifecycleFixture,
+    vector: &Value,
+    tally: &mut Tally,
+) -> Result<()> {
     let claim_id = required_str(vector, "claim_id")?;
     let digest = required_str(vector, "keypackage_digest")?;
     let mismatched_digest = required_str(vector, "mismatched_keypackage_digest")?;
@@ -1162,9 +1218,10 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
     schema_valid(MLS_WELCOME_DELIVERY_SCHEMA, &delivery_value)?;
     let delivery: MlsWelcomeDelivery = serde_json::from_value(delivery_value.clone())?;
     delivery.validate_shape()?;
-    if delivery.keypackage_claim_ref.as_str() != required_str(vector, "keypackage_claim_ref")? {
-        bail!("Welcome delivery does not bind the fixture's exact claim reference");
-    }
+    tally.check(
+        delivery.keypackage_claim_ref.as_str() == required_str(vector, "keypackage_claim_ref")?,
+        || "Welcome delivery does not bind the fixture's exact claim reference".to_owned(),
+    )?;
 
     let claim_record = claim_record_value(ClaimRecordInput {
         claim_id,
@@ -1186,19 +1243,22 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         "sha256:{}",
         hex::encode(sha2::Sha256::digest(&keypackage_bytes))
     );
-    if recomputed != digest || recomputed == mismatched_digest {
-        bail!("fixture KeyPackage digest does not match claimed bytes");
-    }
-    if claim.claim_id != claim_id || claim.keypackage_ref != required_str(vector, "keypackage_ref")?
-    {
-        bail!("Welcome claim ledger reference is inconsistent");
-    }
+    tally.check(
+        !(recomputed != digest || recomputed == mismatched_digest),
+        || "fixture KeyPackage digest does not match claimed bytes".to_owned(),
+    )?;
+    tally.check(
+        !(claim.claim_id != claim_id
+            || claim.keypackage_ref != required_str(vector, "keypackage_ref")?),
+        || "Welcome claim ledger reference is inconsistent".to_owned(),
+    )?;
 
     let queue_value = json!({"delivery_kind": "mls_welcome", "mls_welcome": delivery_value});
     let queued: RecipientDelivery = serde_json::from_value(queue_value.clone())?;
-    if !matches!(queued, RecipientDelivery::MlsWelcome { mls_welcome } if mls_welcome == delivery) {
-        bail!("recipient delivery queue changed the signed Welcome object");
-    }
+    tally.check(
+        matches!(queued, RecipientDelivery::MlsWelcome { mls_welcome } if mls_welcome == delivery),
+        || "recipient delivery queue changed the signed Welcome object".to_owned(),
+    )?;
     for retired_field in [
         "claim_ref",
         "claim_envelope",
@@ -1209,9 +1269,10 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         let mut invalid = delivery_value.clone();
         invalid[retired_field] = json!("retired");
         schema_invalid(MLS_WELCOME_DELIVERY_SCHEMA, &invalid)?;
-        if serde_json::from_value::<MlsWelcomeDelivery>(invalid).is_ok() {
-            bail!("retired Welcome member was accepted: {retired_field}");
-        }
+        tally.check(
+            !(serde_json::from_value::<MlsWelcomeDelivery>(invalid).is_ok()),
+            || format!("retired Welcome member was accepted: {retired_field}"),
+        )?;
     }
     for invalid_ciphertext in ["AA==", "AB", "A"] {
         let mut invalid = delivery_value.clone();
@@ -1223,9 +1284,9 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
             Ok(delivery) => delivery.validate_shape().is_err(),
             Err(_) => true,
         };
-        if !rejected {
-            bail!("noncanonical Welcome ciphertext was accepted: {invalid_ciphertext}");
-        }
+        tally.check(rejected, || {
+            format!("noncanonical Welcome ciphertext was accepted: {invalid_ciphertext}")
+        })?;
     }
     let mut wrong_context = delivery_value.clone();
     wrong_context["producer_proof"]["context"] = json!("ak.realm_commit_signature.v1");
@@ -1238,36 +1299,36 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         .expect_err("cross-Realm scope must be rejected");
     let mut wrong_branch = queue_value;
     wrong_branch["delivery_kind"] = json!("device_message");
-    if serde_json::from_value::<RecipientDelivery>(wrong_branch).is_ok() {
-        bail!("Welcome parsed as a DeviceMessage queue branch");
-    }
-    if !expected_bool(vector, "reject_before_decrypt")? {
-        bail!("Welcome vector must reject mismatched claim ledger before decrypt");
-    }
+    tally.check(
+        !(serde_json::from_value::<RecipientDelivery>(wrong_branch).is_ok()),
+        || "Welcome parsed as a DeviceMessage queue branch".to_owned(),
+    )?;
+    tally.check(expected_bool(vector, "reject_before_decrypt")?, || {
+        "Welcome vector must reject mismatched claim ledger before decrypt".to_owned()
+    })?;
     Ok(())
 }
 
 /// Exact runner for `ak.vector.keypackage.self_claim_authorization_idempotency.v1`.
-pub fn run_keypackage_self_claim_authorization_idempotency_vector() -> Result<()> {
-    let fixture = keypackage_fixture()?;
-    validate_unsigned_selector_transcripts(&fixture)?;
-    let vector = case(
-        &fixture,
-        VECTOR_ID_KEYPACKAGE_SELF_CLAIM_AUTHORIZATION_IDEMPOTENCY,
-    )?;
+fn self_claim_authorization_idempotency_case(
+    fixture: &KeypackageLifecycleFixture,
+    vector: &Value,
+    tally: &mut Tally,
+) -> Result<()> {
+    validate_unsigned_selector_transcripts(fixture, tally)?;
     let requester_device_id = required_str(vector, "requester_device_id")?;
     let device_authorization_event_id = required_str(vector, "device_authorization_event_id")?;
     let expected_verification_method =
         required_str(vector, "requester_verification_method")?.to_owned();
     let expected_verification_method_typed = verification_method(&expected_verification_method)?;
-    if expected_verification_method_typed
-        .as_str()
-        .rsplit_once('#')
-        .map(|(_, fragment)| fragment)
-        != Some(requester_device_id)
-    {
-        bail!("self-claim verification method does not name requester_device_id");
-    }
+    tally.check(
+        !(expected_verification_method_typed
+            .as_str()
+            .rsplit_once('#')
+            .map(|(_, fragment)| fragment)
+            != Some(requester_device_id)),
+        || "self-claim verification method does not name requester_device_id".to_owned(),
+    )?;
     device(requester_device_id)?;
     arkret_wire::EventId::new(device_authorization_event_id.to_owned())?;
     require_model_generation_ref(vector, "model_generation_ref")?;
@@ -1294,25 +1355,26 @@ pub fn run_keypackage_self_claim_authorization_idempotency_vector() -> Result<()
     else {
         bail!("self-claim fixture must use the closed device authorization branch");
     };
-    if verification_method != &expected_verification_method_typed
-        || authorized_device_id.as_str() != requester_device_id
-        || authorized_event_id.as_str() != device_authorization_event_id
-    {
-        bail!("self-claim authorization is not bound to the accepted device selector");
-    }
-    if serde_json::to_value(typed.unsigned_request())? != vector["unsigned_request"]
-        || serde_json::to_value(&typed.service_binding)? != vector["service_binding"]
-    {
-        bail!("unified claim request drifted from its unsigned request or service binding");
-    }
+    tally.check(
+        !(verification_method != &expected_verification_method_typed
+            || authorized_device_id.as_str() != requester_device_id
+            || authorized_event_id.as_str() != device_authorization_event_id),
+        || "self-claim authorization is not bound to the accepted device selector".to_owned(),
+    )?;
+    tally.check(
+        !(serde_json::to_value(typed.unsigned_request())? != vector["unsigned_request"]
+            || serde_json::to_value(&typed.service_binding)? != vector["service_binding"]),
+        || "unified claim request drifted from its unsigned request or service binding".to_owned(),
+    )?;
     let binding = arkret_models_crypto::keypackage_claim_authorization_signing_bytes(
         &typed.unsigned_request(),
         &typed.service_binding,
         &typed.requester_authorization,
     )?;
-    if !binding.starts_with(b"ak.keypackage-claim-authorization-v1\n") {
-        bail!("self-claim authorization uses the wrong signing domain");
-    }
+    tally.check(
+        binding.starts_with(b"ak.keypackage-claim-authorization-v1\n"),
+        || "self-claim authorization uses the wrong signing domain".to_owned(),
+    )?;
     let request_digest = arkret_canonical::canonical_sha256(&serde_json::to_value(&typed)?)?;
 
     let identity = (
@@ -1326,26 +1388,26 @@ pub fn run_keypackage_self_claim_authorization_idempotency_vector() -> Result<()
     let mut ledger = BTreeMap::new();
     ledger.insert(identity.clone(), (request_digest.clone(), outcome.clone()));
     let replay = ledger.get(&identity).expect("inserted terminal outcome");
-    if replay.0 != request_digest || replay.1 != outcome {
-        bail!("exact retry did not return the byte-identical terminal outcome");
-    }
+    tally.check(!(replay.0 != request_digest || replay.1 != outcome), || {
+        "exact retry did not return the byte-identical terminal outcome".to_owned()
+    })?;
     let mut conflict = request;
     conflict["target_account_id"]["principal_id"] =
         json!("ak:did_core:webvh:z6mkfixturemalloryexample");
     let conflict: arkret_models_crypto::KeyPackagesClaimRequestBody =
         serde_json::from_value(conflict)?;
     let conflict_digest = arkret_canonical::canonical_sha256(&serde_json::to_value(&conflict)?)?;
-    if conflict_digest == replay.0 {
-        bail!("same requester/claim_request_id with a changed payload did not conflict");
-    }
+    tally.check(conflict_digest != replay.0, || {
+        "same requester/claim_request_id with a changed payload did not conflict".to_owned()
+    })?;
     let conflict_binding = arkret_models_crypto::keypackage_claim_authorization_signing_bytes(
         &conflict.unsigned_request(),
         &conflict.service_binding,
         &conflict.requester_authorization,
     )?;
-    if conflict_binding == binding {
-        bail!("claim authorization transcript did not bind the changed target");
-    }
+    tally.check(conflict_binding != binding, || {
+        "claim authorization transcript did not bind the changed target".to_owned()
+    })?;
 
     let mut next_attempt = serde_json::to_value(&typed)?;
     next_attempt["claim_request_id"] = json!("AAAAAAAAAAAAAAAAAAAAAg");
@@ -1356,37 +1418,42 @@ pub fn run_keypackage_self_claim_authorization_idempotency_vector() -> Result<()
         next_attempt.service_binding.source_id.as_str().to_owned(),
         next_attempt.claim_request_id.as_str().to_owned(),
     );
-    if next_identity == identity || ledger.contains_key(&next_identity) {
-        bail!("a new claim attempt reused the prior claim_request_id ledger identity");
-    }
+    tally.check(
+        !(next_identity == identity || ledger.contains_key(&next_identity)),
+        || "a new claim attempt reused the prior claim_request_id ledger identity".to_owned(),
+    )?;
 
     let mut missing = serde_json::to_value(&typed)?;
     missing
         .as_object_mut()
         .expect("request object")
         .remove("requester_authorization");
-    if serde_json::from_value::<arkret_models_crypto::KeyPackagesClaimRequestBody>(missing).is_ok()
-    {
-        bail!("a self claim without requester authorization was accepted");
-    }
+    tally.check(
+        !(serde_json::from_value::<arkret_models_crypto::KeyPackagesClaimRequestBody>(missing)
+            .is_ok()),
+        || "a self claim without requester authorization was accepted".to_owned(),
+    )?;
     let mut wrong_branch = serde_json::to_value(&typed)?;
     wrong_branch["requester_authorization"]["signature"]["kid"] =
         json!("did:webvh:z6mkfixture:alice.example#other-key");
     let wrong_branch: arkret_models_crypto::KeyPackagesClaimRequestBody =
         serde_json::from_value(wrong_branch)?;
-    if wrong_branch.validate_shape().is_ok() {
-        bail!("a requester authorization whose signature key differs from its method was accepted");
-    }
+    tally.check(!(wrong_branch.validate_shape().is_ok()), || {
+        "a requester authorization whose signature key differs from its method was accepted"
+            .to_owned()
+    })?;
     Ok(())
 }
 
-fn validate_unsigned_selector_transcripts(fixture: &KeypackageLifecycleFixture) -> Result<()> {
+fn validate_unsigned_selector_transcripts(
+    fixture: &KeypackageLifecycleFixture,
+    tally: &mut Tally,
+) -> Result<()> {
     let rows = &fixture.unsigned_selector_transcripts;
-    if rows.len() != 2 {
-        bail!(
-            "unsigned selector transcript fixture must cover exactly the device and agent branches"
-        );
-    }
+    tally.check(rows.len() == 2, || {
+        "unsigned selector transcript fixture must cover exactly the device and agent branches"
+            .to_owned()
+    })?;
 
     let mut seen = BTreeSet::new();
     for row in rows {
@@ -1414,17 +1481,17 @@ fn validate_unsigned_selector_transcripts(fixture: &KeypackageLifecycleFixture) 
             }
             other => bail!("unknown unsigned selector transcript branch {other}"),
         };
-        if !exact_branch || !seen.insert(branch) {
-            bail!("{branch} does not preserve one exact selector branch");
-        }
+        tally.check(!(!exact_branch || !seen.insert(branch)), || {
+            format!("{branch} does not preserve one exact selector branch")
+        })?;
 
         let canonical = arkret_canonical::canonical_json_string(&request_value)?;
         let digest = arkret_canonical::canonical_sha256(&request_value)?;
-        if canonical != required_str(row, "canonical_jcs")?
-            || digest != required_str(row, "request_digest")?
-        {
-            bail!("{branch} unsigned request transcript drifted");
-        }
+        tally.check(
+            !(canonical != required_str(row, "canonical_jcs")?
+                || digest != required_str(row, "request_digest")?),
+            || format!("{branch} unsigned request transcript drifted"),
+        )?;
 
         let mut changed = request_value.clone();
         match branch {
@@ -1438,31 +1505,61 @@ fn validate_unsigned_selector_transcripts(fixture: &KeypackageLifecycleFixture) 
             }
             _ => unreachable!(),
         }
-        if arkret_canonical::canonical_sha256(&changed)? == digest {
-            bail!("{branch} selector mutation did not change the idempotency digest");
-        }
+        tally.check(
+            arkret_canonical::canonical_sha256(&changed)? != digest,
+            || format!("{branch} selector mutation did not change the idempotency digest"),
+        )?;
     }
-    if seen != BTreeSet::from(["device", "agent"]) {
-        bail!("unsigned selector transcript branch set is incomplete");
-    }
+    tally.check(seen == BTreeSet::from(["device", "agent"]), || {
+        "unsigned selector transcript branch set is incomplete".to_owned()
+    })?;
     Ok(())
 }
 
-pub fn run_keypackage_lifecycle_fixture_suite() -> Result<()> {
-    validate_keypackage_lifecycle_fixture_metadata(&keypackage_fixture()?)?;
+pub fn run_keypackage_exhaustion_claim_limits_vector() -> Result<()> {
+    run_single_case("exhaustion_claim_limits", |_, case, tally| {
+        exhaustion_claim_limits_case(case, tally)
+    })
+}
 
-    run_keypackage_exhaustion_claim_limits_vector()
-        .context("keypackage exhaustion/claim-limits vector")?;
-    run_keypackage_last_resort_claim_and_reuse_vector()
-        .context("keypackage last-resort claim/reuse vector")?;
-    run_keypackage_last_resort_forced_rotation_vector()
-        .context("keypackage last-resort forced-rotation vector")?;
-    run_keypackage_last_resort_affinity_and_optionality_vector()
-        .context("keypackage last-resort affinity/optionality vector")?;
-    run_keypackage_self_claim_authorization_idempotency_vector()
-        .context("keypackage self-claim authorization/idempotency vector")?;
-    run_mls_welcome_keypackage_hash_vector().context("MLS welcome KeyPackage hash vector")?;
-    Ok(())
+pub fn run_keypackage_last_resort_claim_and_reuse_vector() -> Result<()> {
+    run_single_case("last_resort_claim_and_reuse", |_, case, tally| {
+        last_resort_claim_and_reuse_case(case, tally)
+    })
+}
+
+pub fn run_keypackage_last_resort_forced_rotation_vector() -> Result<()> {
+    run_single_case("last_resort_forced_rotation", |_, case, tally| {
+        last_resort_forced_rotation_case(case, tally)
+    })?;
+    run_single_case(EXPIRY_SECURITY_CASE_NAME, last_resort_expiry_security_case)
+}
+
+pub fn run_keypackage_last_resort_affinity_and_optionality_vector() -> Result<()> {
+    run_single_case("last_resort_affinity_and_optionality", |_, case, tally| {
+        last_resort_affinity_and_optionality_case(case, tally)
+    })
+}
+
+pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
+    run_single_case("welcome_keypackage_hash", welcome_keypackage_hash_case)
+}
+
+pub fn run_keypackage_self_claim_authorization_idempotency_vector() -> Result<()> {
+    run_single_case(
+        "self_claim_authorization_idempotency",
+        self_claim_authorization_idempotency_case,
+    )
+}
+
+/// Every fixture case through the named suite.
+pub fn run_keypackage_lifecycle_fixture_suite() -> Result<()> {
+    let execution = run_keypackage_lifecycle_suite()?;
+    execution.assert_complete_against(&load_fixture_value_for_suite()?)
+}
+
+fn load_fixture_value_for_suite() -> Result<Value> {
+    super::load_fixture_value(KEYPACKAGE_LIFECYCLE_FIXTURE_FILE)
 }
 
 #[cfg(test)]

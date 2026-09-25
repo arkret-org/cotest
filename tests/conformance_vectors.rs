@@ -21,8 +21,8 @@ use cotest::conformance::{
     run_cursor_vector_suite, run_detached_object_signature_suite,
     run_digest_construction_known_answers, run_encoding_fixture_suite, run_franking_proof_suite,
     run_handle_claim_rejection_vector_suite, run_key_backup_hardening_suite,
-    run_keypackage_write_transcripts_suite, run_media_binding_suite,
-    run_member_identity_vector_suite, run_member_roster_vector_suite,
+    run_keypackage_lifecycle_suite, run_keypackage_write_transcripts_suite,
+    run_media_binding_suite, run_member_identity_vector_suite, run_member_roster_vector_suite,
     run_mention_rendering_vector_suite, run_mls_governance_binding_suite, run_named_suite_audit,
     run_object_addressing_vector_suite, run_object_identity_collision_suite,
     run_poll_reducer_fixture_suite, run_presence_signal_vector_suite,
@@ -38,6 +38,18 @@ use serde_json::{Value, json};
 fn keypackage_write_transcript_named_suite_returns_one_result_per_case() -> Result<()> {
     let execution = run_keypackage_write_transcripts_suite()?;
     assert_eq!(execution.cases.len(), 4);
+    Ok(())
+}
+
+#[test]
+fn keypackage_lifecycle_named_suite_executes_all_fifteen_cases() -> Result<()> {
+    let execution = run_keypackage_lifecycle_suite()?;
+    assert_eq!(
+        execution.entrypoint,
+        "ak.suite.crypto.keypackage_lifecycle.v1"
+    );
+    assert_eq!(execution.cases.len(), 15);
+    assert!(execution.cases.iter().all(|case| case.assertions > 0));
     Ok(())
 }
 
@@ -300,8 +312,8 @@ fn expected_state_digest_known_answers_recompute_every_fold() -> Result<()> {
 fn named_suite_audit_executes_registered_runners_and_exposes_every_gap() -> Result<()> {
     let report = run_named_suite_audit()?;
     assert_eq!(report.fixture_count, 76);
-    assert_eq!(report.executed_entrypoints.len(), 46);
-    assert_eq!(report.unwired_entrypoints.len(), 30);
+    assert_eq!(report.executed_entrypoints.len(), 47);
+    assert_eq!(report.unwired_entrypoints.len(), 29);
     for required_gap in [
         "ak.suite.consent.cache_invalidation.v1",
         "ak.suite.direct_conversation.admission_producers.v1",
