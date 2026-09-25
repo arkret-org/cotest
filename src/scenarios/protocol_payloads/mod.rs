@@ -33,7 +33,7 @@ use crate::scenarios::identity_test_support::{
     spawn_with_harness_account_authority,
 };
 
-mod account_summary;
+pub(crate) mod account_summary;
 mod authority_reads;
 mod backup_delete;
 mod blob;

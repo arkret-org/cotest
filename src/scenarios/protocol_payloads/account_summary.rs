@@ -17,7 +17,7 @@ const TITLE: &str = "Account summary";
 
 /// Every frame of one bounded Account subscribe, each past the SDK's closed
 /// frame contract.
-async fn account_frames(
+pub(crate) async fn account_frames(
     client: &crate::harness::TestActorClient,
     after: Option<&str>,
 ) -> Result<Vec<AccountSubscribeFrame>> {
@@ -46,7 +46,7 @@ async fn account_frames(
         .collect()
 }
 
-fn last_cursor(frames: &[AccountSubscribeFrame]) -> Result<String> {
+pub(crate) fn last_cursor(frames: &[AccountSubscribeFrame]) -> Result<String> {
     frames
         .iter()
         .rev()
@@ -55,7 +55,7 @@ fn last_cursor(frames: &[AccountSubscribeFrame]) -> Result<String> {
 }
 
 /// The Realm's row in the initial realm-list page.
-fn listed_row(frames: &[AccountSubscribeFrame], realm_id: &str) -> Result<RealmListRow> {
+pub(crate) fn listed_row(frames: &[AccountSubscribeFrame], realm_id: &str) -> Result<RealmListRow> {
     frames
         .iter()
         .filter_map(|frame| frame.realm_list.as_ref())
