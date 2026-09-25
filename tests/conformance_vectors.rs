@@ -286,8 +286,8 @@ fn registered_canonical_json_digest_constructions_match_known_answers() -> Resul
 #[test]
 fn named_suite_audit_executes_registered_runners_and_exposes_every_gap() -> Result<()> {
     let report = run_named_suite_audit()?;
-    assert_eq!(report.fixture_count, 75);
-    assert_eq!(report.executed_entrypoints.len(), 45);
+    assert_eq!(report.fixture_count, 76);
+    assert_eq!(report.executed_entrypoints.len(), 46);
     assert_eq!(report.unwired_entrypoints.len(), 30);
     for required_gap in [
         "ak.suite.consent.cache_invalidation.v1",
@@ -319,6 +319,36 @@ fn account_blocklist_projection_vector_runs_clean() {
     );
     cotest::conformance::run_account_blocklist_projection_vector()
         .expect("account blocklist projection vector must pass");
+}
+
+#[test]
+fn actor_private_events_submit_named_suite_executes_every_variant() -> Result<()> {
+    assert_eq!(
+        cotest::conformance::VECTOR_ID_ACTOR_PRIVATE_EVENTS_SUBMIT,
+        "ak.vector.actor_private_events.submit.v1"
+    );
+    let execution = cotest::conformance::run_actor_private_events_submit_suite()?;
+    assert_eq!(
+        execution.entrypoint,
+        "ak.suite.actor_private_events.submit.v1"
+    );
+    let executed = execution
+        .cases
+        .iter()
+        .map(|case| (case.case_id.as_str(), case.assertions))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        executed,
+        [
+            ("push_route_revision_cas_and_exact_retry", 7),
+            ("agent_action_request_and_rejection", 10),
+            ("agent_draft_proposal", 4),
+            ("owner_account_station_binding", 5),
+            ("shared_submit_refuses_actor_private_kinds", 5),
+            ("closed_request_and_payload_shapes", 4),
+        ]
+    );
+    Ok(())
 }
 
 #[test]

@@ -1,6 +1,7 @@
 mod account_blocklist_projection;
 mod account_data_cas_convergence;
 mod account_status_issuer_ledger;
+mod actor_private_events_submit;
 mod aead_nonce_replay;
 mod agent_action_approve_expiry;
 mod agent_draft_pending_intent_account_subscribe;
@@ -141,6 +142,10 @@ pub use account_data_cas_convergence::{
 };
 pub use account_status_issuer_ledger::{
     VECTOR_ID_ACCOUNT_STATUS_ISSUER_LEDGER, run_account_status_issuer_ledger_vector,
+};
+pub use actor_private_events_submit::{
+    ACTOR_PRIVATE_EVENTS_SUBMIT_ENTRYPOINT, VECTOR_ID_ACTOR_PRIVATE_EVENTS_SUBMIT,
+    run_actor_private_events_submit_suite, run_actor_private_events_submit_vector,
 };
 pub use aead_nonce_replay::{AEAD_NONCE_REPLAY_ENTRYPOINT, run_aead_nonce_replay_suite};
 pub use agent_action_approve_expiry::{
