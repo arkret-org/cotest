@@ -46,7 +46,7 @@ use serde_json::{Value, json};
 
 use crate::harness::{
     ArkretServer, TestActorClient, TestServerGroup,
-    event_envelope_with_chain_and_signing_identity_and_causal_refs, expect_json,
+    event_envelope_with_chain_and_signing_identity_and_causal_refs, expect_api_error, expect_json,
     message_create_text_payload,
 };
 use crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
@@ -318,85 +318,25 @@ pub async fn run_cross_station_authority_forward_live() -> Result<()> {
             ciphertext_message_payload(&strand_id, &join.event_id)?,
         )
         .await?;
-    let refusal = events_a
-        .post("/_arkret/self/events")
-        .json(&crate::publication::initial_submission(
-            ciphertext.clone(),
-            "",
-        )?)
-        .send()
-        .await?;
-    let status = refusal.status();
-    let problem: Value = refusal.json().await?;
+    let refusal = expect_api_error(
+        events_a
+            .post("/_arkret/self/events")
+            .json(&crate::publication::initial_submission(
+                ciphertext.clone(),
+                "",
+            )?),
+        StatusCode::CONFLICT,
+        ErrorCode::FailedPrecondition.as_str(),
+    )
+    .await
+    .context("the forwarded ciphertext Message was not refused by the send gate")?;
     ensure!(
-        status == StatusCode::CONFLICT
-            && problem["type"]
-                == format!(
-                    "https://arkret.org/problems/{}",
-                    ErrorCode::FailedPrecondition.as_str()
-                )
-            && problem.get("reason_code").is_none(),
-        "the forwarded ciphertext Message was not refused by the send gate: {status} {problem}"
+        !refusal.extensions.contains_key("reason_code"),
+        "the send gate refusal carries a reason: {refusal:?}"
     );
     ensure_never_committed(&bob, &ciphertext.event_id, Duration::from_secs(2)).await?;
 
-    // 6. A revokes device C through the live SecurityRotation path.
-    let (rotation, _) = signer.rotation(
-        "fa01",
-        DEVICE_C,
-        seed_a,
-        seed_a,
-        &old,
-        &selected.active_series.authority_commit_id,
-    )?;
-    let created = create(&client_a, &rotation).await?;
-    wait_for_accepted_revoke(&client_a, &created).await?;
-    ensure!(
-        refused(&client_c).await?,
-        "the revoked device C still authenticates at its account Station"
-    );
-
-    // 7. An Event device C signed is refused by A's live gate with device_revoked, and B never
-    //    commits it.
-    let station_a_id = DidCoreId::new(account_station.service_id().as_str().to_owned())?;
-    let revoked_method =
-        DidUrl::new(format!("{}#{DEVICE_C}", principal.did)).map_err(|error| anyhow!("{error}"))?;
-    let revoked_event = event_envelope_with_chain_and_signing_identity_and_causal_refs(
-        principal.did.as_str(),
-        &realm_id,
-        EventKind::MessageCreate.as_str(),
-        message_create_text_payload(&strand_id, "signed by a revoked device")?,
-        None,
-        Vec::new(),
-        DEVICE_C_SEED,
-        &revoked_method,
-        Some(&station_a_id),
-        Vec::new(),
-    );
-    ensure_human_producer(&revoked_event, &alice_account, DEVICE_C)?;
-    let refusal = events_a
-        .post("/_arkret/self/events")
-        .json(&crate::publication::initial_submission(
-            revoked_event.clone(),
-            "",
-        )?)
-        .send()
-        .await?;
-    let status = refusal.status();
-    let problem: Value = refusal.json().await?;
-    ensure!(
-        status == StatusCode::CONFLICT
-            && problem["type"]
-                == format!(
-                    "https://arkret.org/problems/{}",
-                    ErrorCode::DeviceRevoked.as_str()
-                ),
-        "the account Station did not refuse the revoked device's Event with device_revoked: {status} {problem}"
-    );
-    ensure_never_committed(&bob, &revoked_event.event_id, Duration::from_secs(10)).await?;
-    ensure_absent_from_stream(&bob, &realm_id, &revoked_event.event_id).await?;
-
-    // 8. Control Event by device A: Alice leaves the B-governed Realm.
+    // 6. Control Event by device A: Alice leaves the B-governed Realm.
     let leave = events_a
         .author_event(
             &realm_id,
@@ -416,6 +356,56 @@ pub async fn run_cross_station_authority_forward_live() -> Result<()> {
         &leave_commit,
         &wait_for_committed(&bob, &leave.event_id).await?,
     )?;
+    // 7. A revokes device C through the live SecurityRotation path.
+    let (rotation, _) = signer.rotation(
+        "fa01",
+        DEVICE_C,
+        seed_a,
+        seed_a,
+        &old,
+        &selected.active_series.authority_commit_id,
+    )?;
+    let created = create(&client_a, &rotation).await?;
+    wait_for_accepted_revoke(&client_a, &created).await?;
+    ensure!(
+        refused(&client_c).await?,
+        "the revoked device C still authenticates at its account Station"
+    );
+
+    // 8. An Event device C signed is refused by A's live gate with device_revoked, and B never
+    //    commits it.
+    let station_a_id = DidCoreId::new(account_station.service_id().as_str().to_owned())?;
+    let revoked_method =
+        DidUrl::new(format!("{}#{DEVICE_C}", principal.did)).map_err(|error| anyhow!("{error}"))?;
+    let revoked_event = event_envelope_with_chain_and_signing_identity_and_causal_refs(
+        principal.did.as_str(),
+        &realm_id,
+        EventKind::MessageCreate.as_str(),
+        message_create_text_payload(&strand_id, "signed by a revoked device")?,
+        None,
+        Vec::new(),
+        DEVICE_C_SEED,
+        &revoked_method,
+        Some(&station_a_id),
+        Vec::new(),
+    );
+    ensure_human_producer(&revoked_event, &alice_account, DEVICE_C)?;
+    let refusal = expect_api_error(
+        events_a
+            .post("/_arkret/self/events")
+            .json(&crate::publication::initial_submission(
+                revoked_event.clone(),
+                "",
+            )?),
+        StatusCode::CONFLICT,
+        ErrorCode::DeviceRevoked.as_str(),
+    )
+    .await
+    .context("the account Station did not refuse the revoked device's Event with device_revoked")?;
+    let _ = refusal;
+    ensure_never_committed(&bob, &revoked_event.event_id, Duration::from_secs(10)).await?;
+    ensure_absent_from_stream(&bob, &realm_id, &revoked_event.event_id).await?;
+
     drop(coauth);
     Ok(())
 }
@@ -554,11 +544,16 @@ fn ciphertext_message_payload(strand_id: &str, group_state_ref: &EventId) -> Res
         ),
         ciphertext: "Y2lwaGVydGV4dA".to_owned(),
     };
-    Ok(json!({
+    let payload = json!({
         "strand_id": strand_id,
         "track_name": "discussion",
         "encrypted_content": envelope,
-    }))
+    });
+    // The envelope serializes in struct order; the submitted payload must be
+    // canonical JSON.
+    Ok(serde_json::from_slice(
+        &arkret_canonical::canonical_json_bytes(&payload)?,
+    )?)
 }
 
 fn database(scenario: &str) -> Result<Option<EphemeralPg>> {
