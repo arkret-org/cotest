@@ -13,9 +13,9 @@
 //!    `ak.message.create`, after which it is committed and Alice's stream scan returns it in full;
 //! 4. Bob's own scan starts at his accepting Commit (`membership_join`, decision 0108 §1045); his
 //!    `/head` Snapshot names the same floor and carries the Invite, grant and roster rows; his
-//!    whole-interval Account window starts at that Commit and is preview only (no Snapshot before
-//!    his floor was ever issued to him), while a window above the floor names his issued `/head` as
-//!    its `after_committed_prefix` basis;
+//!    whole-interval Account window starts exactly at that nonzero floor and is therefore
+//!    `preview_only` without a basis (`zh/sync/client-sync.md` §5.2, decision 0113), while a window
+//!    above the floor names his issued `/head` as the committed prefix through its anchor;
 //! 5. Bob leaves by his own `ak.member.state`; his Account realm list removes the Realm and his
 //!    scan is refused.
 
@@ -340,7 +340,8 @@ pub async fn local_invite_accept_join_run() -> Result<()> {
         "Bob's Snapshot carries his Invite, membership and grant rows: {head_body}"
     );
 
-    // Bob's whole readable interval starts at his join and is preview only.
+    // Bob's whole readable interval starts exactly at his nonzero floor, so
+    // the formal rule makes it preview only with no basis.
     let whole = realm_window(&bob, &realm, 20).await?;
     let whole_window = whole
         .streams
@@ -375,8 +376,6 @@ pub async fn local_invite_accept_join_run() -> Result<()> {
         window_positions(&latest) == vec![head_position + 1]
             && latest_window.limited
             && latest_window.preview_only.is_none()
-            && basis.anchor_kind
-                == arkret_models_collaboration::sync_frames::account_sync::StreamWindowAnchorKind::AfterCommittedPrefix
             && basis.anchor_position == head_position
             && basis.snapshot_ref == head_snapshot.snapshot_id,
         "the one-row window is backed by Bob's /head: {latest_window:?}"

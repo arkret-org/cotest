@@ -492,15 +492,13 @@ fn window_positions(
 }
 
 /// Fresh Soland + real PostgreSQL: an Account frame filtered to one Realm with
-/// a limited `window_limit` names an `after_committed_prefix` basis only when
-/// `/head` already issued the exact snapshot at the window's anchor; that
+/// a limited `window_limit` names a committed-prefix basis only when `/head`
+/// already issued the exact snapshot at the window's anchor; that
 /// `snapshot_ref` reads back by reference as the same signed object. Without
 /// a prior issuance the limited window is `preview_only` with no basis. The
 /// retired `timeline_limit` member and an unprovable Circle selection are
 /// refused rather than degraded.
 pub async fn limited_account_window_names_issued_basis_or_is_preview_only() -> Result<()> {
-    use arkret_models_collaboration::sync_frames::account_sync::StreamWindowAnchorKind;
-
     let SnapshotAuthor {
         _coauth,
         server: _server,
@@ -556,8 +554,7 @@ pub async fn limited_account_window_names_issued_basis_or_is_preview_only() -> R
         .as_ref()
         .context("an issued anchor snapshot yields a basis")?;
     ensure!(
-        basis.anchor_kind == StreamWindowAnchorKind::AfterCommittedPrefix
-            && basis.anchor_position == anchor.stream_position
+        basis.anchor_position == anchor.stream_position
             && basis.anchor_commit_ref == anchor.commit_id
             && basis.snapshot_ref == issued.snapshot_id
             && basis.governance_generation == issued.governance_generation,
@@ -928,16 +925,14 @@ pub async fn preview_account_window_backfills_without_failing_its_sibling_realm(
 /// Fresh Soland + real PostgreSQL, the live floor-tail shape: `/head` signs
 /// the seven-Commit creator bootstrap, the creator then adds a default
 /// Strand (StrandCreate + `ak.realm.set_default_strand`), and a
-/// `window_limit` 2 Account window names that issued snapshot as its
-/// `after_committed_prefix` basis. Inkson's Account frame verifier reads the
+/// `window_limit` 2 Account window names that issued snapshot as the basis
+/// for its committed prefix. Inkson's Account frame verifier reads the
 /// basis by reference through Garth, verifies the two-Commit tail and keeps
 /// the Station's same-cut current (equal to the signed `/head` at the window
 /// head) without failing the frame; the client never folds typed current
 /// itself. A current row sourced outside the verified cut fails closed.
 pub async fn limited_window_strand_tail_verifies_with_same_cut_current_through_inkson() -> Result<()>
 {
-    use arkret_models_collaboration::sync_frames::account_sync::StreamWindowAnchorKind;
-
     let SnapshotAuthor {
         _coauth,
         server: _server,
@@ -981,8 +976,7 @@ pub async fn limited_window_strand_tail_verifies_with_same_cut_current_through_i
     ensure!(
         window.preview_only.is_none()
             && window.window_start_basis.as_ref().is_some_and(|basis| {
-                basis.anchor_kind == StreamWindowAnchorKind::AfterCommittedPrefix
-                    && basis.snapshot_ref == issued.snapshot_id
+                basis.anchor_position == 6 && basis.snapshot_ref == issued.snapshot_id
             })
             && window_positions(&entry) == vec![7, 8],
         "the window must name the issued anchor and carry the Strand tail: {window:?}"
@@ -1105,13 +1099,11 @@ pub async fn limited_window_strand_tail_verifies_with_same_cut_current_through_i
 /// Strand and one message, a `/head` issued at that message Commit (position
 /// 10), then twenty more messages. The default window delivers positions
 /// 11..=30 and names the
-/// issued snapshot, which already carries a `message_revision` row, as its
-/// `after_committed_prefix` basis. Inkson verifies the signed floor rows, the
+/// issued snapshot, which already carries a `message_revision` row, as the
+/// basis for its committed prefix. Inkson verifies the signed floor rows, the
 /// twenty-Commit message tail and the same-cut current without failing the
 /// frame, and the fresh signed head at the window head equals that current.
 pub async fn message_tail_window_beyond_twenty_commits_verifies_through_inkson() -> Result<()> {
-    use arkret_models_collaboration::sync_frames::account_sync::StreamWindowAnchorKind;
-
     let SnapshotAuthor {
         _coauth,
         server,
@@ -1162,9 +1154,7 @@ pub async fn message_tail_window_beyond_twenty_commits_verifies_through_inkson()
             && window.preview_only.is_none()
             && window.next_position == 31
             && window.window_start_basis.as_ref().is_some_and(|basis| {
-                basis.anchor_kind == StreamWindowAnchorKind::AfterCommittedPrefix
-                    && basis.anchor_position == 10
-                    && basis.snapshot_ref == issued.snapshot_id
+                basis.anchor_position == 10 && basis.snapshot_ref == issued.snapshot_id
             })
             && window_positions(&entry) == (11..=30).collect::<Vec<_>>(),
         "the default window must carry the twenty-message tail on the issued anchor: {window:?}"
@@ -1253,9 +1243,7 @@ pub async fn message_tail_window_beyond_twenty_commits_verifies_through_inkson()
                 .window_start_basis
                 .as_ref()
                 .is_some_and(|basis| {
-                    basis.anchor_kind == StreamWindowAnchorKind::AfterCommittedPrefix
-                        && basis.anchor_position == 30
-                        && basis.anchor_commit_ref == delivered_head
+                    basis.anchor_position == 30 && basis.anchor_commit_ref == delivered_head
                 })
             && window_positions(&delta) == vec![31, 32],
         "the live delta must continue after the delivered head: {delta_window:?}"
@@ -1279,8 +1267,6 @@ pub async fn message_tail_window_beyond_twenty_commits_verifies_through_inkson()
 /// names that snapshot as its basis. Inkson installs the signed join policy
 /// and restricted join rule without evaluating the gate itself.
 pub async fn restricted_join_policy_floor_verifies_through_inkson() -> Result<()> {
-    use arkret_models_collaboration::sync_frames::account_sync::StreamWindowAnchorKind;
-
     let SnapshotAuthor {
         _coauth,
         server,
@@ -1347,9 +1333,7 @@ pub async fn restricted_join_policy_floor_verifies_through_inkson() -> Result<()
     ensure!(
         window.preview_only.is_none()
             && window.window_start_basis.as_ref().is_some_and(|basis| {
-                basis.anchor_kind == StreamWindowAnchorKind::AfterCommittedPrefix
-                    && basis.anchor_position == 6
-                    && basis.snapshot_ref == issued.snapshot_id
+                basis.anchor_position == 6 && basis.snapshot_ref == issued.snapshot_id
             })
             && window_positions(&entry) == vec![7, 8],
         "the window must name the restricted cut as its basis: {window:?}"
