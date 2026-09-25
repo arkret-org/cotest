@@ -42,3 +42,10 @@ async fn message_tail_window_beyond_twenty_commits_verifies_through_inkson() -> 
     cotest::scenarios::protocol_payloads::message_tail_window_beyond_twenty_commits_verifies_through_inkson()
         .await
 }
+
+#[tokio::test]
+#[serial]
+async fn restricted_join_policy_floor_verifies_through_inkson() -> Result<()> {
+    cotest::scenarios::protocol_payloads::restricted_join_policy_floor_verifies_through_inkson()
+        .await
+}

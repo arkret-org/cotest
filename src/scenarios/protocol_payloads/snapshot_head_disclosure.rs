@@ -1272,6 +1272,98 @@ pub async fn message_tail_window_beyond_twenty_commits_verifies_through_inkson()
     Ok(())
 }
 
+/// Fresh Soland + real PostgreSQL, a `restricted` founder Realm whose join
+/// policy declares an automatic claim gate: `/head` signs the complete cut
+/// (the policy bundle carries the join policy the Station evaluated at
+/// admission), and after a default Strand a `window_limit` 2 Account window
+/// names that snapshot as its basis. Inkson installs the signed join policy
+/// and restricted join rule without evaluating the gate itself.
+pub async fn restricted_join_policy_floor_verifies_through_inkson() -> Result<()> {
+    use arkret_models_collaboration::sync_frames::account_sync::StreamWindowAnchorKind;
+
+    let SnapshotAuthor {
+        _coauth,
+        server,
+        author,
+    } = snapshot_author("snapshot-join-policy", "join-policy-ivy").await?;
+    let issuer = server.service_id().to_string();
+    let bootstrap = author
+        .create_realm_bootstrap_with(json!({
+            "title": "Restricted floor",
+            "join_rule": "restricted",
+            "plaintext_visible_services": [],
+            "join_policy": {
+                "gates": [{
+                    "gate_id": "employee",
+                    "kind": "claim_required",
+                    "required_claims": ["employee"],
+                    "trusted_issuer_ids": [issuer]
+                }],
+                "combinator": "all"
+            }
+        }))
+        .await?;
+    let realm_id = bootstrap["realm_id"]
+        .as_str()
+        .context("realm_id")?
+        .to_owned();
+    let issued: arkret_wire::RealmStateSnapshot = serde_json::from_value(
+        expect_json(
+            author
+                .get("/_arkret/self/realm-state-snapshot/head")
+                .query(&[("realm_id", realm_id.as_str())]),
+            StatusCode::OK,
+        )
+        .await?,
+    )
+    .context("a restricted founder cut must be a signed snapshot")?;
+    ensure!(
+        issued.visible_stream_heads[0].stream_position == 6
+            && issued.current_state_entries.iter().any(|row| matches!(
+                row,
+                arkret_wire::TypedCurrentResult::Value {
+                    selector: arkret_wire::CurrentSelector::RealmPolicyBundle,
+                    value,
+                    ..
+                } if value.get("join_policy").is_some()
+            ))
+            && issued.current_state_entries.iter().any(|row| matches!(
+                row,
+                arkret_wire::TypedCurrentResult::Value {
+                    selector: arkret_wire::CurrentSelector::RealmJoinRule,
+                    value,
+                    ..
+                } if value == "restricted"
+            )),
+        "the signed cut must carry the join policy and restricted rule: {issued:?}"
+    );
+    author.create_default_strand(&realm_id).await?;
+    let frame =
+        account_detail_frame(&author, json!({"realm_ids": [realm_id], "window_limit": 2})).await?;
+    let entry = realm_detail(&frame, &realm_id)?;
+    let [window] = entry.streams.as_deref().context("stream windows")? else {
+        anyhow::bail!("a founder Realm has exactly its Realm stream window");
+    };
+    ensure!(
+        window.preview_only.is_none()
+            && window.window_start_basis.as_ref().is_some_and(|basis| {
+                basis.anchor_kind == StreamWindowAnchorKind::AfterCommittedPrefix
+                    && basis.anchor_position == 6
+                    && basis.snapshot_ref == issued.snapshot_id
+            })
+            && window_positions(&entry) == vec![7, 8],
+        "the window must name the restricted cut as its basis: {window:?}"
+    );
+    let verified = inkson::realm_events_engine::verify_account_frame_commits(&author.sdk(), &frame)
+        .await
+        .context("a signed join policy floor must verify")?;
+    ensure!(
+        verified.unresolved_streams().is_empty() && verified.preview_streams().is_empty(),
+        "the restricted floor window settles as exact"
+    );
+    Ok(())
+}
+
 fn by_ref_request(
     client: &crate::harness::TestActorClient,
     snapshot_id: &arkret_wire::RealmSnapshotId,

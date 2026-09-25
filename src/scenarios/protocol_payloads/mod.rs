@@ -55,6 +55,7 @@ pub use snapshot_head_disclosure::{
     message_tail_window_beyond_twenty_commits_verifies_through_inkson,
     narrow_snapshot_head_discloses_only_complete_creator_cut,
     preview_account_window_backfills_without_failing_its_sibling_realm,
+    restricted_join_policy_floor_verifies_through_inkson,
 };
 
 pub async fn events_keys_device_blob_push_and_moderation_surfaces_work() -> Result<()> {
