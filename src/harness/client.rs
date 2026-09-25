@@ -423,6 +423,14 @@ impl TestActorClient {
             tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         }
     }
+    /// `ak.self.committed_event.read.get.v1`: the exact committed Event and
+    /// its RealmCommit as this caller may read them.
+    pub async fn get_committed_event(&self, event_id: &EventId) -> Result<Value> {
+        let item = self.sdk.committed_event_get(event_id).await?;
+        item.validate_shape()?;
+        Ok(serde_json::to_value(item)?)
+    }
+
     pub fn controls_realm_authority_root(&self, realm_id: &str) -> bool {
         self.controlled_realms
             .lock()

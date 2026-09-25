@@ -29,6 +29,7 @@ pub mod human_device_producer_live;
 pub mod identity_directory;
 pub mod identity_test_support;
 pub mod interaction_models;
+pub mod invite_create_and_dispatch;
 pub mod invite_frozen_prestate_live;
 pub mod invite_new_source_quota_live;
 pub mod invite_service_fanout_live;
