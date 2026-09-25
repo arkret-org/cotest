@@ -70,7 +70,7 @@ const EVIDENCE_MEMBER: &str = "producer_device_evidence";
 
 /// A self-submitting client on `server` whose session is a standard DPoP
 /// SessionGrant for its founding device, and the complete Account it acts as.
-async fn standard_client(
+pub(crate) async fn standard_client(
     server: &ArkretServer,
     coauth: &MockCoauthIntrospectionServer,
     label: &str,
@@ -101,7 +101,7 @@ async fn standard_client(
     ))
 }
 
-fn station_env(
+pub(crate) fn station_env(
     database_url: &str,
     coauth: &MockCoauthIntrospectionServer,
 ) -> Vec<(String, String)> {
@@ -260,7 +260,14 @@ pub async fn run_cross_station_authority_forward_live() -> Result<()> {
 
     // 1. Alice prepares on A: the verified current authority is the only place her Station will
     //    forward to.
-    prepare_join(&events_a, &realm_id, governance_station).await?;
+    prepare_join(
+        &events_a,
+        &realm_id,
+        governance_station,
+        "ak:request:019b0000-0000-7000-8000-000000002104",
+        RealmJoinIntent::MemberJoin,
+    )
+    .await?;
 
     // 2. Alice's own join Control Event, submitted to A and forwarded to B.
     let join = events_a
@@ -417,12 +424,23 @@ async fn create_public_realm(
     title: &str,
     plaintext_stations: &[&ArkretServer],
 ) -> Result<String> {
+    create_realm_with_join_rule(creator, title, "public", plaintext_stations).await
+}
+
+/// A Realm created by `creator` under `join_rule`, whose plaintext Message
+/// bodies every Station in `plaintext_stations` may hold.
+pub(crate) async fn create_realm_with_join_rule(
+    creator: &TestActorClient,
+    title: &str,
+    join_rule: &str,
+    plaintext_stations: &[&ArkretServer],
+) -> Result<String> {
     let created = creator
         .create_realm_with(json!({
             "title": title,
             "summary": title,
             "public": false,
-            "join_rule": "public",
+            "join_rule": join_rule,
             "plaintext_visible_services": plaintext_stations
                 .iter()
                 .map(|station| station.service_id().to_string())
@@ -437,16 +455,22 @@ async fn create_public_realm(
 
 /// `ak.self.realm_join.command.prepare.v1` on the applicant's own Station,
 /// naming the governance Station only as an untrusted locator.
-async fn prepare_join(
+pub(crate) async fn prepare_join(
     client: &TestActorClient,
     realm_id: &str,
     governance: &ArkretServer,
+    request_id: &str,
+    intent: RealmJoinIntent,
 ) -> Result<()> {
+    let invite_id = match &intent {
+        RealmJoinIntent::InviteAccept { invite_id } => Some(invite_id.clone()),
+        RealmJoinIntent::MemberJoin | RealmJoinIntent::Knock => None,
+    };
     let body = SelfRealmJoinPrepareRequestBody {
-        request_id: RequestId::new("ak:request:019b0000-0000-7000-8000-000000002104")?,
+        request_id: RequestId::new(request_id.to_owned())?,
         target: RealmJoinTarget {
             realm_id: RealmId::new(realm_id.to_owned())?,
-            invite_id: None,
+            invite_id,
             authority_locator_hints: vec![RealmJoinCandidate {
                 service_kind: RealmJoinCandidateServiceKind::Station,
                 service_id: governance.service_id().clone(),
@@ -454,7 +478,7 @@ async fn prepare_join(
                 source: AuthorityLocatorSource::Directory,
             }],
         },
-        intent: RealmJoinIntent::MemberJoin,
+        intent,
     };
     body.validate()?;
     let outcome: SelfRealmJoinPrepareOutcome = serde_json::from_value(
@@ -472,7 +496,7 @@ async fn prepare_join(
 }
 
 /// The Realm controller grants `member` the Realm-wide Message action.
-async fn grant_message_create(
+pub(crate) async fn grant_message_create(
     controller: &TestActorClient,
     controller_station: &ArkretServer,
     realm_id: &str,
@@ -556,7 +580,7 @@ fn ciphertext_message_payload(strand_id: &str, group_state_ref: &EventId) -> Res
     )?)
 }
 
-fn database(scenario: &str) -> Result<Option<EphemeralPg>> {
+pub(crate) fn database(scenario: &str) -> Result<Option<EphemeralPg>> {
     let database = spawn_ephemeral_postgres_for("COTEST_SOLAND_DATABASE_URL")?;
     if database.is_none() {
         skip_or_fail(scenario, "PostgreSQL unavailable")?;
@@ -598,7 +622,7 @@ fn ensure_human_producer(event: &Event, account: &AccountId, device: &str) -> Re
 /// Submit through the self surface and require the committed outcome. The
 /// self submission is the bare Event: it never carries device evidence, whether
 /// the Realm is governed here or forwarded elsewhere.
-async fn submit_and_expect_commit(
+pub(crate) async fn submit_and_expect_commit(
     client: &TestActorClient,
     account: &AccountId,
     device: &str,
@@ -632,7 +656,10 @@ async fn submit_and_expect_commit(
 }
 
 /// The RealmCommit is the governance Station's own signature.
-fn ensure_commit_signed_by(commit: &RealmCommit, governance: &ArkretServer) -> Result<()> {
+pub(crate) fn ensure_commit_signed_by(
+    commit: &RealmCommit,
+    governance: &ArkretServer,
+) -> Result<()> {
     let signer = commit
         .signature
         .verification_method
@@ -648,7 +675,10 @@ fn ensure_commit_signed_by(commit: &RealmCommit, governance: &ArkretServer) -> R
     Ok(())
 }
 
-fn ensure_same_commit(submitted: &RealmCommit, observed: &CommittedEventView) -> Result<()> {
+pub(crate) fn ensure_same_commit(
+    submitted: &RealmCommit,
+    observed: &CommittedEventView,
+) -> Result<()> {
     ensure!(
         observed.commit() == submitted,
         "the governance Station holds a different RealmCommit for {}",
@@ -657,7 +687,7 @@ fn ensure_same_commit(submitted: &RealmCommit, observed: &CommittedEventView) ->
     Ok(())
 }
 
-async fn wait_for_committed(
+pub(crate) async fn wait_for_committed(
     client: &TestActorClient,
     event_id: &EventId,
 ) -> Result<CommittedEventView> {
@@ -675,7 +705,7 @@ async fn wait_for_committed(
     }
 }
 
-async fn ensure_never_committed(
+pub(crate) async fn ensure_never_committed(
     client: &TestActorClient,
     event_id: &EventId,
     window: Duration,

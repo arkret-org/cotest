@@ -10,6 +10,7 @@ pub mod circle;
 pub mod coauth_session_grant_response_loss;
 pub mod collaboration_workflow;
 pub mod consent_pairwise_isolation_live;
+pub mod cross_station_invite_join;
 pub mod current_principal_restart;
 pub mod delivery_media;
 pub mod did_boundary_call_counts;
