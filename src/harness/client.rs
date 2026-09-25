@@ -184,7 +184,7 @@ impl TestActorClient {
 
     pub async fn accept_contact(&self, requester: &TestActorClient) -> Result<()> {
         let requester = ActorId::account(AccountId::new(
-            DidCoreId::new(requester.actor.clone())?,
+            project_did_to_core_id(&Did::new(requester.actor.clone())?)?,
             DidCoreId::new(requester.service_id.clone())?,
         ));
         let row = self

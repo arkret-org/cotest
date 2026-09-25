@@ -14,6 +14,7 @@ pub mod cross_station_invite_join;
 pub mod current_principal_restart;
 pub mod delivery_media;
 pub mod did_boundary_call_counts;
+pub mod direct_conversation_founding_live;
 pub mod directory_service;
 pub mod durable_effect_live_spotcheck;
 pub mod event_idempotency_replay;

@@ -5,7 +5,7 @@ use serde_json::json;
 use crate::fixtures::TestScaffold;
 use crate::harness::{ArkretServer, actor_core_id, expect_api_error, expect_json, expect_status};
 use crate::scenarios::identity_test_support::{
-    actor_did_for_service_did, spawn_with_harness_account_authority,
+    actor_did_for_service_did, spawn_with_standard_grant_authority,
 };
 
 pub async fn framework_errors_and_invalid_json_use_arkret_envelopes() -> Result<()> {
@@ -134,18 +134,27 @@ pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
 }
 
 pub async fn contact_edges_are_rejected() -> Result<()> {
-    let server = spawn_with_harness_account_authority("contact-edges", &[]).await?;
+    // Committing a Contact Event is a self Event admission: the holder's
+    // device signs it and the Station checks that signer against the
+    // session's Standard SessionGrant before the atomic Event/RealmCommit
+    // unit (contact-and-direct-conversation.md section 2).
+    let station = spawn_with_standard_grant_authority("contact-edges", &[]).await?;
+    let server = &station.server;
     let alice_actor = actor_did_for_service_did(server.service_did(), "alice-contact")?;
-    let alice = server
-        .demo_client(
-            &alice_actor,
-            "ak:device:01904100-0000-7000-8000-0000000000a1",
-        )
-        .await?;
+    let alice = station.standard_grant_client(
+        &server
+            .demo_client(
+                &alice_actor,
+                "ak:device:01904100-0000-7000-8000-0000000000a1",
+            )
+            .await?,
+    )?;
     let bob_actor = actor_did_for_service_did(server.service_did(), "bob-contact")?;
-    let bob = server
-        .demo_client(&bob_actor, "ak:device:01904100-0000-7000-8000-0000000000b0")
-        .await?;
+    let bob = station.standard_grant_client(
+        &server
+            .demo_client(&bob_actor, "ak:device:01904100-0000-7000-8000-0000000000b0")
+            .await?,
+    )?;
 
     let self_request = alice.contact_request_prepare(&alice.actor)?;
     match alice.sdk().contacts_request(&self_request).await {
@@ -187,10 +196,9 @@ pub async fn contact_edges_are_rejected() -> Result<()> {
             .as_str(),
         missing_target_core_id
     );
+    assert_eq!(missing_receipt.core.slot_version, 1);
+    assert!(missing_receipt.core.slot_predecessor.is_none());
 
-    // Alice's first accepted Contact Event is intentionally still awaiting a
-    // device-signed successor Seal. Exercise the independent valid-target
-    // branch from Bob's fresh PCR rather than bypassing that finality fence.
     let receipt = bob.request_contact(&alice.actor).await?;
     assert_eq!(
         receipt
@@ -210,6 +218,24 @@ pub async fn contact_edges_are_rejected() -> Result<()> {
             .as_str(),
         alice_core_id
     );
+
+    // Alice answers Bob's pending request with a normal response. Its absence
+    // transcript observes her own (empty) slot plus the consumed request, and
+    // the round is accepted in both holders' list projections.
+    alice.accept_contact(&bob).await?;
+    for (client, peer) in [(&alice, &bob_core_id), (&bob, &alice_core_id)] {
+        let row = client
+            .sdk()
+            .contacts_list()
+            .await?
+            .contacts
+            .into_iter()
+            .find(|row| {
+                row.peer.contact_actor_id().signing_principal_id().as_str() == peer.as_str()
+            })
+            .ok_or_else(|| anyhow::anyhow!("the accepted Contact row is missing"))?;
+        assert_eq!(row.state, arkret::ContactState::Accepted);
+    }
 
     Ok(())
 }
