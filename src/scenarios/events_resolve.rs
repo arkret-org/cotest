@@ -4,7 +4,7 @@ use anyhow::{Result, bail};
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::harness::{TestServerGroup, expect_response};
+use crate::harness::{NonProtocolTestBody, TestServerGroup, expect_response};
 use crate::scenarios::identity_test_support::actor_did_for_service_did;
 
 pub async fn events_resolve_selector_budget_run() -> Result<()> {
@@ -24,8 +24,9 @@ pub async fn events_resolve_selector_budget_run() -> Result<()> {
         "/_arkret/self/seals/resolve",
         "/_arkret/self/events/describe",
     ] {
+        let probe = NonProtocolTestBody::new(json!({}));
         let response =
-            expect_response(client.query(path).json(&json!({})), StatusCode::NOT_FOUND).await?;
+            expect_response(client.query(path).json(&probe), StatusCode::NOT_FOUND).await?;
         if response.status != StatusCode::NOT_FOUND {
             bail!("retired selector endpoint {path} is still admitted");
         }
