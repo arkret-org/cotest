@@ -71,7 +71,91 @@ async fn submit_adapter_event(
     assert_eq!(submit["status"], "committed");
     let event_id = crate::harness::submitted_event_id(&submit)?;
     advance_read_cursor_to(server, &actor, &realm_id, &event_id.to_string()).await?;
+    account_data_round_trip(server, &actor).await?;
     Ok((actor, realm_id, event_id.to_string()))
+}
+
+/// `ak.self.account_data.resource.replace.v1` / `.delete.v1` admit the
+/// holder-signed `ak.account_data.set` as an actor-private Event on the
+/// holder's PCR: the revision CAS applies once, a byte-identical retry returns
+/// the value it wrote, a stale write is `cas_conflict`, and the tombstone
+/// hides the key (actor-private-effects.md section 3.1).
+async fn account_data_round_trip(server: &ArkretServer, actor: &TestActorClient) -> Result<()> {
+    let principal = actor
+        .principal
+        .as_ref()
+        .context("event client carries its provisioned principal")?;
+    let pcr_realm_id = principal.pcr_realm_id.to_string();
+    let actor_id = arkret_wire::ActorId::account(arkret_wire::AccountId::new(
+        arkret_identifiers::DidCoreId::new(crate::harness::actor_core_id(&actor.actor)?)?,
+        server.service_id().clone(),
+    ));
+    let key = arkret_wire::AccountDataKey::PUSH_RULES;
+    let path = format!("/_arkret/self/account_data/{key}");
+    let sealed = |value: serde_json::Value, nonce: u8| {
+        arkret_crypto::account_data_crypto::seal_account_data_value_with_nonce(
+            &[7; 32],
+            &actor_id,
+            key,
+            &value,
+            [nonce; 24],
+        )
+    };
+    let first_value = serde_json::to_value(sealed(json!({"enabled": true}), 9)?)?;
+    let set = actor
+        .author_event(
+            &pcr_realm_id,
+            "ak.account_data.set",
+            json!({"key": key, "expected_server_revision": 0, "body": first_value}),
+        )
+        .await?;
+    let body = json!({"set_event": set});
+    let created = expect_json(actor.put(&path).json(&body), StatusCode::CREATED)
+        .await
+        .context("account data create")?;
+    assert_eq!(created["revision"], 1, "{created}");
+    assert_eq!(created["content"], first_value, "{created}");
+    let replay = expect_json(actor.put(&path).json(&body), StatusCode::OK)
+        .await
+        .context("exact account data retry")?;
+    assert_eq!(replay["revision"], 1, "{replay}");
+    assert_eq!(replay["content"], first_value, "{replay}");
+
+    let stale = actor
+        .author_event(
+            &pcr_realm_id,
+            "ak.account_data.set",
+            json!({"key": key, "expected_server_revision": 0, "body": sealed(json!({"enabled": false}), 8)?}),
+        )
+        .await?;
+    crate::harness::expect_api_error(
+        actor.put(&path).json(&json!({"set_event": stale})),
+        StatusCode::CONFLICT,
+        "cas_conflict",
+    )
+    .await
+    .context("stale account data write")?;
+    let read = expect_json(actor.get(&path), StatusCode::OK).await?;
+    assert_eq!(read["revision"], 1, "{read}");
+
+    let tombstone = actor
+        .author_event(
+            &pcr_realm_id,
+            "ak.account_data.set",
+            json!({"key": key, "expected_server_revision": 1, "tombstone": true}),
+        )
+        .await?;
+    let deleted = expect_json(
+        actor.delete(&path).json(&json!({"set_event": tombstone})),
+        StatusCode::OK,
+    )
+    .await
+    .context("account data tombstone")?;
+    assert_eq!(deleted["revision"], 2, "{deleted}");
+    crate::harness::expect_api_error(actor.get(&path), StatusCode::NOT_FOUND, "not_found")
+        .await
+        .context("tombstoned account data read")?;
+    Ok(())
 }
 
 /// `ak.self.read_cursor.command.advance.v1` on the committed Message: the
