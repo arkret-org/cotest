@@ -9,16 +9,11 @@ use arkret_bootstrap::{
 use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_canonical::{canonical_json_bytes, canonical_sha256};
 use arkret_identifiers::{DeviceId, Did, RealmId, WebOrigin, project_did_to_core_id};
-use arkret_models_collaboration::device_pairing::{
-    AccountDevicePairOutcome, AccountDevicePairRequestBody, DevicePairingNonce,
-    DevicePairingStageOutcome, DevicePairingStageRequestBody, UnsignedDevicePairingTargetProof,
-};
 use arkret_models_collaboration::events_payloads::{
     DeviceAuthorizationBindingKind, DeviceAuthorizePayload, DeviceOrPrincipalRef,
     FoundingDeviceDescriptor, FoundingDeviceHpkeKeyAlgorithm, FoundingDeviceKeyAlgorithm,
     FoundingDeviceKeyPurpose, SignatureMaterial, device_authorize_payload_digest,
 };
-use arkret_models_collaboration::governance::agent_artifacts::PublicKey;
 use arkret_models_crypto::{
     AlgorithmKeyRecords, KeyOperationSignature, KeysUploadRequestBody, KeysUploadUnsignedRequest,
     keys_upload_signing_input,
@@ -27,10 +22,6 @@ use arkret_models_identity::{
     IdentityBindingPurpose, IdentityCreationControlProofKind, PCR_GENESIS_UNIT_KINDS,
     PrincipalRegistrationAnchor, UnsignedIdentityCreationControlProof,
     UnsignedIdentityCreationControlProofBody,
-};
-use arkret_signatures::device_pairing::{
-    ServerDevicePairingChallenge, server_device_pairing_transcript,
-    sign_device_pairing_target_proof,
 };
 use arkret_signatures::webvh::{
     PreparedPrincipalInception, PrincipalInceptionInput, prepare_principal_inception,
@@ -431,26 +422,15 @@ pub async fn bootstrap_registered_actor(
 }
 
 /// Admit an additional device of an already-provisioned principal into its PCR
-/// through the §2.1 server-mediated pairing gate (`ak.gate.account.command.
-/// pair_device`): the candidate stages its key at the open short-link surface
-/// and signs the pairing challenge, then the founding device authors the
-/// accepted-device `ak.device.authorize` Control Move whose `device_signature`
-/// is the §5.2.2 target attestation bound to that challenge transcript.
-///
-/// **Blocked on a cross-repository gap, not on this helper.** `device-lifecycle
-/// .md` §2.1.1 clause 2 makes `ak.gate.account.command.finalize_device_pairing
-/// .v1` the only way a staged record reaches `ready_for_claim`, and
-/// `pair_device` MUST refuse a record that is still `staged`. That finalize is
-/// authenticated with `Authorization: DPoP <account_handoff_grant>`, and the
-/// Station cannot yet resolve which account such a grant is bound to
-/// (`account_handoff_bound_account` is a declared fail-closed dead end that
-/// answers `temporarily_unavailable` /
-/// `internal_reason=account_handoff_introspection_unwired`). Until that
-/// Station/Account-Authority interface exists there is no finalize call to
-/// make here, so this helper stops one step short of the spec sequence and the
-/// gate call below fails closed. Do not paper over it by authenticating
-/// finalize with an ordinary session: that is exactly the substitution the
-/// two-phase design exists to forbid.
+/// as an `accepted_device` of the current generation (device-lifecycle.md
+/// §5.2, §5.4). `ak.gate.account.command.pair_device.v1` and its pending
+/// pairing ledger belong to the Account Authority, which relays the frozen
+/// `ak.device.authorize` to the owning Station over the private admission
+/// channel; this single-process harness stands in for that relay, so the
+/// Station's registered accepted-device unit still decides every same-cut
+/// check. The founding device signs the complete Event and the new device
+/// signs its §5.2.2 possession object. The two-process pairing ledger path
+/// (stage, finalize, claim, pair_device) is not exercised here.
 async fn authorize_additional_principal_device(
     server: &ArkretServer,
     founding: &ProvisionedTestPrincipal,
@@ -458,73 +438,14 @@ async fn authorize_additional_principal_device(
     device_signing_key: &SigningKey,
 ) -> Result<arkret_identifiers::EventId> {
     let actor = founding.did.as_str();
-    let created_at = chrono::DateTime::parse_from_rfc3339("2026-05-02T00:00:00.000Z")?
-        .with_timezone(&chrono::Utc);
     let new_device_id = DeviceId::new(device_id.to_owned())?;
     let device_multibase =
         ed25519_pubkey_to_did_key_multibase(&device_signing_key.verifying_key().to_bytes());
-    let device_public_key =
-        NonEmptyString::new(format!("did:key:{device_multibase}")).map_err(anyhow::Error::msg)?;
-    let hpke_key = NonEmptyString::new(format!("z6LSCotestFederationHpkeKey:{device_id}"))
-        .map_err(anyhow::Error::msg)?;
-    let algorithms = vec![
-        NonEmptyString::new("ak.hpke_x25519_aead_chacha20poly1305.v1")
-            .map_err(anyhow::Error::msg)?,
-    ];
-
-    // §2.1 stage: the account-less candidate publishes its key plus a client
-    // nonce and receives the short-link handle and server challenge fields.
-    let new_device_pubkey = PublicKey {
-        kty: NonEmptyString::new("OKP").map_err(anyhow::Error::msg)?,
-        kid: NonEmptyString::new(device_id.to_owned()).map_err(anyhow::Error::msg)?,
-        algorithm: NonEmptyString::new("Ed25519").map_err(anyhow::Error::msg)?,
-        key: Base64UrlString::new(
-            URL_SAFE_NO_PAD.encode(device_signing_key.verifying_key().to_bytes()),
-        )
-        .map_err(anyhow::Error::msg)?,
-        key_digest: None,
-    };
-    let nonce_seed =
-        Sha256::digest(format!("cotest:device-pairing-nonce:{actor}:{device_id}").as_bytes());
-    let client_nonce = DevicePairingNonce::new(URL_SAFE_NO_PAD.encode(&nonce_seed[..16]))
-        .map_err(anyhow::Error::msg)?;
-    let stage = serde_json::from_value::<DevicePairingStageOutcome>(
-        expect_json(
-            server
-                .http()
-                .post(server.url("/_arkret/open/device-pairing/requests"))
-                .json(&DevicePairingStageRequestBody {
-                    new_device_pubkey: new_device_pubkey.clone(),
-                    client_nonce: client_nonce.clone(),
-                    display_name: None,
-                    device_metadata: None,
-                }),
-            StatusCode::OK,
-        )
-        .await?,
-    )?;
-
-    // §2.1.2: the candidate proves possession of its fresh key over the exact
-    // server-mediated challenge transcript.
-    let challenge = ServerDevicePairingChallenge::from_stage(
-        &DevicePairingStageRequestBody {
-            new_device_pubkey: new_device_pubkey.clone(),
-            client_nonce,
-            display_name: None,
-            device_metadata: None,
-        },
-        &stage,
-    );
-    let (_, transcript_digest) = server_device_pairing_transcript(&new_device_pubkey, &challenge)?;
-
-    // §5.2.2: the accepted-device possession attestation binds the exact
-    // account, the target's own key material and the challenge transcript
-    // digest; the authorizing device's Event proof carries the remaining
-    // payload fields. `account_id` is a signed member of the eight-member
-    // `ak.device_authorize_accepted_device_possession_proof.v1` object, so it
-    // must be the account the candidate's pending handoff is bound to and not
-    // a value read back off a route or a session audience.
-    let account_id =
+    let mut hpke = vec![0xec, 0x01];
+    hpke.extend(Sha256::digest(
+        format!("cotest:device-hpke:{device_id}").as_bytes(),
+    ));
+    let account =
         arkret_wire::AccountId::new(founding.core_id.clone(), server.service_id().clone());
     let founding_token = dev_login(server, actor, founding.device_id.as_str()).await?;
     let keys: arkret_models_crypto::KeysQueryOutcome = serde_json::from_value(
@@ -535,7 +456,7 @@ async fn authorize_additional_principal_device(
                 .bearer_auth(&founding_token)
                 .json(&arkret_models_crypto::KeysQueryRequestBody {
                     device_keys: vec![arkret_models_crypto::QueryAccountDeviceSelector {
-                        account_id: account_id.clone(),
+                        account_id: account.clone(),
                         device_ids: vec![founding.device_id.clone()],
                     }],
                     timeout_ms: None,
@@ -546,84 +467,78 @@ async fn authorize_additional_principal_device(
     )?;
     keys.validate()?;
     let generation = keys
-        .generation_for(&account_id)
+        .generation_for(&account)
         .context("keys/query omitted the current PCR device generation")?;
-    let authorizing_device = keys
-        .devices_for(&account_id)
-        .and_then(|devices| devices.get(&founding.device_id))
-        .context("keys/query omitted the founding device")?;
-    anyhow::ensure!(
-        authorizing_device
-            .device_projection
-            .authorized_generation_ref
-            == generation.current_device_generation_ref,
-        "founding device is outside the current PCR generation"
-    );
-    let attestation = sign_device_pairing_target_proof(
-        UnsignedDevicePairingTargetProof::new(
-            account_id,
-            new_device_id.clone(),
-            arkret_wire::DidKey::new(device_public_key.as_str().to_owned())
-                .map_err(anyhow::Error::msg)?,
-            hpke_key.clone(),
-            algorithms.clone(),
-            transcript_digest.clone(),
-        )?,
-        device_signing_key,
-    )?;
-    let payload = DeviceAuthorizePayload {
-        pairing_challenge_transcript_digest: Some(transcript_digest),
+    let mut payload = DeviceAuthorizePayload {
+        pairing_challenge_transcript_digest: Some(Hash::new(arkret_canonical::sha256_digest(
+            format!("cotest:device-pairing:{actor}:{device_id}").as_bytes(),
+        ))?),
         device_id: new_device_id,
-        device_public_key_did: device_public_key,
-        hpke_key: hpke_key.clone(),
-        algorithms,
+        device_public_key_did: NonEmptyString::new(format!("did:key:{device_multibase}"))
+            .map_err(anyhow::Error::msg)?,
+        hpke_key: NonEmptyString::new(arkret_canonical::encode_multibase_base58btc(hpke))
+            .map_err(anyhow::Error::msg)?,
+        algorithms: vec![
+            NonEmptyString::new("ak.hpke_x25519_aead_chacha20poly1305.v1")
+                .map_err(anyhow::Error::msg)?,
+        ],
         device_key_algorithm: NonEmptyString::new("Ed25519").map_err(anyhow::Error::msg)?,
         authorized_by: DeviceOrPrincipalRef::DeviceId(founding.device_id.clone()),
         scopes: None,
-        not_before: created_at,
+        not_before: arkret::canonical::normalize_timestamp_canonical(chrono::Utc::now()),
         expires_at: None,
         authorization_binding_kind: DeviceAuthorizationBindingKind::AcceptedDevice,
         authorized_generation_ref: generation.current_device_generation_ref,
-        device_signature: attestation.device_signature.clone(),
+        device_signature: SignatureMaterial::NonEmptyString(
+            NonEmptyString::new("unsigned").map_err(anyhow::Error::msg)?,
+        ),
         recovery_session_id: None,
         // `accepted_device` is one of the three branches that MUST NOT carry an
         // install fence (`device-lifecycle.md` section 5.2.3).
         applet_id: None,
     };
-
-    // The gate authenticates the authorizing device, so the exact Event is
-    // authored over a founding-device session and relayed verbatim.
+    let possession = payload.device_possession_signature_input(&account)?;
+    payload.device_signature = SignatureMaterial::NonEmptyString(
+        NonEmptyString::new(arkret_canonical::base64url_encode(
+            device_signing_key.sign(&possession).to_bytes(),
+        ))
+        .map_err(anyhow::Error::msg)?,
+    );
     let founding_method = crate::fixture_did_url(format!("{actor}#{}", founding.device_id));
-    let authorize_event = crate::harness::prepare_event_submission_with_signing_identity(
-        server,
-        &founding_token,
+    let event = crate::harness::event_envelope_with_chain_and_signing_identity_and_causal_refs(
         actor,
         founding.pcr_realm_id.as_str(),
         arkret_wire::EventKind::DeviceAuthorize.as_str(),
         serde_json::to_value(&payload)?,
+        None,
+        Vec::new(),
         founding.device_signing_key.to_bytes(),
         &founding_method,
-    )
-    .await?;
-    let outcome = serde_json::from_value::<AccountDevicePairOutcome>(
+        Some(server.service_id()),
+        Vec::new(),
+    );
+    let outcome: arkret_wire::AuthoritySubmitOutcome = serde_json::from_value(
         expect_json(
             server
                 .http()
-                .post(server.url("/_arkret/gate/account/device-pair"))
-                .bearer_auth(&founding_token)
-                .json(&AccountDevicePairRequestBody {
-                    pairing_code: stage.pairing_code.clone(),
-                    new_device_pubkey,
-                    authorize_event: crate::publication::initial_submission(authorize_event, "")?,
-                    display_name: None,
-                    device_metadata: None,
-                    device_pairing_request_id: stage.device_pairing_request_id.clone(),
-                }),
+                .post(server.url("/_soland/account-authority/events/admit"))
+                .bearer_auth(HARNESS_INTERNAL_AUTHORITY_SECRET)
+                .header("idempotency-key", event.event_id.as_str())
+                .json(&arkret_wire::EventAdmissionSubmission::new(event.clone())),
             StatusCode::OK,
         )
         .await?,
     )?;
-    Ok(outcome.authorized_event_ref.event_id)
+    match outcome {
+        arkret_wire::AuthoritySubmitOutcome::Accepted { commit, .. }
+            if commit.event_ref == event.event_id && commit.realm_id == founding.pcr_realm_id =>
+        {
+            Ok(event.event_id)
+        }
+        other => anyhow::bail!(
+            "the accepted-device authorization of {device_id} was not committed: {other:?}"
+        ),
+    }
 }
 
 /// Read the current signed PCR RealmCommit head after verifying every

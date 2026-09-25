@@ -210,6 +210,56 @@ impl RotationAuthor {
         ))
     }
 
+    /// A's `ak.policy.set` publishing a recovery policy whose only method is
+    /// a `device_quorum` of `k` over `members`, the policy signed with `seed`
+    /// under `method` and the Event signed by A.
+    #[allow(clippy::too_many_arguments)]
+    fn recovery_policy(
+        &self,
+        policy_id: &str,
+        version: u64,
+        supersedes: Option<&str>,
+        k: u32,
+        members: &[&str],
+        method: &DidUrl,
+        seed: [u8; 32],
+    ) -> Result<Event> {
+        let mut policy: arkret_models_crypto::RecoveryPolicy =
+            serde_json::from_value(serde_json::json!({
+                "schema": "ak.schema.recovery_policy.v1",
+                "policy_id": policy_id,
+                "account_id": self.account,
+                "version": version,
+                "supersedes_id": supersedes,
+                "trust_domain": "ak:trust_domain:cotest.example",
+                "issued_at": arkret_canonical::format_timestamp_canonical(
+                    arkret::canonical::normalize_timestamp_canonical(Utc::now())
+                ),
+                "auth_data": {
+                    "verification_method": method,
+                    "signature_algorithm": "Ed25519",
+                    "signature": "AA"
+                },
+                "methods": [{"kind": "device_quorum", "k": k, "member_ids": members}]
+            }))?;
+        let transcript = arkret_models_crypto::recovery_policy_signature_transcript_bytes(&policy)?;
+        policy.auth_data.signature = Base64UrlString::new(arkret_canonical::base64url_encode(
+            SigningKey::from_bytes(&seed).sign(&transcript).to_bytes(),
+        ))
+        .map_err(anyhow::Error::msg)?;
+        Ok(event_envelope_with_causal_refs_for_device(
+            &self.actor,
+            DEVICE_A,
+            &self.station,
+            self.principal.pcr_realm_id.as_str(),
+            arkret_wire::EventKind::PolicySet.as_str(),
+            serde_json::json!({"policy_id": policy_id, "value": policy}),
+            None,
+            Vec::new(),
+            Vec::new(),
+        ))
+    }
+
     /// A's rotation revoking `target`: one replacement envelope of a fresh
     /// series signed with `backup_seed`, and pointer version 2 over
     /// `SERIES_ONE` anchored at `source`. `revoke_seed` signs the revoke.
@@ -1360,4 +1410,206 @@ async fn admit_accepted_device(
         "the accepted-device authorization of {device} was not committed on A's PCR: {commit:?}"
     );
     Ok(event.event_id)
+}
+
+/// Publish a recovery policy through the formal publication operation.
+async fn publish_recovery_policy(
+    client: &TestActorClient,
+    event: &Event,
+) -> Result<reqwest::Response> {
+    Ok(canonical_post(
+        client,
+        "/_arkret/root/identity/recovery-policy",
+        &arkret_wire::EventAdmissionSubmission::new(event.clone()),
+    )?
+    .send()
+    .await?)
+}
+
+/// One `device_quorum` delete of `backup_id` signed by `signers`, over a fresh
+/// single-use challenge issued to `client`.
+async fn quorum_delete(
+    client: &TestActorClient,
+    actor: &str,
+    backup_id: &str,
+    request_id: &str,
+    signers: &[(&str, [u8; 32])],
+) -> Result<reqwest::Response> {
+    use arkret_models_crypto::{
+        KeysBackupsDeleteChallenge, KeysBackupsIssueDeleteChallengeRequestBody,
+    };
+    use arkret_wire::{AuditReasonText, PayloadProof, PayloadProofPurpose, proof_kind};
+
+    let request_id = Base64UrlString::new(request_id).map_err(anyhow::Error::msg)?;
+    let reason = AuditReasonText::new("user_requested").map_err(anyhow::Error::msg)?;
+    let challenge: KeysBackupsDeleteChallenge = serde_json::from_value(
+        expect_json(
+            client
+                .post(&format!(
+                    "/_arkret/self/keys/backups/{backup_id}/delete-challenge"
+                ))
+                .json(&KeysBackupsIssueDeleteChallengeRequestBody {
+                    request_id: request_id.clone(),
+                }),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    let canonical = arkret_canonical::canonical_json_bytes(
+        &challenge.delete_intent_transcript(Some(reason.as_str())),
+    )?;
+    let digest = challenge.delete_intent_digest(Some(reason.as_str()))?;
+    let signatures = signers
+        .iter()
+        .map(|(device, seed)| -> Result<serde_json::Value> {
+            let proof = PayloadProof {
+                kind: proof_kind::DETACHED_JWS.to_owned(),
+                verification_method: DidUrl::new(format!("{actor}#{device}"))
+                    .map_err(anyhow::Error::msg)?,
+                payload_digest: digest.clone(),
+                created_at: challenge.issued_at,
+                domain: None,
+                audience: None,
+                proof_purpose: Some(PayloadProofPurpose::IssuerAttestation),
+                jws: arkret_signatures::sign_ed25519_detached_jws(
+                    &SigningKey::from_bytes(seed),
+                    &canonical,
+                )?,
+            };
+            Ok(serde_json::json!({"device_id": device, "proof": proof}))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let body = serde_json::json!({
+        "request_id": request_id,
+        "challenge_id": challenge.challenge_id,
+        "proof": {"kind": "device_quorum", "threshold": 2, "signatures": signatures},
+        "reason": reason,
+    });
+    Ok(client
+        .delete(&format!("/_arkret/self/keys/backups/{backup_id}"))
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .body(arkret_canonical::canonical_json_bytes(&body)?)
+        .send()
+        .await?)
+}
+
+/// §7.8.1 `device_quorum` delete end to end: the founding device publishes a
+/// recovery policy whose quorum is two of A, B and C; a delete signed by one
+/// member is refused and leaves the envelope, and a delete signed by B and C
+/// removes it.
+pub async fn key_backup_device_quorum_delete_removes_an_envelope() -> Result<()> {
+    let LiveRotation {
+        server: _server,
+        _coauth,
+        database: _database,
+        client_a,
+        client_b,
+        events_a,
+        signer,
+        seed_a,
+        ..
+    } = live_rotation("key-backup-device-quorum-delete", &[]).await?;
+
+    // B may not sign the genesis policy; only the founding device may.
+    let genesis = "ak:policy:01904100-0000-7000-8000-0000000000f1";
+    let members = [DEVICE_A, DEVICE_B, DEVICE_C];
+    let method_b =
+        DidUrl::new(format!("{}#{DEVICE_B}", signer.actor)).map_err(anyhow::Error::msg)?;
+    let by_b = signer.recovery_policy(genesis, 1, None, 2, &members, &method_b, DEVICE_B_SEED)?;
+    let refused_b = publish_recovery_policy(&events_a, &by_b).await?;
+    ensure!(
+        refused_b.status().is_client_error(),
+        "a genesis policy signed by B was accepted: {}",
+        refused_b.status()
+    );
+
+    // A publishes v1; an exact retry returns the same acceptance.
+    let v1 = signer.recovery_policy(genesis, 1, None, 2, &members, &signer.method, seed_a)?;
+    let first = publish_recovery_policy(&events_a, &v1).await?;
+    ensure!(
+        first.status() == StatusCode::OK,
+        "recovery policy publication failed: {} {}",
+        first.status(),
+        first.text().await.unwrap_or_default()
+    );
+    let first: arkret_models_crypto::RecoveryPolicyPublishOutcome = first.json().await?;
+    ensure!(first.version == 1 && first.policy_id.as_str() == genesis);
+    let replay: arkret_models_crypto::RecoveryPolicyPublishOutcome =
+        publish_recovery_policy(&events_a, &v1)
+            .await?
+            .json()
+            .await?;
+    ensure!(
+        replay.acceptance_basis_ref == first.acceptance_basis_ref,
+        "an exact retry accepted the policy at another Commit"
+    );
+    let active: arkret_models_crypto::RecoveryPolicyActiveOutcome = serde_json::from_value(
+        expect_json(
+            client_b.get("/_arkret/root/identity/recovery-policy"),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    ensure!(
+        active
+            .active_policy
+            .as_ref()
+            .is_some_and(|policy| policy.policy_id.as_str() == genesis),
+        "the accepted policy is not the active one"
+    );
+
+    // An envelope outside the active series, deleted by quorum.
+    let target = signer.backup(
+        INACTIVE_BACKUP,
+        &BackupSeriesId::new(INACTIVE_SERIES)?,
+        b"quorum-delete",
+        seed_a,
+    )?;
+    let stored = expect_json(
+        client_a
+            .put(&format!("/_arkret/self/keys/backups/{INACTIVE_BACKUP}"))
+            .header("Idempotency-Key", "quorum-delete-target")
+            .json(&target),
+        StatusCode::OK,
+    )
+    .await?;
+    ensure!(stored["status"] == "accepted", "target PUT: {stored}");
+
+    let alone = quorum_delete(
+        &client_a,
+        &signer.actor,
+        INACTIVE_BACKUP,
+        "cXVvcnVtLWRlbGV0ZS1vbmUtMDAwMQ",
+        &[(DEVICE_B, DEVICE_B_SEED)],
+    )
+    .await?;
+    ensure!(
+        alone.status() == StatusCode::FORBIDDEN,
+        "a single quorum signature deleted the envelope: {} {}",
+        alone.status(),
+        alone.text().await.unwrap_or_default()
+    );
+    ensure!(lists(&listing(&client_a).await?, INACTIVE_BACKUP));
+
+    let deleted = quorum_delete(
+        &client_a,
+        &signer.actor,
+        INACTIVE_BACKUP,
+        "cXVvcnVtLWRlbGV0ZS10d28tMDAwMQ",
+        &[(DEVICE_B, DEVICE_B_SEED), (DEVICE_C, DEVICE_C_SEED)],
+    )
+    .await?;
+    ensure!(
+        deleted.status() == StatusCode::OK,
+        "the B+C quorum could not delete: {} {}",
+        deleted.status(),
+        deleted.text().await.unwrap_or_default()
+    );
+    let deleted: arkret_models_crypto::KeysBackupsDeleteOutcome = deleted.json().await?;
+    ensure!(deleted.deleted);
+    ensure!(
+        !lists(&listing(&client_a).await?, INACTIVE_BACKUP),
+        "the deleted envelope is still listed"
+    );
+    Ok(())
 }
