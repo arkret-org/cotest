@@ -590,8 +590,11 @@ impl<'a> AccountStation<'a> {
 
     fn forward_event(&mut self, event: Event, attempt_at: DateTime<Utc>) -> Result<Value> {
         let evidence = self.fresh_evidence(&event, attempt_at)?;
-        let request =
-            PeerAuthorityForwardEventRequest::new(EventAdmissionSubmission::new(event), evidence)?;
+        let request = PeerAuthorityForwardEventRequest::new(
+            EventAdmissionSubmission::new(event),
+            None,
+            evidence,
+        )?;
         self.send(PeerAuthoritySubmitRequest::AuthorityForwardEvent(request))
     }
 
@@ -1519,6 +1522,7 @@ fn history_lacks_method(world: &World) -> Result<Value> {
         )?;
         let request = PeerAuthorityForwardEventRequest::new(
             EventAdmissionSubmission::new(event),
+            None,
             Some(AccountDeviceSignerEvidence {
                 device_projection_attestation: attestation,
                 service_resolution: world.station_a.resolution()?,
@@ -1547,7 +1551,11 @@ fn history_lacks_method(world: &World) -> Result<Value> {
 fn non_human_carries_evidence(world: &World, event: Event) -> Result<Value> {
     ensure!(event.human_device_producer()?.is_none());
     // Positive control: without evidence the forward is well formed.
-    PeerAuthorityForwardEventRequest::new(EventAdmissionSubmission::new(event.clone()), None)?;
+    PeerAuthorityForwardEventRequest::new(
+        EventAdmissionSubmission::new(event.clone()),
+        None,
+        None,
+    )?;
     let mut account = world.account_station(LiveDeviceState::Active)?;
     let honest = account.forward_event(
         world.human_event(
@@ -1572,6 +1580,7 @@ fn human_without_evidence(world: &World) -> Result<Value> {
     let body = serde_json::to_value(PeerAuthorityForwardEventRequest {
         branch: AuthorityForwardBranch::AuthorityForward,
         event_submission: EventAdmissionSubmission::new(event),
+        mls_genesis_material: None,
         producer_device_evidence: None,
     })?;
     ensure!(body.get(EVIDENCE_MEMBER).is_none());

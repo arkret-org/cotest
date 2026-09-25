@@ -684,7 +684,25 @@ fn latency_diff(values: &[u64]) -> u64 {
 /// Typed results whose change moves the MLS key-access revision: they change
 /// which leaves may hold the group's keys. Ordinary governance, message
 /// metadata, grants and roster display never do.
-const KEY_ACCESS_BEARING_RESULTS: &[&str] = &["agent_key", "device_key", "member_key_access"];
+/// Only a membership change on the scope's own stream advances the
+/// key-access revision; endpoint key revocations are refused at the send gate.
+const KEY_ACCESS_BEARING_RESULTS: &[&str] = &["member_key_access"];
+
+/// Send-gate refusal of a revoked endpoint's own encrypted send, per
+/// revoked key kind (encryption-and-audit.md §2.5.2).
+fn revoked_endpoint_send_code(scenario: &Value) -> Result<&'static str> {
+    let changed = required_array(scenario, "changed_results")?;
+    match changed
+        .iter()
+        .filter_map(Value::as_str)
+        .collect::<Vec<_>>()
+        .as_slice()
+    {
+        ["device_key"] => Ok("device_revoked"),
+        ["agent_key"] => Ok("capability_denied"),
+        other => bail!("endpoint revoke case must change exactly one endpoint key: {other:?}"),
+    }
+}
 
 fn key_access_revision_changed(scenario: &Value) -> Result<bool> {
     let changed = scenario
@@ -734,11 +752,11 @@ fn run_mls_key_access_revision_cases(fixture: &FinalConformanceClosureFixture) -
                     "decision": if changed { "reject" } else { "accept" },
                     "key_access_revision_changed": changed,
                 }),
-                "active_leaf_revoke_pauses_sending" => {
+                "membership_change_pauses_sending" => {
                     if changed {
                         json!({
                             "decision": "reject",
-                            "reason": "mls_governance_binding_stale",
+                            "reason": "epoch_update_required",
                             "key_access_revision_changed": true,
                             "self_heal_commit_required": true,
                         })
@@ -746,6 +764,14 @@ fn run_mls_key_access_revision_cases(fixture: &FinalConformanceClosureFixture) -
                         json!({"decision": "accept", "key_access_revision_changed": false})
                     }
                 }
+                "device_revoke_refuses_only_the_revoked_sender"
+                | "agent_key_revoke_refuses_only_the_revoked_sender" => json!({
+                    "key_access_revision_changed": changed,
+                    "other_member_send_decision": if changed { "reject" } else { "accept" },
+                    "revoked_endpoint_send_decision": "reject",
+                    "revoked_endpoint_send_code": revoked_endpoint_send_code(scenario)?,
+                    "self_heal_commit_required": changed,
+                }),
                 // Authorization is decided by current membership, never by the
                 // key-access revision, and a membership rejection is not an
                 // MLS reason.
@@ -774,7 +800,9 @@ fn run_mls_key_access_revision_cases(fixture: &FinalConformanceClosureFixture) -
     for required in [
         "valid_key_access_revision_commit",
         "unrelated_governance_and_new_commit_ref",
-        "active_leaf_revoke_pauses_sending",
+        "membership_change_pauses_sending",
+        "device_revoke_refuses_only_the_revoked_sender",
+        "agent_key_revoke_refuses_only_the_revoked_sender",
         "membership_change_without_key_access_effect",
         "current_revision_does_not_authorize_a_non_member_producer",
         "advanced_revision_admits_nobody_by_itself",
