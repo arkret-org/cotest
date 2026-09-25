@@ -4,23 +4,29 @@
 //!
 //! The scenario proves, against a live Soland:
 //!
-//! 1. `ak.message.revise` of the author's Message is accepted with a RealmCommit on the Realm
+//! 1. Bob joins Alice's Realm by accepting her directed Invite;
+//! 2. Alice's `ak.message.revise` of her Message is accepted with a RealmCommit on the Realm
 //!    stream, and an exact replay is the stored `duplicate` outcome naming the same Commit;
-//! 2. the same revise from an account that is not a member of the Realm is `capability_denied` and
-//!    appends no RealmCommit;
-//! 3. the committed stream then discloses the create and the revise in full, so the latest version
-//!    is the revise body;
-//! 4. `ak.message.redact` is accepted, after which the stream keeps the create and revise Commit
+//! 3. the same edit from Bob, a joined member holding no edit action, and from an account outside
+//!    the Realm is `capability_denied` and appends no RealmCommit;
+//! 4. Bob's own scan discloses the create and the revise in full, so the latest version he reads is
+//!    the revise body;
+//! 5. `ak.message.redact` is accepted, after which Bob's scan keeps the create and revise Commit
 //!    slots as withheld branches while the redaction itself stays disclosed;
-//! 5. a revise of the retracted Message is refused and appends no RealmCommit.
+//! 6. a revise of the retracted Message is refused and appends no RealmCommit.
 
 use anyhow::{Context, Result, anyhow, ensure};
+use arkret_models_collaboration::governance::membership_invite::{
+    InviteAcceptPayload, InvitePreviousState,
+};
+use arkret_wire::{AccountId, DidCoreId, InviteId};
+use chrono::{Duration as ChronoDuration, Utc};
 use reqwest::StatusCode;
 use serde_json::Value;
 
 use crate::harness::{
-    CanonicalJsonBody, TestActorClient, expect_json, message_redact_payload,
-    message_revise_text_payload,
+    CanonicalJsonBody, TestActorClient, actor_core_id, expect_json, invite_create_payload,
+    message_redact_payload, message_revise_text_payload, submitted_event_id,
 };
 use crate::scenarios::invite_create_and_dispatch::InviteStation;
 
@@ -92,6 +98,13 @@ pub async fn message_edit_and_retract_run() -> Result<()> {
         )
         .await
         .context("bootstrap the author client")?;
+    let member = station
+        .grant_bearing_client(
+            "bob-message-edit-retract",
+            "ak:device:01904100-0000-7000-8000-0000000000e5",
+        )
+        .await
+        .context("bootstrap the member client")?;
     let outsider = station
         .grant_bearing_client(
             "mallory-message-edit-retract",
@@ -104,13 +117,45 @@ pub async fn message_edit_and_retract_run() -> Result<()> {
         .await
         .context("create the Realm")?;
     let strand_id = author.default_strand_id(&realm_id)?;
+
+    // (1) Bob joins by accepting Alice's directed Invite.
+    let invited = author
+        .submit_event(
+            &realm_id,
+            "ak.invite.create",
+            invite_create_payload(
+                &member.actor,
+                member.service_id(),
+                format!("sha256:{}", "e".repeat(64)),
+                Utc::now() + ChronoDuration::days(7),
+            )?,
+        )
+        .await
+        .context("invite Bob")?;
+    let member_account = AccountId::new(
+        DidCoreId::new(actor_core_id(&member.actor)?)?,
+        DidCoreId::new(member.service_id().to_owned())?,
+    );
+    member
+        .submit_event(
+            &realm_id,
+            "ak.invite.accept",
+            serde_json::to_value(InviteAcceptPayload::directed(
+                InviteId::from_event_id(&submitted_event_id(&invited)?),
+                member_account,
+                InvitePreviousState::Pending,
+            ))?,
+        )
+        .await
+        .context("Bob accepts and joins")?;
+
     let sent = author
         .send_message(&realm_id, &strand_id, "first draft")
         .await
         .context("send the Message")?;
-    let message_event_id = crate::harness::submitted_event_id(&sent)?;
+    let message_event_id = submitted_event_id(&sent)?;
 
-    // (1) the author's edit is committed on the Realm stream.
+    // (2) the author's edit is committed on the Realm stream.
     let revise = author
         .author_event(
             &realm_id,
@@ -131,39 +176,42 @@ pub async fn message_edit_and_retract_run() -> Result<()> {
         "an exact revise replay must return the stored Commit: {status} {replayed}"
     );
 
-    // (2) an account outside the Realm cannot edit the Message.
+    // (3) neither a member without an edit action nor an outsider may edit it.
     let before = committed_stream(&author, &realm_id).await?;
-    let foreign = outsider
-        .author_event(
-            &realm_id,
-            "ak.message.revise",
-            message_revise_text_payload(message_event_id.as_str(), "not yours")?,
-        )
-        .await?;
-    let (status, refused) = submit(&outsider, foreign).await?;
-    ensure!(
-        status == StatusCode::FORBIDDEN && problem_code(&refused) == "capability_denied",
-        "a foreign revise must be capability_denied: {status} {refused}"
-    );
-    ensure!(
-        committed_stream(&author, &realm_id).await? == before,
-        "a refused revise must append no RealmCommit"
-    );
+    for (label, editor) in [("member", &member), ("outsider", &outsider)] {
+        let foreign = editor
+            .author_event(
+                &realm_id,
+                "ak.message.revise",
+                message_revise_text_payload(message_event_id.as_str(), "not yours")?,
+            )
+            .await?;
+        let (status, refused) = submit(editor, foreign).await?;
+        ensure!(
+            status == StatusCode::FORBIDDEN && problem_code(&refused) == "capability_denied",
+            "a {label} revise must be capability_denied: {status} {refused}"
+        );
+        ensure!(
+            committed_stream(&author, &realm_id).await? == before,
+            "a refused {label} revise must append no RealmCommit"
+        );
+    }
 
-    // (3) the latest version is the revise body.
-    let revise_row = row(&before, revise.event_id.as_str())?
+    // (4) Bob reads the revise body as the latest version.
+    let member_view = committed_stream(&member, &realm_id).await?;
+    let revise_row = row(&member_view, revise.event_id.as_str())?
         .as_ref()
-        .context("the revise must be disclosed before retraction")?;
+        .context("the revise must be disclosed to Bob before retraction")?;
     ensure!(
         revise_row["payload"]["content"]["body"] == "final text",
         "the disclosed latest version must be the revise body: {revise_row}"
     );
     ensure!(
-        row(&before, message_event_id.as_str())?.is_some(),
-        "the original create must be disclosed before retraction"
+        row(&member_view, message_event_id.as_str())?.is_some(),
+        "the original create must be disclosed to Bob before retraction"
     );
 
-    // (4) retraction withholds every version and keeps its own Commit.
+    // (5) retraction withholds every version from Bob and keeps its own Commit.
     let redacted = expect_json(
         author.post("/_arkret/self/events").canonical_json(
             &crate::publication::initial_submission(
@@ -181,10 +229,10 @@ pub async fn message_edit_and_retract_run() -> Result<()> {
     )
     .await
     .context("retract the Message")?;
-    let redact_event_id = crate::harness::submitted_event_id(&redacted)?;
-    let after = committed_stream(&author, &realm_id).await?;
+    let redact_event_id = submitted_event_id(&redacted)?;
+    let after = committed_stream(&member, &realm_id).await?;
     ensure!(
-        after.len() == before.len() + 1,
+        after.len() == member_view.len() + 1,
         "the retraction appends exactly one Commit"
     );
     ensure!(
@@ -197,7 +245,7 @@ pub async fn message_edit_and_retract_run() -> Result<()> {
         "the redaction itself stays disclosed"
     );
 
-    // (5) a retracted Message cannot be edited again.
+    // (6) a retracted Message cannot be edited again.
     let too_late = author
         .author_event(
             &realm_id,
@@ -211,7 +259,7 @@ pub async fn message_edit_and_retract_run() -> Result<()> {
         "a revise of a retracted Message must be failed_precondition: {status} {refused}"
     );
     ensure!(
-        committed_stream(&author, &realm_id).await? == after,
+        committed_stream(&member, &realm_id).await? == after,
         "a refused revise must append no RealmCommit"
     );
     Ok(())
