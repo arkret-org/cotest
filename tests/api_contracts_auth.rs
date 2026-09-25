@@ -19,3 +19,10 @@ async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
 async fn contact_edges_are_rejected() -> Result<()> {
     cotest::scenarios::api_contracts_auth::contact_edges_are_rejected().await
 }
+
+#[tokio::test]
+#[serial]
+async fn contact_reject_scope_update_and_tombstone_commit_atomically() -> Result<()> {
+    cotest::scenarios::api_contracts_auth::contact_reject_scope_update_and_tombstone_commit_atomically()
+        .await
+}

@@ -264,7 +264,7 @@ impl TestActorClient {
         }
     }
 
-    fn sign_prepared_contact_event(
+    pub(crate) fn sign_prepared_contact_event(
         &self,
         draft: &PreparedEventDraft,
         expected_kind: &str,

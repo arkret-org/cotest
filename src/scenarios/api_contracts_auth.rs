@@ -239,3 +239,204 @@ pub async fn contact_edges_are_rejected() -> Result<()> {
 
     Ok(())
 }
+
+/// Prepare one two-phase Contact command at `path`, sign its exact draft as
+/// `kind` and commit it; the committed outcome is returned.
+async fn contact_command(
+    client: &crate::harness::TestActorClient,
+    path: &str,
+    prepare: serde_json::Value,
+    kind: &str,
+) -> Result<arkret::contact_operations::ContactOperationOutcome> {
+    use arkret::contact_operations::{
+        ContactCommitPhase, ContactCommitRequestBody, ContactOperationOutcome,
+        ContactPreparedOutcome,
+    };
+    let operation_id = arkret::ProtocolOperationId::new(crate::harness::next_typed_id("operation"))
+        .map_err(anyhow::Error::msg)?;
+    let idempotency_key = arkret::IdempotencyKey::new(crate::harness::next_typed_id("idempotency"))
+        .map_err(anyhow::Error::msg)?;
+    let mut body = prepare;
+    body["phase"] = json!("prepare");
+    body["operation_id"] = json!(operation_id);
+    body["idempotency_key"] = json!(idempotency_key);
+    let prepared: ContactOperationOutcome =
+        serde_json::from_value(expect_json(client.post(path).json(&body), StatusCode::OK).await?)?;
+    let (reservation_handle, event_draft) = match prepared {
+        ContactOperationOutcome::Prepared { outcome } => match outcome {
+            ContactPreparedOutcome::Request {
+                reservation_handle,
+                event_draft,
+                ..
+            }
+            | ContactPreparedOutcome::Response {
+                reservation_handle,
+                event_draft,
+                ..
+            }
+            | ContactPreparedOutcome::Reject {
+                reservation_handle,
+                event_draft,
+                ..
+            }
+            | ContactPreparedOutcome::ScopeUpdate {
+                reservation_handle,
+                event_draft,
+                ..
+            }
+            | ContactPreparedOutcome::Tombstone {
+                reservation_handle,
+                event_draft,
+                ..
+            } => (reservation_handle, event_draft),
+        },
+        other => return Err(anyhow::anyhow!("{path} prepare did not prepare: {other:?}")),
+    };
+    let commit = ContactCommitRequestBody {
+        phase: ContactCommitPhase::Commit,
+        operation_id,
+        idempotency_key,
+        reservation_handle,
+        signed_event: client.sign_prepared_contact_event(&event_draft, kind)?,
+    };
+    Ok(serde_json::from_value(
+        expect_json(client.post(path).json(&commit), StatusCode::OK).await?,
+    )?)
+}
+
+/// The holder's current list row for `peer`.
+async fn contact_row(
+    client: &crate::harness::TestActorClient,
+    peer: &str,
+) -> Result<arkret::contact_operations::ContactListRow> {
+    let peer = actor_core_id(peer)?;
+    client
+        .sdk()
+        .contacts_list()
+        .await?
+        .contacts
+        .into_iter()
+        .find(|row| {
+            row.peer
+                .contact_actor_id()
+                .signing_principal_id()
+                .as_str()
+                == peer.as_str()
+        })
+        .ok_or_else(|| anyhow::anyhow!("the Contact row for {peer} is missing"))
+}
+
+pub async fn contact_reject_scope_update_and_tombstone_commit_atomically() -> Result<()> {
+    use arkret::contact_operations::{ContactAcceptedOutcome, ContactOperationOutcome};
+    let station = spawn_with_standard_grant_authority("contact-successors", &[]).await?;
+    let server = &station.server;
+    let client = |label: &'static str, device: &'static str| {
+        let station = &station;
+        async move {
+            let actor = actor_did_for_service_did(station.server.service_did(), label)?;
+            station.standard_grant_client(&station.server.demo_client(&actor, device).await?)
+        }
+    };
+    let carol = client("carol-contact", "ak:device:01904100-0000-7000-8000-0000000000c1").await?;
+    let dave = client("dave-contact", "ak:device:01904100-0000-7000-8000-0000000000d1").await?;
+    let erin = client("erin-contact", "ak:device:01904100-0000-7000-8000-0000000000e1").await?;
+    let _ = server;
+
+    // `ak.contact.rejected`: Carol terminally rejects Dave's pending request.
+    dave.request_contact(&carol.actor).await?;
+    let pending = contact_row(&carol, &dave.actor).await?;
+    let rejected = contact_command(
+        &carol,
+        "/_arkret/self/contacts/reject",
+        json!({
+            "peer": pending.peer,
+            "request_event_ref": pending.request_event_ref,
+            "action": "reject",
+        }),
+        arkret_wire::event_kind_str::CONTACT_REJECTED,
+    )
+    .await?;
+    assert!(matches!(
+        rejected,
+        ContactOperationOutcome::Accepted {
+            outcome: ContactAcceptedOutcome::Reject { .. }
+        }
+    ));
+    assert_eq!(
+        contact_row(&carol, &dave.actor).await?.state,
+        arkret::ContactState::Rejected
+    );
+
+    // `ak.contact.scope.update`: after a normal round, the requester's first
+    // successor walks the founding edge from its own request head, and the
+    // responder's first successor follows its accepted head.
+    erin.request_contact(&carol.actor).await?;
+    carol.accept_contact(&erin).await?;
+    for (holder, peer) in [(&erin, &carol), (&carol, &erin)] {
+        let row = contact_row(holder, &peer.actor).await?;
+        let next = row
+            .next_prepare_input
+            .ok_or_else(|| anyhow::anyhow!("an accepted row carries its next prepare input"))?;
+        assert_eq!(next.version, 2);
+        let updated = contact_command(
+            holder,
+            "/_arkret/self/contacts/scope-update",
+            json!({
+                "peer": row.peer,
+                "contact_round_id": next.contact_round_id,
+                "version": next.version,
+                "predecessor_event_ref": next.predecessor_event_ref,
+                "granted_to_peer_scopes": [],
+            }),
+            arkret_wire::event_kind_str::CONTACT_SCOPE_UPDATE,
+        )
+        .await?;
+        assert!(matches!(
+            updated,
+            ContactOperationOutcome::Accepted {
+                outcome: ContactAcceptedOutcome::ScopeUpdate { .. }
+            }
+        ));
+        let row = contact_row(holder, &peer.actor).await?;
+        assert_eq!(row.state, arkret::ContactState::Accepted);
+        assert!(row.granted_to_peer_scopes.is_empty());
+        assert_eq!(
+            row.next_prepare_input
+                .ok_or_else(|| anyhow::anyhow!("an accepted row keeps its next prepare input"))?
+                .version,
+            3
+        );
+    }
+
+    // `ak.contact.tombstone`: Carol terminates the round.
+    let row = contact_row(&carol, &erin.actor).await?;
+    let next = row
+        .next_prepare_input
+        .ok_or_else(|| anyhow::anyhow!("an accepted row carries its next prepare input"))?;
+    let tombstoned = contact_command(
+        &carol,
+        "/_arkret/self/contacts/tombstone",
+        json!({
+            "peer": row.peer,
+            "contact_round_id": next.contact_round_id,
+            "version": next.version,
+            "predecessor_event_ref": next.predecessor_event_ref,
+            "block_peer": false,
+        }),
+        arkret_wire::event_kind_str::CONTACT_TOMBSTONE,
+    )
+    .await?;
+    assert!(matches!(
+        tombstoned,
+        ContactOperationOutcome::Accepted {
+            outcome: ContactAcceptedOutcome::Tombstone { .. }
+        }
+    ));
+    for (holder, peer) in [(&carol, &erin), (&erin, &carol)] {
+        assert_eq!(
+            contact_row(holder, &peer.actor).await?.state,
+            arkret::ContactState::Tombstoned
+        );
+    }
+    Ok(())
+}
