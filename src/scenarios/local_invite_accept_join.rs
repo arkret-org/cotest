@@ -11,7 +11,11 @@
 //!    `invite_already_terminal` and appends no Commit;
 //! 3. joining grants no writing: Bob's Message is `capability_denied` until Alice grants him
 //!    `ak.message.create`, after which it is committed and Alice's stream scan returns it in full;
-//! 4. Bob's own scan starts at his accepting Commit (`membership_join`, decision 0108 §1045);
+//! 4. Bob's own scan starts at his accepting Commit (`membership_join`, decision 0108 §1045); his
+//!    `/head` Snapshot names the same floor and carries the Invite, grant and roster rows; his
+//!    whole-interval Account window starts at that Commit and is preview only (no Snapshot before
+//!    his floor was ever issued to him), while a window above the floor names his issued `/head` as
+//!    its `after_committed_prefix` basis;
 //! 5. Bob leaves by his own `ak.member.state`; his Account realm list removes the Realm and his
 //!    scan is refused.
 
@@ -27,7 +31,8 @@ use reqwest::StatusCode;
 use serde_json::Value;
 
 use crate::harness::{
-    CanonicalJsonBody, TestActorClient, actor_core_id, invite_create_payload, submitted_event_id,
+    CanonicalJsonBody, TestActorClient, actor_core_id, expect_json, invite_create_payload,
+    submitted_event_id,
 };
 use crate::scenarios::invite_create_and_dispatch::InviteStation;
 use crate::scenarios::protocol_payloads::account_summary::{
@@ -91,6 +96,55 @@ async fn realm_head(client: &TestActorClient, realm_id: &RealmId) -> Result<u64>
         .last()
         .map(|item| item.commit().stream_position)
         .context("the Realm stream has no Commit")
+}
+
+/// The first Account subscribe frame's Realm detail for `realm` at
+/// `window_limit`, after the SDK's closed frame contract.
+async fn realm_window(
+    client: &TestActorClient,
+    realm: &str,
+    window_limit: u32,
+) -> Result<arkret_models_collaboration::sync_frames::account_subscribe::RealmSyncEntry> {
+    let filter = serde_json::json!({"realm_ids": [realm], "window_limit": window_limit});
+    let filter = String::from_utf8(arkret_canonical::canonical_json_bytes(&filter)?)?;
+    let response = client
+        .get("/_arkret/self/account/subscribe")
+        .query(&[("filter", filter.as_str())])
+        .send()
+        .await?;
+    let status = response.status();
+    let body = response.text().await?;
+    ensure!(
+        status == StatusCode::OK,
+        "account subscribe {status}: {body}"
+    );
+    let line = body
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .context("account subscribe returned no frame")?;
+    let frame: arkret_models_collaboration::sync_frames::account_subscribe::AccountSubscribeFrame =
+        serde_json::from_str(line).with_context(|| format!("closed Account frame: {line}"))?;
+    frame
+        .validate()
+        .map_err(|error| anyhow!("Account frame contract: {error}: {line}"))?;
+    frame
+        .realms
+        .as_ref()
+        .and_then(|realms| realms.entries.get(realm))
+        .cloned()
+        .with_context(|| format!("the requested Realm detail is absent: {line}"))
+}
+
+fn window_positions(
+    entry: &arkret_models_collaboration::sync_frames::account_subscribe::RealmSyncEntry,
+) -> Vec<u64> {
+    entry
+        .committed_events
+        .iter()
+        .flatten()
+        .map(|row| row.commit().stream_position)
+        .collect()
 }
 
 pub async fn local_invite_accept_join_run() -> Result<()> {
@@ -240,6 +294,92 @@ pub async fn local_invite_accept_join_run() -> Result<()> {
             .first()
             .is_some_and(|item| item.commit().commit_id == accept_commit.commit_id),
         "Bob's scan starts at his join"
+    );
+
+    // (4b) Bob's `/head` names the same floor and every Realm state row.
+    let head_body = expect_json(
+        bob.get("/_arkret/self/realm-state-snapshot/head")
+            .query(&[("realm_id", realm.as_str())]),
+        StatusCode::OK,
+    )
+    .await
+    .context("Bob's /head")?;
+    let head_snapshot: arkret_wire::RealmStateSnapshot = serde_json::from_value(head_body.clone())
+        .context("Bob's /head is a closed signed Snapshot")?;
+    let head_position = realm_head(&alice, &realm_id).await?;
+    let realm_stream = CommitStreamRef::Realm {
+        realm_id: realm_id.clone(),
+    };
+    ensure!(
+        head_snapshot.retention_and_history_floor.stream_floors
+            == [arkret_wire::StreamHistoryFloor {
+                stream_ref: realm_stream.clone(),
+                oldest_position: accept_commit.stream_position,
+            }]
+            && head_snapshot.visible_stream_heads.len() == 1
+            && head_snapshot.visible_stream_heads[0].stream_position == head_position,
+        "Bob's Snapshot floor is his accepting Commit at the current head: {head_body}"
+    );
+    let selectors = head_snapshot
+        .current_state_entries
+        .iter()
+        .filter_map(|entry| match entry {
+            arkret_wire::TypedCurrentResult::Value { selector, .. } => Some(selector.clone()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    ensure!(
+        selectors.contains(&arkret_wire::CurrentSelector::InviteLifecycle {
+            invite_id: invite_id.clone(),
+        }) && selectors.contains(&arkret_wire::CurrentSelector::MemberState {
+            actor_id: bob_actor.clone(),
+        }) && selectors.iter().any(|selector| matches!(
+            selector,
+            arkret_wire::CurrentSelector::CapabilityGrant { .. }
+        )),
+        "Bob's Snapshot carries his Invite, membership and grant rows: {head_body}"
+    );
+
+    // Bob's whole readable interval starts at his join and is preview only.
+    let whole = realm_window(&bob, &realm, 20).await?;
+    let whole_window = whole
+        .streams
+        .as_deref()
+        .and_then(|streams| streams.first())
+        .context("Bob's Realm stream window")?;
+    ensure!(
+        window_positions(&whole)
+            == (accept_commit.stream_position..=head_position).collect::<Vec<_>>()
+            && !whole_window.limited
+            && whole_window.preview_only == Some(true)
+            && whole_window.window_start_basis.is_none(),
+        "Bob's window starts at his floor and has no pre-floor basis: {whole_window:?}"
+    );
+
+    // One more Commit: a one-row window names Bob's issued `/head` as its
+    // exact anchor.
+    bob.send_message(&realm, &strand_id, "after the head")
+        .await
+        .context("Bob's second Message is committed")?;
+    let latest = realm_window(&bob, &realm, 1).await?;
+    let latest_window = latest
+        .streams
+        .as_deref()
+        .and_then(|streams| streams.first())
+        .context("Bob's one-row window")?;
+    let basis = latest_window
+        .window_start_basis
+        .as_ref()
+        .with_context(|| format!("a window above the floor names a basis: {latest_window:?}"))?;
+    ensure!(
+        window_positions(&latest) == vec![head_position + 1]
+            && latest_window.limited
+            && latest_window.preview_only.is_none()
+            && basis.anchor_kind
+                == arkret_models_collaboration::sync_frames::account_sync::StreamWindowAnchorKind::AfterCommittedPrefix
+            && basis.anchor_position == head_position
+            && basis.snapshot_ref == head_snapshot.snapshot_id,
+        "the one-row window is backed by Bob's /head: {latest_window:?}"
     );
 
     // (5) Bob leaves by his own Event.
