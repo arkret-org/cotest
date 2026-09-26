@@ -18,8 +18,13 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
-use crate::harness::{NonProtocolTestBody, TestServerGroup, expect_api_error, expect_json};
-use crate::scenarios::identity_test_support::actor_did_for_service_did;
+use crate::harness::{
+    ArkretServer, NonProtocolTestBody, TestServerGroup, expect_api_error, expect_json,
+};
+use crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
+use crate::scenarios::identity_test_support::{
+    HARNESS_INTERNAL_AUTHORITY_SECRET, actor_did_for_service_did,
+};
 
 pub async fn applet_lifecycle_surfaces_are_advertised_when_routes_exist() -> Result<()> {
     let group = TestServerGroup::single("extension-surface-applet").await?;
@@ -200,8 +205,19 @@ pub async fn agent_lifecycle_surfaces_are_advertised_when_routes_exist() -> Resu
 }
 
 pub async fn device_pairing_handoff_bundle_selects_all_canonical_routes() -> Result<()> {
-    let group = TestServerGroup::single("extension-surface-device-pairing").await?;
-    let server = group.server(0);
+    // This surface test uses a narrow AA fixture for the private stage,
+    // resolve and status legs. The real Coauth finalize/pair_device flow is
+    // covered separately by the two-process pairing tail-in task.
+    let authority = MockCoauthIntrospectionServer::spawn_with_pairing_handoff(
+        HARNESS_INTERNAL_AUTHORITY_SECRET,
+    )
+    .await?;
+    let authority_origin = authority.origin();
+    let server = ArkretServer::spawn_with_env(
+        "extension-surface-device-pairing",
+        &[("SOLAND_ACCOUNT_AUTHORITY_URL", authority_origin.as_str())],
+    )
+    .await?;
     let describe = expect_json(
         server.http().get(server.url("/_arkret/describe")),
         StatusCode::OK,
@@ -287,5 +303,6 @@ pub async fn device_pairing_handoff_bundle_selects_all_canonical_routes() -> Res
         status.device_id.is_none() && status.authorized_event_ref.is_none(),
         "a staged record exposes no device identity and no authorization"
     );
+    assert_eq!(authority.pairing_calls(), ["stage", "resolve", "status"]);
     Ok(())
 }

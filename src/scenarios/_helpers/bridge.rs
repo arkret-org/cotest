@@ -3,6 +3,11 @@
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
+use arkret_models_collaboration::device_pairing::{
+    DevicePairingCode, DevicePairingNonce, DevicePairingRequestId, DevicePairingResolveRequestBody,
+    DevicePairingStageOutcome, DevicePairingStageRequestBody, DevicePairingState,
+    DevicePairingStatusOutcome, DevicePairingStatusRequestBody,
+};
 use salvo::affix_state;
 use salvo::prelude::{Depot, Json, Request, Response, Router, handler};
 use serde_json::{Value, json};
@@ -67,6 +72,13 @@ struct CoauthIntrospectionState {
     bindings: Arc<Mutex<Vec<CoauthGrantBinding>>>,
     requests: Arc<Mutex<Vec<Value>>>,
     channel: Arc<Mutex<Vec<ChannelObservation>>>,
+    pairing: Option<Arc<Mutex<MockPairingLedger>>>,
+}
+
+#[derive(Default)]
+struct MockPairingLedger {
+    staged: Vec<(DevicePairingRequestId, DevicePairingCode)>,
+    calls: Vec<&'static str>,
 }
 
 pub struct MockCoauthIntrospectionServer {
@@ -75,6 +87,7 @@ pub struct MockCoauthIntrospectionServer {
     bindings: Arc<Mutex<Vec<CoauthGrantBinding>>>,
     requests: Arc<Mutex<Vec<Value>>>,
     channel: Arc<Mutex<Vec<ChannelObservation>>>,
+    pairing: Option<Arc<Mutex<MockPairingLedger>>>,
     _server: super::mock_http::MockServer,
 }
 
@@ -87,16 +100,32 @@ impl MockCoauthIntrospectionServer {
     }
 
     pub async fn spawn_with_internal_secret(internal_secret: &str) -> Result<Self> {
+        Self::spawn_with_optional_pairing(internal_secret, false).await
+    }
+
+    /// Test AA for the Station's three open handoff routes only. This models
+    /// account-less stage and staged visibility; it cannot finalize or pair a
+    /// device, so the separate real Coauth two-process suite remains required.
+    pub async fn spawn_with_pairing_handoff(internal_secret: &str) -> Result<Self> {
+        Self::spawn_with_optional_pairing(internal_secret, true).await
+    }
+
+    async fn spawn_with_optional_pairing(
+        internal_secret: &str,
+        pairing_enabled: bool,
+    ) -> Result<Self> {
         let requests: Arc<Mutex<Vec<Value>>> = Arc::new(Mutex::new(Vec::new()));
         let bindings: Arc<Mutex<Vec<CoauthGrantBinding>>> = Arc::new(Mutex::new(Vec::new()));
         let channel: Arc<Mutex<Vec<ChannelObservation>>> = Arc::new(Mutex::new(Vec::new()));
+        let pairing = pairing_enabled.then(|| Arc::new(Mutex::new(MockPairingLedger::default())));
         let state = CoauthIntrospectionState {
             internal_secret: internal_secret.to_owned(),
             bindings: Arc::clone(&bindings),
             requests: Arc::clone(&requests),
             channel: Arc::clone(&channel),
+            pairing: pairing.clone(),
         };
-        let router = Router::new()
+        let mut router = Router::new()
             .hoop(affix_state::inject(state))
             .push(
                 Router::with_path("_coauth/internal/session-grants/introspect")
@@ -105,6 +134,21 @@ impl MockCoauthIntrospectionServer {
             .push(
                 Router::with_path("_arkret/gate/account/session-grants/revoke").post(coauth_revoke),
             );
+        if pairing_enabled {
+            router = router
+                .push(
+                    Router::with_path("_coauth/internal/device-pairing/stages")
+                        .post(mock_pairing_stage),
+                )
+                .push(
+                    Router::with_path("_coauth/internal/device-pairing/resolutions")
+                        .post(mock_pairing_resolve),
+                )
+                .push(
+                    Router::with_path("_coauth/internal/device-pairing/status-queries")
+                        .post(mock_pairing_status),
+                );
+        }
         let server = super::mock_http::spawn_mock(router).await?;
         let origin = format!("http://{}", server.addr());
         let url = format!("{origin}/_coauth/internal/session-grants/introspect");
@@ -114,6 +158,7 @@ impl MockCoauthIntrospectionServer {
             bindings,
             requests,
             channel,
+            pairing,
             _server: server,
         })
     }
@@ -221,6 +266,137 @@ impl MockCoauthIntrospectionServer {
     pub fn channel_observations(&self) -> Vec<ChannelObservation> {
         self.channel.lock().expect("mock channel lock").clone()
     }
+
+    pub fn pairing_calls(&self) -> Vec<&'static str> {
+        self.pairing
+            .as_ref()
+            .expect("pairing handoff mock was enabled")
+            .lock()
+            .expect("mock pairing lock")
+            .calls
+            .clone()
+    }
+}
+
+fn pairing_channel_authorized(req: &Request, state: &CoauthIntrospectionState) -> bool {
+    req.headers()
+        .get(salvo::http::header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| value == format!("Bearer {}", state.internal_secret))
+}
+
+#[handler]
+async fn mock_pairing_stage(req: &mut Request, depot: &mut Depot, res: &mut Response) {
+    let state = depot
+        .get_typed::<CoauthIntrospectionState>()
+        .expect("mock AA state");
+    if !pairing_channel_authorized(req, state) || req.headers().get("idempotency-key").is_none() {
+        res.status_code(salvo::http::StatusCode::UNAUTHORIZED);
+        return;
+    }
+    let Ok(_stage) = req.parse_json::<DevicePairingStageRequestBody>().await else {
+        res.status_code(salvo::http::StatusCode::BAD_REQUEST);
+        return;
+    };
+    let uuid = crate::scenarios::mls_lifecycle_live::fresh_uuid_v7();
+    let id = DevicePairingRequestId::new(format!("device_pairing_request:{uuid}"))
+        .expect("UUIDv7 pairing id");
+    let entropy = arkret_canonical::sha256_bytes(uuid.as_bytes());
+    let alphabet = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let code = DevicePairingCode::new(
+        entropy[..8]
+            .iter()
+            .map(|byte| alphabet[usize::from(byte & 31)] as char)
+            .collect(),
+    )
+    .expect("closed pairing code");
+    let nonce = DevicePairingNonce::new(arkret_canonical::base64url_encode(entropy))
+        .expect("32-byte pairing nonce");
+    let host = req
+        .headers()
+        .get(salvo::http::header::HOST)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default();
+    let outcome = DevicePairingStageOutcome {
+        device_pairing_request_id: id.clone(),
+        pairing_code: code.clone(),
+        gate_audience_uri: format!("http://{host}"),
+        server_nonce: nonce,
+        expires_at: chrono::Utc::now() + chrono::Duration::minutes(10),
+    };
+    let mut ledger = state
+        .pairing
+        .as_ref()
+        .expect("pairing enabled")
+        .lock()
+        .expect("mock pairing lock");
+    ledger.calls.push("stage");
+    ledger.staged.push((id, code));
+    res.render(Json(outcome));
+}
+
+#[handler]
+async fn mock_pairing_resolve(req: &mut Request, depot: &mut Depot, res: &mut Response) {
+    let state = depot
+        .get_typed::<CoauthIntrospectionState>()
+        .expect("mock AA state");
+    if !pairing_channel_authorized(req, state) {
+        res.status_code(salvo::http::StatusCode::UNAUTHORIZED);
+        return;
+    }
+    if req
+        .parse_json::<DevicePairingResolveRequestBody>()
+        .await
+        .is_err()
+    {
+        res.status_code(salvo::http::StatusCode::BAD_REQUEST);
+        return;
+    }
+    state
+        .pairing
+        .as_ref()
+        .expect("pairing enabled")
+        .lock()
+        .expect("mock pairing lock")
+        .calls
+        .push("resolve");
+    // A merely staged record is intentionally invisible until finalize.
+    res.status_code(salvo::http::StatusCode::NOT_FOUND);
+}
+
+#[handler]
+async fn mock_pairing_status(req: &mut Request, depot: &mut Depot, res: &mut Response) {
+    let state = depot
+        .get_typed::<CoauthIntrospectionState>()
+        .expect("mock AA state");
+    if !pairing_channel_authorized(req, state) {
+        res.status_code(salvo::http::StatusCode::UNAUTHORIZED);
+        return;
+    }
+    let Ok(query) = req.parse_json::<DevicePairingStatusRequestBody>().await else {
+        res.status_code(salvo::http::StatusCode::BAD_REQUEST);
+        return;
+    };
+    let mut ledger = state
+        .pairing
+        .as_ref()
+        .expect("pairing enabled")
+        .lock()
+        .expect("mock pairing lock");
+    ledger.calls.push("status");
+    if !ledger
+        .staged
+        .iter()
+        .any(|(id, code)| *id == query.device_pairing_request_id && *code == query.pairing_code)
+    {
+        res.status_code(salvo::http::StatusCode::NOT_FOUND);
+        return;
+    }
+    res.render(Json(DevicePairingStatusOutcome {
+        state: DevicePairingState::Staged,
+        device_id: None,
+        authorized_event_ref: None,
+    }));
 }
 
 /// The same public Account Authority operation exercised by a live Coauth
