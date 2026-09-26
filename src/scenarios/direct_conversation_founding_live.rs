@@ -35,9 +35,13 @@ use std::time::{Duration, Instant};
 use anyhow::{Context as _, Result, bail, ensure};
 use arkret::{ArkretMlsGroup, MlsCommitPayload, MlsGovernanceBindingPayload};
 use arkret_models_collaboration::authority_commit::{
-    AggregateAcceptanceStatus, DirectConversationFoundingAcceptanceOutcome,
+    AggregateAcceptanceStatus, CommittedEventSubmission,
+    DirectConversationFoundingAcceptanceOutcome,
+    DirectConversationFoundingDependencyMissingProblem,
+    DirectConversationFoundingFederationSubmission, DirectConversationFoundingMissingDependency,
     DirectConversationFoundingUnitKind, DirectConversationFoundingUnitSubmission,
-    SelfAuthoritySubmitRequest,
+    PeerAuthoritySubmitRequest, PeerRegisteredAtomicUnit, PeerRegisteredAtomicUnitRequest,
+    RegisteredAtomicUnitBranch, SelfAuthoritySubmitRequest,
 };
 use arkret_models_collaboration::device_messages::DeviceMessagesAckRequestBody;
 use arkret_models_collaboration::direct_conversation::DirectConversationFoundingPlan;
@@ -407,12 +411,40 @@ async fn wait_for_peer_founding_commits(
     }
 }
 
+async fn assert_no_peer_founding_writes(connect_url: &str, realm_id: &RealmId) -> Result<()> {
+    let connect_url = connect_url.to_owned();
+    let realm_id = realm_id.to_string();
+    let counts = tokio::task::spawn_blocking(move || -> Result<Vec<i64>> {
+        let mut db = postgres::Client::connect(&connect_url, postgres::NoTls)?;
+        let row = db.query_one(
+            "SELECT \
+             (SELECT count(*) FROM canonical_events WHERE realm_id=$1), \
+             (SELECT count(*) FROM realm_commits WHERE realm_id=$1), \
+             (SELECT count(*) FROM realm_authorities WHERE realm_id=$1), \
+             (SELECT count(*) FROM direct_conversation_founding_slots WHERE realm_id=$1), \
+             (SELECT count(*) FROM federation_outbox WHERE payload_json LIKE '%' || $1 || '%')",
+            &[&realm_id],
+        )?;
+        Ok((0..5).map(|index| row.get(index)).collect())
+    })
+    .await??;
+    ensure!(
+        counts == [0; 5],
+        "missing dependency left peer Event/Commit/authority/slot/outbox writes: {counts:?}"
+    );
+    Ok(())
+}
+
 pub async fn contact_round_founds_direct_conversation() -> Result<()> {
-    run(false).await
+    run(false, false).await
 }
 
 pub async fn cross_station_contact_round_founds_direct_conversation() -> Result<()> {
-    run(true).await
+    run(true, false).await
+}
+
+pub async fn cross_station_missing_contact_dependency_is_atomic() -> Result<()> {
+    run(true, true).await
 }
 
 /// A glare round has two request heads and no normal response Event. Its
@@ -637,7 +669,7 @@ async fn accepted_round_id(holder: &Member, peer: &AccountId) -> Result<arkret_w
         .contact_round_id)
 }
 
-async fn run(cross_station: bool) -> Result<()> {
+async fn run(cross_station: bool, missing_contact_dependency: bool) -> Result<()> {
     let Some(governance_database) = database(GROUP)? else {
         return Ok(());
     };
@@ -696,6 +728,37 @@ async fn run(cross_station: bool) -> Result<()> {
         accepted_round(&bob, &alice.account).await?.0 == contact_round_id,
         "both holders must list the same accepted round"
     );
+    let founding_evidence = if missing_contact_dependency {
+        let resolved = alice
+            .client
+            .sdk()
+            .direct_conversation_resolve(&DirectConversationResolveRequestBody {
+                peer: arkret::contact_operations::ContactPeer::Human {
+                    account_id: bob.account.clone(),
+                },
+            })
+            .await?;
+        let DirectConversationResolveOutcome::CreationRequired {
+            next_founding_input,
+        } = resolved
+        else {
+            bail!("the normal-round responder did not receive founding material: {resolved:?}");
+        };
+        let peer_url = peer_database
+            .as_ref()
+            .expect("missing dependency needs two Stations")
+            .connect_url
+            .clone();
+        let deleted = tokio::task::spawn_blocking(move || -> Result<u64> {
+            let mut db = postgres::Client::connect(&peer_url, postgres::NoTls)?;
+            Ok(db.execute("DELETE FROM contacts", &[])?)
+        })
+        .await??;
+        ensure!(deleted > 0, "the peer had no Contact to remove");
+        Some(next_founding_input.founding_authority_evidence)
+    } else {
+        None
+    };
 
     // Section 5.5: Alice authors the four-Event unit and signs every Event.
     let at = arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now());
@@ -791,6 +854,58 @@ async fn run(cross_station: bool) -> Result<()> {
                 && commit.realm_id == realm_id,
             "founding Commit {position} does not cover its unit Event"
         );
+    }
+    if let Some(founding_authority_evidence) = founding_evidence {
+        let request =
+            PeerAuthoritySubmitRequest::RegisteredAtomicUnit(PeerRegisteredAtomicUnitRequest {
+                branch: RegisteredAtomicUnitBranch::RegisteredAtomicUnit,
+                unit: PeerRegisteredAtomicUnit::DirectConversationFounding(
+                    DirectConversationFoundingFederationSubmission {
+                        unit_kind: unit.unit_kind,
+                        committed_events: std::array::from_fn(|index| CommittedEventSubmission {
+                            event_submission: unit.events[index].clone(),
+                            source_commit: founded.commits[index].clone(),
+                            welcomes: None,
+                        }),
+                        founding_authority_evidence,
+                    },
+                ),
+            });
+        request.validate()?;
+        let body = arkret_canonical::canonical_json_bytes(&request)?;
+        for _ in 0..2 {
+            let (status, answer) = peer_server
+                .signed_peer_post(
+                    server,
+                    "/_arkret/peer/events",
+                    &body,
+                    peer_server.service_id(),
+                )
+                .await?;
+            ensure!(
+                status == StatusCode::CONFLICT,
+                "missing Contact dependency answered {status}: {}",
+                String::from_utf8_lossy(&answer)
+            );
+            let problem: DirectConversationFoundingDependencyMissingProblem =
+                serde_json::from_slice(&answer)?;
+            problem.validate()?;
+            ensure!(
+                problem.details.missing_dependencies
+                    == vec![
+                        DirectConversationFoundingMissingDependency::ContactRoundEvidence {
+                            source_event_ref: heads[0].clone(),
+                        }
+                    ],
+                "missing dependency list does not name the source Contact request"
+            );
+        }
+        assert_no_peer_founding_writes(
+            &peer_database.expect("two Stations").connect_url,
+            &realm_id,
+        )
+        .await?;
+        return Ok(());
     }
     // Section 5.5: an exact retry replays the same four source Commits.
     let replayed: DirectConversationFoundingAcceptanceOutcome = serde_json::from_value(
