@@ -19,8 +19,9 @@ use arkret_models_identity::{
     SignerKeysQueryRequestBody,
 };
 use arkret_wire::{
-    AccountId, ActorId, CommittedEventView, Did, DidCoreId, DidUrl, Event,
+    AccountId, ActorId, CommitStreamRef, CommittedEventView, Did, DidCoreId, DidUrl, Event,
     EventAdmissionSubmission, EventId, EventKind, RealmCommit, RealmId, RequestId,
+    StreamScanDirection, StreamScanOutcome, StreamScanRequest,
 };
 use reqwest::StatusCode;
 use serde_json::{Value, json};
@@ -280,10 +281,18 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
         .await?;
     let carol_commit =
         submit_and_expect_commit(&carol, &carol_account, CAROL_DEVICE, &carol_join).await?;
-    ensure_same_commit(
-        &carol_commit,
-        &wait_held(&bob, &carol_join.event_id, ROUTE_MISS_WINDOW).await?,
-    )?;
+    // Bob's own scan on Y reads the held stream from its typed current: the
+    // withheld Message is its exact Commit alone, Carol's join follows it.
+    let page = wait_scanned(&bob, &restricted, &carol_commit, ROUTE_MISS_WINDOW).await?;
+    let withheld = page
+        .committed_events
+        .iter()
+        .find(|item| item.commit() == &plaintext.1)
+        .context("Y's scan has no row for the withheld Message")?;
+    ensure!(
+        matches!(withheld, CommittedEventView::Withheld(_)),
+        "Y serves the restricted plaintext Message in full"
+    );
     match bob.sdk().committed_event_get(&plaintext.0.event_id).await? {
         CommittedEventView::Withheld(view) => ensure!(
             view.commit == plaintext.1,
@@ -293,6 +302,41 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
     }
     drop(coauth);
     Ok(())
+}
+
+/// Poll `client`'s own Realm stream scan on its Station until it holds
+/// `commit`, and return that page.
+async fn wait_scanned(
+    client: &TestActorClient,
+    realm_id: &str,
+    commit: &RealmCommit,
+    window: Duration,
+) -> Result<StreamScanOutcome> {
+    let realm_id = RealmId::new(realm_id.to_owned())?;
+    let request = StreamScanRequest {
+        realm_id: realm_id.clone(),
+        stream_ref: CommitStreamRef::Realm { realm_id },
+        direction: StreamScanDirection::After(None),
+        limit: 100,
+    };
+    let deadline = Instant::now() + window;
+    loop {
+        if let Ok(page) = client.sdk().scan_commit_stream(&request).await
+            && page
+                .committed_events
+                .iter()
+                .any(|item| item.commit() == commit)
+        {
+            return Ok(page);
+        }
+        if Instant::now() >= deadline {
+            bail!(
+                "Commit {} never reached the member Station's held stream",
+                commit.commit_id
+            );
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
 }
 
 /// Poll `client`'s realm list on its Station until it no longer names
