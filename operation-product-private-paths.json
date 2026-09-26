@@ -88,6 +88,27 @@
     },
     {
       "source": "cotest",
+      "method": "QUERY",
+      "path": "/_arkret/self/events/resolve",
+      "classification": "product-private",
+      "reason": "Negative-surface probe in events_resolve.rs: the retired Event selector endpoint must remain 404; committed Event reads use the registered stream scan and exact Event read operations."
+    },
+    {
+      "source": "cotest",
+      "method": "QUERY",
+      "path": "/_arkret/self/seals/resolve",
+      "classification": "product-private",
+      "reason": "Negative-surface probe in events_resolve.rs: the retired Seal selector endpoint must remain 404."
+    },
+    {
+      "source": "cotest",
+      "method": "QUERY",
+      "path": "/_arkret/self/events/describe",
+      "classification": "product-private",
+      "reason": "Negative-surface probe in events_resolve.rs: the retired Event describe endpoint must remain 404."
+    },
+    {
+      "source": "cotest",
       "method": "GET",
       "path": "/_arkret/self/keys/backups/{wildcard}",
       "classification": "product-private",
