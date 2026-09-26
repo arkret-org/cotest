@@ -69,7 +69,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let (manage_grant_id, manage_grant) = alice
         .grant_realm_actions_to(&realm_id, &bob.actor, &["ak.realm.admin"])
         .await?;
-    assert_eq!(manage_grant["status"], "accepted");
+    assert_eq!(manage_grant["status"], "committed");
 
     let subject_actor_id = account_actor(&bob, &bob_core_id)?.to_string();
     let effective_grants = expect_json(
@@ -202,7 +202,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let revoked_manage = alice
         .revoke_realm_grant(&realm_id, &manage_grant_id)
         .await?;
-    assert_eq!(revoked_manage["status"], "accepted");
+    assert_eq!(revoked_manage["status"], "committed");
 
     let denied_after_revoke = expect_json(
         bob.post("/_arkret/self/authz/check")

@@ -31,7 +31,7 @@ pub async fn kanban_creates_keep_one_identity_across_receipt_backfill_and_retry(
     let server = group.server(0);
     let alice_did = actor_did_for_service_did(server.service_did(), "alice-kanban-id")?;
     let alice = server
-        .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-00000000ab01")
+        .standard_client(&alice_did, "ak:device:01904100-0000-7000-8000-00000000ab01")
         .await?;
     let realm_id = create_test_realm(&alice, "Kanban Identity Boundary").await?;
     // The typed builders resolve the envelope `station_id` from the

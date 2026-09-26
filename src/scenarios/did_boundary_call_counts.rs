@@ -104,7 +104,7 @@ fn assert_signature_counter_is_live(
 }
 
 async fn seeded_actor(server: &ArkretServer, actor: &str, device: &str) -> Result<TestActorClient> {
-    server.demo_client(actor, device).await
+    server.standard_client(actor, device).await
 }
 
 /// Flip one character of `producer_proof.jws`'s signature segment, leaving every

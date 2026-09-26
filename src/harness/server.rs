@@ -23,6 +23,7 @@ use super::assertions::expect_json;
 use super::canonical_device_id;
 use super::client::TestActorClient;
 use super::principal::ProvisionedTestPrincipal;
+use crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
 use crate::scenarios::_helpers::coauth_bootstrap::{EphemeralPg, spawn_ephemeral_postgres_for};
 use crate::scenarios::identity_test_support::{
     ActorBootstrapRegistration, HARNESS_ACCOUNT_AUTHORITY_ORIGIN,
@@ -168,6 +169,12 @@ pub struct ArkretServer {
     /// Keeps the process-only TLS authority and certificate files alive for
     /// exactly as long as at least one server from the run still needs them.
     _tls: Option<Arc<HarnessTls>>,
+    /// The harness Account Authority's issuer ledger, when this process was
+    /// wired to it. A self Event needs the authenticated Standard SessionGrant
+    /// of the exact Account (`account-lifecycle.md` step 8), which only an
+    /// introspectable issuer record can back; see
+    /// [`ArkretServer::standard_grant_client`].
+    session_grant_issuer: Option<Arc<MockCoauthIntrospectionServer>>,
 }
 
 struct HarnessTls {
@@ -407,6 +414,7 @@ impl ArkretServer {
             _port_reservations: Vec::new(),
             _database: None,
             _tls: tls,
+            session_grant_issuer: None,
         })
     }
 
@@ -415,10 +423,8 @@ impl ArkretServer {
             .context(
                 "Soland Cotest runtime requires PostgreSQL; set COTEST_SOLAND_DATABASE_URL or make Docker available for an isolated test database",
             )?;
-        let mut env = Vec::with_capacity(extra_env.len() + 1);
-        env.push(("DATABASE_URL", database.connect_url.as_str()));
-        env.extend_from_slice(extra_env);
-        let mut server = Self::spawn_with_network_and_env(name, None, &env).await?;
+        let mut server =
+            Self::spawn_with_database_url(name, &database.connect_url, extra_env).await?;
         server._database = Some(database);
         Ok(server)
     }
@@ -428,10 +434,115 @@ impl ArkretServer {
         database_url: &str,
         extra_env: &[(&str, &str)],
     ) -> Result<Self> {
-        let mut env = Vec::with_capacity(extra_env.len() + 1);
+        let issuer = Self::harness_session_grant_issuer(extra_env).await?;
+        let issuer_env = issuer
+            .as_ref()
+            .map(|issuer| (issuer.origin(), issuer.url()));
+        let mut env = Vec::with_capacity(extra_env.len() + 3);
         env.push(("DATABASE_URL", database_url));
+        if let Some((origin, introspection_url)) = issuer_env.as_ref() {
+            env.push(("SOLAND_ACCOUNT_AUTHORITY_URL", origin.as_str()));
+            env.push((
+                "SOLAND_SESSION_GRANT_INTROSPECTION_URL",
+                introspection_url.as_str(),
+            ));
+        }
         env.extend_from_slice(extra_env);
-        Self::spawn_with_network_and_env(name, None, &env).await
+        let mut server = Self::spawn_with_network_and_env(name, None, &env).await?;
+        server.session_grant_issuer = issuer;
+        Ok(server)
+    }
+
+    /// Stand up the harness Account Authority's issuer ledger for a process
+    /// Station whose caller did not wire an Account Authority of its own.
+    ///
+    /// The ledger answers the deployment-internal SessionGrant introspection
+    /// on the same registered channel (`harness_account_authority_env`) the
+    /// canonical actor bootstrap already uses, so a scenario principal can
+    /// present a Standard grant. A container cannot reach this in-process
+    /// listener, and a caller that names any part of the Authority keeps it.
+    async fn harness_session_grant_issuer(
+        extra_env: &[(&str, &str)],
+    ) -> Result<Option<Arc<MockCoauthIntrospectionServer>>> {
+        let caller_owns_authority = extra_env.iter().any(|(key, _)| {
+            matches!(
+                *key,
+                "SOLAND_ACCOUNT_AUTHORITY_URL"
+                    | "SOLAND_SESSION_GRANT_INTROSPECTION_URL"
+                    | "SOLAND_INTERNAL_AUTHORITY_SHARED_SECRET"
+                    | "SOLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN"
+            )
+        });
+        if caller_owns_authority || sut_runtime_mode() != SutRuntimeMode::Process {
+            return Ok(None);
+        }
+        Ok(Some(Arc::new(
+            MockCoauthIntrospectionServer::spawn_with_internal_secret(
+                HARNESS_INTERNAL_AUTHORITY_SECRET,
+            )
+            .await?,
+        )))
+    }
+
+    /// Bind the founding device of `client`'s provisioned principal to one
+    /// exact issuer-ledger grant and return a DPoP client presenting it.
+    ///
+    /// The development bearer `demo_client` / `register_client` return is a
+    /// local Station session and carries no SessionGrant, so a scenario that
+    /// authors a self Event presents this client instead.
+    pub fn standard_grant_client(&self, client: &TestActorClient) -> Result<TestActorClient> {
+        let issuer = self.session_grant_issuer.as_ref().context(
+            "this Station has no harness issuer ledger; it was spawned with its own Account Authority",
+        )?;
+        let principal = client
+            .principal
+            .as_ref()
+            .context("a Standard grant needs the client's provisioned principal")?;
+        let grant = crate::scenarios::bridge_contracts::session_grant::mock_session_grant_jwt(
+            principal.core_id.as_str(),
+            principal.device_id.as_str(),
+            self.service_id.as_str(),
+        );
+        issuer.bind_founding_device_grant(
+            &grant,
+            principal.core_id.as_str(),
+            principal.device_id.as_str(),
+            principal.founding_authorize_event_id.as_str(),
+            &principal.device_signing_key.verifying_key(),
+        )?;
+        self.client_with_founding_device_grant(principal, grant)
+    }
+
+    /// [`Self::demo_client`] presenting its founding device's Standard grant.
+    pub async fn standard_client(&self, actor: &str, device_id: &str) -> Result<TestActorClient> {
+        let client = self.demo_client(actor, device_id).await?;
+        self.standard_grant_client(&client)
+    }
+
+    /// [`Self::register_client`] presenting its founding device's Standard grant.
+    pub async fn standard_register_client(
+        &self,
+        did: &str,
+        handle: &str,
+        device_id: &str,
+    ) -> Result<TestActorClient> {
+        let client = self.register_client(did, handle, device_id).await?;
+        self.standard_grant_client(&client)
+    }
+
+    /// [`Self::register_client_with_localpart`] presenting its founding
+    /// device's Standard grant.
+    pub async fn standard_register_client_with_localpart(
+        &self,
+        did: &str,
+        display_handle: &str,
+        localpart: &str,
+        device_id: &str,
+    ) -> Result<TestActorClient> {
+        let client = self
+            .register_client_with_localpart(did, display_handle, localpart, device_id)
+            .await?;
+        self.standard_grant_client(&client)
     }
 
     async fn spawn_with_network_and_env(
@@ -624,6 +735,7 @@ impl ArkretServer {
             _port_reservations: vec![port, metrics_port],
             _database: None,
             _tls: Some(tls),
+            session_grant_issuer: None,
         })
     }
 
@@ -763,6 +875,7 @@ impl ArkretServer {
             _port_reservations: vec![host_port],
             _database: None,
             _tls: None,
+            session_grant_issuer: None,
         })
     }
 

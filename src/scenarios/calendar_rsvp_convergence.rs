@@ -351,7 +351,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
     let alice_did = alice_did.as_str();
     let bob_did = bob_did.as_str();
     let alice = server
-        .register_client(
+        .standard_register_client(
             alice_did,
             "@cotest-rsvp-alice",
             "ak:device:01904100-0000-7000-8000-0000000000c1",
@@ -363,7 +363,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
     // without calling an operation the SUT does not advertise.
     let alice_second_device = alice.clone();
     let bob = server
-        .register_client(
+        .standard_register_client(
             bob_did,
             "@cotest-rsvp-bob",
             "ak:device:01904100-0000-7000-8000-0000000000b1",
@@ -731,7 +731,7 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
     let alice_did = alice_did.as_str();
     let bob_did = bob_did.as_str();
     let alice = server
-        .register_client(
+        .standard_register_client(
             alice_did,
             "@cotest-rsvp-alice",
             "ak:device:01904100-0000-7000-8000-0000000000d1",
@@ -845,7 +845,7 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
     let mut server =
         ArkretServer::spawn_with_database_url(test_name, &database_url, &keystore_env).await?;
     let alice = server
-        .demo_client(alice_did, "ak:device:01904100-0000-7000-8000-0000000000d1")
+        .standard_client(alice_did, "ak:device:01904100-0000-7000-8000-0000000000d1")
         .await?;
     let alice_second_device = alice.clone();
     let restarted_strand = read_soland_product_projection_strand(&alice, &strand_id).await?;
@@ -903,7 +903,7 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
     let server =
         ArkretServer::spawn_with_database_url(test_name, &database_url, &keystore_env).await?;
     let alice = server
-        .demo_client(alice_did, "ak:device:01904100-0000-7000-8000-0000000000d1")
+        .standard_client(alice_did, "ak:device:01904100-0000-7000-8000-0000000000d1")
         .await?;
     let winner = winner_for(
         &read_soland_product_projection_strand(&alice, &strand_id).await?,
@@ -932,7 +932,7 @@ pub async fn calendar_rsvp_without_cell_effect_is_rejected() -> Result<()> {
     let alice_did = alice_did.as_str();
     let bob_did = bob_did.as_str();
     let alice = server
-        .register_client(
+        .standard_register_client(
             alice_did,
             "@cotest-rsvp-alice",
             "ak:device:01904100-0000-7000-8000-0000000000c3",

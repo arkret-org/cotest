@@ -26,7 +26,7 @@ pub async fn applet_lifecycle_surfaces_are_advertised_when_routes_exist() -> Res
     let server = group.server(0);
     let alice_did = actor_did_for_service_did(server.service_did(), "alice-applet")?;
     let alice = server
-        .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
+        .standard_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
     let realm_id = alice.create_realm("Applet Surface Realm").await?;
 
@@ -101,7 +101,7 @@ pub async fn agent_lifecycle_surfaces_are_advertised_when_routes_exist() -> Resu
     let server = group.server(0);
     let alice_did = actor_did_for_service_did(server.service_did(), "alice-agent")?;
     let alice = server
-        .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
+        .standard_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
     let realm_id = alice.create_realm("Agent Surface Realm").await?;
 
@@ -135,13 +135,11 @@ pub async fn agent_lifecycle_surfaces_are_advertised_when_routes_exist() -> Resu
         );
     }
 
-    let empty_list = expect_json(alice.get("/_arkret/self/agents"), StatusCode::OK).await?;
-    assert!(
-        empty_list["agent_projections"]
-            .as_array()
-            .unwrap()
-            .is_empty()
-    );
+    let empty_list: arkret_models_collaboration::agent_operations::AgentList =
+        serde_json::from_value(
+            expect_json(alice.get("/_arkret/self/agents"), StatusCode::OK).await?,
+        )?;
+    assert!(empty_list.agents.is_empty() && !empty_list.has_more);
 
     let requested_operation = "ak.self.events.command.submit.v1";
     let provision = AgentProvisionRequestBody::Prepare(AgentProvisionPrepareRequestBody {

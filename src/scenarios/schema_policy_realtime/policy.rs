@@ -9,14 +9,14 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
     let server = ArkretServer::spawn("policy-documents").await?;
     let alice_actor = actor_did_for_service_did(server.service_did(), "alice-policy")?;
     let alice = server
-        .demo_client(
+        .standard_client(
             &alice_actor,
             "ak:device:01904100-0000-7000-8000-0000000000a1",
         )
         .await?;
     let bob_actor = actor_did_for_service_did(server.service_did(), "bob-policy")?;
     let bob = server
-        .register_client(
+        .standard_register_client(
             &bob_actor,
             "@bob-policy",
             "ak:device:01904100-0000-7000-8000-0000000000b0",

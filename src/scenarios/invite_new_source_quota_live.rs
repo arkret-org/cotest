@@ -87,7 +87,7 @@ async fn holder_with_quarantine_policy(
 ) -> Result<TestActorClient> {
     let holder_did = actor_did_for_service_did(server.service_did(), label)?;
     let holder = server
-        .register_client(
+        .standard_register_client(
             &holder_did,
             label,
             "ak:device:01904100-0000-7000-8000-0000000000c1",
@@ -102,7 +102,7 @@ async fn holder_with_quarantine_policy(
 
 async fn inviter(server: &ArkretServer, label: &str, device_suffix: u8) -> Result<TestActorClient> {
     server
-        .demo_client(
+        .standard_client(
             &actor_did_for_service_did(server.service_did(), label)?,
             &format!("ak:device:01904100-0000-7000-8000-0000000000{device_suffix:02x}"),
         )

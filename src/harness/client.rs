@@ -592,7 +592,10 @@ impl TestActorClient {
                 serde_json::to_value(StrandCreatePayload { object: strand })?,
             )
             .await?;
-        let event_created_at = serde_json::to_value(strand_event.created_at)?;
+        // Carry the envelope's own canonical rendering: chrono's default
+        // `Serialize` drops the fixed milliseconds on a whole second, which
+        // the canonical timestamp contract refuses.
+        let event_created_at = serde_json::to_value(&strand_event)?["created_at"].clone();
         // The authored Strand's creation time is the signed Event time. Set it
         // after the envelope clock is chosen, then rederive the Event id/proof.
         strand_event
@@ -682,13 +685,44 @@ impl TestActorClient {
             .await?)
     }
 
+    /// Bring `member` into the Realm the way `realm-membership.md` admits a
+    /// Station-local account: this client commits a directed
+    /// `ak.invite.create`, and the invitee's own `ak.invite.accept` is its
+    /// join. Only the target itself may enter a Realm, so no administrator
+    /// `ak.member.state{join}` exists for this. Returns the accept's outcome.
+    ///
+    /// Both clients author self Events and therefore present a Standard
+    /// SessionGrant. Joining grants no writing; grant actions separately.
     pub async fn add_member(&self, realm_id: &str, member: &TestActorClient) -> Result<Value> {
-        self.submit_event(
-            realm_id,
-            "ak.member.state",
-            member_join_payload(realm_id, &member.actor),
-        )
-        .await
+        let created = self
+            .submit_event(
+                realm_id,
+                "ak.invite.create",
+                super::event_builder::invite_create_payload(
+                    &member.actor,
+                    member.service_id(),
+                    format!("sha256:{}", "c".repeat(64)),
+                    chrono::Utc::now() + chrono::Duration::days(7),
+                )?,
+            )
+            .await
+            .context("commit the directed invite")?;
+        let invite_id = arkret_wire::InviteId::from_event_id(&super::submitted_event_id(&created)?);
+        let invitee = arkret_wire::AccountId::new(
+            project_did_to_core_id(&Did::new(member.actor.clone())?)?,
+            DidCoreId::new(member.service_id().to_owned())?,
+        );
+        let accept = serde_json::to_value(
+            arkret_models_collaboration::governance::membership_invite::InviteAcceptPayload::directed(
+                invite_id,
+                invitee,
+                arkret_models_collaboration::governance::membership_invite::InvitePreviousState::Pending,
+            ),
+        )?;
+        member
+            .submit_event(realm_id, "ak.invite.accept", accept)
+            .await
+            .context("the invitee accepts its directed invite")
     }
 
     /// Remove one member through the current signed `ak.member.state{leave}`

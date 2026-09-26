@@ -20,7 +20,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     let server = spawn_with_harness_account_authority("collaboration-workflow", &[]).await?;
     let alice_did = actor_did_for_service_did(server.service_did(), "collab-alice")?;
     let alice = server
-        .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
+        .standard_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
     let alice_device_key = alice
         .principal
@@ -30,7 +30,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         .clone();
     let bob_did = actor_did_for_service_did(server.service_did(), "collab-bob")?;
     let bob = server
-        .register_client_with_localpart(
+        .standard_register_client_with_localpart(
             &bob_did,
             BOB_HANDLE,
             BOB_HANDLE.trim_start_matches('@'),

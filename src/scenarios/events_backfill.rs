@@ -18,7 +18,7 @@ pub async fn backfill_pages_recover_messages_missing_from_limited_client_page() 
     // we can demonstrate the new fixture surface in a real scenario.
     let alice_did = actor_did_for_service_did(server.service_did(), "alice-backfill")?;
     let alice = server
-        .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
+        .standard_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
     let bob_did = actor_did_for_service_did(server.service_did(), "bob-backfill")?;
     let bob = TestActorBuilder::new(server, "@bob-backfill")
@@ -26,7 +26,8 @@ pub async fn backfill_pages_recover_messages_missing_from_limited_client_page() 
         .with_device("ak:device:01904100-0000-7000-8000-0000000000b0")
         .create()
         .await?;
-    let bob_client = bob.client();
+    // Bob accepts his invite himself, which needs his Standard grant.
+    let bob_client = &server.standard_grant_client(bob.client())?;
 
     let realm_id = alice.create_realm("Backfill Recovery Realm").await?;
     let strand_id = alice.default_strand_id(&realm_id)?;
@@ -299,7 +300,7 @@ pub async fn event_cursor_cannot_be_reused_by_another_authorized_member() -> Res
     let server = group.server(0);
     let bob_did = actor_did_for_service_did(server.service_did(), "cursor-member-bob")?;
     let bob = server
-        .demo_client(&bob_did, "ak:device:01904100-0000-7000-8000-0000000000b0")
+        .standard_client(&bob_did, "ak:device:01904100-0000-7000-8000-0000000000b0")
         .await?;
     alice.add_member(&realm_id, &bob).await?;
     let strand = alice.default_strand_id(&realm_id)?;
@@ -385,7 +386,7 @@ pub async fn event_scan_rejects_barrier_and_stream_cursor_role_confusion() -> Re
     let server = group.server(0);
     let bob_did = actor_did_for_service_did(server.service_did(), "barrier-other-account")?;
     let bob = server
-        .demo_client(&bob_did, "ak:device:01904100-0000-7000-8000-0000000000b1")
+        .standard_client(&bob_did, "ak:device:01904100-0000-7000-8000-0000000000b1")
         .await?;
     let bob_realm = bob.create_realm("independent barrier reader").await?;
     let bob_scope = scan_scope(&bob_realm, 2)?;
@@ -408,7 +409,7 @@ async fn pagination_fixture(
     let server = group.server(0);
     let did = actor_did_for_service_did(server.service_did(), label)?;
     let alice = server
-        .demo_client(&did, "ak:device:01904100-0000-7000-8000-0000000000a1")
+        .standard_client(&did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
     let realm_id = alice.create_realm(label).await?;
     let strand = alice.default_strand_id(&realm_id)?;

@@ -18,7 +18,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     let server = spawn_with_harness_account_authority("directory-workflow", &[]).await?;
     let alice_did = actor_did_for_service_did(server.service_did(), "directory-alice")?;
     let alice = server
-        .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
+        .standard_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
     let alice_device_key = alice
         .principal
@@ -28,7 +28,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         .clone();
     let bob_did = actor_did_for_service_did(server.service_did(), "directory-bob")?;
     let bob = server
-        .register_client(
+        .standard_register_client(
             &bob_did,
             "@bob-directory",
             "ak:device:01904100-0000-7000-8000-0000000000b0",
@@ -74,7 +74,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         .await?;
     assert_eq!(
         invite_event["status"],
-        "accepted",
+        "committed",
         "invite event was not accepted: {}",
         serde_json::to_string_pretty(&invite_event)?
     );

@@ -82,7 +82,9 @@ pub async fn current_principal_survives_index_eviction_and_restart() -> Result<(
         request_id: RequestId::new("ak:request:01904100-0000-7000-8000-0000000000c1")?,
         account_id: account_id.clone(),
     };
-    let (initial_value, initial) = read_current(&client, &request).await?;
+    let (initial_value, initial) = read_current(&client, &request)
+        .await
+        .context("read current-principal after registration")?;
     anyhow::ensure!(
         initial.principal_control_realm_id == principal.pcr_realm_id,
         "registration and current-principal selected different PCRs"
@@ -116,14 +118,18 @@ pub async fn current_principal_survives_index_eviction_and_restart() -> Result<(
         before == 1 && deleted == 1 && after == 0,
         "live index eviction did not remove exactly one principal_resolutions row"
     );
-    let (after_eviction_value, after_eviction) = read_current(&client, &request).await?;
+    let (after_eviction_value, after_eviction) = read_current(&client, &request)
+        .await
+        .context("read current-principal after evicting its index")?;
     anyhow::ensure!(
         after_eviction == initial && after_eviction_value == initial_value,
         "current-principal changed after evicting its replaceable index"
     );
 
     server.restart_external_process().await?;
-    let (after_restart_value, after_restart) = read_current(&client, &request).await?;
+    let (after_restart_value, after_restart) = read_current(&client, &request)
+        .await
+        .context("read current-principal after restart")?;
     anyhow::ensure!(
         after_restart == initial && after_restart_value == initial_value,
         "current-principal changed after process restart with the index absent"

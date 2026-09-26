@@ -51,9 +51,9 @@ pub async fn owner_invite_remove_grant_revoke_survive_restart() -> Result<()> {
     let bob_did = actor_did_for_service_did(server.service_did(), "owner-restart-bob")?;
     let alice_device = "ak:device:01904100-0000-7000-8000-0000000000e1";
     let bob_device = "ak:device:01904100-0000-7000-8000-0000000000e2";
-    let alice = server.demo_client(&alice_did, alice_device).await?;
+    let alice = server.standard_client(&alice_did, alice_device).await?;
     let _bob = server
-        .register_client(&bob_did, "owner-restart-bob", bob_device)
+        .standard_register_client(&bob_did, "owner-restart-bob", bob_device)
         .await?;
     let created = alice.create_realm("Owner Restart Authority").await?;
     let realm_id = created;
@@ -62,8 +62,8 @@ pub async fn owner_invite_remove_grant_revoke_survive_restart() -> Result<()> {
     drop(server);
     let mut server =
         ArkretServer::spawn_with_database_url(test_name, &database_url, &keystore_env).await?;
-    let alice = server.demo_client(&alice_did, alice_device).await?;
-    let bob = server.demo_client(&bob_did, bob_device).await?;
+    let alice = server.standard_client(&alice_did, alice_device).await?;
+    let bob = server.standard_client(&bob_did, bob_device).await?;
     alice.track_controlled_realm(&arkret_identifiers::RealmId::new(realm_id.clone())?);
 
     let invite = alice
@@ -78,16 +78,34 @@ pub async fn owner_invite_remove_grant_revoke_survive_restart() -> Result<()> {
             )?,
         )
         .await?;
-    if invite["status"] != "accepted" {
+    if invite["status"] != "committed" {
         return Err(anyhow!("restarted owner could not create invite: {invite}"));
     }
     alice
         .await_event_seal_coverage(&realm_id, &submitted_event_id(&invite)?)
         .await?;
 
-    let added = alice.add_member(&realm_id, &bob).await?;
-    if added["status"] != "accepted" {
-        return Err(anyhow!("restarted owner could not add member: {added}"));
+    // The invitee's own accept is its join (`realm-membership.md`).
+    let added = bob
+        .submit_event(
+            &realm_id,
+            "ak.invite.accept",
+            serde_json::to_value(
+                arkret_models_collaboration::governance::membership_invite::InviteAcceptPayload::directed(
+                    arkret_wire::InviteId::from_event_id(&submitted_event_id(&invite)?),
+                    AccountId::new(
+                        DidCoreId::new(actor_core_id(&bob.actor)?)?,
+                        DidCoreId::new(bob.service_id().to_owned())?,
+                    ),
+                    arkret_models_collaboration::governance::membership_invite::InvitePreviousState::Pending,
+                ),
+            )?,
+        )
+        .await?;
+    if added["status"] != "committed" {
+        return Err(anyhow!(
+            "the invitee could not accept the restarted owner's invite: {added}"
+        ));
     }
     alice
         .await_event_seal_coverage(&realm_id, &submitted_event_id(&added)?)
@@ -117,7 +135,7 @@ pub async fn owner_invite_remove_grant_revoke_survive_restart() -> Result<()> {
     }
 
     let revoked = alice.revoke_realm_grant(&realm_id, &grant_id).await?;
-    if revoked["status"] != "accepted" {
+    if revoked["status"] != "committed" {
         return Err(anyhow!("restarted owner could not revoke grant: {revoked}"));
     }
     alice
@@ -142,7 +160,7 @@ pub async fn owner_invite_remove_grant_revoke_survive_restart() -> Result<()> {
     }
 
     let removed = alice.remove_member(&realm_id, &bob).await?;
-    if removed["status"] != "accepted" {
+    if removed["status"] != "committed" {
         return Err(anyhow!(
             "restarted owner could not remove member: {removed}"
         ));

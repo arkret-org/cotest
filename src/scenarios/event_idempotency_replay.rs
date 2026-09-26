@@ -1,11 +1,10 @@
 use anyhow::{Result, anyhow};
-use arkret_wire::Event;
 use reqwest::StatusCode;
-use serde_json::{Value, json};
+use serde_json::json;
 
 use crate::harness::{
-    TestActorClient, TestServerGroup, events_query_for_realm, expect_json,
-    message_create_text_payload_for_strand, parse_strand_id,
+    TestActorClient, TestServerGroup, expect_json, message_create_text_payload_for_strand,
+    parse_strand_id,
 };
 use crate::scenarios::_helpers::protocol_values::submitted_event_id;
 use crate::scenarios::identity_test_support::actor_did_for_service_did;
@@ -15,7 +14,7 @@ pub async fn duplicate_event_submit_is_idempotent_and_projects_once() -> Result<
     let server = group.server(0);
     let alice_did = actor_did_for_service_did(server.service_did(), "alice-replay")?;
     let alice = server
-        .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
+        .standard_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
     let realm_id = create_test_realm(&alice, "Event Idempotency Replay").await?;
     let event = alice
@@ -36,9 +35,9 @@ pub async fn duplicate_event_submit_is_idempotent_and_projects_once() -> Result<
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(first["status"], "accepted");
+    assert_eq!(first["status"], "committed");
     let event_id = submitted_event_id(&first)
-        .ok_or_else(|| anyhow!("accepted response missing event_id: {first}"))?;
+        .ok_or_else(|| anyhow!("committed response names no Event: {first}"))?;
     assert_eq!(event_id, event.event_id.as_str());
 
     let duplicate = expect_json(
@@ -50,23 +49,16 @@ pub async fn duplicate_event_submit_is_idempotent_and_projects_once() -> Result<
     .await?;
     assert_eq!(duplicate["status"], "duplicate");
     assert_eq!(submitted_event_id(&duplicate), Some(event_id));
-
-    let listed = expect_json(
-        alice
-            .query("/_arkret/self/events")
-            .json(&events_query_for_realm(&realm_id, 100)?),
-        StatusCode::OK,
-    )
-    .await?;
-    let matching_events = listed["events"]
-        .as_array()
-        .ok_or_else(|| anyhow!("events query response missing events array"))?
-        .iter()
-        .filter(|event| event["event_id"].as_str() == Some(event_id))
-        .count();
     assert_eq!(
-        matching_events, 1,
-        "events query should project the idempotent event exactly once"
+        duplicate["commit"], first["commit"],
+        "an exact duplicate answers with the original RealmCommit"
+    );
+
+    let committed = committed_realm_events(&alice, &realm_id).await?;
+    assert_eq!(
+        event_count(&committed, event_id),
+        1,
+        "the Realm stream commits the idempotent Event exactly once"
     );
 
     Ok(())
@@ -80,7 +72,7 @@ pub async fn concurrent_event_retransmission_accepts_once_and_allows_the_next_wr
     let server = group.server(0);
     let did = actor_did_for_service_did(server.service_did(), "concurrent-retransmission")?;
     let alice = server
-        .demo_client(&did, "ak:device:01904100-0000-7000-8000-0000000000a1")
+        .standard_client(&did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
     let realm = alice
         .create_realm("Concurrent Event Retransmission")
@@ -105,7 +97,7 @@ pub async fn concurrent_event_retransmission_accepts_once_and_allows_the_next_wr
     assert_eq!(
         outcomes
             .iter()
-            .filter(|item| item["status"] == "accepted")
+            .filter(|item| item["status"] == "committed")
             .count(),
         1
     );
@@ -119,27 +111,32 @@ pub async fn concurrent_event_retransmission_accepts_once_and_allows_the_next_wr
     for outcome in &outcomes {
         assert_eq!(submitted_event_id(outcome), Some(event.event_id.as_str()));
     }
-    let accepted = outcomes
+    let committed = outcomes
         .iter()
-        .find(|item| item["status"] == "accepted")
-        .ok_or_else(|| anyhow!("no accepted outcome"))?;
-    assert_projected_event_count(
-        &alice,
-        &realm,
-        event.event_id.as_str(),
-        1,
-        submission_barrier(accepted)?,
-    )
-    .await?;
+        .find(|item| item["status"] == "committed")
+        .ok_or_else(|| anyhow!("no committed outcome"))?;
+    for outcome in &outcomes {
+        assert_eq!(
+            outcome["commit"], committed["commit"],
+            "every retransmission answers with the one RealmCommit"
+        );
+    }
+    assert_eq!(
+        event_count(
+            &committed_realm_events(&alice, &realm).await?,
+            event.event_id.as_str()
+        ),
+        1
+    );
     let successor = alice
         .send_message(&realm, &strand, "after concurrent retransmission")
         .await?;
     let successor_id =
         submitted_event_id(&successor).ok_or_else(|| anyhow!("successor omitted Event ID"))?;
-    let listed = list_realm_events_after(&alice, &realm, submission_barrier(&successor)?).await?;
-    assert_eq!(event_count(&listed, event.event_id.as_str())?, 1);
-    assert_eq!(event_count(&listed, successor_id)?, 1);
-    assert_eq!(event_kind_count(&listed, "ak.message.create")?, 2);
+    let listed = committed_realm_events(&alice, &realm).await?;
+    assert_eq!(event_count(&listed, event.event_id.as_str()), 1);
+    assert_eq!(event_count(&listed, successor_id), 1);
+    assert_eq!(event_kind_count(&listed, "ak.message.create"), 2);
     Ok(())
 }
 
@@ -151,10 +148,10 @@ pub async fn idempotency_keys_are_isolated_between_authenticated_actors() -> Res
     let alice_did = actor_did_for_service_did(server.service_did(), "key-scope-alice")?;
     let bob_did = actor_did_for_service_did(server.service_did(), "key-scope-bob")?;
     let alice = server
-        .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
+        .standard_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
     let bob = server
-        .demo_client(&bob_did, "ak:device:01904100-0000-7000-8000-0000000000b1")
+        .standard_client(&bob_did, "ak:device:01904100-0000-7000-8000-0000000000b1")
         .await?;
     let realm_a = alice.create_realm("Alice key scope").await?;
     let realm_b = bob.create_realm("Bob key scope").await?;
@@ -181,19 +178,18 @@ pub async fn idempotency_keys_are_isolated_between_authenticated_actors() -> Res
             )
         };
         let first = send().await?;
-        assert_eq!(first["status"], "accepted");
+        assert_eq!(first["status"], "committed");
         assert_eq!(submitted_event_id(&first), Some(event.event_id.as_str()));
         let replay = send().await?;
         assert_eq!(submitted_event_id(&replay), Some(event.event_id.as_str()));
-        assert!(replay["status"] == "accepted" || replay["status"] == "duplicate");
-        assert_projected_event_count(
-            actor,
-            realm,
-            event.event_id.as_str(),
-            1,
-            submission_barrier(&first)?,
-        )
-        .await?;
+        assert_eq!(replay["status"], "duplicate");
+        assert_eq!(
+            event_count(
+                &committed_realm_events(actor, realm).await?,
+                event.event_id.as_str()
+            ),
+            1
+        );
     }
     Ok(())
 }
@@ -221,103 +217,39 @@ async fn create_test_realm(alice: &TestActorClient, title: &str) -> Result<Strin
         .to_owned())
 }
 
-async fn submit_and_duplicate(alice: &TestActorClient, event: &Event) -> Result<Value> {
-    let first = expect_json(
-        alice
-            .post("/_arkret/self/events")
-            .json(&crate::publication::initial_submission(event.clone(), "")?),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(first["status"], "accepted");
-    let event_id = Some(event.event_id.as_str());
-    assert_eq!(submitted_event_id(&first), event_id);
-
-    let duplicate = expect_json(
-        alice
-            .post("/_arkret/self/events")
-            .json(&crate::publication::initial_submission(event.clone(), "")?),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(duplicate["status"], "duplicate");
-    assert_eq!(submitted_event_id(&duplicate), event_id);
-    assert_eq!(duplicate["canonical_digest"], first["canonical_digest"]);
-
-    Ok(first)
-}
-
-async fn list_realm_events_after(
-    alice: &TestActorClient,
+/// Every committed Event of the Realm stream, read to its head. The submit
+/// commits synchronously, so no read barrier is owed.
+async fn committed_realm_events(
+    client: &TestActorClient,
     realm_id: &str,
-    barrier: &str,
-) -> Result<Value> {
-    expect_json(
-        alice
-            .query("/_arkret/self/events")
-            .header("X-Arkret-Wait-For", barrier)
-            .json(&events_query_for_realm(realm_id, 100)?),
-        StatusCode::OK,
-    )
-    .await
-}
-
-fn submission_barrier(response: &Value) -> Result<&str> {
-    response["cursor"]
-        .as_str()
-        .ok_or_else(|| anyhow!("event submission response missing barrier cursor"))
-}
-
-async fn assert_projected_event_count(
-    alice: &TestActorClient,
-    realm_id: &str,
-    event_id: &str,
-    expected: usize,
-    barrier: &str,
-) -> Result<()> {
-    let listed = list_realm_events_after(alice, realm_id, barrier).await?;
-    let actual = event_count(&listed, event_id)?;
-    assert_eq!(
-        actual, expected,
-        "projected event {event_id} count mismatch"
-    );
-    Ok(())
-}
-
-async fn assert_projected_kind_count(
-    alice: &TestActorClient,
-    realm_id: &str,
-    kind: &str,
-    expected: usize,
-    barrier: &str,
-) -> Result<()> {
-    let listed = list_realm_events_after(alice, realm_id, barrier).await?;
-    let actual = event_kind_count(&listed, kind)?;
-    assert_eq!(actual, expected, "projected kind {kind} count mismatch");
-    Ok(())
-}
-
-fn event_count(listed: &Value, event_id: &str) -> Result<usize> {
-    Ok(projected_events(listed)?
+) -> Result<Vec<arkret_wire::Event>> {
+    let realm_id = arkret_wire::RealmId::new(realm_id.to_owned())?;
+    let scanned = client
+        .sdk()
+        .scan_commit_stream_to_head(
+            realm_id.clone(),
+            arkret_wire::CommitStreamRef::Realm { realm_id },
+            None,
+            200,
+        )
+        .await?;
+    Ok(scanned
+        .committed_events
         .iter()
-        .filter(|event| event["event_id"].as_str() == Some(event_id))
-        .count())
+        .filter_map(|item| item.reducer_input().cloned())
+        .collect())
 }
 
-fn event_kind_count(listed: &Value, kind: &str) -> Result<usize> {
-    Ok(projected_events(listed)?
+fn event_count(committed: &[arkret_wire::Event], event_id: &str) -> usize {
+    committed
         .iter()
-        .filter(|event| {
-            event["kind"]
-                .as_str()
-                .or_else(|| event["event_kind"].as_str())
-                == Some(kind)
-        })
-        .count())
+        .filter(|event| event.event_id.as_str() == event_id)
+        .count()
 }
 
-fn projected_events(listed: &Value) -> Result<&Vec<Value>> {
-    listed["events"]
-        .as_array()
-        .ok_or_else(|| anyhow!("events query response missing events array"))
+fn event_kind_count(committed: &[arkret_wire::Event], kind: &str) -> usize {
+    committed
+        .iter()
+        .filter(|event| event.kind.as_str() == kind)
+        .count()
 }

@@ -11,14 +11,14 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
     let server = ArkretServer::spawn("rtc-media").await?;
     let alice_actor = actor_did_for_service_did(server.service_did(), "alice-rtc")?;
     let alice = server
-        .demo_client(
+        .standard_client(
             &alice_actor,
             "ak:device:01904100-0000-7000-8000-0000000000a1",
         )
         .await?;
     let carol_actor = actor_did_for_service_did(server.service_did(), "carol-rtc")?;
     let carol = server
-        .register_client(
+        .standard_register_client(
             &carol_actor,
             "@carol-rtc",
             "ak:device:01904100-0000-7000-8000-000000000ca0",

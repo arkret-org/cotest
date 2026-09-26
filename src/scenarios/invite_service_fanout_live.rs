@@ -461,7 +461,9 @@ async fn assert_notify_invite_wakes_account_subscribe(
     let delivery_row = account_data_row(holder, AccountDataKey::ACCOUNT_INVITE_DELIVERY)
         .await
         .context("read invite delivery CAS row")?;
-    let subscribe_messages: DeviceMessagesGetOutcome = serde_json::from_value(
+    // An Account frame carries its own `to_device` container, not the
+    // device_messages GET outcome (which alone owes `has_more`).
+    let subscribe_messages: arkret_models_collaboration::sync_frames::account_subscribe::RecipientDeliveryContainer = serde_json::from_value(
         invite_delta
             .get("to_device")
             .cloned()
@@ -497,7 +499,7 @@ pub async fn invite_notification_wakeup_live_run() -> Result<()> {
     let group = TestServerGroup::single("invite-notification-wakeup-live").await?;
     let server = group.server(0);
     let inviter = server
-        .demo_client(
+        .standard_client(
             &actor_did_for_service_did(server.service_did(), "alice-invite-notification-wakeup")?,
             "ak:device:01904100-0000-7000-8000-0000000000c1",
         )
@@ -506,7 +508,7 @@ pub async fn invite_notification_wakeup_live_run() -> Result<()> {
     let holder_did =
         actor_did_for_service_did(server.service_did(), "bob-invite-notification-wakeup")?;
     let holder = server
-        .register_client(
+        .standard_register_client(
             &holder_did,
             "bob-invite-notification-wakeup",
             "ak:device:01904100-0000-7000-8000-0000000000d1",
@@ -529,7 +531,7 @@ pub async fn invite_service_fanout_live_run() -> Result<()> {
     let group = TestServerGroup::single("invite-service-fanout-live").await?;
     let server = group.server(0);
     let inviter = server
-        .demo_client(
+        .standard_client(
             &actor_did_for_service_did(server.service_did(), "alice-invite-service-fanout")?,
             "ak:device:01904100-0000-7000-8000-0000000000a1",
         )
@@ -537,7 +539,7 @@ pub async fn invite_service_fanout_live_run() -> Result<()> {
         .context("bootstrap inviter client")?;
     let holder_did = actor_did_for_service_did(server.service_did(), "bob-invite-service-fanout")?;
     let holder = server
-        .register_client(
+        .standard_register_client(
             &holder_did,
             "bob-invite-service-fanout",
             "ak:device:01904100-0000-7000-8000-0000000000b1",
@@ -545,7 +547,7 @@ pub async fn invite_service_fanout_live_run() -> Result<()> {
         .await
         .context("bootstrap holder client")?;
     let holder_secondary = server
-        .demo_client(
+        .standard_client(
             &holder_did,
             "ak:device:01904100-0000-7000-8000-0000000000b2",
         )

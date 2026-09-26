@@ -15,12 +15,12 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     let server = spawn_with_harness_account_authority("interaction-messages", &[]).await?;
     let alice_did = actor_did_for_service_did(server.service_did(), "interaction-alice")?;
     let alice = server
-        .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
+        .standard_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
 
     let bob_did = actor_did_for_service_did(server.service_did(), "interaction-bob")?;
     let bob = server
-        .register_client(
+        .standard_register_client(
             &bob_did,
             "@bob-interaction",
             "ak:device:01904100-0000-7000-8000-0000000000b0",
@@ -29,7 +29,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
 
     let carol_did = actor_did_for_service_did(server.service_did(), "interaction-carol")?;
     let carol = server
-        .register_client(
+        .standard_register_client(
             &carol_did,
             "@carol-interaction",
             "ak:device:01904100-0000-7000-8000-000000000ca0",
@@ -38,7 +38,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
 
     let dave_did = actor_did_for_service_did(server.service_did(), "interaction-dave")?;
     let dave = server
-        .register_client(
+        .standard_register_client(
             &dave_did,
             "@dave-interaction",
             "ak:device:01904100-0000-7000-8000-000000000da0",
@@ -136,7 +136,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
             }),
         )
         .await?;
-    assert_eq!(reaction["status"], "accepted");
+    assert_eq!(reaction["status"], "committed");
 
     let removed_reaction = carol
         .submit_event(
@@ -148,7 +148,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
             }),
         )
         .await?;
-    assert_eq!(removed_reaction["status"], "accepted");
+    assert_eq!(removed_reaction["status"], "committed");
 
     // Per read-cursor.schema.json, a `kind="thread"` read scope references the
     // thread's root *message* (`ak:message:<event-token>`), not an opaque
@@ -245,7 +245,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
             message_redact_payload(sent_event_id.as_str(), None)?,
         )
         .await?;
-    assert_eq!(redacted["status"], "accepted");
+    assert_eq!(redacted["status"], "committed");
 
     Ok(())
 }

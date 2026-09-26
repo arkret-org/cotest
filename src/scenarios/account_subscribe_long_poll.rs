@@ -45,14 +45,14 @@ pub async fn account_subscribe_wait_for_barrier_contract() -> Result<()> {
         actor_did_for_service_did(server.service_did(), "account-subscribe-wait-alice")?;
     let bob_did = actor_did_for_service_did(server.service_did(), "account-subscribe-wait-bob")?;
     let alice = server
-        .register_client(
+        .standard_register_client(
             &alice_did,
             "@wait-for-alice",
             "ak:device:01904100-0000-7000-8000-00000000b501",
         )
         .await?;
     let bob = server
-        .register_client(
+        .standard_register_client(
             &bob_did,
             "@wait-for-bob",
             "ak:device:01904100-0000-7000-8000-00000000b502",
@@ -131,7 +131,7 @@ pub async fn account_subscribe_omits_quiet_realm_at_unchanged_cursor() -> Result
     let alice_did =
         actor_did_for_service_did(server.service_did(), "account-subscribe-quiet-alice")?;
     let alice = server
-        .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
+        .standard_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
     let realm_id = alice.create_realm("Quiet Incremental Realm").await?;
     let strand_id = alice.default_strand_id(&realm_id)?;
@@ -195,7 +195,7 @@ pub async fn account_subscribe_long_poll_wakes_on_visible_event() -> Result<()> 
     let alice_did =
         actor_did_for_service_did(server.service_did(), "account-subscribe-poll-alice")?;
     let alice = server
-        .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
+        .standard_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
     let realm_id = alice.create_realm("Long-Poll Recovery Realm").await?;
     let strand_id = alice.default_strand_id(&realm_id)?;
@@ -270,7 +270,7 @@ pub async fn invited_members_exchange_post_join_messages_over_account_subscribe(
         actor_did_for_service_did(server.service_did(), "account-subscribe-invite-alice")?;
     let bob_did = actor_did_for_service_did(server.service_did(), "account-subscribe-invite-bob")?;
     let alice = server
-        .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
+        .standard_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
     let bob = TestActorBuilder::new(server, "@bob-sync")
         .with_did(&bob_did)
@@ -468,7 +468,7 @@ pub async fn cancelled_pending_invite_disappears_from_invite_views() -> Result<(
         actor_did_for_service_did(server.service_did(), "account-subscribe-cancel-alice")?;
     let bob_did = actor_did_for_service_did(server.service_did(), "account-subscribe-cancel-bob")?;
     let alice = server
-        .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
+        .standard_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
     let bob = TestActorBuilder::new(server, "@bob-cancel")
         .with_did(&bob_did)

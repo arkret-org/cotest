@@ -374,13 +374,16 @@ pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
     // Alice founds the Realm, which needs her Standard SessionGrant.
     let alice = station.standard_grant_client(&alice_bearer)?;
     let bob_did = actor_did_for_service_did(server.service_did(), "bob-blob")?;
-    let bob = server
-        .register_client(
-            &bob_did,
-            "@bob-blob",
-            "ak:device:01904100-0000-7000-8000-0000000000b0",
-        )
-        .await?;
+    // Bob accepts his invite himself, which is a self Event.
+    let bob = station.standard_grant_client(
+        &server
+            .register_client(
+                &bob_did,
+                "@bob-blob",
+                "ak:device:01904100-0000-7000-8000-0000000000b0",
+            )
+            .await?,
+    )?;
     let carol_did = actor_did_for_service_did(server.service_did(), "carol-blob")?;
     let carol = server
         .register_client(
@@ -497,7 +500,7 @@ async fn create_blob_access_realm(
         .to_owned();
 
     let member = alice.add_member(&realm_id, bob).await?;
-    assert_eq!(member["status"], "accepted");
+    assert_eq!(member["status"], "committed");
 
     Ok(realm_id)
 }
