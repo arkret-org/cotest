@@ -78,7 +78,7 @@
       "coverage": [
         {
           "kind": "ordinary",
-          "path": "../soland/crates/server/tests/http_api/identity.rs",
+          "path": "../soland/crates/http/src/routing/identity/did.rs",
           "markers": [
             "/_arkret/root/identity/resolve",
             "/_arkret/root/identity/document"
@@ -94,7 +94,7 @@
         },
         {
           "kind": "ordinary",
-          "path": "../soland/crates/server/tests/http_api/recovery/policy.rs",
+          "path": "../soland/crates/http/src/routing/identity/recovery.rs",
           "markers": [
             "/_arkret/root/identity/recovery-policy"
           ]
@@ -206,10 +206,10 @@
       "coverage": [
         {
           "kind": "ordinary",
-        "path": "../soland/crates/server/tests/http_api/common.rs",
-        "markers": [
-          "/_soland/self/account/register",
-          "/_soland/gate/auth/dev-login"
+          "path": "../soland/crates/server/tests/http_api/current_common.rs",
+          "markers": [
+            "/_soland/gate/account/project",
+            "/_soland/gate/auth/dev-login"
           ]
         },
         {
@@ -779,10 +779,10 @@
       "coverage": [
         {
           "kind": "ordinary",
-          "path": "../soland/crates/server/tests/http_api/devices_webrtc.rs",
+          "path": "../soland/crates/http/src/routing/interop/webrtc.rs",
           "markers": [
-            "post_canonical_signal(",
-            "rtc_media_token"
+            "rtc/ice-config",
+            "ak.self.call.media.exchange.issue_token.v1"
           ]
         },
         {
@@ -1007,10 +1007,10 @@
         },
         {
           "kind": "ordinary",
-          "path": "../soland/crates/server/tests/http_api/mimi.rs",
+          "path": "../soland/crates/http/src/routing/interop/mimi.rs",
           "markers": [
-            "/_arkret/open/mimi/provider-directory",
-            "/_arkret/open/mimi/strands/{room_id}/messages"
+            "Router::with_path(\"provider-directory\")",
+            "Router::with_path(\"strands/{strand_id}/messages\")"
           ]
         },
         {

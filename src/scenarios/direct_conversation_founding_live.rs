@@ -49,7 +49,9 @@ use arkret_models_collaboration::direct_conversation::{
     DirectConversationResolveOutcome, DirectConversationResolveRequestBody,
 };
 use arkret_models_collaboration::events_payloads::direct_conversation::DirectConversationBoundPayload;
-use arkret_models_collaboration::governance::invite_addressing::PrincipalLocator;
+use arkret_models_collaboration::governance::invite_addressing::{
+    InviteLocatorIssueRequestBody, InviteLocatorResolveRequestBody, PrincipalLocator,
+};
 use arkret_models_collaboration::governance::membership_invite::MembershipPayloadState;
 use arkret_models_collaboration::governance::peer_contact::ContactIntroductionEvidence;
 use arkret_models_collaboration::objects::direct_conversation::{
@@ -290,7 +292,10 @@ async fn issued_locator(member: &Member) -> Result<PrincipalLocator> {
         member
             .client
             .post("/_arkret/self/invite-locators")
-            .json(&json!({"ttl_seconds": 900})),
+            .json(&InviteLocatorIssueRequestBody {
+                ttl_seconds: Some(900),
+                ..Default::default()
+            }),
         StatusCode::OK,
     )
     .await?;
@@ -301,7 +306,7 @@ async fn issued_locator(member: &Member) -> Result<PrincipalLocator> {
         member
             .client
             .post("/_arkret/open/invite-locators/resolve")
-            .json(&json!({"locator_token": token})),
+            .json(&InviteLocatorResolveRequestBody::new(token)),
         StatusCode::OK,
     )
     .await?;

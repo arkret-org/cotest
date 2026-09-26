@@ -4,16 +4,19 @@
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail, ensure};
-use arkret::contact_operations::{ContactPeer, ContactState};
+use arkret::contact_operations::{
+    ContactPeer, ContactPreparePhase, ContactState, ContactTombstonePrepareRequestBody,
+};
 use arkret_models_collaboration::direct_conversation::{
     DirectConversationResolveOutcome, DirectConversationResolveRequestBody,
 };
-use arkret_models_collaboration::governance::invite_addressing::PrincipalLocator;
+use arkret_models_collaboration::governance::invite_addressing::{
+    InviteLocatorIssueRequestBody, InviteLocatorResolveRequestBody, PrincipalLocator,
+};
 use arkret_models_collaboration::governance::peer_contact::ContactIntroductionEvidence;
 use arkret_models_collaboration::objects::direct_conversation::DirectConversationFoundingAuthorityEvidence;
 use arkret_wire::ActorId;
 use reqwest::StatusCode;
-use serde_json::json;
 
 use crate::harness::{TestActorClient, TestServerGroup, expect_json};
 use crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
@@ -29,7 +32,10 @@ async fn issued_locator(holder: &TestActorClient) -> Result<PrincipalLocator> {
     let issued = expect_json(
         holder
             .post("/_arkret/self/invite-locators")
-            .json(&json!({"ttl_seconds": 900})),
+            .json(&InviteLocatorIssueRequestBody {
+                ttl_seconds: Some(900),
+                ..Default::default()
+            }),
         StatusCode::OK,
     )
     .await?;
@@ -39,7 +45,7 @@ async fn issued_locator(holder: &TestActorClient) -> Result<PrincipalLocator> {
     let resolved = expect_json(
         holder
             .post("/_arkret/open/invite-locators/resolve")
-            .json(&json!({"locator_token": token})),
+            .json(&InviteLocatorResolveRequestBody::new(token)),
         StatusCode::OK,
     )
     .await?;
@@ -96,16 +102,16 @@ async fn tombstone_contact(
     let path = "/_arkret/self/contacts/tombstone";
     let prepared: ContactOperationOutcome = serde_json::from_value(
         expect_json(
-            holder.post(path).json(&json!({
-                "phase": "prepare",
-                "operation_id": operation_id,
-                "idempotency_key": idempotency_key,
-                "peer": row.peer,
-                "contact_round_id": next.contact_round_id,
-                "version": next.version,
-                "predecessor_event_ref": next.predecessor_event_ref,
-                "block_peer": false,
-            })),
+            holder.post(path).json(&ContactTombstonePrepareRequestBody {
+                phase: ContactPreparePhase::Prepare,
+                operation_id: operation_id.clone(),
+                idempotency_key: idempotency_key.clone(),
+                peer: row.peer.clone(),
+                contact_round_id: next.contact_round_id.clone(),
+                version: next.version,
+                predecessor_event_ref: next.predecessor_event_ref.clone(),
+                block_peer: false,
+            }),
             StatusCode::OK,
         )
         .await?,
