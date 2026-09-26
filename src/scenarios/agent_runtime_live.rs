@@ -20,6 +20,7 @@
 use std::time::{Duration, Instant};
 
 use anyhow::{Context as _, Result, bail, ensure};
+use arkret::{ArkretMlsIdentity, ArkretMlsSigner};
 use arkret_models_collaboration::agent_operations::{
     AgentKeyPairActivationState, AgentKeyPairOutcome, AgentPairingBootstrap,
     AgentProvisionCommitPhase, AgentProvisionCommitRequestBody, AgentProvisionOutcome,
@@ -31,6 +32,7 @@ use arkret_models_collaboration::agent_scope::AgentRequestedScopeDisclosure;
 use arkret_models_collaboration::events_payloads::agent::{
     AgentKeyApprovalEvidence, AgentKeyApprovalEvidenceKind, AgentKeyAuthorizePayload, AgentKeyScope,
 };
+use arkret_models_crypto::{KeyPackagesUploadOutcome, MlsEndpointIdentity};
 use arkret_wire::{
     AccountId, ActorId, AuthorityCommitStatus, AuthoritySubmitOutcome, Did, DidCoreId, DidUrl,
     Event, EventId, IdempotencyKey, NonEmptyString, OpaqueLocalId, ProtocolOperationId, RealmId,
@@ -67,10 +69,10 @@ fn runtime_operations() -> [&'static str; 4] {
     ]
 }
 
-fn requested_scope() -> Result<AgentKeyScope> {
+fn requested_scope(operations: &[&str]) -> Result<AgentKeyScope> {
     Ok(serde_json::from_value(json!({
-        "actions": runtime_operations(),
-        "resources": runtime_operations()
+        "actions": operations,
+        "resources": operations
             .iter()
             .map(|operation| json!({"kind": "operation", "operation": operation}))
             .collect::<Vec<_>>()
@@ -169,6 +171,25 @@ impl AgentRuntimeSession {
         controller_account: &AccountId,
         label: &str,
     ) -> Result<Self> {
+        Self::establish_with_operations(
+            server,
+            coauth,
+            controller,
+            controller_account,
+            label,
+            &runtime_operations(),
+        )
+        .await
+    }
+
+    pub async fn establish_with_operations(
+        server: &ArkretServer,
+        coauth: &MockCoauthIntrospectionServer,
+        controller: &TestActorClient,
+        controller_account: &AccountId,
+        label: &str,
+        operations: &[&str],
+    ) -> Result<Self> {
         let principal = controller
             .principal
             .as_ref()
@@ -217,7 +238,7 @@ impl AgentRuntimeSession {
         let agent_did = Did::new(inception.did.clone())?;
 
         // 2. Prepare pins the accepted inception.
-        let scope = requested_scope()?;
+        let scope = requested_scope(operations)?;
         let operation_id = ProtocolOperationId::new(format!("ak:operation:{}", unique_uuid7()))
             .map_err(anyhow::Error::msg)?;
         let idempotency_key = IdempotencyKey::new(unique_uuid7()).map_err(anyhow::Error::msg)?;
@@ -527,7 +548,7 @@ impl AgentRuntimeSession {
             authorize.event_id.as_str(),
             verification_method.as_str(),
             &runtime_key.verifying_key(),
-            &runtime_operations(),
+            operations,
         )?;
         let runtime = server.client_with_agent_runtime_grant(
             agent_did.as_str(),
@@ -881,6 +902,115 @@ pub async fn run_agent_runtime_session_live() -> Result<()> {
         ended.status() == StatusCode::UNAUTHORIZED,
         "a revoked key's session still reads its queue: {}",
         ended.status()
+    );
+    Ok(())
+}
+
+/// An Agent publishes with its own current key after restoring persisted MLS
+/// identity state; a Device branch cannot be smuggled through that session.
+pub async fn run_agent_keypackage_upload_live() -> Result<()> {
+    let group_name = "agent-keypackage-upload";
+    let Some(database) = database(group_name)? else {
+        return Ok(());
+    };
+    let coauth = MockCoauthIntrospectionServer::spawn_with_internal_secret(
+        HARNESS_INTERNAL_AUTHORITY_SECRET,
+    )
+    .await?;
+    let Some(group) = TestServerGroup::try_multi_external_with_node_envs(
+        group_name,
+        &[station_env(&database.connect_url, &coauth)],
+    )
+    .await?
+    else {
+        return skip_or_fail(group_name, "prebuilt Soland unavailable");
+    };
+    let station = group.server(0);
+    let (controller, controller_account) =
+        standard_client(station, &coauth, "mls-agent-controller", CONTROLLER_DEVICE).await?;
+    let operations = [
+        ServiceOperationId::SELF_KEYS_KEYPACKAGES_UPLOAD_CREATE_V1,
+        ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_CONSUME_V1,
+    ];
+    let agent = AgentRuntimeSession::establish_with_operations(
+        station,
+        &coauth,
+        &controller,
+        &controller_account,
+        "mls-agent",
+        &operations,
+    )
+    .await?;
+    let actor = ActorId::account(agent.agent_account.clone());
+    let identity = ArkretMlsIdentity::new_agent(
+        actor.clone(),
+        agent.verification_method.clone(),
+        agent.key_authorization.clone(),
+        ArkretMlsSigner::from_ed25519_signing_key(agent.runtime_key.clone()),
+    )?;
+    let keypackage = identity.key_package_record()?;
+    let snapshot_file = tempfile::NamedTempFile::new()?;
+    std::fs::write(snapshot_file.path(), identity.export_private_state()?)?;
+    let restored = ArkretMlsIdentity::restore_from_private_state(
+        actor,
+        MlsEndpointIdentity::agent_runtime(
+            agent.agent_account.principal_id.clone(),
+            agent.verification_method.clone(),
+            agent.key_authorization.clone(),
+        )?,
+        &std::fs::read(snapshot_file.path())?,
+    )?;
+    let upload = restored.signed_key_packages_upload_request(
+        std::slice::from_ref(&keypackage),
+        agent.verification_method.as_str(),
+        None,
+    )?;
+    let outcome: KeyPackagesUploadOutcome = serde_json::from_value(
+        expect_json(
+            agent
+                .runtime
+                .post("/_arkret/self/keys/keypackages/upload")
+                .json(&upload),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    ensure!(
+        outcome.accepted == 1
+            && outcome.key_package_refs == vec![keypackage.keypackage_ref.to_string()],
+        "Agent KeyPackage was not published: {outcome:?}"
+    );
+    let mut wrong_branch = serde_json::to_value(&upload)?;
+    let object = wrong_branch
+        .as_object_mut()
+        .context("typed upload is an object")?;
+    object.remove("agent_verification_method");
+    object.remove("agent_key_authorize_event_id");
+    object.insert("device_id".to_owned(), json!(CONTROLLER_DEVICE));
+    let rejected = agent
+        .runtime
+        .post("/_arkret/self/keys/keypackages/upload")
+        .json(&wrong_branch)
+        .send()
+        .await?;
+    ensure!(
+        rejected.status() == StatusCode::FORBIDDEN,
+        "Agent session accepted a Device KeyPackage branch: {}",
+        rejected.status()
+    );
+    let mut wrong_method = serde_json::to_value(&upload)?;
+    wrong_method["agent_verification_method"] =
+        json!(format!("{}#another-runtime-key", agent.agent_did));
+    let rejected = agent
+        .runtime
+        .post("/_arkret/self/keys/keypackages/upload")
+        .json(&wrong_method)
+        .send()
+        .await?;
+    ensure!(
+        rejected.status() == StatusCode::FORBIDDEN,
+        "Agent KeyPackage upload accepted another runtime method: {}",
+        rejected.status()
     );
     Ok(())
 }

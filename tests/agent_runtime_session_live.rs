@@ -11,3 +11,8 @@ async fn agent_runtime_authors_actor_private_requests_and_drafts_for_its_control
 -> anyhow::Result<()> {
     cotest::scenarios::agent_runtime_live::run_agent_actor_private_events_live().await
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn agent_publishes_persisted_keypackage_with_its_runtime_key() -> anyhow::Result<()> {
+    cotest::scenarios::agent_runtime_live::run_agent_keypackage_upload_live().await
+}
