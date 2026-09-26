@@ -136,15 +136,8 @@ fn run_error_code_vocabulary_unregistered_spelling_vector() -> Result<()> {
         ("bad_json", "json_invalid"),
         ("bad_query", "query_invalid"),
         ("device_not_authorized", "device_unauthorized"),
-        ("directory_not_authorized", "directory_unauthorized"),
-        (
-            "federation_actor_origin_rejected",
-            "federation_actor_origin_denied",
-        ),
         ("invalid_avatar_blob_ref", "avatar_blob_ref_invalid"),
-        ("invalid_genesis_seal", "genesis_seal_invalid"),
         ("invalid_param", "param_invalid"),
-        ("invalid_response", "response_invalid"),
         ("invalid_signature", "signature_invalid"),
         ("missing_param", "param_missing"),
         (
@@ -153,16 +146,24 @@ fn run_error_code_vocabulary_unregistered_spelling_vector() -> Result<()> {
         ),
         ("profile_unsupported", "unsupported_profile"),
         (
-            "recovery_policy_device_not_authorized",
-            "recovery_policy_device_unauthorized",
-        ),
-        (
             "service_registration_rejected",
             "service_registration_denied",
         ),
         ("signal_class_not_permitted", "signal_class_denied"),
-        ("stale_frontier", "frontier_stale"),
-        ("stale_peer", "peer_stale"),
+    ];
+    // Renames whose canonical spelling the registry only reserves: a reserved
+    // code has no producer yet and is never emitted (decision 0098), so the
+    // SDK parses neither spelling as an active code.
+    const RESERVED_RENAMES: &[(&str, &str)] = &[
+        (
+            "federation_actor_origin_rejected",
+            "federation_actor_origin_denied",
+        ),
+        ("invalid_response", "response_invalid"),
+        (
+            "recovery_policy_device_not_authorized",
+            "recovery_policy_device_unauthorized",
+        ),
         (
             "stale_peer_state_unavailable",
             "peer_state_stale_unavailable",
@@ -170,6 +171,31 @@ fn run_error_code_vocabulary_unregistered_spelling_vector() -> Result<()> {
         ("unknown_did", "did_unknown"),
         ("verifier_not_authorized", "verifier_unauthorized"),
     ];
+    for &(unregistered, reserved) in RESERVED_RENAMES {
+        for spelling in [unregistered, reserved] {
+            if ErrorCode::from_wire(spelling).is_some() {
+                bail!("reserved or unregistered error code `{spelling}` parses as an active code");
+            }
+        }
+    }
+
+    // Codes the registry retired outright: neither the old spelling nor its
+    // later canonical rename may parse.
+    const RETIRED: &[&str] = &[
+        "directory_not_authorized",
+        "directory_unauthorized",
+        "invalid_genesis_seal",
+        "genesis_seal_invalid",
+        "stale_frontier",
+        "frontier_stale",
+        "stale_peer",
+        "peer_stale",
+    ];
+    for &retired in RETIRED {
+        if ErrorCode::from_wire(retired).is_some() {
+            bail!("retired error code `{retired}` is accepted by the SDK parser");
+        }
+    }
 
     for &(unregistered, canonical) in RENAMES {
         if ErrorCode::from_wire(unregistered).is_some() {

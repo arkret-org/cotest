@@ -1,7 +1,7 @@
 use anyhow::Result;
 use reqwest::StatusCode;
 
-use crate::harness::{ArkretServer, expect_json};
+use crate::harness::{ArkretServer, expect_api_error, expect_json};
 use crate::scenarios::identity_test_support::prepare_actor_inception_for_service_did;
 
 pub async fn identity_surface_and_receipts_work() -> Result<()> {
@@ -16,7 +16,9 @@ pub async fn identity_surface_and_receipts_work() -> Result<()> {
     .await?;
     assert_eq!(describe["protocol_version"], "1.0");
 
-    let resolved = expect_json(
+    // A did:web the Station cannot fetch is never answered from a guess: the
+    // resolve fails closed instead of inventing a document.
+    expect_api_error(
         server
             .http()
             .post(server.url("/_arkret/root/identity/resolve"))
@@ -26,32 +28,10 @@ pub async fn identity_surface_and_receipts_work() -> Result<()> {
                     requested_evidence_kinds: Vec::new(),
                 },
             ),
-        StatusCode::OK,
+        StatusCode::SERVICE_UNAVAILABLE,
+        "current_did_authority_unavailable",
     )
     .await?;
-    assert_eq!(resolved["did_document"]["id"], "did:web:alice.example");
-
-    let document = expect_json(
-        server
-            .http()
-            .get(server.url("/_arkret/root/identity/document?did=did:web:alice.example")),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(document["did_document"]["id"], "did:web:alice.example");
-
-    let log = expect_json(
-        server
-            .http()
-            .get(server.url("/_arkret/root/identity/log?did=did:web:alice.example")),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(log["did"], "did:web:alice.example");
-    assert_eq!(log["method"], "did:web");
-    assert_eq!(log["native_history"], false);
-    assert!(log["entries"].as_array().is_some_and(Vec::is_empty));
-    assert_eq!(log["has_more"], false);
 
     let prepared = prepare_actor_inception_for_service_did(server.service_did(), "identity-alice")?;
     let actor_id = prepared.did.clone();

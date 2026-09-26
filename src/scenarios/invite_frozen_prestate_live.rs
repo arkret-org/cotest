@@ -82,11 +82,16 @@ fn problem(body: &Value) -> Result<arkret_wire::Problem> {
         .map_err(|error| anyhow!("refusal is not a problem document ({error}): {body}"))
 }
 
-/// The registered sub-reason when the refusal carries one, else its code.
+/// The registered sub-reason when the refusal carries one, else its code:
+/// an RFC 9457 problem names the code as the last segment of its `type` URI.
 fn reason(body: &Value) -> String {
     body.get("reason_code")
-        .or_else(|| body.get("code"))
         .and_then(Value::as_str)
+        .or_else(|| {
+            body.get("type")
+                .and_then(Value::as_str)
+                .and_then(|kind| kind.rsplit('/').next())
+        })
         .unwrap_or("<no code>")
         .to_owned()
 }

@@ -102,15 +102,16 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
 /// false Describe claim (`service-surface.md` §3: only bundles the deployment
 /// really implements may be advertised, and a frozen bundle cannot drop a
 /// member). The set mirrors Soland's own ratchet and may only shrink.
-const KNOWN_ADVERTISED_UNMOUNTED: &[arkret_wire::ServiceOperationId] = &[
-    arkret_wire::ServiceOperationId::EdgeAppletManagedActorCommandAuthorV1,
-    arkret_wire::ServiceOperationId::PeerRealmJoinReadPreviewV1,
-    arkret_wire::ServiceOperationId::SelfCurrentResultsReadExactV1,
-    arkret_wire::ServiceOperationId::SelfMediaServiceBindingReadResolveV1,
-    arkret_wire::ServiceOperationId::SelfRealmReadStreamsV1,
-    arkret_wire::ServiceOperationId::SelfRealmJoinReadPreviewV1,
-    arkret_wire::ServiceOperationId::SelfStrandWatchReadCurrentV1,
-];
+const KNOWN_ADVERTISED_UNMOUNTED: &[arkret_wire::ServiceOperationId] =
+    &[arkret_wire::ServiceOperationId::EdgeAppletManagedActorCommandAuthorV1];
+
+/// Advertised Station members served by the co-located Account Authority of
+/// the same Station TCB (`device-lifecycle.md` §2.1.1): the deployment gateway
+/// routes them to that process, which owns the pending pairing ledger, so a
+/// bare Station process does not mount them. Mirrors Soland's own exemption;
+/// they are not a false Describe claim.
+const SERVED_BY_ACCOUNT_AUTHORITY: &[arkret_wire::ServiceOperationId] =
+    &[arkret_wire::ServiceOperationId::GateAccountCommandPairDeviceV1];
 
 /// How the live router answered one unauthenticated, selector-carrying probe.
 #[derive(Debug, PartialEq, Eq)]
@@ -197,6 +198,7 @@ pub async fn advertised_operations_are_mounted_and_selectable() -> Result<()> {
         })?;
         for member in bundle.members {
             if member.binding_kind != arkret_wire::BindingKind::HttpJson
+                || SERVED_BY_ACCOUNT_AUTHORITY.contains(&member.operation_id)
                 || !probed.insert(member.operation_id)
             {
                 continue;

@@ -4,7 +4,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::harness::expect_status;
+use crate::harness::{expect_api_error, expect_status};
 use crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
 use crate::scenarios::identity_test_support::{
     HARNESS_INTERNAL_AUTHORITY_SECRET, actor_did_for_service_did,
@@ -113,16 +113,18 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
         &holder_key,
     )?;
     // This fixture does not onboard a Push Gateway. A valid presentation
-    // therefore reaches the gateway dependency gate (409); invalid grants
-    // below must fail authentication first (401).
-    expect_status(
+    // therefore reaches the gateway handoff, which register-device reports as
+    // its registered `push_gateway_unreachable` (503); invalid grants below
+    // must fail authentication first (401).
+    expect_api_error(
         server
             .http()
             .post(&push_url)
             .header(reqwest::header::AUTHORIZATION, format!("DPoP {grant_jwt}"))
             .header("DPoP", &dpop.header_value)
             .json(&push_body),
-        StatusCode::CONFLICT,
+        StatusCode::SERVICE_UNAVAILABLE,
+        "push_gateway_unreachable",
     )
     .await?;
 
