@@ -616,12 +616,37 @@ pub(crate) fn claim_request_between(
     claim_request_id: [u8; 16],
     lifetime: chrono::Duration,
 ) -> Result<KeyPackagesClaimRequestBody> {
+    claim_request_to(
+        requester,
+        source,
+        destination,
+        (&target.account, &target.device),
+        realm_id,
+        mls_group_id,
+        claim_request_id,
+        lifetime,
+    )
+}
+
+/// [`claim_request_between`] for an exact `(AccountId, device)` target that
+/// need not be a provisioned member.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn claim_request_to(
+    requester: &Member,
+    source: &ArkretServer,
+    destination: &ArkretServer,
+    (target_account, target_device): (&AccountId, &DeviceId),
+    realm_id: &RealmId,
+    mls_group_id: &str,
+    claim_request_id: [u8; 16],
+    lifetime: chrono::Duration,
+) -> Result<KeyPackagesClaimRequestBody> {
     let signed_at = arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now());
     let mut body: KeyPackagesClaimRequestBody = serde_json::from_value(json!({
         "claim_request_id": base64::engine::general_purpose::URL_SAFE_NO_PAD
             .encode(claim_request_id),
-        "target_account_id": target.account,
-        "target_device_ids": [target.device],
+        "target_account_id": target_account,
+        "target_device_ids": [target_device],
         "requester_account_id": requester.account,
         "intended_realm_id": realm_id,
         "mls_group_id": mls_group_id,
@@ -852,7 +877,7 @@ pub(crate) async fn accepted_full_view(
                 return Ok(view);
             }
             Ok(CommittedEventView::Withheld(_)) => {
-                bail!("the accepted Commit {event_id} is withheld from its own author")
+                bail!("the accepted Commit {event_id} is withheld from its reader")
             }
             Err(error) if std::time::Instant::now() >= deadline => {
                 bail!("the accepted Commit {event_id} is not readable: {error}")

@@ -13,7 +13,14 @@
 //!    her claim on Y, joins from the Welcome, ACKs it and consumes the claim against the Welcome
 //!    binding Y recorded.
 //! 3. Carol, now a member, adds Dave the same way: X signs her forwarded Commit, Y holds its exact
-//!    bytes and queues Dave's Welcome, and Dave joins at epoch 2.
+//!    bytes and queues Dave's Welcome, and Dave joins at epoch 2. Carol and Dave read the Commits
+//!    they join from on Y, from Y's own typed current, although Bob and Carol authored them; the
+//!    Genesis Blobs are uploaded to Y bound to the Realm.
+//! 4. Alice on X claims one of Dave's KeyPackages at Y through X's durable relay: Y executes the
+//!    claim as its destination, X answers the stored outcome and replays it exactly, Dave reads it
+//!    on Y, Y replays the exact peer command and answers its query, another digest under the same
+//!    identity is `duplicate_conflict` at both Stations, Y's privacy failures share one opaque
+//!    `claim_failed` view, and X closes a relayed failure as `claim_failed`.
 
 use std::time::{Duration, Instant};
 
@@ -27,7 +34,9 @@ use arkret_models_collaboration::governance::membership_invite::{
 use arkret_models_collaboration::governance::realm_join_intake::RealmJoinIntent;
 use arkret_models_collaboration::sync_frames::demand_sync::RealmListMembership;
 use arkret_models_crypto::{
-    KeyPackagesClaimOutcome, KeyPackagesClaimQueryRequestBody, KeyPackagesUploadOutcome,
+    KeyPackagesClaimOutcome, KeyPackagesClaimQueryRequestBody, KeyPackagesClaimRequestBody,
+    KeyPackagesUploadOutcome, PeerKeyPackagesClaimQueryOutcome,
+    PeerKeyPackagesClaimQueryRequestBody, PeerKeyPackagesClaimQueryState,
 };
 use arkret_wire::{
     AuthorityCommitStatus, AuthoritySubmitOutcome, EventKind, InviteId, MlsCommitSubmission,
@@ -35,7 +44,7 @@ use arkret_wire::{
 };
 use chrono::{Duration as ChronoDuration, Utc};
 use reqwest::StatusCode;
-use serde_json::json;
+use serde_json::{Value, json};
 
 use crate::harness::{ArkretServer, TestServerGroup, expect_json, invite_create_payload};
 use crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
@@ -46,7 +55,7 @@ use crate::scenarios::human_device_producer_live::{
 };
 use crate::scenarios::identity_test_support::HARNESS_INTERNAL_AUTHORITY_SECRET;
 use crate::scenarios::mls_lifecycle_live::{
-    ACTIVE_SUITE, Member, accepted_full_view, canonical, claim_request_between,
+    ACTIVE_SUITE, Member, accepted_full_view, canonical, claim_request_between, claim_request_to,
     claimed_keypackage_record, fresh_uuid_v7, json_equal, post_bytes_at, post_claim, post_json,
     post_json_at, problem_type, recipient_welcomes, signed_welcome, upload_public_blob,
 };
@@ -57,6 +66,7 @@ const ALICE_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002601";
 const BOB_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002602";
 const CAROL_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002603";
 const DAVE_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002607";
+const EVE_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002608";
 const CLAIM_QUERY: &str = "/_arkret/self/keys/keypackages/claims/query";
 
 /// `member` on Y accepts Alice's directed Invite through its own Station.
@@ -168,7 +178,11 @@ async fn claim_for(
     realm_id: &RealmId,
     group_id: &str,
     seed: u8,
-) -> Result<(KeyPackagesClaimOutcome, Vec<u8>)> {
+) -> Result<(
+    KeyPackagesClaimOutcome,
+    Vec<u8>,
+    KeyPackagesClaimRequestBody,
+)> {
     let deadline = Instant::now() + Duration::from_secs(120);
     let mut attempt = 0u8;
     loop {
@@ -189,7 +203,7 @@ async fn claim_for(
                 outcome
                     .validate_shape()
                     .map_err(|error| anyhow::anyhow!("claim outcome shape: {error:?}"))?;
-                return Ok((outcome, bytes));
+                return Ok((outcome, bytes, request));
             }
             let kind = problem_type(&bytes)?;
             if Instant::now() >= deadline {
@@ -257,21 +271,6 @@ async fn submit_mls_commit(
     }
 }
 
-/// Upload `bytes` as one of the member's own content-addressed Blobs.
-async fn upload_own_blob(member: &Member, bytes: &[u8]) -> Result<String> {
-    let uploaded = expect_json(
-        member.client.post("/_arkret/self/blob/upload").multipart(
-            crate::scenarios::delivery_media::blob_upload_form(bytes, "application/octet-stream")?,
-        ),
-        StatusCode::OK,
-    )
-    .await?;
-    uploaded["blob_ref"]
-        .as_str()
-        .map(ToOwned::to_owned)
-        .ok_or_else(|| anyhow::anyhow!("Blob upload returned no blob_ref: {uploaded}"))
-}
-
 /// `adder` on Y claims one of `added`'s KeyPackages on their shared Station
 /// and submits the inline Add Commit with its Welcome to Y, which forwards it
 /// to X; returns the Commit Event, its Welcome, the claim outcome bytes and
@@ -296,7 +295,7 @@ async fn forwarded_add(
 )> {
     let realm_id = RealmId::new(realm.to_owned())?;
     let group_id = scope.canonical_mls_group_id()?;
-    let (outcome, bytes) =
+    let (outcome, bytes, _) =
         claim_for(adder, y, y, added, &realm_id, group_id.as_str(), seed).await?;
     ensure!(
         outcome.claims.len() == 1 && outcome.claims[0].actor_id == added.actor,
@@ -409,8 +408,8 @@ pub async fn cross_station_mls_welcome_run() -> Result<()> {
         .mls_identity()?
         .create_group_with_governance_binding(&scope, &genesis_binding)?;
     let (group_info, tree) = bob_group.public_group_state_bytes()?;
-    let group_info_ref = upload_own_blob(&bob, &group_info).await?;
-    let tree_ref = upload_own_blob(&bob, &tree).await?;
+    let group_info_ref = upload_public_blob(&bob.client, &realm_id, &group_info).await?;
+    let tree_ref = upload_public_blob(&bob.client, &realm_id, &tree).await?;
     let genesis = bob
         .client
         .author_event(
@@ -455,8 +454,8 @@ pub async fn cross_station_mls_welcome_run() -> Result<()> {
         "Carol's queue on Y does not hold exactly the replicated Welcome: {queued:?}"
     );
     ensure!(
-        accepted_full_view(&bob.client, &first_event.event_id).await? == first_accepted,
-        "Y does not hold the exact bytes of Bob's forwarded Commit"
+        accepted_full_view(&carol.client, &first_event.event_id).await? == first_accepted,
+        "Carol does not read the exact bytes of Bob's forwarded Commit on Y"
     );
     let claim = carol_claim.claims[0].clone();
     let (status, read) = post_bytes_at(
@@ -545,8 +544,8 @@ pub async fn cross_station_mls_welcome_run() -> Result<()> {
     let second_accepted = accepted_full_view(&alice.client, &second_event.event_id).await?;
     wait_for_welcome(&dave, &dave_welcome).await?;
     ensure!(
-        accepted_full_view(&carol.client, &second_event.event_id).await? == second_accepted,
-        "Y does not hold the exact bytes of Carol's forwarded Commit"
+        accepted_full_view(&dave.client, &second_event.event_id).await? == second_accepted,
+        "Dave does not read the exact bytes of Carol's forwarded Commit on Y"
     );
     let dave_group = ArkretMlsGroup::join_from_verified_welcome_delivery(
         dave_identity,
@@ -554,6 +553,274 @@ pub async fn cross_station_mls_welcome_run() -> Result<()> {
         &second_accepted,
     )?;
     ensure!(dave_group.epoch() == 2, "Dave did not join at epoch 2");
+
+    // (4) Alice on X claims one of Dave's KeyPackages at Y, Dave's own
+    //     Station: X durably relays her self claim, Y executes it as the
+    //     claim destination, and X answers the stored outcome.
+    publish_one(&dave).await?;
+    let (relayed, relayed_bytes, relayed_request) =
+        claim_for(&alice, x, y, &dave, &realm_id, group_id.as_str(), 0x61).await?;
+    ensure!(
+        relayed.claims.len() == 1 && relayed.claims[0].actor_id == dave.actor,
+        "the relayed claim did not select Dave's KeyPackage: {relayed:?}"
+    );
+    let eve = Member::provision(y, &coauth, "xwelcome-eve", EVE_DEVICE).await?;
+    peer_claim_at_destination(
+        x,
+        y,
+        &alice,
+        &dave,
+        &eve,
+        &realm_id,
+        group_id.as_str(),
+        &relayed_request,
+        &relayed_bytes,
+    )
+    .await?;
     drop(coauth);
+    Ok(())
+}
+
+const PEER_CLAIM: &str = "/_arkret/peer/keys/keypackages/claim";
+const PEER_CLAIM_QUERY: &str = "/_arkret/peer/keys/keypackages/claims/query";
+
+/// POST `body` to `receiver` as the peer command `source` signs, under the
+/// claim's `Idempotency-Key`.
+async fn peer_post(
+    receiver: &ArkretServer,
+    source: &ArkretServer,
+    path: &str,
+    body: &impl serde::Serialize,
+    claim_request_id: &str,
+) -> Result<(StatusCode, Vec<u8>)> {
+    receiver
+        .signed_peer_post_with_idempotency_key(
+            source,
+            path,
+            &arkret_canonical::canonical_json_bytes(body)?,
+            receiver.service_id(),
+            Some(claim_request_id),
+        )
+        .await
+}
+
+/// The peer command view `bytes` carries, with its state.
+fn peer_view(bytes: &[u8]) -> Result<PeerKeyPackagesClaimQueryOutcome> {
+    let view: PeerKeyPackagesClaimQueryOutcome = serde_json::from_slice(bytes)?;
+    view.validate_shape()
+        .map_err(|error| anyhow::anyhow!("peer claim view shape: {error:?}"))?;
+    Ok(view)
+}
+
+/// The outward shape of one claim failure: status, the view's closed field
+/// names, its state and error code.
+fn failure_shape(status: StatusCode, bytes: &[u8]) -> Result<(StatusCode, Vec<String>, Value)> {
+    let value: Value = serde_json::from_slice(bytes)?;
+    let fields = value
+        .as_object()
+        .map(|object| object.keys().cloned().collect())
+        .unwrap_or_default();
+    Ok((
+        status,
+        fields,
+        json!([value.get("state"), value.get("error_code")]),
+    ))
+}
+
+/// The destination side of a claim relayed from X (`device-lifecycle.md`
+/// §9.2.3): X's exact replay answers the stored outcome, Dave reads it on Y,
+/// Y replays the exact peer command and answers its query with the same
+/// outcome, refuses another digest under the same identity with
+/// `duplicate_conflict` at both Stations, and every privacy failure is the
+/// same opaque `claim_failed` view, which X's relay closes for its caller.
+#[allow(clippy::too_many_arguments)]
+async fn peer_claim_at_destination(
+    x: &ArkretServer,
+    y: &ArkretServer,
+    requester: &Member,
+    target: &Member,
+    outsider: &Member,
+    realm_id: &RealmId,
+    group_id: &str,
+    request: &KeyPackagesClaimRequestBody,
+    outcome_bytes: &[u8],
+) -> Result<()> {
+    let (status, replay) = post_claim(&requester.client, request).await?;
+    ensure!(
+        status == StatusCode::OK && json_equal(&replay, outcome_bytes)?,
+        "X's exact replay of the relayed claim did not answer its stored outcome: {status}"
+    );
+    let outcome: Value = serde_json::from_slice(outcome_bytes)?;
+    let claim_id = outcome["claims"][0]["claim_id"]
+        .as_str()
+        .context("the relayed outcome names no claim")?
+        .to_owned();
+    let (status, read) = post_bytes_at(
+        &target.client,
+        CLAIM_QUERY,
+        &KeyPackagesClaimQueryRequestBody {
+            claim_id: arkret_wire::KeypackageClaimId::new(claim_id)?,
+        },
+    )
+    .await?;
+    ensure!(
+        status == StatusCode::OK && json_equal(&read, outcome_bytes)?,
+        "Dave could not read the relayed claim on Y: {status}"
+    );
+
+    // Y: the exact peer command replays its stored outcome, and the query
+    // under the exact digest answers the same view.
+    let (status, replayed) =
+        peer_post(y, x, PEER_CLAIM, request, request.claim_request_id.as_str()).await?;
+    ensure!(
+        status == StatusCode::OK,
+        "Y refused the exact peer replay: {status} {}",
+        String::from_utf8_lossy(&replayed)
+    );
+    let replayed = peer_view(&replayed)?;
+    ensure!(
+        replayed.state == PeerKeyPackagesClaimQueryState::Claimed
+            && serde_json::to_value(&replayed.claim_outcome)? == outcome,
+        "Y's exact peer replay is not the stored claimed outcome: {replayed:?}"
+    );
+    let digest = arkret_wire::Hash::new(arkret_canonical::canonical_sha256(request)?)?;
+    let (status, queried) = peer_post(
+        y,
+        x,
+        PEER_CLAIM_QUERY,
+        &PeerKeyPackagesClaimQueryRequestBody {
+            claim_request_id: request.claim_request_id.clone(),
+            request_digest: digest,
+        },
+        request.claim_request_id.as_str(),
+    )
+    .await?;
+    ensure!(
+        status == StatusCode::OK,
+        "Y refused the claim query: {status}"
+    );
+    let queried = peer_view(&queried)?;
+    ensure!(
+        queried.state == PeerKeyPackagesClaimQueryState::Claimed
+            && serde_json::to_value(&queried.claim_outcome)? == outcome,
+        "Y's claim query is not the stored claimed outcome: {queried:?}"
+    );
+
+    // The same identity under another digest is duplicate_conflict at X and
+    // at Y, and changes nothing.
+    let seed: [u8; 16] = base64::Engine::decode(
+        &base64::engine::general_purpose::URL_SAFE_NO_PAD,
+        request.claim_request_id.as_str(),
+    )?
+    .try_into()
+    .map_err(|_| anyhow::anyhow!("the claim request id is not 16 bytes"))?;
+    let altered = claim_request_between(
+        requester,
+        x,
+        y,
+        target,
+        realm_id,
+        group_id,
+        seed,
+        ChronoDuration::minutes(4),
+    )?;
+    ensure!(
+        altered.claim_request_id == request.claim_request_id
+            && arkret_canonical::canonical_json_bytes(&altered)?
+                != arkret_canonical::canonical_json_bytes(request)?,
+        "the altered claim does not reuse the identity with another body"
+    );
+    for (station, (status, body)) in [
+        ("X", post_claim(&requester.client, &altered).await?),
+        (
+            "Y",
+            peer_post(
+                y,
+                x,
+                PEER_CLAIM,
+                &altered,
+                altered.claim_request_id.as_str(),
+            )
+            .await?,
+        ),
+    ] {
+        ensure!(
+            problem_type(&body)? == "duplicate_conflict",
+            "{station} answered another digest under the same claim identity with {status} {}",
+            String::from_utf8_lossy(&body)
+        );
+    }
+    let (_, still) = post_claim(&requester.client, request).await?;
+    ensure!(
+        json_equal(&still, outcome_bytes)?,
+        "the conflicting claim changed X's stored outcome"
+    );
+
+    // Privacy failures at Y share one opaque view: a target outside the
+    // Realm, an unknown target device, an exhausted target and an unknown
+    // Realm.
+    let unknown_device =
+        arkret_wire::DeviceId::new("ak:device:01904100-0000-7000-8000-0000000026ff".to_owned())?;
+    let unknown_realm = RealmId::new(format!("ak:realm:A{}", "Q".repeat(43)))?;
+    let failures = [
+        ((&outsider.account, &outsider.device), realm_id, 0x71u8),
+        ((&target.account, &unknown_device), realm_id, 0x72),
+        ((&target.account, &target.device), realm_id, 0x73),
+        ((&target.account, &target.device), &unknown_realm, 0x74),
+    ];
+    let mut shapes = Vec::new();
+    for (target_endpoint, realm, id) in failures {
+        let failing = claim_request_to(
+            requester,
+            x,
+            y,
+            target_endpoint,
+            realm,
+            group_id,
+            [id; 16],
+            ChronoDuration::minutes(5),
+        )?;
+        let (status, body) = peer_post(
+            y,
+            x,
+            PEER_CLAIM,
+            &failing,
+            failing.claim_request_id.as_str(),
+        )
+        .await?;
+        shapes.push(failure_shape(status, &body)?);
+    }
+    ensure!(
+        shapes.windows(2).all(|pair| pair[0] == pair[1])
+            && shapes[0].0 == StatusCode::OK
+            && shapes[0].2 == json!(["claim_failed", "claim_failed"]),
+        "Y's privacy failures are not one opaque claim_failed view: {shapes:?}"
+    );
+
+    // Through X's relay the exhausted target closes as claim_failed.
+    let relayed_failure = claim_request_between(
+        requester,
+        x,
+        y,
+        target,
+        realm_id,
+        group_id,
+        [0x75; 16],
+        ChronoDuration::minutes(5),
+    )?;
+    let deadline = Instant::now() + Duration::from_secs(120);
+    loop {
+        let (status, body) = post_claim(&requester.client, &relayed_failure).await?;
+        let kind = problem_type(&body)?;
+        if kind == "claim_failed" {
+            break;
+        }
+        ensure!(
+            kind == "failed_precondition" && Instant::now() < deadline,
+            "X did not close the relayed failure as claim_failed: {status} {}",
+            String::from_utf8_lossy(&body)
+        );
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
     Ok(())
 }

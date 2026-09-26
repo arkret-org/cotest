@@ -509,17 +509,19 @@ pub(crate) async fn grant_message_create(
         member,
         &[arkret_wire::CapabilityActionId::MESSAGE_CREATE],
     )
-    .await
+    .await?;
+    Ok(())
 }
 
-/// The Realm controller grants `member` the Realm-wide `actions`.
+/// The Realm controller grants `member` the Realm-wide `actions`; returns the
+/// grant's Commit.
 pub(crate) async fn grant_realm_actions(
     controller: &TestActorClient,
     controller_station: &ArkretServer,
     realm_id: &str,
     member: &AccountId,
     actions: &[&str],
-) -> Result<()> {
+) -> Result<RealmCommit> {
     let realm = RealmId::new(realm_id.to_owned())?;
     let issuer = ActorId::account(AccountId::new(
         controller
@@ -562,17 +564,13 @@ pub(crate) async fn grant_realm_actions(
             )
             .await?,
     )?;
-    ensure!(
-        matches!(
-            outcome,
-            AuthoritySubmitOutcome::Accepted {
-                status: AuthorityCommitStatus::Committed,
-                ..
-            }
-        ),
-        "the grant of {actions:?} was not committed: {outcome:?}"
-    );
-    Ok(())
+    match outcome {
+        AuthoritySubmitOutcome::Accepted {
+            status: AuthorityCommitStatus::Committed,
+            commit,
+        } => Ok(commit),
+        other => bail!("the grant of {actions:?} was not committed: {other:?}"),
+    }
 }
 
 /// A discussion Message carrying only an RFC 9420 ciphertext envelope.

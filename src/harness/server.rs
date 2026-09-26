@@ -964,6 +964,20 @@ impl ArkretServer {
         body: &[u8],
         destination: &DidCoreId,
     ) -> Result<(StatusCode, Vec<u8>)> {
+        self.signed_peer_post_with_idempotency_key(source, path, body, destination, None)
+            .await
+    }
+
+    /// [`Self::signed_peer_post`] carrying the command's `Idempotency-Key`,
+    /// covered by the transport signature like every signed peer header.
+    pub async fn signed_peer_post_with_idempotency_key(
+        &self,
+        source: &ArkretServer,
+        path: &str,
+        body: &[u8],
+        destination: &DidCoreId,
+        idempotency_key: Option<&str>,
+    ) -> Result<(StatusCode, Vec<u8>)> {
         use arkret_signatures::http_signature::{
             Component, ContentDigest, ContentDigestAlgorithm, SignedRequestParts,
             canonical_message, format_signature_input_component_list, parse_signature_input,
@@ -1007,6 +1021,10 @@ impl ArkretServer {
         if let Some(operation) = arkret_wire::ServiceOperationId::from_http_request("POST", path) {
             headers.push(("arkret-operation".to_owned(), operation.as_str().to_owned()));
             covered.push(Component::Header("arkret-operation".to_owned()));
+        }
+        if let Some(key) = idempotency_key {
+            headers.push(("idempotency-key".to_owned(), key.to_owned()));
+            covered.push(Component::Header("idempotency-key".to_owned()));
         }
         let created = Utc::now().timestamp();
         let keyid = format!("{}#federation-fanout-key", source.service_did());

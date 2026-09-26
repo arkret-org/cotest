@@ -8,10 +8,13 @@
 //! 1. Alice on X creates an invite-only Realm; Bob, whose Account lives on Y, accepts her directed
 //!    Invite through Y and is granted `ak.mls.genesis`.
 //! 2. Bob's Genesis naming Blobs Y does not hold is refused by Y itself with a bare
-//!    `failed_precondition`; X never commits it.
-//! 3. Bob uploads the epoch-0 GroupInfo and ratchet tree to Y and submits his Genesis there. Y
-//!    forwards it with `mls_genesis_material`, X verifies the content addresses and the RFC 9420
-//!    public state, commits it under its own signature and replicates the Commit back to Y.
+//!    `failed_precondition`; X never commits it. Y answers Bob's read of the later grant from its
+//!    own typed current, while Alice's Invite before his join and every read by Eve, a Y Account
+//!    outside the Realm, are not found.
+//! 3. Bob uploads the epoch-0 GroupInfo and ratchet tree to Y bound to the Realm (Eve's Realm-bound
+//!    upload is `capability_denied`) and submits his Genesis there. Y forwards it with
+//!    `mls_genesis_material`, X verifies the content addresses and the RFC 9420 public state,
+//!    commits it under its own signature and replicates the Commit back to Y.
 //! 4. X serves the exact two Blobs through `ak.peer.mls.read.group_state_material.v1` to Y, and the
 //!    byte-identical Genesis submitted again returns the original Commit.
 
@@ -25,7 +28,8 @@ use arkret_models_collaboration::mls_group_state_material::{
     MlsGroupStateMaterialOutcome, MlsGroupStateMaterialRequestBody,
 };
 use arkret_wire::{
-    ActorId, AuthorityCommitStatus, AuthoritySubmitOutcome, EventKind, InviteId, RealmId, ScopeRef,
+    ActorId, AuthorityCommitStatus, AuthoritySubmitOutcome, EventId, EventKind, InviteId, RealmId,
+    ScopeRef,
 };
 use chrono::{Duration as ChronoDuration, Utc};
 use reqwest::StatusCode;
@@ -43,10 +47,12 @@ use crate::scenarios::human_device_producer_live::{
     submit_and_expect_commit, wait_for_committed,
 };
 use crate::scenarios::identity_test_support::HARNESS_INTERNAL_AUTHORITY_SECRET;
+use crate::scenarios::mls_lifecycle_live::upload_public_blob;
 
 const GROUP: &str = "cross-station-mls-genesis";
 const ALICE_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002501";
 const BOB_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002502";
+const EVE_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002503";
 const ACTIVE_SUITE: &str = "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519";
 const GROUP_STATE_MATERIAL: &str = "/_arkret/peer/mls/group-state-material";
 
@@ -79,18 +85,38 @@ async fn submit_raw(
 /// Upload `bytes` as one of the member's own content-addressed Blobs on its
 /// Account Station (`ak.self.blob.*`), the store the forwarding Station reads
 /// the Genesis material from.
-async fn upload_own_blob(client: &TestActorClient, bytes: &[u8]) -> Result<String> {
-    let uploaded = crate::harness::expect_json(
-        client
-            .post("/_arkret/self/blob/upload")
-            .multipart(blob_upload_form(bytes, "application/octet-stream")?),
-        StatusCode::OK,
-    )
-    .await?;
-    uploaded["blob_ref"]
-        .as_str()
-        .map(ToOwned::to_owned)
-        .ok_or_else(|| anyhow!("Blob upload returned no blob_ref: {uploaded}"))
+/// Upload `bytes` bound to `realm_id` and return the status and problem or
+/// outcome body.
+async fn realm_bound_upload(
+    client: &TestActorClient,
+    realm_id: &RealmId,
+    bytes: &[u8],
+) -> Result<(StatusCode, Value)> {
+    let response = client
+        .post("/_arkret/self/blob/upload")
+        .header("x-arkret-realm-id", realm_id.as_str())
+        .multipart(blob_upload_form(bytes, "application/octet-stream")?)
+        .send()
+        .await?;
+    let status = response.status();
+    Ok((status, response.json().await?))
+}
+
+/// `client`'s Station answers a read of `event_id` as not found.
+async fn ensure_not_found(client: &TestActorClient, event_id: &EventId) -> Result<()> {
+    let response = client
+        .get(&format!(
+            "/_arkret/self/committed-events/{}",
+            event_id.as_str()
+        ))
+        .send()
+        .await?;
+    ensure!(
+        response.status() == StatusCode::NOT_FOUND,
+        "a read of {event_id} outside the caller's interval was {}",
+        response.status()
+    );
+    Ok(())
 }
 
 /// The Genesis payload naming `group_info_ref` and `ratchet_tree_ref`.
@@ -189,7 +215,7 @@ pub async fn cross_station_mls_genesis_run() -> Result<()> {
         &accept_commit,
         &wait_for_committed(&bob, &accept.event_id).await?,
     )?;
-    grant_realm_actions(
+    let grant_commit = grant_realm_actions(
         &alice,
         governance,
         &realm,
@@ -197,6 +223,22 @@ pub async fn cross_station_mls_genesis_run() -> Result<()> {
         &[arkret_wire::CapabilityActionId::MLS_GENESIS],
     )
     .await?;
+    // Y answers Bob's read of Alice's later grant from its own typed current;
+    // Alice's Invite before his join and every read by Eve, who is not a
+    // member, stay not found.
+    ensure_same_commit(
+        &grant_commit,
+        &wait_for_committed(&bob, &grant_commit.event_ref).await?,
+    )?;
+    let invite_event = submitted_event_id(&created)?;
+    let (eve, _) = standard_client(member_station, &coauth, "xgenesis-eve", EVE_DEVICE).await?;
+    for (reader, event_id) in [
+        (&bob, &invite_event),
+        (&eve, &invite_event),
+        (&eve, &grant_commit.event_ref),
+    ] {
+        ensure_not_found(reader, event_id).await?;
+    }
 
     // Bob's epoch-0 group with his own device leaf only.
     let principal = bob
@@ -234,9 +276,19 @@ pub async fn cross_station_mls_genesis_run() -> Result<()> {
     );
     ensure_never_committed(&alice, &unheld.event_id, std::time::Duration::from_secs(2)).await?;
 
-    // (3) With both Blobs on Y, the forwarded Genesis carries them to X.
-    let group_info_ref = upload_own_blob(&bob, &group_info).await?;
-    let tree_ref = upload_own_blob(&bob, &tree).await?;
+    // (3) Bob uploads both Blobs to Y bound to the Realm, which Y admits
+    //     from his joined membership in its typed current; Eve's upload bound
+    //     to the same Realm is refused. The forwarded Genesis carries them.
+    let (status, refused) = realm_bound_upload(&eve, &realm_id, &group_info).await?;
+    ensure!(
+        status == StatusCode::FORBIDDEN
+            && refused["type"]
+                .as_str()
+                .is_some_and(|kind| kind.ends_with("/capability_denied")),
+        "a non-member's Realm-bound upload on Y was not capability_denied: {status} {refused}"
+    );
+    let group_info_ref = upload_public_blob(&bob, &realm_id, &group_info).await?;
+    let tree_ref = upload_public_blob(&bob, &realm_id, &tree).await?;
     ensure!(
         group_info_ref == blob_ref(&group_info) && tree_ref == blob_ref(&tree),
         "the uploaded Blob refs are not the content addresses"
