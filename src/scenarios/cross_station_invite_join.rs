@@ -70,6 +70,36 @@ async fn submit_raw(
     Ok((status, body))
 }
 
+async fn local_event_row(
+    database_url: &str,
+    event_id: &str,
+) -> Result<(i64, String, Vec<u8>, Value)> {
+    let database_url = database_url.to_owned();
+    let event_id = event_id.to_owned();
+    tokio::task::spawn_blocking(move || -> Result<_> {
+        let mut db = postgres::Client::connect(&database_url, postgres::NoTls)?;
+        let rows = db
+            .query(
+                "SELECT pk, state, canonical_bytes, envelope::text FROM canonical_events \
+                 WHERE envelope->>'event_id'=$1",
+                &[&event_id],
+            )
+            .context("find the forwarded Event's local rows")?;
+        ensure!(
+            rows.len() == 1,
+            "forwarded Event must have exactly one local row"
+        );
+        let row = &rows[0];
+        Ok((
+            row.get(0),
+            row.get(1),
+            row.get(2),
+            serde_json::from_str::<Value>(&row.get::<_, String>(3))?,
+        ))
+    })
+    .await?
+}
+
 fn problem_is(body: &Value, code: &str) -> bool {
     body["type"]
         .as_str()
@@ -234,6 +264,19 @@ pub async fn cross_station_invite_join_run() -> Result<()> {
         !status.is_success() && problem_is(&body, "temporarily_unavailable"),
         "Y answered the accept without its governance Station: {status} {body}"
     );
+    let queued = local_event_row(&member_database.connect_url, accept.event_id.as_str()).await?;
+    ensure!(
+        queued.1 == "queued",
+        "Y did not retain the forwarded Event as queued"
+    );
+    ensure!(
+        queued.2 == arkret_canonical::canonical_json_bytes(&accept.digest_payload()?)?,
+        "Y changed the producer-signed canonical Event bytes"
+    );
+    ensure!(
+        queued.3 == serde_json::to_value(&accept)?,
+        "Y changed the exact producer proof or Event envelope"
+    );
     ensure!(
         bob.sdk()
             .committed_event_get(&accept.event_id)
@@ -259,6 +302,14 @@ pub async fn cross_station_invite_join_run() -> Result<()> {
         &accept_commit,
         &wait_for_committed(&bob, &accept.event_id).await?,
     )?;
+    let committed = local_event_row(&member_database.connect_url, accept.event_id.as_str()).await?;
+    ensure!(
+        committed.0 == queued.0
+            && committed.1 == "committed"
+            && committed.2 == queued.2
+            && committed.3 == queued.3,
+        "Y did not upgrade the same exact queued Event row on replica arrival"
+    );
     wait_for_joined_row(&bob, &realm).await?;
 
     // (5) Y anchors its held stream: Bob's own scan starts at his accept.
