@@ -1,86 +1,144 @@
-//! A Direct Conversation founded from a Contact round that production Contact
-//! admission produced (`contact-and-direct-conversation.md` sections 2, 5.2,
-//! 5.5 and 6.1).
+//! A complete Direct Conversation on one Station, from the Contact round
+//! production Contact admission produced to encrypted messages both ways
+//! (`contact-and-direct-conversation.md` sections 2, 5.2, 5.5, 6.1, 7.2,
+//! 8.3 and 8.4).
 //!
-//! Bob requests Alice and Alice answers with a normal response, both through
-//! the self Contact operations on one Station, so the pair's Contact row is
-//! the one the atomic Contact admission wrote. The normal round's founder is
-//! the responder: Alice authors the four-Event founding unit, names the round
-//! by its `direct_conversation_contact_round` ref and submits it through the
-//! self events union. The unit commits as four consecutive RealmCommits and an
-//! exact retry replays them. A Message into the Direct Conversation is then
-//! judged by the profile admission table; its participant evaluator needs the
-//! Direct Conversation's MLS group current (task 2145), so the Message stops at
-//! the registered participant refusal.
+//! Bob requests Alice and Alice answers with a normal response through the
+//! self Contact operations, so the pair's Contact row is the one the atomic
+//! Contact admission wrote. The normal round's founder is the responder:
+//!
+//! * Alice authors the four-Event founding unit naming the round and submits it through the self
+//!   events union; it commits as four consecutive RealmCommits and an exact retry replays them.
+//! * Before the scope's group Genesis no bootstrap phase exists, so Alice's first Message is
+//!   refused by the participant evaluator. The technical root's materialization mask admits Alice's
+//!   `ak.mls.genesis`.
+//! * Provisional phase: only the founder sends under the bootstrap source; Bob's attempt is
+//!   refused. Alice claims Bob's KeyPackage and Adds him with a Welcome, still under the bootstrap
+//!   source.
+//! * Bob joins from the Welcome and acknowledges it; before he consumes his claim an endorsement is
+//!   still refused. Once consumed, the completion phase admits only binding endorsements: one
+//!   naming another group state is `direct_conversation_binding_invalid`, the founder's provisional
+//!   Message is refused, and Bob's exact endorsement and Alice's compatible one are both accepted.
+//! * Found: both participants send MLS ciphertext under the participant source citing an
+//!   endorsement and each decrypts the other's committed Message. The bootstrap source no longer
+//!   carries a Message, an invite of a third party is
+//!   `direct_conversation_third_party_member_forbidden` although it is also an invite, an invite of
+//!   the peer is `direct_conversation_invite_forbidden`, banning the peer relies on the technical
+//!   root and is `direct_conversation_root_mask_violation`, and a destroy by the root is
+//!   `direct_conversation_terminal_forbidden` although it also relies on the root.
+//!
+//! Every refusal is the closed `{status="rejected",reason_code}` outcome and
+//! leaves no committed Event.
 
-use anyhow::{Context as _, Result, anyhow, ensure};
+use anyhow::{Context as _, Result, bail, ensure};
+use arkret::{ArkretMlsGroup, MlsCommitPayload, MlsGovernanceBindingPayload};
 use arkret_models_collaboration::authority_commit::{
     AggregateAcceptanceStatus, DirectConversationFoundingAcceptanceOutcome,
     DirectConversationFoundingUnitKind, DirectConversationFoundingUnitSubmission,
+    SelfAuthoritySubmitRequest,
 };
+use arkret_models_collaboration::device_messages::DeviceMessagesAckRequestBody;
+use arkret_models_collaboration::direct_conversation::DirectConversationFoundingPlan;
+use arkret_models_collaboration::events_payloads::direct_conversation::DirectConversationBoundPayload;
+use arkret_models_collaboration::governance::membership_invite::MembershipPayloadState;
 use arkret_models_collaboration::objects::direct_conversation::{
+    DirectConversationAuthorizationBasis, DirectConversationPairKeyParticipant,
     direct_conversation_main_strand_create_payload, direct_conversation_member_join_payload,
-    direct_conversation_peer_membership_bootstrap, direct_conversation_realm_create_payload,
+    direct_conversation_pair_key, direct_conversation_peer_membership_bootstrap,
+    direct_conversation_realm_create_payload,
 };
+use arkret_models_crypto::{KeyPackagesClaimOutcome, KeyPackagesUploadOutcome};
 use arkret_wire::{
-    AccountId, ActorId, AuthoritySubmitOutcome, Did, DidCoreId, Event, EventAdmissionSubmission,
-    EventId, GenesisSalt, RealmId, ScopeRef, SemanticRef, StrandId,
+    AccountId, ActorId, AuthorityCommitStatus, AuthoritySubmitOutcome, Did, Event,
+    EventAdmissionSubmission, EventId, GenesisSalt, MlsCommitSubmission, RealmId, ScopeRef,
+    SemanticRef, StrandId,
 };
 use reqwest::StatusCode;
+use serde_json::{Value, json};
 
-use crate::harness::{
-    TestActorClient, event_signing_identity_for_device, expect_json,
-    message_create_text_payload_for_strand,
+use crate::harness::{TestServerGroup, expect_json};
+use crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
+use crate::scenarios::_helpers::live_gate::skip_or_fail;
+use crate::scenarios::human_device_producer_live::{
+    database, membership_payload, standard_client, station_env,
 };
-use crate::scenarios::identity_test_support::{
-    actor_did_for_service_did, spawn_with_standard_grant_authority,
+use crate::scenarios::identity_test_support::HARNESS_INTERNAL_AUTHORITY_SECRET;
+use crate::scenarios::mls_lifecycle_live::{
+    ACTIVE_SUITE, Member, accepted_full_view, canonical, claim_request_between,
+    claimed_keypackage_record, fresh_uuid_v7, post_bytes_at, post_claim, post_json,
+    recipient_welcomes, signed_welcome,
 };
 
+const GROUP: &str = "direct-conversation-founding";
 const ALICE_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002401";
 const BOB_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002402";
+const THIRD_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002403";
 const CONTACT_ROUND_ROLE: &str = "direct_conversation_contact_round";
+const FOUNDING_UNIT_ROLE: &str = "direct_conversation_founding_unit";
+const BINDING_ROLE: &str = "direct_conversation_binding";
+const BOOTSTRAP_SOURCE: &str = "ak.authority.direct_conversation_bootstrap_participant.v1";
+const PARTICIPANT_SOURCE: &str = "ak.authority.direct_conversation_participant.v1";
+const MESSAGE_CONTENT_TYPE: &str = "application/vnd.arkret.message+json";
+const PARTICIPANT_DENIED: &str = "direct_conversation_participant_authority_denied";
 
-fn account_of(client: &TestActorClient) -> Result<AccountId> {
-    Ok(AccountId::new(
-        arkret_wire::project_did_to_core_id(&Did::new(client.actor.clone())?)?,
-        DidCoreId::new(client.service_id().to_owned())?,
-    ))
+/// The authority source and critical ref a Direct Conversation Event names.
+#[derive(Clone, Copy)]
+enum Cites<'a> {
+    Nothing,
+    Bootstrap(&'a EventId),
+    Participant(&'a EventId),
 }
 
-/// A fresh UUIDv7 idempotency key for one founding unit.
-fn founding_idempotency_key() -> Result<arkret_wire::UuidV7> {
-    let millis = u64::try_from(chrono::Utc::now().timestamp_millis())?;
-    let key = format!(
-        "{:08x}-{:04x}-7000-8000-{:012x}",
-        millis >> 16,
-        millis & 0xffff,
-        millis
-    );
-    Ok(arkret_wire::UuidV7::new(key.parse()?)?)
-}
-
-/// One Event authored and signed by `client`'s device at `at`.
+/// One Event authored now and signed by `member`'s founding device.
 fn authored(
-    client: &TestActorClient,
+    member: &Member,
     kind: &str,
     scope_ref: ScopeRef,
-    payload: serde_json::Value,
+    payload: Value,
     semantic_refs: Vec<SemanticRef>,
+    cites: Cites<'_>,
+) -> Result<Event> {
+    let at = arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now());
+    authored_at(member, kind, scope_ref, payload, semantic_refs, cites, at)
+}
+
+/// [`authored`] at `at`, for Events whose payload repeats their creation time.
+fn authored_at(
+    member: &Member,
+    kind: &str,
+    scope_ref: ScopeRef,
+    payload: Value,
+    semantic_refs: Vec<SemanticRef>,
+    cites: Cites<'_>,
     at: chrono::DateTime<chrono::Utc>,
 ) -> Result<Event> {
-    let account = account_of(client)?;
     let mut event = arkret_wire::test_support::raw_event_at(
         kind,
         scope_ref,
-        account.principal_id,
-        account.station_id,
-        payload,
+        member.account.principal_id.clone(),
+        member.account.station_id.clone(),
+        canonical(payload)?,
         at,
     )?;
     event.semantic_refs = semantic_refs;
-    let (seed, method) = event_signing_identity_for_device(&client.actor, &client.device_id);
-    let signer =
-        arkret_test_kit::seeded_signer_for_seed(seed, Did::new(client.actor.clone())?, method);
+    let cited = match cites {
+        Cites::Nothing => None,
+        Cites::Bootstrap(reference) => Some((BOOTSTRAP_SOURCE, FOUNDING_UNIT_ROLE, reference)),
+        Cites::Participant(reference) => Some((PARTICIPANT_SOURCE, BINDING_ROLE, reference)),
+    };
+    if let Some((source, role, reference)) = cited {
+        event.authorization_ref = Some(
+            arkret_wire::AuthorizationRef::new(source.to_owned()).map_err(anyhow::Error::msg)?,
+        );
+        event
+            .semantic_refs
+            .push(SemanticRef::new(reference.to_string(), role));
+    }
+    let signer = arkret_test_kit::seeded_signer_for_seed(
+        member.key.to_bytes(),
+        Did::new(member.client.actor.clone())?,
+        member.method.clone(),
+    );
     Ok(arkret_test_kit::sign_verifiable_event(
         event,
         &signer,
@@ -89,10 +147,77 @@ fn authored(
     .expect_verifiable())
 }
 
-/// The accepted normal round `holder` sees with `peer`.
-async fn accepted_round(holder: &TestActorClient, peer: &AccountId) -> Result<arkret_wire::Hash> {
+/// Upload one public MLS state Blob to the member's own Station without a
+/// Realm binding and return its content-addressed ref.
+async fn upload_unbound_blob(member: &Member, bytes: &[u8]) -> Result<String> {
+    let uploaded = expect_json(
+        member.client.post("/_arkret/self/blob/upload").multipart(
+            crate::scenarios::delivery_media::blob_upload_form(bytes, "application/octet-stream")?,
+        ),
+        StatusCode::OK,
+    )
+    .await?;
+    uploaded["blob_ref"]
+        .as_str()
+        .map(ToOwned::to_owned)
+        .context("the Blob upload returned its ref")
+}
+
+/// Submit one Event through the self events union and return its outcome.
+async fn submit(member: &Member, event: &Event) -> Result<AuthoritySubmitOutcome> {
+    let (status, body) = post_json(
+        &member.client,
+        &EventAdmissionSubmission::new(event.clone()),
+    )
+    .await?;
+    ensure!(
+        status == StatusCode::OK,
+        "{} was not decided with a closed outcome: {status} {body}",
+        event.kind.as_str()
+    );
+    Ok(serde_json::from_value(body)?)
+}
+
+fn expect_committed(outcome: &AuthoritySubmitOutcome, event: &Event) -> Result<()> {
+    match outcome {
+        AuthoritySubmitOutcome::Accepted {
+            status: AuthorityCommitStatus::Committed,
+            commit,
+        } if commit.event_ref == event.event_id => Ok(()),
+        other => bail!("{} was not committed: {other:?}", event.kind.as_str()),
+    }
+}
+
+async fn expect_rejected(member: &Member, event: &Event, reason: &str) -> Result<()> {
+    match submit(member, event).await? {
+        AuthoritySubmitOutcome::Rejected { reason_code, .. } if reason_code == reason => {}
+        other => bail!(
+            "{} must be rejected as {reason}, got {other:?}",
+            event.kind.as_str()
+        ),
+    }
+    ensure!(
+        member
+            .client
+            .sdk()
+            .committed_event_get(&event.event_id)
+            .await
+            .is_err(),
+        "a rejected {} left a committed Event",
+        event.kind.as_str()
+    );
+    Ok(())
+}
+
+/// The accepted normal round `holder` sees with `peer`, with its accepted
+/// request and accept Event refs.
+async fn accepted_round(
+    holder: &Member,
+    peer: &AccountId,
+) -> Result<(arkret_wire::Hash, [EventId; 2])> {
     let peer = ActorId::account(peer.clone());
     let row = holder
+        .client
         .sdk()
         .contacts_list()
         .await?
@@ -105,41 +230,116 @@ async fn accepted_round(holder: &TestActorClient, peer: &AccountId) -> Result<ar
         "the pair's Contact round is not accepted: {:?}",
         row.state
     );
-    Ok(row
-        .next_prepare_input
-        .context("an accepted row carries its next prepare input")?
-        .contact_round_id)
+    let heads = [
+        row.request_event_ref
+            .clone()
+            .context("an accepted row names its request")?,
+        row.response_event_ref
+            .clone()
+            .context("an accepted row names its accept")?,
+    ];
+    Ok((
+        row.next_prepare_input
+            .context("an accepted row carries its next prepare input")?
+            .contact_round_id,
+        heads,
+    ))
+}
+
+/// One MLS ciphertext Message sealed by `group` at its current epoch over
+/// `group_state_ref`, the committed winning state that epoch was reached by.
+fn sealed_message(
+    group: &mut ArkretMlsGroup,
+    scope: &ScopeRef,
+    strand_id: &StrandId,
+    group_state_ref: &EventId,
+    plaintext: &[u8],
+) -> Result<Value> {
+    let header = arkret::EventContentPreEncryptionHeader::reconstruct(
+        "1.0",
+        MESSAGE_CONTENT_TYPE,
+        arkret::EncryptedPayloadScheme::MlsRfc9420,
+        scope.clone(),
+        arkret_wire::event_kind_str::MESSAGE_CREATE,
+        group.epoch(),
+        group_state_ref.clone(),
+        group.local_content_sender_domain()?,
+        None,
+        arkret::EventContentRoutingContext::None,
+    )?;
+    let sealed = arkret::MessageCrypto::encrypt(group, fresh_uuid_v7(), header, plaintext)?;
+    Ok(json!({
+        "strand_id": strand_id,
+        "track_name": "discussion",
+        "encrypted_content": sealed.payload.to_envelope()?,
+    }))
+}
+
+/// Read `event_id` as `reader` sees it committed and decrypt it with the
+/// reader's own group, the sender domain derived from the committed actor.
+async fn open_committed_message(
+    reader: &Member,
+    group: &mut ArkretMlsGroup,
+    scope: &ScopeRef,
+    event_id: &EventId,
+) -> Result<Vec<u8>> {
+    let view = accepted_full_view(&reader.client, event_id).await?;
+    let event = &view.event;
+    // The sender domain is the sender leaf's BasicCredential identity, the
+    // canonical ActorId of the verified Event producer.
+    let sender_domain = String::from_utf8(arkret_models_crypto::mls_basic_credential_identity(
+        &event.actor_id,
+    )?)?;
+    let envelope: arkret::EncryptedEnvelope = serde_json::from_value(
+        serde_json::to_value(&event.payload)?
+            .get("encrypted_content")
+            .cloned()
+            .context("the committed Message is MLS ciphertext")?,
+    )?;
+    let header = envelope.reconstruct_pre_encryption_header(
+        arkret::EncryptedPayloadScheme::MlsRfc9420,
+        scope.clone(),
+        arkret_wire::event_kind_str::MESSAGE_CREATE,
+        sender_domain,
+        None,
+    )?;
+    let payload = arkret::encrypted_envelope_to_payload_with_verified_header(&envelope, header)?;
+    Ok(arkret::MessageCrypto::decrypt(
+        group,
+        &arkret::EncryptedMessage {
+            message_id: event_id.to_string(),
+            payload,
+        },
+    )?)
 }
 
 pub async fn contact_round_founds_direct_conversation() -> Result<()> {
-    let station = spawn_with_standard_grant_authority("contact-dc-founding", &[]).await?;
-    let server = &station.server;
-    let alice = station.standard_grant_client(
-        &server
-            .demo_client(
-                &actor_did_for_service_did(server.service_did(), "dc-alice")?,
-                ALICE_DEVICE,
-            )
-            .await?,
-    )?;
-    let bob = station.standard_grant_client(
-        &server
-            .demo_client(
-                &actor_did_for_service_did(server.service_did(), "dc-bob")?,
-                BOB_DEVICE,
-            )
-            .await?,
-    )?;
-    let alice_account = account_of(&alice)?;
-    let bob_account = account_of(&bob)?;
+    let Some(database) = database(GROUP)? else {
+        return Ok(());
+    };
+    let coauth = MockCoauthIntrospectionServer::spawn_with_internal_secret(
+        HARNESS_INTERNAL_AUTHORITY_SECRET,
+    )
+    .await?;
+    let Some(group) = TestServerGroup::try_multi_external_with_node_envs(
+        GROUP,
+        &[station_env(&database.connect_url, &coauth)],
+    )
+    .await?
+    else {
+        return skip_or_fail(GROUP, "prebuilt Soland unavailable");
+    };
+    let server = group.server(0);
+    let alice = Member::provision(server, &coauth, "dc-alice", ALICE_DEVICE).await?;
+    let bob = Member::provision(server, &coauth, "dc-bob", BOB_DEVICE).await?;
 
     // Bob requests; Alice, the responder, accepts. Both directions grant
     // `direct_message`.
-    bob.request_contact(&alice.actor).await?;
-    alice.accept_contact(&bob).await?;
-    let contact_round_id = accepted_round(&alice, &bob_account).await?;
+    bob.client.request_contact(&alice.client.actor).await?;
+    alice.client.accept_contact(&bob.client).await?;
+    let (contact_round_id, heads) = accepted_round(&alice, &bob.account).await?;
     ensure!(
-        accepted_round(&bob, &alice_account).await? == contact_round_id,
+        accepted_round(&bob, &alice.account).await?.0 == contact_round_id,
         "both holders must list the same accepted round"
     );
 
@@ -151,7 +351,7 @@ pub async fn contact_round_founds_direct_conversation() -> Result<()> {
         server.service_id().clone(),
         at,
     )?;
-    let create = authored(
+    let create = authored_at(
         &alice,
         arkret_wire::event_kind_str::REALM_CREATE,
         ScopeRef::RealmGenesis,
@@ -160,57 +360,66 @@ pub async fn contact_round_founds_direct_conversation() -> Result<()> {
             contact_round_id.to_string(),
             CONTACT_ROUND_ROLE,
         )],
+        Cites::Nothing,
         at,
     )?;
     let realm_id = RealmId::from_event_id(&create.event_id);
-    let realm_scope = ScopeRef::Realm {
+    let scope = ScopeRef::Realm {
         realm_id: realm_id.clone(),
     };
-    let founder_join = authored(
+    let founder_join = authored_at(
         &alice,
         arkret_wire::event_kind_str::MEMBER_STATE,
-        realm_scope.clone(),
+        scope.clone(),
         serde_json::to_value(direct_conversation_member_join_payload(
             realm_id.clone(),
-            alice_account.clone(),
+            alice.account.clone(),
         ))?,
         Vec::new(),
+        Cites::Nothing,
         at,
     )?;
-    let peer_join = authored(
+    let peer_join = authored_at(
         &alice,
         arkret_wire::event_kind_str::MEMBER_STATE,
-        realm_scope.clone(),
+        scope.clone(),
         serde_json::to_value(direct_conversation_peer_membership_bootstrap(
             realm_id.clone(),
-            &alice_account,
-            [alice_account.clone(), bob_account.clone()],
+            &alice.account,
+            [alice.account.clone(), bob.account.clone()],
         )?)?,
         Vec::new(),
+        Cites::Nothing,
         at,
     )?;
-    let strand = authored(
+    let strand = authored_at(
         &alice,
         arkret_wire::event_kind_str::STRAND_CREATE,
-        realm_scope.clone(),
+        scope.clone(),
         serde_json::to_value(direct_conversation_main_strand_create_payload(
             realm_id.clone(),
-            ActorId::account(alice_account.clone()),
+            alice.actor.clone(),
             at,
         ))?,
         Vec::new(),
+        Cites::Nothing,
         at,
     )?;
-    let strand_id = StrandId::from_event_id(&strand.event_id);
     let unit = DirectConversationFoundingUnitSubmission {
         unit_kind: DirectConversationFoundingUnitKind::DirectConversationFounding,
-        idempotency_key: founding_idempotency_key()?,
+        idempotency_key: arkret_wire::UuidV7::new(fresh_uuid_v7().parse()?)?,
         events: [create, founder_join, peer_join, strand].map(EventAdmissionSubmission::new),
     };
     unit.validate()?;
+    let plan = DirectConversationFoundingPlan::from_events(
+        unit.events.each_ref().map(|submission| &submission.event),
+    )?;
+    ensure!(plan.realm_id == realm_id, "the unit derives its own Realm");
+    let create_ref = unit.events[0].event.event_id.clone();
+    let strand_id = plan.main_strand_id.clone();
     let founded: DirectConversationFoundingAcceptanceOutcome = serde_json::from_value(
         expect_json(
-            alice.post("/_arkret/self/events").json(&unit),
+            alice.client.post("/_arkret/self/events").json(&unit),
             StatusCode::OK,
         )
         .await?,
@@ -221,24 +430,18 @@ pub async fn contact_round_founds_direct_conversation() -> Result<()> {
         founded.status == AggregateAcceptanceStatus::Committed,
         "the first founding unit must commit"
     );
-    let unit_event_ids: Vec<EventId> = unit
-        .events
-        .iter()
-        .map(|submission| submission.event.event_id.clone())
-        .collect();
     for (position, commit) in founded.commits.iter().enumerate() {
         ensure!(
             commit.stream_position == position as u64
-                && commit.event_ref == unit_event_ids[position]
+                && commit.event_ref == unit.events[position].event.event_id
                 && commit.realm_id == realm_id,
             "founding Commit {position} does not cover its unit Event"
         );
     }
-
     // Section 5.5: an exact retry replays the same four source Commits.
     let replayed: DirectConversationFoundingAcceptanceOutcome = serde_json::from_value(
         expect_json(
-            alice.post("/_arkret/self/events").json(&unit),
+            alice.client.post("/_arkret/self/events").json(&unit),
             StatusCode::OK,
         )
         .await?,
@@ -249,33 +452,426 @@ pub async fn contact_round_founds_direct_conversation() -> Result<()> {
         "an exact founding retry must replay the committed unit"
     );
 
-    // Section 8.4: the Message is judged by the profile admission table. Its
-    // participant evaluator reads the Direct Conversation's MLS group current,
-    // which task 2145 owns; until then it refuses as a closed Event outcome.
-    let message = authored(
-        &bob,
+    // Section 7.2: before the group Genesis there is no provisional phase.
+    let early = authored(
+        &alice,
         arkret_wire::event_kind_str::MESSAGE_CREATE,
-        realm_scope,
-        message_create_text_payload_for_strand(strand_id, "hello, Alice")?,
+        scope.clone(),
+        crate::harness::message_create_text_payload_for_strand(strand_id.clone(), "too early")?,
         Vec::new(),
-        arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now()),
+        Cites::Bootstrap(&create_ref),
     )?;
-    let outcome: AuthoritySubmitOutcome = serde_json::from_value(
+    expect_rejected(&alice, &early, PARTICIPANT_DENIED).await?;
+
+    // Bob publishes a KeyPackage under his device key.
+    let bob_identity = bob.mls_identity()?;
+    let bob_package = bob_identity.key_package_record()?;
+    let upload = bob_identity.signed_key_packages_upload_request(
+        std::slice::from_ref(&bob_package),
+        bob.method.as_str(),
+        None,
+    )?;
+    let uploaded: KeyPackagesUploadOutcome = serde_json::from_value(
         expect_json(
-            bob.post("/_arkret/self/events")
-                .json(&EventAdmissionSubmission::new(message)),
+            bob.client
+                .post("/_arkret/self/keys/keypackages/upload")
+                .json(&upload),
             StatusCode::OK,
         )
         .await?,
     )?;
-    match outcome {
-        AuthoritySubmitOutcome::Rejected { reason_code, .. }
-            if reason_code == "direct_conversation_participant_authority_denied" =>
-        {
-            Ok(())
-        }
-        other => Err(anyhow!(
-            "the Direct Conversation Message must stop at the participant evaluator: {other:?}"
-        )),
-    }
+    ensure!(uploaded.accepted == 1, "Bob's KeyPackage was not published");
+
+    // The root's materialization mask admits the scope's one Genesis.
+    let alice_identity = alice.mls_identity()?;
+    let genesis_binding = MlsGovernanceBindingPayload::new(scope.clone(), None, 0, 0, 0)?;
+    let mut alice_group =
+        alice_identity.create_group_with_governance_binding(&scope, &genesis_binding)?;
+    let (group_info, tree) = alice_group.public_group_state_bytes()?;
+    // The Direct Conversation declares no plaintext-visible service, so the
+    // public MLS state goes to the creator's Station as content-addressed
+    // Blobs outside any Realm (encryption-and-audit.md §5.1.2).
+    let group_info_ref = upload_unbound_blob(&alice, &group_info).await?;
+    let tree_ref = upload_unbound_blob(&alice, &tree).await?;
+    let mls_genesis = authored(
+        &alice,
+        arkret_wire::event_kind_str::MLS_GENESIS,
+        scope.clone(),
+        json!({
+            "cipher_suite": ACTIVE_SUITE,
+            "group_info_ref": group_info_ref,
+            "ratchet_tree_ref": tree_ref,
+            "governance_binding": genesis_binding,
+            "created_at": arkret_canonical::format_timestamp_canonical(chrono::Utc::now()),
+        }),
+        Vec::new(),
+        Cites::Nothing,
+    )?;
+    expect_committed(&submit(&alice, &mls_genesis).await?, &mls_genesis)?;
+    let genesis_ref = mls_genesis.event_id.clone();
+
+    // Provisional: only the founder sends, under the bootstrap source.
+    let provisional = authored(
+        &alice,
+        arkret_wire::event_kind_str::MESSAGE_CREATE,
+        scope.clone(),
+        sealed_message(
+            &mut alice_group,
+            &scope,
+            &strand_id,
+            &genesis_ref,
+            b"before Bob joins",
+        )?,
+        Vec::new(),
+        Cites::Bootstrap(&create_ref),
+    )?;
+    expect_committed(&submit(&alice, &provisional).await?, &provisional)?;
+    let bob_early = authored(
+        &bob,
+        arkret_wire::event_kind_str::MESSAGE_CREATE,
+        scope.clone(),
+        crate::harness::message_create_text_payload_for_strand(
+            strand_id.clone(),
+            "not Bob's to send",
+        )?,
+        Vec::new(),
+        Cites::Bootstrap(&create_ref),
+    )?;
+    expect_rejected(&bob, &bob_early, PARTICIPANT_DENIED).await?;
+
+    // Alice claims Bob's KeyPackage and Adds him with a Welcome.
+    let group_id = scope.canonical_mls_group_id()?;
+    let claim_request = claim_request_between(
+        &alice,
+        server,
+        server,
+        &bob,
+        &realm_id,
+        group_id.as_str(),
+        [0x41; 16],
+        chrono::Duration::minutes(4),
+    )?;
+    let (status, claim_bytes) = post_claim(&alice.client, &claim_request).await?;
+    ensure!(
+        status == StatusCode::OK,
+        "Alice's claim of Bob's KeyPackage was not admitted: {status} {}",
+        String::from_utf8_lossy(&claim_bytes)
+    );
+    let claimed: KeyPackagesClaimOutcome = serde_json::from_slice(&claim_bytes)?;
+    let claim = claimed
+        .claims
+        .first()
+        .cloned()
+        .context("the claim selected Bob's KeyPackage")?;
+    let add_binding =
+        MlsGovernanceBindingPayload::new(scope.clone(), Some(genesis_ref.clone()), 0, 1, 0)?;
+    let add = alice_group.add_member_with_governance_binding(
+        &claimed_keypackage_record(&claim, &bob)?,
+        &add_binding,
+    )?;
+    let add_event = authored(
+        &alice,
+        arkret_wire::event_kind_str::MLS_COMMIT,
+        scope.clone(),
+        serde_json::to_value(MlsCommitPayload::new(
+            genesis_ref.clone(),
+            0,
+            &add.commit,
+            add_binding,
+        )?)?,
+        Vec::new(),
+        Cites::Bootstrap(&create_ref),
+    )?;
+    let welcome = signed_welcome(&alice, &add_event, &bob, &add.welcome)?;
+    let submission = SelfAuthoritySubmitRequest::MlsCommit(MlsCommitSubmission {
+        commit_event: add_event.clone(),
+        welcomes: vec![welcome.clone()],
+        idempotency_key: arkret_wire::UuidV7::new(fresh_uuid_v7().parse()?)?,
+    });
+    submission.validate()?;
+    let (status, outcome) = post_json(&alice.client, &submission).await?;
+    ensure!(
+        status == StatusCode::OK,
+        "the Add Commit was not decided: {status} {outcome}"
+    );
+    expect_committed(&serde_json::from_value(outcome)?, &add_event)?;
+    let add_ref = add_event.event_id.clone();
+    let accepted_add = accepted_full_view(&alice.client, &add_ref).await?;
+    let base = arkret_wire::MlsGroupCurrent {
+        effective_scope: scope.clone(),
+        genesis_event_ref: genesis_ref.clone(),
+        current_mls_commit_event_ref: genesis_ref.clone(),
+        epoch: 0,
+        current_key_access_revision: 0,
+        covered_key_access_revision: 0,
+        public_tree_ref: arkret_wire::BlobRef::new(tree_ref.clone())?,
+    };
+    ensure!(
+        alice_group.install_accepted_commit(&accepted_add, &base)? == 1,
+        "Alice did not install her accepted Add Commit"
+    );
+
+    // Bob joins from his Welcome and acknowledges it.
+    let (queued, ack_token) = recipient_welcomes(&bob.client).await?;
+    ensure!(
+        queued == vec![welcome.clone()],
+        "Bob's recipient queue does not hold exactly the Add's Welcome: {queued:?}"
+    );
+    let mut bob_group =
+        ArkretMlsGroup::join_from_verified_welcome_delivery(bob_identity, &welcome, &accepted_add)?;
+    ensure!(bob_group.epoch() == 1, "Bob did not join at epoch 1");
+    bob.client
+        .post("/_arkret/self/device_messages/ack")
+        .json(&DeviceMessagesAckRequestBody { ack_token })
+        .send()
+        .await?
+        .error_for_status()?;
+
+    // Before Bob consumes his claim the Realm is still provisional.
+    let pair_key = direct_conversation_pair_key(
+        server.trust_domain().clone(),
+        DirectConversationPairKeyParticipant::unmapped(alice.actor.clone()),
+        DirectConversationPairKeyParticipant::unmapped(bob.actor.clone()),
+    )?;
+    let endorsement = |group_state_ref: &EventId| -> Result<Value> {
+        let payload = DirectConversationBoundPayload {
+            pair_key: pair_key.clone(),
+            unordered_participant_ids: vec![alice.actor.clone(), bob.actor.clone()],
+            realm_id: realm_id.clone(),
+            main_strand_id: strand_id.clone(),
+            founding_unit_digest: plan.founding_unit_digest.clone(),
+            authorization_basis: DirectConversationAuthorizationBasis::accepted_contact(
+                heads.to_vec(),
+            ),
+            initial_exact_pair_group_state_ref: group_state_ref.clone(),
+            created_at: arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now()),
+        };
+        payload.validate_shape()?;
+        Ok(serde_json::to_value(payload)?)
+    };
+    let unconsumed = authored(
+        &bob,
+        arkret_wire::event_kind_str::DIRECT_CONVERSATION_BOUND,
+        scope.clone(),
+        endorsement(&add_ref)?,
+        Vec::new(),
+        Cites::Bootstrap(&create_ref),
+    )?;
+    expect_rejected(&bob, &unconsumed, PARTICIPANT_DENIED).await?;
+
+    let bob_signer = bob.mls_identity()?;
+    let receipt = bob_signer.sign_recipient_mls_durable_receipt(
+        arkret_models_crypto::RecipientMlsDurableReceipt {
+            domain: arkret_wire::NonEmptyString::new(
+                arkret_wire::DomainSeparationId::MLS_RECIPIENT_DURABLE_RECEIPT_V1.to_owned(),
+            )
+            .map_err(anyhow::Error::msg)?,
+            claim_request_id: claim_request.claim_request_id.clone(),
+            key_package_ref: arkret_wire::NonEmptyString::new(claim.keypackage_ref.clone())
+                .map_err(anyhow::Error::msg)?,
+            recipient: arkret_models_crypto::RecipientMlsDurableSigner::Device {
+                recipient_account_id: bob.account.clone(),
+                recipient_device_id: bob.device.clone(),
+                device_verification_method: bob.method.clone(),
+            },
+            recipient_id: server.service_id().clone(),
+            realm_id: realm_id.clone(),
+            mls_group_id: group_id.clone(),
+            mls_epoch: 1,
+            welcome_ref: welcome.welcome_id.clone(),
+            welcome_digest: welcome.durable_receipt_digest()?,
+            durable_at: chrono::Utc::now(),
+            signature: arkret_models_crypto::KeyOperationSignature {
+                kid: arkret_wire::NonEmptyString::new(bob.method.to_string())
+                    .map_err(anyhow::Error::msg)?,
+                signature_algorithm: None,
+                sig: arkret_wire::Base64UrlString::new("AA".to_owned())
+                    .map_err(anyhow::Error::msg)?,
+            },
+        },
+    )?;
+    let consume = bob_signer.signed_key_packages_consume_request(
+        arkret_wire::KeypackageClaimId::new(claim.claim_id.clone())?,
+        receipt,
+    )?;
+    let (status, consumed) = post_bytes_at(
+        &bob.client,
+        "/_arkret/self/keys/keypackages/consume",
+        &consume,
+    )
+    .await?;
+    ensure!(
+        status == StatusCode::OK,
+        "Bob's consume was not admitted: {status} {}",
+        String::from_utf8_lossy(&consumed)
+    );
+
+    // Completion: only an exact endorsement. One naming another group state
+    // fails binding integrity, and the provisional Message no longer passes.
+    let wrong_state = authored(
+        &bob,
+        arkret_wire::event_kind_str::DIRECT_CONVERSATION_BOUND,
+        scope.clone(),
+        endorsement(&genesis_ref)?,
+        Vec::new(),
+        Cites::Bootstrap(&create_ref),
+    )?;
+    expect_rejected(&bob, &wrong_state, "direct_conversation_binding_invalid").await?;
+    let late_provisional = authored(
+        &alice,
+        arkret_wire::event_kind_str::MESSAGE_CREATE,
+        scope.clone(),
+        sealed_message(
+            &mut alice_group,
+            &scope,
+            &strand_id,
+            &add_ref,
+            b"provisional is over",
+        )?,
+        Vec::new(),
+        Cites::Bootstrap(&create_ref),
+    )?;
+    expect_rejected(&alice, &late_provisional, PARTICIPANT_DENIED).await?;
+    let bob_endorsement = authored(
+        &bob,
+        arkret_wire::event_kind_str::DIRECT_CONVERSATION_BOUND,
+        scope.clone(),
+        endorsement(&add_ref)?,
+        Vec::new(),
+        Cites::Bootstrap(&create_ref),
+    )?;
+    expect_committed(&submit(&bob, &bob_endorsement).await?, &bob_endorsement)?;
+    let alice_endorsement = authored(
+        &alice,
+        arkret_wire::event_kind_str::DIRECT_CONVERSATION_BOUND,
+        scope.clone(),
+        endorsement(&add_ref)?,
+        Vec::new(),
+        Cites::Bootstrap(&create_ref),
+    )?;
+    expect_committed(
+        &submit(&alice, &alice_endorsement).await?,
+        &alice_endorsement,
+    )?;
+
+    // Found: both participants send under the binding and read each other.
+    let bob_message = authored(
+        &bob,
+        arkret_wire::event_kind_str::MESSAGE_CREATE,
+        scope.clone(),
+        sealed_message(
+            &mut bob_group,
+            &scope,
+            &strand_id,
+            &add_ref,
+            b"hello, Alice",
+        )?,
+        Vec::new(),
+        Cites::Participant(&bob_endorsement.event_id),
+    )?;
+    expect_committed(&submit(&bob, &bob_message).await?, &bob_message)?;
+    ensure!(
+        open_committed_message(&alice, &mut alice_group, &scope, &bob_message.event_id).await?
+            == b"hello, Alice",
+        "Alice did not decrypt Bob's committed Message"
+    );
+    let alice_message = authored(
+        &alice,
+        arkret_wire::event_kind_str::MESSAGE_CREATE,
+        scope.clone(),
+        sealed_message(
+            &mut alice_group,
+            &scope,
+            &strand_id,
+            &add_ref,
+            b"hello, Bob",
+        )?,
+        Vec::new(),
+        Cites::Participant(&alice_endorsement.event_id),
+    )?;
+    expect_committed(&submit(&alice, &alice_message).await?, &alice_message)?;
+    ensure!(
+        open_committed_message(&bob, &mut bob_group, &scope, &alice_message.event_id).await?
+            == b"hello, Bob",
+        "Bob did not decrypt Alice's committed Message"
+    );
+
+    // Once found the bootstrap source carries nothing but endorsements.
+    let bootstrap_after = authored(
+        &alice,
+        arkret_wire::event_kind_str::MESSAGE_CREATE,
+        scope.clone(),
+        sealed_message(
+            &mut alice_group,
+            &scope,
+            &strand_id,
+            &add_ref,
+            b"stale source",
+        )?,
+        Vec::new(),
+        Cites::Bootstrap(&create_ref),
+    )?;
+    expect_rejected(&alice, &bootstrap_after, PARTICIPANT_DENIED).await?;
+
+    // Registered precedence on double matches: a third-party invite is also
+    // an invite, and a destroy by the technical root also relies on it.
+    let (_, third) = standard_client(server, &coauth, "dc-third", THIRD_DEVICE).await?;
+    let invite = authored(
+        &alice,
+        arkret_wire::event_kind_str::INVITE_CREATE,
+        scope.clone(),
+        json!({
+            "invitee_account_id": third,
+            "introduction_evidence_digest": format!("sha256:{}", "4".repeat(64)),
+            "expires_at": "2099-01-01T00:00:00.000Z",
+        }),
+        Vec::new(),
+        Cites::Nothing,
+    )?;
+    expect_rejected(
+        &alice,
+        &invite,
+        "direct_conversation_third_party_member_forbidden",
+    )
+    .await?;
+    let pair_invite = authored(
+        &alice,
+        arkret_wire::event_kind_str::INVITE_CREATE,
+        scope.clone(),
+        json!({
+            "invitee_account_id": bob.account,
+            "introduction_evidence_digest": format!("sha256:{}", "4".repeat(64)),
+            "expires_at": "2099-01-01T00:00:00.000Z",
+        }),
+        Vec::new(),
+        Cites::Nothing,
+    )?;
+    expect_rejected(&alice, &pair_invite, "direct_conversation_invite_forbidden").await?;
+    // Banning the peer would lean on the technical root's owner aggregate,
+    // whose mask is empty once found.
+    let ban = authored(
+        &alice,
+        arkret_wire::event_kind_str::MEMBER_STATE,
+        scope.clone(),
+        membership_payload(
+            realm_id.as_str(),
+            bob.account.clone(),
+            MembershipPayloadState::Ban,
+            "direct conversation root mask",
+        )?,
+        Vec::new(),
+        Cites::Nothing,
+    )?;
+    expect_rejected(&alice, &ban, "direct_conversation_root_mask_violation").await?;
+    let destroy = authored(
+        &alice,
+        arkret_wire::event_kind_str::REALM_DESTROY,
+        scope.clone(),
+        json!({ "realm_id": realm_id }),
+        Vec::new(),
+        Cites::Nothing,
+    )?;
+    expect_rejected(&alice, &destroy, "direct_conversation_terminal_forbidden").await?;
+    drop(coauth);
+    Ok(())
 }

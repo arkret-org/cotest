@@ -1,11 +1,12 @@
 //! Admission-producer contract audit for Direct Conversation Realms.
 //!
-//! This module deliberately does not claim service execution. The canonical
-//! suite requires calls through the public Event-submit and Direct Conversation
-//! resolver operations, but the current Station/SDK pair does not yet expose a
-//! complete public setup path for all seven negative pre-states. Keeping that
-//! distinction explicit prevents a fixture walk from being reported as E2E
-//! coverage.
+//! The fixture walk here is not service execution. Six of the seven reasons
+//! run live against a spawned Station in
+//! `scenarios::direct_conversation_founding_live` through the public Event
+//! submit, including both registered double-match precedences. The exact-two
+//! negatives need a membership projection that disagrees with the immutable
+//! pair, which no public operation can produce, so the suite stays `partial`
+//! and says so instead of counting the fixture walk as E2E coverage.
 
 use std::collections::BTreeSet;
 
@@ -51,9 +52,8 @@ pub struct DirectConversationAdmissionCoverage {
 }
 
 /// Audit the closed canonical producer mapping without presenting it as a live
-/// operation run. `service_e2e_status` stays `unwired` until Cotest can create
-/// every required pre-state through public operations and then observe the
-/// write and read outcomes from a spawned Station.
+/// operation run. `service_e2e_status` is `partial` while any required
+/// pre-state cannot be created through public operations on a spawned Station.
 pub fn audit_direct_conversation_admission_contract() -> Result<DirectConversationAdmissionCoverage>
 {
     let fixture = load_fixture_value(FIXTURE)?;
@@ -135,11 +135,8 @@ pub fn audit_direct_conversation_admission_contract() -> Result<DirectConversati
         read_operation_id: READ_OPERATION.to_owned(),
         audited_reason_codes: observed_reasons,
         audited_negative_cases: negative_cases,
-        service_e2e_status: "unwired",
-        blockers: vec![
-            "station_producer_for_all_seven_reasons_not_yet_available",
-            "public_operation_setup_for_all_negative_pre_states_not_yet_available",
-        ],
+        service_e2e_status: "partial",
+        blockers: vec!["exact_two_negative_pre_states_have_no_public_operation_setup"],
     })
 }
 
