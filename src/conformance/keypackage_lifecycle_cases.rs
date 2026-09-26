@@ -633,8 +633,8 @@ fn self_claim_conflict_ledger(case: &Value, tally: &mut Tally) -> Result<()> {
                     || "conflicting reuse claimed a second KeyPackage".to_owned(),
                 )?;
                 tally.check(
-                    expected_str(case, "conflicting_digest_audit_reason")? == "duplicate_conflict",
-                    || "conflict audit reason drifted".to_owned(),
+                    expected_str(case, "conflicting_digest_error")? == "duplicate_conflict",
+                    || "conflicting self-claim reuse is not duplicate_conflict".to_owned(),
                 )?;
             }
             other => bail!("unexecuted self claim step {other}"),

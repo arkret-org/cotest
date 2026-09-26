@@ -17,9 +17,9 @@
 //!   `ak.mls.commit` whose Welcome names the claim; Bob reads the Welcome from his own recipient
 //!   queue, joins from it against the accepted Commit and decrypts Alice's next message. Plaintext
 //!   into the activated scope is `mls_activation_required`.
-//! * Consume of the claim after the durable group state stays fail closed: the durable receipt's
-//!   `welcome_digest` and the Station's Welcome binding for consume are not defined by the
-//!   specification yet (spec-open 0715), and the Station refuses rather than guess.
+//! * Consume of the claim after the durable group state stays fail closed: the Station does not yet
+//!   write the claim-ledger Welcome binding (device-lifecycle §9.2.3) that consume compares the
+//!   durable receipt's `welcome_ref`, `welcome_digest` and `mls_epoch` against.
 //! * After a Station restart the claim ledger replays byte-identically and the ACKed Welcome is not
 //!   delivered again.
 //!
@@ -396,8 +396,9 @@ pub async fn run_same_station_mls_keypackage_lifecycle_live() -> Result<()> {
     )?;
     ensure!(bob_group.epoch() == 1, "Bob did not join at epoch 1");
 
-    // Consume after the durable group state: the receipt's Welcome binding is
-    // not specified, so the Station keeps consume fail closed.
+    // Consume after the durable group state: the Station does not yet record
+    // the claim-ledger Welcome binding consume is checked against, so it
+    // keeps consume fail closed.
     let receipt = arkret_models_crypto::RecipientMlsDurableReceipt {
         domain: arkret_wire::NonEmptyString::new(
             arkret_wire::DomainSeparationId::MLS_RECIPIENT_DURABLE_RECEIPT_V1.to_owned(),
@@ -416,9 +417,7 @@ pub async fn run_same_station_mls_keypackage_lifecycle_live() -> Result<()> {
         mls_group_id: group_id.clone(),
         mls_epoch: 1,
         welcome_ref: welcome.welcome_id.clone(),
-        welcome_digest: arkret_wire::Hash::new(arkret_canonical::canonical_sha256(
-            &serde_json::to_value(&welcome)?,
-        )?)?,
+        welcome_digest: welcome.durable_receipt_digest()?,
         durable_at: chrono::Utc::now(),
         signature: arkret_models_crypto::KeyOperationSignature {
             kid: arkret_wire::NonEmptyString::new(bob.method.to_string())
@@ -444,7 +443,7 @@ pub async fn run_same_station_mls_keypackage_lifecycle_live() -> Result<()> {
             && refusal["type"]
                 .as_str()
                 .is_some_and(|value| value.ends_with("/failed_precondition")),
-        "consume without a specified Welcome binding did not fail closed: {status} {refusal}"
+        "consume without a claim-ledger Welcome binding did not fail closed: {status} {refusal}"
     );
 
     bob.client
