@@ -73,6 +73,73 @@ async fn wait_contact(
     }
 }
 
+async fn tombstone_contact(
+    holder: &TestActorClient,
+    row: &arkret::contact_operations::ContactListRow,
+) -> Result<()> {
+    use arkret::contact_operations::{
+        ContactCommitPhase, ContactCommitRequestBody, ContactOperationOutcome,
+        ContactPreparedOutcome,
+    };
+    let next = row
+        .next_prepare_input
+        .as_ref()
+        .context("accepted Contact has no next prepare input")?;
+    let operation_id = arkret::ProtocolOperationId::new(crate::harness::next_typed_id("operation"))
+        .map_err(anyhow::Error::msg)?;
+    let idempotency_key = arkret::IdempotencyKey::new(crate::harness::next_typed_id("idempotency"))
+        .map_err(anyhow::Error::msg)?;
+    let path = "/_arkret/self/contacts/tombstone";
+    let prepared: ContactOperationOutcome = serde_json::from_value(
+        expect_json(
+            holder.post(path).json(&json!({
+                "phase": "prepare",
+                "operation_id": operation_id,
+                "idempotency_key": idempotency_key,
+                "peer": row.peer,
+                "contact_round_id": next.contact_round_id,
+                "version": next.version,
+                "predecessor_event_ref": next.predecessor_event_ref,
+                "block_peer": false,
+            })),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    let ContactOperationOutcome::Prepared {
+        outcome:
+            ContactPreparedOutcome::Tombstone {
+                reservation_handle,
+                event_draft,
+                ..
+            },
+    } = prepared
+    else {
+        bail!("cross-Station tombstone did not prepare: {prepared:?}");
+    };
+    let committed: ContactOperationOutcome = serde_json::from_value(
+        expect_json(
+            holder.post(path).json(&ContactCommitRequestBody {
+                phase: ContactCommitPhase::Commit,
+                operation_id,
+                idempotency_key,
+                reservation_handle,
+                signed_event: holder.sign_prepared_contact_event(
+                    &event_draft,
+                    arkret_wire::event_kind_str::CONTACT_TOMBSTONE,
+                )?,
+            }),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    ensure!(
+        matches!(committed, ContactOperationOutcome::Accepted { .. }),
+        "cross-Station tombstone was not accepted: {committed:?}"
+    );
+    Ok(())
+}
+
 pub async fn normal_round_crosses_two_stations() -> Result<()> {
     let Some(alice_database) = database(GROUP)? else {
         return Ok(());
@@ -213,25 +280,40 @@ pub async fn concurrent_requests_complete_glare_round() -> Result<()> {
     );
     let alice_row = wait_contact(
         &alice,
-        &ActorId::account(bob_account),
+        &ActorId::account(bob_account.clone()),
         ContactState::Accepted,
     )
     .await?;
     let bob_row = wait_contact(
         &bob,
-        &ActorId::account(alice_account),
+        &ActorId::account(alice_account.clone()),
         ContactState::Accepted,
     )
     .await?;
     let alice_round = alice_row
         .next_prepare_input
+        .as_ref()
         .context("glare initiator has no confirmed round input")?;
     let bob_round = bob_row
         .next_prepare_input
+        .as_ref()
         .context("glare receiver has no confirmed round input")?;
     ensure!(
         alice_round.contact_round_id == bob_round.contact_round_id,
         "glare Stations installed different Contact rounds"
     );
+    tombstone_contact(&alice, &alice_row).await?;
+    wait_contact(
+        &alice,
+        &ActorId::account(bob_account.clone()),
+        ContactState::Tombstoned,
+    )
+    .await?;
+    wait_contact(
+        &bob,
+        &ActorId::account(alice_account.clone()),
+        ContactState::Tombstoned,
+    )
+    .await?;
     Ok(())
 }
