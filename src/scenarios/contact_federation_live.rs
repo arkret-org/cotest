@@ -5,8 +5,12 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail, ensure};
 use arkret::contact_operations::{ContactPeer, ContactState};
+use arkret_models_collaboration::direct_conversation::{
+    DirectConversationResolveOutcome, DirectConversationResolveRequestBody,
+};
 use arkret_models_collaboration::governance::invite_addressing::PrincipalLocator;
 use arkret_models_collaboration::governance::peer_contact::ContactIntroductionEvidence;
+use arkret_models_collaboration::objects::direct_conversation::DirectConversationFoundingAuthorityEvidence;
 use arkret_wire::ActorId;
 use reqwest::StatusCode;
 use serde_json::json;
@@ -301,6 +305,50 @@ pub async fn concurrent_requests_complete_glare_round() -> Result<()> {
     ensure!(
         alice_round.contact_round_id == bob_round.contact_round_id,
         "glare Stations installed different Contact rounds"
+    );
+    let alice_resolve = alice
+        .sdk()
+        .direct_conversation_resolve(&DirectConversationResolveRequestBody {
+            peer: ContactPeer::Human {
+                account_id: bob_account.clone(),
+            },
+        })
+        .await?;
+    let bob_resolve = bob
+        .sdk()
+        .direct_conversation_resolve(&DirectConversationResolveRequestBody {
+            peer: ContactPeer::Human {
+                account_id: alice_account.clone(),
+            },
+        })
+        .await?;
+    let founder_material = match (&alice_resolve, &bob_resolve) {
+        (
+            DirectConversationResolveOutcome::CreationRequired {
+                next_founding_input,
+            },
+            DirectConversationResolveOutcome::AwaitingFounder { .. },
+        )
+        | (
+            DirectConversationResolveOutcome::AwaitingFounder { .. },
+            DirectConversationResolveOutcome::CreationRequired {
+                next_founding_input,
+            },
+        ) => next_founding_input,
+        _ => bail!(
+            "glare did not identify one DC founder: Alice {alice_resolve:?}; Bob {bob_resolve:?}"
+        ),
+    };
+    let DirectConversationFoundingAuthorityEvidence::Human {
+        contact_round_evidence,
+        ..
+    } = &founder_material.founding_authority_evidence
+    else {
+        bail!("glare founder received non-Contact DC authority");
+    };
+    ensure!(
+        contact_round_evidence.contact_round_id == alice_round.contact_round_id,
+        "glare DC founding input names another Contact round"
     );
     tombstone_contact(&alice, &alice_row).await?;
     wait_contact(
