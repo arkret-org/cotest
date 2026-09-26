@@ -32,7 +32,9 @@ use arkret_models_collaboration::agent_scope::AgentRequestedScopeDisclosure;
 use arkret_models_collaboration::events_payloads::agent::{
     AgentKeyApprovalEvidence, AgentKeyApprovalEvidenceKind, AgentKeyAuthorizePayload, AgentKeyScope,
 };
-use arkret_models_crypto::{KeyPackagesUploadOutcome, MlsEndpointIdentity};
+use arkret_models_crypto::{
+    KeyPackagesClaimRequestBody, KeyPackagesUploadOutcome, MlsEndpointIdentity,
+};
 use arkret_wire::{
     AccountId, ActorId, AuthorityCommitStatus, AuthoritySubmitOutcome, Did, DidCoreId, DidUrl,
     Event, EventId, IdempotencyKey, NonEmptyString, OpaqueLocalId, ProtocolOperationId, RealmId,
@@ -41,7 +43,7 @@ use arkret_wire::{
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::Utc;
-use ed25519_dalek::SigningKey;
+use ed25519_dalek::{Signer as _, SigningKey};
 use reqwest::StatusCode;
 use serde_json::json;
 
@@ -930,6 +932,8 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
         standard_client(station, &coauth, "mls-agent-controller", CONTROLLER_DEVICE).await?;
     let operations = [
         ServiceOperationId::SELF_KEYS_KEYPACKAGES_UPLOAD_CREATE_V1,
+        ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_CLAIM_V1,
+        ServiceOperationId::SELF_KEYS_KEYPACKAGES_READ_CLAIM_V1,
         ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_CONSUME_V1,
     ];
     let agent = AgentRuntimeSession::establish_with_operations(
@@ -1017,6 +1021,68 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
         ),
         "Agent KeyPackage upload accepted another runtime method: {}",
         rejected.status()
+    );
+    let realm_id = agent.agent_pcr.clone();
+    let mls_group_id = ScopeRef::Realm {
+        realm_id: realm_id.clone(),
+    }
+    .canonical_mls_group_id()?;
+    let signed_at = arkret_canonical::normalize_timestamp_canonical(Utc::now());
+    let claim_id = arkret_canonical::sha256_bytes(unique_uuid7().as_bytes());
+    let mut claim: KeyPackagesClaimRequestBody = serde_json::from_value(json!({
+        "claim_request_id": URL_SAFE_NO_PAD.encode(&claim_id[..16]),
+        "target_agent_id": agent.agent_account.principal_id,
+        "target_agent_verification_method": agent.verification_method,
+        "target_agent_key_authorize_event_id": agent.key_authorization,
+        "intended_realm_id": realm_id,
+        "mls_group_id": mls_group_id,
+        "claim_purpose": "realm_membership",
+        "required_capabilities": ["ak.content.v1"],
+        "expires_at": arkret_canonical::format_timestamp_canonical(signed_at + chrono::Duration::minutes(4)),
+        "target_keypackage_ref": keypackage.keypackage_ref,
+        "service_binding": {
+            "source_id": station.service_id(),
+            "destination_id": station.service_id(),
+        },
+        "requester_authorization": {
+            "kind": "agent",
+            "verification_method": agent.verification_method,
+            "requester_agent_id": agent.agent_account.principal_id,
+            "agent_key_authorize_event_id": agent.key_authorization,
+            "signed_at": arkret_canonical::format_timestamp_canonical(signed_at),
+            "signature": {
+                "kid": agent.verification_method,
+                "signature_algorithm": "Ed25519",
+                "sig": "AA"
+            }
+        }
+    }))?;
+    let signing_input = arkret_models_crypto::keypackage_claim_authorization_signing_bytes(
+        &claim.unsigned_request(),
+        &claim.service_binding,
+        &claim.requester_authorization,
+    )?;
+    let arkret_models_crypto::PeerKeyPackageRequesterAuthorization::Agent { signature, .. } =
+        &mut claim.requester_authorization
+    else {
+        unreachable!("the fixture builds an Agent claim")
+    };
+    signature.sig = arkret_wire::Base64UrlString::new(
+        URL_SAFE_NO_PAD.encode(agent.runtime_key.sign(&signing_input).to_bytes()),
+    )
+    .map_err(anyhow::Error::msg)?;
+    let rejected = agent
+        .runtime
+        .post("/_arkret/self/keys/keypackages/claim")
+        .header("content-type", "application/json")
+        .body(arkret_canonical::canonical_json_bytes(&claim)?)
+        .send()
+        .await?;
+    let rejected_status = rejected.status();
+    let rejected_body = rejected.text().await?;
+    ensure!(
+        rejected_status == StatusCode::FORBIDDEN,
+        "Agent claimed into an unjoined Realm: {rejected_status} {rejected_body}",
     );
     Ok(())
 }
