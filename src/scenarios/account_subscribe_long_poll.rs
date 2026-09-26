@@ -14,13 +14,13 @@ use arkret_models_collaboration::governance::invite_addressing::IntroductionEvid
 use base64::Engine as _;
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use reqwest::StatusCode;
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use crate::fixtures::TestActorBuilder;
 use crate::harness::{
     account_subscribe_delta_from_text, actor_core_id, dispatch_accepted_invite_and_await_delivery,
     eventually, expect_account_subscribe_delta, expect_account_subscribe_realm_delta,
-    invite_create_payload, message_create_text_payload,
+    expect_response, invite_create_payload, message_create_text_payload,
 };
 use crate::scenarios::_helpers::protocol_values::submitted_event_id;
 use crate::scenarios::identity_test_support::{
@@ -139,38 +139,56 @@ pub async fn account_subscribe_omits_quiet_realm_at_unchanged_cursor() -> Result
         .send_message(&realm_id, &strand_id, "baseline message")
         .await?;
 
-    let baseline = fetch_account_subscribe(&alice, "catchup=true").await?;
+    let filter = realm_detail_filter_query(&realm_id);
+    let baseline_frames =
+        fetch_account_subscribe_frames(&alice, &format!("catchup=true&{filter}")).await?;
+    let baseline = baseline_frames
+        .iter()
+        .find(|frame| frame["realms"][&realm_id].is_object())
+        .ok_or_else(|| anyhow!("selected Realm detail baseline is missing: {baseline_frames:?}"))?;
     assert!(
         baseline["realms"][&realm_id].is_object(),
-        "full sync MUST include the realm baseline: {baseline}"
+        "selected Realm detail baseline is missing: {baseline}"
     );
-    let cursor = baseline["cursor"]
-        .as_str()
-        .ok_or_else(|| anyhow!("baseline sync missing cursor: {baseline}"))?
-        .to_owned();
+    let detail_cursor = completed_cursor(&baseline_frames)?;
+    let global_frames = fetch_account_subscribe_frames(
+        &alice,
+        &format!("catchup=true&after={detail_cursor}&{filter}"),
+    )
+    .await?;
+    assert!(
+        global_frames.iter().any(|frame| frame["kind"] == "delta"),
+        "initial account-global baseline is missing: {global_frames:?}"
+    );
+    let cursor = completed_cursor(&global_frames)?;
 
-    let quiet = tokio::time::timeout(
+    let quiet_frames = tokio::time::timeout(
         QUIET_LONG_POLL_TEST_DEADLINE,
-        fetch_account_subscribe_frontier(&alice, &format!("catchup=true&after={cursor}")),
+        fetch_account_subscribe_frames(&alice, &format!("catchup=true&after={cursor}&{filter}")),
     )
     .await
     .map_err(|_| anyhow!("quiet incremental subscribe exceeded its controlled deadline"))??;
 
-    let quiet_cursor = quiet["cursor"]
-        .as_str()
-        .ok_or_else(|| anyhow!("quiet incremental response missing cursor: {quiet}"))?;
+    let quiet_cursor = quiet_frames
+        .iter()
+        .find(|frame| frame["kind"] == "catchup_complete")
+        .and_then(|frame| frame["cursor"].as_str())
+        .ok_or_else(|| {
+            anyhow!("quiet incremental response missing completion: {quiet_frames:?}")
+        })?;
     assert_eq!(
         cursor_frontier_handle(quiet_cursor)?,
         cursor_frontier_handle(&cursor)?,
-        "an empty incremental response MUST preserve the cursor frontier: {quiet}"
-    );
-    assert_eq!(
-        quiet["kind"], "frontier",
-        "quiet poll must end with frontier"
+        "an empty incremental response MUST preserve the cursor frontier: {quiet_frames:?}"
     );
     assert!(
-        quiet.get("realms").is_none_or(Value::is_null),
-        "frontier MUST omit every quiet realm, including {realm_id}: {quiet}"
+        quiet_frames.iter().all(|frame| {
+            frame["realms"][&realm_id].is_null()
+                && frame["realm_list_changes"]["upserts"]
+                    .as_array()
+                    .is_none_or(Vec::is_empty)
+        }),
+        "quiet continuation MUST omit the unchanged Realm: {quiet_frames:?}"
     );
 
     Ok(())
@@ -186,6 +204,21 @@ fn cursor_frontier_handle(cursor: &str) -> Result<String> {
         .as_str()
         .map(ToOwned::to_owned)
         .ok_or_else(|| anyhow!("account subscribe cursor missing frontier handle: {payload}"))
+}
+
+fn completed_cursor(frames: &[Value]) -> Result<String> {
+    frames
+        .iter()
+        .find(|frame| frame["kind"] == "catchup_complete")
+        .and_then(|frame| frame["cursor"].as_str())
+        .map(ToOwned::to_owned)
+        .ok_or_else(|| anyhow!("account subscribe missing completed cursor: {frames:?}"))
+}
+
+fn realm_detail_filter_query(realm_id: &str) -> String {
+    url::form_urlencoded::Serializer::new(String::new())
+        .append_pair("filter", &json!({"realm_ids": [realm_id]}).to_string())
+        .finish()
 }
 
 pub async fn account_subscribe_long_poll_wakes_on_visible_event() -> Result<()> {
@@ -206,16 +239,24 @@ pub async fn account_subscribe_long_poll_wakes_on_visible_event() -> Result<()> 
     // Full sync establishes the baseline + a cursor the rest of the
     // scenario re-uses. After this point the realm is "quiet" — every
     // subsequent assertion drives the delta-empty path.
-    let baseline = fetch_account_subscribe(&alice, "catchup=true").await?;
-    let baseline_realm = baseline["realms"][&realm_id].clone();
+    let filter = realm_detail_filter_query(&realm_id);
+    let baseline_frames =
+        fetch_account_subscribe_frames(&alice, &format!("catchup=true&{filter}")).await?;
+    let baseline_realm = baseline_frames
+        .iter()
+        .find_map(|frame| frame["realms"][&realm_id].as_object())
+        .cloned();
     assert!(
-        baseline_realm.is_object(),
-        "full sync MUST include the realm baseline: {baseline}"
+        baseline_realm.is_some(),
+        "full sync MUST include the selected Realm baseline: {baseline_frames:?}"
     );
-    let cursor = baseline["cursor"]
-        .as_str()
-        .ok_or_else(|| anyhow!("baseline sync missing cursor: {baseline}"))?
-        .to_owned();
+    let detail_cursor = completed_cursor(&baseline_frames)?;
+    let global_frames = fetch_account_subscribe_frames(
+        &alice,
+        &format!("catchup=true&after={detail_cursor}&{filter}"),
+    )
+    .await?;
+    let cursor = completed_cursor(&global_frames)?;
 
     // A real timeline event must wake the long-poll — fire a
     //     concurrent send and verify the incremental subscribe returns
@@ -234,7 +275,7 @@ pub async fn account_subscribe_long_poll_wakes_on_visible_event() -> Result<()> 
     let woken = expect_account_subscribe_realm_delta(
         alice
             .get(&format!(
-                "/_arkret/self/account/subscribe?catchup=true&after={cursor}"
+                "/_arkret/self/account/subscribe?catchup=true&after={cursor}&{filter}"
             ))
             .header("accept", "application/x-ndjson"),
         StatusCode::OK,
@@ -249,14 +290,14 @@ pub async fn account_subscribe_long_poll_wakes_on_visible_event() -> Result<()> 
         wake_elapsed < Duration::from_secs(3),
         "broadcast should wake long-poll well before its deadline (got {wake_elapsed:?})"
     );
-    let timeline_events = woken["realms"][&realm_id]["timeline"]["events"]
+    let committed_events = woken["realms"][&realm_id]["committed_events"]
         .as_array()
-        .ok_or_else(|| anyhow!("woken delta missing realm timeline: {woken}"))?;
+        .ok_or_else(|| anyhow!("woken delta missing Realm committed Events: {woken}"))?;
     assert!(
-        timeline_events
+        committed_events
             .iter()
-            .any(|event| event["event_id"] == sent_event_id),
-        "woken delta MUST include the wake-up event: {woken}"
+            .any(|row| row["event"]["event_id"] == sent_event_id),
+        "woken delta MUST include the wake-up committed Event: {woken}"
     );
 
     Ok(())
@@ -336,26 +377,30 @@ pub async fn invited_members_exchange_post_join_messages_over_account_subscribe(
         .await?;
     tokio::time::sleep(Duration::from_millis(20)).await;
 
+    let filter = realm_detail_filter_query(&realm_id);
     let bob_baseline = eventually(
         "Bob joined-history baseline",
         Duration::from_secs(5),
         Duration::from_millis(100),
         || async {
-            let sync = bob_client.sync().await?;
-            if sync["realms"][&realm_id].is_object() {
-                Ok(sync)
+            let frames =
+                fetch_account_subscribe_frames(bob_client, &format!("catchup=true&{filter}"))
+                    .await?;
+            if frames
+                .iter()
+                .any(|frame| frame["realms"][&realm_id].is_object())
+            {
+                Ok(frames)
             } else {
-                Err(anyhow!("Bob baseline missing joined realm: {sync}"))
+                Err(anyhow!("Bob baseline missing joined realm: {frames:?}"))
             }
         },
     )
     .await?;
-    let bob_baseline_events = timeline_events(&bob_baseline, &realm_id)?;
+    let bob_baseline_events = committed_event_ids(&bob_baseline, &realm_id);
     assert!(
-        !bob_baseline_events
-            .iter()
-            .any(|event| event["event_id"] == pre_join_event_id),
-        "joined-history invitee MUST NOT receive pre-join timeline events: {bob_baseline}"
+        !bob_baseline_events.contains(&pre_join_event_id),
+        "joined-history invitee MUST NOT receive pre-join committed Events: {bob_baseline:?}"
     );
     eventually(
         "accepted invite is hidden after Bob joins",
@@ -381,7 +426,13 @@ pub async fn invited_members_exchange_post_join_messages_over_account_subscribe(
         },
     )
     .await?;
-    let bob_cursor = cursor_from_sync(&bob_baseline)?;
+    let bob_detail_cursor = completed_cursor(&bob_baseline)?;
+    let bob_global = fetch_account_subscribe_frames(
+        bob_client,
+        &format!("catchup=true&after={bob_detail_cursor}&{filter}"),
+    )
+    .await?;
+    let bob_cursor = completed_cursor(&bob_global)?;
 
     let alice_after_join =
         send_message_now(&alice, &realm_id, &strand_id, "alice after bob joined").await?;
@@ -398,26 +449,31 @@ pub async fn invited_members_exchange_post_join_messages_over_account_subscribe(
             let bob_cursor = bob_cursor.clone();
             let alice_after_join_event_id = alice_after_join_event_id.clone();
             let realm_id = realm_id.clone();
+            let filter = filter.clone();
             async move {
-                let sync = fetch_account_subscribe(
+                let frames = fetch_account_subscribe_frames(
                     bob_client,
-                    &format!("catchup=true&after={bob_cursor}"),
+                    &format!("catchup=true&after={bob_cursor}&{filter}"),
                 )
                 .await?;
-                let events = timeline_events(&sync, &realm_id)?;
-                if events
-                    .iter()
-                    .any(|event| event["event_id"] == alice_after_join_event_id)
-                {
-                    Ok(sync)
+                if committed_event_ids(&frames, &realm_id).contains(&alice_after_join_event_id) {
+                    Ok(frames)
                 } else {
-                    Err(anyhow!("Bob incremental missing Alice event: {sync}"))
+                    Err(anyhow!("Bob incremental missing Alice event: {frames:?}"))
                 }
             }
         },
     )
     .await?;
-    let alice_cursor = cursor_from_sync(&alice.sync().await?)?;
+    let alice_baseline =
+        fetch_account_subscribe_frames(&alice, &format!("catchup=true&{filter}")).await?;
+    let alice_detail_cursor = completed_cursor(&alice_baseline)?;
+    let alice_global = fetch_account_subscribe_frames(
+        &alice,
+        &format!("catchup=true&after={alice_detail_cursor}&{filter}"),
+    )
+    .await?;
+    let alice_cursor = completed_cursor(&alice_global)?;
 
     let bob_after_join =
         send_message_now(bob_client, &realm_id, &strand_id, "bob after joining").await?;
@@ -433,30 +489,27 @@ pub async fn invited_members_exchange_post_join_messages_over_account_subscribe(
             let bob_after_join_event_id = bob_after_join_event_id.clone();
             let realm_id = realm_id.clone();
             let alice = alice.clone();
+            let filter = filter.clone();
             async move {
-                let sync =
-                    fetch_account_subscribe(&alice, &format!("catchup=true&after={alice_cursor}"))
-                        .await?;
-                let events = timeline_events(&sync, &realm_id)?;
-                if events
-                    .iter()
-                    .any(|event| event["event_id"] == bob_after_join_event_id)
-                {
-                    Ok(sync)
+                let frames = fetch_account_subscribe_frames(
+                    &alice,
+                    &format!("catchup=true&after={alice_cursor}&{filter}"),
+                )
+                .await?;
+                if committed_event_ids(&frames, &realm_id).contains(&bob_after_join_event_id) {
+                    Ok(frames)
                 } else {
-                    Err(anyhow!("Alice incremental missing Bob event: {sync}"))
+                    Err(anyhow!("Alice incremental missing Bob event: {frames:?}"))
                 }
             }
         },
     )
     .await?;
 
-    let bob_incremental_events = timeline_events(&bob_incremental, &realm_id)?;
+    let bob_incremental_events = committed_event_ids(&bob_incremental, &realm_id);
     assert!(
-        bob_incremental_events
-            .iter()
-            .any(|event| event["event_id"] == alice_after_join_event_id),
-        "Bob incremental should retain Alice post-join event: {bob_incremental}"
+        bob_incremental_events.contains(&alice_after_join_event_id),
+        "Bob incremental should retain Alice post-join event: {bob_incremental:?}"
     );
 
     Ok(())
@@ -565,32 +618,25 @@ async fn authz_invites(
     Ok(serde_json::from_value(response)?)
 }
 
-async fn fetch_account_subscribe_frontier(
+async fn fetch_account_subscribe_frames(
     actor: &crate::harness::TestActorClient,
     query: &str,
-) -> Result<Value> {
-    let response = actor
-        .get(&format!("/_arkret/self/account/subscribe?{query}"))
-        .header("accept", "application/x-ndjson")
-        .send()
-        .await?;
-    if response.status() != StatusCode::OK {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        return Err(anyhow!(
-            "expected quiet subscribe HTTP 200, got {status}: {body}"
-        ));
-    }
-    let body = response.text().await?;
-    for line in body.lines().map(str::trim).filter(|line| !line.is_empty()) {
-        let frame: Value = serde_json::from_str(line)?;
-        if frame.get("kind").and_then(Value::as_str) == Some("frontier") {
-            return Ok(frame);
-        }
-    }
-    Err(anyhow!(
-        "quiet account subscribe ended without a frontier frame: {body}"
-    ))
+) -> Result<Vec<Value>> {
+    let response = expect_response(
+        actor
+            .get(&format!("/_arkret/self/account/subscribe?{query}"))
+            .header("accept", "application/x-ndjson"),
+        StatusCode::OK,
+    )
+    .await?;
+    response
+        .text()
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(serde_json::from_str)
+        .collect::<std::result::Result<Vec<Value>, _>>()
+        .map_err(Into::into)
 }
 
 fn cursor_from_sync(sync: &Value) -> Result<String> {
@@ -600,10 +646,17 @@ fn cursor_from_sync(sync: &Value) -> Result<String> {
         .ok_or_else(|| anyhow!("sync response missing cursor: {sync}"))
 }
 
-fn timeline_events<'a>(sync: &'a Value, realm_id: &str) -> Result<&'a Vec<Value>> {
-    sync["realms"][realm_id]["timeline"]["events"]
-        .as_array()
-        .ok_or_else(|| anyhow!("sync response missing realm timeline events: {sync}"))
+fn committed_event_ids(frames: &[Value], realm_id: &str) -> Vec<String> {
+    frames
+        .iter()
+        .flat_map(|frame| {
+            frame["realms"][realm_id]["committed_events"]
+                .as_array()
+                .into_iter()
+                .flatten()
+        })
+        .filter_map(|row| row["event"]["event_id"].as_str().map(ToOwned::to_owned))
+        .collect()
 }
 
 async fn send_message_now(
