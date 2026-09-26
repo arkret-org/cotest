@@ -14,12 +14,13 @@ use serde_json::Value;
 use super::{
     ACCOUNT_BLOCKLIST_PROJECTION_ENTRYPOINT, ACCOUNT_DATA_CAS_CONVERGENCE_ENTRYPOINT,
     ACTOR_PRIVATE_EVENTS_SUBMIT_ENTRYPOINT, AEAD_NONCE_REPLAY_ENTRYPOINT,
-    AGENT_MLS_KEYPACKAGE_AUTHORIZATION_ENTRYPOINT, BLOB_STREAM_AEAD_ENTRYPOINT,
-    CALL_MEDIA_LIFECYCLE_ENTRYPOINT, CALL_STATE_CORE_ENTRYPOINT,
+    AGENT_MLS_KEYPACKAGE_AUTHORIZATION_ENTRYPOINT, AUTHORITY_FORWARD_GENESIS_MATERIAL_ENTRYPOINT,
+    BLOB_STREAM_AEAD_ENTRYPOINT, CALL_MEDIA_LIFECYCLE_ENTRYPOINT, CALL_STATE_CORE_ENTRYPOINT,
     CAPABILITY_RELINQUISH_AUTHORING_ENTRYPOINT, CRYPTO_HPKE_ENTRYPOINT, CURSOR_NEGATIVE_ENTRYPOINT,
     DETACHED_OBJECT_SIGNATURE_ENTRYPOINT, FRANKING_PROOF_ENTRYPOINT,
     KEY_BACKUP_HARDENING_ENTRYPOINT, KEYPACKAGE_LIFECYCLE_ENTRYPOINT,
-    KEYPACKAGE_WRITE_TRANSCRIPTS_ENTRYPOINT, MEDIA_BINDING_ENTRYPOINT,
+    KEYPACKAGE_RECIPIENT_CLAIM_READ_ENTRYPOINT, KEYPACKAGE_WRITE_TRANSCRIPTS_ENTRYPOINT,
+    MEDIA_BINDING_ENTRYPOINT, MLS_CROSS_STATION_WELCOME_REPLICATION_ENTRYPOINT,
     MLS_GOVERNANCE_BINDING_ENTRYPOINT, OBJECT_IDENTITY_COLLISION_ENTRYPOINT,
     PRIVATE_VIEW_INBOX_ENTRYPOINT, PRODUCER_IDENTITY_ENTRYPOINT,
     PROTOCOL_TIME_TOLERANCE_ENTRYPOINT, PROTOCOL_VERSION_ENTRYPOINT, PUSH_RULE_CORE_ENTRYPOINT,
@@ -30,14 +31,16 @@ use super::{
     run_account_status_issuer_ledger_vector, run_actor_private_events_submit_suite,
     run_aead_nonce_replay_suite, run_agent_membership_cascade_suite,
     run_agent_mls_keypackage_authorization_suite, run_applet_registration_epoch_kat_suite,
-    run_authority_commit_suite, run_blob_stream_aead_suite, run_call_media_lifecycle_suite,
-    run_call_state_core_suite, run_capability_relinquish_authoring_suite, run_crypto_hpke_suite,
-    run_cursor_negative_suite, run_detached_object_signature_suite, run_encoding_fixture_suite,
+    run_authority_commit_suite, run_authority_forward_genesis_material_suite,
+    run_blob_stream_aead_suite, run_call_media_lifecycle_suite, run_call_state_core_suite,
+    run_capability_relinquish_authoring_suite, run_crypto_hpke_suite, run_cursor_negative_suite,
+    run_detached_object_signature_suite, run_encoding_fixture_suite,
     run_event_envelope_fixture_suite, run_fanout_route_miss_suite,
     run_file_transfer_stream_aead_fixture_suite, run_franking_proof_suite,
     run_invite_new_source_quota_suite, run_key_backup_hardening_suite,
-    run_keypackage_lifecycle_suite, run_keypackage_write_transcripts_suite,
-    run_media_binding_suite, run_mls_creator_bootstrap_recovery_suite,
+    run_keypackage_lifecycle_suite, run_keypackage_recipient_claim_read_suite,
+    run_keypackage_write_transcripts_suite, run_media_binding_suite,
+    run_mls_creator_bootstrap_recovery_suite, run_mls_cross_station_welcome_replication_suite,
     run_mls_governance_binding_suite, run_object_identity_collision_suite,
     run_private_view_inbox_suite, run_producer_identity_suite, run_protocol_time_tolerance_suite,
     run_protocol_version_suite, run_push_rule_core_suite, run_realm_join_candidate_suite,
@@ -98,7 +101,19 @@ enum Runner {
     EvidenceMapped(fn() -> Result<()>),
 }
 
-const RUNNERS: [(&str, Runner); 47] = [
+const RUNNERS: [(&str, Runner); 50] = [
+    (
+        AUTHORITY_FORWARD_GENESIS_MATERIAL_ENTRYPOINT,
+        Runner::Cases(run_authority_forward_genesis_material_suite),
+    ),
+    (
+        KEYPACKAGE_RECIPIENT_CLAIM_READ_ENTRYPOINT,
+        Runner::Cases(run_keypackage_recipient_claim_read_suite),
+    ),
+    (
+        MLS_CROSS_STATION_WELCOME_REPLICATION_ENTRYPOINT,
+        Runner::Cases(run_mls_cross_station_welcome_replication_suite),
+    ),
     (
         ACCOUNT_DATA_CAS_CONVERGENCE_ENTRYPOINT,
         Runner::Cases(run_account_data_cas_convergence_suite),

@@ -17,6 +17,7 @@ mod arkret_private_kdf_and_durability;
 mod auth_session_proof;
 mod authority_commit;
 mod authority_event_submit_carriers;
+mod authority_forward_genesis_material;
 mod authority_forward_producer_device_evidence;
 mod blind_payload;
 mod blob_stream_aead;
@@ -57,6 +58,7 @@ mod inkson_client;
 mod invite_new_source_quota;
 mod key_backup_hardening;
 mod keypackage_lifecycle;
+mod keypackage_recipient_claim_read;
 mod keypackage_write_transcripts;
 mod long_text_content;
 mod media_binding;
@@ -64,6 +66,7 @@ mod member_identity_vectors;
 mod member_roster_vectors;
 mod mention_rendering_vectors;
 mod mls_creator_bootstrap_recovery;
+mod mls_cross_station_welcome_replication;
 mod mls_governance_binding;
 mod named_suite_audit;
 mod non_governance_receiver;
@@ -192,6 +195,10 @@ pub use authority_commit::{
 pub use authority_event_submit_carriers::{
     AuthorityEventSubmitCarrierCoverage, run_authority_event_submit_carrier_conformance,
 };
+pub use authority_forward_genesis_material::{
+    AUTHORITY_FORWARD_GENESIS_MATERIAL_ENTRYPOINT, VECTOR_ID_AUTHORITY_FORWARD_GENESIS_MATERIAL,
+    run_authority_forward_genesis_material_suite, run_authority_forward_genesis_material_vector,
+};
 pub use authority_forward_producer_device_evidence::{
     VECTOR_ID_AUTHORITY_FORWARD_PRODUCER_DEVICE_EVIDENCE,
     run_authority_forward_producer_device_evidence_vector,
@@ -312,6 +319,10 @@ pub use keypackage_lifecycle::{
     run_keypackage_lifecycle_suite, run_keypackage_self_claim_authorization_idempotency_vector,
     run_mls_welcome_keypackage_hash_vector,
 };
+pub use keypackage_recipient_claim_read::{
+    KEYPACKAGE_RECIPIENT_CLAIM_READ_ENTRYPOINT, VECTOR_ID_KEYPACKAGE_RECIPIENT_CLAIM_READ,
+    run_keypackage_recipient_claim_read_suite, run_keypackage_recipient_claim_read_vector,
+};
 pub use keypackage_write_transcripts::{
     KEYPACKAGE_WRITE_TRANSCRIPTS_ENTRYPOINT, run_keypackage_write_transcripts_suite,
 };
@@ -351,6 +362,12 @@ pub use mention_rendering_vectors::{
     run_render_step1_unique_success_vector,
 };
 pub use mls_creator_bootstrap_recovery::run_mls_creator_bootstrap_recovery_suite;
+pub use mls_cross_station_welcome_replication::{
+    MLS_CROSS_STATION_WELCOME_REPLICATION_ENTRYPOINT,
+    VECTOR_ID_MLS_CROSS_STATION_WELCOME_REPLICATION,
+    run_mls_cross_station_welcome_replication_suite,
+    run_mls_cross_station_welcome_replication_vector,
+};
 pub use mls_governance_binding::{
     MLS_GOVERNANCE_BINDING_ENTRYPOINT, run_mls_governance_binding_suite,
 };
@@ -471,6 +488,7 @@ pub use station_certification::run_station_certification_gate_suite;
 pub use strand_watch_current::{STRAND_WATCH_CURRENT_ENTRYPOINT, run_strand_watch_current_suite};
 pub use string_profiles::{STRING_PROFILE_ENTRYPOINT, run_string_profile_suite};
 pub use suite_execution::{CaseExecutionResult, SuiteExecutionResult};
+pub(crate) use suite_execution::{scripted_cases, verify_decision_point_evidence};
 pub use sync::{VECTOR_ID_CLIENT_ACCOUNT_STREAM, run_sync_fixture_suite};
 pub use test_material_rejection::{
     TEST_MATERIAL_REJECTION_ENTRYPOINT, TestMaterialRejectionCoverage,

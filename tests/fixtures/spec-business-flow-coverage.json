@@ -664,6 +664,14 @@
             "ak.suite.crypto.keypackage_lifecycle.v1",
             "fn run_keypackage_lifecycle_suite"
           ]
+        },
+        {
+          "kind": "conformance_fixture",
+          "path": "src/conformance/keypackage_recipient_claim_read.rs",
+          "markers": [
+            "ak.vector.keypackage.recipient_claim_read.v1",
+            "fn run_keypackage_recipient_claim_read_suite"
+          ]
         }
       ]
     },
@@ -1027,6 +1035,22 @@
             "operation_id = \"ak.self.applet.command.install\"",
             "fn first_install_commit_rejects_expiry_but_exact_success_replay_does_not",
             "fn successful_install_replay_rejects_changed_body"
+          ]
+        },
+        {
+          "kind": "conformance_fixture",
+          "path": "src/conformance/mls_cross_station_welcome_replication.rs",
+          "markers": [
+            "ak.vector.mls.cross_station_welcome_replication.v1",
+            "fn run_mls_cross_station_welcome_replication_suite"
+          ]
+        },
+        {
+          "kind": "conformance_fixture",
+          "path": "src/conformance/authority_forward_genesis_material.rs",
+          "markers": [
+            "ak.vector.federation.authority_forward_genesis_material.v1",
+            "fn run_authority_forward_genesis_material_suite"
           ]
         }
       ]

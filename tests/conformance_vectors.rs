@@ -311,8 +311,8 @@ fn expected_state_digest_known_answers_recompute_every_fold() -> Result<()> {
 #[test]
 fn named_suite_audit_executes_registered_runners_and_exposes_every_gap() -> Result<()> {
     let report = run_named_suite_audit()?;
-    assert_eq!(report.fixture_count, 76);
-    assert_eq!(report.executed_entrypoints.len(), 47);
+    assert_eq!(report.fixture_count, 79);
+    assert_eq!(report.executed_entrypoints.len(), 50);
     assert_eq!(report.unwired_entrypoints.len(), 29);
     for required_gap in [
         "ak.suite.consent.cache_invalidation.v1",
@@ -371,6 +371,92 @@ fn actor_private_events_submit_named_suite_executes_every_variant() -> Result<()
             ("owner_account_station_binding", 5),
             ("shared_submit_refuses_actor_private_kinds", 5),
             ("closed_request_and_payload_shapes", 4),
+        ]
+    );
+    Ok(())
+}
+
+fn executed_cases(execution: &cotest::conformance::SuiteExecutionResult) -> Vec<(&str, usize)> {
+    execution
+        .cases
+        .iter()
+        .map(|case| (case.case_id.as_str(), case.assertions))
+        .collect()
+}
+
+#[test]
+fn mls_cross_station_welcome_replication_named_suite_executes_every_variant() -> Result<()> {
+    assert_eq!(
+        cotest::conformance::VECTOR_ID_MLS_CROSS_STATION_WELCOME_REPLICATION,
+        "ak.vector.mls.cross_station_welcome_replication.v1"
+    );
+    let execution = cotest::conformance::run_mls_cross_station_welcome_replication_suite()?;
+    assert_eq!(
+        execution.entrypoint,
+        "ak.suite.mls.cross_station_welcome_replication.v1"
+    );
+    assert_eq!(
+        executed_cases(&execution),
+        [
+            ("governance_routes_remote_welcomes_into_their_intents", 2),
+            ("recipient_station_outside_the_target_set", 2),
+            ("welcomes_ride_only_an_mls_commit_item", 3),
+            (
+                "destination_reverifies_each_claim_in_the_replica_transaction",
+                7
+            ),
+            ("replay_after_scan_queues_the_missing_welcomes", 3),
+            (
+                "replicated_welcomes_count_toward_but_are_not_refused_by_capacity",
+                3
+            ),
+        ]
+    );
+    Ok(())
+}
+
+#[test]
+fn keypackage_recipient_claim_read_named_suite_executes_every_variant() -> Result<()> {
+    assert_eq!(
+        cotest::conformance::VECTOR_ID_KEYPACKAGE_RECIPIENT_CLAIM_READ,
+        "ak.vector.keypackage.recipient_claim_read.v1"
+    );
+    let execution = cotest::conformance::run_keypackage_recipient_claim_read_suite()?;
+    assert_eq!(
+        execution.entrypoint,
+        "ak.suite.keypackage.recipient_claim_read.v1"
+    );
+    assert_eq!(
+        executed_cases(&execution),
+        [
+            ("the_claimed_endpoint_reads_the_original_outcome", 3),
+            ("every_other_reader_is_keypackage_unknown", 6),
+            ("the_recipient_binds_the_claim_before_decrypting", 6),
+        ]
+    );
+    Ok(())
+}
+
+#[test]
+fn authority_forward_genesis_material_named_suite_executes_every_variant() -> Result<()> {
+    assert_eq!(
+        cotest::conformance::VECTOR_ID_AUTHORITY_FORWARD_GENESIS_MATERIAL,
+        "ak.vector.federation.authority_forward_genesis_material.v1"
+    );
+    let execution = cotest::conformance::run_authority_forward_genesis_material_suite()?;
+    assert_eq!(
+        execution.entrypoint,
+        "ak.suite.federation.authority_forward_genesis_material.v1"
+    );
+    assert_eq!(
+        executed_cases(&execution),
+        [
+            ("forwarded_genesis_is_admitted_stored_and_served", 3),
+            ("the_forwarding_station_must_hold_both_blobs", 5),
+            ("material_presence_follows_the_event_kind", 3),
+            ("carried_bytes_address_the_genesis_refs", 3),
+            ("member_length_bounds_the_carrier", 4),
+            ("addressed_bytes_must_be_the_epoch_zero_public_state", 2),
         ]
     );
     Ok(())

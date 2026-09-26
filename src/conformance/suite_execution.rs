@@ -67,6 +67,108 @@ impl SuiteExecutionResult {
     }
 }
 
+/// The fixture's cases paired with their variants, checked against the
+/// executed script: every case and variant name must match in order, so a
+/// renamed, added or dropped variant fails instead of being skipped.
+pub(crate) fn scripted_cases<'a>(
+    fixture: &'a Value,
+    script: &[(&str, &[&str])],
+) -> Result<Vec<(&'a str, &'a [Value])>> {
+    let cases = fixture
+        .get("cases")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow::anyhow!("fixture has no cases[]"))?;
+    if cases.len() != script.len() {
+        bail!(
+            "fixture carries {} cases, the runner executes {}",
+            cases.len(),
+            script.len()
+        );
+    }
+    let mut scripted = Vec::with_capacity(cases.len());
+    for (case, (case_name, variant_names)) in cases.iter().zip(script) {
+        let name = case
+            .get("name")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow::anyhow!("a fixture case has no name"))?;
+        if name != *case_name {
+            bail!("fixture case {name} is not the executed case {case_name}");
+        }
+        let variants = case
+            .get("variants")
+            .and_then(Value::as_array)
+            .ok_or_else(|| anyhow::anyhow!("{name} has no variants[]"))?;
+        let declared = variants
+            .iter()
+            .map(|variant| variant.get("name").and_then(Value::as_str))
+            .collect::<Option<Vec<_>>>()
+            .ok_or_else(|| anyhow::anyhow!("{name}: a variant has no name"))?;
+        if declared != *variant_names {
+            bail!("{name}: variants drifted from the executed script: {declared:?}");
+        }
+        scripted.push((name, variants.as_slice()));
+    }
+    Ok(scripted)
+}
+
+/// The fixture's decision points are exactly `expected_ids`, each with a
+/// requirement and at least one accepting (`accept` or `replay`) and one
+/// refusing (`reject`) decision named by JSON pointer: a variant, or one
+/// decision object inside a variant's expectation.
+pub(crate) fn verify_decision_point_evidence(fixture: &Value, expected_ids: &[&str]) -> Result<()> {
+    let points = fixture
+        .get("decision_points")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow::anyhow!("fixture has no decision_points[]"))?;
+    let mut ids = Vec::with_capacity(points.len());
+    for point in points {
+        let id = point
+            .get("id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow::anyhow!("a decision point has no id"))?;
+        if point
+            .get("requirement")
+            .and_then(Value::as_str)
+            .is_none_or(|text| text.trim().is_empty())
+        {
+            bail!("{id}: empty requirement");
+        }
+        for (side, allowed) in [
+            ("accept", &["accept", "replay"][..]),
+            ("reject", &["reject"]),
+        ] {
+            let pointers = point
+                .get(side)
+                .and_then(Value::as_array)
+                .filter(|pointers| !pointers.is_empty())
+                .ok_or_else(|| anyhow::anyhow!("{id}: no {side} evidence"))?;
+            for pointer in pointers {
+                let pointer = pointer
+                    .as_str()
+                    .ok_or_else(|| anyhow::anyhow!("{id}: {side} pointer is not a string"))?;
+                // A pointer names a variant, whose `expected.decision` is its
+                // evidence, or one decision inside a variant's expectation.
+                let decision = fixture
+                    .pointer(pointer)
+                    .and_then(|node| node.get("expected").or(Some(node)))
+                    .and_then(|expected| expected.get("decision"))
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("{id}: unresolved evidence pointer {pointer}")
+                    })?;
+                if !allowed.contains(&decision) {
+                    bail!("{id}: {pointer} is {decision}, not {side} evidence");
+                }
+            }
+        }
+        ids.push(id);
+    }
+    if ids != expected_ids {
+        bail!("decision points drifted: {ids:?}");
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;

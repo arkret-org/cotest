@@ -1615,3 +1615,98 @@ fn evidence_on_other_branch(world: &World, baseline: Value) -> Result<Value> {
         None,
     ))
 }
+
+// ---------------------------------------------------------------------------
+// Shared forwarding world
+// ---------------------------------------------------------------------------
+
+/// This vector's account Station (A) and human-device producer, for other
+/// suites whose Events ride `authority_forward` to a governance Station with
+/// the fresh `producer_device_evidence` the rule above requires.
+pub(super) struct ForwardingWorld(World);
+
+impl ForwardingWorld {
+    pub(super) fn load() -> Result<Self> {
+        let fixture = load_fixture_value(FIXTURE)?;
+        let case = fixture["cases"]
+            .as_array()
+            .context("peer event submit fixture cases")?
+            .iter()
+            .find(|case| case["name"] == CASE_NAME)
+            .with_context(|| format!("{FIXTURE} publishes no {CASE_NAME} case"))?;
+        Ok(Self(World::new(&case["setup"])?))
+    }
+
+    pub(super) fn producer_account(&self) -> &AccountId {
+        &self.0.account
+    }
+
+    pub(super) fn producer_device(&self) -> Result<DeviceId> {
+        Ok(DeviceId::new(DEVICE)?)
+    }
+
+    /// The producer device's Ed25519 key, which also signs its MLS leaf.
+    pub(super) fn producer_device_key(&self) -> SigningKey {
+        SigningKey::from_bytes(&DEVICE_SEED)
+    }
+
+    pub(super) fn realm_id(&self) -> &RealmId {
+        &self.0.realm_id
+    }
+
+    /// One Event of `kind` carrying `payload`, signed by the producer device.
+    pub(super) fn producer_event(&self, kind: &str, payload: Value) -> Result<Event> {
+        let created_at = self.0.setup.event_created_at;
+        let event = arkret_wire::test_support::raw_event_for_actor_at(
+            kind,
+            ScopeRef::Realm {
+                realm_id: self.0.realm_id.clone(),
+            },
+            ActorId::account(self.0.account.clone()),
+            payload,
+            created_at,
+        )?;
+        sign(
+            event,
+            &format!("{PRINCIPAL_DID}#{DEVICE}"),
+            DEVICE_SEED,
+            created_at,
+        )
+    }
+
+    /// A producer Event of the fixture's own payload for `kind`.
+    pub(super) fn fixture_event(&self, kind: &str) -> Result<Event> {
+        self.0.human_event(kind, self.0.setup.event_created_at)
+    }
+
+    /// Evidence the forwarding Station signs fresh for one attempt from its
+    /// live device gate.
+    pub(super) fn fresh_evidence(&self, event: &Event) -> Result<AccountDeviceSignerEvidence> {
+        let mut station = self.0.account_station(LiveDeviceState::Active)?;
+        station
+            .fresh_evidence(event, self.0.setup.attested_at)?
+            .context("the forwarded Event has a human-device producer")
+    }
+
+    /// The governance Station's resolution of the forwarded producer, the
+    /// step between request validation and the Event's own admission.
+    pub(super) fn verify_forwarded_producer(
+        &self,
+        event: &Event,
+        evidence: Option<&AccountDeviceSignerEvidence>,
+    ) -> std::result::Result<(), ErrorCode> {
+        let evidence = evidence.ok_or(ErrorCode::SchemaViolation)?;
+        let producer = verify_forwarded_human_producer(
+            evidence,
+            event,
+            &self.0.station_a.service_id,
+            DigestSuite::Sha256,
+            self.0.setup.now,
+        )
+        .map_err(|error| error.error_code().unwrap_or(ErrorCode::SignatureInvalid))?;
+        match event.human_device_producer() {
+            Ok(Some(signer)) if signer == producer => Ok(()),
+            _ => Err(ErrorCode::SignatureInvalid),
+        }
+    }
+}
