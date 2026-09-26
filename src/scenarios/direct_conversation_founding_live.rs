@@ -873,13 +873,15 @@ async fn run(cross_station: bool, missing_contact_dependency: bool) -> Result<()
             });
         request.validate()?;
         let body = arkret_canonical::canonical_json_bytes(&request)?;
+        let idempotency_key = format!("direct-conversation-founding:{}", plan.founding_unit_digest);
         for _ in 0..2 {
             let (status, answer) = peer_server
-                .signed_peer_post(
+                .signed_peer_post_with_idempotency_key(
                     server,
                     "/_arkret/peer/events",
                     &body,
                     peer_server.service_id(),
+                    Some(&idempotency_key),
                 )
                 .await?;
             ensure!(
