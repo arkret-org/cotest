@@ -5,10 +5,11 @@ use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{
-    ArkretServer, add_member, create_realm, expect_api_error, expect_json,
-    member_join_payload_value, message_create_text_payload,
+    expect_api_error, expect_json, member_join_payload_value, message_create_text_payload,
 };
-use crate::scenarios::identity_test_support::actor_did_for_service_did;
+use crate::scenarios::identity_test_support::{
+    actor_did_for_service_did, spawn_with_harness_account_authority,
+};
 
 pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()> {
     // CT-12: scaffold-driven, parallel-safe.
@@ -17,10 +18,10 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
     let alice_did = actor_did_for_service_did(server.service_did(), "space-alice")?;
     let bob_did = actor_did_for_service_did(server.service_did(), "bob-space")?;
     let alice = server
-        .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
+        .standard_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
     let bob = server
-        .register_client(
+        .standard_register_client(
             &bob_did,
             "@bob-space",
             "ak:device:01904100-0000-7000-8000-0000000000b0",
@@ -38,21 +39,14 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
     )
     .await?;
 
-    let realm_id = create_realm(
-        server,
-        alice.expect_dev_bearer(),
-        &alice_did,
-        "Permission Space",
-    )
-    .await?;
-    let mut unauthorized_join = alice
+    let realm_id = alice.create_realm("Permission Space").await?;
+    let unauthorized_join = bob
         .author_event(
             &realm_id,
             "ak.member.state",
             member_join_payload_value(&realm_id, &bob_did)?,
         )
         .await?;
-    rebind_authored_event(&mut unauthorized_join, &bob.actor)?;
     let unauthorized_submission =
         crate::publication::initial_submission(unauthorized_join.clone(), "")?;
     expect_api_error(
@@ -89,14 +83,15 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
 }
 
 pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Result<()> {
-    let server = ArkretServer::spawn("space-visibility").await?;
+    let server_owner = spawn_with_harness_account_authority("space-visibility", &[]).await?;
+    let server = &server_owner;
     let alice_did = actor_did_for_service_did(server.service_did(), "visible-alice")?;
     let bob_did = actor_did_for_service_did(server.service_did(), "bob-visible")?;
     let alice = server
-        .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
+        .standard_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
     let bob = server
-        .register_client(
+        .standard_register_client(
             &bob_did,
             "@bob-visible",
             "ak:device:01904100-0000-7000-8000-0000000000b0",
@@ -138,14 +133,13 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
         serde_json::to_string_pretty(&anonymous_search)?
     );
 
-    let mut non_member_event = alice
+    let non_member_event = bob
         .author_event(
             &realm_id,
             "ak.message.create",
             message_create_text_payload(&strand_id, "not a member")?,
         )
         .await?;
-    rebind_authored_event(&mut non_member_event, &bob.actor)?;
     expect_api_error(
         bob.authorize(server.http().post(server.url("/_arkret/self/events")))
             .json(&crate::publication::initial_submission(
@@ -157,16 +151,9 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
     )
     .await?;
 
-    let pre_member_seal = current_seal_id(&alice, &realm_id).await?;
-    add_member(
-        &server,
-        alice.expect_dev_bearer(),
-        &alice_did,
-        &realm_id,
-        &bob_did,
-    )
-    .await?;
-    await_seal_advance(&alice, &realm_id, &pre_member_seal).await?;
+    let pre_member_commit = current_commit_id(&alice, &realm_id).await?;
+    alice.add_member(&realm_id, &bob).await?;
+    await_commit_advance(&alice, &realm_id, &pre_member_commit).await?;
     alice
         .grant_realm_actions_to_client(&realm_id, &bob, &["ak.message.create"])
         .await?;
@@ -209,25 +196,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
     Ok(())
 }
 
-fn rebind_authored_event(event: &mut arkret_wire::Event, actor: &str) -> Result<()> {
-    let verification_method = crate::harness::default_event_verification_method(actor).to_string();
-    let actor_did = arkret_identifiers::Did::new(actor.to_owned())?;
-    event.actor_id = arkret_wire::ActorId::account(arkret_wire::AccountId::new(
-        arkret_identifiers::project_did_to_core_id(&actor_did)?,
-        event.actor_id.route_service_id().clone(),
-    ));
-    event.authorization_ref = None;
-    event.semantic_refs.clear();
-    event
-        .producer_proof
-        .as_mut()
-        .ok_or_else(|| anyhow!("authored Event has no proof"))?
-        .verification_method =
-        arkret_wire::DidUrl::new(verification_method).map_err(anyhow::Error::msg)?;
-    crate::harness::refresh_typed_event_proof(event)
-}
-
-async fn current_seal_id(
+async fn current_commit_id(
     client: &crate::harness::TestActorClient,
     realm_id: &str,
 ) -> Result<String> {
@@ -241,18 +210,18 @@ async fn current_seal_id(
         .ok_or_else(|| anyhow!("Realm stream omitted current commit_id"))
 }
 
-async fn await_seal_advance(
+async fn await_commit_advance(
     client: &crate::harness::TestActorClient,
     realm_id: &str,
     predecessor: &str,
 ) -> Result<()> {
     let deadline = Instant::now() + Duration::from_secs(30);
     loop {
-        if current_seal_id(client, realm_id).await? != predecessor {
+        if current_commit_id(client, realm_id).await? != predecessor {
             return Ok(());
         }
         if Instant::now() >= deadline {
-            return Err(anyhow!("membership Control Move was not sealed"));
+            return Err(anyhow!("membership Control Move was not committed"));
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
