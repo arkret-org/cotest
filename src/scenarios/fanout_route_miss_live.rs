@@ -20,8 +20,8 @@ use arkret_models_identity::{
 };
 use arkret_wire::{
     AccountId, ActorId, CommitStreamRef, CommittedEventView, Did, DidCoreId, DidUrl, Event,
-    EventAdmissionSubmission, EventId, EventKind, RealmCommit, RealmId, RequestId,
-    StreamScanDirection, StreamScanOutcome, StreamScanRequest,
+    EventAdmissionSubmission, EventId, EventKind, ReadableFloorReason, RealmCommit, RealmId,
+    RequestId, StreamScanDirection, StreamScanOutcome, StreamScanRequest,
 };
 use reqwest::StatusCode;
 use serde_json::{Value, json};
@@ -29,7 +29,7 @@ use serde_json::{Value, json};
 use crate::harness::{ArkretServer, TestActorClient, TestServerGroup, message_create_text_payload};
 use crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
 use crate::scenarios::_helpers::live_gate::skip_or_fail;
-use crate::scenarios::cross_station_invite_join::wait_for_member_scan;
+use crate::scenarios::cross_station_invite_join::{wait_for_member_scan, wait_for_titled_row};
 use crate::scenarios::human_device_producer_live::{
     create_realm_with_join_rule, database, ensure_commit_signed_by, ensure_same_commit,
     membership_payload, prepare_join, standard_client, station_env, submit_and_expect_commit,
@@ -58,6 +58,9 @@ const CAROL_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002004";
 ///    pulls the cancelled predecessor through the peer scan, stores the removal and withdraws Bob's
 ///    realm list row; exact replays of both are `duplicate`, and a later Commit is refused because
 ///    Y no longer hosts a joined member.
+/// 5b. Bob joins again: his own join re-opens Y's held stream, which Y re-anchors (decision 0122);
+///    Bob's scan on Y restarts at the rejoin, his realm list carries the title again, and the
+///    Message between his removal and his rejoin is never held.
 /// 6. A plaintext Message of a Realm that does not list Y as a plaintext Station is never
 ///    replicated to Y, although Bob is joined there; the same Message validly signed by X and sent
 ///    to Y is refused by Y's own re-verification against its anchored typed current (§0356). A
@@ -218,6 +221,38 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
         ),
         "a Commit after Bob's removal was not refused for want of a hosted member: {outcomes:?}"
     );
+
+    // (5b) Bob joins again (decision 0122): his own join re-opens Y's held
+    //      stream, which Y re-anchors on a new snapshot; his scan on Y starts
+    //      at the rejoin, his realm list carries the title again, and the
+    //      position between his removal and his rejoin is never held.
+    let (_, rejoin_commit) = join_from_member_station(
+        &bob,
+        &bob_account,
+        &realm,
+        group.server(0),
+        "ak:request:019b0000-0000-7000-8000-000000002503",
+    )
+    .await?;
+    let page = wait_for_member_scan(&bob, &RealmId::new(realm.clone())?).await?;
+    let floor = page
+        .readable_floor
+        .as_ref()
+        .context("Bob's scan on Y names no readable floor after the rejoin")?;
+    ensure!(
+        floor.oldest_position == rejoin_commit.stream_position
+            && floor.floor_commit_id == rejoin_commit.commit_id
+            && floor.floor_reason == ReadableFloorReason::MembershipJoin,
+        "Bob's scan on Y does not restart at his rejoin: {floor:?}"
+    );
+    ensure!(
+        page.committed_events
+            .first()
+            .is_some_and(|item| item.commit() == &rejoin_commit),
+        "Bob's scan on Y does not begin with his rejoin"
+    );
+    wait_for_titled_row(&bob, &realm, "Fanout route miss").await?;
+    ensure_not_stored(group.server(1), group.server(0), &after_body).await?;
 
     // (6) A restricted plaintext Message is not replicated.
     let restricted = create_realm_with_join_rule(

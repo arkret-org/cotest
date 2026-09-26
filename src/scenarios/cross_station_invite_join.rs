@@ -124,7 +124,11 @@ pub(crate) async fn wait_for_member_scan(
 
 /// Poll Bob's realm list on his Station until the Realm's row carries
 /// `title`.
-async fn wait_for_titled_row(client: &TestActorClient, realm_id: &str, title: &str) -> Result<()> {
+pub(crate) async fn wait_for_titled_row(
+    client: &TestActorClient,
+    realm_id: &str,
+    title: &str,
+) -> Result<()> {
     let deadline = Instant::now() + Duration::from_secs(120);
     loop {
         let frames = account_frames(client, None).await?;
