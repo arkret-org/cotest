@@ -55,12 +55,14 @@ const CONTROLLER_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002301"
 const RUNTIME_FRAGMENT: &str = "agent-runtime-1";
 
 /// The service operations the fixture Agent may ever use: its recipient
-/// queue and the actor-private Events it authors for its controller. No
+/// queue, its sender queue and the actor-private Events it authors for its
+/// controller. No
 /// interactive or E2EE capability is selected, so no floor applies.
-fn runtime_operations() -> [&'static str; 3] {
+fn runtime_operations() -> [&'static str; 4] {
     [
         ServiceOperationId::SELF_DEVICE_MESSAGES_READ_LIST_V1,
         ServiceOperationId::SELF_DEVICE_MESSAGES_COMMAND_ACK_V1,
+        ServiceOperationId::SELF_DEVICE_MESSAGES_COMMAND_SEND_V1,
         ServiceOperationId::SELF_ACTOR_PRIVATE_EVENTS_COMMAND_SUBMIT_V1,
     ]
 }
@@ -777,6 +779,105 @@ pub async fn run_agent_runtime_session_live() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
+
+    // The Agent sends to its controller's device as an Agent endpoint.
+    let principal = controller
+        .principal
+        .as_ref()
+        .context("the controller carries its provisioned principal")?;
+    let device_message_id = format!("ak:device_message:{}", unique_uuid7());
+    let send = crate::harness::device_message_send_request(
+        principal.did.as_str(),
+        principal.device_id.as_str(),
+        &device_message_id,
+        "ak.mls.application",
+        crate::harness::encrypted_envelope("ak.mls.application", "YWdlbnQtdG8tY29udHJvbGxlcg"),
+        Utc::now() + chrono::Duration::hours(1),
+    )?;
+    let sent = expect_json(
+        agent
+            .runtime
+            .post("/_arkret/self/device_messages")
+            .header("Idempotency-Key", unique_uuid7())
+            .json(&send),
+        StatusCode::OK,
+    )
+    .await?;
+    ensure!(
+        sent["delivered"][controller_account.principal_id.as_str()][principal.device_id.as_str()]["status"]
+            == "delivered",
+        "the Agent's device message was not delivered: {sent}"
+    );
+    let inbox = expect_json(
+        controller.get("/_arkret/self/device_messages"),
+        StatusCode::OK,
+    )
+    .await?;
+    ensure!(
+        inbox["deliveries"].as_array().is_some_and(|deliveries| {
+            deliveries.iter().any(|delivery| {
+                delivery.to_string().contains(device_message_id.as_str())
+                    && delivery
+                        .to_string()
+                        .contains(agent.key_authorization.as_str())
+            })
+        }),
+        "the controller's queue lacks the Agent-sent message with its key authorization: {inbox}"
+    );
+
+    // The controller revokes the runtime key; the session ends with it.
+    let revoke = sign(
+        arkret_event_draft::build_agent_key_revoke_intent(
+            &arkret_models_collaboration::events_payloads::agent::AgentKeyRevokePayload {
+                agent_id: agent.agent_account.principal_id.clone(),
+                key_id: NonEmptyString::new(agent.verification_method.as_str())
+                    .map_err(anyhow::Error::msg)?,
+                revoked_by: controller_account.principal_id.clone(),
+                revoked_at: arkret::canonical::normalize_timestamp_canonical(Utc::now()),
+                reason: None,
+            },
+            ScopeRef::Realm {
+                realm_id: agent.agent_pcr.clone(),
+            },
+            ActorId::account(agent.agent_account.clone()),
+            ActorId::account(controller_account.clone()),
+            agent.delegation.clone(),
+            Utc::now(),
+        )?
+        .author_with_digest_suite(arkret::canonical::DigestSuite::Sha256)?,
+        &DidUrl::new(format!("{}#{}", principal.did, principal.device_id))
+            .map_err(anyhow::Error::msg)?,
+        principal.device_signing_key.to_bytes(),
+    )?;
+    let revoked: AuthoritySubmitOutcome = serde_json::from_value(
+        expect_json(
+            controller
+                .post("/_arkret/self/events")
+                .json(&arkret_wire::EventAdmissionSubmission::new(revoke)),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    ensure!(
+        matches!(
+            revoked,
+            AuthoritySubmitOutcome::Accepted {
+                status: AuthorityCommitStatus::Committed,
+                ..
+            }
+        ),
+        "the key revocation was not committed: {revoked:?}"
+    );
+    let ended = agent
+        .runtime
+        .get("/_arkret/self/device_messages")
+        .send()
+        .await?;
+    ensure!(
+        ended.status() == StatusCode::UNAUTHORIZED,
+        "a revoked key's session still reads its queue: {}",
+        ended.status()
+    );
     Ok(())
 }
 
