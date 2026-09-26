@@ -1214,6 +1214,21 @@ impl ArkretServer {
         self.start_external_process().await
     }
 
+    /// Restart an owned Soland process with a new explicit service assertion
+    /// seed while retaining its database, KeyStore, DID, endpoints, and peers.
+    pub async fn restart_external_process_with_notary_signing_key(
+        &mut self,
+        signing_key_base64: &str,
+    ) -> Result<()> {
+        self.stop_external_process().await?;
+        let config = self
+            .external_restart
+            .as_mut()
+            .context("Soland signer rotation requires the external-binary harness")?;
+        config.notary_signing_key = signing_key_base64.to_owned();
+        self.start_external_process().await
+    }
+
     pub fn sdk(&self) -> Result<SdkClient> {
         let builder = SdkClient::builder(self.base_url());
         Ok(if self._tls.is_some() {
