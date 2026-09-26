@@ -513,6 +513,14 @@ impl ArkretServer {
         self.client_with_founding_device_grant(principal, grant)
     }
 
+    /// The public Account Authority origin for a process Station backed by
+    /// the harness issuer ledger.
+    pub fn harness_account_authority_origin(&self) -> Option<String> {
+        self.session_grant_issuer
+            .as_ref()
+            .map(|issuer| issuer.origin())
+    }
+
     /// [`Self::demo_client`] presenting its founding device's Standard grant.
     pub async fn standard_client(&self, actor: &str, device_id: &str) -> Result<TestActorClient> {
         let client = self.demo_client(actor, device_id).await?;

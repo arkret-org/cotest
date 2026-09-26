@@ -189,16 +189,28 @@ pub async fn standard_session_grant_revoke_invalidates_current_session() -> Resu
     let bob = server
         .standard_client(&bob_did, "ak:device:01904100-0000-7000-8000-0000000000b1")
         .await?;
+    let authority_origin = server
+        .harness_account_authority_origin()
+        .ok_or_else(|| anyhow::anyhow!("standard grant issuer ledger is unavailable"))?;
+    let revoke_url = format!("{authority_origin}/_arkret/gate/account/session-grants/revoke");
+    expect_status(
+        server.http().post(&revoke_url),
+        StatusCode::UNAUTHORIZED,
+    )
+    .await?;
     let logout = expect_json(
-        bob.authorize(
-            server
-                .http()
-                .post(server.url("/_arkret/gate/account/session-grants/revoke")),
-        ),
+        bob.authorize(server.http().post(&revoke_url)),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(logout["revoked_count"], 1);
+    expect_status(
+        bob.authorize(server.http().post(&revoke_url)),
+        StatusCode::CONFLICT,
+    )
+    .await?;
+    // This request reaches the Station, which must recheck the exact token
+    // against the Account Authority ledger after the public revoke operation.
     expect_status(
         bob.authorize(
             server

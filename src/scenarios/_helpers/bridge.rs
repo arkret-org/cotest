@@ -25,6 +25,7 @@ struct CoauthGrantBinding {
     holder: CoauthGrantHolder,
     cnf_jkt: String,
     session_public_key: String,
+    revoked: bool,
 }
 
 /// The closed holder of one recorded grant: a human device with its accepted
@@ -95,9 +96,15 @@ impl MockCoauthIntrospectionServer {
             requests: Arc::clone(&requests),
             channel: Arc::clone(&channel),
         };
-        let router = Router::with_path("_coauth/internal/session-grants/introspect")
+        let router = Router::new()
             .hoop(affix_state::inject(state))
-            .post(coauth_introspect);
+            .push(
+                Router::with_path("_coauth/internal/session-grants/introspect")
+                    .post(coauth_introspect),
+            )
+            .push(
+                Router::with_path("_arkret/gate/account/session-grants/revoke").post(coauth_revoke),
+            );
         let server = super::mock_http::spawn_mock(router).await?;
         let origin = format!("http://{}", server.addr());
         let url = format!("{origin}/_coauth/internal/session-grants/introspect");
@@ -186,6 +193,7 @@ impl MockCoauthIntrospectionServer {
             holder,
             cnf_jkt,
             session_public_key,
+            revoked: false,
         };
         // Each exact credential is its own ledger record, so a second device
         // of the same principal can hold a grant beside the first one.
@@ -213,6 +221,86 @@ impl MockCoauthIntrospectionServer {
     pub fn channel_observations(&self) -> Vec<ChannelObservation> {
         self.channel.lock().expect("mock channel lock").clone()
     }
+}
+
+/// The same public Account Authority operation exercised by a live Coauth
+/// deployment. This test ledger records the exact grant transition so the
+/// Station's next introspection observes it.
+#[handler]
+async fn coauth_revoke(req: &mut Request, depot: &mut Depot, res: &mut Response) {
+    let state = depot
+        .get_typed::<CoauthIntrospectionState>()
+        .expect("coauth mock state injected");
+    let token = req
+        .headers()
+        .get(salvo::http::header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("DPoP "))
+        .map(str::to_owned);
+    let proof = req
+        .headers()
+        .get("dpop")
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned);
+    let (Some(token), Some(proof)) = (token, proof) else {
+        res.status_code(salvo::http::StatusCode::UNAUTHORIZED);
+        return;
+    };
+    let host = req
+        .headers()
+        .get(salvo::http::header::HOST)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default();
+    let htu = format!("http://{host}{}", req.uri().path());
+    let verified = arkret_signatures::dpop::verify_dpop_proof(
+        &arkret_signatures::dpop::DpopVerificationRequest {
+            proof_jwt: &proof,
+            method: "POST",
+            htu: &htu,
+            access_token: Some(&token),
+            now: chrono::Utc::now(),
+            max_age: chrono::Duration::seconds(300),
+            max_future_skew: chrono::Duration::seconds(30),
+            expected_nonce: None,
+        },
+    );
+    let Ok(verified) = verified else {
+        res.status_code(salvo::http::StatusCode::UNAUTHORIZED);
+        return;
+    };
+    let body = req.payload().await.ok();
+    if body.is_some_and(|bytes| !bytes.is_empty() && bytes.as_ref() != b"{}") {
+        res.status_code(salvo::http::StatusCode::BAD_REQUEST);
+        return;
+    }
+    let mut bindings = state.bindings.lock().expect("coauth mock binding lock");
+    let Some((index, binding)) = bindings
+        .iter_mut()
+        .enumerate()
+        .find(|(_, binding)| binding.grant_jwt == token && binding.cnf_jkt == verified.jkt)
+    else {
+        res.status_code(salvo::http::StatusCode::UNAUTHORIZED);
+        return;
+    };
+    if binding.revoked {
+        res.status_code(salvo::http::StatusCode::CONFLICT);
+        return;
+    }
+    binding.revoked = true;
+    let grant_id = if index == 0 {
+        "ak:session_grant:AREUYrj1_BH7OOg12-uDdXYf2SrPpdqagciUGa9tJ-nD".to_owned()
+    } else {
+        let mut digest = vec![0x01];
+        digest.extend(arkret_canonical::sha256_bytes(token.as_bytes()));
+        format!(
+            "ak:session_grant:{}",
+            arkret_canonical::base64url_encode(digest)
+        )
+    };
+    res.render(Json(json!({
+        "revoked_count": 1,
+        "revoked_session_grant_ids": [grant_id]
+    })));
 }
 
 #[handler]
@@ -287,6 +375,15 @@ async fn coauth_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respo
         })));
         return;
     };
+    if binding.revoked {
+        res.render(Json(json!({
+            "active": false,
+            "status": "revoked",
+            "proof_required": false,
+            "one_time_use_consumed": false
+        })));
+        return;
+    }
     let audience = by_jwt
         .audience_id
         .map(|value| value.as_str().to_owned())

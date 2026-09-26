@@ -3,7 +3,7 @@ use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::fixtures::TestScaffold;
-use crate::harness::{ArkretServer, actor_core_id, expect_api_error, expect_json, expect_status};
+use crate::harness::{ArkretServer, actor_core_id, expect_api_error, expect_json};
 use crate::scenarios::identity_test_support::{
     actor_did_for_service_did, spawn_with_standard_grant_authority,
 };
@@ -111,22 +111,25 @@ pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
     )
     .await?;
 
-    let logout = expect_json(
+    // Local development bearers are outside the Account Authority's Standard
+    // SessionGrant revoke contract. The Station must not return a false
+    // success for this canonical operation.
+    expect_api_error(
         server
             .http()
             .post(server.url("/_arkret/gate/account/session-grants/revoke"))
             .bearer_auth(token),
-        StatusCode::OK,
+        StatusCode::NOT_FOUND,
+        "unrecognized_endpoint",
     )
     .await?;
-    assert_eq!(logout["revoked_count"], 1);
 
-    expect_status(
+    expect_json(
         server
             .http()
             .get(server.url("/_arkret/self/account/viewer"))
             .bearer_auth(token),
-        StatusCode::UNAUTHORIZED,
+        StatusCode::OK,
     )
     .await?;
 
