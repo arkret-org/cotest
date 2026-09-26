@@ -4,31 +4,31 @@
 //! end to end, because the convergence properties only mean something once a
 //! real reducer has admitted the Events:
 //!
-//! * an RSVP carries the registry-derived cell effect, so it reaches its CBS cell instead of being
-//!   accepted as a side-band record;
-//! * two responses that do not observe each other retain both identities while the server exposes
-//!   the fixed `(depth, EventId)` winner, independently of HLC and arrival order;
-//! * a response that names the current winner in `causal_refs` has greater depth and becomes the
-//!   next deterministic answer;
+//! * an RSVP is admitted as a signed Event and its complete entry reaches the
+//!   materialized current value;
+//! * two responses authored before either is submitted receive distinct RealmCommits;
+//!   the later stream position is the current value, regardless of EventId order;
+//! * exact replay and process restart preserve that value and its source Event.
 //!
-//! Cell-subject isolation between responders is not repeated here: the
-//! accountable actor is part of the composite subject, which the reducer unit
-//! tests already pin. What only a live server can show is the concurrency and
-//! domination behaviour below.
+//! Subject isolation between responders is not repeated here: the accountable
+//! actor is part of the composite subject, which reducer unit tests already pin.
 //!
 //! This is deliberately a **Soland product-integration scenario**, not a
 //! portable Arkret conformance vector. Writes and public lifecycle reads use
-//! registered `/_arkret/*` operations; assertions over the materialized RSVP winner
+//! registered `/_arkret/*` operations; assertions over the materialized RSVP value
 //! use Soland's product-private projection read because that implementation
 //! state is not part of the cross-implementation wire contract.
 
 use std::time::Duration;
 
-use anyhow::{Result, anyhow};
+use anyhow::{Result, anyhow, ensure};
+use arkret_wire::{EventId, RealmCommit, RealmId};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
-use crate::harness::{ArkretServer, TestActorClient, actor_core_id, eventually, expect_json};
+use crate::harness::{
+    ArkretServer, TestActorClient, actor_core_id, eventually, expect_json, submitted_event_id,
+};
 use crate::scenarios::identity_test_support::actor_did_for_service_did;
 
 const ALICE_LOCAL: &str = "cotest-rsvp-alice";
@@ -132,7 +132,7 @@ fn accepted_schedule_basis(submitted: &Value) -> Result<Vec<String>> {
     ])
 }
 
-fn winner_for(strand: &Value, actor: &arkret_wire::ActorId) -> Option<Value> {
+fn current_rsvp_for(strand: &Value, actor: &arkret_wire::ActorId) -> Option<Value> {
     strand["rsvps"]
         .as_array()
         .and_then(|cells| {
@@ -144,70 +144,50 @@ fn winner_for(strand: &Value, actor: &arkret_wire::ActorId) -> Option<Value> {
                     == Some(actor)
             })
         })
-        .and_then(|cell| cell.get("winner"))
-        .filter(|winner| !winner.is_null())
         .cloned()
 }
 
-fn winner_status(winner: &Value) -> Option<&str> {
-    winner["entry"]["response"]["status"].as_str()
+fn current_status(current: &Value) -> Option<&str> {
+    current["entry"]["response"]["status"].as_str()
 }
 
-fn higher_event_id<'a>(
-    left: &'a arkret_wire::Event,
-    right: &'a arkret_wire::Event,
-) -> &'a arkret_wire::Event {
-    if left.event_id.token_bytes() > right.event_id.token_bytes() {
-        left
-    } else {
-        right
-    }
+fn assert_current_rsvp(
+    strand: &Value,
+    actor: &arkret_wire::ActorId,
+    source_event_id: &EventId,
+    status: &str,
+    schedule_basis: &[String],
+) -> Result<()> {
+    let current = current_rsvp_for(strand, actor)
+        .ok_or_else(|| anyhow!("RSVP current is absent for {actor}"))?;
+    ensure!(
+        current["source_event_id"].as_str() == Some(source_event_id.as_str())
+            && current_status(&current) == Some(status)
+            && current["entry"]["schedule_basis_refs"] == json!(schedule_basis),
+        "RSVP current does not match accepted Event {source_event_id}: {current}"
+    );
+    Ok(())
 }
 
-fn submitted_digest(response: &Value) -> Result<String> {
-    response["cotest_event_digest"]
-        .as_str()
-        .map(ToOwned::to_owned)
-        .ok_or_else(|| anyhow!("submit response carries no event digest"))
+fn accepted_commit(response: &Value) -> Result<RealmCommit> {
+    let event_id = submitted_event_id(response)?;
+    let commit: RealmCommit = serde_json::from_value(response["commit"].clone())?;
+    ensure!(
+        commit.event_ref == event_id,
+        "submit outcome names another Event"
+    );
+    Ok(commit)
 }
 
-async fn wait_for_bootstrap_seal(client: &TestActorClient, realm_id: &str) -> Result<String> {
-    eventually(
-        "Realm bootstrap Seal",
-        Duration::from_secs(30),
-        Duration::from_millis(100),
-        || async {
-            let frontier = client.realm_seal_frontier(realm_id).await?;
-            frontier["frontier"]["seal_basis"]["leaves"][0]
-                .as_str()
-                .map(ToOwned::to_owned)
-                .ok_or_else(|| anyhow!("Realm frontier has no seal_id"))
-        },
-    )
-    .await
-}
-
-async fn wait_for_next_seal(
+async fn assert_committed(
     client: &TestActorClient,
     realm_id: &str,
-    predecessor: &str,
-) -> Result<String> {
-    eventually(
-        "post-bootstrap capability Seal",
-        Duration::from_secs(30),
-        Duration::from_millis(100),
-        || async {
-            let frontier = client.realm_seal_frontier(realm_id).await?;
-            let seal_id = frontier["frontier"]["seal_basis"]["leaves"][0]
-                .as_str()
-                .ok_or_else(|| anyhow!("Realm frontier has no seal_id"))?;
-            if seal_id == predecessor {
-                return Err(anyhow!("the capability grant is not sealed yet"));
-            }
-            Ok(seal_id.to_owned())
-        },
-    )
-    .await
+    event_id: &EventId,
+) -> Result<RealmCommit> {
+    client.await_event_seal_coverage(realm_id, event_id).await?;
+    let view = client.sdk().committed_event_get(event_id).await?;
+    view.validate_shape()?;
+    Ok(view.commit().clone())
 }
 
 async fn wait_for_projected_grant(
@@ -236,8 +216,7 @@ async fn wait_for_projected_grant(
             .await?;
             if effective["grants"].as_array().is_some_and(|grants| {
                 grants.iter().any(|grant| {
-                    grant["id"].as_str() == Some(grant_id)
-                        || grant["grant_id"].as_str() == Some(grant_id)
+                    grant["grant"]["id"].as_str() == Some(grant_id)
                 })
             }) {
                 Ok(())
@@ -249,38 +228,15 @@ async fn wait_for_projected_grant(
     .await
 }
 
-async fn current_seal(client: &TestActorClient, realm_id: &str) -> Result<String> {
-    let frontier = client.realm_seal_frontier(realm_id).await?;
-    frontier["frontier"]["seal_basis"]["leaves"][0]
-        .as_str()
-        .map(ToOwned::to_owned)
-        .ok_or_else(|| anyhow!("Realm frontier has no seal_id"))
-}
-
-async fn grant_calendar_actions(
-    client: &TestActorClient,
-    realm_id: &str,
-    bootstrap_seal: &str,
-) -> Result<Vec<String>> {
+async fn grant_calendar_actions(client: &TestActorClient, realm_id: &str) -> Result<String> {
     // A field-access constraint narrows every action in its grant. Keep the
     // ordinary create/RSVP actions on an unconstrained grant and put the
     // field-scoped Strand update on its own grant.
-    let (plain_grant_id, response) = client
-        .grant_realm_actions_to(
-            realm_id,
-            &client.actor,
-            &["ak.strand.create", "ak.rsvp.set"],
-        )
+    let plain_grant_id = client
+        .grant_realm_actions_to_client(realm_id, client, &["ak.strand.create", "ak.rsvp.set"])
         .await?;
-    let proposal_digest = response["control_proposal_acks"][0]["proposal_digest"]
-        .as_str()
-        .ok_or_else(|| anyhow!("calendar plain grant response omitted its proposal digest"))?;
     let subject = actor_core_id(&client.actor)?;
     wait_for_projected_grant(client, realm_id, &subject, &plain_grant_id).await?;
-    client
-        .await_control_proposal_settled(realm_id, proposal_digest, bootstrap_seal)
-        .await?;
-    let plain_grant_seal = current_seal(client, realm_id).await?;
 
     let mut calendar_field_constraint =
         arkret_models_collaboration::governance::grant_constraint::GrantConstraint::new(
@@ -288,7 +244,7 @@ async fn grant_calendar_actions(
             arkret_models_collaboration::governance::grant_constraint::GrantConstraintEffect::Allow,
         );
     calendar_field_constraint.allowed_write_fields = vec!["metadata.fields.calendar".to_owned()];
-    let (field_grant_id, response) = client
+    let (field_grant_id, _response) = client
         .grant_realm_actions_with_constraints_to(
             realm_id,
             &client.actor,
@@ -296,52 +252,103 @@ async fn grant_calendar_actions(
             vec![calendar_field_constraint],
         )
         .await?;
-    let proposal_digest = response["control_proposal_acks"][0]["proposal_digest"]
-        .as_str()
-        .ok_or_else(|| anyhow!("calendar grant response omitted its proposal digest"))?;
+    let field_grant_event = EventId::from_token_bytes(
+        arkret_identifiers::GrantId::new(field_grant_id.clone())?.token_bytes(),
+    )?;
+    assert_committed(client, realm_id, &field_grant_event).await?;
     wait_for_projected_grant(client, realm_id, &subject, &field_grant_id).await?;
-    client
-        .await_control_proposal_settled(realm_id, proposal_digest, &plain_grant_seal)
-        .await?;
-    Ok(vec![plain_grant_id, field_grant_id])
+    client.remember_grant(realm_id, &field_grant_id, &["ak.strand.update"]);
+    Ok(plain_grant_id)
 }
 
 async fn grant_calendar_rsvp_to(
     issuer: &TestActorClient,
     realm_id: &str,
-    actor: &str,
-    predecessor_seal: &str,
-) -> Result<Vec<String>> {
-    let (grant_id, response) = issuer
-        .grant_realm_actions_to(realm_id, actor, &["ak.rsvp.set"])
+    subject_client: &TestActorClient,
+) -> Result<()> {
+    let grant_id = issuer
+        .grant_realm_actions_to_client(realm_id, subject_client, &["ak.rsvp.set"])
         .await?;
-    let proposal_digest = response["control_proposal_acks"][0]["proposal_digest"]
-        .as_str()
-        .ok_or_else(|| anyhow!("RSVP grant response omitted its proposal digest"))?;
-    let subject = actor_core_id(actor)?;
+    let subject = actor_core_id(&subject_client.actor)?;
     wait_for_projected_grant(issuer, realm_id, &subject, &grant_id).await?;
-    issuer
-        .await_control_proposal_settled(realm_id, proposal_digest, predecessor_seal)
-        .await?;
-    Ok(vec![grant_id])
+    Ok(())
 }
 
 async fn submit_prepared_event(
     client: &TestActorClient,
     event: &arkret_wire::Event,
-) -> Result<String> {
-    expect_json(
+) -> Result<RealmCommit> {
+    let response = expect_json(
         client
             .post("/_arkret/self/events")
             .json(&crate::publication::initial_submission(event.clone(), "")?),
         StatusCode::OK,
     )
     .await?;
+    let commit = accepted_commit(&response)?;
+    ensure!(
+        commit.event_ref == event.event_id,
+        "submitted Event changed identity"
+    );
+    Ok(commit)
+}
+
+async fn create_calendar_strand(
+    client: &TestActorClient,
+    realm_id: &str,
+    title: &str,
+    bob_did: &str,
+    preserve_unknown_display: bool,
+) -> Result<Value> {
+    let mut fields = json!({
+        "calendar": calendar_subtree(&client.actor, bob_did, client.service_id())?
+    });
+    if preserve_unknown_display {
+        fields["x_future_display"] = json!({"badge": "preserve-me", "revision": 7});
+    }
+    let mut event = client
+        .author_event(
+            realm_id,
+            "ak.strand.create",
+            json!({
+                "object": {
+                    "schema": "ak.schema.strand.v1",
+                    "realm_id": realm_id,
+                    "schema_refs": ["ak.schema.calendar_event.v1"],
+                    "metadata": {"title": title, "fields": fields},
+                    "tracks": {"synthesis": {"enabled": true, "is_primary": true}},
+                    "created_by": actor_for_station(&client.actor, client.service_id())?,
+                    "created_at": "2026-05-02T00:00:00.000Z"
+                }
+            }),
+        )
+        .await?;
+    // Strand creation time is the signed Event time. The product's default
+    // Strand fixture uses the same order: choose envelope clock, then sign.
+    let created_at = serde_json::to_value(&event)?["created_at"].clone();
     event
-        .producer_proof
-        .as_ref()
-        .map(|proof| proof.event_digest.to_string())
-        .ok_or_else(|| anyhow!("prepared Event carries no event digest"))
+        .payload
+        .get_mut("object")
+        .and_then(Value::as_object_mut)
+        .ok_or_else(|| anyhow!("Calendar Strand create has no object"))?
+        .insert("created_at".to_owned(), created_at);
+    let (seed, _) =
+        crate::harness::event_signing_identity_for_device(&client.actor, &client.device_id);
+    crate::harness::refresh_typed_event_proof_with_signing_seed(&mut event, seed)?;
+    let response = expect_json(
+        client
+            .post("/_arkret/self/events")
+            .json(&crate::publication::initial_submission(event.clone(), "")?),
+        StatusCode::OK,
+    )
+    .await?;
+    let commit = accepted_commit(&response)?;
+    ensure!(
+        commit.event_ref == event.event_id,
+        "Calendar Strand create changed Event identity"
+    );
+    assert_committed(client, realm_id, &event.event_id).await?;
+    Ok(response)
 }
 
 pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()> {
@@ -357,10 +364,8 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
             "ak:device:01904100-0000-7000-8000-0000000000c1",
         )
         .await?;
-    // This scenario covers RSVP lattice convergence, not the optional
-    // device-pairing handoff surface. Two independently authored client views
-    // of the same accepted device produce the concurrent actor branches
-    // without calling an operation the SUT does not advertise.
+    // Two views author before either RSVP is submitted. Their Commit positions,
+    // not any producer-side causal edge, select the current response.
     let alice_second_device = alice.clone();
     let bob = server
         .standard_register_client(
@@ -382,46 +387,16 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
         .as_str()
         .ok_or_else(|| anyhow!("realm create response has no realm_id"))?
         .to_owned();
-    // The product coordinator, not an operator endpoint, must publish the
-    // non-empty bootstrap Seal before a client authors its first ordinary Event.
-    let bootstrap_seal = wait_for_bootstrap_seal(&alice, &realm_id).await?;
-    alice.add_member(&realm_id, &bob).await?;
-    let member_seal = wait_for_next_seal(&alice, &realm_id, &bootstrap_seal).await?;
-    let calendar_grant_refs = grant_calendar_actions(&alice, &realm_id, &member_seal).await?;
-    let alice_grant_seal = current_seal(&alice, &realm_id).await?;
-    let bob_grant_refs =
-        grant_calendar_rsvp_to(&alice, &realm_id, bob_did, &alice_grant_seal).await?;
+    let realm_event = RealmId::new(realm_id.clone())?.event_id();
+    assert_committed(&alice, &realm_id, &realm_event).await?;
+    let joined = alice.add_member(&realm_id, &bob).await?;
+    assert_committed(&bob, &realm_id, &submitted_event_id(&joined)?).await?;
+    let _alice_grant = grant_calendar_actions(&alice, &realm_id).await?;
+    grant_calendar_rsvp_to(&alice, &realm_id, &bob).await?;
 
     // Activation is one canonical pair: the schema ref plus the calendar
     // namespace. A lone ref or a lone subtree is calendar_activation_mismatch.
-    let created = alice
-        .submit_event_with_causal_refs(
-            &realm_id,
-            "ak.strand.create",
-            json!({
-                "object": {
-                    "schema": "ak.schema.strand.v1",
-                    "realm_id": realm_id,
-                    "schema_refs": ["ak.schema.calendar_event.v1"],
-                    "metadata": {
-                        "title": "Weekly sync",
-                        "fields": {
-                            "calendar": calendar_subtree(alice_did, bob_did, alice.service_id())?,
-                            "x_future_display": {
-                                "badge": "preserve-me",
-                                "revision": 7
-                            }
-                        }
-                    },
-                    "tracks": {"synthesis": {"enabled": true, "is_primary": true}},
-                    "created_by": actor_for_station(alice_did, alice.service_id())?,
-                    "created_at": "2026-05-02T00:00:00.000Z"
-                }
-            }),
-            Vec::new(),
-            calendar_grant_refs.clone(),
-        )
-        .await?;
+    let created = create_calendar_strand(&alice, &realm_id, "Weekly sync", bob_did, true).await?;
     let strand_id = created_strand_id(&created)?;
     let projected = read_soland_product_projection_strand(&alice, &strand_id).await?;
     let preserved_display = json!({"badge": "preserve-me", "revision": 7});
@@ -431,13 +406,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
         ));
     }
 
-    let create_frontier = accepted_schedule_basis(&created)?;
-    if create_frontier.is_empty() {
-        return Err(anyhow!(
-            "calendar create must publish a schedule revision head; without it a client cannot \
-             author an RSVP at all"
-        ));
-    }
+    let create_basis = accepted_schedule_basis(&created)?;
 
     // Exercise a real schedule revision before RSVP authoring. Soland does not
     // claim the Calendar notification server profile: receiver-private DND,
@@ -445,7 +414,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
     // Calendar fanout correctly fails closed until an authorized minimal
     // policy projection exists.
     let updated = alice
-        .submit_event_with_causal_refs(
+        .submit_event(
             &realm_id,
             "ak.strand.update",
             json!({
@@ -470,42 +439,44 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
                     }
                 }
             }),
-            create_frontier,
-            calendar_grant_refs.clone(),
         )
         .await?;
-    let frontier = accepted_schedule_basis(&updated)?;
+    let schedule_basis = accepted_schedule_basis(&updated)?;
+    let create_commit =
+        assert_committed(&alice, &realm_id, &EventId::new(create_basis[0].clone())?).await?;
+    let update_commit = assert_committed(&alice, &realm_id, &submitted_event_id(&updated)?).await?;
+    ensure!(
+        update_commit.stream_position > create_commit.stream_position,
+        "schedule update did not advance the RealmCommit stream"
+    );
 
-    bob.submit_event_with_causal_refs(
-        &realm_id,
-        "ak.rsvp.set",
-        inkson_rsvp_payload(
+    let bob_response = bob
+        .submit_event(
             &realm_id,
-            &strand_id,
-            bob_did,
-            "accepted",
-            &frontier,
-            (alice_did, bob_did, alice.service_id()),
-        )?,
-        frontier.clone(),
-        bob_grant_refs,
-    )
-    .await?;
-    let bob_winner = winner_for(
+            "ak.rsvp.set",
+            inkson_rsvp_payload(
+                &realm_id,
+                &strand_id,
+                bob_did,
+                "accepted",
+                &schedule_basis,
+                (alice_did, bob_did, alice.service_id()),
+            )?,
+        )
+        .await?;
+    let bob_commit = accepted_commit(&bob_response)?;
+    assert_current_rsvp(
         &read_soland_product_projection_strand(&bob, &strand_id).await?,
         &actor_for_station(bob_did, bob.service_id())?,
-    )
-    .ok_or_else(|| anyhow!("Bob's RSVP has no deterministic winner"))?;
-    if winner_status(&bob_winner) != Some("accepted") {
-        return Err(anyhow!(
-            "Bob's RSVP did not materialize through the real reducer"
-        ));
-    }
+        &bob_commit.event_ref,
+        "accepted",
+        &schedule_basis,
+    )?;
 
-    // Both client views author before either submits, so the responses have
-    // the same actor frontier and neither can accidentally observe the other.
+    // Both responses are authored before either is submitted. The governing
+    // Station still assigns a strict RealmCommit order to their current writes.
     let first_event = alice
-        .author_event_with_causal_refs(
+        .author_event(
             &realm_id,
             "ak.rsvp.set",
             inkson_rsvp_payload(
@@ -513,15 +484,13 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
                 &strand_id,
                 alice_did,
                 "accepted",
-                &frontier,
+                &schedule_basis,
                 (alice_did, bob_did, alice.service_id()),
             )?,
-            frontier.clone(),
-            calendar_grant_refs.clone(),
         )
         .await?;
     let second_event = alice_second_device
-        .author_event_with_causal_refs(
+        .author_event(
             &realm_id,
             "ak.rsvp.set",
             inkson_rsvp_payload(
@@ -529,78 +498,55 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
                 &strand_id,
                 alice_did,
                 "declined",
-                &frontier,
+                &schedule_basis,
                 (alice_did, bob_did, alice.service_id()),
             )?,
-            frontier.clone(),
-            calendar_grant_refs.clone(),
         )
         .await?;
-    let first_digest = submit_prepared_event(&alice, &first_event).await?;
-    let second_digest = submit_prepared_event(&alice_second_device, &second_event).await?;
+    let first_commit = submit_prepared_event(&alice, &first_event).await?;
+    let second_commit = submit_prepared_event(&alice_second_device, &second_event).await?;
+    ensure!(
+        second_commit.stream_ref == first_commit.stream_ref
+            && second_commit.stream_position > first_commit.stream_position,
+        "concurrent RSVP candidates were not ordered by RealmCommit"
+    );
+    assert_current_rsvp(
+        &read_soland_product_projection_strand(&alice, &strand_id).await?,
+        &actor_for_station(alice_did, alice.service_id())?,
+        &second_event.event_id,
+        "declined",
+        &schedule_basis,
+    )?;
 
-    let strand = read_soland_product_projection_strand(&alice, &strand_id).await?;
-    let winner = winner_for(&strand, &actor_for_station(alice_did, alice.service_id())?)
-        .ok_or_else(|| anyhow!("concurrent responses have no deterministic winner"))?;
-    let expected_status =
-        if higher_event_id(&first_event, &second_event).event_id == first_event.event_id {
-            "accepted"
-        } else {
-            "declined"
-        };
-    if winner_status(&winner) != Some(expected_status) {
-        return Err(anyhow!(
-            "concurrent responses did not select the fixed (depth, EventId) winner"
-        ));
-    }
-
-    // A normal edit references the deterministic winner and therefore has a
-    // greater causal depth than both same-depth candidates.
-    let winning_digest = if expected_status == "accepted" {
-        first_digest.clone()
-    } else {
-        second_digest.clone()
-    };
-    let mut resolving_basis = frontier.clone();
-    resolving_basis.push(winning_digest);
-    resolving_basis.sort();
-    resolving_basis.dedup();
+    // A later response replaces the previous current without causal edges.
     let resolved = alice
-        .submit_event_with_causal_refs(
+        .submit_event(
             &realm_id,
             "ak.rsvp.set",
-            // The entry basis stays the schedule winner; the additional causal
-            // edge is the previous RSVP winner.
             inkson_rsvp_payload(
                 &realm_id,
                 &strand_id,
                 alice_did,
                 "tentative",
-                &frontier,
+                &schedule_basis,
                 (alice_did, bob_did, alice.service_id()),
             )?,
-            resolving_basis,
-            calendar_grant_refs.clone(),
         )
         .await?;
-    let resolved_digest = submitted_digest(&resolved)?;
+    let resolved_commit = accepted_commit(&resolved)?;
+    ensure!(resolved_commit.stream_position > second_commit.stream_position);
+    assert_current_rsvp(
+        &read_soland_product_projection_strand(&alice, &strand_id).await?,
+        &actor_for_station(alice_did, alice.service_id())?,
+        &resolved_commit.event_ref,
+        "tentative",
+        &schedule_basis,
+    )?;
 
-    let strand = read_soland_product_projection_strand(&alice, &strand_id).await?;
-    let winner = winner_for(&strand, &actor_for_station(alice_did, alice.service_id())?)
-        .ok_or_else(|| anyhow!("causal successor has no winner"))?;
-    if winner_status(&winner) != Some("tentative") {
-        return Err(anyhow!("the causal successor must become the winner"));
-    }
-
-    // Exchange device/arrival order for a second concurrent pair, replay the
-    // exact first Event, and verify neither arrival order nor idempotent replay
-    // changes the exposed causal-register winner.
-    let mut next_pair_basis = frontier.clone();
-    next_pair_basis.push(resolved_digest);
-    next_pair_basis.sort();
-    next_pair_basis.dedup();
+    // Reverse arrival order for the second pair. Exact replay of the earlier
+    // Commit cannot move the current back to its old value.
     let reverse_first = alice_second_device
-        .author_event_with_causal_refs(
+        .author_event(
             &realm_id,
             "ak.rsvp.set",
             inkson_rsvp_payload(
@@ -608,15 +554,13 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
                 &strand_id,
                 alice_did,
                 "accepted",
-                &frontier,
+                &schedule_basis,
                 (alice_did, bob_did, alice.service_id()),
             )?,
-            next_pair_basis.clone(),
-            calendar_grant_refs.clone(),
         )
         .await?;
     let reverse_second = alice
-        .author_event_with_causal_refs(
+        .author_event(
             &realm_id,
             "ak.rsvp.set",
             inkson_rsvp_payload(
@@ -624,42 +568,29 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
                 &strand_id,
                 alice_did,
                 "declined",
-                &frontier,
+                &schedule_basis,
                 (alice_did, bob_did, alice.service_id()),
             )?,
-            next_pair_basis,
-            calendar_grant_refs.clone(),
         )
         .await?;
-    let reverse_first_digest = submit_prepared_event(&alice_second_device, &reverse_first).await?;
-    let reverse_second_digest = submit_prepared_event(&alice, &reverse_second).await?;
-    submit_prepared_event(&alice_second_device, &reverse_first).await?;
-    let winner = winner_for(
+    let reverse_second_commit = submit_prepared_event(&alice, &reverse_second).await?;
+    let reverse_first_commit = submit_prepared_event(&alice_second_device, &reverse_first).await?;
+    ensure!(reverse_first_commit.stream_position > reverse_second_commit.stream_position);
+    let replay_commit = submit_prepared_event(&alice, &reverse_second).await?;
+    ensure!(
+        replay_commit == reverse_second_commit,
+        "exact replay changed RealmCommit"
+    );
+    assert_current_rsvp(
         &read_soland_product_projection_strand(&alice_second_device, &strand_id).await?,
         &actor_for_station(alice_did, alice.service_id())?,
-    )
-    .ok_or_else(|| anyhow!("reversed concurrent responses have no winner"))?;
-    let reverse_expected =
-        if higher_event_id(&reverse_first, &reverse_second).event_id == reverse_first.event_id {
-            "accepted"
-        } else {
-            "declined"
-        };
-    if winner_status(&winner) != Some(reverse_expected) {
-        return Err(anyhow!(
-            "reversed arrival plus exact replay changed the deterministic winner"
-        ));
-    }
-    let mut final_resolution_basis = frontier.clone();
-    final_resolution_basis.push(if reverse_expected == "accepted" {
-        reverse_first_digest
-    } else {
-        reverse_second_digest
-    });
-    final_resolution_basis.sort();
-    final_resolution_basis.dedup();
-    alice
-        .submit_event_with_causal_refs(
+        &reverse_first.event_id,
+        "accepted",
+        &schedule_basis,
+    )?;
+
+    let final_response = alice
+        .submit_event(
             &realm_id,
             "ak.rsvp.set",
             inkson_rsvp_payload(
@@ -667,31 +598,28 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
                 &strand_id,
                 alice_did,
                 "tentative",
-                &frontier,
+                &schedule_basis,
                 (alice_did, bob_did, alice.service_id()),
             )?,
-            final_resolution_basis,
-            calendar_grant_refs,
         )
         .await?;
-    let final_winner = winner_for(
+    let final_commit = accepted_commit(&final_response)?;
+    ensure!(final_commit.stream_position > reverse_first_commit.stream_position);
+    assert_current_rsvp(
         &read_soland_product_projection_strand(&alice, &strand_id).await?,
         &actor_for_station(alice_did, alice.service_id())?,
-    )
-    .ok_or_else(|| anyhow!("final RSVP has no winner"))?;
-    if winner_status(&final_winner) != Some("tentative") {
-        return Err(anyhow!(
-            "reversed arrival order must converge to the same causal successor"
-        ));
-    }
+        &final_commit.event_ref,
+        "tentative",
+        &schedule_basis,
+    )?;
 
     Ok(())
 }
 
-/// The same Calendar CBS cell must survive a real process restart and exact
+/// The same Calendar current value must survive a real process restart and exact
 /// Event replay. The scenario uses a throw-away Postgres when Docker is
 /// available; environments without either Postgres source report an explicit
-/// live-row skip while the always-on in-memory convergence scenario still runs.
+/// live-row skip while reducer unit tests still run.
 pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
     // `COTEST_SOLAND_DATABASE_URL` is an administrator connection, not a test
     // database: used directly, every run replays onto the previous run's rows
@@ -751,36 +679,15 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
         .as_str()
         .ok_or_else(|| anyhow!("realm create response has no realm_id"))?
         .to_owned();
-    let bootstrap_seal = wait_for_bootstrap_seal(&alice, &realm_id).await?;
-    let grants = grant_calendar_actions(&alice, &realm_id, &bootstrap_seal).await?;
-    let created = alice
-        .submit_event_with_causal_refs(
-            &realm_id,
-            "ak.strand.create",
-            json!({
-                "object": {
-                    "schema": "ak.schema.strand.v1",
-                    "realm_id": realm_id,
-                    "schema_refs": ["ak.schema.calendar_event.v1"],
-                    "metadata": {
-                        "title": "Durable weekly sync",
-                        "fields": {
-                            "calendar": calendar_subtree(alice_did, bob_did, alice.service_id())?,
-                            "x_future_display": {
-                                "badge": "preserve-me",
-                                "revision": 7
-                            }
-                        }
-                    },
-                    "tracks": {"synthesis": {"enabled": true, "is_primary": true}},
-                    "created_by": actor_for_station(alice_did, alice.service_id())?,
-                    "created_at": "2026-05-02T00:00:00.000Z"
-                }
-            }),
-            Vec::new(),
-            grants.clone(),
-        )
-        .await?;
+    assert_committed(
+        &alice,
+        &realm_id,
+        &RealmId::new(realm_id.clone())?.event_id(),
+    )
+    .await?;
+    let alice_grant = grant_calendar_actions(&alice, &realm_id).await?;
+    let created =
+        create_calendar_strand(&alice, &realm_id, "Durable weekly sync", bob_did, true).await?;
     let strand_id = created_strand_id(&created)?;
     let preserved_display = json!({"badge": "preserve-me", "revision": 7});
     let projected = read_soland_product_projection_strand(&alice, &strand_id).await?;
@@ -789,9 +696,9 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
             "unknown namespaced display metadata was lost on decode/store/read: {projected}"
         ));
     }
-    let frontier = accepted_schedule_basis(&created)?;
+    let schedule_basis = accepted_schedule_basis(&created)?;
     let accepted = alice
-        .author_event_with_causal_refs(
+        .author_event(
             &realm_id,
             "ak.rsvp.set",
             inkson_rsvp_payload(
@@ -799,15 +706,13 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
                 &strand_id,
                 alice_did,
                 "accepted",
-                &frontier,
+                &schedule_basis,
                 (alice_did, bob_did, alice.service_id()),
             )?,
-            frontier.clone(),
-            grants.clone(),
         )
         .await?;
     let declined = alice_second_device
-        .author_event_with_causal_refs(
+        .author_event(
             &realm_id,
             "ak.rsvp.set",
             inkson_rsvp_payload(
@@ -815,29 +720,21 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
                 &strand_id,
                 alice_did,
                 "declined",
-                &frontier,
+                &schedule_basis,
                 (alice_did, bob_did, alice.service_id()),
             )?,
-            frontier.clone(),
-            grants.clone(),
         )
         .await?;
-    let accepted_digest = submit_prepared_event(&alice, &accepted).await?;
-    let declined_digest = submit_prepared_event(&alice_second_device, &declined).await?;
-    let expected_status = if higher_event_id(&accepted, &declined).event_id == accepted.event_id {
-        "accepted"
-    } else {
-        "declined"
-    };
-    let before_restart = winner_for(
+    let accepted_realm_commit = submit_prepared_event(&alice, &accepted).await?;
+    let declined_commit = submit_prepared_event(&alice_second_device, &declined).await?;
+    ensure!(declined_commit.stream_position > accepted_realm_commit.stream_position);
+    assert_current_rsvp(
         &read_soland_product_projection_strand(&alice, &strand_id).await?,
         &actor_for_station(alice_did, alice.service_id())?,
-    );
-    if before_restart.as_ref().and_then(winner_status) != Some(expected_status) {
-        return Err(anyhow!(
-            "pre-restart Calendar cell did not expose the deterministic winner"
-        ));
-    }
+        &declined.event_id,
+        "declined",
+        &schedule_basis,
+    )?;
 
     assert_realm_identity(&alice, &realm_id).await?;
     server.kill_immediately().await?;
@@ -855,35 +752,33 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
             "unknown namespaced display metadata was lost across restart: {restarted_strand}"
         ));
     }
-    let winner = winner_for(
+    assert_current_rsvp(
         &restarted_strand,
         &actor_for_station(alice_did, alice.service_id())?,
+        &declined.event_id,
+        "declined",
+        &schedule_basis,
+    )?;
+    ensure!(
+        submit_prepared_event(&alice, &accepted).await? == accepted_realm_commit
+            && submit_prepared_event(&alice_second_device, &declined).await? == declined_commit,
+        "restart changed an exact replay's RealmCommit"
     );
-    if winner.as_ref().and_then(winner_status) != Some(expected_status) {
-        return Err(anyhow!(
-            "restart did not restore the deterministic RSVP winner: {restarted_strand}"
-        ));
-    }
-    submit_prepared_event(&alice, &accepted).await?;
-    submit_prepared_event(&alice_second_device, &declined).await?;
-    let replayed = winner_for(
+    assert_current_rsvp(
         &read_soland_product_projection_strand(&alice, &strand_id).await?,
         &actor_for_station(alice_did, alice.service_id())?,
-    );
-    if replayed.as_ref().and_then(winner_status) != Some(expected_status) {
-        return Err(anyhow!("post-restart exact replay changed the RSVP winner"));
-    }
+        &declined.event_id,
+        "declined",
+        &schedule_basis,
+    )?;
 
-    let mut resolution_basis = frontier.clone();
-    resolution_basis.push(if expected_status == "accepted" {
-        accepted_digest
-    } else {
-        declined_digest
-    });
-    resolution_basis.sort();
-    resolution_basis.dedup();
-    alice
-        .submit_event_with_causal_refs(
+    alice.remember_grant(
+        &realm_id,
+        &alice_grant,
+        &["ak.strand.create", "ak.rsvp.set"],
+    );
+    let resolved = alice
+        .submit_event(
             &realm_id,
             "ak.rsvp.set",
             inkson_rsvp_payload(
@@ -891,13 +786,13 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
                 &strand_id,
                 alice_did,
                 "tentative",
-                &frontier,
+                &schedule_basis,
                 (alice_did, bob_did, alice.service_id()),
             )?,
-            resolution_basis,
-            grants,
         )
         .await?;
+    let resolved_commit = accepted_commit(&resolved)?;
+    ensure!(resolved_commit.stream_position > declined_commit.stream_position);
     server.kill_immediately().await?;
     drop(server);
     let server =
@@ -905,28 +800,22 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
     let alice = server
         .standard_client(alice_did, "ak:device:01904100-0000-7000-8000-0000000000d1")
         .await?;
-    let winner = winner_for(
+    assert_current_rsvp(
         &read_soland_product_projection_strand(&alice, &strand_id).await?,
         &actor_for_station(alice_did, alice.service_id())?,
-    );
-    if winner.as_ref().and_then(winner_status) != Some("tentative") {
-        return Err(anyhow!(
-            "resolved RSVP cell did not survive the second restart"
-        ));
-    }
+        &resolved_commit.event_ref,
+        "tentative",
+        &schedule_basis,
+    )?;
 
     drop(ephemeral);
     Ok(())
 }
 
-/// An RSVP whose effect was stripped must not be accepted.
-///
-/// This is the concrete defect the closure review found in the client: the
-/// Event validated against the payload schema, so it looked fine, but it never
-/// reached `ak.component.calendar.rsvp.v1` and the response silently did not
-/// converge.
-pub async fn calendar_rsvp_without_cell_effect_is_rejected() -> Result<()> {
-    let server = ArkretServer::spawn("calendar-rsvp-effectless").await?;
+/// A signed RSVP with no schedule basis must be rejected before it can write
+/// the current result. A valid response for the same subject remains current.
+pub async fn calendar_rsvp_malformed_basis_is_rejected() -> Result<()> {
+    let server = ArkretServer::spawn("calendar-rsvp-malformed-basis").await?;
     let alice_did = actor_did_for_service_did(server.service_did(), ALICE_LOCAL)?;
     let bob_did = actor_did_for_service_did(server.service_did(), BOB_LOCAL)?;
     let alice_did = alice_did.as_str();
@@ -940,8 +829,8 @@ pub async fn calendar_rsvp_without_cell_effect_is_rejected() -> Result<()> {
         .await?;
     let created = alice
         .create_realm_with(json!({
-            "title": "RSVP effect contract",
-            "summary": "RSVP effect contract",
+            "title": "RSVP basis contract",
+            "summary": "RSVP basis contract",
             "public": false,
             "schema_refs": ["ak.schema.realm.v1"],
             "plaintext_visible_services": [alice.service_id()]
@@ -951,36 +840,19 @@ pub async fn calendar_rsvp_without_cell_effect_is_rejected() -> Result<()> {
         .as_str()
         .ok_or_else(|| anyhow!("realm create response has no realm_id"))?
         .to_owned();
-    let bootstrap_seal = wait_for_bootstrap_seal(&alice, &realm_id).await?;
-    let strand_grant_refs = grant_calendar_actions(&alice, &realm_id, &bootstrap_seal).await?;
-    let strand_created = alice
-        .submit_event_with_causal_refs(
-            &realm_id,
-            "ak.strand.create",
-            json!({
-                "object": {
-                    "schema": "ak.schema.strand.v1",
-                    "realm_id": realm_id,
-                    "schema_refs": ["ak.schema.calendar_event.v1"],
-                    "metadata": {
-                        "title": "Weekly sync",
-                        "fields": {"calendar": calendar_subtree(alice_did, bob_did, alice.service_id())?}
-                    },
-                    "tracks": {"synthesis": {"enabled": true, "is_primary": true}},
-                    "created_by": actor_for_station(alice_did, alice.service_id())?,
-                    "created_at": "2026-05-02T00:00:00.000Z"
-                }
-            }),
-            Vec::new(),
-            strand_grant_refs,
-        )
-        .await?;
+    assert_committed(
+        &alice,
+        &realm_id,
+        &RealmId::new(realm_id.clone())?.event_id(),
+    )
+    .await?;
+    let _alice_grant = grant_calendar_actions(&alice, &realm_id).await?;
+    let strand_created =
+        create_calendar_strand(&alice, &realm_id, "Weekly sync", bob_did, false).await?;
     let strand_id = created_strand_id(&strand_created)?;
-
-    let frontier = accepted_schedule_basis(&strand_created)?;
-
-    let event = alice
-        .author_event(
+    let schedule_basis = accepted_schedule_basis(&strand_created)?;
+    let valid = alice
+        .submit_event(
             &realm_id,
             "ak.rsvp.set",
             inkson_rsvp_payload(
@@ -988,24 +860,49 @@ pub async fn calendar_rsvp_without_cell_effect_is_rejected() -> Result<()> {
                 &strand_id,
                 alice_did,
                 "accepted",
-                &frontier,
+                &schedule_basis,
                 (alice_did, bob_did, alice.service_id()),
             )?,
         )
         .await?;
-    let submission = crate::publication::initial_submission(event, "")?;
-    let invalid_submission = arkret_test_kit::wire_negative_from_sdk(&submission, |body| {
-        body["event"]["effects"] = json!([]);
-    })?;
+    let valid_commit = accepted_commit(&valid)?;
+    let mut malformed_payload = inkson_rsvp_payload(
+        &realm_id,
+        &strand_id,
+        alice_did,
+        "declined",
+        &schedule_basis,
+        (alice_did, bob_did, alice.service_id()),
+    )?;
+    malformed_payload["entry"]["schedule_basis_refs"] = json!([]);
+    let event = alice
+        .author_event(&realm_id, "ak.rsvp.set", malformed_payload)
+        .await?;
     let response = alice
         .post("/_arkret/self/events")
-        .json(&invalid_submission)
+        .json(&crate::publication::initial_submission(event.clone(), "")?)
         .send()
         .await?;
-    if response.status() == StatusCode::OK {
-        return Err(anyhow!(
-            "an effect-less RSVP must not be accepted: it never reaches its CBS cell"
-        ));
-    }
+    let status = response.status();
+    let body = response.json::<Value>().await.unwrap_or(Value::Null);
+    ensure!(
+        status.is_client_error(),
+        "malformed RSVP basis was accepted: {status} {body}"
+    );
+    ensure!(
+        alice
+            .sdk()
+            .committed_event_get(&event.event_id)
+            .await
+            .is_err(),
+        "malformed RSVP acquired a RealmCommit"
+    );
+    assert_current_rsvp(
+        &read_soland_product_projection_strand(&alice, &strand_id).await?,
+        &actor_for_station(alice_did, alice.service_id())?,
+        &valid_commit.event_ref,
+        "accepted",
+        &schedule_basis,
+    )?;
     Ok(())
 }

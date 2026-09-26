@@ -4,8 +4,8 @@
 //! is therefore not evidence that another Arkret implementation must expose
 //! the same read endpoint.
 
-/// The live product coordinator must seal the bootstrap/control path without
-/// any privileged compaction or on-demand ordinary-Event signing.
+/// Signed RealmCommits order preauthored RSVP Events and select the current
+/// response by stream position.
 #[tokio::test(flavor = "multi_thread")]
 #[serial_test::serial]
 async fn calendar_rsvp_converges_across_concurrent_responses() {
@@ -16,8 +16,8 @@ async fn calendar_rsvp_converges_across_concurrent_responses() {
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial_test::serial]
-async fn calendar_rsvp_without_cell_effect_is_rejected() {
-    cotest::scenarios::calendar_rsvp_convergence::calendar_rsvp_without_cell_effect_is_rejected()
+async fn calendar_rsvp_malformed_basis_is_rejected() {
+    cotest::scenarios::calendar_rsvp_convergence::calendar_rsvp_malformed_basis_is_rejected()
         .await
         .unwrap();
 }
