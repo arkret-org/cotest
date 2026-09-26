@@ -326,6 +326,11 @@ pub fn realm_create_payload_for_station(
         .cloned()
         .map(serde_json::from_value)
         .transpose()?;
+    policy_bundle.allowed_third_party_invite_verification_ids = input
+        .get("allowed_third_party_invite_verification_ids")
+        .cloned()
+        .map(serde_json::from_value)
+        .transpose()?;
     policy_bundle.validate()?;
     let history_access =
         arkret_models_collaboration::governance::realm_lifecycle::HistoryAccessPayload::initialize(
