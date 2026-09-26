@@ -38,9 +38,53 @@ use url::Url;
 
 use crate::harness::{
     ArkretServer, ProvisionedTestPrincipal, TestActorClient, canonical_device_id, dev_login,
-    expect_json, register_account_via_dev_login, register_account_with_localpart_via_dev_login,
-    register_event_signing_identity,
+    expect_json, refresh_typed_event_proof_with_signing_seed, register_account_via_dev_login,
+    register_account_with_localpart_via_dev_login, register_event_signing_identity,
 };
+
+/// Establish Human kind from an accepted, holder-authored PCR ProfileCreate.
+/// Account registration and a Standard SessionGrant do not create this
+/// create-locked profile current result.
+pub(crate) async fn create_human_actor_profile(
+    client: &TestActorClient,
+    display_name: &str,
+) -> Result<()> {
+    let principal = client
+        .principal
+        .as_ref()
+        .context("the Human client carries its provisioned principal")?;
+    let mut event = client
+        .author_event(
+            principal.pcr_realm_id.as_str(),
+            arkret_wire::EventKind::ProfileCreate.as_str(),
+            json!({
+                "object": {
+                    "principal_id": principal.core_id,
+                    "actor_kind": "user",
+                    "display_name": display_name,
+                }
+            }),
+        )
+        .await?;
+    event.authorization_ref = None;
+    refresh_typed_event_proof_with_signing_seed(
+        &mut event,
+        principal.device_signing_key.to_bytes(),
+    )?;
+    let outcome = expect_json(
+        client
+            .post("/_arkret/self/account/profile")
+            .json(&json!({"profile_event": {"event": event}})),
+        StatusCode::OK,
+    )
+    .await?;
+    anyhow::ensure!(
+        outcome["profile"]["actor_kind"] == "user"
+            && outcome["commit"]["event_ref"] == event.event_id.as_str(),
+        "PCR Human ProfileCreate was not committed: {outcome}"
+    );
+    Ok(())
+}
 
 pub(crate) const HARNESS_ACCOUNT_AUTHORITY_KEY_SEED: [u8; 32] = [0xac; 32];
 pub(crate) const HARNESS_ACCOUNT_AUTHORITY_ORIGIN: &str = "https://account-authority.cotest.local";

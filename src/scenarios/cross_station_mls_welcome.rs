@@ -53,7 +53,9 @@ use crate::scenarios::human_device_producer_live::{
     create_realm_with_join_rule, database, ensure_commit_signed_by, grant_realm_actions,
     prepare_join, station_env, submit_and_expect_commit, wait_for_committed,
 };
-use crate::scenarios::identity_test_support::HARNESS_INTERNAL_AUTHORITY_SECRET;
+use crate::scenarios::identity_test_support::{
+    HARNESS_INTERNAL_AUTHORITY_SECRET, create_human_actor_profile,
+};
 use crate::scenarios::mls_lifecycle_live::{
     ACTIVE_SUITE, Member, accepted_full_view, canonical, claim_request_between, claim_request_to,
     claimed_keypackage_record, fresh_uuid_v7, json_equal, post_bytes_at, post_claim, post_json,
@@ -360,6 +362,8 @@ pub async fn cross_station_mls_welcome_run() -> Result<()> {
     let alice = Member::provision(x, &coauth, "xwelcome-alice", ALICE_DEVICE).await?;
     let bob = Member::provision(y, &coauth, "xwelcome-bob", BOB_DEVICE).await?;
     let carol = Member::provision(y, &coauth, "xwelcome-carol", CAROL_DEVICE).await?;
+    create_human_actor_profile(&bob.client, "Bob Welcome").await?;
+    create_human_actor_profile(&carol.client, "Carol Welcome").await?;
     let dave = Member::provision(y, &coauth, "xwelcome-dave", DAVE_DEVICE).await?;
     let realm =
         create_realm_with_join_rule(&alice.client, "Cross-Station Welcome", "invite", &[x, y])

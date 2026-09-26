@@ -14,7 +14,7 @@ use crate::harness::{
     TestActorClient, actor_core_id, expect_api_error, expect_json, expect_status,
 };
 use crate::scenarios::identity_test_support::{
-    actor_did_for_service_did, spawn_with_standard_grant_authority,
+    actor_did_for_service_did, create_human_actor_profile, spawn_with_standard_grant_authority,
 };
 
 pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
@@ -43,6 +43,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
             )
             .await?,
     )?;
+    create_human_actor_profile(&bob, "Bob Authz").await?;
     let bob_core_id = actor_core_id(&bob.actor)?;
     let realm_id = alice.create_realm("Grant Lifecycle Realm").await?;
 
@@ -74,6 +75,66 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
         .grant_realm_actions_to(&realm_id, &bob.actor, &["ak.realm.admin"])
         .await?;
     assert_eq!(manage_grant["status"], "committed");
+
+    // Human kind comes from Bob's accepted PCR profile above. A regular
+    // high-risk Realm admin grant may be indefinite, while the broadcast
+    // action's registry entry requires a finite global grant lifetime for
+    // every subject.
+    let issued_at = chrono::Utc::now();
+    let mut broadcast_grant = serde_json::json!({
+        "schema": "ak.schema.capability.v1",
+        "realm_id": realm_id,
+        "issuer_id": account_actor(&alice, &actor_core_id(&alice.actor)?)?,
+        "subject": account_actor(&bob, &bob_core_id)?,
+        "actions": ["ak.message.mention.broadcast"],
+        "resources": [{"kind":"realm", "realm_id":realm_id, "match_scope":"realm_wide"}],
+        "constraints": [{
+            "constraint_kind":"quota",
+            "effect":"allow",
+            "max_operations":5,
+            "period":"PT1H",
+            "constraint_scope":"per_realm"
+        }],
+        "issuer_authority_refs": [{
+            "kind":"realm_root",
+            "realm_id":realm_id,
+            "authority_event_ref": RealmId::new(realm_id.clone())?.event_id(),
+            "authority_generation":0
+        }],
+        "issued_at": issued_at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+    });
+    let missing_expiry = alice
+        .author_event(
+            &realm_id,
+            arkret_wire::EventKind::CapabilityGrant.as_str(),
+            serde_json::json!({"grant": broadcast_grant.clone()}),
+        )
+        .await?;
+    expect_api_error(
+        alice
+            .post("/_arkret/self/events")
+            .json(&crate::publication::initial_submission(missing_expiry, "")?),
+        StatusCode::CONFLICT,
+        "failed_precondition",
+    )
+    .await?;
+    broadcast_grant["constraints"]
+        .as_array_mut()
+        .expect("broadcast grant constraints")
+        .push(serde_json::json!({
+            "constraint_kind":"temporal",
+            "effect":"allow",
+            "expires_at": (issued_at + chrono::Duration::days(1))
+                .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+        }));
+    let broadcast = alice
+        .submit_event(
+            &realm_id,
+            arkret_wire::EventKind::CapabilityGrant.as_str(),
+            serde_json::json!({"grant": broadcast_grant}),
+        )
+        .await?;
+    assert_eq!(broadcast["status"], "committed");
 
     let subject_actor_id = account_actor(&bob, &bob_core_id)?.to_string();
     let effective_grants = expect_json(

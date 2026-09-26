@@ -46,7 +46,9 @@ use crate::scenarios::human_device_producer_live::{
     ensure_same_commit, grant_realm_actions, prepare_join, standard_client, station_env,
     submit_and_expect_commit, wait_for_committed,
 };
-use crate::scenarios::identity_test_support::HARNESS_INTERNAL_AUTHORITY_SECRET;
+use crate::scenarios::identity_test_support::{
+    HARNESS_INTERNAL_AUTHORITY_SECRET, create_human_actor_profile,
+};
 use crate::scenarios::mls_lifecycle_live::upload_public_blob;
 
 const GROUP: &str = "cross-station-mls-genesis";
@@ -167,6 +169,7 @@ pub async fn cross_station_mls_genesis_run() -> Result<()> {
     let (alice, _) = standard_client(governance, &coauth, "xgenesis-alice", ALICE_DEVICE).await?;
     let (bob, bob_account) =
         standard_client(member_station, &coauth, "xgenesis-bob", BOB_DEVICE).await?;
+    create_human_actor_profile(&bob, "Bob Genesis").await?;
     let realm = create_realm_with_join_rule(
         &alice,
         "Cross-Station Genesis",
