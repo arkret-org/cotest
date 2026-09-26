@@ -32,6 +32,8 @@ use arkret_models_collaboration::agent_scope::AgentRequestedScopeDisclosure;
 use arkret_models_collaboration::events_payloads::agent::{
     AgentKeyApprovalEvidence, AgentKeyApprovalEvidenceKind, AgentKeyAuthorizePayload, AgentKeyScope,
 };
+use arkret_models_collaboration::governance::agent_membership_cascade::AgentControllerMembershipBinding;
+use arkret_models_collaboration::governance::membership_invite::MembershipPayload;
 use arkret_models_crypto::{
     KeyPackagesClaimRequestBody, KeyPackagesUploadOutcome, MlsEndpointIdentity,
 };
@@ -935,6 +937,8 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
         ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_CLAIM_V1,
         ServiceOperationId::SELF_KEYS_KEYPACKAGES_READ_CLAIM_V1,
         ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_CONSUME_V1,
+        ServiceOperationId::SELF_DEVICE_MESSAGES_READ_LIST_V1,
+        ServiceOperationId::SELF_DEVICE_MESSAGES_COMMAND_ACK_V1,
     ];
     let agent = AgentRuntimeSession::establish_with_operations(
         station,
@@ -953,6 +957,7 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
         ArkretMlsSigner::from_ed25519_signing_key(agent.runtime_key.clone()),
     )?;
     let keypackage = identity.key_package_record()?;
+    let add_keypackage = identity.key_package_record()?;
     let snapshot_file = tempfile::NamedTempFile::new()?;
     std::fs::write(snapshot_file.path(), identity.export_private_state()?)?;
     let restored = ArkretMlsIdentity::restore_from_private_state(
@@ -965,7 +970,7 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
         &std::fs::read(snapshot_file.path())?,
     )?;
     let upload = restored.signed_key_packages_upload_request(
-        std::slice::from_ref(&keypackage),
+        &[keypackage.clone(), add_keypackage.clone()],
         agent.verification_method.as_str(),
         None,
     )?;
@@ -980,8 +985,13 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
         .await?,
     )?;
     ensure!(
-        outcome.accepted == 1
-            && outcome.key_package_refs == vec![keypackage.keypackage_ref.to_string()],
+        outcome.accepted == 2
+            && outcome
+                .key_package_refs
+                .contains(&keypackage.keypackage_ref.to_string())
+            && outcome
+                .key_package_refs
+                .contains(&add_keypackage.keypackage_ref.to_string()),
         "Agent KeyPackage was not published: {outcome:?}"
     );
     let mut wrong_branch = serde_json::to_value(&upload)?;
@@ -1083,6 +1093,472 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
     ensure!(
         rejected_status == StatusCode::FORBIDDEN,
         "Agent claimed into an unjoined Realm: {rejected_status} {rejected_body}",
+    );
+
+    // A controller already joined to an ordinary Realm can author the
+    // Agent's explicit membership Event with the exact controller generation.
+    let created = controller
+        .create_realm_with(json!({
+            "title": "Agent membership admission",
+            "summary": "Agent membership admission",
+            "public": false,
+            "join_rule": "public",
+            "plaintext_visible_services": [station.service_id()]
+        }))
+        .await?;
+    let joined_realm = RealmId::new(
+        created["realm_id"]
+            .as_str()
+            .context("created Realm id")?
+            .to_owned(),
+    )?;
+    let controller_generation = EventId::new(
+        created["event_response"]["commits"]
+            .as_array()
+            .and_then(|commits| commits.last())
+            .and_then(|commit| commit["event_ref"].as_str())
+            .context("creator join Commit event ref")?
+            .to_owned(),
+    )?;
+    let mut agent_join = MembershipPayload::join(
+        joined_realm.clone(),
+        ActorId::account(agent.agent_account.clone()),
+        "controller joins its active Agent",
+    );
+    agent_join.agent_controller_binding = Some(AgentControllerMembershipBinding {
+        controller_account_id: controller_account.clone(),
+        controller_membership_generation_ref: controller_generation,
+        controller_terminal_event_ref: None,
+    });
+    let mut wrong_controller = agent_join.clone();
+    wrong_controller
+        .agent_controller_binding
+        .as_mut()
+        .context("Agent join binding")?
+        .controller_account_id = agent.agent_account.clone();
+    let forged = controller
+        .author_event(
+            joined_realm.as_str(),
+            "ak.member.state",
+            wrong_controller.to_value()?,
+        )
+        .await?;
+    let refused = controller
+        .post("/_arkret/self/events")
+        .header("content-type", "application/json")
+        .body(arkret_canonical::canonical_json_bytes(
+            &crate::publication::initial_submission(forged, "")?,
+        )?)
+        .send()
+        .await?;
+    let status = refused.status();
+    let body = refused.text().await?;
+    ensure!(
+        matches!(status, StatusCode::FORBIDDEN | StatusCode::CONFLICT)
+            && (body.contains("agent_controller_binding_invalid") || body.contains("controller")),
+        "wrong controller admitted an Agent join: {status} {body}"
+    );
+    let mut wrong_generation = agent_join.clone();
+    wrong_generation
+        .agent_controller_binding
+        .as_mut()
+        .context("Agent join binding")?
+        .controller_membership_generation_ref = EventId::new(
+        created["event_response"]["commits"][0]["event_ref"]
+            .as_str()
+            .context("Realm create Event ref")?
+            .to_owned(),
+    )?;
+    let forged = controller
+        .author_event(
+            joined_realm.as_str(),
+            "ak.member.state",
+            wrong_generation.to_value()?,
+        )
+        .await?;
+    let refused = controller
+        .post("/_arkret/self/events")
+        .header("content-type", "application/json")
+        .body(arkret_canonical::canonical_json_bytes(
+            &crate::publication::initial_submission(forged, "")?,
+        )?)
+        .send()
+        .await?;
+    let status = refused.status();
+    let body = refused.text().await?;
+    ensure!(
+        matches!(status, StatusCode::FORBIDDEN | StatusCode::CONFLICT)
+            && (body.contains("agent_controller_binding_invalid")
+                || body.contains("bound joined generation")),
+        "wrong controller generation admitted an Agent join: {status} {body}"
+    );
+    let join_event = controller
+        .author_event(
+            joined_realm.as_str(),
+            "ak.member.state",
+            agent_join.to_value()?,
+        )
+        .await?;
+    let joined: AuthoritySubmitOutcome = serde_json::from_value(
+        expect_json(
+            controller
+                .post("/_arkret/self/events")
+                .header("content-type", "application/json")
+                .body(arkret_canonical::canonical_json_bytes(
+                    &crate::publication::initial_submission(join_event.clone(), "")?,
+                )?),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    ensure!(
+        matches!(joined, AuthoritySubmitOutcome::Accepted {
+            status: AuthorityCommitStatus::Committed,
+            commit,
+        } if commit.event_ref == join_event.event_id),
+        "controller's Agent join was not committed"
+    );
+    claim.claim_request_id = arkret_wire::Base64UrlString::new(
+        URL_SAFE_NO_PAD.encode(&arkret_canonical::sha256_bytes(unique_uuid7().as_bytes())[..16]),
+    )
+    .map_err(anyhow::Error::msg)?;
+    claim.intended_realm_id = joined_realm.clone();
+    claim.mls_group_id = ScopeRef::Realm {
+        realm_id: joined_realm.clone(),
+    }
+    .canonical_mls_group_id()?;
+    let signing_input = arkret_models_crypto::keypackage_claim_authorization_signing_bytes(
+        &claim.unsigned_request(),
+        &claim.service_binding,
+        &claim.requester_authorization,
+    )?;
+    let arkret_models_crypto::PeerKeyPackageRequesterAuthorization::Agent { signature, .. } =
+        &mut claim.requester_authorization
+    else {
+        unreachable!("the fixture builds an Agent claim")
+    };
+    signature.sig = arkret_wire::Base64UrlString::new(
+        URL_SAFE_NO_PAD.encode(agent.runtime_key.sign(&signing_input).to_bytes()),
+    )
+    .map_err(anyhow::Error::msg)?;
+    let claimed = agent
+        .runtime
+        .post("/_arkret/self/keys/keypackages/claim")
+        .header("content-type", "application/json")
+        .body(arkret_canonical::canonical_json_bytes(&claim)?)
+        .send()
+        .await?;
+    let claim_status = claimed.status();
+    let claim_body = claimed.text().await?;
+    ensure!(
+        claim_status == StatusCode::OK,
+        "joined Agent self-claim was refused: {claim_status} {claim_body}"
+    );
+
+    // The joined controller claims another Agent KeyPackage for an MLS Add.
+    // Its signed authorization and target are distinct from the Agent's
+    // earlier self claim, while both point at the same accepted binding.
+    let controller_principal = controller
+        .principal
+        .as_ref()
+        .context("controller carries its provisioned principal")?;
+    let controller_method = DidUrl::new(format!(
+        "{}#{}",
+        controller_principal.did, controller_principal.device_id
+    ))
+    .map_err(anyhow::Error::msg)?;
+    let mut controller_claim = claim.clone();
+    controller_claim.claim_request_id = arkret_wire::Base64UrlString::new(
+        URL_SAFE_NO_PAD.encode(&arkret_canonical::sha256_bytes(unique_uuid7().as_bytes())[..16]),
+    )
+    .map_err(anyhow::Error::msg)?;
+    controller_claim.target_keypackage_ref = Some(serde_json::from_value(json!(
+        add_keypackage.keypackage_ref
+    ))?);
+    controller_claim.requester_account_id = Some(controller_account.clone());
+    controller_claim.requester_authorization = serde_json::from_value(json!({
+        "kind": "device",
+        "verification_method": controller_method,
+        "requester_device_id": controller_principal.device_id,
+        "device_authorize_event_id": controller_principal.founding_authorize_event_id,
+        "signed_at": arkret_canonical::format_timestamp_canonical(Utc::now()),
+        "signature": {
+            "kid": controller_method,
+            "signature_algorithm": "Ed25519",
+            "sig": "AA"
+        }
+    }))?;
+    let signing_input = arkret_models_crypto::keypackage_claim_authorization_signing_bytes(
+        &controller_claim.unsigned_request(),
+        &controller_claim.service_binding,
+        &controller_claim.requester_authorization,
+    )?;
+    let arkret_models_crypto::PeerKeyPackageRequesterAuthorization::Device { signature, .. } =
+        &mut controller_claim.requester_authorization
+    else {
+        unreachable!("the fixture builds a Device claim")
+    };
+    signature.sig = arkret_wire::Base64UrlString::new(
+        URL_SAFE_NO_PAD.encode(
+            controller_principal
+                .device_signing_key
+                .sign(&signing_input)
+                .to_bytes(),
+        ),
+    )
+    .map_err(anyhow::Error::msg)?;
+    let (status, response) =
+        crate::scenarios::mls_lifecycle_live::post_claim(&controller, &controller_claim).await?;
+    ensure!(
+        status == StatusCode::OK,
+        "joined controller could not claim Agent KeyPackage: {status} {}",
+        String::from_utf8_lossy(&response)
+    );
+    let outcome: arkret_models_crypto::KeyPackagesClaimOutcome = serde_json::from_slice(&response)?;
+    ensure!(
+        outcome.claims.len() == 1,
+        "controller claim selected an unexpected set: {outcome:?}"
+    );
+    let add_claim = outcome.claims[0].clone();
+    ensure!(
+        add_claim.agent_id.as_ref() == Some(&agent.agent_account.principal_id)
+            && add_claim.agent_verification_method.as_ref() == Some(&agent.verification_method)
+            && add_claim.agent_key_authorize_event_id.as_ref() == Some(&agent.key_authorization)
+            && add_claim.keypackage_ref == add_keypackage.keypackage_ref.to_string(),
+        "controller claim did not select the Agent's exact accepted key binding: {add_claim:?}"
+    );
+
+    let scope = ScopeRef::Realm {
+        realm_id: joined_realm.clone(),
+    };
+    let controller_identity = ArkretMlsIdentity::new_human_device(
+        ActorId::account(controller_account.clone()),
+        controller_principal.device_id.clone(),
+        ArkretMlsSigner::from_ed25519_signing_key(controller_principal.device_signing_key.clone()),
+    )?;
+    let genesis_binding = arkret::MlsGovernanceBindingPayload::new(scope.clone(), None, 0, 0, 0)?;
+    let mut controller_group =
+        controller_identity.create_group_with_governance_binding(&scope, &genesis_binding)?;
+    let (group_info, tree) = controller_group.public_group_state_bytes()?;
+    let group_info_ref = crate::scenarios::mls_lifecycle_live::upload_public_blob(
+        &controller,
+        &joined_realm,
+        &group_info,
+    )
+    .await?;
+    let tree_ref =
+        crate::scenarios::mls_lifecycle_live::upload_public_blob(&controller, &joined_realm, &tree)
+            .await?;
+    let genesis = controller
+        .author_event(
+            joined_realm.as_str(),
+            "ak.mls.genesis",
+            crate::scenarios::mls_lifecycle_live::canonical(json!({
+                "cipher_suite": crate::scenarios::mls_lifecycle_live::ACTIVE_SUITE,
+                "group_info_ref": group_info_ref,
+                "ratchet_tree_ref": tree_ref,
+                "governance_binding": genesis_binding,
+                "created_at": arkret_canonical::format_timestamp_canonical(Utc::now()),
+            }))?,
+        )
+        .await?;
+    crate::scenarios::human_device_producer_live::submit_and_expect_commit(
+        &controller,
+        &controller_account,
+        CONTROLLER_DEVICE,
+        &genesis,
+    )
+    .await?;
+
+    let add_binding = arkret::MlsGovernanceBindingPayload::new(
+        scope.clone(),
+        Some(genesis.event_id.clone()),
+        0,
+        1,
+        0,
+    )?;
+    let mut add_record = add_keypackage.clone();
+    add_record.keypackage = add_claim.keypackage.clone();
+    add_record.keypackage_ref = arkret_wire::Hash::new(add_claim.keypackage_ref.clone())?;
+    add_record.capabilities = add_claim.capabilities.clone();
+    add_record.state = arkret_models_crypto::MlsKeyPackageState::Claimed;
+    add_record.claim_id = Some(add_claim.claim_id.clone());
+    add_record.expires_at = Some(add_claim.expires_at);
+    let add = controller_group.add_member_with_governance_binding(&add_record, &add_binding)?;
+    let commit_payload =
+        arkret::MlsCommitPayload::new(genesis.event_id.clone(), 0, &add.commit, add_binding)?;
+    let commit_event = controller
+        .author_event(
+            joined_realm.as_str(),
+            "ak.mls.commit",
+            crate::scenarios::mls_lifecycle_live::canonical(serde_json::to_value(
+                &commit_payload,
+            )?)?,
+        )
+        .await?;
+    let mut welcome = arkret_wire::MlsWelcomeDelivery {
+        welcome_id: arkret_wire::MlsWelcomeDeliveryId::new_v7_at(
+            u64::try_from(Utc::now().timestamp_millis()).unwrap_or_default(),
+        ),
+        realm_id: joined_realm.clone(),
+        effective_scope: scope.clone(),
+        commit_event_ref: commit_event.event_id.clone(),
+        recipient_actor_id: ActorId::account(agent.agent_account.clone()),
+        recipient_endpoint: arkret_wire::MlsWelcomeRecipientEndpoint::AgentRuntime {
+            verification_method: agent.verification_method.clone(),
+        },
+        keypackage_claim_ref: add.welcome.keypackage_claim_ref.clone(),
+        ciphertext_b64: add.welcome.ciphertext_b64.clone(),
+        producer_proof: arkret_wire::DetachedObjectSignature {
+            context: arkret_wire::DetachedSignatureContext::MlsWelcomeDelivery,
+            signature_algorithm: arkret_wire::DetachedSignatureAlgorithm::Ed25519,
+            verification_method: controller_method.clone(),
+            signed_digest: arkret_wire::Hash::new(format!("sha256:{}", "0".repeat(64)))?,
+            created_at: Utc::now(),
+            sig: arkret_wire::Base64UrlString::new("AA".to_owned()).map_err(anyhow::Error::msg)?,
+        },
+    };
+    let mut unsigned = serde_json::to_value(&welcome)?;
+    unsigned
+        .as_object_mut()
+        .context("Welcome is an object")?
+        .remove("producer_proof");
+    welcome.producer_proof = arkret_signatures::detached_object::sign_detached_object(
+        &unsigned,
+        arkret_wire::DetachedSignatureContext::MlsWelcomeDelivery,
+        controller_method,
+        arkret_canonical::normalize_timestamp_canonical(Utc::now()),
+        &controller_principal.device_signing_key,
+    )?;
+    welcome.validate_shape()?;
+    let submission =
+        arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest::MlsCommit(
+            arkret_wire::MlsCommitSubmission {
+                commit_event: commit_event.clone(),
+                welcomes: vec![welcome.clone()],
+                idempotency_key: arkret_wire::UuidV7::new(unique_uuid7().parse()?)?,
+            },
+        );
+    submission.validate()?;
+    let (status, result) =
+        crate::scenarios::mls_lifecycle_live::post_json(&controller, &submission).await?;
+    ensure!(
+        status == StatusCode::OK,
+        "Agent Add Commit refused: {status} {result}"
+    );
+    let result: AuthoritySubmitOutcome = serde_json::from_value(result)?;
+    ensure!(
+        matches!(result, AuthoritySubmitOutcome::Accepted { status: AuthorityCommitStatus::Committed, commit } if commit.event_ref == commit_event.event_id),
+        "Agent Add Commit was not committed"
+    );
+    let accepted = crate::scenarios::mls_lifecycle_live::accepted_full_view(
+        &controller,
+        &commit_event.event_id,
+    )
+    .await?;
+    let base = arkret_wire::MlsGroupCurrent {
+        effective_scope: scope,
+        genesis_event_ref: genesis.event_id.clone(),
+        current_mls_commit_event_ref: genesis.event_id.clone(),
+        epoch: 0,
+        current_key_access_revision: 0,
+        covered_key_access_revision: 0,
+        public_tree_ref: arkret_wire::BlobRef::new(tree_ref)?,
+    };
+    ensure!(
+        controller_group.install_accepted_commit(&accepted, &base)? == 1,
+        "controller Add Commit not installed"
+    );
+    let (queued, ack_token) =
+        crate::scenarios::mls_lifecycle_live::recipient_welcomes(&agent.runtime).await?;
+    ensure!(
+        queued == vec![welcome.clone()],
+        "Agent queue did not receive exact Welcome: {queued:?}"
+    );
+    let agent_group =
+        arkret::ArkretMlsGroup::join_from_verified_welcome_delivery(restored, &welcome, &accepted)?;
+    ensure!(agent_group.epoch() == 1, "Agent did not install epoch 1");
+    agent
+        .runtime
+        .post("/_arkret/self/device_messages/ack")
+        .json(
+            &arkret_models_collaboration::device_messages::DeviceMessagesAckRequestBody {
+                ack_token,
+            },
+        )
+        .send()
+        .await?
+        .error_for_status()?;
+
+    let receipt = arkret_models_crypto::RecipientMlsDurableReceipt {
+        domain: arkret_wire::NonEmptyString::new(
+            arkret_wire::DomainSeparationId::MLS_RECIPIENT_DURABLE_RECEIPT_V1.to_owned(),
+        )
+        .map_err(anyhow::Error::msg)?,
+        claim_request_id: controller_claim.claim_request_id.clone(),
+        key_package_ref: arkret_wire::NonEmptyString::new(add_claim.keypackage_ref.clone())
+            .map_err(anyhow::Error::msg)?,
+        recipient: arkret_models_crypto::RecipientMlsDurableSigner::Agent {
+            recipient_agent_id: agent.agent_account.principal_id.clone(),
+            recipient_agent_verification_method: agent.verification_method.clone(),
+            agent_key_authorize_event_id: agent.key_authorization.clone(),
+        },
+        recipient_id: station.service_id().clone(),
+        realm_id: joined_realm,
+        mls_group_id: controller_claim.mls_group_id.clone(),
+        mls_epoch: 1,
+        welcome_ref: welcome.welcome_id.clone(),
+        welcome_digest: welcome.durable_receipt_digest()?,
+        durable_at: Utc::now(),
+        signature: arkret_models_crypto::KeyOperationSignature {
+            kid: arkret_wire::NonEmptyString::new(agent.verification_method.to_string())
+                .map_err(anyhow::Error::msg)?,
+            signature_algorithm: None,
+            sig: arkret_wire::Base64UrlString::new("AA".to_owned()).map_err(anyhow::Error::msg)?,
+        },
+    };
+    let mut wrong_binding = receipt.clone();
+    wrong_binding.claim_request_id = claim.claim_request_id.clone();
+    let wrong_binding = identity.sign_recipient_mls_durable_receipt(wrong_binding)?;
+    let wrong_consume = identity.signed_key_packages_consume_request(
+        arkret_wire::KeypackageClaimId::new(add_claim.claim_id.clone())?,
+        wrong_binding,
+    )?;
+    let (status, result) = crate::scenarios::mls_lifecycle_live::post_json_at(
+        &agent.runtime,
+        "/_arkret/self/keys/keypackages/consume",
+        &wrong_consume,
+    )
+    .await?;
+    ensure!(
+        matches!(status, StatusCode::CONFLICT | StatusCode::FORBIDDEN),
+        "Agent consume accepted another claim's receipt binding: {status} {result}"
+    );
+
+    let receipt = identity.sign_recipient_mls_durable_receipt(receipt)?;
+    let consume = identity.signed_key_packages_consume_request(
+        arkret_wire::KeypackageClaimId::new(add_claim.claim_id.clone())?,
+        receipt,
+    )?;
+    let (status, result) = crate::scenarios::mls_lifecycle_live::post_json_at(
+        &controller,
+        "/_arkret/self/keys/keypackages/consume",
+        &consume,
+    )
+    .await?;
+    ensure!(
+        matches!(status, StatusCode::FORBIDDEN | StatusCode::NOT_FOUND),
+        "the controller consumed its Agent's KeyPackage claim: {status} {result}"
+    );
+    let (status, result) = crate::scenarios::mls_lifecycle_live::post_json_at(
+        &agent.runtime,
+        "/_arkret/self/keys/keypackages/consume",
+        &consume,
+    )
+    .await?;
+    ensure!(
+        status == StatusCode::OK,
+        "Agent durable consume refused: {status} {result}"
     );
     Ok(())
 }
