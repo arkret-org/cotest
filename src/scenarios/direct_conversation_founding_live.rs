@@ -30,6 +30,8 @@
 //! Every refusal is the closed `{status="rejected",reason_code}` outcome and
 //! leaves no committed Event.
 
+use std::time::{Duration, Instant};
+
 use anyhow::{Context as _, Result, bail, ensure};
 use arkret::{ArkretMlsGroup, MlsCommitPayload, MlsGovernanceBindingPayload};
 use arkret_models_collaboration::authority_commit::{
@@ -40,7 +42,9 @@ use arkret_models_collaboration::authority_commit::{
 use arkret_models_collaboration::device_messages::DeviceMessagesAckRequestBody;
 use arkret_models_collaboration::direct_conversation::DirectConversationFoundingPlan;
 use arkret_models_collaboration::events_payloads::direct_conversation::DirectConversationBoundPayload;
+use arkret_models_collaboration::governance::invite_addressing::PrincipalLocator;
 use arkret_models_collaboration::governance::membership_invite::MembershipPayloadState;
+use arkret_models_collaboration::governance::peer_contact::ContactIntroductionEvidence;
 use arkret_models_collaboration::objects::direct_conversation::{
     DirectConversationAuthorizationBasis, DirectConversationPairKeyParticipant,
     direct_conversation_main_strand_create_payload, direct_conversation_member_join_payload,
@@ -60,12 +64,12 @@ use crate::harness::{TestServerGroup, expect_json};
 use crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
 use crate::scenarios::_helpers::live_gate::skip_or_fail;
 use crate::scenarios::human_device_producer_live::{
-    database, membership_payload, standard_client, station_env,
+    database, membership_payload, standard_client, station_env, wait_for_committed,
 };
 use crate::scenarios::identity_test_support::HARNESS_INTERNAL_AUTHORITY_SECRET;
 use crate::scenarios::mls_lifecycle_live::{
     ACTIVE_SUITE, Member, accepted_full_view, canonical, claim_request_between,
-    claimed_keypackage_record, fresh_uuid_v7, post_bytes_at, post_claim, post_json,
+    claimed_keypackage_record, fresh_uuid_v7, post_bytes_at, post_claim, post_json, problem_type,
     recipient_welcomes, signed_welcome,
 };
 
@@ -246,6 +250,56 @@ async fn accepted_round(
     ))
 }
 
+async fn wait_contact_state(
+    holder: &Member,
+    peer: &AccountId,
+    expected: arkret::ContactState,
+) -> Result<()> {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let state = holder
+            .client
+            .sdk()
+            .contacts_list()
+            .await?
+            .contacts
+            .into_iter()
+            .find(|row| row.peer.contact_actor_id() == ActorId::account(peer.clone()))
+            .map(|row| row.state);
+        if state == Some(expected) {
+            return Ok(());
+        }
+        ensure!(
+            Instant::now() < deadline,
+            "the cross-Station Contact did not converge to {expected:?}; last state: {state:?}"
+        );
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+}
+
+async fn issued_locator(member: &Member) -> Result<PrincipalLocator> {
+    let issued = expect_json(
+        member
+            .client
+            .post("/_arkret/self/invite-locators")
+            .json(&json!({"ttl_seconds": 900})),
+        StatusCode::OK,
+    )
+    .await?;
+    let token = issued["locator_token"]
+        .as_str()
+        .context("locator issue omitted locator_token")?;
+    let resolved = expect_json(
+        member
+            .client
+            .post("/_arkret/open/invite-locators/resolve")
+            .json(&json!({"locator_token": token})),
+        StatusCode::OK,
+    )
+    .await?;
+    Ok(serde_json::from_value(resolved)?)
+}
+
 /// One MLS ciphertext Message sealed by `group` at its current epoch over
 /// `group_state_ref`, the committed winning state that epoch was reached by.
 fn sealed_message(
@@ -283,6 +337,7 @@ async fn open_committed_message(
     scope: &ScopeRef,
     event_id: &EventId,
 ) -> Result<Vec<u8>> {
+    wait_for_committed(&reader.client, event_id).await?;
     let view = accepted_full_view(&reader.client, event_id).await?;
     let event = &view.event;
     // The sender domain is the sender leaf's BasicCredential identity, the
@@ -313,30 +368,104 @@ async fn open_committed_message(
     )?)
 }
 
+/// The peer holds the entire founding stream even though `since_join` keeps
+/// the founder's join (position 1) outside the peer member's self read window.
+async fn wait_for_peer_founding_commits(
+    connect_url: &str,
+    realm_id: &RealmId,
+    expected: &[arkret_wire::RealmCommit; 4],
+) -> Result<()> {
+    let deadline = Instant::now() + Duration::from_secs(120);
+    loop {
+        let connect_url = connect_url.to_owned();
+        let realm_id = realm_id.to_string();
+        let commits = tokio::task::spawn_blocking(move || -> Result<Vec<arkret_wire::RealmCommit>> {
+            let mut db = postgres::Client::connect(&connect_url, postgres::NoTls)?;
+            db.query(
+                "SELECT commit_json::text FROM realm_commits WHERE realm_id=$1 ORDER BY stream_position",
+                &[&realm_id],
+            )?
+            .into_iter()
+            .map(|row| serde_json::from_str(row.get::<_, String>(0).as_str()).map_err(Into::into))
+            .collect()
+        })
+        .await??;
+        if commits.len() == expected.len() {
+            ensure!(
+                commits.as_slice() == expected,
+                "the peer did not hold the four exact source Commits"
+            );
+            return Ok(());
+        }
+        if Instant::now() >= deadline {
+            bail!("the peer held {} of four founding Commits", commits.len());
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+}
+
 pub async fn contact_round_founds_direct_conversation() -> Result<()> {
-    let Some(database) = database(GROUP)? else {
+    run(false).await
+}
+
+pub async fn cross_station_contact_round_founds_direct_conversation() -> Result<()> {
+    run(true).await
+}
+
+async fn run(cross_station: bool) -> Result<()> {
+    let Some(governance_database) = database(GROUP)? else {
         return Ok(());
     };
+    let peer_database = if cross_station {
+        database(GROUP)?
+    } else {
+        None
+    };
+    if let Some(peer_database) = &peer_database {
+        ensure!(
+            peer_database.connect_url != governance_database.connect_url,
+            "the two Stations must have separate databases"
+        );
+    }
     let coauth = MockCoauthIntrospectionServer::spawn_with_internal_secret(
         HARNESS_INTERNAL_AUTHORITY_SECRET,
     )
     .await?;
-    let Some(group) = TestServerGroup::try_multi_external_with_node_envs(
-        GROUP,
-        &[station_env(&database.connect_url, &coauth)],
-    )
-    .await?
+    let mut node_envs = vec![station_env(&governance_database.connect_url, &coauth)];
+    if let Some(peer_database) = &peer_database {
+        node_envs.push(station_env(&peer_database.connect_url, &coauth));
+    }
+    let Some(group) = TestServerGroup::try_multi_external_with_node_envs(GROUP, &node_envs).await?
     else {
         return skip_or_fail(GROUP, "prebuilt Soland unavailable");
     };
     let server = group.server(0);
+    let peer_server = group.server(usize::from(cross_station));
     let alice = Member::provision(server, &coauth, "dc-alice", ALICE_DEVICE).await?;
-    let bob = Member::provision(server, &coauth, "dc-bob", BOB_DEVICE).await?;
+    let bob = Member::provision(peer_server, &coauth, "dc-bob", BOB_DEVICE).await?;
 
     // Bob requests; Alice, the responder, accepts. Both directions grant
     // `direct_message`.
-    bob.client.request_contact(&alice.client.actor).await?;
+    if cross_station {
+        let locator = issued_locator(&alice).await?;
+        bob.client
+            .request_contact_with_peer(
+                arkret::contact_operations::ContactPeer::Human {
+                    account_id: alice.account.clone(),
+                },
+                ContactIntroductionEvidence::LocatorRef {
+                    principal_locator: locator,
+                },
+            )
+            .await?;
+        wait_contact_state(&alice, &bob.account, arkret::ContactState::PendingIncoming).await?;
+    } else {
+        bob.client.request_contact(&alice.client.actor).await?;
+    }
     alice.client.accept_contact(&bob.client).await?;
+    if cross_station {
+        wait_contact_state(&bob, &alice.account, arkret::ContactState::Accepted).await?;
+    }
     let (contact_round_id, heads) = accepted_round(&alice, &bob.account).await?;
     ensure!(
         accepted_round(&bob, &alice.account).await?.0 == contact_round_id,
@@ -451,6 +580,25 @@ pub async fn contact_round_founds_direct_conversation() -> Result<()> {
             && replayed.commits == founded.commits,
         "an exact founding retry must replay the committed unit"
     );
+    if cross_station {
+        wait_for_peer_founding_commits(
+            &peer_database
+                .as_ref()
+                .expect("cross-station database")
+                .connect_url,
+            &realm_id,
+            &founded.commits,
+        )
+        .await?;
+        for index in [0, 2, 3] {
+            let item = &unit.events[index];
+            let replica = wait_for_committed(&bob.client, &item.event.event_id).await?;
+            ensure!(
+                replica.commit() == &founded.commits[index],
+                "the peer Station did not materialize exact source Commit {index}"
+            );
+        }
+    }
 
     // Section 7.2: before the group Genesis there is no provisional phase.
     let early = authored(
@@ -544,19 +692,28 @@ pub async fn contact_round_founds_direct_conversation() -> Result<()> {
     let claim_request = claim_request_between(
         &alice,
         server,
-        server,
+        peer_server,
         &bob,
         &realm_id,
         group_id.as_str(),
         [0x41; 16],
         chrono::Duration::minutes(4),
     )?;
-    let (status, claim_bytes) = post_claim(&alice.client, &claim_request).await?;
-    ensure!(
-        status == StatusCode::OK,
-        "Alice's claim of Bob's KeyPackage was not admitted: {status} {}",
-        String::from_utf8_lossy(&claim_bytes)
-    );
+    let claim_deadline = Instant::now() + Duration::from_secs(120);
+    let claim_bytes = loop {
+        let (status, bytes) = post_claim(&alice.client, &claim_request).await?;
+        if status == StatusCode::OK {
+            break bytes;
+        }
+        ensure!(
+            status == StatusCode::CONFLICT
+                && problem_type(&bytes)? == "failed_precondition"
+                && Instant::now() < claim_deadline,
+            "Alice's claim of Bob's KeyPackage was not admitted: {status} {}",
+            String::from_utf8_lossy(&bytes)
+        );
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    };
     let claimed: KeyPackagesClaimOutcome = serde_json::from_slice(&claim_bytes)?;
     let claim = claimed
         .claims
@@ -612,7 +769,22 @@ pub async fn contact_round_founds_direct_conversation() -> Result<()> {
     );
 
     // Bob joins from his Welcome and acknowledges it.
-    let (queued, ack_token) = recipient_welcomes(&bob.client).await?;
+    let (queued, ack_token) = if cross_station {
+        let deadline = Instant::now() + Duration::from_secs(120);
+        loop {
+            let page = recipient_welcomes(&bob.client).await?;
+            if !page.0.is_empty() {
+                break page;
+            }
+            ensure!(
+                Instant::now() < deadline,
+                "Bob's cross-Station Welcome was not delivered"
+            );
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+    } else {
+        recipient_welcomes(&bob.client).await?
+    };
     ensure!(
         queued == vec![welcome.clone()],
         "Bob's recipient queue does not hold exactly the Add's Welcome: {queued:?}"
@@ -674,7 +846,7 @@ pub async fn contact_round_founds_direct_conversation() -> Result<()> {
                 recipient_device_id: bob.device.clone(),
                 device_verification_method: bob.method.clone(),
             },
-            recipient_id: server.service_id().clone(),
+            recipient_id: peer_server.service_id().clone(),
             realm_id: realm_id.clone(),
             mls_group_id: group_id.clone(),
             mls_epoch: 1,
