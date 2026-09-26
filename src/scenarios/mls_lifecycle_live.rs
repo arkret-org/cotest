@@ -17,14 +17,16 @@
 //!   `ak.mls.commit` whose Welcome names the claim; Bob reads the Welcome from his own recipient
 //!   queue, joins from it against the accepted Commit and decrypts Alice's next message. Plaintext
 //!   into the activated scope is `mls_activation_required`.
-//! * Consume of the claim after the durable group state stays fail closed: the Station does not yet
-//!   write the claim-ledger Welcome binding (device-lifecycle §9.2.3) that consume compares the
-//!   durable receipt's `welcome_ref`, `welcome_digest` and `mls_epoch` against.
+//! * Bob reads the claim through `ak.self.keys.keypackages.read.claim.v1` and gets the original
+//!   outcome bytes; Alice and an unknown claim id both get `keypackage_unknown`.
+//! * After the durable group state and the ACK, Bob consumes the claim against the Welcome binding
+//!   the Station recorded when it queued the Welcome (decision 0121): a receipt naming another
+//!   `welcome_digest` or `mls_epoch` is `conflict`, the exact receipt consumes and replays
+//!   byte-identically.
 //! * After a Station restart the claim ledger replays byte-identically and the ACKed Welcome is not
 //!   delivered again.
 //!
-//! Cross-Station Welcome delivery and recipient-side claim resolution are the
-//! open carriers of spec-open 0529 and are not exercised here.
+//! Cross-Station Welcome delivery needs a second Station and is not exercised here.
 
 use std::time::Duration;
 
@@ -39,7 +41,8 @@ use arkret_models_collaboration::device_messages::{
 };
 use arkret_models_collaboration::governance::membership_invite::MembershipPayloadState;
 use arkret_models_crypto::{
-    KeyPackagesClaimOutcome, KeyPackagesClaimRequestBody, KeyPackagesUploadOutcome,
+    KeyPackagesClaimOutcome, KeyPackagesClaimQueryRequestBody, KeyPackagesClaimRequestBody,
+    KeyPackagesUploadOutcome,
 };
 use arkret_wire::{
     AccountId, ActorId, AuthorityCommitStatus, AuthoritySubmitOutcome, CommittedEventFullView,
@@ -247,6 +250,45 @@ pub async fn run_same_station_mls_keypackage_lifecycle_live() -> Result<()> {
         "the exact claim replay did not return the stored outcome: {status}"
     );
 
+    // Claim read (device-lifecycle §9 `claims/query`): only the claimed
+    // endpoint reads the original outcome; the requester sees the same
+    // `keypackage_unknown` as for an unknown id.
+    let query = KeyPackagesClaimQueryRequestBody {
+        claim_id: arkret_wire::KeypackageClaimId::new(claim.claim_id.clone())?,
+    };
+    let (status, read_bytes) = post_bytes_at(
+        &bob.client,
+        "/_arkret/self/keys/keypackages/claims/query",
+        &query,
+    )
+    .await?;
+    ensure!(
+        status == StatusCode::OK && json_equal(&read_bytes, &first_bytes)?,
+        "the claimed endpoint did not read the original claim outcome: {status}"
+    );
+    for (reader, body) in [
+        (&alice, query.clone()),
+        (
+            &bob,
+            KeyPackagesClaimQueryRequestBody {
+                claim_id: arkret_wire::KeypackageClaimId::new(
+                    "ak:keypackage_claim:01904100-0000-7000-8000-00000000c1a1".to_owned(),
+                )?,
+            },
+        ),
+    ] {
+        let (status, refused) = post_bytes_at(
+            &reader.client,
+            "/_arkret/self/keys/keypackages/claims/query",
+            &body,
+        )
+        .await?;
+        ensure!(
+            status == StatusCode::NOT_FOUND && problem_type(&refused)? == "keypackage_unknown",
+            "a claim read outside the claimed endpoint was not keypackage_unknown: {status}"
+        );
+    }
+
     let conflicting = claim_request(
         &alice,
         station,
@@ -396,62 +438,106 @@ pub async fn run_same_station_mls_keypackage_lifecycle_live() -> Result<()> {
     )?;
     ensure!(bob_group.epoch() == 1, "Bob did not join at epoch 1");
 
-    // Consume after the durable group state: the Station does not yet record
-    // the claim-ledger Welcome binding consume is checked against, so it
-    // keeps consume fail closed.
-    let receipt = arkret_models_crypto::RecipientMlsDurableReceipt {
-        domain: arkret_wire::NonEmptyString::new(
-            arkret_wire::DomainSeparationId::MLS_RECIPIENT_DURABLE_RECEIPT_V1.to_owned(),
-        )
-        .map_err(anyhow::Error::msg)?,
-        claim_request_id: first_request.claim_request_id.clone(),
-        key_package_ref: arkret_wire::NonEmptyString::new(claim.keypackage_ref.clone())
-            .map_err(anyhow::Error::msg)?,
-        recipient: arkret_models_crypto::RecipientMlsDurableSigner::Device {
-            recipient_account_id: bob.account.clone(),
-            recipient_device_id: bob.device.clone(),
-            device_verification_method: bob.method.clone(),
-        },
-        recipient_id: station.service_id().clone(),
-        realm_id: realm_id.clone(),
-        mls_group_id: group_id.clone(),
-        mls_epoch: 1,
-        welcome_ref: welcome.welcome_id.clone(),
-        welcome_digest: welcome.durable_receipt_digest()?,
-        durable_at: chrono::Utc::now(),
-        signature: arkret_models_crypto::KeyOperationSignature {
-            kid: arkret_wire::NonEmptyString::new(bob.method.to_string())
-                .map_err(anyhow::Error::msg)?,
-            signature_algorithm: None,
-            sig: arkret_wire::Base64UrlString::new("AA".to_owned()).map_err(anyhow::Error::msg)?,
-        },
-    };
-    let bob_signer = bob.mls_identity()?;
-    let receipt = bob_signer.sign_recipient_mls_durable_receipt(receipt)?;
-    let consume = bob_signer.signed_key_packages_consume_request(
-        arkret_wire::KeypackageClaimId::new(claim.claim_id.clone())?,
-        receipt,
-    )?;
-    let (status, refusal) = post_json_at(
-        &bob.client,
-        "/_arkret/self/keys/keypackages/consume",
-        &consume,
-    )
-    .await?;
-    ensure!(
-        status == StatusCode::CONFLICT
-            && refusal["type"]
-                .as_str()
-                .is_some_and(|value| value.ends_with("/failed_precondition")),
-        "consume without a claim-ledger Welcome binding did not fail closed: {status} {refusal}"
-    );
-
     bob.client
         .post("/_arkret/self/device_messages/ack")
         .json(&DeviceMessagesAckRequestBody { ack_token })
         .send()
         .await?
         .error_for_status()?;
+
+    // Consume after the durable group state and the ACK (decision 0121: the
+    // Station compares the receipt with the claim's Welcome binding, never
+    // the queue row). Another digest or epoch is `conflict`; the exact
+    // receipt consumes and replays byte-identically.
+    let bob_signer = bob.mls_identity()?;
+    let consume = |welcome_digest: arkret_wire::Hash, mls_epoch: u64| -> Result<_> {
+        let receipt = arkret_models_crypto::RecipientMlsDurableReceipt {
+            domain: arkret_wire::NonEmptyString::new(
+                arkret_wire::DomainSeparationId::MLS_RECIPIENT_DURABLE_RECEIPT_V1.to_owned(),
+            )
+            .map_err(anyhow::Error::msg)?,
+            claim_request_id: first_request.claim_request_id.clone(),
+            key_package_ref: arkret_wire::NonEmptyString::new(claim.keypackage_ref.clone())
+                .map_err(anyhow::Error::msg)?,
+            recipient: arkret_models_crypto::RecipientMlsDurableSigner::Device {
+                recipient_account_id: bob.account.clone(),
+                recipient_device_id: bob.device.clone(),
+                device_verification_method: bob.method.clone(),
+            },
+            recipient_id: station.service_id().clone(),
+            realm_id: realm_id.clone(),
+            mls_group_id: group_id.clone(),
+            mls_epoch,
+            welcome_ref: welcome.welcome_id.clone(),
+            welcome_digest,
+            durable_at: chrono::Utc::now(),
+            signature: arkret_models_crypto::KeyOperationSignature {
+                kid: arkret_wire::NonEmptyString::new(bob.method.to_string())
+                    .map_err(anyhow::Error::msg)?,
+                signature_algorithm: None,
+                sig: arkret_wire::Base64UrlString::new("AA".to_owned())
+                    .map_err(anyhow::Error::msg)?,
+            },
+        };
+        let receipt = bob_signer.sign_recipient_mls_durable_receipt(receipt)?;
+        Ok(bob_signer.signed_key_packages_consume_request(
+            arkret_wire::KeypackageClaimId::new(claim.claim_id.clone())?,
+            receipt,
+        )?)
+    };
+    let digest = welcome.durable_receipt_digest()?;
+    for (name, tampered) in [
+        (
+            "welcome_digest",
+            consume(
+                arkret_wire::Hash::new(format!("sha256:{}", "7".repeat(64)))?,
+                1,
+            )?,
+        ),
+        ("mls_epoch", consume(digest.clone(), 2)?),
+    ] {
+        let (status, refusal) = post_json_at(
+            &bob.client,
+            "/_arkret/self/keys/keypackages/consume",
+            &tampered,
+        )
+        .await?;
+        ensure!(
+            status == StatusCode::CONFLICT
+                && refusal["type"]
+                    .as_str()
+                    .is_some_and(|value| value.ends_with("/conflict")),
+            "a consume with a tampered {name} was not conflict: {status} {refusal}"
+        );
+    }
+    let exact = consume(digest, 1)?;
+    let (status, consumed) = post_bytes_at(
+        &bob.client,
+        "/_arkret/self/keys/keypackages/consume",
+        &exact,
+    )
+    .await?;
+    ensure!(
+        status == StatusCode::OK,
+        "the exact consume was not admitted: {status} {}",
+        String::from_utf8_lossy(&consumed)
+    );
+    let outcome: arkret_models_crypto::KeyPackagesConsumeOutcome =
+        serde_json::from_slice(&consumed)?;
+    ensure!(
+        outcome.consume_receipt.claim_id.as_str() == claim.claim_id,
+        "the consume receipt names another claim"
+    );
+    let (status, replayed) = post_bytes_at(
+        &bob.client,
+        "/_arkret/self/keys/keypackages/consume",
+        &exact,
+    )
+    .await?;
+    ensure!(
+        status == StatusCode::OK && replayed == consumed,
+        "the exact consume replay did not return the first receipt: {status}"
+    );
 
     // Encrypted application content at the accepted epoch reaches Bob.
     let header = arkret::EventContentPreEncryptionHeader::reconstruct(
@@ -562,6 +648,21 @@ async fn post_claim(
     let response = client
         .post("/_arkret/self/keys/keypackages/claim")
         .header("idempotency-key", body.claim_request_id.as_str())
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .body(arkret_canonical::canonical_json_bytes(body)?)
+        .send()
+        .await?;
+    let status = response.status();
+    Ok((status, response.bytes().await?.to_vec()))
+}
+
+async fn post_bytes_at(
+    client: &TestActorClient,
+    path: &str,
+    body: &impl serde::Serialize,
+) -> Result<(StatusCode, Vec<u8>)> {
+    let response = client
+        .post(path)
         .header(reqwest::header::CONTENT_TYPE, "application/json")
         .body(arkret_canonical::canonical_json_bytes(body)?)
         .send()

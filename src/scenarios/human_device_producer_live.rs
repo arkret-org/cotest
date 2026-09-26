@@ -502,6 +502,24 @@ pub(crate) async fn grant_message_create(
     realm_id: &str,
     member: &AccountId,
 ) -> Result<()> {
+    grant_realm_actions(
+        controller,
+        controller_station,
+        realm_id,
+        member,
+        &[arkret_wire::CapabilityActionId::MESSAGE_CREATE],
+    )
+    .await
+}
+
+/// The Realm controller grants `member` the Realm-wide `actions`.
+pub(crate) async fn grant_realm_actions(
+    controller: &TestActorClient,
+    controller_station: &ArkretServer,
+    realm_id: &str,
+    member: &AccountId,
+    actions: &[&str],
+) -> Result<()> {
     let realm = RealmId::new(realm_id.to_owned())?;
     let issuer = ActorId::account(AccountId::new(
         controller
@@ -520,7 +538,7 @@ pub(crate) async fn grant_message_create(
             arkret_models_collaboration::governance::grant_constraint::CapabilitySubject::Actor(
                 ActorId::account(member.clone()),
             ),
-        actions: vec![arkret_wire::CapabilityActionId::MESSAGE_CREATE.to_owned()],
+        actions: actions.iter().map(|action| (*action).to_owned()).collect(),
         resources: vec![serde_json::from_value(json!({
             "kind": "realm",
             "realm_id": realm_id,
@@ -552,7 +570,7 @@ pub(crate) async fn grant_message_create(
                 ..
             }
         ),
-        "the Message grant was not committed: {outcome:?}"
+        "the grant of {actions:?} was not committed: {outcome:?}"
     );
     Ok(())
 }
