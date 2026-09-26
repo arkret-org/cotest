@@ -170,7 +170,7 @@ pub async fn normal_round_crosses_two_stations() -> Result<()> {
         env.push(("SOLAND_FEDERATION_OUTBOUND".to_owned(), "1".to_owned()));
         env
     };
-    let Some(group) = TestServerGroup::try_multi_external_with_node_envs(
+    let Some(mut group) = TestServerGroup::try_multi_external_with_node_envs(
         GROUP,
         &[
             station(&alice_database.connect_url),
@@ -219,6 +219,79 @@ pub async fn normal_round_crosses_two_stations() -> Result<()> {
     ensure!(
         alice_round.contact_round_id == bob_round.contact_round_id,
         "both Stations installed different Contact rounds"
+    );
+
+    // Reopen both service processes before they reissue DC authority. The
+    // historical assertion-key cache is empty after restart, so the founder
+    // must resolve and verify the durable bilateral Contact evidence again.
+    group.server_mut(0).restart_external_process().await?;
+    group.server_mut(1).restart_external_process().await?;
+    let alice_after_restart = wait_contact(&alice, &bob_actor, ContactState::Accepted).await?;
+    let bob_after_restart = wait_contact(&bob, &alice_actor, ContactState::Accepted).await?;
+    ensure!(
+        alice_after_restart
+            .next_prepare_input
+            .as_ref()
+            .context("restarted requester has no confirmed round input")?
+            .contact_round_id
+            == alice_round.contact_round_id
+            && bob_after_restart
+                .next_prepare_input
+                .as_ref()
+                .context("restarted responder has no confirmed round input")?
+                .contact_round_id
+                == alice_round.contact_round_id,
+        "restart changed the accepted Contact round"
+    );
+    let alice_resolve = alice
+        .sdk()
+        .direct_conversation_resolve(&DirectConversationResolveRequestBody {
+            peer: ContactPeer::Human {
+                account_id: bob_actor
+                    .as_account_id()
+                    .context("Bob is not an Account")?
+                    .clone(),
+            },
+        })
+        .await?;
+    let bob_resolve = bob
+        .sdk()
+        .direct_conversation_resolve(&DirectConversationResolveRequestBody {
+            peer: ContactPeer::Human {
+                account_id: alice_actor
+                    .as_account_id()
+                    .context("Alice is not an Account")?
+                    .clone(),
+            },
+        })
+        .await?;
+    let founder_material = match (&alice_resolve, &bob_resolve) {
+        (
+            DirectConversationResolveOutcome::CreationRequired {
+                next_founding_input,
+            },
+            DirectConversationResolveOutcome::AwaitingFounder { .. },
+        )
+        | (
+            DirectConversationResolveOutcome::AwaitingFounder { .. },
+            DirectConversationResolveOutcome::CreationRequired {
+                next_founding_input,
+            },
+        ) => next_founding_input,
+        _ => bail!(
+            "restarted normal Contact did not identify one DC founder: Alice {alice_resolve:?}; Bob {bob_resolve:?}"
+        ),
+    };
+    let DirectConversationFoundingAuthorityEvidence::Human {
+        contact_round_evidence,
+        ..
+    } = &founder_material.founding_authority_evidence
+    else {
+        bail!("restarted founder received non-Contact DC authority");
+    };
+    ensure!(
+        contact_round_evidence.contact_round_id == alice_round.contact_round_id,
+        "restarted DC material names another Contact round"
     );
     Ok(())
 }
