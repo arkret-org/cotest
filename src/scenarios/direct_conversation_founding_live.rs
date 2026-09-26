@@ -41,15 +41,18 @@ use arkret_models_collaboration::authority_commit::{
 };
 use arkret_models_collaboration::device_messages::DeviceMessagesAckRequestBody;
 use arkret_models_collaboration::direct_conversation::DirectConversationFoundingPlan;
+use arkret_models_collaboration::direct_conversation::{
+    DirectConversationResolveOutcome, DirectConversationResolveRequestBody,
+};
 use arkret_models_collaboration::events_payloads::direct_conversation::DirectConversationBoundPayload;
 use arkret_models_collaboration::governance::invite_addressing::PrincipalLocator;
 use arkret_models_collaboration::governance::membership_invite::MembershipPayloadState;
 use arkret_models_collaboration::governance::peer_contact::ContactIntroductionEvidence;
 use arkret_models_collaboration::objects::direct_conversation::{
-    DirectConversationAuthorizationBasis, DirectConversationPairKeyParticipant,
-    direct_conversation_main_strand_create_payload, direct_conversation_member_join_payload,
-    direct_conversation_pair_key, direct_conversation_peer_membership_bootstrap,
-    direct_conversation_realm_create_payload,
+    DirectConversationAuthorizationBasis, DirectConversationFoundingAuthorityEvidence,
+    DirectConversationPairKeyParticipant, direct_conversation_main_strand_create_payload,
+    direct_conversation_member_join_payload, direct_conversation_pair_key,
+    direct_conversation_peer_membership_bootstrap, direct_conversation_realm_create_payload,
 };
 use arkret_models_crypto::{KeyPackagesClaimOutcome, KeyPackagesUploadOutcome};
 use arkret_wire::{
@@ -410,6 +413,228 @@ pub async fn contact_round_founds_direct_conversation() -> Result<()> {
 
 pub async fn cross_station_contact_round_founds_direct_conversation() -> Result<()> {
     run(true).await
+}
+
+/// A glare round has two request heads and no normal response Event. Its
+/// selected founder must still admit the same four-Event founding unit.
+pub async fn cross_station_glare_founds_direct_conversation() -> Result<()> {
+    let Some(founder_database) = database("direct-conversation-glare-founding")? else {
+        return Ok(());
+    };
+    let Some(peer_database) = database("direct-conversation-glare-founding")? else {
+        return Ok(());
+    };
+    ensure!(founder_database.connect_url != peer_database.connect_url);
+    let coauth = MockCoauthIntrospectionServer::spawn_with_internal_secret(
+        HARNESS_INTERNAL_AUTHORITY_SECRET,
+    )
+    .await?;
+    let node_envs = [
+        station_env(&founder_database.connect_url, &coauth),
+        station_env(&peer_database.connect_url, &coauth),
+    ];
+    let Some(group) = TestServerGroup::try_multi_external_with_node_envs(
+        "direct-conversation-glare-founding",
+        &node_envs,
+    )
+    .await?
+    else {
+        return skip_or_fail(
+            "direct-conversation-glare-founding",
+            "prebuilt Soland unavailable",
+        );
+    };
+    let first = Member::provision(group.server(0), &coauth, "dc-glare-a", ALICE_DEVICE).await?;
+    let second = Member::provision(group.server(1), &coauth, "dc-glare-b", BOB_DEVICE).await?;
+    let first_locator = issued_locator(&first).await?;
+    let second_locator = issued_locator(&second).await?;
+    let (first_request, second_request) = tokio::join!(
+        first.client.request_contact_with_peer(
+            arkret::contact_operations::ContactPeer::Human {
+                account_id: second.account.clone(),
+            },
+            ContactIntroductionEvidence::LocatorRef {
+                principal_locator: second_locator,
+            },
+        ),
+        second.client.request_contact_with_peer(
+            arkret::contact_operations::ContactPeer::Human {
+                account_id: first.account.clone(),
+            },
+            ContactIntroductionEvidence::LocatorRef {
+                principal_locator: first_locator,
+            },
+        )
+    );
+    let first_request = first_request?;
+    let second_request = second_request?;
+    ensure!(
+        first_request.core.request_event_ref != second_request.core.request_event_ref,
+        "glare requests share an Event ref"
+    );
+    wait_contact_state(&first, &second.account, arkret::ContactState::Accepted).await?;
+    wait_contact_state(&second, &first.account, arkret::ContactState::Accepted).await?;
+    let first_resolution = first
+        .client
+        .sdk()
+        .direct_conversation_resolve(&DirectConversationResolveRequestBody {
+            peer: arkret::contact_operations::ContactPeer::Human {
+                account_id: second.account.clone(),
+            },
+        })
+        .await?;
+    let second_resolution = second
+        .client
+        .sdk()
+        .direct_conversation_resolve(&DirectConversationResolveRequestBody {
+            peer: arkret::contact_operations::ContactPeer::Human {
+                account_id: first.account.clone(),
+            },
+        })
+        .await?;
+    let (founder, peer, founder_server, peer_database, input) =
+        match (&first_resolution, &second_resolution) {
+            (
+                DirectConversationResolveOutcome::CreationRequired {
+                    next_founding_input,
+                },
+                DirectConversationResolveOutcome::AwaitingFounder { .. },
+            ) => (
+                &first,
+                &second,
+                group.server(0),
+                &peer_database,
+                next_founding_input,
+            ),
+            (
+                DirectConversationResolveOutcome::AwaitingFounder { .. },
+                DirectConversationResolveOutcome::CreationRequired {
+                    next_founding_input,
+                },
+            ) => (
+                &second,
+                &first,
+                group.server(1),
+                &founder_database,
+                next_founding_input,
+            ),
+            _ => bail!(
+                "glare did not select one founder: {first_resolution:?}, {second_resolution:?}"
+            ),
+        };
+    let DirectConversationFoundingAuthorityEvidence::Human {
+        contact_round_evidence,
+        ..
+    } = &input.founding_authority_evidence
+    else {
+        bail!("glare founder did not receive Contact authority evidence");
+    };
+    let round = contact_round_evidence.contact_round_id.clone();
+    ensure!(
+        accepted_round_id(founder, &peer.account).await? == round
+            && accepted_round_id(peer, &founder.account).await? == round,
+        "glare founding input differs from accepted Contact round"
+    );
+    let at = arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now());
+    let genesis = direct_conversation_realm_create_payload(
+        GenesisSalt::generate()?,
+        founder_server.trust_domain().clone(),
+        founder_server.service_id().clone(),
+        at,
+    )?;
+    let create = authored_at(
+        founder,
+        arkret_wire::event_kind_str::REALM_CREATE,
+        ScopeRef::RealmGenesis,
+        serde_json::to_value(genesis)?,
+        vec![SemanticRef::new(round.to_string(), CONTACT_ROUND_ROLE)],
+        Cites::Nothing,
+        at,
+    )?;
+    let realm_id = RealmId::from_event_id(&create.event_id);
+    let scope = ScopeRef::Realm {
+        realm_id: realm_id.clone(),
+    };
+    let founder_join = authored_at(
+        founder,
+        arkret_wire::event_kind_str::MEMBER_STATE,
+        scope.clone(),
+        serde_json::to_value(direct_conversation_member_join_payload(
+            realm_id.clone(),
+            founder.account.clone(),
+        ))?,
+        Vec::new(),
+        Cites::Nothing,
+        at,
+    )?;
+    let peer_join = authored_at(
+        founder,
+        arkret_wire::event_kind_str::MEMBER_STATE,
+        scope.clone(),
+        serde_json::to_value(direct_conversation_peer_membership_bootstrap(
+            realm_id.clone(),
+            &founder.account,
+            [founder.account.clone(), peer.account.clone()],
+        )?)?,
+        Vec::new(),
+        Cites::Nothing,
+        at,
+    )?;
+    let strand = authored_at(
+        founder,
+        arkret_wire::event_kind_str::STRAND_CREATE,
+        scope,
+        serde_json::to_value(direct_conversation_main_strand_create_payload(
+            realm_id.clone(),
+            founder.actor.clone(),
+            at,
+        ))?,
+        Vec::new(),
+        Cites::Nothing,
+        at,
+    )?;
+    let unit = DirectConversationFoundingUnitSubmission {
+        unit_kind: DirectConversationFoundingUnitKind::DirectConversationFounding,
+        idempotency_key: arkret_wire::UuidV7::new(fresh_uuid_v7().parse()?)?,
+        events: [create, founder_join, peer_join, strand].map(EventAdmissionSubmission::new),
+    };
+    unit.validate()?;
+    let founded: DirectConversationFoundingAcceptanceOutcome = serde_json::from_value(
+        expect_json(
+            founder.client.post("/_arkret/self/events").json(&unit),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    founded.validate()?;
+    ensure!(founded.status == AggregateAcceptanceStatus::Committed);
+    for (position, commit) in founded.commits.iter().enumerate() {
+        ensure!(
+            commit.stream_position == position as u64
+                && commit.event_ref == unit.events[position].event.event_id
+                && commit.realm_id == realm_id,
+            "glare founding Commit {position} differs from its Event"
+        );
+    }
+    wait_for_peer_founding_commits(&peer_database.connect_url, &realm_id, &founded.commits).await?;
+    Ok(())
+}
+
+async fn accepted_round_id(holder: &Member, peer: &AccountId) -> Result<arkret_wire::Hash> {
+    let row = holder
+        .client
+        .sdk()
+        .contacts_list()
+        .await?
+        .contacts
+        .into_iter()
+        .find(|row| row.peer.contact_actor_id() == ActorId::account(peer.clone()))
+        .context("glare Contact row is listed")?;
+    ensure!(row.state == arkret::ContactState::Accepted);
+    Ok(row
+        .next_prepare_input
+        .context("accepted glare round has no prepare input")?
+        .contact_round_id)
 }
 
 async fn run(cross_station: bool) -> Result<()> {
