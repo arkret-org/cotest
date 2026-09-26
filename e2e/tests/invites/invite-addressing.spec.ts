@@ -101,17 +101,15 @@ async function readAcceptedInvite(
   token: string,
   eventId: string,
 ): Promise<Record<string, unknown>> {
-  const url = `${solandBaseUrl()}/_arkret/self/events/resolve`;
-  const response = await request.fetch(url, {
-    method: "QUERY",
-    headers: authHeaders(token, "QUERY", url),
-    data: { event_ids: [eventId], include_payload: true },
+  const url = `${solandBaseUrl()}/_arkret/self/committed-events/${eventId}`;
+  const response = await request.get(url, {
+    headers: authHeaders(token, "GET", url),
   });
   expect(response.status(), await response.text()).toBe(200);
-  const body = await response.json() as { events: Array<Record<string, unknown>> };
-  const accepted = body.events.find(event => event.event_id === eventId);
+  const body = await response.json() as { event?: Record<string, unknown> };
+  const accepted = body.event;
   if (!accepted) throw new Error("source Station did not return the accepted invite Event");
-  expect(accepted.proofs, "exactly one portable producer proof").toHaveLength(1);
+  expect(accepted.producer_proof, "portable producer proof").toBeDefined();
   return accepted;
 }
 
@@ -212,7 +210,7 @@ async function assertNoHolderPrivateWrite(
   ).toBe(false);
 }
 
-// The peer notification carries the exact accepted Event and its proofs.
+// The peer notification carries the exact accepted Event and its producer proof.
 function peerDeliveryBody(
   fixture: AcceptedInviteFixture,
   label: string,
@@ -614,9 +612,9 @@ test.describe("invite addressing", () => {
       mutate: (proof: Record<string, unknown>) => void,
     ): Record<string, unknown> => {
       const event = structuredClone(fixture.inviteEvent);
-      const proofs = event.proofs as Array<Record<string, unknown>>;
-      expect(proofs).toHaveLength(1);
-      mutate(proofs[0]!);
+      const proof = event.producer_proof as Record<string, unknown>;
+      expect(proof).toBeDefined();
+      mutate(proof);
       return event;
     };
     const cases: Array<[string, Record<string, unknown>, InviteDeliveryRequestBodyBodyBody["invite_commit"]]> = [

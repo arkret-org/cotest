@@ -145,7 +145,7 @@ function realmAuthorityControllerKey(
 /**
  * Register the real browser device signer for direct API events emitted by the
  * same test actor. This keeps the event-key lifecycle separate from DPoP while
- * ensuring both submission paths produce proofs for the authorized device.
+ * ensuring both submission paths produce a proof for the authorized device.
  */
 export function registerEventSigner(args: {
   actorId: string;
@@ -896,7 +896,7 @@ export async function grantServiceCapabilityApi(
   const action = args.action ?? "ak.message.create";
   // `capability-grant.schema.json` is a closed object; annotating the literal
   // makes an unregistered member or a misspelled resource kind a `tsc` error
-  // instead of a reducer rejection. `proofs` is attached after signing.
+  // instead of a reducer rejection. The producer proof is attached after signing.
   const unsignedGrant: CapabilityGrantPayload["grant"] = {
     schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
@@ -986,7 +986,7 @@ export function buildCapabilityGrantEnvelope(args: CapabilityGrantEventArgs): {
   ];
   // `capability-grant.schema.json` is a closed object; annotating the literal
   // makes an unregistered member or a misspelled resource kind a `tsc` error
-  // instead of a reducer rejection. `proofs` is attached after signing.
+  // instead of a reducer rejection. The producer proof is attached after signing.
   const unsignedGrant: CapabilityGrantPayload["grant"] = {
     schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
@@ -1179,7 +1179,6 @@ export async function acceptPreparedInviteApi(
     target: {
       realm_id: realmId,
       invite_id: inviteId,
-      invite_token: delivery!.invite_token,
       authority_locator_hints: [
         {
           service_kind: "station",
@@ -1189,7 +1188,7 @@ export async function acceptPreparedInviteApi(
         },
       ],
     },
-    intent: { kind: "invite_accept", invite_id: inviteId, invite_token: delivery!.invite_token },
+    intent: { kind: "invite_accept", invite_id: inviteId },
   };
   const url = `${solandBaseUrl(opts.server)}/_arkret/self/realm-joins/prepare`;
   const prepare = () => request.post(url, {
@@ -1337,7 +1336,7 @@ export async function sendPreparedMessageApi(
   const derived = sdkEventDerivedIds(unsigned);
   const event = { ...unsigned, event_id: derived.event_id };
   expect(prepared.draft.event_digest).toBe(`sha256:${sha256CanonicalJson(unsigned)}`);
-  event.proofs = [eventEnvelopeProof({ actorId: principal, event })];
+  event.producer_proof = eventEnvelopeProof({ actorId: principal, event });
   const url = `${solandBaseUrl(opts.server)}/_arkret/self/events`;
   const submission = canonicalJson({ event });
   const submit = () => request.post(url, {
@@ -1912,13 +1911,11 @@ export function signedEventEnvelope(
   } as Record<string, unknown>;
   return {
     ...event,
-    proofs: [
-      eventEnvelopeProof({
-        actorId: eventSigningPrincipalId(event),
-        event,
-        verificationMethod: args.proofVerificationMethod,
-      }),
-    ],
+    producer_proof: eventEnvelopeProof({
+      actorId: eventSigningPrincipalId(event),
+      event,
+      verificationMethod: args.proofVerificationMethod,
+    }),
   };
 }
 
@@ -1948,7 +1945,7 @@ export function refreshEventEnvelopeProof(
 ): void {
   const actorId = eventSigningPrincipalId(envelope);
   const event = { ...envelope };
-  delete event.proofs;
+  delete event.producer_proof;
   // An Event id is a
   // function of that digest, so re-signing without re-deriving would leave the
   // envelope carrying the id of content it no longer has.
@@ -1956,13 +1953,11 @@ export function refreshEventEnvelopeProof(
   const derived = sdkEventDerivedIds(event);
   event.event_id = derived.event_id;
   envelope.event_id = derived.event_id;
-  envelope.proofs = [
-    eventEnvelopeProof({
-      actorId,
-      event,
-      verificationMethod: proofVerificationMethod,
-    }),
-  ];
+  envelope.producer_proof = eventEnvelopeProof({
+    actorId,
+    event,
+    verificationMethod: proofVerificationMethod,
+  });
 }
 
 function eventEnvelopeProof(args: {
@@ -2706,7 +2701,6 @@ async function federationEventWireBodies(
     events: Array<Record<string, unknown>>,
     acceptedSource?: { token: string; server?: SolandKey },
 ): Promise<PublicationEvidence[]> {
-  const groups = new Map<string, { token: string; server?: SolandKey; eventIds: string[] }>();
   const entries = events.map((event) => {
     const eventId = stringValue(event.event_id);
     const evidence = (eventId ? publicationEvidenceByEventId.get(eventId) : undefined)
@@ -2715,32 +2709,23 @@ async function federationEventWireBodies(
     if (!eventId || !evidence || !source) {
       throw new Error(`federation requires an accepted source Event and publication evidence: ${eventId ?? "<missing event_id>"}`);
     }
-    const key = `${solandBaseUrl(source.server)}\0${source.token}`;
-    const group = groups.get(key) ?? { ...source, eventIds: [] };
-    group.eventIds.push(eventId);
-    groups.set(key, group);
-    return { eventId, evidence };
+    return { eventId, evidence, source };
   });
-  const accepted = new Map<string, PublicationEvidence["event"]>();
-  for (const group of groups.values()) {
-    // Read the source Station's accepted canonical Event. Forward its sole
-    // producer proof unchanged and never synthesize a receiver signature.
-    const url = `${solandBaseUrl(group.server)}/_arkret/self/events/resolve`;
-    const response = await request.fetch(url, {
-      method: "QUERY",
-      headers: { ...authHeaders(group.token, "QUERY", url), "content-type": "application/json" },
-      data: canonicalJson({ event_ids: [...new Set(group.eventIds)], include_payload: true }),
+  return Promise.all(entries.map(async ({ eventId, evidence, source }) => {
+    // Read the exact accepted Event and covering Commit from the registered
+    // caller-scoped resource. A withheld view cannot be forwarded as an Event.
+    const url = `${solandBaseUrl(source.server)}/_arkret/self/committed-events/${eventId}`;
+    const response = await request.get(url, {
+      headers: authHeaders(source.token, "GET", url),
     });
-    const body = await expectJsonOk<Record<string, unknown>>(response, "resolve accepted source Events for federation");
-    for (const event of (body.events ?? []) as Array<Record<string, unknown>>) {
-      accepted.set(String(event.event_id), event);
+    const body = await expectJsonOk<{ event?: PublicationEvidence["event"] }>(
+      response, "read accepted source Event for federation",
+    );
+    if (!body.event || body.event.event_id !== eventId) {
+      throw new Error(`source Station did not disclose the accepted Event ${eventId}`);
     }
-  }
-  return entries.map(({ eventId, evidence }) => {
-    const event = accepted.get(eventId);
-    if (!event) throw new Error(`source Station did not return the accepted Event ${eventId}`);
-    return { ...evidence, event };
-  });
+    return { ...evidence, event: body.event };
+  }));
 }
 
 export async function queryPeerEventsApi(

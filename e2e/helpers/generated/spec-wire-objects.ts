@@ -14,7 +14,6 @@ export type RealmJoinPrepareRequestBody = {
   "target": {
     "realm_id": string;
     "invite_id"?: string;
-    "invite_token"?: string;
     "authority_locator_hints": Array<{
       "service_kind": "station";
       "service_id": string;
@@ -25,7 +24,6 @@ export type RealmJoinPrepareRequestBody = {
   "intent": {
     "kind": "invite_accept";
     "invite_id": string;
-    "invite_token": string;
   } | {
     "kind": "member_join" | "knock";
   };
