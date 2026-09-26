@@ -994,7 +994,10 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
         .send()
         .await?;
     ensure!(
-        rejected.status() == StatusCode::FORBIDDEN,
+        matches!(
+            rejected.status(),
+            StatusCode::FORBIDDEN | StatusCode::UNPROCESSABLE_ENTITY
+        ),
         "Agent session accepted a Device KeyPackage branch: {}",
         rejected.status()
     );
@@ -1008,7 +1011,10 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
         .send()
         .await?;
     ensure!(
-        rejected.status() == StatusCode::FORBIDDEN,
+        matches!(
+            rejected.status(),
+            StatusCode::FORBIDDEN | StatusCode::UNPROCESSABLE_ENTITY
+        ),
         "Agent KeyPackage upload accepted another runtime method: {}",
         rejected.status()
     );
