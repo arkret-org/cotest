@@ -86,6 +86,22 @@ impl TestActorClient {
     }
 
     pub fn contact_request_prepare(&self, target: &str) -> Result<ContactOperationRequestBody> {
+        self.contact_request_prepare_with_peer(
+            ContactPeer::Human {
+                account_id: AccountId::new(
+                    project_did_to_core_id(&Did::new(target.to_owned())?)?,
+                    DidCoreId::new(self.service_id.clone())?,
+                ),
+            },
+            ContactIntroductionEvidence::ExplicitAddress,
+        )
+    }
+
+    fn contact_request_prepare_with_peer(
+        &self,
+        peer: ContactPeer,
+        introduction_evidence: ContactIntroductionEvidence,
+    ) -> Result<ContactOperationRequestBody> {
         let operation_id =
             ProtocolOperationId::new(next_typed_id("operation")).map_err(anyhow::Error::msg)?;
         let idempotency_key =
@@ -95,14 +111,9 @@ impl TestActorClient {
                 phase: ContactPreparePhase::Prepare,
                 operation_id,
                 idempotency_key,
-                peer: ContactPeer::Human {
-                    account_id: AccountId::new(
-                        project_did_to_core_id(&Did::new(target.to_owned())?)?,
-                        DidCoreId::new(self.service_id.clone())?,
-                    ),
-                },
+                peer,
                 granted_to_peer_scopes: vec![ContactScope::DirectMessage],
-                introduction_evidence: ContactIntroductionEvidence::ExplicitAddress,
+                introduction_evidence,
                 continuity_evidence: None,
                 message: None,
             },
@@ -111,6 +122,22 @@ impl TestActorClient {
 
     pub async fn request_contact(&self, target: &str) -> Result<RequestAcceptanceReceipt> {
         let request = self.contact_request_prepare(target)?;
+        self.request_contact_prepared(request).await
+    }
+
+    pub async fn request_contact_with_peer(
+        &self,
+        peer: ContactPeer,
+        introduction_evidence: ContactIntroductionEvidence,
+    ) -> Result<RequestAcceptanceReceipt> {
+        let request = self.contact_request_prepare_with_peer(peer, introduction_evidence)?;
+        self.request_contact_prepared(request).await
+    }
+
+    async fn request_contact_prepared(
+        &self,
+        request: ContactOperationRequestBody,
+    ) -> Result<RequestAcceptanceReceipt> {
         let (operation_id, idempotency_key) = match &request {
             ContactOperationRequestBody::Prepare(body) => {
                 (body.operation_id.clone(), body.idempotency_key.clone())
