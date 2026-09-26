@@ -381,7 +381,11 @@ impl AgentRuntimeSession {
                 server
                     .http()
                     .post(server.url("/_arkret/open/agent-pairing/resolve"))
-                    .json(&json!({"pairing_token": pairing_token})),
+                    .json(
+                        &arkret_models_collaboration::agent_operations::AgentPairingResolveRequestBody {
+                            pairing_token,
+                        },
+                    ),
                 StatusCode::OK,
             )
             .await?,
@@ -937,6 +941,20 @@ impl AgentRuntimeSession {
             &device_method,
             principal.device_signing_key.to_bytes(),
         )?;
+        let submission = arkret_wire::EventAdmissionSubmission::new(event.clone());
+        let body = match transition {
+            AgentTransition::Pause => serde_json::to_value(
+                arkret_models_collaboration::agent_operations::AgentPauseRequestBody {
+                    reason: None,
+                    lifecycle_event: submission,
+                },
+            )?,
+            AgentTransition::Resume => serde_json::to_value(
+                arkret_models_collaboration::agent_operations::AgentResumeRequestBody {
+                    lifecycle_event: submission,
+                },
+            )?,
+        };
         let outcome: arkret_models_collaboration::agent_operations::AgentLifecycleOutcome =
             serde_json::from_value(
                 expect_json(
@@ -945,9 +963,7 @@ impl AgentRuntimeSession {
                             "/_arkret/self/agents/{}/{path}",
                             self.agent_account.principal_id
                         ))
-                        .json(&json!({
-                            "lifecycle_event": arkret_wire::EventAdmissionSubmission::new(event.clone())
-                        })),
+                        .json(&body),
                     StatusCode::OK,
                 )
                 .await?,
@@ -1001,7 +1017,9 @@ async fn submit_actor_private(
         .post("/_arkret/self/actor-private-events")
         .header(reqwest::header::CONTENT_TYPE, "application/json")
         .body(arkret_canonical::canonical_json_bytes(
-            &json!({ "event": event }),
+            &arkret_wire::ActorPrivateEventSubmitRequestBody {
+                event: event.clone(),
+            },
         )?)
         .send()
         .await?)
