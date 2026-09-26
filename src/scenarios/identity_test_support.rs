@@ -37,9 +37,10 @@ use sha2::{Digest, Sha256};
 use url::Url;
 
 use crate::harness::{
-    ArkretServer, ProvisionedTestPrincipal, TestActorClient, canonical_device_id, dev_login,
-    expect_json, refresh_typed_event_proof_with_signing_seed, register_account_via_dev_login,
-    register_account_with_localpart_via_dev_login, register_event_signing_identity,
+    ArkretServer, CanonicalJsonBody, ProvisionedTestPrincipal, TestActorClient,
+    canonical_device_id, dev_login, expect_json, refresh_typed_event_proof_with_signing_seed,
+    register_account_via_dev_login, register_account_with_localpart_via_dev_login,
+    register_event_signing_identity,
 };
 
 /// Establish Human kind from an accepted, holder-authored PCR ProfileCreate.
@@ -74,7 +75,7 @@ pub(crate) async fn create_human_actor_profile(
     let outcome = expect_json(
         client
             .post("/_arkret/self/account/profile")
-            .json(&json!({"profile_event": {"event": event}})),
+            .canonical_json(&json!({"profile_event": {"event": event}}))?,
         StatusCode::OK,
     )
     .await?;
