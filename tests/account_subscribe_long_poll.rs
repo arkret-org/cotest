@@ -15,8 +15,8 @@ async fn account_subscribe_long_poll_wakes_on_visible_event() -> Result<()> {
 
 #[tokio::test]
 #[serial]
-async fn account_subscribe_wait_for_barrier_is_scoped_and_orders_first_frame() -> Result<()> {
-    cotest::scenarios::account_subscribe_long_poll::account_subscribe_wait_for_barrier_contract()
+async fn account_subscribe_rejects_stream_cursor_as_wait_for() -> Result<()> {
+    cotest::scenarios::account_subscribe_long_poll::account_subscribe_rejects_stream_cursor_as_wait_for()
         .await
 }
 

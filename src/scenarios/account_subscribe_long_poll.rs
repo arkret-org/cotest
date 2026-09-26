@@ -18,9 +18,9 @@ use serde_json::{Value, json};
 
 use crate::fixtures::TestActorBuilder;
 use crate::harness::{
-    account_subscribe_delta_from_text, actor_core_id, dispatch_accepted_invite_and_await_delivery,
-    eventually, expect_account_subscribe_delta, expect_account_subscribe_realm_delta,
-    expect_response, invite_create_payload, message_create_text_payload,
+    actor_core_id, dispatch_accepted_invite_and_await_delivery, eventually,
+    expect_account_subscribe_delta, expect_account_subscribe_realm_delta, expect_response,
+    invite_create_payload, message_create_text_payload,
 };
 use crate::scenarios::_helpers::protocol_values::submitted_event_id;
 use crate::scenarios::identity_test_support::{
@@ -37,25 +37,17 @@ fn client_account_id(client: &crate::harness::TestActorClient) -> Result<arkret_
     ))
 }
 
-pub async fn account_subscribe_wait_for_barrier_contract() -> Result<()> {
+pub async fn account_subscribe_rejects_stream_cursor_as_wait_for() -> Result<()> {
     let server_owner =
         spawn_with_harness_account_authority("account-subscribe-wait-for", &[]).await?;
     let server = &server_owner;
     let alice_did =
         actor_did_for_service_did(server.service_did(), "account-subscribe-wait-alice")?;
-    let bob_did = actor_did_for_service_did(server.service_did(), "account-subscribe-wait-bob")?;
     let alice = server
         .standard_register_client(
             &alice_did,
             "@wait-for-alice",
             "ak:device:01904100-0000-7000-8000-00000000b501",
-        )
-        .await?;
-    let bob = server
-        .standard_register_client(
-            &bob_did,
-            "@wait-for-bob",
-            "ak:device:01904100-0000-7000-8000-00000000b502",
         )
         .await?;
     let realm_id = alice.create_realm("Wait-For Barrier Realm").await?;
@@ -67,38 +59,13 @@ pub async fn account_subscribe_wait_for_barrier_contract() -> Result<()> {
     let submitted = alice
         .send_message(&realm_id, &strand_id, "barrier target")
         .await?;
-    let event_id = submitted_event_id(&submitted)
-        .ok_or_else(|| anyhow!("send response missing event id: {submitted}"))?
-        .to_owned();
-    let barrier_cursor = submitted["cursor"]
-        .as_str()
-        .ok_or_else(|| anyhow!("send response missing barrier cursor: {submitted}"))?
-        .to_owned();
-
-    let response = alice
-        .get("/_arkret/self/account/subscribe?catchup=true")
-        .header("accept", "application/x-ndjson")
-        .header("X-Arkret-Wait-For", &barrier_cursor)
-        .send()
-        .await?;
-    assert_eq!(response.status(), StatusCode::OK);
-    assert_eq!(
-        response
-            .headers()
-            .get("x-arkret-wait-for-satisfied")
-            .and_then(|value| value.to_str().ok()),
-        Some("true")
-    );
-    let body = tokio::time::timeout(Duration::from_secs(5), response.text())
-        .await
-        .map_err(|_| anyhow!("barrier subscribe did not complete catchup response"))??;
-    let first_delta = account_subscribe_delta_from_text(&body)?;
-    let events = first_delta["realms"][&realm_id]["timeline"]["events"]
-        .as_array()
-        .ok_or_else(|| anyhow!("barrier first delta missing Realm timeline: {first_delta}"))?;
     assert!(
-        events.iter().any(|event| event["event_id"] == event_id),
-        "first delta after a satisfied barrier must include the target event"
+        submitted_event_id(&submitted).is_some(),
+        "send response missing committed Event ID: {submitted}"
+    );
+    assert!(
+        submitted.get("cursor").is_none(),
+        "closed self submit outcome must not carry a barrier cursor: {submitted}"
     );
 
     let wrong_purpose = crate::harness::expect_response(
@@ -111,15 +78,6 @@ pub async fn account_subscribe_wait_for_barrier_contract() -> Result<()> {
     let wrong_purpose_problem: arkret_wire::Problem =
         serde_json::from_value(wrong_purpose.json()?)?;
     assert_eq!(wrong_purpose_problem.code(), "param_invalid");
-
-    let wrong_scope = crate::harness::expect_response(
-        bob.get("/_arkret/self/account/subscribe?catchup=true")
-            .header("X-Arkret-Wait-For", barrier_cursor),
-        StatusCode::BAD_REQUEST,
-    )
-    .await?;
-    let wrong_scope_problem: arkret_wire::Problem = serde_json::from_value(wrong_scope.json()?)?;
-    assert_eq!(wrong_scope_problem.code(), "cursor_integrity_invalid");
 
     Ok(())
 }
