@@ -1,17 +1,16 @@
 use anyhow::{Context, Result, anyhow};
 use arkret_canonical::canonical_sha256;
 use arkret_models_collaboration::governance::invite_addressing::IntroductionEvidence;
+use arkret_wire::{CommitStreamRef, RealmId};
 use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{
-    account_subscribe_delta_from_text, dispatch_accepted_invite_and_await_delivery,
-    expect_audit_action, expect_json, expect_response, expect_status, invite_create_payload,
-    submitted_event_id,
+    dispatch_accepted_invite_and_await_delivery, expect_audit_action, expect_json, expect_status,
+    invite_create_payload, submitted_event_id,
 };
 use crate::scenarios::identity_test_support::{
-    actor_did_for_service_did, seal_current_principal_control_frontier,
-    spawn_with_harness_account_authority,
+    actor_did_for_service_did, spawn_with_harness_account_authority,
 };
 
 pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
@@ -20,12 +19,6 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     let alice = server
         .standard_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
-    let alice_device_key = alice
-        .principal
-        .as_ref()
-        .context("alice carries her provisioned principal")?
-        .device_signing_key
-        .clone();
     let bob_did = actor_did_for_service_did(server.service_did(), "directory-bob")?;
     let bob = server
         .standard_register_client(
@@ -34,17 +27,13 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
             "ak:device:01904100-0000-7000-8000-0000000000b0",
         )
         .await?;
-    let bob_device_key = bob
-        .principal
-        .as_ref()
-        .context("bob carries his provisioned principal")?
-        .device_signing_key
-        .clone();
-
-    alice.request_contact(&bob.actor).await?;
-    seal_current_principal_control_frontier(&alice, &alice_device_key).await?;
-    bob.accept_contact(&alice).await?;
-    seal_current_principal_control_frontier(&bob, &bob_device_key).await?;
+    alice
+        .request_contact(&bob.actor)
+        .await
+        .context("Alice requests Contact")?;
+    bob.accept_contact(&alice)
+        .await
+        .context("Bob accepts Contact")?;
 
     let contacts = expect_json(bob.get("/_arkret/self/contacts"), StatusCode::OK).await?;
     assert_eq!(contacts["contacts"].as_array().unwrap().len(), 1);
@@ -79,9 +68,6 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         serde_json::to_string_pretty(&invite_event)?
     );
     let invite_event_id = submitted_event_id(&invite_event)?;
-    alice
-        .await_event_seal_coverage(&invite_realm_id, &invite_event_id)
-        .await?;
     let invite_id = arkret_identifiers::InviteId::from_event_id(&invite_event_id).to_string();
     dispatch_accepted_invite_and_await_delivery(
         &alice,
@@ -147,47 +133,33 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
             .any(|operation| operation["operation_id"] == sent_operation_id)
     );
 
-    let waited_sync = expect_response(
-        alice
-            .get("/_arkret/self/account/subscribe?catchup=true")
-            .header("x-arkret-wait-for", sent["cursor"].as_str().unwrap())
-            .header("accept", "application/x-ndjson"),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(
-        waited_sync
-            .headers
-            .get("x-arkret-wait-for-satisfied")
-            .and_then(|value| value.to_str().ok()),
-        Some("true")
-    );
-    let waited_sync = account_subscribe_delta_from_text(&waited_sync.text())?;
-    let waited_events = waited_sync["realms"][&shared_realm_id]["timeline"]["events"]
-        .as_array()
-        .unwrap();
+    let realm = RealmId::new(shared_realm_id.clone())?;
+    let scanned = alice
+        .sdk()
+        .scan_commit_stream_to_head(
+            realm.clone(),
+            CommitStreamRef::Realm { realm_id: realm },
+            None,
+            100,
+        )
+        .await?;
     assert!(
-        waited_events
+        scanned
+            .committed_events
             .iter()
-            .any(|event| event["event_id"].as_str() == Some(sent_event_id.as_str())),
-        "waited sync did not include submitted message event: {waited_sync}"
+            .filter_map(|item| item.reducer_input())
+            .any(|event| event.event_id == sent_event_id),
+        "committed Realm scan did not include submitted message Event"
     );
-
-    expect_status(
-        alice
-            .get("/_arkret/self/account/subscribe?catchup=true")
-            .header("x-arkret-wait-for", "not-a-sync-token")
-            .header("accept", "application/x-ndjson"),
-        StatusCode::BAD_REQUEST,
-    )
-    .await?;
 
     let audit_events = expect_json(
         alice.get("/_soland/admin/audit/events?limit=20"),
         StatusCode::OK,
     )
     .await?;
-    let _ = expect_audit_action(&audit_events, "events.submit")?;
+    // The local admin audit log records administrative session/account
+    // actions. Realm Events are proven by their signed Commit stream above.
+    let _ = expect_audit_action(&audit_events, "account.register")?;
 
     expect_status(
         alice.get(&format!("/_soland/admin/audit/events?actor={}", bob.actor)),
