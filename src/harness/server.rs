@@ -1395,6 +1395,27 @@ impl ArkretServer {
         Ok(client)
     }
 
+    /// The client of an Agent runtime presenting its Agent SessionGrant, with
+    /// the runtime key as the DPoP holder. An Agent has no device; `fragment`
+    /// only labels the client.
+    pub fn client_with_agent_runtime_grant(
+        &self,
+        agent_did: &str,
+        fragment: &str,
+        grant: String,
+        runtime_key: ed25519_dalek::SigningKey,
+    ) -> Result<TestActorClient> {
+        self.actor_client(
+            agent_did,
+            fragment,
+            crate::harness::ClientSession::Canonical {
+                grant,
+                signing_key: Arc::new(runtime_key),
+            },
+            None,
+        )
+    }
+
     /// A client whose principal was founded through the canonical chain.
     ///
     /// This is the entry point the dev-seam ones are measured against. The

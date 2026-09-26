@@ -22,10 +22,25 @@ use serde_json::{Value, json};
 struct CoauthGrantBinding {
     grant_jwt: String,
     subject: String,
-    device_id: String,
-    authorization_event_id: String,
+    holder: CoauthGrantHolder,
     cnf_jkt: String,
     session_public_key: String,
+}
+
+/// The closed holder of one recorded grant: a human device with its accepted
+/// authorization selector, or an Agent runtime bound to the exact accepted
+/// key authorization and method, with the operations its scope admits.
+#[derive(Clone)]
+enum CoauthGrantHolder {
+    HumanDevice {
+        device_id: String,
+        authorization_event_id: String,
+    },
+    AgentRuntime {
+        agent_key_authorization_ref: String,
+        verification_method: String,
+        scopes: Vec<String>,
+    },
 }
 
 /// What the deployment-internal authenticated channel actually carried on one
@@ -111,6 +126,49 @@ impl MockCoauthIntrospectionServer {
         authorization_event_id: &str,
         holder_key: &ed25519_dalek::VerifyingKey,
     ) -> Result<()> {
+        self.record(
+            grant_jwt,
+            subject,
+            CoauthGrantHolder::HumanDevice {
+                device_id: device_id.to_owned(),
+                authorization_event_id: authorization_event_id.to_owned(),
+            },
+            holder_key,
+        )
+    }
+
+    /// Record `grant_jwt` as the exact Agent runtime SessionGrant of
+    /// `agent_id`, bound to its accepted `ak.agent.key.authorize` Event and
+    /// method (`key-management.md` section 3.6.1). The runtime key is the
+    /// DPoP holder; the grant admits exactly `scopes`.
+    pub fn bind_agent_runtime_grant(
+        &self,
+        grant_jwt: &str,
+        agent_id: &str,
+        agent_key_authorization_ref: &str,
+        verification_method: &str,
+        runtime_key: &ed25519_dalek::VerifyingKey,
+        scopes: &[&str],
+    ) -> Result<()> {
+        self.record(
+            grant_jwt,
+            agent_id,
+            CoauthGrantHolder::AgentRuntime {
+                agent_key_authorization_ref: agent_key_authorization_ref.to_owned(),
+                verification_method: verification_method.to_owned(),
+                scopes: scopes.iter().map(|scope| (*scope).to_owned()).collect(),
+            },
+            runtime_key,
+        )
+    }
+
+    fn record(
+        &self,
+        grant_jwt: &str,
+        subject: &str,
+        holder: CoauthGrantHolder,
+        holder_key: &ed25519_dalek::VerifyingKey,
+    ) -> Result<()> {
         let jwk = arkret_signatures::JsonWebKey::from_ed25519_verifying_key(holder_key);
         let cnf_jkt = arkret_signatures::dpop::dpop_jwk_thumbprint(&jwk)?;
         let x = jwk
@@ -125,8 +183,7 @@ impl MockCoauthIntrospectionServer {
         let binding = CoauthGrantBinding {
             grant_jwt: grant_jwt.to_owned(),
             subject: subject.to_owned(),
-            device_id: device_id.to_owned(),
-            authorization_event_id: authorization_event_id.to_owned(),
+            holder,
             cnf_jkt,
             session_public_key,
         };
@@ -246,45 +303,70 @@ async fn coauth_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respo
             arkret_canonical::base64url_encode(token)
         )
     };
+    let expires_at = arkret_canonical::format_timestamp_canonical(
+        chrono::Utc::now() + chrono::Duration::minutes(10),
+    );
+    let mut grant = json!({
+        "id": grant_id,
+        "issuer_id": "ak:did_core:web:coauth.cotest.local",
+        "account_id": {
+            "principal_id": binding.subject,
+            "station_id": audience
+        },
+        "audience_id": audience,
+        "expires_at": expires_at,
+        "revoked_at": null,
+        "revocation_ref": "org.arkret.coauth.browser_session:cotest-mock",
+        "credential_class": "standard",
+        "cnf_jkt": binding.cnf_jkt,
+        "session_public_key": binding.session_public_key
+    });
+    match &binding.holder {
+        CoauthGrantHolder::HumanDevice {
+            device_id,
+            authorization_event_id,
+        } => {
+            grant["device_id"] = json!(device_id);
+            grant["scopes"] = json!([
+                "ak.self.account.read.describe.v1",
+                "ak.self.committed_event.read.scan.v1",
+                "ak.root.identity.recovery_policy.resource.get.v1"
+            ]);
+            grant["holder_binding"] = json!({
+                "kind": "human_device",
+                "device_binding": device_id
+            });
+            // The human lane requires the exact device authorization
+            // selector; it replays the accepted founding
+            // `ak.device.authorize` Event of the bound principal at its
+            // current generation (founding = 1).
+            grant["device_binding"] = json!({
+                "device_id": device_id,
+                "authorization_event_id": authorization_event_id,
+                "model_generation_ref": 1
+            });
+        }
+        // An Agent grant carries no device: its holder is the exact
+        // (agent_id, method, accepted key authorization) triple.
+        CoauthGrantHolder::AgentRuntime {
+            agent_key_authorization_ref,
+            verification_method,
+            scopes,
+        } => {
+            grant["scopes"] = json!(scopes);
+            grant["holder_binding"] = json!({
+                "kind": "agent_runtime",
+                "agent_id": binding.subject,
+                "agent_key_authorization_ref": agent_key_authorization_ref,
+                "verification_method": verification_method
+            });
+        }
+    }
     res.render(Json(json!({
         "active": true,
         "status": "active",
         "proof_required": false,
         "one_time_use_consumed": false,
-        "grant": {
-            "id": grant_id,
-            "issuer_id": "ak:did_core:web:coauth.cotest.local",
-            "account_id": {
-                "principal_id": binding.subject,
-                "station_id": audience
-            },
-            "device_id": binding.device_id,
-            "audience_id": audience,
-            "scopes": [
-                "ak.self.account.read.describe.v1",
-                "ak.self.committed_event.read.scan.v1",
-                "ak.root.identity.recovery_policy.resource.get.v1"
-            ],
-            "expires_at": arkret_canonical::format_timestamp_canonical(
-                chrono::Utc::now() + chrono::Duration::minutes(10)
-            ),
-            "revoked_at": null,
-            "revocation_ref": "org.arkret.coauth.browser_session:cotest-mock",
-            "credential_class": "standard",
-            "cnf_jkt": binding.cnf_jkt,
-            "session_public_key": binding.session_public_key,
-            "holder_binding": {
-                "kind": "human_device",
-                "device_binding": binding.device_id
-            },
-            // The human lane requires the exact device authorization selector;
-            // it replays the accepted founding `ak.device.authorize` Event of
-            // the bound principal at its current generation (founding = 1).
-            "device_binding": {
-                "device_id": binding.device_id,
-                "authorization_event_id": binding.authorization_event_id,
-                "model_generation_ref": 1
-            }
-        }
+        "grant": grant
     })));
 }
