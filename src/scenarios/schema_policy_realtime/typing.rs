@@ -1,7 +1,11 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
+use arkret_models_identity::account::{
+    AccountDataDeleteRequestBody, AccountDataReplaceRequestBody,
+};
+use reqwest::StatusCode;
 use serde_json::{Value, json};
 
-use crate::harness::actor_core_id;
+use crate::harness::{actor_core_id, expect_json};
 use crate::scenarios::identity_test_support::{
     actor_did_for_service_did, spawn_with_harness_account_authority,
 };
@@ -59,19 +63,33 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
             [9u8; 24],
         )?,
     )?;
+    let pcr_realm_id = bob
+        .principal
+        .as_ref()
+        .context("Bob has a provisioned PCR")?
+        .pcr_realm_id
+        .to_string();
+    let path = "/_arkret/self/account_data/ak.push_rules";
     let rules_written = bob
-        .submit_event(
-            &realm_id,
+        .author_event(
+            &pcr_realm_id,
             "ak.account_data.set",
             json!({
                 "key": "ak.push_rules",
-                "expected_revision": 0,
-                "body": push_rules_carrier.clone(),
-                "updated_at": "2026-05-02T00:00:00.000Z"
+                "expected_server_revision": 0,
+                "body": push_rules_carrier.clone()
             }),
         )
         .await?;
-    assert_eq!(rules_written["status"], "accepted");
+    let written = expect_json(
+        bob.put(path).json(&AccountDataReplaceRequestBody {
+            set_event: rules_written,
+        }),
+        StatusCode::CREATED,
+    )
+    .await?;
+    assert_eq!(written["revision"], 1);
+    assert_eq!(written["content"], push_rules_carrier);
 
     let listed_sync = bob.sync().await?;
     let listed_rules =
@@ -82,18 +100,24 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
     );
 
     let deleted_rules = bob
-        .submit_event(
-            &realm_id,
+        .author_event(
+            &pcr_realm_id,
             "ak.account_data.set",
             json!({
                 "key": "ak.push_rules",
-                "expected_revision": 1,
-                "tombstone": true,
-                "updated_at": "2026-05-02T00:00:01.000Z"
+                "expected_server_revision": 1,
+                "tombstone": true
             }),
         )
         .await?;
-    assert_eq!(deleted_rules["status"], "accepted");
+    let deleted = expect_json(
+        bob.delete(path).json(&AccountDataDeleteRequestBody {
+            set_event: deleted_rules,
+        }),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(deleted["revision"], 2);
 
     let final_sync = bob.sync().await?;
     assert!(
