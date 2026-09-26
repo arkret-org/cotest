@@ -82,6 +82,7 @@ use crate::scenarios::mls_lifecycle_live::{
 
 const GROUP: &str = "direct-conversation-founding";
 const ALICE_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002401";
+const ALICE_SECOND_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002404";
 const BOB_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002402";
 const THIRD_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002403";
 const CONTACT_ROUND_ROLE: &str = "direct_conversation_contact_round";
@@ -445,6 +446,230 @@ pub async fn cross_station_contact_round_founds_direct_conversation() -> Result<
 
 pub async fn cross_station_missing_contact_dependency_is_atomic() -> Result<()> {
     run(true, true).await
+}
+
+fn founding_unit_for(
+    founder: &Member,
+    server: &crate::harness::ArkretServer,
+    peer: &AccountId,
+    contact_round_id: &arkret_wire::Hash,
+    idempotency_key: arkret_wire::UuidV7,
+) -> Result<(RealmId, DirectConversationFoundingUnitSubmission)> {
+    let at = arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now());
+    let create = authored_at(
+        founder,
+        arkret_wire::event_kind_str::REALM_CREATE,
+        ScopeRef::RealmGenesis,
+        serde_json::to_value(direct_conversation_realm_create_payload(
+            GenesisSalt::generate()?,
+            server.trust_domain().clone(),
+            server.service_id().clone(),
+            at,
+        )?)?,
+        vec![SemanticRef::new(
+            contact_round_id.to_string(),
+            CONTACT_ROUND_ROLE,
+        )],
+        Cites::Nothing,
+        at,
+    )?;
+    let realm_id = RealmId::from_event_id(&create.event_id);
+    let scope = ScopeRef::Realm {
+        realm_id: realm_id.clone(),
+    };
+    let founder_join = authored_at(
+        founder,
+        arkret_wire::event_kind_str::MEMBER_STATE,
+        scope.clone(),
+        serde_json::to_value(direct_conversation_member_join_payload(
+            realm_id.clone(),
+            founder.account.clone(),
+        ))?,
+        Vec::new(),
+        Cites::Nothing,
+        at,
+    )?;
+    let peer_join = authored_at(
+        founder,
+        arkret_wire::event_kind_str::MEMBER_STATE,
+        scope.clone(),
+        serde_json::to_value(direct_conversation_peer_membership_bootstrap(
+            realm_id.clone(),
+            &founder.account,
+            [founder.account.clone(), peer.clone()],
+        )?)?,
+        Vec::new(),
+        Cites::Nothing,
+        at,
+    )?;
+    let strand = authored_at(
+        founder,
+        arkret_wire::event_kind_str::STRAND_CREATE,
+        scope,
+        serde_json::to_value(direct_conversation_main_strand_create_payload(
+            realm_id.clone(),
+            founder.actor.clone(),
+            at,
+        ))?,
+        Vec::new(),
+        Cites::Nothing,
+        at,
+    )?;
+    let unit = DirectConversationFoundingUnitSubmission {
+        unit_kind: DirectConversationFoundingUnitKind::DirectConversationFounding,
+        idempotency_key,
+        events: [create, founder_join, peer_join, strand].map(EventAdmissionSubmission::new),
+    };
+    unit.validate()?;
+    Ok((realm_id, unit))
+}
+
+pub async fn cross_station_two_authorized_devices_race_founding() -> Result<()> {
+    let Some(founder_database) = database("direct-conversation-two-device-race")? else {
+        return Ok(());
+    };
+    let Some(peer_database) = database("direct-conversation-two-device-race")? else {
+        return Ok(());
+    };
+    ensure!(founder_database.connect_url != peer_database.connect_url);
+    let coauth = MockCoauthIntrospectionServer::spawn_with_internal_secret(
+        HARNESS_INTERNAL_AUTHORITY_SECRET,
+    )
+    .await?;
+    let node_envs = [
+        station_env(&founder_database.connect_url, &coauth),
+        station_env(&peer_database.connect_url, &coauth),
+    ];
+    let Some(group) = TestServerGroup::try_multi_external_with_node_envs(
+        "direct-conversation-two-device-race",
+        &node_envs,
+    )
+    .await?
+    else {
+        return skip_or_fail(
+            "direct-conversation-two-device-race",
+            "prebuilt Soland unavailable",
+        );
+    };
+    let founder_server = group.server(0);
+    let peer_server = group.server(1);
+    let alice_first =
+        Member::provision(founder_server, &coauth, "dc-race-alice", ALICE_DEVICE).await?;
+    let alice_second = Member::provision(
+        founder_server,
+        &coauth,
+        "dc-race-alice",
+        ALICE_SECOND_DEVICE,
+    )
+    .await?;
+    ensure!(alice_first.account == alice_second.account);
+    ensure!(alice_first.authorize_event_id != alice_second.authorize_event_id);
+    let bob = Member::provision(peer_server, &coauth, "dc-race-bob", BOB_DEVICE).await?;
+    let locator = issued_locator(&alice_first).await?;
+    bob.client
+        .request_contact_with_peer(
+            arkret::contact_operations::ContactPeer::Human {
+                account_id: alice_first.account.clone(),
+            },
+            ContactIntroductionEvidence::LocatorRef {
+                principal_locator: locator,
+            },
+        )
+        .await?;
+    wait_contact_state(
+        &alice_first,
+        &bob.account,
+        arkret::ContactState::PendingIncoming,
+    )
+    .await?;
+    alice_first.client.accept_contact(&bob.client).await?;
+    wait_contact_state(&bob, &alice_first.account, arkret::ContactState::Accepted).await?;
+    let (round, _) = accepted_round(&alice_first, &bob.account).await?;
+    let key_a = arkret_wire::UuidV7::new(fresh_uuid_v7().parse()?)?;
+    let key_b = arkret_wire::UuidV7::new(fresh_uuid_v7().parse()?)?;
+    let (realm_a, unit_a) =
+        founding_unit_for(&alice_first, founder_server, &bob.account, &round, key_a)?;
+    let (realm_b, unit_b) =
+        founding_unit_for(&alice_second, founder_server, &bob.account, &round, key_b)?;
+    ensure!(realm_a != realm_b);
+    let (reply_a, reply_b) = tokio::join!(
+        post_bytes_at(&alice_first.client, "/_arkret/self/events", &unit_a),
+        post_bytes_at(&alice_second.client, "/_arkret/self/events", &unit_b),
+    );
+    let reply_a = reply_a?;
+    let reply_b = reply_b?;
+    let (winner, winner_unit, winner_realm, loser, loser_realm, winner_member) =
+        if reply_a.0 == StatusCode::OK {
+            (reply_a, &unit_a, &realm_a, reply_b, &realm_b, &alice_first)
+        } else {
+            (reply_b, &unit_b, &realm_b, reply_a, &realm_a, &alice_second)
+        };
+    ensure!(
+        winner.0 == StatusCode::OK,
+        "neither device won founding: first {} {}, second {} {}",
+        winner.0,
+        String::from_utf8_lossy(&winner.1),
+        loser.0,
+        String::from_utf8_lossy(&loser.1),
+    );
+    let founded: DirectConversationFoundingAcceptanceOutcome = serde_json::from_slice(&winner.1)?;
+    founded.validate()?;
+    ensure!(founded.status == AggregateAcceptanceStatus::Committed);
+    let (loser_status, loser_body) = loser;
+    ensure!(
+        loser_status == StatusCode::CONFLICT
+            && problem_type(&loser_body)? == "conflict"
+            && serde_json::from_slice::<Value>(&loser_body)?["reason_code"]
+                == "direct_conversation_slot_already_committed",
+        "losing device returned {loser_status}: {}",
+        String::from_utf8_lossy(&loser_body),
+    );
+    for (index, commit) in founded.commits.iter().enumerate() {
+        ensure!(
+            commit.stream_position == index as u64
+                && commit.event_ref == winner_unit.events[index].event.event_id
+                && commit.realm_id == *winner_realm
+        );
+    }
+    let replayed: DirectConversationFoundingAcceptanceOutcome = serde_json::from_value(
+        expect_json(
+            winner_member
+                .client
+                .post("/_arkret/self/events")
+                .json(winner_unit),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    ensure!(
+        replayed.status == AggregateAcceptanceStatus::Duplicate
+            && serde_json::to_vec(&replayed.commits)? == serde_json::to_vec(&founded.commits)?,
+        "exact retry changed the winner's Commit bytes"
+    );
+    let (_, same_key_other_unit) = founding_unit_for(
+        winner_member,
+        founder_server,
+        &bob.account,
+        &round,
+        winner_unit.idempotency_key.clone(),
+    )?;
+    let (conflict_status, conflict_body) = post_bytes_at(
+        &winner_member.client,
+        "/_arkret/self/events",
+        &same_key_other_unit,
+    )
+    .await?;
+    ensure!(
+        conflict_status == StatusCode::CONFLICT
+            && problem_type(&conflict_body)? == "duplicate_conflict",
+        "same key with different unit returned {conflict_status}: {}",
+        String::from_utf8_lossy(&conflict_body)
+    );
+    assert_no_peer_founding_writes(&founder_database.connect_url, loser_realm).await?;
+    assert_no_peer_founding_writes(&peer_database.connect_url, loser_realm).await?;
+    wait_for_peer_founding_commits(&peer_database.connect_url, winner_realm, &founded.commits)
+        .await?;
+    Ok(())
 }
 
 /// A glare round has two request heads and no normal response Event. Its

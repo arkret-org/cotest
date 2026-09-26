@@ -25,3 +25,9 @@ async fn cross_station_glare_founds_direct_conversation() -> Result<()> {
 async fn cross_station_missing_contact_dependency_is_atomic() -> Result<()> {
     cotest::scenarios::direct_conversation_founding_live::cross_station_missing_contact_dependency_is_atomic().await
 }
+
+#[tokio::test]
+#[serial]
+async fn cross_station_two_authorized_devices_race_founding() -> Result<()> {
+    cotest::scenarios::direct_conversation_founding_live::cross_station_two_authorized_devices_race_founding().await
+}
