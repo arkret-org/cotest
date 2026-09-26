@@ -1136,7 +1136,7 @@ async function readOwnInviteDeliveryApi(
   const dataUrl = `${solandBaseUrl(opts.server)}/_arkret/self/account_data`;
   const holder = await expectJsonOk<{ account_data_entries: Array<{
     account_data_key: string; content: { delivery_entries?: Array<{
-      invite_id: string; realm_id: string; invite_token: string;
+      invite_id: string; realm_id: string;
     }> };
   }> }>(await request.get(dataUrl, {
     headers: authHeaders(token, "GET", dataUrl),

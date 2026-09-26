@@ -1,17 +1,19 @@
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use arkret_identifiers::MessageId;
+use arkret_wire::{CommitStreamRef, RealmId};
 use reqwest::StatusCode;
-use serde_json::{Value, json};
+use serde_json::json;
 
 use crate::harness::{
-    actor_core_id, events_query_for_realm, expect_json, expect_response, expect_status,
-    message_redact_payload, message_revise_text_payload, submitted_event_id,
+    actor_core_id, expect_json, message_redact_payload, message_revise_text_payload,
+    submitted_event_id,
 };
+use crate::publication::initial_submission;
 use crate::scenarios::identity_test_support::{
     actor_did_for_service_did, spawn_with_harness_account_authority,
 };
 
-pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()> {
+pub async fn message_revision_reaction_marker_and_scan_work() -> Result<()> {
     let server = spawn_with_harness_account_authority("interaction-messages", &[]).await?;
     let alice_did = actor_did_for_service_did(server.service_did(), "interaction-alice")?;
     let alice = server
@@ -62,72 +64,34 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
         .await?;
     let sent_event_id = submitted_event_id(&sent)?;
 
-    expect_status(
-        server.http().get(server.url(&format!(
-            "/_arkret/self/events/subscribe?realm_ids={realm_id}&limit=1"
-        ))),
-        StatusCode::NOT_FOUND,
-    )
-    .await?;
-
-    // A bare subscribe is live-only, and catch-up replay needs an `after`
-    // resume cursor minted by the stream itself. Cover both legs: hold a
-    // bounded live stream open while submitting a follow-up (live delivery),
-    // then replay past that follow-up's own cursor with catchup=true.
-    let live_subscribe = expect_response(
-        alice.get(&format!(
-            "/_arkret/self/events/subscribe?realm_ids={realm_id}&max_duration_ms=2500&heartbeat_ms=200"
-        )),
-        StatusCode::OK,
-    );
-    let delayed_followup = async {
-        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-        alice
-            .send_message(&realm_id, &strand_id, "hello live stream")
-            .await
-    };
-    let (subscribe_response, followup) = tokio::join!(live_subscribe, delayed_followup);
-    let (subscribe_response, followup) = (subscribe_response?, followup?);
-    let followup_event_id = submitted_event_id(&followup)?;
-    let subscribe_frames = ndjson_frames(&subscribe_response.text())?;
-    let live_frame = subscribe_frames
-        .iter()
-        .find(|frame| frame["payload"]["event_id"].as_str() == Some(followup_event_id.as_str()))
-        .ok_or_else(|| {
-            anyhow!("live subscribe must deliver the follow-up event: {subscribe_frames:?}")
-        })?;
-    let resume_cursor = live_frame["cursor"]
-        .as_str()
-        .ok_or_else(|| anyhow!("live event frame must mint a resume cursor: {live_frame}"))?
-        .to_owned();
-
-    let catchup_target = alice
-        .send_message(&realm_id, &strand_id, "hello catchup")
+    // The registered single-stream scan is the catch-up surface. A later
+    // write must appear as a committed Event in the same Realm stream.
+    let followup = alice
+        .send_message(&realm_id, &strand_id, "hello stream scan")
         .await?;
-    let catchup_target_event_id = submitted_event_id(&catchup_target)?;
-    let catchup_response = expect_response(
-        alice.get(&format!(
-            "/_arkret/self/events/subscribe?realm_ids={realm_id}&after={resume_cursor}&catchup=true&max_duration_ms=1500&heartbeat_ms=200"
-        )),
-        StatusCode::OK,
-    )
-    .await?;
-    let catchup_frames = ndjson_frames(&catchup_response.text())?;
+    let followup_event_id = submitted_event_id(&followup)?;
+    let realm = RealmId::new(realm_id.clone())?;
+    let stream_ref = CommitStreamRef::Realm {
+        realm_id: realm.clone(),
+    };
+    let scanned = alice
+        .sdk()
+        .scan_commit_stream_to_head(realm.clone(), stream_ref.clone(), None, 100)
+        .await?;
     assert!(
-        catchup_frames.iter().any(|frame| {
-            frame["payload"]["event_id"].as_str() == Some(catchup_target_event_id.as_str())
+        scanned.committed_events.iter().any(|item| {
+            item.reducer_input()
+                .is_some_and(|event| event.event_id == followup_event_id)
         }),
-        "catch-up replay must deliver the follow-up event: {catchup_frames:?}"
-    );
-    assert!(
-        catchup_frames
-            .iter()
-            .any(|frame| frame["kind"] == "catchup_complete"),
-        "catch-up replay must emit catchup_complete: {catchup_frames:?}"
+        "stream scan must return the follow-up committed Event"
     );
 
+    // Reactions remain explicitly fail-closed until their authority cut is
+    // wired (kind coverage matrix: 1639/2011). Keep the negative evidence in
+    // this interaction scenario without treating an uncommitted Event as a
+    // successful reaction.
     let reaction = bob
-        .submit_event(
+        .author_event(
             &realm_id,
             "ak.reaction.add",
             json!({
@@ -136,10 +100,16 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
             }),
         )
         .await?;
-    assert_eq!(reaction["status"], "committed");
+    let refused = expect_json(
+        bob.post("/_arkret/self/events")
+            .json(&initial_submission(reaction, "")?),
+        StatusCode::NOT_IMPLEMENTED,
+    )
+    .await?;
+    assert_eq!(refused["title"], "Unsupported event kind");
 
     let removed_reaction = carol
-        .submit_event(
+        .author_event(
             &realm_id,
             "ak.reaction.remove",
             json!({
@@ -148,7 +118,14 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
             }),
         )
         .await?;
-    assert_eq!(removed_reaction["status"], "committed");
+    let refused = expect_json(
+        carol
+            .post("/_arkret/self/events")
+            .json(&initial_submission(removed_reaction, "")?),
+        StatusCode::NOT_IMPLEMENTED,
+    )
+    .await?;
+    assert_eq!(refused["title"], "Unsupported event kind");
 
     // Per read-cursor.schema.json, a `kind="thread"` read scope references the
     // thread's root *message* (`ak:message:<event-token>`), not an opaque
@@ -208,20 +185,15 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
         "actor-private read cursor surface did not return the accepted marker: {markers}"
     );
 
-    let realm_events = expect_json(
-        dave.query("/_arkret/self/events")
-            .json(&events_query_for_realm(&realm_id, 50)?),
-        StatusCode::OK,
-    )
-    .await?;
-    let leaked = realm_events["events"]
-        .as_array()
-        .expect("events query response includes events")
+    let realm_events = dave
+        .sdk()
+        .scan_commit_stream_to_head(realm, stream_ref, None, 100)
+        .await?;
+    let leaked = realm_events
+        .committed_events
         .iter()
-        .filter(|event| {
-            event["kind"] == "ak.read_cursor.advance"
-                || event["event_kind"] == "ak.read_cursor.advance"
-        })
+        .filter_map(|item| item.reducer_input())
+        .filter(|event| event.kind.as_str() == "ak.read_cursor.advance")
         .collect::<Vec<_>>();
     assert!(
         leaked.is_empty(),
@@ -248,15 +220,4 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     assert_eq!(redacted["status"], "committed");
 
     Ok(())
-}
-
-fn ndjson_frames(body: &str) -> Result<Vec<Value>> {
-    let mut frames = Vec::new();
-    for line in body.lines().map(str::trim).filter(|line| !line.is_empty()) {
-        frames.push(serde_json::from_str(line)?);
-    }
-    if frames.is_empty() {
-        return Err(anyhow!("events subscribe response did not include frames"));
-    }
-    Ok(frames)
 }

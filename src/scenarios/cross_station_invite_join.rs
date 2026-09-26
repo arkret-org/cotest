@@ -73,15 +73,17 @@ async fn submit_raw(
 async fn local_event_row(
     database_url: &str,
     event_id: &str,
-) -> Result<(i64, String, Vec<u8>, Value)> {
+) -> Result<(i64, String, Vec<u8>, Value, Option<String>, Option<String>)> {
     let database_url = database_url.to_owned();
     let event_id = event_id.to_owned();
     tokio::task::spawn_blocking(move || -> Result<_> {
         let mut db = postgres::Client::connect(&database_url, postgres::NoTls)?;
         let rows = db
             .query(
-                "SELECT pk, state, canonical_bytes, envelope::text FROM canonical_events \
-                 WHERE envelope->>'event_id'=$1",
+                "SELECT e.pk, e.state, e.canonical_bytes, e.envelope::text, \
+                        f.status, f.reason_code FROM canonical_events e \
+                 LEFT JOIN authority_forward_attempts f ON f.event_pk=e.pk \
+                 WHERE e.envelope->>'event_id'=$1",
                 &[&event_id],
             )
             .context("find the forwarded Event's local rows")?;
@@ -95,6 +97,8 @@ async fn local_event_row(
             row.get(1),
             row.get(2),
             serde_json::from_str::<Value>(&row.get::<_, String>(3))?,
+            row.get(4),
+            row.get(5),
         ))
     })
     .await?
@@ -278,6 +282,10 @@ pub async fn cross_station_invite_join_run() -> Result<()> {
         "Y changed the exact producer proof or Event envelope"
     );
     ensure!(
+        queued.4.as_deref() == Some("temporarily_unavailable") && queued.5.is_none(),
+        "Y did not record the retryable forward attempt separately from queued Event state"
+    );
+    ensure!(
         bob.sdk()
             .committed_event_get(&accept.event_id)
             .await
@@ -307,7 +315,8 @@ pub async fn cross_station_invite_join_run() -> Result<()> {
         committed.0 == queued.0
             && committed.1 == "committed"
             && committed.2 == queued.2
-            && committed.3 == queued.3,
+            && committed.3 == queued.3
+            && committed.4.as_deref() == Some("forwarding"),
         "Y did not upgrade the same exact queued Event row on replica arrival"
     );
     wait_for_joined_row(&bob, &realm).await?;
@@ -345,9 +354,32 @@ pub async fn cross_station_invite_join_run() -> Result<()> {
         status == StatusCode::FORBIDDEN && problem_is(&body, "capability_denied"),
         "a member without ak.message.create is refused: {status} {body}"
     );
+    let refused = local_event_row(&member_database.connect_url, early.event_id.as_str()).await?;
+    ensure!(
+        refused.1 == "queued"
+            && refused.4.as_deref() == Some("rejected")
+            && refused.5.as_deref() == Some("capability_denied"),
+        "Y did not retain the current-cut refusal outside the immutable Event row"
+    );
     ensure_never_committed(&alice, &early.event_id, Duration::from_secs(2)).await?;
 
     grant_message_create(&alice, group.server(0), &realm, &bob_account).await?;
+    let retried_commit = submit_and_expect_commit(&bob, &bob_account, BOB_DEVICE, &early).await?;
+    ensure_commit_signed_by(&retried_commit, group.server(0))?;
+    ensure_same_commit(
+        &retried_commit,
+        &wait_for_committed(&bob, &early.event_id).await?,
+    )?;
+    let retried = local_event_row(&member_database.connect_url, early.event_id.as_str()).await?;
+    ensure!(
+        retried.0 == refused.0
+            && retried.1 == "committed"
+            && retried.2 == refused.2
+            && retried.3 == refused.3
+            && retried.4.as_deref() == Some("forwarding")
+            && retried.5.is_none(),
+        "Y did not upgrade the same refused Event after its grant and exact replay"
+    );
     let message = bob
         .author_event(
             &realm,
