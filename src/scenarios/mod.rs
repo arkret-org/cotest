@@ -12,6 +12,7 @@ pub mod collaboration_workflow;
 pub mod consent_pairwise_isolation_live;
 pub mod cross_station_invite_join;
 pub mod cross_station_mls_genesis;
+pub mod cross_station_mls_welcome;
 pub mod current_principal_restart;
 pub mod delivery_media;
 pub mod did_boundary_call_counts;

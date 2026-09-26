@@ -67,24 +67,24 @@ use crate::scenarios::identity_test_support::HARNESS_INTERNAL_AUTHORITY_SECRET;
 const GROUP: &str = "mls-keypackage-lifecycle";
 const ALICE_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002201";
 const BOB_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002202";
-const ACTIVE_SUITE: &str = "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519";
+pub(crate) const ACTIVE_SUITE: &str = "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519";
 const RESERVED_SUITE: &str = "MLS_128_DHKEMX25519_CHACHA20POLY1305_SHA256_Ed25519";
-const CONTENT_CAPABILITY: &str = "ak.content.v1";
+pub(crate) const CONTENT_CAPABILITY: &str = "ak.content.v1";
 
 /// One Account with its standard-grant client and the founding device key
 /// every signature of this scenario is made with.
-struct Member {
-    client: TestActorClient,
-    account: AccountId,
-    actor: ActorId,
-    device: DeviceId,
-    method: DidUrl,
-    key: SigningKey,
-    authorize_event_id: EventId,
+pub(crate) struct Member {
+    pub(crate) client: TestActorClient,
+    pub(crate) account: AccountId,
+    pub(crate) actor: ActorId,
+    pub(crate) device: DeviceId,
+    pub(crate) method: DidUrl,
+    pub(crate) key: SigningKey,
+    pub(crate) authorize_event_id: EventId,
 }
 
 impl Member {
-    async fn provision(
+    pub(crate) async fn provision(
         station: &ArkretServer,
         coauth: &MockCoauthIntrospectionServer,
         label: &str,
@@ -114,7 +114,7 @@ impl Member {
 
     /// The MLS endpoint of the founding device: its LeafNode key is the
     /// authorized device key and its BasicCredential the complete ActorId.
-    fn mls_identity(&self) -> Result<ArkretMlsIdentity> {
+    pub(crate) fn mls_identity(&self) -> Result<ArkretMlsIdentity> {
         Ok(ArkretMlsIdentity::new_human_device(
             self.actor.clone(),
             self.device.clone(),
@@ -591,6 +591,31 @@ fn claim_request(
     claim_request_id: [u8; 16],
     lifetime: chrono::Duration,
 ) -> Result<KeyPackagesClaimRequestBody> {
+    claim_request_between(
+        requester,
+        station,
+        station,
+        target,
+        realm_id,
+        mls_group_id,
+        claim_request_id,
+        lifetime,
+    )
+}
+
+/// A self claim at the requester's `source` Station for one of `target`'s
+/// device KeyPackages held by `destination`, the target's own Station.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn claim_request_between(
+    requester: &Member,
+    source: &ArkretServer,
+    destination: &ArkretServer,
+    target: &Member,
+    realm_id: &RealmId,
+    mls_group_id: &str,
+    claim_request_id: [u8; 16],
+    lifetime: chrono::Duration,
+) -> Result<KeyPackagesClaimRequestBody> {
     let signed_at = arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now());
     let mut body: KeyPackagesClaimRequestBody = serde_json::from_value(json!({
         "claim_request_id": base64::engine::general_purpose::URL_SAFE_NO_PAD
@@ -605,8 +630,8 @@ fn claim_request(
         "expires_at": arkret_canonical::format_timestamp_canonical(signed_at + lifetime),
         "timeout_ms": null,
         "service_binding": {
-            "source_id": station.service_id(),
-            "destination_id": station.service_id(),
+            "source_id": source.service_id(),
+            "destination_id": destination.service_id(),
         },
         "requester_authorization": {
             "kind": "device",
@@ -641,7 +666,7 @@ fn claim_request(
 
 /// POST one claim with `Idempotency-Key = claim_request_id` and return the
 /// raw response body.
-async fn post_claim(
+pub(crate) async fn post_claim(
     client: &TestActorClient,
     body: &KeyPackagesClaimRequestBody,
 ) -> Result<(StatusCode, Vec<u8>)> {
@@ -656,7 +681,7 @@ async fn post_claim(
     Ok((status, response.bytes().await?.to_vec()))
 }
 
-async fn post_bytes_at(
+pub(crate) async fn post_bytes_at(
     client: &TestActorClient,
     path: &str,
     body: &impl serde::Serialize,
@@ -671,14 +696,14 @@ async fn post_bytes_at(
     Ok((status, response.bytes().await?.to_vec()))
 }
 
-async fn post_json(
+pub(crate) async fn post_json(
     client: &TestActorClient,
     body: &impl serde::Serialize,
 ) -> Result<(StatusCode, Value)> {
     post_json_at(client, "/_arkret/self/events", body).await
 }
 
-async fn post_json_at(
+pub(crate) async fn post_json_at(
     client: &TestActorClient,
     path: &str,
     body: &impl serde::Serialize,
@@ -698,7 +723,7 @@ async fn post_json_at(
     ))
 }
 
-fn problem_type(bytes: &[u8]) -> Result<String> {
+pub(crate) fn problem_type(bytes: &[u8]) -> Result<String> {
     let body: Value = serde_json::from_slice(bytes)?;
     Ok(body["type"]
         .as_str()
@@ -707,18 +732,18 @@ fn problem_type(bytes: &[u8]) -> Result<String> {
         .to_owned())
 }
 
-fn json_equal(left: &[u8], right: &[u8]) -> Result<bool> {
+pub(crate) fn json_equal(left: &[u8], right: &[u8]) -> Result<bool> {
     Ok(serde_json::from_slice::<Value>(left)? == serde_json::from_slice::<Value>(right)?)
 }
 
-fn canonical(value: Value) -> Result<Value> {
+pub(crate) fn canonical(value: Value) -> Result<Value> {
     Ok(serde_json::from_slice(
         &arkret_canonical::canonical_json_bytes(&value)?,
     )?)
 }
 
 /// Upload one public MLS state Blob and return its content-addressed ref.
-async fn upload_public_blob(
+pub(crate) async fn upload_public_blob(
     client: &TestActorClient,
     realm_id: &RealmId,
     bytes: &[u8],
@@ -738,7 +763,7 @@ async fn upload_public_blob(
 }
 
 /// The claimed KeyPackage as the adder installs it from the claim record.
-fn claimed_keypackage_record(
+pub(crate) fn claimed_keypackage_record(
     claim: &arkret_models_crypto::KeyPackageClaimRecord,
     owner: &Member,
 ) -> Result<MlsKeyPackageRecord> {
@@ -762,7 +787,7 @@ fn claimed_keypackage_record(
 }
 
 /// Seal the Welcome for `recipient` under the method that signed the Commit.
-fn signed_welcome(
+pub(crate) fn signed_welcome(
     producer: &Member,
     commit_event: &Event,
     recipient: &Member,
@@ -815,7 +840,7 @@ fn signed_welcome(
 }
 
 /// The accepted Commit Event with its RealmCommit, as the Station serves it.
-async fn accepted_full_view(
+pub(crate) async fn accepted_full_view(
     client: &TestActorClient,
     event_id: &EventId,
 ) -> Result<CommittedEventFullView> {
@@ -839,7 +864,9 @@ async fn accepted_full_view(
 
 /// Every Welcome in the caller's recipient queue and the ACK token of the
 /// page.
-async fn recipient_welcomes(client: &TestActorClient) -> Result<(Vec<MlsWelcomeDelivery>, String)> {
+pub(crate) async fn recipient_welcomes(
+    client: &TestActorClient,
+) -> Result<(Vec<MlsWelcomeDelivery>, String)> {
     let polled = expect_json(client.get("/_arkret/self/device_messages"), StatusCode::OK).await?;
     let outcome: DeviceMessagesGetOutcome = serde_json::from_value(polled.clone())
         .with_context(|| format!("recipient queue page is not closed SDK wire data: {polled}"))?;
@@ -864,7 +891,7 @@ fn now_ms() -> u64 {
 }
 
 /// A fresh RFC 9562 UUIDv7 in its hyphenated text form.
-fn fresh_uuid_v7() -> String {
+pub(crate) fn fresh_uuid_v7() -> String {
     arkret_wire::MlsWelcomeDeliveryId::new_v7_at(now_ms())
         .as_str()
         .rsplit(':')
