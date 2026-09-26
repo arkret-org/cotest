@@ -277,7 +277,9 @@ pub async fn invited_members_exchange_post_join_messages_over_account_subscribe(
         .with_device("ak:device:01904100-0000-7000-8000-0000000000b1")
         .create()
         .await?;
-    let bob_client = bob.client();
+    // Bob authors his own `ak.invite.accept` and later messages, which needs
+    // his Standard SessionGrant.
+    let bob_client = &server.standard_grant_client(bob.client())?;
 
     let created = alice
         .create_realm_with(serde_json::json!({

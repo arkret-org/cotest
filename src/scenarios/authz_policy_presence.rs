@@ -1,5 +1,5 @@
 use anyhow::Result;
-use arkret_models_collaboration::governance::authorization::AuthzCheckRequestBody;
+use arkret_models_collaboration::governance::authorization::{AuthzCheckRequestBody, GrantList};
 use arkret_models_collaboration::objects::media::{MediaIceConfigRequestBody, MediaIceMode};
 use arkret_models_integration::{
     PushKey, PushRegisterDeviceRequestBody, PushUnregisterDeviceRequestBody,
@@ -32,13 +32,17 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     )?;
     let _presence_realm = alice.create_realm("Presence Policy Realm").await?;
     let bob_did = actor_did_for_service_did(server.service_did(), "authz-bob")?;
-    let bob = server
-        .register_client(
-            &bob_did,
-            "@bob-authz",
-            "ak:device:01904100-0000-7000-8000-0000000000b0",
-        )
-        .await?;
+    // Bob authors his own `ak.invite.accept`, which needs his Standard
+    // SessionGrant.
+    let bob = station.standard_grant_client(
+        &server
+            .register_client(
+                &bob_did,
+                "@bob-authz",
+                "ak:device:01904100-0000-7000-8000-0000000000b0",
+            )
+            .await?,
+    )?;
     let bob_core_id = actor_core_id(&bob.actor)?;
     let realm_id = alice.create_realm("Grant Lifecycle Realm").await?;
 
@@ -80,17 +84,13 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert!(effective_grants["state_digest"].is_string());
+    let effective_list: GrantList = serde_json::from_value(effective_grants.clone())?;
     assert!(
-        effective_grants["grants"]
-            .as_array()
-            .unwrap()
+        effective_list
+            .grants
             .iter()
-            .any(
-                |grant| grant["id"].as_str() == Some(manage_grant_id.as_str())
-                    || grant["grant_id"].as_str() == Some(manage_grant_id.as_str())
-            ),
-        "effective grants did not include projected manage grant: {effective_grants}"
+            .any(|row| row.grant.id.as_str() == manage_grant_id.as_str()),
+        "effective grants did not include the committed manage grant: {effective_grants}"
     );
 
     expect_api_error(
