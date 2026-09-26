@@ -105,13 +105,16 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
 const KNOWN_ADVERTISED_UNMOUNTED: &[arkret_wire::ServiceOperationId] =
     &[arkret_wire::ServiceOperationId::EdgeAppletManagedActorCommandAuthorV1];
 
-/// Advertised Station members served by the co-located Account Authority of
-/// the same Station TCB (`device-lifecycle.md` §2.1.1): the deployment gateway
-/// routes them to that process, which owns the pending pairing ledger, so a
-/// bare Station process does not mount them. Mirrors Soland's own exemption;
-/// they are not a false Describe claim.
+/// Advertised Station members served by the Account Authority of the same
+/// Station TCB. The deployment gateway routes pairing and issuer-ledger
+/// revocation to Coauth, so a bare Soland process does not mount them. The
+/// exact hard-logout route remains on Soland. Mirrors Soland's own exemption;
+/// these are not false Describe claims.
 const SERVED_BY_ACCOUNT_AUTHORITY: &[arkret_wire::ServiceOperationId] =
-    &[arkret_wire::ServiceOperationId::GateAccountCommandPairDeviceV1];
+    &[
+        arkret_wire::ServiceOperationId::GateAccountCommandPairDeviceV1,
+        arkret_wire::ServiceOperationId::GateAccountCommandRevokeSessionV1,
+    ];
 
 /// How the live router answered one unauthenticated, selector-carrying probe.
 #[derive(Debug, PartialEq, Eq)]
