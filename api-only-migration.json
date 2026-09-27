@@ -22,7 +22,7 @@
       "disposition": "duplicate_removed",
       "replacements": [
         { "file": "cotest/src/conformance/call_signal.rs", "symbol": "run_call_signal_vector_suite" },
-        { "file": "cotest/src/conformance/call_state_core.rs", "symbol": "run_call_state_core_fixture_suite" }
+        { "file": "cotest/src/conformance/call_state_core_executable.rs", "symbol": "run_call_state_core_suite" }
       ]
     },
     {
@@ -30,7 +30,7 @@
       "disposition": "duplicate_removed",
       "replacements": [
         { "file": "cotest/src/conformance/media_binding.rs", "symbol": "run_media_binding_vector_suite" },
-        { "file": "cotest/src/conformance/call_state_core.rs", "symbol": "run_participant_binding_invalid_vector" }
+        { "file": "cotest/src/conformance/call_state_core_executable.rs", "symbol": "run_call_state_core_suite" }
       ]
     },
     {
