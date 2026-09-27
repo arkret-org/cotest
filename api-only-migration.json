@@ -14,7 +14,10 @@
       "disposition": "duplicate_removed",
       "replacements": [
         { "file": "cotest/src/scenarios/authz_policy_presence.rs", "symbol": "authz_grant_lifecycle_and_audit_work" },
-        { "file": "cotest/src/conformance/capability.rs", "symbol": "run_capability_fixture_suite" }
+        { "file": "cotest/src/conformance/capability.rs", "symbol": "run_capability_facet_fixture_suite" },
+        { "file": "cotest/src/conformance/capability.rs", "symbol": "run_capability_boundary_fixture_suite" },
+        { "file": "soland/crates/services/src/authorization.rs", "symbol": "a_covering_grant_is_named_by_the_verdict" },
+        { "file": "soland/crates/services/src/authorization.rs", "symbol": "nothing_authorizes_an_actor_without_root_or_grant" }
       ]
     },
     {
@@ -107,15 +110,18 @@
       "source": "cotest/e2e/tests/encryption/mls-group.spec.ts",
       "disposition": "duplicate_removed",
       "replacements": [
-        { "file": "cotest/src/conformance/final_conformance_closure.rs", "symbol": "run_mls_security_frontier_vector" },
-        { "file": "cotest/src/conformance/visibility_policy.rs", "symbol": "run_content_floor_downgrade_rejected_vector" }
+        { "file": "cotest/src/conformance/authority_commit.rs", "symbol": "run_authority_commit_suite" },
+        { "file": "cotest/src/conformance/final_conformance_closure.rs", "symbol": "run_mls_proposal_producer_binding_vector" },
+        { "file": "cotest/src/conformance/final_conformance_closure.rs", "symbol": "run_mls_key_access_revision_vector" },
+        { "file": "cotest/src/conformance/visibility_policy.rs", "symbol": "run_visibility_policy_fixture_suite" }
       ]
     },
     {
       "source": "cotest/e2e/tests/extensions/mimi-federation.spec.ts",
       "disposition": "duplicate_removed",
       "replacements": [
-        { "file": "cotest/src/conformance/wire/mimi.rs", "symbol": "run_mimi_interop_fixture_suite" },
+        { "file": "cotest/src/conformance/wire/mimi.rs", "symbol": "run_mimi_components_fixture_suite" },
+        { "file": "cotest/tests/mimi_directory_authority_closure.rs", "symbol": "mimi_report_requires_closed_exact_actor_authority" },
         { "file": "cotest/src/conformance/wire/interop.rs", "symbol": "run_interop_downgrade_fixture_suite" }
       ]
     },
@@ -124,7 +130,10 @@
       "disposition": "duplicate_removed",
       "replacements": [
         { "file": "cotest/src/conformance/security_negative.rs", "symbol": "run_security_negative_profile_suite" },
-        { "file": "cotest/src/conformance/federation.rs", "symbol": "run_federation_fixture_suite" }
+        { "file": "arkret-rust-sdk/crates/signatures/src/http_signature.rs", "symbol": "scenario_signer_owns_headers_and_rejects_body_tampering" },
+        { "file": "arkret-rust-sdk/crates/signatures/src/http_signature.rs", "symbol": "signature_policy_enforces_digest_components_and_time_window" },
+        { "file": "soland/crates/http/src/routing/federation/federation_tests.rs", "symbol": "verify_actor_headers_reject_destination_mismatch" },
+        { "file": "soland/crates/http/src/routing/federation/federation_tests.rs", "symbol": "signature_input_rejects_mismatched_federation_key" }
       ]
     },
     {
