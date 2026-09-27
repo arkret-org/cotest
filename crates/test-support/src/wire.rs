@@ -1193,7 +1193,7 @@ pub fn mimi_request_consent_proof(input: Value) -> Result<Value> {
 pub fn event_derived_id(event: Value) -> Result<Value> {
     let mut event = event;
     if let Value::Object(object) = &mut event {
-        for excluded in ["event_id", "proofs", "unsigned"] {
+        for excluded in ["event_id", "producer_proof", "unsigned"] {
             object.remove(excluded);
         }
     }
@@ -1244,6 +1244,39 @@ fn development_event_signing_key(verification_method: &str) -> SigningKey {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn event_identity_excludes_only_current_envelope_carriers() {
+        let realm = "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP";
+        let draft = json!({
+            "kind": "ak.message.create",
+            "realm_id": realm,
+            "scope_ref": {"kind": "realm", "realm_id": realm},
+            "actor_id": {
+                "kind": "account",
+                "account_id": {
+                    "principal_id": "ak:did_core:web:alice.example",
+                    "station_id": "ak:did_core:web:station.example"
+                }
+            },
+            "created_at": "2026-07-07T05:45:49.000Z",
+            "payload": {"content": {"kind": "ak.content.text", "body": "first"}}
+        });
+        let identity = event_derived_id(draft.clone()).unwrap();
+        let mut envelope = draft.clone();
+        envelope["event_id"] = identity["event_id"].clone();
+        envelope["producer_proof"] = json!({"fixture": "outside digest"});
+        envelope["unsigned"] = json!({"fixture": "outside digest"});
+        assert_eq!(event_derived_id(envelope.clone()).unwrap(), identity);
+        envelope["payload"]["content"]["body"] = json!("second");
+        assert_ne!(
+            event_derived_id(envelope).unwrap()["event_id"],
+            identity["event_id"]
+        );
+        let mut retired = draft;
+        retired["proofs"] = json!([]);
+        assert!(event_derived_id(retired).is_err());
+    }
 
     #[test]
     fn mimi_consent_authoring_signs_unsigned_binding_and_rejects_tampering() {
