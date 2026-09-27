@@ -47,6 +47,9 @@ enum CoauthGrantHolder {
         verification_method: String,
         scopes: Vec<String>,
     },
+    RecoveryCandidateDevice {
+        device_id: String,
+    },
 }
 
 /// What the deployment-internal authenticated channel actually carried on one
@@ -211,6 +214,26 @@ impl MockCoauthIntrospectionServer {
                 scopes: scopes.iter().map(|scope| (*scope).to_owned()).collect(),
             },
             runtime_key,
+        )
+    }
+
+    /// Record the exact short-lived grant of a candidate recovery device.
+    /// Unlike a Standard human grant this carries no accepted-device binding;
+    /// introspection returns the protocol's closed recovery operation set.
+    pub fn bind_recovery_session_grant(
+        &self,
+        grant_jwt: &str,
+        subject: &str,
+        device_id: &str,
+        holder_key: &ed25519_dalek::VerifyingKey,
+    ) -> Result<()> {
+        self.record(
+            grant_jwt,
+            subject,
+            CoauthGrantHolder::RecoveryCandidateDevice {
+                device_id: device_id.to_owned(),
+            },
+            holder_key,
         )
     }
 
@@ -632,6 +655,17 @@ async fn coauth_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respo
                 "agent_id": binding.subject,
                 "agent_key_authorization_ref": agent_key_authorization_ref,
                 "verification_method": verification_method
+            });
+        }
+        CoauthGrantHolder::RecoveryCandidateDevice { device_id } => {
+            grant["credential_class"] = json!("recovery_session");
+            grant["device_id"] = json!(device_id);
+            grant["scopes"] = json!(
+                arkret_models_identity::RECOVERY_SESSION_GRANT_OPERATIONS
+            );
+            grant["holder_binding"] = json!({
+                "kind": "recovery_candidate_device",
+                "device_id": device_id
             });
         }
     }

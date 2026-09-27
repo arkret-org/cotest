@@ -46,7 +46,9 @@ use crate::harness::{
 };
 use crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
 use crate::scenarios::_helpers::coauth_bootstrap::spawn_ephemeral_postgres_for;
-use crate::scenarios::bridge_contracts::session_grant::mock_session_grant_jwt;
+use crate::scenarios::bridge_contracts::session_grant::{
+    mock_recovery_session_grant_jwt, mock_session_grant_jwt,
+};
 use crate::scenarios::identity_test_support::{
     HARNESS_INTERNAL_AUTHORITY_SECRET, actor_did_for_service_did,
     spawn_with_harness_account_authority_at,
@@ -1901,7 +1903,7 @@ fn recovery_grant_coordinates(
     principal: &ProvisionedTestPrincipal,
     station: &DidCoreId,
 ) -> Result<(arkret_wire::SessionGrantId, Base64UrlString)> {
-    let grant = mock_session_grant_jwt(
+    let grant = mock_recovery_session_grant_jwt(
         principal.core_id.as_str(),
         DEVICE_A,
         station.as_str(),
@@ -2182,8 +2184,8 @@ async fn set_recovery_session_expiry(
 pub async fn key_backup_recovery_unlock_delete_is_session_exact_and_zero_write() -> Result<()> {
     const RECOVERY_SEED: [u8; 32] = [0xd7; 32];
     let LiveRotation {
-        server: _server,
-        _coauth,
+        server,
+        _coauth: coauth,
         database,
         client_a,
         events_a,
@@ -2202,8 +2204,22 @@ pub async fn key_backup_recovery_unlock_delete_is_session_exact_and_zero_write()
         published.status(),
         published.text().await.unwrap_or_default()
     );
+
+    let recovery_grant = mock_recovery_session_grant_jwt(
+        signer.principal.core_id.as_str(),
+        signer.principal.device_id.as_str(),
+        signer.station.as_str(),
+    );
+    coauth.bind_recovery_session_grant(
+        &recovery_grant,
+        signer.principal.core_id.as_str(),
+        signer.principal.device_id.as_str(),
+        &signer.principal.device_signing_key.verifying_key(),
+    )?;
+    let recovery_client =
+        server.client_with_founding_device_grant(&signer.principal, recovery_grant)?;
     let session = create_verified_recovery_unlock_session(
-        &events_a,
+        &recovery_client,
         &signer,
         &recovery_method,
         RECOVERY_SEED,
