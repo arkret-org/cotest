@@ -4712,6 +4712,15 @@ try {
         }
     }
 
+    # Cold-start health permits the Station/Account Authority bootstrap cycle.
+    # Business readiness must wait until the final Station endpoint is trusted.
+    $coauthReadinessUrls = @($CoauthBaseUrl, $coauthSecondaryBaseUrl, $coauthServer2BaseUrl) + @(
+        $additionalServers | ForEach-Object { $_.CoauthBaseUrl }
+    )
+    foreach ($baseUrl in @($coauthReadinessUrls | Where-Object { $_ } | Select-Object -Unique)) {
+        Wait-HttpReady -Url "$($baseUrl.TrimEnd('/'))/readyz" -TimeoutSeconds $StartupTimeoutSeconds
+    }
+
     $inksonService = $null
     $inksonServer2Service = $null
     $generatedInksonServer2Command = $false
