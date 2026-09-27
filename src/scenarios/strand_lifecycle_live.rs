@@ -101,14 +101,25 @@ async fn refuse(
     event: &Event,
     status: StatusCode,
     code: &str,
+    reason: Option<&str>,
 ) -> Result<()> {
     let body = crate::publication::initial_submission(event.clone(), "")?;
-    expect_api_error(
+    let problem = expect_api_error(
         client.post("/_arkret/self/events").json(&body),
         status,
         code,
     )
     .await?;
+    if let Some(reason) = reason {
+        ensure!(
+            problem
+                .extensions
+                .get("reason_code")
+                .and_then(Value::as_str)
+                == Some(reason),
+            "expected registered reason_code={reason}, got {problem:?}"
+        );
+    }
     expect_api_error(
         reader.get(&format!(
             "/_arkret/self/committed-events/{}",
@@ -180,6 +191,7 @@ pub async fn run_strand_lifecycle_live() -> Result<()> {
             &bad,
             StatusCode::CONFLICT,
             "failed_precondition",
+            None,
         )
         .await?;
         ensure!(
@@ -229,6 +241,7 @@ pub async fn run_strand_lifecycle_live() -> Result<()> {
             refused,
             StatusCode::CONFLICT,
             "failed_precondition",
+            Some("strand_not_active"),
         )
         .await?;
         ensure!(
@@ -268,6 +281,7 @@ pub async fn run_strand_lifecycle_live() -> Result<()> {
         &twice_restore,
         StatusCode::CONFLICT,
         "failed_precondition",
+        Some("strand_not_archived"),
     )
     .await?;
     let next_event = stage(&alice, &realm, &strand, "blocked", Some("in_progress")).await?;
@@ -313,6 +327,7 @@ pub async fn run_strand_lifecycle_live() -> Result<()> {
         &denied,
         StatusCode::FORBIDDEN,
         "capability_denied",
+        None,
     )
     .await?;
     let denied_archive = lifecycle(&bob, &realm, &strand, EventKind::StrandArchive).await?;
@@ -322,6 +337,7 @@ pub async fn run_strand_lifecycle_live() -> Result<()> {
         &denied_archive,
         StatusCode::FORBIDDEN,
         "capability_denied",
+        None,
     )
     .await?;
     let grant = grant_realm_actions(
