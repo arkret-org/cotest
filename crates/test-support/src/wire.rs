@@ -130,6 +130,7 @@ pub fn verify_realm_state_snapshot(input: Value) -> Result<Value> {
             &freshness,
             &keys,
         )?;
+        replica.install_verified_current_snapshot_heads(&input.snapshot, &freshness, &keys)?;
         Ok(())
     })()
     .is_ok();
