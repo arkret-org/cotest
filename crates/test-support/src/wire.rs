@@ -124,13 +124,18 @@ pub fn verify_realm_state_snapshot(input: Value) -> Result<Value> {
             &keys,
         )?;
         failure_stage = "snapshot";
+        let mut current_replica = replica.clone();
         replica.install_verified_snapshot_heads(
             &input.snapshot,
             &input.expected_snapshot_id,
             &freshness,
             &keys,
         )?;
-        replica.install_verified_current_snapshot_heads(&input.snapshot, &freshness, &keys)?;
+        current_replica.install_verified_current_snapshot_heads(
+            &input.snapshot,
+            &freshness,
+            &keys,
+        )?;
         Ok(())
     })()
     .is_ok();
