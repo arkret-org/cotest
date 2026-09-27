@@ -420,6 +420,7 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
       await test.step("bound client signs in once and logs out", async () => {
         await jointPage.gotoLogin();
         await serverLoginViaCoauth(page, account);
+        await jointPage.completeRecoveryKeySetupIfPrompted();
         await hardLogoutViaAccountMenu(jointPage);
       });
 
