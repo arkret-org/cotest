@@ -8,6 +8,7 @@ type CotestWireCommand =
   | "did-document-digest"
   | "event-envelope-proof"
   | "event-derived-id"
+  | "verify-realm-state-snapshot"
   | "invite-subject-proof"
   | "mimi-consent-proof"
   | "mimi-request-consent-proof"

@@ -2,18 +2,16 @@
 
 ## 目标
 
-通过 soland 公开的 conformance 端点,执行 spec `conformance/realm-state-realm-state-snapshot-schema.md`、`conformance/query-schema.md` 与 `conformance/scalability-constraints.md` 对应的 conformance vector,逐项验证 snapshot manifest 的 chunk/hash/signature 形状、query 的 filter/sort/pagination 行为以及 scale/limit 的 fail-closed 阈值,确保 soland 的实现与 spec fixture 在 byte/digest/枚举值/HTTP 状态码层面完全一致。
+Phase B 通过标准接口读取真实 RealmStateSnapshot，并复用 SDK/Garth 验证权威链、完整身份与签名。其余阶段保留 development-only harness 的回归检查；其中旧 manifest/chunk fixture 不是现行协议快照，不能作为生产 Snapshot 合规或基础功能完成的证据，仍需按现行规范重建。
 
 不验证:encoding & crypto / redaction(见 `conformance/encoding-vectors`)、registry drift(见 `conformance/registry-drift`)、profile claim 真实性(见 `conformance/profile-gates`)、state resolution(见 `sync/state-resolution-vectors`)、capability 向量(见 `authz/capability-vectors`)、sync pagination 通用向量(见 `sync/sync-vectors`)。本 scenario 与 `conformance/encoding-vectors` 是兄弟关系:同一组 vector loader 模式、同一 HTTP-over-fixture 思路,但覆盖的是 snapshot / query / scalability 三个分支。
 
 ## Spec 锚点
 
-- `arkret-spec/spec/v1/zh/conformance/realm-state-realm-state-snapshot-schema.md`
-  - §2 — Snapshot manifest 字段集(id / realm_id / reducer_profile / frontier / event_set_commitment / state_digest / chunks[] / verification_hints / signature;`realm_state_snapshot_ref` 仅用于外部引用位)
-  - §3 — Chunk descriptor 与 chunk payload canonical shape;`items` 按 `(kind, id)` byte order 排序
-  - §4 — `state_digest` = canonical reducer 输出之上的 Merkle root;leaf = `sha256(kind || ":" || id || ":" || sha256(canonical_json(object)))`
-  - §5 — Snapshot signature 必须覆盖 manifest payload(去掉 `signature` 自身)的 canonical 编码;签名 DID 必须属于 Realm owner / admin / trusted issuer / witness quorum / policy-approved issuer
-  - §6 — Event-set commitment 与 inclusion challenge 的能力边界(本 scenario 只断言 manifest digest 与 chunk hash,inclusion challenge 主流程在 `conformance/snapshot-inclusion-challenge` 单独覆盖)
+- `arkret-spec/spec/v1/zh/conformance/realm-state-snapshot-schema.md`
+  - 闭合字段为 snapshot_id、realm_id、governance_generation、visible_stream_heads、current_state_entries、retention_and_history_floor、created_at、signature。
+  - 快照是 Event 与 RealmCommit 的派生读面，不能代替接受真相；current rows、stream heads 与 history floor 必须来自同一 cut。
+  - Phase B 同时依照 `sync/authority-commit-log.md` 与 SDK/Garth 的完整 signed RealmStateSnapshot 合同；v1 不采用旧 manifest/chunk/state-root 作为快照或签名预像。
 - `arkret-spec/spec/v1/zh/conformance/query-schema.md`
   - §2 — Query 对象顶层字段集(realm_ids / object_kinds / morph_kinds / facets / filters / relation / order_by / projection / cursor / limit / consistency)
   - §3 — Filter `{ field, op, value }`,op 在 `{eq, neq, in, not_in, lt, lte, gt, gte, contains, exists, prefix, full_text}`
@@ -37,7 +35,7 @@
 ## 拓扑
 
 - 1 × soland (Station) — `solandBaseUrl()`,暴露(将暴露)`/_arkret/_conformance/snapshot`、`/_arkret/_conformance/query` 端点
-- 1 × coauth (private authentication process) — 仅用来给 alice 颁发 dev session,使 Phase B 验证 snapshot signature 的签名者 DID 时可以拉到真实 actor signing key
+- 1 × coauth — Phase B 通过真实注册／登录取得 canonical session grant 与 DPoP，snapshot 由治理 Station 签发。
 - 1 × conformance harness (Playwright `request` fixture + node `fs`) — 在测试 setup 阶段从 `arkret-spec/spec/v1/artifacts/fixtures/` glob `ak.vector.{snapshot,query,scalability}.*.json`,逐项 POST 到 soland,断言响应与 `expected_*` 字段一致
 
 (都是 cotest 现有 harness 直接提供的,不需要改 `scripts/run-joint-e2e.ps1`;但 `/_arkret/_conformance/{snapshot,query}` 端点目前未实现,见 Implementation notes。)
@@ -46,13 +44,12 @@
 
 | 名字 | DID | 在 conformance/snapshot-query-scalability 中的角色 | 注册时机 |
 |---|---|---|---|
-| alice | `did:webvh:z6mkfixture:alice-sqs-<uuid>.example` | 单 actor;Phase B 用她的 dev key 验证 snapshot signature 验证流的 actor 上下文(实际签名者 DID 由 vector 提供);Phase C 用她的 session 调 query 端点确保 authz filter 走 actor 路径 | 测试开始前 |
+| alice | 真实注册得到的 WebVH principal | Phase B 创建普通 Realm，以获准读面取得 snapshot；不提供 snapshot signer 私钥或代签。 | Phase B setup |
 | harness | n/a (Playwright `request` + node `fs`) | Vector loader / assertion driver;glob fixture 目录 → 调端点 → diff actual vs expected | n/a |
 
 ## Pre-conditions
 
-- `alice` 通过 `POST /_soland/self/account/register` 注册过 (`ensureRegistered`)
-- `alice` 持有有效 dev session token (`POST /_soland/gate/auth/dev-login`)
+- Phase B 使用 `openDpopUserPage` 真实 provisioning，持有 canonical session grant、holder proof 与独立 Event signer。
 - harness 可访问 `arkret-spec/spec/v1/artifacts/fixtures/` 目录(从 spec test 文件位置 `cotest/e2e/tests/conformance/*.spec.ts` 解析为 `../../../../arkret-spec/spec/v1/artifacts/fixtures`,见 Implementation notes)
 - soland 暴露以下 conformance 端点 (gap,见 Implementation notes):
   - `POST /_arkret/_conformance/snapshot` — body `{ vector_id, manifest, chunks }` → `{ manifest_digest, chunk_hashes[], signature_valid, signer_did }`
@@ -60,7 +57,7 @@
 
 ## Steps
 
-### Phase A — Snapshot manifest integrity (snapshot-schema §2 / §3 / §4)
+### Phase A — 旧 development harness manifest integrity（待重建，非现行 Snapshot 合规证据）
 
 1. **harness** 加载 `ak.vector.realm_state_snapshot.manifest_integrity.v1` (若存在);vector 形如:
    ```json
@@ -82,16 +79,13 @@
    - 若 vector 提供 `expected_state_digest`,断言 `response.state_digest === expected_state_digest`(覆盖 §4 reducer-output Merkle root)
 4. 故意篡改一条 chunk payload(改一个 byte)再 POST → 端点 MUST 返回 4xx 与 `error.code === "realm_state_snapshot_chunk_digest_mismatch"`,不静默接受
 
-### Phase B — Snapshot signature binding (snapshot-schema §5)
+### Phase B — 真实 Snapshot identity、authority 与 signature binding
 
-5. **harness** 加载 `ak.vector.realm_state_snapshot.signature_ed25519.v1`(deterministic Ed25519 vector)
-6. `POST /_arkret/_conformance/snapshot` with `{ vector_id, manifest, chunks }`(manifest 内含 `signature` 字段)
-7. 断言:
-   - `response.signature_valid === true`
-   - `response.signer_did === vector.expected_signer_did`(spec §5 列出的 5 类签名者之一:Realm owner / creator / admin / trusted snapshot issuer / witness quorum)
-   - 签名 transcript 覆盖范围(id / realm_id / reducer_profile / schema_profile_refs / state_digest / frontier / event_set_commitment / chunks descriptor / verification_hints / created_by / created_at)与 vector 声明一致 — 端点应返回 `signed_transcript_fields[]` 或等价信号,断言它与 spec §5 列表逐项相等
-8. 同一 manifest 再 POST 一次:`response.signature` 字段(若回显)对 Ed25519 vector MUST 完全相等(deterministic);ECDSA vector 若存在则 `r/s` 可不同但 `signature_valid` 仍为 true
-9. 把 vector `signer_did` 替换为已撤销的 DID(vector `expected_signer_did_revoked` 字段) → 端点 MUST 返回 4xx，`error.code` 是登记的顶层 code（`capability_denied`），`reason_code === "realm_state_snapshot_issuer_revoked"`(snapshot-schema §5 最大接受窗口规则)
+5. 真实注册／登录后经 UI 创建普通 Realm，读取标准 snapshot head，再按 snapshot_id 精确读取原签名对象；两者 canonical bytes 必须一致。
+6. 以新随机 nonce 读取标准 Realm authority bundle，并获取 runner 已绑定 Station 的 retained service resolution。
+7. `cotest-wire verify-realm-state-snapshot` 直接复用 SDK 的 method-native history、verification method 解析和 Garth 的 verified authority/snapshot 安装：验证 nonce、治理代际的 Station signer、完整身份预像与 detached signature。Rust SDK 是唯一类型来源，测试工具只返回验证布尔值和内部失败阶段。
+8. 同一真实对象分别改变 body、签名字节、签名方法为已验证 DID 中不存在的方法，以及 authority request nonce；四者均须拒绝。
+9. 不使用旧 frontier/seal transcript、伪签名或 reserved issuer-revoked reason，也不把 unknown method 负例记为已经执行真实 DID 撤销操作。
 
 ### Phase C — Query filters / sort / pagination (query-schema §2 / §3 / §6 / §8)
 
@@ -167,7 +161,7 @@
 ## Observable assertions (合并清单)
 
 - Phase A:`manifest_digest` 字符串相等、`chunk_hashes` 顺序与字节相等、可选 `state_digest` 相等;篡改 chunk 后 4xx + `realm_state_snapshot_chunk_digest_mismatch`
-- Phase B:`signature_valid === true`、`signer_did` 在 §5 五类合法签名者之一、Ed25519 deterministic 再签结果稳定、revoked signer 4xx + `realm_state_snapshot_issuer_revoked`
+- Phase B：原始 by-ref bytes 与 head 一致，完整 SDK/Garth verified path 成功；body、signature、unknown method、nonce 四种篡改逐项拒绝。
 - Phase C:filter / sort 后行顺序与 `expected_rows_page_*` 顺序相等;`has_more` 与 expected 相同;`next_cursor` 非空且 opaque;同一 cursor 重发结果 byte-equal
 - Phase D:unknown filter op / conflicting sort / unauthorized projection 一律 4xx + `query_schema_violation`,响应不含 `items`
 - Phase E:超 page_size / 超 batch / 超 depth / 超 envelope 一律 4xx + `scalability_limit_exceeded` 或 `payload_too_large`,不静默截断
@@ -186,11 +180,11 @@
 - **Soland test-build 要求**:`/_arkret/_conformance/{snapshot,query}` 已实现为 development-only HTTP harness。joint runner 必须以 `conformance-harness` feature 构建 Soland 且设置 `development_mode=true`；仅源码时间戳 fresh 不足以证明缓存 binary 带有该 feature。生产 binary 不得暴露该命名空间。
 - **fixture 缺失 fallback**:目前 `arkret-spec/spec/v1/artifacts/fixtures/` 中**没有任何** `ak.vector.{snapshot,query,scalability}.*` 文件。Phase F 的 loader smoke 必须优雅降级:`readdirSync` 后命中数可以是 0,assertion 写成 `expect(count).toBeGreaterThanOrEqual(0)`(always-pass);candidate 清单与 count 用 `console.log` + `testInfo.attach` 输出,使得 (1) fixture 尚未提交时测试不红;(2) fixture 提交后日志里立刻能看到 vector 总数变化;(3) spec 作者新增 vector 时不需要改 harness。
 - **fixture loader 实现**:用 `fileURLToPath(import.meta.url)` + `dirname` + `path.resolve(..., "..", "..", "..", "..", "arkret-spec", "spec", "v1", "artifacts", "fixtures")` 从 spec 文件位置走到 fixtures 目录。**不**新增 `helpers/conformance-fixtures.ts`;loader 写在 spec 文件顶部(与 encoding-vectors 风格一致)。
-- **signing key 注入**:Phase B 验证 signature 时 vector 自带 `signer_did` + `public_key_jwk`,不依赖 alice 的 dev key — snapshot 签名者通常是服务自己或 trusted issuer,不是 actor。Phase C 的 query authz filter 才用 alice 的 session token。
+- **snapshot 信任材料**：Phase B 只从标准接口读取真实 signed snapshot、nonce-bound authority 与 retained service history，不注入 snapshot 私钥，不从未验证的展示 JSON 选签名公钥。
 - **vector id 命名**(参考 encoding-vectors §1.2):`ak.vector.realm_state_snapshot.<scenario>.v1` / `ak.vector.query.<scenario>.v1` / `ak.vector.scalability.<scenario>.v1`,具体 scenario 名见各 Phase 步骤。
-- **error codes**（`realm_state_snapshot_issuer_revoked` 是 `reason_codes[]` 成员，出现在 `reason_code` 而不是顶层 `error.code`）:`realm_state_snapshot_chunk_digest_mismatch`、`realm_state_snapshot_issuer_revoked`、`query_schema_violation`、`scalability_limit_exceeded`、`payload_too_large`、`unknown_vector_id`、`unsupported_vector_version`、`cursor_query_mismatch` — 在 `arkret-spec/spec/v1/artifacts/registry/error-code-registry.json` 中应有对应条目(缺失属于 spec/registry 缺口,不属于 cotest 缺口)。
-- **no new helper**：用现有 `request` fixture + `ensureRegistered` / `issueUserSession`，保留 canonical Standard grant 与逐请求 DPoP；所有 loader / assertion 写在 spec 文件局部。
+- **error codes**：其它 conformance phases 仅断言现行 active registry 合同；Phase B 的本地验证结果不是新增协议 verdict，reserved issuer-revoked reason 不用于 positive/negative 验收。
+- **Phase B 验证工具**：使用现有 `openDpopUserPage` 和逐请求 DPoP；`cotest-wire` 的薄命令调用 SDK/Garth 验证器，不另建协议类型或自定义签名规则。其余阶段的 fixture loader 保留在 spec 文件局部。
 
 ## 总耗时预估
 
-单次跑约 30-60s(纯 HTTP 调用 + 一次 fs.readdir,无 browser context;snapshot / query / scalability vector 总数预计 ≤ 20 条,每条 < 300ms;loader smoke < 100ms)。当前 fixture 未提交,主流程全部 fixme,只有 Phase F + Phase G live,实际 wall-clock 约 1-3s。
+Phase B 包含真实 provisioning 与浏览器创建 Realm，超时窗口为 180 秒；其它阶段按实际 joint-e2e 记录报告。测试标签与 fixture loader 成功不能替代生产功能验收。

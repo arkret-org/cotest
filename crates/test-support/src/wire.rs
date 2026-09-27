@@ -14,7 +14,7 @@
 use std::io::{self, Read};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, bail, ensure};
 use arkret_canonical as canonical;
 use arkret_identifiers::{ConsentId, DeviceId, Did, DidCoreId, Hash, project_did_to_core_id};
 use arkret_models_collaboration::governance::membership_invite::{
@@ -37,6 +37,107 @@ use sha2::{Digest, Sha256};
 #[derive(Debug, Deserialize)]
 struct CanonicalInput {
     value: Value,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SnapshotVerificationInput {
+    snapshot: arkret_wire::RealmStateSnapshot,
+    expected_snapshot_id: arkret_wire::RealmSnapshotId,
+    authority_request: arkret_wire::AuthorityBundleRequest,
+    authority_bundle: arkret_wire::RealmAuthorityBundle,
+    trusted_service_id: DidCoreId,
+    service_resolution: arkret_models_identity::AuthenticatedServiceResolution,
+}
+
+/// Verify a live snapshot with the shared client verifier and retained
+/// method-native service history. This CLI result is test tooling, not a wire
+/// verdict or a substitute for the Station's authorization decision.
+pub fn verify_realm_state_snapshot(input: Value) -> Result<Value> {
+    let input: SnapshotVerificationInput = serde_json::from_value(input)?;
+    let mut failure_stage = "service_history";
+    let verified = (|| -> Result<()> {
+        let now = Utc::now();
+        ensure!(input.authority_bundle.current_service_id == input.trusted_service_id);
+        arkret_identity::verify_authenticated_service_resolution_history(
+            &input.service_resolution,
+            &input.trusted_service_id,
+            now,
+        )?;
+        failure_stage = "verification_methods";
+        let mut methods = std::collections::BTreeSet::from([
+            input
+                .authority_bundle
+                .genesis_commit
+                .signature
+                .verification_method
+                .clone(),
+            input
+                .authority_bundle
+                .current_assertion
+                .signature
+                .verification_method
+                .clone(),
+            input.snapshot.signature.verification_method.clone(),
+        ]);
+        for transition in &input.authority_bundle.authority_transitions {
+            methods.insert(
+                transition
+                    .change_commit
+                    .signature
+                    .verification_method
+                    .clone(),
+            );
+            methods.insert(
+                transition
+                    .handoff
+                    .old_authority_signature
+                    .verification_method
+                    .clone(),
+            );
+            methods.insert(
+                transition
+                    .handoff
+                    .new_authority_acceptance_signature
+                    .verification_method
+                    .clone(),
+            );
+        }
+        let mut keys = arkret_identity::RealmAuthorityKeyMap::new();
+        for method in methods {
+            let key = arkret_identity::resolve_verification_method_key_from_document(
+                &input.service_resolution.normalized_did_document,
+                method.as_str(),
+            )?;
+            keys.insert(&method, key.public_key);
+        }
+        let freshness = arkret_identity::RealmAuthorityFreshness::new(
+            now,
+            input.authority_request.nonce.clone(),
+        );
+        let mut replica = garth::RealmReplica::new(input.authority_request.realm_id.clone());
+        failure_stage = "authority";
+        replica.install_verified_authority(
+            &input.authority_request,
+            input.authority_bundle.clone(),
+            &freshness,
+            &keys,
+        )?;
+        failure_stage = "snapshot";
+        replica.install_verified_snapshot_heads(
+            &input.snapshot,
+            &input.expected_snapshot_id,
+            &freshness,
+            &keys,
+        )?;
+        Ok(())
+    })()
+    .is_ok();
+    Ok(if verified {
+        json!({"verified": true})
+    } else {
+        json!({"verified": false, "failure_stage": failure_stage})
+    })
 }
 
 #[derive(Debug, Deserialize)]

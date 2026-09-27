@@ -18,6 +18,7 @@ fn main() -> Result<()> {
         "event-envelope-proof" => wire::event_proof(input, EventDigestMode::RawCanonicalJson)?,
         "event-derived-id" => wire::event_derived_id(input)?,
         "event-envelope-parse" => wire::event_envelope_parse(input)?,
+        "verify-realm-state-snapshot" => wire::verify_realm_state_snapshot(input)?,
         "mimi-consent-proof" => wire::mimi_consent_proof(input)?,
         "mimi-request-consent-proof" => wire::mimi_request_consent_proof(input)?,
         "invite-subject-proof" => wire::invite_subject_proof(input)?,

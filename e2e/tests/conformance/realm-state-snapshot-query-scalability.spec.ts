@@ -13,7 +13,8 @@
 // Fixtures: arkret-spec/spec/v1/artifacts/fixtures/ak.vector.realm_state_snapshot.*.json,
 //           ak.vector.query.*.json, ak.vector.scalability.*.json
 //
-// Phases A-E exercise the test-only conformance endpoints under the
+// Phase B verifies an actual issued snapshot through Garth and the SDK.
+// Phases A, C-E exercise the test-only conformance endpoints under the
 // spec-reserved namespace /_arkret/_conformance/{snapshot,query}
 // (service-http-binding.md §2.1.3). The leading `_` marks `_conformance` as a
 // reserved test-only segment, NOT a production trust-surface; the namespace is
@@ -31,14 +32,17 @@
 //     sanity used by registry-drift / profile-gates.
 
 import { readdirSync, readFileSync, existsSync } from "node:fs";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "../../helpers/arkret-test";
-import { conformanceBaseUrl, solandBaseUrl } from "../../helpers/env";
+import { conformanceBaseUrl, solandBaseUrl, solandServiceId, solandServiceResolution } from "../../helpers/env";
+import { openDpopUserPage } from "../../helpers/users";
 import {
   canonicalJson,
-  projectDidToCoreId,
+  authHeaders,
+  cotestWire,
+  expectJsonOk,
   wireErrCode,
 } from "../../helpers/soland-api";
 
@@ -153,66 +157,73 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
   });
 
   test("Phase B — snapshot signature binding verifies against recorded signer DID", async ({
+    browser,
     request,
   }) => {
-    const signerDid = "did:web:soland.conformance-signer";
-    const chunks = [{ chunk_id: "chunk-1", payload: { cell: "a", value: "signed" } }];
-    const manifest = {
-      id: "ak:realm_state_snapshot:ak:realm:AT1FV5Oc-IicigRsbtaKiJcXWc0f4WBgwlQTJk_XFuyQ:signed",
-      realm_id: "ak:realm:AT1FV5Oc-IicigRsbtaKiJcXWc0f4WBgwlQTJk_XFuyQ",
-      reducer_profile: "ak.reducer.core.v1",
-      schema_profile_refs: ["ak.schema.event.v1"],
-      chunk_hashes: chunks.map(chunkDigest),
-      created_by: projectDidToCoreId(signerDid),
-      created_at: "2026-05-31T00:00:00.000Z",
-      signature: {
-        alg: "Ed25519",
-        signer_did: signerDid,
-        signature: "deterministic-conformance-fixture",
-      },
-    };
-    const resp = await request.post(`${conformanceBaseUrl()}/snapshot`, {
-      headers: { "content-type": "application/json" },
-      data: canonicalJson({
-        vector_id: "ak.vector.realm_state_snapshot.signature_binding.v1",
-        manifest,
-        chunks,
-      }),
-    });
-    expect(resp.status(), await resp.text()).toBe(200);
-    const body = await resp.json();
-    expect(body.signature_valid).toBe(true);
-    expect(body.signer_did).toBe(signerDid);
-    expect(body.signed_transcript_fields).toEqual([
-      "id",
-      "realm_id",
-      "reducer_profile",
-      "schema_profile_refs",
-      "state_digest",
-      "frontier",
-      "event_set_commitment",
-      "chunks",
-      "verification_hints",
-      "created_by",
-      "created_at",
-    ]);
+    test.setTimeout(180_000);
+    const flow = await openDpopUserPage(browser, request, `snapshot-proof-${Date.now()}`);
+    if (!flow) {
+      throw new Error("signed snapshot verification requires canonical session provisioning");
+    }
+    try {
+      const realmId = await flow.page.createRealm({
+        title: `Snapshot proof ${Date.now()}`,
+        discoverability: "listed",
+        joinRule: "invite",
+        mlsActivated: false,
+      });
+      const token = flow.session.grantJwt;
+      const headUrl = `${solandBaseUrl()}/_arkret/self/realm-state-snapshot/head?realm_id=${encodeURIComponent(realmId)}`;
+      const snapshot = await expectJsonOk(await request.get(headUrl, {
+        headers: authHeaders(token, "GET", headUrl),
+      }), "read signed snapshot head") as Record<string, any>;
+      const exactUrl = `${solandBaseUrl()}/_arkret/self/realm-state-snapshot/${encodeURIComponent(snapshot.snapshot_id)}?realm_id=${encodeURIComponent(realmId)}`;
+      const exact = await expectJsonOk(await request.get(exactUrl, {
+        headers: authHeaders(token, "GET", exactUrl),
+      }), "read exact signed snapshot");
+      expect(canonicalJson(exact)).toBe(canonicalJson(snapshot));
+      const authorityRequest = {
+        realm_id: realmId,
+        nonce: randomBytes(32).toString("base64url"),
+      };
+      const authorityBundle = await expectJsonOk(await request.post(
+        `${solandBaseUrl()}/_arkret/open/realm-authority/bundle`, {
+          headers: { "content-type": "application/json" },
+          data: canonicalJson(authorityRequest),
+        },
+      ), "read nonce-bound Realm authority");
+      const serviceResolution = await expectJsonOk(await request.get(
+        solandServiceResolution().resolution_url,
+      ), "read retained Station history");
+      const evidence = {
+        snapshot,
+        expected_snapshot_id: snapshot.snapshot_id,
+        authority_request: authorityRequest,
+        authority_bundle: authorityBundle,
+        trusted_service_id: solandServiceId(),
+        service_resolution: serviceResolution,
+      };
+      const verify = (input: unknown) => cotestWire<{ verified: boolean }>(
+        "verify-realm-state-snapshot", input,
+      ).verified;
+      expect(cotestWire("verify-realm-state-snapshot", evidence)).toEqual({ verified: true });
 
-    const revoked = await request.post(`${conformanceBaseUrl()}/snapshot`, {
-      headers: { "content-type": "application/json" },
-      data: canonicalJson({
-        vector_id: "ak.vector.realm_state_snapshot.signature_binding.revoked.v1",
-        manifest,
-        chunks,
-        revoked_signer_dids: [signerDid],
-      }),
-    });
-    expect(revoked.status()).toBeGreaterThanOrEqual(400);
-    // `realm_state_snapshot_issuer_revoked` is a registered reason code, so it rides
-    // `reason_code`; the RFC 9457 `type` tail stays a registered top-level
-    // code (api-conventions.md 5.1).
-    const revokedBody = (await revoked.json()) as { reason_code?: unknown };
-    expect(wireErrCode(revokedBody)).toBe("capability_denied");
-    expect(revokedBody.reason_code).toBe("realm_state_snapshot_issuer_revoked");
+      const changedBody = structuredClone(snapshot);
+      changedBody.governance_generation += 1;
+      expect(verify({ ...evidence, snapshot: changedBody })).toBe(false);
+      const changedSignature = structuredClone(snapshot);
+      const sig = changedSignature.signature.sig as string;
+      changedSignature.signature.sig = `${sig[0] === "A" ? "B" : "A"}${sig.slice(1)}`;
+      expect(verify({ ...evidence, snapshot: changedSignature })).toBe(false);
+      const unknownMethod = structuredClone(snapshot);
+      unknownMethod.signature.verification_method = `${snapshot.signature.verification_method.split("#")[0]}#unavailable-snapshot-key`;
+      expect(verify({ ...evidence, snapshot: unknownMethod })).toBe(false);
+      expect(verify({ ...evidence, authority_request: {
+        ...authorityRequest, nonce: randomBytes(32).toString("base64url"),
+      } })).toBe(false);
+    } finally {
+      await flow.page.close();
+    }
   });
 
   test("Phase C — query filters / sort / pagination return expected_rows in order", async ({
