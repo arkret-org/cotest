@@ -1538,17 +1538,19 @@ export async function scanRealmStreamApi(
     data: canonicalJson({
       realm_id: realmId,
       stream_ref: streamRef,
+      after_position: null,
       limit: opts.limit ?? 256,
     }),
   });
   const body = await expectJsonOk<{
-    commits?: Array<{
+    committed_events: Array<{
       commit: Record<string, unknown>;
       event: Record<string, unknown>;
     }>;
     truncated?: boolean;
   }>(response, `scan Realm stream for ${realmId}`);
-  const items = body.commits ?? [];
+  const items = body.committed_events;
+  expect(Array.isArray(items), "stream scan must return committed_events").toBeTruthy();
   return {
     commits: items.map((item) => item.commit),
     events: items.map((item) => item.event),
