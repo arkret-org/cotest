@@ -32,19 +32,19 @@ Assert-True `
 $solandApi = Get-Content -Raw -LiteralPath (
     Join-Path $PSScriptRoot "..\..\e2e\helpers\soland-api.ts"
 )
-$authContextMatch = [regex]::Match(
+$producerProofMatch = [regex]::Match(
     $solandApi,
-    'function eventAuthContext\([\s\S]*?\n\}'
+    'function eventEnvelopeProof\([\s\S]*?\r?\n\}(?=\r?\n)'
 )
-Assert-True $authContextMatch.Success "eventAuthContext helper must remain present"
+Assert-True $producerProofMatch.Success "producer proof helper must remain present"
 Assert-True `
-    ($authContextMatch.Value -match 'authority_refs') `
-    "eventAuthContext must bind the sorted authority references"
+    ($producerProofMatch.Value -match 'return sdkEventEnvelopeProof\(') `
+    "producer proof must use the canonical SDK signer"
 Assert-True `
-    ($authContextMatch.Value -notmatch 'key_epoch') `
-    "eventAuthContext must not revive the removed key_epoch wire member"
+    ($producerProofMatch.Value -match 'verificationMethod,\s*createdAt,\s*signingSeedB64url:') `
+    "producer proof must bind the registered verification method, creation time and signer"
 Assert-True `
-    ($authContextMatch.Value -notmatch 'key_id') `
-    "eventAuthContext must not duplicate the proof's key identifier"
+    ($producerProofMatch.Value -notmatch '\b(?:auth_context|authority_refs|key_epoch|key_id)\b') `
+    "producer proof must not revive removed admission-context fields"
 
 Write-Host "joint-soland-conformance-feature.tests.ps1: PASS"

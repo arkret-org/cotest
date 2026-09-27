@@ -11,10 +11,20 @@ $original = $null
 $replacementId = $null
 
 try {
-    $command = "& powershell -NoProfile -Command 'Start-Sleep -Seconds 60'"
+    $shellPath = (Get-Process -Id $PID).Path
+    $quotedShell = "'" + $shellPath.Replace("'", "''") + "'"
+    $sleepCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes('Start-Sleep -Seconds 60'))
+    $command = "& $quotedShell -NoProfile -EncodedCommand $sleepCommand"
     $command | Set-Content -LiteralPath $commandLog -Encoding utf8NoBOM
     $wrapped = "$command; if (-not `$?) { exit 1 }; exit 0"
-    $original = Start-Process -FilePath 'powershell' -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', $wrapped) -WorkingDirectory $root -WindowStyle Hidden -PassThru
+    $startArguments = @{
+        FilePath = $shellPath
+        ArgumentList = @('-NoProfile', '-EncodedCommand', [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($wrapped)))
+        WorkingDirectory = $root
+        PassThru = $true
+    }
+    if ($IsWindows) { $startArguments.WindowStyle = 'Hidden' }
+    $original = Start-Process @startArguments
     Start-Sleep -Milliseconds 750
     $topology = [pscustomobject]@{
         schema = 'cotest.joint-topology.v1'

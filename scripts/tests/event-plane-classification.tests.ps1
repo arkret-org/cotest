@@ -31,8 +31,8 @@ function Assert-NoRustMatch {
 }
 
 Assert-NoRustMatch `
-    -Name "raw Event plane equality" `
-    -Pattern 'cbs_plane\(\)\s*(?:==|!=)' `
+    -Name "retired Event plane classification" `
+    -Pattern '\b(?:cbs_plane|is_data_plane|is_control_plane)\s*\(' `
     -Roots $sourceRoots
 Assert-NoRustMatch `
     -Name "exported Event descriptor plane access" `
@@ -40,10 +40,10 @@ Assert-NoRustMatch `
     -Roots $sourceRoots
 $generatedKinds = Join-Path $WorkspaceRoot "arkret-rust-sdk\crates\wire\src\generated\event_kinds.rs"
 $generatedSource = Get-Content -Raw -LiteralPath $generatedKinds
-foreach ($helper in @("cbs_plane", "is_data_plane", "is_control_plane")) {
+foreach ($helper in @("product_class", "wire_scope", "is_reducer_input")) {
     if ($generatedSource -notmatch "pub fn $helper\(") {
         throw "generated EventKind is missing $helper()"
     }
 }
 
-Write-Host "Event plane classification gate passed."
+Write-Host "Event registry classification gate passed."

@@ -9,6 +9,7 @@ Failed commands are reported with an instruction to retry from an elevated shell
 [CmdletBinding(SupportsShouldProcess)]
 param(
     [ValidateRange(1, 32)][int]$ServerCount = 1,
+    [ValidateSet('local.host', 'localhost')][string]$DnsSuffix = 'local.host',
     [switch]$StartCoauth,
     # Browserless profiles still use Playwright's test runner, but do not need
     # its multi-hundred-megabyte Chromium payload.
@@ -316,7 +317,16 @@ if ($platform.os -eq "windows") {
         }
         Update-CotestProcessPath
 } else {
-    Add-InstallAction "platform packages" "failed" "automatic platform package installation is currently supported only on Windows; retry the applicable reported command with elevation"
+    $requiredTools = @('node', 'npm', 'npx', 'cargo', 'rustc')
+    if ($RequireDocker) { $requiredTools += 'docker' }
+    $missingTools = @($requiredTools | Where-Object { -not (Get-Command $_ -ErrorAction SilentlyContinue) })
+    if (-not (Find-CotestOpenSslPath)) { $missingTools += 'openssl' }
+    if ((Get-CotestCaddyInspection).status -ne 'pass') { $missingTools += 'verified caddy' }
+    if ($missingTools.Count -gt 0) {
+        Add-InstallAction "platform packages" "failed" "missing=$($missingTools -join ','); automatic platform package installation is currently supported only on Windows"
+    } else {
+        Add-InstallAction "platform packages" "ready" "all required platform packages are already installed and verified"
+    }
 }
 
 $npm = Get-Command npm -ErrorAction SilentlyContinue
@@ -346,8 +356,10 @@ if ($RequireDocker) {
     }
 }
 
-if ($isAdministrator) {
-    $null = Initialize-CotestWindowsHostsAccess
+if ($DnsSuffix -eq 'local.host') {
+    if ($isAdministrator) {
+        $null = Initialize-CotestWindowsHostsAccess
+    }
 }
 
 function Find-CotestTool {
@@ -400,7 +412,14 @@ $caddy = Get-CotestCaddyInspection
 $caddyRepair = if ($caddy.status -eq "pass") { @() } else { @(Get-CotestCaddyRepairAdvice -PlatformInfo $platform) }
 Add-Check "caddy" $caddy.status $caddy.detail $caddyRepair
 
-if (-not (Test-Path -LiteralPath $resolvedHostsPath -PathType Leaf)) {
+if ($DnsSuffix -eq 'localhost') {
+    try {
+        Assert-CotestLoopbackDns -Hosts (Get-CotestJointHostNames -ServerCount $ServerCount -IncludeCoauth $StartCoauth.IsPresent -DnsSuffix $DnsSuffix)
+        Add-Check "loopback DNS" "pass" "all localhost service names and the unregistered probe resolve only to loopback"
+    } catch {
+        Add-Check "loopback DNS" "fail" $_.Exception.Message
+    }
+} elseif (-not (Test-Path -LiteralPath $resolvedHostsPath -PathType Leaf)) {
     Add-Check "hosts file" "fail" "not found: $resolvedHostsPath"
 } else {
     try {
@@ -427,13 +446,15 @@ if (-not (Test-Path -LiteralPath $resolvedHostsPath -PathType Leaf)) {
     }
 }
 
-if ($platform.os -ne "windows") {
+if ($DnsSuffix -eq 'localhost') {
+    Add-Check "hosts setup adapter" "pass" "localhost topology requires no hosts mutation; DNS was verified above"
+} elseif ($platform.os -ne "windows") {
     Add-Check "hosts setup adapter" "unsupported" "read-only detection is supported; privileged initialization is currently implemented only for Windows"
 } else {
     Add-Check "hosts setup adapter" "pass" "Windows ACL backup/grant/restore adapter available"
 }
 
-$requiredHosts = @(Get-CotestJointHostNames -ServerCount $ServerCount -IncludeCoauth $StartCoauth.IsPresent -IncludeUnregisteredProbe $true)
+$requiredHosts = @(Get-CotestJointHostNames -ServerCount $ServerCount -IncludeCoauth $StartCoauth.IsPresent -IncludeUnregisteredProbe $true -DnsSuffix $DnsSuffix)
 $portsPerServer = if ($StartCoauth) { 4 } else { 2 }
 $recommendedMemoryGb = [math]::Max(4, 2 + ($ServerCount * $(if ($StartCoauth) { 2 } else { 1 })))
 # The recommendation includes headroom for transient browser/build activity;

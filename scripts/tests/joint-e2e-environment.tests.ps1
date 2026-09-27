@@ -40,13 +40,23 @@ Assert-Equal $original (Remove-CotestHostsBlocks -Content $mixed) "a sweep must 
 
 Assert-True ((Test-CotestAdministrator) -is [bool]) "administrator detection must return a boolean"
 
-$topology = New-CotestServerTopology -ServerCount 3 -StartCoauth $true -NetworkShape full-mesh -TlsPort 24443 -RunRoot "C:\cotest-run"
+$runRoot = Join-Path ([System.IO.Path]::GetTempPath()) "cotest-topology-unit"
+$topology = New-CotestServerTopology -ServerCount 3 -StartCoauth $true -NetworkShape full-mesh -TlsPort 24443 -RunRoot $runRoot
 Assert-CotestTopologyIsolation -Topology $topology
 Assert-CotestTopologyIsolation -Topology (New-CotestServerTopology -ServerCount 1 -StartCoauth $true)
 Assert-Equal 3 $topology.servers.Count "three servers must be generated"
 Assert-Equal "server1" $topology.servers[0].name "numbering starts at server1"
 Assert-Equal "https://soland-server3.local.host:24443" $topology.servers[2].soland.public_url "server3 public URL"
 Assert-Equal 2 $topology.servers[0].peers.Count "full mesh peer count"
+Assert-CotestLoopbackDns -Hosts @('127.0.0.1', '::1')
+$publicDnsRejected = $false
+try { Assert-CotestLoopbackDns -Hosts @('127.0.0.1', '192.0.2.1') } catch { $publicDnsRejected = $true }
+Assert-True $publicDnsRejected "a non-loopback answer must reject the topology"
+$localhostTopology = New-CotestServerTopology -ServerCount 3 -StartCoauth $true -TlsPort 24443 -DnsSuffix localhost
+Assert-CotestTopologyIsolation -Topology $localhostTopology
+Assert-Equal 'https://soland-server3.localhost:24443' $localhostTopology.servers[2].soland.public_url "localhost topology must retain indexed TLS identities"
+Assert-Equal 'https://unregistered.localhost:24443' $localhostTopology.unregistered_probe "unregistered localhost probe must remain a separate host"
+Assert-Equal 7 @(Get-CotestJointHostNames -ServerCount 3 -DnsSuffix localhost).Count "localhost topology must retain every service and negative probe host"
 Assert-True ($topology.servers[0].soland.storage.database -ne $topology.servers[1].soland.storage.database) "Soland stores must be isolated"
 Assert-True ($topology.servers[0].coauth.storage.database -ne $topology.servers[1].coauth.storage.database) "Coauth stores must be isolated"
 $orderedTopology = New-CotestServerTopology -ServerCount 3 -NetworkShape ordered-candidates

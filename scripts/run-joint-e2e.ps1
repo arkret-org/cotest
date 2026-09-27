@@ -138,6 +138,7 @@ param(
     [switch]$RunnerSelfTest,
     [ValidateRange(1, 32)]
     [int]$ServerCount = 1,
+    [ValidateSet('local.host', 'localhost')][string]$DnsSuffix = 'local.host',
     [ValidateSet("full-mesh", "ordered-candidates")]
     [string]$NetworkShape = "full-mesh",
     [string]$SolandServer2NotarySigningKey = "ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg=",
@@ -1079,20 +1080,29 @@ function Invoke-JointE2ePreflight {
         } else {
             Add-PreflightResult $results "tls assets (openssl)" "fail" "openssl is required to mint the joint CA and server certificates"
         }
-        $hostsPath = Get-CotestHostsPath
-        try {
-            $hostsStream = [System.IO.File]::Open(
-                $hostsPath,
-                [System.IO.FileMode]::Append,
-                [System.IO.FileAccess]::Write,
-                [System.IO.FileShare]::ReadWrite
-            )
-            $hostsStream.Close()
-            Add-PreflightResult $results "hosts file writable" "pass" $hostsPath
-        } catch {
-            $platform = Get-CotestPlatformInfo
-            $repair = if ($platform.os -eq "windows") { "Run elevated: pwsh -NoProfile -File $PSScriptRoot\initialize-joint-e2e-environment.ps1 -ServerCount $ServerCount" } else { "Privileged setup is not yet supported on $($platform.os)" }
-            Add-PreflightResult $results "hosts file writable" "fail" "$hostsPath is not writable: $($_.Exception.Message). $repair"
+        if ($DnsSuffix -eq 'localhost') {
+            try {
+                Assert-CotestLoopbackDns -Hosts (Get-CotestJointHostNames -ServerCount $ServerCount -DnsSuffix $DnsSuffix)
+                Add-PreflightResult $results "loopback DNS" "pass" "all registered and unregistered localhost names resolve only to loopback"
+            } catch {
+                Add-PreflightResult $results "loopback DNS" "fail" $_.Exception.Message
+            }
+        } else {
+            $hostsPath = Get-CotestHostsPath
+            try {
+                $hostsStream = [System.IO.File]::Open(
+                    $hostsPath,
+                    [System.IO.FileMode]::Append,
+                    [System.IO.FileAccess]::Write,
+                    [System.IO.FileShare]::ReadWrite
+                )
+                $hostsStream.Close()
+                Add-PreflightResult $results "hosts file writable" "pass" $hostsPath
+            } catch {
+                $platform = Get-CotestPlatformInfo
+                $repair = if ($platform.os -eq "windows") { "Run elevated: pwsh -NoProfile -File $PSScriptRoot\initialize-joint-e2e-environment.ps1 -ServerCount $ServerCount" } else { "Privileged setup is not yet supported on $($platform.os)" }
+                Add-PreflightResult $results "hosts file writable" "fail" "$hostsPath is not writable: $($_.Exception.Message). $repair"
+            }
         }
     }
 
@@ -1332,6 +1342,10 @@ function Install-JointLoopbackHosts {
         [Parameter(Mandatory = $true)][string]$Marker
     )
 
+    if (@($Hosts | Where-Object { -not $_.EndsWith('.localhost', [StringComparison]::OrdinalIgnoreCase) }).Count -eq 0) {
+        Assert-CotestLoopbackDns -Hosts $Hosts
+        return
+    }
     $hostsPath = Get-CotestHostsPath
     $existing = [System.IO.File]::ReadAllText($hostsPath)
     $patched = Add-CotestHostsBlock -Content $existing -Hosts $Hosts -Marker $Marker
@@ -1636,6 +1650,10 @@ function Convert-ToContainerReachableUrl {
 }
 
 function Get-PythonExecutable {
+    $python3 = Get-Command python3 -ErrorAction SilentlyContinue
+    if ($python3) {
+        return $python3.Source
+    }
     $python = Get-Command python -ErrorAction SilentlyContinue
     if ($python) {
         return $python.Source
@@ -2270,14 +2288,16 @@ function Start-ManagedCommand {
     $commandLog = Join-Path $LogDirectory "$Name.command.txt"
     $Command | Set-Content -Path $commandLog -Encoding UTF8
     $wrappedCommand = "$Command; `$managedCommandSucceeded = `$?; `$managedCommandExitCode = `$LASTEXITCODE; if (-not `$managedCommandSucceeded) { if (`$null -ne `$managedCommandExitCode -and `$managedCommandExitCode -ne 0) { exit `$managedCommandExitCode }; exit 1 }; exit 0"
-    $process = Start-Process `
-        -FilePath "powershell" `
-        -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", $wrappedCommand) `
-        -WorkingDirectory $WorkingDirectory `
-        -RedirectStandardOutput $stdout `
-        -RedirectStandardError $stderr `
-        -WindowStyle Hidden `
-        -PassThru
+    $startArguments = @{
+        FilePath = (Get-Process -Id $PID).Path
+        ArgumentList = @('-NoProfile', '-EncodedCommand', [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($wrappedCommand)))
+        WorkingDirectory = $WorkingDirectory
+        RedirectStandardOutput = $stdout
+        RedirectStandardError = $stderr
+        PassThru = $true
+    }
+    if ($IsWindows) { $startArguments.WindowStyle = 'Hidden' }
+    $process = Start-Process @startArguments
 
     # Native and WASM targets can hold different Cargo locks while competing
     # for the same memory. Prepare one workspace at a time; service processes
@@ -2689,7 +2709,10 @@ function Open-ExclusiveRunnerLock {
             if (-not $Wait) {
                 throw "another joint-e2e runner owns the shared workspace build outputs (lock: $lockPath)"
             }
-            if (($_.Exception.HResult -band 0xffff) -notin @(11, 32, 33)) {
+            $lockError = $_.Exception
+            while ($lockError.InnerException) { $lockError = $lockError.InnerException }
+            # EAGAIN is 11 on Linux and 35 on macOS; Windows uses sharing violations.
+            if (($lockError.HResult -band 0xffff) -notin @(11, 32, 33, 35)) {
                 throw
             }
             if (-not $waitingAnnounced) {
@@ -2775,11 +2798,13 @@ function Invoke-RunnerSelfTest {
             throw "fresh binary self-test did not pass: $($freshResults | ConvertTo-Json -Compress)"
         }
 
-        $exitedProcess = Start-Process `
-            -FilePath "powershell" `
-            -ArgumentList @("-NoProfile", "-Command", "exit 23") `
-            -WindowStyle Hidden `
-            -PassThru
+        $selfTestStartArguments = @{
+            FilePath = (Get-Process -Id $PID).Path
+            ArgumentList = @('-NoProfile', '-Command', 'exit 23')
+            PassThru = $true
+        }
+        if ($IsWindows) { $selfTestStartArguments.WindowStyle = 'Hidden' }
+        $exitedProcess = Start-Process @selfTestStartArguments
         $exitedProcess.WaitForExit()
         $exitedService = [pscustomobject]@{
             Kind = "process"
@@ -2793,9 +2818,11 @@ function Invoke-RunnerSelfTest {
             throw "managed service exit self-test did not preserve exit code 23"
         }
 
+        $selfTestShell = Quote-PsLiteral ((Get-Process -Id $PID).Path)
+        $nativeFailureCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes('exit 29'))
         $wrappedFailure = Start-ManagedCommand `
             -Name "self-test-native-failure" `
-            -Command "cmd /c exit 29" `
+            -Command "& $selfTestShell -NoProfile -EncodedCommand $nativeFailureCommand" `
             -WorkingDirectory $tempRoot `
             -LogDirectory $tempRoot
         $preparedFailure = Start-ManagedCommand `
@@ -2824,11 +2851,8 @@ function Invoke-RunnerSelfTest {
             throw "managed service failure report self-test failed"
         }
 
-        $runningProcess = Start-Process `
-            -FilePath "powershell" `
-            -ArgumentList @("-NoProfile", "-Command", "Start-Sleep -Seconds 30") `
-            -WindowStyle Hidden `
-            -PassThru
+        $selfTestStartArguments.ArgumentList = @('-NoProfile', '-Command', 'Start-Sleep -Seconds 30')
+        $runningProcess = Start-Process @selfTestStartArguments
         $runningService = [pscustomobject]@{
             Kind = "process"
             Name = "self-test-running"
@@ -2980,6 +3004,7 @@ $environmentArgs = @(
     "-NoProfile",
     "-File", (Join-Path $PSScriptRoot "initialize-joint-e2e-environment.ps1"),
     "-ServerCount", "$ServerCount",
+    "-DnsSuffix", $DnsSuffix,
     "-OutputDirectory", $environmentOutputDirectory,
     "-PostgresImage"
 )
@@ -3095,18 +3120,18 @@ $coauthServer2PublicHost = $null
 $jointTlsAssets = $null
 $jointTlsHostNames = @()
 $jointTlsHostsMarker = New-CotestHostsMarker -RunId $timestamp
-$jointTlsUnregisteredProbeHost = "unregistered.local.host"
+$jointTlsUnregisteredProbeHost = "unregistered.$DnsSuffix"
 if ($jointTlsEnabled) {
     $jointTlsPort = Get-FreeTcpPort
     if ($jointTlsProcessSoland) {
-        $solandPublicHost = "soland-server1.local.host"
+        $solandPublicHost = "soland-server1.$DnsSuffix"
         if ($multiServer) {
-            $solandServer2PublicHost = "soland-server2.local.host"
+            $solandServer2PublicHost = "soland-server2.$DnsSuffix"
         }
     }
     if ($jointTlsCoauth) {
-        $coauthPublicHost = "coauth-server1.local.host"
-        if ($multiServer) { $coauthServer2PublicHost = "coauth-server2.local.host" }
+        $coauthPublicHost = "coauth-server1.$DnsSuffix"
+        if ($multiServer) { $coauthServer2PublicHost = "coauth-server2.$DnsSuffix" }
     }
 }
 
@@ -3226,10 +3251,10 @@ for ($serverIndex = 3; $serverIndex -le $ServerCount; $serverIndex++) {
         throw "-ServerCount $ServerCount is incompatible with -SolandCommand; use indexed caller-owned topology input instead"
     }
     $additionalSolandPort = Get-FreeTcpPort
-    $additionalSolandHost = if ($jointTlsProcessSoland) { "soland-server$serverIndex.local.host" } else { $null }
+    $additionalSolandHost = if ($jointTlsProcessSoland) { "soland-server$serverIndex.$DnsSuffix" } else { $null }
     $additionalSolandBaseUrl = if ($additionalSolandHost) { "https://${additionalSolandHost}:$jointTlsPort" } else { "http://127.0.0.1:$additionalSolandPort" }
     $additionalCoauthPort = if ($StartCoauth) { Get-FreeTcpPort } else { $null }
-    $additionalCoauthHost = if ($jointTlsCoauth) { "coauth-server$serverIndex.local.host" } else { $null }
+    $additionalCoauthHost = if ($jointTlsCoauth) { "coauth-server$serverIndex.$DnsSuffix" } else { $null }
     $additionalCoauthBaseUrl = if ($additionalCoauthPort) {
         if ($additionalCoauthHost) { "https://${additionalCoauthHost}:$jointTlsPort" } else { "http://localhost:$additionalCoauthPort" }
     } else { $null }
@@ -3417,7 +3442,8 @@ $topology = New-CotestServerTopology `
     -StartCoauth ([bool]$StartCoauth) `
     -NetworkShape $NetworkShape `
     -TlsPort $(if ($jointTlsPort) { $jointTlsPort } else { 443 }) `
-    -RunRoot $jointDir
+    -RunRoot $jointDir `
+    -DnsSuffix $DnsSuffix
 $topology | Add-Member -NotePropertyName generated_at -NotePropertyValue ((Get-Date).ToUniversalTime().ToString("o"))
 $topology | Add-Member -NotePropertyName lifecycle -NotePropertyValue "planned"
 $topology | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $topologyPath -Encoding utf8NoBOM
@@ -4870,7 +4896,7 @@ try {
         lifecycle = "running"
         network_shape = $NetworkShape
         server_count = $ServerCount
-        tls = [pscustomobject]@{ enabled = [bool]$jointTlsEnabled; port = $jointTlsPort; ca_path = if ($jointTlsAssets) { $jointTlsAssets.CaPemPath } else { $null }; unregistered_probe = if ($jointTlsPort) { "https://unregistered.local.host:$jointTlsPort" } else { $null } }
+        tls = [pscustomobject]@{ enabled = [bool]$jointTlsEnabled; port = $jointTlsPort; ca_path = if ($jointTlsAssets) { $jointTlsAssets.CaPemPath } else { $null }; unregistered_probe = if ($jointTlsPort) { "https://${jointTlsUnregisteredProbeHost}:$jointTlsPort" } else { $null } }
         servers = $topologyServers
     }
     $topologyCandidatePath = Join-Path $jointDir "topology.candidate.json"

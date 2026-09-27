@@ -126,7 +126,16 @@ try {
         [System.IO.FileShare]::None
     )
     Remove-StaleArtifactRuns -OutputRoot $testRoot -Family "locked" -KeepRuns 1
-    Assert-True (Test-Path -LiteralPath $lockedOld) "locked stale run should be retained for a later prune"
+    if ($IsWindows) {
+        Assert-True (Test-Path -LiteralPath $lockedOld) "locked stale run should be retained for a later prune"
+    } else {
+        Assert-True (-not (Test-Path -LiteralPath $lockedOld)) "Unix pruning should unlink a stale run with an open file"
+        $lockedHandle.Position = 0
+        $reader = [System.IO.StreamReader]::new($lockedHandle, [Text.Encoding]::UTF8, $true, 1024, $true)
+        try {
+            Assert-True ($reader.ReadToEnd().Trim() -eq 'held open') "Unix unlink must preserve the existing reader's file contents"
+        } finally { $reader.Dispose() }
+    }
     Assert-True (-not (Test-Path -LiteralPath $removableOld)) "one locked run must not stop other stale runs from being pruned"
     Assert-True (Test-Path -LiteralPath $lockedNewest) "retention removed the newest locked-family run"
 

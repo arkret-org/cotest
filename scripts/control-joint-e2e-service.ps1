@@ -81,18 +81,32 @@ public static class CotestNativeProcessControl {
 '@
 }
 
+if (-not $IsWindows -and -not ('CotestUnixProcessControl' -as [type])) {
+    Add-Type @'
+using System.Runtime.InteropServices;
+public static class CotestUnixProcessControl {
+    [DllImport("libc", EntryPoint = "kill", SetLastError = true)]
+    public static extern int Kill(int pid, int signal);
+}
+'@
+}
+
 function Set-ProcessSuspended {
     param([int[]]$ProcessIds, [bool]$Suspended)
     foreach ($id in $ProcessIds) {
-        $process = Get-Process -Id $id -ErrorAction SilentlyContinue
-        if (-not $process) { continue }
         if ($IsWindows) {
+            $process = Get-Process -Id $id -ErrorAction SilentlyContinue
+            if (-not $process) { continue }
             if ($Suspended) { [CotestNativeProcessControl]::Suspend($process.Handle) }
             else { [CotestNativeProcessControl]::Resume($process.Handle) }
         } else {
-            $signal = if ($Suspended) { '-STOP' } else { '-CONT' }
-            & kill $signal $id
-            if ($LASTEXITCODE -ne 0) { throw "kill $signal failed for PID $id" }
+            # Native-command completion can wait for descendants holding the
+            # service's output pipes after SIGSTOP. Signal directly instead.
+            $signal = if ($IsMacOS) { if ($Suspended) { 17 } else { 19 } } else { if ($Suspended) { 19 } else { 18 } }
+            if ([CotestUnixProcessControl]::Kill($id, $signal) -ne 0) {
+                $errorNumber = [Runtime.InteropServices.Marshal]::GetLastPInvokeError()
+                if ($errorNumber -ne 3) { throw "signal $signal failed for PID $id (errno=$errorNumber)" }
+            }
         }
     }
 }
@@ -120,7 +134,7 @@ if ($kind -ne 'process') { throw "Unsupported control kind '$kind'" }
 $rootId = Resolve-CurrentProcessId
 switch ($Action) {
     'isolate' {
-        $ids = @((Get-DescendantProcessIds -RootId $rootId) + @($rootId))
+        $ids = @(Get-DescendantProcessIds -RootId $rootId) + @($rootId)
         if ($ids.Count -lt 2) { throw "$ServerName process tree has no service child" }
         try {
             Set-ProcessSuspended -ProcessIds $ids -Suspended $true
@@ -153,7 +167,16 @@ switch ($Action) {
         $stamp = Get-Date -Format 'yyyyMMdd-HHmmssfff'
         $stdout = Join-Path ([string]$server.soland.log_directory) "$ServerName.restart-$stamp.stdout.log"
         $stderr = Join-Path ([string]$server.soland.log_directory) "$ServerName.restart-$stamp.stderr.log"
-        $process = Start-Process -FilePath 'powershell' -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', $wrapped) -WorkingDirectory ([string]$control.working_directory) -RedirectStandardOutput $stdout -RedirectStandardError $stderr -WindowStyle Hidden -PassThru
+        $startArguments = @{
+            FilePath = (Get-Process -Id $PID).Path
+            ArgumentList = @('-NoProfile', '-EncodedCommand', [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($wrapped)))
+            WorkingDirectory = [string]$control.working_directory
+            RedirectStandardOutput = $stdout
+            RedirectStandardError = $stderr
+            PassThru = $true
+        }
+        if ($IsWindows) { $startArguments.WindowStyle = 'Hidden' }
+        $process = Start-Process @startArguments
         try {
             Write-ControlState @{ kind = $kind; status = 'running'; original_process_id = [int]$server.soland.process_id; current_process_id = $process.Id; restarted = $true; stdout = $stdout; stderr = $stderr }
         } catch {

@@ -2,6 +2,19 @@
 
 The supported production-shaped local topology uses runner-owned processes, independent PostgreSQL stores, a run-scoped CA, and Caddy on loopback. Plain HTTP is diagnostic-only and is not an acceptance topology.
 
+On a machine that resolves service subdomains of `localhost` to loopback, pass
+`-DnsSuffix localhost` to the same entry. The initializer checks every indexed
+service name and the unregistered probe and rejects any non-loopback answer.
+This selects `https://soland-serverN.localhost:<port>` and
+`https://coauth-serverN.localhost:<port>` without changing the hosts file.
+The run-scoped CA, certificate SANs, independent Station identities, SPKI checks,
+and unregistered-host rejection remain mandatory. The default `local.host`
+namespace continues to require run-scoped hosts access.
+
+Platform package auto-installation is currently implemented for Windows. On
+macOS and Linux, already installed prerequisites are verified and accepted;
+missing prerequisites still fail the initializer with their exact names.
+
 ## One entry and administrator initialization
 
 The only test entry is `scripts/run-joint-e2e.ps1`. It always invokes the environment initializer before preparation or service startup:

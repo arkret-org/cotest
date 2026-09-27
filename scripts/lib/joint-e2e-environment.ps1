@@ -37,15 +37,29 @@ function Get-CotestJointHostNames {
     param(
         [ValidateRange(1, 32)][int]$ServerCount = 1,
         [bool]$IncludeCoauth = $true,
-        [bool]$IncludeUnregisteredProbe = $true
+        [bool]$IncludeUnregisteredProbe = $true,
+        [ValidateSet('local.host', 'localhost')][string]$DnsSuffix = 'local.host'
     )
     $names = [System.Collections.Generic.List[string]]::new()
     for ($index = 1; $index -le $ServerCount; $index++) {
-        $names.Add("soland-server$index.local.host")
-        if ($IncludeCoauth) { $names.Add("coauth-server$index.local.host") }
+        $names.Add("soland-server$index.$DnsSuffix")
+        if ($IncludeCoauth) { $names.Add("coauth-server$index.$DnsSuffix") }
     }
-    if ($IncludeUnregisteredProbe) { $names.Add("unregistered.local.host") }
+    if ($IncludeUnregisteredProbe) { $names.Add("unregistered.$DnsSuffix") }
     return @($names)
+}
+
+function Assert-CotestLoopbackDns {
+    param([Parameter(Mandatory = $true)][string[]]$Hosts)
+    foreach ($hostName in $Hosts) {
+        $answers = @([Net.Dns]::GetHostAddresses($hostName))
+        if ($answers.Count -eq 0) { throw "joint TLS topology: $hostName has no DNS answers" }
+        foreach ($answer in $answers) {
+            if (-not [Net.IPAddress]::IsLoopback($answer)) {
+                throw "joint TLS topology: $hostName resolved outside loopback: $answer"
+            }
+        }
+    }
 }
 
 function New-CotestHostsMarker {
@@ -220,7 +234,8 @@ function New-CotestServerTopology {
         [int]$TlsPort = 443,
         [int]$SolandPortBase = 28080,
         [int]$CoauthPortBase = 29080,
-        [string]$RunRoot = ""
+        [string]$RunRoot = "",
+        [ValidateSet('local.host', 'localhost')][string]$DnsSuffix = 'local.host'
     )
     $servers = [System.Collections.Generic.List[object]]::new()
     for ($index = 1; $index -le $ServerCount; $index++) {
@@ -241,7 +256,7 @@ function New-CotestServerTopology {
             name = $name
             role = "station"
             soland = [pscustomobject]@{
-                public_url = "https://soland-$name.local.host:$TlsPort"
+                public_url = "https://soland-$name.${DnsSuffix}:$TlsPort"
                 listen_address = "127.0.0.1:$($SolandPortBase + $index - 1)"
                 service_did = $null
                 storage = [pscustomobject]@{ database = Join-Path $serverRoot "soland-postgres"; objects = Join-Path $serverRoot "objects"; state = Join-Path $serverRoot "state" }
@@ -250,7 +265,7 @@ function New-CotestServerTopology {
                 container_id = $null
             }
             coauth = if ($StartCoauth) { [pscustomobject]@{
-                public_url = "https://coauth-$name.local.host:$TlsPort"
+                public_url = "https://coauth-$name.${DnsSuffix}:$TlsPort"
                 listen_address = "127.0.0.1:$($CoauthPortBase + $index - 1)"
                 service_did = $null
                 storage = [pscustomobject]@{ database = Join-Path $serverRoot "coauth-postgres"; state = Join-Path $serverRoot "coauth-state" }
@@ -267,7 +282,7 @@ function New-CotestServerTopology {
         network_shape = $NetworkShape
         server_count = $ServerCount
         loopback_address = "127.0.0.1"
-        unregistered_probe = "https://unregistered.local.host:$TlsPort"
+        unregistered_probe = "https://unregistered.${DnsSuffix}:$TlsPort"
         servers = @($servers)
     }
 }
