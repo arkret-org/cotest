@@ -7,7 +7,7 @@ import {
 import { solandBaseUrl } from "../../helpers/env";
 import { test as jointTest } from "../../helpers/joint-fixture";
 import { publicRequestFailure } from "../../helpers/secret-safe";
-import { accountActorId, canonicalJson } from "../../helpers/soland-api";
+import { accountActorId, canonicalJson, sha256CanonicalJson } from "../../helpers/soland-api";
 import {
   selfPathHeadersForDpopSession,
   type DpopUserSession,
@@ -278,15 +278,10 @@ async function provisionPendingAgent(
       "allocation_handle",
       "prepare outcome",
     );
-    const requestedScopeDigest = requiredString(
-      preparation,
-      "requested_scope_digest",
-      "prepare outcome",
-    );
+    expect(preparation).not.toHaveProperty("requested_scope_digest");
     expect(agentId).toMatch(/^ak:did_core:/);
     expect(controllerRealmId).toMatch(/^ak:realm:/);
     expect(allocationHandle).toBeTruthy();
-    expect(requestedScopeDigest).toMatch(/^sha256:[0-9a-f]{64}$/);
 
     const commit = await commitObserved;
     const principalControlRealmId = requiredString(
@@ -301,6 +296,12 @@ async function provisionPendingAgent(
     expect(typeof commit.operation_id).toBe("string");
     expect(typeof commit.idempotency_key).toBe("string");
     expect(commit.slug).toBe(agentSlug);
+    const requestedScopeDigest = `sha256:${sha256CanonicalJson({
+      agent_id: agentId,
+      controller_principal_id: controller.user.id,
+      kind: "ak.agent.requested_scope_commitment.v1",
+      requested_scope: asJsonObject(commit.requested_scope, "Agent requested scope"),
+    })}`;
     const provisionSubmission = asJsonObject(
       commit.provision_event,
       "Agent provision commit.provision_event",
@@ -369,9 +370,7 @@ async function provisionPendingAgent(
     expect(awaitingPcrGenesis.principal_control_realm_id).toBe(
       principalControlRealmId,
     );
-    expect(awaitingPcrGenesis.requested_scope_digest).toBe(
-      requestedScopeDigest,
-    );
+    expect(awaitingPcrGenesis).not.toHaveProperty("requested_scope_digest");
 
     // The client now submits and seals the separately frozen Agent PCR
     // genesis, publishes the DID binding entry, and only then exposes pairing.
@@ -394,7 +393,7 @@ async function provisionPendingAgent(
     expect(completed.status).toBe("complete");
     expect(completed.agent_id).toBe(agentId);
     expect(completed.principal_control_realm_id).toBe(principalControlRealmId);
-    expect(completed.requested_scope_digest).toBe(requestedScopeDigest);
+    expect(completed).not.toHaveProperty("requested_scope_digest");
     expect(completed.pairing_request_id).toBeTruthy();
     expect(completed.pairing_code).toBeTruthy();
     return requiredString(completed, "agent_id", "complete outcome");
