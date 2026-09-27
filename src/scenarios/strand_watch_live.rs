@@ -46,6 +46,47 @@ async fn read(
     Ok(outcome)
 }
 
+async fn signed_snapshot(
+    client: &TestActorClient,
+    realm: &RealmId,
+) -> Result<arkret_wire::RealmStateSnapshot> {
+    let http = client.sdk();
+    let snapshot = http.realm_state_snapshot_head(realm).await?;
+    let signer =
+        arkret_identity::verification_method_did(snapshot.signature.verification_method.as_str())?;
+    let service = arkret_wire::project_did_to_core_id(&signer)?;
+    let described = http.describe().await?;
+    ensure!(
+        service == described.service_id,
+        "snapshot signer differs from the serving governing Station"
+    );
+    let resolution = http.open_service_resolution(&service).await?;
+    let document = arkret_identity::authenticated_service_document_at(
+        &resolution,
+        &service,
+        snapshot.signature.created_at,
+    )?;
+    arkret_identity::validate_verification_method_relationship(
+        &document,
+        &snapshot.signature.verification_method,
+        &signer,
+        arkret_identity::DidVerificationRelationship::AssertionMethod,
+    )?;
+    let key = arkret_identity::resolve_verification_method_key_from_document(
+        &document,
+        snapshot.signature.verification_method.as_str(),
+    )?
+    .public_key;
+    let unsigned = arkret_canonical::unsigned_value(&snapshot, &["signature"])?;
+    arkret_signatures::detached_object::verify_detached_object_signature(
+        &snapshot.signature,
+        &unsigned,
+        arkret_wire::DetachedSignatureContext::RealmSnapshot,
+        &key,
+    )?;
+    Ok(snapshot)
+}
+
 fn current(
     outcome: StrandWatchCurrentOutcome,
     commit: &RealmCommit,
@@ -254,6 +295,13 @@ pub async fn run_strand_watch_current_live() -> Result<()> {
         level_public: Some(true),
     });
     current(read(&alice, &request).await?, &first, first_value)?;
+    let first_snapshot = signed_snapshot(&alice, &request.realm_id).await?;
+    ensure!(first_snapshot.current_state_entries.iter().any(|entry| matches!(entry,
+        arkret_wire::TypedCurrentResult::Value { selector: arkret_wire::CurrentSelector::StrandWatch { strand_id, watcher_actor_id }, source_stream_ref, revision, value }
+        if strand_id == &request.strand_id && watcher_actor_id == &request.watcher_actor_id
+            && source_stream_ref == &first.stream_ref && revision.commit_id == first.commit_id
+            && revision.stream_position == first.stream_position && value == &serde_json::json!({"level":"all","level_public":true})
+    )), "signed snapshot omitted or changed the registered complete watch current row");
 
     for payload in [
         initial.clone(),
@@ -352,6 +400,11 @@ pub async fn run_strand_watch_current_live() -> Result<()> {
         matches!(watch_view, CommittedEventView::Withheld(_)) && watch_view.commit() == &restored,
         "ordinary member scan disclosed a private muted watch Event"
     );
+    let private_snapshot = signed_snapshot(&bob, &request.realm_id).await?;
+    ensure!(!private_snapshot.current_state_entries.iter().any(|entry| matches!(entry,
+        arkret_wire::TypedCurrentResult::Value { selector: arkret_wire::CurrentSelector::StrandWatch { strand_id, watcher_actor_id }, .. }
+        if strand_id == &request.strand_id && watcher_actor_id == &request.watcher_actor_id
+    )), "ordinary member signed snapshot disclosed Alice's private muted watch cell");
 
     let bob_payload = StrandWatchSetPayload::set(
         strand,
