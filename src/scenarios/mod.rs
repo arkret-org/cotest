@@ -32,6 +32,7 @@ pub mod full_stack_e2e;
 pub mod handle_to_join_e2e;
 pub mod high_assurance_realm_policy;
 pub mod human_device_producer_live;
+pub mod strand_watch_live;
 pub mod identity_directory;
 pub mod identity_test_support;
 pub mod interaction_models;
