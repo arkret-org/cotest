@@ -35,9 +35,8 @@
 //!   `historical_only=true`, and the recorded "new reducer side effect" counter stays at the
 //!   original value (zero increment on replay).
 //!
-//! The full live multi-server e2e (docker / live soland + teabay
-//! processes, network HTTP, real key rotation) stays `#[ignore]` with
-//! `TODO(federation-idempotency-e2e-docker)`.
+//! This module is an offline wire/cache simulation and proves no live
+//! service behaviour. Live federation belongs to the joint runtime suite.
 //!
 //! Cotest does not depend on `teabay`, and this module exercises only the
 //! SDK federation surface plus a small in-memory cache that reproduce the
@@ -466,31 +465,5 @@ mod tests {
             HISTORICAL_ONLY_REASON,
             arkret_wire::ErrorCode::HISTORICAL_ONLY
         );
-    }
-
-    /// Live multi-server e2e — boots real soland + teabay processes via
-    /// docker, performs a real key rotation, and observes the federation
-    /// idempotency cache HTTP behaviour. Stays `#[ignore]` until the
-    /// docker harness is wired.
-    /// Gating: needs live soland + teabay binaries via docker plus a key-
-    /// rotation harness so the idempotency cache replay can be observed end-
-    /// to-end.
-    /// Issue: federation-idempotency-e2e-docker
-    /// Tier: live
-    #[test]
-    #[ignore = "TODO(federation-idempotency-e2e-docker): needs live soland + teabay + key rotation harness"]
-    fn live_multi_server_federation_historical_only_docker_e2e() {
-        // 1. Boot a 2-service test rig (soland-A + teabay-B) with `ak:trust_domain:a` and
-        //    `ak:trust_domain:b` respectively.
-        // 2. soland-A signs and POSTs a federation_transaction request to teabay-B carrying
-        //    Source-/Destination-Trust-Domain headers + Content-Digest + Idempotency-Key.
-        // 3. Confirm teabay-B caches the response (200 accepted), side effects fire (directory row
-        //    inserted, etc.).
-        // 4. Rotate soland-A's service key (origin_key_state_digest flips).
-        // 5. Replay the same request bytes.
-        // 6. Assert teabay-B returns the cached body with `reason_code=historical_only` AND no new
-        //    directory rows / push fan-out / index updates.
-        // 7. Assert the recorded message-signature transcript includes both trust-domain headers
-        //    and Content-Digest (lowercase, RFC 9421 §2.2).
     }
 }
