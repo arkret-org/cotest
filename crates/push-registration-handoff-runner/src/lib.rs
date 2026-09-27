@@ -25,7 +25,7 @@ use floria::registration_handoff::{ApplyRegistrationError, RegistrationHandoffSt
 use floria::service::build_router;
 use postgres::{Client, NoTls};
 use salvo::http::StatusCode;
-use salvo::test::TestClient;
+use salvo::test::{ResponseExt, TestClient};
 use serde::Deserialize;
 use serde_json::json;
 use uuid::Uuid;
@@ -328,10 +328,24 @@ async fn apply(
     source: &DidCoreId,
     request: &PushRegistrationHandoffRequestBody,
 ) -> Result<PushRegistrationHandoffOutcome> {
-    h.store
-        .apply(source.clone(), h.gateway.clone(), request.clone())
+    let mut response = signed_http_response(
+        h,
+        source,
+        &h.gateway,
+        request,
+        &SigningKey::from_bytes(&SOURCE_SEED),
+        &format!("cotest-{}", Uuid::new_v4().simple()),
+    )
+    .await?;
+    let status = response.status_code;
+    if status != Some(StatusCode::OK) {
+        let body = response.take_string().await.unwrap_or_default();
+        bail!("Floria registration endpoint returned {status:?}: {body}");
+    }
+    response
+        .take_json::<PushRegistrationHandoffOutcome>()
         .await
-        .map_err(Into::into)
+        .context("decode Floria handoff outcome")
 }
 async fn resolve(
     h: &Harness,
@@ -390,6 +404,20 @@ async fn http_status(
     signing: &SigningKey,
     idempotency: &str,
 ) -> Result<StatusCode> {
+    signed_http_response(h, source, destination, req, signing, idempotency)
+        .await?
+        .status_code
+        .ok_or_else(|| anyhow!("HTTP status missing"))
+}
+
+async fn signed_http_response(
+    h: &Harness,
+    source: &DidCoreId,
+    destination: &DidCoreId,
+    req: &PushRegistrationHandoffRequestBody,
+    signing: &SigningKey,
+    idempotency: &str,
+) -> Result<salvo::Response> {
     let expected = SigningKey::from_bytes(&SOURCE_SEED);
     let mut principal = NotifyServicePrincipalConfig::default();
     principal.signature_verification_method = Some(format!("{}#push", source.as_str()));
@@ -431,7 +459,7 @@ async fn http_status(
         now()?,
         signing,
     )?;
-    TestClient::post(url)
+    Ok(TestClient::post(url)
         .add_header("Arkret-Operation", operation, true)
         .add_header(SOURCE_SERVICE_ID_HEADER, source.as_str(), true)
         .add_header(DESTINATION_SERVICE_ID_HEADER, destination.as_str(), true)
@@ -442,9 +470,7 @@ async fn http_status(
         .add_header("Content-Type", "application/json", true)
         .body(body)
         .send(&service)
-        .await
-        .status_code
-        .ok_or_else(|| anyhow!("HTTP status missing"))
+        .await)
 }
 
 fn active(
