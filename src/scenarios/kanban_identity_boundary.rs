@@ -108,6 +108,109 @@ pub async fn kanban_creates_keep_one_identity_across_receipt_backfill_and_retry(
     let (card_move_event_id, card_move_envelope) =
         submit_operation(&alice, &realm_id, &card_move).await?;
 
+    let placed = strand_row(&alice, &realm_id, &card_strand_id).await?;
+    assert_eq!(placed["board_space_id"], board_space_id);
+    assert_eq!(placed["list_space_id"], list_space_id);
+    assert_eq!(placed["rank"], "a0");
+
+    let card_reorder = inkson::operation::ak_ops::strand_position_update(
+        &realm_id,
+        &alice.actor,
+        "ak.strand.reorder",
+        &board_space_id,
+        &card_strand_id,
+        json!({"list_space_id": list_space_id, "rank": "a0"}),
+        json!({"list_space_id": list_space_id, "rank": "b0"}),
+    )
+    .map_err(|error| anyhow!("inkson card reorder builder: {error:#}"))?
+    .build_sdk_event("cotest")
+    .map_err(|error| anyhow!("inkson card reorder build: {error:#}"))?;
+    let (card_reorder_event_id, card_reorder_envelope) =
+        submit_operation(&alice, &realm_id, &card_reorder).await?;
+    let reordered = strand_row(&alice, &realm_id, &card_strand_id).await?;
+    assert_eq!(reordered["rank"], "b0");
+
+    let second_list = inkson::operation::ak_ops::space_create(
+        &realm_id,
+        &alice.actor,
+        "list",
+        "Boundary destination list",
+        Some(&board_space_id),
+        Some("b0"),
+    )
+    .map_err(|error| anyhow!("inkson destination list builder: {error:#}"))?
+    .build_sdk_event("cotest")
+    .map_err(|error| anyhow!("inkson destination list build: {error:#}"))?;
+    let (second_list_event_id, second_list_envelope) =
+        submit_operation(&alice, &realm_id, &second_list).await?;
+    let second_list_space_id = arkret::SpaceId::from_event_id(&second_list_event_id).to_string();
+    let cross_list_move = inkson::operation::ak_ops::strand_position_update(
+        &realm_id,
+        &alice.actor,
+        "ak.strand.move",
+        &board_space_id,
+        &card_strand_id,
+        json!({"list_space_id": list_space_id, "rank": "b0"}),
+        json!({"list_space_id": second_list_space_id, "rank": "a0"}),
+    )
+    .map_err(|error| anyhow!("inkson cross-list move builder: {error:#}"))?
+    .build_sdk_event("cotest")
+    .map_err(|error| anyhow!("inkson cross-list move build: {error:#}"))?;
+    let (cross_list_move_event_id, cross_list_move_envelope) =
+        submit_operation(&alice, &realm_id, &cross_list_move).await?;
+    let moved = strand_row(&alice, &realm_id, &card_strand_id).await?;
+    assert_eq!(moved["board_space_id"], board_space_id);
+    assert_eq!(moved["list_space_id"], second_list_space_id);
+    assert_eq!(moved["rank"], "a0");
+
+    let stale_move = inkson::operation::ak_ops::strand_position_update(
+        &realm_id,
+        &alice.actor,
+        "ak.strand.move",
+        &board_space_id,
+        &card_strand_id,
+        json!({"list_space_id": list_space_id, "rank": "b0"}),
+        json!({"list_space_id": second_list_space_id, "rank": "c0"}),
+    )
+    .map_err(|error| anyhow!("inkson stale move builder: {error:#}"))?
+    .build_sdk_event("cotest")
+    .map_err(|error| anyhow!("inkson stale move build: {error:#}"))?;
+    let stale_event = alice
+        .author_event(
+            &realm_id,
+            stale_move.kind().as_str(),
+            serde_json::to_value(stale_move.payload())?,
+        )
+        .await?;
+    let stale_event_id = stale_event.event_id.clone();
+    let refused = expect_json(
+        alice
+            .post("/_arkret/self/events")
+            .json(&crate::publication::initial_submission(stale_event, "")?),
+        StatusCode::CONFLICT,
+    )
+    .await?;
+    assert_eq!(refused["type"], "https://arkret.org/problems/cas_conflict");
+    assert_eq!(strand_row(&alice, &realm_id, &card_strand_id).await?, moved);
+    let scan = alice
+        .sdk()
+        .scan_commit_stream_to_head(
+            card_move_envelope.realm_id.clone(),
+            arkret_wire::CommitStreamRef::from_scope(
+                &card_move_envelope.scope_ref,
+                Some(card_move_envelope.realm_id.clone()),
+            )?,
+            None,
+            1000,
+        )
+        .await?;
+    assert!(
+        scan.committed_events
+            .iter()
+            .all(|item| item.commit().event_ref != stale_event_id),
+        "stale position CAS must not create a RealmCommit"
+    );
+
     // ---- retry: byte-identical resubmit is the SAME user operation ----------
     let retry = expect_json(
         alice
@@ -128,6 +231,21 @@ pub async fn kanban_creates_keep_one_identity_across_receipt_backfill_and_retry(
         Some(list_event_id.as_str()),
         "the duplicate must name the SAME accepted Event: {retry}"
     );
+    let reorder_retry = expect_json(
+        alice
+            .post("/_arkret/self/events")
+            .json(&crate::publication::initial_submission(
+                card_reorder_envelope.clone(),
+                "",
+            )?),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(reorder_retry["status"], "duplicate");
+    assert_eq!(
+        duplicate_event_id(&reorder_retry),
+        Some(card_reorder_event_id.as_str())
+    );
 
     // ---- backfill: exact committed Event and one Commit per scope stream --
     let mut local_to_event = std::collections::BTreeMap::new();
@@ -140,6 +258,24 @@ pub async fn kanban_creates_keep_one_identity_across_receipt_backfill_and_retry(
             &card_move_event_id,
             &card_move,
             &card_move_envelope,
+        ),
+        (
+            "ak.strand.reorder",
+            &card_reorder_event_id,
+            &card_reorder,
+            &card_reorder_envelope,
+        ),
+        (
+            "ak.space.create",
+            &second_list_event_id,
+            &second_list,
+            &second_list_envelope,
+        ),
+        (
+            "ak.strand.move",
+            &cross_list_move_event_id,
+            &cross_list_move,
+            &cross_list_move_envelope,
         ),
     ] {
         let accepted = alice.sdk().committed_event_get(event_id).await?;
@@ -175,7 +311,7 @@ pub async fn kanban_creates_keep_one_identity_across_receipt_backfill_and_retry(
             "holder-local operation id was reused"
         );
     }
-    assert_eq!(local_to_event.len(), 4);
+    assert_eq!(local_to_event.len(), 7);
 
     // ---- placement references only the accepted Strand and containers -------
     let card_row = serde_json::to_value(&card_envelope)?;
@@ -192,6 +328,19 @@ pub async fn kanban_creates_keep_one_identity_across_receipt_backfill_and_retry(
         "the accepted Card id is retype(event_id) of its own create"
     );
     Ok(())
+}
+
+async fn strand_row(alice: &TestActorClient, realm_id: &str, strand_id: &str) -> Result<Value> {
+    let listed = expect_json(
+        alice.get(&format!("/_arkret/self/realms/{realm_id}/strands")),
+        StatusCode::OK,
+    )
+    .await?;
+    listed["strands"]
+        .as_array()
+        .and_then(|rows| rows.iter().find(|row| row["strand_id"] == strand_id))
+        .cloned()
+        .ok_or_else(|| anyhow!("accepted Card missing from canonical Strand list: {listed}"))
 }
 
 /// Author and submit one inkson-built write the way the client pipeline does:
