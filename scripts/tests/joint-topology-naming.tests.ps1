@@ -33,6 +33,24 @@ $layoutFunction = $ast.FindAll({
 if ($layoutFunction.Count -ne 1) { throw "Expected one generic joint server artifact layout function" }
 Invoke-Expression $layoutFunction[0].Extent.Text
 
+$executableFunction = $ast.FindAll({
+    param($node)
+    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+        $node.Name -eq "Get-NativeExecutableName"
+}, $true)
+if ($executableFunction.Count -ne 1) { throw "Expected one native executable naming function" }
+Invoke-Expression $executableFunction[0].Extent.Text
+foreach ($name in @("soland", "coauth", "teabay", "savfox", "cotest-wire", "cotest-provision")) {
+    $expectedName = if ($IsWindows) { "$name.exe" } else { $name }
+    if ((Get-NativeExecutableName -Name $name) -ne $expectedName) {
+        throw "Incorrect native executable name for $name"
+    }
+}
+$runnerSource = Get-Content -LiteralPath $runnerPath -Raw
+if ($runnerSource -match '"(?:debug|release)\\(?:soland|coauth|teabay|savfox|cotest-wire|cotest-provision)\.exe"') {
+    throw "Cargo executable paths must use platform-native executable names"
+}
+
 $jointDirectory = Join-Path ([System.IO.Path]::GetTempPath()) "cotest-layout"
 foreach ($serverIndex in 1..3) {
     $serverName = "server$serverIndex"

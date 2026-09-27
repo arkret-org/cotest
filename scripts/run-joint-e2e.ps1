@@ -1687,6 +1687,13 @@ function Get-CargoTargetDirectory {
     return $targetDirectory
 }
 
+function Get-NativeExecutableName {
+    param([Parameter(Mandatory = $true)][string]$Name)
+
+    if ($IsWindows) { return "$Name.exe" }
+    return $Name
+}
+
 function Resolve-CoauthBinary {
     param(
         [string]$ExplicitPath,
@@ -1701,8 +1708,8 @@ function Resolve-CoauthBinary {
         $candidates += $env:COAUTH_BIN
     }
     $targetDirectory = Get-CargoTargetDirectory -RepositoryRoot (Join-Path $WorkspaceRoot "coauth")
-    $candidates += (Join-Path $targetDirectory "debug\coauth.exe")
-    $candidates += (Join-Path $targetDirectory "release\coauth.exe")
+    $candidates += (Join-Path $targetDirectory ("debug/" + (Get-NativeExecutableName -Name "coauth")))
+    $candidates += (Join-Path $targetDirectory ("release/" + (Get-NativeExecutableName -Name "coauth")))
 
     foreach ($candidate in $candidates) {
         if ($candidate -and (Test-Path $candidate)) {
@@ -1723,8 +1730,8 @@ function Resolve-SolandBinary {
     if ($ExplicitPath) { $candidates += $ExplicitPath }
     if ($env:SOLAND_BIN) { $candidates += $env:SOLAND_BIN }
     $targetDirectory = Get-CargoTargetDirectory -RepositoryRoot (Join-Path $WorkspaceRoot "soland")
-    $candidates += (Join-Path $targetDirectory "debug\soland.exe")
-    $candidates += (Join-Path $targetDirectory "release\soland.exe")
+    $candidates += (Join-Path $targetDirectory ("debug/" + (Get-NativeExecutableName -Name "soland")))
+    $candidates += (Join-Path $targetDirectory ("release/" + (Get-NativeExecutableName -Name "soland")))
 
     foreach ($candidate in $candidates) {
         if ($candidate -and (Test-Path $candidate)) {
@@ -1744,8 +1751,8 @@ function Resolve-TeabayBinary {
     if ($ExplicitPath) { $candidates += $ExplicitPath }
     if ($env:TEABAY_BIN) { $candidates += $env:TEABAY_BIN }
     $targetDirectory = Get-CargoTargetDirectory -RepositoryRoot (Join-Path $WorkspaceRoot "teabay")
-    $candidates += (Join-Path $targetDirectory "debug\teabay.exe")
-    $candidates += (Join-Path $targetDirectory "release\teabay.exe")
+    $candidates += (Join-Path $targetDirectory ("debug/" + (Get-NativeExecutableName -Name "teabay")))
+    $candidates += (Join-Path $targetDirectory ("release/" + (Get-NativeExecutableName -Name "teabay")))
 
     foreach ($candidate in $candidates) {
         if ($candidate -and (Test-Path $candidate)) {
@@ -3512,7 +3519,7 @@ try {
     $preparationTasks = New-Object System.Collections.Generic.List[object]
     $preparationTimings = New-Object System.Collections.Generic.List[object]
     if (-not $SkipBuild -and $willStartDefaultSoland -and $SolandRuntime -eq "process" -and -not $SolandBin -and -not $env:SOLAND_BIN) {
-        $defaultSolandBinary = Join-Path $solandTargetDirectory "debug\soland.exe"
+        $defaultSolandBinary = Join-Path $solandTargetDirectory ("debug/" + (Get-NativeExecutableName -Name "soland"))
         $freshness = Get-ArtifactFreshness `
             -ArtifactPath $defaultSolandBinary `
             -RepositoryRoots @(
@@ -3556,8 +3563,8 @@ try {
     # full run. Build it once here and let the helper exec the binary directly
     # (`COTEST_WIRE_BIN`), which is what CI already does.
     if (-not $SkipBuild -and -not $env:COTEST_WIRE_BIN) {
-        $cotestWireBinary = Join-Path $cotestTargetDirectory "debug\cotest-wire.exe"
-        $cotestProvisionBinary = Join-Path $cotestTargetDirectory "debug\cotest-provision.exe"
+        $cotestWireBinary = Join-Path $cotestTargetDirectory ("debug/" + (Get-NativeExecutableName -Name "cotest-wire"))
+        $cotestProvisionBinary = Join-Path $cotestTargetDirectory ("debug/" + (Get-NativeExecutableName -Name "cotest-provision"))
         $buildInputRoots = @($repoRoot, (Join-Path $workspaceRoot "arkret-rust-sdk"))
         # One `cargo build` produces both bins, so both have to be checked. With
         # only the wire binary gated, a tree whose `cotest-wire.exe` was built
@@ -3626,7 +3633,7 @@ try {
             $preparationTimings.Add([pscustomobject]@{ name = "coauth-frontend"; status = "cache-hit"; duration_seconds = 0; detail = $coauthFrontendFreshness.Detail })
         }
 
-        $defaultCoauthBinary = Join-Path $coauthTargetDirectory "debug\coauth.exe"
+        $defaultCoauthBinary = Join-Path $coauthTargetDirectory ("debug/" + (Get-NativeExecutableName -Name "coauth"))
         $coauthFreshness = Get-ArtifactFreshness `
             -ArtifactPath $defaultCoauthBinary `
             -RepositoryRoots @(
@@ -3650,7 +3657,7 @@ try {
 
     if (-not $SkipBuild -and $StartSavfox -and -not $SavfoxBin -and -not $env:SAVFOX_BIN) {
         $savfoxTargetDirectory = Get-CargoTargetDirectory -RepositoryRoot $SavfoxRoot
-        $defaultSavfoxBinary = Join-Path $savfoxTargetDirectory "debug\savfox.exe"
+        $defaultSavfoxBinary = Join-Path $savfoxTargetDirectory ("debug/" + (Get-NativeExecutableName -Name "savfox"))
         $savfoxFreshness = Get-ArtifactFreshness `
             -ArtifactPath $defaultSavfoxBinary `
             -RepositoryRoots @(
@@ -3911,7 +3918,7 @@ try {
 
     # Child mocks must inherit the prepared oracle before they start.
     if (-not $env:COTEST_WIRE_BIN) {
-        $preparedWireBinary = Join-Path $cotestTargetDirectory "debug\cotest-wire.exe"
+        $preparedWireBinary = Join-Path $cotestTargetDirectory ("debug/" + (Get-NativeExecutableName -Name "cotest-wire"))
         if (Test-Path -LiteralPath $preparedWireBinary) {
             $env:COTEST_WIRE_BIN = $preparedWireBinary
         }
@@ -4168,7 +4175,7 @@ try {
             $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($env:SAVFOX_BIN)
         } else {
             $savfoxTargetDirectory = Get-CargoTargetDirectory -RepositoryRoot $SavfoxRoot
-            Join-Path $savfoxTargetDirectory "debug\savfox.exe"
+            Join-Path $savfoxTargetDirectory ("debug/" + (Get-NativeExecutableName -Name "savfox"))
         }
         if (-not (Test-Path -LiteralPath $savfoxBinary -PathType Leaf)) {
             throw "Savfox binary not found: $savfoxBinary"
@@ -4689,7 +4696,7 @@ try {
     # paying Cargo discovery and the build-directory lock. It is a long-lived
     # process — the TypeScript side spawns one per Playwright worker — which
     # makes `cargo run` per invocation worse here than it was for cotest-wire.
-    $provisionBinary = Join-Path $cotestTargetDirectory "debug\cotest-provision.exe"
+    $provisionBinary = Join-Path $cotestTargetDirectory ("debug/" + (Get-NativeExecutableName -Name "cotest-provision"))
     if (Test-Path -LiteralPath $provisionBinary) {
         $env:COTEST_PROVISION_BIN = $provisionBinary
     } else {
