@@ -124,7 +124,18 @@ impl Member {
 }
 
 pub async fn run_same_station_mls_keypackage_lifecycle_live() -> Result<()> {
+    run_with_blocklist_observer(false).await
+}
+
+pub async fn run_blocklist_call_invite_live() -> Result<()> {
+    run_with_blocklist_observer(true).await
+}
+
+async fn run_with_blocklist_observer(observe_blocklist: bool) -> Result<()> {
     let Some(database) = database(GROUP)? else {
+        if observe_blocklist {
+            bail!("blocklist Call evidence requires an isolated PostgreSQL database");
+        }
         return Ok(());
     };
     let coauth = MockCoauthIntrospectionServer::spawn_with_internal_secret(
@@ -137,6 +148,9 @@ pub async fn run_same_station_mls_keypackage_lifecycle_live() -> Result<()> {
     )
     .await?
     else {
+        if observe_blocklist {
+            bail!("blocklist Call evidence requires a prebuilt real Soland binary");
+        }
         return skip_or_fail(GROUP, "prebuilt Soland unavailable");
     };
     let station = group.server(0);
@@ -350,6 +364,8 @@ pub async fn run_same_station_mls_keypackage_lifecycle_live() -> Result<()> {
         )
         .await?;
     submit_and_expect_commit(&alice.client, &alice.account, ALICE_DEVICE, &genesis).await?;
+    crate::scenarios::message_mls_cross_station_live::install_bindings(&mut alice_group, &[&alice])
+        .await?;
 
     // Plaintext into the activated scope is refused by the shared send gate.
     let plaintext = alice
@@ -437,6 +453,16 @@ pub async fn run_same_station_mls_keypackage_lifecycle_live() -> Result<()> {
         &accepted_commit,
     )?;
     ensure!(bob_group.epoch() == 1, "Bob did not join at epoch 1");
+    crate::scenarios::message_mls_cross_station_live::install_bindings(
+        &mut alice_group,
+        &[&alice, &bob],
+    )
+    .await?;
+    crate::scenarios::message_mls_cross_station_live::install_bindings(
+        &mut bob_group,
+        &[&alice, &bob],
+    )
+    .await?;
 
     bob.client
         .post("/_arkret/self/device_messages/ack")
@@ -561,6 +587,19 @@ pub async fn run_same_station_mls_keypackage_lifecycle_live() -> Result<()> {
         arkret::MessageCrypto::decrypt(&mut bob_group, &sealed)? == b"after Add",
         "Bob could not decrypt Alice's message at the accepted epoch"
     );
+
+    if observe_blocklist {
+        crate::conformance::account_blocklist_projection::observe_ordinary_call_invite(
+            &alice,
+            &bob,
+            station,
+            &realm_id,
+            &commit_event.event_id,
+            &alice_group,
+            &bob_group,
+        )
+        .await?;
+    }
 
     // Restart: the claim ledger replays byte-identically and the ACKed
     // Welcome is gone.
