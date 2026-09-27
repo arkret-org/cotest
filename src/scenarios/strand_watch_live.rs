@@ -46,7 +46,7 @@ async fn read(
     Ok(outcome)
 }
 
-async fn signed_snapshot(
+pub(crate) async fn signed_snapshot(
     client: &TestActorClient,
     realm: &RealmId,
 ) -> Result<arkret_wire::RealmStateSnapshot> {
