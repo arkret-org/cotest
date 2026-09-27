@@ -680,7 +680,6 @@ async fn submit_message_with_lost_response_and_native_reopen(
     account: &AccountId,
     event: &Event,
 ) -> Result<RealmCommit> {
-    use garth::OutboundQueueStore;
     let principal = client
         .principal
         .as_ref()
@@ -702,8 +701,18 @@ async fn submit_message_with_lost_response_and_native_reopen(
         principal.device_signing_key.clone(),
         method,
     );
-    let mut frozen = garth::MessageAuthoringSession::from_authored_event(authored)?
+    let frozen = garth::MessageAuthoringSession::from_authored_event(authored)?
         .sign(&signer, arkret_signatures::SignEventOptions::new())?;
+    submit_frozen_message_with_lost_response_and_native_reopen(client, account, frozen).await
+}
+
+async fn submit_frozen_message_with_lost_response_and_native_reopen(
+    client: &TestActorClient,
+    account: &AccountId,
+    mut frozen: garth::FrozenMessageSubmission,
+) -> Result<RealmCommit> {
+    use garth::OutboundQueueStore;
+    let event = frozen.request().submission.event.clone();
     ensure_human_producer(
         &frozen.request().submission.event,
         account,
@@ -918,4 +927,601 @@ async fn wait_for_accepted_revoke(
         tokio::time::sleep(Duration::from_millis(500)).await;
         current = serde_json::from_value(expect_json(client.get(&path), StatusCode::OK).await?)?;
     }
+}
+
+/// Real optional-prepare expiry and native Account cursor recovery. Preparation
+/// reserves no Commit: expiry affects another prepare, never exact submit replay.
+pub async fn run_message_prepare_and_account_cursor_recovery_live() -> Result<()> {
+    use arkret_models_collaboration::message_authoring::{
+        MessagePrepareOutcome, MessagePrepareRequestBody,
+    };
+    let label = "message-prepare-cursor-recovery";
+    let Some(database) = database(label)? else {
+        return Ok(());
+    };
+    let coauth = MockCoauthIntrospectionServer::spawn_with_internal_secret(
+        HARNESS_INTERNAL_AUTHORITY_SECRET,
+    )
+    .await?;
+    let Some(group) = TestServerGroup::try_multi_external_with_node_envs(
+        label,
+        &[station_env(&database.connect_url, &coauth)],
+    )
+    .await?
+    else {
+        return skip_or_fail(label, "prebuilt Soland unavailable");
+    };
+    let station = group.server(0);
+    let (alice, account) = standard_client(
+        station,
+        &coauth,
+        "prepare-recovery-alice",
+        SAME_STATION_DEVICE,
+    )
+    .await?;
+    let realm =
+        create_public_realm(&alice, "Prepare and durable cursor recovery", &[station]).await?;
+    let strand = alice.default_strand_id(&realm)?;
+    let directory = tempfile::tempdir()?;
+    let cursor_path = directory.path().join("account.json");
+    let before = run_durable_account_round(&alice, &account, &realm, &cursor_path, None).await?;
+    // Keep a genuine short remaining validity window without changing the
+    // service clock or any server-issued outcome timestamps.
+    let created_at = arkret_canonical::canonical::normalize_timestamp_canonical(
+        chrono::Utc::now() - chrono::Duration::seconds(290),
+    );
+    let request: MessagePrepareRequestBody = serde_json::from_value(json!({
+        "request_id":"ak:request:019b6a40-0000-7000-8000-000000002150",
+        "account_id":account, "realm_id":realm,
+        "intent":{"strand_id":strand,"track_name":"discussion",
+            "content":{"kind":"plaintext","content":{"kind":"ak.content.text","body":"frozen prepared recovery","format":"plain"}}},
+        "created_at":created_at,
+    }))?;
+    let outcome: MessagePrepareOutcome = serde_json::from_value(
+        expect_json(
+            alice.post("/_arkret/self/messages/prepare").json(&request),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    outcome.validate_against_request(&request)?;
+    let replay: MessagePrepareOutcome = serde_json::from_value(
+        expect_json(
+            alice.post("/_arkret/self/messages/prepare").json(&request),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    ensure!(
+        arkret_canonical::canonical_json_bytes(&outcome)?
+            == arkret_canonical::canonical_json_bytes(&replay)?,
+        "prepare replay changed the frozen draft"
+    );
+    let mut conflicting = request.clone();
+    conflicting.intent.content = serde_json::from_value(json!({
+        "kind":"plaintext", "content":{"kind":"ak.content.text","body":"another frozen intent","format":"plain"},
+    }))?;
+    let conflict = expect_api_error(
+        alice
+            .post("/_arkret/self/messages/prepare")
+            .json(&conflicting),
+        StatusCode::CONFLICT,
+        "duplicate_conflict",
+    )
+    .await?;
+    ensure!(conflict.code() == "duplicate_conflict");
+    let principal = alice
+        .principal
+        .as_ref()
+        .context("accepted founding device")?;
+    let method = format!("{}#{}", alice.actor, alice.device_id);
+    let signer = arkret_signatures::Ed25519DetachedJwsSigner::new(
+        principal.device_signing_key.clone(),
+        method,
+    );
+    let frozen = garth::MessageAuthoringPreparation::new(request.clone())?
+        .resolve(&outcome)?
+        .sign(&signer, arkret_signatures::SignEventOptions::new())?;
+    let event = frozen.request().submission.event.clone();
+    let commit = submit_frozen_message_with_lost_response_and_native_reopen(
+        &alice,
+        &account,
+        frozen.clone(),
+    )
+    .await?;
+    let after_submit = run_durable_account_round(
+        &alice,
+        &account,
+        &realm,
+        &cursor_path,
+        Some((&event.event_id, &commit)),
+    )
+    .await?;
+    ensure!(
+        after_submit.cursor != before.cursor,
+        "committed message did not advance durable Account cursor"
+    );
+    let wait = (outcome.expires_at - chrono::Utc::now())
+        .to_std()
+        .unwrap_or_default()
+        + Duration::from_millis(100);
+    ensure!(
+        wait <= Duration::from_secs(15),
+        "near-expiry fixture would wait too long"
+    );
+    tokio::time::sleep(wait).await;
+    let expired = expect_api_error(
+        alice.post("/_arkret/self/messages/prepare").json(&request),
+        StatusCode::GONE,
+        "authoring_request_expired",
+    )
+    .await?;
+    ensure!(expired.code() == "authoring_request_expired");
+    let replay: AuthoritySubmitOutcome = serde_json::from_value(
+        expect_json(
+            alice
+                .post("/_arkret/self/events")
+                .header(reqwest::header::CONTENT_TYPE, "application/json")
+                .body(frozen.canonical_submission_bytes().to_vec()),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    let AuthoritySubmitOutcome::Accepted {
+        commit: replay_commit,
+        ..
+    } = replay
+    else {
+        bail!("expired prepare changed already accepted submit recovery");
+    };
+    ensure!(
+        replay_commit == commit,
+        "post-expiry exact replay allocated a second Commit"
+    );
+    // This expired attempt was never submitted and owns no stream position.
+    let mut never_accepted = request.clone();
+    never_accepted.request_id = RequestId::new("ak:request:019b6a40-0000-7000-8000-000000002151")?;
+    let expired = expect_api_error(
+        alice
+            .post("/_arkret/self/messages/prepare")
+            .json(&never_accepted),
+        StatusCode::GONE,
+        "authoring_request_expired",
+    )
+    .await?;
+    ensure!(expired.code() == "authoring_request_expired");
+    never_accepted.request_id = RequestId::new("ak:request:019b6a40-0000-7000-8000-000000002152")?;
+    never_accepted.created_at =
+        arkret_canonical::canonical::normalize_timestamp_canonical(chrono::Utc::now());
+    let fresh: MessagePrepareOutcome = serde_json::from_value(
+        expect_json(
+            alice
+                .post("/_arkret/self/messages/prepare")
+                .json(&never_accepted),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    let fresh = garth::MessageAuthoringPreparation::new(never_accepted)?
+        .resolve(&fresh)?
+        .sign(&signer, arkret_signatures::SignEventOptions::new())?;
+    let fresh_event = fresh.request().submission.event.clone();
+    ensure!(fresh_event.event_id != event.event_id);
+    let fresh_commit =
+        submit_frozen_message_with_lost_response_and_native_reopen(&alice, &account, fresh).await?;
+    ensure!(
+        fresh_commit.stream_position == commit.stream_position + 1,
+        "prepare, conflict or expired attempts wrote a hidden Commit"
+    );
+    ensure_commit_signed_by(&fresh_commit, station)?;
+    Ok(())
+}
+
+async fn run_durable_account_round(
+    client: &TestActorClient,
+    account: &AccountId,
+    realm: &str,
+    path: &std::path::Path,
+    expected: Option<(&EventId, &RealmCommit)>,
+) -> Result<garth::AccountCursorCheckpoint> {
+    use arkret_models_collaboration::sync_frames::account_subscribe::{
+        AccountSubscribeBatch, SyncRequestBody,
+    };
+    use garth::{
+        AccountBatchProjector, AccountSubscription, CursorScope, CursorStore, FileStore,
+        NativeExecutor,
+    };
+    struct Projector {
+        control: garth::SubscriptionControl,
+        expected: Option<(EventId, RealmCommit)>,
+        observed: std::sync::atomic::AtomicBool,
+    }
+    impl AccountBatchProjector for Projector {
+        async fn project(&self, batch: &AccountSubscribeBatch) -> garth::Result<()> {
+            if let Some((event_id, commit)) = &self.expected {
+                let found = batch
+                    .frames
+                    .iter()
+                    .filter_map(|frame| frame.realms.as_ref())
+                    .flat_map(|realms| realms.entries.values())
+                    .filter_map(|entry| entry.committed_events.as_ref())
+                    .flatten()
+                    .find(|view| &view.commit().event_ref == event_id);
+                let Some(view) = found else {
+                    return Err(garth::Error::Protocol(
+                        "resumed Account batch omitted queued committed message".to_owned(),
+                    ));
+                };
+                view.validate_shape()?;
+                if view.commit() != commit || view.reducer_input().is_none() {
+                    return Err(garth::Error::Protocol(
+                        "Account readback does not bind exact Event and RealmCommit".to_owned(),
+                    ));
+                }
+                self.observed
+                    .store(true, std::sync::atomic::Ordering::SeqCst);
+            }
+            self.control.cancel();
+            Ok(())
+        }
+    }
+    let store = FileStore::open(path)?;
+    let runner = AccountSubscription::new(NativeExecutor, store.clone());
+    let projector = Projector {
+        control: runner.control(),
+        expected: expected.map(|(event, commit)| (event.clone(), commit.clone())),
+        observed: std::sync::atomic::AtomicBool::new(false),
+    };
+    let request: SyncRequestBody =
+        serde_json::from_value(json!({"filter":{"realm_ids":[realm],"window_limit":100}}))?;
+    let device = arkret_wire::DeviceId::new(client.device_id.clone())?;
+    tokio::time::timeout(
+        Duration::from_secs(45),
+        runner.run(
+            &client.sdk(),
+            &projector,
+            None,
+            ActorId::account(account.clone()),
+            device.clone(),
+            request,
+        ),
+    )
+    .await
+    .context("durable Account subscription timed out")??;
+    ensure!(expected.is_none() || projector.observed.load(std::sync::atomic::Ordering::SeqCst));
+    let scope = CursorScope::Account {
+        service_id: None,
+        actor_id: ActorId::account(account.clone()),
+        device_id: device,
+    };
+    let checkpoint = store
+        .load_account_checkpoint(scope.clone())
+        .await?
+        .context("Garth persisted no Account checkpoint")?;
+    drop(runner);
+    drop(store);
+    let reopened = FileStore::open(path)?
+        .load_account_checkpoint(scope)
+        .await?
+        .context("native cursor reopen lost checkpoint")?;
+    ensure!(reopened == checkpoint, "durable cursor changed on reopen");
+    Ok(reopened)
+}
+
+/// Plaintext poll admission and revision history on the real authority stream.
+pub async fn run_plaintext_poll_revision_live() -> Result<()> {
+    let label = "plaintext-poll-revision";
+    let Some(database) = database(label)? else {
+        return Ok(());
+    };
+    let coauth = MockCoauthIntrospectionServer::spawn_with_internal_secret(
+        HARNESS_INTERNAL_AUTHORITY_SECRET,
+    )
+    .await?;
+    let Some(group) = TestServerGroup::try_multi_external_with_node_envs(
+        label,
+        &[station_env(&database.connect_url, &coauth)],
+    )
+    .await?
+    else {
+        return skip_or_fail(label, "prebuilt Soland unavailable");
+    };
+    let station = group.server(0);
+    let (alice, account) =
+        standard_client(station, &coauth, "poll-revision-alice", SAME_STATION_DEVICE).await?;
+    let realm = create_public_realm(&alice, "Durable poll revisions", &[station]).await?;
+    let strand = alice.default_strand_id(&realm)?;
+    let definition = alice
+        .author_event(
+            &realm,
+            EventKind::MessageCreate.as_str(),
+            json!({
+                "strand_id":strand, "track_name":"discussion",
+                "content":{"kind":"ak.content.poll","body":"Choose one",
+                    "poll":{"kind":"disclosed","max_selections":1,
+                        "answers":[{"id":"a","text":{"kind":"ak.content.text","body":"A"}},
+                            {"id":"b","text":{"kind":"ak.content.text","body":"B"}}]}},
+            }),
+        )
+        .await?;
+    let original_commit =
+        submit_and_expect_commit(&alice, &account, SAME_STATION_DEVICE, &definition).await?;
+    let poll_ref = arkret_wire::MessageId::from_event_id(&definition.event_id);
+    let response_payload = |selections: Value, heads: Value| {
+        let content =
+            arkret_models_collaboration::events_payloads::message::ContentBlock::from_value(
+                json!({
+                    "kind":"ak.content.poll.response", "body":"vote",
+                    "poll_response":{"poll_ref":poll_ref,"selections":selections},
+                }),
+            )
+            .expect("registered poll response content");
+        let payload = arkret_models_collaboration::events_payloads::message::MessageCreatePayload::with_content(
+            arkret_wire::StrandId::new(strand.clone()).expect("accepted discussion Strand"),
+            "discussion", content,
+        ).with_poll_response_heads(serde_json::from_value(heads).expect("typed response heads"))
+            .expect("valid response-head carrier");
+        serde_json::to_value(payload).expect("serialize closed MessageCreatePayload")
+    };
+    let first = alice
+        .author_event(
+            &realm,
+            EventKind::MessageCreate.as_str(),
+            response_payload(json!(["a"]), json!([])),
+        )
+        .await?;
+    let first_commit =
+        submit_and_expect_commit(&alice, &account, SAME_STATION_DEVICE, &first).await?;
+    let replacement = alice
+        .author_event(
+            &realm,
+            EventKind::MessageCreate.as_str(),
+            response_payload(
+                json!(["b"]),
+                json!([{"poll_event_ref":definition.event_id,"response_event_ref":first.event_id}]),
+            ),
+        )
+        .await?;
+    let replacement_commit =
+        submit_and_expect_commit(&alice, &account, SAME_STATION_DEVICE, &replacement).await?;
+    let replay_request = arkret_wire::AuthoritySubmitRequest::Event(
+        arkret_wire::EventAdmissionSubmission::new(replacement.clone()),
+    );
+    let replay: AuthoritySubmitOutcome = serde_json::from_value(
+        expect_json(
+            alice.post("/_arkret/self/events").json(&replay_request),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    let AuthoritySubmitOutcome::Accepted {
+        status,
+        commit: replay_commit,
+    } = replay
+    else {
+        bail!("poll exact replay was not accepted: {replay:?}");
+    };
+    ensure!(
+        status == AuthorityCommitStatus::Duplicate,
+        "poll replay was not classified as an exact duplicate"
+    );
+    ensure!(
+        replay_commit == replacement_commit,
+        "poll exact replay allocated a second vote"
+    );
+    let mut refused_ids = Vec::new();
+    for (label, payload) in [
+        (
+            "unknown answer",
+            response_payload(json!(["missing"]), json!([])),
+        ),
+        (
+            "too many answers",
+            response_payload(json!(["a", "b"]), json!([])),
+        ),
+        (
+            "nonresponse predecessor",
+            response_payload(
+                json!(["a"]),
+                json!([{
+                    "poll_event_ref":definition.event_id,"response_event_ref":definition.event_id,
+                }]),
+            ),
+        ),
+        (
+            "nonpoll target",
+            response_payload(
+                json!(["a"]),
+                json!([{
+                    "poll_event_ref":first.event_id,"response_event_ref":first.event_id,
+                }]),
+            ),
+        ),
+    ] {
+        let refused = alice
+            .author_event(&realm, EventKind::MessageCreate.as_str(), payload)
+            .await?;
+        let body = arkret_wire::AuthoritySubmitRequest::Event(
+            arkret_wire::EventAdmissionSubmission::new(refused.clone()),
+        );
+        expect_api_error(
+            alice.post("/_arkret/self/events").json(&body),
+            StatusCode::CONFLICT,
+            "failed_precondition",
+        )
+        .await
+        .with_context(|| format!("poll admission accepted {label}"))?;
+        ensure_absent_from_stream(&alice, &realm, &refused.event_id).await?;
+        refused_ids.push(refused.event_id.to_string());
+    }
+    // Replacement declarations are audit statements, not a CAS requirement:
+    // omitting heads does not prevent a later accepted response becoming current.
+    let last = alice
+        .author_event(
+            &realm,
+            EventKind::MessageCreate.as_str(),
+            response_payload(json!(["a"]), json!([])),
+        )
+        .await?;
+    let last_commit =
+        submit_and_expect_commit(&alice, &account, SAME_STATION_DEVICE, &last).await?;
+    ensure!(first_commit.stream_position == original_commit.stream_position + 1);
+    ensure!(replacement_commit.stream_position == first_commit.stream_position + 1);
+    ensure!(
+        last_commit.stream_position == replacement_commit.stream_position + 1,
+        "refused polls or exact replay mutated the authority stream"
+    );
+    let stream_ref = CommitStreamRef::Realm {
+        realm_id: RealmId::new(realm.clone())?,
+    };
+    use sha2::Digest as _;
+    let nonce = arkret_wire::Base64UrlString::new(arkret_canonical::base64url_encode(
+        sha2::Sha256::digest(format!(
+            "poll:{realm}:{}",
+            chrono::Utc::now().timestamp_nanos_opt().unwrap()
+        ))
+        .as_slice(),
+    ))
+    .map_err(anyhow::Error::msg)?;
+    let request = arkret_wire::AuthorityBundleRequest {
+        realm_id: RealmId::new(realm.clone())?,
+        nonce: nonce.clone(),
+    };
+    let http = alice.sdk();
+    let authority = garth::AuthorityClient::new(http.clone());
+    let bundle = authority.resolve_authority(&request).await?;
+    let freshness = arkret_identity::RealmAuthorityFreshness::new(chrono::Utc::now(), nonce);
+    let keys = garth::fetch_historical_station_key_directory(&http, &bundle, None, None).await?;
+    let mut replica = garth::RealmReplica::new(request.realm_id.clone());
+    replica.install_verified_authority(&request, bundle.clone(), &freshness, &keys)?;
+    let scan = arkret_wire::StreamScanRequest {
+        realm_id: request.realm_id.clone(),
+        stream_ref: stream_ref.clone(),
+        direction: arkret_wire::StreamScanDirection::After(None),
+        limit: 1000,
+    };
+    let page = authority.scan(&scan).await?;
+    ensure!(
+        !page.truncated,
+        "small poll fixture must fit a complete verified prefix"
+    );
+    let page_keys =
+        garth::fetch_historical_station_key_directory(&http, &bundle, Some(&page), None).await?;
+    let page = replica.apply_verified_scan(&scan, page, &freshness, &page_keys)?;
+    ensure!(
+        replica
+            .verified_head(&stream_ref)
+            .is_some_and(|head| head.commit_id == last_commit.commit_id)
+    );
+    let responses = [&first, &replacement, &last];
+    let response_refs = page
+        .rows()
+        .iter()
+        .filter_map(|view| {
+            responses
+                .iter()
+                .find(|event| event.event_id == view.commit().event_ref)
+                .map(|_| (view.commit().event_ref.clone(), view))
+        })
+        .collect::<std::collections::BTreeMap<_, _>>();
+    ensure!(
+        response_refs.len() == 3,
+        "accepted poll response history was lost"
+    );
+    let partition = arkret_models_collaboration::poll::PollPartition {
+        realm_id: RealmId::new(realm.clone())?,
+        stream_ref,
+        poll_ref,
+        poll_event_ref: definition.event_id.clone(),
+        actor_id: ActorId::account(account),
+    };
+    let answers = ["a".to_owned(), "b".to_owned()].into_iter().collect();
+    let mut set = arkret_models_collaboration::poll::PollResponseSet::default();
+    // Reverse application order proves arrival order is not winner authority.
+    for event in responses.into_iter().rev() {
+        let view = response_refs[&event.event_id];
+        ensure!(view.reducer_input() == Some(event));
+        let commit = view.commit();
+        ensure_commit_signed_by(commit, station)?;
+        let accepted_ref = arkret_wire::CommittedEventRef {
+            event_id: event.event_id.clone(),
+            commit_id: commit.commit_id.clone(),
+            stream_ref: commit.stream_ref.clone(),
+            stream_position: commit.stream_position,
+        };
+        let selections: Vec<String> = serde_json::from_value(
+            event.payload["content"]["poll_response"]["selections"].clone(),
+        )?;
+        let heads = serde_json::from_value(
+            event
+                .payload
+                .get("poll_response_heads")
+                .cloned()
+                .unwrap_or_else(|| json!([])),
+        )?;
+        let response = arkret_models_collaboration::poll::VerifiedPollResponse::new(
+            partition.clone(),
+            accepted_ref,
+            &selections,
+            &answers,
+            1,
+            heads,
+            |id| {
+                response_refs.get(id).map(|view| {
+                    let commit = view.commit();
+                    (
+                        partition.clone(),
+                        arkret_wire::CommittedEventRef {
+                            event_id: id.clone(),
+                            commit_id: commit.commit_id.clone(),
+                            stream_ref: commit.stream_ref.clone(),
+                            stream_position: commit.stream_position,
+                        },
+                    )
+                })
+            },
+        )?;
+        set.insert(response)?;
+    }
+    let database_url = database.connect_url.clone();
+    let poll_event_id = definition.event_id.to_string();
+    let last_event_id = last.event_id.to_string();
+    let last_commit_id = last_commit.commit_id.to_string();
+    let last_position = i64::try_from(last_commit.stream_position)?;
+    tokio::task::spawn_blocking(move || -> Result<()> {
+        let mut db = postgres::Client::connect(&database_url, postgres::NoTls)?;
+        // Inspect accepted storage without manufacturing protocol state.
+        let count: i64 = db.query_one(
+            "SELECT count(*) FROM poll_response_inputs p JOIN canonical_events original ON original.pk=p.poll_event_pk WHERE original.envelope->>'event_id'=$1",
+            &[&poll_event_id],
+        )?.get(0);
+        ensure!(count == 3, "durable poll reducer did not retain every accepted response");
+        let rows = db.query(
+            "SELECT v.response_event_id,v.commit_id,v.stream_position,v.selections::text FROM poll_state_current_votes v JOIN canonical_events original ON original.pk=v.poll_event_pk WHERE original.envelope->>'event_id'=$1",
+            &[&poll_event_id],
+        )?;
+        ensure!(rows.len() == 1, "poll partition has more than one current vote");
+        ensure!(rows[0].get::<_,String>(0) == last_event_id);
+        ensure!(rows[0].get::<_,String>(1) == last_commit_id);
+        ensure!(rows[0].get::<_,i64>(2) == last_position);
+        ensure!(serde_json::from_str::<Value>(&rows[0].get::<_,String>(3))? == json!(["a"]));
+        for event_id in refused_ids {
+            let count: i64 = db.query_one(
+                "SELECT count(*) FROM canonical_events WHERE envelope->>'event_id'=$1", &[&event_id],
+            )?.get(0);
+            ensure!(count == 0, "refused poll wrote a canonical Event");
+        }
+        Ok(())
+    }).await??;
+    let projection = set.project(true);
+    let current = &projection[&partition];
+    ensure!(!current.provisional);
+    ensure!(
+        current
+            .winner
+            .as_ref()
+            .is_some_and(|winner| winner.event_id == last.event_id)
+    );
+    ensure!(current.selections == ["a".to_owned()].into_iter().collect());
+    Ok(())
 }

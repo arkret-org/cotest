@@ -72,7 +72,7 @@ const EVE_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002608";
 const CLAIM_QUERY: &str = "/_arkret/self/keys/keypackages/claims/query";
 
 /// `member` on Y accepts Alice's directed Invite through its own Station.
-async fn join_through_invite(
+pub(crate) async fn join_through_invite(
     alice: &Member,
     governance: &ArkretServer,
     member: &Member,
@@ -146,7 +146,7 @@ async fn wait_for_joined_row(member: &Member, realm: &str) -> Result<()> {
 
 /// Publish one fresh KeyPackage of `member` on its own Station and return
 /// the identity that holds its private state.
-async fn publish_one(member: &Member) -> Result<arkret::ArkretMlsIdentity> {
+pub(crate) async fn publish_one(member: &Member) -> Result<arkret::ArkretMlsIdentity> {
     let identity = member.mls_identity()?;
     let record = identity.key_package_record()?;
     let upload =
@@ -172,7 +172,7 @@ async fn publish_one(member: &Member) -> Result<arkret::ArkretMlsIdentity> {
 /// available on the requester's Station: a claim relayed to another Station
 /// answers `failed_precondition` until the relay has stored the outcome, and
 /// a claim the destination cannot serve yet is retried under a new id.
-async fn claim_for(
+pub(crate) async fn claim_for(
     requester: &Member,
     source: &ArkretServer,
     destination: &ArkretServer,
@@ -230,7 +230,7 @@ async fn claim_for(
 }
 
 /// The Welcomes in `member`'s recipient queue once `expected` arrived.
-async fn wait_for_welcome(
+pub(crate) async fn wait_for_welcome(
     member: &Member,
     expected: &MlsWelcomeDelivery,
 ) -> Result<(Vec<MlsWelcomeDelivery>, String)> {
