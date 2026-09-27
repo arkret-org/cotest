@@ -56,8 +56,7 @@ use arkret_models_collaboration::governance::membership_invite::MembershipPayloa
 use arkret_models_collaboration::governance::peer_contact::ContactIntroductionEvidence;
 use arkret_models_collaboration::objects::direct_conversation::{
     DirectConversationAuthorizationBasis, DirectConversationFoundingAuthorityEvidence,
-    DirectConversationPairKeyParticipant, direct_conversation_main_strand_create_payload,
-    direct_conversation_member_join_payload, direct_conversation_pair_key,
+    direct_conversation_main_strand_create_payload, direct_conversation_member_join_payload,
     direct_conversation_peer_membership_bootstrap, direct_conversation_realm_create_payload,
 };
 use arkret_models_crypto::{KeyPackagesClaimOutcome, KeyPackagesUploadOutcome};
@@ -1172,6 +1171,37 @@ async fn run(cross_station: bool, missing_contact_dependency: bool) -> Result<()
         }
     }
 
+    // The accepted founding slot is the coordinate authority.  From this
+    // point on the scenario deliberately consumes the public resolver result
+    // instead of carrying the locally-derived founding plan as a second
+    // coordinate source.
+    let resolved = alice
+        .client
+        .sdk()
+        .direct_conversation_resolve(&DirectConversationResolveRequestBody {
+            peer: arkret::contact_operations::ContactPeer::Human {
+                account_id: bob.account.clone(),
+            },
+        })
+        .await?;
+    let DirectConversationResolveOutcome::Provisional {
+        coordinates,
+        group_state_ref,
+    } = resolved
+    else {
+        bail!("founding slot did not resolve as provisional: {resolved:?}");
+    };
+    ensure!(
+        coordinates.realm_id == realm_id
+            && coordinates.main_strand_id == strand_id
+            && coordinates.binding_event_ref.is_none()
+            && group_state_ref.is_none(),
+        "resolver did not return the accepted founding coordinates"
+    );
+    let pair_key = coordinates.pair_key.clone();
+    let realm_id = coordinates.realm_id;
+    let strand_id = coordinates.main_strand_id;
+
     // Section 7.2: before the group Genesis there is no provisional phase.
     let early = authored(
         &alice,
@@ -1372,11 +1402,6 @@ async fn run(cross_station: bool, missing_contact_dependency: bool) -> Result<()
         .error_for_status()?;
 
     // Before Bob consumes his claim the Realm is still provisional.
-    let pair_key = direct_conversation_pair_key(
-        server.trust_domain().clone(),
-        DirectConversationPairKeyParticipant::unmapped(alice.actor.clone()),
-        DirectConversationPairKeyParticipant::unmapped(bob.actor.clone()),
-    )?;
     let endorsement = |group_state_ref: &EventId| -> Result<Value> {
         let payload = DirectConversationBoundPayload {
             pair_key: pair_key.clone(),
@@ -1497,6 +1522,39 @@ async fn run(cross_station: bool, missing_contact_dependency: bool) -> Result<()
         &submit(&alice, &alice_endorsement).await?,
         &alice_endorsement,
     )?;
+
+    let resolved = alice
+        .client
+        .sdk()
+        .direct_conversation_resolve(&DirectConversationResolveRequestBody {
+            peer: arkret::contact_operations::ContactPeer::Human {
+                account_id: bob.account.clone(),
+            },
+        })
+        .await?;
+    let DirectConversationResolveOutcome::Found {
+        coordinates,
+        group_state_ref,
+        send_blockers,
+    } = resolved
+    else {
+        bail!("completed binding did not resolve as found: {resolved:?}");
+    };
+    ensure!(
+        coordinates.pair_key == pair_key
+            && coordinates.realm_id == realm_id
+            && coordinates.main_strand_id == strand_id
+            && coordinates
+                .binding_event_ref
+                .as_ref()
+                .is_some_and(|event_ref| {
+                    event_ref == &alice_endorsement.event_id
+                        || event_ref == &bob_endorsement.event_id
+                })
+            && group_state_ref == add_ref
+            && send_blockers.is_empty(),
+        "resolver did not return the accepted bound coordinates"
+    );
 
     // Found: both participants send under the binding and read each other.
     let bob_message = authored(
