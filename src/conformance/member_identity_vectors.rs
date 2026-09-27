@@ -167,7 +167,7 @@ pub fn run_member_identity_update_initial_vector() -> Result<()> {
 
     let payload = MemberIdentityUpdatePayload {
         realm_id: fake_realm()?,
-        actor_id: fake_actor()?,
+        member_id: fake_actor()?,
         segment: MemberIdentitySegment::MemberIdentity,
         replaces: vec![],
         identity_payload: carrier,
@@ -241,7 +241,7 @@ pub fn run_member_identity_update_replacement_vector() -> Result<()> {
 
     let payload_a = MemberIdentityUpdatePayload {
         realm_id: fake_realm()?,
-        actor_id: fake_actor()?,
+        member_id: fake_actor()?,
         segment: MemberIdentitySegment::MemberIdentity,
         replaces: vec![],
         identity_payload: carrier_a,
@@ -249,7 +249,7 @@ pub fn run_member_identity_update_replacement_vector() -> Result<()> {
     };
     let payload_b = MemberIdentityUpdatePayload {
         realm_id: fake_realm()?,
-        actor_id: fake_actor()?,
+        member_id: fake_actor()?,
         segment: MemberIdentitySegment::MemberIdentity,
         replaces: vec![MemberIdentityReplacementRef {
             event_id: event_a.clone(),
@@ -293,7 +293,7 @@ pub fn run_member_identity_replacement_digest_mismatch_vector() -> Result<()> {
 
     let payload_a = MemberIdentityUpdatePayload {
         realm_id: fake_realm()?,
-        actor_id: fake_actor()?,
+        member_id: fake_actor()?,
         segment: MemberIdentitySegment::MemberIdentity,
         replaces: vec![],
         identity_payload: IdentityPayloadCarrier::MemberIdentity {
@@ -303,7 +303,7 @@ pub fn run_member_identity_replacement_digest_mismatch_vector() -> Result<()> {
     };
     let payload_b = MemberIdentityUpdatePayload {
         realm_id: fake_realm()?,
-        actor_id: fake_actor()?,
+        member_id: fake_actor()?,
         segment: MemberIdentitySegment::MemberIdentity,
         replaces: vec![MemberIdentityReplacementRef {
             event_id: event_a.clone(),
@@ -378,7 +378,7 @@ pub fn run_member_identity_expected_state_digest_mismatch_vector() -> Result<()>
 
     let payload = MemberIdentityUpdatePayload {
         realm_id: fake_realm()?,
-        actor_id: fake_actor()?,
+        member_id: fake_actor()?,
         segment: MemberIdentitySegment::MemberIdentity,
         replaces: vec![],
         identity_payload: carrier,
@@ -460,7 +460,7 @@ pub fn run_member_identity_unknown_segment_rejected_vector() -> Result<()> {
     };
     let payload = MemberIdentityUpdatePayload {
         realm_id: fake_realm()?,
-        actor_id: fake_actor()?,
+        member_id: fake_actor()?,
         segment: MemberIdentitySegment::MemberIdentity,
         replaces: vec![],
         identity_payload: carrier,
@@ -515,7 +515,7 @@ pub fn run_member_identity_cross_subject_replacement_ignored_vector() -> Result<
             .map_err(|e| anyhow!("bogus digest as Hash: {e}"))?;
     let payload_b = MemberIdentityUpdatePayload {
         realm_id: fake_realm()?,
-        actor_id: account_actor("ak:did_core:web:bob.acme.example")?,
+        member_id: account_actor("ak:did_core:web:bob.acme.example")?,
         segment: MemberIdentitySegment::MemberIdentity,
         replaces: vec![MemberIdentityReplacementRef {
             event_id: cross_subject_event,
