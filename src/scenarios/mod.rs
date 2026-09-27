@@ -21,6 +21,7 @@ pub mod did_boundary_call_counts;
 pub mod direct_conversation_founding_live;
 pub mod directory_service;
 pub mod durable_effect_live_spotcheck;
+pub mod encrypted_poll_closed_live;
 pub mod event_idempotency_replay;
 pub mod events_backfill;
 pub mod events_resolve;
