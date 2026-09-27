@@ -1517,7 +1517,7 @@ function Assert-JointTlsTopology {
         #     that this host serves that exact leaf and that its SAN is bound.
         $healthUrl = "https://${hostName}:$TlsPort/health"
         try {
-            $response = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -SkipCertificateCheck -TimeoutSec 10 -ErrorAction Stop
+            $response = Invoke-WebRequest -Uri $healthUrl -NoProxy:(Test-JointLoopbackUrl -Url $healthUrl) -UseBasicParsing -SkipCertificateCheck -TimeoutSec 10 -ErrorAction Stop
         } catch {
             throw "joint TLS topology: verified HTTPS fetch $healthUrl failed: $($_.Exception.Message)"
         }
@@ -1554,7 +1554,7 @@ function Assert-JointTlsTopology {
         $logUrl = Get-WebvhLogUrlFromDid -Did $did
         $logPath = Join-Path $EvidenceDir "$($service.Name)-did.jsonl"
         try {
-            $logResponse = Invoke-WebRequest -Uri $logUrl -UseBasicParsing -SkipCertificateCheck -TimeoutSec 15 -ErrorAction Stop
+            $logResponse = Invoke-WebRequest -Uri $logUrl -NoProxy:(Test-JointLoopbackUrl -Url $logUrl) -UseBasicParsing -SkipCertificateCheck -TimeoutSec 15 -ErrorAction Stop
         } catch {
             throw "joint TLS topology: cannot read $logUrl over HTTPS: $($_.Exception.Message)"
         }
@@ -1580,7 +1580,7 @@ function Assert-JointTlsTopology {
     $downgradeUrl = "http://$($TrustedHosts[0]):$TlsPort/health"
     $downgradeRejected = $false
     try {
-        $null = Invoke-WebRequest -Uri $downgradeUrl -UseBasicParsing -TimeoutSec 5 -ErrorAction Stop
+        $null = Invoke-WebRequest -Uri $downgradeUrl -NoProxy:(Test-JointLoopbackUrl -Url $downgradeUrl) -UseBasicParsing -TimeoutSec 5 -ErrorAction Stop
     } catch {
         $downgradeRejected = $true
     }
@@ -1593,7 +1593,7 @@ function Assert-JointTlsTopology {
     $unregisteredUrl = "https://${UnregisteredProbeHost}:$TlsPort/health"
     $unregisteredRejected = $false
     try {
-        $null = Invoke-WebRequest -Uri $unregisteredUrl -UseBasicParsing -TimeoutSec 5 -ErrorAction Stop
+        $null = Invoke-WebRequest -Uri $unregisteredUrl -NoProxy:(Test-JointLoopbackUrl -Url $unregisteredUrl) -UseBasicParsing -TimeoutSec 5 -ErrorAction Stop
     } catch {
         $unregisteredRejected = $true
     }
@@ -2077,6 +2077,17 @@ function Invoke-CoauthConfigSync {
     }
 }
 
+function Test-JointLoopbackUrl {
+    param([Parameter(Mandatory = $true)][string]$Url)
+
+    $uri = [System.Uri]$Url
+    # These names belong to the verified local topology. System proxies must
+    # not intercept readiness, identity or negative TLS probes for this run.
+    return $uri.IsLoopback -or
+        $uri.DnsSafeHost.EndsWith(".localhost", [System.StringComparison]::OrdinalIgnoreCase) -or
+        $uri.DnsSafeHost.EndsWith(".local.host", [System.StringComparison]::OrdinalIgnoreCase)
+}
+
 function Wait-HttpReady {
     param(
         [Parameter(Mandatory = $true)][string]$Url,
@@ -2095,7 +2106,7 @@ function Wait-HttpReady {
             if (([System.Uri]$Url).Scheme -eq "https" -and $env:COTEST_RUN_SCOPED_CA_PEM) {
                 $requestOptions.SkipCertificateCheck = $true
             }
-            $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop @requestOptions
+            $response = Invoke-WebRequest -Uri $Url -NoProxy:(Test-JointLoopbackUrl -Url $Url) -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop @requestOptions
             if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 300) {
                 return
             }
@@ -2127,7 +2138,7 @@ function Get-DescribedServiceId {
             $requestOptions.Headers = @{
                 "Arkret-Operation" = "ak.server.read.describe.v1"
             }
-            $describe = Invoke-RestMethod -Uri $url -Method Get -TimeoutSec 10 -ErrorAction Stop @requestOptions
+            $describe = Invoke-RestMethod -Uri $url -NoProxy:(Test-JointLoopbackUrl -Url $url) -Method Get -TimeoutSec 10 -ErrorAction Stop @requestOptions
             $serviceId = [string]$describe.service_id
             if (-not [string]::IsNullOrWhiteSpace($serviceId) -and $serviceId.StartsWith("ak:did_core:", [System.StringComparison]::Ordinal)) {
                 return $serviceId
@@ -2160,7 +2171,7 @@ function Get-DescribedServiceDid {
             $requestOptions.Headers = @{
                 "Arkret-Operation" = "ak.server.read.describe.v1"
             }
-            $describe = Invoke-RestMethod -Uri $url -Method Get -TimeoutSec 10 -ErrorAction Stop @requestOptions
+            $describe = Invoke-RestMethod -Uri $url -NoProxy:(Test-JointLoopbackUrl -Url $url) -Method Get -TimeoutSec 10 -ErrorAction Stop @requestOptions
             $did = [string]$describe.service_resolution.did
             if (-not [string]::IsNullOrWhiteSpace($did) -and $did.StartsWith("did:", [System.StringComparison]::Ordinal)) {
                 return $did
@@ -2188,6 +2199,7 @@ function Assert-CoauthDpopGrantSeamReady {
         }
         Invoke-WebRequest `
             -Uri $url `
+            -NoProxy:(Test-JointLoopbackUrl -Url $url) `
             -Method Post `
             -ContentType "application/json" `
             -Body "{}" `
@@ -2265,7 +2277,7 @@ function Wait-DioxusAppReady {
     $lastError = $null
     while ((Get-Date) -lt $deadline) {
         try {
-            $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 5 -ErrorAction Stop
+            $response = Invoke-WebRequest -Uri $Url -NoProxy:(Test-JointLoopbackUrl -Url $Url) -UseBasicParsing -TimeoutSec 5 -ErrorAction Stop
             if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 300) {
                 if (-not (Test-DioxusBuildPlaceholder -Content $response.Content)) {
                     return
@@ -2634,6 +2646,7 @@ function Get-JointTopologyHealthFailures {
                 }
                 $response = Invoke-WebRequest `
                     -Uri "$($baseUrl.TrimEnd('/'))/health" `
+                    -NoProxy:(Test-JointLoopbackUrl -Url $baseUrl) `
                     -UseBasicParsing `
                     -TimeoutSec 5 `
                     -ErrorAction Stop `

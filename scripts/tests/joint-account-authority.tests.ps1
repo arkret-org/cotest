@@ -14,7 +14,7 @@ if ($ast.Extent.Text -match 'Get-DescribedServiceId -BaseUrl \$CoauthBaseUrl') {
 $requiredFunctions = @(
     "Quote-PsLiteral", "Write-DotEnvFile", "Get-ContainerHostGatewayIpv4", "Convert-ToContainerReachableUrl",
     "New-StationInternalChannelBindings", "Build-SolandCommand",
-    "Build-SolandDockerEnvironment", "Wait-HttpReady", "Resolve-ManagedCoauthEmailMockRequirement"
+    "Build-SolandDockerEnvironment", "Test-JointLoopbackUrl", "Wait-HttpReady", "Resolve-ManagedCoauthEmailMockRequirement"
 )
 foreach ($name in $requiredFunctions) {
     $definition = $ast.FindAll({
@@ -57,6 +57,12 @@ $dockerArguments = @{
     NotarySigningKey = ""; FederationPeers = ""
 }
 try {
+    foreach ($url in @("http://127.0.0.1:1234/health", "http://[::1]/", "https://server1.localhost/", "https://server1.local.host/")) {
+        if (-not (Test-JointLoopbackUrl -Url $url)) { throw "Local joint probes must bypass system proxies: $url" }
+    }
+    foreach ($url in @("https://station.example/", "https://localhost.example/", "https://server1.localhost.example/")) {
+        if (Test-JointLoopbackUrl -Url $url) { throw "External deployments must retain caller proxy settings: $url" }
+    }
     if (-not (Resolve-ManagedCoauthEmailMockRequirement -StartCoauth $true -StartMockEmail $false)) {
         throw "Managed Coauth must automatically start the email verification mock"
     }
