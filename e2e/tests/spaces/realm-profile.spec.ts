@@ -83,14 +83,11 @@ test("@fully-implemented Realm owner changes title and summary, then explicitly 
     expect(cleared.status(), clearedText).toBeLessThan(400);
     const clearedWire = JSON.parse(cleared.request().postData() ?? "{}") as {
       event?: {
-        payload?: { summary?: string };
-        preconditions?: Array<{ predicate?: { value?: { summary?: string } } }>;
+        payload?: { title?: string; summary?: string };
       };
     };
     expect(clearedWire.event?.payload?.summary).toBeUndefined();
-    expect(clearedWire.event?.preconditions?.[0]?.predicate?.value?.summary).toBe(
-      summary,
-    );
+    expect(clearedWire.event?.payload?.title).toBe(updatedTitle);
     await page.page.reload({ waitUntil: "domcontentloaded" });
     await expect(profile).toBeVisible({ timeout: 60_000 });
     await expect(profile.getByTestId("realm-name-input")).toHaveValue(

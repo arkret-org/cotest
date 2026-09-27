@@ -163,7 +163,7 @@ async function discoverRealmAuthorityRootRef(
     throw new Error("capability grant cannot resolve accepted Realm genesis");
   }
   expect(genesis.kind).toBe("ak.realm.create");
-  expect(genesis.realm_id).toBe(realmId);
+  expect(sdkEventDerivedIds(genesis).realm_id).toBe(realmId);
   expect(commit.realm_id).toBe(realmId);
   expect(commit.stream_position).toBe(0);
   assertAuthoritySubmitOutcome({ status: "committed", commit }, genesis,
