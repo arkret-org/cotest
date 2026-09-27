@@ -28,17 +28,9 @@ for (const scenario of ["fresh browser", "handoff response loss", "stale busy ch
         holderPublicKeys.push(header.jwk.x);
       }
     });
-    page.on("response", async (response) => {
-      if (new URL(response.url()).pathname.endsWith("/authentication-handoffs") && response.status() === 200) {
-        const outcome = await response.json();
-        if (outcome.binding.state === "identity_creation_active") {
-          leaseIds.push(outcome.binding.identity_creation_lease.identity_creation_lease_id);
-        }
-      }
-    });
-    if (loseHandoffResponse || staleBusy) {
+    {
       await page.route("**/_arkret/gate/account/authentication-handoffs", async (route) => {
-        if (lostResponse || route.request().method() !== "POST") {
+        if (route.request().method() !== "POST") {
           await route.continue();
           return;
         }
@@ -47,10 +39,11 @@ for (const scenario of ["fresh browser", "handoff response loss", "stale busy ch
         const outcome = await response.json();
         expect(outcome.binding.state).toBe("identity_creation_active");
         leaseIds.push(outcome.binding.identity_creation_lease.identity_creation_lease_id);
-        lostResponse = true;
-        if (loseHandoffResponse) {
+        const injectFault = !lostResponse && (loseHandoffResponse || staleBusy);
+        if (injectFault) lostResponse = true;
+        if (injectFault && loseHandoffResponse) {
           await route.abort("connectionfailed");
-        } else {
+        } else if (injectFault && staleBusy) {
           // Exercise replacement of a previously persisted busy view with a
           // fresh authoritative active response, without waiting for a lease.
           outcome.binding = {
@@ -59,6 +52,8 @@ for (const scenario of ["fresh browser", "handoff response loss", "stale busy ch
             expires_at: outcome.binding.identity_creation_lease.expires_at,
           };
           await route.fulfill({ response, json: outcome });
+        } else {
+          await route.fulfill({ response });
         }
       });
     }
