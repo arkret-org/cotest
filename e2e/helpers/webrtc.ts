@@ -3,12 +3,7 @@ import {
   type APIRequestContext,
   type APIResponse,
 } from "@playwright/test";
-import {
-  createHash,
-  generateKeyPairSync,
-  sign as nodeSign,
-  type KeyObject,
-} from "node:crypto";
+import { createHash } from "node:crypto";
 import { solandBaseUrl } from "./env";
 import {
   accountActorId,
@@ -25,80 +20,20 @@ import {
   signWithRegisteredEventSigner,
 } from "./soland-api";
 
-// ── Real device signer (ed25519 detached-JWS proof, webrtc-signaling.md §5.1) ─
-//
-// The retired soland stack accepted a placeholder `{actor, kid, sig:"cotest-
-// device-proof"}`. The spec `ak.call.signal` `proof` is a detached-JWS whose
-// transcript signs the canonical binding object `{event_digest, actor_id,
-// verification_method, created_at}` (§5.1, byte-identical to the persistent
-// Event proof binding). This helper mints a REAL ed25519 keypair per
-// (actor, device) and produces a real signature so the relay's
-// `validate_production` + `event_digest == canonical(envelope_without_proof)`
-// gates pass AND a real receiver running `verify_ed25519_detached_jws_proof`
-// against this device's public key accepts it. The public key is exported via
-// `deviceVerifyingKeyHex` so a conformance verifier can prove the signature is
-// genuine, not a shape stub.
-
-interface DeviceSigner {
-  actorId: string;
-  deviceId: string;
-  verificationMethod: string;
-  privateKey: KeyObject;
-  publicKeyHex: string;
-}
-
-const deviceSignerCache = new Map<string, DeviceSigner>();
-
-/**
- * Mint (or reuse) a real ed25519 signer for an `(actor, device)`. The keypair
- * is generated in-process; it is a genuine ed25519 key, never a hard-coded
- * string. The `verification_method` follows the spec `{actor_id}#{device_id}` form.
- */
-function deviceSigner(actorId: string, deviceId: string): DeviceSigner {
-  const key = `${actorId}\0${deviceId}`;
-  const cached = deviceSignerCache.get(key);
-  if (cached) {
-    return cached;
-  }
-  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
-  // Raw 32-byte ed25519 public key lives at the tail of the DER SPKI.
-  const spki = publicKey.export({ format: "der", type: "spki" }) as Buffer;
-  const publicKeyHex = spki.subarray(spki.length - 32).toString("hex");
-  const signer: DeviceSigner = {
-    actorId,
-    deviceId,
-    verificationMethod: `${actorId}#${deviceId}`,
-    privateKey,
-    publicKeyHex,
-  };
-  deviceSignerCache.set(key, signer);
-  return signer;
-}
-
-function deviceVerifyingKeyMultibase(
+// Signal proofs must use the exact device key installed by canonical account
+// provisioning. Tests may not mint a second key or seed a verified inventory
+// row through a conformance-only side door.
+function requiredEventVerificationMethod(
   actorId: string,
   deviceId: string,
 ): string {
-  const rawKey = Buffer.from(
-    deviceSigner(actorId, deviceId).publicKeyHex,
-    "hex",
-  );
-  return `z${base58Encode(Buffer.concat([Buffer.from([0xed, 0x01]), rawKey]))}`;
-}
-
-function base58Encode(bytes: Uint8Array): string {
-  const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-  let value = BigInt(`0x${Buffer.from(bytes).toString("hex")}`);
-  let encoded = "";
-  while (value > 0n) {
-    encoded = alphabet[Number(value % 58n)] + encoded;
-    value /= 58n;
+  const verificationMethod = registeredEventVerificationMethod(actorId, deviceId);
+  if (!verificationMethod) {
+    throw new Error(
+      `canonical provisioning omitted the accepted device signer for ${actorId}/${deviceId}`,
+    );
   }
-  let leadingZeroes = 0;
-  while (leadingZeroes < bytes.length && bytes[leadingZeroes] === 0) {
-    leadingZeroes += 1;
-  }
-  return "1".repeat(leadingZeroes) + (encoded || "1");
+  return verificationMethod;
 }
 
 /** Build an encrypted-only Signal envelope for arbitrary client plaintext. */
@@ -149,9 +84,10 @@ export function buildSignalEnvelope(args: {
     },
     proof: {
       kind: "detached_jws",
-      verification_method:
-        registeredEventVerificationMethod(args.actorId, args.deviceId) ??
-        `${args.actorId}#${args.deviceId}`,
+      verification_method: requiredEventVerificationMethod(
+        args.actorId,
+        args.deviceId,
+      ),
       envelope_digest: `sha256:${"0".repeat(64)}`,
       jws: "",
     },
@@ -181,19 +117,16 @@ function finalizeSignalEnvelopeProof(envelope: Record<string, unknown>): void {
   const signingInput = `${protectedHeader}.${bindingPayload}`;
   const actorId = eventPrincipalId({ actor_id: envelope.sender_actor_id });
   const deviceId = String(envelope.sender_device_id);
-  const signature =
-    signWithRegisteredEventSigner(
-      actorId,
-      String(proof.verification_method),
-      signingInput,
-    ) ??
-    base64url(
-      nodeSign(
-        null,
-        Buffer.from(signingInput, "utf8"),
-        deviceSigner(actorId, deviceId).privateKey,
-      ),
+  const signature = signWithRegisteredEventSigner(
+    actorId,
+    String(proof.verification_method),
+    signingInput,
+  );
+  if (!signature) {
+    throw new Error(
+      `canonical provisioning omitted the accepted device signer for ${actorId}/${deviceId}`,
     );
+  }
   proof.jws = `${protectedHeader}..${signature}`;
 }
 
@@ -224,22 +157,7 @@ export async function prepareSignalEnvelope(
   const realmId = String(envelope.realm_id);
   const actorId = eventPrincipalId({ actor_id: envelope.sender_actor_id });
   const deviceId = String(envelope.sender_device_id);
-  if (!registeredEventVerificationMethod(actorId, deviceId)) {
-    const keyResponse = await request.post(
-      `${solandBaseUrl()}/_arkret/_conformance/device-signing-key`,
-      {
-        data: {
-          actor_id: actorId,
-          device_id: deviceId,
-          public_key_multibase: deviceVerifyingKeyMultibase(actorId, deviceId),
-        },
-      },
-    );
-    expect(
-      keyResponse.status(),
-      `seed Signal device key returned ${keyResponse.status()}: ${await keyResponse.text()}`,
-    ).toBe(200);
-  }
+  requiredEventVerificationMethod(actorId, deviceId);
   {
     await seedConformanceRealmBasisApi(
       request,
