@@ -1976,7 +1976,7 @@ export async function approvePairingLinkOnAuthorizedDevice(
   );
   await expect(
     authorizingDevice.page.getByTestId("accept-pairing-status"),
-  ).toContainText("Device paired", { timeout: 90_000 });
+  ).toContainText("Device authorization accepted", { timeout: 90_000 });
 }
 
 export async function allowExplicitInviteNotifications(
