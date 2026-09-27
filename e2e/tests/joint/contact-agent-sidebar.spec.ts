@@ -313,7 +313,13 @@ async function provisionPendingAgent(
     expect(provisionEvent.kind).toBe("ak.agent.provision");
     expect(provisionEvent.actor_id).toEqual(accountActorId(controller.user.id));
     expect(provisionEvent.realm_id).toBe(controllerRealmId);
-    expect(provisionEvent.proofs).not.toHaveLength(0);
+    expect(provisionEvent.producer_proof).toMatchObject({
+      kind: "detached_jws",
+      verification_method: `${controller.user.did}#${controller.user.deviceId}`,
+      event_digest: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
+      jws: expect.any(String),
+    });
+    expect(provisionEvent).not.toHaveProperty("proofs");
     const provisionPayload = asJsonObject(
       provisionEvent.payload,
       "ak.agent.provision payload",
