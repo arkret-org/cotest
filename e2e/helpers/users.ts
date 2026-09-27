@@ -983,7 +983,7 @@ export class JointUserPage {
     if (opts.mlsActivated !== undefined) {
       await this.selectCreateRealmOption(
         strand.getByTestId("realm-mls-activation-input"),
-        opts.mlsActivated ? "activated" : "none",
+        opts.mlsActivated ? "after_create" : "not_now",
         promptHandling,
       );
     }
