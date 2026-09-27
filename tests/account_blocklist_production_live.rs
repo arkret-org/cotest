@@ -1,0 +1,38 @@
+//! Production-only blocklist evidence; missing client cases stay uncertified.
+
+use anyhow::Result;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn blocklist_whole_value_cas_runs_through_http_and_postgres() -> Result<()> {
+    let result = cotest::conformance::run_account_blocklist_production_cases().await?;
+    assert_eq!(result.cases.len(), 3);
+    assert_eq!(
+        result
+            .cases
+            .iter()
+            .map(|case| case.case_id.as_str())
+            .collect::<Vec<_>>(),
+        [
+            "whole_value_cas_rejects_a_stale_expected_revision",
+            "whole_value_cas_rejects_a_stale_concurrent_write",
+            "target_closure_rejects_realm_and_organization_targets",
+        ]
+    );
+    assert!(result.cases.iter().all(|case| case.assertions > 0));
+    Ok(())
+}
+
+#[test]
+fn blocklist_full_suite_refuses_missing_production_case_executors() {
+    let error = cotest::conformance::run_account_blocklist_projection_suite().unwrap_err();
+    let error = error.to_string();
+    for case in [
+        "unregistered_blocklist_event_kind_is_not_an_authoring_surface",
+        "shared_history_is_received_then_filtered_by_the_holder",
+        "unblock_rebuilds_the_projection_from_retained_material",
+        "server_side_filtering_stays_indistinguishable",
+        "an_unsynced_device_treats_freshness_as_unknown",
+    ] {
+        assert!(error.contains(case), "missing case must be named: {error}");
+    }
+}

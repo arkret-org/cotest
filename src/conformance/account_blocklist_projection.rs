@@ -1,176 +1,361 @@
-//! Executable semantics for `ak.vector.account.blocklist_projection.v1`.
+//! Production evidence for the holder-private blocklist CAS rail.
 //!
-//! The canonical fixture is intentionally semantic: its cases describe a
-//! holder-private CAS register and a client projection, not a second wire
-//! protocol.  This runner therefore executes those state transitions.  It
-//! also uses the SDK's closed `AccountBlocklistValue` target union for the
-//! target-closure case, so accepting a Realm/Organization target cannot be
-//! hidden by a harness-only model.
+//! The whole fixture is deliberately refused until every client and service
+//! decision point has a production executor. No harness replica or constant
+//! sender observation can certify those missing cases.
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use anyhow::{Result, anyhow, ensure};
+use anyhow::{Context, Result, anyhow, bail, ensure};
+use arkret_models_collaboration::events_payloads::account_data::{
+    AccountDataBody, AccountDataSetPayload,
+};
 use arkret_models_collaboration::objects::productivity::AccountBlocklistValue;
+use arkret_models_identity::account::{AccountDataReplaceRequestBody, AccountDataRow};
+use arkret_wire::{AccountId, ActorId, DidCoreId};
+use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use super::{
     fixture_runner_entrypoint, load_artifact_json, load_fixture_value, required_field,
     required_str, value_array,
 };
+use crate::harness::{ArkretServer, TestActorClient, actor_core_id, expect_api_error, expect_json};
+use crate::scenarios::_helpers::coauth_bootstrap::spawn_ephemeral_postgres_for;
+use crate::scenarios::identity_test_support::actor_did_for_service_did;
 
 pub const VECTOR_ID_ACCOUNT_BLOCKLIST_PROJECTION: &str =
     "ak.vector.account.blocklist_projection.v1";
 pub const ACCOUNT_BLOCKLIST_PROJECTION_ENTRYPOINT: &str =
     "ak.suite.account.blocklist_projection.v1";
-
 const FIXTURE: &str = "account-blocklist-projection-fixture.json";
 const SUITE: &str = "account_blocklist_projection";
 const BLOCKLIST_KEY: &str = "ak.account.blocklist";
+const PATH: &str = "/_arkret/self/account_data/ak.account.blocklist";
+const SECRET: [u8; 32] = [7; 32];
+const MISSING_CASES: [&str; 5] = [
+    "unregistered_blocklist_event_kind_is_not_an_authoring_surface",
+    "shared_history_is_received_then_filtered_by_the_holder",
+    "unblock_rebuilds_the_projection_from_retained_material",
+    "server_side_filtering_stays_indistinguishable",
+    "an_unsynced_device_treats_freshness_as_unknown",
+];
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum WriteError {
-    CasConflict,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct WholeValueRegister {
-    revision: u64,
-    entries: BTreeSet<String>,
-}
-
-impl WholeValueRegister {
-    fn at(revision: u64, entries: impl IntoIterator<Item = &'static str>) -> Self {
-        Self {
-            revision,
-            entries: entries.into_iter().map(str::to_owned).collect(),
-        }
-    }
-
-    /// `ak.account_data.set` on key `ak.account.blocklist` is the only write:
-    /// one per-key revision, whole-value replacement, no entry merge.
-    fn replace(
-        &mut self,
-        expected_server_revision: u64,
-        entries: impl IntoIterator<Item = &'static str>,
-    ) -> Result<u64, WriteError> {
-        if expected_server_revision != self.revision {
-            return Err(WriteError::CasConflict);
-        }
-        self.revision = self.revision.saturating_add(1);
-        self.entries = entries.into_iter().map(str::to_owned).collect();
-        Ok(self.revision)
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct SharedEvent {
-    author: &'static str,
-    body: &'static str,
-}
-
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-struct HolderReplica {
-    retained: Vec<SharedEvent>,
-    blocked: BTreeSet<String>,
-    local_blocklist_revision: u64,
-}
-
-impl HolderReplica {
-    fn receive(&mut self, event: SharedEvent) {
-        self.retained.push(event);
-    }
-
-    fn install_blocklist(&mut self, revision: u64, blocked: &[&str]) {
-        self.local_blocklist_revision = revision;
-        self.blocked = blocked.iter().map(|value| (*value).to_owned()).collect();
-    }
-
-    fn projected_bodies(&self) -> Vec<&'static str> {
-        self.retained
-            .iter()
-            .filter(|event| !self.blocked.contains(event.author))
-            .map(|event| event.body)
-            .collect()
-    }
-
-    fn may_emit_presence_or_read_receipt(&self, authority_revision: u64) -> bool {
-        self.local_blocklist_revision == authority_revision
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct SenderObservation {
-    status: &'static str,
-    disclosed_reason: Option<&'static str>,
-    delivery_receipt: Option<&'static str>,
-}
-
-fn sender_observation(_recipient_state: RecipientState) -> SenderObservation {
-    // Filtering is a holder-side projection. The peer-facing acceptance shape
-    // is deliberately independent of the private recipient state.
-    SenderObservation {
-        status: "accepted",
-        disclosed_reason: None,
-        delivery_receipt: None,
-    }
-}
-
-#[derive(Clone, Copy)]
-enum RecipientState {
-    Blocked,
-    Unauthorized,
-    Absent,
-    Offline,
-}
-
-/// Execute every canonical blocklist case against the state machines above.
 pub fn run_account_blocklist_projection_vector() -> Result<()> {
     run_account_blocklist_projection_suite().map(|_| ())
 }
 
-/// Execute every declared case and report one result per case, so the named
-/// suite audit can match the fixture's `cases[]` one for one.
 pub fn run_account_blocklist_projection_suite() -> Result<super::SuiteExecutionResult> {
+    validated_fixture()?;
+    bail!(
+        "blocklist suite lacks production executors for: {}; the dedicated live CAS slice does not certify the full fixture",
+        MISSING_CASES.join(", ")
+    )
+}
+
+fn validated_fixture() -> Result<Value> {
     let fixture = load_fixture_value(FIXTURE)?;
     verify_fixture_identity(&fixture)?;
     verify_registry_contract()?;
     verify_security_evidence_mapping(&fixture)?;
-
     let cases = value_array(required_field(&fixture, "cases")?, "cases")?;
     ensure!(
         cases.len() == 8,
         "blocklist fixture must carry exactly 8 cases"
     );
-    let mut executed = BTreeSet::new();
-    let mut results = Vec::with_capacity(cases.len());
-    for case in cases {
-        let name = required_str(case, "name")?;
-        ensure!(executed.insert(name), "duplicate blocklist case {name}");
-        match name {
-            "whole_value_cas_rejects_a_stale_expected_revision" => stale_revision(case)?,
-            "whole_value_cas_rejects_a_stale_concurrent_write" => concurrent_write(case)?,
-            "unregistered_blocklist_event_kind_is_not_an_authoring_surface" => {
-                unregistered_kind(case)?
-            }
-            "target_closure_rejects_realm_and_organization_targets" => target_closure(case)?,
-            "shared_history_is_received_then_filtered_by_the_holder" => {
-                receive_before_filter(case)?
-            }
-            "unblock_rebuilds_the_projection_from_retained_material" => unblock_rebuild(case)?,
-            "server_side_filtering_stays_indistinguishable" => non_enumeration(case)?,
-            "an_unsynced_device_treats_freshness_as_unknown" => stale_device(case)?,
-            other => return Err(anyhow!("unexecuted blocklist fixture case {other}")),
-        }
-        results.push(super::CaseExecutionResult {
-            case_id: name.to_owned(),
-            assertions: 1,
-        });
+    let names = cases
+        .iter()
+        .map(|case| required_str(case, "name"))
+        .collect::<Result<BTreeSet<_>>>()?;
+    ensure!(names.len() == 8, "duplicate blocklist fixture case");
+    let implemented = [
+        "whole_value_cas_rejects_a_stale_expected_revision",
+        "whole_value_cas_rejects_a_stale_concurrent_write",
+        "target_closure_rejects_realm_and_organization_targets",
+    ];
+    ensure!(
+        names == implemented.into_iter().chain(MISSING_CASES).collect(),
+        "blocklist fixture cases drifted"
+    );
+    Ok(fixture)
+}
+
+/// Execute the explicitly bounded production slice. This result is never
+/// returned by the complete named-suite runner while other cases are missing.
+pub async fn run_account_blocklist_production_cases() -> Result<super::SuiteExecutionResult> {
+    let fixture = validated_fixture()?;
+    let cases = value_array(required_field(&fixture, "cases")?, "cases")?;
+    assert_case(&cases[0], "reject", Some("cas_conflict"))?;
+    assert_case(&cases[1], "reject", Some("cas_conflict"))?;
+    target_closure(&cases[3])?;
+    let database = spawn_ephemeral_postgres_for("COTEST_SOLAND_DATABASE_URL")?
+        .context("blocklist live evidence requires an isolated PostgreSQL database")?;
+    let server = ArkretServer::spawn_with_database_url(
+        "blocklist-cas-production",
+        &database.connect_url,
+        &[],
+    )
+    .await?;
+    let did = actor_did_for_service_did(server.service_did(), "blocklist-holder")?;
+    let holder = server
+        .standard_client(&did, "ak:device:01904100-0000-7000-8000-0000000000a1")
+        .await?;
+    let secondary = server
+        .standard_client(&did, "ak:device:01904100-0000-7000-8000-0000000000a2")
+        .await?;
+    let owner = ActorId::account(AccountId::new(
+        DidCoreId::new(actor_core_id(&holder.actor)?)?,
+        server.service_id().clone(),
+    ));
+
+    // Reach revision 7 exclusively through signed, accepted HTTP writes.
+    for expected in 0..7 {
+        let request = write_request(&holder, &owner, expected, "alice:example.test").await?;
+        let row: AccountDataRow = serde_json::from_value(
+            expect_json(
+                holder.put(PATH).json(&request),
+                if expected == 0 {
+                    StatusCode::CREATED
+                } else {
+                    StatusCode::OK
+                },
+            )
+            .await?,
+        )?;
+        ensure!(row.revision == expected + 1);
     }
+    let before = persisted_snapshot(&database.connect_url).await?;
+    let stale = write_request(&holder, &owner, 6, "bob:example.test").await?;
+    expect_api_error(
+        holder.put(PATH).json(&stale),
+        StatusCode::CONFLICT,
+        "cas_conflict",
+    )
+    .await?;
+    ensure!(
+        persisted_snapshot(&database.connect_url).await? == before,
+        "stale CAS changed the value or retry ledger"
+    );
+    let row = read_row(&holder).await?;
+    ensure!(row.revision == 7 && plaintext(&owner, &row)? == blocklist("alice:example.test")?);
+
+    ensure!(
+        read_row(&secondary).await? == row,
+        "both devices must start from revision 7"
+    );
+
+    // Independent active devices submit different whole values against 7.
+    let left = write_request(&holder, &owner, 7, "bob:example.test").await?;
+    let right = write_request(&secondary, &owner, 7, "carol:example.test").await?;
+    let (left_response, right_response) = tokio::try_join!(
+        holder
+            .put(PATH)
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(arkret_canonical::canonical_json_bytes(&left)?)
+            .send(),
+        secondary
+            .put(PATH)
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(arkret_canonical::canonical_json_bytes(&right)?)
+            .send()
+    )?;
+    let left_status = left_response.status();
+    let right_status = right_response.status();
+    let left_body: Value = left_response.json().await?;
+    let right_body: Value = right_response.json().await?;
+    let (winner, loser, losing_client, losing_request, winning_client, winning_request, handle) =
+        match (left_status, right_status) {
+            (StatusCode::OK, StatusCode::CONFLICT) => (
+                left_body,
+                right_body,
+                &secondary,
+                &right,
+                &holder,
+                &left,
+                "bob:example.test",
+            ),
+            (StatusCode::CONFLICT, StatusCode::OK) => (
+                right_body,
+                left_body,
+                &holder,
+                &left,
+                &secondary,
+                &right,
+                "carol:example.test",
+            ),
+            other => bail!(
+                "concurrent blocklist CAS must accept exactly one write: {other:?}; left={left_body}, right={right_body}"
+            ),
+        };
+    ensure!(
+        loser["type"] == "https://arkret.org/problems/cas_conflict",
+        "losing write reason drifted: {loser}"
+    );
+    let winner: AccountDataRow = serde_json::from_value(winner)?;
+    ensure!(
+        winner.revision == 8 && plaintext(&owner, &winner)? == blocklist(handle)?,
+        "CAS merged or rewrote the winning whole value"
+    );
+    ensure!(
+        read_row(&holder).await? == winner && read_row(&secondary).await? == winner,
+        "holder devices disagree on the accepted value"
+    );
+    let accepted = persisted_snapshot(&database.connect_url).await?;
+    ensure!(
+        accepted.2 == before.2 + 1,
+        "CAS must add exactly one accepted private Event"
+    );
+    expect_api_error(
+        losing_client.put(PATH).json(losing_request),
+        StatusCode::CONFLICT,
+        "cas_conflict",
+    )
+    .await?;
+    ensure!(
+        persisted_snapshot(&database.connect_url).await? == accepted,
+        "losing retry changed durable state"
+    );
+    let exact: AccountDataRow = serde_json::from_value(
+        expect_json(
+            winning_client.put(PATH).json(winning_request),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    ensure!(
+        exact == winner && persisted_snapshot(&database.connect_url).await? == accepted,
+        "exact retry changed the whole value or ledger"
+    );
+
+    // The loser must catch up and author a new Event at the winning revision;
+    // resending its unchanged signed body never becomes an accepted write.
+    let reread = read_row(losing_client).await?;
+    ensure!(reread == winner, "losing device failed to read revision 8");
+    let losing_handle = if handle == "bob:example.test" {
+        "carol:example.test"
+    } else {
+        "bob:example.test"
+    };
+    let reauthored = write_request(losing_client, &owner, reread.revision, losing_handle).await?;
+    ensure!(
+        reauthored.set_event.event_id != losing_request.set_event.event_id,
+        "CAS recovery reused the rejected Event"
+    );
+    let recovered: AccountDataRow = serde_json::from_value(
+        expect_json(losing_client.put(PATH).json(&reauthored), StatusCode::OK).await?,
+    )?;
+    ensure!(
+        recovered.revision == 9 && plaintext(&owner, &recovered)? == blocklist(losing_handle)?,
+        "re-authored whole-value write did not replace revision 8"
+    );
+
+    ensure!(
+        read_row(&holder).await? == recovered
+            && read_row(&secondary).await? == recovered
+            && persisted_snapshot(&database.connect_url).await?.2 == accepted.2 + 1,
+        "the re-authored replacement did not persist once for both devices"
+    );
+
     Ok(super::SuiteExecutionResult {
         entrypoint: ACCOUNT_BLOCKLIST_PROJECTION_ENTRYPOINT,
         fixture: FIXTURE,
-        cases: results,
+        cases: [(0, 3), (1, 12), (3, 3)]
+            .into_iter()
+            .map(|(index, assertions)| super::CaseExecutionResult {
+                case_id: required_str(&cases[index], "name").unwrap().to_owned(),
+                assertions,
+            })
+            .collect(),
     })
+}
+
+fn blocklist(handle: &str) -> Result<Value> {
+    let value = json!({"entries": [{"target": {"kind": "handle", "value": handle}, "mode": "block", "applies_to": ["messages"], "created_at": "2026-09-20T00:00:00.000Z"}]});
+    let typed: AccountBlocklistValue = serde_json::from_value(value)?;
+    typed.validate()?;
+    Ok(serde_json::to_value(typed)?)
+}
+
+async fn write_request(
+    holder: &TestActorClient,
+    owner: &ActorId,
+    expected: u64,
+    handle: &str,
+) -> Result<AccountDataReplaceRequestBody> {
+    let body = arkret_crypto::account_data_crypto::seal_account_data_value(
+        &SECRET,
+        owner,
+        BLOCKLIST_KEY,
+        &blocklist(handle)?,
+    )?;
+    let payload = AccountDataSetPayload {
+        key: arkret_wire::NonEmptyString::new(BLOCKLIST_KEY).map_err(anyhow::Error::msg)?,
+        expected_server_revision: expected,
+        body: AccountDataBody::Value(serde_json::to_value(body)?),
+        encrypted_payload: None,
+        tombstone: false,
+        updated_at: None,
+        source_pending_event_id: None,
+    };
+    payload.validate()?;
+    let pcr = holder
+        .principal
+        .as_ref()
+        .context("holder has no provisioned PCR")?
+        .pcr_realm_id
+        .to_string();
+    let set_event = holder
+        .author_event(&pcr, "ak.account_data.set", serde_json::to_value(payload)?)
+        .await?;
+    Ok(AccountDataReplaceRequestBody { set_event })
+}
+
+async fn read_row(holder: &TestActorClient) -> Result<AccountDataRow> {
+    Ok(serde_json::from_value(
+        expect_json(holder.get(PATH), StatusCode::OK).await?,
+    )?)
+}
+
+fn plaintext(owner: &ActorId, row: &AccountDataRow) -> Result<Value> {
+    Ok(arkret_crypto::account_data_crypto::open_account_data_value(
+        &SECRET,
+        owner,
+        BLOCKLIST_KEY,
+        &serde_json::from_value(row.content.clone())?,
+    )?)
+}
+
+// Read the production database using a new connection on every check. No
+// fixture inserts or mutations can substitute for the HTTP transaction.
+async fn persisted_snapshot(url: &str) -> Result<(String, String, i64)> {
+    let url = url.to_owned();
+    tokio::task::spawn_blocking(move || -> Result<(String, String, i64)> {
+        let mut connection = postgres::Client::connect(&url, postgres::NoTls)?;
+        let values = connection
+            .query_one(
+                "SELECT COALESCE(jsonb_agg(to_jsonb(a) ORDER BY actor_id, account_data_key),
+                '[]'::jsonb)::text FROM account_datas a WHERE account_data_key = $1",
+                &[&BLOCKLIST_KEY],
+            )?
+            .get(0);
+        let ledger = connection
+            .query_one(
+                "SELECT COALESCE(jsonb_agg(to_jsonb(e) ORDER BY event_id), '[]'::jsonb)::text
+                FROM actor_private_events e WHERE kind = 'ak.account_data.set'
+                AND envelope->'payload'->>'key' = $1",
+                &[&BLOCKLIST_KEY],
+            )?
+            .get(0);
+        let events = connection
+            .query_one(
+                "SELECT count(*) FROM actor_private_events WHERE kind = 'ak.account_data.set'
+                AND envelope->'payload'->>'key' = $1",
+                &[&BLOCKLIST_KEY],
+            )?
+            .get(0);
+        Ok((values, ledger, events))
+    })
+    .await?
 }
 
 fn assert_case(case: &Value, decision: &str, reason: Option<&str>) -> Result<()> {
@@ -195,53 +380,6 @@ fn assert_case(case: &Value, decision: &str, reason: Option<&str>) -> Result<()>
         !value_array(required_field(case, "assertions")?, "case.assertions")?.is_empty(),
         "{}: case has no observable assertions",
         required_str(case, "name")?
-    );
-    Ok(())
-}
-
-fn stale_revision(case: &Value) -> Result<()> {
-    assert_case(case, "reject", Some("cas_conflict"))?;
-    let before = WholeValueRegister::at(7, ["alice"]);
-    let mut register = before.clone();
-    ensure!(
-        register.replace(6, ["bob"]) == Err(WriteError::CasConflict),
-        "a stale expected_server_revision was accepted"
-    );
-    ensure!(register == before, "a rejected write changed the register");
-    Ok(())
-}
-
-fn concurrent_write(case: &Value) -> Result<()> {
-    assert_case(case, "reject", Some("cas_conflict"))?;
-    let mut register = WholeValueRegister::at(7, ["alice"]);
-    ensure!(register.replace(7, ["bob"]) == Ok(8));
-    let winner = register.clone();
-    ensure!(
-        register.replace(7, ["carol"]) == Err(WriteError::CasConflict),
-        "the stale concurrent write was merged"
-    );
-    ensure!(
-        register == winner,
-        "the losing write partially changed the winner"
-    );
-    Ok(())
-}
-
-fn unregistered_kind(case: &Value) -> Result<()> {
-    assert_case(case, "reject", Some("unsupported_event_kind"))?;
-    let registry = load_artifact_json("registry/event-kind-registry.json")?;
-    let kinds = value_array(required_field(&registry, "event_kinds")?, "event_kinds")?;
-    ensure!(
-        !kinds
-            .iter()
-            .any(|row| row.get("event_kind").and_then(Value::as_str) == Some(BLOCKLIST_KEY)),
-        "ak.account.blocklist is still a registered Event kind"
-    );
-    ensure!(
-        !arkret_wire::EventKind::ALL
-            .iter()
-            .any(|kind| kind.as_str() == BLOCKLIST_KEY),
-        "the SDK still exposes ak.account.blocklist as an Event kind"
     );
     Ok(())
 }
@@ -276,82 +414,6 @@ fn target_closure(case: &Value) -> Result<()> {
             "the SDK accepted an unregistered Realm/Organization target"
         );
     }
-    Ok(())
-}
-
-fn receive_before_filter(case: &Value) -> Result<()> {
-    assert_case(case, "accept", None)?;
-    let mut holder = HolderReplica::default();
-    holder.install_blocklist(8, &["bob"]);
-    holder.receive(SharedEvent {
-        author: "bob",
-        body: "retained while blocked",
-    });
-    ensure!(
-        holder.retained.len() == 1,
-        "shared history was dropped on receive"
-    );
-    ensure!(
-        holder.projected_bodies().is_empty(),
-        "blocked material leaked into the holder projection"
-    );
-    Ok(())
-}
-
-fn unblock_rebuild(case: &Value) -> Result<()> {
-    assert_case(case, "accept", None)?;
-    let mut holder = HolderReplica::default();
-    holder.install_blocklist(8, &["bob"]);
-    holder.receive(SharedEvent {
-        author: "bob",
-        body: "history survives",
-    });
-    ensure!(holder.projected_bodies().is_empty());
-    holder.install_blocklist(9, &[]);
-    ensure!(
-        holder.projected_bodies() == ["history survives"],
-        "unblock did not rebuild from retained history"
-    );
-    ensure!(
-        holder.retained.len() == 1,
-        "rebuild fetched or duplicated history"
-    );
-    Ok(())
-}
-
-fn non_enumeration(case: &Value) -> Result<()> {
-    assert_case(case, "accept", None)?;
-    let baseline = sender_observation(RecipientState::Blocked);
-    for state in [
-        RecipientState::Unauthorized,
-        RecipientState::Absent,
-        RecipientState::Offline,
-    ] {
-        ensure!(
-            sender_observation(state) == baseline,
-            "recipient-private state changed the sender-visible outcome"
-        );
-    }
-    ensure!(
-        !format!("{baseline:?}").contains("blocked"),
-        "the sender observation disclosed the block"
-    );
-    Ok(())
-}
-
-fn stale_device(case: &Value) -> Result<()> {
-    assert_case(case, "accept", None)?;
-    let mut device = HolderReplica::default();
-    device.install_blocklist(7, &[]);
-    ensure!(
-        !device.may_emit_presence_or_read_receipt(8),
-        "a stale device emitted privacy-sensitive signals"
-    );
-    device.install_blocklist(8, &["bob"]);
-    ensure!(
-        device.may_emit_presence_or_read_receipt(8),
-        "a caught-up device remained permanently freshness-unknown"
-    );
     Ok(())
 }
 
