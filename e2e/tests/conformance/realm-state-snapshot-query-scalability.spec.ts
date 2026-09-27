@@ -148,8 +148,8 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
         chunks: [{ ...chunks[0], payload: { cell: "a", value: "tampered", version: 1 } }, chunks[1]],
       }),
     });
-    expect(tampered.status()).toBeGreaterThanOrEqual(400);
-    expect(wireErrCode(await tampered.json())).toBe("realm_state_snapshot_chunk_digest_mismatch");
+    expect(tampered.status()).toBe(422);
+    expect(wireErrCode(await tampered.json())).toBe("digest_mismatch");
   });
 
   test("Phase B — snapshot signature binding verifies against recorded signer DID", async ({
