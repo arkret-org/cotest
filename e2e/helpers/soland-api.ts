@@ -135,6 +135,44 @@ export function realmAuthorityRootRef(
   );
 }
 
+function requireRealmAuthorityRootRef(
+  server: SolandKey | undefined,
+  realmId: string,
+): string {
+  const eventId = realmAuthorityRootRef(server, realmId);
+  if (!eventId) {
+    throw new Error("capability grant requires an accepted Realm genesis reference");
+  }
+  return eventId;
+}
+
+async function discoverRealmAuthorityRootRef(
+  request: APIRequestContext,
+  token: string,
+  realmId: string,
+  server?: SolandKey,
+): Promise<void> {
+  if (realmAuthorityRootRef(server, realmId)) return;
+  const { events, commits } = await scanRealmStreamApi(request, token, realmId, {
+    server,
+    limit: 1,
+  });
+  const genesis = events[0];
+  const commit = commits[0];
+  if (!genesis || !commit) {
+    throw new Error("capability grant cannot resolve accepted Realm genesis");
+  }
+  expect(genesis.kind).toBe("ak.realm.create");
+  expect(genesis.realm_id).toBe(realmId);
+  expect(commit.realm_id).toBe(realmId);
+  expect(commit.stream_position).toBe(0);
+  assertAuthoritySubmitOutcome({ status: "committed", commit }, genesis,
+    "resolve capability grant Realm genesis");
+  const eventId = stringValue(genesis.event_id);
+  expect(eventId && retypeEventDerivedId(eventId, "realm")).toBe(realmId);
+  realmAuthorityRootEventIds.set(realmAuthorityControllerKey(server, realmId), eventId!);
+}
+
 function realmAuthorityControllerKey(
   server: SolandKey | undefined,
   realmId: string,
@@ -917,6 +955,7 @@ export async function grantServiceCapabilityApi(
     server?: SolandKey;
   },
 ): Promise<string> {
+  await discoverRealmAuthorityRootRef(request, ownerToken, args.realmId, args.server);
   const issuedAt = canonicalTimestamp();
   // Use a core collaboration action advertised by both federation peers; the
   // service actor subject and Realm resource make this a peer-service grant.
@@ -936,7 +975,7 @@ export async function grantServiceCapabilityApi(
       {
         kind: "realm_root",
         realm_id: args.realmId,
-        authority_event_ref: realmAuthorityRootRef(args.server, args.realmId)!,
+        authority_event_ref: requireRealmAuthorityRootRef(args.server, args.realmId),
         authority_generation: 0,
       },
     ],
@@ -1027,7 +1066,7 @@ export function buildCapabilityGrantEnvelope(args: CapabilityGrantEventArgs): {
       {
         kind: "realm_root",
         realm_id: args.realmId,
-        authority_event_ref: realmAuthorityRootRef(args.server, args.realmId)!,
+        authority_event_ref: requireRealmAuthorityRootRef(args.server, args.realmId),
         authority_generation: 0,
       },
     ],
@@ -1060,6 +1099,9 @@ export async function grantCapabilityEventApi(
   ownerToken: string,
   args: CapabilityGrantEventArgs,
 ): Promise<{ grantId: string; eventId: string }> {
+  if (args.issuerAuthorityRefs === undefined) {
+    await discoverRealmAuthorityRootRef(request, ownerToken, args.realmId, args.server);
+  }
   const { envelope } = buildCapabilityGrantEnvelope(args);
   await submitSignedEventApi(request, ownerToken, envelope, {
     server: args.server,
