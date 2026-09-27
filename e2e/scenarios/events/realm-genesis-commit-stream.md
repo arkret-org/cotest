@@ -11,11 +11,12 @@ extended it — the authority-commit protocol deleted.
 ## Strand
 
 1. Register Alice and issue a dev session.
-2. Confirm the retired producer-frontier surface no longer answers: a producer
-   must not be able to read, synthesize or extend an authoring frontier.
-3. Create a Realm. Each founding Event — `ak.realm.create`, profile, policy
-   bundle, conditional plaintext-visible services, creator membership — is
-   submitted on its own and answered with the `RealmCommit` that admitted it.
+2. Create a Realm through one `ordinary_realm_bootstrap` self-submit unit with
+   a UUIDv7 idempotency key. Its ordered slots are create, profile, policy
+   bundle, join rule, history access, discovery, conditional plaintext-visible
+   services, and creator membership. The optional alias retains registry order.
+3. Require an indivisible accepted outcome containing one RealmCommit for each
+   submitted Event; no standalone founding write or partial acceptance counts.
 4. Scan the Realm's own stream and assert the commits occupy positions
    `0..n-1`, each naming its predecessor commit and the exact Event it admits,
    all inside `CommitStreamRef::Realm` for this Realm. There is no
@@ -26,8 +27,8 @@ extended it — the authority-commit protocol deleted.
 6. Assert the genesis payload is the closed `realm-genesis.schema.json` object:
    display and visibility facets are separate Events, and v1 has no founding
    `ak.capability.grant` slot at all.
-7. Resubmit a byte-identical clone of the genesis Event. Assert the Station
-   answers `duplicate` with the original commit and the stream is unchanged.
+7. Resubmit the byte-identical complete unit with the same idempotency key.
+   Assert `duplicate` with the original ordered commits and no stream changes.
 8. Resolve the absent default discussion Strand through the normal helper.
    Assert `ak.strand.create`, `ak.realm.set_default_strand` and
    `ak.message.create` continue the same Realm stream with no gap.
@@ -36,9 +37,9 @@ extended it — the authority-commit protocol deleted.
 
 - A producer Event carries no position, predecessor, precondition or coverage;
   the `RealmCommit` supplies all ordering.
-- The founding unit is a contiguous prefix of one Realm stream, not a batch
-  admitted as a unit by the client.
-- An exact retry is a `duplicate` that replays the original commit and consumes
+- The registered founding unit is accepted atomically as a contiguous prefix
+  of one Realm stream, with an individual Commit per Event.
+- An exact unit retry is a `duplicate` that replays the original commits and consumes
   no second stream position.
 - Ordinary writes continue the same stream; no second ordering authority
   (actor frontier, Seal, CBS basis) is consulted anywhere in the strand.
