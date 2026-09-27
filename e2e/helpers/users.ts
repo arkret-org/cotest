@@ -1579,6 +1579,15 @@ export async function issueUserSession(
   user: JointUser,
   opts: { server?: SolandKey; deviceId?: string } = {},
 ): Promise<string> {
+  const accepted = Array.from(canonicalSessionsByGrant.values()).find(
+    (session) => session.accountId.principal_id === user.id &&
+      session.accountId.station_id === solandServiceId(opts.server) &&
+      session.user.did === user.did &&
+      session.user.deviceId === (opts.deviceId ?? user.deviceId),
+  );
+  if (accepted) {
+    return accepted.grantJwt;
+  }
   await ensureRegistered(request, user, opts);
   const authority = coauthBaseUrl(opts.server);
   if (!authority) {
