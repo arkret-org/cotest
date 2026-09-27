@@ -328,7 +328,7 @@ test.describe("core object invariants", () => {
         from_space_id: staleExpectedListId,
         target_space_id: targetListId,
         rank: "z",
-        expected_position: { space_id: staleExpectedListId, rank: "m" },
+        expected_position: { list_space_id: staleExpectedListId, rank: "m" },
       },
     });
     const staleMove = await request.post(
@@ -357,7 +357,7 @@ test.describe("core object invariants", () => {
         from_space_id: sourceListId,
         target_space_id: targetListId,
         rank: "z",
-        expected_position: { space_id: sourceListId, rank: "m" },
+        expected_position: { list_space_id: sourceListId, rank: "m" },
       },
     });
     await submitSignedEventApi(request, aliceToken, freshMove, {
