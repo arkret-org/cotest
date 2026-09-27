@@ -1831,7 +1831,6 @@ export async function verifyRegisteredEventSignerDeviceApi(
       account_id?: unknown;
       generation_state?: {
         current_device_generation_ref?: unknown;
-        device_generation_status?: unknown;
       };
     }>;
   }>(
@@ -1882,7 +1881,9 @@ export async function verifyRegisteredEventSignerDeviceApi(
   }
   const generation = generationEntries[0]!.generation_state;
   if (
-    generation?.device_generation_status !== "active" ||
+    typeof generation?.current_device_generation_ref !== "number" ||
+    !Number.isSafeInteger(generation.current_device_generation_ref) ||
+    generation.current_device_generation_ref < 1 ||
     generation.current_device_generation_ref !==
       projection.authorized_generation_ref
   ) {
