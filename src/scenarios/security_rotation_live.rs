@@ -46,7 +46,9 @@ use crate::harness::{
 };
 use crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
 use crate::scenarios::_helpers::coauth_bootstrap::spawn_ephemeral_postgres_for;
-use crate::scenarios::bridge_contracts::session_grant::mock_session_grant_jwt;
+use crate::scenarios::bridge_contracts::session_grant::{
+    mock_recovery_session_grant_jwt, mock_session_grant_jwt,
+};
 use crate::scenarios::identity_test_support::{
     HARNESS_INTERNAL_AUTHORITY_SECRET, actor_did_for_service_did,
     spawn_with_harness_account_authority_at,
@@ -245,6 +247,79 @@ impl RotationAuthor {
         let transcript = arkret_models_crypto::recovery_policy_signature_transcript_bytes(&policy)?;
         policy.auth_data.signature = Base64UrlString::new(arkret_canonical::base64url_encode(
             SigningKey::from_bytes(&seed).sign(&transcript).to_bytes(),
+        ))
+        .map_err(anyhow::Error::msg)?;
+        Ok(event_envelope_with_causal_refs_for_device(
+            &self.actor,
+            DEVICE_A,
+            &self.station,
+            self.principal.pcr_realm_id.as_str(),
+            arkret_wire::EventKind::PolicySet.as_str(),
+            serde_json::json!({"policy_id": policy_id, "value": policy}),
+            None,
+            Vec::new(),
+            Vec::new(),
+        ))
+    }
+
+    /// A recovery policy whose single authority is one offline Ed25519 recovery key.
+    fn recovery_unlock_policy(
+        &self,
+        policy_id: &str,
+        recovery_method: &DidUrl,
+        recovery_seed: [u8; 32],
+    ) -> Result<Event> {
+        let now = arkret::canonical::normalize_timestamp_canonical(Utc::now());
+        let recovery_multibase = arkret_canonical::ed25519_pubkey_to_did_key_multibase(
+            SigningKey::from_bytes(&recovery_seed)
+                .verifying_key()
+                .as_bytes(),
+        );
+        let mut policy: arkret_models_crypto::RecoveryPolicy =
+            serde_json::from_value(serde_json::json!({
+                "schema": "ak.schema.recovery_policy.v1",
+                "policy_id": policy_id,
+                "account_id": self.account,
+                "version": 1,
+                "supersedes_id": null,
+                "trust_domain": "ak:trust_domain:cotest.example",
+                "issued_at": arkret_canonical::format_timestamp_canonical(now),
+                "auth_data": {
+                    "verification_method": self.method,
+                    "signature_algorithm": "Ed25519",
+                    "signature": "AA"
+                },
+                "methods": [{
+                    "kind": "recovery_unlock",
+                    "keys": [{
+                        "verification_method": recovery_method,
+                        "public_key_multibase": recovery_multibase,
+                        "signature_algorithm": "Ed25519",
+                        "not_before": arkret_canonical::format_timestamp_canonical(
+                            now - chrono::Duration::hours(1)
+                        ),
+                        "expires_at": arkret_canonical::format_timestamp_canonical(
+                            now + chrono::Duration::hours(1)
+                        ),
+                        "backup_hpke": {
+                            "key_agreement_ref": format!("{}#recovery-backup-hpke", self.actor),
+                            "key_agreement_algorithm": "X25519",
+                            "public_key_multibase": "z6LSCotestRecoveryBackupHpkeKey",
+                            "hpke_suites": ["ak.hpke_x25519_aead_chacha20poly1305.v1"],
+                            "use": "backup_hpke",
+                            "not_before": arkret_canonical::format_timestamp_canonical(
+                                now - chrono::Duration::hours(1)
+                            ),
+                            "expires_at": arkret_canonical::format_timestamp_canonical(
+                                now + chrono::Duration::hours(1)
+                            )
+                        }
+                    }]
+                }]
+            }))?;
+        let transcript = arkret_models_crypto::recovery_policy_signature_transcript_bytes(&policy)?;
+        policy.auth_data.signature = Base64UrlString::new(arkret_canonical::base64url_encode(
+            SigningKey::from_bytes(&self.seed).sign(&transcript).to_bytes(),
         ))
         .map_err(anyhow::Error::msg)?;
         Ok(event_envelope_with_causal_refs_for_device(
@@ -1821,5 +1896,437 @@ pub async fn key_backup_device_quorum_delete_removes_an_envelope() -> Result<()>
         !lists(&listing(&client_a).await?, INACTIVE_BACKUP),
         "the deleted envelope is still listed"
     );
+    Ok(())
+}
+
+fn recovery_grant_coordinates(
+    principal: &ProvisionedTestPrincipal,
+    station: &DidCoreId,
+) -> Result<(arkret_wire::SessionGrantId, Base64UrlString)> {
+    let grant = mock_recovery_session_grant_jwt(
+        principal.core_id.as_str(),
+        DEVICE_A,
+        station.as_str(),
+    );
+    // rotation_fixture records B, C, then A. The mock assigns every non-first
+    // binding an id derived from the exact credential.
+    let mut token = vec![0x01];
+    token.extend(arkret_canonical::sha256_bytes(grant.as_bytes()));
+    let grant_id = arkret_wire::SessionGrantId::new(format!(
+        "ak:session_grant:{}",
+        arkret_canonical::base64url_encode(token)
+    ))?;
+    let jwk = arkret_signatures::JsonWebKey::from_ed25519_verifying_key(
+        &principal.device_signing_key.verifying_key(),
+    );
+    let cnf_jkt = Base64UrlString::new(arkret_signatures::dpop::dpop_jwk_thumbprint(&jwk)?)
+        .map_err(anyhow::Error::msg)?;
+    Ok((grant_id, cnf_jkt))
+}
+
+async fn create_verified_recovery_unlock_session(
+    client: &TestActorClient,
+    signer: &RotationAuthor,
+    recovery_method: &DidUrl,
+    recovery_seed: [u8; 32],
+) -> Result<arkret_models_crypto::RecoverySession> {
+    use arkret_models_crypto::{
+        GenericRecoveryTranscript, RecoveryDevicePossessionTranscript, RecoverySession,
+        RecoverySessionCreateRequestBody, RecoverySessionProof,
+        RecoverySessionProofSubmitRequestBody, RecoverySignatureAlgorithm,
+        RecoveryTranscriptProofBody, RecoveryUnlockProofBody,
+        RecoveryUnlockProofBodyWithSignature, RecoveryUnlockProofKind,
+        RECOVERY_DEVICE_POSSESSION_DOMAIN, RECOVERY_PROOF_TRANSCRIPT_SCHEMA,
+    };
+    use arkret_wire::{DidKey, RequestId};
+
+    let (grant_id, cnf_jkt) = recovery_grant_coordinates(&signer.principal, &signer.station)?;
+    let request_id = RequestId::new(
+        "ak:request:01904100-0000-7000-8000-0000000000d1".to_owned(),
+    )?;
+    let device_multibase = arkret_canonical::ed25519_pubkey_to_did_key_multibase(
+        signer.principal.device_signing_key.verifying_key().as_bytes(),
+    );
+    let requesting_device_public_key_did =
+        DidKey::new(format!("did:key:{device_multibase}")).map_err(anyhow::Error::msg)?;
+    let possession = RecoveryDevicePossessionTranscript {
+        schema: RECOVERY_DEVICE_POSSESSION_DOMAIN.to_owned(),
+        request_id: request_id.clone(),
+        session_grant_id: grant_id,
+        session_grant_cnf_jkt: cnf_jkt,
+        account_id: signer.account.clone(),
+        requesting_device_id: signer.principal.device_id.clone(),
+        requesting_device_public_key_did: requesting_device_public_key_did.clone(),
+        trust_domain: arkret_wire::TrustDomainId::new(
+            "ak:trust_domain:cotest.example".to_owned(),
+        )?,
+        expected_recovery_policy_ref: None,
+    };
+    let possession_signature = signer
+        .principal
+        .device_signing_key
+        .sign(&possession.signing_bytes()?);
+    let create = RecoverySessionCreateRequestBody {
+        request_id,
+        account_id: signer.account.clone(),
+        requesting_device_id: signer.principal.device_id.clone(),
+        requesting_device_public_key_did,
+        requesting_device_signature: Base64UrlString::new(
+            arkret_canonical::base64url_encode(possession_signature.to_bytes()),
+        )
+        .map_err(anyhow::Error::msg)?,
+        trust_domain: possession.trust_domain,
+        expected_recovery_policy_ref: None,
+    };
+    let session: RecoverySession = serde_json::from_value(
+        expect_json(
+            client
+                .post("/_arkret/root/identity/recovery-sessions")
+                .json(&create),
+            StatusCode::CREATED,
+        )
+        .await?,
+    )?;
+    let proof_body = RecoveryUnlockProofBody {
+        kind: RecoveryUnlockProofKind::RecoveryUnlock,
+        challenge: session.challenge.clone(),
+        verification_method: recovery_method.clone(),
+        signature_algorithm: RecoverySignatureAlgorithm::Ed25519,
+    };
+    let transcript = GenericRecoveryTranscript {
+        schema: RECOVERY_PROOF_TRANSCRIPT_SCHEMA.to_owned(),
+        kind: arkret_models_crypto::RecoveryProofKind::RecoveryUnlock,
+        request_id: session.request_id.clone(),
+        session_grant_id: session.session_grant_id.clone(),
+        session_grant_cnf_jkt: session.session_grant_cnf_jkt.clone(),
+        account_id: session.account_id.clone(),
+        requesting_device_id: session.requesting_device_id.clone(),
+        requesting_device_public_key_did: session.requesting_device_public_key_did.clone(),
+        trust_domain: session.trust_domain.clone(),
+        policy_id: session.policy_id.clone(),
+        policy_version: session.policy_version,
+        recovery_session_id: session.recovery_session_id.clone(),
+        identity_model: session.identity_model,
+        model_generation_ref: session.current_device_generation_ref,
+        publication_authority_context_digest: session
+            .publication_authority_context_digest
+            .clone(),
+        challenge: session.challenge.clone(),
+        expires_at: session.expires_at,
+        created_at: session.created_at,
+        proof_body: RecoveryTranscriptProofBody::RecoveryUnlock(proof_body),
+    };
+    transcript.validate_shape()?;
+    let signature = SigningKey::from_bytes(&recovery_seed)
+        .sign(&arkret_canonical::canonical_json_bytes(&transcript)?);
+    let submit = RecoverySessionProofSubmitRequestBody {
+        proof: RecoverySessionProof::RecoveryUnlock(RecoveryUnlockProofBodyWithSignature {
+            kind: RecoveryUnlockProofKind::RecoveryUnlock,
+            challenge: session.challenge.clone(),
+            verification_method: recovery_method.clone(),
+            signature_algorithm: RecoverySignatureAlgorithm::Ed25519,
+            signature: Base64UrlString::new(arkret_canonical::base64url_encode(
+                signature.to_bytes(),
+            ))
+            .map_err(anyhow::Error::msg)?,
+        }),
+    };
+    let outcome: arkret_models_crypto::RecoverySessionProofSubmitOutcome =
+        serde_json::from_value(
+            expect_json(
+                client
+                    .post(&format!(
+                        "/_arkret/root/identity/recovery-sessions/{}/proofs",
+                        session.recovery_session_id
+                    ))
+                    .json(&submit),
+                StatusCode::OK,
+            )
+            .await?,
+        )?;
+    ensure!(
+        outcome.proof_summary.as_ref().is_some_and(|summary| {
+            summary.kind == arkret_models_crypto::RecoveryProofKind::RecoveryUnlock
+                && summary.verification_method.as_ref() == Some(recovery_method)
+        }),
+        "the recovery session did not record the recovery_unlock proof"
+    );
+    Ok(session)
+}
+
+async fn recovery_unlock_delete(
+    client: &TestActorClient,
+    backup_id: &str,
+    request_id: &str,
+    recovery_session_id: arkret_wire::RecoverySessionId,
+    recovery_method: &DidUrl,
+    recovery_seed: [u8; 32],
+) -> Result<(reqwest::Response, String)> {
+    use arkret_models_crypto::{
+        KeyBackupDeleteProof, KeysBackupsDeleteChallenge, KeysBackupsDeleteRequestBody,
+        KeysBackupsIssueDeleteChallengeRequestBody,
+    };
+    use arkret_wire::{AuditReasonText, PayloadProof, PayloadProofPurpose, proof_kind};
+
+    let request_id = Base64UrlString::new(request_id).map_err(anyhow::Error::msg)?;
+    let reason = AuditReasonText::new("user_requested").map_err(anyhow::Error::msg)?;
+    let challenge: KeysBackupsDeleteChallenge = serde_json::from_value(
+        expect_json(
+            client
+                .post(&format!(
+                    "/_arkret/self/keys/backups/{backup_id}/delete-challenge"
+                ))
+                .json(&KeysBackupsIssueDeleteChallengeRequestBody {
+                    request_id: request_id.clone(),
+                }),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    let canonical = arkret_canonical::canonical_json_bytes(
+        &challenge.delete_intent_transcript(Some(reason.as_str())),
+    )?;
+    let proof = PayloadProof {
+        kind: proof_kind::DETACHED_JWS.to_owned(),
+        verification_method: recovery_method.clone(),
+        payload_digest: challenge.delete_intent_digest(Some(reason.as_str()))?,
+        created_at: challenge.issued_at,
+        domain: None,
+        audience: None,
+        proof_purpose: Some(PayloadProofPurpose::IssuerAttestation),
+        jws: arkret_signatures::sign_ed25519_detached_jws(
+            &SigningKey::from_bytes(&recovery_seed),
+            &canonical,
+        )?,
+    };
+    let challenge_id = challenge.challenge_id.to_string();
+    let body = KeysBackupsDeleteRequestBody {
+        request_id,
+        challenge_id: challenge.challenge_id,
+        proof: KeyBackupDeleteProof::RecoverySession {
+            recovery_session_id,
+            proof,
+        },
+        reason: Some(reason),
+    };
+    let response = client
+        .delete(&format!("/_arkret/self/keys/backups/{backup_id}"))
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .body(arkret_canonical::canonical_json_bytes(&body)?)
+        .send()
+        .await?;
+    Ok((response, challenge_id))
+}
+
+async fn assert_recovery_delete_rows(
+    database_url: &str,
+    backup_id: &str,
+    challenge_id: &str,
+    backup_exists: bool,
+    challenge_consumed: bool,
+) -> Result<()> {
+    let database_url = database_url.to_owned();
+    let backup_id = backup_id.to_owned();
+    let challenge_id = challenge_id.to_owned();
+    tokio::task::spawn_blocking(move || -> Result<()> {
+        let mut database = postgres::Client::connect(&database_url, postgres::NoTls)?;
+        let actual_backup: bool = database
+            .query_one(
+                "SELECT EXISTS(SELECT 1 FROM key_backups WHERE payload->>'backup_id'=$1)",
+                &[&backup_id],
+            )?
+            .get(0);
+        let actual_consumed: bool = database
+            .query_one(
+                "SELECT consumed_at IS NOT NULL FROM key_backup_delete_challenges WHERE challenge_id=$1",
+                &[&challenge_id],
+            )?
+            .get(0);
+        ensure!(
+            actual_backup == backup_exists && actual_consumed == challenge_consumed,
+            "delete state drifted: backup_exists={actual_backup}, challenge_consumed={actual_consumed}"
+        );
+        Ok(())
+    })
+    .await??;
+    Ok(())
+}
+
+async fn set_recovery_session_expiry(
+    database_url: &str,
+    session_id: &arkret_wire::RecoverySessionId,
+    expires_at: DateTime<Utc>,
+) -> Result<()> {
+    let database_url = database_url.to_owned();
+    let session_uuid = session_id
+        .as_str()
+        .strip_prefix("ak:recovery_session:")
+        .context("recovery session id prefix")?
+        .to_owned();
+    tokio::task::spawn_blocking(move || -> Result<()> {
+        let mut database = postgres::Client::connect(&database_url, postgres::NoTls)?;
+        ensure!(
+            database.execute(
+                "UPDATE recovery_sessions SET expires_at=$2, updated_at=LEAST(updated_at,$2) WHERE id::text=$1",
+                &[&session_uuid, &expires_at],
+            )? == 1,
+            "recovery session expiry update missed its row"
+        );
+        Ok(())
+    })
+    .await??;
+    Ok(())
+}
+
+/// A verified recovery_unlock session is a real delete authority. A different
+/// session id and the same session outside its validity window both fail
+/// before either the envelope or their fresh delete challenge is mutated.
+pub async fn key_backup_recovery_unlock_delete_is_session_exact_and_zero_write() -> Result<()> {
+    const RECOVERY_SEED: [u8; 32] = [0xd7; 32];
+    let LiveRotation {
+        server,
+        _coauth: coauth,
+        database,
+        client_a,
+        events_a,
+        signer,
+        seed_a,
+        ..
+    } = live_rotation("key-backup-recovery-unlock-delete", &[]).await?;
+    let policy_id = "ak:policy:01904100-0000-7000-8000-0000000000d7";
+    let recovery_method =
+        DidUrl::new(format!("{}#offline-recovery-key", signer.actor)).map_err(anyhow::Error::msg)?;
+    let policy = signer.recovery_unlock_policy(policy_id, &recovery_method, RECOVERY_SEED)?;
+    let published = publish_recovery_policy(&events_a, &policy).await?;
+    ensure!(
+        published.status() == StatusCode::OK,
+        "recovery_unlock policy publication failed: {} {}",
+        published.status(),
+        published.text().await.unwrap_or_default()
+    );
+
+    let recovery_grant = mock_recovery_session_grant_jwt(
+        signer.principal.core_id.as_str(),
+        signer.principal.device_id.as_str(),
+        signer.station.as_str(),
+    );
+    coauth.bind_recovery_session_grant(
+        &recovery_grant,
+        signer.principal.core_id.as_str(),
+        signer.principal.device_id.as_str(),
+        &signer.principal.device_signing_key.verifying_key(),
+    )?;
+    let recovery_client =
+        server.client_with_founding_device_grant(&signer.principal, recovery_grant)?;
+    let session = create_verified_recovery_unlock_session(
+        &recovery_client,
+        &signer,
+        &recovery_method,
+        RECOVERY_SEED,
+    )
+    .await?;
+
+    let target = signer.backup(
+        INACTIVE_BACKUP,
+        &BackupSeriesId::new(INACTIVE_SERIES)?,
+        b"recovery-unlock-delete",
+        seed_a,
+    )?;
+    let stored = expect_json(
+        client_a
+            .put(&format!("/_arkret/self/keys/backups/{INACTIVE_BACKUP}"))
+            .header("Idempotency-Key", "recovery-unlock-delete-target")
+            .json(&target),
+        StatusCode::OK,
+    )
+    .await?;
+    ensure!(stored["status"] == "accepted", "target PUT: {stored}");
+
+    let wrong_session = arkret_wire::RecoverySessionId::new(
+        "ak:recovery_session:01904100-0000-7000-8000-00000000dead".to_owned(),
+    )?;
+    let (wrong, wrong_challenge) = recovery_unlock_delete(
+        &client_a,
+        INACTIVE_BACKUP,
+        "cmVjb3ZlcnktZGVsZXRlLXdyb25nLTAx",
+        wrong_session,
+        &recovery_method,
+        RECOVERY_SEED,
+    )
+    .await?;
+    ensure!(
+        wrong.status() == StatusCode::FORBIDDEN,
+        "a different recovery session reached delete: {} {}",
+        wrong.status(),
+        wrong.text().await.unwrap_or_default()
+    );
+    assert_recovery_delete_rows(
+        &database.connect_url,
+        INACTIVE_BACKUP,
+        &wrong_challenge,
+        true,
+        false,
+    )
+    .await?;
+
+    set_recovery_session_expiry(
+        &database.connect_url,
+        &session.recovery_session_id,
+        Utc::now() - chrono::Duration::seconds(1),
+    )
+    .await?;
+    let (expired, expired_challenge) = recovery_unlock_delete(
+        &client_a,
+        INACTIVE_BACKUP,
+        "cmVjb3ZlcnktZGVsZXRlLWV4cGlyZWQtMDE",
+        session.recovery_session_id.clone(),
+        &recovery_method,
+        RECOVERY_SEED,
+    )
+    .await?;
+    ensure!(
+        expired.status() == StatusCode::FORBIDDEN,
+        "an expired recovery session reached delete: {} {}",
+        expired.status(),
+        expired.text().await.unwrap_or_default()
+    );
+    assert_recovery_delete_rows(
+        &database.connect_url,
+        INACTIVE_BACKUP,
+        &expired_challenge,
+        true,
+        false,
+    )
+    .await?;
+
+    set_recovery_session_expiry(
+        &database.connect_url,
+        &session.recovery_session_id,
+        session.expires_at,
+    )
+    .await?;
+    let (deleted, deleted_challenge) = recovery_unlock_delete(
+        &client_a,
+        INACTIVE_BACKUP,
+        "cmVjb3ZlcnktZGVsZXRlLXZhbGlkLTAx",
+        session.recovery_session_id,
+        &recovery_method,
+        RECOVERY_SEED,
+    )
+    .await?;
+    ensure!(
+        deleted.status() == StatusCode::OK,
+        "verified recovery_unlock delete failed: {} {}",
+        deleted.status(),
+        deleted.text().await.unwrap_or_default()
+    );
+    assert_recovery_delete_rows(
+        &database.connect_url,
+        INACTIVE_BACKUP,
+        &deleted_challenge,
+        false,
+        true,
+    )
+    .await?;
     Ok(())
 }

@@ -18,6 +18,19 @@ pub fn mock_session_grant_jwt(subject: &str, device_id: &str, audience: &str) ->
     grant_shaped_jwt(subject, device_id, audience, 0x42)
 }
 
+/// A distinct grant-shaped credential used for a candidate device's
+/// restricted recovery session. The mock issuer ledger supplies the typed
+/// credential class, holder binding, and closed recovery scope on
+/// introspection; the distinct signature keeps this record separate from the
+/// same device's Standard grant.
+pub fn mock_recovery_session_grant_jwt(
+    subject: &str,
+    device_id: &str,
+    audience: &str,
+) -> String {
+    grant_shaped_jwt(subject, device_id, audience, 0x44)
+}
+
 /// A structurally perfect grant-shaped credential whose only difference from
 /// [`mock_session_grant_jwt`] is its signature bytes: exactly what someone
 /// holding a leaked issuer signing key can mint. The claims are self-consistent

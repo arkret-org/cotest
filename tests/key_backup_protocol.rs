@@ -44,6 +44,11 @@ async fn key_backup_device_quorum_delete_removes_an_envelope() -> Result<()> {
 }
 
 #[tokio::test]
+async fn key_backup_recovery_unlock_delete_is_session_exact_and_zero_write() -> Result<()> {
+    cotest::scenarios::security_rotation_live::key_backup_recovery_unlock_delete_is_session_exact_and_zero_write().await
+}
+
+#[tokio::test]
 async fn security_rotation_erase_resumes_after_an_unrelated_pcr_commit() -> Result<()> {
     cotest::scenarios::security_rotation_live::security_rotation_erase_resumes_after_an_unrelated_pcr_commit().await
 }
