@@ -268,7 +268,6 @@
     { "source": "cotest/e2e/tests/events/realm-genesis-commit-stream.spec.ts", "needs": "Needs the canonical founding-unit builder and the governance-Station submit path exposed to Rust scenarios so genesis commits are not hand-rolled." },
     { "source": "cotest/e2e/tests/sync/transport-negotiation.spec.ts", "needs": "Needs transport negotiation in the Rust harness; the spec also captures screenshots, so its evidence must move to a Rust transcript artifact." },
     { "source": "cotest/e2e/tests/encryption/audited-e2ee.spec.ts", "needs": "Needs SDK client coverage for the audited-E2EE read path." },
-    { "source": "cotest/e2e/tests/conformance/realm-state-snapshot-query-scalability.spec.ts", "needs": "Needs the snapshot manifest and query surface in the Rust conformance harness." },
     { "source": "cotest/e2e/tests/invites/invite-addressing.spec.ts", "needs": "Needs contact-api and authenticated invite notification through SDK DTOs." },
     { "source": "cotest/e2e/tests/conformance/registry-drift.spec.ts", "needs": "Overlaps the Rust drift validator; fold the remaining assertions into that suite rather than porting the spec." },
     { "source": "cotest/e2e/tests/invites/third-party.spec.ts", "needs": "Needs third-party invite, encoding and webvh helpers as SDK clients." },
