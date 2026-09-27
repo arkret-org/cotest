@@ -1525,6 +1525,62 @@ async fn unlock(
     .await?)
 }
 
+/// Submit the recovery-session branch of the production unlock operation.
+/// Unlike [`unlock`], this uses the exact frozen recovery-session challenge
+/// and signer selected by the published recovery policy.
+async fn recovery_session_unlock(
+    client: &TestActorClient,
+    backup: &KeyBackup,
+    session: &arkret_models_crypto::RecoverySession,
+    recovery_method: &DidUrl,
+    recovery_seed: [u8; 32],
+) -> Result<reqwest::Response> {
+    use arkret_models_crypto::{
+        KeyBackupUnlockAuthority, KeyBackupUnlockProof, KeyBackupUnlockProofAuthData,
+        KeysBackupsUnlockRequestBody,
+    };
+
+    let mut proof = KeyBackupUnlockProof {
+        schema: KeyBackupUnlockProof::SCHEMA.to_owned(),
+        authority: KeyBackupUnlockAuthority::RecoverySession {
+            recovery_session_id: session.recovery_session_id.clone(),
+        },
+        account_id: session.account_id.clone(),
+        requesting_device_id: session.requesting_device_id.clone(),
+        backup_id: backup.backup_id.clone(),
+        backup_kind: backup.backup_kind,
+        series_id: backup.series_id.clone(),
+        ciphertext_digest: backup.ciphertext_digest.clone(),
+        challenge: session.challenge.clone(),
+        service_id: session.account_id.station_id.clone(),
+        audience: NonEmptyString::new(
+            reqwest::Url::parse(&client.url("/"))?
+                .origin()
+                .ascii_serialization(),
+        )
+        .map_err(anyhow::Error::msg)?,
+        issued_at: session.created_at,
+        expires_at: session.expires_at,
+        auth_data: KeyBackupUnlockProofAuthData {
+            verification_method: recovery_method.clone(),
+            signature_algorithm: KeyBackupSignatureAlgorithm::Ed25519,
+            signature: Base64UrlString::new("AA").map_err(anyhow::Error::msg)?,
+        },
+    };
+    let signature = SigningKey::from_bytes(&recovery_seed).sign(&proof.signing_payload_bytes()?);
+    proof.auth_data.signature =
+        Base64UrlString::new(arkret_canonical::base64url_encode(signature.to_bytes()))
+            .map_err(anyhow::Error::msg)?;
+    canonical_post(
+        client,
+        &format!("/_arkret/self/keys/backups/{}/unlock", backup.backup_id),
+        &KeysBackupsUnlockRequestBody { proof },
+    )?
+    .send()
+    .await
+    .map_err(Into::into)
+}
+
 /// A POST whose body is the exact RFC 8785 bytes the operation requires.
 fn canonical_post(
     client: &TestActorClient,
@@ -1929,6 +1985,7 @@ async fn create_verified_recovery_unlock_session(
     signer: &RotationAuthor,
     recovery_method: &DidUrl,
     recovery_seed: [u8; 32],
+    requesting_device_seed: [u8; 32],
 ) -> Result<arkret_models_crypto::RecoverySession> {
     use arkret_models_crypto::{
         GenericRecoveryTranscript, RecoveryDevicePossessionTranscript, RecoverySession,
@@ -1944,8 +2001,9 @@ async fn create_verified_recovery_unlock_session(
     let request_id = RequestId::new(
         "ak:request:01904100-0000-7000-8000-0000000000d1".to_owned(),
     )?;
+    let requesting_device_key = SigningKey::from_bytes(&requesting_device_seed);
     let device_multibase = arkret_canonical::ed25519_pubkey_to_did_key_multibase(
-        signer.principal.device_signing_key.verifying_key().as_bytes(),
+        requesting_device_key.verifying_key().as_bytes(),
     );
     let requesting_device_public_key_did =
         DidKey::new(format!("did:key:{device_multibase}")).map_err(anyhow::Error::msg)?;
@@ -1962,10 +2020,7 @@ async fn create_verified_recovery_unlock_session(
         )?,
         expected_recovery_policy_ref: None,
     };
-    let possession_signature = signer
-        .principal
-        .device_signing_key
-        .sign(&possession.signing_bytes()?);
+    let possession_signature = requesting_device_key.sign(&possession.signing_bytes()?);
     let create = RecoverySessionCreateRequestBody {
         request_id,
         account_id: signer.account.clone(),
@@ -2178,6 +2233,123 @@ async fn set_recovery_session_expiry(
     Ok(())
 }
 
+async fn assert_recovery_unlock_was_not_consumed(
+    database_url: &str,
+    session_id: &arkret_wire::RecoverySessionId,
+    backup_id: &str,
+) -> Result<()> {
+    let database_url = database_url.to_owned();
+    let session_id = session_id.as_str().to_owned();
+    let backup_id = backup_id.to_owned();
+    tokio::task::spawn_blocking(move || -> Result<()> {
+        let mut database = postgres::Client::connect(&database_url, postgres::NoTls)?;
+        let row = database.query_one(
+            "SELECT e.consumed_at IS NULL, e.request_digest IS NULL, e.holder IS NULL, \
+                    EXISTS(SELECT 1 FROM key_backups WHERE payload->>'backup_id'=$2) \
+             FROM key_backup_unlock_entries e \
+             WHERE e.authority_id=$1 AND e.backup_id=$2",
+            &[&session_id, &backup_id],
+        )?;
+        ensure!(
+            row.get::<_, bool>(0)
+                && row.get::<_, bool>(1)
+                && row.get::<_, bool>(2)
+                && row.get::<_, bool>(3),
+            "rejected test-material unlock consumed authority or released the envelope"
+        );
+        Ok(())
+    })
+    .await??;
+    Ok(())
+}
+
+/// The public conformance Ed25519 key has a valid signature and may be used by
+/// the isolated fixture runner, but the production key-backup unlock route
+/// must reject it after exact session/envelope binding and before consumption.
+pub async fn key_backup_unlock_rejects_published_test_signing_material_live() -> Result<()> {
+    let formal_test_seed = std::array::from_fn(|index| index as u8);
+    let LiveRotation {
+        server,
+        _coauth: coauth,
+        database,
+        events_a,
+        signer,
+        old,
+        ..
+    } = live_rotation("key-backup-test-signing-material", &[]).await?;
+    let recovery_method = DidUrl::new(format!("{}#runtime-recovery-key", signer.actor))
+        .map_err(anyhow::Error::msg)?;
+    let policy = signer.recovery_unlock_policy(
+        "ak:policy:01904100-0000-7000-8000-0000000000f7",
+        &recovery_method,
+        formal_test_seed,
+    )?;
+    let published = publish_recovery_policy(&events_a, &policy).await?;
+    ensure!(
+        published.status() == StatusCode::OK,
+        "recovery policy setup failed: {} {}",
+        published.status(),
+        published.text().await.unwrap_or_default()
+    );
+
+    let recovery_grant = mock_recovery_session_grant_jwt(
+        signer.principal.core_id.as_str(),
+        signer.principal.device_id.as_str(),
+        signer.station.as_str(),
+    );
+    coauth.bind_recovery_session_grant(
+        &recovery_grant,
+        signer.principal.core_id.as_str(),
+        signer.principal.device_id.as_str(),
+        &signer.principal.device_signing_key.verifying_key(),
+    )?;
+    let recovery_client =
+        server.client_with_founding_device_grant(&signer.principal, recovery_grant)?;
+    let session = create_verified_recovery_unlock_session(
+        &recovery_client,
+        &signer,
+        &recovery_method,
+        formal_test_seed,
+        formal_test_seed,
+    )
+    .await?;
+
+    let formal_multibase = arkret_canonical::ed25519_pubkey_to_did_key_multibase(
+        SigningKey::from_bytes(&formal_test_seed)
+            .verifying_key()
+            .as_bytes(),
+    );
+    let frozen_replacement_method =
+        DidUrl::new(format!("did:key:{formal_multibase}#{formal_multibase}"))
+            .map_err(anyhow::Error::msg)?;
+
+    let response = recovery_session_unlock(
+        &recovery_client,
+        &old,
+        &session,
+        &frozen_replacement_method,
+        formal_test_seed,
+    )
+    .await?;
+    ensure!(
+        response.status() == StatusCode::FORBIDDEN,
+        "published test material reached ciphertext release: {}",
+        response.status()
+    );
+    let refusal: serde_json::Value = response.json().await?;
+    ensure!(
+        refusal["type"] == "https://arkret.org/problems/capability_denied"
+            && refusal["reason_code"] == "test_signing_material_denied",
+        "wrong production refusal for published test material: {refusal}"
+    );
+    assert_recovery_unlock_was_not_consumed(
+        &database.connect_url,
+        &session.recovery_session_id,
+        old.backup_id.as_str(),
+    )
+    .await
+}
+
 /// A verified recovery_unlock session is a real delete authority. A different
 /// session id and the same session outside its validity window both fail
 /// before either the envelope or their fresh delete challenge is mutated.
@@ -2223,6 +2395,7 @@ pub async fn key_backup_recovery_unlock_delete_is_session_exact_and_zero_write()
         &signer,
         &recovery_method,
         RECOVERY_SEED,
+        signer.seed,
     )
     .await?;
 
