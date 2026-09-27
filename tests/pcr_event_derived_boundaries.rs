@@ -17,6 +17,30 @@ fn realm_genesis_baseline() -> serde_json::Value {
 }
 
 #[test]
+fn event_actor_requires_complete_core_account_identity() {
+    let actor = json!({
+        "kind": "account",
+        "account_id": {
+            "principal_id": "ak:did_core:web:alice.example",
+            "station_id": "ak:did_core:web:station.example"
+        }
+    });
+    let parsed = serde_json::from_value::<arkret_wire::ActorId>(actor.clone()).unwrap();
+    assert_eq!(serde_json::to_value(parsed).unwrap(), actor);
+    for field in ["principal_id", "station_id"] {
+        let mut did_spelling = actor.clone();
+        did_spelling["account_id"][field] = json!("did:web:alice.example");
+        assert!(serde_json::from_value::<arkret_wire::ActorId>(did_spelling).is_err());
+        let mut incomplete = actor.clone();
+        incomplete["account_id"]
+            .as_object_mut()
+            .unwrap()
+            .remove(field);
+        assert!(serde_json::from_value::<arkret_wire::ActorId>(incomplete).is_err());
+    }
+}
+
+#[test]
 fn realm_genesis_rejects_retired_notary_field() {
     let mut genesis = realm_genesis_baseline();
     assert!(

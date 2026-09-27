@@ -155,7 +155,7 @@
       "source": "cotest/e2e/tests/harness/event-actor.spec.ts",
       "disposition": "duplicate_removed",
       "replacements": [
-        { "file": "cotest/tests/pcr_event_derived_boundaries.rs", "symbol": "notary_value_uses_core_actor_id_and_rejects_did_spelling" },
+        { "file": "cotest/tests/pcr_event_derived_boundaries.rs", "symbol": "event_actor_requires_complete_core_account_identity" },
         { "file": "cotest/tests/canonical_hash_convergence.rs", "symbol": "canonical_hash" }
       ]
     },
