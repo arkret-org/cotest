@@ -26,7 +26,6 @@ pub mod events_backfill;
 pub mod events_resolve;
 pub mod extension_surface_gaps;
 pub mod fanout_route_miss_live;
-pub mod federation_idempotency_historical_only;
 pub mod federation_readiness;
 pub mod full_stack_e2e;
 pub mod handle_to_join_e2e;

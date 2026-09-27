@@ -320,7 +320,7 @@ fn named_suite_audit_executes_registered_runners_and_exposes_every_gap() -> Resu
         "ak.suite.direct_conversation.admission_producers.v1",
         "ak.suite.direct_conversation.signal_admission.v1",
         "ak.suite.federation.idempotency_after_key_revoke.v1",
-        "ak.suite.identity_link.invalidation.v1",
+        "ak.suite.reaction.authority_order.v1",
         "ak.suite.invite.claim_security.v1",
         "ak.suite.mimi.admission_guards.v1",
         "ak.suite.peer.event_submit.semantic_union.v1",
@@ -1032,7 +1032,7 @@ fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
 
     let payload_a = MemberIdentityUpdatePayload {
         realm_id: realm.clone(),
-        actor_id: alice.clone(),
+        member_id: alice.clone(),
         segment: MemberIdentitySegment::MemberIdentity,
         replaces: vec![],
         identity_payload: carrier_a,
@@ -1040,7 +1040,7 @@ fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
     };
     let payload_b = MemberIdentityUpdatePayload {
         realm_id: realm,
-        actor_id: alice,
+        member_id: alice,
         segment: MemberIdentitySegment::MemberIdentity,
         replaces: vec![MemberIdentityReplacementRef {
             event_id: event_a.clone(),
