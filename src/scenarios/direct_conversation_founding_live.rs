@@ -44,9 +44,9 @@ use arkret_models_collaboration::authority_commit::{
     RegisteredAtomicUnitBranch, SelfAuthoritySubmitRequest,
 };
 use arkret_models_collaboration::device_messages::DeviceMessagesAckRequestBody;
-use arkret_models_collaboration::direct_conversation::DirectConversationFoundingPlan;
 use arkret_models_collaboration::direct_conversation::{
-    DirectConversationResolveOutcome, DirectConversationResolveRequestBody,
+    DirectConversationFoundingPlan, DirectConversationResolveOutcome,
+    DirectConversationResolveRequestBody,
 };
 use arkret_models_collaboration::events_payloads::direct_conversation::DirectConversationBoundPayload;
 use arkret_models_collaboration::governance::invite_addressing::{
@@ -330,7 +330,6 @@ fn sealed_message(
         group.epoch(),
         group_state_ref.clone(),
         group.local_content_sender_domain()?,
-        None,
         arkret::EventContentRoutingContext::None,
     )?;
     let sealed = arkret::MessageCrypto::encrypt(group, fresh_uuid_v7(), header, plaintext)?;

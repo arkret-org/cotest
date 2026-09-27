@@ -549,7 +549,6 @@ pub async fn run_same_station_mls_keypackage_lifecycle_live() -> Result<()> {
         1,
         commit_event.event_id.clone(),
         alice_group.local_content_sender_domain()?,
-        None,
         arkret::EventContentRoutingContext::None,
     )?;
     let sealed = arkret::MessageCrypto::encrypt(

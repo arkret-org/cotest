@@ -183,7 +183,7 @@ pub async fn run_same_station_human_control_event_live() -> Result<()> {
         )
         .await?;
     let data_commit =
-        submit_and_expect_commit(&alice, &alice_account, SAME_STATION_DEVICE, &data).await?;
+        submit_message_with_lost_response_and_native_reopen(&alice, &alice_account, &data).await?;
     ensure_commit_signed_by(&data_commit, station)?;
     ensure!(
         join_commit.stream_position < control_commit.stream_position
@@ -669,6 +669,138 @@ pub(crate) async fn submit_and_expect_commit(
     );
     commit.validate_shape()?;
     Ok(commit)
+}
+
+/// Freeze once through the production client seam, discard a successful
+/// authority response, reopen the native outbound store and replay exact bytes.
+/// This covers plaintext transport recovery; MLS private-state recovery has its
+/// own joint acceptance and must not be inferred from this leg.
+async fn submit_message_with_lost_response_and_native_reopen(
+    client: &TestActorClient,
+    account: &AccountId,
+    event: &Event,
+) -> Result<RealmCommit> {
+    use garth::OutboundQueueStore;
+    let principal = client
+        .principal
+        .as_ref()
+        .context("accepted founding device")?;
+    let method = event
+        .producer_proof
+        .as_ref()
+        .context("device proof")?
+        .verification_method
+        .as_str()
+        .to_owned();
+    let mut unsigned = event.clone();
+    unsigned.producer_proof = None;
+    let authored = arkret_wire::AuthoredEvent::finalize_with_digest_suite(
+        unsigned,
+        arkret_canonical::DigestSuite::Sha256,
+    )?;
+    let signer = arkret_signatures::Ed25519DetachedJwsSigner::new(
+        principal.device_signing_key.clone(),
+        method,
+    );
+    let mut frozen = garth::MessageAuthoringSession::from_authored_event(authored)?
+        .sign(&signer, arkret_signatures::SignEventOptions::new())?;
+    ensure_human_producer(
+        &frozen.request().submission.event,
+        account,
+        &client.device_id,
+    )?;
+    let event_id = frozen.request().submission.event.event_id.clone();
+    let exact = frozen.canonical_submission_bytes().to_vec();
+    let directory = tempfile::tempdir()?;
+    let path = directory.path().join("outbound.json");
+    let engine = garth::OutboundEngine::new(garth::FileStore::open(&path)?, garth::SystemClock);
+    engine
+        .enqueue(frozen.clone().into_queued_submission())
+        .await?;
+    frozen.mark_forwarding();
+    ensure!(frozen.state() == garth::MessageSubmissionState::Forwarding);
+    let original: AuthoritySubmitOutcome = serde_json::from_value(
+        expect_json(
+            client
+                .post("/_arkret/self/events")
+                .header(reqwest::header::CONTENT_TYPE, "application/json")
+                .body(exact.clone()),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    let AuthoritySubmitOutcome::Accepted {
+        status,
+        commit: original_commit,
+    } = original
+    else {
+        bail!("the initial frozen message was refused: {original:?}");
+    };
+    ensure!(status == AuthorityCommitStatus::Committed);
+    // The client crashes before recording the result; no terminal state is stored.
+    drop(engine);
+    drop(frozen);
+    let reopened = garth::FileStore::open(&path)?;
+    let snapshot = reopened
+        .mutate_outbound(|queue| Ok(queue.snapshot()))
+        .await?;
+    ensure!(snapshot.items.len() == 1);
+    let pending = &snapshot.items[0];
+    ensure!(pending.status == garth::SendQueueStatus::Queued);
+    ensure!(
+        arkret_canonical::canonical_json_bytes(pending.request())? == exact,
+        "native reopen rewrote the signed request"
+    );
+    let replay: AuthoritySubmitOutcome = serde_json::from_value(
+        expect_json(
+            client
+                .post("/_arkret/self/events")
+                .header(reqwest::header::CONTENT_TYPE, "application/json")
+                .body(exact),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    let AuthoritySubmitOutcome::Accepted { commit, .. } = &replay else {
+        bail!("the frozen replay was refused: {replay:?}");
+    };
+    ensure!(
+        *commit == original_commit,
+        "exact replay allocated another RealmCommit"
+    );
+    let arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest::Event(
+        submission,
+    ) = pending.request()
+    else {
+        bail!("the queue lost its ordinary message branch")
+    };
+    let mut restored =
+        garth::FrozenMessageSubmission::from_signed_request(garth::MessageSubmitRequestBody {
+            submission: submission.clone(),
+        })?;
+    ensure!(restored.state() == garth::MessageSubmissionState::Queued);
+    ensure!(restored.apply_outcome(replay)?.is_none());
+    ensure!(restored.state() == garth::MessageSubmissionState::Committed);
+    let realm_id = event.realm_id.clone();
+    let observed = client
+        .sdk()
+        .scan_commit_stream_to_head(
+            realm_id.clone(),
+            CommitStreamRef::Realm { realm_id },
+            None,
+            1000,
+        )
+        .await?;
+    ensure!(
+        observed
+            .committed_events
+            .iter()
+            .filter(|view| view.commit().event_ref == event_id)
+            .count()
+            == 1,
+        "lost-response replay duplicated the canonical message"
+    );
+    Ok(original_commit)
 }
 
 /// The RealmCommit is the governance Station's own signature.

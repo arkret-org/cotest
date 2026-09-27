@@ -182,7 +182,6 @@ fn authored_message_decrypts_at_the_other_mls_member_without_reencrypting() {
         sender.epoch(),
         EventId::from_digest(DigestSuite::Sha256, [7; 32]),
         &sender_domain,
-        None,
         EventContentRoutingContext::None,
     )
     .unwrap();
