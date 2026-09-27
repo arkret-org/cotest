@@ -1,11 +1,9 @@
-//! Consent pairwise identity boundary after the minimal-metadata Realm profile
-//! was retired. This local conformance check covers the closed peer branch and
-//! rejects the old Realm activation path. A live MLS LeafNode-backed positive
-//! admission scenario remains an active implementation task.
+//! Closed Consent peer boundary after the minimal-metadata Realm profile
+//! was retired. No unregistered pairwise principal branch may enter the DTO.
 
 use anyhow::{Result, ensure};
 use arkret_models_collaboration::events_payloads::consent::ConsentPeer;
-use arkret_wire::{AccountId, ActorId, DidCoreId, RealmId};
+use arkret_wire::{AccountId, ActorId, DidCoreId};
 use ed25519_dalek::SigningKey;
 use serde_json::json;
 
@@ -22,27 +20,24 @@ pub async fn run_consent_pairwise_isolation_live() -> Result<()> {
         "ak:did_core:key:{}",
         arkret_canonical::ed25519_pubkey_to_did_key_multibase(&key)
     ))?;
-    let first_realm = RealmId::new("ak:realm:ASZ1iAvlGxgLC_-P6WHoR9vfijpaxbI5hoSwBx8zWTcT")?;
-    let second_realm = RealmId::new("ak:realm:AYcmQBZ6x7FCwln_vbdWIyV2tJ4pOJ4rmbd6v_0Y7N9_")?;
-    let pairwise = ConsentPeer::PairwisePrincipal {
-        realm_id: first_realm.clone(),
-        principal_id: principal_id.clone(),
-    };
-    let other_realm = ConsentPeer::PairwisePrincipal {
-        realm_id: second_realm,
-        principal_id: principal_id.clone(),
-    };
     let account = ConsentPeer::Actor {
-        actor_id: ActorId::account(AccountId::new(principal_id, DidCoreId::new(STATION_ID)?)),
+        actor_id: ActorId::account(AccountId::new(
+            principal_id.clone(),
+            DidCoreId::new(STATION_ID)?,
+        )),
     };
-    ensure!(pairwise != other_realm && pairwise != account);
-    let encoded = serde_json::to_value(&pairwise)?;
+    let other_station = ConsentPeer::Actor {
+        actor_id: ActorId::account(AccountId::new(
+            principal_id.clone(),
+            DidCoreId::new("ak:did_core:web:other-station.example")?,
+        )),
+    };
     ensure!(
-        encoded["kind"] == "pairwise_principal"
-            && encoded["realm_id"] == first_realm.as_str()
-            && serde_json::from_value::<ConsentPeer>(encoded.clone())? == pairwise,
-        "Consent pairwise branch did not preserve its exact Realm and principal: {encoded}"
+        account != other_station,
+        "Consent collapsed distinct Accounts onto a principal"
     );
+    ensure!(serde_json::from_value::<ConsentPeer>(json!({"kind":"pairwise_principal","realm_id":"ak:realm:ASZ1iAvlGxgLC_-P6WHoR9vfijpaxbI5hoSwBx8zWTcT","principal_id":principal_id})).is_err(),"unregistered Consent peer branch is still accepted");
+    ensure!(serde_json::from_value::<ConsentPeer>(serde_json::to_value(&account)?)? == account);
 
     let retired = json!({
         "title": "Retired pairwise Realm profile",
@@ -62,7 +57,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn retired_pairwise_profile_rejected_and_consent_peer_stays_realm_scoped() {
+    async fn retired_pairwise_profile_and_unregistered_consent_peer_are_rejected() {
         run_consent_pairwise_isolation_live().await.unwrap();
     }
 }

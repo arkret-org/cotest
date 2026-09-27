@@ -17,3 +17,10 @@ async fn invite_service_fanout_matches_account_data_cas() -> Result<()> {
     let _guard = init_transcript_writer("invite_service_fanout_live", None)?;
     cotest::scenarios::invite_service_fanout_live::invite_service_fanout_live_run().await
 }
+
+#[tokio::test(flavor = "multi_thread")]
+#[serial]
+async fn consent_current_grant_read_revoke_changes_invite_gate() -> Result<()> {
+    let _guard = init_transcript_writer("consent_current_invite_gate_live", None)?;
+    cotest::scenarios::invite_service_fanout_live::consent_current_and_invite_gate_live_run().await
+}

@@ -1,5 +1,5 @@
 //! Local negative conformance for the retired minimal-metadata Realm profile
-//! and the exact Realm-scoped Consent pairwise peer DTO.
+//! and unregistered Consent peers; full Account ActorIds stay isolated.
 
 use anyhow::Result;
 #[tokio::test]
