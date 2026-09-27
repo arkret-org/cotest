@@ -14,7 +14,7 @@ if ($ast.Extent.Text -match 'Get-DescribedServiceId -BaseUrl \$CoauthBaseUrl') {
 $requiredFunctions = @(
     "Quote-PsLiteral", "Write-DotEnvFile", "Get-ContainerHostGatewayIpv4", "Convert-ToContainerReachableUrl",
     "New-StationInternalChannelBindings", "Build-SolandCommand",
-    "Build-SolandDockerEnvironment", "Test-JointLoopbackUrl", "Wait-HttpReady", "Resolve-ManagedCoauthEmailMockRequirement"
+    "Build-SolandDockerEnvironment", "Test-JointLoopbackUrl", "Wait-HttpReady", "Stop-ProcessTree", "Resolve-ManagedCoauthEmailMockRequirement"
 )
 foreach ($name in $requiredFunctions) {
     $definition = $ast.FindAll({
@@ -57,6 +57,32 @@ $dockerArguments = @{
     NotarySigningKey = ""; FederationPeers = ""
 }
 try {
+    # A failed run must retire its child services, not just their shell parent.
+    $childPidPath = Join-Path $testDirectory "cleanup-child.pid"
+    $childCode = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes("Start-Sleep -Seconds 60"))
+    $shellPath = (Get-Process -Id $PID).Path
+    $parentCode = @"
+`$child = Start-Process -FilePath $(Quote-PsLiteral $shellPath) -ArgumentList @('-NoProfile', '-EncodedCommand', '$childCode') -PassThru
+[IO.File]::WriteAllText($(Quote-PsLiteral $childPidPath), `$child.Id.ToString())
+Start-Sleep -Seconds 60
+"@
+    $parentCode = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($parentCode))
+    $parent = Start-Process -FilePath $shellPath -ArgumentList @("-NoProfile", "-EncodedCommand", $parentCode) -PassThru
+    $childId = $null
+    try {
+        $deadline = (Get-Date).AddSeconds(10)
+        while (-not (Test-Path $childPidPath) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 100 }
+        if (-not (Test-Path $childPidPath)) { throw "Cleanup fixture did not start its child service" }
+        $childId = [int](Get-Content -Raw $childPidPath)
+        Stop-ProcessTree -ProcessId $parent.Id
+        foreach ($id in @($parent.Id, $childId)) {
+            if (Get-Process -Id $id -ErrorAction SilentlyContinue) { throw "Failed-run cleanup left process $id alive" }
+        }
+    } finally {
+        Stop-ProcessTree -ProcessId $parent.Id
+        if ($childId) { Stop-Process -Id $childId -Force -ErrorAction SilentlyContinue }
+        Remove-Item -LiteralPath $childPidPath -ErrorAction SilentlyContinue
+    }
     foreach ($url in @("http://127.0.0.1:1234/health", "http://[::1]/", "https://server1.localhost/", "https://server1.local.host/")) {
         if (-not (Test-JointLoopbackUrl -Url $url)) { throw "Local joint probes must bypass system proxies: $url" }
     }
