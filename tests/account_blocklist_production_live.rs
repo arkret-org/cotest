@@ -30,7 +30,7 @@ fn blocklist_full_suite_refuses_missing_production_case_executors() {
         "unregistered_blocklist_event_kind_is_not_an_authoring_surface",
         "shared_history_is_received_then_filtered_by_the_holder",
         "unblock_rebuilds_the_projection_from_retained_material",
-        "server_side_filtering_stays_indistinguishable",
+        "holder_side_request_filtering_stays_indistinguishable",
         "an_unsynced_device_treats_freshness_as_unknown",
     ] {
         assert!(error.contains(case), "missing case must be named: {error}");
