@@ -161,8 +161,8 @@ try {
     Build-SolandCommand @processArguments | Out-Null
     $generatedConfig = Get-Content -LiteralPath $configPath -Raw
     if ($generatedConfig -notmatch 'SOLAND_ACCOUNT_AUTHORITY_URL="https://coauth.joint.example"' -or
-        $generatedConfig -notmatch 'SOLAND_SESSION_GRANT_INTROSPECTION_URL="https://coauth.joint.example/_arkret/gate/account/session-grants/introspect"' -or
-        $generatedConfig -notmatch 'SOLAND_AUTH_SESSION_LOGOUT_URL="https://coauth.joint.example/_arkret/gate/account/auth-sessions/logout"' -or
+        $generatedConfig -notmatch 'SOLAND_SESSION_GRANT_INTROSPECTION_URL="https://coauth.joint.example/_coauth/internal/session-grants/introspect"' -or
+        $generatedConfig -notmatch 'SOLAND_AUTH_SESSION_LOGOUT_URL="https://coauth.joint.example/_coauth/internal/auth-sessions/logout"' -or
         $generatedConfig -match 'SOLAND_ACCOUNT_AUTHORITY_PUBLIC_KEY_MULTIBASE=') {
         throw "Generated CoauthCommand must preserve the bound Account Authority origin and operation URLs without a key pin"
     }
@@ -189,8 +189,8 @@ try {
     $loopbackDocker = Build-SolandDockerEnvironment @dockerArguments -AccountAuthorityBaseUrl $loopbackAuthority
     $containerAuthority = "http://192.0.2.1:4455"
     if ($loopbackDocker.SOLAND_ACCOUNT_AUTHORITY_URL -ne $containerAuthority -or
-        $loopbackDocker.SOLAND_SESSION_GRANT_INTROSPECTION_URL -ne "$containerAuthority/_arkret/gate/account/session-grants/introspect" -or
-        $loopbackDocker.SOLAND_AUTH_SESSION_LOGOUT_URL -ne "$containerAuthority/_arkret/gate/account/auth-sessions/logout") {
+        $loopbackDocker.SOLAND_SESSION_GRANT_INTROSPECTION_URL -ne "$containerAuthority/_coauth/internal/session-grants/introspect" -or
+        $loopbackDocker.SOLAND_AUTH_SESSION_LOGOUT_URL -ne "$containerAuthority/_coauth/internal/auth-sessions/logout") {
         throw "Docker internal bearer endpoints must share the container-reachable Account Authority origin"
     }
 

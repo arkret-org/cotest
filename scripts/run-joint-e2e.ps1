@@ -2698,11 +2698,21 @@ function Write-ManagedServiceFailureReport {
 function Stop-ProcessTree {
     param([Parameter(Mandatory = $true)][int]$ProcessId)
 
-    $children = Get-CimInstance Win32_Process -Filter "ParentProcessId = $ProcessId" -ErrorAction SilentlyContinue
+    $children = if ($IsWindows) {
+        @(Get-CimInstance Win32_Process -Filter "ParentProcessId = $ProcessId" -ErrorAction SilentlyContinue)
+    } else {
+        @(& ps -eo pid=,ppid= | ForEach-Object {
+            $parts = ($_ -split '\s+' | Where-Object { $_ })
+            if ($parts.Count -ge 2 -and [int]$parts[1] -eq $ProcessId) {
+                [pscustomobject]@{ ProcessId = [int]$parts[0] }
+            }
+        })
+    }
     foreach ($child in $children) {
         Stop-ProcessTree -ProcessId $child.ProcessId
     }
     Stop-Process -Id $ProcessId -Force -ErrorAction SilentlyContinue
+    try { Wait-Process -Id $ProcessId -Timeout 20 -ErrorAction SilentlyContinue } catch {}
 }
 
 function Open-ExclusiveRunnerLock {
@@ -4285,8 +4295,8 @@ try {
             # must therefore be rewritten for all three values, not only the
             # operation URLs, or the origin check correctly fails closed.
             $map.SOLAND_ACCOUNT_AUTHORITY_URL = $coauthContainer
-            $map.SOLAND_SESSION_GRANT_INTROSPECTION_URL = "$coauthContainer/_arkret/gate/account/session-grants/introspect"
-            $map.SOLAND_AUTH_SESSION_LOGOUT_URL = "$coauthContainer/_arkret/gate/account/auth-sessions/logout"
+            $map.SOLAND_SESSION_GRANT_INTROSPECTION_URL = "$coauthContainer/_coauth/internal/session-grants/introspect"
+            $map.SOLAND_AUTH_SESSION_LOGOUT_URL = "$coauthContainer/_coauth/internal/auth-sessions/logout"
             $map.SOLAND_INTERNAL_AUTHORITY_SHARED_SECRET = $InternalAuthoritySharedSecret
             $map.SOLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN = "ak:trust_domain:local.host"
             $map.SOLAND_OAUTH_CLIENT_ID = $CoauthOAuthClientId
@@ -4352,8 +4362,8 @@ try {
         if ($AccountAuthorityBaseUrl) {
             $coauthTrimmed = $AccountAuthorityBaseUrl.TrimEnd("/")
             $values.SOLAND_ACCOUNT_AUTHORITY_URL = $coauthTrimmed
-            $values.SOLAND_SESSION_GRANT_INTROSPECTION_URL = "$coauthTrimmed/_arkret/gate/account/session-grants/introspect"
-            $values.SOLAND_AUTH_SESSION_LOGOUT_URL = "$coauthTrimmed/_arkret/gate/account/auth-sessions/logout"
+            $values.SOLAND_SESSION_GRANT_INTROSPECTION_URL = "$coauthTrimmed/_coauth/internal/session-grants/introspect"
+            $values.SOLAND_AUTH_SESSION_LOGOUT_URL = "$coauthTrimmed/_coauth/internal/auth-sessions/logout"
             $values.SOLAND_INTERNAL_AUTHORITY_SHARED_SECRET = $InternalAuthoritySharedSecret
             $values.SOLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN = "ak:trust_domain:local.host"
             $values.SOLAND_OAUTH_CLIENT_ID = $CoauthOAuthClientId
@@ -6214,7 +6224,7 @@ $summary = [pscustomobject]@{
     teabay_service_id = if ($TeabayBaseUrl) { $TeabayServiceId } else { $null }
     teabay_database_url = if ($TeabayBaseUrl) { $TeabayDatabaseUrl } else { $null }
     coauth_server1_oauth_introspection_url = if ($CoauthBaseUrl) { "$($CoauthBaseUrl.TrimEnd('/'))/oauth/introspect" } else { $null }
-    coauth_server1_session_grant_introspection_url = if ($CoauthBaseUrl) { "$($CoauthBaseUrl.TrimEnd('/'))/_arkret/gate/account/session-grants/introspect" } else { $null }
+    coauth_server1_session_grant_introspection_url = if ($CoauthBaseUrl) { "$($CoauthBaseUrl.TrimEnd('/'))/_coauth/internal/session-grants/introspect" } else { $null }
     screenshots = $screenshotDir
     visual_baselines = $visualBaselineDir
     diagnostics = Join-Path $jointDir "diagnostics"
