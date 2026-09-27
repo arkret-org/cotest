@@ -2343,7 +2343,7 @@ export async function readCommitStreamHeadApi(
 ): Promise<CommitStreamHead | undefined> {
   const streamRef = opts.streamRef ?? { kind: "realm", realm_id: realmId };
   const url = `${solandBaseUrl(opts.server)}/_arkret/self/streams/scan`;
-  let afterPosition = -1;
+  let afterPosition: number | null = null;
   let head: CommitStreamHead | undefined;
   for (;;) {
     const response = await request.post(url, {
@@ -2359,10 +2359,11 @@ export async function readCommitStreamHeadApi(
       }),
     });
     const body = await expectJsonOk<{
-      commits?: Array<{ commit: CommitStreamHead & { stream_position: number } }>;
-      truncated?: boolean;
+      committed_events: Array<{ commit: CommitStreamHead & { stream_position: number } }>;
+      truncated: boolean;
     }>(response, `scan commit stream for ${realmId}`);
-    const commits = body.commits ?? [];
+    const commits = body.committed_events;
+    expect(Array.isArray(commits), "stream scan must return committed_events").toBeTruthy();
     if (commits.length === 0) return head;
     const last = commits[commits.length - 1]!.commit;
     head = {
