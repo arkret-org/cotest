@@ -29,7 +29,7 @@ import {
   assertJointStackNotRequired,
   createDpopUserSession,
   ensureRegistered,
-  issueDevSession,
+  issueUserSession,
   pairAcceptedSiblingDevice,
   uniqueUser,
 } from "../../helpers/users";
@@ -54,11 +54,10 @@ test.describe("private read marker", () => {
       request,
       "s11-prm-baseline",
     );
-    const auth = { authorization: `Bearer ${aliceToken}` };
 
     const before = await request.get(
       `${solandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`,
-      { headers: auth },
+      { headers: authHeaders(aliceToken, "GET", `${solandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`) },
     );
     expect(before.status()).toBe(200);
     const beforeBody = await before.json();
@@ -85,7 +84,7 @@ test.describe("private read marker", () => {
 
     const after = await request.get(
       `${solandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`,
-      { headers: auth },
+      { headers: authHeaders(aliceToken, "GET", `${solandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`) },
     );
     expect(after.status()).toBe(200);
     const afterBody = await after.json();
@@ -111,13 +110,11 @@ test.describe("private read marker", () => {
     } = await readCursorFixture(request, `s11-prm-alice-${stamp}`);
     const bob = uniqueUser(`s11-prm-bob-${stamp}`);
     await ensureRegistered(request, bob);
-    const bobToken = await issueDevSession(request, bob);
-    const aliceAuth = { authorization: `Bearer ${aliceToken}` };
-    const bobAuth = { authorization: `Bearer ${bobToken}` };
+    const bobToken = await issueUserSession(request, bob);
 
     const bobBefore = await request.get(
       `${solandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`,
-      { headers: bobAuth },
+      { headers: authHeaders(bobToken, "GET", `${solandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`) },
     );
     expect(bobBefore.status()).toBe(200);
     expect((await bobBefore.json()).markers).toEqual([]);
@@ -137,7 +134,7 @@ test.describe("private read marker", () => {
 
     const aliceAfter = await request.get(
       `${solandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`,
-      { headers: aliceAuth },
+      { headers: authHeaders(aliceToken, "GET", `${solandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`) },
     );
     expect(aliceAfter.status()).toBe(200);
     const aliceAfterBody = await aliceAfter.json();
@@ -150,7 +147,7 @@ test.describe("private read marker", () => {
 
     const bobAfter = await request.get(
       `${solandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`,
-      { headers: bobAuth },
+      { headers: authHeaders(bobToken, "GET", `${solandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`) },
     );
     expect(bobAfter.status()).toBe(200);
     const bobAfterBody = await bobAfter.json();
@@ -179,8 +176,8 @@ test.describe("private read marker", () => {
     const alice = session.user;
     const device1 = alice.deviceId;
     const device2 = await pairAcceptedSiblingDevice(browser, request, session);
-    const token1 = await issueDevSession(request, alice, { deviceId: device1 });
-    const token2 = await issueDevSession(request, alice, { deviceId: device2 });
+    const token1 = await issueUserSession(request, alice, { deviceId: device1 });
+    const token2 = await issueUserSession(request, alice, { deviceId: device2 });
 
     const realmId = await createRealmApi(request, token1, {
       title: `read cursor xdev ${stamp}`,
@@ -238,7 +235,7 @@ test.describe("private read marker", () => {
     for (const token of [token1, token2]) {
       const list = await request.get(
         `${solandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`,
-        { headers: { authorization: `Bearer ${token}` } },
+        { headers: authHeaders(token, "GET", `${solandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`) },
       );
       expect(list.status()).toBe(200);
       const realmMarkers = (await list.json()).markers.filter(
@@ -267,8 +264,8 @@ test.describe("private read marker", () => {
     const alice = session.user;
     const device1 = alice.deviceId;
     const device2 = await pairAcceptedSiblingDevice(browser, request, session);
-    const token1 = await issueDevSession(request, alice, { deviceId: device1 });
-    const token2 = await issueDevSession(request, alice, { deviceId: device2 });
+    const token1 = await issueUserSession(request, alice, { deviceId: device1 });
+    const token2 = await issueUserSession(request, alice, { deviceId: device2 });
 
     const realmId = await createRealmApi(request, token1, {
       title: `read cursor ec ${stamp}`,
@@ -305,7 +302,7 @@ test.describe("private read marker", () => {
 
     const list = await request.get(
       `${solandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`,
-      { headers: { authorization: `Bearer ${token2}` } },
+      { headers: authHeaders(token2, "GET", `${solandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`) },
     );
     expect(list.status()).toBe(200);
     const realmMarkers = (await list.json()).markers.filter(
@@ -324,8 +321,8 @@ test.describe("private read marker", () => {
     const bob = uniqueUser(`s11-prm-e2ee-bob-${stamp}`);
     await ensureRegistered(request, alice);
     await ensureRegistered(request, bob);
-    const aliceToken = await issueDevSession(request, alice);
-    const bobToken = await issueDevSession(request, bob);
+    const aliceToken = await issueUserSession(request, alice);
+    const bobToken = await issueUserSession(request, bob);
 
     // E2EE Realm (per_realm_mls encryption locus): bob is a member.
     const realmId = await createRealmApi(request, bobToken, {
@@ -370,8 +367,7 @@ test.describe("private read marker", () => {
     const stamp = Date.now();
     const alice = uniqueUser(`s11-prm-circle-${stamp}`);
     await ensureRegistered(request, alice);
-    const aliceToken = await issueDevSession(request, alice);
-    const auth = { authorization: `Bearer ${aliceToken}` };
+    const aliceToken = await issueUserSession(request, alice);
 
     const realmId = await createRealmApi(request, aliceToken, {
       title: `read cursor circle ${stamp}`,
@@ -425,7 +421,7 @@ test.describe("private read marker", () => {
     // Circle marker MUST NOT pollute the Realm-default marker and vice versa.
     const list = await request.get(
       `${solandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`,
-      { headers: auth },
+      { headers: authHeaders(aliceToken, "GET", `${solandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`) },
     );
     expect(list.status()).toBe(200);
     const markers = (await list.json()).markers as Array<{
@@ -454,7 +450,7 @@ async function readCursorFixture(
   const stamp = Date.now();
   const alice = uniqueUser(label);
   await ensureRegistered(request, alice);
-  const aliceToken = await issueDevSession(request, alice);
+  const aliceToken = await issueUserSession(request, alice);
   const realmId = await createRealmApi(request, aliceToken, {
     title: `read cursor ${stamp}`,
     discoverability: "listed",

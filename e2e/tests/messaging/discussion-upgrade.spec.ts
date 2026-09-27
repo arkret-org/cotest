@@ -28,7 +28,7 @@ import {
 } from "../../helpers/soland-api";
 import {
   ensureRegistered,
-  issueDevSession,
+  issueUserSession,
   type JointUser,
   uniqueUser,
 } from "../../helpers/users";
@@ -151,8 +151,8 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
       ensureRegistered(request, carol),
     ]);
     const [aliceToken, carolToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, carol),
+      issueUserSession(request, alice),
+      issueUserSession(request, carol),
     ]);
     const realmId = await createSharedRealmViaApi(
       request,
@@ -509,7 +509,7 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
       `${solandBaseUrl()}/_arkret/self/events`,
       {
         headers: {
-          ...authHeaders(fixture.aliceToken),
+          ...authHeaders(fixture.aliceToken, "POST", `${solandBaseUrl()}/_arkret/self/events`),
           "content-type": "application/json",
         },
         data: canonicalJson({ event: envelope }),

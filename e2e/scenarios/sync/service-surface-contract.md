@@ -47,7 +47,7 @@
 ## Pre-conditions
 
 - `alice` 已通过 `ensureRegistered` 在 soland 注册
-- `alice` 通过 `issueDevSession` 拿到 soland dev session token(coauth bearer 通常不必,因为 describe 是无认证 GET;但写路径需要 alice 的 soland token)
+- `alice` 通过 `issueUserSession` 保留 canonical 注册得到的 Standard grant；认证请求需要匹配的 DPoP，describe 是无认证 GET。
 - soland 的 `claimed_profiles` 至少含 `ak.profile.core_event_store.v1`(由 `soland/src/wire.rs` 默认写入)
 - coauth 的认证方法与 Account Authority 元数据由 Station describe 公布；coauth 本身没有公共 profile
 - `development_mode=true` 时，Station 的 `verified_profiles` MUST 为空数组(spec §3.0 第 2 条)
@@ -167,7 +167,7 @@
 - **event_id 幂等已 live**:soland 当前依赖 `event_id` 幂等(spec §4.2);同 envelope replay 与同 `event_id` drift conflict 已由 Phase D0 覆盖
 - **Idempotency-Key header 已在 events write live**:Phase D 覆盖 `POST /_arkret/self/events` 的同键同 body replay 与同键不同 body `duplicate_conflict`;其它 write endpoint 的一致性可另开场景
 - **`unsupported_feature` 触发条件已 live**:Phase E 通过 `Event.requirements.features[]` 注入未声明 feature,Phase E2 通过 `requirements.critical_extensions[]` 注入 fail-closed extension,断言 soland 在 envelope validation 阶段返回 `unsupported_feature`
-- **no new helper**:用现有 `request` fixture + `ensureRegistered` / `issueDevSession` + `solandBaseUrl()` / `coauthBaseUrl()`;不要新增 helper
+- **no new helper**：用现有 `request` fixture + `ensureRegistered` / `issueUserSession` + `solandBaseUrl()` / `coauthBaseUrl()`；不要新增 helper。
 
 ## 总耗时预估
 

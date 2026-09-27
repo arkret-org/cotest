@@ -1,3 +1,4 @@
+import { authHeaders } from "../../helpers/soland-api";
 // Account recovery
 // Contract: e2e/scenarios/identity/recovery.md
 // Spec refs:
@@ -13,7 +14,7 @@ import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
 import { accountActorId, canonicalJson } from "../../helpers/soland-api";
 import {
   ensureRegistered,
-  issueDevSession,
+  issueUserSession,
   openDpopUserPage,
   selfPathHeadersForDpopSession,
   uniqueUser,
@@ -131,7 +132,7 @@ async function putBackup(
     `${solandBaseUrl()}/_arkret/self/keys/backups/${encodeURIComponent(backupId)}`,
     {
       headers: {
-        authorization: `Bearer ${token}`,
+        ...authHeaders(token, "PUT", `${solandBaseUrl()}/_arkret/self/keys/backups/${encodeURIComponent(backupId)}`),
         "content-type": "application/json",
         "idempotency-key": `cotest-key-backup-${backupId}`,
       },
@@ -146,12 +147,12 @@ test.describe("account recovery", () => {
   }) => {
     const alice = uniqueUser("s8-probe");
     await ensureRegistered(request, alice);
-    const token = await issueDevSession(request, alice);
+    const token = await issueUserSession(request, alice);
 
     const backupsResp = await request.get(
       `${solandBaseUrl()}/_arkret/self/keys/backups?backup_kind=secret_storage`,
       {
-        headers: { authorization: `Bearer ${token}` },
+        headers: authHeaders(token, "GET", `${solandBaseUrl()}/_arkret/self/keys/backups?backup_kind=secret_storage`),
       },
     );
     expect(backupsResp.status()).toBe(200);
@@ -285,13 +286,13 @@ test.describe("account recovery", () => {
     // absent policy.
     const alice = uniqueUser("recovery-e8-5");
     await ensureRegistered(request, alice);
-    const token = await issueDevSession(request, alice);
+    const token = await issueUserSession(request, alice);
 
     // The recovery-policy GET surface MUST be routed and MUST report null
     // active policy for a brand-new principal (fail-closed default, §7.11).
     const policyUrl = `${solandBaseUrl()}/_arkret/root/identity/recovery-policy`;
     const getResp = await request.get(policyUrl, {
-      headers: { authorization: `Bearer ${token}` },
+      headers: authHeaders(token, "GET", policyUrl),
     });
     expect(
       [200, 401, 403].includes(getResp.status()),
@@ -317,7 +318,7 @@ test.describe("account recovery", () => {
     //       KDF is rejected as schema_violation regardless of profile.
     const alice = uniqueUser("recovery-e8-6");
     await ensureRegistered(request, alice);
-    const token = await issueDevSession(request, alice);
+    const token = await issueUserSession(request, alice);
 
     // mixed_secret_storage=true with a weak Argon2id floor is rejected.
     const weakMixed = secretStorageEnvelope({

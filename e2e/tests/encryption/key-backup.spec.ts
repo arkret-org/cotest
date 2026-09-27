@@ -1,3 +1,4 @@
+import { authHeaders } from "../../helpers/soland-api";
 // Key backup + restore
 // Contract: e2e/scenarios/encryption/key-backup.md
 // Spec refs:
@@ -26,7 +27,7 @@ import {
   ensureRegistered,
   assertJointStackNotRequired,
   createDpopUserSessionForAccount,
-  issueDevSession,
+  issueUserSession,
   openUserPage,
   selfPathHeadersForDpopSession,
   type DpopUserSession,
@@ -53,7 +54,7 @@ test.describe("key backup + restore", () => {
   }) => {
     const alice = uniqueUser("s13-alice");
     await ensureRegistered(request, alice);
-    const aliceToken = await issueDevSession(request, alice);
+    const aliceToken = await issueUserSession(request, alice);
     const alicePage = await openUserPage(browser, alice, {
       sessionCredential: aliceToken,
     });
@@ -63,7 +64,7 @@ test.describe("key backup + restore", () => {
       const listResp = await request.get(
         `${solandBaseUrl()}/_arkret/self/keys/backups`,
         {
-          headers: { authorization: `Bearer ${aliceToken}` },
+          headers: authHeaders(aliceToken, "GET", `${solandBaseUrl()}/_arkret/self/keys/backups`),
         },
       );
       // If routed, body must be JSON; backups array (possibly empty).

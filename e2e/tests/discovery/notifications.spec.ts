@@ -21,7 +21,7 @@ import {
   approvePairingLinkOnAuthorizedDevice,
   assertJointStackNotRequired,
   ensureRegistered,
-  issueDevSession,
+  issueUserSession,
   openDpopUserPage,
   openDpopUserPageForAccount,
   openUserPage,
@@ -69,8 +69,8 @@ test.describe("notifications", () => {
       });
       await bobPage.acceptInvite(realmId);
       const [aliceToken, bobToken] = await Promise.all([
-        issueDevSession(request, alice),
-        issueDevSession(request, bob),
+        issueUserSession(request, alice),
+        issueUserSession(request, bob),
       ]);
       // Membership alone grants Bob no baseline `ak.strand.create`
       // capability. Let the Realm authority-root controller establish the
@@ -153,7 +153,7 @@ test.describe("notifications", () => {
         seedMembers: [bob.id],
       });
       await bobPage.acceptInvite(realmId);
-      const aliceToken = await issueDevSession(request, aliceSession.user);
+      const aliceToken = await issueUserSession(request, aliceSession.user);
       await resolveDefaultStrandId(request, aliceToken, realmId, {
         authorityRootController: aliceSession.user.id,
       });
@@ -252,7 +252,7 @@ test.describe("notifications", () => {
     const alicePage = aliceSession.page;
     const bob = bobDeviceASession.user;
     const bobDeviceA = bobDeviceASession.page;
-    const aliceToken = await issueDevSession(request, alice);
+    const aliceToken = await issueUserSession(request, alice);
     const suppressedSuffix = `DND suppressed ${stamp}`;
     const resumedSuffix = `DND resumed ${stamp}`;
     const apiActorSeq = 8_000_000_000_000_000 + (stamp % 100_000);
@@ -382,8 +382,8 @@ test.describe("notifications", () => {
     const bob = bobSession.user;
     await ensureRegistered(request, alice);
     const [aliceToken, bobToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
+      issueUserSession(request, alice),
+      issueUserSession(request, bob),
     ]);
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S23 Mark Read ${stamp}`,
@@ -440,8 +440,8 @@ test.describe("notifications", () => {
       ensureRegistered(request, bob),
     ]);
     const [aliceToken, bobToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
+      issueUserSession(request, alice),
+      issueUserSession(request, bob),
     ]);
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S23 E2EE Blind Wake ${stamp}`,
@@ -536,7 +536,7 @@ test.describe("notifications", () => {
     }
     const bob = bobDevice1Session.user;
     await ensureRegistered(request, alice);
-    const aliceToken = await issueDevSession(request, alice);
+    const aliceToken = await issueUserSession(request, alice);
     const bobDevice1 = bobDevice1Session.page;
     const bobDevice2Page = await openUserPage(
       browser,

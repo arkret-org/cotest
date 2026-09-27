@@ -22,7 +22,7 @@ import {
 import {
   assertJointStackNotRequired,
   ensureRegistered,
-  issueDevSession,
+  issueUserSession,
   openDpopUserPage,
   openUserPage,
   selfPathHeadersForDpopSession,
@@ -174,7 +174,7 @@ test.describe("workflow: incident response", () => {
     const stamp = Date.now();
     const oncall = uniqueUser("wf-incident-lifecycle");
     await ensureRegistered(request, oncall);
-    const token = await issueDevSession(request, oncall);
+    const token = await issueUserSession(request, oncall);
     const realmId = await createRealmApi(request, token, {
       title: `SEV lifecycle ${stamp}`,
       ownerId: oncall.id,

@@ -18,7 +18,7 @@ import {
 } from "../../helpers/soland-api";
 import {
   ensureRegistered,
-  issueDevSession,
+  issueUserSession,
   uniqueUser,
 } from "../../helpers/users";
 
@@ -85,9 +85,9 @@ async function setupEncryptedMessage(
     ensureRegistered(request, reporter),
   ]);
   const [aliceToken, bobToken, reporterToken] = await Promise.all([
-    issueDevSession(request, alice),
-    issueDevSession(request, bob),
-    issueDevSession(request, reporter),
+    issueUserSession(request, alice),
+    issueUserSession(request, bob),
+    issueUserSession(request, reporter),
   ]);
 
   const realmId = await createRealmApi(request, aliceToken, {
@@ -221,7 +221,7 @@ async function queryAuditEvents(
 ): Promise<Array<Record<string, unknown>>> {
   const response = await request.get(
     `${solandBaseUrl()}/_soland/admin/audit/events?realm_id=${encodeURIComponent(realmId)}&kind=${encodeURIComponent(kind)}`,
-    { headers: authHeaders(token) },
+    { headers: authHeaders(token, "GET", `${solandBaseUrl()}/_soland/admin/audit/events?realm_id=${encodeURIComponent(realmId)}&kind=${encodeURIComponent(kind)}`) },
   );
   const text = await response.text();
   expect(response.ok(), text).toBeTruthy();
@@ -235,7 +235,7 @@ async function queryActorAuditEvents(
 ): Promise<Array<Record<string, unknown>>> {
   const response = await request.get(
     `${solandBaseUrl()}/_soland/admin/audit/events?kind=${encodeURIComponent(kind)}`,
-    { headers: authHeaders(token) },
+    { headers: authHeaders(token, "GET", `${solandBaseUrl()}/_soland/admin/audit/events?kind=${encodeURIComponent(kind)}`) },
   );
   const text = await response.text();
   expect(response.ok(), text).toBeTruthy();

@@ -41,7 +41,7 @@ import {
 import {
   assertJointStackNotRequired,
   ensureRegistered,
-  issueDevSession,
+  issueUserSession,
   openDpopUserPage,
   openUserPage,
   selfPathHeadersForDpopSession,
@@ -266,7 +266,7 @@ test.describe("core object invariants", () => {
     const stamp = Date.now();
     const alice = uniqueUser(`s-coinv-b-${stamp}`);
     await ensureRegistered(request, alice);
-    const aliceToken = await issueDevSession(request, alice);
+    const aliceToken = await issueUserSession(request, alice);
     const realmId = await createRealmApi(request, aliceToken, {
       title: `core-invariants B ${stamp}`,
       ownerId: alice.id,
@@ -334,7 +334,7 @@ test.describe("core object invariants", () => {
     const staleMove = await request.post(
       `${solandBaseUrl()}/_arkret/self/events`,
       {
-        headers: authHeaders(aliceToken),
+        headers: authHeaders(aliceToken, "POST", `${solandBaseUrl()}/_arkret/self/events`),
         data: { event: staleMoveEnvelope },
       },
     );
@@ -381,7 +381,7 @@ test.describe("core object invariants", () => {
     const stamp = Date.now();
     const alice = uniqueUser(`s-coinv-c-${stamp}`);
     await ensureRegistered(request, alice);
-    const aliceToken = await issueDevSession(request, alice);
+    const aliceToken = await issueUserSession(request, alice);
     const realmId = await createRealmApi(request, aliceToken, {
       title: `core-invariants C ${stamp}`,
       ownerId: alice.id,
@@ -417,7 +417,7 @@ test.describe("core object invariants", () => {
     const archiveRes = await request.post(
       `${solandBaseUrl()}/_arkret/self/events`,
       {
-        headers: authHeaders(aliceToken),
+        headers: authHeaders(aliceToken, "POST", `${solandBaseUrl()}/_arkret/self/events`),
         data: { event: signedEventEnvelope({
           actorId: alice.id,
           realmId,
@@ -433,7 +433,7 @@ test.describe("core object invariants", () => {
     const tombFail = await request.post(
       `${solandBaseUrl()}/_arkret/self/events`,
       {
-        headers: authHeaders(aliceToken),
+        headers: authHeaders(aliceToken, "POST", `${solandBaseUrl()}/_arkret/self/events`),
         data: { event: signedEventEnvelope({
           actorId: alice.id,
           realmId,
@@ -463,7 +463,7 @@ test.describe("core object invariants", () => {
     const stamp = Date.now();
     const alice = uniqueUser(`s-coinv-d-${stamp}`);
     await ensureRegistered(request, alice);
-    const aliceToken = await issueDevSession(request, alice);
+    const aliceToken = await issueUserSession(request, alice);
     const realmId = await createRealmApi(request, aliceToken, {
       title: `core-invariants D ${stamp}`,
       ownerId: alice.id,
@@ -517,7 +517,7 @@ test.describe("core object invariants", () => {
 
     const activeEdges = await request.get(
       `${solandBaseUrl()}/_soland/self/relations?from_ref=${encodeURIComponent(sourceRef)}&relation_kind=has_default_view&state=active`,
-      { headers: authHeaders(aliceToken) },
+      { headers: authHeaders(aliceToken, "GET", `${solandBaseUrl()}/_soland/self/relations?from_ref=${encodeURIComponent(sourceRef)}&relation_kind=has_default_view&state=active`) },
     );
     expect(activeEdges.ok()).toBeTruthy();
     const edgesBody = await activeEdges.json();

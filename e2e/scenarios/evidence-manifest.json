@@ -35,7 +35,7 @@
       ],
       "mocks": [],
       "identity_establishment": [
-        "session_injection"
+        "fixture_or_not_applicable"
       ],
       "protocol_object_producers": [
         "cotest_wire_oracle",
@@ -43,12 +43,10 @@
       ],
       "declared_test_bypasses": [
         "raw_http_fixture_or_oracle",
-        "session_injection",
         "test_only_signer_or_wire_builder"
       ],
       "claims_excluded": [
         "product_protocol_object_generation",
-        "registration_login_authorization",
         "ui_driven_business_flow_for_raw_http_steps"
       ]
     },
@@ -127,7 +125,7 @@
       ],
       "mocks": [],
       "identity_establishment": [
-        "session_injection"
+        "fixture_or_not_applicable"
       ],
       "protocol_object_producers": [
         "cotest_wire_oracle",
@@ -135,12 +133,10 @@
       ],
       "declared_test_bypasses": [
         "raw_http_fixture_or_oracle",
-        "session_injection",
         "test_only_signer_or_wire_builder"
       ],
       "claims_excluded": [
         "product_protocol_object_generation",
-        "registration_login_authorization",
         "ui_driven_business_flow_for_raw_http_steps"
       ]
     },
@@ -211,18 +207,16 @@
       ],
       "mocks": [],
       "identity_establishment": [
-        "session_injection"
+        "fixture_or_not_applicable"
       ],
       "protocol_object_producers": [
         "cotest_wire_oracle",
         "raw_http_fixture"
       ],
       "declared_test_bypasses": [
-        "raw_http_fixture_or_oracle",
-        "session_injection"
+        "raw_http_fixture_or_oracle"
       ],
       "claims_excluded": [
-        "registration_login_authorization",
         "ui_driven_business_flow_for_raw_http_steps"
       ]
     },
@@ -353,18 +347,16 @@
       ],
       "mocks": [],
       "identity_establishment": [
-        "session_injection"
+        "fixture_or_not_applicable"
       ],
       "protocol_object_producers": [
         "cotest_wire_oracle",
         "raw_http_fixture"
       ],
       "declared_test_bypasses": [
-        "raw_http_fixture_or_oracle",
-        "session_injection"
+        "raw_http_fixture_or_oracle"
       ],
       "claims_excluded": [
-        "registration_login_authorization",
         "ui_driven_business_flow_for_raw_http_steps"
       ]
     },
@@ -643,17 +635,15 @@
       ],
       "mocks": [],
       "identity_establishment": [
-        "session_injection"
+        "fixture_or_not_applicable"
       ],
       "protocol_object_producers": [
         "raw_http_fixture"
       ],
       "declared_test_bypasses": [
-        "raw_http_fixture_or_oracle",
-        "session_injection"
+        "raw_http_fixture_or_oracle"
       ],
       "claims_excluded": [
-        "registration_login_authorization",
         "ui_driven_business_flow_for_raw_http_steps"
       ]
     },
@@ -808,7 +798,7 @@
       ],
       "mocks": [],
       "identity_establishment": [
-        "session_injection"
+        "fixture_or_not_applicable"
       ],
       "protocol_object_producers": [
         "cotest_wire_oracle",
@@ -816,12 +806,10 @@
       ],
       "declared_test_bypasses": [
         "raw_http_fixture_or_oracle",
-        "session_injection",
         "test_only_signer_or_wire_builder"
       ],
       "claims_excluded": [
         "product_protocol_object_generation",
-        "registration_login_authorization",
         "ui_driven_business_flow_for_raw_http_steps"
       ]
     },
@@ -837,7 +825,7 @@
         "email"
       ],
       "identity_establishment": [
-        "session_injection"
+        "fixture_or_not_applicable"
       ],
       "protocol_object_producers": [
         "cotest_wire_oracle",
@@ -845,12 +833,10 @@
       ],
       "declared_test_bypasses": [
         "raw_http_fixture_or_oracle",
-        "session_injection",
         "test_only_signer_or_wire_builder"
       ],
       "claims_excluded": [
         "product_protocol_object_generation",
-        "registration_login_authorization",
         "ui_driven_business_flow_for_raw_http_steps"
       ]
     },
@@ -1183,7 +1169,7 @@
       ],
       "mocks": [],
       "identity_establishment": [
-        "session_injection"
+        "fixture_or_not_applicable"
       ],
       "protocol_object_producers": [
         "cotest_wire_oracle",
@@ -1191,12 +1177,10 @@
       ],
       "declared_test_bypasses": [
         "raw_http_fixture_or_oracle",
-        "session_injection",
         "test_only_signer_or_wire_builder"
       ],
       "claims_excluded": [
         "product_protocol_object_generation",
-        "registration_login_authorization",
         "ui_driven_business_flow_for_raw_http_steps"
       ]
     },
@@ -1493,7 +1477,7 @@
       ],
       "mocks": [],
       "identity_establishment": [
-        "session_injection"
+        "fixture_or_not_applicable"
       ],
       "protocol_object_producers": [
         "cotest_wire_oracle",
@@ -1501,12 +1485,10 @@
       ],
       "declared_test_bypasses": [
         "raw_http_fixture_or_oracle",
-        "session_injection",
         "test_only_signer_or_wire_builder"
       ],
       "claims_excluded": [
         "product_protocol_object_generation",
-        "registration_login_authorization",
         "ui_driven_business_flow_for_raw_http_steps"
       ]
     },
@@ -1520,17 +1502,15 @@
       ],
       "mocks": [],
       "identity_establishment": [
-        "session_injection"
+        "fixture_or_not_applicable"
       ],
       "protocol_object_producers": [
         "raw_http_fixture"
       ],
       "declared_test_bypasses": [
-        "raw_http_fixture_or_oracle",
-        "session_injection"
+        "raw_http_fixture_or_oracle"
       ],
       "claims_excluded": [
-        "registration_login_authorization",
         "ui_driven_business_flow_for_raw_http_steps"
       ]
     },

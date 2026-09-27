@@ -30,7 +30,7 @@ import {
   solandServiceId,
 } from "../../helpers/env";
 import { registerCoauthPasswordAccount } from "../../helpers/coauth-register";
-import { ensureRegistered, issueDevSession, uniqueUser } from "../../helpers/users";
+import { ensureRegistered, issueUserSession, uniqueUser } from "../../helpers/users";
 import {
   mintDpopProof,
   type DpopBoundGrant,
@@ -164,20 +164,20 @@ test.describe("OIDC login chain (server-side discovery + DPoP)", () => {
     );
   });
 
-  test("3. a dev-login bearer cannot replace SessionGrant plus DPoP on a recovery read", async ({
+  test("3. a Standard grant without DPoP is rejected on a recovery read", async ({
     request,
   }) => {
     // service-http-binding section 2: recovery reads require a SessionGrant
-    // and matching DPoP even when the deployment enables ordinary dev login.
+    // and matching DPoP for the accepted holder.
     const alice = uniqueUser("oidc-chain-devbearer");
     await ensureRegistered(request, alice);
-    const token = await issueDevSession(request, alice);
+    const token = await issueUserSession(request, alice);
 
     const response = await request.get(recoveryPolicyUrl(), {
       headers: { authorization: `Bearer ${token}` },
     });
     const body = await response.text();
-    expect(response.status(), `dev-bearer recovery-policy returned ${response.status()}: ${body}`).toBe(401);
+    expect(response.status(), `bare Standard grant recovery-policy returned ${response.status()}: ${body}`).toBe(401);
     expect(JSON.parse(body).type).toBe("https://arkret.org/problems/unauthenticated");
   });
 });

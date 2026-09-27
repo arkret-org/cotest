@@ -28,7 +28,7 @@ import {
 } from "../../helpers/soland-api";
 import {
   ensureRegistered,
-  issueDevSession,
+  issueUserSession,
   uniqueUser,
   type JointUser,
 } from "../../helpers/users";
@@ -197,7 +197,7 @@ async function createThreeServerRealm(
   ];
   for (const participant of participants) {
     await ensureRegistered(request, participant.user, { server: participant.server });
-    participant.token = await issueDevSession(request, participant.user, {
+    participant.token = await issueUserSession(request, participant.user, {
       server: participant.server,
     });
   }
@@ -239,7 +239,7 @@ async function createThreeServerRealm(
     const views = await Promise.all(participants.map(async (participant) => {
       const response = await request.get(
         `${solandBaseUrl(participant.server)}/_arkret/self/realms/${encodeURIComponent(realmId)}`,
-        { headers: { authorization: `Bearer ${participant.token}` } },
+        { headers: authHeaders(participant.token, "GET", `${solandBaseUrl(participant.server)}/_arkret/self/realms/${encodeURIComponent(realmId)}`) },
       );
       return response.ok() ? JSON.stringify(await response.json()) : "";
     }));

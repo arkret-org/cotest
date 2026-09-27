@@ -5,7 +5,7 @@ import {
 } from "./api";
 import {
   ensureRegistered,
-  issueDevSession,
+  issueUserSession,
   type JointUser,
   uniqueUser,
 } from "./users";
@@ -34,8 +34,8 @@ export async function createTwoUserMessagingRealm(
     ensureRegistered(request, bob),
   ]);
   const [aliceToken, bobToken] = await Promise.all([
-    issueDevSession(request, alice),
-    issueDevSession(request, bob),
+    issueUserSession(request, alice),
+    issueUserSession(request, bob),
   ]);
 
   const owner = opts.owner ?? "alice";

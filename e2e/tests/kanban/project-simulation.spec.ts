@@ -31,7 +31,7 @@ import { acceptInviteViaApi } from "../../helpers/api";
 import {
   assertJointStackNotRequired,
   ensureRegistered,
-  issueDevSession,
+  issueUserSession,
   openDpopUserPage,
   uniqueUser,
 } from "../../helpers/users";
@@ -103,7 +103,7 @@ async function readStrandRow(
     url.searchParams.set("include_terminal", "true");
   }
   const response = await request.get(url.toString(), {
-    headers: authHeaders(token),
+    headers: authHeaders(token, "GET", url.toString()),
   });
   expect(
     response.ok(),
@@ -125,7 +125,7 @@ async function readSpaceRow(
 ): Promise<SpaceProjectionRow | undefined> {
   const response = await request.get(
     `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/spaces?include_terminal=true`,
-    { headers: authHeaders(token) },
+    { headers: authHeaders(token, "GET", `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/spaces?include_terminal=true`) },
   );
   expect(
     response.ok(),
@@ -319,8 +319,8 @@ test.describe("project simulation", () => {
       ensureRegistered(request, alice),
       ensureRegistered(request, bob),
     ]);
-    const aliceToken = await issueDevSession(request, alice);
-    const bobToken = await issueDevSession(request, bob);
+    const aliceToken = await issueUserSession(request, alice);
+    const bobToken = await issueUserSession(request, bob);
 
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S16 Assign ${stamp}`,
@@ -386,7 +386,7 @@ test.describe("project simulation", () => {
   }) => {
     const alice = uniqueUser("s16-transition-alice");
     await ensureRegistered(request, alice);
-    const aliceToken = await issueDevSession(request, alice);
+    const aliceToken = await issueUserSession(request, alice);
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S16 transition ${Date.now()}`,
       ownerId: alice.id,
@@ -464,7 +464,7 @@ test.describe("project simulation", () => {
     const forbiddenStatus = await request.post(
       `${solandBaseUrl()}/_arkret/self/events`,
       {
-        headers: authHeaders(aliceToken),
+        headers: authHeaders(aliceToken, "POST", `${solandBaseUrl()}/_arkret/self/events`),
         data: { event: forbiddenStatusEvent },
       },
     );
@@ -602,7 +602,7 @@ test.describe("project simulation", () => {
       ensureRegistered(request, alice),
       ensureRegistered(request, bob),
     ]);
-    const aliceToken = await issueDevSession(request, alice);
+    const aliceToken = await issueUserSession(request, alice);
 
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S16 Conflict ${stamp}`,
@@ -684,7 +684,7 @@ test.describe("project simulation", () => {
       ensureRegistered(request, alice),
       ensureRegistered(request, bob),
     ]);
-    const aliceToken = await issueDevSession(request, alice);
+    const aliceToken = await issueUserSession(request, alice);
 
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S16 Unassign ${stamp}`,
@@ -771,7 +771,7 @@ test.describe("project simulation", () => {
     const stamp = Date.now();
     const alice = uniqueUser("s16-archive-alice");
     await ensureRegistered(request, alice);
-    const aliceToken = await issueDevSession(request, alice);
+    const aliceToken = await issueUserSession(request, alice);
 
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S16 Archive ${stamp}`,

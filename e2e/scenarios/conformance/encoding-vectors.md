@@ -159,10 +159,10 @@
 
 - **soland 缺口**:`/_arkret/_conformance/{encode,sign,hlc-merge,cursor,envelope,redact}` 端点目前**未实现**。当前 conformance 只跑在 Rust 侧 (`cotest/src/conformance/encoding.rs`、`...redaction.rs`、`...envelope.rs`) 的 integration tests,直接调内部 trait,不走 HTTP。本 e2e scenario 的价值正是要把同一组 vector 通过 HTTP 暴露出来,确保 wire-level 一致(避免内部 canonicalizer 与 HTTP layer 之间的 serializer drift)
 - **fixture loader**:spec fixture 落在 `arkret-spec/spec/v1/artifacts/fixtures/<vector_id>.json`;harness 可在测试 setup 阶段一次性读入,挂在 `test.use({ vectors: ... })` 或顶层 `beforeAll` 里。Rust 侧已有 `cotest/tests/fixtures/*.json` 的 loader 范式可参考,但 e2e 侧要重写为 TS
-- **signing key 注入**:Phase B 用的是 alice 的 dev session signing key,通过 `issueDevSession` 拿到 token 后,从 coauth 拉 actor 的 public key (`GET /_arkret/self/account/keys`) 用来本地 verify
+- **签名材料**：Phase B 使用 alice 的已接纳设备 signer 与 canonical Standard grant；公钥与设备接纳证据必须来自当前 PCR，不得通过 dev session 或虚构公钥绕过验证。
 - **cursor opacity 断言**:不要 hardcode cursor 字节格式;只断言 (a) 同输入稳定 (b) 不含明文 event_id 子串 (c) base64url decode 不报错
 - **redaction visibility 投影**:vector 里的 `expected_retained_fields_*` 是 key path 列表,断言用 `lodash.pick` / 手写 walker 把 actual / expected 都裁到同一 key 集合后 diff
-- **no new helper**:用现有 `request` fixture + `ensureRegistered` / `issueDevSession`;不要新增 `helpers/conformance.ts`,vector loader 放在 spec 文件顶部即可
+- **no new helper**：用现有 `request` fixture + `ensureRegistered` / `issueUserSession`；不要新增 `helpers/conformance.ts`，vector loader 放在 spec 文件顶部即可。
 
 ## 总耗时预估
 

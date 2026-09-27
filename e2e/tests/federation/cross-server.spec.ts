@@ -63,7 +63,7 @@ import {
   allowExplicitInviteNotifications,
   ensureRegistered,
   issueInviteLocatorToken,
-  issueDevSession,
+  issueUserSession,
   openDpopUserPage,
   openDpopUserPageFromSession,
   openUserPage,
@@ -259,7 +259,7 @@ test.describe("cross-server federation", () => {
     );
     const bob = uniqueUser(`s2-bob-${stamp}`);
     await ensureRegistered(request, bob, { server: "server2" });
-    const bobToken = await issueDevSession(request, bob, { server: "server2" });
+    const bobToken = await issueUserSession(request, bob, { server: "server2" });
     expect(aliceSession, "server1 DPoP session").toBeTruthy();
 
     const alicePageSession = await openDpopUserPageFromSession(
@@ -288,7 +288,7 @@ test.describe("cross-server federation", () => {
 
       const bobMeUrl = `${solandBaseUrl("server2")}/_soland/self/account/me`;
       const bobMeResp = await request.get(bobMeUrl, {
-        headers: { authorization: `Bearer ${bobToken}` },
+        headers: authHeaders(bobToken, "GET", bobMeUrl),
       });
       expect(bobMeResp.ok()).toBeTruthy();
       const bobMe = await bobMeResp.json();
@@ -305,7 +305,7 @@ test.describe("cross-server federation", () => {
     const stamp = Date.now();
     const bob = uniqueUser(`s2-bob-${stamp}`);
     await ensureRegistered(request, bob, { server: "server2" });
-    const bobToken = await issueDevSession(request, bob, { server: "server2" });
+    const bobToken = await issueUserSession(request, bob, { server: "server2" });
     const bobLocatorToken = await issueInviteLocatorToken(
       request,
       bobToken,
@@ -363,10 +363,10 @@ test.describe("cross-server federation", () => {
     const bob = uniqueUser(`s2-outbound-bob-${stamp}`, "server2");
     await ensureRegistered(request, alice, { server: "server1" });
     await ensureRegistered(request, bob, { server: "server2" });
-    const aliceToken = await issueDevSession(request, alice, {
+    const aliceToken = await issueUserSession(request, alice, {
       server: "server1",
     });
-    const bobToken = await issueDevSession(request, bob, { server: "server2" });
+    const bobToken = await issueUserSession(request, bob, { server: "server2" });
     const realmId = await createRealmApi(
       request,
       aliceToken,
@@ -509,7 +509,7 @@ test.describe("cross-server federation", () => {
 
     const server2Space = await request.get(
       `${solandBaseUrl("server2")}/_arkret/self/realms/${encodeURIComponent(invite!.realm_id)}`,
-      { headers: authHeaders(bobToken) },
+      { headers: authHeaders(bobToken, "GET", `${solandBaseUrl("server2")}/_arkret/self/realms/${encodeURIComponent(invite!.realm_id)}`) },
     );
     expect(server2Space.ok()).toBeTruthy();
     const realm = await server2Space.json() as { member_roster_entries?: Array<{ actor_id: unknown; membership: string }> };
@@ -525,7 +525,7 @@ test.describe("cross-server federation", () => {
     const stamp = Date.now();
     const bob = uniqueUser(`s2-auto-bob-${stamp}`, "server2");
     await ensureRegistered(request, bob, { server: "server2" });
-    const bobToken = await issueDevSession(request, bob, { server: "server2" });
+    const bobToken = await issueUserSession(request, bob, { server: "server2" });
     const bobLocatorToken = await issueInviteLocatorToken(
       request,
       bobToken,
@@ -663,10 +663,10 @@ test.describe("cross-server federation", () => {
     const bob = uniqueUser(`s2-backfill-bob-${stamp}`, "server2");
     await ensureRegistered(request, alice, { server: "server1" });
     await ensureRegistered(request, bob, { server: "server2" });
-    const aliceToken = await issueDevSession(request, alice, {
+    const aliceToken = await issueUserSession(request, alice, {
       server: "server1",
     });
-    const bobToken = await issueDevSession(request, bob, { server: "server2" });
+    const bobToken = await issueUserSession(request, bob, { server: "server2" });
 
     const realmId = await createRealmApi(
       request,
@@ -838,10 +838,10 @@ test.describe("cross-server federation", () => {
     const bob = uniqueUser(`s2-revoke-bob-${stamp}`, "server2");
     await ensureRegistered(request, alice, { server: "server1" });
     await ensureRegistered(request, bob, { server: "server2" });
-    const aliceToken = await issueDevSession(request, alice, {
+    const aliceToken = await issueUserSession(request, alice, {
       server: "server1",
     });
-    const bobToken = await issueDevSession(request, bob, { server: "server2" });
+    const bobToken = await issueUserSession(request, bob, { server: "server2" });
 
     // Federated Realm: bob@server2 joins so server2 is a routable delivery target on server1.
     const realmId = await createRealmApi(

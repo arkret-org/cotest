@@ -27,7 +27,7 @@ import { grantInviteConsentArkret } from "../../helpers/contact-api";
 import {
   assertJointStackNotRequired,
   ensureRegistered,
-  issueDevSession,
+  issueUserSession,
   openDpopUserPage,
   openUserPage,
   uniqueUser,
@@ -91,8 +91,8 @@ test.describe("single-server triad collaboration", () => {
     const bob = uniqueUser("triad-api-bob");
     await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
     const [aliceToken, bobToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
+      issueUserSession(request, alice),
+      issueUserSession(request, bob),
     ]);
     const realmId = await createSharedRealmViaApi(request, alice, aliceToken, bob, {
       title: `triad audit ${stamp}`,
@@ -176,9 +176,9 @@ test.describe("single-server triad collaboration", () => {
       ensureRegistered(request, carol),
     ]);
     const [aliceToken, bobToken, carolToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
-      issueDevSession(request, carol),
+      issueUserSession(request, alice),
+      issueUserSession(request, bob),
+      issueUserSession(request, carol),
     ]);
     const realmId = await createSharedRealmViaApi(request, alice, aliceToken, bob, {
       title: `triad joined ${stamp}`,
@@ -420,7 +420,7 @@ test.describe("single-server triad collaboration", () => {
       const stamp = Date.now();
       const bob = uniqueUser("s1e11-bob");
       await ensureRegistered(request, bob);
-      const bobToken = await issueDevSession(request, bob);
+      const bobToken = await issueUserSession(request, bob);
       const aliceFlow = await openDpopUserPage(
         browser,
         request,
@@ -521,8 +521,8 @@ test.describe("single-server triad collaboration", () => {
       const carol = uniqueUser("s1e12-carol");
       await ensureRegistered(request, alice);
       await ensureRegistered(request, carol);
-      const aliceToken = await issueDevSession(request, alice);
-      const carolToken = await issueDevSession(request, carol);
+      const aliceToken = await issueUserSession(request, alice);
+      const carolToken = await issueUserSession(request, carol);
 
       const preMessage = `pre-join shared message ${stamp}`;
       const realmId = await createRealmViaApi(request, aliceToken, {
@@ -566,8 +566,8 @@ test.describe("single-server triad collaboration", () => {
       const bob = uniqueUser("s1e14-bob");
       await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
       const [aliceToken, bobToken] = await Promise.all([
-        issueDevSession(request, alice),
-        issueDevSession(request, bob),
+        issueUserSession(request, alice),
+        issueUserSession(request, bob),
       ]);
       const realmId = await createSharedRealmViaApi(request, alice, aliceToken, bob, {
         title: `S1.4 Leave Rejoin ${stamp}`,
@@ -604,14 +604,14 @@ test.describe("single-server triad collaboration", () => {
 
       const realmAfterLeave = await request.get(
         `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}`,
-        { headers: authHeaders(aliceToken) },
+        { headers: authHeaders(aliceToken, "GET", `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}`) },
       );
       expect(realmAfterLeave.status()).toBe(200);
       expect(visibleMemberIds(await realmAfterLeave.json())).not.toContain(bob.id);
 
       const afterLeaveBody = `after leave rejected ${stamp}`;
       const rejected = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
-        headers: authHeaders(bobToken),
+        headers: authHeaders(bobToken, "POST", `${solandBaseUrl()}/_arkret/self/events`),
         data: { event: signedEventEnvelope({
           actorId: bob.id,
           realmId,

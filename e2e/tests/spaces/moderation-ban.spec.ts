@@ -28,7 +28,7 @@ import {
 import {
   assertJointStackNotRequired,
   ensureRegistered,
-  issueDevSession,
+  issueUserSession,
   openDpopUserPage,
   uniqueUser,
 } from "../../helpers/users";
@@ -53,10 +53,10 @@ test.describe("moderation and ban", () => {
     ]);
 
     const [aliceToken, bobToken, malloryToken, carolToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
-      issueDevSession(request, mallory),
-      issueDevSession(request, carol),
+      issueUserSession(request, alice),
+      issueUserSession(request, bob),
+      issueUserSession(request, mallory),
+      issueUserSession(request, carol),
     ]);
 
     const realmId = await createRealmApi(request, aliceToken, {
@@ -128,25 +128,25 @@ test.describe("moderation and ban", () => {
     );
 
     const reporterReports = await request.get(`${solandBaseUrl()}/_soland/admin/reports`, {
-      headers: authHeaders(bobToken),
+      headers: authHeaders(bobToken, "GET", `${solandBaseUrl()}/_soland/admin/reports`),
     });
     expect(reporterReports.ok()).toBeTruthy();
     expect(JSON.stringify(await reporterReports.json())).not.toContain(queueItemId);
 
     const targetReports = await request.get(`${solandBaseUrl()}/_soland/admin/reports`, {
-      headers: authHeaders(malloryToken),
+      headers: authHeaders(malloryToken, "GET", `${solandBaseUrl()}/_soland/admin/reports`),
     });
     expect(targetReports.ok()).toBeTruthy();
     expect(JSON.stringify(await targetReports.json())).not.toContain(queueItemId);
 
     const bystanderReports = await request.get(`${solandBaseUrl()}/_soland/admin/reports`, {
-      headers: authHeaders(carolToken),
+      headers: authHeaders(carolToken, "GET", `${solandBaseUrl()}/_soland/admin/reports`),
     });
     expect(bystanderReports.ok()).toBeTruthy();
     expect(JSON.stringify(await bystanderReports.json())).not.toContain(queueItemId);
 
     const ownerReports = await request.get(`${solandBaseUrl()}/_soland/admin/reports`, {
-      headers: authHeaders(aliceToken),
+      headers: authHeaders(aliceToken, "GET", `${solandBaseUrl()}/_soland/admin/reports`),
     });
     expect(ownerReports.ok()).toBeTruthy();
     expect(JSON.stringify(await ownerReports.json())).toContain(queueItemId);
@@ -177,7 +177,7 @@ test.describe("moderation and ban", () => {
     );
 
     const reports = await request.get(`${solandBaseUrl()}/_soland/admin/reports`, {
-      headers: authHeaders(aliceToken),
+      headers: authHeaders(aliceToken, "GET", `${solandBaseUrl()}/_soland/admin/reports`),
     });
     expect(reports.ok()).toBeTruthy();
     expect(JSON.stringify(await reports.json())).toContain(queueItemId);
@@ -199,7 +199,7 @@ test.describe("moderation and ban", () => {
 
     const realmAfterBan = await request.get(
       `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}`,
-      { headers: authHeaders(aliceToken) },
+      { headers: authHeaders(aliceToken, "GET", `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}`) },
     );
     expect(realmAfterBan.ok()).toBeTruthy();
     const realmAfterBanBody = await realmAfterBan.json();
@@ -252,7 +252,7 @@ test.describe("moderation and ban", () => {
 
     const exportResp = await request.get(
       `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/export`,
-      { headers: authHeaders(aliceToken) },
+      { headers: authHeaders(aliceToken, "GET", `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/export`) },
     );
     expect(exportResp.ok()).toBeTruthy();
     const exportText = JSON.stringify(await exportResp.json());
@@ -272,7 +272,7 @@ test.describe("moderation and ban", () => {
       ensureRegistered(request, alice),
       ensureRegistered(request, mallory),
     ]);
-    const aliceToken = await issueDevSession(request, alice);
+    const aliceToken = await issueUserSession(request, alice);
 
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S5.3 Repeated Ban Rejection ${stamp}`,
@@ -312,7 +312,7 @@ test.describe("moderation and ban", () => {
     expect(secondBanProblem.reason_code).toBe("invalid_membership_transition");
 
     const realm = await request.get(`${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}`, {
-      headers: authHeaders(aliceToken),
+      headers: authHeaders(aliceToken, "GET", `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}`),
     });
     expect(realm.ok()).toBeTruthy();
     const body = await realm.json();
@@ -336,7 +336,7 @@ test.describe("moderation and ban", () => {
       return;
     }
     const alice = aliceFlow.user;
-    const aliceToken = await issueDevSession(request, alice);
+    const aliceToken = await issueUserSession(request, alice);
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S5 UI Ban ${stamp}`,
       public: true,
@@ -368,7 +368,7 @@ test.describe("moderation and ban", () => {
 
       const realm = await request.get(
         `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}`,
-        { headers: authHeaders(aliceToken) },
+        { headers: authHeaders(aliceToken, "GET", `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}`) },
       );
       expect(realm.ok()).toBeTruthy();
       const body = await realm.json();

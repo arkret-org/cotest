@@ -26,10 +26,11 @@ import { type APIResponse, expect, test } from "../../helpers/arkret-test";
 import { solandBaseUrl } from "../../helpers/env";
 import {
   ensureRegistered,
-  issueDevSession,
+  issueUserSession,
   uniqueUser,
 } from "../../helpers/users";
 import {
+  authHeaders,
   createRealmApi,
   resolveDefaultStrandId,
   signedEventEnvelope,
@@ -315,7 +316,7 @@ test.describe("conformance registry drift @fully-implemented", () => {
     expect(activeEventKinds.has(removed!.id), "negative event kind must be absent from active registry").toBeFalsy();
     const alice = uniqueUser("registry-drift-a");
     await ensureRegistered(request, alice);
-    const token = await issueDevSession(request, alice);
+    const token = await issueUserSession(request, alice);
     const envelope = signedEventEnvelope({
       actorId: alice.id,
       realmId: "ak:realm:AWKBMlbiCDVvdxpftc7u00CFiTYThQbKQJCj2gi91O9H",
@@ -326,7 +327,7 @@ test.describe("conformance registry drift @fully-implemented", () => {
       payload: {},
     });
     const resp = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
-      headers: { authorization: `Bearer ${token}` },
+      headers: authHeaders(token, "POST", `${solandBaseUrl()}/_arkret/self/events`),
       data: { event: envelope },
     });
     expect(resp.status()).toBeGreaterThanOrEqual(400);
@@ -358,13 +359,12 @@ test.describe("conformance registry drift @fully-implemented", () => {
     // pair the previous Phase F covered.
     const alice = uniqueUser("registry-drift-terms");
     await ensureRegistered(request, alice);
-    const token = await issueDevSession(request, alice);
-    const auth = { authorization: `Bearer ${token}` };
+    const token = await issueUserSession(request, alice);
 
     // Submit a benign event so the write receipt is part of the scan surface.
     const probeRealmId = "ak:realm:AV1vAwt2NWgRW6lXhHcPfu4l8U3dkzSjWbQ_xXTw370Q";
     const submitReceipt = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
-      headers: auth,
+      headers: authHeaders(token, "POST", `${solandBaseUrl()}/_arkret/self/events`),
       data: { event: signedEventEnvelope({
         actorId: alice.id,
         realmId: probeRealmId,
@@ -377,9 +377,9 @@ test.describe("conformance registry drift @fully-implemented", () => {
       { name: "server.describe", response: await request.get(`${solandBaseUrl()}/_arkret/describe`), requireOk: true },
       { name: "health", response: await request.get(`${solandBaseUrl()}/health`), requireOk: true },
       { name: "directory.describe", response: await request.get(`${solandBaseUrl()}/_arkret/find/directory/describe`) },
-      { name: "account.viewer", response: await request.get(`${solandBaseUrl()}/_arkret/self/account/viewer`, { headers: auth }) },
-      { name: "streams.scan", response: await request.fetch(`${solandBaseUrl()}/_arkret/self/streams/scan`, { method: "POST", data: { realm_id: probeRealmId, stream_ref: { kind: "realm", realm_id: probeRealmId }, limit: 20 }, headers: auth }) },
-      { name: "notifications", response: await request.get(`${solandBaseUrl()}/_arkret/self/notifications`, { headers: auth }) },
+      { name: "account.viewer", response: await request.get(`${solandBaseUrl()}/_arkret/self/account/viewer`, { headers: authHeaders(token, "GET", `${solandBaseUrl()}/_arkret/self/account/viewer`) }) },
+      { name: "streams.scan", response: await request.fetch(`${solandBaseUrl()}/_arkret/self/streams/scan`, { method: "POST", data: { realm_id: probeRealmId, stream_ref: { kind: "realm", realm_id: probeRealmId }, limit: 20 }, headers: authHeaders(token, "POST", `${solandBaseUrl()}/_arkret/self/streams/scan`) }) },
+      { name: "notifications", response: await request.get(`${solandBaseUrl()}/_arkret/self/notifications`, { headers: authHeaders(token, "GET", `${solandBaseUrl()}/_arkret/self/notifications`) }) },
       { name: "events.submit.receipt", response: submitReceipt },
     ];
 
@@ -429,7 +429,7 @@ test.describe("conformance registry drift @fully-implemented", () => {
 
     const alice = uniqueUser("forbidden-wire-fields");
     await ensureRegistered(request, alice);
-    const token = await issueDevSession(request, alice);
+    const token = await issueUserSession(request, alice);
 
     const realmId = await createRealmApi(request, token, {
       title: "forbidden-wire-fields probe",
@@ -450,17 +450,17 @@ test.describe("conformance registry drift @fully-implemented", () => {
     const messageReceipt = await submitSignedEventApi(request, token, messageEnvelope, {
       context: "forbidden-wire-fields message",
     });
-    const messageAuthorityRefs = (
-      messageEnvelope.auth_context as { authority_refs?: unknown } | undefined
-    )?.authority_refs;
     expect(
-      messageAuthorityRefs,
-      "ordinary Event AuthContext cites the confirmed Realm Seal basis",
-    ).toEqual([messageEnvelope.data_basis]);
-    expect(
-      String(messageEnvelope.data_basis),
-      "ordinary Event carries a signed confirmed Seal data_basis",
-    ).toMatch(/^ak:seal:sha256:[0-9a-f]{64}$/);
+      messageEnvelope.producer_proof,
+      "ordinary Event carries its exact device's portable producer proof",
+    ).toMatchObject({
+      kind: "detached_jws",
+      verification_method: `${alice.did}#${alice.deviceId}`,
+      event_digest: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
+      jws: expect.any(String),
+    });
+    expect(messageEnvelope).not.toHaveProperty("auth_context");
+    expect(messageEnvelope).not.toHaveProperty("data_basis");
 
     const cursorEnvelope = signedEventEnvelope({
       actorId: alice.id,

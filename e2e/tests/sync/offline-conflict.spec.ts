@@ -29,7 +29,7 @@ import {
 } from "../../helpers/env";
 import {
   ensureRegistered,
-  issueDevSession,
+  issueUserSession,
   openDpopUserPage,
   uniqueUser,
   type JointUser,
@@ -53,8 +53,8 @@ test.describe("offline sync + conflict repair", () => {
       ensureRegistered(request, bob),
     ]);
     const [aliceToken, bobToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
+      issueUserSession(request, alice),
+      issueUserSession(request, bob),
     ]);
     const m1 = `G2.T3 reconnect m1 ${stamp}`;
     const m2 = `G2.T3 reconnect m2 ${stamp}`;
@@ -115,8 +115,8 @@ test.describe("offline sync + conflict repair", () => {
       ensureRegistered(request, bob),
     ]);
     const [aliceToken, bobToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
+      issueUserSession(request, alice),
+      issueUserSession(request, bob),
     ]);
     const messages = [
       `G2.T3 ordered m1 ${stamp}`,
@@ -248,10 +248,10 @@ test.describe("offline sync + conflict repair", () => {
     const bob = uniqueUser(`g2t3-backfill-bob-${stamp}`, "server2");
     await ensureRegistered(request, alice, { server: "server1" });
     await ensureRegistered(request, bob, { server: "server2" });
-    const aliceToken = await issueDevSession(request, alice, {
+    const aliceToken = await issueUserSession(request, alice, {
       server: "server1",
     });
-    const bobToken = await issueDevSession(request, bob, { server: "server2" });
+    const bobToken = await issueUserSession(request, bob, { server: "server2" });
 
     await grantInviteConsentArkret(request, bobToken, bob, alice.id, {
       server: "server2", peerStationId: solandServiceId("server1"),
@@ -490,7 +490,7 @@ async function waitForMember(
       async () => {
         const response = await request.get(
           `${solandBaseUrl(server)}/_arkret/self/realms/${encodeURIComponent(realmId)}`,
-          { headers: authHeaders(token) },
+          { headers: authHeaders(token, "GET", `${solandBaseUrl(server)}/_arkret/self/realms/${encodeURIComponent(realmId)}`) },
         );
         if (!response.ok()) {
           return false;
@@ -552,8 +552,8 @@ async function createBottomConflictFixture(
   const bob = bobFlow!.user;
   await ensureRegistered(request, alice);
   const [aliceToken, bobToken] = await Promise.all([
-    issueDevSession(request, alice),
-    issueDevSession(request, bob),
+    issueUserSession(request, alice),
+    issueUserSession(request, bob),
   ]);
   const initialTitle = `bottom conflict ${label} ${stamp}`;
   const realmId = await createSharedRealmViaApi(
@@ -619,7 +619,7 @@ async function listBottomCells(
 ): Promise<Array<Record<string, unknown>>> {
   const response = await request.get(
     `${solandBaseUrl()}/_soland/admin/realms/${encodeURIComponent(realmId)}/bottom`,
-    { headers: authHeaders(token) },
+    { headers: authHeaders(token, "GET", `${solandBaseUrl()}/_soland/admin/realms/${encodeURIComponent(realmId)}/bottom`) },
   );
   const text = await response.text();
   expect(response.status(), `list bottom cells: ${text}`).toBe(200);

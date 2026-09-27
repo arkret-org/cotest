@@ -377,7 +377,7 @@ async function postPreparedSignalEnvelopeRaw(
   envelope: Record<string, unknown>,
 ): Promise<APIResponse> {
   return await request.post(`${solandBaseUrl()}/_arkret/self/signal`, {
-    headers: { ...authHeaders(token), "content-type": "application/json" },
+    headers: { ...authHeaders(token, "POST", `${solandBaseUrl()}/_arkret/self/signal`), "content-type": "application/json" },
     data: canonicalJson(envelope),
   });
 }
@@ -397,7 +397,7 @@ async function captureSignalEnvelopes<T>(
   url.searchParams.set("heartbeat_ms", "25");
   const responsePromise = fetch(url, {
     headers: {
-      ...authHeaders(token),
+      ...authHeaders(token, "GET", url.toString()),
       accept: "application/x-ndjson",
       "Arkret-Operation": "ak.self.signal.stream.subscribe.v1",
     },

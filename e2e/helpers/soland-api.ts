@@ -842,7 +842,7 @@ export async function writeJoinPolicyApi(
   const policyCell = "ak:cell:ak.component.realm.policy_bundle.v1:null";
   const currentResponse = await request.get(
     `${solandBaseUrl(opts.server)}/_soland/admin/cells/${encodeURIComponent(policyCell)}?realm_id=${encodeURIComponent(realmId)}`,
-    { headers: authHeaders(token) },
+    { headers: authHeaders(token, "GET", `${solandBaseUrl(opts.server)}/_soland/admin/cells/${encodeURIComponent(policyCell)}?realm_id=${encodeURIComponent(realmId)}`) },
   );
   const currentText = await currentResponse.text();
   expect(currentResponse.status(), currentText).toBe(200);
@@ -875,7 +875,7 @@ export async function writeJoinPolicyApi(
       async () => {
         const response = await request.get(
           `${solandBaseUrl(opts.server)}/_soland/admin/cells/${encodeURIComponent(policyCell)}?realm_id=${encodeURIComponent(realmId)}`,
-          { headers: authHeaders(token) },
+          { headers: authHeaders(token, "GET", `${solandBaseUrl(opts.server)}/_soland/admin/cells/${encodeURIComponent(policyCell)}?realm_id=${encodeURIComponent(realmId)}`) },
         );
         if (!response.ok()) {
           return false;
@@ -1640,7 +1640,7 @@ export async function replaceAccountDataApi(
     `${solandBaseUrl(opts.server)}/_arkret/self/account_data/${encodeURIComponent(key)}`,
     {
       headers: {
-        ...authHeaders(token),
+        ...authHeaders(token, "PUT", `${solandBaseUrl(opts.server)}/_arkret/self/account_data/${encodeURIComponent(key)}`),
         "content-type": "application/json",
       },
       data: canonicalJson({

@@ -21,7 +21,7 @@ import {
 } from "../../helpers/soland-api";
 import {
   ensureRegistered,
-  issueDevSession,
+  issueUserSession,
   uniqueUser,
 } from "../../helpers/users";
 
@@ -43,7 +43,7 @@ test.describe("Realm genesis commit stream @fully-implemented", () => {
   }) => {
     const alice = uniqueUser("realm-genesis-alice");
     await ensureRegistered(request, alice);
-    const aliceToken = await issueDevSession(request, alice);
+    const aliceToken = await issueUserSession(request, alice);
     const actor = accountActorId(alice.id);
 
     let acceptedBootstrap: AcceptedRealmBootstrap | undefined;
@@ -147,7 +147,7 @@ test.describe("Realm genesis commit stream @fully-implemented", () => {
   }) => {
     const alice = uniqueUser("realm-genesis-retry");
     await ensureRegistered(request, alice);
-    const aliceToken = await issueDevSession(request, alice);
+    const aliceToken = await issueUserSession(request, alice);
 
     let acceptedBootstrap: AcceptedRealmBootstrap | undefined;
     const realmId = await createRealmApi(
@@ -191,7 +191,7 @@ test.describe("Realm genesis commit stream @fully-implemented", () => {
   }) => {
     const alice = uniqueUser("realm-genesis-continue");
     await ensureRegistered(request, alice);
-    const aliceToken = await issueDevSession(request, alice);
+    const aliceToken = await issueUserSession(request, alice);
     const realmId = await createRealmApi(request, aliceToken, {
       created_at: canonicalTimestamp(),
       ownerId: alice.id,

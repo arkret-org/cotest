@@ -35,7 +35,7 @@
 ## Pre-conditions
 
 - `alice` 通过 `ensureRegistered(request, alice)` 注册
-- `alice` 通过 `issueDevSession(request, alice)` 拿 token
+- `alice` 通过 `issueUserSession(request, alice)` 保留 canonical 注册得到的 DPoP Standard grant。
 - `alice` 在 inkson 通过 `openUserPage(browser, alice, { sessionCredential })` 起 browser context(`inkson.config.v1` localStorage 注入)
 - `alice` 通过 `JointUserPage.createRealm(...)` 建一个 `discoverability=listed, joinRule=invite` 的 Realm,记录 `realmId`
 

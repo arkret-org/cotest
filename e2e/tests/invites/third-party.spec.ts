@@ -28,7 +28,7 @@ import {
 } from "../../helpers/soland-api";
 import {
   ensureRegistered,
-  issueDevSession,
+  issueUserSession,
   uniqueUser,
   type JointUser,
 } from "../../helpers/users";
@@ -133,7 +133,7 @@ async function submitSelfEvent(
   const response = await request.post(
     `${solandBaseUrl()}/_arkret/self/events`,
     {
-      headers: { ...authHeaders(token), "content-type": "application/json" },
+      headers: { ...authHeaders(token, "POST", `${solandBaseUrl()}/_arkret/self/events`), "content-type": "application/json" },
       data: canonicalJson({ event: envelope }),
     },
   );
@@ -199,7 +199,7 @@ async function allowlistVerificationService(
   const policyCell = "ak:cell:ak.component.realm.policy_bundle.v1:null";
   const currentResponse = await request.get(
     `${solandBaseUrl()}/_soland/admin/cells/${encodeURIComponent(policyCell)}?realm_id=${encodeURIComponent(realmId)}`,
-    { headers: authHeaders(token) },
+    { headers: authHeaders(token, "GET", `${solandBaseUrl()}/_soland/admin/cells/${encodeURIComponent(policyCell)}?realm_id=${encodeURIComponent(realmId)}`) },
   );
   const currentCell = await expectJsonOk<{state: string; value: Record<string, unknown>}>(
     currentResponse, "read current policy before verification allowlist replacement",
@@ -295,8 +295,8 @@ test.describe("third-party invite", () => {
     await ensureRegistered(request, alice);
     await ensureRegistered(request, bob);
     const bobSubjectIdentity = currentSubjectIdentity(bob);
-    const aliceToken = await issueDevSession(request, alice);
-    const bobToken = await issueDevSession(request, bob);
+    const aliceToken = await issueUserSession(request, alice);
+    const bobToken = await issueUserSession(request, bob);
     // The outer Event and subject proof are both signed by the current PCR
     // device authority. A device is not a DID actor and its method is therefore
     // resolved through the accepted device authorization, not a DID document.
@@ -507,7 +507,7 @@ test.describe("third-party invite", () => {
       `${solandBaseUrl()}/_arkret/self/authz/invites?realm_id=${encodeURIComponent(ctx.realmId)}`,
       {
         headers: {
-          ...authHeaders(ctx.bobToken),
+          ...authHeaders(ctx.bobToken, "GET", `${solandBaseUrl()}/_arkret/self/authz/invites?realm_id=${encodeURIComponent(ctx.realmId)}`),
           "Arkret-Operation": "ak.self.authz.invites.read.list.v1",
         },
       },
@@ -620,7 +620,7 @@ test.describe("third-party invite", () => {
     const mallory = uniqueUser("s3-mallory");
     await ensureRegistered(request, mallory);
     const mallorySubjectIdentity = currentSubjectIdentity(mallory);
-    const malloryToken = await issueDevSession(request, mallory);
+    const malloryToken = await issueUserSession(request, mallory);
     registerEventSigner({
       actorId: mallory.id,
       deviceId: mallory.deviceId,

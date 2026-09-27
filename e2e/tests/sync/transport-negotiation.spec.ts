@@ -50,7 +50,7 @@ import {
 } from "../../helpers/soland-api";
 import {
   ensureRegistered,
-  issueDevSession,
+  issueUserSession,
   uniqueUser,
 } from "../../helpers/users";
 
@@ -133,7 +133,7 @@ test.describe("transport negotiation", () => {
     //   FEDERATION_AUTH_FAILURE_MESSAGE + a fixed timing bucket.
     const user = uniqueUser("e81-federation", "server1");
     await ensureRegistered(request, user, { server: "server1" });
-    const token = await issueDevSession(request, user, { server: "server1" });
+    const token = await issueUserSession(request, user, { server: "server1" });
     const realmId = await createRealmApi(
       request,
       token,

@@ -24,7 +24,7 @@ import {
 import {
   assertJointStackNotRequired,
   ensureRegistered,
-  issueDevSession,
+  issueUserSession,
   openDpopUserPage,
   openUserPage,
   selfPathHeadersForDpopSession,
@@ -54,7 +54,7 @@ test.describe("personal blocklist", () => {
   test("personal-blocklist endpoint surface probe", async ({ request }) => {
     const alice = uniqueUser("s31-probe");
     await ensureRegistered(request, alice);
-    const token = await issueDevSession(request, alice);
+    const token = await issueUserSession(request, alice);
 
     const accountData = await accountSubscribeFramesApi(request, token);
     expect(JSON.stringify(accountData)).toContain("delta");
@@ -66,7 +66,7 @@ test.describe("personal blocklist", () => {
     const stamp = Date.now();
     const alice = uniqueUser("s31-accountdata");
     await ensureRegistered(request, alice);
-    const token = await issueDevSession(request, alice);
+    const token = await issueUserSession(request, alice);
     // Account Data v1 is a closed registry, not an arbitrary client key/value
     // bag. Use a registered encrypted private key while exercising the same
     // CAS and sync semantics this complement test is meant to cover.
@@ -99,7 +99,7 @@ test.describe("personal blocklist", () => {
 
     const get = await request.get(
       `${solandBaseUrl()}/_arkret/self/account_data/${encodeURIComponent(dataType)}`,
-      { headers: authHeaders(token) },
+      { headers: authHeaders(token, "GET", `${solandBaseUrl()}/_arkret/self/account_data/${encodeURIComponent(dataType)}`) },
     );
     expect(get.status()).toBe(200);
     expect(
@@ -109,7 +109,7 @@ test.describe("personal blocklist", () => {
     const list = await request.get(
       `${solandBaseUrl()}/_arkret/self/account_data`,
       {
-        headers: authHeaders(token),
+        headers: authHeaders(token, "GET", `${solandBaseUrl()}/_arkret/self/account_data`),
       },
     );
     expect(list.status()).toBe(200);
@@ -163,7 +163,7 @@ test.describe("personal blocklist", () => {
     const alicePage = aliceFlow.page;
     const bobPage = bobFlow.page;
     const aliceToken = aliceFlow.session.grantJwt;
-    const bobToken = await issueDevSession(request, bob);
+    const bobToken = await issueUserSession(request, bob);
     const aliceSubscribeOpts = () =>
       accountSubscribeDpopOpts(aliceFlow.session);
     // The row identifies its target by `data-actor-id` (the canonical ActorId
@@ -322,9 +322,9 @@ test.describe("personal blocklist", () => {
       ensureRegistered(request, carol),
     ]);
     const [aliceToken, bobToken, carolToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
-      issueDevSession(request, carol),
+      issueUserSession(request, alice),
+      issueUserSession(request, bob),
+      issueUserSession(request, carol),
     ]);
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S31 E11.1 ${stamp}`,
@@ -402,8 +402,8 @@ test.describe("personal blocklist", () => {
       ensureRegistered(request, bob),
     ]);
     const [aliceToken, bobToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
+      issueUserSession(request, alice),
+      issueUserSession(request, bob),
     ]);
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S31 E11.2 ${stamp}`,
@@ -426,7 +426,7 @@ test.describe("personal blocklist", () => {
     const registerDevice = await request.post(
       `${solandBaseUrl()}/_arkret/edge/push/register-device`,
       {
-        headers: { ...authHeaders(aliceToken), "content-type": "application/json" },
+        headers: { ...authHeaders(aliceToken, "POST", `${solandBaseUrl()}/_arkret/edge/push/register-device`), "content-type": "application/json" },
         data: canonicalJson({
           device_id: alice.deviceId,
           push_gateway_url: "https://push.example",
@@ -502,8 +502,8 @@ test.describe("personal blocklist", () => {
       ensureRegistered(request, bob),
     ]);
     const [aliceToken, bobToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
+      issueUserSession(request, alice),
+      issueUserSession(request, bob),
     ]);
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S31 E11.3 ${stamp}`,

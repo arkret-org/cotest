@@ -5,7 +5,6 @@ import {
   expect,
   request as playwrightRequest,
   type APIRequestContext,
-  type APIResponse,
   type Browser,
   type BrowserContext,
   type Locator,
@@ -14,7 +13,6 @@ import {
 import {
   coauthBaseUrl,
   diagnosticsRoot,
-  embeddedWebvhRegistrationBearer,
   inksonBaseUrl,
   type SolandKey,
   solandBaseUrl,
@@ -216,22 +214,6 @@ function pushDiagnosticLine(lines: string[], line: string) {
       }),
     );
   }
-}
-
-function retryAfterMs(response: APIResponse, fallbackMs: number): number {
-  const raw = response.headers()["retry-after"];
-  if (!raw) {
-    return fallbackMs;
-  }
-  const seconds = Number(raw);
-  if (Number.isFinite(seconds) && seconds >= 0) {
-    return Math.min(Math.max(Math.ceil(seconds * 1000), 250), 65_000);
-  }
-  const dateMs = Date.parse(raw);
-  if (Number.isFinite(dateMs)) {
-    return Math.min(Math.max(dateMs - Date.now(), 250), 65_000);
-  }
-  return fallbackMs;
 }
 
 function objectRecord(value: unknown): Record<string, unknown> | undefined {
@@ -1487,7 +1469,9 @@ export function uniqueUser(prefix: string, server?: SolandKey): JointUser {
 // alias and rebound the caller's object to the last one. See
 // `provisioning-cache.ts` for the isolation rules and for why this memo is not
 // a substitute for the Authority's own duplicate handling.
-const provisionedPrincipals = new Map<string, Promise<ProvisionedIdentity>>();
+type ProvisionedPrincipal = ProvisionedIdentity & { session: DpopUserSession };
+const provisionedPrincipals = new Map<string, Promise<ProvisionedPrincipal>>();
+const canonicalSessionsByGrant = new Map<string, DpopUserSession>();
 const provisioningLedger = new ProvisioningLedger();
 
 export async function ensureRegistered(
@@ -1512,7 +1496,7 @@ export async function ensureRegistered(
     provisioningLedger.claim(user, key);
     let provisioning = provisionedPrincipals.get(key);
     if (!provisioning) {
-      provisioning = (async (): Promise<ProvisionedIdentity> => {
+      provisioning = (async (): Promise<ProvisionedPrincipal> => {
         const accountRequest = withOperationSelectors(
           await playwrightRequest.newContext({
             ignoreHTTPSErrors: process.env.COTEST_IGNORE_HTTPS === "1",
@@ -1538,7 +1522,7 @@ export async function ensureRegistered(
               `ensureRegistered: canonical provisioning returned no session for ${user.name}`,
             );
           }
-          return assertCompleteIdentity(
+          const identity = assertCompleteIdentity(
             {
               id: session.user.id,
               did: session.user.did,
@@ -1548,6 +1532,7 @@ export async function ensureRegistered(
             },
             key,
           );
+          return { ...identity, session };
         } finally {
           await accountRequest.dispose();
         }
@@ -1563,7 +1548,7 @@ export async function ensureRegistered(
       });
       provisionedPrincipals.set(key, provisioning);
     }
-    let identity: ProvisionedIdentity;
+    let identity: ProvisionedPrincipal;
     try {
       identity = await provisioning;
     } catch (error) {
@@ -1586,96 +1571,33 @@ export async function ensureRegistered(
     user.displayName = identity.displayName;
     return;
   }
-  await ensureRegisteredRaw(request, user, opts);
+  throw new Error("canonical user provisioning requires a configured Account Authority");
 }
 
-async function ensureRegisteredRaw(
-  request: APIRequestContext,
-  user: JointUser,
-  opts: { server?: SolandKey } = {},
-) {
-  // Most protocol tests need a pre-existing Station projection but
-  // are not account-onboarding tests. Provision that deployment-private state
-  // directly; canonical `ak.gate.account.command.register.v1` remains owned by
-  // the Account Authority and is exercised through coauth-register.ts.
-  const url = `${solandBaseUrl(opts.server)}/_soland/gate/account/project`;
-  const data = {
-    principal_id: user.id,
-    did: user.did,
-    display_name: user.displayName,
-    device_id: user.deviceId,
-  };
-  const registrationBearer = embeddedWebvhRegistrationBearer();
-  const headers: Record<string, string> = {
-    "content-type": "application/json",
-  };
-  if (registrationBearer) {
-    headers.authorization = `Bearer ${registrationBearer}`;
-  }
-  registerEventSigner({
-    actorId: user.id,
-    deviceId: user.deviceId,
-    verificationMethod: `${user.did}#${user.deviceId}`,
-  });
-  const backoffMs = [500, 1_000, 2_000, 4_000, 8_000, 16_000, 30_000];
-  for (let attempt = 0; attempt < backoffMs.length; attempt += 1) {
-    const response = await request.post(url, {
-      data: canonicalJson(data),
-      headers,
-    });
-    if ([200, 409].includes(response.status())) {
-      return;
-    }
-    const text = await response.text();
-    if (response.status() !== 429 || attempt === backoffMs.length - 1) {
-      throw new Error(
-        `ensureRegistered: ${url} returned ${response.status()} for ${user.id}: ${text}`,
-      );
-    }
-    await sleep(retryAfterMs(response, backoffMs[attempt]));
-  }
-}
-
-export async function issueDevSession(
+export async function issueUserSession(
   request: APIRequestContext,
   user: JointUser,
   opts: { server?: SolandKey; deviceId?: string } = {},
 ): Promise<string> {
-  const url = `${solandBaseUrl(opts.server)}/_soland/gate/auth/dev-login`;
-  const data = {
-    actor: user.id,
-    // Same actor (DID) can hold multiple device sessions: pass `deviceId` to
-    // override the default per-user device. soland's dev-login registers each
-    // distinct device_id in the device inventory, which is what drives the
-    // actor-private read-cursor to-device fan-out across devices.
-    device_id: opts.deviceId ?? user.deviceId,
-    display_name: user.displayName,
-  };
-  registerEventSigner({
-    actorId: user.id,
-    deviceId: opts.deviceId ?? user.deviceId,
-    verificationMethod: `${user.did}#${opts.deviceId ?? user.deviceId}`,
-  });
-  const backoffMs = [500, 1_000, 2_000, 4_000, 8_000, 16_000, 30_000];
-  for (let attempt = 0; attempt < backoffMs.length; attempt += 1) {
-    const response = await request.post(url, {
-      data: canonicalJson(data),
-      headers: { "content-type": "application/json" },
-    });
-    if (response.status() === 200) {
-      const body = await response.json();
-      expect(body.session_credential).toBeTruthy();
-      return body.session_credential;
-    }
-    const text = await response.text();
-    if (response.status() !== 429 || attempt === backoffMs.length - 1) {
-      throw new Error(
-        `issueDevSession: ${url} returned ${response.status()} for ${user.id}: ${text}`,
-      );
-    }
-    await sleep(retryAfterMs(response, backoffMs[attempt]));
+  await ensureRegistered(request, user, opts);
+  const authority = coauthBaseUrl(opts.server);
+  if (!authority) {
+    throw new Error("canonical user sessions require a configured Account Authority");
   }
-  throw new Error(`issueDevSession: exhausted retry loop for ${user.id}`);
+  const key = provisioningKey({
+    stationBaseUrl: solandBaseUrl(opts.server),
+    authorityBaseUrl: authority,
+    principalName: user.name,
+  });
+  const provisioned = await provisionedPrincipals.get(key);
+  if (!provisioned) {
+    throw new Error("canonical user session has no completed provisioning");
+  }
+  const session = provisioned.session;
+  if (session.user.id !== user.id || session.user.deviceId !== (opts.deviceId ?? user.deviceId)) {
+    throw new Error("a different device must complete canonical pairing before receiving a session");
+  }
+  return session.grantJwt;
 }
 
 export async function createDpopUserSession(
@@ -1768,13 +1690,8 @@ export async function createDpopUserSessionForAccount(
     handle: `@${account.handle}`,
     displayName: account.displayName,
   };
-  // No `ensureRegisteredRaw` here. Both halves of it were redundant on this
-  // path: Coauth performs the Station projection inside the canonical register
-  // saga (`account_register.rs`, before a usable grant leaves it), so the call
-  // could only replay it and take the 409 back; and its seed-less
-  // `registerEventSigner` was immediately overwritten by the seeded one below.
-  // A canonical path must not need a deployment-private endpoint to make its
-  // own principal usable.
+  // Canonical registration already accepted the account and its founding
+  // device. Retain that exact device's signer and proof-bound Standard grant.
   const eventSigningSeedB64url = dpopDeviceSeedB64url(eventSigningKey);
   registerEventSigner({
     actorId: user.id,
@@ -1880,6 +1797,7 @@ export async function createDpopUserSessionForAccount(
       server: opts.server,
     },
   );
+  canonicalSessionsByGrant.set(session.grantJwt, session);
   return session;
 }
 
@@ -2084,6 +2002,20 @@ export async function allowExplicitInviteNotifications(
   expect(updated.status(), await updated.text()).toBe(200);
 }
 
+function canonicalSessionOptions(session: DpopUserSession): OpenUserOpts {
+  return {
+    grantJwt: session.grantJwt,
+    dpopSeedB64url: session.dpopSeedB64url,
+    eventSigningSeedB64url: session.eventSigningSeedB64url,
+    grantId: session.grantId,
+    accountId: session.accountId,
+    principalControlRealmId: session.principalControlRealmId,
+    grantAudience: session.grantAudience,
+    recoveryKey: session.recoveryKey,
+    recoveryMaterialEvidence: session.recoveryMaterialEvidence,
+  };
+}
+
 export async function openDpopUserPageFromSession(
   browser: Browser,
   session: DpopUserSession | undefined,
@@ -2098,15 +2030,7 @@ export async function openDpopUserPageFromSession(
   }
   const page = await openUserPage(browser, session.user, {
     server: opts.server,
-    grantJwt: session.grantJwt,
-    dpopSeedB64url: session.dpopSeedB64url,
-    eventSigningSeedB64url: session.eventSigningSeedB64url,
-    grantId: session.grantId,
-    accountId: session.accountId,
-    principalControlRealmId: session.principalControlRealmId,
-    grantAudience: session.grantAudience,
-    recoveryKey: session.recoveryKey,
-    recoveryMaterialEvidence: session.recoveryMaterialEvidence,
+    ...canonicalSessionOptions(session),
     autoCompleteRecoveryKeySetup: opts.autoCompleteRecoveryKeySetup,
   });
   // Session injection is applied asynchronously after Inkson acquires the
@@ -2141,6 +2065,30 @@ export async function openUser(
   user: JointUser,
   opts: OpenUserOpts = {},
 ): Promise<UserSession> {
+  if (!opts.neutralLoginConfig && !opts.grantJwt) {
+    let session = opts.sessionCredential
+      ? canonicalSessionsByGrant.get(opts.sessionCredential)
+      : undefined;
+    const authority = coauthBaseUrl(opts.server);
+    if (!opts.sessionCredential && authority) {
+      const key = provisioningKey({
+        stationBaseUrl: solandBaseUrl(opts.server),
+        authorityBaseUrl: authority,
+        principalName: user.name,
+      });
+      session = (await provisionedPrincipals.get(key))?.session;
+    }
+    if (session) {
+      if (session.accountId.principal_id !== user.id ||
+          session.accountId.station_id !== solandServiceId(opts.server) ||
+          session.user.deviceId !== user.deviceId || session.user.did !== user.did) {
+        throw new Error("browser fixture does not match the canonical account/device session");
+      }
+      opts = { ...opts, ...canonicalSessionOptions(session), sessionCredential: undefined };
+    } else if (opts.sessionCredential) {
+      throw new Error("browser fixture credential has no canonical grant and holder material");
+    }
+  }
   const serverUrl = solandBaseUrl(opts.server);
   const sessionCredential = opts.sessionCredential ?? "";
   const diagnosticsDir = path.join(
@@ -2225,11 +2173,6 @@ export async function openUser(
       name: "inkson.test.session_injection.v1",
       value: JSON.stringify(sessionInjection),
     });
-  } else if (sessionCredential) {
-    localStorage.push({
-      name: "inkson.test.session_credential_injection.v1",
-      value: sessionCredential,
-    });
   }
   const context = await browser.newContext({
     baseURL: inksonBaseUrl(opts.server),
@@ -2272,16 +2215,6 @@ export async function openUser(
     await context.close();
     throw new Error(
       "Inkson browser context is missing its test session fixture",
-    );
-  }
-  if (
-    !sessionInjection &&
-    sessionCredential &&
-    !seededNames.has("inkson.test.session_credential_injection.v1")
-  ) {
-    await context.close();
-    throw new Error(
-      "Inkson browser context is missing its test credential fixture",
     );
   }
   // Hide dioxus-cli's dev-mode rebuild toast (`#__dx-toast`). When dx serve's

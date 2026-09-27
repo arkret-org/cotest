@@ -39,7 +39,7 @@ import {
   submitSignedEventApi,
   wireErrCode,
 } from "../../helpers/soland-api";
-import { ensureRegistered, issueDevSession, uniqueUser } from "../../helpers/users";
+import { ensureRegistered, issueUserSession, uniqueUser } from "../../helpers/users";
 
 test.describe.configure({ mode: "serial" });
 
@@ -395,7 +395,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       const stamp = Date.now();
       const alice = uniqueUser(`ssc-event-id-alice-${stamp}`);
       await ensureRegistered(request, alice);
-      const token = await issueDevSession(request, alice);
+      const token = await issueUserSession(request, alice);
       const realmId = await createRealmViaApi(request, token, {
         title: `ssc event idempotency ${stamp}`,
         historyAccess: "all_history_for_current_members",
@@ -481,7 +481,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       const stamp = Date.now();
       const alice = uniqueUser(`ssc-page-alice-${stamp}`);
       await ensureRegistered(request, alice);
-      const token = await issueDevSession(request, alice);
+      const token = await issueUserSession(request, alice);
       const realmId = await createRealmViaApi(request, token, {
         title: `ssc pagination ${stamp}`,
         historyAccess: "all_history_for_current_members",
@@ -633,7 +633,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       const stamp = Date.now();
       const alice = uniqueUser(`ssc-idem-alice-${stamp}`);
       await ensureRegistered(request, alice);
-      const token = await issueDevSession(request, alice);
+      const token = await issueUserSession(request, alice);
       const realmId = await createRealmViaApi(request, token, {
         title: `ssc idempotency-key ${stamp}`,
         historyAccess: "all_history_for_current_members",
@@ -728,7 +728,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
 
       const alice = uniqueUser("ssc-phase-e");
       await ensureRegistered(request, alice);
-      const token = await issueDevSession(request, alice);
+      const token = await issueUserSession(request, alice);
       const realmId = await createRealmViaApi(request, token, {
         title: `unsupported feature ${Date.now()}`,
         historyAccess: "all_history_for_current_members",
@@ -771,7 +771,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       const criticalExtension = "ak.extension.cotest.unknown_fail_closed.v1";
       const alice = uniqueUser("ssc-phase-e2");
       await ensureRegistered(request, alice);
-      const token = await issueDevSession(request, alice);
+      const token = await issueUserSession(request, alice);
       const realmId = await createRealmViaApi(request, token, {
         title: `unsupported critical extension ${Date.now()}`,
         historyAccess: "all_history_for_current_members",

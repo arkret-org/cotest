@@ -34,7 +34,7 @@ import {
 } from "../../helpers/soland-api";
 import {
   ensureRegistered,
-  issueDevSession,
+  issueUserSession,
   openDpopUserPage,
   openUserPage,
   uniqueUser,
@@ -79,10 +79,10 @@ test.describe("contact graph federation (server1/server2)", () => {
     const bob = uniqueUser(`cgf-s1-bob-${stamp}`);
     await ensureRegistered(request, alice, { server: "server1" });
     await ensureRegistered(request, bob, { server: "server2" });
-    const aliceToken = await issueDevSession(request, alice, {
+    const aliceToken = await issueUserSession(request, alice, {
       server: "server1",
     });
-    const bobToken = await issueDevSession(request, bob, { server: "server2" });
+    const bobToken = await issueUserSession(request, bob, { server: "server2" });
     // The server2 default invite/contact policy quarantines explicit-address
     // requests. Resolve a signed principal locator so the peer can notify and
     // project the pending_incoming row (invite-addressing.md Â§5).
@@ -158,10 +158,10 @@ test.describe("contact graph federation (server1/server2)", () => {
     const bob = uniqueUser(`cgf-s3-bob-${stamp}`);
     await ensureRegistered(request, alice, { server: "server1" });
     await ensureRegistered(request, bob, { server: "server2" });
-    const aliceToken = await issueDevSession(request, alice, {
+    const aliceToken = await issueUserSession(request, alice, {
       server: "server1",
     });
-    const bobToken = await issueDevSession(request, bob, { server: "server2" });
+    const bobToken = await issueUserSession(request, bob, { server: "server2" });
     const bobLocator = await resolvePrincipalLocator(request, bob.id, "server2", bobToken);
 
     // Federated direct_message contact handshake (same path as S1-fed, but with
@@ -204,7 +204,7 @@ test.describe("contact graph federation (server1/server2)", () => {
     const resolved = await request.post(
       `${solandBaseUrl("server1")}/_arkret/self/direct-conversations/resolve`,
       {
-        headers: { ...authHeaders(aliceToken), "content-type": "application/json" },
+        headers: { ...authHeaders(aliceToken, "POST", `${solandBaseUrl("server1")}/_arkret/self/direct-conversations/resolve`), "content-type": "application/json" },
         data: canonicalJson({
           peer: {
             kind: "human",
@@ -220,7 +220,6 @@ test.describe("contact graph federation (server1/server2)", () => {
     expect(body.next_founding_input).toBeUndefined();
 
     const founderRequest = {
-      headers: { ...authHeaders(bobToken), "content-type": "application/json" },
       data: canonicalJson({
         peer: {
           kind: "human",
@@ -234,7 +233,7 @@ test.describe("contact graph federation (server1/server2)", () => {
     await expect.poll(async () => {
       const founderResolved = await request.post(
         `${solandBaseUrl("server2")}/_arkret/self/direct-conversations/resolve`,
-        founderRequest,
+        { ...founderRequest, headers: { ...authHeaders(bobToken, "POST", `${solandBaseUrl("server2")}/_arkret/self/direct-conversations/resolve`), "content-type": "application/json" } },
       );
       expect(founderResolved.ok(), await founderResolved.text()).toBeTruthy();
       founderBody = await founderResolved.json();
@@ -264,7 +263,7 @@ test.describe("contact graph federation (server1/server2)", () => {
 
     const retry = await request.post(
       `${solandBaseUrl("server2")}/_arkret/self/direct-conversations/resolve`,
-      founderRequest,
+      { ...founderRequest, headers: { ...authHeaders(bobToken, "POST", `${solandBaseUrl("server2")}/_arkret/self/direct-conversations/resolve`), "content-type": "application/json" } },
     );
     expect(retry.ok(), await retry.text()).toBeTruthy();
     const retried = await retry.json();
@@ -298,8 +297,8 @@ test.describe("contact graph federation (server1/server2)", () => {
     const alice = aliceFlow.user;
     const bob = bobFlow.user;
     const [aliceToken, bobToken] = await Promise.all([
-      issueDevSession(request, alice, { server: "server1" }),
-      issueDevSession(request, bob, { server: "server2" }),
+      issueUserSession(request, alice, { server: "server1" }),
+      issueUserSession(request, bob, { server: "server2" }),
     ]);
     const alicePage = aliceFlow.page;
     const bobPage = bobFlow.page;
@@ -442,8 +441,8 @@ test.describe("contact graph federation (server1/server2)", () => {
 
     await ensureRegistered(request, alice, { server: "server1" });
     await ensureRegistered(request, bob, { server: "server2" });
-    const aliceTokenServer1 = await issueDevSession(request, alice, { server: "server1" });
-    const bobTokenServer2 = await issueDevSession(request, bob, { server: "server2" });
+    const aliceTokenServer1 = await issueUserSession(request, alice, { server: "server1" });
+    const bobTokenServer2 = await issueUserSession(request, bob, { server: "server2" });
     const locator = await resolvePrincipalLocator(request, bob.id, "server2", bobTokenServer2);
     const { outcome } = await requestContactArkret(request, aliceTokenServer1, bob.id, {
       requestedScopes: ["invite"], server: "server1", recipientServiceId: solandServiceId("server2"),
@@ -511,7 +510,7 @@ test.describe("contact graph federation (server1/server2)", () => {
         async () => {
           const resp = await request.get(
             `${solandBaseUrl("server2")}/_arkret/self/realms/${encodeURIComponent(realmId)}`,
-            { headers: authHeaders(bobTokenServer2) },
+            { headers: authHeaders(bobTokenServer2, "GET", `${solandBaseUrl("server2")}/_arkret/self/realms/${encodeURIComponent(realmId)}`) },
           );
           if (!resp.ok()) return false;
           const realm = await resp.json();
@@ -541,10 +540,10 @@ test.describe("contact graph federation (server1/server2)", () => {
     const bob = uniqueUser(`cgf-tomb-bob-${stamp}`);
     await ensureRegistered(request, alice, { server: "server1" });
     await ensureRegistered(request, bob, { server: "server2" });
-    const aliceToken = await issueDevSession(request, alice, {
+    const aliceToken = await issueUserSession(request, alice, {
       server: "server1",
     });
-    const bobToken = await issueDevSession(request, bob, { server: "server2" });
+    const bobToken = await issueUserSession(request, bob, { server: "server2" });
     const bobLocator = await resolvePrincipalLocator(request, bob.id, "server2", bobToken);
 
     // Federated accepted handshake (reuse S1-fed path).

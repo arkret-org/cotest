@@ -31,7 +31,7 @@ import {
 import {
   assertJointStackNotRequired,
   ensureRegistered,
-  issueDevSession,
+  issueUserSession,
   openDpopUserPage,
   openUserPage,
   selfPathHeadersForDpopSession,
@@ -372,7 +372,7 @@ test.describe("kanban end-to-end", () => {
     const stamp = Date.now();
     const alice = uniqueUser("kanban-cas-alice");
     await ensureRegistered(request, alice);
-    const aliceToken = await issueDevSession(request, alice);
+    const aliceToken = await issueUserSession(request, alice);
 
     const realmId = await createRealmApi(request, aliceToken, {
       title: `Kanban CAS ${stamp}`,
@@ -492,7 +492,7 @@ test.describe("kanban end-to-end", () => {
     const stamp = Date.now();
     const alice = uniqueUser("kanban-crossrealm-alice");
     await ensureRegistered(request, alice);
-    const aliceToken = await issueDevSession(request, alice);
+    const aliceToken = await issueUserSession(request, alice);
 
     const realmA = await createRealmApi(request, aliceToken, {
       title: `Kanban Realm A ${stamp}`,
@@ -544,7 +544,7 @@ test.describe("kanban end-to-end", () => {
       `${solandBaseUrl()}/_arkret/self/events`,
       {
         headers: {
-          ...authHeaders(aliceToken),
+          ...authHeaders(aliceToken, "POST", `${solandBaseUrl()}/_arkret/self/events`),
           "content-type": "application/json",
         },
         data: canonicalJson({ event: crossRealm }),
@@ -579,7 +579,7 @@ test.describe("kanban end-to-end", () => {
     const stamp = Date.now();
     const alice = uniqueUser("kanban-archived-alice");
     await ensureRegistered(request, alice);
-    const aliceToken = await issueDevSession(request, alice);
+    const aliceToken = await issueUserSession(request, alice);
 
     const realmId = await createRealmApi(request, aliceToken, {
       title: `Kanban Archived ${stamp}`,
@@ -623,7 +623,7 @@ test.describe("kanban end-to-end", () => {
       `${solandBaseUrl()}/_arkret/self/events`,
       {
         headers: {
-          ...authHeaders(aliceToken),
+          ...authHeaders(aliceToken, "POST", `${solandBaseUrl()}/_arkret/self/events`),
           "content-type": "application/json",
         },
         data: canonicalJson({ event: trackWrite }),

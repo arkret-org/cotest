@@ -34,7 +34,7 @@ import {
 } from "../../helpers/soland-api";
 import {
   ensureRegistered,
-  issueDevSession,
+  issueUserSession,
   uniqueUser,
   type JointUser,
 } from "../../helpers/users";
@@ -124,8 +124,8 @@ async function acceptedInviteFixture(
   const invitee = uniqueUser(`${slug}-invitee`);
   await ensureRegistered(request, inviter);
   await ensureRegistered(request, invitee, { server: recipientServer });
-  const inviterToken = await issueDevSession(request, inviter);
-  const inviteeToken = await issueDevSession(request, invitee, { server: recipientServer });
+  const inviterToken = await issueUserSession(request, inviter);
+  const inviteeToken = await issueUserSession(request, invitee, { server: recipientServer });
   const realmId = await createRealmApi(request, inviterToken, {
     title: `invite dispatch ${slug} ${Date.now()}`,
     ownerId: inviter.id,
@@ -295,8 +295,7 @@ test.describe("invite addressing", () => {
   }) => {
     const user = uniqueUser(`invite-locator-${Date.now()}`);
     await ensureRegistered(request, user);
-    const token = await issueDevSession(request, user);
-    const selfHeaders = authHeaders(token);
+    const token = await issueUserSession(request, user);
     const issueUrl = `${solandBaseUrl()}/_arkret/self/invite-locators`;
     const rotateUrl = `${issueUrl}/rotate`;
     const revokeUrl = `${issueUrl}/revoke`;
@@ -304,7 +303,7 @@ test.describe("invite addressing", () => {
 
     const issueStarted = Date.now();
     const issue = await request.post(issueUrl, {
-      headers: { ...selfHeaders, "content-type": "application/json" },
+      headers: { ...authHeaders(token, "POST", issueUrl), "content-type": "application/json" },
       data: canonicalJson({
         ttl_seconds: 60,
         one_time_use: false,
@@ -362,7 +361,7 @@ test.describe("invite addressing", () => {
     );
 
     const rotate = await request.post(rotateUrl, {
-      headers: selfHeaders,
+      headers: authHeaders(token, "POST", rotateUrl),
       data: { locator_id: issued.locator_id },
     });
     expect(rotate.status(), await rotate.text()).toBe(200);
@@ -392,13 +391,13 @@ test.describe("invite addressing", () => {
     });
 
     const revoke = await request.post(revokeUrl, {
-      headers: selfHeaders,
+      headers: authHeaders(token, "POST", revokeUrl),
       data: { locator_id: rotated.locator_id },
     });
     expect(revoke.status(), await revoke.text()).toBe(200);
     const revoked = await revoke.json();
     const revokeRetry = await request.post(revokeUrl, {
-      headers: selfHeaders,
+      headers: authHeaders(token, "POST", revokeUrl),
       data: { locator_id: rotated.locator_id },
     });
     expect(revokeRetry.status(), await revokeRetry.text()).toBe(200);
@@ -412,14 +411,14 @@ test.describe("invite addressing", () => {
 
     for (const ttl_seconds of [59, 3601]) {
       const invalidTtl = await request.post(issueUrl, {
-        headers: selfHeaders,
+        headers: authHeaders(token, "POST", issueUrl),
         data: { ttl_seconds },
       });
       expect(invalidTtl.status()).toBe(400);
     }
 
     const oneTimeIssue = await request.post(issueUrl, {
-      headers: { ...selfHeaders, "content-type": "application/json" },
+      headers: { ...authHeaders(token, "POST", issueUrl), "content-type": "application/json" },
       data: canonicalJson({
         ttl_seconds: 120,
         one_time_use: false,
@@ -430,7 +429,7 @@ test.describe("invite addressing", () => {
     const beforeOneTime =
       (await oneTimeIssue.json()) as InviteLocatorIssueOutcome;
     const oneTimeRotate = await request.post(rotateUrl, {
-      headers: { ...selfHeaders, "content-type": "application/json" },
+      headers: { ...authHeaders(token, "POST", rotateUrl), "content-type": "application/json" },
       data: canonicalJson({
         locator_id: beforeOneTime.locator_id,
         ttl_seconds: 60,

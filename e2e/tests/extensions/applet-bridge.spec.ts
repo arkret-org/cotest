@@ -57,7 +57,7 @@ import {
 import {
   assertJointStackNotRequired,
   ensureRegistered,
-  issueDevSession,
+  issueUserSession,
   openDpopUserPage,
   uniqueUser,
 } from "../../helpers/users";
@@ -275,7 +275,7 @@ test.describe("applet bridge", () => {
       return;
     }
     const { page: alicePage, user: alice } = aliceFlow;
-    const aliceToken = await issueDevSession(request, alice);
+    const aliceToken = await issueUserSession(request, alice);
 
     try {
       const signed = await signPackage(request, registryBase, {
@@ -326,7 +326,7 @@ test.describe("applet bridge", () => {
         verificationMethod: botVerificationMethod,
         signingSeedB64url: botSigningJwk.d,
       });
-      const botToken = await issueDevSession(request, {
+      const botToken = await issueUserSession(request, {
         ...uniqueUser(`applet-bot-${stamp}`),
         id: signed.applet_package.bot_actor_id.account_id.principal_id,
       });
@@ -376,7 +376,7 @@ test.describe("applet bridge", () => {
         registration,
         "ak.applet.ghost.provision",
       );
-      const appletServiceToken = await issueDevSession(request, {
+      const appletServiceToken = await issueUserSession(request, {
         ...uniqueUser(`applet-service-${stamp}`),
         id: signed.applet_package.service_id,
       });
@@ -509,7 +509,7 @@ test.describe("applet bridge", () => {
       expect(wireErrCode(JSON.parse(standaloneGenesisText))).toBe("schema_violation");
       expect(JSON.parse(standaloneGenesisText).detail).toContain("not_ordinary_realm_bootstrap");
       const provision = await request.post(`${registryBase}/external-event`, {
-        headers: authHeaders(aliceToken),
+        headers: authHeaders(aliceToken, "POST", `${registryBase}/external-event`),
         data: {
           soland_base_url: solandBaseUrl(),
           destination_id: solandServiceId(),
@@ -536,7 +536,7 @@ test.describe("applet bridge", () => {
 
       const text = `hi from outside ${stamp}`;
       const external = await request.post(`${registryBase}/external-event`, {
-        headers: authHeaders(aliceToken),
+        headers: authHeaders(aliceToken, "POST", `${registryBase}/external-event`),
         data: {
           soland_base_url: solandBaseUrl(),
           destination_id: solandServiceId(),
@@ -664,7 +664,7 @@ test.describe("applet bridge", () => {
 
       const afterRevokeText = `after revoke ${stamp}`;
       const afterRevoke = await request.post(`${registryBase}/external-event`, {
-        headers: authHeaders(aliceToken),
+        headers: authHeaders(aliceToken, "POST", `${registryBase}/external-event`),
         data: {
           soland_base_url: solandBaseUrl(),
           destination_id: solandServiceId(),
@@ -716,7 +716,7 @@ test.describe("applet bridge", () => {
     const stamp = Date.now();
     const alice = uniqueUser(`applet-conflict-${stamp}`);
     await ensureRegistered(request, alice);
-    const aliceToken = await issueDevSession(request, alice);
+    const aliceToken = await issueUserSession(request, alice);
     const namespace = `bridge.conflict.${stamp}`;
 
     const realmId = await createAppletInstallRealm(request, aliceToken, {
@@ -759,7 +759,7 @@ test.describe("applet bridge", () => {
     const stamp = Date.now();
     const alice = uniqueUser(`applet-revoke-${stamp}`);
     await ensureRegistered(request, alice);
-    const aliceToken = await issueDevSession(request, alice);
+    const aliceToken = await issueUserSession(request, alice);
     const realmId = await createAppletInstallRealm(request, aliceToken, {
       title: `applet revoke ${stamp}`,
       discoverability: "listed",
@@ -804,7 +804,7 @@ test.describe("applet bridge", () => {
       `${solandBaseUrl()}/_soland/edge/applets/${encodeURIComponent(registration.applet_id)}/bot/messages`,
       {
         headers: {
-          ...authHeaders(aliceToken),
+          ...authHeaders(aliceToken, "POST", `${solandBaseUrl()}/_soland/edge/applets/${encodeURIComponent(registration.applet_id)}/bot/messages`),
           "content-type": "application/json",
         },
         data: canonicalJson({ text: `must-not-route-${stamp}` }),
@@ -820,7 +820,7 @@ test.describe("applet bridge", () => {
     const stamp = Date.now();
     const alice = uniqueUser(`applet-idem-${stamp}`);
     await ensureRegistered(request, alice);
-    const aliceToken = await issueDevSession(request, alice);
+    const aliceToken = await issueUserSession(request, alice);
     const realmId = await createAppletInstallRealm(request, aliceToken, {
       title: `applet idem ${stamp}`,
       discoverability: "listed",
@@ -899,7 +899,7 @@ test.describe("applet bridge", () => {
     const stamp = Date.now();
     const alice = uniqueUser(`applet-evidence-carrier-${stamp}`);
     await ensureRegistered(request, alice);
-    const aliceToken = await issueDevSession(request, alice);
+    const aliceToken = await issueUserSession(request, alice);
     const realmId = await createAppletInstallRealm(request, aliceToken, {
       title: `applet evidence carrier ${stamp}`,
       discoverability: "listed",
@@ -932,7 +932,7 @@ test.describe("applet bridge", () => {
     const missingEvidence = await request.fetch(previewUrl, {
       method: "POST",
       headers: {
-        ...authHeaders(aliceToken),
+        ...authHeaders(aliceToken, "POST", previewUrl),
         "content-type": "application/json",
       },
       data: canonicalJson({
@@ -946,7 +946,7 @@ test.describe("applet bridge", () => {
     const duplicateSibling = await request.fetch(previewUrl, {
       method: "POST",
       headers: {
-        ...authHeaders(aliceToken),
+        ...authHeaders(aliceToken, "POST", previewUrl),
         "content-type": "application/json",
       },
       data: canonicalJson({
@@ -968,7 +968,7 @@ test.describe("applet bridge", () => {
     const misplaced = await request.fetch(previewUrl, {
       method: "POST",
       headers: {
-        ...authHeaders(aliceToken),
+        ...authHeaders(aliceToken, "POST", previewUrl),
         "content-type": "application/json",
       },
       data: canonicalJson({
@@ -996,7 +996,7 @@ test.describe("applet bridge", () => {
       const denied = await request.fetch(previewUrl, {
         method: "POST",
         headers: {
-          ...authHeaders(aliceToken),
+          ...authHeaders(aliceToken, "POST", previewUrl),
           "content-type": "application/json",
         },
         data: canonicalJson({
@@ -1041,7 +1041,7 @@ test.describe("applet bridge", () => {
     const stamp = Date.now();
     const alice = uniqueUser(`applet-service-as-controller-${stamp}`);
     await ensureRegistered(request, alice);
-    const aliceToken = await issueDevSession(request, alice);
+    const aliceToken = await issueUserSession(request, alice);
     const realmId = await createAppletInstallRealm(request, aliceToken, {
       title: `applet service as controller ${stamp}`,
       discoverability: "listed",
@@ -1073,7 +1073,7 @@ test.describe("applet bridge", () => {
     const stamp = Date.now();
     const alice = uniqueUser(`applet-tamper-body-${stamp}`);
     await ensureRegistered(request, alice);
-    const aliceToken = await issueDevSession(request, alice);
+    const aliceToken = await issueUserSession(request, alice);
     const realmId = await createAppletInstallRealm(request, aliceToken, {
       title: `applet tamper body ${stamp}`,
       discoverability: "listed",
@@ -1113,7 +1113,7 @@ test.describe("applet bridge", () => {
     const stamp = Date.now();
     const alice = uniqueUser(`applet-tamper-proof-${stamp}`);
     await ensureRegistered(request, alice);
-    const aliceToken = await issueDevSession(request, alice);
+    const aliceToken = await issueUserSession(request, alice);
     const realmId = await createAppletInstallRealm(request, aliceToken, {
       title: `applet tamper proof ${stamp}`,
       discoverability: "listed",
@@ -1158,7 +1158,7 @@ test.describe("applet bridge", () => {
     const stamp = Date.now();
     const alice = uniqueUser(`applet-commit-expiry-${stamp}`);
     await ensureRegistered(request, alice);
-    const token = await issueDevSession(request, alice);
+    const token = await issueUserSession(request, alice);
     const realmId = await createAppletInstallRealm(request, token, {
       title: `applet commit expiry ${stamp}`,
       discoverability: "listed",
@@ -1289,7 +1289,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
     const stamp = Date.now();
     const alice = uniqueUser(`applet-inbound-${stamp}`);
     await ensureRegistered(request, alice);
-    return issueDevSession(request, alice);
+    return issueUserSession(request, alice);
   }
 
   test("valid applet service signature inbound transaction push → 200 accepted", async ({
@@ -1300,7 +1300,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
     const stamp = Date.now();
     const alice = uniqueUser(`applet-inbound-ok-${stamp}`);
     await ensureRegistered(request, alice);
-    const token = await issueDevSession(request, alice);
+    const token = await issueUserSession(request, alice);
     const realmId = await createAppletInstallRealm(request, token, {
       title: `applet inbound signed ${stamp}`,
       discoverability: "listed",
@@ -1537,7 +1537,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
     const stamp = Date.now();
     const alice = uniqueUser(`applet-inbound-forged-${stamp}`);
     await ensureRegistered(request, alice);
-    const token = await issueDevSession(request, alice);
+    const token = await issueUserSession(request, alice);
     const realmId = await createAppletInstallRealm(request, token, {
       title: `applet inbound forged signature ${stamp}`,
       discoverability: "listed",
@@ -1900,7 +1900,7 @@ async function rawInstallApplet(
     const preview = await request.fetch(previewUrl, {
       method: "POST",
       headers: {
-        ...authHeaders(token),
+        ...authHeaders(token, "POST", previewUrl),
         "content-type": "application/json",
       },
       data: canonicalJson({
@@ -2122,7 +2122,7 @@ async function rawInstallApplet(
     const fifthRoleResponse = await request.fetch(installUrl, {
       method: "POST",
       headers: {
-        ...authHeaders(token),
+        ...authHeaders(token, "POST", installUrl),
         "content-type": "application/json",
         "Idempotency-Key": `${idempotencyKey}-fifth-role`,
       },
@@ -2139,7 +2139,7 @@ async function rawInstallApplet(
   const response = await request.fetch(installUrl, {
     method: "POST",
     headers: {
-      ...authHeaders(token),
+      ...authHeaders(token, "POST", installUrl),
       "content-type": "application/json",
       "Idempotency-Key": idempotencyKey,
     },

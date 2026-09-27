@@ -9,7 +9,7 @@ import {
 } from "../../helpers/api";
 import {
   assertJointStackNotRequired,
-  issueDevSession,
+  issueUserSession,
   openDpopUserPage,
   openUserPage,
   type JointUser,
@@ -99,8 +99,8 @@ async function createOfflineFixture(
   const alice = aliceFlow.user;
   const bob = bobFlow.user;
   const [aliceToken, bobToken] = await Promise.all([
-    issueDevSession(request, alice),
-    issueDevSession(request, bob),
+    issueUserSession(request, alice),
+    issueUserSession(request, bob),
   ]);
   const realmId = await createSharedRealmViaApi(
     request,

@@ -39,7 +39,7 @@
 ### Phase A — Baseline 注册
 
 1. `ensureRegistered` × 2 (alice、bob)
-2. `issueDevSession` × 2,拿到两个 token
+2. `issueUserSession` × 2，保留两个账号 canonical 注册得到的 DPoP Standard grant；每个请求生成绑定方法与 URL 的 holder proof。
 3. `openUserPage` × 2,得到 `alicePage` / `bobPage`
 4. 断言:两侧的 inkson 已经加载、`inkson-config-loaded` testid 可见
 

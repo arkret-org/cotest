@@ -27,7 +27,7 @@ import {
 import {
   createDpopUserSession,
   ensureRegistered,
-  issueDevSession,
+  issueUserSession,
   pairAcceptedSiblingDevice,
   type JointUser,
   uniqueUser,
@@ -56,8 +56,8 @@ test.describe("read receipts + privacy", () => {
       ensureRegistered(request, bob),
     ]);
     const [aliceToken, bobToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
+      issueUserSession(request, alice),
+      issueUserSession(request, bob),
     ]);
 
     const realmId = await createSharedRealmViaApi(
@@ -220,7 +220,7 @@ test.describe("read receipts + privacy", () => {
     const fixture = await createReceiptFixture(request, "non-member");
     const outsider = uniqueUser("receipt-outsider");
     await ensureRegistered(request, outsider);
-    const outsiderToken = await issueDevSession(request, outsider);
+    const outsiderToken = await issueUserSession(request, outsider);
     const envelope = buildReceiptSignal({
       actor: outsider,
       realmId: fixture.realmId,
@@ -234,7 +234,7 @@ test.describe("read receipts + privacy", () => {
       `${solandBaseUrl()}/_arkret/self/signal`,
       {
         headers: {
-          ...authHeaders(outsiderToken),
+          ...authHeaders(outsiderToken, "POST", `${solandBaseUrl()}/_arkret/self/signal`),
           "content-type": "application/json",
         },
         data: canonicalJson(envelope),
@@ -481,7 +481,7 @@ test.describe("read receipts + privacy", () => {
       fixture.alice,
       await pairAcceptedSiblingDevice(browser, request, aliceSession),
     );
-    const aliceSecondToken = await issueDevSession(request, aliceSecond);
+    const aliceSecondToken = await issueUserSession(request, aliceSecond);
 
     const hlc = makeHlc(1);
     const advance = await advanceReadCursor(request, fixture.aliceToken, fixture.alice, {
@@ -629,7 +629,7 @@ test.describe("read receipts + privacy", () => {
       fixture.alice,
       await pairAcceptedSiblingDevice(browser, request, aliceSession),
     );
-    const aliceSecondToken = await issueDevSession(request, aliceSecond);
+    const aliceSecondToken = await issueUserSession(request, aliceSecond);
 
     const lower =
       fixture.alice.deviceId < aliceSecond.deviceId
@@ -715,8 +715,8 @@ async function createPairableReceiptFixture(
   const alice = aliceSession!.user;
   const bob = bobSession!.user;
   const [aliceToken, bobToken] = await Promise.all([
-    issueDevSession(request, alice),
-    issueDevSession(request, bob),
+    issueUserSession(request, alice),
+    issueUserSession(request, bob),
   ]);
   const realmId = await createSharedRealmViaApi(
     request,

@@ -33,7 +33,7 @@ import {
 import {
   assertJointStackNotRequired,
   ensureRegistered,
-  issueDevSession,
+  issueUserSession,
   openDpopUserPage,
   openUserPage,
   uniqueUser,
@@ -435,8 +435,8 @@ test.describe("chat advanced", () => {
     }
     const bob = uniqueUser(`typing-api-bob-${stamp}`);
     await ensureRegistered(request, bob);
-    const aliceToken = await issueDevSession(request, aliceFlow.user);
-    const bobToken = await issueDevSession(request, bob);
+    const aliceToken = await issueUserSession(request, aliceFlow.user);
+    const bobToken = await issueUserSession(request, bob);
 
     try {
       const realmId = await createRealmApi(request, aliceToken, {
@@ -514,8 +514,8 @@ test.describe("chat advanced", () => {
     const bob = uniqueUser("chat-route-bob");
     await ensureRegistered(request, bob);
     const [aliceToken, bobToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
+      issueUserSession(request, alice),
+      issueUserSession(request, bob),
     ]);
     const realmId = await createSharedRealmViaApi(
       request,
@@ -690,7 +690,7 @@ test.describe("chat advanced", () => {
     const alicePage = aliceFlow.page;
     const bobPage = bobFlow.page;
     const carolPage = carolFlow.page;
-    const aliceToken = await issueDevSession(request, alice);
+    const aliceToken = await issueUserSession(request, alice);
 
     const mentionSuffix = `can you review the incident note? ${stamp}`;
     const apiActorSeq = 8_000_000_300_000_000 + (stamp % 100_000);
@@ -1010,8 +1010,8 @@ test.describe("chat advanced", () => {
       ensureRegistered(request, bob),
     ]);
     const [aliceToken, bobToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
+      issueUserSession(request, alice),
+      issueUserSession(request, bob),
     ]);
     const realmId = await createSharedRealmViaApi(
       request,

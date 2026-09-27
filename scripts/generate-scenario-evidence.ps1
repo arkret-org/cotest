@@ -19,7 +19,7 @@ foreach ($file in Get-ChildItem -LiteralPath $testsRoot -Recurse -File -Filter "
     if ($source -match 'prepareMlsDevice\s*:\s*false') { $bypasses.Add("prepare_mls_device_false") }
     if ($source -match 'allowRecoveryOverride\s*:\s*true') { $bypasses.Add("recovery_override") }
     if ($source -match '\.createRealm\s*\(' -and $source -notmatch 'allowPassivePromptDismissal\s*:\s*false') { $bypasses.Add("create_realm_passive_prompt_dismissal") }
-    if ($source -match 'issueDevSession|sessionCredential\s*:|openDpopUserPage|openDpopUserPageFromSession|createDpopUserSession') { $bypasses.Add("session_injection") }
+    if ($source -match 'sessionCredential\s*:|openDpopUserPage|openDpopUserPageFromSession|createDpopUserSession') { $bypasses.Add("session_injection") }
     if ($source -match 'cotestWire|signedEventEnvelope|registerEventSigner') { $bypasses.Add("test_only_signer_or_wire_builder") }
     if ($usesRawHttp) { $bypasses.Add("raw_http_fixture_or_oracle") }
 

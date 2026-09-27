@@ -252,7 +252,7 @@ export async function createCircleArkret(
   const response = await request.post(
     `${solandBaseUrl(args.server)}/_arkret/self/circles`,
     {
-      headers: { ...authHeaders(token), "content-type": "application/json" },
+      headers: { ...authHeaders(token, "POST", `${solandBaseUrl(args.server)}/_arkret/self/circles`), "content-type": "application/json" },
       data: canonicalJson({
         create_event: {
           ...createEvent,
@@ -274,7 +274,7 @@ export async function getCircleArkret(
 ): Promise<CircleOutcome> {
   const response = await request.get(
     `${solandBaseUrl(opts.server)}/_arkret/self/circles/${encodeURIComponent(circleId)}`,
-    { headers: authHeaders(token) },
+    { headers: authHeaders(token, "GET", `${solandBaseUrl(opts.server)}/_arkret/self/circles/${encodeURIComponent(circleId)}`) },
   );
   return await expectJsonOk<CircleOutcome>(response, `get circle ${circleId}`);
 }
@@ -317,7 +317,7 @@ export async function addCircleMemberRaw(
   return await request.post(
     `${solandBaseUrl(args.server)}/_arkret/self/circles/${encodeURIComponent(circleId)}/members`,
     {
-      headers: { ...authHeaders(token), "content-type": "application/json" },
+      headers: { ...authHeaders(token, "POST", `${solandBaseUrl(args.server)}/_arkret/self/circles/${encodeURIComponent(circleId)}/members`), "content-type": "application/json" },
       data: canonicalJson({
         member_event: {
           ...memberEvent,
@@ -378,7 +378,7 @@ export async function removeCircleMemberArkret(
   const response = await request.delete(
     `${solandBaseUrl(args.server)}/_arkret/self/circles/${encodeURIComponent(circleId)}/members/${encodeURIComponent(canonicalJson(accountActorId(actorId, args.server)))}`,
     {
-      headers: { ...authHeaders(token), "content-type": "application/json" },
+      headers: { ...authHeaders(token, "DELETE", `${solandBaseUrl(args.server)}/_arkret/self/circles/${encodeURIComponent(circleId)}/members/${encodeURIComponent(canonicalJson(accountActorId(actorId, args.server)))}`), "content-type": "application/json" },
       data: canonicalJson({
         member_event: {
           ...memberEvent,

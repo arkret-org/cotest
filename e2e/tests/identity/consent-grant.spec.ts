@@ -24,7 +24,7 @@ import {
 import {
   assertJointStackNotRequired,
   ensureRegistered,
-  issueDevSession,
+  issueUserSession,
   openDpopUserPage,
   openUserPage,
   selfPathHeadersForDpopSession,
@@ -202,7 +202,7 @@ async function listConsentResults(
 ): Promise<ConsentView[]> {
   const response = await request.get(
     `${solandBaseUrl()}/_arkret/self/consent/results`,
-    { headers: { authorization: `Bearer ${token}` } },
+    { headers: authHeaders(token, "GET", `${solandBaseUrl()}/_arkret/self/consent/results`) },
   );
   const body = await expectJsonOk<{ consents: ConsentView[] }>(
     response,
@@ -252,7 +252,7 @@ async function expectConsentResultMissing(
   scope: string,
 ) {
   const response = await request.get(consentResultUrl(peerId, scope), {
-    headers: { authorization: `Bearer ${token}` },
+    headers: authHeaders(token, "GET", consentResultUrl(peerId, scope)),
   });
   expect(response.status()).toBe(404);
 }
@@ -278,7 +278,7 @@ async function requestConsentApi(
   const response = await request.post(
     `${solandBaseUrl()}/_arkret/self/consent/request`,
     {
-      headers: { ...authHeaders(token), "content-type": "application/json" },
+      headers: { ...authHeaders(token, "POST", `${solandBaseUrl()}/_arkret/self/consent/request`), "content-type": "application/json" },
       data: canonicalJson({
         consent_scope: scope,
         holder_account_id: {
@@ -385,7 +385,7 @@ test.describe("consent grant", () => {
       return;
     }
     const alice = aliceFlow.user;
-    const aliceToken = await issueDevSession(request, alice);
+    const aliceToken = await issueUserSession(request, alice);
     const alicePage = aliceFlow.page;
 
     try {
@@ -417,7 +417,7 @@ test.describe("consent grant", () => {
       // quarantine/anti-abuse path and creates no Consent result, pending state,
       // contact fact, or requester-visible outgoing projection.
       const peerRead = await request.get(consentResultUrl(bob.id, "voice_call"), {
-        headers: authHeaders(aliceToken),
+        headers: authHeaders(aliceToken, "GET", consentResultUrl(bob.id, "voice_call")),
       });
       expect(peerRead.status()).toBe(404);
       await expect(
@@ -486,9 +486,9 @@ test.describe("consent grant", () => {
       ensureRegistered(request, charlie),
     ]);
     const [aliceToken, bobToken, charlieToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
-      issueDevSession(request, charlie),
+      issueUserSession(request, alice),
+      issueUserSession(request, bob),
+      issueUserSession(request, charlie),
     ]);
     const aliceSigningSeed = registeredEventSigningSeedB64url(alice.id);
     const bobSigningSeed = registeredEventSigningSeedB64url(bob.id);
@@ -529,7 +529,7 @@ test.describe("consent grant", () => {
       `${solandBaseUrl()}/_arkret/open/mimi/consent/request`,
       {
         headers: {
-          ...authHeaders(bobToken),
+          ...authHeaders(bobToken, "POST", `${solandBaseUrl()}/_arkret/open/mimi/consent/request`),
           "content-type": "application/json",
         },
         data: canonicalJson({ ...openUnsigned, proofs: [openProof] }),
@@ -576,7 +576,7 @@ test.describe("consent grant", () => {
     const signedUpdate = { ...unsignedUpdate, signature };
     const update = await request.post(updateUrl, {
       headers: {
-        ...authHeaders(aliceToken),
+        ...authHeaders(aliceToken, "POST", updateUrl),
         "content-type": "application/json",
       },
       data: canonicalJson(signedUpdate),
@@ -589,7 +589,7 @@ test.describe("consent grant", () => {
 
     const replay = await request.post(updateUrl, {
       headers: {
-        ...authHeaders(aliceToken),
+        ...authHeaders(aliceToken, "POST", updateUrl),
         "content-type": "application/json",
       },
       data: canonicalJson(signedUpdate),
@@ -628,7 +628,7 @@ test.describe("consent grant", () => {
     };
     const conflicting = await request.post(updateUrl, {
       headers: {
-        ...authHeaders(aliceToken),
+        ...authHeaders(aliceToken, "POST", updateUrl),
         "content-type": "application/json",
       },
       data: canonicalJson(conflictingBody),
@@ -661,7 +661,7 @@ test.describe("consent grant", () => {
     };
     const invisible = await request.post(updateUrl, {
       headers: {
-        ...authHeaders(charlieToken),
+        ...authHeaders(charlieToken, "POST", updateUrl),
         "content-type": "application/json",
       },
       data: canonicalJson(invisibleBody),
@@ -693,7 +693,7 @@ test.describe("consent grant", () => {
     };
     const unknown = await request.post(updateUrl, {
       headers: {
-        ...authHeaders(charlieToken),
+        ...authHeaders(charlieToken, "POST", updateUrl),
         "content-type": "application/json",
       },
       data: canonicalJson(unknownBody),
@@ -718,8 +718,8 @@ test.describe("consent grant", () => {
       ensureRegistered(request, bob),
     ]);
     const [aliceToken, bobToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
+      issueUserSession(request, alice),
+      issueUserSession(request, bob),
     ]);
     // consent-model.md section 3.3: Consent Events are authored in the
     // holder's Principal Control Realm.
@@ -822,7 +822,7 @@ test.describe("consent grant", () => {
     }
     const alice = aliceFlow.user;
     const bob = bobFlow.user;
-    const aliceToken = await issueDevSession(request, alice);
+    const aliceToken = await issueUserSession(request, alice);
     const alicePage = aliceFlow.page;
     const bobPage = bobFlow.page;
 
@@ -925,7 +925,7 @@ test.describe("consent grant", () => {
     }
     const alice = aliceFlow.user;
     const bob = bobFlow.user;
-    const aliceToken = await issueDevSession(request, alice);
+    const aliceToken = await issueUserSession(request, alice);
     const alicePage = aliceFlow.page;
     const bobPage = bobFlow.page;
 
@@ -1005,7 +1005,7 @@ test.describe("consent grant", () => {
     }
     const alice = aliceFlow.user;
     const bob = bobFlow.user;
-    const aliceToken = await issueDevSession(request, alice);
+    const aliceToken = await issueUserSession(request, alice);
     const alicePage = aliceFlow.page;
     const bobPage = bobFlow.page;
 
@@ -1092,8 +1092,8 @@ test.describe("consent grant", () => {
     const alice = aliceFlow.user;
     const bob = bobFlow.user;
     const [aliceToken, bobToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
+      issueUserSession(request, alice),
+      issueUserSession(request, bob),
     ]);
     const alicePage = aliceFlow.page;
     const bobPage = bobFlow.page;

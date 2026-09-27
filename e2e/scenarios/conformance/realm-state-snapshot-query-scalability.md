@@ -189,7 +189,7 @@
 - **signing key 注入**:Phase B 验证 signature 时 vector 自带 `signer_did` + `public_key_jwk`,不依赖 alice 的 dev key — snapshot 签名者通常是服务自己或 trusted issuer,不是 actor。Phase C 的 query authz filter 才用 alice 的 session token。
 - **vector id 命名**(参考 encoding-vectors §1.2):`ak.vector.realm_state_snapshot.<scenario>.v1` / `ak.vector.query.<scenario>.v1` / `ak.vector.scalability.<scenario>.v1`,具体 scenario 名见各 Phase 步骤。
 - **error codes**（`realm_state_snapshot_issuer_revoked` 是 `reason_codes[]` 成员，出现在 `reason_code` 而不是顶层 `error.code`）:`realm_state_snapshot_chunk_digest_mismatch`、`realm_state_snapshot_issuer_revoked`、`query_schema_violation`、`scalability_limit_exceeded`、`payload_too_large`、`unknown_vector_id`、`unsupported_vector_version`、`cursor_query_mismatch` — 在 `arkret-spec/spec/v1/artifacts/registry/error-code-registry.json` 中应有对应条目(缺失属于 spec/registry 缺口,不属于 cotest 缺口)。
-- **no new helper**:用现有 `request` fixture + `ensureRegistered` / `issueDevSession`;所有 loader / assertion 写在 spec 文件局部。
+- **no new helper**：用现有 `request` fixture + `ensureRegistered` / `issueUserSession`，保留 canonical Standard grant 与逐请求 DPoP；所有 loader / assertion 写在 spec 文件局部。
 
 ## 总耗时预估
 
