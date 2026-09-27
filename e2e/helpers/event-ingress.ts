@@ -1,8 +1,7 @@
 // One typed decoder for everything a test observes on Event ingress.
 //
-// `POST /_arkret/self/events` carries either one `EventInitialSubmission` or an
-// `EventsSubmitBatchRequestBody`, whose `events[]` contain that same wrapper —
-// not bare Events (`arkret-rust-sdk/crates/wire/src/event_submission.rs`).
+// `POST /_arkret/self/events` carries an EventAdmissionSubmission or a
+// registered atomic unit whose events[] contain that same wrapper.
 // Every listener that reached into `events[0].kind` directly kept working right
 // up to the moment the wire shape moved, and then reported "no request" for a
 // submission the server had actually accepted.
@@ -15,17 +14,12 @@ export type IngressEvent = Record<string, unknown> & {
   event_id?: string;
   kind?: string;
   realm_id?: string;
-  actor_id?: string;
-  actor_seq?: number;
-  prev_refs?: string[];
+  actor_id?: unknown;
   payload?: Record<string, unknown>;
 };
 
 export type IngressSubmission = {
   event: IngressEvent;
-  authorization_lease?: Record<string, unknown>;
-  cbs_proof_bundles?: unknown[];
-  control_proposal_ack?: Record<string, unknown>;
 };
 
 export type IngressDecodeOptions = {
@@ -50,7 +44,7 @@ function decodeSubmission(
     return candidate as IngressSubmission;
   }
   throw new Error(
-    `${where} is not an EventInitialSubmission: expected a nested "event", ` +
+    `${where} is not an EventAdmissionSubmission: expected a nested "event", ` +
       `got keys [${Object.keys(candidate).join(", ")}]`,
   );
 }
@@ -64,6 +58,9 @@ export function decodeEventIngressBody(
     throw new Error(`${options.context ?? "Event ingress"} body is not an object`);
   }
   if (Array.isArray(body.events)) {
+    if (!["ordinary_realm_bootstrap", "direct_conversation_founding", "membership_compensation"].includes(String(body.unit_kind))) {
+      throw new Error(`${options.context ?? "Event ingress"} has no registered atomic unit_kind`);
+    }
     return body.events.map((candidate, index) =>
       decodeSubmission(candidate, index, options),
     );
@@ -73,7 +70,7 @@ export function decodeEventIngressBody(
   }
   throw new Error(
     `${options.context ?? "Event ingress"} body is neither a single ` +
-      `EventInitialSubmission nor an events[] batch`,
+      `EventAdmissionSubmission nor a registered atomic unit`,
   );
 }
 

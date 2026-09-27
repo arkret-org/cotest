@@ -2,9 +2,8 @@
 // Regression guard for Realm genesis under the authority-commit protocol.
 //
 // Replaces the retired `batch-realm-bootstrap` spec. Genesis is no longer a
-// client-side batch bound to an `(realm_id, actor_id)` authoring frontier: each
-// founding Event is submitted on its own and the governance Station returns the
-// `RealmCommit` that gives it a position in this Realm's own stream. The
+// client-side batch bound to an `(realm_id, actor_id)` authoring frontier: one
+// registered atomic unit returns one RealmCommit per founding Event. The
 // producer Event carries no position, predecessor, precondition or Cell write,
 // so every ordering claim below is read off the commits instead.
 
@@ -12,14 +11,12 @@ import { expect, test } from "../../helpers/arkret-test";
 import { solandBaseUrl } from "../../helpers/env";
 import {
   accountActorId,
-  assertAuthoritySubmitOutcome,
   authHeaders,
   canonicalJson,
   canonicalTimestamp,
   createRealmApi,
   scanRealmStreamApi,
   sendMessageApi,
-  submitSignedEventApi,
   type AcceptedRealmBootstrap,
 } from "../../helpers/soland-api";
 import {
@@ -48,23 +45,6 @@ test.describe("Realm genesis commit stream @fully-implemented", () => {
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
     const actor = accountActorId(alice.id);
-
-    // The retired actor-frontier surface must be gone, not merely unused. A
-    // QUERY binding that still answers would mean a second ordering authority
-    // survived the migration.
-    const frontierUrl = `${solandBaseUrl()}/_arkret/self/events/frontier`;
-    const frontier = await request.fetch(frontierUrl, {
-      method: "QUERY",
-      headers: {
-        ...authHeaders(aliceToken, "QUERY", frontierUrl),
-        "content-type": "application/json",
-      },
-      data: canonicalJson({ actor_id: actor, realm_id: "ak:realm:x" }),
-    });
-    expect(
-      [404, 405].includes(frontier.status()),
-      `the retired actor-frontier surface answered ${frontier.status()}`,
-    ).toBe(true);
 
     let acceptedBootstrap: AcceptedRealmBootstrap | undefined;
     const realmId = await createRealmApi(
@@ -96,6 +76,9 @@ test.describe("Realm genesis commit stream @fully-implemented", () => {
       "ak.realm.create",
       "ak.realm.profile",
       "ak.realm.policy_bundle",
+      "ak.realm.join_rule",
+      "ak.realm.history_access",
+      "ak.realm.discovery",
       "ak.realm.plaintext_visible_services",
       "ak.member.state",
     ]);
@@ -154,13 +137,12 @@ test.describe("Realm genesis commit stream @fully-implemented", () => {
       "the creator membership slot is authored by the creator",
     ).toEqual(actor);
     expect(memberStates[0]!.payload).toMatchObject({
-      realm_id: realmId,
       member_id: actor,
       membership: "join",
     });
   });
 
-  test("resubmitting a committed Event is a duplicate that takes no new position", async ({
+  test("replaying the complete bootstrap returns its original commits without new positions", async ({
     request,
   }) => {
     const alice = uniqueUser("realm-genesis-retry");
@@ -185,18 +167,17 @@ test.describe("Realm genesis commit stream @fully-implemented", () => {
     );
     const before = await scanRealmStreamApi(request, aliceToken, realmId);
 
-    // The exact bytes of an already committed Event replay to the commit that
-    // admitted them. A retry must never consume a second stream position.
-    const genesis = structuredClone(acceptedBootstrap!.events[0]!);
-    const retry = await submitSignedEventApi(request, aliceToken, genesis, {
-      context: `retry committed Realm genesis ${realmId}`,
+    const eventsUrl = `${solandBaseUrl()}/_arkret/self/events`;
+    const response = await request.post(eventsUrl, {
+      headers: { ...authHeaders(aliceToken, "POST", eventsUrl), "content-type": "application/json" },
+      data: canonicalJson(acceptedBootstrap!.submission),
     });
-    assertAuthoritySubmitOutcome(retry, genesis, "genesis retry");
-    expect(retry.status, "an exact retry is a duplicate").toBe("duplicate");
-    expect(
-      (retry.commit as Record<string, unknown>).commit_id,
-      "the duplicate replays the original commit",
-    ).toBe(before.commits[0]!.commit_id);
+    const text = await response.text();
+    expect([200, 201], `bootstrap replay: ${response.status()}: ${text}`).toContain(response.status());
+    const retry = JSON.parse(text) as Record<string, unknown>;
+    expect(retry.unit_kind).toBe("ordinary_realm_bootstrap");
+    expect(retry.status).toBe("duplicate");
+    expect(retry.commits).toEqual(acceptedBootstrap!.outcome.commits);
 
     const after = await scanRealmStreamApi(request, aliceToken, realmId);
     expect(

@@ -531,6 +531,7 @@ export function canonicalServiceResolution(server?: SolandKey): {
 
 export type AcceptedRealmBootstrap = {
   events: Array<Record<string, unknown>>;
+  submission: Record<string, unknown>;
   outcome: Record<string, unknown>;
 };
 
@@ -588,10 +589,8 @@ export async function createRealmApi(
   const plaintextVisibleServices = plaintextVisibleServiceDeclarations(
     plaintextVisibleServiceIds,
   );
-  // `realm-genesis.schema.json` is closed and now carries the three initial
-  // policy axes itself, so the bootstrap no longer authors a separate facet
-  // Event for each of them. There is no reducer profile, no digest algorithm
-  // and no frozen notary on it any more.
+  // Genesis declares the initial axes; the registered bootstrap also includes
+  // matching typed-current facet writes in its fixed slot order.
   const realmGenesis: RealmGenesisObject = {
     schema: "ak.schema.realm_genesis.v1",
     purpose: "collaboration",
@@ -606,6 +605,8 @@ export async function createRealmApi(
   };
   const { envelope: realmCreateEvent, realmId } = signedRealmGenesisEnvelope({
     actorId: ownerId,
+    server: opts.server,
+    stationId: data.creator_id,
     // The genesis names no Realm; the envelope builder derives both its own id
     // and the Realm's from the finished envelope.
     realmId: "",
@@ -625,6 +626,8 @@ export async function createRealmApi(
     bootstrapEvents.push(
       signedEventEnvelope({
         actorId: ownerId,
+        server: opts.server,
+        stationId: data.creator_id,
         realmId,
         kind,
         createdAt,
@@ -645,6 +648,16 @@ export async function createRealmApi(
     policy_revision: 1,
     federation_policy: data.federation_policy ?? "restricted",
   });
+  pushBootstrapEvent("ak.realm.join_rule", {
+    value: realmGenesis.initial_join_rule,
+  });
+  pushBootstrapEvent("ak.realm.history_access", {
+    from: null,
+    to: realmGenesis.initial_history_access,
+  });
+  pushBootstrapEvent("ak.realm.discovery", {
+    value: { discoverability: realmGenesis.initial_discoverability },
+  });
   if (plaintextVisibleServices.length > 0) {
     pushBootstrapEvent("ak.realm.plaintext_visible_services", {
       services: plaintextVisibleServices,
@@ -660,39 +673,53 @@ export async function createRealmApi(
     },
   };
   pushBootstrapEvent("ak.member.state", {
-    realm_id: realmId,
     member_id: creatorActorId,
     membership: "join",
   });
 
-  // There is no batch submission: one `RealmCommit` admits exactly one Event.
-  // The founding unit is therefore submitted Event by Event, and the commits it
-  // gets back must occupy consecutive positions of this Realm's own stream
-  // starting at zero — which is the whole ordering guarantee the retired
-  // actor-frontier chain used to carry on the producer envelope.
-  const bootstrapOutcomes: Array<Record<string, unknown>> = [];
+  // The registered bootstrap is one atomic request; each Event still receives
+  // its own consecutive RealmCommit, with no unit-level ordering artifact.
+  const submission = {
+    unit_kind: "ordinary_realm_bootstrap",
+    idempotency_key: uuidV7(),
+    events: bootstrapEvents.map((event) => ({ event })),
+  };
+  const eventsUrl = `${solandBaseUrl(opts.server)}/_arkret/self/events`;
+  const response = await request.post(eventsUrl, {
+    headers: {
+      ...authHeaders(token, "POST", eventsUrl),
+      "content-type": "application/json",
+    },
+    data: canonicalJson(submission),
+  });
+  const text = await response.text();
+  expect([200, 201], `create realm ${data.title}: ${response.status()}: ${text}`)
+    .toContain(response.status());
+  const outcome = JSON.parse(text) as Record<string, unknown>;
+  expect(outcome.unit_kind).toBe("ordinary_realm_bootstrap");
+  expect(["committed", "duplicate"]).toContain(outcome.status);
+  expect(Array.isArray(outcome.commits)).toBe(true);
+  const commits = outcome.commits as Array<Record<string, unknown>>;
+  expect(commits).toHaveLength(bootstrapEvents.length);
   for (const [index, event] of bootstrapEvents.entries()) {
-    const outcome = await submitSignedEventApi(request, token, event, {
-      server: opts.server,
-      context: `create realm ${data.title} (${String(event.kind)})`,
-    });
-    const commit = outcome.commit as Record<string, unknown> | undefined;
+    const commit = commits[index]!;
+    assertAuthoritySubmitOutcome({ status: outcome.status, commit }, event,
+      `create realm ${data.title} slot ${index}`);
     expect(
       commit?.stream_position,
       `realm bootstrap Event ${index} did not take Realm stream position ${index}`,
     ).toBe(index);
-    const previous = bootstrapOutcomes[index - 1]?.commit as
-      | Record<string, unknown>
-      | undefined;
+    const previous = commits[index - 1];
     expect(
       commit?.previous_commit_ref ?? null,
       `realm bootstrap Event ${index} does not follow its predecessor commit`,
     ).toEqual(previous ? previous.commit_id : null);
-    bootstrapOutcomes.push(outcome);
   }
+  rememberPublicationEvidence(bootstrapEvents, outcome, { token, server: opts.server });
   opts.onAcceptedBootstrap?.({
     events: structuredClone(bootstrapEvents),
-    outcome: structuredClone({ commits: bootstrapOutcomes }),
+    submission: structuredClone(submission),
+    outcome: structuredClone(outcome),
   });
   realmAuthorityControllers.set(
     realmAuthorityControllerKey(opts.server, realmId),
@@ -2124,7 +2151,9 @@ export function commitStreamRefForScope(
   envelope: Record<string, unknown>,
 ): Record<string, unknown> {
   const scope = envelope.scope_ref as Record<string, unknown> | undefined;
-  const realmId = stringValue(envelope.realm_id) ?? stringValue(scope?.realm_id);
+  const realmId = scope?.kind === "realm_genesis"
+    ? sdkEventDerivedIds(envelope).realm_id
+    : stringValue(envelope.realm_id) ?? stringValue(scope?.realm_id);
   if (!realmId) {
     throw new Error("an Event outside Realm genesis carries its realm_id");
   }
