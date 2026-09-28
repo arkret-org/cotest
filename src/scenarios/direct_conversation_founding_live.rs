@@ -1593,7 +1593,20 @@ async fn run(
         Vec::new(),
         Cites::Participant(&bob_endorsement.event_id),
     )?;
-    expect_committed(&submit(&bob, &bob_message).await?, &bob_message)?;
+    let blocked_dm_sender = if observe_dm_receipt {
+        let observation =
+            crate::conformance::account_blocklist_projection::observed_authored_shared_message(
+                &bob.client,
+                bob_message.clone(),
+            )
+            .await
+            .context("blocked DM paired Message HTTP submission")?;
+        expect_committed(&observation.outcome, &bob_message)?;
+        Some(observation)
+    } else {
+        expect_committed(&submit(&bob, &bob_message).await?, &bob_message)?;
+        None
+    };
     if observe_dm_receipt {
         crate::conformance::account_blocklist_projection::observe_dm_retained_receipt(
             &bob,
@@ -1607,6 +1620,34 @@ async fn run(
             &provisional.event_id,
         )
         .await?;
+        let unblocked_dm_message = authored(
+            &bob,
+            arkret_wire::event_kind_str::MESSAGE_CREATE,
+            scope.clone(),
+            sealed_message(
+                &mut bob_group,
+                &scope,
+                &strand_id,
+                &add_ref,
+                b"after Alice unblocks",
+            )?,
+            Vec::new(),
+            Cites::Participant(&bob_endorsement.event_id),
+        )?;
+        let unblocked_dm_sender =
+            crate::conformance::account_blocklist_projection::observed_authored_shared_message(
+                &bob.client,
+                unblocked_dm_message.clone(),
+            )
+            .await
+            .context("unblocked DM paired Message HTTP submission")?;
+        expect_committed(&unblocked_dm_sender.outcome, &unblocked_dm_message)?;
+        crate::conformance::account_blocklist_projection::compare_shared_sender_observations(
+            blocked_dm_sender
+                .as_ref()
+                .context("DM paired transport omitted the blocked submission")?,
+            &unblocked_dm_sender,
+        )?;
         return Ok(());
     }
     ensure!(

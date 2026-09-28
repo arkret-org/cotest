@@ -437,7 +437,7 @@ async fn private_account_catchup(holder: &TestActorClient, owner: &ActorId) -> R
 
 /// A real sender observation; elapsed transport time is regression evidence,
 /// not an invented timing bucket or a proof of statistical indistinguishability.
-struct SharedSubmissionObservation {
+pub(crate) struct SharedSubmissionObservation {
     sender_actor: ActorId,
     event_kind: arkret_wire::EventKind,
     scope_ref: arkret_wire::ScopeRef,
@@ -446,8 +446,9 @@ struct SharedSubmissionObservation {
     content_type: String,
     transport_protocol: String,
     response_shape: Value,
-    outcome: arkret_wire::AuthoritySubmitOutcome,
+    pub(crate) outcome: arkret_wire::AuthoritySubmitOutcome,
     elapsed: std::time::Duration,
+    attempts: Vec<(StatusCode, Option<String>)>,
 }
 
 fn json_shape(value: &Value) -> Value {
@@ -482,7 +483,7 @@ async fn observed_shared_message(
     observed_authored_shared_message(peer, event).await
 }
 
-async fn observed_authored_shared_message(
+pub(crate) async fn observed_authored_shared_message(
     peer: &TestActorClient,
     event: arkret_wire::Event,
 ) -> Result<SharedSubmissionObservation> {
@@ -493,31 +494,57 @@ async fn observed_authored_shared_message(
         event.clone(),
         "",
     )?);
-    let submission = peer
-        .post("/_arkret/self/events")
-        .header(reqwest::header::CONTENT_TYPE, "application/json")
-        .body(arkret_canonical::canonical_json_bytes(&request)?);
+    let request_bytes = arkret_canonical::canonical_json_bytes(&request)?;
     let started = std::time::Instant::now();
-    let response = submission.send().await?;
-    let status = response.status();
-    let transport_protocol = format!("{:?}", response.version());
-    let content_type = response
-        .headers()
-        .get(reqwest::header::CONTENT_TYPE)
-        .context("accepted sender response lacks Content-Type")?
-        .to_str()?
-        .to_owned();
-    ensure!(
-        !response.headers().iter().any(|(_, value)| value
-            .to_str()
-            .is_ok_and(|value| value.contains("blocked_by_user"))),
-        "private block leaked through a response header"
-    );
-    let bytes = response.bytes().await?;
+    let mut attempts = Vec::new();
+    let (status, transport_protocol, content_type, bytes) = loop {
+        let response = peer
+            .post("/_arkret/self/events")
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(request_bytes.clone())
+            .send()
+            .await?;
+        let status = response.status();
+        let transport_protocol = format!("{:?}", response.version());
+        let content_type = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .context("sender response lacks Content-Type")?
+            .to_str()?
+            .to_owned();
+        ensure!(
+            !response.headers().iter().any(|(_, value)| value
+                .to_str()
+                .is_ok_and(|value| value.contains("blocked_by_user"))),
+            "private block leaked through a response header"
+        );
+        let bytes = response.bytes().await?;
+        let problem_type = serde_json::from_slice::<Value>(&bytes)
+            .ok()
+            .and_then(|value| value.get("type")?.as_str().map(ToOwned::to_owned));
+        attempts.push((status, problem_type.clone()));
+        if status == StatusCode::SERVICE_UNAVAILABLE
+            && problem_type.as_deref()
+                == Some("https://arkret.org/problems/temporarily_unavailable")
+            && attempts.len() < 3
+        {
+            tokio::time::sleep(std::time::Duration::from_millis(
+                100 * attempts.len() as u64,
+            ))
+            .await;
+            continue;
+        }
+        break (status, transport_protocol, content_type, bytes);
+    };
     let elapsed = started.elapsed();
+    eprintln!(
+        "blocklist exact signed Message request attempts: event={}, attempts={attempts:?}, total_start_to_full_response_ns={}",
+        event.event_id,
+        elapsed.as_nanos(),
+    );
     ensure!(
         status == StatusCode::OK,
-        "shared Message submission failed: {}",
+        "shared Message submission failed after {attempts:?}: {}",
         String::from_utf8_lossy(&bytes)
     );
     ensure!(
@@ -561,13 +588,20 @@ async fn observed_authored_shared_message(
         response_shape,
         outcome,
         elapsed,
+        attempts,
     })
 }
 
-fn compare_shared_sender_observations(
+pub(crate) fn compare_shared_sender_observations(
     blocked: &SharedSubmissionObservation,
     unblocked: &SharedSubmissionObservation,
 ) -> Result<()> {
+    ensure!(
+        blocked.attempts.len() == 1 && unblocked.attempts.len() == 1,
+        "paired one-shot transport differs because a registered retry occurred: blocked={:?}, unblocked={:?}; retries are recorded as availability evidence, not response-independence proof",
+        blocked.attempts,
+        unblocked.attempts,
+    );
     ensure!(
         blocked.sender_actor == unblocked.sender_actor
             && blocked.event_kind == unblocked.event_kind
