@@ -193,11 +193,7 @@ pub async fn standard_session_grant_revoke_invalidates_current_session() -> Resu
         .harness_account_authority_origin()
         .ok_or_else(|| anyhow::anyhow!("standard grant issuer ledger is unavailable"))?;
     let revoke_url = format!("{authority_origin}/_arkret/gate/account/session-grants/revoke");
-    expect_status(
-        server.http().post(&revoke_url),
-        StatusCode::UNAUTHORIZED,
-    )
-    .await?;
+    expect_status(server.http().post(&revoke_url), StatusCode::UNAUTHORIZED).await?;
     let logout = expect_json(
         bob.authorize(server.http().post(&revoke_url)),
         StatusCode::OK,

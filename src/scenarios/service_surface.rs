@@ -110,11 +110,10 @@ const KNOWN_ADVERTISED_UNMOUNTED: &[arkret_wire::ServiceOperationId] =
 /// revocation to Coauth, so a bare Soland process does not mount them. The
 /// exact hard-logout route remains on Soland. Mirrors Soland's own exemption;
 /// these are not false Describe claims.
-const SERVED_BY_ACCOUNT_AUTHORITY: &[arkret_wire::ServiceOperationId] =
-    &[
-        arkret_wire::ServiceOperationId::GateAccountCommandPairDeviceV1,
-        arkret_wire::ServiceOperationId::GateAccountCommandRevokeSessionV1,
-    ];
+const SERVED_BY_ACCOUNT_AUTHORITY: &[arkret_wire::ServiceOperationId] = &[
+    arkret_wire::ServiceOperationId::GateAccountCommandPairDeviceV1,
+    arkret_wire::ServiceOperationId::GateAccountCommandRevokeSessionV1,
+];
 
 /// How the live router answered one unauthenticated, selector-carrying probe.
 #[derive(Debug, PartialEq, Eq)]

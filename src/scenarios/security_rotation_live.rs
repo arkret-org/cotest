@@ -319,7 +319,9 @@ impl RotationAuthor {
             }))?;
         let transcript = arkret_models_crypto::recovery_policy_signature_transcript_bytes(&policy)?;
         policy.auth_data.signature = Base64UrlString::new(arkret_canonical::base64url_encode(
-            SigningKey::from_bytes(&self.seed).sign(&transcript).to_bytes(),
+            SigningKey::from_bytes(&self.seed)
+                .sign(&transcript)
+                .to_bytes(),
         ))
         .map_err(anyhow::Error::msg)?;
         Ok(event_envelope_with_causal_refs_for_device(
@@ -1959,11 +1961,8 @@ fn recovery_grant_coordinates(
     principal: &ProvisionedTestPrincipal,
     station: &DidCoreId,
 ) -> Result<(arkret_wire::SessionGrantId, Base64UrlString)> {
-    let grant = mock_recovery_session_grant_jwt(
-        principal.core_id.as_str(),
-        DEVICE_A,
-        station.as_str(),
-    );
+    let grant =
+        mock_recovery_session_grant_jwt(principal.core_id.as_str(), DEVICE_A, station.as_str());
     // rotation_fixture records B, C, then A. The mock assigns every non-first
     // binding an id derived from the exact credential.
     let mut token = vec![0x01];
@@ -1988,19 +1987,17 @@ async fn create_verified_recovery_unlock_session(
     requesting_device_seed: [u8; 32],
 ) -> Result<arkret_models_crypto::RecoverySession> {
     use arkret_models_crypto::{
-        GenericRecoveryTranscript, RecoveryDevicePossessionTranscript, RecoverySession,
+        GenericRecoveryTranscript, RECOVERY_DEVICE_POSSESSION_DOMAIN,
+        RECOVERY_PROOF_TRANSCRIPT_SCHEMA, RecoveryDevicePossessionTranscript, RecoverySession,
         RecoverySessionCreateRequestBody, RecoverySessionProof,
         RecoverySessionProofSubmitRequestBody, RecoverySignatureAlgorithm,
-        RecoveryTranscriptProofBody, RecoveryUnlockProofBody,
-        RecoveryUnlockProofBodyWithSignature, RecoveryUnlockProofKind,
-        RECOVERY_DEVICE_POSSESSION_DOMAIN, RECOVERY_PROOF_TRANSCRIPT_SCHEMA,
+        RecoveryTranscriptProofBody, RecoveryUnlockProofBody, RecoveryUnlockProofBodyWithSignature,
+        RecoveryUnlockProofKind,
     };
     use arkret_wire::{DidKey, RequestId};
 
     let (grant_id, cnf_jkt) = recovery_grant_coordinates(&signer.principal, &signer.station)?;
-    let request_id = RequestId::new(
-        "ak:request:01904100-0000-7000-8000-0000000000d1".to_owned(),
-    )?;
+    let request_id = RequestId::new("ak:request:01904100-0000-7000-8000-0000000000d1".to_owned())?;
     let requesting_device_key = SigningKey::from_bytes(&requesting_device_seed);
     let device_multibase = arkret_canonical::ed25519_pubkey_to_did_key_multibase(
         requesting_device_key.verifying_key().as_bytes(),
@@ -2015,9 +2012,7 @@ async fn create_verified_recovery_unlock_session(
         account_id: signer.account.clone(),
         requesting_device_id: signer.principal.device_id.clone(),
         requesting_device_public_key_did: requesting_device_public_key_did.clone(),
-        trust_domain: arkret_wire::TrustDomainId::new(
-            "ak:trust_domain:cotest.example".to_owned(),
-        )?,
+        trust_domain: arkret_wire::TrustDomainId::new("ak:trust_domain:cotest.example".to_owned())?,
         expected_recovery_policy_ref: None,
     };
     let possession_signature = requesting_device_key.sign(&possession.signing_bytes()?);
@@ -2026,9 +2021,9 @@ async fn create_verified_recovery_unlock_session(
         account_id: signer.account.clone(),
         requesting_device_id: signer.principal.device_id.clone(),
         requesting_device_public_key_did,
-        requesting_device_signature: Base64UrlString::new(
-            arkret_canonical::base64url_encode(possession_signature.to_bytes()),
-        )
+        requesting_device_signature: Base64UrlString::new(arkret_canonical::base64url_encode(
+            possession_signature.to_bytes(),
+        ))
         .map_err(anyhow::Error::msg)?,
         trust_domain: possession.trust_domain,
         expected_recovery_policy_ref: None,
@@ -2063,9 +2058,7 @@ async fn create_verified_recovery_unlock_session(
         recovery_session_id: session.recovery_session_id.clone(),
         identity_model: session.identity_model,
         model_generation_ref: session.current_device_generation_ref,
-        publication_authority_context_digest: session
-            .publication_authority_context_digest
-            .clone(),
+        publication_authority_context_digest: session.publication_authority_context_digest.clone(),
         challenge: session.challenge.clone(),
         expires_at: session.expires_at,
         created_at: session.created_at,
@@ -2086,19 +2079,18 @@ async fn create_verified_recovery_unlock_session(
             .map_err(anyhow::Error::msg)?,
         }),
     };
-    let outcome: arkret_models_crypto::RecoverySessionProofSubmitOutcome =
-        serde_json::from_value(
-            expect_json(
-                client
-                    .post(&format!(
-                        "/_arkret/root/identity/recovery-sessions/{}/proofs",
-                        session.recovery_session_id
-                    ))
-                    .json(&submit),
-                StatusCode::OK,
-            )
-            .await?,
-        )?;
+    let outcome: arkret_models_crypto::RecoverySessionProofSubmitOutcome = serde_json::from_value(
+        expect_json(
+            client
+                .post(&format!(
+                    "/_arkret/root/identity/recovery-sessions/{}/proofs",
+                    session.recovery_session_id
+                ))
+                .json(&submit),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
     ensure!(
         outcome.proof_summary.as_ref().is_some_and(|summary| {
             summary.kind == arkret_models_crypto::RecoveryProofKind::RecoveryUnlock
@@ -2366,8 +2358,8 @@ pub async fn key_backup_recovery_unlock_delete_is_session_exact_and_zero_write()
         ..
     } = live_rotation("key-backup-recovery-unlock-delete", &[]).await?;
     let policy_id = "ak:policy:01904100-0000-7000-8000-0000000000d7";
-    let recovery_method =
-        DidUrl::new(format!("{}#offline-recovery-key", signer.actor)).map_err(anyhow::Error::msg)?;
+    let recovery_method = DidUrl::new(format!("{}#offline-recovery-key", signer.actor))
+        .map_err(anyhow::Error::msg)?;
     let policy = signer.recovery_unlock_policy(policy_id, &recovery_method, RECOVERY_SEED)?;
     let published = publish_recovery_policy(&events_a, &policy).await?;
     ensure!(

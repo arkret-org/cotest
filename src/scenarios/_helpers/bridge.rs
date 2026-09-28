@@ -660,9 +660,7 @@ async fn coauth_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respo
         CoauthGrantHolder::RecoveryCandidateDevice { device_id } => {
             grant["credential_class"] = json!("recovery_session");
             grant["device_id"] = json!(device_id);
-            grant["scopes"] = json!(
-                arkret_models_identity::RECOVERY_SESSION_GRANT_OPERATIONS
-            );
+            grant["scopes"] = json!(arkret_models_identity::RECOVERY_SESSION_GRANT_OPERATIONS);
             grant["holder_binding"] = json!({
                 "kind": "recovery_candidate_device",
                 "device_id": device_id
