@@ -427,10 +427,32 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         const mlsSubmissions = trackMlsSubmissions(inkson);
         const keyPackageClaims = countRequests(inkson, KEYPACKAGES_CLAIM_PATH);
         const bindings = trackDirectConversationBindings(inkson);
+        const openResponses: string[] = [];
+        inkson.on("response", (response) => {
+          if (new URL(response.url()).pathname.includes("direct-conversation")) {
+            openResponses.push(`${response.request().method()} ${new URL(response.url()).pathname}: ${response.status()}`);
+          }
+        });
         const crash = await cutFirstMlsTransactionSubmission(inkson);
 
         await openOwnAgentDirectChat(inkson, agentSlug);
-        const crashedEventIds = await crash.waitForCutSubmission();
+        let crashedEventIds: string[];
+        try {
+          crashedEventIds = await crash.waitForCutSubmission();
+        } catch (error) {
+          const toasts = await inkson.getByTestId("toast-item").allTextContents();
+          throw new Error(
+            `Agent Direct Conversation did not submit MLS: ` +
+              JSON.stringify({
+                openResponses,
+                keyPackageClaims: keyPackageClaims.count(),
+                mlsSubmissions: mlsSubmissions.diagnostics(),
+                toasts,
+                currentUrl: inkson.url(),
+              }),
+            { cause: error },
+          );
+        }
         expect(
           crashedEventIds.length,
           "the cut submission must carry the signed Commit and Welcome",

@@ -189,7 +189,12 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
     const accepted = await rsvpWrite;
     const acceptedText = await accepted.text();
     expect(accepted.status(), acceptedText).toBeLessThan(400);
-    expect(accepted.request().postData() ?? "").toContain('"status":"accepted"');
+    const acceptedWire = JSON.parse(accepted.request().postData() ?? "{}");
+    const encryptedResponse = acceptedWire.event?.payload?.entry?.encrypted_response;
+    expect(encryptedResponse?.content_type).toBe(
+      "application/vnd.arkret.calendar-rsvp-response+json",
+    );
+    expect(encryptedResponse?.ciphertext).toBeTruthy();
     await expect(calendar.getByTestId("card-detail-rsvp-own")).toHaveText(
       "You: accepted",
       { timeout: 90_000 },
