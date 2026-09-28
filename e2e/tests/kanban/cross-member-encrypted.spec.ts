@@ -68,7 +68,9 @@ type E2eeStorageEvidence = {
   wrappingKeyExtractable: boolean | null;
 };
 
-async function waitForMlsWelcome(
+// The Welcome is a recipient delivery, not a shared Event. Wait for the
+// accepted member-add Commit before the recipient reload/decrypt assertions.
+async function waitForMlsCommit(
   request: APIRequestContext,
   session: DpopUserSession,
   realmId: string,
@@ -77,16 +79,21 @@ async function waitForMlsWelcome(
   await expect
     .poll(
       async () => {
-        const url = `${solandBaseUrl()}/_arkret/self/events`;
+        const url = `${solandBaseUrl()}/_arkret/self/streams/scan`;
         const response = await request.fetch(url, {
-          method: "QUERY",
-          data: canonicalJson({ realm_ids: [realmId], limit: 500 }),
+          method: "POST",
+          data: canonicalJson({
+            realm_id: realmId,
+            stream_ref: { kind: "realm", realm_id: realmId },
+            after_position: null,
+            limit: 500,
+          }),
           headers: {
             "content-type": "application/json",
             ...selfPathGrantHeaders({
               deviceKey: session.deviceKey,
               grantJwt: session.grantJwt,
-              method: "QUERY",
+              method: "POST",
               url,
             }),
           },
@@ -95,16 +102,15 @@ async function waitForMlsWelcome(
           return `status ${response.status()}: ${await response.text()}`;
         }
         const body = await response.json();
-        return (body.events ?? []).some(
-          (event: Record<string, any>) =>
-            event.kind === "ak.mls.welcome" &&
-            event.payload?.recipient_principal_id === recipientId,
+        return (body.committed_events ?? []).some(
+          (item: { event?: Record<string, any> }) =>
+            item.event?.kind === "ak.mls.commit",
         );
       },
       {
         timeout: 120_000,
         intervals: [1_000, 2_000, 5_000],
-        message: `MLS Welcome for ${recipientId} was not accepted in ${realmId}`,
+        message: `MLS member-add Commit for ${recipientId} was not accepted in ${realmId}`,
       },
     )
     .toBe(true);
@@ -700,7 +706,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           await outboundFault.restore();
         }
         await bobPage.gotoTimelineRealm(realmId);
-        await waitForMlsWelcome(request, aliceSession, realmId, bob.id);
+        await waitForMlsCommit(request, aliceSession, realmId, bob.id);
         await bobPage.page.reload({ waitUntil: "domcontentloaded" });
         await bobPage.completeRecoveryKeySetupIfPrompted();
 
@@ -934,7 +940,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
       await bobPage.acknowledgeRecommendedEncryptionPromptIfVisible();
       await bobPage.acceptInvite(realmId);
       await bobPage.gotoTimelineRealm(realmId);
-      await waitForMlsWelcome(request, aliceSession, realmId, bob.id);
+      await waitForMlsCommit(request, aliceSession, realmId, bob.id);
       await bobPage.page.reload({ waitUntil: "domcontentloaded" });
       await bobPage.completeRecoveryKeySetupIfPrompted();
 
