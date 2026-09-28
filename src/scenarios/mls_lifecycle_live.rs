@@ -42,7 +42,7 @@ use arkret_models_collaboration::device_messages::{
 use arkret_models_collaboration::governance::membership_invite::MembershipPayloadState;
 use arkret_models_crypto::{
     KeyPackagesClaimOutcome, KeyPackagesClaimQueryRequestBody, KeyPackagesClaimRequestBody,
-    KeyPackagesUploadOutcome,
+    KeyPackagesUploadOutcome, mls_key_package_record_upload_entry,
 };
 use arkret_wire::{
     AccountId, ActorId, AuthorityCommitStatus, AuthoritySubmitOutcome, CommittedEventFullView,
@@ -182,11 +182,21 @@ async fn run_with_blocklist_observer(observe_blocklist: bool) -> Result<()> {
     let second = bob_identity.key_package_record()?;
     let mut mislabeled = bob_identity.key_package_record()?;
     mislabeled.cipher_suites = vec![RESERVED_SUITE.to_owned()];
-    let upload = bob_identity.signed_key_packages_upload_request(
-        &[first.clone(), second.clone(), mislabeled.clone()],
+    let valid_upload = bob_identity.signed_key_packages_upload_request(
+        &[first.clone(), second.clone()],
         bob.method.as_str(),
         None,
     )?;
+    let mut unsigned = valid_upload.unsigned();
+    unsigned
+        .keypackages
+        .push(mls_key_package_record_upload_entry(&mislabeled).map_err(anyhow::Error::msg)?);
+    let signature = arkret_signatures::keypackages::sign_keypackages_upload_request(
+        &unsigned,
+        bob.method.as_str(),
+        &bob.key.to_bytes(),
+    )?;
+    let upload = unsigned.into_signed(signature);
     let uploaded: KeyPackagesUploadOutcome = serde_json::from_value(
         expect_json(
             bob.client

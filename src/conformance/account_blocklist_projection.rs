@@ -1348,6 +1348,24 @@ async fn native_signal_endpoint(
     Ok(host)
 }
 
+async fn catch_up_blocklist_revision(
+    host: &inkson::sync_engine::NativeAccountHost,
+    expected_revision: u64,
+) -> Result<()> {
+    for _ in 0..8 {
+        if host.state_store().client_blocklist_revision() >= expected_revision {
+            return Ok(());
+        }
+        tokio::time::timeout(std::time::Duration::from_secs(20), host.catch_up())
+            .await
+            .context("private blocklist catch-up timed out")??;
+    }
+    bail!(
+        "private blocklist revision stayed at {} below server revision {expected_revision}",
+        host.state_store().client_blocklist_revision()
+    )
+}
+
 struct ActiveEndpointSigner {
     previous: Option<std::sync::Arc<inkson::event_signer::InksonEventSigner>>,
     mode: inkson::operation::ProofMode,
@@ -1486,6 +1504,15 @@ pub(crate) async fn observe_ordinary_call_invite(
         &directory.path().join("call-recipient.json"),
     )
     .await?;
+    let blocked_revision = read_row(&holder.client).await?.revision;
+    catch_up_blocklist_revision(&holder_host, blocked_revision).await?;
+    ensure!(
+        inkson::account_data::blocks_call_invite(
+            &holder_host.state_store().client_blocklist(),
+            &sender.actor,
+        ),
+        "accepted private block revision did not block the exact Call sender"
+    );
     let scope = arkret_wire::ScopeRef::Realm {
         realm_id: realm.clone(),
     };
@@ -1506,6 +1533,8 @@ pub(crate) async fn observe_ordinary_call_invite(
             expect_json(holder.client.put(PATH).json(&request), StatusCode::OK).await?;
             holder_host
                 .catch_up_selected_realm_until_complete(realm)
+                .await?;
+            catch_up_blocklist_revision(&holder_host, read_row(&holder.client).await?.revision)
                 .await?;
             ensure!(
                 holder_host.state_store().client_blocklist().is_empty(),
@@ -1560,7 +1589,12 @@ pub(crate) async fn observe_ordinary_call_invite(
             inkson::conformance::observe_native_call_projection(&holder_host, received).await?;
         ensure!(
             dispatch == usize::from(!blocked),
-            "private block/unblock did not govern the actual accepted Call product"
+            "private block/unblock did not govern the actual accepted Call product: blocked={blocked}, dispatch={dispatch}, entries={}, matches_sender={}",
+            holder_host.state_store().client_blocklist().len(),
+            inkson::account_data::blocks_call_invite(
+                &holder_host.state_store().client_blocklist(),
+                &sender.actor,
+            )
         );
         observed.push(outcome);
     }

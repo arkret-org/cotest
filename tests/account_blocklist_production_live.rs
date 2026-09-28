@@ -37,8 +37,19 @@ fn blocklist_full_suite_refuses_missing_production_case_executors() {
     }
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn blocklist_real_call_invite_uses_accepted_ordinary_call_and_sealed_delivery() -> Result<()>
-{
-    cotest::scenarios::mls_lifecycle_live::run_blocklist_call_invite_live().await
+#[test]
+fn blocklist_real_call_invite_uses_accepted_ordinary_call_and_sealed_delivery() -> Result<()> {
+    const STACK_SIZE: usize = 32 * 1024 * 1024;
+    std::thread::Builder::new()
+        .stack_size(STACK_SIZE)
+        .spawn(|| -> Result<()> {
+            tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(2)
+                .thread_stack_size(STACK_SIZE)
+                .enable_all()
+                .build()?
+                .block_on(cotest::scenarios::mls_lifecycle_live::run_blocklist_call_invite_live())
+        })?
+        .join()
+        .map_err(|_| anyhow::anyhow!("CallInvite live worker panicked"))?
 }
