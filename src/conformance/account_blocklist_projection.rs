@@ -379,6 +379,130 @@ pub async fn run_account_blocklist_case4_combined_slice() -> Result<()> {
     Ok(())
 }
 
+/// Cross the real peer ingress and federation relay with the holder's private
+/// value present only at its own Station. The remote sender repeats the same
+/// ordinary operation with unchanged Realm authority after the holder removes
+/// the entry; neither Station receives the holder's plaintext target.
+pub async fn run_account_blocklist_case4_federated_boundary_slice() -> Result<()> {
+    use crate::harness::TestServerGroup;
+    use crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
+    use crate::scenarios::cross_station_mls_welcome::join_through_invite;
+    use crate::scenarios::human_device_producer_live::{
+        create_realm_with_join_rule, database, grant_message_create, station_env,
+        wait_for_committed,
+    };
+    use crate::scenarios::identity_test_support::HARNESS_INTERNAL_AUTHORITY_SECRET;
+    use crate::scenarios::mls_lifecycle_live::Member;
+
+    const GROUP: &str = "blocklist-federated-boundary";
+    let holder_database = database(GROUP)?.context("holder Station needs isolated PostgreSQL")?;
+    let sender_database = database(GROUP)?.context("sender Station needs isolated PostgreSQL")?;
+    ensure!(holder_database.connect_url != sender_database.connect_url);
+    let coauth = MockCoauthIntrospectionServer::spawn_with_internal_secret(
+        HARNESS_INTERNAL_AUTHORITY_SECRET,
+    )
+    .await?;
+    let group = TestServerGroup::try_multi_external_with_node_envs(
+        GROUP,
+        &[
+            station_env(&holder_database.connect_url, &coauth),
+            station_env(&sender_database.connect_url, &coauth),
+        ],
+    )
+    .await?
+    .context("case 4 federation boundary requires two real Soland processes")?;
+    let holder_station = group.server(0);
+    let sender_station = group.server(1);
+    let holder = Member::provision(
+        holder_station,
+        &coauth,
+        "blocklist-federated-holder",
+        "ak:device:01904100-0000-7000-8000-000000002471",
+    )
+    .await?;
+    let sender = Member::provision(
+        sender_station,
+        &coauth,
+        "blocklist-federated-sender",
+        "ak:device:01904100-0000-7000-8000-000000002472",
+    )
+    .await?;
+    let realm = create_realm_with_join_rule(
+        &holder.client,
+        "Blocklist federated submission boundary",
+        "invite",
+        &[holder_station, sender_station],
+    )
+    .await?;
+    let strand = holder.client.default_strand_id(&realm)?;
+    join_through_invite(
+        &holder,
+        holder_station,
+        &sender,
+        &realm,
+        "ak:request:019b0000-0000-7000-8000-000000002473",
+        'd',
+    )
+    .await?;
+    grant_message_create(&holder.client, holder_station, &realm, &sender.account).await?;
+
+    block_direct_peer(&holder, &sender).await?;
+    let (holder_value, holder_ledger, holder_writes) =
+        persisted_snapshot(&holder_database.connect_url).await?;
+    let (remote_value, remote_ledger, remote_writes) =
+        persisted_snapshot(&sender_database.connect_url).await?;
+    ensure!(
+        holder_writes == 1
+            && !holder_value.contains(&sender.actor.to_string())
+            && !holder_ledger.contains(&sender.actor.to_string())
+            && remote_value == "[]"
+            && remote_ledger == "[]"
+            && remote_writes == 0,
+        "private blocklist target escaped the holder's encrypted Account Data lane"
+    );
+
+    let blocked = observed_shared_message(
+        &sender.client,
+        &realm,
+        &strand,
+        "federated Message while privately blocked",
+    )
+    .await?;
+    let arkret_wire::AuthoritySubmitOutcome::Accepted { commit, .. } = &blocked.outcome else {
+        bail!("remote blocked submission did not commit");
+    };
+    let holder_view = wait_for_committed(&holder.client, &commit.event_ref).await?;
+    let sender_view = wait_for_committed(&sender.client, &commit.event_ref).await?;
+    ensure!(
+        holder_view == sender_view && holder_view.commit() == commit,
+        "federation relay changed or withheld the blocked sender's accepted Commit"
+    );
+
+    unblock_direct_peer(&holder).await?;
+    ensure!(
+        persisted_snapshot(&sender_database.connect_url).await?.2 == 0,
+        "private unblock revision appeared in the sender Station"
+    );
+    let unblocked = observed_shared_message(
+        &sender.client,
+        &realm,
+        &strand,
+        "federated Message after private unblock",
+    )
+    .await?;
+    let arkret_wire::AuthoritySubmitOutcome::Accepted { commit, .. } = &unblocked.outcome else {
+        bail!("remote unblocked submission did not commit");
+    };
+    let holder_view = wait_for_committed(&holder.client, &commit.event_ref).await?;
+    let sender_view = wait_for_committed(&sender.client, &commit.event_ref).await?;
+    ensure!(
+        holder_view == sender_view && holder_view.commit() == commit,
+        "federation relay changed or withheld the unblocked sender's accepted Commit"
+    );
+    compare_shared_sender_observations(&blocked, &unblocked)?;
+    Ok(())
+}
+
 /// Exercise the ordinary Inkson Account projector and Garth subscription,
 /// including the durable cursor on a real undecryptable accepted Delta.
 async fn private_account_catchup(holder: &TestActorClient, owner: &ActorId) -> Result<()> {

@@ -91,6 +91,25 @@ fn blocklist_case4_combined_shared_history_and_receipt_slice() -> Result<()> {
 }
 
 #[test]
+fn blocklist_case4_federated_ingress_keeps_private_value_at_holder() -> Result<()> {
+    const STACK_SIZE: usize = 32 * 1024 * 1024;
+    std::thread::Builder::new()
+        .stack_size(STACK_SIZE)
+        .spawn(|| -> Result<()> {
+            tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(2)
+                .thread_stack_size(STACK_SIZE)
+                .enable_all()
+                .build()?
+                .block_on(
+                    cotest::conformance::run_account_blocklist_case4_federated_boundary_slice(),
+                )
+        })?
+        .join()
+        .map_err(|_| anyhow::anyhow!("case 4 federation boundary worker panicked"))?
+}
+
+#[test]
 fn blocklist_dm_binding_signed_snapshot_is_participant_only() -> Result<()> {
     const STACK_SIZE: usize = 32 * 1024 * 1024;
     std::thread::Builder::new()
