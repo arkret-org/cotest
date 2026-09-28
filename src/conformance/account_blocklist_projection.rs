@@ -313,7 +313,7 @@ pub async fn run_account_blocklist_production_cases() -> Result<super::SuiteExec
     };
     let reauthored = write_request(losing_client, &owner, reread.revision, losing_handle).await?;
     ensure!(
-        reauthored.set_event.event_id != losing_request.set_event.event_id,
+        reauthored.set_event.event.event_id != losing_request.set_event.event.event_id,
         "CAS recovery reused the rejected Event"
     );
     let recovered: AccountDataRow = serde_json::from_value(
@@ -2273,7 +2273,9 @@ async fn write_value_request(
     let set_event = holder
         .author_event(&pcr, "ak.account_data.set", serde_json::to_value(payload)?)
         .await?;
-    Ok(AccountDataReplaceRequestBody { set_event })
+    Ok(AccountDataReplaceRequestBody {
+        set_event: arkret_wire::EventAdmissionSubmission::new(set_event),
+    })
 }
 
 async fn read_row(holder: &TestActorClient) -> Result<AccountDataRow> {

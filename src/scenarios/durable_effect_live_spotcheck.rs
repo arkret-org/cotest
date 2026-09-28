@@ -301,13 +301,17 @@ pub async fn declared_durable_effects_match_live_producers() -> Result<()> {
         arkret_wire::event_kind_str::ACCOUNT_DATA_SET,
         json!({
             "key": account_data_key,
-            "expected_revision": 0,
+            "expected_server_revision": 0,
             "body": {"spotcheck": true},
         }),
     );
     let response = alice
         .put(&format!("/_arkret/self/account_data/{account_data_key}"))
-        .json(&arkret_models_identity::account::AccountDataReplaceRequestBody { set_event })
+        .json(
+            &arkret_models_identity::account::AccountDataReplaceRequestBody {
+                set_event: arkret_wire::EventAdmissionSubmission::new(set_event),
+            },
+        )
         .send()
         .await?;
     let private_status = response.status();

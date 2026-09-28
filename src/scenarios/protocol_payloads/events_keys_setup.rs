@@ -113,7 +113,9 @@ async fn account_data_round_trip(server: &ArkretServer, actor: &TestActorClient)
             json!({"key": key, "expected_server_revision": 0, "body": first_value}),
         )
         .await?;
-    let body = AccountDataReplaceRequestBody { set_event: set };
+    let body = AccountDataReplaceRequestBody {
+        set_event: arkret_wire::EventAdmissionSubmission::new(set),
+    };
     let created = expect_json(actor.put(&path).json(&body), StatusCode::CREATED)
         .await
         .context("account data create")?;
@@ -133,9 +135,9 @@ async fn account_data_round_trip(server: &ArkretServer, actor: &TestActorClient)
         )
         .await?;
     crate::harness::expect_api_error(
-        actor
-            .put(&path)
-            .json(&AccountDataReplaceRequestBody { set_event: stale }),
+        actor.put(&path).json(&AccountDataReplaceRequestBody {
+            set_event: arkret_wire::EventAdmissionSubmission::new(stale),
+        }),
         StatusCode::CONFLICT,
         "cas_conflict",
     )
@@ -153,7 +155,7 @@ async fn account_data_round_trip(server: &ArkretServer, actor: &TestActorClient)
         .await?;
     let deleted = expect_json(
         actor.delete(&path).json(&AccountDataDeleteRequestBody {
-            set_event: tombstone,
+            set_event: arkret_wire::EventAdmissionSubmission::new(tombstone),
         }),
         StatusCode::OK,
     )

@@ -139,7 +139,7 @@ test.describe("personal blocklist", () => {
     const syncPayload = syncEntry!.payload as Record<string, unknown>;
     expect(syncPayload.encrypted_payload).toEqual(secondEntry.content);
     expect(syncPayload.body).toBeUndefined();
-    expect(syncEntry!.proofs).toEqual(expect.any(Array));
+    expect(syncEntry!.producer_proof).toEqual(expect.any(Object));
     expect(JSON.stringify(syncEntry)).not.toContain(first.label);
     expect(JSON.stringify(syncEntry)).not.toContain(second.label);
   });

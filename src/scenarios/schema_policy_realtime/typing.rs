@@ -83,7 +83,7 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
         .await?;
     let written = expect_json(
         bob.put(path).json(&AccountDataReplaceRequestBody {
-            set_event: rules_written,
+            set_event: arkret_wire::EventAdmissionSubmission::new(rules_written),
         }),
         StatusCode::CREATED,
     )
@@ -112,7 +112,7 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
         .await?;
     let deleted = expect_json(
         bob.delete(path).json(&AccountDataDeleteRequestBody {
-            set_event: deleted_rules,
+            set_event: arkret_wire::EventAdmissionSubmission::new(deleted_rules),
         }),
         StatusCode::OK,
     )

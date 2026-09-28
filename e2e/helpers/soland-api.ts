@@ -1643,7 +1643,7 @@ function accountDataSetSubmission(args: {
 }): Record<string, unknown> {
   const payload: Record<string, unknown> = {
     key: args.key,
-    expected_revision: args.expectedRevision,
+    expected_server_revision: args.expectedRevision,
   };
   if (args.value === undefined) {
     payload.tombstone = true;
