@@ -679,7 +679,8 @@ function Start-ManagedSavfoxGateway {
         [Parameter(Mandatory = $true)][string]$LogDirectory,
         [Parameter(Mandatory = $true)][int]$TimeoutSeconds,
         [Parameter(Mandatory = $true)][System.Collections.IList]$ManagedServices,
-        [string]$TrustedCaFile
+        [string]$TrustedCaFile,
+        [string]$DnsSuffix
     )
 
     $caPrefix = if ($TrustedCaFile) {
@@ -687,7 +688,16 @@ function Start-ManagedSavfoxGateway {
     } else {
         ""
     }
-    $command = $caPrefix + ((
+    $noProxyPrefix = if ($DnsSuffix) {
+        $loopbackNoProxy = "localhost,127.0.0.1,::1,.$DnsSuffix"
+        $gatewayNoProxy = (@($env:NO_PROXY, $env:no_proxy, $loopbackNoProxy) |
+                Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+                Select-Object -Unique) -join ","
+        "`$env:NO_PROXY={0}; `$env:no_proxy={0}; " -f (Quote-PsLiteral $gatewayNoProxy)
+    } else {
+        ""
+    }
+    $command = $caPrefix + $noProxyPrefix + ((
             "`$env:SAVFOX_HOME={0}; `$env:RUST_LOG='info'; & {1} gateway --host 127.0.0.1 --port {2} --token {3}"
         ) -f (Quote-PsLiteral $Probe.Home), (Quote-PsLiteral $Binary), $Probe.Port, (Quote-PsLiteral $Probe.Token))
     $service = Start-ManagedCommand `
@@ -4228,7 +4238,8 @@ try {
                 -LogDirectory $serviceLogDir `
                 -TimeoutSeconds $StartupTimeoutSeconds `
                 -ManagedServices $managedServices `
-                -TrustedCaFile $(if ($jointTlsAssets) { $jointTlsAssets.CaPemPath } else { $null }) | Out-Null
+                -TrustedCaFile $(if ($jointTlsAssets) { $jointTlsAssets.CaPemPath } else { $null }) `
+                -DnsSuffix $DnsSuffix | Out-Null
         }
     }
 

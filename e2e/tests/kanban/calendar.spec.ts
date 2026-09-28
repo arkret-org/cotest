@@ -188,10 +188,7 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
     await calendar.getByTestId("card-detail-rsvp-accepted").click();
     const accepted = await rsvpWrite;
     const acceptedText = await accepted.text();
-    expect(
-      accepted.status(),
-      `${acceptedText}\nrequest=${accepted.request().postData() ?? ""}`,
-    ).toBeLessThan(400);
+    expect(accepted.status(), acceptedText).toBeLessThan(400);
     expect(accepted.request().postData() ?? "").toContain('"status":"accepted"');
     await expect(calendar.getByTestId("card-detail-rsvp-own")).toHaveText(
       "You: accepted",

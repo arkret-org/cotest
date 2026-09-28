@@ -197,6 +197,16 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
 
       const savfoxContext = await browser.newContext();
       const savfox = await savfoxContext.newPage();
+      const approvalDetailStatuses: number[] = [];
+      inkson.on("response", (response) => {
+        const path = new URL(response.url()).pathname;
+        if (
+          response.request().method() === "GET" &&
+          path.startsWith(`${AGENT_LIST_PATH}/`)
+        ) {
+          approvalDetailStatuses.push(response.status());
+        }
+      });
       let secondController: JointUserPage | undefined;
       let unaddressedRuntimeContext: BrowserContext | undefined;
       try {
@@ -215,7 +225,10 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           const listOutage = await failAgentListQuery(inkson);
           try {
             await startSavfoxPairing(savfox, pairingLink);
-            await expect(approvalModal).toBeVisible({ timeout: 120_000 });
+            await expect(
+              approvalModal,
+              `Agent detail reads during notification wakeup: ${approvalDetailStatuses.join(",") || "none"}`,
+            ).toBeVisible({ timeout: 120_000 });
           } finally {
             await listOutage.restore();
           }
