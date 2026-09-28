@@ -23,6 +23,7 @@ import {
   selfInviteDispatchBody,
   expectJsonOk,
   principalControlRealmForId,
+  principalControlRootAuthorizationRefForId,
   registeredEventSigningSeedB64url,
   registeredEventVerificationMethod,
   retypeEventDerivedId,
@@ -144,6 +145,7 @@ export async function grantInviteConsentArkret(
     actorId: holder.id,
     realmId: principalControlRealmForId(holder.id),
     kind: "ak.consent.grant",
+    authorizationRef: principalControlRootAuthorizationRefForId(holder.id),
     server: opts.server,
     payload: {
       consent_id: consentId,

@@ -401,6 +401,16 @@ export function principalControlRealmForId(principalId: string): string {
   }
   return realmId;
 }
+
+export function principalControlRootAuthorizationRefForId(principalId: string): string {
+  const events = principalControlEvents.get(requireDidCoreId(principalId));
+  const create = events?.[0];
+  if (create?.kind !== "ak.realm.create" || typeof create.event_id !== "string") {
+    throw new Error(`accepted PCR root Event for ${principalId} is unavailable`);
+  }
+  return create.event_id;
+}
+
 function principalControlRealmForIdIfKnown(
   principalId: string,
 ): string | undefined {
