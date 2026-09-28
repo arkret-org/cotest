@@ -136,11 +136,12 @@ function Start-CotestTestPostgres {
     $containerName = "cotest-conformance-$PID-pg"
     $runOutput = @(
         & docker run --rm -d --name $containerName `
+            --shm-size 1g `
             -e "POSTGRES_USER=arkret" `
             -e "POSTGRES_PASSWORD=arkret" `
             -e "POSTGRES_DB=arkret" `
             -p "127.0.0.1:$port`:5432" `
-            $Image 2>&1
+            $Image postgres -c max_locks_per_transaction=1024 2>&1
     )
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to start conformance PostgreSQL container: $($runOutput -join [Environment]::NewLine)"

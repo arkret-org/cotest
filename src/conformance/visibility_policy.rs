@@ -134,16 +134,13 @@ fn assert_directory_visibility(fixture: &Value) -> Result<()> {
     {
         bail!("Circle directory visibility closed set drifted");
     }
-    let locked = json!({
-        "visibility": "locked",
-        "opaque_commitment": format!("sha256:{}", "0".repeat(64)),
-    });
-    if key_set(&locked)? != expected_keys(members, "locked_stub_keys")?
+    if members["expected"]["non_member_projection"] != "not_found"
+        || members["expected"]["absent_projection"] != "not_found"
+        || realm_members["expected"]["non_realm_projection"] != "not_found"
         || members["expected"]["timing_bucket"] != realm_members["expected"]["timing_bucket"]
     {
         bail!("Circle non-member and absent projections differ");
     }
-    reject_forbidden(&locked, &expected_keys(members, "forbidden_fields")?)?;
     let preview = json!({
         "circle_id": "ak:circle:AUSenBRnepSegLPN_3QRmalt393LbZ9xTHIOK-qXDnHw",
         "realm_id": "ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1",

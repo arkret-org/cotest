@@ -187,12 +187,17 @@ pub(super) fn registered_atomic_unit_request_baseline() -> Result<Value> {
 }
 
 fn membership_compensation_peer_request(approved: &Value) -> Value {
+    let mut committed_submission = approved.clone();
+    committed_submission
+        .as_object_mut()
+        .expect("submission object")
+        .remove("approval_signatures");
     json!({
         "branch": "registered_atomic_unit",
         "unit": {
             "unit_kind": "membership_compensation",
             "committed_event": {
-                "event_submission": approved,
+                "event_submission": committed_submission,
                 "source_commit": realm_commit(0)
             },
             "membership_compensation_evidence": compensation_evidence()
@@ -396,6 +401,8 @@ fn replication_request(replications: Vec<Value>) -> Value {
 }
 
 fn replication_item(submission: Value) -> Value {
+    let mut submission = submission;
+    submission.as_object_mut().expect("submission object").remove("approval_signatures");
     json!({
         "event_submission": submission,
         "source_commit": realm_commit(0)
