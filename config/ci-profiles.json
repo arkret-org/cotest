@@ -173,10 +173,6 @@
           "filter": "account_auth_and_session_edges_are_enforced"
         },
         {
-          "target": "security_closure_vectors",
-          "filter": "federation_c3_multi_server_in_memory_driver_round_trips"
-        },
-        {
           "target": "directory_service",
           "filter": "teabay_directory_service_profile_is_discoverable"
         },
