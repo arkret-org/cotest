@@ -33,10 +33,7 @@ const SUITE: &str = "account_blocklist_projection";
 const BLOCKLIST_KEY: &str = "ak.account.blocklist";
 const PATH: &str = "/_arkret/self/account_data/ak.account.blocklist";
 const SECRET: [u8; 32] = [7; 32];
-const MISSING_CASES: [&str; 2] = [
-    "unblock_rebuilds_the_projection_from_retained_material",
-    "holder_side_request_filtering_stays_indistinguishable",
-];
+const MISSING_CASES: [&str; 1] = ["holder_side_request_filtering_stays_indistinguishable"];
 
 pub fn run_account_blocklist_projection_vector() -> Result<()> {
     run_account_blocklist_projection_suite().map(|_| ())
@@ -71,6 +68,7 @@ fn validated_fixture() -> Result<Value> {
         "target_closure_rejects_realm_and_organization_targets",
         "unregistered_blocklist_event_kind_is_not_an_authoring_surface",
         "shared_history_is_received_then_filtered_by_the_holder",
+        "unblock_rebuilds_the_projection_from_retained_material",
         "an_unsynced_device_treats_freshness_as_unknown",
     ];
     ensure!(
@@ -517,6 +515,32 @@ pub async fn run_account_blocklist_case4_production() -> Result<super::CaseExecu
     run_account_blocklist_case4_federated_boundary_slice()
         .await
         .context("case 4 encrypted private value and peer ingress boundary")?;
+    Ok(super::CaseExecutionResult {
+        case_id: required_str(case, "name")?.to_owned(),
+        assertions: value_array(required_field(case, "assertions")?, "case.assertions")?.len(),
+    })
+}
+
+/// Exercise the fixture's retained-history restoration in both shared Realm
+/// and direct-conversation scopes. The shared leg proves an unchanged raw
+/// history is merely reprojected after the next accepted private revision;
+/// the DM leg proves the exact ciphertext reappears while a separate Contact
+/// tombstone keeps a subsequently refused Message absent after unblock.
+pub async fn run_account_blocklist_case5_production() -> Result<super::CaseExecutionResult> {
+    let fixture = validated_fixture()?;
+    let cases = value_array(required_field(&fixture, "cases")?, "cases")?;
+    let case = &cases[5];
+    assert_case(case, "accept", None)?;
+    let base = run_account_blocklist_production_cases()
+        .await
+        .context("case 5 shared Realm retained-history projection")?;
+    ensure!(
+        base.cases.len() == 5,
+        "case 5 shared history prerequisite did not execute its production checks"
+    );
+    crate::scenarios::direct_conversation_founding_live::blocklist_case5_dm_history_and_contact_terminal_live()
+        .await
+        .context("case 5 retained DM history and Contact terminal")?;
     Ok(super::CaseExecutionResult {
         case_id: required_str(case, "name")?.to_owned(),
         assertions: value_array(required_field(case, "assertions")?, "case.assertions")?.len(),

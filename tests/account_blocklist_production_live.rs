@@ -28,13 +28,11 @@ async fn blocklist_whole_value_cas_runs_through_http_and_postgres() -> Result<()
 fn blocklist_full_suite_refuses_missing_production_case_executors() {
     let error = cotest::conformance::run_account_blocklist_projection_suite().unwrap_err();
     let error = error.to_string();
-    for case in [
-        "unblock_rebuilds_the_projection_from_retained_material",
-        "holder_side_request_filtering_stays_indistinguishable",
-    ] {
+    for case in ["holder_side_request_filtering_stays_indistinguishable"] {
         assert!(error.contains(case), "missing case must be named: {error}");
     }
     assert!(!error.contains("shared_history_is_received_then_filtered_by_the_holder"));
+    assert!(!error.contains("unblock_rebuilds_the_projection_from_retained_material"));
 }
 
 #[test]
@@ -133,6 +131,32 @@ fn blocklist_case4_full_fixture_runs_production_executor() -> Result<()> {
         })?
         .join()
         .map_err(|_| anyhow::anyhow!("case 4 full fixture worker panicked"))?
+}
+
+#[test]
+fn blocklist_case5_full_fixture_runs_production_executor() -> Result<()> {
+    const STACK_SIZE: usize = 32 * 1024 * 1024;
+    std::thread::Builder::new()
+        .stack_size(STACK_SIZE)
+        .spawn(|| -> Result<()> {
+            tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(2)
+                .thread_stack_size(STACK_SIZE)
+                .enable_all()
+                .build()?
+                .block_on(async {
+                    let result =
+                        cotest::conformance::run_account_blocklist_case5_production().await?;
+                    assert_eq!(
+                        result.case_id,
+                        "unblock_rebuilds_the_projection_from_retained_material"
+                    );
+                    assert_eq!(result.assertions, 4);
+                    Ok(())
+                })
+        })?
+        .join()
+        .map_err(|_| anyhow::anyhow!("case 5 full fixture worker panicked"))?
 }
 
 #[test]
