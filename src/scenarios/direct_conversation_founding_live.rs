@@ -463,6 +463,11 @@ pub async fn blocklist_case5_dm_history_and_contact_terminal_live() -> Result<()
     run(false, false, false, true, true).await
 }
 
+pub async fn blocklist_contact_first_dm_pending_request_live() -> Result<()> {
+    crate::conformance::account_blocklist_projection::contact_and_first_dm_pending_request_live()
+        .await
+}
+
 fn founding_unit_for(
     founder: &Member,
     server: &crate::harness::ArkretServer,

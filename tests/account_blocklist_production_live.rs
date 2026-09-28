@@ -129,3 +129,22 @@ fn blocklist_case5_dm_history_restores_but_contact_terminal_does_not_backfill() 
         .join()
         .map_err(|_| anyhow::anyhow!("DM case5 live worker panicked"))?
 }
+
+#[test]
+fn blocklist_contact_first_dm_pending_request_is_delivered_then_filtered_locally() -> Result<()> {
+    const STACK_SIZE: usize = 32 * 1024 * 1024;
+    std::thread::Builder::new()
+        .stack_size(STACK_SIZE)
+        .spawn(|| -> Result<()> {
+            tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(2)
+                .thread_stack_size(STACK_SIZE)
+                .enable_all()
+                .build()?
+                .block_on(
+                    cotest::scenarios::direct_conversation_founding_live::blocklist_contact_first_dm_pending_request_live(),
+                )
+        })?
+        .join()
+        .map_err(|_| anyhow::anyhow!("Contact first-DM blocklist live worker panicked"))?
+}

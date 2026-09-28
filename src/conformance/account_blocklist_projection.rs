@@ -1021,6 +1021,239 @@ pub(crate) async fn unblock_direct_peer(
     Ok(())
 }
 
+/// A Contact request with `direct_message` scope is the registered first-DM
+/// invitation. The holder receives its accepted row before private filtering.
+pub async fn contact_and_first_dm_pending_request_live() -> Result<()> {
+    use arkret::contact_operations::{
+        ContactAcceptedOutcome, ContactCommitPhase, ContactCommitRequestBody,
+        ContactOperationOutcome, ContactOperationRequestBody, ContactPreparedOutcome, ContactScope,
+        ContactState,
+    };
+
+    use crate::harness::TestServerGroup;
+    use crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
+    use crate::scenarios::_helpers::live_gate::skip_or_fail;
+    use crate::scenarios::human_device_producer_live::{database, station_env};
+    use crate::scenarios::identity_test_support::HARNESS_INTERNAL_AUTHORITY_SECRET;
+    use crate::scenarios::mls_lifecycle_live::Member;
+
+    const GROUP: &str = "blocklist-contact-first-dm-live";
+    let Some(database) = database(GROUP)? else {
+        return Ok(());
+    };
+    let coauth = MockCoauthIntrospectionServer::spawn_with_internal_secret(
+        HARNESS_INTERNAL_AUTHORITY_SECRET,
+    )
+    .await?;
+    let node_envs = [station_env(&database.connect_url, &coauth)];
+    let Some(group) = TestServerGroup::try_multi_external_with_node_envs(GROUP, &node_envs).await?
+    else {
+        return skip_or_fail(GROUP, "prebuilt Soland unavailable");
+    };
+    let station = group.server(0);
+    let alice = Member::provision(
+        station,
+        &coauth,
+        "blocklist-contact-holder",
+        "ak:device:01904100-0000-7000-8000-000000002461",
+    )
+    .await?;
+    let bob = Member::provision(
+        station,
+        &coauth,
+        "blocklist-contact-sender",
+        "ak:device:01904100-0000-7000-8000-000000002462",
+    )
+    .await?;
+    block_direct_peer(&alice, &bob).await?;
+    let directory = tempfile::tempdir()?;
+    let holder_host = inkson::sync_engine::NativeAccountHost::new(
+        alice.client.sdk(),
+        alice.account.clone(),
+        alice.device.clone(),
+        inkson::LocalStateStore::with_path(&directory.path().join("contact-holder.json")),
+    )
+    .await?;
+    holder_host.catch_up().await?;
+    catch_up_blocklist_revision(&holder_host, read_row(&alice.client).await?.revision).await?;
+    ensure!(
+        inkson::account_data::hides_contact_request(
+            &holder_host.state_store().client_blocklist(),
+            &bob.actor,
+        ),
+        "accepted private block did not filter Bob's Contact surface"
+    );
+
+    let prepare = bob.client.contact_request_prepare(&alice.client.actor)?;
+    let ContactOperationRequestBody::Prepare(prepared_input) = &prepare else {
+        bail!("first DM Contact fixture lacks a prepare request");
+    };
+    ensure!(
+        prepared_input.granted_to_peer_scopes == vec![ContactScope::DirectMessage],
+        "first DM request did not use the registered Contact direct_message scope"
+    );
+    let mut observations = Vec::new();
+    let mut prepared = None;
+    for blocked in [true, false] {
+        let started = std::time::Instant::now();
+        let response = bob
+            .client
+            .post("/_arkret/self/contacts/request")
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(arkret_canonical::canonical_json_bytes(&prepare)?)
+            .send()
+            .await?;
+        let status = response.status();
+        let protocol = format!("{:?}", response.version());
+        let content_type = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or_default()
+            .to_owned();
+        let bytes = response.bytes().await?;
+        let elapsed = started.elapsed();
+        ensure!(
+            status == StatusCode::OK,
+            "Contact prepare changed sender-visible status at blocked={blocked}: {status} {}",
+            String::from_utf8_lossy(&bytes)
+        );
+        let value: Value = serde_json::from_slice(&bytes)?;
+        ensure!(
+            !value.to_string().contains("blocked_by_user"),
+            "holder-private block leaked through Contact prepare response"
+        );
+        let outcome: ContactOperationOutcome = serde_json::from_value(value.clone())?;
+        ensure!(
+            matches!(
+                &outcome,
+                ContactOperationOutcome::Prepared {
+                    outcome: ContactPreparedOutcome::Request { .. }
+                }
+            ),
+            "Contact prepare did not return its registered request branch: {outcome:?}"
+        );
+        observations.push((status, protocol, content_type, json_shape(&value), elapsed));
+        prepared = Some(outcome);
+        if blocked {
+            unblock_direct_peer(&alice).await?;
+            catch_up_blocklist_revision(&holder_host, read_row(&alice.client).await?.revision)
+                .await?;
+        }
+    }
+    ensure!(
+        observations[0].0 == observations[1].0
+            && observations[0].1 == observations[1].1
+            && observations[0].2 == observations[1].2
+            && observations[0].3 == observations[1].3,
+        "holder-private block changed the exact Contact prepare replay response envelope"
+    );
+    block_direct_peer(&alice, &bob).await?;
+    catch_up_blocklist_revision(&holder_host, read_row(&alice.client).await?.revision).await?;
+    let ContactOperationOutcome::Prepared {
+        outcome:
+            ContactPreparedOutcome::Request {
+                reservation_handle,
+                event_draft,
+                ..
+            },
+    } = prepared.context("Contact prepare yielded no result")?
+    else {
+        bail!("Contact prepare replay omitted its request draft");
+    };
+    let commit = ContactOperationRequestBody::Commit(ContactCommitRequestBody {
+        phase: ContactCommitPhase::Commit,
+        operation_id: prepared_input.operation_id.clone(),
+        idempotency_key: prepared_input.idempotency_key.clone(),
+        reservation_handle,
+        signed_event: bob.client.sign_prepared_contact_event(
+            &event_draft,
+            arkret_wire::event_kind_str::CONTACT_REQUESTED,
+        )?,
+    });
+    let started = std::time::Instant::now();
+    let response = bob
+        .client
+        .post("/_arkret/self/contacts/request")
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .body(arkret_canonical::canonical_json_bytes(&commit)?)
+        .send()
+        .await?;
+    let commit_status = response.status();
+    let commit_bytes = response.bytes().await?;
+    let commit_elapsed = started.elapsed();
+    ensure!(
+        commit_status == StatusCode::OK,
+        "blocked Contact commit was not accepted: {commit_status} {}",
+        String::from_utf8_lossy(&commit_bytes)
+    );
+    let committed: ContactOperationOutcome = serde_json::from_slice(&commit_bytes)?;
+    let ContactOperationOutcome::Accepted {
+        outcome:
+            ContactAcceptedOutcome::Request {
+                request_acceptance_receipt,
+                ..
+            },
+    } = committed
+    else {
+        bail!("blocked Contact commit changed its closed outcome: {committed:?}");
+    };
+    let row = alice
+        .client
+        .sdk()
+        .contacts_list()
+        .await?
+        .contacts
+        .into_iter()
+        .find(|row| row.peer.contact_actor_id() == bob.actor)
+        .context("Contact service did not deliver Bob's accepted request to Alice")?;
+    ensure!(
+        row.state == ContactState::PendingIncoming
+            && row.request_event_ref.as_ref()
+                == Some(&request_acceptance_receipt.core.request_event_ref)
+            && row
+                .granted_by_peer_scopes
+                .contains(&ContactScope::DirectMessage),
+        "holder did not retain exact first-DM-scoped Contact request"
+    );
+    ensure!(
+        inkson::account_data::hides_contact_request(
+            &holder_host.state_store().client_blocklist(),
+            &bob.actor
+        ),
+        "holder default Contact inbox did not filter the accepted pending request"
+    );
+    unblock_direct_peer(&alice).await?;
+    catch_up_blocklist_revision(&holder_host, read_row(&alice.client).await?.revision).await?;
+    ensure!(
+        !inkson::account_data::hides_contact_request(
+            &holder_host.state_store().client_blocklist(),
+            &bob.actor
+        ),
+        "unblock did not restore the accepted pending Contact request"
+    );
+    let reopened = alice.client.sdk().contacts_list().await?.contacts;
+    ensure!(
+        reopened
+            .iter()
+            .any(|candidate| candidate.peer.contact_actor_id() == bob.actor
+                && candidate.state == ContactState::PendingIncoming
+                && candidate.request_event_ref == row.request_event_ref),
+        "private unblock changed or deleted the accepted first-DM Contact row"
+    );
+    eprintln!(
+        "blocklist Contact first-DM prepare exact replay: protocol={}, status={}, shape={}, blocked_start_to_full_response_ns={}, unblocked_replay_start_to_full_response_ns={}; commit_status={}, commit_start_to_full_response_ns={}; replay timing is diagnostic only",
+        observations[0].1,
+        observations[0].0,
+        observations[0].3,
+        observations[0].4.as_nanos(),
+        observations[1].4.as_nanos(),
+        commit_status,
+        commit_elapsed.as_nanos(),
+    );
+    Ok(())
+}
+
 /// Observe a retained, accepted DM Message through the real Native receipt rail.
 /// The holder's private block revision is installed before `message_id` commits.
 pub(crate) async fn observe_dm_retained_receipt(
