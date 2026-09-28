@@ -82,6 +82,12 @@ test.describe("notifications", () => {
         realmId,
         { authorityRootController: alice.id },
       );
+      await grantCapabilityEventApi(request, aliceToken, {
+        ownerId: alice.id,
+        realmId,
+        subjectId: bob.id,
+        actions: ["ak.strand.watch.set"],
+      });
       await setStrandWatchLevelApi(
         request,
         bobToken,

@@ -810,24 +810,27 @@ export async function createRealmApi(
       if (!inviteEventId) {
         throw new Error(`directed invite ${invitee} is missing event_id`);
       }
-      const dispatch = await dispatchSelfInviteApi(
-        request,
-        token,
-        selfInviteDispatchBody({
-          eventId: inviteEventId,
-          inviteAddress: {
-            account_id: inviteeAccountId,
-            service_resolution: canonicalServiceResolution(recipientServer),
-          },
-          evidence,
-        }),
-        { server: opts.server },
-      );
-      if (dispatch.status !== "accepted" && dispatch.status !== "duplicate") {
-        throw new Error(
-          `directed invite dispatch for ${invitee} returned ${dispatch.status}`,
+      const dispatchBody = selfInviteDispatchBody({
+        eventId: inviteEventId,
+        inviteAddress: {
+          account_id: inviteeAccountId,
+          service_resolution: canonicalServiceResolution(recipientServer),
+        },
+        evidence,
+      });
+      await expect.poll(async () => {
+        const dispatch = await dispatchSelfInviteApi(
+          request,
+          token,
+          dispatchBody,
+          { server: opts.server },
         );
-      }
+        return dispatch.status;
+      }, {
+        message: `directed invite dispatch for ${invitee}`,
+        timeout: 30_000,
+        intervals: [250, 500, 1_000, 2_000],
+      }).toMatch(/^(accepted|duplicate)$/);
     }
   }
 
@@ -1177,6 +1180,7 @@ export async function acceptInviteApi(
   inviteId: string,
   opts: {
     server?: SolandKey;
+    previousState?: "pending" | "claimed";
     /// Set `false` for a third-party invite, which stores no account.
     ///
     /// governance-objects.md section 5.3 binds the optional
@@ -1198,6 +1202,7 @@ export async function acceptInviteApi(
     kind: "ak.invite.accept",
     payload: {
       invite_id: inviteId,
+      previous_state: opts.previousState ?? "pending",
       ...(opts.directed === false ? {} : {
         invitee_account_id: accountActorId(actorId, opts.server).account_id,
       }),

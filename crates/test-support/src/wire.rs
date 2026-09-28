@@ -1257,8 +1257,14 @@ pub fn mimi_request_consent_proof(input: Value) -> Result<Value> {
         serde_json::from_value(input).context("parse MIMI request-consent proof input")?;
     let created_at = canonical::parse_timestamp_canonical(&input.created_at)
         .with_context(|| format!("parse proof created_at {:?}", input.created_at))?;
+    let mut unsigned_request = input.request.clone();
+    unsigned_request
+        .as_object_mut()
+        .ok_or_else(|| anyhow::anyhow!("MIMI request-consent body must be an object"))?
+        .entry("proofs")
+        .or_insert_with(|| json!([]));
     let mut request: MimiRequestConsentRequestBody =
-        serde_json::from_value(input.request.clone()).context("parse MIMI request-consent body")?;
+        serde_json::from_value(unsigned_request).context("parse MIMI request-consent body")?;
     // The digest is over the body without `proofs`, so the proof being built
     // never enters its own preimage.
     request.proofs = Vec::new();

@@ -11,7 +11,6 @@ import { expect, test, type APIRequestContext } from "../../helpers/arkret-test"
 import { solandBaseUrl } from "../../helpers/env";
 import {
   acceptInviteViaApi,
-  listRealmEventsViaApi,
   sendPlaintextMessageViaApi,
 } from "../../helpers/api";
 import {
@@ -506,8 +505,9 @@ async function postReadCursor(
   });
 }
 
-// Send a plaintext message and return its canonical read-cursor position
-// {event_id, hlc} resolved from the realm event log.
+// The Event envelope has no HLC field. A read cursor carries its own local
+// clock alongside the accepted target Event ID.
+let cursorPhysicalMs = 0;
 async function sendAndResolvePosition(
   request: APIRequestContext,
   token: string,
@@ -518,13 +518,16 @@ async function sendAndResolvePosition(
   const message = await sendPlaintextMessageViaApi(request, token, realmId, body, {
     actorId,
   });
-  const events = await listRealmEventsViaApi(request, token, realmId, { limit: 50 });
-  const event = events.find(
-    (candidate) => candidate.event_id === message.event_id,
-  ) as { event_id?: string; hlc?: string } | undefined;
-  expect(event, `message event ${message.event_id}`).toBeTruthy();
-  expect(typeof event!.hlc).toBe("string");
-  return { event_id: message.event_id, hlc: event!.hlc! };
+  cursorPhysicalMs = Math.max(Date.now(), cursorPhysicalMs + 1);
+  const nodeId = createHash("sha256")
+    .update(realmId)
+    .update(actorId)
+    .digest("hex")
+    .slice(0, 8);
+  return {
+    event_id: message.event_id,
+    hlc: `${cursorPhysicalMs.toString(16).padStart(12, "0")}-0000-${nodeId}`,
+  };
 }
 
 // Poll `account/subscribe` until the actor's to-device queue carries a

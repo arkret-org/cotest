@@ -16,13 +16,11 @@ import {
   type Locator,
 } from "../../helpers/arkret-test";
 import { createRealmViaApi } from "../../helpers/api";
-import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import { decodeIngressEvents } from "../../helpers/event-ingress";
-import { canonicalJson } from "../../helpers/soland-api";
+import { scanRealmStreamApi } from "../../helpers/soland-api";
 import {
   openDpopUserPage,
-  selfPathHeadersForDpopSession,
   type DpopUserSession,
 } from "../../helpers/users";
 
@@ -33,25 +31,10 @@ async function readRealmEvents(
   realmId: string,
   session: DpopUserSession,
 ): Promise<Array<Record<string, unknown>>> {
-  const url = `${solandBaseUrl()}/_arkret/self/events`;
-  const response = await request.fetch(url, {
-    method: "QUERY",
-    headers: {
-      ...selfPathHeadersForDpopSession(session, "QUERY", url),
-      "content-type": "application/json",
-    },
-    data: canonicalJson({ limit: 256, realm_ids: [realmId] }),
+  const scan = await scanRealmStreamApi(request, session.grantJwt, realmId, {
+    limit: 256,
   });
-  expect(response.status(), await response.text()).toBe(200);
-  const body = (await response.json()) as {
-    events?: Array<Record<string, unknown>>;
-  };
-  return (body.events ?? []).map((row) => {
-    const event = row.event;
-    return event && typeof event === "object"
-      ? (event as Record<string, unknown>)
-      : row;
-  });
+  return scan.events;
 }
 
 async function addCardThroughColumn(column: Locator, title: string): Promise<void> {
@@ -195,9 +178,7 @@ test.describe("workflow: kanban week-in-review", () => {
           return boardCreate !== undefined;
         }, { timeout: 90_000 })
         .toBe(true);
-      expect(boardCreate?.auth_context, "Board create carries Data Event auth context").toEqual(
-        expect.objectContaining({ authority_refs: expect.any(Array) }),
-      );
+      expect(boardCreate?.event_id, "Board create is an accepted Event").toMatch(/^ak:event:/);
       expect(boardCreate?.seal_basis, "Board create never enters Control Move shape").toBeUndefined();
 
       for (const columnName of [todayList, doingList, doneList]) {

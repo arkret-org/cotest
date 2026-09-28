@@ -37,6 +37,7 @@ import {
   typedId,
   wireErrCode,
   readCommitStreamHeadApi,
+  scanRealmStreamApi,
 } from "../../helpers/soland-api";
 import {
   assertJointStackNotRequired,
@@ -70,7 +71,6 @@ async function createStrandApi(
         schema: "ak.schema.strand.v1",
         realm_id: realmId,
         metadata: { title },
-        stage: "planned",
         tracks: { discussion: { enabled: true, is_primary: true } },
         created_by: accountActorId(actorId),
         created_at: createdAt,
@@ -187,26 +187,14 @@ test.describe("core object invariants", () => {
       // query response items are canonical Event Envelopes. The required
       // security scope is carried by scope_ref; top-level realm_id is not a
       // required producer field.
-      const eventsUrl = `${solandBaseUrl()}/_arkret/self/events`;
-      const eventsRes = await request.fetch(eventsUrl, {
-        method: "QUERY",
-        data: canonicalJson({ realm_ids: [realmId], limit: 20 }),
-        headers: {
-          ...authFor("QUERY", eventsUrl),
-          "content-type": "application/json",
-        },
-      });
-      expect(eventsRes.status()).toBe(200);
-      const eventsBody = (await eventsRes.json()) as {
-        events?: Array<{
-          event_id?: string;
-          kind?: string;
-          actor_id?: ActorId;
-          created_at?: string;
-          scope_ref?: { kind?: string; realm_id?: string };
-        }>;
-      };
-      const events = eventsBody.events ?? [];
+      const scan = await scanRealmStreamApi(request, aliceFlow.session.grantJwt, realmId, { limit: 20 });
+      const events = scan.events as Array<{
+        event_id?: string;
+        kind?: string;
+        actor_id?: ActorId;
+        created_at?: string;
+        scope_ref?: { kind?: string; realm_id?: string };
+      }>;
       expect(events.length).toBeGreaterThan(0);
 
       // Find the Realm lifecycle / create event — soland writes lifecycle

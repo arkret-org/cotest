@@ -87,6 +87,10 @@ function submittedEventId(body: unknown): string | undefined {
     return undefined;
   }
   const record = body as Record<string, unknown>;
+  const commit = record.commit as Record<string, unknown> | undefined;
+  if (typeof commit?.event_ref === "string") {
+    return commit.event_ref;
+  }
   if (typeof record.event_id === "string") {
     return record.event_id;
   }
@@ -107,6 +111,9 @@ function submittedEventOutcome(
     return undefined;
   }
   const record = body as Record<string, unknown>;
+  if (record.status === "committed") {
+    return "accepted";
+  }
   if (record.status === "accepted" || record.status === "duplicate") {
     return record.status;
   }
@@ -448,8 +455,6 @@ test.describe("service surface contract — error envelope, pagination, idempote
           content: { kind: "ak.content.text", body: `${body} drift` },
         },
       });
-      drift.auth_context = envelope.auth_context;
-      refreshEventEnvelopeProof(drift);
       // Deliberately reuse the accepted request identity with different content.
       // Ordinary signing helpers derive a new id; this negative request must not.
       drift.event_id = eventId;

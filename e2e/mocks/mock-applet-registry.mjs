@@ -53,7 +53,7 @@ import {
   randomUUID,
   sign,
 } from "node:crypto";
-import { createEd25519KeyPair } from "./_shared/keypairs.mjs";
+import { createEd25519KeyPair, encodeEd25519PubkeyMultibase, rawEd25519PublicKey } from "./_shared/keypairs.mjs";
 import { handleInspect } from "./_shared/inspect.mjs";
 import { canonicalJson, readJson } from "./_shared/http.mjs";
 import { replaceStateFileSync } from "./_shared/atomic-state.mjs";
@@ -135,15 +135,6 @@ function decryptDurableState(envelope, key) {
 // Auto-generate the registry DID unless overridden, so each harness run
 // gets a unique registry identity (preventing test cross-contamination
 // across runs that share a persistent backing store).
-const configuredRegistryDid =
-  process.env.MOCK_APPLET_REGISTRY_DID ?? durableState.registryDid;
-const registryDid =
-  configuredRegistryDid ??
-  `did:web:applet-registry-${randomUUID().slice(0, 8)}.joint-e2e.local`;
-if (!registryDid.startsWith("did:")) {
-  throw new Error("MOCK_APPLET_REGISTRY_DID must be a W3C DID");
-}
-
 function projectDidToCoreId(did) {
   if (did.startsWith("did:webvh:")) {
     const scid = did.slice("did:webvh:".length).split(":", 1)[0];
@@ -159,8 +150,6 @@ function projectDidToCoreId(did) {
   throw new Error(`unsupported DID method: ${did}`);
 }
 
-const registryId = projectDidToCoreId(registryDid);
-
 const persistedPrivateKey = durableState.registryPrivateJwk
   ? createPrivateKey({ key: durableState.registryPrivateJwk, format: "jwk" })
   : undefined;
@@ -170,6 +159,15 @@ const generatedKeyPair = persistedPrivateKey
 const privateKey = persistedPrivateKey ?? generatedKeyPair.privateKey;
 const publicKey = createPublicKey(privateKey);
 const publicJwk = publicKey.export({ format: "jwk" });
+const registryKeyMultibase = encodeEd25519PubkeyMultibase(rawEd25519PublicKey(publicKey));
+const registryDid = process.env.MOCK_APPLET_REGISTRY_DID ?? durableState.registryDid ?? `did:key:${registryKeyMultibase}`;
+if (!registryDid.startsWith("did:")) {
+  throw new Error("MOCK_APPLET_REGISTRY_DID must be a W3C DID");
+}
+const registryId = projectDidToCoreId(registryDid);
+const registryVerificationMethod = registryDid.startsWith("did:key:")
+  ? `${registryDid}#${registryKeyMultibase}`
+  : `${registryDid}#mock-applet-registry-key-1`;
 const jwks = {
   keys: [
     {
@@ -757,6 +755,10 @@ function signedPackage(body) {
     },
     updated: createdAt,
   };
+  const acceptedKeyMaterial = serviceIdDocument.verificationMethod?.[webhookAuth.key_ref];
+  if (typeof acceptedKeyMaterial !== "string") {
+    throw new Error("Applet service DID document is missing its webhook signing key");
+  }
   const registrationEpochEvidence = {
     did: serviceIdDocument.id,
     document_digest: runCotestWire("did-document-digest", serviceIdDocument),
@@ -775,7 +777,7 @@ function signedPackage(body) {
     accepted_signing_keys: [
       {
         key_ref: webhookAuth.key_ref,
-        public_key_digest: canonicalHash(webhookPublicJwk),
+        public_key_digest: `sha256:${createHash("sha256").update(acceptedKeyMaterial).digest("hex")}`,
       },
     ],
   };
@@ -880,7 +882,7 @@ function signedPackage(body) {
     ...sealed,
     proof: {
       kind: "detached_jws",
-      verification_method: `${registryDid}#mock-applet-registry-key-1`,
+      verification_method: registryVerificationMethod,
       payload_digest: payloadDigest,
       created_at: createdAt,
       jws,
@@ -1064,20 +1066,19 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
       res.end(JSON.stringify({ error: "applet_service_key_unavailable" }));
       return;
     }
-    const managedActorSealBasis = authoringRequest?.purpose === "install_bot"
-      ? authoringRequest?.basis?.registration_event?.seal_basis
-      : material.seal_basis;
-    const managedActorSealLeaves = managedActorSealBasis?.leaves;
-    if (!Array.isArray(managedActorSealLeaves) || managedActorSealLeaves.length !== 1) {
+    const registrationRef = authoringRequest?.purpose === "install_bot"
+      ? authoringRequest?.basis?.registration_event?.event_id
+      : material.registration_ref;
+    if (typeof registrationRef !== "string") {
       res.statusCode = 409;
-      res.end(JSON.stringify({ error: "managed_actor_data_basis_unavailable" }));
+      res.end(JSON.stringify({ error: "managed_actor_registration_ref_unavailable" }));
       return;
     }
     const outcome = runCotestWire("managed-actor-author", {
       authoring_request: authoringRequest,
       applet_package: packageInfo.appletPackage,
       ...material,
-      data_basis: managedActorSealLeaves[0],
+      registration_ref: registrationRef,
       service_signing_seed_b64url: servicePrivateJwk.d,
       service_verification_method: packageInfo.verificationMethod,
       station_id: stationId(),

@@ -8,11 +8,12 @@ import {
   createRealmApi,
   grantCapabilityEventApi,
   resolveDefaultStrandId,
+  scanRealmStreamApi,
   signedEventEnvelope,
   submitSignedEventApi,
 } from "./soland-api";
 import type { InviteObject, RealmObject } from "./generated/spec-wire-objects";
-import type { JointUser } from "./users";
+import { allowExplicitInviteNotifications, issueUserSession, type JointUser } from "./users";
 
 export { authHeaders };
 
@@ -26,6 +27,7 @@ export type ApiRealmOpts = {
   mlsActivated?: boolean;
   plaintextVisibleServices?: string[];
   invitees?: string[];
+  inviteeStationIds?: Record<string, string>;
   ownerId?: string;
   server?: SolandKey;
 };
@@ -76,6 +78,7 @@ export async function createRealmViaApi(
       mls_activated: opts.mlsActivated,
       plaintext_visible_services: opts.plaintextVisibleServices,
       invitees: opts.invitees,
+      invitee_ids: opts.inviteeStationIds,
       ownerId: opts.ownerId,
     },
     { server: opts.server },
@@ -134,30 +137,19 @@ export async function createSharedRealmViaApi(
   member: JointUser,
   opts: Omit<ApiRealmOpts, "invitees">,
 ): Promise<string> {
+  const memberToken = await issueUserSession(request, member, { server: opts.server });
+  await allowExplicitInviteNotifications(request, memberToken, opts.server);
   const realmId = await createRealmViaApi(request, ownerToken, {
     ...opts,
     ownerId: owner.id,
+    invitees: [member.id],
+    inviteeStationIds: { [member.id]: solandServiceId(opts.server) },
   });
   // A normal Realm has no implicit discussion Strand. This fixture promises a
   // shared messaging Realm, so establish the explicit Strand + default pointer
   // while the root controller is still the author.
   await resolveDefaultStrandId(request, ownerToken, realmId);
-  await submitSignedEventApi(
-    request,
-    ownerToken,
-    signedEventEnvelope({
-      actorId: owner.id,
-      server: opts.server,
-      realmId,
-      kind: "ak.member.state",
-      payload: {
-        realm_id: realmId,
-        member_id: accountActorId(member.id, opts.server),
-        membership: "join",
-      },
-    }),
-    { server: opts.server, context: `join ${member.id}` },
-  );
+  await acceptInviteViaApi(request, memberToken, member.id, realmId, { server: opts.server });
   // Membership is not an authorization source. This fixture promises only
   // that both participants can author messages; tests exercising reactions,
   // revisions, or moderation must grant those independent actions explicitly.
@@ -226,23 +218,11 @@ export async function listRealmEventsViaApi(
   realmId: string,
   opts: { limit?: number; server?: SolandKey; order?: "ascending" | "descending" } = {},
 ): Promise<Array<Record<string, unknown>>> {
-  const url = `${solandBaseUrl(opts.server)}/_arkret/self/events`;
-  const response = await request.fetch(url, {
-    method: "QUERY",
-    data: canonicalJson({ realm_ids: [realmId], limit: opts.limit ?? 50, ...(opts.order ? { order: opts.order } : {}) }),
-    headers: {
-      ...authHeaders(token, "QUERY", url),
-      "content-type": "application/json",
-    },
+  const { events } = await scanRealmStreamApi(request, token, realmId, {
+    server: opts.server,
+    limit: opts.limit ?? 50,
   });
-  const responseText = await response.text();
-  expect(
-    response.status(),
-    `list Realm events returned ${response.status()}: ${responseText}`,
-  ).toBe(200);
-  const body = JSON.parse(responseText);
-  expect(Array.isArray(body.events)).toBe(true);
-  return body.events;
+  return opts.order === "descending" ? [...events].reverse() : events;
 }
 
 export async function listReadMarkersViaApi(

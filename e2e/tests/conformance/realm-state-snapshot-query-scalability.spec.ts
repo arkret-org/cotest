@@ -174,9 +174,21 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
       });
       const token = flow.session.grantJwt;
       const headUrl = `${solandBaseUrl()}/_arkret/self/realm-state-snapshot/head?realm_id=${encodeURIComponent(realmId)}`;
-      const snapshot = await expectJsonOk(await request.get(headUrl, {
-        headers: authHeaders(token, "GET", headUrl),
-      }), "read signed snapshot head") as Record<string, any>;
+      let snapshot: Record<string, any> | undefined;
+      await expect.poll(async () => {
+        const response = await request.get(headUrl, {
+          headers: authHeaders(token, "GET", headUrl),
+        });
+        if (response.status() === 503) {
+          const problem = await response.json() as { type?: string };
+          if (problem.type?.endsWith("/realm_state_snapshot_unavailable")) {
+            return response.status();
+          }
+        }
+        snapshot = await expectJsonOk(response, "read signed snapshot head") as Record<string, any>;
+        return response.status();
+      }, { timeout: 30_000, intervals: [250, 500, 1_000, 2_000] }).toBe(200);
+      if (!snapshot) throw new Error("signed snapshot head returned no body");
       const exactUrl = `${solandBaseUrl()}/_arkret/self/realm-state-snapshot/${encodeURIComponent(snapshot.snapshot_id)}?realm_id=${encodeURIComponent(realmId)}`;
       const exact = await expectJsonOk(await request.get(exactUrl, {
         headers: authHeaders(token, "GET", exactUrl),

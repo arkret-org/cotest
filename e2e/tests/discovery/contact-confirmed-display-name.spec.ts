@@ -113,12 +113,9 @@ test.describe("contact confirmed display name", () => {
         actorId: bob.id,
         payload: {
           object: {
-            schema: "ak.schema.actor_profile.v1",
-            realm_id: bobRealmId,
             principal_id: bob.id,
             actor_kind: "user",
             display_name: firstDisplay,
-            created_at: new Date().toISOString(),
           },
         },
       });
@@ -139,7 +136,7 @@ test.describe("contact confirmed display name", () => {
       await alicePage.gotoAppPanel("/settings/contacts", "settings-panel");
       const row = alicePage.page
         .getByTestId("contact-row")
-        .filter({ hasText: bob.id });
+        .filter({ hasText: bob.id.slice(-6) });
       await expect(row).toBeVisible({ timeout: 60_000 });
       // The live verified Profile display arrives through the authorized
       // resolve, not through the Contact row itself.

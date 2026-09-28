@@ -8,7 +8,8 @@
 //   - §5.2 Ban via ak.member.state{membership="ban"}
 
 import { expect, test } from "../../helpers/arkret-test";
-import { solandBaseUrl } from "../../helpers/env";
+import { solandBaseUrl, solandServiceId } from "../../helpers/env";
+import { acceptInviteViaApi } from "../../helpers/api";
 import {
   accountActorId,
   addRealmMemberApi,
@@ -26,6 +27,7 @@ import {
   wireErrCode,
 } from "../../helpers/soland-api";
 import {
+  allowExplicitInviteNotifications,
   assertJointStackNotRequired,
   ensureRegistered,
   issueUserSession,
@@ -58,6 +60,11 @@ test.describe("moderation and ban", () => {
       issueUserSession(request, mallory),
       issueUserSession(request, carol),
     ]);
+    await Promise.all([
+      allowExplicitInviteNotifications(request, bobToken),
+      allowExplicitInviteNotifications(request, malloryToken),
+      allowExplicitInviteNotifications(request, carolToken),
+    ]);
 
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S5 Moderation API ${stamp}`,
@@ -65,10 +72,16 @@ test.describe("moderation and ban", () => {
       public: true,
       discoverability: "public",
       history_access: "all_history_for_current_members",
+      invitees: [bob.id, mallory.id, carol.id],
+      invitee_ids: {
+        [bob.id]: solandServiceId(),
+        [mallory.id]: solandServiceId(),
+        [carol.id]: solandServiceId(),
+      },
     });
-    await addRealmMemberApi(request, aliceToken, realmId, bob.id);
-    await addRealmMemberApi(request, aliceToken, realmId, mallory.id);
-    await addRealmMemberApi(request, aliceToken, realmId, carol.id);
+    await acceptInviteViaApi(request, bobToken, bob.id, realmId);
+    await acceptInviteViaApi(request, malloryToken, mallory.id, realmId);
+    await acceptInviteViaApi(request, carolToken, carol.id, realmId);
     // The first message below is authored by a non-owner. Establish the
     // ordinary Realm's explicit default discussion Strand as the root
     // controller before that member write.
@@ -102,11 +115,6 @@ test.describe("moderation and ban", () => {
         evidence_refs: [sent.event_id],
       },
     });
-    const proof = Array.isArray(reportEvent.proofs)
-      ? (reportEvent.proofs[0] as Record<string, unknown> | undefined)
-      : undefined;
-    const verificationMethod = String(proof?.verification_method ?? "");
-    refreshEventEnvelopeProof(reportEvent, verificationMethod);
     const reportUrl = `${solandBaseUrl()}/_arkret/self/moderation/report`;
     const reportResp = await request.post(reportUrl, {
       headers: {

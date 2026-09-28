@@ -134,7 +134,7 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
     const scheduleWire = scheduledResponse.request().postData() ?? "";
     expect(
       scheduledResponse.status(),
-      `${scheduledText}\nrequest=${scheduleWire}`,
+      scheduledText,
     ).toBeLessThan(400);
     expect(scheduleWire).toContain("ak.schema.calendar_event.v1");
     expect(scheduleWire).toContain(timezone);

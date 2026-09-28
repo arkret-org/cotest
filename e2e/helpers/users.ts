@@ -1984,12 +1984,16 @@ export async function approvePairingLinkOnAuthorizedDevice(
 
 export async function allowExplicitInviteNotifications(
   request: APIRequestContext,
-  session: DpopUserSession,
+  session: DpopUserSession | string,
   server?: SolandKey,
 ) {
   const url = `${solandBaseUrl(server)}/_arkret/self/invite-receive-policy`;
+  const headers = (method: "GET" | "PUT") =>
+    typeof session === "string"
+      ? authHeaders(session, method, url)
+      : selfPathHeadersForDpopSession(session, method, url);
   const current = await request.get(url, {
-    headers: selfPathHeadersForDpopSession(session, "GET", url),
+    headers: headers("GET"),
   });
   expect(current.status(), await current.text()).toBe(200);
   const policy = (await current.json()) as Record<string, unknown>;
@@ -2000,7 +2004,7 @@ export async function allowExplicitInviteNotifications(
     : [];
   const updated = await request.put(url, {
     headers: {
-      ...selfPathHeadersForDpopSession(session, "PUT", url),
+      ...headers("PUT"),
       "content-type": "application/json",
     },
     data: canonicalJson({

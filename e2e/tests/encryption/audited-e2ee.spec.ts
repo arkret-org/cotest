@@ -3,10 +3,10 @@
 // Spec: crypto-media/audited-e2ee.md §2/§8, governance/content-moderation.md §3.4
 
 import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
-import { solandBaseUrl } from "../../helpers/env";
+import { solandBaseUrl, solandServiceId } from "../../helpers/env";
+import { acceptInviteViaApi } from "../../helpers/api";
 import {
   accountActorId,
-  addRealmMemberApi,
   authHeaders,
   canonicalJson,
   canonicalTimestamp,
@@ -17,6 +17,7 @@ import {
   submitSignedEventApi,
 } from "../../helpers/soland-api";
 import {
+  allowExplicitInviteNotifications,
   ensureRegistered,
   issueUserSession,
   uniqueUser,
@@ -89,6 +90,10 @@ async function setupEncryptedMessage(
     issueUserSession(request, bob),
     issueUserSession(request, reporter),
   ]);
+  await Promise.all([
+    allowExplicitInviteNotifications(request, bobToken),
+    allowExplicitInviteNotifications(request, reporterToken),
+  ]);
 
   const realmId = await createRealmApi(request, aliceToken, {
     title: `S25 moderation franking ${label} ${Date.now()}`,
@@ -97,9 +102,14 @@ async function setupEncryptedMessage(
     mls_activated: true,
     plaintext_visible_services: [],
     ownerId: alice.id,
+    invitees: [bob.id, reporter.id],
+    invitee_ids: {
+      [bob.id]: solandServiceId(),
+      [reporter.id]: solandServiceId(),
+    },
   });
-  await addRealmMemberApi(request, aliceToken, realmId, bob.id);
-  await addRealmMemberApi(request, aliceToken, realmId, reporter.id);
+  await acceptInviteViaApi(request, bobToken, bob.id, realmId);
+  await acceptInviteViaApi(request, reporterToken, reporter.id, realmId);
   await grantCapabilityEventApi(request, aliceToken, {
     ownerId: alice.id,
     realmId,

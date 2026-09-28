@@ -12,7 +12,7 @@ import {
   type Locator,
 } from "../../helpers/arkret-test";
 import { stepShot } from "../../helpers/screenshots";
-import { solandBaseUrl } from "../../helpers/env";
+import { solandBaseUrl, solandServiceId } from "../../helpers/env";
 import {
   accountActorId,
   addRealmMemberApi,
@@ -29,6 +29,7 @@ import {
 } from "../../helpers/soland-api";
 import { acceptInviteViaApi } from "../../helpers/api";
 import {
+  allowExplicitInviteNotifications,
   assertJointStackNotRequired,
   ensureRegistered,
   issueUserSession,
@@ -215,14 +216,12 @@ async function createBoardWithCard(
       object: {
         schema: "ak.schema.strand.v1",
         realm_id: realmId,
-        // `metadata.fields.status` is hard_reject forbidden wire
-        // (registry/forbidden-wire-fields.json, context strand_payload); the
-        // registered replacement is the top-level `stage` below.
+        // Initial stage is derived by the authority. Later changes use
+        // ak.strand.stage.set, never metadata.fields.status.
         metadata: {
           title: opts.cardTitle,
           ...(opts.dueDate ? { fields: { due_date: opts.dueDate } } : {}),
         },
-        stage: "planned",
         tracks: { discussion: { enabled: true, is_primary: true } },
         created_by: accountActorId(actorId),
         created_at: createdAt,
@@ -321,15 +320,15 @@ test.describe("project simulation", () => {
     ]);
     const aliceToken = await issueUserSession(request, alice);
     const bobToken = await issueUserSession(request, bob);
+    await allowExplicitInviteNotifications(request, bobToken);
 
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S16 Assign ${stamp}`,
       ownerId: alice.id,
+      invitees: [bob.id],
+      invitee_ids: { [bob.id]: solandServiceId() },
     });
-    // Assignment is the behavior under test. Establish Bob's membership
-    // directly so invite-delivery policy/quarantine is not an unrelated
-    // prerequisite for reading the resulting Strand projection.
-    await addRealmMemberApi(request, aliceToken, realmId, bob.id);
+    await acceptInviteViaApi(request, bobToken, bob.id, realmId);
 
     const { cardId } = await createBoardWithCard(
       request,

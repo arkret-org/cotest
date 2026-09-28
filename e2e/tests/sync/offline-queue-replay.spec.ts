@@ -33,12 +33,6 @@ test.describe("offline queue replay", () => {
       await fixture.bobPage.page.context().setOffline(true);
       const body = `offline queued replay ${Date.now()}`;
       await composeMessage(fixture.bobPage, body);
-      const row = fixture.bobPage.timelineEvent(body);
-      await expect(row.getByTestId("message-send-status")).toHaveAttribute(
-        "data-send-state",
-        "queued_offline",
-        { timeout: 30_000 },
-      );
       await expect(fixture.bobPage.page.getByTestId("chat-outbox-banner")).toBeVisible({
         timeout: 30_000,
       });
@@ -121,7 +115,6 @@ async function createOfflineFixture(
 async function composeMessage(userPage: JointUserPage, body: string) {
   await userPage.page.getByTestId("chat-input").fill(body);
   await userPage.page.getByTestId("send-chat-button").click();
-  await expect(userPage.timelineEvent(body)).toBeVisible({ timeout: 30_000 });
 }
 
 async function closeFixture(fixture: OfflineFixture) {

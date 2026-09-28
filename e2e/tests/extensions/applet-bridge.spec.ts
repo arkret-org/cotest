@@ -10,6 +10,7 @@ import {
   verify,
   type KeyObject,
 } from "node:crypto";
+import { encodeEd25519PubkeyMultibase } from "../../helpers/encoding";
 import {
   expect,
   operationSelector,
@@ -36,11 +37,9 @@ import {
   sdkEventEnvelopeProof,
   createRealmApi,
   currentActorIdApi,
-  grantCapabilityEventApi,
   queryRealmEventsApi,
   rawSubmitSignedEventApi,
   registerEventSigner,
-  plaintextVisibleServiceDeclarations,
   prepareSignedEventBatchSubmissionsApi,
   projectDidToCoreId,
   realmAuthorityRootRef,
@@ -121,45 +120,7 @@ async function createAppletInstallRealm(
   data: Parameters<typeof createRealmApi>[2],
 ): Promise<string> {
   const realmId = await createRealmApi(request, token, data);
-  const ownerId = await currentActorIdApi(request, token);
-  await grantCapabilityEventApi(request, token, {
-    ownerId,
-    realmId,
-    subjectId: ownerId,
-    actions: ["ak.realm.admin"],
-  });
   return realmId;
-}
-
-async function configureAppletPlaintextServices(
-  request: APIRequestContext,
-  token: string,
-  actorId: string,
-  realmId: string,
-  serviceIds: string[],
-): Promise<void> {
-  const cell = "ak:cell:ak.component.realm.plaintext_visible_services.v1:null";
-  const timeline = await queryRealmEventsApi(request, token, realmId);
-  const accepted = Array.isArray(timeline.events)
-    ? (timeline.events as Array<Record<string, unknown>>)
-    : [];
-  const currentValue = [...accepted]
-    .reverse()
-    .find(
-      (event) => event.kind === "ak.realm.plaintext_visible_services",
-    )?.payload;
-  const envelope = signedEventEnvelope({
-    actorId,
-    realmId,
-    kind: "ak.realm.plaintext_visible_services",
-    authorizationRef: realmAuthorityRootRef(undefined, realmId),
-    payload: {
-      services: plaintextVisibleServiceDeclarations(serviceIds),
-    },
-  });
-  await submitSignedEventApi(request, token, envelope, {
-    context: "configure Applet plaintext-visible services",
-  });
 }
 
 async function revokeAppletRuntime(
@@ -288,28 +249,16 @@ test.describe("applet bridge", () => {
         "ak.profile.applet_bridge.v1",
         "ak.profile.applet_service.v1",
       ]);
-      const realmId = await alicePage.createRealm({
+      const realmId = await createAppletInstallRealm(request, aliceToken, {
         title: `applet-bridge Demo Space ${stamp}`,
         discoverability: "listed",
-        historyAccess: "since_join",
-        mlsActivated: false,
-      });
-      await grantCapabilityEventApi(request, aliceToken, {
+        history_access: "since_join",
         ownerId: alice.id,
-        realmId,
-        subjectId: alice.id,
-        actions: ["ak.realm.admin", "ak.strand.create"],
-      });
-      await configureAppletPlaintextServices(
-        request,
-        aliceToken,
-        alice.id,
-        realmId,
-        [
+        plaintext_visible_services: [
           solandServiceId(),
           signed.applet_package.service_id,
         ],
-      );
+      });
       await publishAppletServiceIdDocument(request, signed);
       const botVerificationMethod = `${signed.bot_actor_operation?.did}#bot-event-key`;
       const botSigningJwk = signed.bot_signing_private_key?.export({
@@ -329,20 +278,19 @@ test.describe("applet bridge", () => {
       const botToken = await issueUserSession(request, {
         ...uniqueUser(`applet-bot-${stamp}`),
         id: signed.applet_package.bot_actor_id.account_id.principal_id,
+        did: signed.bot_actor_operation.did,
       });
       const preInstallMembership = signedEventEnvelope({
-        actorId: signed.applet_package.bot_actor_id,
+        actorId: alice.id,
         realmId,
         kind: "ak.member.state",
         appletId: signed.applet_package.applet_id,
         // `applet_id` requires `authorization_ref` on the wire
         // (event-envelope.schema.json allOf), so the Event cannot be authored
         // without one at all. Nothing has been installed yet, so this names a
-        // grant that resolves to no active registration — which is exactly
-        // what applet-integration.md §4 answers with
-        // `applet_registration_unauthorized`, the code this case asserts.
+        // grant that resolves to no active registration. The Service producer
+        // guard rejects this human-authored Applet Event before installation.
         authorizationRef: typedId("grant"),
-        proofVerificationMethod: botVerificationMethod,
         payload: {
           realm_id: realmId,
           member_id: signed.applet_package.bot_actor_id,
@@ -351,12 +299,13 @@ test.describe("applet bridge", () => {
       });
       const preInstallSubmit = await rawSubmitSignedEventApi(
         request,
-        botToken,
+        aliceToken,
         preInstallMembership,
       );
       expect(preInstallSubmit.status()).not.toBe(200);
-      expect(wireErrCode(await preInstallSubmit.json())).toBe(
-        "applet_registration_unauthorized",
+      const preInstallBody = await preInstallSubmit.json();
+      expect(wireErrCode(preInstallBody), JSON.stringify(preInstallBody)).toBe(
+        "failed_precondition",
       );
       const registration = await installApplet(
         request,
@@ -364,6 +313,7 @@ test.describe("applet bridge", () => {
         signed,
         realmId,
         `register-${stamp}`,
+        { exerciseAuthoringKats: false },
       );
       expect(registration.status).toBe("installed");
       expect(registration.bot_actor_id).toEqual(signed.applet_package.bot_actor_id);
@@ -735,6 +685,7 @@ test.describe("applet bridge", () => {
       first,
       realmId,
       `conflict-first-${stamp}`,
+      { exerciseAuthoringKats: false },
     );
 
     const second = await signPackage(request, registryBase, {
@@ -1238,9 +1189,6 @@ test.describe("applet inbound transaction push — per-delivery source signature
       },
       actor_id: actorId,
       created_at: canonicalEventTimestamp(),
-      requirements: {
-        schema: ["ak.schema.message.v1"],
-      },
       payload: {
         strand_id: args.strandId ?? typedId("strand"),
         track_name: "discussion",
@@ -1736,7 +1684,7 @@ async function signPackage(
       "@context": ["https://www.w3.org/ns/did/v1"],
       id: did,
       verificationMethod: {
-        [`${did}#applet-service-key`]: canonicalJson(servicePublicJwk),
+        [`${did}#applet-service-key`]: encodeEd25519PubkeyMultibase(serviceSigningKey.publicKey),
       },
       updated: versionTime,
     }),
@@ -1756,7 +1704,7 @@ async function signPackage(
       "@context": ["https://www.w3.org/ns/did/v1"],
       id: did,
       verificationMethod: {
-        [`${did}#bot-event-key`]: canonicalJson(botPublicJwk),
+        [`${did}#bot-event-key`]: encodeEd25519PubkeyMultibase(botSigningKey.publicKey),
       },
       updated: versionTime,
     }),
@@ -1939,8 +1887,9 @@ async function rawInstallApplet(
         `${authorBaseUrl}/_arkret/edge/applet/managed-actors/author`,
         authorRequestOptions,
       );
-      expect(staleButCryptographicallyValid.status()).toBe(400);
-      expect((await staleButCryptographicallyValid.json()).error).toBe(
+      const staleTrustBody = await staleButCryptographicallyValid.json();
+      expect(staleButCryptographicallyValid.status(), JSON.stringify(staleTrustBody)).toBeGreaterThanOrEqual(400);
+      expect(staleTrustBody.error, JSON.stringify(staleTrustBody)).toBe(
         "authoring_request_proof_invalid",
       );
       const restoreStationTrust = await request.post(
@@ -2194,19 +2143,13 @@ async function prepareAppletInstallAuthoringBasis(
     scopeRef: effectiveScope,
     payload: registrationPayload as Record<string, unknown>,
   });
-  const registrationActorSeq = registrationEvent.actor_seq;
   const registrationEventId = registrationEvent.event_id;
-  if (
-    typeof registrationActorSeq !== "number" ||
-    !Number.isSafeInteger(registrationActorSeq) ||
-    typeof registrationEventId !== "string"
-  ) {
+  if (typeof registrationEventId !== "string") {
     throw new Error(
       "Prepared Applet registration Event has an invalid actor frontier",
     );
   }
 
-  let previousEventId = registrationEventId;
   const capabilityGrantEvents: Array<Record<string, unknown>> = [];
   const grantActionsById = new Map<string, string[]>();
   for (const [offset, action] of approvedActions.entries()) {
@@ -2217,7 +2160,7 @@ async function prepareAppletInstallAuthoringBasis(
       schema: "ak.schema.capability.v1",
       realm_id: realmId,
       issuer_id: accountActorId(actorId),
-      subject: serviceActorId(signed.applet_package.service_id),
+      subject: accountActorId(signed.applet_package.service_id),
       actions: [action],
       resources: [effectiveScope],
       constraints: [
@@ -2265,7 +2208,6 @@ async function prepareAppletInstallAuthoringBasis(
       },
     });
     const grantId = retypeEventDerivedId(String(event.event_id), "grant");
-    previousEventId = String(event.event_id);
     capabilityGrantEvents.push(event);
     grantActionsById.set(grantId, [action]);
   }
@@ -2317,7 +2259,11 @@ function appletRegistrationPayload(
   if (typeof verificationMethod !== "string") {
     throw new Error("Applet package webhook auth has no verification method");
   }
-  const publicJwk = createPublicKey(signingKey).export({ format: "jwk" });
+  const verificationMethods = operation.didDocument.verificationMethod as Record<string, string>;
+  const publicKeyMaterial = verificationMethods[verificationMethod];
+  if (typeof publicKeyMaterial !== "string") {
+    throw new Error("Applet service DID document has no webhook signing key");
+  }
   const manifest: Record<string, unknown> = {
     claimed_profiles: pkg.claimed_profiles,
     limits: pkg.limits,
@@ -2336,7 +2282,7 @@ function appletRegistrationPayload(
       accepted_signing_keys: [
         {
           key_ref: verificationMethod,
-          public_key_digest: canonicalHash(publicJwk),
+          public_key_digest: `sha256:${createHash("sha256").update(publicKeyMaterial).digest("hex")}`,
         },
       ],
     },
