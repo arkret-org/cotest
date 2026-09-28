@@ -831,6 +831,7 @@ fn replication_body(event: &Event, commit: &RealmCommit) -> Result<Vec<u8>> {
             replications: vec![CommittedEventSubmission {
                 event_submission: EventAdmissionSubmission::new(event.clone()),
                 source_commit: commit.clone(),
+                genesis_event_ref: None,
                 welcomes: None,
             }],
         });

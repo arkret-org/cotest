@@ -57,7 +57,15 @@ const PEER_REQUEST: &str =
 const ALICE_SEED: [u8; 32] = [0x91; 32];
 const COMMITTED_AT: &str = "2026-09-26T02:00:00.000Z";
 
-const EXECUTED_CASES: [(&str, &[&str]); 6] = [
+const EXECUTED_CASES: [(&str, &[&str]); 7] = [
+    (
+        "immutable_genesis_ref_on_later_add_replication",
+        &[
+            "later_epoch_signed_ref_installs_attestation",
+            "wrong_genesis_ref_conflicts_with_held_group",
+            "replay_changes_genesis_ref",
+        ],
+    ),
     (
         "governance_routes_remote_welcomes_into_their_intents",
         &[
@@ -194,14 +202,27 @@ fn verify_schema_cases(fixture: &Value) -> Result<()> {
                     .with_context(|| format!("{name}: instance_from"))?;
                 for mutation in value_array(required_field(case, "mutations")?, "mutations")? {
                     let path = required_str(mutation, "path")?;
-                    let member = path.strip_prefix('/').context("top-level mutation")?;
-                    let object = instance.as_object_mut().context("object instance")?;
+                    let (parent_path, member) = path
+                        .rsplit_once('/')
+                        .context("JSON Pointer mutation path")?;
+                    let object = instance
+                        .pointer_mut(parent_path)
+                        .with_context(|| format!("{name}: mutation parent {parent_path}"))?
+                        .as_object_mut()
+                        .context("mutation parent is not an object")?;
                     match required_str(mutation, "op")? {
-                        "add" | "replace" => {
+                        "add" => {
+                            object.insert(member.to_owned(), mutation["value"].clone());
+                        }
+                        "replace" => {
+                            ensure!(object.contains_key(member), "{name}: no member at {path}");
                             object.insert(member.to_owned(), mutation["value"].clone());
                         }
                         "remove" => {
-                            object.remove(member);
+                            ensure!(
+                                object.remove(member).is_some(),
+                                "{name}: no member at {path}"
+                            );
                         }
                         other => bail!("{name}: unsupported mutation {other}"),
                     }
@@ -335,23 +356,41 @@ impl World {
         Ok(DateTime::parse_from_rfc3339(COMMITTED_AT)?.to_utc())
     }
 
+    fn genesis_event_ref(&self) -> EventId {
+        EventId::from_digest(DigestSuite::Sha256, [0x91; 32])
+    }
+
+    fn fixture_genesis_event_ref(&self, name: &str) -> Result<EventId> {
+        match name {
+            "accepted_genesis_event" => Ok(self.genesis_event_ref()),
+            "other_group_genesis_event" => {
+                Ok(EventId::from_digest(DigestSuite::Sha256, [0x93; 32]))
+            }
+            other => bail!("unknown Genesis Event fixture ref {other}"),
+        }
+    }
+
     /// alice's signed `ak.mls.commit` whose inline Adds are `adds`.
     fn commit_event(&self, adds: &[&str]) -> Result<Event> {
+        self.commit_event_at_epoch(adds, 1)
+    }
+
+    fn commit_event_at_epoch(&self, adds: &[&str], previous_epoch: u64) -> Result<Event> {
         let base = EventId::from_digest(DigestSuite::Sha256, [0x92; 32]);
         let payload = json!({
             "base_group_state_ref": base,
-            "previous_epoch": 1,
-            "next_epoch": 2,
-            "covers_key_access_revision": 1,
+            "previous_epoch": previous_epoch,
+            "next_epoch": previous_epoch + 1,
+            "covers_key_access_revision": previous_epoch,
             "commit_bytes_b64": arkret_canonical::base64url_encode(
                 format!("commit adding {}", adds.join(",")).as_bytes()
             ),
             "governance_binding": {
                 "effective_scope": self.scope,
                 "base_group_state_ref": base,
-                "previous_epoch": 1,
-                "next_epoch": 2,
-                "key_access_revision": 1,
+                "previous_epoch": previous_epoch,
+                "next_epoch": previous_epoch + 1,
+                "key_access_revision": previous_epoch,
             },
         });
         self.signed_event(EventKind::MlsCommit, payload)
@@ -735,6 +774,7 @@ fn governance_submit(world: &World, variant: &Value) -> Result<Value> {
                 replications: vec![CommittedEventSubmission {
                     event_submission: EventAdmissionSubmission::new(event.clone()),
                     source_commit: source_commit.clone(),
+                    genesis_event_ref: Some(world.genesis_event_ref()),
                     welcomes: carried.clone(),
                 }],
             });
@@ -775,6 +815,8 @@ struct MemberStation {
     station_id: DidCoreId,
     /// Held replicas by Commit id, with their exact Event.
     replicas: BTreeMap<String, Event>,
+    /// Genesis refs installed by signed Commit replication, keyed by Commit.
+    genesis_refs: BTreeMap<String, EventId>,
     claims: BTreeMap<String, Claim>,
     queues: Queues,
     /// The Commit Event every item of this case replicates.
@@ -784,6 +826,7 @@ struct MemberStation {
 impl PartialEq for MemberStation {
     fn eq(&self, other: &Self) -> bool {
         self.replicas.keys().eq(other.replicas.keys())
+            && self.genesis_refs == other.genesis_refs
             && self.claims == other.claims
             && self.queues == other.queues
     }
@@ -823,6 +866,7 @@ impl MemberStation {
         Ok(Self {
             station_id: world.stations["member_y"].clone(),
             replicas: BTreeMap::new(),
+            genesis_refs: BTreeMap::new(),
             claims,
             // Earlier deliveries wait only on the endpoints this variant
             // delivers to.
@@ -909,13 +953,28 @@ impl MemberStation {
             None => None,
         };
         let event = match required_str(variant, "item_event_kind")? {
-            "ak.mls.commit" => self.commit_event(world)?,
+            "ak.mls.commit" => match variant.get("commit_previous_epoch") {
+                Some(epoch) => world.commit_event_at_epoch(
+                    &["bob", "carol"],
+                    epoch.as_u64().context("commit_previous_epoch")?,
+                )?,
+                None => self.commit_event(world)?,
+            },
             "ak.member.state" => world.member_state_event("bob")?,
             other => bail!("unknown item_event_kind {other}"),
         };
         let item = CommittedEventSubmission {
             event_submission: EventAdmissionSubmission::new(event.clone()),
             source_commit: world.source_commit(&event)?,
+            genesis_event_ref: if event.kind == EventKind::MlsCommit {
+                Some(match variant.get("genesis_event_ref") {
+                    Some(value) => world
+                        .fixture_genesis_event_ref(value.as_str().context("genesis_event_ref")?)?,
+                    None => world.genesis_event_ref(),
+                })
+            } else {
+                None
+            },
             welcomes: welcome_names
                 .as_deref()
                 .map(|names| world.welcomes(&event, names))
@@ -958,6 +1017,41 @@ impl MemberStation {
             .next()
             .context("one replication item")?;
         let commit_id = item.source_commit.commit_id.to_string();
+        if let Some(genesis_event_ref) = item.genesis_event_ref.as_ref() {
+            let held_group_ref = variant
+                .get("held_group_genesis_event_ref")
+                .map(|value| {
+                    world.fixture_genesis_event_ref(
+                        value.as_str().context("held_group_genesis_event_ref")?,
+                    )
+                })
+                .transpose()?;
+            let previously_stored_ref = variant
+                .get("previously_stored_genesis_event_ref")
+                .map(|value| {
+                    world.fixture_genesis_event_ref(
+                        value
+                            .as_str()
+                            .context("previously_stored_genesis_event_ref")?,
+                    )
+                })
+                .transpose()?;
+            let conflicts = [held_group_ref.as_ref(), previously_stored_ref.as_ref()]
+                .into_iter()
+                .flatten()
+                .chain(self.genesis_refs.get(&commit_id))
+                .any(|held| held != genesis_event_ref);
+            if conflicts {
+                ensure!(*self == before, "a Genesis-ref conflict changed Station Y");
+                return Ok(json!({
+                    "decision": "reject",
+                    "replicas": self.replicas.len(),
+                    "queue": self.queues.welcomes(),
+                    "claim_bindings": self.bindings(),
+                    "attestations": self.genesis_refs.len(),
+                }));
+            }
+        }
         let event = item.event_submission.event;
 
         // One replica transaction: the Commit (or the held one) and every
@@ -972,6 +1066,10 @@ impl MemberStation {
                 "stored"
             }
         };
+        if let Some(genesis_ref) = item.genesis_event_ref {
+            self.genesis_refs
+                .insert(item.source_commit.commit_id.to_string(), genesis_ref);
+        }
         let mut queued_now = 0;
         let mut decisions = Map::new();
         for welcome in item.welcomes.iter().flatten() {
@@ -993,7 +1091,27 @@ impl MemberStation {
                 json!({"decision": if passes { "accept" } else { "reject" }}),
             );
         }
-        self.render(variant, Some((outcome, queued_now, decisions)))
+        let mut rendered = self.render(variant, Some((outcome, queued_now, decisions)))?;
+        if variant.get("genesis_event_ref").is_some() {
+            ensure!(
+                self.genesis_refs
+                    .get(&item.source_commit.commit_id.to_string())
+                    == Some(&world.genesis_event_ref()),
+                "the attestation must retain the accepted Genesis Event ref"
+            );
+            rendered["attestation_genesis_event_ref"] = json!("accepted_genesis_event");
+            // The new fixture focuses on the signed provenance and durable
+            // binding; its expected result does not enumerate queue counts.
+            rendered
+                .as_object_mut()
+                .context("rendered result")?
+                .remove("queued_now");
+            rendered
+                .as_object_mut()
+                .context("rendered result")?
+                .remove("welcome_decisions");
+        }
+        Ok(rendered)
     }
 
     /// device-lifecycle.md §9.2.3 as the claim destination: the recipient is

@@ -1116,6 +1116,7 @@ async fn run(
                         committed_events: std::array::from_fn(|index| CommittedEventSubmission {
                             event_submission: unit.events[index].clone(),
                             source_commit: founded.commits[index].clone(),
+                            genesis_event_ref: None,
                             welcomes: None,
                         }),
                         founding_authority_evidence,

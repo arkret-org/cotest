@@ -406,6 +406,7 @@ fn mls_cross_station_welcome_replication_named_suite_executes_every_variant() ->
     assert_eq!(
         executed_cases(&execution),
         [
+            ("immutable_genesis_ref_on_later_add_replication", 3),
             ("governance_routes_remote_welcomes_into_their_intents", 2),
             ("recipient_station_outside_the_target_set", 2),
             ("welcomes_ride_only_an_mls_commit_item", 3),
