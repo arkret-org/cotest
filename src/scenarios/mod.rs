@@ -9,6 +9,7 @@ pub mod certification_report;
 pub mod chaos_kill_midwrite;
 pub mod circle;
 pub mod circle_full_view_live;
+pub mod circle_poll_scope_live;
 pub mod coauth_session_grant_response_loss;
 pub mod collaboration_workflow;
 pub mod consent_pairwise_isolation_live;
