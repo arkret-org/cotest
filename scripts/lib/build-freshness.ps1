@@ -78,3 +78,23 @@ function Test-ArtifactBuildStamp {
         return [pscustomobject]@{ Matches = $false; Detail = "build-input stamp unreadable: $stampPath ($($_.Exception.Message))" }
     }
 }
+
+function Test-ArtifactSourceFreshness {
+    param(
+        [Parameter(Mandatory = $true)][DateTime]$ArtifactTimeUtc,
+        [Parameter(Mandatory = $true)]$RepositoryStates,
+        [Parameter(Mandatory = $true)][bool]$StampMatches
+    )
+
+    if (-not $StampMatches) {
+        return $false
+    }
+    $newest = $RepositoryStates | Sort-Object RequiredTimeUtc -Descending | Select-Object -First 1
+    if ($ArtifactTimeUtc -ge $newest.RequiredTimeUtc) {
+        return $true
+    }
+    # A clean checkout at the exact stamped commits has the same tracked inputs
+    # even when a formatter or checkout has refreshed file modification times.
+    # Dirty inputs still require a build newer than their on-disk contents.
+    return @($RepositoryStates | Where-Object { $_.BuildInputsDirty }).Count -eq 0
+}

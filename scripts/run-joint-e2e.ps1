@@ -478,6 +478,11 @@ function Get-RepositoryBuildInputState {
     if ($LASTEXITCODE -ne 0) {
         throw "Unable to enumerate build inputs for $resolvedRepository"
     }
+    $dirtyArguments = @("-C", $resolvedRepository, "status", "--porcelain", "--untracked-files=all", "--") + $buildInputPaths
+    $dirtyOutput = @(Invoke-NativeCapture -FilePath $git -Arguments $dirtyArguments)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to inspect build input changes for $resolvedRepository"
+    }
 
     $latestInputTime = [DateTime]::MinValue
     $latestInputPath = $null
@@ -516,6 +521,7 @@ function Get-RepositoryBuildInputState {
         RepositoryRoot = $resolvedRepository
         RepositoryName = Split-Path -Leaf $resolvedRepository
         Head = $head
+        BuildInputsDirty = $dirtyOutput.Count -gt 0
         RequiredTimeUtc = $requiredTime
         RequiredBy = $requiredBy
         BinaryPath = $resolvedBinary
@@ -544,7 +550,11 @@ function Add-BinaryFreshnessPreflight {
         $stamp = Test-ArtifactBuildStamp -ArtifactPath $BinaryPath -RepositoryStates $states
         $shortHead = if ($newest.Head.Length -gt 12) { $newest.Head.Substring(0, 12) } else { $newest.Head }
         $detail = "binary=$($newest.BinaryTimeUtc.ToString('o')); newest_input=$($newest.RequiredTimeUtc.ToString('o')); repo=$($newest.RepositoryName); head=$shortHead; input=$($newest.RequiredBy)"
-        if ($newest.BinaryTimeUtc -lt $newest.RequiredTimeUtc) {
+        $fresh = Test-ArtifactSourceFreshness `
+            -ArtifactTimeUtc $newest.BinaryTimeUtc `
+            -RepositoryStates $states `
+            -StampMatches $stamp.Matches
+        if (-not $fresh -and $newest.BinaryTimeUtc -lt $newest.RequiredTimeUtc) {
             Add-PreflightResult $Results $Name "fail" "stale binary; $detail"
         } elseif ($RequireBuildStamp -and -not $stamp.Matches) {
             Add-PreflightResult $Results $Name "fail" "$detail; $($stamp.Detail)"
@@ -574,8 +584,12 @@ function Get-ArtifactFreshness {
         )
         $newest = $states | Sort-Object RequiredTimeUtc -Descending | Select-Object -First 1
         $stamp = Test-ArtifactBuildStamp -ArtifactPath $ArtifactPath -RepositoryStates $states
+        $fresh = Test-ArtifactSourceFreshness `
+            -ArtifactTimeUtc $newest.BinaryTimeUtc `
+            -RepositoryStates $states `
+            -StampMatches $stamp.Matches
         return [pscustomobject]@{
-            Fresh = $newest.BinaryTimeUtc -ge $newest.RequiredTimeUtc -and $stamp.Matches
+            Fresh = $fresh
             Detail = "artifact=$($newest.BinaryTimeUtc.ToString('o')); newest_input=$($newest.RequiredTimeUtc.ToString('o')); repo=$($newest.RepositoryName); input=$($newest.RequiredBy); $($stamp.Detail)"
         }
     } catch {

@@ -30,6 +30,18 @@ try {
     $matching = Test-ArtifactBuildStamp -ArtifactPath $artifact -RepositoryStates $states
     Assert-True $matching.Matches "the exact stamped commit set must be fresh"
 
+    $oldArtifactTime = [DateTime]::UtcNow.AddHours(-1)
+    $recentInputTime = [DateTime]::UtcNow
+    $cleanInputs = @(
+        [pscustomobject]@{ RequiredTimeUtc = $recentInputTime; BuildInputsDirty = $false }
+    )
+    $dirtyInputs = @(
+        [pscustomobject]@{ RequiredTimeUtc = $recentInputTime; BuildInputsDirty = $true }
+    )
+    Assert-True (Test-ArtifactSourceFreshness -ArtifactTimeUtc $oldArtifactTime -RepositoryStates $cleanInputs -StampMatches $true) "a clean checkout at stamped commits may have newer file timestamps"
+    Assert-True (-not (Test-ArtifactSourceFreshness -ArtifactTimeUtc $oldArtifactTime -RepositoryStates $dirtyInputs -StampMatches $true)) "dirty build inputs newer than the artifact must rebuild"
+    Assert-True (-not (Test-ArtifactSourceFreshness -ArtifactTimeUtc $oldArtifactTime -RepositoryStates $cleanInputs -StampMatches $false)) "a mismatched stamp must rebuild even for a clean checkout"
+
     # Keep the artifact timestamp unchanged while advancing one repository.
     # This is the fast-forward case that an mtime-only gate cannot detect.
     $advanced = @(
