@@ -15,21 +15,27 @@
 //!    upload is `capability_denied`) and submits his Genesis there. Y forwards it with
 //!    `mls_genesis_material`, X verifies the content addresses and the RFC 9420 public state,
 //!    commits it under its own signature and replicates the Commit back to Y.
-//! 4. X serves the exact two Blobs through `ak.peer.mls.read.group_state_material.v1` to Y, and the
-//!    byte-identical Genesis submitted again returns the original Commit.
+//! 4. X serves the exact two Blobs through `ak.peer.mls.read.group_state_material.v1` to Y; Bob
+//!    also reads through `ak.self.mls.read.group_state_material.v1` across Stations, Alice reads
+//!    through her governing Station, and Eve is refused. The byte-identical Genesis submitted again
+//!    returns the original Commit.
 
 use anyhow::{Context, Result, anyhow, ensure};
-use arkret::{ArkretMlsIdentity, ArkretMlsSigner, MlsGovernanceBindingPayload};
+use arkret::{
+    ArkretMlsIdentity, ArkretMlsSigner, MlsEndpointIdentity, MlsGovernanceBindingPayload,
+};
+use arkret_models_collaboration::events_payloads::MlsGenesisCreatorLeafAuthority;
 use arkret_models_collaboration::governance::membership_invite::{
     InviteAcceptPayload, InvitePreviousState,
 };
 use arkret_models_collaboration::governance::realm_join_intake::RealmJoinIntent;
 use arkret_models_collaboration::mls_group_state_material::{
     MlsGroupStateMaterialOutcome, MlsGroupStateMaterialRequestBody,
+    MlsMemberGroupStateMaterialReadRequestBody,
 };
 use arkret_wire::{
-    ActorId, AuthorityCommitStatus, AuthoritySubmitOutcome, EventId, EventKind, InviteId, RealmId,
-    ScopeRef,
+    ActorId, AuthorityCommitStatus, AuthoritySubmitOutcome, EventId, EventKind, InviteId,
+    MlsWelcomeRecipientEndpoint, RealmId, ScopeRef,
 };
 use chrono::{Duration as ChronoDuration, Utc};
 use reqwest::StatusCode;
@@ -57,6 +63,7 @@ const BOB_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002502";
 const EVE_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002503";
 const ACTIVE_SUITE: &str = "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519";
 const GROUP_STATE_MATERIAL: &str = "/_arkret/peer/mls/group-state-material";
+const SELF_GROUP_STATE_MATERIAL: &str = "/_arkret/self/mls/group-state-material/query";
 
 fn canonical(value: Value) -> Result<Value> {
     Ok(serde_json::from_slice(
@@ -126,12 +133,14 @@ fn genesis_payload(
     group_info_ref: &str,
     ratchet_tree_ref: &str,
     binding: &MlsGovernanceBindingPayload,
+    creator_leaf_authority: &MlsGenesisCreatorLeafAuthority,
 ) -> Result<Value> {
     canonical(json!({
         "cipher_suite": ACTIVE_SUITE,
         "group_info_ref": group_info_ref,
         "ratchet_tree_ref": ratchet_tree_ref,
         "governance_binding": binding,
+        "creator_leaf_authority": creator_leaf_authority,
         "created_at": arkret_canonical::format_timestamp_canonical(Utc::now()),
     }))
 }
@@ -166,7 +175,8 @@ pub async fn cross_station_mls_genesis_run() -> Result<()> {
     let member_station = group.server(1);
 
     // (1) Bob on Y joins Alice's invite-only Realm on X and may activate MLS.
-    let (alice, _) = standard_client(governance, &coauth, "xgenesis-alice", ALICE_DEVICE).await?;
+    let (alice, alice_account) =
+        standard_client(governance, &coauth, "xgenesis-alice", ALICE_DEVICE).await?;
     let (bob, bob_account) =
         standard_client(member_station, &coauth, "xgenesis-bob", BOB_DEVICE).await?;
     create_human_actor_profile(&bob, "Bob Genesis").await?;
@@ -234,7 +244,8 @@ pub async fn cross_station_mls_genesis_run() -> Result<()> {
         &wait_for_committed(&bob, &grant_commit.event_ref).await?,
     )?;
     let invite_event = submitted_event_id(&created)?;
-    let (eve, _) = standard_client(member_station, &coauth, "xgenesis-eve", EVE_DEVICE).await?;
+    let (eve, eve_account) =
+        standard_client(member_station, &coauth, "xgenesis-eve", EVE_DEVICE).await?;
     for (reader, event_id) in [
         (&bob, &invite_event),
         (&eve, &invite_event),
@@ -257,7 +268,43 @@ pub async fn cross_station_mls_genesis_run() -> Result<()> {
         realm_id: realm_id.clone(),
     };
     let binding = MlsGovernanceBindingPayload::new(scope.clone(), None, 0, 0, 0)?;
-    let mls_group = identity.create_group_with_governance_binding(&scope, &binding)?;
+    let mut mls_group = identity.create_group_with_governance_binding(&scope, &binding)?;
+    mls_group.install_local_creator_binding(
+        ActorId::account(bob_account.clone()),
+        Some(principal.founding_authorize_event_id.clone()),
+    )?;
+    let bindings = mls_group.verified_leaf_bindings()?;
+    let [creator] = bindings.as_slice() else {
+        return Err(anyhow!(
+            "Genesis requires exactly one verified creator leaf"
+        ));
+    };
+    ensure!(
+        creator.leaf_index == 0 && creator.actor_id == ActorId::account(bob_account.clone()),
+        "Genesis creator leaf does not belong to Bob",
+    );
+    let endpoint = match &creator.endpoint {
+        MlsEndpointIdentity::HumanDevice { device_id, .. } => {
+            ensure!(*device_id == principal.device_id);
+            MlsWelcomeRecipientEndpoint::Device {
+                device_id: device_id.clone(),
+            }
+        }
+        _ => {
+            return Err(anyhow!(
+                "Genesis creator leaf must use Bob's device endpoint"
+            ));
+        }
+    };
+    let creator_leaf_authority = MlsGenesisCreatorLeafAuthority {
+        leaf_signature_key_b64u: creator.signature_key.clone(),
+        endpoint,
+        authorization_event_ref: creator
+            .device_authorize_event_id
+            .clone()
+            .context("verified Genesis creator leaf lacks DeviceAuthorize Event")?,
+    };
+    creator_leaf_authority.validate()?;
     let (group_info, tree) = mls_group.public_group_state_bytes()?;
 
     // (2) A Genesis naming Blobs Y does not hold stops at Y.
@@ -265,7 +312,12 @@ pub async fn cross_station_mls_genesis_run() -> Result<()> {
         .author_event(
             &realm,
             EventKind::MlsGenesis.as_str(),
-            genesis_payload(&blob_ref(&group_info), &blob_ref(&tree), &binding)?,
+            genesis_payload(
+                &blob_ref(&group_info),
+                &blob_ref(&tree),
+                &binding,
+                &creator_leaf_authority,
+            )?,
         )
         .await?;
     let (status, body) = submit_raw(&bob, &unheld).await?;
@@ -300,7 +352,12 @@ pub async fn cross_station_mls_genesis_run() -> Result<()> {
         .author_event(
             &realm,
             EventKind::MlsGenesis.as_str(),
-            genesis_payload(&group_info_ref, &tree_ref, &binding)?,
+            genesis_payload(
+                &group_info_ref,
+                &tree_ref,
+                &binding,
+                &creator_leaf_authority,
+            )?,
         )
         .await?;
     let genesis_commit = submit_and_expect_commit(&bob, &bob_account, BOB_DEVICE, &genesis).await?;
@@ -349,6 +406,70 @@ pub async fn cross_station_mls_genesis_run() -> Result<()> {
         "X served other bytes than the forwarded Genesis carried"
     );
 
+    // A joined member reads through their own Account Station. Y first
+    // authorizes Bob at its replicated current and target cut, then X checks
+    // the same caller-bearing request and serves the exact accepted bytes.
+    let member_request = MlsMemberGroupStateMaterialReadRequestBody {
+        realm_id: realm_id.clone(),
+        effective_scope: scope.clone(),
+        mls_group_id: scope.canonical_mls_group_id()?,
+        epoch: 0u64.try_into().map_err(|error| anyhow!("{error:?}"))?,
+        group_state_event_id: genesis.event_id.clone(),
+        caller_actor_id: ActorId::account(bob_account.clone()),
+        target_commit_event_ref: genesis.event_id.clone(),
+        target_epoch: 0,
+        group_info_ref: arkret_wire::BlobRef::new(group_info_ref.clone())?,
+        ratchet_tree_ref: arkret_wire::BlobRef::new(tree_ref.clone())?,
+        max_response_bytes: None,
+    };
+    for (reader, actor) in [(&bob, &bob_account), (&alice, &alice_account)] {
+        let mut exact = member_request.clone();
+        exact.caller_actor_id = ActorId::account(actor.clone());
+        let response = reader
+            .post(SELF_GROUP_STATE_MATERIAL)
+            .canonical_json(&exact)?
+            .send()
+            .await?;
+        let status = response.status();
+        let body = response.bytes().await?;
+        ensure!(
+            status == StatusCode::OK,
+            "joined member self material read failed: {status} {}",
+            String::from_utf8_lossy(&body),
+        );
+        let outcome: MlsGroupStateMaterialOutcome = serde_json::from_slice(&body)?;
+        let validated = outcome.validate_for_request(&exact.as_peer_request())?;
+        ensure!(
+            validated.group_info_bytes == group_info && validated.ratchet_tree_bytes == tree,
+            "self material read did not return the accepted Genesis bytes",
+        );
+    }
+    let response = alice
+        .post(SELF_GROUP_STATE_MATERIAL)
+        .canonical_json(&member_request)?
+        .send()
+        .await?;
+    let status = response.status();
+    ensure!(
+        status == StatusCode::NOT_FOUND,
+        "a member session asserted as another Actor was not opaque 404: {status} {}",
+        response.text().await?,
+    );
+    let mut outsider = member_request.clone();
+    outsider.caller_actor_id = ActorId::account(eve_account);
+    let response = eve
+        .post(SELF_GROUP_STATE_MATERIAL)
+        .canonical_json(&outsider)?
+        .send()
+        .await?;
+    let status = response.status();
+    ensure!(
+        status == StatusCode::NOT_FOUND,
+        "outsider self material read was not opaque 404: {} {}",
+        status,
+        response.text().await?,
+    );
+
     // The byte-identical Genesis again returns its original Commit.
     let (status, replay) = submit_raw(&bob, &genesis).await?;
     ensure!(
@@ -366,6 +487,197 @@ pub async fn cross_station_mls_genesis_run() -> Result<()> {
         ),
         "the exact Genesis replay did not return its original Commit: {replay:?}"
     );
+    drop(coauth);
+    Ok(())
+}
+
+/// A Realm-root Genesis supplies a member read without granting a high-risk
+/// action to a cross-Station subject. Bob is joined before the target Genesis
+/// Commit, so both his Account Station and governance can verify that cut.
+pub async fn cross_station_member_group_state_material_run() -> Result<()> {
+    const MEMBER_GROUP: &str = "cross-station-member-mls-material";
+    let Some(governance_database) = database(MEMBER_GROUP)? else {
+        return Ok(());
+    };
+    let Some(member_database) = database(MEMBER_GROUP)? else {
+        return Ok(());
+    };
+    ensure!(governance_database.connect_url != member_database.connect_url);
+    let coauth = MockCoauthIntrospectionServer::spawn_with_internal_secret(
+        HARNESS_INTERNAL_AUTHORITY_SECRET,
+    )
+    .await?;
+    let Some(group) = TestServerGroup::try_multi_external_with_node_envs(
+        MEMBER_GROUP,
+        &[
+            station_env(&governance_database.connect_url, &coauth),
+            station_env(&member_database.connect_url, &coauth),
+        ],
+    )
+    .await?
+    else {
+        return skip_or_fail(MEMBER_GROUP, "prebuilt Soland unavailable");
+    };
+    let x = group.server(0);
+    let y = group.server(1);
+    let (alice, alice_account) =
+        standard_client(x, &coauth, "xmaterial-alice", ALICE_DEVICE).await?;
+    let (bob, bob_account) = standard_client(y, &coauth, "xmaterial-bob", BOB_DEVICE).await?;
+    let (eve, eve_account) = standard_client(y, &coauth, "xmaterial-eve", EVE_DEVICE).await?;
+    let realm =
+        create_realm_with_join_rule(&alice, "Cross-Station Member Material", "invite", &[x, y])
+            .await?;
+    let realm_id = RealmId::new(realm.clone())?;
+    let created = alice
+        .submit_event(
+            &realm,
+            EventKind::InviteCreate.as_str(),
+            invite_create_payload(
+                &bob.actor,
+                bob.service_id(),
+                format!("sha256:{}", "e".repeat(64)),
+                Utc::now() + ChronoDuration::days(7),
+            )?,
+        )
+        .await?;
+    let invite_id = InviteId::from_event_id(&submitted_event_id(&created)?);
+    prepare_join(
+        &bob,
+        &realm,
+        x,
+        "ak:request:019b0000-0000-7000-8000-000000002513",
+        RealmJoinIntent::InviteAccept {
+            invite_id: invite_id.clone(),
+        },
+    )
+    .await?;
+    let accept = bob
+        .author_event(
+            &realm,
+            EventKind::InviteAccept.as_str(),
+            serde_json::to_value(InviteAcceptPayload::directed(
+                invite_id,
+                bob_account.clone(),
+                InvitePreviousState::Pending,
+            ))?,
+        )
+        .await?;
+    let accept_commit = submit_and_expect_commit(&bob, &bob_account, BOB_DEVICE, &accept).await?;
+    ensure_same_commit(
+        &accept_commit,
+        &wait_for_committed(&bob, &accept.event_id).await?,
+    )?;
+
+    let principal = alice
+        .principal
+        .clone()
+        .context("Alice's client carries its accepted device authorization")?;
+    let scope = ScopeRef::Realm {
+        realm_id: realm_id.clone(),
+    };
+    let binding = MlsGovernanceBindingPayload::new(scope.clone(), None, 0, 0, 0)?;
+    let identity = ArkretMlsIdentity::new_human_device(
+        ActorId::account(alice_account.clone()),
+        principal.device_id.clone(),
+        ArkretMlsSigner::from_ed25519_signing_key(principal.device_signing_key.clone()),
+    )?;
+    let mut mls_group = identity.create_group_with_governance_binding(&scope, &binding)?;
+    mls_group.install_local_creator_binding(
+        ActorId::account(alice_account.clone()),
+        Some(principal.founding_authorize_event_id.clone()),
+    )?;
+    let bindings = mls_group.verified_leaf_bindings()?;
+    let [creator] = bindings.as_slice() else {
+        return Err(anyhow!("Genesis requires Alice's sole verified MLS leaf"));
+    };
+    ensure!(creator.leaf_index == 0 && creator.actor_id == ActorId::account(alice_account.clone()));
+    let endpoint = match &creator.endpoint {
+        MlsEndpointIdentity::HumanDevice { device_id, .. } => {
+            ensure!(*device_id == principal.device_id);
+            MlsWelcomeRecipientEndpoint::Device {
+                device_id: device_id.clone(),
+            }
+        }
+        _ => return Err(anyhow!("Alice's Genesis creator leaf is not her device")),
+    };
+    let creator_leaf_authority = MlsGenesisCreatorLeafAuthority {
+        leaf_signature_key_b64u: creator.signature_key.clone(),
+        endpoint,
+        authorization_event_ref: creator
+            .device_authorize_event_id
+            .clone()
+            .context("Alice's MLS leaf lacks accepted DeviceAuthorize Event")?,
+    };
+    creator_leaf_authority.validate()?;
+    let (group_info, tree) = mls_group.public_group_state_bytes()?;
+    let group_info_ref = upload_public_blob(&alice, &realm_id, &group_info).await?;
+    let tree_ref = upload_public_blob(&alice, &realm_id, &tree).await?;
+    let genesis = alice
+        .author_event(
+            &realm,
+            EventKind::MlsGenesis.as_str(),
+            genesis_payload(
+                &group_info_ref,
+                &tree_ref,
+                &binding,
+                &creator_leaf_authority,
+            )?,
+        )
+        .await?;
+    let genesis_commit =
+        submit_and_expect_commit(&alice, &alice_account, ALICE_DEVICE, &genesis).await?;
+    ensure_commit_signed_by(&genesis_commit, x)?;
+    ensure_same_commit(
+        &genesis_commit,
+        &wait_for_committed(&bob, &genesis.event_id).await?,
+    )?;
+
+    let request = MlsMemberGroupStateMaterialReadRequestBody {
+        realm_id: realm_id.clone(),
+        effective_scope: scope.clone(),
+        mls_group_id: scope.canonical_mls_group_id()?,
+        epoch: 0u64.try_into().map_err(|error| anyhow!("{error:?}"))?,
+        group_state_event_id: genesis.event_id.clone(),
+        caller_actor_id: ActorId::account(bob_account.clone()),
+        target_commit_event_ref: genesis.event_id.clone(),
+        target_epoch: 0,
+        group_info_ref: arkret_wire::BlobRef::new(group_info_ref)?,
+        ratchet_tree_ref: arkret_wire::BlobRef::new(tree_ref)?,
+        max_response_bytes: None,
+    };
+    for (reader, account) in [(&bob, &bob_account), (&alice, &alice_account)] {
+        let mut exact = request.clone();
+        exact.caller_actor_id = ActorId::account(account.clone());
+        let response = reader
+            .post(SELF_GROUP_STATE_MATERIAL)
+            .canonical_json(&exact)?
+            .send()
+            .await?;
+        let status = response.status();
+        let body = response.bytes().await?;
+        ensure!(
+            status == StatusCode::OK,
+            "joined member MLS material read failed: {status} {}",
+            String::from_utf8_lossy(&body),
+        );
+        let outcome: MlsGroupStateMaterialOutcome = serde_json::from_slice(&body)?;
+        let validated = outcome.validate_for_request(&exact.as_peer_request())?;
+        ensure!(validated.group_info_bytes == group_info && validated.ratchet_tree_bytes == tree);
+    }
+    let response = alice
+        .post(SELF_GROUP_STATE_MATERIAL)
+        .canonical_json(&request)?
+        .send()
+        .await?;
+    ensure!(response.status() == StatusCode::NOT_FOUND);
+    let mut outsider = request;
+    outsider.caller_actor_id = ActorId::account(eve_account);
+    let response = eve
+        .post(SELF_GROUP_STATE_MATERIAL)
+        .canonical_json(&outsider)?
+        .send()
+        .await?;
+    ensure!(response.status() == StatusCode::NOT_FOUND);
     drop(coauth);
     Ok(())
 }

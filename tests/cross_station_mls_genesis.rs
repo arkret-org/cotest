@@ -11,3 +11,11 @@ async fn cross_station_mls_genesis() -> Result<()> {
     let _guard = init_transcript_writer("cross_station_mls_genesis", None)?;
     cotest::scenarios::cross_station_mls_genesis::cross_station_mls_genesis_run().await
 }
+
+#[tokio::test(flavor = "multi_thread")]
+#[serial]
+async fn cross_station_member_group_state_material() -> Result<()> {
+    let _guard = init_transcript_writer("cross_station_member_group_state_material", None)?;
+    cotest::scenarios::cross_station_mls_genesis::cross_station_member_group_state_material_run()
+        .await
+}
