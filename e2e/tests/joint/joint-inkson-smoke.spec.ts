@@ -121,19 +121,14 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
         subjectId: jointRealm.alice.id,
         actions: ["ak.message.create"],
       });
-      await submitSignedEvent(
+      await grantInviteConsentArkret(
         request,
-        jointRealm.aliceSession,
+        participantSession!.grantJwt,
+        participantSession!.user,
         jointRealm.alice.id,
-        jointRealm.alicePage.serverUrl,
-        jointRealm.realmId,
-        "ak.member.state",
-        {
-          realm_id: jointRealm.realmId,
-          member_id: accountActorId(participantId),
-          membership: "join",
-        },
       );
+      await jointRealm.alicePage.inviteFromAdmin(jointRealm.realmId, participantId);
+      await participantFlow!.page.acceptInvite(jointRealm.realmId);
       // Membership does not confer the action capability needed by the reply.
       await grantCapabilityEventApi(request, jointRealm.aliceToken, {
         ownerId: jointRealm.alice.id,

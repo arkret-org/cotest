@@ -221,6 +221,9 @@ $MockWitnessExtraDids = @(
         ForEach-Object { $_.Trim() } |
         Where-Object { $_ }
 )
+if ($RunProfile -eq "joint-smoke" -and $StartMocks -and $MockWitnessExtraDids.Count -eq 0) {
+    $MockWitnessExtraDids = @("did:webvh:z6mkfixture:witness-quorum.joint-e2e.local")
+}
 if ($MockWitnessExtraDids.Count -gt 0) {
     $StartMockWitness = $true
 }
