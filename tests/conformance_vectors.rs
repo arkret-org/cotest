@@ -312,10 +312,9 @@ fn expected_state_digest_known_answers_recompute_every_fold() -> Result<()> {
 fn named_suite_audit_executes_registered_runners_and_exposes_every_gap() -> Result<()> {
     let report = run_named_suite_audit()?;
     assert_eq!(report.fixture_count, 82);
-    assert_eq!(report.executed_entrypoints.len(), 49);
-    assert_eq!(report.unwired_entrypoints.len(), 33);
+    assert_eq!(report.executed_entrypoints.len(), 50);
+    assert_eq!(report.unwired_entrypoints.len(), 32);
     for required_gap in [
-        "ak.suite.account.blocklist_projection.v1",
         "ak.suite.call.force_mute_v1_boundary.v1",
         "ak.suite.current.cas_failure_read_boundary.v1",
         "ak.suite.consent.cache_invalidation.v1",
@@ -340,18 +339,13 @@ fn named_suite_audit_executes_registered_runners_and_exposes_every_gap() -> Resu
 }
 
 #[test]
-fn account_blocklist_projection_vector_refuses_unexecuted_production_cases() {
+fn account_blocklist_projection_vector_executes_complete_production_suite() -> Result<()> {
     assert_eq!(
         cotest::conformance::VECTOR_ID_ACCOUNT_BLOCKLIST_PROJECTION,
         "ak.vector.account.blocklist_projection.v1"
     );
-    let error = cotest::conformance::run_account_blocklist_projection_vector()
-        .expect_err("a partial production slice cannot certify the complete blocklist vector");
-    assert!(
-        error
-            .to_string()
-            .contains("blocklist suite lacks production executors")
-    );
+    cotest::conformance::run_account_blocklist_projection_vector()?;
+    Ok(())
 }
 
 #[test]

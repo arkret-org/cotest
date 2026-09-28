@@ -12,7 +12,8 @@ use anyhow::{Result, anyhow, ensure};
 use serde_json::Value;
 
 use super::{
-    ACCOUNT_DATA_CAS_CONVERGENCE_ENTRYPOINT, ACTOR_PRIVATE_EVENTS_SUBMIT_ENTRYPOINT,
+    ACCOUNT_BLOCKLIST_PROJECTION_ENTRYPOINT, ACCOUNT_DATA_CAS_CONVERGENCE_ENTRYPOINT,
+    ACTOR_PRIVATE_EVENTS_SUBMIT_ENTRYPOINT,
     AEAD_NONCE_REPLAY_ENTRYPOINT, AGENT_MLS_KEYPACKAGE_AUTHORIZATION_ENTRYPOINT,
     AUTHORITY_FORWARD_GENESIS_MATERIAL_ENTRYPOINT, BLOB_STREAM_AEAD_ENTRYPOINT,
     CALL_MEDIA_LIFECYCLE_ENTRYPOINT, CALL_STATE_CORE_ENTRYPOINT,
@@ -27,7 +28,8 @@ use super::{
     REALM_JOIN_CANDIDATE_ENTRYPOINT, RELATION_STRUCTURAL_REALM_ENTRYPOINT, SDK_PRECHECK_ENTRYPOINT,
     STRAND_WATCH_CURRENT_ENTRYPOINT, STRING_PROFILE_ENTRYPOINT, SuiteExecutionResult,
     TEST_MATERIAL_REJECTION_ENTRYPOINT, VIEW_WRITE_CONTRACT_ENTRYPOINT,
-    run_account_data_cas_convergence_suite, run_account_status_issuer_ledger_vector,
+    run_account_blocklist_projection_suite, run_account_data_cas_convergence_suite,
+    run_account_status_issuer_ledger_vector,
     run_actor_private_events_submit_suite, run_aead_nonce_replay_suite,
     run_agent_membership_cascade_suite, run_agent_mls_keypackage_authorization_suite,
     run_applet_registration_epoch_kat_suite, run_authority_commit_suite,
@@ -56,8 +58,7 @@ const ACCOUNT_STATUS_ENTRYPOINT: &str = "ak.suite.account_status.issuer_ledger.v
 /// Exact acknowledged gap ledger. This is deliberately closed: adding or
 /// renaming a canonical named suite cannot remain invisible merely because the
 /// total number of unwired suites happened to stay constant.
-const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 33] = [
-    "ak.suite.account.blocklist_projection.v1",
+const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 32] = [
     "ak.suite.agent.draft_pending_intent.v1",
     "ak.suite.agent.participation.v1",
     "ak.suite.agent.vectors.v1",
@@ -105,7 +106,11 @@ enum Runner {
     EvidenceMapped(fn() -> Result<()>),
 }
 
-const RUNNERS: [(&str, Runner); 49] = [
+const RUNNERS: [(&str, Runner); 50] = [
+    (
+        ACCOUNT_BLOCKLIST_PROJECTION_ENTRYPOINT,
+        Runner::Cases(run_account_blocklist_projection_suite),
+    ),
     (
         AUTHORITY_FORWARD_GENESIS_MATERIAL_ENTRYPOINT,
         Runner::Cases(run_authority_forward_genesis_material_suite),
