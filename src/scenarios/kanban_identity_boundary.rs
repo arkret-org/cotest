@@ -200,7 +200,10 @@ pub async fn kanban_creates_keep_one_identity_across_receipt_backfill_and_retry(
         StatusCode::CONFLICT,
     )
     .await?;
-    assert_eq!(refused["type"], "https://arkret.org/problems/cas_conflict");
+    assert_eq!(
+        refused["type"],
+        "https://arkret.org/problems/failed_precondition"
+    );
     assert_eq!(strand_row(&alice, &realm_id, &card_strand_id).await?, moved);
     let scan = alice
         .sdk()
