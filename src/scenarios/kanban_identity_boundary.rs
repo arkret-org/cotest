@@ -91,6 +91,11 @@ pub async fn kanban_creates_keep_one_identity_across_receipt_backfill_and_retry(
         !card.local_operation_id().as_str().starts_with("ak:"),
         "the holder-local operation id must not impersonate an Arkret identifier"
     );
+    assert_eq!(
+        serde_json::to_value(card.payload())?["object"]["created_at"],
+        arkret_canonical::format_timestamp_canonical(card.created_at()),
+        "Inkson's Strand create object and Event intent must share one clock"
+    );
     let (card_event_id, card_envelope) = submit_operation(&alice, &realm_id, &card).await?;
     let card_strand_id = arkret::StrandId::from_event_id(&card_event_id).to_string();
     let card_move = inkson::operation::ak_ops::strand_position_update(
@@ -351,13 +356,25 @@ async fn submit_operation(
     realm_id: &str,
     operation: &inkson::operation::LocalOperation,
 ) -> Result<(arkret_identifiers::EventId, Event)> {
-    let event = alice
+    let mut event = alice
         .author_event(
             realm_id,
             operation.kind().as_str(),
             serde_json::to_value(operation.payload())?,
         )
         .await?;
+    if operation.kind().as_str() == "ak.strand.create" {
+        // The live harness chooses its own envelope clock. Match that signed
+        // clock in the Event-derived create object before finalizing identity.
+        let event_created_at = serde_json::to_value(&event)?["created_at"].clone();
+        event
+            .payload
+            .get_mut("object")
+            .and_then(Value::as_object_mut)
+            .ok_or_else(|| anyhow!("Strand create payload has no object"))?
+            .insert("created_at".to_owned(), event_created_at);
+        crate::harness::refresh_typed_event_proof(&mut event)?;
+    }
     let authored_event_id = event.event_id.clone();
     let accepted = expect_json(
         alice
