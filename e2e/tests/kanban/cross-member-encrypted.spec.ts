@@ -77,16 +77,21 @@ async function waitForMlsWelcome(
   await expect
     .poll(
       async () => {
-        const url = `${solandBaseUrl()}/_arkret/self/events`;
+        const url = `${solandBaseUrl()}/_arkret/self/streams/scan`;
         const response = await request.fetch(url, {
-          method: "QUERY",
-          data: canonicalJson({ realm_ids: [realmId], limit: 500 }),
+          method: "POST",
+          data: canonicalJson({
+            realm_id: realmId,
+            stream_ref: { kind: "realm", realm_id: realmId },
+            after_position: null,
+            limit: 500,
+          }),
           headers: {
             "content-type": "application/json",
             ...selfPathGrantHeaders({
               deviceKey: session.deviceKey,
               grantJwt: session.grantJwt,
-              method: "QUERY",
+              method: "POST",
               url,
             }),
           },
@@ -95,10 +100,10 @@ async function waitForMlsWelcome(
           return `status ${response.status()}: ${await response.text()}`;
         }
         const body = await response.json();
-        return (body.events ?? []).some(
-          (event: Record<string, any>) =>
-            event.kind === "ak.mls.welcome" &&
-            event.payload?.recipient_principal_id === recipientId,
+        return (body.committed_events ?? []).some(
+          (item: { event?: Record<string, any> }) =>
+            item.event?.kind === "ak.mls.welcome" &&
+            item.event.payload?.recipient_principal_id === recipientId,
         );
       },
       {
