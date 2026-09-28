@@ -124,6 +124,10 @@ type OpenUserOpts = {
   grantAudience?: string;
   recoveryKey?: string;
   recoveryMaterialEvidence?: Record<string, unknown>;
+  /// Keep this user's real browser storage, including IndexedDB secrets,
+  /// across closing and relaunching the Chromium process.
+  persistentUserDataDir?: string;
+  resumePersistentProfile?: boolean;
 };
 
 export type DpopUserSession = {
@@ -2190,48 +2194,48 @@ export async function openUser(
       value: JSON.stringify(sessionInjection),
     });
   }
-  const context = await browser.newContext({
+  const contextOptions = {
     baseURL: inksonBaseUrl(opts.server),
     // Opt-in for running against a live Caddy stack whose TLS is `tls internal`
     // (self-signed). Default off so CI/headless harness runs are unaffected.
     ignoreHTTPSErrors: process.env.COTEST_IGNORE_HTTPS === "1",
     recordHar: {
       path: path.join(diagnosticsDir, "network.har"),
-      mode: "minimal",
-      content: "omit",
+      mode: "minimal" as const,
+      content: "omit" as const,
     },
     // Seed the Inkson origin directly. An init script also runs once against
     // the initial opaque about:blank document, where localStorage access throws
     // SecurityError and can make session injection nondeterministic.
-    storageState: {
-      cookies: [],
-      origins: [
-        {
-          origin: new URL(inksonBaseUrl(opts.server)).origin,
-          localStorage,
-        },
-      ],
-    },
-  });
-  const seededStorageState = await context.storageState();
-  const seededOrigin = seededStorageState.origins.find(
-    ({ origin }) => origin === new URL(inksonBaseUrl(opts.server)).origin,
-  );
-  const seededNames = new Set(
-    seededOrigin?.localStorage.map(({ name }) => name) ?? [],
-  );
-  if (!seededNames.has("inkson.config.v1")) {
-    await context.close();
-    throw new Error("Inkson browser context is missing its seeded config");
+  };
+  const origin = new URL(inksonBaseUrl(opts.server)).origin;
+  const context = opts.persistentUserDataDir
+    ? await browser.browserType().launchPersistentContext(opts.persistentUserDataDir, contextOptions)
+    : await browser.newContext({
+        ...contextOptions,
+        storageState: { cookies: [], origins: [{ origin, localStorage }] },
+      });
+  if (opts.persistentUserDataDir && !opts.resumePersistentProfile) {
+    // Seed only the first launch. A resumed profile must use its own durable
+    // localStorage and IndexedDB, including newer recovery-policy evidence.
+    await context.addInitScript(({ origin, entries }) => {
+      if (window.location.origin !== origin) return;
+      for (const { name, value } of entries) {
+        if (window.localStorage.getItem(name) === null) {
+          window.localStorage.setItem(name, value);
+        }
+      }
+    }, { origin, entries: localStorage });
   }
-  if (
-    sessionInjection &&
-    !seededNames.has("inkson.test.session_injection.v1")
-  ) {
-    await context.close();
-    throw new Error(
-      "Inkson browser context is missing its test session fixture",
-    );
+  if (!opts.persistentUserDataDir) {
+    const seededStorageState = await context.storageState();
+    const seededOrigin = seededStorageState.origins.find(({ origin: saved }) => saved === origin);
+    const seededNames = new Set(seededOrigin?.localStorage.map(({ name }) => name) ?? []);
+    if (!seededNames.has("inkson.config.v1") ||
+        (sessionInjection && !seededNames.has("inkson.test.session_injection.v1"))) {
+      await context.close();
+      throw new Error("Inkson browser context is missing its seeded session config");
+    }
   }
   // Hide dioxus-cli's dev-mode rebuild toast (`#__dx-toast`). When dx serve's
   // dev WS reconnects mid-test the overlay covers the page and blocks pointer
@@ -2270,7 +2274,7 @@ export async function openUser(
       hideDeviceAuthorizationPrompt: opts.keepDeviceAuthorizationModal !== true,
     },
   );
-  const page = await context.newPage();
+  const page = context.pages()[0] ?? await context.newPage();
   // With real-grant injection enabled, device enrollment triggers inkson's
   // mandatory "Set up your 24-word Recovery Key" modal ("required before
   // encryption"). It can pop asynchronously mid-flow and covers the page, so a

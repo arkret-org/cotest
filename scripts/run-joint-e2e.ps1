@@ -1677,19 +1677,25 @@ function Convert-ToContainerReachableUrl {
 }
 
 function Get-PythonExecutable {
-    $python3 = Get-Command python3 -ErrorAction SilentlyContinue
-    if ($python3) {
-        return $python3.Source
+    # Windows Store app-execution aliases appear in Get-Command even when no
+    # Python runtime is installed. The runner refreshes PATH from the machine
+    # and user scopes after its offline gates, so a caller's temporary PATH
+    # correction cannot keep those aliases out of this later lookup.
+    foreach ($name in @('python3', 'python', 'py')) {
+        foreach ($command in @(Get-Command $name -All -ErrorAction SilentlyContinue)) {
+            $candidate = $command.Source
+            if (-not $candidate -or $candidate -match '[\\/]WindowsApps[\\/]') {
+                continue
+            }
+            $versionArgs = @('--version')
+            if ($name -eq 'py') { $versionArgs = @('-3', '--version') }
+            $versionOutput = & $candidate @versionArgs 2>&1
+            if ($LASTEXITCODE -eq 0 -and ($versionOutput -join ' ') -match '^Python 3\.') {
+                return $candidate
+            }
+        }
     }
-    $python = Get-Command python -ErrorAction SilentlyContinue
-    if ($python) {
-        return $python.Source
-    }
-    $py = Get-Command py -ErrorAction SilentlyContinue
-    if ($py) {
-        return $py.Source
-    }
-    throw "Python is required to patch generated coauth config"
+    throw "Python 3 is required to patch generated coauth config"
 }
 
 function Get-CargoTargetDirectory {
