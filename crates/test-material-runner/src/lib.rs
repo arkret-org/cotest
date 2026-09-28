@@ -537,6 +537,88 @@ fn coauth_rejects_before_binding_state(public_key: &[u8]) -> Result<()> {
     Ok(())
 }
 
+fn coauth_trust_domain_admission(
+    public_key: &[u8],
+    trust_domain: &str,
+    accept: bool,
+) -> Result<()> {
+    use arkret_identifiers::{Did, Hash, TrustDomainId};
+    use arkret_identity::{DidBindingPurpose, VerifiedDidBindingKey};
+    use coauth_backend::handlers::arkret::{DidDocument, VerificationMethod};
+    use coauth_backend::services::did_binding::{
+        DidBindingError, DurableVerifiedDidBindingStore, binding_from_resolution,
+        high_risk_freshness,
+    };
+    use coauth_backend::services::did_resolver::{DidResolution, DidResolutionSource};
+
+    let did = "did:web:cotest-domain.production";
+    let domain = TrustDomainId::new(trust_domain.to_owned())?;
+    let policy_digest = Hash::new(format!("sha256:{}", "b".repeat(64)))?;
+    let now = chrono::DateTime::from_timestamp(1_800_000_000, 0).context("fixed instant")?;
+    let resolution = DidResolution {
+        document: DidDocument {
+            id: did.to_owned(),
+            also_known_as: Vec::new(),
+            verification_method: vec![VerificationMethod {
+                id: format!("{did}#runtime-1"),
+                kind: "JsonWebKey2020".to_owned(),
+                controller: did.to_owned(),
+                public_key_jwk: Some(serde_json::from_value(serde_json::json!({
+                    "x": arkret_canonical::base64url_encode(public_key),
+                    "crv": "Ed25519",
+                    "kty": "OKP"
+                }))?),
+                public_key_multibase: None,
+            }],
+            authentication: Vec::new(),
+            assertion_method: Vec::new(),
+            service: Vec::new(),
+            metadata: None,
+        },
+        source: DidResolutionSource::DelegatedResolver,
+        verified_local_binding: false,
+        key_log_head: Some(Hash::new(format!("sha256:{}", "a".repeat(64)))?),
+        method_evidence: serde_json::json!({"method": "did:web"}),
+        closed_method_evidence: None,
+        identity_fact_rejection: None,
+    };
+    let key = VerifiedDidBindingKey {
+        did: Did::new(did.to_owned())?,
+        trust_domain: domain.clone(),
+        purpose: DidBindingPurpose::AccountBinding,
+        policy_digest: policy_digest.clone(),
+        verification_method: None,
+    };
+    let durable = DurableVerifiedDidBindingStore::new(4);
+    let result = binding_from_resolution(
+        &resolution,
+        domain,
+        DidBindingPurpose::AccountBinding,
+        policy_digest,
+        None,
+        &high_risk_freshness(),
+        now,
+    );
+    if accept {
+        let binding = result.context("ordinary trust domain must produce an accepted binding")?;
+        durable.accept(binding)?;
+        ensure!(
+            durable.get(&key, now).is_some(),
+            "accepted binding absent from mirror"
+        );
+    } else {
+        ensure!(matches!(
+            result,
+            Err(DidBindingError::TestSigningMaterialDenied)
+        ));
+        ensure!(
+            durable.get(&key, now).is_none(),
+            "denied binding reached mirror"
+        );
+    }
+    Ok(())
+}
+
 pub fn run_test_material_rejection_suite_with_coverage() -> Result<TestMaterialRejectionCoverage> {
     let fixture = load_fixture_value(FIXTURE)?;
     ensure!(
@@ -706,19 +788,48 @@ pub fn run_test_material_rejection_suite_with_coverage() -> Result<TestMaterialR
     record(9, 3)?;
     let domain_only = reserved_identifier_matches(None, None, Some(&domain_example));
     ensure!(!domain_only.did && !domain_only.key_id && domain_only.trust_domain);
-    record(10, 3)?;
+    ensure!(
+        fixture["cases"][10]["name"] == "a_reserved_trust_domain_is_refused_at_trust_admission",
+        "reserved trust-domain case moved or changed without runner review"
+    );
+    coauth_trust_domain_admission(
+        unlisted.verifying_key().as_bytes(),
+        domain_example.as_str(),
+        false,
+    )?;
+    record(10, 5)?;
 
+    let mut admitted_domains = 0;
+    ensure!(
+        fixture["cases"][11]["name"]
+            == "a_deployment_domain_that_merely_shares_a_tail_is_not_refused",
+        "ordinary trust-domain case moved or changed without runner review"
+    );
     for sample in rules[2]["non_examples"]
         .as_array()
         .context("domain non-examples")?
     {
-        let matches =
-            arkret_wire::TrustDomainId::new(sample.as_str().context("domain")?.to_owned())
-                .map(|value| reserved_identifier_matches(None, None, Some(&value)))
-                .unwrap_or_default();
+        let raw = sample.as_str().context("domain")?;
+        let parsed = arkret_wire::TrustDomainId::new(raw.to_owned());
+        let matches = parsed
+            .as_ref()
+            .map(|value| reserved_identifier_matches(None, None, Some(value)))
+            .unwrap_or_default();
         ensure!(!matches.any());
+        if let Ok(domain) = parsed {
+            coauth_trust_domain_admission(
+                unlisted.verifying_key().as_bytes(),
+                domain.as_str(),
+                true,
+            )?;
+            admitted_domains += 1;
+        }
     }
-    record(11, 2)?;
+    ensure!(
+        admitted_domains >= 2,
+        "no deployable non-example domains executed"
+    );
+    record(11, 3 + admitted_domains)?;
     for (rule, kind) in rules.iter().zip(["did", "key_id", "trust_domain"]) {
         for sample in rule["non_examples"].as_array().context("non-examples")? {
             let raw = sample.as_str().context("non-example string")?;
