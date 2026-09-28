@@ -11,6 +11,7 @@ use arkret_signatures::http_signature::{
     ContentDigest, ContentDigestAlgorithm, HttpSignatureScenario, SignedRequestParts,
     sign_http_message_for_scenario,
 };
+use cotest::scenarios::_helpers::coauth_bootstrap::spawn_ephemeral_postgres_for;
 use cotest::scenarios::_helpers::joint_service_bootstrap::{JointServiceConfig, try_bootstrap};
 use ed25519_dalek::SigningKey;
 use serde_json::Value;
@@ -96,7 +97,11 @@ fn empty_inventory_witness_and_aba_are_bound_to_the_closed_sdk_carrier() -> Resu
 #[ignore = "requires built Soland and Coauth binaries plus Docker or COTEST_COAUTH_DATABASE_URL"]
 #[serial]
 async fn live_signed_inventory_uses_coauth_issuer_and_unsigned_read_has_no_effect() -> Result<()> {
-    let stack = try_bootstrap(JointServiceConfig::new(STATION_NAME)).await?;
+    let soland_db = spawn_ephemeral_postgres_for("COTEST_SOLAND_DATABASE_URL")?
+        .context("live inventory requires isolated PostgreSQL for Soland")?;
+    let mut config = JointServiceConfig::new(STATION_NAME);
+    config.soland_database_url = Some(soland_db.connect_url.clone());
+    let stack = try_bootstrap(config).await?;
     let coauth = stack.coauth.as_ref().context(
         "live inventory requires real Coauth and PostgreSQL; build both binaries and provide Docker or COTEST_COAUTH_DATABASE_URL",
     )?;
