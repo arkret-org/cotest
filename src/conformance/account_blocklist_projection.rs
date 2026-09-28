@@ -353,6 +353,32 @@ pub async fn run_account_blocklist_production_cases() -> Result<super::SuiteExec
     })
 }
 
+/// Execute case 4 against the same production paths used by the bounded CAS
+/// runner. The shared Realm leg proves that the accepted Message is retained
+/// before the holder filters it and compares two fresh submissions by the
+/// same sender under the same Realm authority. The MLS leg observes the
+/// automatic receipt difference through the real Native and Signal paths.
+/// These observations do not certify the still missing whole suite.
+pub async fn run_account_blocklist_case4_combined_slice() -> Result<()> {
+    let fixture = validated_fixture()?;
+    let cases = value_array(required_field(&fixture, "cases")?, "cases")?;
+    assert_case(&cases[4], "accept", None)?;
+
+    // This runner includes retained_shared_history, whose paired sender
+    // submissions use one Realm, sender, operation and authority. It also
+    // checks the exact verified Commit and durable Native retention.
+    let base = run_account_blocklist_production_cases().await?;
+    ensure!(
+        base.cases.len() == 5,
+        "bounded production prerequisite did not execute all existing cases"
+    );
+    crate::scenarios::mls_lifecycle_live::run_blocklist_automatic_receipt_live()
+        .await
+        .context("case 4 encrypted Message and automatic receipt production leg")?;
+
+    Ok(())
+}
+
 /// Exercise the ordinary Inkson Account projector and Garth subscription,
 /// including the durable cursor on a real undecryptable accepted Delta.
 async fn private_account_catchup(holder: &TestActorClient, owner: &ActorId) -> Result<()> {
