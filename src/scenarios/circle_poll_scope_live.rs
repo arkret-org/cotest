@@ -58,6 +58,30 @@ async fn durable_state(database_url: &str, realm: &str, poll_event: &str) -> Res
     }).await?
 }
 
+async fn seed_stale_circle_mirror(
+    database_url: &str,
+    realm: &str,
+    circle: &CircleId,
+    actor: &ActorId,
+) -> Result<()> {
+    let database_url = database_url.to_owned();
+    let realm = realm.to_owned();
+    let token = circle.token_bytes().to_vec();
+    let actor = serde_json::to_value(actor)?;
+    tokio::task::spawn_blocking(move || -> Result<()> {
+        let mut db = postgres::Client::connect(&database_url, postgres::NoTls)?;
+        db.execute(
+            "INSERT INTO projection_circles \
+             (id,realm_id,title,display,directory_visibility,join_rule,history_access,encryption_profile,state,created_by,created_at) \
+             VALUES($1,$2,'stale Circle mirror',$3,'members','public','since_join','none','archived',$4,now())",
+            &[&token, &realm, &json!({"short_name":"stale","color_token":"blue","symbol":{"glyph":"lock"}}), &actor],
+        )?;
+        Ok(())
+    })
+    .await??;
+    Ok(())
+}
+
 async fn circle_create(
     client: &TestActorClient,
     realm: &str,
@@ -292,6 +316,9 @@ pub async fn run() -> Result<()> {
     })
     .await??;
 
+    // One legacy mirror lies about Circle A; Circle B has no mirror at all.
+    // Both must recover from accepted Event/Commit truth after restart.
+    seed_stale_circle_mirror(&database.connect_url, &realm, &circle_a, &actor).await?;
     group.server_mut(0).restart_external_process().await?;
     let readback: CommittedEventView = serde_json::from_value(
         expect_json(
@@ -306,6 +333,20 @@ pub async fn run() -> Result<()> {
     ensure!(
         matches!(&readback, CommittedEventView::Full(view) if view.event == replacement),
         "restarted Station did not disclose the committed replacement Event: {readback:?}"
+    );
+    let second_circle: CommittedEventView = serde_json::from_value(
+        expect_json(
+            alice.get(&format!(
+                "/_arkret/self/committed-events/{}",
+                strand_b.event_id
+            )),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    ensure!(
+        matches!(&second_circle, CommittedEventView::Full(view) if view.event == strand_b),
+        "restarted Station did not recover the Circle without a legacy mirror: {second_circle:?}"
     );
     let restarted = durable_state(&database.connect_url, &realm, poll.event_id.as_str()).await?;
     ensure!(
