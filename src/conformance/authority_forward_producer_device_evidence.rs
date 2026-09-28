@@ -1650,6 +1650,14 @@ impl ForwardingWorld {
         SigningKey::from_bytes(&DEVICE_SEED)
     }
 
+    /// The accepted authorization Event for the producer device in this fixture.
+    pub(super) fn producer_device_authorize_event_id(&self) -> Result<EventId> {
+        Ok(self
+            .0
+            .device_record(LiveDeviceState::Active)?
+            .authorize_event_id)
+    }
+
     pub(super) fn realm_id(&self) -> &RealmId {
         &self.0.realm_id
     }

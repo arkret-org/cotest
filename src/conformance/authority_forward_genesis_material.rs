@@ -21,19 +21,23 @@ use std::collections::BTreeMap;
 
 use anyhow::{Context as _, Result, anyhow, bail, ensure};
 use arkret::mls::MlsPublicGroupTracker;
-use arkret::{ArkretMlsIdentity, ArkretMlsSigner, MlsGovernanceBindingPayload};
+use arkret::{
+    ArkretMlsIdentity, ArkretMlsSigner, MlsEndpointIdentity, MlsGovernanceBindingPayload,
+};
 use arkret_models_collaboration::authority_commit::{
     AuthorityForwardBranch, MLS_GENESIS_MATERIAL_MAX_BLOB_BYTES, MlsGenesisMaterial,
     PeerAuthorityForwardEventRequest, PeerAuthoritySubmitRequest,
 };
-use arkret_models_collaboration::events_payloads::MlsGenesisPayload;
+use arkret_models_collaboration::events_payloads::{
+    MlsGenesisCreatorLeafAuthority, MlsGenesisPayload,
+};
 use arkret_models_collaboration::mls_group_state_material::{
     MlsGroupStateMaterialOutcome, MlsGroupStateMaterialRequestBody,
 };
 use arkret_models_identity::AccountDeviceSignerEvidence;
 use arkret_wire::{
     ActorId, Base64UrlString, BlobRef, ErrorCode, Event, EventAdmissionSubmission, EventId,
-    EventKind, ScopeRef,
+    EventKind, MlsWelcomeRecipientEndpoint, ScopeRef,
 };
 use serde_json::{Value, json};
 
@@ -232,6 +236,7 @@ struct World {
     scope: ScopeRef,
     binding: MlsGovernanceBindingPayload,
     creator_state: GroupState,
+    creator_leaf_authority: MlsGenesisCreatorLeafAuthority,
     peer_request: jsonschema::Validator,
 }
 
@@ -248,7 +253,38 @@ impl World {
             forwarding.producer_device()?,
             ArkretMlsSigner::from_ed25519_signing_key(forwarding.producer_device_key()),
         )?;
-        let group = identity.create_group_with_governance_binding(&scope, &binding)?;
+        let mut group = identity.create_group_with_governance_binding(&scope, &binding)?;
+        group.install_local_creator_binding(
+            ActorId::account(forwarding.producer_account().clone()),
+            Some(forwarding.producer_device_authorize_event_id()?),
+        )?;
+        let bindings = group.verified_leaf_bindings()?;
+        let [creator] = bindings.as_slice() else {
+            bail!("Genesis fixture must have exactly one verified creator leaf");
+        };
+        ensure!(
+            creator.leaf_index == 0
+                && creator.actor_id == ActorId::account(forwarding.producer_account().clone()),
+            "Genesis fixture creator leaf differs from its producer",
+        );
+        let endpoint = match &creator.endpoint {
+            MlsEndpointIdentity::HumanDevice { device_id, .. } => {
+                ensure!(*device_id == forwarding.producer_device()?);
+                MlsWelcomeRecipientEndpoint::Device {
+                    device_id: device_id.clone(),
+                }
+            }
+            _ => bail!("Genesis fixture creator leaf is not the producer device"),
+        };
+        let creator_leaf_authority = MlsGenesisCreatorLeafAuthority {
+            leaf_signature_key_b64u: creator.signature_key.clone(),
+            endpoint,
+            authorization_event_ref: creator
+                .device_authorize_event_id
+                .clone()
+                .context("verified creator leaf lacks accepted device authorization")?,
+        };
+        creator_leaf_authority.validate()?;
         let (group_info, ratchet_tree) = group.public_group_state_bytes()?;
         Ok(Self {
             forwarding,
@@ -258,6 +294,7 @@ impl World {
                 group_info,
                 ratchet_tree,
             },
+            creator_leaf_authority,
             peer_request: schema_validator(PEER_REQUEST)?,
         })
     }
@@ -269,6 +306,7 @@ impl World {
             "group_info_ref": refs.0,
             "ratchet_tree_ref": refs.1,
             "governance_binding": self.binding,
+            "creator_leaf_authority": self.creator_leaf_authority,
             "created_at": "2026-09-25T09:59:00.000Z",
         });
         let typed: MlsGenesisPayload = serde_json::from_value(payload.clone())?;
