@@ -2,8 +2,24 @@
 
 use anyhow::Result;
 
-#[tokio::test(flavor = "multi_thread")]
-async fn blocklist_whole_value_cas_runs_through_http_and_postgres() -> Result<()> {
+#[test]
+fn blocklist_whole_value_cas_runs_through_http_and_postgres() -> Result<()> {
+    const STACK_SIZE: usize = 32 * 1024 * 1024;
+    std::thread::Builder::new()
+        .stack_size(STACK_SIZE)
+        .spawn(|| -> Result<()> {
+            tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(2)
+                .thread_stack_size(STACK_SIZE)
+                .enable_all()
+                .build()?
+                .block_on(verify_blocklist_whole_value_cas())
+        })?
+        .join()
+        .map_err(|_| anyhow::anyhow!("blocklist CAS worker panicked"))?
+}
+
+async fn verify_blocklist_whole_value_cas() -> Result<()> {
     let result = cotest::conformance::run_account_blocklist_production_cases().await?;
     assert_eq!(result.cases.len(), 5);
     assert_eq!(

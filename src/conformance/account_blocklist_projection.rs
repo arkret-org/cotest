@@ -853,15 +853,17 @@ pub(crate) fn compare_shared_sender_observations(
             && blocked_commit.commit_id != unblocked_commit.commit_id,
         "distinct observations reused a fabricated acceptance"
     );
+    let response_shape_digest =
+        arkret_canonical::sha256_digest(&serde_json::to_vec(&blocked.response_shape)?);
     eprintln!(
-        "blocklist shared sender paired transport: actor={}, operation={}, realm={}, protocol={}, status={}, content_type={}, response_shape={}, outcome=committed/no_problem_reason, blocked_start_to_full_response_ns={}, unblocked_start_to_full_response_ns={}; durations are regression observations without a pass threshold",
+        "blocklist shared sender paired transport: actor={}, operation={}, realm={}, protocol={}, status={}, content_type={}, response_shape_digest={}, outcome=committed/no_problem_reason, blocked_start_to_full_response_ns={}, unblocked_start_to_full_response_ns={}; durations are regression observations without a pass threshold",
         blocked.sender_actor,
         blocked.event_kind.as_str(),
         blocked_commit.realm_id,
         blocked.transport_protocol,
         blocked.status,
         blocked.content_type,
-        blocked.response_shape,
+        response_shape_digest,
         blocked.elapsed.as_nanos(),
         unblocked.elapsed.as_nanos()
     );
