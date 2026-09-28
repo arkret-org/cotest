@@ -34,7 +34,10 @@ const BOB_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002802";
 
 /// Bind every actual occupied leaf to the accepted founding device facts,
 /// not the isolated cryptography test helper's synthetic authorization ID.
-async fn install_bindings(group: &mut ArkretMlsGroup, members: &[&Member]) -> Result<()> {
+pub(crate) async fn install_bindings(
+    group: &mut ArkretMlsGroup,
+    members: &[&Member],
+) -> Result<()> {
     let mut bindings = Vec::new();
     for leaf in group.active_author_leaves() {
         let arkret::AuthorLeafCredential::Basic { identity } = leaf.credential else {

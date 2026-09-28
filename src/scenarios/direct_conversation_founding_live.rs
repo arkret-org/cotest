@@ -898,7 +898,23 @@ async fn accepted_round_id(holder: &Member, peer: &AccountId) -> Result<arkret_w
 }
 
 async fn run(cross_station: bool, missing_contact_dependency: bool) -> Result<()> {
+    run_with_blocklist(cross_station, missing_contact_dependency, false).await
+}
+
+pub(crate) async fn blocklist_retained_direct_conversation() -> Result<()> {
+    run_with_blocklist(false, false, true).await
+}
+
+async fn run_with_blocklist(
+    cross_station: bool,
+    missing_contact_dependency: bool,
+    blocklist: bool,
+) -> Result<()> {
     let Some(governance_database) = database(GROUP)? else {
+        ensure!(
+            !blocklist,
+            "blocklist DM evidence requires actual PostgreSQL"
+        );
         return Ok(());
     };
     let peer_database = if cross_station {
@@ -922,6 +938,10 @@ async fn run(cross_station: bool, missing_contact_dependency: bool) -> Result<()
     }
     let Some(group) = TestServerGroup::try_multi_external_with_node_envs(GROUP, &node_envs).await?
     else {
+        ensure!(
+            !blocklist,
+            "blocklist DM evidence requires the actual Soland binary"
+        );
         return skip_or_fail(GROUP, "prebuilt Soland unavailable");
     };
     let server = group.server(0);
@@ -929,6 +949,9 @@ async fn run(cross_station: bool, missing_contact_dependency: bool) -> Result<()
     let alice = Member::provision(server, &coauth, "dc-alice", ALICE_DEVICE).await?;
     let bob = Member::provision(peer_server, &coauth, "dc-bob", BOB_DEVICE).await?;
 
+    if blocklist {
+        crate::conformance::account_blocklist_projection::block_direct_peer(&alice, &bob).await?;
+    }
     // Bob requests; Alice, the responder, accepts. Both directions grant
     // `direct_message`.
     if cross_station {
@@ -1556,24 +1579,39 @@ async fn run(cross_station: bool, missing_contact_dependency: bool) -> Result<()
     );
 
     // Found: both participants send under the binding and read each other.
+    if blocklist {
+        crate::conformance::account_blocklist_projection::block_direct_peer(&alice, &bob).await?;
+    }
+    let bob_plaintext = if blocklist {
+        arkret_canonical::canonical_json_bytes(&arkret::ContentBlock::text("hello, Alice"))?
+    } else {
+        b"hello, Alice".to_vec()
+    };
     let bob_message = authored(
         &bob,
         arkret_wire::event_kind_str::MESSAGE_CREATE,
         scope.clone(),
-        sealed_message(
-            &mut bob_group,
-            &scope,
-            &strand_id,
-            &add_ref,
-            b"hello, Alice",
-        )?,
+        sealed_message(&mut bob_group, &scope, &strand_id, &add_ref, &bob_plaintext)?,
         Vec::new(),
         Cites::Participant(&bob_endorsement.event_id),
     )?;
     expect_committed(&submit(&bob, &bob_message).await?, &bob_message)?;
+    if blocklist {
+        crate::conformance::account_blocklist_projection::retained_direct_history(
+            &alice,
+            &bob,
+            &realm_id,
+            &strand_id,
+            &add_ref,
+            &bob_message.event_id,
+            &alice_group,
+            &bob_group,
+        )
+        .await?;
+    }
     ensure!(
         open_committed_message(&alice, &mut alice_group, &scope, &bob_message.event_id).await?
-            == b"hello, Alice",
+            == bob_plaintext,
         "Alice did not decrypt Bob's committed Message"
     );
     let alice_message = authored(
@@ -1673,6 +1711,44 @@ async fn run(cross_station: bool, missing_contact_dependency: bool) -> Result<()
         Cites::Nothing,
     )?;
     expect_rejected(&alice, &destroy, "direct_conversation_terminal_forbidden").await?;
+    if blocklist {
+        crate::conformance::account_blocklist_projection::block_direct_peer(&alice, &bob).await?;
+        crate::conformance::account_blocklist_projection::tombstone_direct_peer(&alice, &bob)
+            .await?;
+        let refused = authored(
+            &bob,
+            arkret_wire::event_kind_str::MESSAGE_CREATE,
+            scope.clone(),
+            sealed_message(
+                &mut bob_group,
+                &scope,
+                &strand_id,
+                &add_ref,
+                b"refused after Contact tombstone",
+            )?,
+            Vec::new(),
+            Cites::Participant(&bob_endorsement.event_id),
+        )?;
+        let result = submit(&bob, &refused).await?;
+        ensure!(
+            matches!(result, AuthoritySubmitOutcome::Rejected { .. }),
+            "Contact tombstone admitted a new DM Message"
+        );
+        ensure!(
+            bob.client
+                .sdk()
+                .committed_event_get(&refused.event_id)
+                .await
+                .is_err(),
+            "Contact tombstone wrote the refused DM Message"
+        );
+        crate::conformance::account_blocklist_projection::unblock_after_tombstone(
+            &alice,
+            &realm_id,
+            &refused.event_id,
+        )
+        .await?;
+    }
     drop(coauth);
     Ok(())
 }

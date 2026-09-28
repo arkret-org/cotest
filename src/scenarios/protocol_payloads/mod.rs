@@ -48,7 +48,10 @@ mod snapshot_head_disclosure;
 
 pub use account_summary::account_summary_follows_bootstrap_default_strand_and_restart;
 pub use authority_reads::live_authority_bundle_and_scan_verify_through_garth;
-pub use bootstrap_variants::ordinary_bootstrap_admits_a_restricted_join_policy_and_refuses_unprovable_gates;
+pub use bootstrap_variants::{
+    ordinary_bootstrap_admits_a_restricted_join_policy_and_refuses_unprovable_gates,
+    ordinary_bootstrap_retry_preserves_the_exact_commits_and_conflict_writes_nothing,
+};
 pub use key_backup_pointer::key_backup_active_pointer_is_committed_and_listed_at_its_pcr_cut;
 pub use snapshot_head_disclosure::{
     exact_snapshot_by_ref_reads_through_garth_with_historical_station_key,

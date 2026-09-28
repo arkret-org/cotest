@@ -311,11 +311,13 @@ fn expected_state_digest_known_answers_recompute_every_fold() -> Result<()> {
 #[test]
 fn named_suite_audit_executes_registered_runners_and_exposes_every_gap() -> Result<()> {
     let report = run_named_suite_audit()?;
-    assert_eq!(report.fixture_count, 79);
+    assert_eq!(report.fixture_count, 81);
     assert_eq!(report.executed_entrypoints.len(), 49);
-    assert_eq!(report.unwired_entrypoints.len(), 30);
+    assert_eq!(report.unwired_entrypoints.len(), 32);
     for required_gap in [
         "ak.suite.account.blocklist_projection.v1",
+        "ak.suite.call.force_mute_v1_boundary.v1",
+        "ak.suite.current.cas_failure_read_boundary.v1",
         "ak.suite.consent.cache_invalidation.v1",
         "ak.suite.direct_conversation.admission_producers.v1",
         "ak.suite.direct_conversation.signal_admission.v1",

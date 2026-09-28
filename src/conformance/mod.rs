@@ -1,4 +1,4 @@
-mod account_blocklist_projection;
+pub(crate) mod account_blocklist_projection;
 mod account_data_cas_convergence;
 mod account_status_issuer_ledger;
 mod actor_private_events_submit;

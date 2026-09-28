@@ -1,18 +1,33 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::fixtures::TestScaffold;
-use crate::harness::{ArkretServer, actor_core_id, expect_api_error, expect_json};
+use crate::harness::{actor_core_id, expect_api_error, expect_json};
 use crate::scenarios::identity_test_support::{
     actor_did_for_service_did, spawn_with_standard_grant_authority,
 };
 
 pub async fn framework_errors_and_invalid_json_use_arkret_envelopes() -> Result<()> {
-    // CT-12: scaffold-driven, parallel-safe.
-    let scaffold = TestScaffold::fresh("api-errors").await?;
-    let server = scaffold.server();
+    use arkret_models_collaboration::account_operations::AccountView;
+    use arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest;
 
+    const EVENTS: &str = "/_arkret/self/events";
+    let station = spawn_with_standard_grant_authority("api-errors", &[]).await?;
+    let server = &station.server;
+    let actor = actor_did_for_service_did(server.service_did(), "api-errors-holder")?;
+    let client = station.standard_grant_client(
+        &server
+            .demo_client(&actor, "ak:device:01904100-0000-7000-8000-0000000000f1")
+            .await?,
+    )?;
+    let principal = client
+        .principal
+        .as_ref()
+        .context("framework errors require an accepted PCR holder")?;
+    let before: AccountView = serde_json::from_value(
+        expect_json(client.get("/_arkret/self/account/viewer"), StatusCode::OK).await?,
+    )?;
+    assert_eq!(before.principal_id, principal.core_id);
     let missing = expect_api_error(
         server.http().get(server.url("/_arkret/self/missing")),
         StatusCode::NOT_FOUND,
@@ -20,119 +35,163 @@ pub async fn framework_errors_and_invalid_json_use_arkret_envelopes() -> Result<
     )
     .await?;
     assert!(missing.instance.is_some());
-
     expect_api_error(
         server.http().post(server.url("/_arkret/describe")),
         StatusCode::METHOD_NOT_ALLOWED,
         "method_not_allowed",
     )
     .await?;
+
+    // The registered handler distinguishes JSON syntax from the SDK's closed
+    // SelfAuthoritySubmitRequest union after authenticating the actual holder.
     expect_api_error(
-        server
-            .account_registration_request()
+        client
+            .post(EVENTS)
             .header("content-type", "application/json")
             .body("{"),
         StatusCode::BAD_REQUEST,
-        "param_invalid",
+        "json_invalid",
     )
     .await?;
+    let descriptor = arkret_wire::SERVICE_OPERATION_DESCRIPTORS
+        .iter()
+        .find(|descriptor| {
+            descriptor.id.as_str() == arkret_wire::ServiceOperationId::SELF_EVENTS_COMMAND_SUBMIT_V1
+        })
+        .context("self Event submission must have a registered body budget")?;
+    let canonical_limit = arkret_wire::WireBodyClass::NonStreamingJsonOperation {
+        max_canonical_body_bytes: descriptor.max_canonical_body_bytes,
+    }
+    .canonical_byte_limit();
+    assert!(canonical_limit < arkret_wire::MAX_HTTP_MESSAGE_CONTENT_BYTES);
 
+    // Deliberately schema-invalid negative bodies: a canonical JSON string
+    // cannot be decoded as any registered submission. Its size separates the
+    // operation budget from typed shape validation without inventing a DTO.
+    for (length, status, code) in [
+        (
+            canonical_limit,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "schema_violation",
+        ),
+        (
+            canonical_limit + 1,
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "payload_too_large",
+        ),
+    ] {
+        let body = serde_json::to_vec(&"x".repeat(length - 2))?;
+        assert_eq!(body.len(), length);
+        assert!(serde_json::from_slice::<SelfAuthoritySubmitRequest>(&body).is_err());
+        expect_api_error(
+            client
+                .post(EVENTS)
+                .header("content-type", "application/json")
+                .body(body),
+            status,
+            code,
+        )
+        .await?;
+    }
+    // The transport budget rejects even malformed JSON before the operation
+    // parser; below that budget the same syntax category remains json_invalid.
+    let mut oversized = vec![b' '; arkret_wire::MAX_HTTP_MESSAGE_CONTENT_BYTES + 1];
+    oversized[0] = b'{';
+    expect_api_error(
+        client
+            .post(EVENTS)
+            .header("content-type", "application/json")
+            .body(oversized),
+        StatusCode::PAYLOAD_TOO_LARGE,
+        "payload_too_large",
+    )
+    .await?;
+    expect_api_error(
+        client
+            .post(EVENTS)
+            .header("content-type", "application/json")
+            .body("{ "),
+        StatusCode::BAD_REQUEST,
+        "json_invalid",
+    )
+    .await?;
+    let after: AccountView = serde_json::from_value(
+        expect_json(client.get("/_arkret/self/account/viewer"), StatusCode::OK).await?,
+    )?;
+    assert_eq!(after.principal_id, principal.core_id);
     Ok(())
 }
 
 pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
-    let server = ArkretServer::spawn("account-auth").await?;
-    let account_did = arkret_identifiers::Did::new("did:web:alice-auth.example".to_owned())?;
-    let account_core_id = arkret_identifiers::project_did_to_core_id(&account_did)?;
+    use arkret_models_collaboration::account_operations::AccountView;
 
-    expect_api_error(
-        server
-            .account_registration_request()
-            .json(&crate::harness::NonProtocolTestBody::new(json!({"did": "bad", "handle": "@bad", "device_id": "ak:device:01904100-0000-7000-8000-000000000bad"}))),
-        StatusCode::BAD_REQUEST,
-        "param_invalid",
-    )
-    .await?;
+    const VIEWER: &str = "/_arkret/self/account/viewer";
+    let station = spawn_with_standard_grant_authority("account-auth", &[]).await?;
+    let server = &station.server;
+    let actor = actor_did_for_service_did(server.service_did(), "alice-auth")?;
+    // The existing provisioning fixture admits the closed PCR genesis unit.
+    // Only its Standard SessionGrant is used by the requests under test.
+    let alice = station.standard_grant_client(
+        &server
+            .demo_client(&actor, "ak:device:01904100-0000-7000-8000-0000000000a1")
+            .await?,
+    )?;
+    let principal = alice
+        .principal
+        .as_ref()
+        .context("the Standard SessionGrant client requires an accepted PCR principal")?;
+    assert!(matches!(
+        alice.session(),
+        crate::harness::ClientSession::Canonical { .. }
+    ));
 
-    let registration_body = crate::harness::NonProtocolTestBody::new(json!({
-        "did": account_did,
-        "handle": "@alice-auth",
-        "display_name": "alice-auth",
-        "device_id": "ak:device:01904100-0000-7000-8000-0000000000a1",
-    }));
-    let registered = expect_json(
-        server
-            .account_registration_request()
-            .json(&registration_body),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(registered["principal_id"], account_core_id.as_str());
+    let before: AccountView =
+        serde_json::from_value(expect_json(alice.get(VIEWER), StatusCode::OK).await?)?;
+    assert_eq!(before.principal_id, principal.core_id);
 
-    expect_api_error(
-        server
-            .account_registration_request()
-            .json(&registration_body),
-        StatusCode::CONFLICT,
-        "duplicate_conflict",
-    )
-    .await?;
-
-    let login = expect_json(
+    // api-conventions section 3.3 requires both the grant and its holder proof.
+    // A Standard SessionGrant is never a Station-local Bearer credential.
+    let proof_request = alice.get(VIEWER).build()?;
+    let holder_proof = proof_request
+        .headers()
+        .get("DPoP")
+        .context("the canonical client must attach its signed holder proof")?
+        .clone();
+    for request in [
+        server.http().get(server.url(VIEWER)),
         server
             .http()
-            .post(server.url("/_soland/gate/auth/dev-login"))
-            .json(&crate::harness::NonProtocolTestBody::new(json!({
-                "actor": account_core_id,
-                "device_id": "ak:device:01904100-0000-7000-8000-0000000000a1",
-                "display_name": "Alice"
-            }))),
-        StatusCode::OK,
-    )
-    .await?;
-    let token = login["session_credential"].as_str().unwrap();
-
-    let me = expect_json(
+            .get(server.url(VIEWER))
+            .bearer_auth(alice.session().credential()),
         server
             .http()
-            .get(server.url("/_arkret/self/account/viewer"))
-            .bearer_auth(token),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(me["principal_id"], account_core_id.as_str());
+            .get(server.url(VIEWER))
+            .bearer_auth(alice.session().credential())
+            .header("DPoP", holder_proof),
+        server.http().get(server.url(VIEWER)).header(
+            reqwest::header::AUTHORIZATION,
+            format!("DPoP {}", alice.session().credential()),
+        ),
+    ] {
+        expect_api_error(request, StatusCode::UNAUTHORIZED, "unauthenticated").await?;
+    }
 
-    expect_api_error(
-        server
-            .http()
-            .get(server.url("/_arkret/self/account/viewer")),
-        StatusCode::UNAUTHORIZED,
-        "unauthenticated",
-    )
-    .await?;
+    // Clone the already-authorized request: the replay carries the exact same
+    // signed proof and jti, rather than a newly minted proof for the same URL.
+    let accepted_request = alice.get(VIEWER);
+    let replay = accepted_request
+        .try_clone()
+        .context("the body-free viewer request must support exact proof replay")?;
+    let accepted: AccountView =
+        serde_json::from_value(expect_json(accepted_request, StatusCode::OK).await?)?;
+    assert_eq!(accepted.principal_id, principal.core_id);
+    expect_api_error(replay, StatusCode::UNAUTHORIZED, "unauthenticated").await?;
 
-    // Local development bearers are outside the Account Authority's Standard
-    // SessionGrant revoke contract. The Station must not return a false
-    // success for this canonical operation.
-    expect_api_error(
-        server
-            .http()
-            .post(server.url("/_arkret/gate/account/session-grants/revoke"))
-            .bearer_auth(token),
-        StatusCode::NOT_FOUND,
-        "unrecognized_endpoint",
-    )
-    .await?;
-
-    expect_json(
-        server
-            .http()
-            .get(server.url("/_arkret/self/account/viewer"))
-            .bearer_auth(token),
-        StatusCode::OK,
-    )
-    .await?;
-
+    // Rejection does not invalidate the legitimate grant: a fresh proof still
+    // resolves the exact accepted principal through the registered viewer DTO.
+    let after: AccountView =
+        serde_json::from_value(expect_json(alice.get(VIEWER), StatusCode::OK).await?)?;
+    assert_eq!(after.principal_id, principal.core_id);
     Ok(())
 }
 
@@ -319,13 +378,7 @@ async fn contact_row(
         .await?
         .contacts
         .into_iter()
-        .find(|row| {
-            row.peer
-                .contact_actor_id()
-                .signing_principal_id()
-                .as_str()
-                == peer.as_str()
-        })
+        .find(|row| row.peer.contact_actor_id().signing_principal_id().as_str() == peer.as_str())
         .ok_or_else(|| anyhow::anyhow!("the Contact row for {peer} is missing"))
 }
 
@@ -340,9 +393,21 @@ pub async fn contact_reject_scope_update_and_tombstone_commit_atomically() -> Re
             station.standard_grant_client(&station.server.demo_client(&actor, device).await?)
         }
     };
-    let carol = client("carol-contact", "ak:device:01904100-0000-7000-8000-0000000000c1").await?;
-    let dave = client("dave-contact", "ak:device:01904100-0000-7000-8000-0000000000d1").await?;
-    let erin = client("erin-contact", "ak:device:01904100-0000-7000-8000-0000000000e1").await?;
+    let carol = client(
+        "carol-contact",
+        "ak:device:01904100-0000-7000-8000-0000000000c1",
+    )
+    .await?;
+    let dave = client(
+        "dave-contact",
+        "ak:device:01904100-0000-7000-8000-0000000000d1",
+    )
+    .await?;
+    let erin = client(
+        "erin-contact",
+        "ak:device:01904100-0000-7000-8000-0000000000e1",
+    )
+    .await?;
     let _ = server;
 
     // `ak.contact.rejected`: Carol terminally rejects Dave's pending request.
