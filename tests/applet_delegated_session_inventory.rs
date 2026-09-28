@@ -161,7 +161,30 @@ async fn live_signed_inventory_uses_coauth_issuer_and_unsigned_read_has_no_effec
     let http = reqwest::Client::builder()
         .timeout(Duration::from_secs(30))
         .build()?;
-    wait_for_coauth_service_identity(&http, coauth.base_url()).await?;
+    let deadline = Instant::now() + Duration::from_secs(60);
+    let (status, bytes) = loop {
+        let mut signed_request = http.post(&target).body(body.clone());
+        for (name, value) in &headers {
+            signed_request = signed_request.header(name, value);
+        }
+        let response = signed_request
+            .header("signature-input", &signed.signature_input_header)
+            .header("signature", &signed.signature_header)
+            .send()
+            .await?;
+        let status = response.status();
+        let bytes = response.bytes().await?;
+        if status.is_success() {
+            break (status, bytes);
+        }
+        ensure!(
+            Instant::now() < deadline,
+            "Coauth rejected signed inventory with {status}: {}",
+            String::from_utf8_lossy(&bytes)
+        );
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    };
+    ensure!(status.is_success());
     let mut unsigned = http.post(&target).body(body.clone());
     for (name, value) in &headers {
         unsigned = unsigned.header(name, value);
@@ -191,64 +214,30 @@ async fn live_signed_inventory_uses_coauth_issuer_and_unsigned_read_has_no_effec
         tampered_response.status()
     );
 
-    let mut signed_request = http.post(&target).body(body);
-    for (name, value) in &headers {
-        signed_request = signed_request.header(name, value);
-    }
-    let response = signed_request
-        .header("signature-input", &signed.signature_input_header)
-        .header("signature", &signed.signature_header)
-        .send()
-        .await?;
-    let status = response.status();
-    let bytes = response.bytes().await?;
-    ensure!(
-        status.is_success(),
-        "Coauth rejected signed inventory with {status}: {}",
-        String::from_utf8_lossy(&bytes)
-    );
     let outcome: AppletDelegatedSessionInventoryOutcome = serde_json::from_slice(&bytes)?;
     outcome.validate_against(&request)?;
     ensure_eq_empty_fixture(&outcome, kat)?;
 
-    let mut db = postgres::Client::connect(&coauth.pg.connect_url, postgres::NoTls)?;
-    let states: i64 = db
-        .query_one(
-            "SELECT count(*) FROM oauth_applet_session_inventory_states",
-            &[],
-        )?
-        .get(0);
-    let operations: i64 = db
-        .query_one("SELECT count(*) FROM oauth_session_grant_operations", &[])?
-        .get(0);
+    let pg_url = coauth.pg.connect_url.clone();
+    let (states, operations): (i64, i64) = tokio::task::spawn_blocking(move || -> Result<_> {
+        let mut db = postgres::Client::connect(&pg_url, postgres::NoTls)?;
+        let states = db
+            .query_one(
+                "SELECT count(*) FROM oauth_applet_session_inventory_states",
+                &[],
+            )?
+            .get(0);
+        let operations = db
+            .query_one("SELECT count(*) FROM oauth_session_grant_operations", &[])?
+            .get(0);
+        Ok((states, operations))
+    })
+    .await??;
     ensure!(
         states == 0 && operations == 0,
         "inventory reads mutated the issuer ledger"
     );
     Ok(())
-}
-
-async fn wait_for_coauth_service_identity(http: &reqwest::Client, base_url: &str) -> Result<()> {
-    let deadline = Instant::now() + Duration::from_secs(60);
-    let url = format!("{}/_arkret/describe", base_url.trim_end_matches('/'));
-    loop {
-        let response = http.get(&url).send().await?;
-        if response.status().is_success() {
-            let describe: Value = response.json().await?;
-            if describe
-                .get("service_id")
-                .and_then(Value::as_str)
-                .is_some_and(|id| !id.is_empty())
-            {
-                return Ok(());
-            }
-        }
-        ensure!(
-            Instant::now() < deadline,
-            "Coauth service identity was not ready within 60 seconds"
-        );
-        tokio::time::sleep(Duration::from_millis(200)).await;
-    }
 }
 
 fn ensure_eq_empty_fixture(

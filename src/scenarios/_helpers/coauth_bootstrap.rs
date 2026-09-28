@@ -334,6 +334,15 @@ fn patch_station_config(
             "trust_domain": JOINT_TRUST_DOMAIN
         })])?,
     );
+    arkret.insert(
+        serde_yaml_ng::Value::String("identity_registry".to_owned()),
+        serde_yaml_ng::to_value(serde_json::json!({
+            "resolver": format!(
+                "{}/_arkret/root/identity/resolve",
+                endpoint.trim_end_matches('/')
+            )
+        }))?,
+    );
     file.set_len(0)?;
     file.seek(SeekFrom::Start(0))?;
     serde_yaml_ng::to_writer(&mut *file, &config).context("write Station-wired coauth config")?;
