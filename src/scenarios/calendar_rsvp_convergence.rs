@@ -215,9 +215,9 @@ async fn wait_for_projected_grant(
             )
             .await?;
             if effective["grants"].as_array().is_some_and(|grants| {
-                grants.iter().any(|grant| {
-                    grant["grant"]["id"].as_str() == Some(grant_id)
-                })
+                grants
+                    .iter()
+                    .any(|grant| grant["grant"]["id"].as_str() == Some(grant_id))
             }) {
                 Ok(())
             } else {

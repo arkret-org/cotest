@@ -177,7 +177,12 @@ fn actor_profile_resolve_carries_the_event_without_a_seal_and_one_failure_value(
     let row = &schema["$defs"]["resolved_actor_profile"];
     assert_eq!(
         row["required"],
-        json!(["actor_id", "actor_profile", "profile_event", "profile_commit"]),
+        json!([
+            "actor_id",
+            "actor_profile",
+            "profile_event",
+            "profile_commit"
+        ]),
         "the row is the projection, its exact Event and that Event's covering RealmCommit"
     );
     assert_eq!(row["additionalProperties"], false);

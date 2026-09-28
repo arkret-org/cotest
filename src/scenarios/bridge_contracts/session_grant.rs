@@ -23,11 +23,7 @@ pub fn mock_session_grant_jwt(subject: &str, device_id: &str, audience: &str) ->
 /// credential class, holder binding, and closed recovery scope on
 /// introspection; the distinct signature keeps this record separate from the
 /// same device's Standard grant.
-pub fn mock_recovery_session_grant_jwt(
-    subject: &str,
-    device_id: &str,
-    audience: &str,
-) -> String {
+pub fn mock_recovery_session_grant_jwt(subject: &str, device_id: &str, audience: &str) -> String {
     grant_shaped_jwt(subject, device_id, audience, 0x44)
 }
 
