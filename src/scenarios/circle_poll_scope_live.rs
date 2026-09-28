@@ -2,8 +2,8 @@
 
 use anyhow::{Context as _, Result, ensure};
 use arkret_wire::{
-    ActorId, AuthoritySubmitRequest, CircleId, Event, EventAdmissionSubmission, EventKind,
-    MessageId, ScopeRef, StrandId,
+    ActorId, AuthoritySubmitRequest, CircleId, CommittedEventView, Event, EventAdmissionSubmission,
+    EventKind, MessageId, ScopeRef, StrandId,
 };
 use reqwest::StatusCode;
 use serde_json::{Value, json};
@@ -166,7 +166,7 @@ pub async fn run() -> Result<()> {
         HARNESS_INTERNAL_AUTHORITY_SECRET,
     )
     .await?;
-    let Some(group) = TestServerGroup::try_multi_external_with_node_envs(
+    let Some(mut group) = TestServerGroup::try_multi_external_with_node_envs(
         GROUP,
         &[station_env(&database.connect_url, &coauth)],
     )
@@ -291,6 +291,27 @@ pub async fn run() -> Result<()> {
         Ok(())
     })
     .await??;
+
+    group.server_mut(0).restart_external_process().await?;
+    let readback: CommittedEventView = serde_json::from_value(
+        expect_json(
+            alice.get(&format!(
+                "/_arkret/self/committed-events/{}",
+                replacement.event_id
+            )),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    ensure!(
+        matches!(&readback, CommittedEventView::Full(view) if view.event == replacement),
+        "restarted Station did not disclose the committed replacement Event: {readback:?}"
+    );
+    let restarted = durable_state(&database.connect_url, &realm, poll.event_id.as_str()).await?;
+    ensure!(
+        restarted == after,
+        "restarted Station changed durable PollState: {after:?} -> {restarted:?}"
+    );
 
     Ok(())
 }
