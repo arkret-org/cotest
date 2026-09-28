@@ -26,8 +26,12 @@ use arkret_wire::{
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
-use crate::harness::{ArkretServer, TestActorClient, TestServerGroup, message_create_text_payload};
+use crate::harness::{
+    ArkretServer, TestActorClient, TestServerGroup, message_create_text_payload,
+    test_service_signing_key,
+};
 use crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
+use crate::scenarios::_helpers::coauth_bootstrap::EphemeralPg;
 use crate::scenarios::_helpers::live_gate::skip_or_fail;
 use crate::scenarios::cross_station_invite_join::{wait_for_member_scan, wait_for_titled_row};
 use crate::scenarios::human_device_producer_live::{
@@ -43,16 +47,23 @@ const ALICE_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002002";
 const BOB_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002003";
 const CAROL_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002004";
 
-/// A focused production replay check with two independently signed Stations,
-/// separate PostgreSQL stores, and a held Event/RealmCommit. It ends before
-/// the route-miss and membership-loss lifecycle exercised below.
-pub async fn run_federation_current_origin_replay_live() -> Result<()> {
-    const GROUP: &str = "federation-current-origin-replay";
-    let Some(governance_database) = database(GROUP)? else {
-        return Ok(());
+struct CurrentOriginFixture {
+    alice: TestActorClient,
+    bob: TestActorClient,
+    alice_account: AccountId,
+    realm: String,
+    group: TestServerGroup,
+    _coauth: MockCoauthIntrospectionServer,
+    _governance_database: EphemeralPg,
+    _member_database: EphemeralPg,
+}
+
+async fn current_origin_fixture(name: &str) -> Result<Option<CurrentOriginFixture>> {
+    let Some(governance_database) = database(name)? else {
+        return Ok(None);
     };
-    let Some(member_database) = database(GROUP)? else {
-        return Ok(());
+    let Some(member_database) = database(name)? else {
+        return Ok(None);
     };
     ensure!(
         governance_database.connect_url != member_database.connect_url,
@@ -63,7 +74,7 @@ pub async fn run_federation_current_origin_replay_live() -> Result<()> {
     )
     .await?;
     let Some(group) = TestServerGroup::try_multi_external_with_node_envs(
-        GROUP,
+        name,
         &[
             station_env(&governance_database.connect_url, &coauth),
             station_env(&member_database.connect_url, &coauth),
@@ -71,7 +82,8 @@ pub async fn run_federation_current_origin_replay_live() -> Result<()> {
     )
     .await?
     else {
-        return skip_or_fail(GROUP, "prebuilt Soland unavailable");
+        skip_or_fail(name, "prebuilt Soland unavailable")?;
+        return Ok(None);
     };
     let (alice, alice_account) =
         standard_client(group.server(0), &coauth, "origin-alice", ALICE_DEVICE).await?;
@@ -84,7 +96,7 @@ pub async fn run_federation_current_origin_replay_live() -> Result<()> {
         &[group.server(0), group.server(1)],
     )
     .await?;
-    join_from_member_station(
+    let (_, join_commit) = join_from_member_station(
         &bob,
         &bob_account,
         &realm,
@@ -92,23 +104,288 @@ pub async fn run_federation_current_origin_replay_live() -> Result<()> {
         "ak:request:019b0000-0000-7000-8000-000000002504",
     )
     .await?;
-    let strand = alice.default_strand_id(&realm)?;
+    let page = wait_for_member_scan(&bob, &RealmId::new(realm.clone())?).await?;
+    let floor = page
+        .readable_floor
+        .as_ref()
+        .context("the member's held Realm stream has no readable floor")?;
+    ensure!(
+        floor.oldest_position == join_commit.stream_position
+            && floor.floor_commit_id == join_commit.commit_id
+            && floor.floor_reason == ReadableFloorReason::MembershipJoin,
+        "the member's held Realm stream is not anchored at its joined Commit: {floor:?}"
+    );
+    ensure!(
+        page.committed_events
+            .first()
+            .is_some_and(|item| item.commit() == &join_commit),
+        "the member's held Realm stream does not begin with its join Commit"
+    );
+    wait_for_titled_row(&bob, &realm, "Federation current origin replay").await?;
+    Ok(Some(CurrentOriginFixture {
+        alice,
+        bob,
+        alice_account,
+        realm,
+        group,
+        _coauth: coauth,
+        _governance_database: governance_database,
+        _member_database: member_database,
+    }))
+}
+
+/// A focused production replay check with two independently signed Stations,
+/// separate PostgreSQL stores, and a held Event/RealmCommit. It ends before
+/// the route-miss and membership-loss lifecycle exercised below.
+pub async fn run_federation_current_origin_replay_live() -> Result<()> {
+    const GROUP: &str = "federation-current-origin-replay";
+    let Some(fixture) = current_origin_fixture(GROUP).await? else {
+        return Ok(());
+    };
+    let strand = fixture.alice.default_strand_id(&fixture.realm)?;
     let (event, commit) = alice_message(
-        &alice,
-        &alice_account,
-        &realm,
+        &fixture.alice,
+        &fixture.alice_account,
+        &fixture.realm,
         &strand,
         "held Commit for current-origin replay",
     )
     .await?;
     ensure_same_commit(
         &commit,
-        &wait_held(&bob, &event.event_id, HELD_WINDOW).await?,
+        &wait_held(&fixture.bob, &event.event_id, HELD_WINDOW).await?,
     )?;
     let replay = replication_body(&event, &commit)?;
-    assert_held_commit_current_origin(&group, &bob, &replay, &event.event_id, &commit).await?;
-    drop(coauth);
+    assert_held_commit_current_origin(
+        &fixture.group,
+        &fixture.bob,
+        &replay,
+        &event.event_id,
+        &commit,
+    )
+    .await?;
     Ok(())
+}
+
+/// Replay one byte-identical RFC 9421 peer request after the source Station
+/// publishes a verified WebVH successor that replaces its assertion key.
+/// The old accepted Commit stays held, but its old transport signature is no
+/// longer current authority for either a cached outcome or another write.
+pub async fn run_federation_revoked_service_key_replay_live() -> Result<()> {
+    const GROUP: &str = "federation-revoked-service-key-replay";
+    let Some(mut fixture) = current_origin_fixture(GROUP).await? else {
+        return Ok(());
+    };
+    let strand = fixture.alice.default_strand_id(&fixture.realm)?;
+    let (event, commit) = alice_message(
+        &fixture.alice,
+        &fixture.alice_account,
+        &fixture.realm,
+        &strand,
+        "held Commit before service key rotation",
+    )
+    .await?;
+    ensure_same_commit(
+        &commit,
+        &wait_held(&fixture.bob, &event.event_id, HELD_WINDOW).await?,
+    )?;
+    let body = replication_body(&event, &commit)?;
+    let request = fixture
+        .group
+        .server(1)
+        .signed_peer_post_request_with_idempotency_key(
+            fixture.group.server(0),
+            PEER_EVENTS,
+            &body,
+            fixture.group.server(1).service_id(),
+            Some("federation-key-revoke-replay"),
+        )?;
+    ensure!(
+        request.body().and_then(reqwest::Body::as_bytes) == Some(body.as_slice()),
+        "the signed replay request does not contain the exact replication body"
+    );
+    let signed_at = Instant::now();
+    let baseline = fixture
+        .group
+        .server(1)
+        .http()
+        .execute(
+            request
+                .try_clone()
+                .context("clone the original signed request")?,
+        )
+        .await?;
+    ensure!(baseline.status() == StatusCode::OK);
+    let baseline: PeerAuthoritySubmitOutcome = baseline.json().await?;
+    ensure!(
+        matches!(
+            &baseline,
+            PeerAuthoritySubmitOutcome::CommittedReplication(value)
+                if matches!(
+                    value.replication_outcomes.as_slice(),
+                    [PeerCommittedReplicationOutcomeRecord::Duplicate {}]
+                )
+        ),
+        "the original request did not return its accepted duplicate outcome"
+    );
+    let held_before_same_basis_replay = held_commit_ids(&fixture.bob, &fixture.realm).await?;
+    let same_basis_response = fixture
+        .group
+        .server(1)
+        .http()
+        .execute(
+            request
+                .try_clone()
+                .context("clone the accepted signed request for same-basis replay")?,
+        )
+        .await?;
+    ensure!(same_basis_response.status() == StatusCode::OK);
+    let same_basis: PeerAuthoritySubmitOutcome = same_basis_response.json().await?;
+    ensure!(
+        same_basis == baseline,
+        "an unchanged key and authorization basis did not replay the original per-item outcome: first {baseline:?}, replay {same_basis:?}"
+    );
+    ensure!(
+        held_commit_ids(&fixture.bob, &fixture.realm).await? == held_before_same_basis_replay,
+        "same-basis idempotency replay changed the recipient's committed Realm stream"
+    );
+    let old_key = current_federation_key(fixture.group.server(0)).await?;
+    let (new_seed, _) = test_service_signing_key("federation-revoked-key-successor");
+    fixture
+        .group
+        .server_mut(0)
+        .restart_external_process_with_notary_signing_key(&new_seed)
+        .await?;
+    let new_key = current_federation_key(fixture.group.server(0)).await?;
+    ensure!(
+        old_key != new_key,
+        "WebVH successor retained the old assertion key"
+    );
+    // The recipient resolves current peer assertion state on every request.
+    // Prove it accepts a newly signed source Commit before replaying the old
+    // request; restarting the recipient would add an unrelated hydration cut.
+    let (fresh_event, fresh_commit) = alice_message(
+        &fixture.alice,
+        &fixture.alice_account,
+        &fixture.realm,
+        &strand,
+        "fresh Commit under successor service key",
+    )
+    .await?;
+    let successor_outcomes = replicate(
+        fixture.group.server(1),
+        fixture.group.server(0),
+        &replication_body(&fresh_event, &fresh_commit)?,
+    )
+    .await?;
+    ensure!(
+        matches!(
+            successor_outcomes.as_slice(),
+            [PeerCommittedReplicationOutcomeRecord::Stored {}
+                | PeerCommittedReplicationOutcomeRecord::Duplicate {}]
+        ),
+        "the successor service key did not authenticate and store a current peer submit: {successor_outcomes:?}"
+    );
+    ensure_same_commit(
+        &fresh_commit,
+        &wait_held(&fixture.bob, &fresh_event.event_id, HELD_WINDOW).await?,
+    )?;
+    let successor_replay = replicate(
+        fixture.group.server(1),
+        fixture.group.server(0),
+        &replication_body(&fresh_event, &fresh_commit)?,
+    )
+    .await?;
+    ensure!(
+        matches!(
+            successor_replay.as_slice(),
+            [PeerCommittedReplicationOutcomeRecord::Duplicate {}]
+        ),
+        "the successor service key did not authenticate a held Commit replay: {successor_replay:?}"
+    );
+    let before = held_commit_ids(&fixture.bob, &fixture.realm).await?;
+    ensure!(
+        before.contains(&commit.commit_id) && before.contains(&fresh_commit.commit_id),
+        "the recipient lacks the old and successor Commits"
+    );
+    for _ in 0..2 {
+        ensure!(
+            signed_at.elapsed() < Duration::from_secs(240),
+            "the original signed request is near expiry; revocation evidence is inconclusive"
+        );
+        let response = fixture
+            .group
+            .server(1)
+            .http()
+            .execute(
+                request
+                    .try_clone()
+                    .context("clone the byte-identical revoked request")?,
+            )
+            .await?;
+        let status = response.status();
+        let bytes = response.bytes().await?;
+        let problem: arkret_wire::Problem = serde_json::from_slice(&bytes)
+            .with_context(|| format!("revoked peer request returned {status}"))?;
+        ensure!(
+            !status.is_success()
+                && problem.error_code() == Some(arkret_wire::ErrorCode::SignatureInvalid),
+            "revoked key replay was not rejected by current transport auth: {status} {problem:?}"
+        );
+        ensure!(
+            held_commit_ids(&fixture.bob, &fixture.realm).await? == before,
+            "a revoked-key replay changed the recipient's committed Realm stream"
+        );
+    }
+    Ok(())
+}
+
+async fn current_federation_key(server: &ArkretServer) -> Result<String> {
+    let history = server
+        .http()
+        .get(server.url("/webvh/service/did.jsonl"))
+        .send()
+        .await?
+        .error_for_status()?
+        .text()
+        .await?;
+    let head: Value = serde_json::from_str(
+        history
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .last()
+            .context("service WebVH history is empty")?,
+    )?;
+    let method_id = format!("{}#federation-fanout-key", server.service_did());
+    head["state"]["verificationMethod"]
+        .as_array()
+        .context("service WebVH head has no verification methods")?
+        .iter()
+        .find(|method| method["id"].as_str() == Some(method_id.as_str()))
+        .and_then(|method| method["publicKeyMultibase"].as_str())
+        .map(ToOwned::to_owned)
+        .context("service WebVH head lacks the federation assertion method")
+}
+
+async fn held_commit_ids(
+    member: &TestActorClient,
+    realm: &str,
+) -> Result<Vec<arkret_wire::RealmCommitId>> {
+    let realm_id = RealmId::new(realm.to_owned())?;
+    let page = member
+        .sdk()
+        .scan_commit_stream_to_head(
+            realm_id.clone(),
+            arkret_wire::CommitStreamRef::Realm { realm_id },
+            None,
+            200,
+        )
+        .await?;
+    Ok(page
+        .committed_events
+        .iter()
+        .map(|view| view.commit().commit_id.clone())
+        .collect())
 }
 
 /// The committed-replication failure matrix between a governance Station X
