@@ -43,6 +43,74 @@ const ALICE_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002002";
 const BOB_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002003";
 const CAROL_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002004";
 
+/// A focused production replay check with two independently signed Stations,
+/// separate PostgreSQL stores, and a held Event/RealmCommit. It ends before
+/// the route-miss and membership-loss lifecycle exercised below.
+pub async fn run_federation_current_origin_replay_live() -> Result<()> {
+    const GROUP: &str = "federation-current-origin-replay";
+    let Some(governance_database) = database(GROUP)? else {
+        return Ok(());
+    };
+    let Some(member_database) = database(GROUP)? else {
+        return Ok(());
+    };
+    ensure!(
+        governance_database.connect_url != member_database.connect_url,
+        "the governance and member Stations must use separate databases"
+    );
+    let coauth = MockCoauthIntrospectionServer::spawn_with_internal_secret(
+        HARNESS_INTERNAL_AUTHORITY_SECRET,
+    )
+    .await?;
+    let Some(group) = TestServerGroup::try_multi_external_with_node_envs(
+        GROUP,
+        &[
+            station_env(&governance_database.connect_url, &coauth),
+            station_env(&member_database.connect_url, &coauth),
+        ],
+    )
+    .await?
+    else {
+        return skip_or_fail(GROUP, "prebuilt Soland unavailable");
+    };
+    let (alice, alice_account) =
+        standard_client(group.server(0), &coauth, "origin-alice", ALICE_DEVICE).await?;
+    let (bob, bob_account) =
+        standard_client(group.server(1), &coauth, "origin-bob", BOB_DEVICE).await?;
+    let realm = create_realm_with_join_rule(
+        &alice,
+        "Federation current origin replay",
+        "public",
+        &[group.server(0), group.server(1)],
+    )
+    .await?;
+    join_from_member_station(
+        &bob,
+        &bob_account,
+        &realm,
+        group.server(0),
+        "ak:request:019b0000-0000-7000-8000-000000002504",
+    )
+    .await?;
+    let strand = alice.default_strand_id(&realm)?;
+    let (event, commit) = alice_message(
+        &alice,
+        &alice_account,
+        &realm,
+        &strand,
+        "held Commit for current-origin replay",
+    )
+    .await?;
+    ensure_same_commit(
+        &commit,
+        &wait_held(&bob, &event.event_id, HELD_WINDOW).await?,
+    )?;
+    let replay = replication_body(&event, &commit)?;
+    assert_held_commit_current_origin(&group, &bob, &replay, &event.event_id, &commit).await?;
+    drop(coauth);
+    Ok(())
+}
+
 /// The committed-replication failure matrix between a governance Station X
 /// and a member Station Y (`federation.md` §3, §4.1.1).
 ///
@@ -144,6 +212,8 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
         &missed.1,
         &wait_held(&bob, &missed.0.event_id, HELD_WINDOW).await?,
     )?;
+
+    assert_held_commit_current_origin(&group, &bob, &replay, &missed.0.event_id, &missed.1).await?;
 
     // (4) Wrong destination, Event/Commit mismatch, wrong source.
     let (status, body) = group
@@ -352,6 +422,73 @@ async fn wait_not_listed(client: &TestActorClient, realm_id: &str, window: Durat
 const PEER_EVENTS: &str = "/_arkret/peer/events";
 const ROUTE_MISS_WINDOW: Duration = Duration::from_secs(360);
 const HELD_WINDOW: Duration = Duration::from_secs(120);
+
+async fn assert_held_commit_current_origin(
+    group: &TestServerGroup,
+    member: &TestActorClient,
+    replay: &[u8],
+    event_id: &EventId,
+    source_commit: &RealmCommit,
+) -> Result<()> {
+    // A matching idempotency key and an already held Commit cannot turn an
+    // authenticated but non-origin Station into the current Realm authority.
+    let replay_key = "federation-current-origin-replay";
+    let (status, answer) = group
+        .server(1)
+        .signed_peer_post_with_idempotency_key(
+            group.server(0),
+            PEER_EVENTS,
+            replay,
+            group.server(1).service_id(),
+            Some(replay_key),
+        )
+        .await?;
+    ensure!(status == StatusCode::OK, "origin replay failed: {status}");
+    let authorized = serde_json::from_slice::<PeerAuthoritySubmitOutcome>(&answer)?;
+    ensure!(
+        matches!(
+            authorized,
+            PeerAuthoritySubmitOutcome::CommittedReplication(value)
+                if matches!(
+                    value.replication_outcomes.as_slice(),
+                    [PeerCommittedReplicationOutcomeRecord::Duplicate {}]
+                )
+        ),
+        "the active origin did not replay the held Commit"
+    );
+    let (status, answer) = group
+        .server(1)
+        .signed_peer_post_with_idempotency_key(
+            group.server(1),
+            PEER_EVENTS,
+            replay,
+            group.server(1).service_id(),
+            Some(replay_key),
+        )
+        .await?;
+    ensure!(
+        status == StatusCode::OK,
+        "wrong-origin replay failed: {status}"
+    );
+    let denied = serde_json::from_slice::<PeerAuthoritySubmitOutcome>(&answer)?;
+    ensure!(
+        matches!(
+            &denied,
+            PeerAuthoritySubmitOutcome::CommittedReplication(value)
+                if matches!(
+                    value.replication_outcomes.as_slice(),
+                    [PeerCommittedReplicationOutcomeRecord::Rejected { reason_code }]
+                        if reason_code == "capability_denied"
+                )
+        ),
+        "a cached Commit was replayed by a non-origin Station: {denied:?}"
+    );
+    ensure_same_commit(
+        source_commit,
+        &wait_held(member, event_id, HELD_WINDOW).await?,
+    )?;
+    Ok(())
+}
 
 /// Bob prepares on Y, signs his own `join` and submits it to Y, which forwards
 /// it to X; X's committed join then reaches Y by committed replication.

@@ -4533,6 +4533,7 @@ try {
         $solandServer2CorsAllowOrigin = $solandCorsAllowOrigin
         if ($SolandRuntime -eq "docker") {
             $solandServer2DockerArguments = @{
+                AccountAuthorityBaseUrl = if ($StartCoauth) { $coauthServer2BaseUrl } else { $CoauthBaseUrl }
                 BaseUrl = $solandServer2BaseUrl
                 DatabaseUrl = $solandServer2DatabaseDsn
                 MetricsPort = $solandServer2MetricsPort
@@ -4565,6 +4566,7 @@ try {
             }
         } else {
             $solandServer2ProcessArguments = @{
+                AccountAuthorityBaseUrl = if ($StartCoauth) { $coauthServer2BaseUrl } else { $CoauthBaseUrl }
                 BinaryPath = $solandBinary
                 ConfigPath = $serverArtifactLayouts["server2"].SolandConfigPath
                 BaseUrl = $solandServer2BaseUrl
@@ -4604,6 +4606,7 @@ try {
         $server.SolandMetricsPort = Get-FreeTcpPort
         $traceFile = Join-Path $serverServiceLogDirs[$server.Name] "$($server.SolandName).trace.log"
         $configArguments = @{
+            AccountAuthorityBaseUrl = if ($StartCoauth) { $server.CoauthBaseUrl } else { $CoauthBaseUrl }
             BaseUrl = $server.SolandBaseUrl
             DatabaseUrl = $server.SolandDatabaseDsn
             MetricsPort = $server.SolandMetricsPort

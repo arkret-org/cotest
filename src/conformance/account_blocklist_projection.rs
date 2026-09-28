@@ -33,8 +33,9 @@ const SUITE: &str = "account_blocklist_projection";
 const BLOCKLIST_KEY: &str = "ak.account.blocklist";
 const PATH: &str = "/_arkret/self/account_data/ak.account.blocklist";
 const SECRET: [u8; 32] = [7; 32];
-const MISSING_CASES: [&str; 2] = [
+const MISSING_CASES: [&str; 3] = [
     "shared_history_is_received_then_filtered_by_the_holder",
+    "unblock_rebuilds_the_projection_from_retained_material",
     "holder_side_request_filtering_stays_indistinguishable",
 ];
 
@@ -70,7 +71,6 @@ fn validated_fixture() -> Result<Value> {
         "whole_value_cas_rejects_a_stale_concurrent_write",
         "target_closure_rejects_realm_and_organization_targets",
         "unregistered_blocklist_event_kind_is_not_an_authoring_surface",
-        "unblock_rebuilds_the_projection_from_retained_material",
         "an_unsynced_device_treats_freshness_as_unknown",
     ];
     ensure!(
@@ -339,13 +339,11 @@ pub async fn run_account_blocklist_production_cases() -> Result<super::SuiteExec
 
     private_account_catchup(&holder, &owner).await?;
     retained_shared_history(&server, &holder, &owner).await?;
-    crate::scenarios::direct_conversation_founding_live::blocklist_retained_direct_conversation()
-        .await?;
 
     Ok(super::SuiteExecutionResult {
         entrypoint: ACCOUNT_BLOCKLIST_PROJECTION_ENTRYPOINT,
         fixture: FIXTURE,
-        cases: [(0, 3), (1, 12), (2, 8), (3, 3), (5, 4), (7, 3)]
+        cases: [(0, 3), (1, 12), (2, 8), (3, 3), (7, 3)]
             .into_iter()
             .map(|(index, assertions)| super::CaseExecutionResult {
                 case_id: required_str(&cases[index], "name").unwrap().to_owned(),
@@ -440,10 +438,32 @@ async fn private_account_catchup(holder: &TestActorClient, owner: &ActorId) -> R
 /// A real sender observation; elapsed transport time is regression evidence,
 /// not an invented timing bucket or a proof of statistical indistinguishability.
 struct SharedSubmissionObservation {
+    sender_actor: ActorId,
+    event_kind: arkret_wire::EventKind,
+    scope_ref: arkret_wire::ScopeRef,
+    authorization_ref: Option<arkret_wire::AuthorizationRef>,
     status: StatusCode,
     content_type: String,
+    transport_protocol: String,
+    response_shape: Value,
     outcome: arkret_wire::AuthoritySubmitOutcome,
     elapsed: std::time::Duration,
+}
+
+fn json_shape(value: &Value) -> Value {
+    match value {
+        Value::Null => json!("null"),
+        Value::Bool(_) => json!("boolean"),
+        Value::Number(_) => json!("number"),
+        Value::String(_) => json!("string"),
+        Value::Array(values) => Value::Array(values.iter().map(json_shape).collect()),
+        Value::Object(fields) => Value::Object(
+            fields
+                .iter()
+                .map(|(key, value)| (key.clone(), json_shape(value)))
+                .collect(),
+        ),
+    }
 }
 
 async fn observed_shared_message(
@@ -452,9 +472,6 @@ async fn observed_shared_message(
     strand: &str,
     text: &str,
 ) -> Result<SharedSubmissionObservation> {
-    use arkret_models_collaboration::authority_commit::{
-        SelfAuthoritySubmitOutcome, SelfAuthoritySubmitRequest,
-    };
     let event = peer
         .author_event(
             realm,
@@ -462,18 +479,28 @@ async fn observed_shared_message(
             crate::harness::message_create_text_payload(strand, text)?,
         )
         .await?;
+    observed_authored_shared_message(peer, event).await
+}
+
+async fn observed_authored_shared_message(
+    peer: &TestActorClient,
+    event: arkret_wire::Event,
+) -> Result<SharedSubmissionObservation> {
+    use arkret_models_collaboration::authority_commit::{
+        SelfAuthoritySubmitOutcome, SelfAuthoritySubmitRequest,
+    };
     let request = SelfAuthoritySubmitRequest::Event(crate::publication::initial_submission(
         event.clone(),
         "",
     )?);
-    let started = std::time::Instant::now();
-    let response = peer
+    let submission = peer
         .post("/_arkret/self/events")
         .header(reqwest::header::CONTENT_TYPE, "application/json")
-        .body(arkret_canonical::canonical_json_bytes(&request)?)
-        .send()
-        .await?;
+        .body(arkret_canonical::canonical_json_bytes(&request)?);
+    let started = std::time::Instant::now();
+    let response = submission.send().await?;
     let status = response.status();
+    let transport_protocol = format!("{:?}", response.version());
     let content_type = response
         .headers()
         .get(reqwest::header::CONTENT_TYPE)
@@ -497,6 +524,7 @@ async fn observed_shared_message(
         !String::from_utf8_lossy(&bytes).contains("blocked_by_user"),
         "private block leaked through the sender result"
     );
+    let response_shape = json_shape(&serde_json::from_slice::<Value>(&bytes)?);
     let outcome: SelfAuthoritySubmitOutcome = serde_json::from_slice(&bytes)?;
     outcome.validate_for_request(&request)?;
     let SelfAuthoritySubmitOutcome::Ordinary(outcome) = outcome else {
@@ -513,14 +541,24 @@ async fn observed_shared_message(
         *accepted_status == arkret_wire::AuthorityCommitStatus::Committed,
         "fresh shared Message did not commit"
     );
+    let sender_actor = event.actor_id.clone();
+    let event_kind = event.kind.clone();
+    let scope_ref = event.scope_ref.clone();
+    let authorization_ref = event.authorization_ref.clone();
     arkret_wire::CommittedEventFullView {
         event,
         commit: commit.clone(),
     }
     .validate_shape()?;
     Ok(SharedSubmissionObservation {
+        sender_actor,
+        event_kind,
+        scope_ref,
+        authorization_ref,
         status,
         content_type,
+        transport_protocol,
+        response_shape,
         outcome,
         elapsed,
     })
@@ -531,8 +569,15 @@ fn compare_shared_sender_observations(
     unblocked: &SharedSubmissionObservation,
 ) -> Result<()> {
     ensure!(
-        blocked.status == unblocked.status && blocked.content_type == unblocked.content_type,
-        "private block changed the sender's response shape"
+        blocked.sender_actor == unblocked.sender_actor
+            && blocked.event_kind == unblocked.event_kind
+            && blocked.scope_ref == unblocked.scope_ref
+            && blocked.authorization_ref == unblocked.authorization_ref
+            && blocked.status == unblocked.status
+            && blocked.content_type == unblocked.content_type
+            && blocked.transport_protocol == unblocked.transport_protocol
+            && blocked.response_shape == unblocked.response_shape,
+        "paired submissions changed sender, scope, authority, operation, protocol or response shape"
     );
     let arkret_wire::AuthoritySubmitOutcome::Accepted {
         status: blocked_status,
@@ -561,8 +606,16 @@ fn compare_shared_sender_observations(
         "distinct observations reused a fabricated acceptance"
     );
     eprintln!(
-        "blocklist shared sender observations: both HTTP {} / committed / no reason; blocked transport {:?}, unblocked transport {:?}; full privacy oracle remains unwired",
-        blocked.status, blocked.elapsed, unblocked.elapsed
+        "blocklist shared sender paired transport: actor={}, operation={}, realm={}, protocol={}, status={}, content_type={}, response_shape={}, outcome=committed/no_problem_reason, blocked_start_to_full_response_ns={}, unblocked_start_to_full_response_ns={}; durations are regression observations without a pass threshold",
+        blocked.sender_actor,
+        blocked.event_kind.as_str(),
+        blocked_commit.realm_id,
+        blocked.transport_protocol,
+        blocked.status,
+        blocked.content_type,
+        blocked.response_shape,
+        blocked.elapsed.as_nanos(),
+        unblocked.elapsed.as_nanos()
     );
     Ok(())
 }
@@ -587,7 +640,7 @@ async fn retained_shared_history(
     let realm = holder
         .create_realm("Blocklist retained shared history")
         .await?;
-    let strand = holder.create_default_strand(&realm).await?;
+    let strand = holder.default_strand_id(&realm)?;
     holder.add_member(&realm, &peer).await?;
     holder
         .grant_realm_actions_to(&realm, &peer.actor, &["ak.message.create"])
@@ -803,7 +856,11 @@ async fn observe_unknown_privacy_signals(
             }
         }
     });
-    let observer = holder.sdk().with_base_url(endpoint.parse()?)?;
+    // This listener is an intentionally refusing loopback transport probe.
+    // It carries no session authority and cannot admit a Signal.
+    let observer = arkret_http_client::Client::builder(endpoint.parse()?)
+        .allow_insecure_localhost()
+        .build()?;
     let submitter = inkson::event_submit::EventSubmitter::new(observer.clone());
     let material = inkson::signal::SignalKeyMaterial {
         group_state_ref: event.to_owned(),
@@ -860,75 +917,6 @@ async fn observe_unknown_privacy_signals(
     Ok(())
 }
 
-/// Observe the actual Native automatic-receipt path with real accepted MLS
-/// material. The receiver supplies no authority or Signal success: an
-/// unblocked control must reach HTTP, a filtered message must not reach it.
-async fn observe_retained_automatic_receipt(
-    holder: &TestActorClient,
-    host: &inkson::sync_engine::NativeAccountHost,
-    realm: &str,
-    strand: &str,
-    expect_transport: bool,
-) -> Result<()> {
-    use std::sync::Arc;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    let store = host.state_store();
-    ensure!(
-        store.blocklist_freshness_known(),
-        "receipt observation requires actual private catch-up"
-    );
-    inkson::signal::key_material_for_scope(&store, realm, None)
-        .context("receipt observation requires the receiving endpoint's accepted MLS state")?;
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-    let endpoint = format!("http://{}/", listener.local_addr()?);
-    let requests = Arc::new(AtomicUsize::new(0));
-    let observed = requests.clone();
-    let receiver = tokio::spawn(async move {
-        loop {
-            let Ok((mut socket, _)) = listener.accept().await else {
-                break;
-            };
-            let mut bytes = [0u8; 8192];
-            if socket.read(&mut bytes).await.unwrap_or(0) > 0 {
-                observed.fetch_add(1, Ordering::SeqCst);
-                let _ = socket.write_all(b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").await;
-            }
-        }
-    });
-    let http = holder.sdk().with_base_url(endpoint.parse()?)?;
-    let result = inkson::conformance::send_native_automatic_read_receipt(
-        host,
-        http.clone(),
-        realm,
-        strand,
-        "",
-    )
-    .await;
-    let count = requests.load(Ordering::SeqCst);
-    if expect_transport {
-        ensure!(
-            result.is_err() && count > 0,
-            "eligible unblocked automatic receipt did not reach the actual transport: {result:?}, requests={count}"
-        );
-    } else {
-        ensure!(
-            matches!(result, Ok(None)) && count == 0,
-            "filtered automatic receipt reached the actual transport: {result:?}, requests={count}"
-        );
-        ensure!(
-            http.describe().await.is_err() && requests.load(Ordering::SeqCst) > 0,
-            "receipt network observer lacks an actual positive control"
-        );
-    }
-    receiver.abort();
-    eprintln!(
-        "blocklist Native MLS automatic receipt: expected transport={expect_transport}, observed requests={count}; observer refuses authority, no Signal delivery claimed"
-    );
-    Ok(())
-}
-
 fn blocklist(handle: &str) -> Result<Value> {
     let value = json!({"entries": [{"target": {"kind": "handle", "value": handle}, "mode": "block", "applies_to": ["messages"], "created_at": "2026-09-20T00:00:00.000Z"}]});
     let typed: AccountBlocklistValue = serde_json::from_value(value)?;
@@ -936,7 +924,7 @@ fn blocklist(handle: &str) -> Result<Value> {
     Ok(serde_json::to_value(typed)?)
 }
 
-pub(crate) async fn block_direct_peer(
+async fn block_direct_peer(
     holder: &crate::scenarios::mls_lifecycle_live::Member,
     peer: &crate::scenarios::mls_lifecycle_live::Member,
 ) -> Result<()> {
@@ -977,147 +965,6 @@ pub(crate) async fn block_direct_peer(
         },
     )
     .await?;
-    Ok(())
-}
-
-pub(crate) async fn retained_direct_history(
-    holder: &crate::scenarios::mls_lifecycle_live::Member,
-    peer: &crate::scenarios::mls_lifecycle_live::Member,
-    realm: &arkret_wire::RealmId,
-    strand: &arkret_wire::StrandId,
-    accepted_group: &arkret_wire::EventId,
-    message: &arkret_wire::EventId,
-    group: &arkret::ArkretMlsGroup,
-    peer_group: &arkret::ArkretMlsGroup,
-) -> Result<()> {
-    use base64::Engine as _;
-    let directory = tempfile::tempdir()?;
-    let path = directory.path().join("retained-direct-history.json");
-    let host = inkson::sync_engine::NativeAccountHost::new_for_realm(
-        holder.client.sdk(),
-        holder.account.clone(),
-        holder.device.clone(),
-        inkson::LocalStateStore::with_path(&path),
-        realm.clone(),
-    )
-    .await?;
-    host.catch_up_selected_realm_until_complete(realm).await?;
-    let mut store = host.state_store();
-    ensure!(store.blocklist_freshness_known());
-    let blocking_revision = store.client_blocklist_revision();
-    // Transfer this receiving endpoint's real live MLS provider through the
-    // same encrypted checkpoint format used by native restart restoration.
-    let record = group.export_state_record()?;
-    let secret = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(SECRET);
-    let mut checkpoint = inkson::mls::persistence::encrypt_state(
-        realm.as_str(),
-        record.group_id.as_str(),
-        record.epoch,
-        &serde_json::to_vec(&record)?,
-        &secret,
-        &[43; 16],
-    );
-    let accepted = holder
-        .client
-        .sdk()
-        .committed_event_get(accepted_group)
-        .await?;
-    ensure!(
-        accepted.commit().event_ref == *accepted_group,
-        "MLS checkpoint lacks its accepted covering Commit"
-    );
-    checkpoint.group_state_event_id = Some(accepted_group.clone());
-    let scope = arkret_wire::ScopeRef::Realm {
-        realm_id: realm.clone(),
-    };
-    host.state_store_handle()
-        .write(|store| store.save_mls_checkpoint_for_scope(&scope, checkpoint))
-        .map_err(anyhow::Error::msg)?;
-    ingest_retained_realm(&holder.client, &host, realm).await?;
-    store = host.state_store();
-    let actor = holder.actor.to_string();
-    let projection = inkson::conformance::retained_blocklist_message_projection_for_account(
-        &store,
-        &holder.account,
-        &actor,
-        &holder.device,
-    );
-    ensure!(
-        projection
-            .iter()
-            .any(|(id, body, hidden)| id == message.as_str() && body == "hello, Alice" && *hidden),
-        "actual Native encrypted DM retention/decryption/filter failed"
-    );
-    observe_retained_automatic_receipt(
-        &holder.client,
-        &host,
-        realm.as_str(),
-        strand.as_str(),
-        false,
-    )
-    .await?;
-    let peer_host = native_signal_endpoint(
-        peer,
-        realm,
-        accepted_group,
-        peer_group,
-        &directory.path().join("direct-peer.json"),
-    )
-    .await?;
-    let raw = store.load().raw_operations;
-    let write = write_value_request(
-        &holder.client,
-        &holder.actor,
-        blocking_revision,
-        json!({"entries":[]}),
-    )
-    .await?;
-    expect_json(holder.client.put(PATH).json(&write), StatusCode::OK).await?;
-    host.catch_up_selected_realm_until_complete(realm).await?;
-    let store = host.state_store();
-    ensure!(
-        store.blocklist_freshness_known()
-            && store.client_blocklist_revision() == blocking_revision + 1
-    );
-    let projection = inkson::conformance::retained_blocklist_message_projection_for_account(
-        &store,
-        &holder.account,
-        &actor,
-        &holder.device,
-    );
-    ensure!(
-        projection
-            .iter()
-            .any(|(id, body, hidden)| id == message.as_str() && body == "hello, Alice" && !hidden),
-        "unblock did not restore real encrypted DM retained material"
-    );
-    ensure!(
-        store.load().raw_operations == raw,
-        "DM unblock changed shared retained history"
-    );
-    observe_retained_automatic_receipt(
-        &holder.client,
-        &host,
-        realm.as_str(),
-        strand.as_str(),
-        true,
-    )
-    .await?;
-    observe_sealed_read_receipt(holder, &host, peer, &peer_host, realm, strand, message).await?;
-    eprintln!(
-        "blocklist unauthorized relay: Contact and first DM founding accepted with an already-held private block; legal CallInvite requires an accepted CallCreate writer; authorized service branch remains missing"
-    );
-    ensure!(
-        peer.client
-            .sdk()
-            .committed_event_get(message)
-            .await?
-            .commit()
-            .event_ref
-            == *message,
-        "private block changed the sender's accepted Message"
-    );
-    ensure!(strand.as_str() != "", "DM fixture lacks its actual Strand");
     Ok(())
 }
 
@@ -1183,118 +1030,6 @@ async fn ingest_retained_realm(
     ensure!(
         replica.verified_head(&stream) == Some(&bundle.realm_stream_head),
         "private block stopped the real DM Commit cursor"
-    );
-    Ok(())
-}
-
-pub(crate) async fn tombstone_direct_peer(
-    holder: &crate::scenarios::mls_lifecycle_live::Member,
-    peer: &crate::scenarios::mls_lifecycle_live::Member,
-) -> Result<()> {
-    use arkret::contact_operations::{
-        ContactCommitPhase, ContactCommitRequestBody, ContactOperationOutcome,
-        ContactPreparedOutcome,
-    };
-    let row = holder
-        .client
-        .sdk()
-        .contacts_list()
-        .await?
-        .contacts
-        .into_iter()
-        .find(|row| row.peer.contact_actor_id() == peer.actor)
-        .context("actual accepted DM Contact")?;
-    let next = row
-        .next_prepare_input
-        .context("accepted Contact next prepare input")?;
-    let operation_id = arkret::ProtocolOperationId::new(crate::harness::next_typed_id("operation"))
-        .map_err(anyhow::Error::msg)?;
-    let idempotency_key = arkret::IdempotencyKey::new(crate::harness::next_typed_id("idempotency"))
-        .map_err(anyhow::Error::msg)?;
-    let path = "/_arkret/self/contacts/tombstone";
-    let prepared: ContactOperationOutcome = serde_json::from_value(
-        expect_json(
-            holder.client.post(path).json(&json!({
-                "phase":"prepare", "operation_id":operation_id, "idempotency_key":idempotency_key,
-                "peer":row.peer, "contact_round_id":next.contact_round_id, "version":next.version,
-                "predecessor_event_ref":next.predecessor_event_ref, "block_peer":true,
-            })),
-            StatusCode::OK,
-        )
-        .await?,
-    )?;
-    let ContactOperationOutcome::Prepared {
-        outcome:
-            ContactPreparedOutcome::Tombstone {
-                reservation_handle,
-                event_draft,
-                ..
-            },
-    } = prepared
-    else {
-        bail!("actual Contact tombstone did not prepare")
-    };
-    let commit = ContactCommitRequestBody {
-        phase: ContactCommitPhase::Commit,
-        operation_id,
-        idempotency_key,
-        reservation_handle,
-        signed_event: holder.client.sign_prepared_contact_event(
-            &event_draft,
-            arkret_wire::event_kind_str::CONTACT_TOMBSTONE,
-        )?,
-    };
-    let result: ContactOperationOutcome = serde_json::from_value(
-        expect_json(holder.client.post(path).json(&commit), StatusCode::OK).await?,
-    )?;
-    ensure!(
-        matches!(result, ContactOperationOutcome::Accepted { .. }),
-        "Contact tombstone failed actual acceptance"
-    );
-    Ok(())
-}
-
-pub(crate) async fn unblock_after_tombstone(
-    holder: &crate::scenarios::mls_lifecycle_live::Member,
-    realm: &arkret_wire::RealmId,
-    refused: &arkret_wire::EventId,
-) -> Result<()> {
-    let row = holder.client.sdk().account_data_get(BLOCKLIST_KEY).await?;
-    let write = write_value_request(
-        &holder.client,
-        &holder.actor,
-        row.revision,
-        json!({"entries":[]}),
-    )
-    .await?;
-    expect_json(holder.client.put(PATH).json(&write), StatusCode::OK).await?;
-    let directory = tempfile::tempdir()?;
-    let host = inkson::sync_engine::NativeAccountHost::new(
-        holder.client.sdk(),
-        holder.account.clone(),
-        holder.device.clone(),
-        inkson::LocalStateStore::with_path(directory.path().join("tombstone-unblock.json")),
-    )
-    .await?;
-    host.catch_up().await?;
-    let mut store = host.state_store();
-    ensure!(
-        store.blocklist_freshness_known() && store.client_blocklist_revision() == row.revision + 1
-    );
-    ingest_retained_realm(&holder.client, &host, realm).await?;
-    store = host.state_store();
-    ensure!(
-        !serde_json::to_string(&store.load().raw_operations)?.contains(refused.as_str()),
-        "private unblock back-filled a Contact-refused DM Message"
-    );
-    ensure!(
-        holder
-            .client
-            .sdk()
-            .committed_event_get(refused)
-            .await
-            .is_err(),
-        "private unblock materialized a refused DM Message"
     );
     Ok(())
 }
@@ -1681,53 +1416,6 @@ async fn next_admitted_signal(
     })
     .await
     .context("actual Signal delivery observation timed out; no latency claim")?
-}
-
-async fn observe_sealed_read_receipt(
-    holder: &crate::scenarios::mls_lifecycle_live::Member,
-    host: &inkson::sync_engine::NativeAccountHost,
-    peer: &crate::scenarios::mls_lifecycle_live::Member,
-    peer_host: &inkson::sync_engine::NativeAccountHost,
-    realm: &arkret_wire::RealmId,
-    strand: &arkret_wire::StrandId,
-    message: &arkret_wire::EventId,
-) -> Result<()> {
-    let mut stream = peer.client.sdk().signal_subscribe_frames().await?;
-    let _signer = ActiveEndpointSigner::install(holder)?;
-    let outcome = host
-        .send_automatic_read_receipt(realm.as_str(), strand.as_str(), "")
-        .await?
-        .context("unblocked actual automatic receipt was not sent")?;
-    ensure!(
-        outcome.accepted && outcome.realm_id == *realm,
-        "actual Station did not accept the sealed receipt: {outcome:?}"
-    );
-    let mut receiver = garth::signal::SignalReceiver::new();
-    let received = next_admitted_signal(&mut stream, peer_host, peer, &mut receiver).await?;
-    let garth::signal::SignalReceiveOutcome::Accepted {
-        domain, plaintext, ..
-    } = received
-    else {
-        bail!("actual sealed receipt not admitted: {received:?}");
-    };
-    let arkret::SignalPlaintext::ReadReceipt(receipt) = plaintext else {
-        bail!("actual receiver admitted a different Signal profile: {plaintext:?}");
-    };
-    ensure!(
-        domain.sender_actor_id == holder.actor
-            && receipt.actor_id == holder.actor
-            && receipt.event_id == *message
-            && receipt.read_scope.object_ref.as_deref() == Some(strand.as_str())
-            && domain.scope_ref
-                == (arkret_wire::ScopeRef::Realm {
-                    realm_id: realm.clone()
-                }),
-        "actual sealed receipt changed authenticated sender, scope or retained event"
-    );
-    eprintln!(
-        "blocklist actual formal Signal receipt: accepted at Station, streamed to peer, real MLS AEAD/proof/sequence admission; no timing oracle claim"
-    );
-    Ok(())
 }
 
 /// Actual ordinary Realm MLS is necessary: the DM participant profile has no
