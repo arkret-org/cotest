@@ -2206,12 +2206,10 @@ pub(crate) async fn observe_ordinary_call_invite(
             None,
         )
         .context("sender Native key material after accepted MLS checkpoint")?;
-        let started = std::time::Instant::now();
-        let outcome = sender_host
-            .send_scope_signal(scope.clone(), &material, &payload)
+        let (outcome, transport) = sender_host
+            .send_scope_signal_with_transport_observation(scope.clone(), &material, &payload)
             .await
             .context("CallInvite send after holder blocklist projection")?;
-        let elapsed = started.elapsed();
         ensure!(
             outcome.accepted && outcome.realm_id == *realm,
             "real CallInvite was not accepted: {outcome:?}"
@@ -2246,22 +2244,29 @@ pub(crate) async fn observe_ordinary_call_invite(
                 &sender.actor,
             )
         );
-        observed.push((outcome, elapsed));
+        observed.push((outcome, transport));
     }
     ensure!(
         observed[0].0.accepted == observed[1].0.accepted
             && observed[0].0.realm_id == observed[1].0.realm_id
             && observed[0].0.dispatched_recipient_count == observed[1].0.dispatched_recipient_count
+            && observed[0].1.status == 200
+            && observed[0].1.status == observed[1].1.status
+            && observed[0].1.http_version == observed[1].1.http_version
+            && observed[0].1.content_type == observed[1].1.content_type
             && json_shape(&serde_json::to_value(&observed[0].0)?)
                 == json_shape(&serde_json::to_value(&observed[1].0)?),
         "private block leaked through typed public response eligibility"
     );
     eprintln!(
-        "blocklist CallInvite paired client submission: scope={}, sender={}, blocked_invocation_to_response_ns={}, unblocked_invocation_to_response_ns={}, public_response_shape={}, accepted={}, recipient_count={:?}; durations include local encryption and are not isolated transport timing",
+        "blocklist CallInvite paired Signal HTTP transport: scope={}, sender={}, protocol={}, status={}, content_type={}, blocked_start_to_full_response_ns={}, unblocked_start_to_full_response_ns={}, public_response_shape={}, accepted={}, recipient_count={:?}; durations are regression observations without a pass threshold",
         realm,
         sender.actor,
-        observed[0].1.as_nanos(),
-        observed[1].1.as_nanos(),
+        observed[0].1.http_version,
+        observed[0].1.status,
+        observed[0].1.content_type,
+        observed[0].1.start_to_full_response.as_nanos(),
+        observed[1].1.start_to_full_response.as_nanos(),
         json_shape(&serde_json::to_value(&observed[0].0)?),
         observed[0].0.accepted,
         observed[0].0.dispatched_recipient_count,
@@ -2329,7 +2334,7 @@ pub(crate) async fn observe_ordinary_call_invite(
         "held joined cut was not refused by the registered current membership gate: {denied:#}"
     );
     eprintln!(
-        "blocklist actual accepted ordinary CallCreate + sealed CallInvite: real producer/MLS/sequence receiver, private product 0->1, unchanged public response shape; full case 6 still requires Contact and first DM production paths"
+        "blocklist actual accepted ordinary CallCreate + sealed CallInvite: real producer/MLS/sequence receiver, private product 0->1, unchanged public response shape; Contact and first-DM production observations run in their separately named live case"
     );
     Ok(())
 }
