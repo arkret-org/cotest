@@ -29,12 +29,12 @@ fn blocklist_full_suite_refuses_missing_production_case_executors() {
     let error = cotest::conformance::run_account_blocklist_projection_suite().unwrap_err();
     let error = error.to_string();
     for case in [
-        "shared_history_is_received_then_filtered_by_the_holder",
         "unblock_rebuilds_the_projection_from_retained_material",
         "holder_side_request_filtering_stays_indistinguishable",
     ] {
         assert!(error.contains(case), "missing case must be named: {error}");
     }
+    assert!(!error.contains("shared_history_is_received_then_filtered_by_the_holder"));
 }
 
 #[test]
@@ -107,6 +107,32 @@ fn blocklist_case4_federated_ingress_keeps_private_value_at_holder() -> Result<(
         })?
         .join()
         .map_err(|_| anyhow::anyhow!("case 4 federation boundary worker panicked"))?
+}
+
+#[test]
+fn blocklist_case4_full_fixture_runs_production_executor() -> Result<()> {
+    const STACK_SIZE: usize = 32 * 1024 * 1024;
+    std::thread::Builder::new()
+        .stack_size(STACK_SIZE)
+        .spawn(|| -> Result<()> {
+            tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(2)
+                .thread_stack_size(STACK_SIZE)
+                .enable_all()
+                .build()?
+                .block_on(async {
+                    let result =
+                        cotest::conformance::run_account_blocklist_case4_production().await?;
+                    assert_eq!(
+                        result.case_id,
+                        "shared_history_is_received_then_filtered_by_the_holder"
+                    );
+                    assert_eq!(result.assertions, 6);
+                    Ok(())
+                })
+        })?
+        .join()
+        .map_err(|_| anyhow::anyhow!("case 4 full fixture worker panicked"))?
 }
 
 #[test]

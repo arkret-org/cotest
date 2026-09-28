@@ -33,8 +33,7 @@ const SUITE: &str = "account_blocklist_projection";
 const BLOCKLIST_KEY: &str = "ak.account.blocklist";
 const PATH: &str = "/_arkret/self/account_data/ak.account.blocklist";
 const SECRET: [u8; 32] = [7; 32];
-const MISSING_CASES: [&str; 3] = [
-    "shared_history_is_received_then_filtered_by_the_holder",
+const MISSING_CASES: [&str; 2] = [
     "unblock_rebuilds_the_projection_from_retained_material",
     "holder_side_request_filtering_stays_indistinguishable",
 ];
@@ -46,7 +45,7 @@ pub fn run_account_blocklist_projection_vector() -> Result<()> {
 pub fn run_account_blocklist_projection_suite() -> Result<super::SuiteExecutionResult> {
     validated_fixture()?;
     bail!(
-        "blocklist suite lacks production executors for: {}; the dedicated live CAS slice does not certify the full fixture",
+        "blocklist suite lacks production executors for: {}; the bounded live slices do not certify the full fixture",
         MISSING_CASES.join(", ")
     )
 }
@@ -71,6 +70,7 @@ fn validated_fixture() -> Result<Value> {
         "whole_value_cas_rejects_a_stale_concurrent_write",
         "target_closure_rejects_realm_and_organization_targets",
         "unregistered_blocklist_event_kind_is_not_an_authoring_surface",
+        "shared_history_is_received_then_filtered_by_the_holder",
         "an_unsynced_device_treats_freshness_as_unknown",
     ];
     ensure!(
@@ -501,6 +501,26 @@ pub async fn run_account_blocklist_case4_federated_boundary_slice() -> Result<()
     );
     compare_shared_sender_observations(&blocked, &unblocked)?;
     Ok(())
+}
+
+/// Complete the fixture's shared-history case with production evidence from
+/// the holder, sender, Signal and federation paths. The whole eight-case
+/// named suite remains gated until its other missing cases have executors.
+pub async fn run_account_blocklist_case4_production() -> Result<super::CaseExecutionResult> {
+    let fixture = validated_fixture()?;
+    let cases = value_array(required_field(&fixture, "cases")?, "cases")?;
+    let case = &cases[4];
+    assert_case(case, "accept", None)?;
+    run_account_blocklist_case4_combined_slice()
+        .await
+        .context("case 4 holder retention and automatic receipt")?;
+    run_account_blocklist_case4_federated_boundary_slice()
+        .await
+        .context("case 4 encrypted private value and peer ingress boundary")?;
+    Ok(super::CaseExecutionResult {
+        case_id: required_str(case, "name")?.to_owned(),
+        assertions: value_array(required_field(case, "assertions")?, "case.assertions")?.len(),
+    })
 }
 
 /// Exercise the ordinary Inkson Account projector and Garth subscription,
@@ -1552,61 +1572,105 @@ async fn ingest_retained_realm(
     use sha2::{Digest, Sha256};
     let http = holder.sdk();
     let authority = garth::AuthorityClient::new(http.clone());
-    let nonce = arkret_wire::Base64UrlString::new(
-        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(Sha256::digest(
-            format!(
-                "{realm}:{}",
-                chrono::Utc::now()
-                    .timestamp_nanos_opt()
-                    .context("nonce clock")?
-            )
-            .as_bytes(),
-        )),
-    )
-    .map_err(anyhow::Error::msg)?;
-    let request = arkret_wire::AuthorityBundleRequest {
-        realm_id: realm.clone(),
-        nonce: nonce.clone(),
-    };
-    let bundle = authority.resolve_authority(&request).await?;
-    let freshness = arkret_identity::RealmAuthorityFreshness::new(chrono::Utc::now(), nonce);
-    let keys = garth::fetch_historical_station_key_directory(&http, &bundle, None, None).await?;
-    let mut replica = garth::RealmReplica::new(realm.clone());
-    replica.install_verified_authority(&request, bundle.clone(), &freshness, &keys)?;
     let stream = arkret_wire::CommitStreamRef::Realm {
         realm_id: realm.clone(),
     };
-    let mut after = None;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    let mut required_position = None;
     loop {
-        let scan = arkret_wire::StreamScanRequest {
+        // A stream can advance after the signed bundle was issued. Garth
+        // correctly refuses that scan; obtain a fresh nonce-bound authority
+        // instead of weakening its exact-head check or installing any pages
+        // from the failed attempt.
+        let nonce = arkret_wire::Base64UrlString::new(
+            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(Sha256::digest(
+                format!(
+                    "{realm}:{}",
+                    chrono::Utc::now()
+                        .timestamp_nanos_opt()
+                        .context("nonce clock")?
+                )
+                .as_bytes(),
+            )),
+        )
+        .map_err(anyhow::Error::msg)?;
+        let request = arkret_wire::AuthorityBundleRequest {
             realm_id: realm.clone(),
-            stream_ref: stream.clone(),
-            direction: arkret_wire::StreamScanDirection::After(after),
-            limit: 64,
+            nonce: nonce.clone(),
         };
-        let page = authority.scan(&scan).await?;
-        let truncated = page.truncated;
-        let keys = garth::fetch_historical_station_key_directory(&http, &bundle, Some(&page), None)
-            .await?;
-        let verified = replica.apply_verified_scan(&scan, page, &freshness, &keys)?;
-        host.state_store_handle()
-            .write(|store| store.ingest_verified_message_history(&verified))
-            .map_err(anyhow::Error::msg)?;
-        after = Some(
-            replica
-                .verified_head(&stream)
-                .context("verified DM head")?
-                .stream_position,
-        );
-        if !truncated {
-            break;
+        let bundle = authority.resolve_authority(&request).await?;
+        if required_position
+            .is_some_and(|position| bundle.realm_stream_head.stream_position < position)
+        {
+            ensure!(
+                std::time::Instant::now() < deadline,
+                "verified authority did not reach the scanned Realm Commit position {required_position:?}"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            continue;
         }
+        let freshness = arkret_identity::RealmAuthorityFreshness::new(chrono::Utc::now(), nonce);
+        let keys =
+            garth::fetch_historical_station_key_directory(&http, &bundle, None, None).await?;
+        let mut replica = garth::RealmReplica::new(realm.clone());
+        replica.install_verified_authority(&request, bundle.clone(), &freshness, &keys)?;
+        let mut verified_pages = Vec::new();
+        let mut after = None;
+        let mut newer_cut_required = false;
+        loop {
+            let scan = arkret_wire::StreamScanRequest {
+                realm_id: realm.clone(),
+                stream_ref: stream.clone(),
+                direction: arkret_wire::StreamScanDirection::After(after),
+                limit: 64,
+            };
+            let page = authority.scan(&scan).await?;
+            let truncated = page.truncated;
+            let observed_position = page
+                .committed_events
+                .last()
+                .map(|view| view.commit().stream_position);
+            let keys =
+                garth::fetch_historical_station_key_directory(&http, &bundle, Some(&page), None)
+                    .await?;
+            match replica.apply_verified_scan(&scan, page, &freshness, &keys) {
+                Ok(verified) => verified_pages.push(verified),
+                Err(garth::Error::AuthorityCutBehind) => {
+                    required_position =
+                        observed_position.into_iter().chain(required_position).max();
+                    newer_cut_required = true;
+                    break;
+                }
+                Err(error) => return Err(error.into()),
+            }
+            after = Some(
+                replica
+                    .verified_head(&stream)
+                    .context("verified DM head")?
+                    .stream_position,
+            );
+            if !truncated {
+                break;
+            }
+        }
+        if newer_cut_required {
+            ensure!(
+                std::time::Instant::now() < deadline,
+                "verified authority did not advance before the bounded catch-up deadline"
+            );
+            continue;
+        }
+        ensure!(
+            replica.verified_head(&stream) == Some(&bundle.realm_stream_head),
+            "private block stopped the real DM Commit cursor"
+        );
+        for verified in &verified_pages {
+            host.state_store_handle()
+                .write(|store| store.ingest_verified_message_history(verified))
+                .map_err(anyhow::Error::msg)?;
+        }
+        return Ok(());
     }
-    ensure!(
-        replica.verified_head(&stream) == Some(&bundle.realm_stream_head),
-        "private block stopped the real DM Commit cursor"
-    );
-    Ok(())
 }
 
 async fn write_request(

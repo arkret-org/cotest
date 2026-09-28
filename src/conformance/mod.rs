@@ -140,8 +140,9 @@ const ARTIFACT_FIXTURES_DIR: &str = "fixtures";
 pub use account_blocklist_projection::{
     ACCOUNT_BLOCKLIST_PROJECTION_ENTRYPOINT, VECTOR_ID_ACCOUNT_BLOCKLIST_PROJECTION,
     run_account_blocklist_case4_combined_slice,
-    run_account_blocklist_case4_federated_boundary_slice, run_account_blocklist_production_cases,
-    run_account_blocklist_projection_suite, run_account_blocklist_projection_vector,
+    run_account_blocklist_case4_federated_boundary_slice, run_account_blocklist_case4_production,
+    run_account_blocklist_production_cases, run_account_blocklist_projection_suite,
+    run_account_blocklist_projection_vector,
 };
 pub use account_data_cas_convergence::{
     ACCOUNT_DATA_CAS_CONVERGENCE_ENTRYPOINT, run_account_data_cas_convergence_suite,
