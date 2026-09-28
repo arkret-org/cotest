@@ -3,7 +3,9 @@
 use std::collections::BTreeSet;
 
 use anyhow::{Result, ensure};
-use arkret_models_collaboration::governance::circle::{CircleCreateRequestBody, CircleMemberRequestBody};
+use arkret_models_collaboration::governance::circle::{
+    CircleCreateRequestBody, CircleMemberRequestBody,
+};
 use arkret_wire::{ActorId, CircleId, EventAdmissionSubmission, EventKind, ScopeRef};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
@@ -75,7 +77,9 @@ pub async fn run() -> Result<()> {
     let created = expect_json(
         alice
             .post("/_arkret/self/circles")
-            .json(&CircleCreateRequestBody { create_event: EventAdmissionSubmission::new(create) }),
+            .json(&CircleCreateRequestBody {
+                create_event: EventAdmissionSubmission::new(create),
+            }),
         StatusCode::OK,
     )
     .await?;
@@ -127,7 +131,9 @@ pub async fn run() -> Result<()> {
     expect_json(
         alice
             .post(&format!("{path}/members"))
-            .json(&CircleMemberRequestBody { member_event: EventAdmissionSubmission::new(join) }),
+            .json(&CircleMemberRequestBody {
+                member_event: EventAdmissionSubmission::new(join),
+            }),
         StatusCode::OK,
     )
     .await?;
@@ -162,7 +168,9 @@ pub async fn run() -> Result<()> {
     expect_json(
         alice
             .delete(&format!("{path}/members/{actor_path}"))
-            .json(&CircleMemberRequestBody { member_event: EventAdmissionSubmission::new(leave) }),
+            .json(&CircleMemberRequestBody {
+                member_event: EventAdmissionSubmission::new(leave),
+            }),
         StatusCode::OK,
     )
     .await?;
@@ -199,7 +207,9 @@ pub async fn run() -> Result<()> {
     expect_json(
         alice
             .post("/_arkret/self/circles")
-            .json(&CircleCreateRequestBody { create_event: EventAdmissionSubmission::new(hidden_create) }),
+            .json(&CircleCreateRequestBody {
+                create_event: EventAdmissionSubmission::new(hidden_create),
+            }),
         StatusCode::OK,
     )
     .await?;

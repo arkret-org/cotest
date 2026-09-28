@@ -1,7 +1,9 @@
 //! Circle-scoped plaintext Poll admission against a real Station and PostgreSQL.
 
 use anyhow::{Context as _, Result, ensure};
-use arkret_models_collaboration::governance::circle::{CircleCreateRequestBody, CircleMemberRequestBody};
+use arkret_models_collaboration::governance::circle::{
+    CircleCreateRequestBody, CircleMemberRequestBody,
+};
 use arkret_wire::{
     ActorId, AuthoritySubmitRequest, CircleId, CommittedEventView, Event, EventAdmissionSubmission,
     EventKind, MessageId, ScopeRef, StrandId,
@@ -118,7 +120,9 @@ async fn circle_create(
     let result = expect_json(
         client
             .post("/_arkret/self/circles")
-            .json(&CircleCreateRequestBody { create_event: EventAdmissionSubmission::new(create) }),
+            .json(&CircleCreateRequestBody {
+                create_event: EventAdmissionSubmission::new(create),
+            }),
         StatusCode::OK,
     )
     .await?;
@@ -176,7 +180,9 @@ async fn join_circle(
                 "/_arkret/self/circles/{}/members",
                 circle.as_str()
             ))
-            .json(&CircleMemberRequestBody { member_event: EventAdmissionSubmission::new(join) }),
+            .json(&CircleMemberRequestBody {
+                member_event: EventAdmissionSubmission::new(join),
+            }),
         StatusCode::OK,
     )
     .await?;

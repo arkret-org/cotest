@@ -48,6 +48,7 @@ use arkret_models_collaboration::direct_conversation::{
     DirectConversationFoundingPlan, DirectConversationResolveOutcome,
     DirectConversationResolveRequestBody,
 };
+use arkret_models_collaboration::events_payloads::MlsGenesisCreatorLeafAuthority;
 use arkret_models_collaboration::events_payloads::direct_conversation::DirectConversationBoundPayload;
 use arkret_models_collaboration::governance::invite_addressing::{
     InviteLocatorIssueRequestBody, InviteLocatorResolveRequestBody, PrincipalLocator,
@@ -1260,6 +1261,26 @@ async fn run(
     let genesis_binding = MlsGovernanceBindingPayload::new(scope.clone(), None, 0, 0, 0)?;
     let mut alice_group =
         alice_identity.create_group_with_governance_binding(&scope, &genesis_binding)?;
+    alice_group.install_local_creator_binding(
+        alice.actor.clone(),
+        Some(alice.authorize_event_id.clone()),
+    )?;
+    let bindings = alice_group.verified_leaf_bindings()?;
+    let [creator] = bindings.as_slice() else {
+        bail!("Direct Conversation Genesis requires one verified creator leaf");
+    };
+    ensure!(creator.leaf_index == 0 && creator.actor_id == alice.actor);
+    let creator_leaf_authority = MlsGenesisCreatorLeafAuthority {
+        leaf_signature_key_b64u: creator.signature_key.clone(),
+        endpoint: arkret_wire::MlsWelcomeRecipientEndpoint::Device {
+            device_id: alice.device.clone(),
+        },
+        authorization_event_ref: creator
+            .device_authorize_event_id
+            .clone()
+            .context("creator leaf lacks DeviceAuthorize Event")?,
+    };
+    creator_leaf_authority.validate()?;
     let (group_info, tree) = alice_group.public_group_state_bytes()?;
     // The Direct Conversation declares no plaintext-visible service, so the
     // public MLS state goes to the creator's Station as content-addressed
@@ -1274,6 +1295,7 @@ async fn run(
             "cipher_suite": ACTIVE_SUITE,
             "group_info_ref": group_info_ref,
             "ratchet_tree_ref": tree_ref,
+            "creator_leaf_authority": creator_leaf_authority,
             "governance_binding": genesis_binding,
             "created_at": arkret_canonical::format_timestamp_canonical(chrono::Utc::now()),
         }),

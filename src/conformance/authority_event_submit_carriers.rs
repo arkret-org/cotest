@@ -402,7 +402,10 @@ fn replication_request(replications: Vec<Value>) -> Value {
 
 fn replication_item(submission: Value) -> Value {
     let mut submission = submission;
-    submission.as_object_mut().expect("submission object").remove("approval_signatures");
+    submission
+        .as_object_mut()
+        .expect("submission object")
+        .remove("approval_signatures");
     json!({
         "event_submission": submission,
         "source_commit": realm_commit(0)
