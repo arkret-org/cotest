@@ -35,6 +35,7 @@ use arkret_models_collaboration::governance::membership_invite::{
 use arkret_models_collaboration::governance::realm_join_intake::RealmJoinIntent;
 use arkret_models_collaboration::mls_roster_authority::{
     MlsAddAuthorityAttestation, MlsAttestAddOutcome, MlsAttestAddRequestBody, MlsAttestAddStatus,
+    MlsRosterAuthorityReadOutcome, MlsRosterAuthorityReadRequestBody, MlsRosterRecord,
 };
 use arkret_models_collaboration::sync_frames::demand_sync::RealmListMembership;
 use arkret_models_crypto::{
@@ -743,7 +744,151 @@ async fn cross_station_mls_attest_add_direct_run() -> Result<()> {
         &claim,
         &carol,
     )
-    .await
+    .await?;
+    roster_authority_http_round_trip(x, y, &scope, &genesis.event_id, &commit_event, &carol).await
+}
+
+async fn roster_authority_http_round_trip(
+    governance: &ArkretServer,
+    recipient_station: &ArkretServer,
+    scope: &ScopeRef,
+    genesis_ref: &arkret_wire::EventId,
+    commit_event: &arkret_wire::Event,
+    recipient: &Member,
+) -> Result<()> {
+    let request = MlsRosterAuthorityReadRequestBody {
+        realm_id: scope
+            .realm_id_opt()
+            .context("roster scope has a Realm")?
+            .clone(),
+        effective_scope: scope.clone(),
+        mls_group_id: scope.canonical_mls_group_id()?,
+        genesis_event_ref: genesis_ref.clone(),
+        target_commit_event_ref: commit_event.event_id.clone(),
+        target_epoch: 1,
+        caller_actor_id: recipient.actor.clone(),
+        cursor: None,
+    };
+    let (status, body) = post_json_at(
+        &recipient.client,
+        arkret_wire::PATH_SELF_MLS_ROSTER_AUTHORITY,
+        &request,
+    )
+    .await?;
+    ensure!(
+        status == StatusCode::OK,
+        "member roster self read failed: {status} {body}"
+    );
+    let self_page: MlsRosterAuthorityReadOutcome = serde_json::from_value(body)?;
+    let (status, bytes) = governance
+        .signed_peer_post(
+            recipient_station,
+            arkret_wire::PATH_PEER_MLS_ROSTER_AUTHORITY,
+            &arkret_canonical::canonical_json_bytes(&request)?,
+            governance.service_id(),
+        )
+        .await?;
+    ensure!(
+        status == StatusCode::OK,
+        "member roster peer read failed: {status} {}",
+        String::from_utf8_lossy(&bytes)
+    );
+    let peer_page: MlsRosterAuthorityReadOutcome = serde_json::from_slice(&bytes)?;
+    ensure!(
+        arkret_canonical::canonical_json_bytes(&self_page.records)?
+            == arkret_canonical::canonical_json_bytes(&peer_page.records)?,
+        "self and peer reads returned different accepted roster records"
+    );
+    ensure!(
+        self_page.manifest.records_digest == peer_page.manifest.records_digest
+            && self_page.manifest.authority_head_commit_event_ref
+                == peer_page.manifest.authority_head_commit_event_ref,
+        "self and peer reads signed different roster cuts"
+    );
+    ensure!(
+        self_page.page_index == 0
+            && self_page.next_cursor.is_none()
+            && self_page.manifest.total_records == 2
+            && self_page.manifest.page_count == 1
+            && self_page.records.len() == 2,
+        "complete Genesis+Add roster was not returned"
+    );
+    ensure!(
+        self_page.manifest.records_digest.as_str()
+            == arkret_canonical::canonical_sha256(&self_page.records)?,
+        "governance roster digest differs from exact records"
+    );
+    let (_, governance_seed) = test_service_signing_key(&format!("{GROUP}-0"));
+    let governance_key = ed25519_dalek::SigningKey::from_bytes(&governance_seed);
+    let method = format!("{}#notary-key", governance.service_did());
+    for page in [&self_page, &peer_page] {
+        page.manifest.validate_for_request(&request)?;
+        arkret_signatures::keypackages::verify_keypackage_signing_input(
+            &governance_key.verifying_key().to_bytes(),
+            &method,
+            &page.manifest.signing_bytes()?,
+            &page.manifest.signature,
+        )?;
+    }
+    ensure!(
+        matches!(&self_page.records[0], MlsRosterRecord::Genesis { genesis_event_ref, .. } if genesis_event_ref == genesis_ref),
+        "roster Genesis does not match accepted group"
+    );
+    let MlsRosterRecord::Add {
+        commit_event_ref,
+        proposal_wire_b64u,
+        attestation,
+        ..
+    } = &self_page.records[1]
+    else {
+        bail!("roster lacks the accepted Add record");
+    };
+    ensure!(commit_event_ref == &commit_event.event_id && attestation.actor_id == recipient.actor);
+    let proposal = arkret_mls::verify_add_proposal_leaf(
+        &arkret_canonical::base64url::base64url_decode(proposal_wire_b64u.as_str())?,
+    )?;
+    ensure!(
+        proposal.actor_id == recipient.actor
+            && proposal.leaf_signature_key == attestation.leaf_signature_key_b64u
+    );
+
+    let mut wrong_caller = request.clone();
+    wrong_caller.caller_actor_id = arkret_wire::ActorId::service(governance.service_id().clone());
+    let (status, _) = post_json_at(
+        &recipient.client,
+        arkret_wire::PATH_SELF_MLS_ROSTER_AUTHORITY,
+        &wrong_caller,
+    )
+    .await?;
+    ensure!(
+        status == StatusCode::NOT_FOUND,
+        "wrong self Actor escaped roster gate: {status}"
+    );
+    let (status, _) = governance
+        .signed_peer_post(
+            governance,
+            arkret_wire::PATH_PEER_MLS_ROSTER_AUTHORITY,
+            &arkret_canonical::canonical_json_bytes(&request)?,
+            governance.service_id(),
+        )
+        .await?;
+    ensure!(
+        status == StatusCode::NOT_FOUND,
+        "wrong peer source escaped roster gate: {status}"
+    );
+    let mut invalid_cursor = request;
+    invalid_cursor.cursor = Some("!".to_owned());
+    let (status, body) = post_json_at(
+        &recipient.client,
+        arkret_wire::PATH_SELF_MLS_ROSTER_AUTHORITY,
+        &invalid_cursor,
+    )
+    .await?;
+    ensure!(
+        status == StatusCode::BAD_REQUEST && body.to_string().contains("cursor_invalid"),
+        "malformed cursor was not rejected as cursor_invalid: {status} {body}"
+    );
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]

@@ -245,6 +245,7 @@ arkret-hlc = { workspace = true }
 arkret-http-client = { workspace = true }
 arkret-identifiers = { workspace = true }
 arkret-identity = { workspace = true }
+arkret-mls = { workspace = true }
 arkret-models-collaboration = { workspace = true }
 arkret-models-crypto = { workspace = true }
 arkret-models-discovery = { workspace = true }
