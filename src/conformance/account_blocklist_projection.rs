@@ -1002,6 +1002,25 @@ pub(crate) async fn block_direct_peer(
     Ok(())
 }
 
+pub(crate) async fn unblock_direct_peer(
+    holder: &crate::scenarios::mls_lifecycle_live::Member,
+) -> Result<()> {
+    let row = read_row(&holder.client).await?;
+    let request = write_value_request(
+        &holder.client,
+        &holder.actor,
+        row.revision,
+        json!({"entries": []}),
+    )
+    .await?;
+    expect_json(holder.client.put(PATH).json(&request), StatusCode::OK).await?;
+    ensure!(
+        plaintext(&holder.actor, &read_row(&holder.client).await?)? == json!({"entries": []}),
+        "the holder's accepted unblock revision did not remove the private entry"
+    );
+    Ok(())
+}
+
 /// Observe a retained, accepted DM Message through the real Native receipt rail.
 /// The holder's private block revision is installed before `message_id` commits.
 pub(crate) async fn observe_dm_retained_receipt(
@@ -1098,6 +1117,12 @@ pub(crate) async fn observe_dm_retained_receipt(
         .as_deref()
             == Some(message_id.as_str()),
         "unblocked retained DM Message was not the exact receipt candidate"
+    );
+    ensure!(
+        inkson::conformance::retained_blocklist_message_projection(&holder_host.state_store())
+            .iter()
+            .any(|(id, _, hidden)| id.as_str() == message_id.as_str() && !*hidden),
+        "unblock did not restore the exact retained DM Message to the holder view"
     );
     holder_host
         .state_store_handle()

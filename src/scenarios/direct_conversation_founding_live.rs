@@ -440,23 +440,27 @@ async fn assert_no_peer_founding_writes(connect_url: &str, realm_id: &RealmId) -
 }
 
 pub async fn contact_round_founds_direct_conversation() -> Result<()> {
-    run(false, false, false, false).await
+    run(false, false, false, false, false).await
 }
 
 pub async fn cross_station_contact_round_founds_direct_conversation() -> Result<()> {
-    run(true, false, false, false).await
+    run(true, false, false, false, false).await
 }
 
 pub async fn cross_station_missing_contact_dependency_is_atomic() -> Result<()> {
-    run(true, true, false, false).await
+    run(true, true, false, false, false).await
 }
 
 pub async fn blocklist_dm_binding_snapshot_live() -> Result<()> {
-    run(false, false, true, false).await
+    run(false, false, true, false, false).await
 }
 
 pub async fn blocklist_dm_retained_receipt_live() -> Result<()> {
-    run(false, false, false, true).await
+    run(false, false, false, true, false).await
+}
+
+pub async fn blocklist_case5_dm_history_and_contact_terminal_live() -> Result<()> {
+    run(false, false, false, true, true).await
 }
 
 fn founding_unit_for(
@@ -910,6 +914,7 @@ async fn run(
     missing_contact_dependency: bool,
     observe_binding_snapshot: bool,
     observe_dm_receipt: bool,
+    observe_case5_contact_terminal: bool,
 ) -> Result<()> {
     let Some(governance_database) = database(GROUP)? else {
         return Ok(());
@@ -1648,6 +1653,80 @@ async fn run(
                 .context("DM paired transport omitted the blocked submission")?,
             &unblocked_dm_sender,
         )?;
+        if observe_case5_contact_terminal {
+            // A second private block is paired with a real Contact terminal
+            // command. Removing the private entry cannot recreate a Message
+            // that the durable Contact authority never accepted.
+            crate::conformance::account_blocklist_projection::block_direct_peer(&alice, &bob)
+                .await?;
+            let contact = alice
+                .client
+                .sdk()
+                .contacts_list()
+                .await?
+                .contacts
+                .into_iter()
+                .find(|row| row.peer.contact_actor_id() == bob.actor)
+                .context("case5 accepted Contact row is absent")?;
+            ensure!(contact.state == arkret::ContactState::Accepted);
+            let next = contact
+                .next_prepare_input
+                .context("case5 accepted Contact lacks its next signed head")?;
+            let tombstoned = crate::scenarios::api_contracts_auth::contact_command(
+                &alice.client,
+                "/_arkret/self/contacts/tombstone",
+                json!({
+                    "peer": contact.peer,
+                    "contact_round_id": next.contact_round_id,
+                    "version": next.version,
+                    "predecessor_event_ref": next.predecessor_event_ref,
+                    "block_peer": true,
+                }),
+                arkret_wire::event_kind_str::CONTACT_TOMBSTONE,
+            )
+            .await?;
+            ensure!(
+                matches!(
+                    &tombstoned,
+                    arkret::contact_operations::ContactOperationOutcome::Accepted {
+                        outcome: arkret::contact_operations::ContactAcceptedOutcome::Tombstone { .. }
+                    }
+                ),
+                "case5 Contact tombstone did not commit: {tombstoned:?}"
+            );
+            wait_contact_state(&alice, &bob.account, arkret::ContactState::Tombstoned).await?;
+            wait_contact_state(&bob, &alice.account, arkret::ContactState::Tombstoned).await?;
+            let refused = authored(
+                &bob,
+                arkret_wire::event_kind_str::MESSAGE_CREATE,
+                scope.clone(),
+                sealed_message(
+                    &mut bob_group,
+                    &scope,
+                    &strand_id,
+                    &add_ref,
+                    b"Contact terminal refused this request",
+                )?,
+                Vec::new(),
+                Cites::Participant(&bob_endorsement.event_id),
+            )?;
+            expect_rejected(&bob, &refused, PARTICIPANT_DENIED).await?;
+            crate::conformance::account_blocklist_projection::unblock_direct_peer(&alice).await?;
+            ensure!(
+                alice
+                    .client
+                    .sdk()
+                    .committed_event_get(&refused.event_id)
+                    .await
+                    .is_err(),
+                "unblock back-filled a Message refused by the Contact terminal"
+            );
+            wait_contact_state(&alice, &bob.account, arkret::ContactState::Tombstoned).await?;
+            eprintln!(
+                "blocklist case5 DM retained Event restored after unblock; Contact tombstone kept refused Event {} absent after the next private unblock",
+                refused.event_id
+            );
+        }
         return Ok(());
     }
     ensure!(

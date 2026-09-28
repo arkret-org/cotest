@@ -304,7 +304,7 @@ pub async fn contact_edges_are_rejected() -> Result<()> {
 
 /// Prepare one two-phase Contact command at `path`, sign its exact draft as
 /// `kind` and commit it; the committed outcome is returned.
-async fn contact_command(
+pub(crate) async fn contact_command(
     client: &crate::harness::TestActorClient,
     path: &str,
     prepare: serde_json::Value,
