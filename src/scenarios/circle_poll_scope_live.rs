@@ -25,6 +25,8 @@ struct DurableState {
     realm_commits: i64,
     poll_responses: i64,
     current_response: String,
+    current_selections: Value,
+    current_declared_heads: Option<Value>,
 }
 
 async fn durable_state(database_url: &str, realm: &str, poll_event: &str) -> Result<DurableState> {
@@ -43,11 +45,16 @@ async fn durable_state(database_url: &str, realm: &str, poll_event: &str) -> Res
             "SELECT count(*) FROM poll_response_inputs p JOIN canonical_events original ON original.pk=p.poll_event_pk WHERE original.envelope->>'event_id'=$1",
             &[&poll_event],
         )?.get(0);
-        let current_response: String = db.query_one(
-            "SELECT v.response_event_id FROM poll_state_current_votes v JOIN canonical_events original ON original.pk=v.poll_event_pk WHERE original.envelope->>'event_id'=$1",
+        let current = db.query_one(
+            "SELECT v.response_event_id, v.selections, v.declared_heads FROM poll_state_current_votes v JOIN canonical_events original ON original.pk=v.poll_event_pk WHERE original.envelope->>'event_id'=$1",
             &[&poll_event],
-        )?.get(0);
-        Ok(DurableState {realm_events, realm_commits, poll_responses, current_response})
+        )?;
+        Ok(DurableState {
+            realm_events, realm_commits, poll_responses,
+            current_response: current.get(0),
+            current_selections: current.get(1),
+            current_declared_heads: current.get(2),
+        })
     }).await?
 }
 
@@ -186,7 +193,8 @@ pub async fn run() -> Result<()> {
     let poll = circle_event(&alice, &realm, &circle_a, EventKind::MessageCreate,
         json!({"strand_id":strand_a_id,"track_name":"discussion","content":{
             "kind":"ak.content.poll","body":"Choose one","poll":{"kind":"disclosed","max_selections":1,
-                "answers":[{"id":"a","text":{"kind":"ak.content.text","body":"A"}}]}}}),
+                "answers":[{"id":"a","text":{"kind":"ak.content.text","body":"A"}},
+                    {"id":"b","text":{"kind":"ak.content.text","body":"B"}}]}}}),
     ).await?;
     submit_and_expect_commit(&alice, &account, DEVICE, &poll).await?;
     let poll_ref = MessageId::from_event_id(&poll.event_id);
@@ -203,8 +211,37 @@ pub async fn run() -> Result<()> {
     submit_and_expect_commit(&alice, &account, DEVICE, &vote).await?;
     let before = durable_state(&database.connect_url, &realm, poll.event_id.as_str()).await?;
     ensure!(
-        before.poll_responses == 1 && before.current_response == vote.event_id.to_string(),
+        before.poll_responses == 1
+            && before.current_response == vote.event_id.to_string()
+            && before.current_selections == json!(["a"]),
         "same-Circle vote did not become durable current: {before:?}"
+    );
+
+    let declared_heads = json!([{
+        "poll_event_ref":poll.event_id,
+        "response_event_ref":vote.event_id,
+    }]);
+    let replacement = circle_event(
+        &alice,
+        &realm,
+        &circle_a,
+        EventKind::MessageCreate,
+        json!({"strand_id":strand_a_id,"track_name":"discussion","content":{
+            "kind":"ak.content.poll.response","body":"Changed vote",
+            "poll_response":{"poll_ref":poll_ref,"selections":["b"]}},
+            "poll_response_heads":declared_heads}),
+    )
+    .await?;
+    submit_and_expect_commit(&alice, &account, DEVICE, &replacement).await?;
+    let revised = durable_state(&database.connect_url, &realm, poll.event_id.as_str()).await?;
+    ensure!(
+        revised.poll_responses == 2
+            && revised.current_response == replacement.event_id.to_string()
+            && revised.current_selections == json!(["b"])
+            && revised.current_declared_heads == Some(declared_heads)
+            && revised.realm_events == before.realm_events + 1
+            && revised.realm_commits == before.realm_commits + 1,
+        "same-Circle replacement did not persist both inputs and the new current vote: {before:?} -> {revised:?}"
     );
 
     let circle_b = circle_create(&alice, &realm, &actor, "Private poll B", "Poll B").await?;
@@ -254,5 +291,6 @@ pub async fn run() -> Result<()> {
         Ok(())
     })
     .await??;
+
     Ok(())
 }
