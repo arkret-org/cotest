@@ -185,6 +185,7 @@ impl SpawnedCoauth {
         let mut command = coauth_process_command(
             &self.server.bin_path,
             self.config.path(),
+            false,
             self.restart_with_test_endpoints,
             self.restart_chaos.as_ref(),
         );
@@ -248,7 +249,7 @@ impl PreparedCoauth {
         )?;
         run_coauth_migrations(&coauth_bin, bundle.file.path())?;
 
-        let mut command = coauth_process_command(&coauth_bin, bundle.file.path(), true, None);
+        let mut command = coauth_process_command(&coauth_bin, bundle.file.path(), true, true, None);
         if let Some(ca_path) = station_ca_path {
             command.env("SSL_CERT_FILE", ca_path);
         }
@@ -332,6 +333,15 @@ fn patch_station_config(
             "embedded_webvh_registration_bearer": embedded_webvh_registration_bearer,
             "trust_domain": JOINT_TRUST_DOMAIN
         })])?,
+    );
+    arkret.insert(
+        serde_yaml_ng::Value::String("identity_registry".to_owned()),
+        serde_yaml_ng::to_value(serde_json::json!({
+            "resolver": format!(
+                "{}/_arkret/root/identity/resolve",
+                endpoint.trim_end_matches('/')
+            )
+        }))?,
     );
     file.set_len(0)?;
     file.seek(SeekFrom::Start(0))?;
@@ -839,6 +849,7 @@ async fn spawn_coauth_with_db_options(
     let mut command = coauth_process_command(
         &coauth_bin,
         bundle.file.path(),
+        true,
         chaos.is_some(),
         chaos.as_ref(),
     );
@@ -910,6 +921,7 @@ fn coauth_binary_probe_spec() -> ExternalBinarySpec {
 fn coauth_process_command(
     bin_path: &Path,
     config_path: &Path,
+    first_provisioning: bool,
     test_endpoints: bool,
     chaos: Option<&CoauthChaosConfig>,
 ) -> Command {
@@ -919,6 +931,9 @@ fn coauth_process_command(
         .arg("--config")
         .arg(config_path)
         .arg("--no-sync");
+    if first_provisioning {
+        command.arg("--first-provisioning");
+    }
     if test_endpoints {
         command
             .env("COAUTH_ENABLE_TEST_ENDPOINTS", "1")
