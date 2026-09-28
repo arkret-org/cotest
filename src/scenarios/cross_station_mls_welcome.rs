@@ -25,28 +25,34 @@
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail, ensure};
-use arkret::{ArkretMlsGroup, MlsCommitPayload, MlsGovernanceBindingPayload};
+use arkret::{ArkretMlsGroup, MlsCommitPayload, MlsEndpointIdentity, MlsGovernanceBindingPayload};
 use arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest;
 use arkret_models_collaboration::device_messages::DeviceMessagesAckRequestBody;
+use arkret_models_collaboration::events_payloads::MlsGenesisCreatorLeafAuthority;
 use arkret_models_collaboration::governance::membership_invite::{
     InviteAcceptPayload, InvitePreviousState,
 };
 use arkret_models_collaboration::governance::realm_join_intake::RealmJoinIntent;
+use arkret_models_collaboration::mls_roster_authority::{
+    MlsAddAuthorityAttestation, MlsAttestAddOutcome, MlsAttestAddRequestBody, MlsAttestAddStatus,
+};
 use arkret_models_collaboration::sync_frames::demand_sync::RealmListMembership;
 use arkret_models_crypto::{
     KeyPackagesClaimOutcome, KeyPackagesClaimQueryRequestBody, KeyPackagesClaimRequestBody,
-    KeyPackagesUploadOutcome, PeerKeyPackagesClaimQueryOutcome,
+    KeyPackagesUploadOutcome, PeerKeyPackagesClaimOutcome, PeerKeyPackagesClaimQueryOutcome,
     PeerKeyPackagesClaimQueryRequestBody, PeerKeyPackagesClaimQueryState,
 };
 use arkret_wire::{
     AuthorityCommitStatus, AuthoritySubmitOutcome, EventKind, InviteId, MlsCommitSubmission,
-    MlsWelcomeDelivery, RealmId, ScopeRef,
+    MlsWelcomeDelivery, MlsWelcomeRecipientEndpoint, RealmId, ScopeRef,
 };
 use chrono::{Duration as ChronoDuration, Utc};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
-use crate::harness::{ArkretServer, TestServerGroup, expect_json, invite_create_payload};
+use crate::harness::{
+    ArkretServer, TestServerGroup, expect_json, invite_create_payload, test_service_signing_key,
+};
 use crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
 use crate::scenarios::_helpers::live_gate::skip_or_fail;
 use crate::scenarios::human_device_producer_live::{
@@ -70,6 +76,40 @@ const CAROL_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002603";
 const DAVE_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002607";
 const EVE_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002608";
 const CLAIM_QUERY: &str = "/_arkret/self/keys/keypackages/claims/query";
+const PEER_ATTEST_ADD: &str = "/_arkret/peer/mls/add-authority-attestations";
+
+fn genesis_creator_leaf_authority(
+    group: &mut ArkretMlsGroup,
+    creator: &Member,
+) -> Result<MlsGenesisCreatorLeafAuthority> {
+    group.install_local_creator_binding(
+        creator.actor.clone(),
+        Some(creator.authorize_event_id.clone()),
+    )?;
+    let bindings = group.verified_leaf_bindings()?;
+    let [leaf] = bindings.as_slice() else {
+        bail!("Genesis requires exactly one verified creator leaf");
+    };
+    ensure!(leaf.leaf_index == 0 && leaf.actor_id == creator.actor);
+    let endpoint = match &leaf.endpoint {
+        MlsEndpointIdentity::HumanDevice { device_id, .. } if device_id == &creator.device => {
+            MlsWelcomeRecipientEndpoint::Device {
+                device_id: device_id.clone(),
+            }
+        }
+        _ => bail!("Genesis creator leaf is not the accepted device endpoint"),
+    };
+    let authority = MlsGenesisCreatorLeafAuthority {
+        leaf_signature_key_b64u: leaf.signature_key.clone(),
+        endpoint,
+        authorization_event_ref: leaf
+            .device_authorize_event_id
+            .clone()
+            .context("Genesis creator leaf lacks DeviceAuthorize Event")?,
+    };
+    authority.validate()?;
+    Ok(authority)
+}
 
 /// `member` on Y accepts Alice's directed Invite through its own Station.
 pub(crate) async fn join_through_invite(
@@ -329,6 +369,14 @@ async fn forwarded_add(
 }
 
 pub async fn cross_station_mls_welcome_run() -> Result<()> {
+    cross_station_mls_welcome_original_run().await
+}
+
+pub async fn cross_station_mls_attest_add_run() -> Result<()> {
+    cross_station_mls_attest_add_direct_run().await
+}
+
+async fn cross_station_mls_welcome_original_run() -> Result<()> {
     let Some(governance_database) = database(GROUP)? else {
         return Ok(());
     };
@@ -411,6 +459,7 @@ pub async fn cross_station_mls_welcome_run() -> Result<()> {
     let mut bob_group = bob
         .mls_identity()?
         .create_group_with_governance_binding(&scope, &genesis_binding)?;
+    let creator_leaf_authority = genesis_creator_leaf_authority(&mut bob_group, &bob)?;
     let (group_info, tree) = bob_group.public_group_state_bytes()?;
     let group_info_ref = upload_public_blob(&bob.client, &realm_id, &group_info).await?;
     let tree_ref = upload_public_blob(&bob.client, &realm_id, &tree).await?;
@@ -424,6 +473,7 @@ pub async fn cross_station_mls_welcome_run() -> Result<()> {
                 "group_info_ref": group_info_ref,
                 "ratchet_tree_ref": tree_ref,
                 "governance_binding": genesis_binding,
+                "creator_leaf_authority": creator_leaf_authority,
                 "created_at": arkret_canonical::format_timestamp_canonical(Utc::now()),
             }))?,
         )
@@ -583,6 +633,253 @@ pub async fn cross_station_mls_welcome_run() -> Result<()> {
     .await?;
     drop(coauth);
     Ok(())
+}
+
+/// Governance X's founder adds a real member on Y. The requester's existing
+/// Realm root authority avoids the separate 2161 cross-Station Grant witness
+/// gap while every recipient claim, remote Welcome and peer proof stays live.
+async fn cross_station_mls_attest_add_direct_run() -> Result<()> {
+    let Some(governance_database) = database(GROUP)? else {
+        bail!("MLS attest_add live requires an isolated governance PostgreSQL database");
+    };
+    let Some(member_database) = database(GROUP)? else {
+        bail!("MLS attest_add live requires an isolated recipient PostgreSQL database");
+    };
+    ensure!(
+        governance_database.connect_url != member_database.connect_url,
+        "MLS attest_add must use two isolated PostgreSQL databases"
+    );
+    let coauth = MockCoauthIntrospectionServer::spawn_with_internal_secret(
+        HARNESS_INTERNAL_AUTHORITY_SECRET,
+    )
+    .await?;
+    let group = TestServerGroup::try_multi_external_with_node_envs(
+        GROUP,
+        &[
+            station_env(&governance_database.connect_url, &coauth),
+            station_env(&member_database.connect_url, &coauth),
+        ],
+    )
+    .await?
+    .context("MLS attest_add live requires a prebuilt real Soland binary")?;
+    let x = group.server(0);
+    let y = group.server(1);
+    let alice = Member::provision(x, &coauth, "xroster-alice", ALICE_DEVICE).await?;
+    let carol = Member::provision(y, &coauth, "xroster-carol", CAROL_DEVICE).await?;
+    create_human_actor_profile(&carol.client, "Carol Roster").await?;
+    let realm =
+        create_realm_with_join_rule(&alice.client, "Cross-Station MLS Roster", "invite", &[x, y])
+            .await?;
+    join_through_invite(
+        &alice,
+        x,
+        &carol,
+        &realm,
+        "ak:request:019b0000-0000-7000-8000-000000002609",
+        'd',
+    )
+    .await?;
+    let realm_id = RealmId::new(realm.clone())?;
+    let scope = ScopeRef::Realm {
+        realm_id: realm_id.clone(),
+    };
+    let group_id = scope.canonical_mls_group_id()?;
+    let genesis_binding = MlsGovernanceBindingPayload::new(scope.clone(), None, 0, 0, 0)?;
+    let mut alice_group = alice
+        .mls_identity()?
+        .create_group_with_governance_binding(&scope, &genesis_binding)?;
+    let creator_leaf_authority = genesis_creator_leaf_authority(&mut alice_group, &alice)?;
+    let (group_info, tree) = alice_group.public_group_state_bytes()?;
+    let group_info_ref = upload_public_blob(&alice.client, &realm_id, &group_info).await?;
+    let tree_ref = upload_public_blob(&alice.client, &realm_id, &tree).await?;
+    let genesis = alice
+        .client
+        .author_event(
+            &realm,
+            EventKind::MlsGenesis.as_str(),
+            canonical(json!({
+                "cipher_suite": ACTIVE_SUITE,
+                "group_info_ref": group_info_ref,
+                "ratchet_tree_ref": tree_ref,
+                "governance_binding": genesis_binding,
+                "creator_leaf_authority": creator_leaf_authority,
+                "created_at": arkret_canonical::format_timestamp_canonical(Utc::now()),
+            }))?,
+        )
+        .await?;
+    let genesis_commit =
+        submit_and_expect_commit(&alice.client, &alice.account, ALICE_DEVICE, &genesis).await?;
+    ensure_commit_signed_by(&genesis_commit, x)?;
+    let _ = publish_one(&carol).await?;
+    let (claim, ..) = claim_for(&alice, x, y, &carol, &realm_id, group_id.as_str(), 0x71).await?;
+    ensure!(claim.claims.len() == 1 && claim.claims[0].actor_id == carol.actor);
+    let binding =
+        MlsGovernanceBindingPayload::new(scope.clone(), Some(genesis.event_id.clone()), 0, 1, 0)?;
+    let add = alice_group.add_member_with_governance_binding(
+        &claimed_keypackage_record(&claim.claims[0], &carol)?,
+        &binding,
+    )?;
+    let payload = MlsCommitPayload::new(genesis.event_id.clone(), 0, &add.commit, binding)?;
+    let commit_event = alice
+        .client
+        .author_event(
+            &realm,
+            EventKind::MlsCommit.as_str(),
+            canonical(serde_json::to_value(&payload)?)?,
+        )
+        .await?;
+    let welcome = signed_welcome(&alice, &commit_event, &carol, &add.welcome)?;
+    let commit = submit_mls_commit(&alice, &commit_event, &welcome).await?;
+    ensure_commit_signed_by(&commit, x)?;
+    wait_for_welcome(&carol, &welcome).await?;
+    attest_add_http_round_trip(
+        x,
+        y,
+        &scope,
+        &genesis.event_id,
+        &commit_event,
+        &commit,
+        &welcome,
+        &claim,
+        &carol,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn attest_add_http_round_trip(
+    governance: &ArkretServer,
+    recipient_station: &ArkretServer,
+    scope: &ScopeRef,
+    genesis_ref: &arkret_wire::EventId,
+    commit_event: &arkret_wire::Event,
+    accepted_commit: &arkret_wire::RealmCommit,
+    welcome: &MlsWelcomeDelivery,
+    claim: &KeyPackagesClaimOutcome,
+    recipient: &Member,
+) -> Result<()> {
+    let source_outcome = PeerKeyPackagesClaimOutcome {
+        claim_request_id: claim.claim_request_id.clone(),
+        claims: claim.claims.clone(),
+        claim_receipt: claim.claim_receipt.clone(),
+    };
+    source_outcome
+        .validate_shape()
+        .map_err(|error| anyhow::anyhow!("historical claim outcome invalid: {error:?}"))?;
+    let did_method = format!("{}#notary-key", recipient_station.service_did());
+    let (_, station_seed) = test_service_signing_key(&format!("{GROUP}-1"));
+    let mut attestation = MlsAddAuthorityAttestation {
+        attestor_station_id: recipient_station.service_id().clone(),
+        realm_id: welcome.realm_id.clone(),
+        effective_scope: scope.clone(),
+        mls_group_id: scope.canonical_mls_group_id()?,
+        genesis_event_ref: genesis_ref.clone(),
+        commit_event_ref: commit_event.event_id.clone(),
+        commit_stream_position: accepted_commit.stream_position,
+        epoch: 1,
+        welcome_id: welcome.welcome_id.clone(),
+        claim_id: welcome.keypackage_claim_ref.clone(),
+        actor_id: recipient.actor.clone(),
+        endpoint: welcome.recipient_endpoint.clone(),
+        authorization_event_ref: recipient.authorize_event_id.clone(),
+        leaf_signature_key_b64u: arkret_wire::Base64UrlString::new(
+            arkret_canonical::base64url_encode(recipient.key.verifying_key().as_bytes()),
+        )
+        .map_err(anyhow::Error::msg)?,
+        claim_record_digest: arkret_wire::Hash::new(arkret_canonical::canonical_sha256(
+            &source_outcome.claims[0],
+        )?)?,
+        claim_receipt: source_outcome.claim_receipt.clone(),
+        attested_at: Utc::now(),
+        signature: source_outcome.claim_receipt.signature.clone(),
+    };
+    attestation.signature = arkret_signatures::keypackages::sign_keypackage_signing_input(
+        &station_seed,
+        &did_method,
+        &attestation.signing_bytes()?,
+    )?;
+    let request = MlsAttestAddRequestBody {
+        attestation,
+        claim_outcome: source_outcome,
+    };
+    request.validate_claim_binding()?;
+    // Both copies of the receipt stay byte identical, so the typed shape
+    // remains valid; the historical recipient-Station signature must fail.
+    let mut wrong_receipt = request.clone();
+    let bad_sig = arkret_wire::Base64UrlString::new(arkret_canonical::base64url_encode([7; 64]))
+        .map_err(anyhow::Error::msg)?;
+    wrong_receipt.attestation.claim_receipt.signature.sig = bad_sig.clone();
+    wrong_receipt.claim_outcome.claim_receipt.signature.sig = bad_sig;
+    wrong_receipt.attestation.signature =
+        arkret_signatures::keypackages::sign_keypackage_signing_input(
+            &station_seed,
+            &did_method,
+            &wrong_receipt.attestation.signing_bytes()?,
+        )?;
+    wrong_receipt.validate_claim_binding()?;
+    let (status, body) = post_attest_add(governance, recipient_station, &wrong_receipt).await?;
+    ensure!(
+        status != StatusCode::OK && String::from_utf8_lossy(&body).contains("signature_invalid"),
+        "bad historical claim signature escaped ingress: {status} {}",
+        String::from_utf8_lossy(&body)
+    );
+
+    // A fresh valid signature over a false accepted-cut selector passes the
+    // serving-layer signatures and is refused by governance's atomic PG gate.
+    let mut wrong_cut = request.clone();
+    wrong_cut.attestation.commit_stream_position += 1;
+    wrong_cut.attestation.signature =
+        arkret_signatures::keypackages::sign_keypackage_signing_input(
+            &station_seed,
+            &did_method,
+            &wrong_cut.attestation.signing_bytes()?,
+        )?;
+    wrong_cut.validate_claim_binding()?;
+    let (status, body) = post_attest_add(governance, recipient_station, &wrong_cut).await?;
+    ensure!(
+        status == StatusCode::CONFLICT,
+        "false accepted MLS cut was not refused: {status} {}",
+        String::from_utf8_lossy(&body)
+    );
+
+    let (status, body) = post_attest_add(governance, recipient_station, &request).await?;
+    ensure!(
+        status == StatusCode::OK,
+        "signed MLS Add attestation was not installed: {status} {}",
+        String::from_utf8_lossy(&body)
+    );
+    let installed: MlsAttestAddOutcome = serde_json::from_slice(&body)?;
+    ensure!(
+        matches!(
+            installed.status,
+            MlsAttestAddStatus::Installed | MlsAttestAddStatus::Duplicate
+        ),
+        "attest_add returned no installed authority"
+    );
+    let (status, body) = post_attest_add(governance, recipient_station, &request).await?;
+    ensure!(status == StatusCode::OK, "exact replay failed: {status}");
+    let replay: MlsAttestAddOutcome = serde_json::from_slice(&body)?;
+    ensure!(
+        replay.status == MlsAttestAddStatus::Duplicate
+            && replay.attestation_digest == installed.attestation_digest,
+        "exact replay changed the signed MLS Add authority outcome"
+    );
+    Ok(())
+}
+
+async fn post_attest_add(
+    governance: &ArkretServer,
+    recipient_station: &ArkretServer,
+    body: &MlsAttestAddRequestBody,
+) -> Result<(StatusCode, Vec<u8>)> {
+    governance
+        .signed_peer_post(
+            recipient_station,
+            PEER_ATTEST_ADD,
+            &arkret_canonical::canonical_json_bytes(body)?,
+            governance.service_id(),
+        )
+        .await
 }
 
 const PEER_CLAIM: &str = "/_arkret/peer/keys/keypackages/claim";
