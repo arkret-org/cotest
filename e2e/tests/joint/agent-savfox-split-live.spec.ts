@@ -238,7 +238,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           await inkson.getByTestId("agent-runtime-approval-code").innerText()
         ).trim();
         expect(inksonCode).toBe(firstPairing.pairingCode);
-        const groupedPairingCode = `${inksonCode.slice(0, 4)} ${inksonCode.slice(4)}`;
+        const groupedPairingCode = inksonCode.match(/.{1,4}/g)?.join(" ") ?? "";
         await expect(
           savfox.getByText(groupedPairingCode, { exact: true }),
         ).toBeVisible();
