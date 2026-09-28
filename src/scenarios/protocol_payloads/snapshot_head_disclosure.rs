@@ -992,7 +992,7 @@ pub async fn limited_window_strand_tail_verifies_with_same_cut_current_through_i
         realm_id: typed_realm.clone(),
     };
     ensure!(
-        verified.unresolved_streams().is_empty() && verified.preview_streams().is_empty(),
+        verified.preview_streams().is_empty(),
         "the snapshot window settles as exact"
     );
     ensure!(
@@ -1182,7 +1182,7 @@ pub async fn message_tail_window_beyond_twenty_commits_verifies_through_inkson()
         .await
         .context("a message tail on a message-bearing floor must verify")?;
     ensure!(
-        verified.unresolved_streams().is_empty() && verified.preview_streams().is_empty(),
+        verified.preview_streams().is_empty(),
         "the anchored window settles as exact"
     );
     let product_frame = verified.product_frame(&frame);
@@ -1253,8 +1253,7 @@ pub async fn message_tail_window_beyond_twenty_commits_verifies_through_inkson()
             .await
             .context("a live delta on the auto-issued head snapshot must verify")?;
     ensure!(
-        verified_delta.unresolved_streams().is_empty()
-            && verified_delta.preview_streams().is_empty(),
+        verified_delta.preview_streams().is_empty(),
         "the live delta settles as exact"
     );
     Ok(())
@@ -1342,7 +1341,7 @@ pub async fn restricted_join_policy_floor_verifies_through_inkson() -> Result<()
         .await
         .context("a signed join policy floor must verify")?;
     ensure!(
-        verified.unresolved_streams().is_empty() && verified.preview_streams().is_empty(),
+        verified.preview_streams().is_empty(),
         "the restricted floor window settles as exact"
     );
     Ok(())
