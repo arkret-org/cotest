@@ -986,6 +986,33 @@ impl ArkretServer {
         destination: &DidCoreId,
         idempotency_key: Option<&str>,
     ) -> Result<(StatusCode, Vec<u8>)> {
+        let request = self.signed_peer_post_request_with_idempotency_key(
+            source,
+            path,
+            body,
+            destination,
+            idempotency_key,
+        )?;
+        let response = self
+            .http_client
+            .execute(request)
+            .await
+            .with_context(|| format!("signed peer POST {path}"))?;
+        let status = response.status();
+        Ok((status, response.bytes().await?.to_vec()))
+    }
+
+    /// Construct the exact signed peer request without sending it. A live
+    /// replay test can clone and resend the identical RFC 9421 transcript
+    /// after the source service's accepted DID key state changes.
+    pub fn signed_peer_post_request_with_idempotency_key(
+        &self,
+        source: &ArkretServer,
+        path: &str,
+        body: &[u8],
+        destination: &DidCoreId,
+        idempotency_key: Option<&str>,
+    ) -> Result<reqwest::Request> {
         use arkret_signatures::http_signature::{
             Component, ContentDigest, ContentDigestAlgorithm, SignedRequestParts,
             canonical_message, format_signature_input_component_list, parse_signature_input,
@@ -1060,14 +1087,11 @@ impl ArkretServer {
         for (name, value) in headers {
             request = request.header(name, value);
         }
-        let response = request
+        request
             .header("signature-input", signature_input)
             .header("signature", format!("sig1=:{signature}:"))
-            .send()
-            .await
-            .with_context(|| format!("signed peer POST {path}"))?;
-        let status = response.status();
-        Ok((status, response.bytes().await?.to_vec()))
+            .build()
+            .with_context(|| format!("build signed peer POST {path}"))
     }
 
     /// Build a request for Soland's deployment-local account projection fixture.
