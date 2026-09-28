@@ -124,14 +124,18 @@ impl Member {
 }
 
 pub async fn run_same_station_mls_keypackage_lifecycle_live() -> Result<()> {
-    run_with_blocklist_observer(false).await
+    run_with_blocklist_observer(false, false).await
 }
 
 pub async fn run_blocklist_call_invite_live() -> Result<()> {
-    run_with_blocklist_observer(true).await
+    run_with_blocklist_observer(true, false).await
 }
 
-async fn run_with_blocklist_observer(observe_blocklist: bool) -> Result<()> {
+pub async fn run_blocklist_automatic_receipt_live() -> Result<()> {
+    run_with_blocklist_observer(true, true).await
+}
+
+async fn run_with_blocklist_observer(observe_blocklist: bool, observe_receipt: bool) -> Result<()> {
     let Some(database) = database(GROUP)? else {
         if observe_blocklist {
             bail!("blocklist Call evidence requires an isolated PostgreSQL database");
@@ -605,8 +609,9 @@ async fn run_with_blocklist_observer(observe_blocklist: bool) -> Result<()> {
             station,
             &realm_id,
             &commit_event.event_id,
-            &alice_group,
+            &mut alice_group,
             &bob_group,
+            observe_receipt,
         )
         .await?;
     }

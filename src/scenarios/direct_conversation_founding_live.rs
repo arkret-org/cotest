@@ -440,15 +440,19 @@ async fn assert_no_peer_founding_writes(connect_url: &str, realm_id: &RealmId) -
 }
 
 pub async fn contact_round_founds_direct_conversation() -> Result<()> {
-    run(false, false).await
+    run(false, false, false).await
 }
 
 pub async fn cross_station_contact_round_founds_direct_conversation() -> Result<()> {
-    run(true, false).await
+    run(true, false, false).await
 }
 
 pub async fn cross_station_missing_contact_dependency_is_atomic() -> Result<()> {
-    run(true, true).await
+    run(true, true, false).await
+}
+
+pub async fn blocklist_dm_binding_snapshot_live() -> Result<()> {
+    run(false, false, true).await
 }
 
 fn founding_unit_for(
@@ -897,7 +901,11 @@ async fn accepted_round_id(holder: &Member, peer: &AccountId) -> Result<arkret_w
         .contact_round_id)
 }
 
-async fn run(cross_station: bool, missing_contact_dependency: bool) -> Result<()> {
+async fn run(
+    cross_station: bool,
+    missing_contact_dependency: bool,
+    observe_binding_snapshot: bool,
+) -> Result<()> {
     let Some(governance_database) = database(GROUP)? else {
         return Ok(());
     };
@@ -1668,6 +1676,62 @@ async fn run(cross_station: bool, missing_contact_dependency: bool) -> Result<()
         Cites::Nothing,
     )?;
     expect_rejected(&alice, &destroy, "direct_conversation_terminal_forbidden").await?;
+    if observe_binding_snapshot {
+        for participant in [&alice, &bob] {
+            let snapshot = crate::scenarios::strand_watch_live::signed_snapshot(
+                &participant.client,
+                &realm_id,
+            )
+            .await?;
+            let binding = snapshot
+                .current_state_entries
+                .iter()
+                .find_map(|entry| match entry {
+                    arkret_wire::TypedCurrentResult::Value {
+                        selector:
+                            arkret_wire::CurrentSelector::DirectConversationBinding {
+                                pair_key: subject,
+                            },
+                        value,
+                        source_stream_ref,
+                        ..
+                    } if subject == &pair_key => Some((value, source_stream_ref)),
+                    _ => None,
+                })
+                .context("signed participant Snapshot omitted its exact DM binding current")?;
+            ensure!(
+                binding.1
+                    == &arkret_wire::CommitStreamRef::Realm {
+                        realm_id: realm_id.clone(),
+                    },
+                "DM binding current has another source stream"
+            );
+            let value: arkret_models_collaboration::events_payloads::direct_conversation::DirectConversationBindingCurrentValue =
+                serde_json::from_value(binding.0.clone())?;
+            ensure!(
+                value.endorsements.len() == 2
+                    && value.endorsed_by(&alice_endorsement.event_id)
+                    && value.endorsed_by(&bob_endorsement.event_id),
+                "signed participant Snapshot did not contain both accepted binding endorsements"
+            );
+        }
+        let outsider = Member::provision(
+            server,
+            &coauth,
+            "dc-binding-outsider",
+            "ak:device:01904100-0000-7000-8000-000000002405",
+        )
+        .await?;
+        ensure!(
+            outsider
+                .client
+                .sdk()
+                .realm_state_snapshot_head(&realm_id)
+                .await
+                .is_err(),
+            "a nonparticipant obtained the Direct Conversation Snapshot"
+        );
+    }
     drop(coauth);
     Ok(())
 }

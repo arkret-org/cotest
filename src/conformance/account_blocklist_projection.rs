@@ -1321,7 +1321,6 @@ async fn native_signal_endpoint(
         realm.clone(),
     )
     .await?;
-    host.catch_up_selected_realm_until_complete(realm).await?;
     let record = group.export_state_record()?;
     let accepted = member
         .client
@@ -1344,7 +1343,19 @@ async fn native_signal_endpoint(
     host.state_store_handle()
         .write(|store| store.save_mls_checkpoint_for_scope(&scope, checkpoint))
         .map_err(anyhow::Error::msg)?;
+    host.catch_up_selected_realm_until_complete(realm)
+        .await
+        .context("Native selected Realm catch-up after accepted MLS checkpoint")?;
     ingest_retained_realm(&member.client, &host, realm).await?;
+    let installed_ref = host
+        .state_store()
+        .mls_group_state_ref_for_scope(&scope, record.group_id.as_str(), record.epoch)
+        .map_err(anyhow::Error::msg)
+        .context("Native checkpoint lost its accepted MLS group-state reference after ingest")?;
+    ensure!(
+        installed_ref == *accepted_group,
+        "Native checkpoint installed another accepted MLS group-state Event"
+    );
     Ok(host)
 }
 
@@ -1438,14 +1449,60 @@ async fn next_admitted_signal(
 
 /// Actual ordinary Realm MLS is necessary: the DM participant profile has no
 /// CallCreate action and may not gain one for a test.
+async fn authored_encrypted_blocklist_message(
+    sender: &crate::scenarios::mls_lifecycle_live::Member,
+    realm: &arkret_wire::RealmId,
+    strand: &str,
+    accepted_group: &arkret_wire::EventId,
+    sender_group: &mut arkret::ArkretMlsGroup,
+) -> Result<arkret_wire::Event> {
+    let body = arkret_canonical::canonical_json_bytes(&arkret::ContentBlock::text(
+        "retained MLS message",
+    ))?;
+    let header = arkret::EventContentPreEncryptionHeader::reconstruct(
+        "1.0",
+        "application/vnd.arkret.message+json",
+        arkret::EncryptedPayloadScheme::MlsRfc9420,
+        arkret_wire::ScopeRef::Realm {
+            realm_id: realm.clone(),
+        },
+        arkret_wire::EventKind::MessageCreate.as_str(),
+        sender_group.epoch(),
+        accepted_group.clone(),
+        sender_group.local_content_sender_domain()?,
+        arkret::EventContentRoutingContext::None,
+    )?;
+    let sealed = arkret::MessageCrypto::encrypt(
+        sender_group,
+        crate::scenarios::mls_lifecycle_live::fresh_uuid_v7(),
+        header,
+        &body,
+    )?;
+    let payload: arkret_models_collaboration::events_payloads::message::MessageCreatePayload =
+        serde_json::from_value(json!({
+            "strand_id": strand,
+            "track_name": "discussion",
+            "encrypted_content": sealed.payload.to_envelope()?,
+        }))?;
+    sender
+        .client
+        .author_event(
+            realm.as_str(),
+            arkret_wire::EventKind::MessageCreate.as_str(),
+            serde_json::to_value(payload)?,
+        )
+        .await
+}
+
 pub(crate) async fn observe_ordinary_call_invite(
     sender: &crate::scenarios::mls_lifecycle_live::Member,
     holder: &crate::scenarios::mls_lifecycle_live::Member,
     station: &ArkretServer,
     realm: &arkret_wire::RealmId,
     accepted_group: &arkret_wire::EventId,
-    sender_group: &arkret::ArkretMlsGroup,
+    sender_group: &mut arkret::ArkretMlsGroup,
     holder_group: &arkret::ArkretMlsGroup,
+    observe_receipt: bool,
 ) -> Result<()> {
     use arkret_models_collaboration::events_payloads::call::{
         CallCreatePayload, CallLifecycleState,
@@ -1454,39 +1511,67 @@ pub(crate) async fn observe_ordinary_call_invite(
     use crate::scenarios::human_device_producer_live::{
         grant_realm_actions, submit_and_expect_commit,
     };
+    let actions = if observe_receipt {
+        vec!["ak.message.create"]
+    } else {
+        vec!["ak.call.join", "ak.call.signal.send"]
+    };
     let grant = grant_realm_actions(
         &sender.client,
         station,
         realm.as_str(),
         &sender.account,
-        &["ak.call.join", "ak.call.signal.send"],
+        &actions,
     )
     .await?;
-    let payload = CallCreatePayload {
-        initial_state: CallLifecycleState::Ringing,
-    };
-    payload.validate().map_err(anyhow::Error::msg)?;
-    let create = sender
-        .client
-        .author_event(
-            realm.as_str(),
-            arkret_wire::EventKind::CallCreate.as_str(),
-            serde_json::to_value(payload)?,
+    let (call_id, call_commit) = if observe_receipt {
+        (None, None)
+    } else {
+        let payload = CallCreatePayload {
+            initial_state: CallLifecycleState::Ringing,
+        };
+        payload.validate().map_err(anyhow::Error::msg)?;
+        let create = sender
+            .client
+            .author_event(
+                realm.as_str(),
+                arkret_wire::EventKind::CallCreate.as_str(),
+                serde_json::to_value(payload)?,
+            )
+            .await?;
+        let commit = submit_and_expect_commit(
+            &sender.client,
+            &sender.account,
+            sender.device.as_str(),
+            &create,
         )
         .await?;
-    let commit = submit_and_expect_commit(
-        &sender.client,
-        &sender.account,
-        sender.device.as_str(),
-        &create,
-    )
-    .await?;
-    ensure!(
-        commit.event_ref == create.event_id && grant.stream_position < commit.stream_position,
-        "Call create was not accepted after its actual grant"
-    );
-    let call_id = arkret_wire::CallId::from_event_id(&create.event_id);
+        ensure!(
+            commit.event_ref == create.event_id && grant.stream_position < commit.stream_position,
+            "Call create was not accepted after its actual grant"
+        );
+        (
+            Some(arkret_wire::CallId::from_event_id(&create.event_id)),
+            Some(commit),
+        )
+    };
     block_direct_peer(holder, sender).await?;
+    let receipt_message = if observe_receipt {
+        let strand = sender.client.default_strand_id(realm.as_str())?;
+        let message = authored_encrypted_blocklist_message(
+            sender,
+            realm,
+            &strand,
+            accepted_group,
+            sender_group,
+        )
+        .await?;
+        let blocked_sender =
+            observed_authored_shared_message(&sender.client, message.clone()).await?;
+        Some((strand, message.event_id, blocked_sender))
+    } else {
+        None
+    };
     let directory = tempfile::tempdir()?;
     let sender_host = native_signal_endpoint(
         sender,
@@ -1495,7 +1580,8 @@ pub(crate) async fn observe_ordinary_call_invite(
         sender_group,
         &directory.path().join("call-sender.json"),
     )
-    .await?;
+    .await
+    .context("sender Native Signal endpoint initialization")?;
     let holder_host = native_signal_endpoint(
         holder,
         realm,
@@ -1503,7 +1589,8 @@ pub(crate) async fn observe_ordinary_call_invite(
         holder_group,
         &directory.path().join("call-recipient.json"),
     )
-    .await?;
+    .await
+    .context("holder Native Signal endpoint initialization")?;
     let blocked_revision = read_row(&holder.client).await?.revision;
     catch_up_blocklist_revision(&holder_host, blocked_revision).await?;
     ensure!(
@@ -1513,11 +1600,38 @@ pub(crate) async fn observe_ordinary_call_invite(
         ),
         "accepted private block revision did not block the exact Call sender"
     );
+    if let Some((strand, message_id, _)) = &receipt_message {
+        ensure!(
+            inkson::conformance::retained_blocklist_message_projection(&holder_host.state_store())
+                .iter()
+                .any(|(id, _, hidden)| id.as_str() == message_id.as_str() && *hidden),
+            "the blocked encrypted Message was not retained before receipt suppression"
+        );
+        ensure!(
+            inkson::conformance::retained_blocklist_receipt_candidate(
+                &holder_host.state_store(),
+                realm.as_str(),
+                &strand,
+            )
+            .is_none(),
+            "blocked encrypted Message became an automatic receipt candidate"
+        );
+        ensure!(
+            inkson::conformance::send_native_automatic_read_receipt(
+                &holder_host,
+                holder.client.sdk(),
+                realm.as_str(),
+                &strand,
+                "",
+            )
+            .await?
+            .is_none(),
+            "blocked encrypted Message emitted an automatic read receipt"
+        );
+    }
     let scope = arkret_wire::ScopeRef::Realm {
         realm_id: realm.clone(),
     };
-    let material =
-        inkson::signal::key_material_for_scope(&sender_host.state_store(), realm.as_str(), None)?;
     let mut receiver = garth::signal::SignalReceiver::new();
     let mut observed = Vec::new();
     for (seq, blocked) in [(1, true), (2, false)] {
@@ -1533,14 +1647,116 @@ pub(crate) async fn observe_ordinary_call_invite(
             expect_json(holder.client.put(PATH).json(&request), StatusCode::OK).await?;
             holder_host
                 .catch_up_selected_realm_until_complete(realm)
-                .await?;
+                .await
+                .context("selected Realm catch-up after private unblock")?;
             catch_up_blocklist_revision(&holder_host, read_row(&holder.client).await?.revision)
                 .await?;
             ensure!(
                 holder_host.state_store().client_blocklist().is_empty(),
                 "actual unblock delta was not consumed"
             );
+            if let Some((strand, message_id, blocked_sender)) = &receipt_message {
+                ensure!(
+                    inkson::conformance::retained_blocklist_receipt_candidate(
+                        &holder_host.state_store(),
+                        realm.as_str(),
+                        &strand,
+                    )
+                    .as_deref()
+                        == Some(message_id.as_str()),
+                    "unblock did not restore the retained encrypted Message receipt candidate"
+                );
+                holder_host
+                    .state_store_handle()
+                    .write(|store| store.set_read_receipt_default_send(true));
+                let current_store = holder_host.state_store();
+                let restored = inkson::signal::restore_signal_mls_session(
+                    &current_store,
+                    inkson::secure_key_store::default_secure_key_store("inkson").as_ref(),
+                    &scope,
+                    &holder.account,
+                    &holder.device,
+                    holder_group.epoch(),
+                )
+                .context("restore holder MLS session before automatic receipt")?;
+                let restored_ref = current_store
+                    .mls_group_state_ref_for_scope(
+                        &scope,
+                        &restored.group.group_id(),
+                        restored.group.epoch(),
+                    )
+                    .map_err(anyhow::Error::msg)
+                    .with_context(|| {
+                        format!(
+                            "restored holder MLS group lacks exact accepted Event reference: restored_group={}, restored_epoch={}, checkpoint_group={}, checkpoint_epoch={}",
+                            restored.group.group_id(),
+                            restored.group.epoch(),
+                            restored.snapshot.group_id,
+                            restored.snapshot.epoch,
+                        )
+                    })?;
+                ensure!(
+                    restored_ref == *accepted_group,
+                    "restored holder MLS group refers to another accepted Event"
+                );
+                let mut receipt_stream = sender.client.sdk().signal_subscribe_frames().await?;
+                let _receipt_signer = ActiveEndpointSigner::install(holder)?;
+                let receipt = inkson::conformance::send_native_automatic_read_receipt(
+                    &holder_host,
+                    holder.client.sdk(),
+                    realm.as_str(),
+                    &strand,
+                    "",
+                )
+                .await
+                .context("unblocked Native automatic ReadReceipt submission")?
+                .context("visible retained Message did not emit an automatic receipt")?;
+                ensure!(receipt.accepted && receipt.realm_id == *realm);
+                let mut receipt_receiver = garth::signal::SignalReceiver::new();
+                let received = next_admitted_signal(
+                    &mut receipt_stream,
+                    &sender_host,
+                    sender,
+                    &mut receipt_receiver,
+                )
+                .await?;
+                let garth::signal::SignalReceiveOutcome::Accepted { plaintext, .. } = received
+                else {
+                    bail!("automatic receipt was not admitted by the real sender: {received:?}");
+                };
+                let arkret::SignalPlaintext::ReadReceipt(read) = plaintext else {
+                    bail!("another Signal profile reached the automatic receipt subscriber");
+                };
+                ensure!(
+                    read.event_id == *message_id && read.actor_id == holder.actor,
+                    "automatic receipt did not bind the visible retained Message and exact holder"
+                );
+                let unblocked_message = authored_encrypted_blocklist_message(
+                    sender,
+                    realm,
+                    strand,
+                    accepted_group,
+                    sender_group,
+                )
+                .await?;
+                let unblocked_sender =
+                    observed_authored_shared_message(&sender.client, unblocked_message).await?;
+                compare_shared_sender_observations(blocked_sender, &unblocked_sender)?;
+                eprintln!(
+                    "blocklist paired encrypted Message submissions and automatic receipt: blocked=None, unblocked=accepted, sender MLS receiver admitted exact event {}",
+                    message_id,
+                );
+            }
         }
+        if observe_receipt {
+            if blocked {
+                continue;
+            }
+            return Ok(());
+        }
+        let call_id = call_id
+            .clone()
+            .context("CallInvite fixture lacks accepted CallCreate")?;
         let payload = inkson::signal::SignalPayload::CallSignal {
             call_id: call_id.clone(),
             seq,
@@ -1559,9 +1775,18 @@ pub(crate) async fn observe_ordinary_call_invite(
         };
         let mut stream = holder.client.sdk().signal_subscribe_frames().await?;
         let _signer = ActiveEndpointSigner::install(sender)?;
+        let material = inkson::signal::key_material_for_scope(
+            &sender_host.state_store(),
+            realm.as_str(),
+            None,
+        )
+        .context("sender Native key material after accepted MLS checkpoint")?;
+        let started = std::time::Instant::now();
         let outcome = sender_host
             .send_scope_signal(scope.clone(), &material, &payload)
-            .await?;
+            .await
+            .context("CallInvite send after holder blocklist projection")?;
+        let elapsed = started.elapsed();
         ensure!(
             outcome.accepted && outcome.realm_id == *realm,
             "real CallInvite was not accepted: {outcome:?}"
@@ -1596,13 +1821,25 @@ pub(crate) async fn observe_ordinary_call_invite(
                 &sender.actor,
             )
         );
-        observed.push(outcome);
+        observed.push((outcome, elapsed));
     }
     ensure!(
-        observed[0].accepted == observed[1].accepted
-            && observed[0].realm_id == observed[1].realm_id
-            && observed[0].dispatched_recipient_count == observed[1].dispatched_recipient_count,
+        observed[0].0.accepted == observed[1].0.accepted
+            && observed[0].0.realm_id == observed[1].0.realm_id
+            && observed[0].0.dispatched_recipient_count == observed[1].0.dispatched_recipient_count
+            && json_shape(&serde_json::to_value(&observed[0].0)?)
+                == json_shape(&serde_json::to_value(&observed[1].0)?),
         "private block leaked through typed public response eligibility"
+    );
+    eprintln!(
+        "blocklist CallInvite paired client submission: scope={}, sender={}, blocked_invocation_to_response_ns={}, unblocked_invocation_to_response_ns={}, public_response_shape={}, accepted={}, recipient_count={:?}; durations include local encryption and are not isolated transport timing",
+        realm,
+        sender.actor,
+        observed[0].1.as_nanos(),
+        observed[1].1.as_nanos(),
+        json_shape(&serde_json::to_value(&observed[0].0)?),
+        observed[0].0.accepted,
+        observed[0].0.dispatched_recipient_count,
     );
     // A held historical joined cut cannot authorize a sender that has left
     // before the next source ingress. Bind the fresh encrypted attempt to the
@@ -1623,6 +1860,8 @@ pub(crate) async fn observe_ordinary_call_invite(
         &leave,
     )
     .await?;
+    let call_id = call_id.context("held-cut fixture lacks accepted CallCreate")?;
+    let commit = call_commit.context("held-cut fixture lacks accepted CallCreate Commit")?;
     let material =
         inkson::signal::key_material_for_scope(&holder_host.state_store(), realm.as_str(), None)?;
     let payload = inkson::signal::SignalPayload::CallSignal {
@@ -1665,7 +1904,7 @@ pub(crate) async fn observe_ordinary_call_invite(
         "held joined cut was not refused by the registered current membership gate: {denied:#}"
     );
     eprintln!(
-        "blocklist actual accepted ordinary CallCreate + sealed CallInvite: real producer/MLS/sequence receiver, private product 0->1, unchanged public accepted/recipient count; whole case6 remains missing authorized holder-private carrier"
+        "blocklist actual accepted ordinary CallCreate + sealed CallInvite: real producer/MLS/sequence receiver, private product 0->1, unchanged public response shape; full case 6 still requires Contact and first DM production paths"
     );
     Ok(())
 }
