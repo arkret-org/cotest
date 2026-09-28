@@ -440,19 +440,23 @@ async fn assert_no_peer_founding_writes(connect_url: &str, realm_id: &RealmId) -
 }
 
 pub async fn contact_round_founds_direct_conversation() -> Result<()> {
-    run(false, false, false).await
+    run(false, false, false, false).await
 }
 
 pub async fn cross_station_contact_round_founds_direct_conversation() -> Result<()> {
-    run(true, false, false).await
+    run(true, false, false, false).await
 }
 
 pub async fn cross_station_missing_contact_dependency_is_atomic() -> Result<()> {
-    run(true, true, false).await
+    run(true, true, false, false).await
 }
 
 pub async fn blocklist_dm_binding_snapshot_live() -> Result<()> {
-    run(false, false, true).await
+    run(false, false, true, false).await
+}
+
+pub async fn blocklist_dm_retained_receipt_live() -> Result<()> {
+    run(false, false, false, true).await
 }
 
 fn founding_unit_for(
@@ -905,6 +909,7 @@ async fn run(
     cross_station: bool,
     missing_contact_dependency: bool,
     observe_binding_snapshot: bool,
+    observe_dm_receipt: bool,
 ) -> Result<()> {
     let Some(governance_database) = database(GROUP)? else {
         return Ok(());
@@ -1401,6 +1406,18 @@ async fn run(
     let mut bob_group =
         ArkretMlsGroup::join_from_verified_welcome_delivery(bob_identity, &welcome, &accepted_add)?;
     ensure!(bob_group.epoch() == 1, "Bob did not join at epoch 1");
+    if observe_dm_receipt {
+        crate::scenarios::message_mls_cross_station_live::install_bindings(
+            &mut alice_group,
+            &[&alice, &bob],
+        )
+        .await?;
+        crate::scenarios::message_mls_cross_station_live::install_bindings(
+            &mut bob_group,
+            &[&alice, &bob],
+        )
+        .await?;
+    }
     bob.client
         .post("/_arkret/self/device_messages/ack")
         .json(&DeviceMessagesAckRequestBody { ack_token })
@@ -1564,6 +1581,9 @@ async fn run(
     );
 
     // Found: both participants send under the binding and read each other.
+    if observe_dm_receipt {
+        crate::conformance::account_blocklist_projection::block_direct_peer(&alice, &bob).await?;
+    }
     let bob_plaintext = b"hello, Alice".to_vec();
     let bob_message = authored(
         &bob,
@@ -1574,6 +1594,21 @@ async fn run(
         Cites::Participant(&bob_endorsement.event_id),
     )?;
     expect_committed(&submit(&bob, &bob_message).await?, &bob_message)?;
+    if observe_dm_receipt {
+        crate::conformance::account_blocklist_projection::observe_dm_retained_receipt(
+            &bob,
+            &alice,
+            &realm_id,
+            strand_id.as_str(),
+            &add_ref,
+            &bob_group,
+            &alice_group,
+            &bob_message.event_id,
+            &provisional.event_id,
+        )
+        .await?;
+        return Ok(());
+    }
     ensure!(
         open_committed_message(&alice, &mut alice_group, &scope, &bob_message.event_id).await?
             == bob_plaintext,

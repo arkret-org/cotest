@@ -91,3 +91,22 @@ fn blocklist_dm_binding_signed_snapshot_is_participant_only() -> Result<()> {
         .join()
         .map_err(|_| anyhow::anyhow!("DM binding Snapshot live worker panicked"))?
 }
+
+#[test]
+fn blocklist_dm_retained_message_automatic_receipt_production_slice() -> Result<()> {
+    const STACK_SIZE: usize = 32 * 1024 * 1024;
+    std::thread::Builder::new()
+        .stack_size(STACK_SIZE)
+        .spawn(|| -> Result<()> {
+            tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(2)
+                .thread_stack_size(STACK_SIZE)
+                .enable_all()
+                .build()?
+                .block_on(
+                    cotest::scenarios::direct_conversation_founding_live::blocklist_dm_retained_receipt_live(),
+                )
+        })?
+        .join()
+        .map_err(|_| anyhow::anyhow!("DM retained receipt live worker panicked"))?
+}

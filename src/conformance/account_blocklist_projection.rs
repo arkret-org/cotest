@@ -924,7 +924,7 @@ fn blocklist(handle: &str) -> Result<Value> {
     Ok(serde_json::to_value(typed)?)
 }
 
-async fn block_direct_peer(
+pub(crate) async fn block_direct_peer(
     holder: &crate::scenarios::mls_lifecycle_live::Member,
     peer: &crate::scenarios::mls_lifecycle_live::Member,
 ) -> Result<()> {
@@ -965,6 +965,139 @@ async fn block_direct_peer(
         },
     )
     .await?;
+    Ok(())
+}
+
+/// Observe a retained, accepted DM Message through the real Native receipt rail.
+/// The holder's private block revision is installed before `message_id` commits.
+pub(crate) async fn observe_dm_retained_receipt(
+    sender: &crate::scenarios::mls_lifecycle_live::Member,
+    holder: &crate::scenarios::mls_lifecycle_live::Member,
+    realm: &arkret_wire::RealmId,
+    strand: &str,
+    accepted_group: &arkret_wire::EventId,
+    sender_group: &arkret::ArkretMlsGroup,
+    holder_group: &arkret::ArkretMlsGroup,
+    message_id: &arkret_wire::EventId,
+    latest_cursor: &arkret_wire::EventId,
+) -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let sender_host = native_signal_endpoint(
+        sender,
+        realm,
+        accepted_group,
+        sender_group,
+        &directory.path().join("dm-receipt-sender.json"),
+    )
+    .await
+    .context("DM sender Native endpoint")?;
+    let holder_host = native_signal_endpoint(
+        holder,
+        realm,
+        accepted_group,
+        holder_group,
+        &directory.path().join("dm-receipt-holder.json"),
+    )
+    .await
+    .context("DM holder Native endpoint")?;
+    catch_up_blocklist_revision(&holder_host, read_row(&holder.client).await?.revision).await?;
+    ensure!(
+        inkson::account_data::blocks_call_invite(
+            &holder_host.state_store().client_blocklist(),
+            &sender.actor,
+        ),
+        "DM holder Native projection omitted the accepted private block"
+    );
+    ensure!(
+        inkson::conformance::retained_blocklist_message_projection(&holder_host.state_store())
+            .iter()
+            .any(|(id, _, hidden)| id.as_str() == message_id.as_str() && *hidden),
+        "blocked DM ciphertext was not retained and hidden"
+    );
+    let blocked_candidate = inkson::conformance::retained_blocklist_receipt_candidate(
+        &holder_host.state_store(),
+        realm.as_str(),
+        strand,
+    );
+    ensure!(
+        blocked_candidate.as_deref() == Some(latest_cursor.as_str())
+            && blocked_candidate.as_deref() != Some(message_id.as_str()),
+        "blocked DM ciphertext displaced the acknowledged prior visible cursor: candidate={blocked_candidate:?}, prior={latest_cursor}, blocked={message_id}"
+    );
+    ensure!(
+        inkson::conformance::send_native_automatic_read_receipt(
+            &holder_host,
+            holder.client.sdk(),
+            realm.as_str(),
+            strand,
+            latest_cursor.as_str(),
+        )
+        .await?
+        .is_none(),
+        "blocked DM ciphertext emitted an automatic receipt"
+    );
+
+    let row = read_row(&holder.client).await?;
+    let request = write_value_request(
+        &holder.client,
+        &holder.actor,
+        row.revision,
+        json!({"entries": []}),
+    )
+    .await?;
+    expect_json(holder.client.put(PATH).json(&request), StatusCode::OK).await?;
+    holder_host
+        .catch_up_selected_realm_until_complete(realm)
+        .await
+        .context("DM selected Realm catch-up after private unblock")?;
+    catch_up_blocklist_revision(&holder_host, read_row(&holder.client).await?.revision).await?;
+    ensure!(
+        holder_host.state_store().client_blocklist().is_empty(),
+        "DM holder did not consume its private unblock delta"
+    );
+    ensure!(
+        inkson::conformance::retained_blocklist_receipt_candidate(
+            &holder_host.state_store(),
+            realm.as_str(),
+            strand,
+        )
+        .as_deref()
+            == Some(message_id.as_str()),
+        "unblocked retained DM Message was not the exact receipt candidate"
+    );
+    holder_host
+        .state_store_handle()
+        .write(|store| store.set_read_receipt_default_send(true));
+    let mut stream = sender.client.sdk().signal_subscribe_frames().await?;
+    let _signer = ActiveEndpointSigner::install(holder)?;
+    let outcome = inkson::conformance::send_native_automatic_read_receipt(
+        &holder_host,
+        holder.client.sdk(),
+        realm.as_str(),
+        strand,
+        latest_cursor.as_str(),
+    )
+    .await
+    .context("unblocked DM automatic ReadReceipt submission")?
+    .context("visible retained DM Message did not emit a receipt")?;
+    ensure!(outcome.accepted && outcome.realm_id == *realm);
+    let received = next_admitted_signal(
+        &mut stream,
+        &sender_host,
+        sender,
+        &mut garth::signal::SignalReceiver::new(),
+    )
+    .await?;
+    let garth::signal::SignalReceiveOutcome::Accepted { plaintext, .. } = received else {
+        bail!("DM receipt failed sender MLS admission: {received:?}");
+    };
+    let arkret::SignalPlaintext::ReadReceipt(read) = plaintext else {
+        bail!("non receipt Signal reached DM receipt subscriber");
+    };
+    ensure!(
+        read.event_id == *message_id && read.actor_id == holder.actor,
+        "DM automatic receipt did not bind the exact retained Message and holder"
+    );
     Ok(())
 }
 
