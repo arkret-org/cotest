@@ -122,6 +122,10 @@ async function gotoChat(userPage: JointUserPage, realmId: string) {
 
 async function sendChatMessage(userPage: JointUserPage, realmId: string, body: string) {
   await gotoChat(userPage, realmId);
+  // The recipient initially sees the fail-closed encrypted composer while its
+  // verified Realm current is still loading. Wait for the plaintext policy
+  // selected by this scenario before authoring a message.
+  await expect(userPage.page.getByTestId("send-e2ee-move-button")).toBeVisible({ timeout: 30_000 });
   await userPage.page.getByTestId("chat-input").fill(body);
   await userPage.page.getByTestId("send-chat-button").click();
   await expect(chatMessage(userPage, body)).toBeVisible({ timeout: 30_000 });

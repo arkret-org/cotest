@@ -735,16 +735,21 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         await expect
           .poll(
             async () => {
-              const url = `${solandBaseUrl()}/_arkret/self/events`;
+              const url = `${solandBaseUrl()}/_arkret/self/streams/scan`;
               const resp = await request.fetch(url, {
-                method: "QUERY",
-                data: canonicalJson({ realm_ids: [realmId], limit: 500 }),
+                method: "POST",
+                data: canonicalJson({
+                  realm_id: realmId,
+                  stream_ref: { kind: "realm", realm_id: realmId },
+                  after_position: null,
+                  limit: 500,
+                }),
                 headers: {
                   "content-type": "application/json",
                   ...selfPathGrantHeaders({
                     deviceKey: bobSession.deviceKey,
                     grantJwt: bobSession.grantJwt,
-                    method: "QUERY",
+                    method: "POST",
                     url,
                   }),
                 },
@@ -949,16 +954,21 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
       await expect
         .poll(
           async () => {
-            const url = `${solandBaseUrl()}/_arkret/self/events`;
+            const url = `${solandBaseUrl()}/_arkret/self/streams/scan`;
             const resp = await request.fetch(url, {
-              method: "QUERY",
-              data: canonicalJson({ realm_ids: [realmId], limit: 500 }),
+              method: "POST",
+              data: canonicalJson({
+                realm_id: realmId,
+                stream_ref: { kind: "realm", realm_id: realmId },
+                after_position: null,
+                limit: 500,
+              }),
               headers: {
                 "content-type": "application/json",
                 ...selfPathGrantHeaders({
                   deviceKey: bobSession.deviceKey,
                   grantJwt: bobSession.grantJwt,
-                  method: "QUERY",
+                  method: "POST",
                   url,
                 }),
               },
@@ -989,16 +999,21 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         "C-bob-prejoin-card-survives-reload",
       );
 
-      const rawEventsUrl = `${solandBaseUrl()}/_arkret/self/events`;
+      const rawEventsUrl = `${solandBaseUrl()}/_arkret/self/streams/scan`;
       const rawEvents = await request.fetch(rawEventsUrl, {
-        method: "QUERY",
-        data: canonicalJson({ realm_ids: [realmId], limit: 200 }),
+        method: "POST",
+        data: canonicalJson({
+          realm_id: realmId,
+          stream_ref: { kind: "realm", realm_id: realmId },
+          after_position: null,
+          limit: 200,
+        }),
         headers: {
           "content-type": "application/json",
           ...selfPathGrantHeaders({
             deviceKey: aliceSession.deviceKey,
             grantJwt: aliceSession.grantJwt,
-            method: "QUERY",
+            method: "POST",
             url: rawEventsUrl,
           }),
         },
