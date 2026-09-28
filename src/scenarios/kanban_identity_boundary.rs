@@ -227,8 +227,8 @@ pub async fn kanban_creates_keep_one_identity_across_receipt_backfill_and_retry(
         "a byte-identical retry must be an idempotent duplicate: {retry}"
     );
     assert_eq!(
-        duplicate_event_id(&retry),
-        Some(list_event_id.as_str()),
+        crate::harness::submitted_event_id(&retry)?,
+        list_event_id,
         "the duplicate must name the SAME accepted Event: {retry}"
     );
     let reorder_retry = expect_json(
@@ -243,8 +243,8 @@ pub async fn kanban_creates_keep_one_identity_across_receipt_backfill_and_retry(
     .await?;
     assert_eq!(reorder_retry["status"], "duplicate");
     assert_eq!(
-        duplicate_event_id(&reorder_retry),
-        Some(card_reorder_event_id.as_str())
+        crate::harness::submitted_event_id(&reorder_retry)?,
+        card_reorder_event_id
     );
 
     // ---- backfill: exact committed Event and one Commit per scope stream --
@@ -367,8 +367,8 @@ async fn submit_operation(
     )
     .await?;
     assert_eq!(
-        accepted["status"], "accepted",
-        "the authored create must be accepted: {accepted}"
+        accepted["status"], "committed",
+        "the authored Event must be committed: {accepted}"
     );
     let accepted_id = crate::harness::submitted_event_id(&accepted)?;
     assert_eq!(
@@ -377,12 +377,6 @@ async fn submit_operation(
         "the receipt must name the authored identity verbatim"
     );
     Ok((authored_event_id, event))
-}
-
-fn duplicate_event_id(response: &Value) -> Option<&str> {
-    response["duplicate"][0]
-        .as_str()
-        .or_else(|| response["accepted"][0].as_str())
 }
 
 async fn create_test_realm(alice: &TestActorClient, title: &str) -> Result<String> {
