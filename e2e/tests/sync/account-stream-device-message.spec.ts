@@ -25,7 +25,9 @@ function realmBuckets(frames: Array<Record<string, unknown>>) {
   return frames.filter((frame) => frame.kind === "delta").flatMap((frame) => {
     expect(frame.realms === undefined || (frame.realms !== null && typeof frame.realms === "object")).toBe(true);
     return Object.entries((frame.realms ?? {}) as Record<string, {
-      timeline?: { events?: Array<{ event_id: string; kind: string }>; limited?: boolean; preview_only?: boolean };
+      committed_events?: Array<{ event?: { event_id: string; kind: string } }>;
+      streams_limited?: boolean;
+      streams?: Array<{ limited: boolean; preview_only?: boolean; window_start_basis?: unknown }>;
       state_at_window_start?: unknown;
     }>);
   });
@@ -33,10 +35,10 @@ function realmBuckets(frames: Array<Record<string, unknown>>) {
 
 function messageIds(frames: Array<Record<string, unknown>>, realmId: string): string[] {
   return realmBuckets(frames).filter(([id]) => id === realmId).flatMap(([, bucket]) => {
-    if (!bucket.timeline) return [];
-    expect(bucket.timeline?.limited, "small replay window must be complete").toBe(false);
-    expect(Array.isArray(bucket.timeline?.events), "timeline.events is required for this delta").toBe(true);
-    return bucket.timeline!.events!.filter((event) => event.kind === "ak.message.create")
+    if (!bucket.committed_events) return [];
+    expect(bucket.streams_limited, "small replay window must be complete").not.toBe(true);
+    return bucket.committed_events.flatMap((item) => item.event ?? [])
+      .filter((event) => event.kind === "ak.message.create")
       .map((event) => event.event_id);
   }).sort();
 }
@@ -52,7 +54,19 @@ async function accountFramesWithMessages(
   await expect
     .poll(
       async () => {
-        frames = await accountSubscribeFramesApi(request, token, opts);
+        frames = [];
+        let after = opts.after;
+        const selectedCount = Array.isArray(opts.filter?.realm_ids) ? opts.filter.realm_ids.length : 1;
+        // Demand sync sends one atomic Realm window per frame. Follow the
+        // returned cursor to collect every selected Realm before comparing.
+        for (let turn = 0; turn <= selectedCount; turn += 1) {
+          const batch = await accountSubscribeFramesApi(request, token, { ...opts, after });
+          frames.push(...batch);
+          if (messageIds(frames, realmId).length > 0) break;
+          const cursor = latestCursor(batch);
+          if (cursor === after) break;
+          after = cursor;
+        }
         return messageIds(frames, realmId);
       },
       { timeout: 30_000, intervals: [250, 500, 1_000, 2_000] },
@@ -82,7 +96,7 @@ test.describe("account stream + device-message convergence", () => {
   test("quiet long-poll closes at its bound and a fresh poll wakes on the next delta", async ({
     request,
   }) => {
-    test.setTimeout(75_000);
+    test.setTimeout(105_000);
     const { user, token } = await accountSession(request, "account-long-poll");
     const realmId = await createRealmApi(request, token, {
       title: `long-poll scope ${Date.now()}`,
@@ -91,17 +105,23 @@ test.describe("account stream + device-message convergence", () => {
     const filter = { realm_ids: [realmId] };
 
     const baseline = await accountSubscribeFramesApi(request, token, { filter });
-    const baselineCursor = latestCursor(baseline);
-
-    const quietStartedAt = Date.now();
-    const quietPoll = accountSubscribeFramesApi(request, token, {
-      after: baselineCursor,
-      filter,
-      timeoutMs: 40_000,
-    });
-    const quiet = await quietPoll;
-    const quietElapsedMs = Date.now() - quietStartedAt;
-    expect(quiet[0]?.kind).toBe("frontier");
+    let cursor = latestCursor(baseline);
+    let quiet: Array<Record<string, unknown>> = [];
+    let quietElapsedMs = 0;
+    // The initial Realm detail can be followed by a separate account-global
+    // delta. Drain those catch-up turns before measuring an idle subscription.
+    for (let turn = 0; turn < 3; turn += 1) {
+      const startedAt = Date.now();
+      quiet = await accountSubscribeFramesApi(request, token, {
+        after: cursor,
+        filter,
+        timeoutMs: 40_000,
+      });
+      quietElapsedMs = Date.now() - startedAt;
+      cursor = latestCursor(quiet);
+      if (quiet[0]?.kind === "checkpoint") break;
+    }
+    expect(quiet[0]?.kind).toBe("checkpoint");
     expect(quietElapsedMs, "quiet poll respects the server-side 30s bound").toBeGreaterThanOrEqual(
       28_000,
     );
@@ -197,12 +217,11 @@ test.describe("account stream + device-message convergence", () => {
       { filter, waitFor: excluded.cursor },
     );
     expectCatchup(baseline);
-    await expect
-      .poll(async () => messageIds(
-        await accountSubscribeFramesApi(request, owner.token, { filter }),
-        first,
-      ))
-      .toEqual([included.event_id]);
+    const firstFrames = await accountFramesWithMessages(request, owner.token, first, [included.event_id], {
+      filter,
+      waitFor: included.cursor,
+    });
+    expect(messageIds(firstFrames, first)).toEqual([included.event_id]);
     expect(messageIds(baseline, second)).toEqual([excluded.event_id]);
 
     const filtered = await accountSubscribeFramesApi(request, owner.token, {
@@ -238,19 +257,20 @@ test.describe("account stream + device-message convergence", () => {
     const buckets = realmBuckets(limited).filter(([id]) => id === realmId);
     expect(buckets.length, "the selected Realm must still be present").toBeGreaterThan(0);
     for (const [, bucket] of buckets) {
-      expect(bucket.timeline?.events?.length, "per-stream window_limit must be enforced").toBeLessThanOrEqual(2);
-      if (bucket.timeline?.limited === true) {
-        expect(bucket.state_at_window_start != null || bucket.timeline?.preview_only === true,
-          "a truncated timeline needs window-start state or preview_only").toBe(true);
+      expect(bucket.committed_events?.length, "per-stream window_limit must be enforced").toBeLessThanOrEqual(2);
+      if (bucket.streams?.some((stream) => stream.limited === true)) {
+        expect(bucket.state_at_window_start != null || bucket.streams?.some((stream) => stream.preview_only === true || stream.window_start_basis != null),
+          "a truncated stream needs window-start state or preview_only").toBe(true);
       }
     }
-    const visibleIds = buckets.flatMap(([, bucket]) => bucket.timeline!.events!.map((event) => event.event_id));
+    const visibleIds = buckets.flatMap(([, bucket]) => (bucket.committed_events ?? [])
+      .flatMap((item) => item.event ?? []).map((event) => event.event_id));
     expect(visibleIds).toContain(ids.at(-1));
     expect(new Set(visibleIds).size, "initial frames must not duplicate messages").toBe(visibleIds.length);
     expect(visibleIds.every((id) => ids.includes(id))).toBe(true);
     if (visibleIds.length < ids.length) {
-      expect(buckets.some(([, bucket]) => bucket.timeline?.limited === true),
-        "omitted history must not be advertised as a complete timeline").toBe(true);
+      expect(buckets.some(([, bucket]) => bucket.streams?.some((stream) => stream.limited === true)),
+        "omitted history must not be advertised as a complete stream").toBe(true);
     }
   });
 
