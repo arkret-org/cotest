@@ -19,7 +19,10 @@ import {
   selfPathHeadersForDpopSession,
 } from "../../helpers/users";
 import { coauthBaseUrl } from "../../helpers/env";
-import { grantInviteConsentArkret } from "../../helpers/contact-api";
+import {
+  deliverInviteWithConsentGrant,
+  grantInviteConsentArkret,
+} from "../../helpers/contact-api";
 
 test.describe.configure({ mode: "serial" });
 
@@ -121,13 +124,22 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
         subjectId: jointRealm.alice.id,
         actions: ["ak.message.create"],
       });
-      await grantInviteConsentArkret(
+      const consent = await grantInviteConsentArkret(
         request,
         participantSession!.grantJwt,
         participantSession!.user,
         jointRealm.alice.id,
       );
-      await jointRealm.alicePage.inviteFromAdmin(jointRealm.realmId, participantId);
+      const delivery = await deliverInviteWithConsentGrant(request, {
+        inviterId: jointRealm.alice.id,
+        inviterToken: jointRealm.aliceToken,
+        realmId: jointRealm.realmId,
+        inviteeId: participantId,
+        consentGrantRef: consent.eventRef,
+        originServer: "server1",
+        recipientServer: "server1",
+      });
+      expect(delivery.outcome.disclosed_outcome).toBe("delivered");
       await participantFlow!.page.acceptInvite(jointRealm.realmId);
       // Membership does not confer the action capability needed by the reply.
       await grantCapabilityEventApi(request, jointRealm.aliceToken, {
