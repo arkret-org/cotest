@@ -1,8 +1,7 @@
 //! Soland product-integration coverage for live Calendar RSVP convergence.
 //!
-//! This suite observes the Soland-private materialized Strand projection and
-//! is therefore not evidence that another Arkret implementation must expose
-//! the same read endpoint.
+//! This suite verifies Station-signed RealmStateSnapshot typed current rows
+//! against accepted RSVP RealmCommits and real Realm MLS ciphertext.
 
 /// Signed RealmCommits order preauthored RSVP Events and select the current
 /// response by stream position.

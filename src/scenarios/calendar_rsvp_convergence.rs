@@ -4,25 +4,23 @@
 //! end to end, because the convergence properties only mean something once a
 //! real reducer has admitted the Events:
 //!
-//! * an RSVP is admitted as a signed Event and its complete entry reaches the
-//!   materialized current value;
-//! * two responses authored before either is submitted receive distinct RealmCommits;
-//!   the later stream position is the current value, regardless of EventId order;
+//! * an RSVP is admitted as a signed Event and its complete entry reaches the materialized current
+//!   value;
+//! * two responses authored before either is submitted receive distinct RealmCommits; the later
+//!   stream position is the current value, regardless of EventId order;
 //! * exact replay and process restart preserve that value and its source Event.
 //!
 //! Subject isolation between responders is not repeated here: the accountable
 //! actor is part of the composite subject, which reducer unit tests already pin.
 //!
-//! This is deliberately a **Soland product-integration scenario**, not a
-//! portable Arkret conformance vector. Writes and public lifecycle reads use
-//! registered `/_arkret/*` operations; assertions over the materialized RSVP value
-//! use Soland's product-private projection read because that implementation
-//! state is not part of the cross-implementation wire contract.
+//! Reads use the Station-signed RealmStateSnapshot and its registered typed
+//! current selectors, including the complete encrypted RSVP entry.
 
 use std::time::Duration;
 
 use anyhow::{Result, anyhow, ensure};
-use arkret_wire::{EventId, RealmCommit, RealmId};
+use arkret::{ArkretMlsGroup, ArkretMlsIdentity, ArkretMlsSigner, MlsGovernanceBindingPayload};
+use arkret_wire::{EventId, RealmCommit, RealmId, ScopeRef};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
@@ -51,6 +49,74 @@ fn actor_for_station(actor_did: &str, station_id: &str) -> Result<arkret_wire::A
     )))
 }
 
+struct RsvpMls {
+    group: ArkretMlsGroup,
+    genesis_ref: EventId,
+    scope: ScopeRef,
+}
+
+async fn activate_rsvp_mls(client: &TestActorClient, realm_id: &str) -> Result<RsvpMls> {
+    let realm = RealmId::new(realm_id.to_owned())?;
+    let scope = ScopeRef::Realm {
+        realm_id: realm.clone(),
+    };
+    let principal = client
+        .principal
+        .clone()
+        .ok_or_else(|| anyhow!("Calendar MLS author has no provisioned device"))?;
+    let actor = actor_for_station(&client.actor, client.service_id())?;
+    let identity = ArkretMlsIdentity::new_human_device(
+        actor.clone(),
+        principal.device_id.clone(),
+        ArkretMlsSigner::from_ed25519_signing_key(principal.device_signing_key.clone()),
+    )?;
+    let binding = MlsGovernanceBindingPayload::new(scope.clone(), None, 0, 0, 0)?;
+    let mut group = identity.create_group_with_governance_binding(&scope, &binding)?;
+    let (group_info, tree) = group.public_group_state_bytes()?;
+    let group_info_ref =
+        super::mls_lifecycle_live::upload_public_blob(client, &realm, &group_info).await?;
+    let tree_ref = super::mls_lifecycle_live::upload_public_blob(client, &realm, &tree).await?;
+    let genesis = client
+        .author_event(
+            realm_id,
+            arkret_wire::EventKind::MlsGenesis.as_str(),
+            super::mls_lifecycle_live::canonical(json!({
+                "cipher_suite": super::mls_lifecycle_live::ACTIVE_SUITE,
+                "group_info_ref": group_info_ref,
+                "ratchet_tree_ref": tree_ref,
+                "governance_binding": binding,
+                "created_at": arkret_canonical::format_timestamp_canonical(chrono::Utc::now()),
+            }))?,
+        )
+        .await?;
+    let commit = submit_prepared_event(client, &genesis).await?;
+    ensure!(commit.event_ref == genesis.event_id);
+    assert_committed(client, realm_id, &genesis.event_id).await?;
+    let member = super::mls_lifecycle_live::Member {
+        client: client.clone(),
+        account: actor
+            .as_account_id()
+            .ok_or_else(|| anyhow!("Calendar MLS author is not an Account"))?
+            .clone(),
+        actor,
+        device: principal.device_id.clone(),
+        method: arkret_wire::DidUrl::new(format!(
+            "{}#{}",
+            principal.did.as_str(),
+            principal.device_id.as_str()
+        ))
+        .map_err(anyhow::Error::msg)?,
+        key: principal.device_signing_key.clone(),
+        authorize_event_id: principal.founding_authorize_event_id.clone(),
+    };
+    super::message_mls_cross_station_live::install_bindings(&mut group, &[&member]).await?;
+    Ok(RsvpMls {
+        group,
+        genesis_ref: genesis.event_id,
+        scope,
+    })
+}
+
 fn calendar_subtree(alice_did: &str, bob_did: &str, station_id: &str) -> Result<Value> {
     Ok(json!({
         "start": "2026-06-22T09:00:00",
@@ -68,6 +134,7 @@ fn calendar_subtree(alice_did: &str, bob_did: &str, station_id: &str) -> Result<
 }
 
 fn inkson_rsvp_payload(
+    mls: &mut RsvpMls,
     realm_id: &str,
     strand_id: &str,
     actor_id: &str,
@@ -94,7 +161,43 @@ fn inkson_rsvp_payload(
         &calendar_fields,
         basis_event_id,
     )?;
-    Ok(serde_json::to_value(operation.payload())?)
+    let mut payload = serde_json::to_value(operation.payload())?;
+    let response = payload["entry"]["response"].clone();
+    ensure!(
+        response.is_object(),
+        "Inkson RSVP has no response to encrypt"
+    );
+    let header = arkret::EventContentPreEncryptionHeader::reconstruct(
+        "1.0",
+        arkret_models_collaboration::objects::productivity::RSVP_RESPONSE_CONTENT_TYPE,
+        arkret::EncryptedPayloadScheme::MlsRfc9420,
+        mls.scope.clone(),
+        arkret_wire::EventKind::RsvpSet.as_str(),
+        mls.group.epoch(),
+        mls.genesis_ref.clone(),
+        mls.group.local_content_sender_domain()?,
+        arkret::EventContentRoutingContext::None,
+    )?;
+    let encrypted = mls
+        .group
+        .encrypt_payload(header, &arkret_canonical::canonical_json_bytes(&response)?)?;
+    let envelope = arkret::mls::encrypted_envelope_from_payload(&encrypted)?;
+    payload["entry"]
+        .as_object_mut()
+        .ok_or_else(|| anyhow!("RSVP entry is missing"))?
+        .remove("response");
+    payload["entry"]["encrypted_response"] = serde_json::to_value(envelope)?;
+    let parsed: arkret_models_collaboration::objects::productivity::RsvpSetPayload =
+        serde_json::from_value(payload.clone())?;
+    parsed.validate()?;
+    Ok(payload)
+}
+
+fn rsvp_entry(event: &arkret_wire::Event) -> Result<&Value> {
+    event
+        .payload
+        .get("entry")
+        .ok_or_else(|| anyhow!("signed RSVP Event lacks entry"))
 }
 
 /// Reads the schedule revision winner used as the RSVP basis.
@@ -115,15 +218,27 @@ async fn assert_realm_identity(client: &TestActorClient, realm_id: &str) -> Resu
     Ok(())
 }
 
-async fn read_soland_product_projection_strand(
+async fn signed_strand_value(
     client: &TestActorClient,
-    strand_id: &str,
+    realm: &RealmId,
+    strand_id: &arkret_wire::StrandId,
 ) -> Result<Value> {
-    expect_json(
-        client.get(&format!("/_soland/self/strands/{strand_id}")),
-        StatusCode::OK,
-    )
-    .await
+    let snapshot = super::strand_watch_live::signed_snapshot(client, realm).await?;
+    snapshot
+        .current_state_entries
+        .iter()
+        .find_map(|row| match row {
+            arkret_wire::TypedCurrentResult::Value {
+                selector:
+                    arkret_wire::CurrentSelector::Strand {
+                        strand_id: selected,
+                    },
+                value,
+                ..
+            } if selected == strand_id => Some(value.clone()),
+            _ => None,
+        })
+        .ok_or_else(|| anyhow!("signed Snapshot omits Calendar Strand {strand_id}"))
 }
 
 fn accepted_schedule_basis(submitted: &Value) -> Result<Vec<String>> {
@@ -132,39 +247,44 @@ fn accepted_schedule_basis(submitted: &Value) -> Result<Vec<String>> {
     ])
 }
 
-fn current_rsvp_for(strand: &Value, actor: &arkret_wire::ActorId) -> Option<Value> {
-    strand["rsvps"]
-        .as_array()
-        .and_then(|cells| {
-            cells.iter().find(|cell| {
-                cell["actor_id"]
-                    .as_str()
-                    .and_then(|value| serde_json::from_str::<arkret_wire::ActorId>(value).ok())
-                    .as_ref()
-                    == Some(actor)
-            })
-        })
-        .cloned()
-}
-
-fn current_status(current: &Value) -> Option<&str> {
-    current["entry"]["response"]["status"].as_str()
-}
-
-fn assert_current_rsvp(
-    strand: &Value,
+async fn assert_signed_snapshot_rsvp(
+    client: &TestActorClient,
+    realm: &RealmId,
+    strand: &arkret_wire::StrandId,
     actor: &arkret_wire::ActorId,
-    source_event_id: &EventId,
-    status: &str,
-    schedule_basis: &[String],
+    accepted: &RealmCommit,
+    entry: &Value,
 ) -> Result<()> {
-    let current = current_rsvp_for(strand, actor)
-        .ok_or_else(|| anyhow!("RSVP current is absent for {actor}"))?;
+    let snapshot = super::strand_watch_live::signed_snapshot(client, realm).await?;
+    let current = snapshot
+        .current_state_entries
+        .iter()
+        .find(|row| {
+            matches!(row, arkret_wire::TypedCurrentResult::Value {
+                selector: arkret_wire::CurrentSelector::Rsvp {
+                    event_ref,
+                    occurrence: None,
+                    responder_actor_id,
+                },
+                ..
+            } if event_ref == strand && responder_actor_id == actor)
+        })
+        .ok_or_else(|| anyhow!("signed Snapshot omits the exact RSVP current"))?;
+    let arkret_wire::TypedCurrentResult::Value {
+        source_stream_ref,
+        revision,
+        value,
+        ..
+    } = current
+    else {
+        unreachable!()
+    };
     ensure!(
-        current["source_event_id"].as_str() == Some(source_event_id.as_str())
-            && current_status(&current) == Some(status)
-            && current["entry"]["schedule_basis_refs"] == json!(schedule_basis),
-        "RSVP current does not match accepted Event {source_event_id}: {current}"
+        source_stream_ref == &accepted.stream_ref
+            && revision.commit_id == accepted.commit_id
+            && revision.stream_position == accepted.stream_position
+            && value == entry,
+        "signed RSVP current differs from the accepted Commit and complete entry: {current:?}"
     );
     Ok(())
 }
@@ -398,9 +518,14 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
     // namespace. A lone ref or a lone subtree is calendar_activation_mismatch.
     let created = create_calendar_strand(&alice, &realm_id, "Weekly sync", bob_did, true).await?;
     let strand_id = created_strand_id(&created)?;
-    let projected = read_soland_product_projection_strand(&alice, &strand_id).await?;
+    let projected = signed_strand_value(
+        &alice,
+        &RealmId::new(realm_id.clone())?,
+        &arkret_wire::StrandId::new(strand_id.clone())?,
+    )
+    .await?;
     let preserved_display = json!({"badge": "preserve-me", "revision": 7});
-    if projected["fields"]["x_future_display"] != preserved_display {
+    if projected["metadata"]["fields"]["x_future_display"] != preserved_display {
         return Err(anyhow!(
             "unknown namespaced display metadata was lost on decode/store/read: {projected}"
         ));
@@ -449,29 +574,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
         update_commit.stream_position > create_commit.stream_position,
         "schedule update did not advance the RealmCommit stream"
     );
-
-    let bob_response = bob
-        .submit_event(
-            &realm_id,
-            "ak.rsvp.set",
-            inkson_rsvp_payload(
-                &realm_id,
-                &strand_id,
-                bob_did,
-                "accepted",
-                &schedule_basis,
-                (alice_did, bob_did, alice.service_id()),
-            )?,
-        )
-        .await?;
-    let bob_commit = accepted_commit(&bob_response)?;
-    assert_current_rsvp(
-        &read_soland_product_projection_strand(&bob, &strand_id).await?,
-        &actor_for_station(bob_did, bob.service_id())?,
-        &bob_commit.event_ref,
-        "accepted",
-        &schedule_basis,
-    )?;
+    let mut mls = activate_rsvp_mls(&alice, &realm_id).await?;
 
     // Both responses are authored before either is submitted. The governing
     // Station still assigns a strict RealmCommit order to their current writes.
@@ -480,6 +583,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
             &realm_id,
             "ak.rsvp.set",
             inkson_rsvp_payload(
+                &mut mls,
                 &realm_id,
                 &strand_id,
                 alice_did,
@@ -494,6 +598,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
             &realm_id,
             "ak.rsvp.set",
             inkson_rsvp_payload(
+                &mut mls,
                 &realm_id,
                 &strand_id,
                 alice_did,
@@ -510,20 +615,25 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
             && second_commit.stream_position > first_commit.stream_position,
         "concurrent RSVP candidates were not ordered by RealmCommit"
     );
-    assert_current_rsvp(
-        &read_soland_product_projection_strand(&alice, &strand_id).await?,
+    assert_signed_snapshot_rsvp(
+        &alice,
+        &RealmId::new(realm_id.clone())?,
+        &arkret_wire::StrandId::new(strand_id.clone())?,
         &actor_for_station(alice_did, alice.service_id())?,
-        &second_event.event_id,
-        "declined",
-        &schedule_basis,
-    )?;
-
+        &second_commit,
+        second_event
+            .payload
+            .get("entry")
+            .ok_or_else(|| anyhow!("signed RSVP Event lacks entry"))?,
+    )
+    .await?;
     // A later response replaces the previous current without causal edges.
     let resolved = alice
-        .submit_event(
+        .author_event(
             &realm_id,
             "ak.rsvp.set",
             inkson_rsvp_payload(
+                &mut mls,
                 &realm_id,
                 &strand_id,
                 alice_did,
@@ -533,15 +643,17 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
             )?,
         )
         .await?;
-    let resolved_commit = accepted_commit(&resolved)?;
+    let resolved_commit = submit_prepared_event(&alice, &resolved).await?;
     ensure!(resolved_commit.stream_position > second_commit.stream_position);
-    assert_current_rsvp(
-        &read_soland_product_projection_strand(&alice, &strand_id).await?,
+    assert_signed_snapshot_rsvp(
+        &alice,
+        &RealmId::new(realm_id.clone())?,
+        &arkret_wire::StrandId::new(strand_id.clone())?,
         &actor_for_station(alice_did, alice.service_id())?,
-        &resolved_commit.event_ref,
-        "tentative",
-        &schedule_basis,
-    )?;
+        &resolved_commit,
+        rsvp_entry(&resolved)?,
+    )
+    .await?;
 
     // Reverse arrival order for the second pair. Exact replay of the earlier
     // Commit cannot move the current back to its old value.
@@ -550,6 +662,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
             &realm_id,
             "ak.rsvp.set",
             inkson_rsvp_payload(
+                &mut mls,
                 &realm_id,
                 &strand_id,
                 alice_did,
@@ -564,6 +677,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
             &realm_id,
             "ak.rsvp.set",
             inkson_rsvp_payload(
+                &mut mls,
                 &realm_id,
                 &strand_id,
                 alice_did,
@@ -581,19 +695,22 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
         replay_commit == reverse_second_commit,
         "exact replay changed RealmCommit"
     );
-    assert_current_rsvp(
-        &read_soland_product_projection_strand(&alice_second_device, &strand_id).await?,
+    assert_signed_snapshot_rsvp(
+        &alice_second_device,
+        &RealmId::new(realm_id.clone())?,
+        &arkret_wire::StrandId::new(strand_id.clone())?,
         &actor_for_station(alice_did, alice.service_id())?,
-        &reverse_first.event_id,
-        "accepted",
-        &schedule_basis,
-    )?;
+        &reverse_first_commit,
+        rsvp_entry(&reverse_first)?,
+    )
+    .await?;
 
-    let final_response = alice
-        .submit_event(
+    let final_event = alice
+        .author_event(
             &realm_id,
             "ak.rsvp.set",
             inkson_rsvp_payload(
+                &mut mls,
                 &realm_id,
                 &strand_id,
                 alice_did,
@@ -603,15 +720,17 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
             )?,
         )
         .await?;
-    let final_commit = accepted_commit(&final_response)?;
+    let final_commit = submit_prepared_event(&alice, &final_event).await?;
     ensure!(final_commit.stream_position > reverse_first_commit.stream_position);
-    assert_current_rsvp(
-        &read_soland_product_projection_strand(&alice, &strand_id).await?,
+    assert_signed_snapshot_rsvp(
+        &alice,
+        &RealmId::new(realm_id.clone())?,
+        &arkret_wire::StrandId::new(strand_id.clone())?,
         &actor_for_station(alice_did, alice.service_id())?,
-        &final_commit.event_ref,
-        "tentative",
-        &schedule_basis,
-    )?;
+        &final_commit,
+        rsvp_entry(&final_event)?,
+    )
+    .await?;
 
     Ok(())
 }
@@ -690,18 +809,25 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
         create_calendar_strand(&alice, &realm_id, "Durable weekly sync", bob_did, true).await?;
     let strand_id = created_strand_id(&created)?;
     let preserved_display = json!({"badge": "preserve-me", "revision": 7});
-    let projected = read_soland_product_projection_strand(&alice, &strand_id).await?;
-    if projected["fields"]["x_future_display"] != preserved_display {
+    let projected = signed_strand_value(
+        &alice,
+        &RealmId::new(realm_id.clone())?,
+        &arkret_wire::StrandId::new(strand_id.clone())?,
+    )
+    .await?;
+    if projected["metadata"]["fields"]["x_future_display"] != preserved_display {
         return Err(anyhow!(
             "unknown namespaced display metadata was lost on decode/store/read: {projected}"
         ));
     }
     let schedule_basis = accepted_schedule_basis(&created)?;
+    let mut mls = activate_rsvp_mls(&alice, &realm_id).await?;
     let accepted = alice
         .author_event(
             &realm_id,
             "ak.rsvp.set",
             inkson_rsvp_payload(
+                &mut mls,
                 &realm_id,
                 &strand_id,
                 alice_did,
@@ -716,6 +842,7 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
             &realm_id,
             "ak.rsvp.set",
             inkson_rsvp_payload(
+                &mut mls,
                 &realm_id,
                 &strand_id,
                 alice_did,
@@ -728,13 +855,15 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
     let accepted_realm_commit = submit_prepared_event(&alice, &accepted).await?;
     let declined_commit = submit_prepared_event(&alice_second_device, &declined).await?;
     ensure!(declined_commit.stream_position > accepted_realm_commit.stream_position);
-    assert_current_rsvp(
-        &read_soland_product_projection_strand(&alice, &strand_id).await?,
+    assert_signed_snapshot_rsvp(
+        &alice,
+        &RealmId::new(realm_id.clone())?,
+        &arkret_wire::StrandId::new(strand_id.clone())?,
         &actor_for_station(alice_did, alice.service_id())?,
-        &declined.event_id,
-        "declined",
-        &schedule_basis,
-    )?;
+        &declined_commit,
+        rsvp_entry(&declined)?,
+    )
+    .await?;
 
     assert_realm_identity(&alice, &realm_id).await?;
     server.kill_immediately().await?;
@@ -745,32 +874,44 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
         .standard_client(alice_did, "ak:device:01904100-0000-7000-8000-0000000000d1")
         .await?;
     let alice_second_device = alice.clone();
-    let restarted_strand = read_soland_product_projection_strand(&alice, &strand_id).await?;
+    let restarted_strand = signed_strand_value(
+        &alice,
+        &RealmId::new(realm_id.clone())?,
+        &arkret_wire::StrandId::new(strand_id.clone())?,
+    )
+    .await?;
     assert_realm_identity(&alice, &realm_id).await?;
-    if restarted_strand["fields"]["x_future_display"] != preserved_display {
+    assert_signed_snapshot_rsvp(
+        &alice,
+        &RealmId::new(realm_id.clone())?,
+        &arkret_wire::StrandId::new(strand_id.clone())?,
+        &actor_for_station(alice_did, alice.service_id())?,
+        &declined_commit,
+        declined
+            .payload
+            .get("entry")
+            .ok_or_else(|| anyhow!("signed RSVP Event lacks entry"))?,
+    )
+    .await?;
+    if restarted_strand["metadata"]["fields"]["x_future_display"] != preserved_display {
         return Err(anyhow!(
             "unknown namespaced display metadata was lost across restart: {restarted_strand}"
         ));
     }
-    assert_current_rsvp(
-        &restarted_strand,
-        &actor_for_station(alice_did, alice.service_id())?,
-        &declined.event_id,
-        "declined",
-        &schedule_basis,
-    )?;
     ensure!(
         submit_prepared_event(&alice, &accepted).await? == accepted_realm_commit
             && submit_prepared_event(&alice_second_device, &declined).await? == declined_commit,
         "restart changed an exact replay's RealmCommit"
     );
-    assert_current_rsvp(
-        &read_soland_product_projection_strand(&alice, &strand_id).await?,
+    assert_signed_snapshot_rsvp(
+        &alice,
+        &RealmId::new(realm_id.clone())?,
+        &arkret_wire::StrandId::new(strand_id.clone())?,
         &actor_for_station(alice_did, alice.service_id())?,
-        &declined.event_id,
-        "declined",
-        &schedule_basis,
-    )?;
+        &declined_commit,
+        rsvp_entry(&declined)?,
+    )
+    .await?;
 
     alice.remember_grant(
         &realm_id,
@@ -778,10 +919,11 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
         &["ak.strand.create", "ak.rsvp.set"],
     );
     let resolved = alice
-        .submit_event(
+        .author_event(
             &realm_id,
             "ak.rsvp.set",
             inkson_rsvp_payload(
+                &mut mls,
                 &realm_id,
                 &strand_id,
                 alice_did,
@@ -791,7 +933,7 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
             )?,
         )
         .await?;
-    let resolved_commit = accepted_commit(&resolved)?;
+    let resolved_commit = submit_prepared_event(&alice, &resolved).await?;
     ensure!(resolved_commit.stream_position > declined_commit.stream_position);
     server.kill_immediately().await?;
     drop(server);
@@ -800,13 +942,15 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
     let alice = server
         .standard_client(alice_did, "ak:device:01904100-0000-7000-8000-0000000000d1")
         .await?;
-    assert_current_rsvp(
-        &read_soland_product_projection_strand(&alice, &strand_id).await?,
+    assert_signed_snapshot_rsvp(
+        &alice,
+        &RealmId::new(realm_id.clone())?,
+        &arkret_wire::StrandId::new(strand_id.clone())?,
         &actor_for_station(alice_did, alice.service_id())?,
-        &resolved_commit.event_ref,
-        "tentative",
-        &schedule_basis,
-    )?;
+        &resolved_commit,
+        rsvp_entry(&resolved)?,
+    )
+    .await?;
 
     drop(ephemeral);
     Ok(())
@@ -851,11 +995,13 @@ pub async fn calendar_rsvp_malformed_basis_is_rejected() -> Result<()> {
         create_calendar_strand(&alice, &realm_id, "Weekly sync", bob_did, false).await?;
     let strand_id = created_strand_id(&strand_created)?;
     let schedule_basis = accepted_schedule_basis(&strand_created)?;
+    let mut mls = activate_rsvp_mls(&alice, &realm_id).await?;
     let valid = alice
-        .submit_event(
+        .author_event(
             &realm_id,
             "ak.rsvp.set",
             inkson_rsvp_payload(
+                &mut mls,
                 &realm_id,
                 &strand_id,
                 alice_did,
@@ -865,8 +1011,9 @@ pub async fn calendar_rsvp_malformed_basis_is_rejected() -> Result<()> {
             )?,
         )
         .await?;
-    let valid_commit = accepted_commit(&valid)?;
+    let valid_commit = submit_prepared_event(&alice, &valid).await?;
     let mut malformed_payload = inkson_rsvp_payload(
+        &mut mls,
         &realm_id,
         &strand_id,
         alice_did,
@@ -897,12 +1044,14 @@ pub async fn calendar_rsvp_malformed_basis_is_rejected() -> Result<()> {
             .is_err(),
         "malformed RSVP acquired a RealmCommit"
     );
-    assert_current_rsvp(
-        &read_soland_product_projection_strand(&alice, &strand_id).await?,
+    assert_signed_snapshot_rsvp(
+        &alice,
+        &RealmId::new(realm_id.clone())?,
+        &arkret_wire::StrandId::new(strand_id.clone())?,
         &actor_for_station(alice_did, alice.service_id())?,
-        &valid_commit.event_ref,
-        "accepted",
-        &schedule_basis,
-    )?;
+        &valid_commit,
+        rsvp_entry(&valid)?,
+    )
+    .await?;
     Ok(())
 }
