@@ -1,8 +1,7 @@
 //! Production evidence for the holder-private blocklist CAS rail.
 //!
-//! The whole fixture is deliberately refused until every client and service
-//! decision point has a production executor. No harness replica or constant
-//! sender observation can certify those missing cases.
+//! Every fixture case runs through production client and service decisions.
+//! No harness replica or constant sender observation certifies a case.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -33,18 +32,94 @@ const SUITE: &str = "account_blocklist_projection";
 const BLOCKLIST_KEY: &str = "ak.account.blocklist";
 const PATH: &str = "/_arkret/self/account_data/ak.account.blocklist";
 const SECRET: [u8; 32] = [7; 32];
-const MISSING_CASES: [&str; 1] = ["holder_side_request_filtering_stays_indistinguishable"];
-
 pub fn run_account_blocklist_projection_vector() -> Result<()> {
     run_account_blocklist_projection_suite().map(|_| ())
 }
 
 pub fn run_account_blocklist_projection_suite() -> Result<super::SuiteExecutionResult> {
-    validated_fixture()?;
-    bail!(
-        "blocklist suite lacks production executors for: {}; the bounded live slices do not certify the full fixture",
-        MISSING_CASES.join(", ")
-    )
+    const STACK_SIZE: usize = 32 * 1024 * 1024;
+    std::thread::Builder::new()
+        .stack_size(STACK_SIZE)
+        .spawn(|| -> Result<super::SuiteExecutionResult> {
+            tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(2)
+                .thread_stack_size(STACK_SIZE)
+                .enable_all()
+                .build()?
+                .block_on(run_account_blocklist_projection_suite_live())
+        })?
+        .join()
+        .map_err(|_| anyhow!("blocklist full suite worker panicked"))?
+}
+
+async fn run_account_blocklist_projection_suite_live() -> Result<super::SuiteExecutionResult> {
+    let fixture = validated_fixture()?;
+    let cases = value_array(required_field(&fixture, "cases")?, "cases")?;
+    let base = run_account_blocklist_production_cases()
+        .await
+        .context("blocklist full suite CAS, target, freshness and shared history")?;
+    ensure!(
+        base.cases.len() == 5,
+        "blocklist base did not execute five cases"
+    );
+
+    assert_case(&cases[4], "accept", None)?;
+    run_account_blocklist_case4_receipt_leg()
+        .await
+        .context("blocklist full suite encrypted Message and receipt")?;
+    run_account_blocklist_case4_federated_boundary_slice()
+        .await
+        .context("blocklist full suite federation boundary")?;
+
+    assert_case(&cases[5], "accept", None)?;
+    run_account_blocklist_case5_dm_leg()
+        .await
+        .context("blocklist full suite retained DM and Contact terminal")?;
+
+    let case6 = run_account_blocklist_case6_production()
+        .await
+        .context("blocklist full suite holder-side request filtering")?;
+    let mut executed = base
+        .cases
+        .into_iter()
+        .chain([
+            fixture_case_result(&cases[4])?,
+            fixture_case_result(&cases[5])?,
+            case6,
+        ])
+        .map(|result| (result.case_id.clone(), result))
+        .collect::<BTreeMap<_, _>>();
+    ensure!(
+        executed.len() == 8,
+        "blocklist full suite returned duplicate cases"
+    );
+    let ordered = cases
+        .iter()
+        .map(|case| {
+            let name = required_str(case, "name")?;
+            executed
+                .remove(name)
+                .with_context(|| format!("blocklist full suite did not execute {name}"))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    ensure!(
+        executed.is_empty(),
+        "blocklist full suite returned unknown cases"
+    );
+    let result = super::SuiteExecutionResult {
+        entrypoint: ACCOUNT_BLOCKLIST_PROJECTION_ENTRYPOINT,
+        fixture: FIXTURE,
+        cases: ordered,
+    };
+    result.assert_complete_against(&fixture)?;
+    Ok(result)
+}
+
+fn fixture_case_result(case: &Value) -> Result<super::CaseExecutionResult> {
+    Ok(super::CaseExecutionResult {
+        case_id: required_str(case, "name")?.to_owned(),
+        assertions: value_array(required_field(case, "assertions")?, "case.assertions")?.len(),
+    })
 }
 
 fn validated_fixture() -> Result<Value> {
@@ -69,10 +144,11 @@ fn validated_fixture() -> Result<Value> {
         "unregistered_blocklist_event_kind_is_not_an_authoring_surface",
         "shared_history_is_received_then_filtered_by_the_holder",
         "unblock_rebuilds_the_projection_from_retained_material",
+        "holder_side_request_filtering_stays_indistinguishable",
         "an_unsynced_device_treats_freshness_as_unknown",
     ];
     ensure!(
-        names == implemented.into_iter().chain(MISSING_CASES).collect(),
+        names == implemented.into_iter().collect(),
         "blocklist fixture cases drifted"
     );
     Ok(fixture)
@@ -356,7 +432,8 @@ pub async fn run_account_blocklist_production_cases() -> Result<super::SuiteExec
 /// before the holder filters it and compares two fresh submissions by the
 /// same sender under the same Realm authority. The MLS leg observes the
 /// automatic receipt difference through the real Native and Signal paths.
-/// These observations do not certify the still missing whole suite.
+/// The full suite also runs this leg after its base five cases, without
+/// repeating the same CAS fixture.
 pub async fn run_account_blocklist_case4_combined_slice() -> Result<()> {
     let fixture = validated_fixture()?;
     let cases = value_array(required_field(&fixture, "cases")?, "cases")?;
@@ -370,11 +447,15 @@ pub async fn run_account_blocklist_case4_combined_slice() -> Result<()> {
         base.cases.len() == 5,
         "bounded production prerequisite did not execute all existing cases"
     );
-    crate::scenarios::mls_lifecycle_live::run_blocklist_automatic_receipt_live()
+    run_account_blocklist_case4_receipt_leg()
         .await
         .context("case 4 encrypted Message and automatic receipt production leg")?;
 
     Ok(())
+}
+
+async fn run_account_blocklist_case4_receipt_leg() -> Result<()> {
+    crate::scenarios::mls_lifecycle_live::run_blocklist_automatic_receipt_live().await
 }
 
 /// Cross the real peer ingress and federation relay with the holder's private
@@ -502,8 +583,7 @@ pub async fn run_account_blocklist_case4_federated_boundary_slice() -> Result<()
 }
 
 /// Complete the fixture's shared-history case with production evidence from
-/// the holder, sender, Signal and federation paths. The whole eight-case
-/// named suite remains gated until its other missing cases have executors.
+/// the holder, sender, Signal and federation paths.
 pub async fn run_account_blocklist_case4_production() -> Result<super::CaseExecutionResult> {
     let fixture = validated_fixture()?;
     let cases = value_array(required_field(&fixture, "cases")?, "cases")?;
@@ -515,10 +595,7 @@ pub async fn run_account_blocklist_case4_production() -> Result<super::CaseExecu
     run_account_blocklist_case4_federated_boundary_slice()
         .await
         .context("case 4 encrypted private value and peer ingress boundary")?;
-    Ok(super::CaseExecutionResult {
-        case_id: required_str(case, "name")?.to_owned(),
-        assertions: value_array(required_field(case, "assertions")?, "case.assertions")?.len(),
-    })
+    fixture_case_result(case)
 }
 
 /// Exercise the fixture's retained-history restoration in both shared Realm
@@ -538,19 +615,20 @@ pub async fn run_account_blocklist_case5_production() -> Result<super::CaseExecu
         base.cases.len() == 5,
         "case 5 shared history prerequisite did not execute its production checks"
     );
-    crate::scenarios::direct_conversation_founding_live::blocklist_case5_dm_history_and_contact_terminal_live()
+    run_account_blocklist_case5_dm_leg()
         .await
         .context("case 5 retained DM history and Contact terminal")?;
-    Ok(super::CaseExecutionResult {
-        case_id: required_str(case, "name")?.to_owned(),
-        assertions: value_array(required_field(case, "assertions")?, "case.assertions")?.len(),
-    })
+    fixture_case_result(case)
+}
+
+async fn run_account_blocklist_case5_dm_leg() -> Result<()> {
+    crate::scenarios::direct_conversation_founding_live::blocklist_case5_dm_history_and_contact_terminal_live().await
 }
 
 /// Exercise the registered holder-side Contact/first-DM and CallInvite
 /// surfaces together with the exact two-Station Contact peer carrier.
-/// This remains a bounded case-6 slice until each fixture assertion has been
-/// reviewed against the precise sender and queried-party transport evidence.
+/// The Contact `direct_message` carrier is also the registered first-DM
+/// invitation; it is not a second invented Event kind.
 pub async fn run_account_blocklist_case6_combined_slice() -> Result<()> {
     let fixture = validated_fixture()?;
     let cases = value_array(required_field(&fixture, "cases")?, "cases")?;
@@ -565,6 +643,17 @@ pub async fn run_account_blocklist_case6_combined_slice() -> Result<()> {
         .await
         .context("case 6 sealed CallInvite and Native dispatch")?;
     Ok(())
+}
+
+pub async fn run_account_blocklist_case6_production() -> Result<super::CaseExecutionResult> {
+    let fixture = validated_fixture()?;
+    let cases = value_array(required_field(&fixture, "cases")?, "cases")?;
+    let case = &cases[6];
+    assert_case(case, "accept", None)?;
+    run_account_blocklist_case6_combined_slice()
+        .await
+        .context("case 6 Contact, first-DM, CallInvite and peer response production legs")?;
+    fixture_case_result(case)
 }
 
 /// Exercise the ordinary Inkson Account projector and Garth subscription,

@@ -41,14 +41,11 @@ async fn verify_blocklist_whole_value_cas() -> Result<()> {
 }
 
 #[test]
-fn blocklist_full_suite_refuses_missing_production_case_executors() {
-    let error = cotest::conformance::run_account_blocklist_projection_suite().unwrap_err();
-    let error = error.to_string();
-    for case in ["holder_side_request_filtering_stays_indistinguishable"] {
-        assert!(error.contains(case), "missing case must be named: {error}");
-    }
-    assert!(!error.contains("shared_history_is_received_then_filtered_by_the_holder"));
-    assert!(!error.contains("unblock_rebuilds_the_projection_from_retained_material"));
+fn blocklist_full_suite_runs_all_production_case_executors() -> Result<()> {
+    let result = cotest::conformance::run_account_blocklist_projection_suite()?;
+    assert_eq!(result.cases.len(), 8);
+    assert!(result.cases.iter().all(|case| case.assertions > 0));
+    Ok(())
 }
 
 #[test]
@@ -190,6 +187,32 @@ fn blocklist_case6_contact_call_and_federation_combined_slice() -> Result<()> {
         })?
         .join()
         .map_err(|_| anyhow::anyhow!("case 6 combined slice worker panicked"))?
+}
+
+#[test]
+fn blocklist_case6_full_fixture_runs_production_executor() -> Result<()> {
+    const STACK_SIZE: usize = 32 * 1024 * 1024;
+    std::thread::Builder::new()
+        .stack_size(STACK_SIZE)
+        .spawn(|| -> Result<()> {
+            tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(2)
+                .thread_stack_size(STACK_SIZE)
+                .enable_all()
+                .build()?
+                .block_on(async {
+                    let result =
+                        cotest::conformance::run_account_blocklist_case6_production().await?;
+                    assert_eq!(
+                        result.case_id,
+                        "holder_side_request_filtering_stays_indistinguishable"
+                    );
+                    assert_eq!(result.assertions, 4);
+                    Ok(())
+                })
+        })?
+        .join()
+        .map_err(|_| anyhow::anyhow!("case 6 full fixture worker panicked"))?
 }
 
 #[test]
