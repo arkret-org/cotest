@@ -139,6 +139,7 @@ const ARTIFACT_FIXTURES_DIR: &str = "fixtures";
 
 pub use account_blocklist_projection::{
     ACCOUNT_BLOCKLIST_PROJECTION_ENTRYPOINT, VECTOR_ID_ACCOUNT_BLOCKLIST_PROJECTION,
+    contact_first_dm_cross_station_private_boundary_live,
     run_account_blocklist_case4_combined_slice,
     run_account_blocklist_case4_federated_boundary_slice, run_account_blocklist_case4_production,
     run_account_blocklist_case5_production, run_account_blocklist_case6_combined_slice,

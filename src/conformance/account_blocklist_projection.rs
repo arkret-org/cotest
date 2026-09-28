@@ -548,7 +548,7 @@ pub async fn run_account_blocklist_case5_production() -> Result<super::CaseExecu
 }
 
 /// Exercise the registered holder-side Contact/first-DM and CallInvite
-/// surfaces together with the independent two-Station private-data boundary.
+/// surfaces together with the exact two-Station Contact peer carrier.
 /// This remains a bounded case-6 slice until each fixture assertion has been
 /// reviewed against the precise sender and queried-party transport evidence.
 pub async fn run_account_blocklist_case6_combined_slice() -> Result<()> {
@@ -558,12 +558,12 @@ pub async fn run_account_blocklist_case6_combined_slice() -> Result<()> {
     contact_and_first_dm_pending_request_live()
         .await
         .context("case 6 Contact direct_message request and holder filter")?;
+    contact_first_dm_cross_station_private_boundary_live()
+        .await
+        .context("case 6 Contact direct_message peer relay and private data boundary")?;
     crate::scenarios::mls_lifecycle_live::run_blocklist_call_invite_live()
         .await
         .context("case 6 sealed CallInvite and Native dispatch")?;
-    run_account_blocklist_case4_federated_boundary_slice()
-        .await
-        .context("case 6 generic holder-private Account Data federation boundary")?;
     Ok(())
 }
 
@@ -1391,12 +1391,13 @@ pub async fn contact_and_first_dm_pending_request_live() -> Result<()> {
             arkret_wire::event_kind_str::CONTACT_REQUESTED,
         )?,
     });
+    let commit_request_bytes = arkret_canonical::canonical_json_bytes(&commit)?;
     let started = std::time::Instant::now();
     let response = bob
         .client
         .post("/_arkret/self/contacts/request")
         .header(reqwest::header::CONTENT_TYPE, "application/json")
-        .body(arkret_canonical::canonical_json_bytes(&commit)?)
+        .body(commit_request_bytes.clone())
         .send()
         .await?;
     let commit_status = response.status();
@@ -1471,8 +1472,52 @@ pub async fn contact_and_first_dm_pending_request_live() -> Result<()> {
         ),
         "holder default Contact inbox did not filter the accepted pending request"
     );
-    unblock_direct_peer(&alice).await?;
-    catch_up_blocklist_revision(&holder_host, read_row(&alice.client).await?.revision).await?;
+    let mut committed_replays = Vec::new();
+    for blocked in [true, false] {
+        if !blocked {
+            unblock_direct_peer(&alice).await?;
+            catch_up_blocklist_revision(&holder_host, read_row(&alice.client).await?.revision)
+                .await?;
+        }
+        let started = std::time::Instant::now();
+        let response = bob
+            .client
+            .post("/_arkret/self/contacts/request")
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(commit_request_bytes.clone())
+            .send()
+            .await?;
+        let status = response.status();
+        let protocol = format!("{:?}", response.version());
+        let content_type = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or_default()
+            .to_owned();
+        ensure!(
+            !response.headers().iter().any(|(_, value)| value
+                .to_str()
+                .is_ok_and(|value| value.contains("blocked_by_user"))),
+            "holder-private block leaked through Contact Commit replay headers"
+        );
+        let bytes = response.bytes().await?;
+        let elapsed = started.elapsed();
+        ensure!(
+            status == StatusCode::OK
+                && bytes.as_ref() == commit_bytes.as_ref()
+                && !String::from_utf8_lossy(&bytes).contains("blocked_by_user"),
+            "Contact exact Commit replay changed its accepted outcome at blocked={blocked}: {status} {}",
+            String::from_utf8_lossy(&bytes)
+        );
+        committed_replays.push((status, protocol, content_type, elapsed));
+    }
+    ensure!(
+        committed_replays[0].0 == committed_replays[1].0
+            && committed_replays[0].1 == committed_replays[1].1
+            && committed_replays[0].2 == committed_replays[1].2,
+        "holder-private block changed the exact Contact Commit replay transport envelope"
+    );
     ensure!(
         !inkson::account_data::hides_contact_request(
             &holder_host.state_store().client_blocklist(),
@@ -1490,7 +1535,7 @@ pub async fn contact_and_first_dm_pending_request_live() -> Result<()> {
         "private unblock changed or deleted the accepted first-DM Contact row"
     );
     eprintln!(
-        "blocklist Contact first-DM prepare exact replay: protocol={}, status={}, shape={}, blocked_start_to_full_response_ns={}, unblocked_replay_start_to_full_response_ns={}; commit_status={}, commit_start_to_full_response_ns={}; replay timing is diagnostic only",
+        "blocklist Contact first-DM exact replays: prepare_protocol={}, prepare_status={}, prepare_shape={}, blocked_prepare_ns={}, unblocked_prepare_ns={}; first_commit_status={}, first_commit_ns={}; blocked_commit_replay_ns={}, unblocked_commit_replay_ns={}; timing is diagnostic only",
         observations[0].1,
         observations[0].0,
         observations[0].3,
@@ -1498,6 +1543,350 @@ pub async fn contact_and_first_dm_pending_request_live() -> Result<()> {
         observations[1].4.as_nanos(),
         commit_status,
         commit_elapsed.as_nanos(),
+        committed_replays[0].3.as_nanos(),
+        committed_replays[1].3.as_nanos(),
+    );
+    Ok(())
+}
+
+/// Keep the Contact/first-DM request on its registered peer carrier while
+/// only the holder's encrypted Account Data revision changes. Both Stations
+/// must retain the same request Event; the sender Station has no blocklist
+/// row or target material to inspect.
+pub async fn contact_first_dm_cross_station_private_boundary_live() -> Result<()> {
+    use arkret::contact_operations::{
+        ContactAcceptedOutcome, ContactCommitPhase, ContactCommitRequestBody,
+        ContactOperationOutcome, ContactOperationRequestBody, ContactPeer, ContactPreparePhase,
+        ContactPrepareRequestBody, ContactPreparedOutcome, ContactScope, ContactState,
+    };
+    use arkret_models_collaboration::governance::invite_addressing::{
+        InviteLocatorIssueRequestBody, InviteLocatorResolveRequestBody, PrincipalLocator,
+    };
+    use arkret_models_collaboration::governance::peer_contact::ContactIntroductionEvidence;
+
+    use crate::harness::{TestServerGroup, next_typed_id};
+    use crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
+    use crate::scenarios::human_device_producer_live::{database, station_env};
+    use crate::scenarios::identity_test_support::HARNESS_INTERNAL_AUTHORITY_SECRET;
+    use crate::scenarios::mls_lifecycle_live::Member;
+
+    const GROUP: &str = "blocklist-first-dm-contact-federation";
+    let holder_database = database(GROUP)?.context("holder needs isolated PostgreSQL")?;
+    let sender_database = database(GROUP)?.context("sender needs isolated PostgreSQL")?;
+    ensure!(holder_database.connect_url != sender_database.connect_url);
+    let coauth = MockCoauthIntrospectionServer::spawn_with_internal_secret(
+        HARNESS_INTERNAL_AUTHORITY_SECRET,
+    )
+    .await?;
+    let station = |url: &str| {
+        let mut env = station_env(url, &coauth);
+        env.push(("SOLAND_FEDERATION_OUTBOUND".to_owned(), "1".to_owned()));
+        env
+    };
+    let group = TestServerGroup::try_multi_external_with_node_envs(
+        GROUP,
+        &[
+            station(&holder_database.connect_url),
+            station(&sender_database.connect_url),
+        ],
+    )
+    .await?
+    .context("first-DM Contact federation needs two real Soland processes")?;
+    let holder = Member::provision(
+        group.server(0),
+        &coauth,
+        "blocklist-first-dm-federated-holder",
+        "ak:device:01904100-0000-7000-8000-000000002481",
+    )
+    .await?;
+    let sender = Member::provision(
+        group.server(1),
+        &coauth,
+        "blocklist-first-dm-federated-sender",
+        "ak:device:01904100-0000-7000-8000-000000002482",
+    )
+    .await?;
+    block_direct_peer(&holder, &sender).await?;
+    let directory = tempfile::tempdir()?;
+    let holder_host = inkson::sync_engine::NativeAccountHost::new(
+        holder.client.sdk(),
+        holder.account.clone(),
+        holder.device.clone(),
+        inkson::LocalStateStore::with_path(&directory.path().join("holder.json")),
+    )
+    .await?;
+    holder_host.catch_up().await?;
+    catch_up_blocklist_revision(&holder_host, read_row(&holder.client).await?.revision).await?;
+    ensure!(
+        inkson::account_data::hides_contact_request(
+            &holder_host.state_store().client_blocklist(),
+            &sender.actor
+        ),
+        "cross-Station holder did not install its private Contact filter"
+    );
+    let (holder_value, holder_ledger, holder_writes) =
+        persisted_snapshot(&holder_database.connect_url).await?;
+    let (sender_value, sender_ledger, sender_writes) =
+        persisted_snapshot(&sender_database.connect_url).await?;
+    ensure!(
+        holder_writes == 1
+            && !holder_value.contains(&sender.actor.to_string())
+            && !holder_ledger.contains(&sender.actor.to_string())
+            && sender_value == "[]"
+            && sender_ledger == "[]"
+            && sender_writes == 0,
+        "holder-private target escaped to the Contact sender Station"
+    );
+
+    let locator_issued = expect_json(
+        holder
+            .client
+            .post("/_arkret/self/invite-locators")
+            .json(&InviteLocatorIssueRequestBody {
+                ttl_seconds: Some(900),
+                ..Default::default()
+            }),
+        StatusCode::OK,
+    )
+    .await?;
+    let locator_token = locator_issued["locator_token"]
+        .as_str()
+        .context("holder locator issue omitted token")?;
+    let locator: PrincipalLocator = serde_json::from_value(
+        expect_json(
+            holder
+                .client
+                .post("/_arkret/open/invite-locators/resolve")
+                .json(&InviteLocatorResolveRequestBody::new(locator_token)),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    ensure!(locator.account_id == holder.account);
+    let operation_id =
+        arkret::ProtocolOperationId::new(next_typed_id("operation")).map_err(anyhow::Error::msg)?;
+    let idempotency_key =
+        arkret::IdempotencyKey::new(next_typed_id("idempotency")).map_err(anyhow::Error::msg)?;
+    let prepare = ContactOperationRequestBody::Prepare(ContactPrepareRequestBody {
+        phase: ContactPreparePhase::Prepare,
+        operation_id: operation_id.clone(),
+        idempotency_key: idempotency_key.clone(),
+        peer: ContactPeer::Human {
+            account_id: holder.account.clone(),
+        },
+        granted_to_peer_scopes: vec![ContactScope::DirectMessage],
+        introduction_evidence: ContactIntroductionEvidence::LocatorRef {
+            principal_locator: locator,
+        },
+        continuity_evidence: None,
+        message: None,
+    });
+    let prepared = expect_json(
+        sender
+            .client
+            .post("/_arkret/self/contacts/request")
+            .json(&prepare),
+        StatusCode::OK,
+    )
+    .await?;
+    ensure!(!prepared.to_string().contains("blocked_by_user"));
+    let ContactOperationOutcome::Prepared {
+        outcome:
+            ContactPreparedOutcome::Request {
+                reservation_handle,
+                event_draft,
+                ..
+            },
+    } = serde_json::from_value(prepared)?
+    else {
+        bail!("cross-Station first-DM Contact request did not prepare");
+    };
+    let commit = ContactOperationRequestBody::Commit(ContactCommitRequestBody {
+        phase: ContactCommitPhase::Commit,
+        operation_id,
+        idempotency_key,
+        reservation_handle,
+        signed_event: sender.client.sign_prepared_contact_event(
+            &event_draft,
+            arkret_wire::event_kind_str::CONTACT_REQUESTED,
+        )?,
+    });
+    let commit_bytes = arkret_canonical::canonical_json_bytes(&commit)?;
+    let initial_started = std::time::Instant::now();
+    let response = sender
+        .client
+        .post("/_arkret/self/contacts/request")
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .body(commit_bytes.clone())
+        .send()
+        .await?;
+    let initial_status = response.status();
+    ensure!(
+        !response.headers().iter().any(|(_, value)| value
+            .to_str()
+            .is_ok_and(|value| value.contains("blocked_by_user"))),
+        "Contact peer submission disclosed a private block in response headers"
+    );
+    let initial_body = response.bytes().await?;
+    let initial_elapsed = initial_started.elapsed();
+    ensure!(
+        initial_status == StatusCode::OK,
+        "blocked first-DM peer submission failed: {initial_status} {}",
+        String::from_utf8_lossy(&initial_body)
+    );
+    let accepted: Value = serde_json::from_slice(&initial_body)?;
+    ensure!(!accepted.to_string().contains("blocked_by_user"));
+    let ContactOperationOutcome::Accepted {
+        outcome:
+            ContactAcceptedOutcome::Request {
+                request_acceptance_receipt,
+                ..
+            },
+    } = serde_json::from_value(accepted)?
+    else {
+        bail!("cross-Station first-DM Contact request did not commit");
+    };
+    let event_ref = request_acceptance_receipt.core.request_event_ref;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    loop {
+        let incoming = holder
+            .client
+            .sdk()
+            .contacts_list()
+            .await?
+            .contacts
+            .into_iter()
+            .find(|row| row.peer.contact_actor_id() == sender.actor);
+        let outgoing = sender
+            .client
+            .sdk()
+            .contacts_list()
+            .await?
+            .contacts
+            .into_iter()
+            .find(|row| row.peer.contact_actor_id() == holder.actor);
+        if incoming.as_ref().is_some_and(|row| {
+            row.state == ContactState::PendingIncoming
+                && row.request_event_ref.as_ref() == Some(&event_ref)
+                && row
+                    .granted_by_peer_scopes
+                    .contains(&ContactScope::DirectMessage)
+        }) && outgoing.as_ref().is_some_and(|row| {
+            row.state == ContactState::PendingOutgoing
+                && row.request_event_ref.as_ref() == Some(&event_ref)
+        }) {
+            break;
+        }
+        ensure!(
+            std::time::Instant::now() < deadline,
+            "Contact peer relay did not converge on exact first-DM Event: holder={incoming:?}, sender={outgoing:?}"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+    }
+    ensure!(
+        inkson::account_data::hides_contact_request(
+            &holder_host.state_store().client_blocklist(),
+            &sender.actor
+        ),
+        "holder default Contact view lost private block after accepted peer relay"
+    );
+    let mut replays = Vec::new();
+    for blocked in [true, false] {
+        if !blocked {
+            unblock_direct_peer(&holder).await?;
+            catch_up_blocklist_revision(&holder_host, read_row(&holder.client).await?.revision)
+                .await?;
+        }
+        let started = std::time::Instant::now();
+        let response = sender
+            .client
+            .post("/_arkret/self/contacts/request")
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(commit_bytes.clone())
+            .send()
+            .await?;
+        let status = response.status();
+        let protocol = format!("{:?}", response.version());
+        let content_type = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or_default()
+            .to_owned();
+        ensure!(
+            !response.headers().iter().any(|(_, value)| value
+                .to_str()
+                .is_ok_and(|value| value.contains("blocked_by_user"))),
+            "Contact peer replay disclosed a private block in response headers"
+        );
+        let body = response.bytes().await?;
+        let elapsed = started.elapsed();
+        ensure!(
+            status == StatusCode::OK && !String::from_utf8_lossy(&body).contains("blocked_by_user"),
+            "Contact peer replay changed sender-visible result at blocked={blocked}: {status} {}",
+            String::from_utf8_lossy(&body)
+        );
+        let outcome: ContactOperationOutcome = serde_json::from_slice(&body)?;
+        ensure!(
+            matches!(
+                outcome,
+                ContactOperationOutcome::Accepted {
+                    outcome: ContactAcceptedOutcome::Request { .. }
+                }
+            ),
+            "Contact peer exact Commit replay changed its accepted branch"
+        );
+        replays.push((
+            status,
+            protocol,
+            content_type,
+            json_shape(&serde_json::from_slice::<Value>(&body)?),
+            elapsed,
+            body.to_vec(),
+        ));
+    }
+    ensure!(
+        replays[0].0 == replays[1].0
+            && replays[0].1 == replays[1].1
+            && replays[0].2 == replays[1].2
+            && replays[0].3 == replays[1].3
+            && replays[0].5 == replays[1].5,
+        "holder-private block changed the Contact peer replay response envelope"
+    );
+    ensure!(
+        !inkson::account_data::hides_contact_request(
+            &holder_host.state_store().client_blocklist(),
+            &sender.actor
+        ),
+        "cross-Station unblock did not restore the retained first-DM request"
+    );
+    ensure!(
+        holder
+            .client
+            .sdk()
+            .contacts_list()
+            .await?
+            .contacts
+            .iter()
+            .any(|row| row.peer.contact_actor_id() == sender.actor
+                && row.state == ContactState::PendingIncoming
+                && row.request_event_ref.as_ref() == Some(&event_ref)),
+        "private unblock changed the peer-relayed Contact Event"
+    );
+    ensure!(
+        persisted_snapshot(&sender_database.connect_url).await?.2 == 0,
+        "private unblock revision appeared in the Contact sender Station"
+    );
+    eprintln!(
+        "blocklist first-DM Contact peer relay: exact_event={}, initial_status={}, initial_ns={}, replay_status={}, replay_protocol={}, response_shape={}, blocked_replay_ns={}, unblocked_replay_ns={}; durations are regression observations",
+        event_ref,
+        initial_status,
+        initial_elapsed.as_nanos(),
+        replays[0].0,
+        replays[0].1,
+        replays[0].3,
+        replays[0].4.as_nanos(),
+        replays[1].4.as_nanos()
     );
     Ok(())
 }
