@@ -547,6 +547,26 @@ pub async fn run_account_blocklist_case5_production() -> Result<super::CaseExecu
     })
 }
 
+/// Exercise the registered holder-side Contact/first-DM and CallInvite
+/// surfaces together with the independent two-Station private-data boundary.
+/// This remains a bounded case-6 slice until each fixture assertion has been
+/// reviewed against the precise sender and queried-party transport evidence.
+pub async fn run_account_blocklist_case6_combined_slice() -> Result<()> {
+    let fixture = validated_fixture()?;
+    let cases = value_array(required_field(&fixture, "cases")?, "cases")?;
+    assert_case(&cases[6], "accept", None)?;
+    contact_and_first_dm_pending_request_live()
+        .await
+        .context("case 6 Contact direct_message request and holder filter")?;
+    crate::scenarios::mls_lifecycle_live::run_blocklist_call_invite_live()
+        .await
+        .context("case 6 sealed CallInvite and Native dispatch")?;
+    run_account_blocklist_case4_federated_boundary_slice()
+        .await
+        .context("case 6 generic holder-private Account Data federation boundary")?;
+    Ok(())
+}
+
 /// Exercise the ordinary Inkson Account projector and Garth subscription,
 /// including the durable cursor on a real undecryptable accepted Delta.
 async fn private_account_catchup(holder: &TestActorClient, owner: &ActorId) -> Result<()> {
@@ -1305,6 +1325,12 @@ pub async fn contact_and_first_dm_pending_request_live() -> Result<()> {
             .and_then(|value| value.to_str().ok())
             .unwrap_or_default()
             .to_owned();
+        ensure!(
+            !response.headers().iter().any(|(_, value)| value
+                .to_str()
+                .is_ok_and(|value| value.contains("blocked_by_user"))),
+            "holder-private block leaked through a Contact prepare response header"
+        );
         let bytes = response.bytes().await?;
         let elapsed = started.elapsed();
         ensure!(
@@ -1374,6 +1400,12 @@ pub async fn contact_and_first_dm_pending_request_live() -> Result<()> {
         .send()
         .await?;
     let commit_status = response.status();
+    ensure!(
+        !response.headers().iter().any(|(_, value)| value
+            .to_str()
+            .is_ok_and(|value| value.contains("blocked_by_user"))),
+        "holder-private block leaked through a Contact commit response header"
+    );
     let commit_bytes = response.bytes().await?;
     let commit_elapsed = started.elapsed();
     ensure!(
@@ -1410,6 +1442,28 @@ pub async fn contact_and_first_dm_pending_request_live() -> Result<()> {
                 .contains(&ContactScope::DirectMessage),
         "holder did not retain exact first-DM-scoped Contact request"
     );
+    let sender_deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    loop {
+        let sender_row = bob
+            .client
+            .sdk()
+            .contacts_list()
+            .await?
+            .contacts
+            .into_iter()
+            .find(|candidate| candidate.peer.contact_actor_id() == alice.actor);
+        if sender_row.as_ref().is_some_and(|candidate| {
+            candidate.state == ContactState::PendingOutgoing
+                && candidate.request_event_ref == row.request_event_ref
+        }) {
+            break;
+        }
+        ensure!(
+            std::time::Instant::now() < sender_deadline,
+            "sender's queried Contact projection did not retain its accepted pending request: {sender_row:?}"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+    }
     ensure!(
         inkson::account_data::hides_contact_request(
             &holder_host.state_store().client_blocklist(),

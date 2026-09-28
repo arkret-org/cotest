@@ -160,6 +160,23 @@ fn blocklist_case5_full_fixture_runs_production_executor() -> Result<()> {
 }
 
 #[test]
+fn blocklist_case6_contact_call_and_federation_combined_slice() -> Result<()> {
+    const STACK_SIZE: usize = 32 * 1024 * 1024;
+    std::thread::Builder::new()
+        .stack_size(STACK_SIZE)
+        .spawn(|| -> Result<()> {
+            tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(2)
+                .thread_stack_size(STACK_SIZE)
+                .enable_all()
+                .build()?
+                .block_on(cotest::conformance::run_account_blocklist_case6_combined_slice())
+        })?
+        .join()
+        .map_err(|_| anyhow::anyhow!("case 6 combined slice worker panicked"))?
+}
+
+#[test]
 fn blocklist_dm_binding_signed_snapshot_is_participant_only() -> Result<()> {
     const STACK_SIZE: usize = 32 * 1024 * 1024;
     std::thread::Builder::new()

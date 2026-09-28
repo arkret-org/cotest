@@ -32,13 +32,14 @@ use std::time::Duration;
 
 use anyhow::{Context as _, Result, anyhow, bail, ensure};
 use arkret::{
-    ArkretMlsGroup, ArkretMlsIdentity, ArkretMlsSigner, MlsCommitPayload,
+    ArkretMlsGroup, ArkretMlsIdentity, ArkretMlsSigner, MlsCommitPayload, MlsEndpointIdentity,
     MlsGovernanceBindingPayload, MlsKeyPackageRecord,
 };
 use arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest;
 use arkret_models_collaboration::device_messages::{
     DeviceMessagesAckRequestBody, DeviceMessagesGetOutcome, RecipientDelivery,
 };
+use arkret_models_collaboration::events_payloads::MlsGenesisCreatorLeafAuthority;
 use arkret_models_collaboration::governance::membership_invite::MembershipPayloadState;
 use arkret_models_crypto::{
     KeyPackagesClaimOutcome, KeyPackagesClaimQueryRequestBody, KeyPackagesClaimRequestBody,
@@ -360,6 +361,36 @@ async fn run_with_blocklist_observer(observe_blocklist: bool, observe_receipt: b
     let genesis_binding = MlsGovernanceBindingPayload::new(scope.clone(), None, 0, 0, 0)?;
     let mut alice_group =
         alice_identity.create_group_with_governance_binding(&scope, &genesis_binding)?;
+    alice_group.install_local_creator_binding(
+        alice.actor.clone(),
+        Some(alice.authorize_event_id.clone()),
+    )?;
+    let verified = alice_group.verified_leaf_bindings()?;
+    let [creator] = verified.as_slice() else {
+        bail!("Genesis requires Alice's sole verified MLS leaf");
+    };
+    ensure!(
+        creator.leaf_index == 0 && creator.actor_id == alice.actor,
+        "Genesis creator leaf does not belong to Alice"
+    );
+    let endpoint = match &creator.endpoint {
+        MlsEndpointIdentity::HumanDevice { device_id, .. } => {
+            ensure!(*device_id == alice.device);
+            MlsWelcomeRecipientEndpoint::Device {
+                device_id: device_id.clone(),
+            }
+        }
+        _ => bail!("Genesis creator leaf is not Alice's device"),
+    };
+    let creator_leaf_authority = MlsGenesisCreatorLeafAuthority {
+        leaf_signature_key_b64u: creator.signature_key.clone(),
+        endpoint,
+        authorization_event_ref: creator
+            .device_authorize_event_id
+            .clone()
+            .context("Alice's MLS creator leaf lacks accepted DeviceAuthorize Event")?,
+    };
+    creator_leaf_authority.validate()?;
     let (group_info, tree) = alice_group.public_group_state_bytes()?;
     let group_info_ref = upload_public_blob(&alice.client, &realm_id, &group_info).await?;
     let tree_ref = upload_public_blob(&alice.client, &realm_id, &tree).await?;
@@ -373,6 +404,7 @@ async fn run_with_blocklist_observer(observe_blocklist: bool, observe_receipt: b
                 "group_info_ref": group_info_ref,
                 "ratchet_tree_ref": tree_ref,
                 "governance_binding": genesis_binding,
+                "creator_leaf_authority": creator_leaf_authority,
                 "created_at": arkret_canonical::format_timestamp_canonical(chrono::Utc::now()),
             }))?,
         )
