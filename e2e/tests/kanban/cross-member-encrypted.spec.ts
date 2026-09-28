@@ -68,7 +68,9 @@ type E2eeStorageEvidence = {
   wrappingKeyExtractable: boolean | null;
 };
 
-async function waitForMlsWelcome(
+// The Welcome is a recipient delivery, not a shared Event. Wait for the
+// accepted member-add Commit before the recipient reload/decrypt assertions.
+async function waitForMlsCommit(
   request: APIRequestContext,
   session: DpopUserSession,
   realmId: string,
@@ -102,14 +104,13 @@ async function waitForMlsWelcome(
         const body = await response.json();
         return (body.committed_events ?? []).some(
           (item: { event?: Record<string, any> }) =>
-            item.event?.kind === "ak.mls.welcome" &&
-            item.event.payload?.recipient_principal_id === recipientId,
+            item.event?.kind === "ak.mls.commit",
         );
       },
       {
         timeout: 120_000,
         intervals: [1_000, 2_000, 5_000],
-        message: `MLS Welcome for ${recipientId} was not accepted in ${realmId}`,
+        message: `MLS member-add Commit for ${recipientId} was not accepted in ${realmId}`,
       },
     )
     .toBe(true);
@@ -705,7 +706,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           await outboundFault.restore();
         }
         await bobPage.gotoTimelineRealm(realmId);
-        await waitForMlsWelcome(request, aliceSession, realmId, bob.id);
+        await waitForMlsCommit(request, aliceSession, realmId, bob.id);
         await bobPage.page.reload({ waitUntil: "domcontentloaded" });
         await bobPage.completeRecoveryKeySetupIfPrompted();
 
@@ -939,7 +940,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
       await bobPage.acknowledgeRecommendedEncryptionPromptIfVisible();
       await bobPage.acceptInvite(realmId);
       await bobPage.gotoTimelineRealm(realmId);
-      await waitForMlsWelcome(request, aliceSession, realmId, bob.id);
+      await waitForMlsCommit(request, aliceSession, realmId, bob.id);
       await bobPage.page.reload({ waitUntil: "domcontentloaded" });
       await bobPage.completeRecoveryKeySetupIfPrompted();
 

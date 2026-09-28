@@ -58,8 +58,7 @@ type PairingHandle = {
 };
 
 type RuntimeKeyRequestStatus = {
-  ok: boolean;
-  status: string;
+  lifecycle: string;
   runtime_state: string;
   approval_request_id?: string | null;
   authorized_event_ref?: string | null;
@@ -191,7 +190,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         request,
         firstPairing,
       );
-      expect(beforeRequest.status).toBe("active");
+      expect(beforeRequest.lifecycle).toBe("active");
       expect(beforeRequest.runtime_state).toBe("pending_runtime_key");
       expect(beforeRequest.approval_request_id ?? null).toBeNull();
       expect(beforeRequest.authorized_event_ref ?? null).toBeNull();
@@ -271,7 +270,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           request,
           firstPairing,
         );
-        expect(firstBinding.status).toBe("active");
+        expect(firstBinding.lifecycle).toBe("active");
         expect(firstBinding.runtime_state).toBe("ready");
         expect(firstBinding.approval_request_id ?? null).toBeNull();
         const firstAuthorizedEventRef = firstBinding.authorized_event_ref ?? "";
@@ -329,7 +328,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           request,
           replacementPairing,
         );
-        expect(replacementBeforeRequest.status).toBe("active");
+        expect(replacementBeforeRequest.lifecycle).toBe("active");
         expect(replacementBeforeRequest.runtime_state).toBe("replacing");
         expect(replacementBeforeRequest.approval_request_id ?? null).toBeNull();
         expect(
