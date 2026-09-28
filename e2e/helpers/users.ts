@@ -549,16 +549,19 @@ export class JointUserPage {
           if (response.status() !== 200) return false;
           const body = (await response.json()) as {
             grants?: Array<{
-              id?: string;
-              subject?: unknown;
-              actions?: string[];
+              grant?: {
+                id?: string;
+                subject?: unknown;
+                actions?: string[];
+              };
             }>;
           };
           projectedGrantId = body.grants?.find(
-            (grant) =>
-              canonicalJson(grant.subject) === canonicalJson(subject) &&
-              grant.actions?.includes(action),
-          )?.id;
+            (row) =>
+              row.grant?.subject !== undefined &&
+              canonicalJson(row.grant.subject) === canonicalJson(subject) &&
+              row.grant.actions?.includes(action),
+          )?.grant?.id;
           return projectedGrantId?.startsWith("ak:grant:") ?? false;
         },
         { timeout: 120_000, intervals: [250, 500, 1_000, 2_000] },
