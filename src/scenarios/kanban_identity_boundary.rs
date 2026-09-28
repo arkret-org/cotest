@@ -54,6 +54,11 @@ pub async fn kanban_creates_keep_one_identity_across_receipt_backfill_and_retry(
     .map_err(|error| anyhow!("inkson board builder: {error:#}"))?
     .build_sdk_event("cotest")
     .map_err(|error| anyhow!("inkson board build: {error:#}"))?;
+    assert_eq!(
+        serde_json::to_value(board.payload())?["object"]["created_at"],
+        arkret_canonical::format_timestamp_canonical(board.created_at()),
+        "Inkson's Space create object and Event intent must share one clock"
+    );
     let (board_event_id, board_envelope) = submit_operation(&alice, &realm_id, &board).await?;
     let board_space_id = arkret::SpaceId::from_event_id(&board_event_id).to_string();
 
@@ -363,15 +368,18 @@ async fn submit_operation(
             serde_json::to_value(operation.payload())?,
         )
         .await?;
-    if operation.kind().as_str() == "ak.strand.create" {
+    if matches!(
+        operation.kind().as_str(),
+        "ak.strand.create" | "ak.space.create"
+    ) {
         // The live harness chooses its own envelope clock. Match that signed
-        // clock in the Event-derived create object before finalizing identity.
+        // clock in each Event-derived create object before finalizing identity.
         let event_created_at = serde_json::to_value(&event)?["created_at"].clone();
         event
             .payload
             .get_mut("object")
             .and_then(Value::as_object_mut)
-            .ok_or_else(|| anyhow!("Strand create payload has no object"))?
+            .ok_or_else(|| anyhow!("Event-derived create payload has no object"))?
             .insert("created_at".to_owned(), event_created_at);
         crate::harness::refresh_typed_event_proof(&mut event)?;
     }
