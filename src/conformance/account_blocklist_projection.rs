@@ -437,8 +437,8 @@ async fn private_account_catchup(holder: &TestActorClient, owner: &ActorId) -> R
     Ok(())
 }
 
-/// A real sender observation; elapsed transport time is evidence only, not
-/// an invented timing bucket or a proof of statistical indistinguishability.
+/// A real sender observation; elapsed transport time is regression evidence,
+/// not an invented timing bucket or a proof of statistical indistinguishability.
 struct SharedSubmissionObservation {
     status: StatusCode,
     content_type: String,
@@ -561,7 +561,7 @@ fn compare_shared_sender_observations(
         "distinct observations reused a fabricated acceptance"
     );
     eprintln!(
-        "blocklist shared sender observations: both HTTP {} / committed / no reason; blocked transport {:?}, unblocked transport {:?}; timing oracle remains unwired",
+        "blocklist shared sender observations: both HTTP {} / committed / no reason; blocked transport {:?}, unblocked transport {:?}; full privacy oracle remains unwired",
         blocked.status, blocked.elapsed, unblocked.elapsed
     );
     Ok(())
