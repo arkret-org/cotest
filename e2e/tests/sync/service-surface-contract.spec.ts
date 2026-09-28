@@ -473,16 +473,10 @@ test.describe("service surface contract — error envelope, pagination, idempote
   );
 
   test(
-    "Phase C: list endpoint pagination cursor is opaque, gap-free, and non-overlapping across pages",
+    "Phase C: committed stream scan is gap-free and non-overlapping across pages",
     async ({ request }) => {
-      // spec: api-conventions.md §7 (cursor opaque; wire form `ak:cursor:<base64url>`;
-      //         invalid → param_invalid; expired → cursor_expired),
-      //       §7.1 (list pagination response: { <items_field>, next_cursor, has_more };
-      //         client paginates by `has_more`, follows `next_cursor`).
-      //
-      // The `ak.self.committed_event.read.scan.v1` list surface at POST /_arkret/self/streams/scan
-      // is the first list endpoint to reach the §7.1 wire shape exactly:
-      // `{ events, next_cursor: "ak:cursor:<base64url>", has_more, prev_cursor }`.
+      // A committed stream is paged by position. `before_position` is exclusive,
+      // and `truncated` tells the reader whether older positions remain.
       const stamp = Date.now();
       const alice = uniqueUser(`ssc-page-alice-${stamp}`);
       await ensureRegistered(request, alice);
@@ -494,7 +488,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       });
       const strandId = await resolveDefaultStrandId(request, token, realmId);
 
-      // Seed ≥5 list-visible messages so a limit=2 page leaves ≥2 more pages.
+      // Seed enough messages to require several pages after the bootstrap.
       const seededEventIds: string[] = [];
       for (let i = 0; i < 6; i += 1) {
         const envelope = signedEventEnvelope({
@@ -514,70 +508,58 @@ test.describe("service surface contract — error envelope, pagination, idempote
       }
       const seededSet = new Set(seededEventIds);
 
-      const cursorRe = /^ak:cursor:[A-Za-z0-9_-]+$/;
-      // api-conventions §7.1: Event scan has_more means older history only.
-      const fetchPage = async (before?: string) => {
-        const url = new URL(`${solandBaseUrl()}/_arkret/self/events`);
-        const resp = await request.fetch(url.toString(), {
-          method: "QUERY",
-          headers: { ...authHeaders(token, "QUERY", url.toString()), "content-type": "application/json" },
+      const scanUrl = `${solandBaseUrl()}/_arkret/self/streams/scan`;
+      const fetchPage = async (beforePosition: number | null) => {
+        const response = await request.post(scanUrl, {
+          headers: { ...authHeaders(token, "POST", scanUrl), "content-type": "application/json" },
           data: canonicalJson({
-            realm_ids: [realmId],
-            order: "descending",
+            realm_id: realmId,
+            stream_ref: { kind: "realm", realm_id: realmId },
+            before_position: beforePosition,
             limit: 2,
-            ...(before ? { before } : {}),
           }),
         });
-        expect(resp.status(), "list page status").toBe(200);
-        const body = (await resp.json()) as {
-          events?: Array<{ event_id?: string }>;
-          prev_cursor?: string;
-          has_more?: boolean;
+        expect(response.status(), "stream scan page status").toBe(200);
+        const body = (await response.json()) as {
+          committed_events: Array<{
+            commit: { stream_position: number; event_ref: string };
+            event: { event_id: string };
+          }>;
+          truncated: boolean;
         };
-        expect(
-          Array.isArray(body.events),
-          "page events[] is array",
-        ).toBe(true);
-        expect(typeof body.has_more, "has_more boolean MUST be present").toBe("boolean");
+        expect(Array.isArray(body.committed_events)).toBe(true);
+        expect(typeof body.truncated).toBe("boolean");
         return body;
       };
 
-      // Walk pages strictly by has_more / prev_cursor, collecting only the
-      // seeded ids so unrelated bootstrap events do not perturb the assertions.
       const pageSeededIds: string[][] = [];
-      let cursor: string | undefined;
-      let sawHasMoreTrue = false;
-      for (let guard = 0; guard < 12; guard += 1) {
-        const page = await fetchPage(cursor);
-        const ids = (page.events ?? [])
-          .map((event) => event.event_id)
-          .filter((id): id is string => typeof id === "string");
-        pageSeededIds.push(ids.filter((id) => seededSet.has(id)));
-        if (page.prev_cursor !== undefined) {
-          // §7 — opaque ak:cursor token; decoding it MUST NOT reveal any seeded id.
-          expect(page.prev_cursor, "prev_cursor wire form").toMatch(cursorRe);
-          const decoded = Buffer.from(
-            page.prev_cursor.slice("ak:cursor:".length),
-            "base64url",
-          ).toString("utf8");
-          for (const id of seededEventIds) {
-            expect(decoded, "cursor is opaque (no seeded id leaks)").not.toContain(id);
-          }
-        }
-        if (page.has_more === true) {
-          sawHasMoreTrue = true;
-          expect(page.prev_cursor, "has_more=true MUST carry prev_cursor").toMatch(cursorRe);
-        }
-        if (page.has_more !== true || !page.prev_cursor) {
-          break;
-        }
-        cursor = page.prev_cursor;
+      const seenPositions = new Set<number>();
+      let beforePosition: number | null = null;
+      let previousPosition: number | undefined;
+      let sawTruncated = false;
+      for (let guard = 0; guard < 20; guard += 1) {
+        const page = await fetchPage(beforePosition);
+        expect(page.committed_events.length).toBeGreaterThan(0);
+        expect(page.committed_events.length).toBeLessThanOrEqual(2);
+        pageSeededIds.push(page.committed_events
+          .map(({ commit, event }) => {
+            expect(commit.event_ref).toBe(event.event_id);
+            expect(seenPositions.has(commit.stream_position), "stream position repeated").toBe(false);
+            if (previousPosition !== undefined) {
+              expect(commit.stream_position, "stream scan skipped a position").toBe(previousPosition - 1);
+            }
+            previousPosition = commit.stream_position;
+            seenPositions.add(commit.stream_position);
+            return event.event_id;
+          })
+          .filter((id) => seededSet.has(id)));
+        if (!page.truncated) break;
+        sawTruncated = true;
+        beforePosition = previousPosition!;
       }
+      expect(sawTruncated, "limit=2 must require another page").toBe(true);
+      expect(previousPosition, "scan reaches the Realm stream genesis").toBe(0);
 
-      // At least one page was bounded (proves the limit=2 cap paginated).
-      expect(sawHasMoreTrue, "limit=2 over ≥6 items must page (has_more=true seen)").toBe(true);
-
-      // Gap-free: union over all pages covers every seeded id.
       const union = new Set<string>(pageSeededIds.flat());
       for (const id of seededEventIds) {
         expect(union.has(id), `seeded id ${id} appears in some page (no gap)`).toBe(true);
@@ -593,30 +575,18 @@ test.describe("service surface contract — error envelope, pagination, idempote
         }
       }
 
-      // Tampered cursor → encoding.md §8.3 closed set. Flipping the final
-      // base64url character corrupts the canonical JSON body, so this is a
-      // *syntax* failure: the mapping is pinned to top-level `param_invalid`
-      // with reason `invalid_cursor` — `cursor_expired` is reserved for TTL
-      // expiry and `cursor_integrity_invalid` for handle lookup / binding
-      // failures; a bare `invalid_cursor` error code is outside the closed set.
-      const firstPage = await fetchPage();
-      const validCursor = firstPage.prev_cursor;
-      expect(validCursor, "first page must carry a prev_cursor to tamper").toMatch(cursorRe);
-      const flippedChar = validCursor![validCursor!.length - 1] === "A" ? "B" : "A";
-      const tampered = validCursor!.slice(0, -1) + flippedChar;
-      const tamperUrl = new URL(`${solandBaseUrl()}/_arkret/self/events`);
-      const tamperResp = await request.fetch(tamperUrl.toString(), {
-        method: "QUERY",
-        headers: { ...authHeaders(token, "QUERY", tamperUrl.toString()), "content-type": "application/json" },
-        data: canonicalJson({ realm_ids: [realmId], order: "descending", limit: 2, before: tampered }),
+      const malformed = await request.post(scanUrl, {
+        headers: { ...authHeaders(token, "POST", scanUrl), "content-type": "application/json" },
+        data: canonicalJson({
+          realm_id: realmId,
+          stream_ref: { kind: "realm", realm_id: realmId },
+          after_position: null,
+          before_position: null,
+          limit: 2,
+        }),
       });
-      expect(tamperResp.status(), "tampered cursor is param_invalid (HTTP 400)").toBe(400);
-      const tamperBody = (await tamperResp.json()) as { reason_code?: string };
-      expect(wireErrCode(tamperBody), "tampered cursor error code").toBe("param_invalid");
-      expect(
-        tamperBody.reason_code,
-        "syntax failure carries reason invalid_cursor",
-      ).toBe("invalid_cursor");
+      expect(malformed.status(), "both scan directions are rejected").toBe(422);
+      expect(wireErrCode(await malformed.json())).toBe("schema_violation");
     },
   );
 

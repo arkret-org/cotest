@@ -63,10 +63,8 @@ async function errorFingerprint(response: {
   };
 }
 
-// The two §7 accepted-event preconditions are a closed rejection set:
-// `failed_precondition` plus one of `invite_event_unaccepted` /
-// `invite_event_actor_mismatch`. RFC 9457 `type` carries the top-level code;
-// the registered operation-specific sub-reason is the root `reason_code`.
+// §7 exposes only the active `failed_precondition` code. The retired
+// operation-specific reason codes must not appear on the wire.
 async function dispatchRejection(response: {
   status(): number;
   text(): Promise<string>;
@@ -521,7 +519,7 @@ test.describe("invite addressing", () => {
     });
 
     // §7: an Event this service has not accepted MUST be rejected with
-    // `failed_precondition` / `invite_event_unaccepted`. The Event below is well
+    // `failed_precondition`. The Event below is well
     // formed and correctly signed but was never submitted.
     const unsubmitted = signedEventEnvelope({
       actorId: fixture.inviter.id,
@@ -548,11 +546,11 @@ test.describe("invite addressing", () => {
       // error-code-registry.json maps `failed_precondition` to HTTP 409.
       status: 409,
       code: "failed_precondition",
-      reason: "invite_event_unaccepted",
+      reason: undefined,
     });
 
     // §7: a signer that is not the authenticated session actor MUST be
-    // rejected with `failed_precondition` / `invite_event_actor_mismatch`. The
+    // rejected with `failed_precondition`. The
     // Event here is accepted and byte-exact — only the session belongs to
     // someone else, and the service MUST NOT co-sign or re-author for them.
     const actorMismatch = await rawDispatchSelfInviteApi(
@@ -564,7 +562,7 @@ test.describe("invite addressing", () => {
       // error-code-registry.json maps `failed_precondition` to HTTP 409.
       status: 409,
       code: "failed_precondition",
-      reason: "invite_event_actor_mismatch",
+      reason: undefined,
     });
 
     // §7: neither rejection may produce a delivery, an outbox
