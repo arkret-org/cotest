@@ -265,6 +265,7 @@ test.describe("kanban end-to-end", () => {
     browser,
     request,
   }, testInfo) => {
+    test.setTimeout(360_000);
     const stamp = Date.now();
     const aliceFlow = await openDpopUserPage(browser, request, "kanban-alice");
     if (!aliceFlow) {
@@ -335,6 +336,9 @@ test.describe("kanban end-to-end", () => {
         .getByTestId("kanban-card")
         .filter({ hasText: cardA })
         .first();
+      await expect(cardALocator).toHaveAttribute("data-card-draft", "false", {
+        timeout: 120_000,
+      });
       await cardALocator.hover();
       await cardALocator.getByTestId("card-archive-button").click();
       await expect(todoColumn.getByTestId("kanban-card").filter({ hasText: cardA })).toHaveCount(0, {
@@ -346,6 +350,17 @@ test.describe("kanban end-to-end", () => {
       ).toBeVisible({ timeout: 30_000 });
       await stepShot(alicePage.page, testInfo, "D-card-archived");
 
+      // The archived state must come back from durable server data, rather
+      // than only from the optimistic board projection in this page.
+      await alicePage.page.reload({ waitUntil: "domcontentloaded" });
+      await expect(alicePage.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
+      await expect(
+        alicePage.page.getByTestId("kanban-card").filter({ hasText: cardA }),
+      ).toHaveCount(0);
+      await expect(
+        alicePage.page.getByTestId("kanban-archived-card-row").filter({ hasText: cardA }),
+      ).toBeVisible({ timeout: 30_000 });
+
       // Restore Card A from archive — it should reappear on the board.
       const archivedRow = alicePage.page
         .getByTestId("kanban-archived-card-row")
@@ -356,6 +371,14 @@ test.describe("kanban end-to-end", () => {
         alicePage.page.getByTestId("kanban-card").filter({ hasText: cardA }),
       ).toBeVisible({ timeout: 30_000 });
       await stepShot(alicePage.page, testInfo, "E-card-restored");
+
+      await alicePage.page.reload({ waitUntil: "domcontentloaded" });
+      await expect(
+        alicePage.page.getByTestId("kanban-card").filter({ hasText: cardA }),
+      ).toBeVisible({ timeout: 120_000 });
+      await expect(
+        alicePage.page.getByTestId("kanban-archived-card-row").filter({ hasText: cardA }),
+      ).toHaveCount(0);
     } finally {
       await alicePage.close();
     }
