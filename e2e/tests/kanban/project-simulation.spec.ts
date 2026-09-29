@@ -15,7 +15,6 @@ import { stepShot } from "../../helpers/screenshots";
 import { solandBaseUrl, solandServiceId } from "../../helpers/env";
 import {
   accountActorId,
-  addRealmMemberApi,
   authHeaders,
   canonicalJson,
   canonicalTimestamp,
@@ -28,6 +27,7 @@ import {
   wireErrCode,
 } from "../../helpers/soland-api";
 import { acceptInviteViaApi } from "../../helpers/api";
+import { relationCreatePayload } from "../../helpers/relation-api";
 import {
   allowExplicitInviteNotifications,
   assertJointStackNotRequired,
@@ -346,17 +346,11 @@ test.describe("project simulation", () => {
       actorId: alice.id,
       realmId,
       kind: "ak.relation.create",
-      payload: {
-        relation: {
-          schema: "ak.schema.relation.v1",
-          realm_id: realmId,
-          relation_kind: "assigned_to",
-          from_ref: cardId,
-          to_ref: accountActorId(bob.id),
-          created_by: accountActorId(alice.id),
-          created_at: canonicalTimestamp(),
-        },
-      },
+      payload: relationCreatePayload({
+        relationKind: "assigned_to",
+        fromRef: cardId,
+        toRef: accountActorId(bob.id),
+      }),
     });
     await submitSignedEventApi(request, aliceToken, assignment, {
       context: "assign Card 1 to bob",
@@ -404,7 +398,6 @@ test.describe("project simulation", () => {
             schema: "ak.schema.strand.v1",
             realm_id: realmId,
             metadata: { title: "Implement login" },
-            stage: "planned",
             tracks: { discussion: { enabled: true, is_primary: true } },
             created_by: accountActorId(alice.id),
             created_at: taskCreatedAt,
@@ -417,6 +410,23 @@ test.describe("project simulation", () => {
     const taskStrandId = retypeEventDerivedId(
       String(taskStrandEnvelope.event_id),
       "strand",
+    );
+
+    // strand-and-message.md section 2: create carries no `stage`; the first
+    // `ak.strand.stage.set` initializes the axis without `expected_stage`.
+    await submitSignedEventApi(
+      request,
+      aliceToken,
+      signedEventEnvelope({
+        actorId: alice.id,
+        realmId,
+        kind: "ak.strand.stage.set",
+        payload: {
+          strand_id: taskStrandId,
+          stage: "planned",
+        },
+      }),
+      { context: "initialize card stage to planned" },
     );
 
     // common-fields.md §5.3.3: without a profile-declared workflow transition rule the
@@ -625,33 +635,21 @@ test.describe("project simulation", () => {
       actorId: alice.id,
       realmId,
       kind: "ak.relation.create",
-      payload: {
-        relation: {
-          schema: "ak.schema.relation.v1",
-          realm_id: realmId,
-          relation_kind: "assigned_to",
-          from_ref: cardId,
-          to_ref: accountActorId(alice.id),
-          created_by: accountActorId(alice.id),
-          created_at: canonicalTimestamp(),
-        },
-      },
+      payload: relationCreatePayload({
+        relationKind: "assigned_to",
+        fromRef: cardId,
+        toRef: accountActorId(alice.id),
+      }),
     });
     const assignToBob = signedEventEnvelope({
       actorId: alice.id,
       realmId,
       kind: "ak.relation.create",
-      payload: {
-        relation: {
-          schema: "ak.schema.relation.v1",
-          realm_id: realmId,
-          relation_kind: "assigned_to",
-          from_ref: cardId,
-          to_ref: accountActorId(bob.id),
-          created_by: accountActorId(alice.id),
-          created_at: canonicalTimestamp(),
-        },
-      },
+      payload: relationCreatePayload({
+        relationKind: "assigned_to",
+        fromRef: cardId,
+        toRef: accountActorId(bob.id),
+      }),
     });
 
     await submitSignedEventApi(request, aliceToken, assignToAlice, {
@@ -705,32 +703,31 @@ test.describe("project simulation", () => {
       actorId: alice.id,
       realmId,
       kind: "ak.relation.create",
-      payload: {
-        relation: {
-          schema: "ak.schema.relation.v1",
-          realm_id: realmId,
-          relation_kind: "assigned_to",
-          from_ref: cardId,
-          to_ref: accountActorId(bob.id),
-          created_by: accountActorId(alice.id),
-          created_at: canonicalTimestamp(),
-        },
-      },
+      payload: relationCreatePayload({
+        relationKind: "assigned_to",
+        fromRef: cardId,
+        toRef: accountActorId(bob.id),
+      }),
     });
-    await submitSignedEventApi(
+    const assignmentOutcome = await submitSignedEventApi(
       request,
       aliceToken,
       assignment,
       { context: "assign Card to bob" },
     );
     const relationId = sdkEventDerivedObjectId(assignment);
+    const assignmentCommit = assignmentOutcome.commit as {
+      commit_id: string;
+      stream_position: number;
+    };
 
     const assigned = await readStrandRow(request, aliceToken, realmId, cardId);
     expect(assigned?.assigned_actor_ids ?? []).toContainEqual(
       accountActorId(bob.id),
     );
 
-    // Unassign: tombstone the assigned_to edge.
+    // Unassign: tombstone the assigned_to edge at its exact current revision
+    // (relation.md section 6.2).
     await submitSignedEventApi(
       request,
       aliceToken,
@@ -739,6 +736,12 @@ test.describe("project simulation", () => {
         realmId,
         kind: "ak.relation.tombstone",
         payload: {
+          primary_conflict_domain: (assignment.payload as Record<string, unknown>)
+            .primary_conflict_domain,
+          expected_revision: {
+            commit_id: assignmentCommit.commit_id,
+            stream_position: assignmentCommit.stream_position,
+          },
           relation_id: relationId,
         },
       }),

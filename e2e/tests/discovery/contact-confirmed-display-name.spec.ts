@@ -18,9 +18,11 @@ import {
   assertJointStackNotRequired,
   createDpopUserSession,
   openDpopUserPage,
+  openDpopUserPageFromSession,
   selfPathHeadersForDpopSession,
 } from "../../helpers/users";
 import {
+  accountActorId,
   canonicalJson,
   prepareSignedEventSubmissionApi,
   principalControlRealmForId,
@@ -63,8 +65,11 @@ test.describe("contact confirmed display name", () => {
     const bobToken = bobSession.grantJwt;
 
     try {
-      // The shared Direct Conversation Realm created by an accepted Contact is
-      // what authorizes reading Bob's global Profile at all.
+      // A shared Collaboration Realm is what authorizes reading Bob's global
+      // Profile at all (profiles-presence.md §2.3). Accepting the Contact does
+      // not create one: only the pair's founder authors the Direct
+      // Conversation founding unit, and in the normal branch that founder is
+      // the responder (contact-and-direct-conversation.md §5.2 / §5.5).
       const { outcome } = await requestContactArkret(
         request,
         aliceToken,
@@ -77,6 +82,25 @@ test.describe("contact confirmed display name", () => {
         action: "accept",
         grantedScopes: ["direct_message"],
       });
+      const bobFlow = await openDpopUserPageFromSession(browser, bobSession);
+      expect(bobFlow, "Bob's founder device opens").toBeTruthy();
+      const bobPage = bobFlow!.page;
+      try {
+        await bobPage.page.getByTestId("realm-sidebar-tab-direct").click();
+        const aliceRow = bobPage.page.locator(
+          `[data-testid="direct-conversation-row"][data-peer=${JSON.stringify(canonicalJson(accountActorId(alice.id)))}]`,
+        );
+        await expect(async () => {
+          if (!new URL(bobPage.page.url()).pathname.startsWith("/direct/")) {
+            await aliceRow.click();
+          }
+          await expect(bobPage.page).toHaveURL(/\/direct\/ak:realm:.*\/ak:strand:/, {
+            timeout: 5_000,
+          });
+        }).toPass({ timeout: 180_000, intervals: [2_000] });
+      } finally {
+        await bobPage.close();
+      }
 
       const bobRealmId = principalControlRealmForId(bob.id);
       const profileUrl = `${solandBaseUrl()}/_arkret/self/account/profile`;

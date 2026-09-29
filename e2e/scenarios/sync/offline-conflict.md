@@ -2,15 +2,15 @@
 
 ## 目标
 
-bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending move。Realm title / summary / avatar 的唯一写入面 `ak.realm.profile` 使用 `ak.component.realm.profile.v1` 的 `causal_register`：全部合资格 sibling 身份作为证据保留，current 按固定 `(depth, EventId)` 只暴露一个赢家。普通编辑引用当前来源即可形成更高 depth 的后继，不需要通用 repair event。
+bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending Event。Realm title / summary / avatar 的唯一写入面 `ak.realm.profile` 是 `realm_profile` 单例的整值替换；同一 Realm stream 上的写入只按治理 Station 给出的 `stream_position` 排序，后接纳者即 current，不存在需要合并的多头或通用 repair event。
 
 ## Spec 锚点
 
 - `sync/client-sync.md` §2 — Sync 协议 + cursor
-- `sync/operations-sync.md` §2 — Conflict resolution via Lattice join
-- `sync/operations-sync.md` §2.1 — `bottom_cells` 暴露
-- `authz/event-auth-state-resolution.md` §2 — Bottom cell diagnostics
-- `authz/event-auth-state-resolution.md` §8.1 — 冲突恢复 Move(`state_witness` / `inclusion_proof`)
+- `sync/operations-sync.md` §9 — 单 authority 顺序裁决冲突，无通用合流
+- `authz/event-auth-state-resolution.md` §6 — typed 当前值 = 该 stream 最后一个被接受的写入
+- `authz/event-auth-state-resolution.md` §8 — RealmCommit 是唯一 finality
+- `models/realm-and-space.md` §2.3.A — `ak.realm.profile` 是 title / summary / avatar 的唯一 carrier
 
 ## 拓扑
 
@@ -45,17 +45,11 @@ bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending 
 10. 断言:30s 内 `M_b_offline` 状态从 pending 变 persisted;UI 标记移除
 11. 断言:alice 和 bob 双方都看到 `M_a_online` 和 `M_b_offline`
 
-### Phase D — 因果有序 title update 不产生 bottom
+### Phase D — 因果有序 title update 按 stream 顺序收敛
 
-12. alice 在线提交完整 `ak.realm.profile`，等待其 Seal finality；bob 再以该后继 basis 提交第二条完整 profile
-13. soland 因果应用两条 Realm profile 更新，保持 `ak.component.realm.profile.v1` 单值，不得把它误投影成 `bottom=expose`
-14. 断言:`GET /_soland/admin/realms/<S>/bottom` 返回空数组
-
-### Phase E — repair 区仍为只读
-
-15. 断言:inkson 不渲染 `prefer-safer-side-button`、`repair-target-cell-input`、`repair-winner-json-input`、`repair-submit-button`
-16. 断言:`GET /_soland/admin/realms/<S>/bottom` 仍为空；`sequenced_state` 与 ordinary `causal_register` 并发都不产生 Bottom，该诊断面只列出显式注册的跨 Cell 领域不变量失败
-17. 备注:若后续 AKP 为某个跨 Cell 不变量注册专用 repair kind，再单独覆盖该领域流程；ordinary causal-register 不进入 repair
+12. alice 提交完整 `ak.realm.profile`（title=A）；bob 在 `ak.realm.profile` grant 下再提交完整 profile（title=B）
+13. 断言：Realm stream scan 中这两条 profile Event 按 RealmCommit 顺序为 [A, B]
+14. 断言：bob 打开 inkson Realm 设置 profile 区，`realm-name-input` 显示 B（current = 最后接纳的写入）
 
 ### Phase F — Backfill via pull
 
@@ -67,14 +61,12 @@ bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending 
 - **E26.1 outbox 满**:bob 长期离线,outbox 满;客户端 UI 显示 "Too many pending changes, please reconnect"
 - **E26.2 旧 revision 再写**:同一 `sequenced_state` 的首条确认命令推进 revision；其余旧 revision 命令持久拒绝且不改变状态
 - **E26.3 重新 author**:客户端取得新 revision 后显式重建新 Event；旧签名 Event 本身不得被服务器改写或升级
-- **E26.4 ordinary causal 并发**：注册为 `causal_register` 的 ordinary cell 必须按固定 `(depth, EventId)` 得到唯一当前值；落选 sibling 保留为历史证据，不产生通用 Bottom 或人工修复流程
+- **E26.4 并发 profile 写入**：两条并发 `ak.realm.profile` 由治理 Station 串行化为两个 stream position，后者即 current；需要防覆盖的 kind 用 `expected_revision` CAS，loser 收到 `failed_precondition` 后重读重签
 
 ## Implementation notes
 
-- **soland 已落地**:`ak.realm.profile` 的 sequenced-state 更新不产生 Bottom；admin diagnostics 对该 cell 返回空数组。
-- **inkson 已落地**: ordinary causal-register current 只消费确定性赢家，不渲染通用多头 repair 或 Bottom 控件；领域专用诊断仍按各自合同显示。
-- **测试侧已激活**:offline outbox / pending reconcile 在 `sync/offline-queue-replay` live 覆盖；本 scenario 覆盖 title update 的固定 `(depth, EventId)` 赢家及后继编辑。普通 sibling 保留各自 Event identity 作为历史证据；control `sequenced_state` 的竞争 predecessor 由 call-state conformance vectors 覆盖。
-- **剩余边界**:outbox capacity、旧 revision 持久拒绝与重新 author 仍保留为后续边界 fixme；ordinary causal-register concurrency 不再产生 Bottom。
+- **测试侧已激活**:offline outbox / pending reconcile 在 `sync/offline-queue-replay` live 覆盖；本 scenario 覆盖两条 `ak.realm.profile` 的 stream 顺序与 current 值。
+- **剩余边界**:outbox capacity、旧 revision 持久拒绝与重新 author 仍保留为后续边界 fixme。
 
 ## 总耗时预估
 

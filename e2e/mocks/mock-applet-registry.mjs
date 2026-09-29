@@ -201,7 +201,6 @@ const managedActorAuthoringOutcomes = new Map(
 );
 let currentStationVerificationMethod = `${stationDid()}#notary-key`;
 const provisionedGhosts = new Map();
-const actorSequences = new Map();
 
 function persistDurableAuthoringState() {
   if (!durableStateFile) {
@@ -479,17 +478,6 @@ function safeToken(value) {
   return safe || "bridge-demo";
 }
 
-function nextActorSequence(actor) {
-  const key = canonicalJson(actor);
-  const next = (actorSequences.get(key) ?? -1) + 1;
-  actorSequences.set(key, next);
-  return next;
-}
-
-function currentHlc() {
-  return `${Date.now().toString(16).padStart(12, "0")}-0000-00000000`;
-}
-
 function detachedEventProof(
   event,
   actorDid,
@@ -511,22 +499,6 @@ function detachedEventProof(
   });
 }
 
-function detachedJws(binding, signingKey) {
-  const protectedHeader = Buffer.from('{"alg":"Ed25519"}', "utf8").toString(
-    "base64url",
-  );
-  const signingInput = `${protectedHeader}.${Buffer.from(
-    canonicalJson(binding),
-    "utf8",
-  ).toString("base64url")}`;
-  const signature = sign(
-    null,
-    Buffer.from(signingInput, "utf8"),
-    signingKey,
-  ).toString("base64url");
-  return `${protectedHeader}..${signature}`;
-}
-
 function exactObjectKeys(value, expected) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const actual = Object.keys(value).sort();
@@ -536,66 +508,58 @@ function exactObjectKeys(value, expected) {
   );
 }
 
+// One closed producer-signed Ghost message (event-envelope.schema.json):
+// `actor_id` is the accountable Ghost, the installed Service executes and signs
+// it with its registration producer key, and `authorization_ref` cites the
+// active grant of the Ghost itself (applet-integration.md §8, §9.1, §11).
+// The external message provenance is the signed top-level `external_ref`.
 function signedGhostMessageEvent({
   packageInfo,
   provision,
   authorizationRef,
   realmId,
   strandId,
-  authorityRefs,
   externalId,
-  displayName,
+  externalMessageId,
   text,
 }) {
-  const createdAt = rfc3339Now();
   const event = {
     kind: "ak.message.create",
     realm_id: realmId,
     scope_ref: { kind: "realm", realm_id: realmId },
     actor_id: provision.ghost_actor_id,
-    actor_seq: nextActorSequence(provision.ghost_actor_id),
-    created_at: createdAt,
-    hlc: currentHlc(),
-    prev_refs: [provision.profile_event_ref],
-    semantic_refs: [],
     executed_by: { kind: "service", service_id: packageInfo.serviceId },
     authorization_ref: authorizationRef,
     applet_id: packageInfo.appletId,
-    auth_context: {
-      authority_refs: [...authorityRefs].sort(),
-    },
     external_ref: {
       protocol: "bridge",
       instance_id: "joint-e2e",
-      external_id: externalId,
+      user_id: externalId,
+      event_id: externalMessageId,
     },
+    created_at: rfc3339Now(),
     payload: {
       strand_id: strandId,
       track_name: "discussion",
       content: {
         kind: "ak.content.text",
         body: text,
-
       },
     },
   };
   const eventId = deriveEventId(event);
   event.event_id = eventId;
   const messageId = eventId.replace(/^ak:event:/, "ak:message:");
-  // Applet-originated ghost events are executed and signed by the installed
-  // service principal; actor_id remains the accountable ghost identity.
   const verificationMethod = packageInfo.verificationMethod;
   return {
     event: {
       ...event,
-      proofs: [
-        detachedEventProof(
-          event,
-          verificationMethod.split("#", 1)[0],
-          verificationMethod,
-          packageInfo.signingKey,
-        ),
-      ],
+      producer_proof: detachedEventProof(
+        event,
+        verificationMethod.split("#", 1)[0],
+        verificationMethod,
+        packageInfo.signingKey,
+      ),
     },
     eventId,
     messageId,
@@ -610,6 +574,7 @@ async function submitSignedAppletTransaction({
   idempotencyKey,
 }) {
   const target = `${String(solandBase).replace(/\/$/, "")}/_arkret/edge/applet/transactions`;
+  const operation = "ak.edge.applet.command.transaction.v1";
   const targetUrl = new URL(target);
   const transaction = {
     applet_id: packageInfo.appletId,
@@ -623,7 +588,7 @@ async function submitSignedAppletTransaction({
   const created = Math.floor(Date.now() / 1000);
   const expires = created + 60;
   const signatureParams =
-    `("@method" "@target-uri" "@authority" "content-digest" ` +
+    `("@method" "@target-uri" "@authority" "content-digest" "arkret-operation" ` +
     `"source-service-id" "destination-service-id" "idempotency-key");` +
     `created=${created};expires=${expires};keyid="${packageInfo.verificationMethod}";` +
     `alg="ed25519"`;
@@ -632,6 +597,7 @@ async function submitSignedAppletTransaction({
     `"@target-uri": ${target}\n` +
     `"@authority": ${targetUrl.host}\n` +
     `"content-digest": ${contentDigest}\n` +
+    `"arkret-operation": ${operation}\n` +
     `"source-service-id": ${packageInfo.serviceId}\n` +
     `"destination-service-id": ${destinationServiceId}\n` +
     `"idempotency-key": ${idempotencyKey}\n` +
@@ -644,7 +610,7 @@ async function submitSignedAppletTransaction({
   return await fetch(target, {
     method: "POST",
     headers: {
-      "arkret-operation": "ak.edge.applet.command.transaction.v1",
+      "arkret-operation": operation,
       "content-type": "application/json",
       "content-digest": contentDigest,
       "source-service-id": packageInfo.serviceId,
@@ -666,6 +632,7 @@ async function submitSignedGhostProvision({
   idempotencyKey,
 }) {
   const target = `${String(solandBase).replace(/\/$/, "")}/_arkret/self/applets/${encodeURIComponent(appletId)}/ghosts/provision`;
+  const operation = "ak.self.applet.ghost.command.provision.v1";
   const targetUrl = new URL(target);
   const body = canonicalJson(requestBody);
   const contentDigest = `sha-256=:${createHash("sha256")
@@ -674,7 +641,7 @@ async function submitSignedGhostProvision({
   const created = Math.floor(Date.now() / 1000);
   const expires = created + 60;
   const signatureParams =
-    `("@method" "@target-uri" "@authority" "content-digest" ` +
+    `("@method" "@target-uri" "@authority" "content-digest" "arkret-operation" ` +
     `"source-service-id" "destination-service-id" "idempotency-key");` +
     `created=${created};expires=${expires};keyid="${packageInfo.verificationMethod}";` +
     `alg="ed25519"`;
@@ -683,6 +650,7 @@ async function submitSignedGhostProvision({
     `"@target-uri": ${target}\n` +
     `"@authority": ${targetUrl.host}\n` +
     `"content-digest": ${contentDigest}\n` +
+    `"arkret-operation": ${operation}\n` +
     `"source-service-id": ${packageInfo.serviceId}\n` +
     `"destination-service-id": ${destinationServiceId}\n` +
     `"idempotency-key": ${idempotencyKey}\n` +
@@ -695,7 +663,7 @@ async function submitSignedGhostProvision({
   return await fetch(target, {
     method: "POST",
     headers: {
-      "arkret-operation": "ak.self.applet.ghost.command.provision.v1",
+      "arkret-operation": operation,
       "content-type": "application/json",
       "content-digest": contentDigest,
       "source-service-id": packageInfo.serviceId,
@@ -1188,7 +1156,6 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
         ...JSON.parse(provisionText),
         ghost_actor_did: ghostCreation.ghost_actor_did,
       };
-      actorSequences.set(canonicalJson(ghostActorId), 0);
       provisionedGhosts.set(ghostKey, provision);
     }
     if (body.payload?.kind !== "message") {
@@ -1215,22 +1182,22 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
       res.end(JSON.stringify({ error: "missing_strand_id" }));
       return;
     }
-    const authorityRefs = body.authority_refs;
-    if (!Array.isArray(authorityRefs) || authorityRefs.length === 0 ||
-        authorityRefs.some((value) => typeof value !== "string" || !value.startsWith("ak:seal:"))) {
+    // The provisioning grant echoed by the provision outcome never authorizes
+    // later Ghost writes (applet-integration.md §9.1); the caller names the
+    // Ghost's own message grant.
+    if (typeof body.authorization_ref !== "string" || !body.authorization_ref.startsWith("ak:grant:")) {
       res.statusCode = 400;
-      res.end(JSON.stringify({ error: "missing_authority_refs" }));
+      res.end(JSON.stringify({ error: "missing_authorization_ref" }));
       return;
     }
     const signed = signedGhostMessageEvent({
       packageInfo,
       provision,
-      authorizationRef: body.authorization_ref ?? provision.authorization_ref,
+      authorizationRef: body.authorization_ref,
       realmId: body.realm_id,
       strandId: body.strand_id,
-      authorityRefs,
       externalId,
-      displayName,
+      externalMessageId: `msg-${randomUUID()}`,
       text: body.payload.text,
     });
     let upstream;

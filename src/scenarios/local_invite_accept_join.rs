@@ -325,7 +325,6 @@ pub async fn local_invite_accept_join_run() -> Result<()> {
         .iter()
         .filter_map(|entry| match entry {
             arkret_wire::TypedCurrentResult::Value { selector, .. } => Some(selector.clone()),
-            _ => None,
         })
         .collect::<Vec<_>>();
     ensure!(

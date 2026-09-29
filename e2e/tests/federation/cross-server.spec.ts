@@ -7,20 +7,16 @@
 //   - §4.2 pull / backfill, §4.5 fork detection / frontier exchange
 //   - §5.1 cross-domain invite
 //
-// Soland implementation status (2026-05 audit):
-//   ✓ POST /_arkret/peer/events handler routed and ingests events
-//   ✓ GET  /_arkret/peer/events cursor-based
-//   ✓ Per-event accepted / rejected partial-accept
-//   ✓ Idempotent by event_id
-//   ✓ SOLAND_FEDERATION_PEERS env wires peer URLs + peer service DIDs
-//   ✓ Outbound push worker POSTs local invite/message Events to peers
-//   ✓ ak.invite.create, ak.member.state join, and ak.message.create trigger federation push
-//   ✓ peer events query pulls peer pages and ingests missing local Events
-//   ✓ peer events frontier exposes deterministic Event ID coverage
-//   ✓ inbound RFC 9421 HTTP Message Signature rejects tampered batches
-//   ✓ reducer profile resolved from each Event's authenticated CBS
-//   ✓ §4.4 capability revoke fanout: revoking a peer's service delegation
-//     stops outbound federation push to that peer
+// Peer surfaces exercised (spec v1):
+//   - POST /_arkret/peer/events, `committed_replication` branch: exact
+//     source-committed (RealmCommit, Event) pairs, per-item stored|duplicate|
+//     rejected outcomes (authority-commit-operations.schema.json)
+//   - POST /_arkret/peer/streams/scan: per-stream replication read
+//     (ak.peer.committed_event.read.scan.v1); QUERY peer/events is not v1
+//   - own-Station join: self/realm-joins/prepare + self Event submit, which the
+//     applicant's Station forwards to the current governance Station
+//   - Realm fanout targets are the routing services of effective joined
+//     members (federation.md §4.1.1)
 
 import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 import {
@@ -30,33 +26,25 @@ import {
   solandServiceId,
 } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
-import type { InviteDeliveryRequestBody } from "../../helpers/generated/spec-wire-objects";
 import {
-  acceptInviteApi,
   acceptPreparedInviteApi,
   waitForInviteDeliveryApi,
   accountActorId,
   authHeaders,
   canonicalJson,
-  queryPeerEventsApi,
-  readCommitStreamHeadApi,
   createRealmApi,
-  dispatchSelfInviteApi,
-  grantServiceCapabilityApi,
-  listInvitesApi,
-  makeFederationEvent,
+  pushCommittedRowsApi,
   pushFederationEvents,
   rawPushFederationEvents,
+  replicationOutcomesOutside,
   queryRealmEventsApi,
-  revokeCapabilityApi,
+  readCommitStreamHeadApi,
+  scanPeerRealmStreamRowsApi,
   sendMessageApi,
   sendPreparedMessageApi,
-  selfInviteDispatchBody,
-  sha256CanonicalJson,
   signedEventEnvelope,
   submitSignedEventApi,
   typedId,
-  wireErrCode,
 } from "../../helpers/soland-api";
 import {
   createDpopUserSession,
@@ -66,7 +54,6 @@ import {
   issueUserSession,
   openDpopUserPage,
   openDpopUserPageFromSession,
-  openUserPage,
   selfPathHeadersForDpopSession,
   uniqueUser,
 } from "../../helpers/users";
@@ -98,36 +85,32 @@ function accountActorRoutesThrough(
   );
 }
 
-async function waitForInvite(
+/// Directed-invite join through the invitee's own Station: the invitation
+/// arrives as `ak.account.invite_delivery` account data (invite-addressing.md
+/// §7), and the join is prepared and submitted to that same Station, which
+/// forwards the exact Event to the current governance Station.
+async function joinFromOwnStation(
   request: APIRequestContext,
   token: string,
   inviteeId: string,
   realmId: string,
   server: "server1" | "server2",
 ) {
-  let found:
-    | {
-        id: string;
-        realm_id: string;
-        invitee_id?: string;
-        state?: string;
-        status?: string;
-      }
-    | undefined;
-  await expect
-    .poll(
-      async () => {
-        const invites = await listInvitesApi(request, token, { server });
-        found = invites.find(
-          (invite) =>
-            invite.invitee_account_id?.principal_id === inviteeId && invite.invitee_account_id.station_id === solandServiceId(server) && invite.realm_id === realmId,
-        );
-        return Boolean(found);
-      },
-      { timeout: 45_000, intervals: [1_000, 2_000, 5_000] },
-    )
-    .toBeTruthy();
-  return found!;
+  const invitation = await waitForInviteDeliveryApi(request, token, inviteeId, realmId, server);
+  return await acceptPreparedInviteApi(request, token, inviteeId, realmId, invitation.id, { server });
+}
+
+/// The self read of one committed Event at `server`, or the HTTP status when
+/// the Station does not disclose it to this caller.
+async function committedEventStatus(
+  request: APIRequestContext,
+  token: string,
+  eventId: string,
+  server: "server1" | "server2",
+): Promise<number> {
+  const url = `${solandBaseUrl(server)}/_arkret/self/committed-events/${eventId}`;
+  const response = await request.get(url, { headers: authHeaders(token, "GET", url) });
+  return response.status();
 }
 
 async function waitForMember(
@@ -179,7 +162,7 @@ async function waitForEventBody(
     .toBeTruthy();
 }
 
-function unsignedPeerQueryHeaders(
+function unsignedPeerHeaders(
   sourceServiceId: string,
   destinationServiceId: string,
 ): Record<string, string> {
@@ -203,7 +186,7 @@ function trustDomainFromServiceId(serviceId: string): string {
 
 test.describe("cross-server federation", () => {
   test.describe.configure({ mode: "serial" });
-  test("both soland instances expose peer events submit and query endpoints", async ({
+  test("both soland instances expose the peer Event submit and peer stream scan endpoints", async ({
     request,
   }) => {
     // Sanity: both servers up and exposing the federation surface.
@@ -212,37 +195,38 @@ test.describe("cross-server federation", () => {
     const server2Health = await request.get(`${solandBaseUrl("server2")}/health`);
     expect(server2Health.ok()).toBeTruthy();
 
-    // POST without auth/body should not 404 — endpoint MUST exist.
-    const pushProbe = await request.post(
-      `${solandBaseUrl("server2")}/_arkret/peer/events`,
-      {
-        data: {},
-      },
-    );
-    expect(pushProbe.status()).not.toBe(404);
-
-    const pullProbe = await request.fetch(
-      `${solandBaseUrl("server2")}/_arkret/peer/events`,
-      { method: "QUERY", data: { realm_ids: ["ak:realm:probe"] } },
-    );
-    expect(pullProbe.status()).not.toBe(404);
+    // POST without auth/body should not 404 — both registered peer paths
+    // (ak.peer.events.command.submit.v1, ak.peer.committed_event.read.scan.v1)
+    // MUST exist.
+    for (const path of ["/_arkret/peer/events", "/_arkret/peer/streams/scan"]) {
+      const probe = await request.post(`${solandBaseUrl("server2")}${path}`, { data: {} });
+      expect(probe.status(), path).not.toBe(404);
+    }
   });
 
-  test("unsigned peer QUERY pull is rejected", async ({ request }) => {
-    const response = await request.fetch(
-      `${solandBaseUrl("server2")}/_arkret/peer/events`,
+  test("unsigned peer stream scan is rejected", async ({ request }) => {
+    const realmId = typedId("realm");
+    const response = await request.post(
+      `${solandBaseUrl("server2")}/_arkret/peer/streams/scan`,
       {
-        method: "QUERY",
-        data: { limit: 1 },
-        headers: unsignedPeerQueryHeaders(
-          solandServiceId("server1"),
-          solandServiceId("server2"),
-        ),
+        data: canonicalJson({
+          realm_id: realmId,
+          stream_ref: { kind: "realm", realm_id: realmId },
+          after_position: null,
+          limit: 1,
+        }),
+        headers: {
+          "content-type": "application/json",
+          ...unsignedPeerHeaders(
+            solandServiceId("server1"),
+            solandServiceId("server2"),
+          ),
+        },
       },
     );
     expect(
       response.ok(),
-      `unsigned peer QUERY unexpectedly returned ${response.status()}: ${await response.text()}`,
+      `unsigned peer scan unexpectedly returned ${response.status()}: ${await response.text()}`,
     ).toBeFalsy();
     expect(response.status()).toBeLessThan(500);
   });
@@ -352,26 +336,31 @@ test.describe("cross-server federation", () => {
     }
   });
 
-  test("server1→server2 federation push smoke delivers an invite-shaped Event to server2 pull + invite APIs", async ({
+  test("server1→server2 committed replication smoke: a Station hosting no joined member refuses the Realm; after the member's own join the exact committed pair is held", async ({
     request,
   }) => {
-    // API-first smoke for G3.S0: the real server2 federation ingestion and pull
-    // surfaces accept an server1-origin Event. The fully automatic inkson
-    // invite/accept round trip remains pinned in the richer fixme below.
+    // federation.md §4.1.1: a remote Station enters the committed-replication
+    // target set only through a hosted effective joined member, and the
+    // receiver re-verifies that hosted membership from committed history.
     const stamp = Date.now();
-    const alice = uniqueUser(`s2-outbound-alice-${stamp}`, "server1");
-    const bob = uniqueUser(`s2-outbound-bob-${stamp}`, "server2");
+    const alice = uniqueUser(`s2-replica-alice-${stamp}`, "server1");
+    const bob = uniqueUser(`s2-replica-bob-${stamp}`, "server2");
     await ensureRegistered(request, alice, { server: "server1" });
     await ensureRegistered(request, bob, { server: "server2" });
     const aliceToken = await issueUserSession(request, alice, {
       server: "server1",
     });
     const bobToken = await issueUserSession(request, bob, { server: "server2" });
+    await allowExplicitInviteNotifications(request, bobToken, "server2");
     const realmId = await createRealmApi(
       request,
       aliceToken,
       {
-        title: `S2 pushed invite ${stamp}`,
+        title: `S2 committed replication ${stamp}`,
+        discoverability: "listed",
+        history_access: "all_history_for_current_members",
+        invitees: [bob.id],
+        invitee_ids: { [bob.id]: solandServiceId("server2") },
         ownerId: alice.id,
         creator_id: solandServiceId("server1"),
         plaintext_visible_services: [
@@ -391,134 +380,54 @@ test.describe("cross-server federation", () => {
       Array.isArray(server1RealmEvents.events)
         ? (server1RealmEvents.events as Array<Record<string, unknown>>)
         : []
-    ).sort(
-      (left, right) =>
-        Number(left.actor_seq ?? 0) - Number(right.actor_seq ?? 0),
-    );
-    const bootstrapPush = await pushFederationEvents(request, bootstrapEvents, {
+    ).filter((event) => event.kind !== "ak.invite.create");
+    expect(bootstrapEvents.length).toBeGreaterThan(0);
+
+    // server2 hosts no joined member yet: every exact, validly signed pair is
+    // refused item by item and nothing is stored.
+    const refused = await pushFederationEvents(request, bootstrapEvents, {
       origin: solandServiceId("server1"),
       destination: solandServiceId("server2"),
       server: "server2",
       realmId,
-      idempotencyKey: `${solandServiceId("server1")}#cotest-cross-server-bootstrap`,
     });
-    expect(bootstrapPush.rejections ?? []).toEqual([]);
-    expect([
-      ...(bootstrapPush.accepted ?? []),
-      ...(bootstrapPush.duplicate ?? []),
-    ]).toHaveLength(bootstrapEvents.length);
-
-    const realmHead = await readCommitStreamHeadApi(
-      request,
-      aliceToken,
-      realmId,
-      { server: "server1" },
-    );
-    expect(realmHead, "server1 must have an accepted Realm commit stream").toBeTruthy();
-    expect(realmHead!.commit_id).toMatch(/^ak:realm_commit:/);
-    expect(realmHead!.stream_ref).toEqual({ kind: "realm", realm_id: realmId });
-
-    const locatorToken = await issueInviteLocatorToken(request, bobToken, "server2");
-    const locatorResponse = await request.post(
-      `${solandBaseUrl("server2")}/_arkret/open/invite-locators/resolve`,
-      { data: { locator_token: locatorToken } },
-    );
-    expect(locatorResponse.status(), await locatorResponse.text()).toBe(200);
-    type LocatorEvidence = Extract<InviteDeliveryRequestBody["introduction_evidence"], { kind: "locator_ref" }>;
-    const locator = await locatorResponse.json() as LocatorEvidence["principal_locator"];
-    const evidence: LocatorEvidence = { kind: "locator_ref", principal_locator: locator };
-    const inviteEvent = makeFederationEvent({
-      realmId,
-      kind: "ak.invite.create",
-      actorId: alice.id,
-      payload: {
-        invitee_account_id: locator.account_id,
-        introduction_evidence_digest: `sha256:${sha256CanonicalJson(evidence)}`,
-        expires_at: new Date(Date.now() + 86_400_000).toISOString(),
-      },
-    });
-    await submitSignedEventApi(request, aliceToken, inviteEvent, {
-      server: "server1",
-      context: "submit server1 invite for federated Seal-closure delivery",
-    });
-    const delivery = await dispatchSelfInviteApi(request, aliceToken, selfInviteDispatchBody({
-      eventId: String(inviteEvent.event_id),
-      inviteAddress: {
-        account_id: locator.account_id,
-        service_resolution: locator.service_resolution,
-        ...(locator.route_assistance ? { route_assistance: locator.route_assistance } : {}),
-      },
-      evidence,
-    }), { server: "server1" });
-    expect(delivery.status).toBe("accepted");
-
-    await expect
-      .poll(
-        async () => {
-          const invites = await listInvitesApi(request, bobToken, {
-            server: "server2",
-          });
-          return invites.some(
-            (item) => item.realm_id === realmId && item.invitee_account_id?.principal_id === bob.id && item.invitee_account_id.station_id === solandServiceId("server2"),
-          );
-        },
-        { timeout: 20_000 },
-      )
-      .toBe(true);
-
-    const replay = await pushFederationEvents(request, [inviteEvent], {
-      origin: solandServiceId("server1"),
-      destination: solandServiceId("server2"),
-      server: "server2",
-      realmId,
-      idempotencyKey: `${solandServiceId("server1")}#cotest-cross-server-smoke`,
-    });
-    expect(replay.rejections ?? [], "accepted invite replay must not be rejected").toEqual([]);
-    expect([...(replay.accepted ?? []), ...(replay.duplicate ?? [])]).toContain(
-      inviteEvent.event_id,
-    );
-
-    const pullBody = await queryPeerEventsApi(request, {
-      server: "server2",
-      sourceServiceId: solandServiceId("server1"),
-      realmId,
-      limit: 10,
-    });
-    expect((pullBody.events ?? []).map((event) => event.event_id)).toContain(
-      inviteEvent.event_id,
-    );
     expect(
-      (pullBody.events ?? []).filter(
-        (event) => event.event_id === inviteEvent.event_id,
-      ),
-    ).toHaveLength(1);
+      replicationOutcomesOutside(bootstrapEvents, refused, ["rejected"]),
+      "a Station without a hosted joined member must not hold the Realm",
+    ).toEqual([]);
 
-    const invites = await listInvitesApi(request, bobToken, { server: "server2" });
-    const invite = invites.find(
-      (item) => item.realm_id === realmId && item.invitee_account_id?.principal_id === bob.id && item.invitee_account_id.station_id === solandServiceId("server2"),
-    );
-    expect(invite).toBeTruthy();
-    await acceptInviteApi(
-      request,
-      bobToken,
-      bob.id,
-      invite!.realm_id,
-      invite!.id,
-      { server: "server2" },
-    );
+    await joinFromOwnStation(request, bobToken, bob.id, realmId, "server2");
+    await waitForMember(request, aliceToken, bob.id, realmId, "server1");
 
-    const server2Space = await request.get(
-      `${solandBaseUrl("server2")}/_arkret/self/realms/${encodeURIComponent(invite!.realm_id)}`,
-      { headers: authHeaders(bobToken, "GET", `${solandBaseUrl("server2")}/_arkret/self/realms/${encodeURIComponent(invite!.realm_id)}`) },
-    );
-    expect(server2Space.ok()).toBeTruthy();
-    const realm = await server2Space.json() as { member_roster_entries?: Array<{ actor_id: unknown; membership: string }> };
-    expect(realm.member_roster_entries?.some((member) =>
-      member.membership === "join" && accountActorRoutesThrough(member.actor_id, solandServiceId("server2"), bob.id),
-    )).toBe(true);
+    const body = `committed replication smoke ${stamp}`;
+    const sent = await sendMessageApi(request, aliceToken, realmId, body, {
+      server: "server1",
+    });
+    await waitForEventBody(request, bobToken, realmId, body, "server2");
+
+    // server2 now reads the Realm stream from its governance Station and the
+    // exact pair it already holds replays as `duplicate`, twice.
+    const rows = await scanPeerRealmStreamRowsApi(request, {
+      server: "server1",
+      sourceServiceId: solandServiceId("server2"),
+      realmId,
+    });
+    const row = rows.find((candidate) => candidate.event.event_id === sent.event_id);
+    expect(row, "the governance Station discloses the committed message to server2").toBeTruthy();
+    expect(row!.commit.commit_id).toBe(sent.commit_id);
+    for (const attempt of ["first", "exact replay"]) {
+      const outcome = await pushCommittedRowsApi(request, [row!], {
+        origin: solandServiceId("server1"),
+        destination: solandServiceId("server2"),
+        server: "server2",
+        realmId,
+      });
+      expect(outcome.replication_outcomes, attempt).toEqual([{ status: "duplicate" }]);
+    }
+    expect(await committedEventStatus(request, bobToken, sent.event_id, "server2")).toBe(200);
   });
 
-  test("server1 invite UI event fans out to server2 and standard peer Events propagates server2 acceptance back to server1", async ({
+  test("server1 invite UI event reaches bob@server2, whose own-Station join is committed by server1", async ({
     browser,
     request,
   }, testInfo) => {
@@ -560,74 +469,7 @@ test.describe("cross-server federation", () => {
       });
       await stepShot(alicePage.page, testInfo, "server1-auto-invite-issued");
 
-      const server2Invite = await waitForInvite(
-        request,
-        bobToken,
-        bob.id,
-        realmId,
-        "server2",
-      );
-      const acceptanceEvent = signedEventEnvelope({
-        actorId: bob.id,
-        realmId: server2Invite.realm_id,
-        kind: "ak.invite.accept",
-        payload: {
-          invite_id: server2Invite.id,
-          // Directed invite: the stored account is the only signed source the
-          // live-target release write can derive its subject from, and
-          // omitting it fails the registered pre-state requirement
-          // (governance-objects.md section 5.3).
-          invitee_account_id: accountActorId(bob.id, "server2").account_id,
-        },
-      });
-      await submitSignedEventApi(request, bobToken, acceptanceEvent, {
-        server: "server2",
-      });
-      const server1EventsUrl = `${solandBaseUrl("server1")}/_arkret/self/events`;
-      const server1EventsResponse = await request.fetch(server1EventsUrl, {
-        method: "QUERY",
-        data: { realm_ids: [realmId], limit: 100 },
-        headers: selfPathHeadersForDpopSession(
-          aliceFlow.session,
-          "QUERY",
-          server1EventsUrl,
-        ),
-      });
-      expect(
-        server1EventsResponse.status(),
-        await server1EventsResponse.text(),
-      ).toBe(200);
-      const server1Events = (await server1EventsResponse.json()) as {
-        events?: Array<Record<string, unknown>>;
-      };
-      const server1BindingEvent = (
-        Array.isArray(server1Events.events)
-          ? (server1Events.events as Array<Record<string, unknown>>)
-          : []
-      ).find((event) => {
-        if (event.kind !== "ak.member.state") {
-          return false;
-        }
-        const payload = event.payload as Record<string, unknown> | undefined;
-        return accountActorRoutesThrough(
-          payload?.actor_id,
-          solandServiceId("server1"),
-        );
-      });
-      expect(server1BindingEvent?.event_id).toBeTruthy();
-      const propagation = await pushFederationEvents(
-        request,
-        [acceptanceEvent],
-        {
-          origin: solandServiceId("server2"),
-          destination: solandServiceId("server1"),
-          server: "server1",
-          realmId,
-          idempotencyKey: `${solandServiceId("server2")}#${realmId}#acceptance`,
-          serviceBindingFrontier: [String(server1BindingEvent!.event_id)],
-        },
-      );
-      expect(propagation.rejections ?? []).toEqual([]);
+      await joinFromOwnStation(request, bobToken, bob.id, realmId, "server2");
       const server1RealmUrl =
         `${solandBaseUrl("server1")}/_arkret/self/realms/` +
         encodeURIComponent(realmId);
@@ -644,8 +486,10 @@ test.describe("cross-server federation", () => {
             if (!response.ok()) {
               return false;
             }
-            const body = (await response.json()) as { member_ids?: string[] };
-            return body.member_ids?.includes(bob.id) ?? false;
+            const body = (await response.json()) as { member_ids?: unknown[] };
+            return (body.member_ids ?? []).some((member) =>
+              accountActorRoutesThrough(member, solandServiceId("server2"), bob.id),
+            );
           },
           { timeout: 45_000, intervals: [1_000, 2_000, 5_000] },
         )
@@ -655,7 +499,7 @@ test.describe("cross-server federation", () => {
     }
   });
 
-  test("peer query recovery: after a network partition, server2 fetches missing server1 events via QUERY /_arkret/peer/events", async ({
+  test("peer stream scan recovery: server2 reads a committed message from server1 through ak.peer.committed_event.read.scan.v1 and holds it exactly once", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -667,6 +511,7 @@ test.describe("cross-server federation", () => {
       server: "server1",
     });
     const bobToken = await issueUserSession(request, bob, { server: "server2" });
+    await allowExplicitInviteNotifications(request, bobToken, "server2");
 
     const realmId = await createRealmApi(
       request,
@@ -683,172 +528,72 @@ test.describe("cross-server federation", () => {
           solandServiceId("server1"),
           solandServiceId("server2"),
         ],
-        federation_policy: "open",
       },
       { server: "server1" },
     );
-    const server2Invite = await waitForInvite(
-      request,
-      bobToken,
-      bob.id,
-      realmId,
-      "server2",
-    );
-    await acceptInviteApi(
-      request,
-      bobToken,
-      bob.id,
-      server2Invite.realm_id,
-      server2Invite.id,
-      {
-        server: "server2",
-      },
-    );
+    await joinFromOwnStation(request, bobToken, bob.id, realmId, "server2");
     await waitForMember(request, aliceToken, bob.id, realmId, "server1");
 
-    const missingBody = `pulled after partition ${stamp}`;
-    const missingEvent = makeFederationEvent({
-      realmId,
-      kind: "ak.message.create",
-      actorId: alice.id,
-      payload: {
-        strand_id: typedId("strand"),
-        track_name: "discussion",
-        content: {
-          kind: "ak.content.text",
-          body: missingBody,
-        },
-      },
-    });
-    const server1BeforePartitionWrite = await queryRealmEventsApi(
-      request,
-      aliceToken,
-      realmId,
-      { server: "server1", limit: 100 },
-    );
-    const server1BindingEvent = (
-      Array.isArray(server1BeforePartitionWrite.events)
-        ? (server1BeforePartitionWrite.events as Array<Record<string, unknown>>)
-        : []
-    ).find((event) => {
-      if (event.kind !== "ak.member.state") {
-        return false;
-      }
-      const payload = event.payload as Record<string, unknown> | undefined;
-      return accountActorRoutesThrough(
-        payload?.actor_id,
-        solandServiceId("server1"),
-      );
-    });
-    expect(server1BindingEvent?.event_id).toBeTruthy();
-
-    const sourceWrite = await pushFederationEvents(request, [missingEvent], {
-      origin: solandServiceId("server2"),
-      destination: solandServiceId("server1"),
+    const missingBody = `recovered through peer scan ${stamp}`;
+    const sent = await sendMessageApi(request, aliceToken, realmId, missingBody, {
       server: "server1",
-      realmId,
-      idempotencyKey: `${solandServiceId("server2")}#cotest-partition-source`,
-      serviceBindingFrontier: [String(server1BindingEvent!.event_id)],
     });
-    expect(sourceWrite.rejections ?? []).toEqual([]);
-    expect(sourceWrite.accepted ?? []).toContain(missingEvent.event_id);
-    await waitForEventBody(request, aliceToken, realmId, missingBody, "server1");
 
-    const server2BeforeEvents = await queryRealmEventsApi(
-      request,
-      bobToken,
-      realmId,
-      {
-        server: "server2",
-        limit: 100,
-      },
-    );
-    expect(JSON.stringify(server2BeforeEvents)).not.toContain(missingBody);
-    const server2BeforeIds = new Set(
-      (Array.isArray(server2BeforeEvents.events)
-        ? (server2BeforeEvents.events as Array<Record<string, unknown>>)
-        : []
-      ).map((event) => String(event.event_id)),
-    );
-
-    const backfill = await queryPeerEventsApi(request, {
+    // Recovery reads the one authorized stream from its governance Station
+    // (federation.md §3) and replicates the exact pair; whether the durable
+    // outbox got there first only decides stored versus duplicate.
+    const rows = await scanPeerRealmStreamRowsApi(request, {
       server: "server1",
       sourceServiceId: solandServiceId("server2"),
       realmId,
-      limit: 100,
     });
-    const backfilledEvents = backfill.events ?? [];
-    const missingBackfillEvents = backfilledEvents.filter(
-      (event) => !server2BeforeIds.has(String(event.event_id)),
-    );
-    expect(backfilledEvents.map((event) => event.event_id)).toContain(
-      missingEvent.event_id,
-    );
-    const server2BindingEvent = backfilledEvents.find((event) => {
-      if (event.kind !== "ak.invite.create") {
-        return false;
-      }
-      const payload = event.payload as Record<string, unknown> | undefined;
-      const target = payload?.invite_delivery_target as
-        | { account_id?: { station_id?: string } }
-        | undefined;
-      return target?.account_id?.station_id === solandServiceId("server2");
-    });
-    expect(server2BindingEvent?.event_id).toBeTruthy();
-    const ingest = await pushFederationEvents(request, missingBackfillEvents, {
+    const row = rows.find((candidate) => candidate.event.event_id === sent.event_id);
+    expect(row, "server2 may read the committed message on the Realm stream").toBeTruthy();
+    const positions = rows.map((candidate) => Number(candidate.commit.stream_position));
+    expect(positions).toEqual([...positions].sort((left, right) => left - right));
+    const ingest = await pushCommittedRowsApi(request, [row!], {
       origin: solandServiceId("server1"),
       destination: solandServiceId("server2"),
       server: "server2",
       realmId,
-      idempotencyKey: `${solandServiceId("server2")}#cotest-peer-query-recovery`,
-      serviceBindingFrontier: [String(server2BindingEvent!.event_id)],
     });
-    expect(ingest.rejections ?? []).toEqual([]);
-    expect([...(ingest.accepted ?? []), ...(ingest.duplicate ?? [])]).toContain(
-      String(missingEvent.event_id),
-    );
+    expect(["stored", "duplicate"]).toContain(ingest.replication_outcomes[0].status);
     await waitForEventBody(request, bobToken, realmId, missingBody, "server2");
 
     const server2After = await queryRealmEventsApi(request, bobToken, realmId, {
       server: "server2",
       limit: 100,
     });
-    const server2AfterIds = new Set(
-      (Array.isArray(server2After.events)
-        ? (server2After.events as Array<Record<string, unknown>>)
-        : []
-      ).map((event) => String(event.event_id)),
-    );
-    for (const event of backfilledEvents) {
-      expect(server2AfterIds).toContain(String(event.event_id));
-    }
+    const server2AfterIds = (Array.isArray(server2After.events)
+      ? (server2After.events as Array<Record<string, unknown>>)
+      : []
+    ).map((event) => String(event.event_id));
+    expect(server2AfterIds.filter((eventId) => eventId === sent.event_id)).toHaveLength(1);
   });
 
-  test("Capability revoke fanout: after alice revokes server2's service delegation, server1 MUST stop pushing future events to server2 (§4.4)", async ({
+  test("membership-terminating fanout: after bob@server2 leaves, server1 delivers no later Realm Commit to server2 (federation.md §4.1.1)", async ({
     request,
   }) => {
-    // spec: sync/federation.md §4.4 — once a service delegation grant whose
-    // subject is a peer service DID is revoked, the source Station
-    // MUST stop pushing future events for that Realm to the revoked peer.
-    // soland: `ProjectionState::federation_delivery_revoked_peers` derives the
-    // revoked-peer set from the durable capability grant cells and
-    // `dynamic_peer_event_targets` (event_log/submit.rs) skips those peers.
+    // federation.md §4.1.1: the fanout target set is the routing services of
+    // the effective joined members of the accepted Realm view. Once the only
+    // member server2 hosts has left, server2 is no longer a target, and a
+    // grant or peer relationship never re-creates delivery authority.
     const stamp = Date.now();
-    const alice = uniqueUser(`s2-revoke-alice-${stamp}`, "server1");
-    const bob = uniqueUser(`s2-revoke-bob-${stamp}`, "server2");
+    const alice = uniqueUser(`s2-leave-alice-${stamp}`, "server1");
+    const bob = uniqueUser(`s2-leave-bob-${stamp}`, "server2");
     await ensureRegistered(request, alice, { server: "server1" });
     await ensureRegistered(request, bob, { server: "server2" });
     const aliceToken = await issueUserSession(request, alice, {
       server: "server1",
     });
     const bobToken = await issueUserSession(request, bob, { server: "server2" });
+    await allowExplicitInviteNotifications(request, bobToken, "server2");
 
-    // Federated Realm: bob@server2 joins so server2 is a routable delivery target on server1.
     const realmId = await createRealmApi(
       request,
       aliceToken,
       {
-        title: `S2 revoke fanout ${stamp}`,
+        title: `S2 leave fanout ${stamp}`,
         discoverability: "listed",
         history_access: "all_history_for_current_members",
         invitees: [bob.id],
@@ -862,103 +607,85 @@ test.describe("cross-server federation", () => {
       },
       { server: "server1" },
     );
-    const server2Invite = await waitForInvite(
-      request,
-      bobToken,
-      bob.id,
-      realmId,
-      "server2",
-    );
-    await acceptInviteApi(
-      request,
-      bobToken,
-      bob.id,
-      server2Invite.realm_id,
-      server2Invite.id,
-      { server: "server2" },
-    );
+    await joinFromOwnStation(request, bobToken, bob.id, realmId, "server2");
     await waitForMember(request, aliceToken, bob.id, realmId, "server1");
 
-    // Alice (Realm owner) grants a Realm-scoped capability to server2's service
-    // actor, then confirms a baseline message still fans out to server2.
-    const grantId = await grantServiceCapabilityApi(request, aliceToken, {
-      ownerId: alice.id,
-      realmId,
-      subjectServiceId: solandServiceId("server2"),
-    });
-    const beforeBody = `before revoke ${stamp}`;
+    // Baseline: while bob is joined, server2 is a routable target.
+    const beforeBody = `before leave ${stamp}`;
     await sendMessageApi(request, aliceToken, realmId, beforeBody, {
       server: "server1",
     });
     await waitForEventBody(request, bobToken, realmId, beforeBody, "server2");
 
-    // Revoke server2's service delegation. Per §4.4 the source server MUST stop
-    // pushing future events to server2.
-    await revokeCapabilityApi(request, aliceToken, {
-      ownerId: alice.id,
+    // bob leaves through his own Station, which forwards the exact Event to
+    // the governance Station.
+    await submitSignedEventApi(request, bobToken, signedEventEnvelope({
+      actorId: bob.id,
+      server: "server2",
       realmId,
-      grantId,
-    });
+      kind: "ak.member.state",
+      payload: { member_id: accountActorId(bob.id, "server2"), membership: "leave" },
+    }), { server: "server2", context: "bob leaves the Realm from server2" });
+    await expect
+      .poll(
+        async () => {
+          const url = `${solandBaseUrl("server1")}/_arkret/self/realms/${encodeURIComponent(realmId)}`;
+          const response = await request.get(url, { headers: authHeaders(aliceToken, "GET", url) });
+          const body = response.ok() ? await response.json() as { member_ids?: unknown[] } : {};
+          return (body.member_ids ?? []).some((member) =>
+            accountActorRoutesThrough(member, solandServiceId("server2"), bob.id),
+          );
+        },
+        { timeout: 45_000, intervals: [1_000, 2_000, 5_000] },
+      )
+      .toBe(false);
 
-    // A message sent after the revoke MUST still land on server1 (the revoke only
-    // gates outbound federation push, not local acceptance) …
-    const afterBody = `after revoke ${stamp}`;
-    await sendMessageApi(request, aliceToken, realmId, afterBody, {
+    // A message after the leave is still accepted on server1 …
+    const afterBody = `after leave ${stamp}`;
+    const after = await sendMessageApi(request, aliceToken, realmId, afterBody, {
       server: "server1",
     });
     await waitForEventBody(request, aliceToken, realmId, afterBody, "server1");
 
-    // … but MUST NOT be pushed to server2. Poll server2 long enough that a fanout would
-    // have arrived, then assert the post-revoke body never appears while the
-    // pre-revoke body remains visible (proves server2 was reachable before revoke).
+    // … but server2 never holds its Commit: poll long enough that a fanout
+    // would have arrived.
     await expect
       .poll(
-        async () => {
-          const body = await queryRealmEventsApi(request, bobToken, realmId, {
-            server: "server2",
-            limit: 200,
-          });
-          const serialized = JSON.stringify(body);
-          return {
-            hasBefore: serialized.includes(beforeBody),
-            hasAfter: serialized.includes(afterBody),
-          };
-        },
+        async () => await committedEventStatus(request, bobToken, after.event_id, "server2"),
         { timeout: 20_000, intervals: [1_000, 2_000, 4_000] },
       )
-      .toEqual({ hasBefore: true, hasAfter: false });
-
-    // Final settle: re-confirm server2 never received the post-revoke event.
-    const server2Final = await queryRealmEventsApi(request, bobToken, realmId, {
-      server: "server2",
-      limit: 200,
-    });
-    expect(JSON.stringify(server2Final)).not.toContain(afterBody);
+      .toBe(404);
+    await new Promise((resolve) => setTimeout(resolve, 5_000));
+    expect(await committedEventStatus(request, bobToken, after.event_id, "server2")).toBe(404);
   });
 
   test("RFC 9421 signature failure: tampered Signature header makes server2 reject the entire batch with 4xx", async ({
     request,
   }) => {
-    const realmId = typedId("realm");
-    const event = makeFederationEvent({
-      realmId,
-      kind: "ak.message.create",
-      actorId: "ak:did_core:web:alice-rfc9421.example",
-      payload: {
-        strand_id: typedId("strand"),
-        track_name: "discussion",
-        content: {
-          kind: "ak.content.text",
-          body: `tampered signature ${Date.now()}`,
-        },
+    // The body is an exact accepted pair, so only the transport signature is
+    // wrong: service authentication precedes any inner object (§3.2).
+    const stamp = Date.now();
+    const alice = uniqueUser(`s2-rfc9421-alice-${stamp}`, "server1");
+    await ensureRegistered(request, alice, { server: "server1" });
+    const aliceToken = await issueUserSession(request, alice, { server: "server1" });
+    const realmId = await createRealmApi(
+      request,
+      aliceToken,
+      {
+        title: `S2 RFC 9421 ${stamp}`,
+        ownerId: alice.id,
+        creator_id: solandServiceId("server1"),
       },
+      { server: "server1" },
+    );
+    const sent = await sendMessageApi(request, aliceToken, realmId, `tampered signature ${stamp}`, {
+      server: "server1",
     });
-    const response = await rawPushFederationEvents(request, [event], {
+    const response = await rawPushFederationEvents(request, [{ event_id: sent.event_id }], {
       origin: solandServiceId("server1"),
       destination: solandServiceId("server2"),
       server: "server2",
       realmId,
-      idempotencyKey: `${solandServiceId("server1")}#cotest-rfc9421-negative`,
       tamperSignature: true,
     });
     const text = await response.text();

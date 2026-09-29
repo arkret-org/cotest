@@ -93,9 +93,9 @@ async fn submit_raw(
 
 /// Upload `bytes` as one of the member's own content-addressed Blobs on its
 /// Account Station (`ak.self.blob.*`), the store the forwarding Station reads
-/// the Genesis material from.
-/// Upload `bytes` bound to `realm_id` and return the status and problem or
-/// outcome body.
+/// the Genesis material from, bound to `realm_id` through the
+/// `blob_upload_request_body` form member, and return the status and problem
+/// or outcome body.
 async fn realm_bound_upload(
     client: &TestActorClient,
     realm_id: &RealmId,
@@ -103,8 +103,10 @@ async fn realm_bound_upload(
 ) -> Result<(StatusCode, Value)> {
     let response = client
         .post("/_arkret/self/blob/upload")
-        .header("x-arkret-realm-id", realm_id.as_str())
-        .multipart(blob_upload_form(bytes, "application/octet-stream")?)
+        .multipart(
+            blob_upload_form(bytes, "application/octet-stream")?
+                .text("realm_id", realm_id.as_str().to_owned()),
+        )
         .send()
         .await?;
     let status = response.status();

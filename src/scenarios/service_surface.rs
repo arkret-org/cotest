@@ -113,7 +113,6 @@ const KNOWN_ADVERTISED_UNMOUNTED: &[arkret_wire::ServiceOperationId] =
 const SERVED_BY_ACCOUNT_AUTHORITY: &[arkret_wire::ServiceOperationId] = &[
     arkret_wire::ServiceOperationId::GateAccountCommandPairDeviceV1,
     arkret_wire::ServiceOperationId::GateAccountCommandRevokeSessionV1,
-    arkret_wire::ServiceOperationId::GateAccountReadAppletDelegatedSessionInventoryV1,
 ];
 
 /// How the live router answered one unauthenticated, selector-carrying probe.

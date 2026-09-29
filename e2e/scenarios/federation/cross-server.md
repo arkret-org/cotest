@@ -2,61 +2,21 @@
 
 ## 目标
 
-验证两个独立 Station 之间的联邦推送能完成完整的协作链路:跨服务器邀请、被邀方接受、双向消息推送、accepted Event frontier 收敛、撤销服务委托后停止推送。证明协议是 federated 的 — 单一服务器不是全局权威,信任根是签名 Event + RFC 9421 HTTP Message Signature + 服务绑定快照。
+验证两个独立 Station 之间的联邦链路:跨服务器定向邀请、被邀方经自己 Station 加入、双向消息、committed replication、
+按 stream 的 peer scan 恢复,以及成员退出后停止 fanout。信任根是 producer 签名 Event + 治理 Station 签发的
+RealmCommit + RFC 9421 HTTP Message Signature;单一服务器不是全局权威。
 
 不验证:第三方邮件邀请 (后续 invites/third-party,本 scenario 用 DID-to-DID 直接邀请)、moderation (spaces/moderation-ban)。
 
 ## Spec 锚点
 
-- `arkret-spec/spec/v1/zh/sync/federation.md` §2.1 — Event Chain 是信任锚点
-- `arkret-spec/spec/v1/zh/sync/federation.md` §2.2 — Station 是受控同步边界,不是全局权威
-- `arkret-spec/spec/v1/zh/sync/federation.md` §3.1-§3.2 — 基于 DID 的服务器身份 + RFC 9421 请求签名
-- `arkret-spec/spec/v1/zh/sync/federation.md` §4.1 — Push 协议、`POST /_arkret/peer/peer/events` 请求字段
-- `arkret-spec/spec/v1/zh/sync/federation.md` §4.1.0 — Push 时序图(信任根说明)
-- `arkret-spec/spec/v1/zh/sync/federation.md` §4.1.1 — 批量推送幂等 (`(origin, destination, event_id)` 去重)
-- `arkret-spec/spec/v1/zh/sync/federation.md` §4.2 — Pull / Backfill (`peer events query`)
-- `arkret-spec/spec/v1/zh/sync/federation.md` §4.5 — Fork Detection / Frontier Exchange
-- `arkret-spec/spec/v1/zh/sync/federation.md` §5.1 — 跨域邀请流程 (6 步)
-- `arkret-spec/spec/v1/zh/sync/federation.md` §4.4 — Capability Revoke Fanout
-
-## 拓扑
-
-```
-                    +-------+
-                    |coauth1| / |coauth2|  (independent account authorities)
-                    +---+---+
-                        |
-        +---------------+---------------+
-        |                               |
-   +----v----+                     +----v----+
-   | soland  |  <--- federation ---|  soland |
-   |  server1  |   peer events submit   |   server2  |
-   +----+----+                     +----+----+
-        |                               |
-   alice@server1                     bob@server2
-```
-
-- **2 × soland** 实例
-  - server1 监听 `http://127.0.0.1:<port_server1>`,service DID `did:web:soland-server1.joint-e2e.local`
-  - server2 监听 `http://127.0.0.1:<port_server2>`,service DID `did:web:soland-server2.joint-e2e.local`
-- **2 × coauth**，每台 server 使用独立身份与存储
-- 两个 soland 在 config 里互相把对方列为 `federation_peers` 或等价机制(具体看 soland 实现)
-
-## Actors
-
-| 名字 | DID | 注册服务器 | 角色 |
-|---|---|---|---|
-| alice | `did:webvh:z6mkfixture:alice-s2-<uuid>.example` | server1 (soland-server1) | Realm 创建者 + 跨域 inviter |
-| bob | `did:webvh:z6mkfixture:bob-s2-<uuid>.example` | server2 (soland-server2) | 跨域 invitee |
-| mallory (sub-test) | `did:webvh:z6mkfixture:mallory-s2-<uuid>.example` | server2 | 服务委托被撤销后的旁观者 |
-
-## Pre-conditions
-
-- server1 和 server2 两个 soland 都启动并 ready
-- coauth 启动并 ready
-- alice 在 server1 上注册;bob 在 server2 上注册;两端都通过同一 coauth 拿到 session credential
-- DID Document(或等效的服务发现源)能让 server1 通过 bob 的 DID 解析出 `did:web:soland-server2.joint-e2e.local` 是 bob 的 Station (`sync/federation.md` §6.2 Actor Event Source 发现)
-- server1 和 server2 互信对方的 service DID (HTTP Message Signature 校验能过)
+- `arkret-spec/spec/v1/zh/sync/federation.md` §3 — 复制单元是单条 stream 的 `(RealmCommit, Event)`;非治理接收方以治理签名为准;`QUERY peer/events` 不属于 v1
+- `arkret-spec/spec/v1/zh/sync/federation.md` §3.2 — 服务签名先于任何内层对象处理
+- `arkret-spec/spec/v1/zh/sync/federation.md` §4.1.1 — fanout 目标 = effective joined 成员的 routing service;`committed_replication` 分支;接收方重验本机托管成员资格
+- `arkret-spec/spec/v1/zh/sync/federation.md` §5.3.1 — invite 只携 locator candidate,由自己 Station 验证 nonce-bound bundle
+- `arkret-spec/spec/v1/zh/sync/invite-addressing.md` §7 — 定向邀请以 `ak.account.invite_delivery` account data 送达;§7.1 加入预览/准备的权威来源
+- `arkret-spec/spec/v1/zh/sync/api-conventions.md` Event submit 幂等 — `replication_outcomes[]` 与 `replications[]` 同序,没有顶层 `accepted[]`／`duplicate[]`
+- `authority-commit-operations.schema.json#/$defs/peer_submit_request`、`#/$defs/stream_scan_request`
 
 ## Steps
 
@@ -72,32 +32,18 @@
    - 在 server1 侧产生 `ak.invite.create` Event,subject_did = bob.did
 4. 断言:server1 侧 `realm-admin-panel` 显示 `invited bob.did`
 
-### Phase B — 联邦 push 把 invite 送到 server2
+### Phase B — 定向邀请送达 server2
 
-5. server1 检测到 bob 不在本地,通过服务发现拿到 `did:web:soland-server2.joint-e2e.local` 是 bob 的 Station
-6. server1 `POST http://<port_server2>/_arkret/peer/events`,body 含:
-   - `origin = did:web:soland-server1.joint-e2e.local`
-   - `destination = did:web:soland-server2.joint-e2e.local`
-   - `realm_id = realmId`
-   - `service_binding_ref` 含 `realm_policy_digest` / `membership_frontier`; 成员 ActorId 中的 Station 是路由真相
-   - `events: [<完整签名的 ak.invite.create Envelope>]`
-   - HTTP headers `Signature-Input`、`Signature`、`Content-Digest`
-7. server2 校验:
-   - HTTP signature transcript + destination DID 匹配
-   - content-digest 覆盖 body
-   - service_binding_ref 与 server2 本地的 Realm policy snapshot 一致
-   - 每个 Event 的 actor 签名 + 因果链
-   - server2 从普通 Event 的 `auth_context.authority_refs`（控制面 Event 使用 `seal_basis`）所确定的 CBS 读取 Realm reducer-profile cell；请求和 binding 均不声明 profile
-8. server2 返回 `{accepted: [invite_event_id], rejected: [], quarantine: []}`
-9. 断言(测试侧从 server1 视角拿响应,或者从测试 harness 直接读 server2 的 sync state):invite event 在 server2 上可见
+5. server1 经 `ak.self.invites.command.dispatch.v1` 把 invite 投递到 bob 的 Station (`POST /_arkret/peer/invites`)
+6. server2 按 bob 的 invite receive policy 写入 `ak.account.invite_delivery`,entry 携 `authority_locator_hints`
+7. 断言:bob 在 server2 的 account data 中读到该 delivery entry(server2 不持有 Invite 对象,也不在加入前持有 Realm)
 
-### Phase C — bob@server2 接受 invite
+### Phase C — bob@server2 经自己 Station 加入
 
-10. **bob** 通过 server2 的 inkson 加载;客户端检测到收到一个 invite (inkson 应该有 invite 列表 UI;如果没有,scenario 注释成需要 inkson 补 UI 或者通过 API call 走)
-11. bob 触发接受;server2 上产生 `ak.invite.accept` Event,refs 指向 `ak.invite.create.event_id`
-12. server2 主动把 `ak.invite.accept` push 到 server1 (反向 federation push)
-13. server1 校验后接受;server1 上 reducer 收敛 bob 的 `membership=join`
-14. 断言:server1 上 `/realms/${realmId}/admin` 的成员列表含 bob.did
+8. bob 以 delivery entry 的 hints 调 server2 的 `self/realm-joins/prepare`;server2 取回并验证 server1 的 nonce-bound bundle
+9. bob 签署 `ak.invite.accept`(`previous_state=pending`、`invitee_account_id`)提交给 server2,由它 `authority_forward` 到 server1
+10. server1 接纳并签发 RealmCommit;精确重放同一 Event 返回 `duplicate`
+11. 断言:server1 上成员列表含 bob 的完整 AccountId
 
 ### Phase D — 双向消息推送
 
@@ -109,41 +55,33 @@
 18. 断言:server1 那边 alice 30s 内 timeline 含 `M_b`
 19. (Edit + redact 子流程可选;主要验证传播方向,不重复 messaging/triad-collaboration 的 message 内部细节)
 
-### Phase E — Frontier 一致性
+### Phase E — Committed replication 与 peer scan
 
-20. 测试 harness 分别查询 server1 和 server2 的 `GET /_arkret/peer/events/frontier?realm_id=${realmId}` (或等价 endpoint),拿到两端的 accepted Event frontier 集合
-21. 断言:两端 frontier 覆盖相同的 event 集合;event_id 相同,顺序可能不同但因果一致
+20. 加入前,harness 以 server1 身份把 Realm bootstrap 的精确 `(RealmCommit, Event)` 送到 server2 的
+    `committed_replication`:server2 不托管 joined 成员,每项 `rejected` 且零写
+21. 加入后,harness 以 server2 身份对 server1 做 `ak.peer.committed_event.read.scan.v1`,取到消息的 Commit 行;
+    送回 server2 为 `duplicate`,精确重放仍为 `duplicate`
+22. 恢复用例:同一 scan 行经 `committed_replication` 送到 server2 为 `stored` 或 `duplicate`,server2 上只物化一次
 
-### Phase F — Pull / Backfill (sub-test E2.1)
+### Phase F — 成员退出后停止 fanout
 
-22. 把 server2 临时离线(harness 用 `route.block` 拦掉 server1→server2 的 push,模拟网络分区)
-23. **alice** 发 `M_offline = "during partition ${stamp}"`,server1 多次重试 push 失败
-24. 恢复 server2,**bob** 进 timeline → server2 检测因果缺口(本地缺 `M_offline` 的 `prev_refs`),发起 `GET /_arkret/peer/events?realms=...&after=...`
-25. server1 返回缺口 event 数组,server2 落库,bob 现在能看到 `M_offline`
-
-### Phase G — Capability revoke fanout (sub-test E2.2)
-
-26. **alice** 在 server1 撤销 `did:web:soland-server2.joint-e2e.local` 对该 Realm 的服务委托 (具体事件类型按 `ak.service.delegation` 或等价)
-27. 撤销 fanout 推到 server2 (`§4.4`)
-28. **alice** 再发 `M_after_revoke = "post-revoke ${stamp}"`
-29. 断言:server1 **不再** 把该 event push 给 server2;server2 上 bob 看不到 `M_after_revoke`(spec §4.1 末尾:"撤销后的 service DID 不得继续接收非加密私有内容")
+23. bob 在 server2 签署 `ak.member.state{leave}`,经 server2 转发到 server1
+24. **alice** 再发 `M_after_leave`
+25. 断言:server1 已接纳该消息,server2 不持有其 Commit(bob 的 committed-event 读取为 404)
 
 ## Observable assertions (合并清单)
 
-- 步骤 6-8:server1→server2 的 push 成功,server2 返回 `accepted` 含 invite event_id
-- 步骤 12-13:server2→server1 的 accept push 成功
-- 步骤 14:server1 视图中 bob 是 member
+- 步骤 7:定向邀请以 account data 送达 server2
+- 步骤 10-11:own-Station 加入被 server1 提交,server1 视图中 bob 是 member
 - 步骤 16、18:两边消息双向 30s 内可见
-- 步骤 21:frontier 在两端覆盖同一 event 集合
-- 步骤 25:peer events query 能补齐缺口
-- 步骤 29:撤销后 server1 不再向 server2 推送
+- 步骤 20:无托管成员的 Station 逐项拒绝 committed replication
+- 步骤 21-22:peer scan + committed replication 幂等,不重复物化
+- 步骤 25:成员退出后不再向 server2 fanout
 
 ## Edge cases / sub-tests
 
-- **E2.3 unsupported_profile**：让 Event 的 CBS 落在 server2 未实现的 reducer profile；断言 Event 以 `unsupported_profile` 拒绝
-- **E2.4 idempotent push**:server1 把同一个 invite event 推两次,server2 第二次也返回 `accepted`(幂等),不重复写入
-- **E2.5 signature 失败**:篡改 server1 的 HTTP signature header,server2 整批拒绝;断言 4xx 状态码 + 标准 JSON error envelope
-- **E2.6 dependency_missing**:server1 发一个 `prev_refs` 指向 server2 未见过的 event 的 message,server2 把它放 `rejected[]` with `reason_code=dependency_missing`
+- **E2.5 signature 失败**:篡改 server1 的 HTTP signature header,server2 整批拒绝;断言 4xx + 不可区分的认证失败 envelope
+- **未签名 peer scan**:缺少 RFC 9421 签名的 `POST /_arkret/peer/streams/scan` 被拒绝(<500)
 
 ## Implementation notes — harness 改动
 
@@ -168,8 +106,6 @@
 
 ## 风险 / 前置依赖
 
-- **已落地**:双 soland 拓扑、`peer events submit` / `peer events query` endpoint、server1→server2 invite 自动 push、server2→server1 invite-accept member join push、双向 message push、幂等 replay、网络分区恢复后的 pull/backfill operation frontier coverage、入站 RFC 9421 HTTP Message Signature 验证、key rotation hint、relay outer/inner signature 边界。
-- **仍待后续 GAP**：服务委托 revoke fanout。
 - **当前加入链路仍待验收**：下面的 typed authoring / bootstrap 用例经申请人自己 Station prepare，使用正式 `ak.invite.accept`；旧 helper 和历史成员投影不能证明来源准入、受限状态与 covering Seal 导入已闭合。
 
 ## 总耗时预估

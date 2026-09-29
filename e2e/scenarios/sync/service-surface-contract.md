@@ -15,7 +15,7 @@
 - `arkret-spec/spec/v1/zh/sync/service-surface.md` §17 — 线级互操作要求(describe 必填字段、`verified_profiles` 与 `development_mode` 约束、claim-level partition)
 - `arkret-spec/spec/v1/zh/sync/api-conventions.md` §4 — 标准成功响应 envelope
 - `arkret-spec/spec/v1/zh/sync/api-conventions.md` §5 — 标准错误响应(`ok=false`、`error.code`、`message`、`retry_after_ms`、`details`、`request_id`)
-- `arkret-spec/spec/v1/zh/sync/api-conventions.md` §5.1 — 标准错误码与 `unsupported_feature` / `unsupported_event_kind` 区分
+- `arkret-spec/spec/v1/zh/sync/api-conventions.md` §5.1 — 标准错误码；current-v1 Event 无 `requirements` / `critical_extensions` carrier，顶层出现即 `schema_violation`
 - `arkret-spec/spec/v1/zh/sync/api-conventions.md` §5.2 — 未知路径 `404 unrecognized_endpoint` / 错误方法 `405 method_not_allowed`,MUST 使用统一错误响应
 - `arkret-spec/spec/v1/zh/sync/api-conventions.md` §6 — 幂等(`Idempotency-Key` / `event_id` / `request_id`、`duplicate_conflict` 语义)
 - `arkret-spec/spec/v1/zh/sync/api-conventions.md` §7 — Cursor opaque token、`ak:cursor:<base64url>`、`param_invalid` / `cursor_expired`、TTL 上限
@@ -42,7 +42,7 @@
 | alice | `did:webvh:z6mkfixture:alice-ssc-<uuid>.example` | 写操作发起者;Phase D 用她的 dev token 重复提交带 `Idempotency-Key` 的写请求;Phase C 用她的可见性范围列分页 | 测试开始前 |
 | harness | n/a (Playwright `request`) | 直接拼 HTTP request、断言响应 envelope、解码 cursor base64url | n/a |
 
-不需要第二个 actor:本 scenario 不涉及跨用户授权;`unsupported_feature` 路径只需要 alice 的 token + 一个声明不支持的 feature。
+不需要第二个 actor:本 scenario 不涉及跨用户授权;Phase E 只需要 alice 的 token。
 
 ## Pre-conditions
 
@@ -131,16 +131,13 @@
     - `error.code === "duplicate_conflict"`(spec §6 第 2 条)
     - HTTP 409
 
-### Phase E — Unsupported feature fail-closed(§5.1)
+### Phase E — 顶层 `requirements` / `critical_extensions` 是 schema_violation(§5.1)
 
-31. 从 Phase A 的 describe 响应里取唯一运行时 feature 集 `supported_features`,选一个其中不存在的注册 feature 标识
-32. 构造一个 `POST /_arkret/self/events` 请求,在 envelope 的 `requirements.features[]` 字段里声明依赖该 feature
-33. 断言:
-    - HTTP 4xx
-    - `error.code === "unsupported_feature"`(spec §5.1:该 code 专门用于 `Event.requirements.features[]` 命中实现未声明 feature)
-    - **MUST NOT** 是 `unsupported_event_kind`(spec §5.1 第 4 条:二者不得互相替代)
-    - **MUST NOT** 是普通 `schema_violation`(实现不得用泛 code 掩盖 fail-closed)
-    - 服务端没有把 event 写入(用 frontier 或 list 反向验证)
+31. alice 签一条合法 `ak.message.create`，签名后在 envelope 顶层注入 `requirements`（Phase E）或 `critical_extensions`（Phase E2）
+32. 断言:
+    - HTTP 422，`error.code === "schema_violation"`（api-conventions §5.1：current-v1 Event 没有通用 `requirements` / `critical_extensions` carrier，不得伪装成 feature negotiation；`models/event-and-patch.md` §2 与 `forbidden-wire-fields.json` 同样禁止 `requirements`）
+    - **MUST NOT** 是 `unsupported_feature`（它只用于已登记 wire 特性在 v1 支持矩阵中为 unsupported）
+    - 服务端没有把 event 写入（stream scan 反向验证）
 
 ## Observable assertions(合并清单)
 
@@ -149,7 +146,7 @@
 - Phase C:list 响应符合 §7.1 形状;`cursor` 是 `ak:cursor:<base64url>`;多页无 overlap / 无 gap;cursor 不可解析出明文 ID;篡改 cursor → `param_invalid` / `cursor_expired`
 - Phase D0:`event_id` 同 envelope 重放 → duplicate/no-op；改变 producer-signed preimage 却保留旧 `event_id` → identity 校验失败（`schema_violation` / 400），在去重查询前拒绝，事件只投影一次。依据 `models/event-and-patch.md` 的 Event ID 校验顺序；请求级同键异体冲突由 Phase D 单独覆盖。
 - Phase D:同键同 body → 与首次等价;同键不同 body → `duplicate_conflict` / 409;副作用只发生一次
-- Phase E:`requirements.features[]` 引用未实现 feature → `unsupported_feature` / 4xx;event 未落库;不被泛 code 替代
+- Phase E / E2:顶层 `requirements` / `critical_extensions` → `schema_violation` / 422;event 未落库
 
 ## Edge cases / sub-tests
 
@@ -157,7 +154,6 @@
 - **E2 dev_mode invariant**:`development_mode === true` + 非空 `verified_profiles` 是 invalid describe(SDK / conformance tooling 必须 fail);harness 不能模拟服务端违规,所以以 fixme 钉住 spec 合约,等 production-mode CI 落地后做 live 反例测试
 - **E3 cursor TTL 上限**:stream cursor TTL MUST ≤ 7 天(api-conventions §7 TTL 硬上限);本测试无法在 e2e 内等 7 天,但可以 fixme 钉住 spec,后续在 cotest fixture 里塞一个 8 天前签发的 cursor 验证 `cursor_expired`
 - **E4 idempotency cross-actor 隔离**:同一 `Idempotency-Key` 由 bob 重复提交 MUST NOT 命中 alice 的缓存项(否则可被用作 oracle);fixme 钉住,等 G3.S0 / multi-user soland scaffold 稳定后 live
-- **E5 unsupported critical extension**:与 `unsupported_feature` 平行,`requirements.critical_extensions[]` 引用未实现且 `fail_closed=true` 的 extension MUST 也用 `unsupported_feature` code(spec §5.1 同一条);当前已由 Phase E2 live 覆盖
 
 ## Implementation notes
 
@@ -166,7 +162,7 @@
 - **Phase C list endpoint 已 live**:当前用 `/_arkret/self/events?after=...` 覆盖 §7.1 pagination shape、opaque cursor、tamper reject、gap-free / non-overlap 分页;`/sync/operations` 不存在不再阻塞本场景
 - **event_id 幂等已 live**:soland 当前依赖 `event_id` 幂等(spec §4.2);同 envelope replay 与同 `event_id` drift conflict 已由 Phase D0 覆盖
 - **Idempotency-Key header 已在 events write live**:Phase D 覆盖 `POST /_arkret/self/events` 的同键同 body replay 与同键不同 body `duplicate_conflict`;其它 write endpoint 的一致性可另开场景
-- **`unsupported_feature` 触发条件已 live**:Phase E 通过 `Event.requirements.features[]` 注入未声明 feature,Phase E2 通过 `requirements.critical_extensions[]` 注入 fail-closed extension,断言 soland 在 envelope validation 阶段返回 `unsupported_feature`
+- **闭合 Event schema 已 live**:Phase E / E2 在签名后注入顶层 `requirements` / `critical_extensions`,断言 soland 在 envelope 解析阶段返回 `schema_violation`
 - **no new helper**：用现有 `request` fixture + `ensureRegistered` / `issueUserSession` + `solandBaseUrl()` / `coauthBaseUrl()`；不要新增 helper。
 
 ## 总耗时预估

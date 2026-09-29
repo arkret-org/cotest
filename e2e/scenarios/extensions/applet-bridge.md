@@ -17,7 +17,7 @@
 - 1 × soland (Station) — 假设监听 `http://127.0.0.1:<soland_port>`
 - 1 × coauth (private authentication process) — 假设监听 `http://127.0.0.1:<coauth_port>`
 - 1 × mock-applet-registry — 由 cotest runner 的 `-StartMockAppletRegistry` / `-StartMocks` 启动,通过 `COTEST_MOCK_APPLET_REGISTRY_BASE_URL` 注入;由它代表"applet developer"完成 manifest 签名与外部 webhook 转发
-- 共享同一 coauth；principal actor 与 applet service 都使用可验证 session，ghost event 则由 applet registration epoch 捕获的 service signing key 签名
+- 共享同一 coauth；只有 principal actor（alice）持有 Account session。applet service 没有 Account session，也不走 Account Station 的 `/_arkret/self/events`（`sync/service-http-binding.md` §2.6）；它的写入只经 `POST /_arkret/edge/applet/transactions`，每次投递带 RFC 9421 来源签名（`applet-integration.md` §7.3.1，覆盖集含 `arkret-operation`），每条 Event 是 closed Event Envelope（`event-envelope.schema.json`），唯一 producer proof 为 `producer_proof`，由 registration epoch 捕获的 service signing key（`webhook_auth.key_ref`）签名
 
 ## Actors
 
@@ -69,9 +69,9 @@
    - history_access = `since_join`
    - seed_members = `[]`（install 不写 membership）
 6. 断言:`realm-lifecycle-strand` 显示 `created ak:realm:...`,记录 `realmId`
-7. 安装本身不创建 membership。PCR accepted 后，Bot 使用持久化的独立 runtime key，通过正式 `ak.member.state` Event 执行普通 self-join admission；不得由管理员预写 membership、Applet service 代签或调用私有 endpoint。
-8. 测试把已接受的同一 Bot Event 投递到标准 peer ingress，并仅断言 duplicate/accepted 幂等结果；这是 peer ingress 重放覆盖，不宣称观察了 outbound federation outbox，也不冒充 invite accept transition。
-   - 断言:返回 `{ status: "joined" }`
+7. 安装本身不创建 membership，registration Event 也不是 Bot 的授权：以 `authorization_ref=registration_event_ref` 投递的 Bot `ak.member.state{join}` 在 transaction outcome 中 `status="rejected"`，且不入 accepted history（§8、§11）。
+8. alice 以 Realm 管理员身份为 Bot 签发一条 install 绑定的 grant（`subject=bot_actor_id`，`authority_control/applet_authority` 绑定 `applet_id`、`executed_by=service_id`、`registration_epoch`；§6、§11），再发 directed `ak.invite.create`；Bot 自己的 `ak.invite.accept` 由 Applet service 执行并签名（`actor_id=bot_actor_id`、`executed_by=service`、`authorization_ref=<Bot grant>`、`applet_id`、`producer_proof`），经 transaction rail 投递（`common-fields.md` §4.5：管理员不代写他人 `member.state{join}`）。
+   - 断言:transaction outcome `status="accepted"`，accepted history 含该 `ak.invite.accept`，其 `actor_id`/`executed_by` 如上
 9. **alice** 同步 `/realms/${realmId}/admin/members`,断言 members 列表包含 `bot_actor_id`
 
 ### Phase C — 外部事件 → ghost actor 转译
@@ -79,17 +79,24 @@
 10. mock-applet-registry 模拟外部事件:测试调 `POST ${COTEST_MOCK_APPLET_REGISTRY_BASE_URL}/external-event`,body 形如
     ```json
     {
+      "soland_base_url": "<soland>",
+      "destination_id": "<station service did_core_id>",
       "applet_id": "<applet_id>",
       "realm_id": "<realmId>",
+      "strand_id": "<portal strand>",
+      "authorization_ref": "<Ghost 自己的 ak.message.create grant>",
+      "provision_authorization_ref": "<install 的 ak.applet.ghost.provision grant>",
       "external_user": { "id": "ext-user-X", "display_name": "External X" },
+      "ghost_creation": { "authoring_request": "…", "managed_actor_bundle": "…", "ghost_actor_did": "…", "external_ref": "…" },
       "payload": { "kind": "message", "text": "hi from outside ${stamp}" }
     }
     ```
+    首次调用 `payload.kind="provision"` 只做 provision；Ghost 随后按 Phase B 同样的 grant + invite/accept 流程入 Realm（§9.1：provision 不隐含 membership），再发 `kind="message"`。
 11. mock 内部:
-    - 正向 provision 前，把同一 `applet_managed_control` PCR genesis 分别投递到普通 `/_arkret/self/events` 与 peer federation 单 Event 入口；两者都必须以 `applet_managed_pcr_genesis_requires_closed_aggregate` 拒绝，证明只能由固定四事件 formal aggregate 注入
-    - 用 active registration service key 对 exact body/path/Idempotency-Key 生成 RFC 9421 `service_signature`，调 `POST /_arkret/self/applets/{applet_id}/ghosts/provision`；不得用 bearer session 替代
-    - 请求携带完整 `actor_station_id`、service-signed managed provision、Ghost PCR genesis、accountability grant 与 profile 四事件；Station 独立验证 DID method evidence 和 DID namespace 后原子提交，不代签、不重建
-    - ghost 消息通过 `POST /_arkret/edge/applet/transactions` 提交，`actor_id=ghost_actor_id`、`executed_by=applet_service.id`，并引用安装时颁发的 message capability
+    - 正向 provision 前，测试把同一 `applet_managed_control` PCR genesis 单独投递到普通 `/_arkret/self/events`，必须被拒（只能由固定四事件 formal aggregate 注入）
+    - 用 active registration service key 生成 RFC 9421 来源签名（覆盖 `arkret-operation`），调 `POST /_arkret/self/applets/{applet_id}/ghosts/provision`；不得用 bearer session 替代
+    - 请求是 exact `{authoring_request, managed_actor_bundle}`；Station 独立验证 DID method evidence 和 DID namespace 后原子提交，不代签、不重建
+    - ghost 消息是 closed Event Envelope：`actor_id=ghost_actor_id`、`executed_by={kind:service,service_id}`、`authorization_ref=<Ghost 自己的 message grant>`（provision grant 与其回显不授权后续写入，§9.1）、`applet_id`、顶层 signed `external_ref`、唯一 `producer_proof`；不携带 `proofs[]`/`actor_seq`/`hlc`/`prev_refs`/`auth_context` 等 schema 外成员。`event_id` 与 `producer_proof` 由 `cotest-wire` 的 SDK 命令派生/签名。通过 `POST /_arkret/edge/applet/transactions` 提交
     - Realm 为私有明文时，必须在 `plaintext_visible_services` 中显式授权 applet service 的 `message_content`
     - 返回 `{ ghost_actor_id, message_id }`
 12. 断言:返回的 `ghost_actor_id` 是合法 `did_core_id`，且与 provision/profile/message 三处逐字相同
@@ -97,12 +104,12 @@
 14. **alice** 点击该 timeline-event,断言:
     - 消息卡片显示 ghost 标记(`ghost-actor-badge` testid),且文本含 `External X`
     - `actor_id` 字段 = `ghost_actor_id`
-15. 查询 Realm accepted Events，断言:
-    - `ak.profile.create.payload.object.principal_id = ghost_actor_id`
-    - `actor_kind = "integration"`
-    - `accountable_principal_ids = [applet_service.service_id]`
-    - 同一 provisioning aggregate 的 `ak.identity.accountability_grant` 由该 service 签署，且
+15. 问责闭包断言:
+    - accepted 消息：`actor_id=ghost_actor_id`、`executed_by=service`、`applet_id`、`authorization_ref=<Ghost message grant>`、`external_ref.protocol="bridge"`；`producer_proof.kind="detached_jws"`、`verification_method=webhook_auth.key_ref`，不带 `signer_resolution_evidence_ref`
+    - Ghost `ak.profile.create` 属于 Ghost 自己的 `applet_managed_control` PCR（`realm_id=principal_control_realm_id`），从提交的四事件单元断言 `payload.object.principal_id = ghost_actor_id`、`actor_kind = "integration"`、`accountable_principal_ids = [applet_service.service_id]`，且其 critical `accountability` semantic ref 指向下述 grant
+    - 同一 provisioning aggregate 的 `ak.identity.accountability_grant` 在 portal Realm accepted history 中，由 service 署名、`authorization_ref=<provision grant>`，
       `issuer=applet_service.service_id`、`subject=ghost_actor_id`、`grant_status="active"`
+    - provision outcome 的 `authorization_ref` 回显 provision grant，且不等于 Ghost message grant
 
 ### Phase D — 链路追溯 UI
 
@@ -112,14 +119,14 @@
 ### Phase E — Revoke + 后续 ghost 消息被拒
 
 17. **alice** 在 `/realms/${realmId}/admin/access` 或 `/settings/applets`(以 inkson 实际路由为准)对 `applet_id` 执行 revoke:
-    - 先调 `POST /_arkret/self/applets/${applet_id}/revoke/preview`，按 plan 为每个 capability revoke intent 构造完整 `EventInitialSubmission`
-    - 再调 `POST /_arkret/self/applets/${applet_id}/revoke`，携 `revoke_plan_digest`、两类 submission 数组和 `Idempotency-Key`
+    - 先调 `POST /_arkret/self/applets/${applet_id}/revoke/preview`（outcome 只含 `revoke_plan`），按 plan 为每个 capability revoke intent 签 `ak.capability.revoke{grant_id, expected_revision, reason}`，为每个 membership removal intent 签 `ak.member.state{leave}`（Bot/Ghost 经 invite accept 入场，属 applet-managed membership）
+    - 再调 `POST /_arkret/self/applets/${applet_id}/revoke`，携 caller 自算的 `revoke_plan_digest = sha256(JCS(revoke_plan))`、两类 submission 数组和 `Idempotency-Key`
     - 断言:返回 `{ ok: true, status: "complete", revoked_refs: [...] }`
 18. 再调 `POST ${COTEST_MOCK_APPLET_REGISTRY_BASE_URL}/external-event`(同 §10,但 text = `"after revoke ${stamp}"`)
-    - 断言:mock 拿到的 soland 写消息响应 status = `403` 或 `409`,error code 含 `applet_revoked`
+    - 断言:mock 拿到的 soland transaction 响应 status = `403`（无 active effective install），error code = `applet_registration_unauthorized`（§7.3.1 失败码）
     - **断言**:alice timeline 不出现 `"after revoke ${stamp}"`
 19. 已接受的 registration、Profile 与 accountability grant 仍保留(historic accountability 不能事后被抹去)，同时 revoke outcome 的 `revoked_refs` 至少包含 bot/ghost actor ids，后续 runtime ingress 继续 fail closed
-20. 使用 revoke 前签好并取得 lease 的 Ghost 普通 Event 直接调用 `/_arkret/self/events`，断言 `403 applet_revoked`；这条负例绕过 Applet ingress，证明通用 admission gate 生效
+20. revoke 前由 service 自行构造并签名（绕过 mock registry）的一条合法 Ghost `ak.message.create`，revoke 后直接投递到 `/_arkret/edge/applet/transactions`：断言 `403 applet_registration_unauthorized` 且不入 history。Applet service 没有 Account session，不存在经 `/_arkret/self/events` 冒充 Ghost 的路径
 21. Applet service 查询 `(actor_id, PCR realm_id)` authoring frontier 得到 `404`，但仅按 actor 查询历史 aggregate frontier 仍为 `200` 且包含原 PCR realm；撤销只关闭 authoring，不删除历史 identity resolution
 
 ## Observable assertions (合并清单)
@@ -131,7 +138,7 @@
 - 步骤 14:UI 上 ghost 消息有 ghost badge,actor_id 是 ghost_actor_id
 - 步骤 15:accepted Profile + accountability grant + registration/install 构成规范问责闭包
 - 步骤 17:revoke preview/commit 返回 200 + `status=complete`
-- 步骤 18:revoke 后再发的 ghost 消息被拒(403/409 + `applet_revoked`),timeline 不出现新文本
+- 步骤 18:revoke 后再发的 ghost 消息被拒(403 + `applet_registration_unauthorized`),timeline 不出现新文本
 - 步骤 19:历史 accepted 问责事实保留，revoke refs/fence 标记 runtime 已撤销
 - 步骤 20-21:绕过 Applet ingress 的普通 Event 仍被 revoke fence 拒绝；PCR authoring frontier 关闭而历史 aggregate frontier 保留
 
@@ -139,7 +146,9 @@
 
 - **E4.1 namespace 冲突**:Phase A 之后,mock 再生成一个不同的 `package_id` 但相同 `namespace = "bridge.demo"` 的 package;soland install preview/commit 返回 `409`,error code 含 `applet_namespace_conflict`;首次 applet 不受影响
 - **E4.2 capability revoke**：revoke 后 Bot/Ghost creation anchors 与历史 resolution 仍可读；测试用正式通用 Event submit 构造 Ghost 自签写入并断言 `applet_revoked`，并断言 combined authoring frontier 关闭、actor-only 历史 frontier 保留；不得调用已删除的私有 typed bot message route。
-- **E4.3 idempotency**:同一 install body 用相同 `Idempotency-Key` 重复 commit 两次,第二次返回 200 + 与第一次完全相同的 `{ applet_id, bot_actor_id }`;相同 key 但不同 body 返回 `409 idempotency_key_conflict`
+- **E4.3 idempotency**:同一 install body 用相同 `Idempotency-Key` 重复 commit 两次,第二次返回 200 + 与第一次完全相同的 `{ applet_id, bot_actor_id }`;同一 `(applet_id, effective_scope)` 换 `Idempotency-Key` 再次 commit 返回 `409 duplicate_conflict`（`applet_already_registered` 在 error-code-registry 为 reserved，生产者不得发射）
+
+- **Inbound transaction push**（§7.3、§7.3.1、§11.1）：Bot 消息以 producer-only Event 投递，outcome `accepted` 且 `committed_event_refs` 恰含该 Event；accepted Event 的 `producer_proof` 与提交逐字相同、无 Station 附加签名。同一 Event 换成不验签的 producer proof（外来 key、篡改 jws）逐条 `rejected`；旧 `proofs[]` carrier 整体 `422 schema_violation`。Service 自署写入不带 `executed_by`，`actor_id` 为 install grant 的 subject authority pair `(service_id, target_station_id)`（§4b）。revoke 后投递 `403 applet_registration_unauthorized`，与 revoke 竞争的投递要么唯一接纳、要么不入 history。缺签名 / 伪签名 / 过期窗口分别为 `401 http_signature_required` / `http_signature_invalid` / `signature_window_invalid`。
 
 主流程之外的 E4.x 子测试建议放在同一个 `tests/extensions/applet-bridge.spec.ts` 的 `test.describe` 内,各自独立建 Realm 或共用 Phase A,以避免 namespace 状态干扰。
 
@@ -157,7 +166,7 @@
 - mock-applet-registry 提供这些 endpoint:
   - `GET /healthz`
   - `POST /sign-package` → `{ applet_package, package_digest }`
-  - 不提供 Bot membership 私有 endpoint；测试必须提交正式 Bot-signed Event。
+  - 不提供 Bot membership 私有 endpoint；Bot/Ghost 入场是测试经 transaction rail 投递的 Service 执行 `ak.invite.accept`。
   - `POST /external-event` → `{ ghost_actor_id, message_id }` 或错误
 - `COTEST_MOCK_APPLET_REGISTRY_BASE_URL` 由 cotest harness 在启动 mock 时注入;mock 自身仍用 `MOCK_APPLET_REGISTRY_PORT` 绑定本地监听端口
 - Inkson UI 侧:`ghost-actor-badge`、`accountability-trace-button`、`/settings/applets` 当前都不存在 — 主测试用 timeline 可见性 + HTTP accountability 断言为主

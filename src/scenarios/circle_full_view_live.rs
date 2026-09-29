@@ -115,12 +115,13 @@ pub async fn run() -> Result<()> {
         "hidden and absent Circle errors disclose a different shape: {hidden} / {absent}"
     );
 
+    let parent = alice.parent_membership_revision(&realm, &actor).await?;
     let mut join = alice
         .author_event(
             &realm,
             EventKind::CircleMemberState.as_str(),
             json!({"circle_id":circle,"member_id":actor,"membership":"join",
-            "expected_membership":null}),
+            "parent_membership_revision":parent,"expected_membership":null}),
         )
         .await?;
     join.scope_ref = ScopeRef::Circle {

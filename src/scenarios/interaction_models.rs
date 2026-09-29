@@ -86,46 +86,51 @@ pub async fn message_revision_reaction_marker_and_scan_work() -> Result<()> {
         "stream scan must return the follow-up committed Event"
     );
 
-    // Reactions remain explicitly fail-closed until their authority cut is
-    // wired (kind coverage matrix: 1639/2011). Keep the negative evidence in
-    // this interaction scenario without treating an uncommitted Event as a
-    // successful reaction.
-    let reaction = bob
+    // strand-and-message.md section 9.8: a reaction targets the accepted
+    // `ak:message:` in its own scope and is admitted at the same cut with the
+    // actor's `ak.reaction.add` / `ak.reaction.remove` grant. A remove is
+    // self-scoped and needs no prior add of its own.
+    let message_ref = MessageId::from_event_id(&sent_event_id).to_string();
+    let reacted = bob
+        .submit_event(
+            &realm_id,
+            "ak.reaction.add",
+            json!({
+                "target_ref": message_ref,
+                "key": "like"
+            }),
+        )
+        .await?;
+    assert_eq!(reacted["status"], "committed");
+    let removed = carol
+        .submit_event(
+            &realm_id,
+            "ak.reaction.remove",
+            json!({
+                "target_ref": message_ref,
+                "key": "like"
+            }),
+        )
+        .await?;
+    assert_eq!(removed["status"], "committed");
+
+    // v1 core rejects every non-Message target as a schema violation.
+    let strand_reaction = bob
         .author_event(
             &realm_id,
             "ak.reaction.add",
             json!({
-                "target_ref": sent_event_id,
+                "target_ref": strand_id,
                 "key": "like"
             }),
         )
         .await?;
-    let refused = expect_json(
+    expect_json(
         bob.post("/_arkret/self/events")
-            .json(&initial_submission(reaction, "")?),
-        StatusCode::NOT_IMPLEMENTED,
+            .json(&initial_submission(strand_reaction, "")?),
+        StatusCode::UNPROCESSABLE_ENTITY,
     )
     .await?;
-    assert_eq!(refused["title"], "Unsupported event kind");
-
-    let removed_reaction = carol
-        .author_event(
-            &realm_id,
-            "ak.reaction.remove",
-            json!({
-                "target_ref": sent_event_id,
-                "key": "like"
-            }),
-        )
-        .await?;
-    let refused = expect_json(
-        carol
-            .post("/_arkret/self/events")
-            .json(&initial_submission(removed_reaction, "")?),
-        StatusCode::NOT_IMPLEMENTED,
-    )
-    .await?;
-    assert_eq!(refused["title"], "Unsupported event kind");
 
     // Per read-cursor.schema.json, a `kind="thread"` read scope references the
     // thread's root *message* (`ak:message:<event-token>`), not an opaque

@@ -19,17 +19,18 @@ import { createTwoUserMessagingRealm } from "../../helpers/messaging-fixtures";
 import { stepShot } from "../../helpers/screenshots";
 import {
   accountActorId,
-  addRealmMemberApi,
   accountSubscribeFramesApi,
   canonicalJson,
   createRealmApi,
   eventPrincipalId,
   grantCapabilityEventApi,
+  joinRealmMemberByInviteApi,
   resolveDefaultStrandId,
   sendMessageApi,
   signedEventEnvelope,
   submitSignedEventApi,
 } from "../../helpers/soland-api";
+import { addRealmMlsMemberApi } from "../../helpers/soland-api/mls";
 import {
   assertJointStackNotRequired,
   ensureRegistered,
@@ -76,17 +77,26 @@ async function accountSubscribeTimelineEvents(
   token: string,
   realmId: string,
 ): Promise<Array<Record<string, unknown>>> {
-  const frames = await accountSubscribeFramesApi(request, token);
-  const frame = frames.find((candidate) => candidate.kind === "delta");
-  expect(frame, "account subscribe delta frame").toBeTruthy();
-  if (!frame) throw new Error("account subscribe delta frame missing");
-  const realms = (frame as { realms?: Record<string, unknown> }).realms ?? {};
-  const realmFrame = realms[realmId] as
-    | { timeline?: { events?: unknown } }
-    | undefined;
-  expect(realmFrame, `sync realm frame for ${realmId}`).toBeTruthy();
-  expect(Array.isArray(realmFrame?.timeline?.events)).toBe(true);
-  return realmFrame!.timeline!.events as Array<Record<string, unknown>>;
+  // account-subscribe-frame.schema.json `account_filter`: an absent or empty
+  // `realm_ids` selects no Realm detail, so the Realm bucket is requested
+  // explicitly. Its delivered rows are `realm_sync_entry.committed_events[]`
+  // (`CommittedEventView`: a RealmCommit plus the exact signed Event, or a
+  // withheld marker without Event bytes); a window may span several frames.
+  const frames = await accountSubscribeFramesApi(request, token, {
+    filter: { realm_ids: [realmId], window_limit: 100 },
+  });
+  const buckets = frames.flatMap((frame) => {
+    if (frame.kind !== "delta") return [];
+    const realms = frame.realms as
+      | Record<string, { committed_events?: Array<{ event?: Record<string, unknown> }> }>
+      | undefined;
+    const bucket = realms?.[realmId];
+    return bucket ? [bucket] : [];
+  });
+  expect(buckets.length, `sync realm frame for ${realmId}`).toBeGreaterThan(0);
+  return buckets.flatMap((bucket) =>
+    (bucket.committed_events ?? []).flatMap((row) => (row.event ? [row.event] : [])),
+  );
 }
 
 test.describe("chat advanced", () => {
@@ -445,7 +455,19 @@ test.describe("chat advanced", () => {
         mls_activated: true,
         history_access: "since_join",
       });
-      await addRealmMemberApi(request, aliceToken, realmId, bob.id);
+      // common-fields.md section 4.5: only the target enters a Realm by its own
+      // membership Event, here by accepting a directed Invite. The join
+      // advances the MLS key-access revision, so an Add Commit must cover bob
+      // before the scope admits new ciphertext (encryption-and-audit.md 2.4.1).
+      await joinRealmMemberByInviteApi(request, aliceToken, realmId, {
+        id: bob.id,
+        token: bobToken,
+      });
+      await addRealmMlsMemberApi(request, realmId, {
+        id: bob.id,
+        deviceId: bob.deviceId,
+        token: bobToken,
+      });
       const strandId = await resolveDefaultStrandId(request, aliceToken, realmId);
       const sentAt = new Date();
       const envelope = buildSignalEnvelope({

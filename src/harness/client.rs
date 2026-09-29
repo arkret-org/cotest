@@ -566,6 +566,29 @@ impl TestActorClient {
         self.authorize(self.http.delete(self.url(path)))
     }
 
+    /// The exact typed revision of `member`'s current parent Realm
+    /// `member_state` join, read from the signed Realm State Snapshot head --
+    /// the `parent_membership_revision` a Circle join signs (circle.md §9.1).
+    pub async fn parent_membership_revision(
+        &self,
+        realm_id: &str,
+        member: &arkret_wire::ActorId,
+    ) -> Result<Value> {
+        let snapshot: arkret_wire::RealmStateSnapshot = serde_json::from_value(
+            expect_json(
+                self.get("/_arkret/self/realm-state-snapshot/head")
+                    .query(&[("realm_id", realm_id)]),
+                StatusCode::OK,
+            )
+            .await?,
+        )
+        .context("decode the Realm State Snapshot head")?;
+        let revision = snapshot
+            .parent_membership_revision(member)
+            .ok_or_else(|| anyhow!("{member} has no current parent Realm join in {realm_id}"))?;
+        Ok(serde_json::to_value(revision)?)
+    }
+
     pub async fn create_realm(&self, title: &str) -> Result<String> {
         let created = self
             .create_realm_with(json!({

@@ -7,7 +7,7 @@ import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
   accountActorId,
-  addRealmMemberApi,
+  joinRealmMemberByInviteApi,
   accountSubscribeDeltaApi,
   accountSubscribeFramesApi,
   authHeaders,
@@ -20,6 +20,7 @@ import {
   sendMessageApi,
   signedEventEnvelope,
   submitSignedEventApi,
+  wireErrCode,
 } from "../../helpers/soland-api";
 import {
   assertJointStackNotRequired,
@@ -331,8 +332,14 @@ test.describe("personal blocklist", () => {
       public: true,
       history_access: "all_history_for_current_members",
     });
-    await addRealmMemberApi(request, aliceToken, realmId, bob.id);
-    await addRealmMemberApi(request, aliceToken, realmId, carol.id);
+    await joinRealmMemberByInviteApi(request, aliceToken, realmId, {
+      id: bob.id,
+      token: bobToken,
+    });
+    await joinRealmMemberByInviteApi(request, aliceToken, realmId, {
+      id: carol.id,
+      token: carolToken,
+    });
     await resolveDefaultStrandId(request, aliceToken, realmId, { authorityRootController: alice.id });
     await grantCapabilityEventApi(request, aliceToken, {
       ownerId: alice.id,
@@ -410,7 +417,10 @@ test.describe("personal blocklist", () => {
       public: true,
       history_access: "all_history_for_current_members",
     });
-    await addRealmMemberApi(request, aliceToken, realmId, bob.id);
+    await joinRealmMemberByInviteApi(request, aliceToken, realmId, {
+      id: bob.id,
+      token: bobToken,
+    });
 
     const mutedVisible = `S31 E11.2 muted-visible ${stamp}`;
     await resolveDefaultStrandId(request, aliceToken, realmId, { authorityRootController: alice.id });
@@ -437,10 +447,16 @@ test.describe("personal blocklist", () => {
         }),
       },
     );
-    expect(registerDevice.status(), await registerDevice.text()).toBe(200);
-    const registeredDevice = await registerDevice.json();
-    const pushTargetId = registeredDevice.push_target_id;
-    expect(pushTargetId).toBeTruthy();
+    // push-notifications.md section 3.3: a bare push_gateway_url establishes
+    // no trust. An origin that is not a pre-onboarded canonical Gateway fails
+    // closed with the operation's registered push_gateway_unreachable
+    // (operations-error-mapping.json) and installs no push target; push
+    // absence never gates ordinary messaging.
+    const registerText = await registerDevice.text();
+    expect(registerDevice.status(), registerText).toBe(503);
+    const registerProblem = JSON.parse(registerText) as Record<string, unknown>;
+    expect(wireErrCode(registerProblem), registerText).toBe("push_gateway_unreachable");
+    expect(registerProblem).not.toHaveProperty("push_target_id");
 
     await replaceAccountDataApi(
       request,
@@ -468,7 +484,7 @@ test.describe("personal blocklist", () => {
         headers: { "content-type": "application/json" },
         data: canonicalJson({
           notification: {
-            push_target_id: pushTargetId,
+            push_target_id: `ak:pseudonym:push:s31e112-probe-${stamp}`,
             wakeup_kind: "message",
             devices: [{ device_id: alice.deviceId }],
           },
@@ -510,7 +526,10 @@ test.describe("personal blocklist", () => {
       public: true,
       history_access: "all_history_for_current_members",
     });
-    await addRealmMemberApi(request, aliceToken, realmId, bob.id);
+    await joinRealmMemberByInviteApi(request, aliceToken, realmId, {
+      id: bob.id,
+      token: bobToken,
+    });
     await putBlocklist(request, aliceToken, alice.id, [
       canonicalActorBlockEntry(bob.id),
     ]);

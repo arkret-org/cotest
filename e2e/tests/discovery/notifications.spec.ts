@@ -6,10 +6,10 @@ import { expect, test } from "../../helpers/arkret-test";
 import { cssStringEscape } from "../../helpers/dom";
 import { stepShot } from "../../helpers/screenshots";
 import {
-  addRealmMemberApi,
   accountSubscribeDeltaApi,
   createRealmApi,
   grantCapabilityEventApi,
+  joinRealmMemberByInviteApi,
   resolveDefaultStrandId,
   sendMessageApi,
   setStrandWatchLevelApi,
@@ -17,6 +17,12 @@ import {
   signedEventEnvelope,
   submitSignedEventApi,
 } from "../../helpers/soland-api";
+import {
+  addRealmMlsMemberApi,
+  encryptMlsMessageContent,
+  readScopeMlsGroupCurrentApi,
+  realmMlsCreatorGroupApi,
+} from "../../helpers/soland-api/mls";
 import {
   approvePairingLinkOnAuthorizedDevice,
   assertJointStackNotRequired,
@@ -397,7 +403,12 @@ test.describe("notifications", () => {
       history_access: "all_history_for_current_members",
       mls_activated: false,
     });
-    await addRealmMemberApi(request, aliceToken, realmId, bob.id);
+    // common-fields.md section 4.5: only the target itself, or its accepted
+    // directed invite, writes its `leave -> join` edge.
+    await joinRealmMemberByInviteApi(request, aliceToken, realmId, {
+      id: bob.id,
+      token: bobToken,
+    });
     const msg = `mark all read notification ${stamp}`;
     await sendMessageApi(request, aliceToken, realmId, msg, {
       mentions: [bob.id],
@@ -455,7 +466,27 @@ test.describe("notifications", () => {
       history_access: "since_join",
       mls_activated: true,
     });
-    await addRealmMemberApi(request, aliceToken, realmId, bob.id);
+    // bob's own invite acceptance advances the scope's key-access revision;
+    // new ciphertext is admitted only after an Add Commit covers it
+    // (encryption-and-audit.md sections 2.4.1 and 2.5.2).
+    await joinRealmMemberByInviteApi(request, aliceToken, realmId, {
+      id: bob.id,
+      token: bobToken,
+    });
+    await addRealmMlsMemberApi(request, realmId, {
+      id: bob.id,
+      deviceId: bob.deviceId,
+      token: bobToken,
+    });
+    const mlsGroup = await readScopeMlsGroupCurrentApi(
+      request,
+      aliceToken,
+      realmId,
+    );
+    if (!mlsGroup) throw new Error(`Realm ${realmId} has no accepted MLS group`);
+    expect(mlsGroup.covered_key_access_revision).toBe(
+      mlsGroup.current_key_access_revision,
+    );
     await replaceAccountDataApi(
       request,
       bobToken,
@@ -479,6 +510,9 @@ test.describe("notifications", () => {
 
     const plaintext = `sealed-keyword plaintext must stay client-side ${stamp}`;
     const strandId = await resolveDefaultStrandId(request, aliceToken, realmId);
+    const aliceGroup = await realmMlsCreatorGroupApi(request, realmId);
+    expect(aliceGroup.groupStateRef).toBe(mlsGroup.current_mls_commit_event_ref);
+    expect(aliceGroup.epoch).toBe(mlsGroup.epoch);
     const encrypted = signedEventEnvelope({
       actorId: alice.id,
       realmId: realmId,
@@ -486,11 +520,11 @@ test.describe("notifications", () => {
       payload: {
         strand_id: strandId,
         track_name: "discussion",
-        encrypted_content: encryptedEnvelope(
-          "ak.message.v1",
-          "opaque-ciphertext-for-sealed-keyword",
-          realmId,
-        ),
+        encrypted_content: encryptMlsMessageContent(aliceGroup, {
+          kind: "ak.content.text",
+          body: plaintext,
+          format: "plain",
+        }),
       },
     });
     await submitSignedEventApi(request, aliceToken, encrypted, {
@@ -604,7 +638,11 @@ test.describe("notifications", () => {
         history_access: "all_history_for_current_members",
         mls_activated: false,
       });
-      await addRealmMemberApi(request, aliceToken, realmId, bob.id);
+      const bobToken = await issueUserSession(request, bob);
+      await joinRealmMemberByInviteApi(request, aliceToken, realmId, {
+        id: bob.id,
+        token: bobToken,
+      });
       const msg = `cross-device unread ${stamp}`;
       await sendMessageApi(request, aliceToken, realmId, msg, {
         mentions: [bob.id],
@@ -675,22 +713,4 @@ function isEncryptedDndAccountData(value: unknown): boolean {
     typeof value.nonce === "string" &&
     value.nonce.length > 0
   );
-}
-
-function encryptedEnvelope(
-  contentType: string,
-  ciphertext: string,
-  realmId: string,
-): Record<string, unknown> {
-  void contentType;
-  void realmId;
-  return {
-    version: "1.0",
-    content_type: "application/vnd.arkret.message+json",
-    encryption_context: {
-      epoch: 1,
-      group_state_ref: "ak:event:ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM",
-    },
-    ciphertext,
-  };
 }

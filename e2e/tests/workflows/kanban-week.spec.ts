@@ -267,8 +267,9 @@ test.describe("workflow: kanban week-in-review", () => {
       expect(restoredPrIndex).toBeLessThan(restoredSpecIndex);
       await stepShot(patPage.page, testInfo, "D-restored");
 
-      // Phase E — archive an entire list and verify soland cascades the card
-      // lifecycle while preserving the original card rank for restore.
+      // Phase E — archive an entire List and restore it. realm-and-space.md
+      // section 3.4: Space archive moves only the List's own lifecycle; its
+      // cards keep their state and placement, so restore brings them back.
       const todayListId = await today
         .getByTestId("list-archive-button")
         .getAttribute("data-space-container-id");
@@ -316,14 +317,16 @@ test.describe("workflow: kanban week-in-review", () => {
       await expect(
         patPage.page.getByTestId("kanban-column").filter({ hasText: todayList }),
       ).toBeVisible({ timeout: 30_000 });
-      const controlMove = decodeIngressEvents(
+      // event-envelope.schema.json is closed: the archive is an ordinary
+      // producer-signed Event whose payload names only the Space
+      // (space_state_transition_payload); it carries no seal or auth basis.
+      const archiveEvent = decodeIngressEvents(
         archiveResponse.request().postData(),
       ).find((event) => event.kind === "ak.space.archive");
-      expect(controlMove, "workflow emitted a real Control Move comparison event").toBeDefined();
-      expect(controlMove?.seal_basis, "Control Move carries seal_basis").toEqual(
-        expect.any(Object),
-      );
-      expect(controlMove?.auth_context, "Control Move has no Data Event auth context").toBeUndefined();
+      expect(archiveEvent, "workflow emitted the List archive Event").toBeDefined();
+      expect(archiveEvent?.payload).toEqual({ space_id: todayListId });
+      expect(archiveEvent?.seal_basis).toBeUndefined();
+      expect(archiveEvent?.auth_context).toBeUndefined();
       await stepShot(patPage.page, testInfo, "E-list-restored");
     } finally {
       await patPage.close();

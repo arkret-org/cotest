@@ -271,6 +271,8 @@
     { "source": "cotest/e2e/tests/invites/invite-addressing.spec.ts", "needs": "Needs contact-api and authenticated invite notification through SDK DTOs." },
     { "source": "cotest/e2e/tests/conformance/registry-drift.spec.ts", "needs": "Overlaps the Rust drift validator; fold the remaining assertions into that suite rather than porting the spec." },
     { "source": "cotest/e2e/tests/invites/third-party.spec.ts", "needs": "Needs third-party invite, encoding and webvh helpers as SDK clients." },
-    { "source": "cotest/e2e/tests/messaging/discussion-upgrade.spec.ts", "needs": "Largest remaining port: messaging fixtures, circle-api and webrtc helpers all need SDK equivalents." }
+    { "source": "cotest/e2e/tests/messaging/discussion-upgrade.spec.ts", "needs": "Largest remaining port: messaging fixtures, circle-api and webrtc helpers all need SDK equivalents." },
+    { "source": "cotest/e2e/tests/messaging/read-receipts.spec.ts", "needs": "Needs the accepted-device sibling pairing ceremony (stage, finalize, pair_device, issue_session_grant) and the encrypted receipt Signal helpers exposed to Rust scenarios." },
+    { "source": "cotest/e2e/tests/models/private-read-marker.spec.ts", "needs": "Needs the accepted-device sibling pairing ceremony (stage, finalize, pair_device, issue_session_grant) and an SDK account-stream to-device client exposed to Rust scenarios." }
   ]
 }

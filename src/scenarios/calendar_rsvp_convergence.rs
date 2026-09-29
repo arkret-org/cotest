@@ -275,10 +275,7 @@ async fn assert_signed_snapshot_rsvp(
         revision,
         value,
         ..
-    } = current
-    else {
-        unreachable!()
-    };
+    } = current;
     ensure!(
         source_stream_ref == &accepted.stream_ref
             && revision.commit_id == accepted.commit_id

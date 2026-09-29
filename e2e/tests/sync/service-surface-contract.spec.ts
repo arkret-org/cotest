@@ -12,8 +12,8 @@
 // `GET /_arkret/describe` with the supported profiles and verification evidence layer in place, so the two
 // describe probes are LIVE today. Phase A.E1 (claim_kind partition), Phase B
 // (error envelope), Phase E (unsupported_feature fail-closed), Phase C (opaque
-// list-pagination cursor on `ak.self.committed_event.read.scan.v1`) and Phase D (generic
-// `Idempotency-Key` header path on POST /_arkret/self/events) are all live on
+// list-pagination cursor on `ak.self.committed_event.read.scan.v1`) and Phase D (full-body
+// `canonical_hash` replay identity of POST /_arkret/self/events) are all live on
 // soland.
 //
 // Only the describe describe-block is tagged @fully-implemented — that's the slice safe to
@@ -33,7 +33,6 @@ import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
 import {
   authHeaders,
   canonicalJson,
-  refreshEventEnvelopeProof,
   resolveDefaultStrandId,
   signedEventEnvelope,
   submitSignedEventApi,
@@ -591,31 +590,29 @@ test.describe("service surface contract — error envelope, pagination, idempote
   );
 
   test(
-    "Phase D: Idempotency-Key replay returns the cached first response; same key + different body returns duplicate_conflict",
+    "Phase D: exact Event-submit replay returns the original commit; a different body is an independent request",
     async ({ request }) => {
-      // spec: api-conventions.md §6 (idempotency —
-      //         same key + same canonical body → semantically equivalent result;
-      //         same key + different canonical body → duplicate_conflict;
-      //         server SHOULD persist idempotency mapping at least until the
-      //         related Event is fully synced or expired).
-      //
-      // soland honours the generic `Idempotency-Key` header on POST
-      // /_arkret/self/events, scoped to the authenticated principal: first
-      // request executes + caches its response; same key + same canonical body
-      // replays the cached first response; same key + a different canonical body
-      // is `duplicate_conflict`. This is independent of Event-ID idempotency, so
-      // the conflict probe uses a fresh event_id (only the reused key drives 409).
+      // spec: operation-registry.json registers
+      //   `ak.self.events.command.submit.v1` as `canonical_hash / full_body /
+      //   retry_safe=true`; api-conventions.md §6 makes the full canonical
+      //   request body the replay identity (scoped to principal + operation)
+      //   and §6.2 lets a byte-identical retry return the original branch
+      //   outcome or an equivalent idempotent result. authority-commit-log.md
+      //   §3/§4: an exact retry returns the same Commit, reported as
+      //   `committed` or `duplicate`, and never takes a new position.
+      //   `Idempotency-Key` is not this operation's request identity, so no
+      //   header is sent; key-reuse `duplicate_conflict` belongs to operations
+      //   registered with `idempotency_mechanism=idempotency_key`.
       const stamp = Date.now();
       const alice = uniqueUser(`ssc-idem-alice-${stamp}`);
       await ensureRegistered(request, alice);
       const token = await issueUserSession(request, alice);
       const realmId = await createRealmViaApi(request, token, {
-        title: `ssc idempotency-key ${stamp}`,
+        title: `ssc exact replay ${stamp}`,
         historyAccess: "all_history_for_current_members",
         ownerId: alice.id,
       });
       const strandId = await resolveDefaultStrandId(request, token, realmId);
-      const idempotencyKey = `ssc-${randomUUID()}`;
 
       const messageEnvelope = (body: string) =>
         signedEventEnvelope({
@@ -642,159 +639,115 @@ test.describe("service surface contract — error envelope, pagination, idempote
       const before = await countSeededEvents();
 
       const submitUrl = `${solandBaseUrl()}/_arkret/self/events`;
-      // R1 — first request under the key executes and is cached.
+      const submit = async (event: Record<string, unknown>) =>
+        await request.post(submitUrl, {
+          headers: { ...authHeaders(token, "POST", submitUrl), "content-type": "application/json" },
+          data: canonicalJson({ event }),
+        });
+
+      // R1 — the first request commits the Event.
       const b1 = messageEnvelope(`idem body ${stamp} v1`);
-      const r1 = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
-        headers: { ...authHeaders(token, "POST", submitUrl), "idempotency-key": idempotencyKey, "content-type": "application/json" },
-        data: canonicalJson({ event: b1 }),
-      });
+      const r1 = await submit(b1);
       expect([200, 201], `R1 returned ${r1.status()}`).toContain(r1.status());
       const r1Body = await r1.json();
       expect(submittedEventId(r1Body), "R1 carries the submitted event_id").toBe(
         String(b1.event_id),
       );
-      expect(submittedEventOutcome(r1Body, String(b1.event_id))).toBe("accepted");
+      expect(r1Body.status).toBe("committed");
 
-      // R2 — same key + SAME canonical body replays the cached first response.
-      const r2 = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
-        headers: { ...authHeaders(token, "POST", submitUrl), "idempotency-key": idempotencyKey, "content-type": "application/json" },
-        data: canonicalJson({ event: b1 }),
-      });
+      // R2 — the byte-identical request is the same request identity: it
+      // returns the same Commit and creates nothing.
+      const r2 = await submit(b1);
       expect([200, 201], `R2 returned ${r2.status()}`).toContain(r2.status());
       const r2Body = await r2.json();
-      expect(submittedEventId(r2Body), "R2 mirrors R1 event_id (no new event)").toBe(
-        String(b1.event_id),
-      );
-      expect(canonicalJson(r2Body) === canonicalJson(r1Body),
-        "R2 is the exact cached first response (body omitted from diagnostics)").toBe(true);
+      expect(["committed", "duplicate"]).toContain(r2Body.status);
+      expect(
+        canonicalJson(r2Body.commit) === canonicalJson(r1Body.commit),
+        "R2 returns the exact first Commit (body omitted from diagnostics)",
+      ).toBe(true);
 
-      // R3 — same key + DIFFERENT canonical body (fresh event_id) → duplicate_conflict.
-      const b2 = messageEnvelope(`idem body ${stamp} v2-divergent`);
-      const r3 = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
-        headers: { ...authHeaders(token, "POST", submitUrl), "idempotency-key": idempotencyKey, "content-type": "application/json" },
-        data: canonicalJson({ event: b2 }),
-      });
-      expect(r3.status(), "same key + different body is 409").toBe(409);
-      expect(wireErrCode(await r3.json()), "duplicate_conflict on key reuse").toBe(
-        "duplicate_conflict",
-      );
+      // R3 — a different canonical body is a different request identity and
+      // an independent Event.
+      const b2 = messageEnvelope(`idem body ${stamp} v2`);
+      const r3 = await submit(b2);
+      expect([200, 201], `R3 returned ${r3.status()}`).toContain(r3.status());
+      const r3Body = await r3.json();
+      expect(r3Body.status).toBe("committed");
+      expect(submittedEventId(r3Body)).toBe(String(b2.event_id));
+      expect(canonicalJson(r3Body.commit) === canonicalJson(r1Body.commit)).toBe(false);
 
-      // Side effect: exactly one new seeded event landed across R1..R3.
       const after = await countSeededEvents();
-      expect(after - before, "exactly one event created across the idempotent sequence").toBe(1);
+      expect(after - before, "one Event per distinct request identity").toBe(2);
     },
   );
 
-  test(
-    "Phase E: event requiring an undeclared feature is rejected with unsupported_feature (fail-closed)",
-    async ({ request }) => {
-      // spec: api-conventions.md §5.1 (unsupported_feature is reserved for
-      //         Event.requirements.features[] / requirements.critical_extensions[]
-      //         pointing at a feature this implementation has NOT advertised),
-      //       service-surface.md §2.4 (services must publish supported_features).
-      const describe = await request.get(`${solandBaseUrl()}/_arkret/describe`);
-      expect(describe.status()).toBe(200);
-      const description = await describe.json();
-      const declared = new Set<string>([
-        ...((description.supported_features ?? []) as string[]),
-      ]);
-      const undeclaredFeature = "ak.feature.mimi_room_passthrough.v1";
-      expect(declared.has(undeclaredFeature), "fixture feature must be undeclared").toBe(false);
-
-      const alice = uniqueUser("ssc-phase-e");
-      await ensureRegistered(request, alice);
-      const token = await issueUserSession(request, alice);
-      const realmId = await createRealmViaApi(request, token, {
-        title: `unsupported feature ${Date.now()}`,
-        historyAccess: "all_history_for_current_members",
-        ownerId: alice.id,
-      });
-      const strandId = await resolveDefaultStrandId(request, token, realmId);
-      const envelope = signedEventEnvelope({
-        actorId: alice.id,
-        realmId,
-        kind: "ak.message.create",
-        payload: {
-          strand_id: strandId,
-          track_name: "discussion",
-          content: { kind: "ak.content.text", body: "must not accept unknown feature" },
-        },
-      });
-      (envelope.requirements as { features: string[] }).features = [undeclaredFeature];
-      refreshEventEnvelopeProof(envelope);
-      const eventId = String(envelope.event_id);
-
-      const submitUrl = `${solandBaseUrl()}/_arkret/self/events`;
-      const resp = await request.post(submitUrl, {
-        headers: { ...authHeaders(token, "POST", submitUrl), "content-type": "application/json" },
-        data: canonicalJson({ event: envelope }),
-      });
-      expect(resp.status()).toBeGreaterThanOrEqual(400);
-      const body = await resp.json();
-      expect(wireErrCode(body)).toBe("unsupported_feature");
-      expect(JSON.stringify(body)).not.toContain('"accepted"');
-      expect(JSON.stringify(body)).not.toContain(eventId);
+  // spec: api-conventions.md section 5.1 and models/event-and-patch.md section 2
+  // - a current-v1 Event has no generic `requirements` / `critical_extensions`
+  // carrier; a top-level occurrence is a schema_violation and MUST NOT be
+  // disguised as feature negotiation (unsupported_feature is reserved for
+  // registered wire features the v1 support matrix marks unsupported).
+  // forbidden-wire-fields.json registers `requirements` as a forbidden field.
+  for (const retired of [
+    {
+      phase: "Phase E",
+      member: "requirements",
+      value: { features: ["ak.feature.mimi_room_passthrough.v1"] },
     },
-  );
-
-  test(
-    "Phase E2: unknown fail-closed critical extension is rejected with unsupported_feature",
-    async ({ request }) => {
-      // spec: api-conventions.md section 5.1 uses unsupported_feature for
-      // unknown Event.requirements.critical_extensions[] entries that are
-      // declared fail_closed.
-      const criticalExtension = "ak.extension.cotest.unknown_fail_closed.v1";
-      const alice = uniqueUser("ssc-phase-e2");
-      await ensureRegistered(request, alice);
-      const token = await issueUserSession(request, alice);
-      const realmId = await createRealmViaApi(request, token, {
-        title: `unsupported critical extension ${Date.now()}`,
-        historyAccess: "all_history_for_current_members",
-        ownerId: alice.id,
-      });
-      const strandId = await resolveDefaultStrandId(request, token, realmId);
-      const envelope = signedEventEnvelope({
-        actorId: alice.id,
-        realmId,
-        kind: "ak.message.create",
-        payload: {
-          strand_id: strandId,
-          track_name: "discussion",
-          content: {
-            kind: "ak.content.text",
-            body: "must not accept unknown fail-closed critical extension",
-          },
-        },
-      });
-      (
-        envelope.requirements as {
-          critical_extensions: Array<{
-            id: string;
-            fail_closed: boolean;
-            extension_scope: string;
-          }>;
-        }
-      ).critical_extensions = [
+    {
+      phase: "Phase E2",
+      member: "critical_extensions",
+      value: [
         {
-          id: criticalExtension,
+          id: "ak.extension.cotest.unknown_fail_closed.v1",
           fail_closed: true,
           extension_scope: "payload",
         },
-      ];
-      refreshEventEnvelopeProof(envelope);
-      const eventId = String(envelope.event_id);
-
-      const submitUrl = `${solandBaseUrl()}/_arkret/self/events`;
-      const resp = await request.post(submitUrl, {
-        headers: { ...authHeaders(token, "POST", submitUrl), "content-type": "application/json" },
-        data: canonicalJson({ event: envelope }),
-      });
-      expect(resp.status()).toBeGreaterThanOrEqual(400);
-      expect(resp.status()).toBeLessThan(600);
-      const body = await resp.json();
-      expect(wireErrCode(body)).toBe("unsupported_feature");
-      expect(JSON.stringify(body)).not.toContain('"accepted"');
-      expect(JSON.stringify(body)).not.toContain(String(envelope.event_id));
+      ],
     },
-  );
+  ]) {
+    test(
+      `${retired.phase}: an Event carrying a top-level \`${retired.member}\` carrier is a schema_violation, not unsupported_feature`,
+      async ({ request }) => {
+        const alice = uniqueUser(`ssc-${retired.member}`);
+        await ensureRegistered(request, alice);
+        const token = await issueUserSession(request, alice);
+        const realmId = await createRealmViaApi(request, token, {
+          title: `retired ${retired.member} carrier ${Date.now()}`,
+          historyAccess: "all_history_for_current_members",
+          ownerId: alice.id,
+        });
+        const strandId = await resolveDefaultStrandId(request, token, realmId);
+        const envelope = signedEventEnvelope({
+          actorId: alice.id,
+          realmId,
+          kind: "ak.message.create",
+          payload: {
+            strand_id: strandId,
+            track_name: "discussion",
+            content: { kind: "ak.content.text", body: `must not accept ${retired.member}` },
+          },
+        });
+        const eventId = String(envelope.event_id);
+        // The SDK cannot derive an identity for a closed envelope with an
+        // unregistered member, so the member is injected after signing: the
+        // closed Event schema must reject it before any proof evaluation.
+        const tampered = { ...envelope, [retired.member]: retired.value };
+
+        const submitUrl = `${solandBaseUrl()}/_arkret/self/events`;
+        const resp = await request.post(submitUrl, {
+          headers: { ...authHeaders(token, "POST", submitUrl), "content-type": "application/json" },
+          data: canonicalJson({ event: tampered }),
+        });
+        const text = await resp.text();
+        expect(resp.status(), text).toBe(422);
+        const body = JSON.parse(text);
+        expect(wireErrCode(body), text).toBe("schema_violation");
+        expect(text).not.toContain('"committed"');
+        expect(text).not.toContain(eventId);
+
+        const events = await listRealmEventsViaApi(request, token, realmId, { limit: 100 });
+        expect(JSON.stringify(events)).not.toContain(eventId);
+      },
+    );
+  }
 });

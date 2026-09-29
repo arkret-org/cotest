@@ -22,17 +22,22 @@ import {
   rawSubmitSignedEventApi,
   retypeEventDerivedId,
   resolveDefaultStrandId,
+  scanRealmStreamApi,
   signedEventEnvelope,
   submitSignedEventApi,
   typedId,
 } from "../../helpers/soland-api";
+import { relationCreatePayload } from "../../helpers/relation-api";
 import {
   ensureRegistered,
   issueUserSession,
   type JointUser,
   uniqueUser,
 } from "../../helpers/users";
-import { grantCircleMemberManageCapability } from "../../helpers/circle-api";
+import {
+  addCircleMemberArkret,
+  grantCircleMemberAddCapability,
+} from "../../helpers/circle-api";
 import {
   buildSignalEnvelope,
   captureSubmittedSignalEnvelope,
@@ -122,18 +127,37 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
       "private discussion",
     );
 
-    const events = await listRealmEventsViaApi(
+    // Both streams belong to the same Realm; a Circle owns its own linear
+    // commit stream (realm-commit.schema.json stream_ref `circle`), so the
+    // private Message is read from that stream, not from the Realm stream.
+    const realmEvents = await listRealmEventsViaApi(
       request,
       fixture.bobToken,
       fixture.realmId,
     );
-    const ids = events.map((event) => event.event_id);
-    expect(ids).toEqual(
-      expect.arrayContaining([before.event_id, after.event_id]),
+    expect(realmEvents.map((event) => event.event_id)).toContain(before.event_id);
+    expect(realmEvents.map((event) => event.event_id)).not.toContain(after.event_id);
+    const circleScan = await scanRealmStreamApi(
+      request,
+      fixture.bobToken,
+      fixture.realmId,
+      {
+        streamRef: {
+          kind: "circle",
+          realm_id: fixture.realmId,
+          circle_id: promoted.circleId,
+        },
+      },
     );
-    expect(JSON.stringify(eventById(events, after.event_id))).toContain(
-      promoted.circleId,
+    const events = circleScan.events.filter(
+      (event): event is Record<string, unknown> => event !== undefined,
     );
+    expect(events.map((event) => event.event_id)).toContain(after.event_id);
+    expect(eventById(events, after.event_id).scope_ref).toEqual({
+      kind: "circle",
+      realm_id: fixture.realmId,
+      circle_id: promoted.circleId,
+    });
     expect(eventPayload(eventById(events, after.event_id))).toMatchObject({
       strand_id: promoted.privateStrandId,
       track_name: "discussion",
@@ -670,12 +694,17 @@ async function createDiscussionCircleViaApi(
           symbol: { glyph: "lock" },
         },
         directory_visibility: "members",
-        join_rule: "invite",
+        // common-fields.md section 4.5: `leave -> join` is written only by the
+        // target itself (or its exact invite acceptance); v1 registers no
+        // Circle invite, so each member self-joins, which circle.md section 8
+        // (`ak.circle.member.add`) admits for a `public` Circle. `public` only
+        // opens self-entry to parent Realm members; `directory_visibility`
+        // keeps the Circle hidden from non-members.
+        join_rule: "public",
         history_access: "since_join",
-        encryption_profile: opts.circleEncryptionProfile ?? "none",
-        ...(opts.circleEncryptionProfile === "mls_rfc9420"
-          ? { content_scheme: "mls_rfc9420" }
-          : {}),
+        // circle.schema.json is closed: a Circle is created plaintext and
+        // carries no encryption profile or content scheme; its scope becomes
+        // end-to-end encrypted only through an accepted `ak.mls.genesis`.
         state: "active",
         created_by: accountActorId(fixture.alice.id),
         created_at: createdAt,
@@ -689,50 +718,32 @@ async function createDiscussionCircleViaApi(
     { context: "create discussion circle" },
   );
   const circleId = retypeEventDerivedId(String(envelope.event_id), "circle");
-  await grantCircleMemberManageCapability(request, fixture.aliceToken, {
-    ownerId: fixture.alice.id,
-    realmId: fixture.realmId,
-    subjectId: fixture.alice.id,
-    circleId,
-  });
   for (const member of opts.members) {
-    await submitCircleMemberStateViaApi(
-      request,
-      fixture.aliceToken,
-      fixture.alice,
-      fixture.realmId,
-      circleId,
-      member.id,
-      "join",
-    );
+    const memberToken =
+      member.id === fixture.alice.id
+        ? fixture.aliceToken
+        : member.id === fixture.bob.id
+          ? fixture.bobToken
+          : undefined;
+    if (!memberToken) {
+      throw new Error(`Circle member ${member.id} has no session in this fixture`);
+    }
+    if (member.id !== fixture.alice.id) {
+      await grantCircleMemberAddCapability(request, fixture.aliceToken, {
+        ownerId: fixture.alice.id,
+        realmId: fixture.realmId,
+        subjectId: member.id,
+        circleId,
+      });
+    }
+    await addCircleMemberArkret(request, memberToken, circleId, {
+      signerId: member.id,
+      realmId: fixture.realmId,
+      actorId: member.id,
+      membership: "join",
+    });
   }
   return circleId;
-}
-
-async function submitCircleMemberStateViaApi(
-  request: APIRequestContext,
-  token: string,
-  actor: JointUser,
-  realmId: string,
-  circleId: string,
-  memberId: string,
-  membership: "join" | "invite" | "knock" | "leave" | "ban",
-) {
-  await submitSignedEventApi(
-    request,
-    token,
-    signedEventEnvelope({
-      actorId: actor.id,
-      realmId,
-      kind: "ak.circle.member.state",
-      payload: {
-        circle_id: circleId,
-        member_id: accountActorId(memberId),
-        membership,
-      },
-    }),
-    { context: `circle ${circleId} member ${memberId} -> ${membership}` },
-  );
 }
 
 async function createConfidentialDiscussionRelationViaApi(
@@ -745,25 +756,21 @@ async function createConfidentialDiscussionRelationViaApi(
   circleId: string,
 ) {
   const createdAt = canonicalTimestamp();
+  // relation.md section 3.2: the fact is committed in the private Strand's
+  // Circle scope so non-members cannot enumerate it from the public side.
   const envelope = signedEventEnvelope({
     actorId: actor.id,
     realmId,
     kind: "ak.relation.create",
     createdAt,
-    payload: {
-      relation: {
-        schema: "ak.schema.relation.v1",
-        realm_id: realmId,
-        relation_kind: "confidential_discussion_of",
-        from_ref: privateStrandId,
-        to_ref: publicStrandId,
-        scope_circle_id: circleId,
-        fields: { role: "promoted_discussion" },
-        state: "active",
-        created_by: accountActorId(actor.id),
-        created_at: createdAt,
-      },
-    },
+    scopeRef: { kind: "circle", realm_id: realmId, circle_id: circleId },
+    payload: relationCreatePayload({
+      relationKind: "confidential_discussion_of",
+      fromRef: privateStrandId,
+      toRef: publicStrandId,
+      scopeCircleId: circleId,
+      fields: { role: "promoted_discussion" },
+    }),
   });
   await submitSignedEventApi(
     request,

@@ -13,13 +13,12 @@
 //   ✓ RFC 9421 INBOUND: full — the single RFC 9530 Content-Digest,
 //     created/expires freshness window (±30s skew, ≤300s window,
 //     expires-in-future), @authority/endpoint-digest binding, and the
-//     §3.2/§8.3 minimal-disclosure failure envelope are all wired
-//     (signature.rs). Every auth-failure cause (stale window, wrong/invalid
-//     key) folds into one indistinguishable envelope (FEDERATION_AUTH_FAILURE
-//     _MESSAGE + fixed timing bucket); a key-rotation hint IS computed but
-//     stays audit-log only (tracing::warn! detail), because surfacing it in
-//     the response would violate the minimal-disclosure MUST. E8.1 below
-//     asserts that uniform-failure contract.
+//     registered failure codes are all wired (signature.rs). A window
+//     failure is `signature_window_invalid` (service-http-binding.md §8.3,
+//     shared by every signature scenario); an invalid or wrong-key signature
+//     on the closed peer submit is `signature_invalid` (federation.md §3.2).
+//     Both share one fixed detail string and timing bucket; the private cause
+//     and any key-rotation hint stay audit-log only. E8.1 below asserts it.
 //   ✓ RFC 9421 INBOUND relay hop: the canonical /_arkret/peer/* rail
 //     (verify_inbound_peer_http_signature) authenticates purely on the
 //     federation trust headers — origin IS the source-service-id header, so
@@ -44,8 +43,8 @@ import {
   createRealmApi,
   makeFederationEvent,
   rawPushFederationEvents,
+  resolveDefaultStrandId,
   submitSignedEventApi,
-  typedId,
   wireErrCode,
 } from "../../helpers/soland-api";
 import {
@@ -55,8 +54,6 @@ import {
 } from "../../helpers/users";
 
 // Reads the canonical Problem Details shape from a federation push response.
-// Minimal disclosure means status, detail, and type MUST be identical across
-// every distinct failure cause (federation.md §3.2 / §8.3).
 async function federationAuthFailureShape(response: {
   status: () => number;
   text: () => Promise<string>;
@@ -121,16 +118,16 @@ test.describe("transport negotiation", () => {
     expect(probe.status()).toBeLessThan(500);
   });
 
-  test("E8.1 signature expiry / key mismatch: server2 returns one indistinguishable auth-failure envelope (no key_rotation_hint); a fresh re-sign passes auth", async ({
+  test("E8.1 signature expiry / key mismatch: server2 answers the registered window and signature codes with no private cause (no key_rotation_hint); a fresh re-sign passes auth", async ({
     request,
   }) => {
-    // spec: federation.md §3.2 + §8.3 minimal-disclosure MUST. Distinct
-    //   failure causes (stale freshness window, invalid/wrong-key signature)
-    //   MUST collapse to ONE indistinguishable failure: same HTTP status, same
-    //   message, same code, with no distinguishing field (no key_rotation_hint
-    //   / signature_expired / unknown_keyid) in the response — the real cause
-    //   is audit-log only. soland: signature.rs folds every cause into
-    //   FEDERATION_AUTH_FAILURE_MESSAGE + a fixed timing bucket.
+    // spec: service-http-binding.md §8.3 — any failure of
+    //   `ak.http_signature.freshness.v1` returns `signature_window_invalid`,
+    //   for all five signature scenarios. federation.md §3.2 — a peer submit
+    //   whose current RFC 9421 signature does not verify returns
+    //   `signature_invalid`. error-code-registry.json gives both HTTP 401.
+    //   Neither response carries the private cause (key_rotation_hint /
+    //   signature_expired / unknown_keyid); that stays audit-log only.
     const user = uniqueUser("e81-federation", "server1");
     await ensureRegistered(request, user, { server: "server1" });
     const token = await issueUserSession(request, user, { server: "server1" });
@@ -144,13 +141,18 @@ test.describe("transport negotiation", () => {
       },
       { server: "server1" },
     );
+    // The source Station admits a message only into an existing Strand of the
+    // Realm; a fabricated Strand id is a `conflict` before federation starts.
+    const strandId = await resolveDefaultStrandId(request, token, realmId, {
+      server: "server1",
+    });
     const buildEvent = (tag: string) =>
       makeFederationEvent({
         realmId,
         kind: "ak.message.create",
         actorId: user.id,
         payload: {
-          strand_id: typedId("strand"),
+          strand_id: strandId,
           track_name: "discussion",
           content: {
             kind: "ak.content.text",
@@ -182,7 +184,6 @@ test.describe("transport negotiation", () => {
     const expired = await federationAuthFailureShape(
       await rawPushFederationEvents(request, [expiredEvent], {
         ...pushOpts,
-        idempotencyKey: `${solandServiceId("server1")}#cotest-e81-expired`,
         expireSignature: true,
       }),
     );
@@ -193,7 +194,6 @@ test.describe("transport negotiation", () => {
     const tampered = await federationAuthFailureShape(
       await rawPushFederationEvents(request, [tamperedEvent], {
         ...pushOpts,
-        idempotencyKey: `${solandServiceId("server1")}#cotest-e81-tampered`,
         tamperSignature: true,
       }),
     );
@@ -204,11 +204,13 @@ test.describe("transport negotiation", () => {
       expect(failure.status).toBeLessThan(500);
     }
 
-    // Minimal disclosure: the two distinct causes are INDISTINGUISHABLE — same
-    // status, same message, same code.
-    expect(expired.status).toBe(tampered.status);
+    // Each cause answers its own registered code at the same status, and the
+    // public detail is the one fixed string for either.
+    expect(expired.status).toBe(401);
+    expect(tampered.status).toBe(401);
+    expect(expired.code).toBe("signature_window_invalid");
+    expect(tampered.code).toBe("signature_invalid");
     expect(expired.message).toBe(tampered.message);
-    expect(expired.code).toBe(tampered.code);
 
     // And neither response leaks a distinguishing rotation/cause signal that
     // §3.2/§8.3 forbid.
@@ -227,7 +229,6 @@ test.describe("transport negotiation", () => {
     const reSigned = await federationAuthFailureShape(
       await rawPushFederationEvents(request, [resignedEvent], {
         ...pushOpts,
-        idempotencyKey: `${solandServiceId("server1")}#cotest-e81-resigned`,
       }),
     );
     const passedAuth =

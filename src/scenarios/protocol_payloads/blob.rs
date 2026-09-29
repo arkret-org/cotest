@@ -24,14 +24,16 @@ async fn sha_mismatch_is_rejected(server: &ArkretServer, token: &str) -> Result<
             .http()
             .post(server.url("/_arkret/self/blob/upload"))
             .bearer_auth(token)
-            .header(
-                "x-arkret-content-digest",
-                "sha256:deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
-            )
-            .multipart(crate::scenarios::delivery_media::blob_upload_form(
-                b"encrypted-bytes",
-                "text/plain",
-            )?),
+            .multipart(
+                crate::scenarios::delivery_media::blob_upload_form(
+                    b"encrypted-bytes",
+                    "text/plain",
+                )?
+                .text(
+                    "content_digest",
+                    "sha256:deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+                ),
+            ),
         StatusCode::UNPROCESSABLE_ENTITY,
         "blob_digest_mismatch",
     )

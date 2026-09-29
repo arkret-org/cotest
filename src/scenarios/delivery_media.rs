@@ -406,11 +406,10 @@ pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
     expect_api_error(
         alice
             .authorize(server.http().post(server.url("/_arkret/self/blob/upload")))
-            .header(
-                "x-arkret-content-digest",
+            .multipart(blob_upload_form(b"blob-bytes", "text/plain")?.text(
+                "content_digest",
                 "sha256:deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
-            )
-            .multipart(blob_upload_form(b"blob-bytes", "text/plain")?),
+            )),
         StatusCode::UNPROCESSABLE_ENTITY,
         "blob_digest_mismatch",
     )
@@ -419,8 +418,10 @@ pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
     let blob = expect_json(
         alice
             .authorize(server.http().post(server.url("/_arkret/self/blob/upload")))
-            .header("x-arkret-realm-id", &realm_id)
-            .multipart(blob_upload_form(b"encrypted-bytes", "text/plain")?),
+            .multipart(
+                blob_upload_form(b"encrypted-bytes", "text/plain")?
+                    .text("realm_id", realm_id.clone()),
+            ),
         StatusCode::OK,
     )
     .await?;

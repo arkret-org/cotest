@@ -1050,6 +1050,352 @@ pub fn identity_creation_register_request(input: Value) -> Result<Value> {
     serde_json::to_value(request).context("serialize identity-creation register request")
 }
 
+#[derive(Deserialize)]
+struct KeyBackupAuthSignatureInput {
+    envelope: Value,
+    signing_seed_b64url: String,
+}
+
+/// Sign a key-backup envelope's `auth_data` with its device key.
+///
+/// key-management.md section 7.4.1 anchors `auth_data.signature` to the
+/// accepted device authorization; the transcript is the SDK
+/// `KeyBackup::signing_payload_bytes`, which is the canonical envelope without
+/// the signature member. The caller sends the envelope without a signature and
+/// receives the same envelope with the real signature attached.
+pub fn key_backup_auth_signature(input: Value) -> Result<Value> {
+    let input: KeyBackupAuthSignatureInput =
+        serde_json::from_value(input).context("parse key-backup signature input")?;
+    let unsigned = input.envelope;
+    let mut envelope = unsigned.clone();
+    let auth_data = envelope
+        .get_mut("auth_data")
+        .and_then(Value::as_object_mut)
+        .context("key-backup envelope has no auth_data object")?;
+    ensure!(
+        !auth_data.contains_key("signature"),
+        "key-backup envelope must arrive unsigned"
+    );
+    // The typed envelope requires the member, and the transcript removes it,
+    // so a placeholder never reaches the signed bytes.
+    auth_data.insert(
+        "signature".to_owned(),
+        Value::String(base64::engine::general_purpose::URL_SAFE_NO_PAD.encode([0_u8; 64])),
+    );
+    let backup: arkret_models_crypto::KeyBackup =
+        serde_json::from_value(envelope).context("parse key-backup envelope")?;
+    let transcript = backup
+        .signing_payload_bytes()
+        .context("key-backup signing transcript")?;
+    let signing_key = signing_key_from_seed(&input.signing_seed_b64url)
+        .context("parse key-backup device signing seed")?;
+    let signature = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .encode(signing_key.sign(&transcript).to_bytes());
+    // The receiver re-derives the transcript from its own typed decode, so the
+    // caller's wire members are returned unchanged with the signature added.
+    let mut signed = unsigned;
+    signed
+        .get_mut("auth_data")
+        .and_then(Value::as_object_mut)
+        .context("key-backup envelope has no auth_data object")?
+        .insert("signature".to_owned(), Value::String(signature));
+    Ok(signed)
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DevicePairingTargetProofInput {
+    account_id: AccountId,
+    stage_request: arkret_models_collaboration::device_pairing::DevicePairingStageRequestBody,
+    stage_outcome: arkret_models_collaboration::device_pairing::DevicePairingStageOutcome,
+    device_signing_seed_b64url: String,
+    hpke_public_key_b64url: String,
+}
+
+/// The candidate device's accepted-device target proof.
+///
+/// device-lifecycle.md section 2.1.1 item 2 and section 5.2.2: the candidate
+/// rebuilds the challenge digest from its own stage request and the server
+/// stage outcome, then signs the closed eight-member attestation that commits
+/// the exact `AccountId` its pending handoff is bound to. The proof is checked
+/// against the same reconstruction a gate performs before it is returned.
+pub fn device_pairing_target_proof(input: Value) -> Result<Value> {
+    use arkret_models_collaboration::device_pairing::UnsignedDevicePairingTargetProof;
+    use arkret_signatures::device_pairing as pairing;
+
+    let input: DevicePairingTargetProofInput =
+        serde_json::from_value(input).context("parse device-pairing target proof input")?;
+    let signing_key = signing_key_from_seed(&input.device_signing_seed_b64url)
+        .context("parse candidate device signing seed")?;
+    let public_key = signing_key.verifying_key().to_bytes();
+    let staged_key = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(input.stage_request.new_device_pubkey.key.as_str())
+        .context("decode staged new_device_pubkey")?;
+    ensure!(
+        staged_key.as_slice() == public_key.as_slice(),
+        "staged new_device_pubkey is not the candidate signing key"
+    );
+    let device_id = DeviceId::new(
+        input
+            .stage_request
+            .new_device_pubkey
+            .kid
+            .as_str()
+            .to_owned(),
+    )
+    .context("staged new_device_pubkey.kid is not a device id")?;
+    let challenge = pairing::ServerDevicePairingChallenge::from_stage(
+        &input.stage_request,
+        &input.stage_outcome,
+    );
+    let (_, transcript_digest) = pairing::server_device_pairing_transcript(
+        &input.stage_request.new_device_pubkey,
+        &challenge,
+    )?;
+    let hpke_public_key = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(&input.hpke_public_key_b64url)
+        .context("decode candidate HPKE public key")?;
+    ensure!(
+        hpke_public_key.len() == 32,
+        "candidate HPKE public key must be a 32-byte X25519 key"
+    );
+    // Multicodec x25519-pub (0xec 0x01), base58btc multibase: the same encoding
+    // the founding device descriptor and Inkson's pairing path publish.
+    let mut hpke_multicodec = vec![0xec, 0x01];
+    hpke_multicodec.extend_from_slice(&hpke_public_key);
+    let unsigned = UnsignedDevicePairingTargetProof::new(
+        input.account_id.clone(),
+        device_id,
+        arkret_wire::DidKey::new(format!(
+            "did:key:{}",
+            canonical::ed25519_pubkey_to_did_key_multibase(&public_key)
+        ))
+        .map_err(anyhow::Error::msg)?,
+        non_empty(canonical::encode_multibase_base58btc(hpke_multicodec))?,
+        vec![non_empty(
+            arkret_wire::HPKE_SUITE_X25519_CHACHA20POLY1305_V1,
+        )?],
+        transcript_digest,
+    )?;
+    let proof = pairing::sign_device_pairing_target_proof(unsigned, &signing_key)?;
+    pairing::verify_server_device_pairing_target_proof(
+        &input.stage_request.new_device_pubkey,
+        &challenge,
+        &input.account_id,
+        &proof,
+        Utc::now(),
+    )?;
+    serde_json::to_value(proof).context("serialize device-pairing target proof")
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DevicePairingApprovalInput {
+    bootstrap: arkret_models_collaboration::device_pairing::DevicePairingBootstrap,
+    target_proof: arkret_models_collaboration::device_pairing::DevicePairingTargetProof,
+    approving_account_id: AccountId,
+    approving_did: Did,
+    approving_device_id: DeviceId,
+    approving_signing_seed_b64url: String,
+    principal_control_realm_id: arkret_wire::RealmId,
+    authorized_generation_ref: u64,
+}
+
+/// The approving device's `pair_device` request.
+///
+/// device-lifecycle.md sections 2.1.1 item 4, 2.1.4 and 5.4: the approving
+/// accepted device verifies the out-of-band target proof against the resolved
+/// bootstrap and its own `AccountId`, copies the attested material into a
+/// complete `accepted_device` authorize payload, and signs the Event with its
+/// own device key. The server receives the exact submission and never mints it.
+pub fn device_pairing_approval(input: Value) -> Result<Value> {
+    use arkret_models_collaboration::device_pairing::AccountDevicePairRequestBody;
+    use arkret_models_collaboration::events_payloads::{
+        DeviceAuthorizationBindingKind, DeviceAuthorizePayload, DeviceOrPrincipalRef,
+        SignatureMaterial,
+    };
+    use arkret_signatures::device_pairing as pairing;
+
+    let input: DevicePairingApprovalInput =
+        serde_json::from_value(input).context("parse device-pairing approval input")?;
+    pairing::verify_server_device_pairing_target_proof(
+        &input.bootstrap.new_device_pubkey,
+        &pairing::ServerDevicePairingChallenge::from_bootstrap(&input.bootstrap),
+        &input.approving_account_id,
+        &input.target_proof,
+        Utc::now(),
+    )?;
+    ensure!(
+        project_did_to_core_id(&input.approving_did)? == input.approving_account_id.principal_id,
+        "approving DID does not project to the approving account principal"
+    );
+    ensure!(
+        input.authorized_generation_ref >= 1,
+        "authorized_generation_ref must be the current positive PCR generation"
+    );
+    ensure!(
+        matches!(
+            input.target_proof.device_signature,
+            SignatureMaterial::NonEmptyString(_)
+        ),
+        "accepted-device target proof must carry a base64url signature string"
+    );
+    let created_at = Utc::now().with_nanosecond(0).unwrap_or_else(Utc::now);
+    let payload = DeviceAuthorizePayload {
+        device_id: input.target_proof.device_id.clone(),
+        device_public_key_did: non_empty(input.target_proof.device_public_key_did.as_str())?,
+        hpke_key: input.target_proof.hpke_key.clone(),
+        algorithms: input.target_proof.algorithms.clone(),
+        device_key_algorithm: non_empty("Ed25519")?,
+        authorized_by: DeviceOrPrincipalRef::DeviceId(input.approving_device_id.clone()),
+        scopes: None,
+        not_before: created_at,
+        expires_at: None,
+        authorization_binding_kind: DeviceAuthorizationBindingKind::AcceptedDevice,
+        authorized_generation_ref: input.authorized_generation_ref,
+        device_signature: input.target_proof.device_signature.clone(),
+        recovery_session_id: None,
+        pairing_challenge_transcript_digest: Some(
+            input
+                .target_proof
+                .pairing_challenge_transcript_digest
+                .clone(),
+        ),
+        // `accepted_device` is one of the three branches that MUST NOT carry an
+        // install fence (`device-lifecycle.md` section 5.2.3).
+        applet_id: None,
+    };
+    payload
+        .validate_wire_constraints()
+        .map_err(anyhow::Error::msg)?;
+    let mut authorize =
+        arkret_event_draft::TypedEventDraft::<arkret_wire::event_spec::DeviceAuthorize>::new(
+            arkret::ScopeRef::Realm {
+                realm_id: input.principal_control_realm_id.clone(),
+            },
+            arkret_wire::ActorId::account(input.approving_account_id.clone()),
+            payload,
+        )?
+        .author_with_digest_suite(created_at, arkret_canonical::DigestSuite::Sha256)?;
+    let signing_key = signing_key_from_seed(&input.approving_signing_seed_b64url)
+        .context("parse approving device signing seed")?;
+    let device_did = Did::new(format!(
+        "did:key:{}",
+        canonical::ed25519_pubkey_to_did_key_multibase(&signing_key.verifying_key().to_bytes())
+    ))?;
+    let method = DidUrl::new(format!(
+        "{}#{}",
+        input.approving_did, input.approving_device_id
+    ))
+    .map_err(anyhow::Error::msg)?;
+    let signer =
+        arkret::Ed25519PayloadSigner::from_did_key_seed(signing_key.to_bytes(), device_did, method);
+    arkret::signatures::sign_event(
+        &mut authorize,
+        &signer,
+        arkret::signatures::SignEventOptions::new().with_created_at(created_at),
+    )
+    .context("sign the accepted-device authorize Event")?;
+    let request = AccountDevicePairRequestBody {
+        pairing_code: input.bootstrap.pairing_code.clone(),
+        new_device_pubkey: input.bootstrap.new_device_pubkey.clone(),
+        authorize_event: EventAdmissionSubmission::new(authorize.into_event()),
+        display_name: input
+            .bootstrap
+            .display_name
+            .as_ref()
+            .map(|value| value.as_str().to_owned()),
+        device_metadata: input.bootstrap.device_metadata.clone(),
+        device_pairing_request_id: input.bootstrap.device_pairing_request_id.clone(),
+    };
+    serde_json::to_value(request).context("serialize pair_device request")
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct HumanSessionGrantRequestInput {
+    principal_did: Did,
+    account_id: AccountId,
+    device_id: DeviceId,
+    holder_jkt: String,
+    account_subject: Hash,
+    account_handoff_grant: String,
+    handoff_expires_at: String,
+    device_signing_seed_b64url: String,
+}
+
+/// A returning accepted device's Standard grant request.
+///
+/// device-lifecycle.md section 2.1.4 and section 3.3: a paired device obtains
+/// its grant through `issue_session_grant` with its pending account handoff,
+/// proving possession of its accepted device key over the SDK
+/// `accepted_device` issue transcript. The grant binds the handoff holder key
+/// (`cnf.jkt`), which is distinct from the device identity key.
+pub fn human_session_grant_request(input: Value) -> Result<Value> {
+    let input: HumanSessionGrantRequestInput =
+        serde_json::from_value(input).context("parse human session-grant request input")?;
+    ensure!(
+        project_did_to_core_id(&input.principal_did)? == input.account_id.principal_id,
+        "principal DID does not project to the account principal"
+    );
+    let now = Utc::now().with_nanosecond(0).unwrap_or_else(Utc::now);
+    let handoff_expires_at = canonical::parse_timestamp_canonical(&input.handoff_expires_at)
+        .context("parse account handoff expires_at")?;
+    let expires_at = std::cmp::min(now + chrono::Duration::minutes(5), handoff_expires_at);
+    ensure!(
+        expires_at > now,
+        "account handoff expired before the session grant request"
+    );
+    let unix_ms = u64::try_from(Utc::now().timestamp_millis()).context("clock before epoch")?;
+    let request_id = arkret_wire::RequestId::new_v7_at(unix_ms);
+    let audience = input.account_id.station_id.clone();
+    let session_intent_digest = arkret::human_session_grant_intent_digest(
+        &request_id,
+        &input.account_id.principal_id,
+        &input.device_id,
+        &audience,
+        &input.holder_jkt,
+    )?;
+    let unsigned = arkret_wire::UnsignedAcceptedDeviceIssuePossessionProof {
+        context: arkret_wire::AcceptedDevicePossessionProofContext::V1,
+        purpose: arkret_wire::AcceptedDeviceIssuePossessionPurpose::SessionGrantIssue,
+        request_id: request_id.clone(),
+        account_subject: input.account_subject,
+        account_handoff_grant_digest: Hash::new(canonical::sha256_digest(
+            input.account_handoff_grant.as_bytes(),
+        ))?,
+        account_id: input.account_id.clone(),
+        device_id: input.device_id.clone(),
+        audience_id: audience.clone(),
+        holder_jkt: input.holder_jkt,
+        session_intent_digest,
+        issued_at: now,
+        expires_at,
+        verification_method: DidUrl::new(format!("{}#{}", input.principal_did, input.device_id))
+            .map_err(anyhow::Error::msg)?,
+    };
+    let signing_key = signing_key_from_seed(&input.device_signing_seed_b64url)
+        .context("parse accepted device signing seed")?;
+    let signature = arkret_wire::Base64UrlString::new(
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(
+            signing_key
+                .sign(&unsigned.canonical_signing_bytes()?)
+                .to_bytes(),
+        ),
+    )
+    .map_err(anyhow::Error::msg)?;
+    let proof = unsigned.attach_signature(signature)?;
+    let request = arkret::session_grant::human_session_grant_request(
+        request_id,
+        input.account_id.principal_id,
+        input.device_id,
+        audience,
+        proof,
+    )
+    .context("build human session-grant request")?;
+    serde_json::to_value(request).context("serialize human session-grant request")
+}
+
 fn signing_key_from_seed(seed_b64url: &str) -> Result<SigningKey> {
     let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
         .decode(seed_b64url)
@@ -1584,5 +1930,103 @@ mod tests {
             &public_key,
         )
         .unwrap();
+    }
+
+    #[test]
+    fn sibling_pairing_proof_approval_and_session_request_compose() {
+        let (did, principal_id) = actor_ids("did:web:alice.example");
+        let account = AccountId::new(
+            principal_id.clone(),
+            DidCoreId::new("ak:did_core:web:station.example").unwrap(),
+        );
+        let candidate_seed = [7_u8; 32];
+        let candidate = SigningKey::from_bytes(&candidate_seed);
+        let device_id = "ak:device:01904100-0000-7000-8000-000000000002";
+        let stage_request = json!({
+            "new_device_pubkey": {
+                "kty": "OKP",
+                "kid": device_id,
+                "algorithm": "Ed25519",
+                "key": canonical::base64url_encode(candidate.verifying_key().to_bytes())
+            },
+            "client_nonce": "AAAAAAAAAAAAAAAAAAAAAA"
+        });
+        let stage_outcome = json!({
+            "device_pairing_request_id": "device_pairing_request:01904100-0000-7000-8000-000000000003",
+            "pairing_code": "ABCDEFGH",
+            "gate_audience_uri": "https://account.example",
+            "server_nonce": "BBBBBBBBBBBBBBBBBBBBBB",
+            "expires_at": "2099-01-01T00:00:00.000Z"
+        });
+        let proof = device_pairing_target_proof(json!({
+            "account_id": account,
+            "stage_request": stage_request,
+            "stage_outcome": stage_outcome,
+            "device_signing_seed_b64url": canonical::base64url_encode(candidate_seed),
+            "hpke_public_key_b64url": canonical::base64url_encode([5_u8; 32])
+        }))
+        .unwrap();
+        assert_eq!(proof["account_id"], json!(account));
+        assert_eq!(proof["device_id"], json!(device_id));
+
+        let mut bootstrap = stage_outcome;
+        bootstrap["arkret_base_url"] = json!("https://station.example");
+        bootstrap["new_device_pubkey"] = stage_request["new_device_pubkey"].clone();
+        bootstrap["client_nonce"] = stage_request["client_nonce"].clone();
+        let approving_device = "ak:device:01904100-0000-7000-8000-000000000001";
+        let approve = |approving_account: &AccountId| {
+            device_pairing_approval(json!({
+                "bootstrap": bootstrap,
+                "target_proof": proof,
+                "approving_account_id": approving_account,
+                "approving_did": did,
+                "approving_device_id": approving_device,
+                "approving_signing_seed_b64url": canonical::base64url_encode([9_u8; 32]),
+                "principal_control_realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP",
+                "authorized_generation_ref": 1
+            }))
+        };
+        let request = approve(&account).unwrap();
+        let event = &request["authorize_event"]["event"];
+        assert_eq!(event["kind"], json!("ak.device.authorize"));
+        let payload = &event["payload"];
+        for member in [
+            "device_id",
+            "device_public_key_did",
+            "hpke_key",
+            "algorithms",
+            "device_signature",
+            "pairing_challenge_transcript_digest",
+        ] {
+            assert_eq!(payload[member], proof[member], "{member}");
+        }
+        assert_eq!(payload["authorized_by"], json!(approving_device));
+        assert_eq!(
+            event["producer_proof"]["verification_method"],
+            json!(format!("{did}#{approving_device}"))
+        );
+        // Same principal core under another Station is another account: the
+        // approving side must refuse the attestation (section 5.2.2).
+        let other_station = AccountId::new(
+            principal_id,
+            DidCoreId::new("ak:did_core:web:other-station.example").unwrap(),
+        );
+        assert!(approve(&other_station).is_err());
+
+        let session_request = human_session_grant_request(json!({
+            "principal_did": did,
+            "account_id": account,
+            "device_id": device_id,
+            "holder_jkt": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "account_subject": format!("sha256:{}", "ab".repeat(32)),
+            "account_handoff_grant": "handoff.jwt",
+            "handoff_expires_at": "2099-01-01T00:00:00.000Z",
+            "device_signing_seed_b64url": canonical::base64url_encode(candidate_seed)
+        }))
+        .unwrap();
+        let body: arkret::SessionGrantRequestBody =
+            serde_json::from_value(session_request).unwrap();
+        body.validate().unwrap();
+        assert!(matches!(body, arkret::SessionGrantRequestBody::Human(_)));
     }
 }

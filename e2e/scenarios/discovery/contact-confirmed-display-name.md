@@ -13,7 +13,7 @@ holder 显式刷新快照。同时证明 `petname` 不随对方改名变化，�
 
 ## 拓扑
 
-- 1 × soland + 1 × coauth，alice 走浏览器，bob 只走 API
+- 1 × soland + 1 × coauth，alice 走浏览器；bob 只在创建 Direct Conversation 时开浏览器，其余走 API
 
 ## Actors
 
@@ -24,8 +24,10 @@ holder 显式刷新快照。同时证明 `petname` 不随对方改名变化，�
 
 ## Steps
 
-1. alice、bob 注册；两人通过 API 完成 contact request → accept，从而拥有共同的 Direct Conversation
-   Realm（该 Realm 是 resolve 的授权基础）。Contact UI 不参与本场景的前置，避免联系人界面失败时整段被 skip。
+1. alice、bob 注册；两人通过 API 完成 contact request → accept。accept 本身不创建共享 Realm：
+   normal 分支的 founder 是 responder bob，由 bob 的客户端打开 Direct Conversation 行并提交 founding unit
+   （`identity/contact-and-direct-conversation.md` §5.2 / §5.5），该 Realm 才是 resolve 的授权基础。
+   Contact UI 不参与本场景的前置，避免联系人界面失败时整段被 skip。
 2. bob 以 `ak.profile.create` 发布 `display_name = D1`（API）。
 3. alice 打开 `/settings/contacts`：该行显示经 resolve 取得的 live profile display `D1`
    （`contact-profile-display-<peer>`），并出现首次确认入口 `contact-confirm-identity-<peer>`。

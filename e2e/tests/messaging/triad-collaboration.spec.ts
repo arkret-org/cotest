@@ -17,9 +17,10 @@ import {
   accountActorId,
   authHeaders,
   canonicalJson,
-  canonicalTimestamp,
+  joinRealmMemberByInviteApi,
   listInvitesApi,
   resolveDefaultStrandId,
+  scanRealmStreamApi,
   signedEventEnvelope,
   submitSignedEventApi,
 } from "../../helpers/soland-api";
@@ -44,22 +45,6 @@ function eventPayload(event: Record<string, unknown> | undefined): Record<string
   return payload && typeof payload === "object"
     ? (payload as Record<string, unknown>)
     : {};
-}
-
-function expectRedactedPayload(
-  event: Record<string, unknown> | undefined,
-  leakedBody: string,
-): void {
-  expect(event, "redacted event must be present").toBeTruthy();
-  const payload = eventPayload(event);
-  // A normal member has no `redacted_history_allowed=true` read grant, so the
-  // projection may suppress payload entirely. If a deployment does expose the
-  // permitted stub, it must carry the canonical tombstone markers. Neither
-  // form may leak the original body.
-  if (Object.keys(payload).length > 0) {
-    expect(payload).toMatchObject({ redacted: true, state: "redacted" });
-  }
-  expect(JSON.stringify(event)).not.toContain(leakedBody);
 }
 
 function visibleMemberIds(realm: Record<string, unknown>): string[] {
@@ -146,21 +131,28 @@ test.describe("single-server triad collaboration", () => {
       { context: "redact message" },
     );
 
-    const events = await listRealmEventsViaApi(request, bobToken, realmId);
-    const eventKinds = events.map(eventKind);
-    expect(eventKinds).toContain("ak.message.revise");
-    expect(eventKinds).toContain("ak.message.create");
-    // The canonical Event log retains the redaction fact; only the target's
-    // visible content is removed (strand-and-message sections 9.1/9.2).
-    expect(eventKinds).toContain("ak.message.redact");
-    expectRedactedPayload(
-      events.find((event) => eventKind(event) === "ak.message.create"),
-      createBody,
+    // The Commit chain keeps every slot and the redaction fact stays disclosed
+    // (strand-and-message.md section 9.5.1). The signed create and revise
+    // bytes cannot be rewritten into a stub, so their slots use the closed
+    // withheld `CommittedEventView` branch (service-http-binding.md); no
+    // third redacted form exists and the original bodies never leak.
+    const scan = await scanRealmStreamApi(request, bobToken, realmId);
+    const revise = beforeRedact.find((event) => eventKind(event) === "ak.message.revise");
+    const reviseEventId = String(revise?.event_id ?? "");
+    expect(reviseEventId).toMatch(/^ak:event:/);
+    const slot = (eventId: string) => {
+      const index = scan.commits.findIndex((commit) => commit.event_ref === eventId);
+      expect(index, `Commit slot for ${eventId}`).toBeGreaterThanOrEqual(0);
+      return scan.events[index];
+    };
+    expect(slot(created.event_id), "redacted create is withheld").toBeUndefined();
+    expect(slot(reviseEventId), "redacted revise is withheld").toBeUndefined();
+    const events = scan.events.filter(
+      (event): event is Record<string, unknown> => event !== undefined,
     );
-    expectRedactedPayload(
-      events.find((event) => eventKind(event) === "ak.message.revise"),
-      revisedBody,
-    );
+    expect(events.map(eventKind)).toContain("ak.message.redact");
+    expect(JSON.stringify(scan)).not.toContain(createBody);
+    expect(JSON.stringify(scan)).not.toContain(revisedBody);
   });
 
   test("API late-join triad member sees only post-join messages in joined history", async ({
@@ -184,13 +176,11 @@ test.describe("single-server triad collaboration", () => {
       title: `triad joined ${stamp}`,
       historyAccess: "since_join",
     });
-    const baseMs = Date.now() + 1_000;
     const defaultStrandId = await resolveDefaultStrandId(request, aliceToken, realmId);
     const pre = signedEventEnvelope({
       actorId: alice.id,
       realmId: realmId,
       kind: "ak.message.create",
-      createdAt: canonicalTimestamp(new Date(baseMs)),
       payload: {
         strand_id: defaultStrandId,
         track_name: "discussion",
@@ -200,27 +190,18 @@ test.describe("single-server triad collaboration", () => {
     await submitSignedEventApi(request, aliceToken, pre, {
       context: "pre-join triad message",
     });
-    await submitSignedEventApi(
-      request,
-      aliceToken,
-      signedEventEnvelope({
-        actorId: alice.id,
-        realmId: realmId,
-        kind: "ak.member.state",
-        createdAt: canonicalTimestamp(new Date(baseMs + 60_000)),
-        payload: {
-          realm_id: realmId,
-          member_id: accountActorId(carol.id),
-          membership: "join",
-        },
-      }),
-      { context: "join carol" },
-    );
+    // common-fields.md section 4.5: only the target itself, or its accepted
+    // directed invite, writes its `leave -> join` edge. history-visibility.md
+    // section 3 anchors the `since_join` floor at that join Commit's stream
+    // position, so submission order alone separates pre from post.
+    await joinRealmMemberByInviteApi(request, aliceToken, realmId, {
+      id: carol.id,
+      token: carolToken,
+    });
     const post = signedEventEnvelope({
       actorId: alice.id,
       realmId: realmId,
       kind: "ak.message.create",
-      createdAt: canonicalTimestamp(new Date(baseMs + 120_000)),
       payload: {
         strand_id: defaultStrandId,
         track_name: "discussion",
@@ -537,21 +518,10 @@ test.describe("single-server triad collaboration", () => {
         preMessage,
         { actorId: alice.id },
       );
-      await submitSignedEventApi(
-        request,
-        aliceToken,
-        signedEventEnvelope({
-          actorId: alice.id,
-          realmId: realmId,
-          kind: "ak.member.state",
-          payload: {
-            realm_id: realmId,
-            member_id: accountActorId(carol.id),
-            membership: "join",
-          },
-        }),
-        { context: "join carol shared history" },
-      );
+      await joinRealmMemberByInviteApi(request, aliceToken, realmId, {
+        id: carol.id,
+        token: carolToken,
+      });
 
       const carolEvents = await listRealmEventsViaApi(request, carolToken, realmId);
       expect(carolEvents.map((event) => event.event_id)).toContain(pre.event_id);
@@ -640,22 +610,13 @@ test.describe("single-server triad collaboration", () => {
       });
       expect(JSON.stringify(eventsAfterLeave)).not.toContain(afterLeaveBody);
 
-      await submitSignedEventApi(
-        request,
-        aliceToken,
-        signedEventEnvelope({
-          actorId: alice.id,
-          realmId,
-          kind: "ak.member.state",
-          payload: {
-            realm_id: realmId,
-            member_id: accountActorId(bob.id),
-            membership: "join",
-            reason: "owner_readd",
-          },
-        }),
-        { context: "owner re-adds bob" },
-      );
+      // common-fields.md section 4.5: an administrator never writes the
+      // `leave -> join` edge for somebody else; the owner re-adds bob with a
+      // fresh directed invite that bob accepts himself.
+      await joinRealmMemberByInviteApi(request, aliceToken, realmId, {
+        id: bob.id,
+        token: bobToken,
+      });
       const afterRejoin = await sendPlaintextMessageViaApi(
         request,
         bobToken,

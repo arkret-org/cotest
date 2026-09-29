@@ -12,6 +12,7 @@ import {
   signedEventEnvelope,
   submitSignedEventApi,
 } from "./soland-api";
+import { addRealmMlsMemberApi } from "./soland-api/mls";
 import type { InviteObject, RealmObject } from "./generated/spec-wire-objects";
 import { allowExplicitInviteNotifications, issueUserSession, type JointUser } from "./users";
 
@@ -23,7 +24,8 @@ export type ApiRealmOpts = {
   // Closed `realm.schema.json` enums, mirrored from the spec artifacts.
   discoverability?: RealmObject["default_discoverability"];
   historyAccess?: RealmObject["history_access"];
-  /// Accept an `ak.mls.genesis` for the new Realm's scope.
+  /// Accept an `ak.mls.genesis` for the new Realm's scope
+  /// (`createRealmApi` `mls_activated`).
   mlsActivated?: boolean;
   plaintextVisibleServices?: string[];
   invitees?: string[];
@@ -150,6 +152,17 @@ export async function createSharedRealmViaApi(
   // while the root controller is still the author.
   await resolveDefaultStrandId(request, ownerToken, realmId);
   await acceptInviteViaApi(request, memberToken, member.id, realmId, { server: opts.server });
+  if (opts.mlsActivated) {
+    // The join advanced the scope's key-access revision; ciphertext is
+    // admitted again only once an Add Commit covers it
+    // (encryption-and-audit.md §2.4.1, §2.5.2).
+    await addRealmMlsMemberApi(
+      request,
+      realmId,
+      { id: member.id, deviceId: member.deviceId, token: memberToken, server: opts.server },
+      { server: opts.server },
+    );
+  }
   // Membership is not an authorization source. This fixture promises only
   // that both participants can author messages; tests exercising reactions,
   // revisions, or moderation must grant those independent actions explicitly.
@@ -218,10 +231,17 @@ export async function listRealmEventsViaApi(
   realmId: string,
   opts: { limit?: number; server?: SolandKey; order?: "ascending" | "descending" } = {},
 ): Promise<Array<Record<string, unknown>>> {
-  const { events } = await scanRealmStreamApi(request, token, realmId, {
+  const scan = await scanRealmStreamApi(request, token, realmId, {
     server: opts.server,
     limit: opts.limit ?? 50,
   });
+  // service-http-binding.md: a `CommittedEventView` is either `{commit,event}`
+  // or the closed withheld branch `{commit,event_disclosure}`; a withheld slot
+  // discloses no Event, so the Event list carries only the full branch.
+  const events = scan.events.filter(
+    (event): event is Record<string, unknown> =>
+      event !== undefined && event !== null,
+  );
   return opts.order === "descending" ? [...events].reverse() : events;
 }
 

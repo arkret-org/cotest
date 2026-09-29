@@ -53,7 +53,9 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
    - `encryption.recipient_method: "recovery_public_key"`
    - `contents[].item_kind: "mls_account_secret"`
    - `ciphertext` / `ciphertext_digest` 等 envelope metadata
-5. 断言:`GET /_arkret/self/keys/backups` 列出该 backup,**metadata only**(no plaintext, no Recovery Key words)
+5. 断言:`GET /_arkret/self/keys/backups` 列出该 backup,**metadata only**(no plaintext, no Recovery Key words);
+   列表项不携带 `contents`(`identity/key-management.md` §7.6.1),durable 判据是 `active_series.secret_storage`
+   为 `active` 且其 `active_series_id` 指向该 `recovery_public_key` backup 的 series
 6. UI 显示 recovery root 已配置;`mls_account_secret` 与自有内容 sidecar / 轮换材料按 §7.10 自动持续备份,无需手动触发
 > **§7.10 持续备份时序(inkson 实现语义)**:RK 已配置的账号上,任一加密写引发的
 > `ak.mls.commit` 被接受后约 **1.5s(debounce)** 内,该 Realm 的 `mls_history`

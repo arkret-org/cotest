@@ -44,6 +44,7 @@ import {
   accountSubscribeDeltaApi,
   accountSubscribeFramesApi,
 } from "./soland-api/account-stream";
+import { activateRealmMlsApi } from "./soland-api/mls";
 import {
   authHeaders,
   expectJsonOk,
@@ -108,6 +109,10 @@ type RegisteredEventSigner = {
   deviceId: string;
   verificationMethod: string;
   signingSeedB64url?: string;
+  /// A sibling device paired after the founding device signs only when a
+  /// caller names its verification method; it never becomes the implicit
+  /// signer of its actor.
+  explicitOnly: boolean;
 };
 
 const registeredEventSigners = new Map<
@@ -190,6 +195,7 @@ export function registerEventSigner(args: {
   deviceId: string;
   verificationMethod: string;
   signingSeedB64url?: string;
+  explicitOnly?: boolean;
 }): void {
   const actorId = requireDidCoreId(args.actorId);
   if (!args.verificationMethod.endsWith(`#${args.deviceId}`)) {
@@ -210,6 +216,7 @@ export function registerEventSigner(args: {
       (previous?.verificationMethod === args.verificationMethod
         ? previous.signingSeedB64url
         : undefined),
+    explicitOnly: args.explicitOnly ?? previous?.explicitOnly ?? false,
   };
   byMethod.set(args.verificationMethod, signer);
   registeredEventSigners.set(actorId, byMethod);
@@ -226,7 +233,8 @@ function eventSignerFor(
   if (requestedVerificationMethod !== undefined) {
     return byMethod.get(requestedVerificationMethod);
   }
-  return byMethod.size === 1 ? byMethod.values().next().value : undefined;
+  const implicit = [...byMethod.values()].filter((signer) => !signer.explicitOnly);
+  return implicit.length === 1 ? implicit[0] : undefined;
 }
 
 export function registeredEventVerificationMethod(
@@ -250,8 +258,9 @@ export function registeredEventVerificationMethod(
 
 export function registeredEventSigningSeedB64url(
   actorId: string,
+  verificationMethod?: string,
 ): string | undefined {
-  return eventSignerFor(actorId)?.signingSeedB64url;
+  return eventSignerFor(actorId, verificationMethod)?.signingSeedB64url;
 }
 
 export function signWithRegisteredEventSigner(
@@ -593,9 +602,12 @@ export async function createRealmApi(
     // strings: a typo used to travel all the way to the server.
     discoverability?: RealmObject["default_discoverability"];
     history_access?: RealmObject["history_access"];
-    /// Activate MLS for the new Realm by accepting an `ak.mls.genesis` for
-    /// its scope. There is no declared profile to compare against: a scope is
-    /// end-to-end encrypted exactly when that genesis has been accepted.
+    /// Activate MLS for the new Realm: the owner's registered device founds
+    /// the group and its `ak.mls.genesis` is accepted before any invite
+    /// (`soland-api/mls.ts`). There is no declared profile to compare
+    /// against: a scope is end-to-end encrypted exactly when that genesis has
+    /// been accepted. Members that join afterwards need an Add Commit
+    /// (`addRealmMlsMemberApi`) before new ciphertext is admitted.
     mls_activated?: boolean;
     invitees?: string[];
     /**
@@ -780,6 +792,22 @@ export async function createRealmApi(
       genesisEventId,
     );
   }
+  if (data.mls_activated) {
+    // Genesis precedes every invite: each later join advances the scope's
+    // key-access revision, which the joiner's Add Commit then covers
+    // (`addRealmMlsMemberApi`).
+    const ownerMethod = registeredEventVerificationMethod(ownerId);
+    const ownerDeviceId = ownerMethod?.split("#", 2)[1];
+    if (!ownerDeviceId) {
+      throw new Error(`MLS Genesis needs the registered device signer of ${ownerId}`);
+    }
+    await activateRealmMlsApi(
+      request,
+      { id: ownerId, deviceId: ownerDeviceId, token, server: opts.server },
+      realmId,
+      { stationId: data.creator_id },
+    );
+  }
   for (const invitee of data.invitees ?? []) {
     const recipientServiceId =
       data.invitee_ids?.[invitee] ?? solandServiceId(opts.server);
@@ -837,35 +865,80 @@ export async function createRealmApi(
   return realmId;
 }
 
-export async function addRealmMemberApi(
+/// Bring an account into a Realm on the owner's Station.
+///
+/// common-fields.md section 4.5 lists exactly two writers for the
+/// `leave -> join` edge: the target itself, or the exact target's acceptance
+/// of an invite. An administrator never writes somebody else's
+/// `member.state{join}`. The owner therefore issues a directed
+/// `ak.invite.create`, and the member signs `ak.invite.accept` with its own
+/// session; the `invite_id` is `retype(create_event.event_id)`
+/// (governance-objects.md section 5.3).
+export async function joinRealmMemberByInviteApi(
+  request: APIRequestContext,
+  ownerToken: string,
+  realmId: string,
+  member: { id: string; token: string },
+  opts: { server?: SolandKey } = {},
+) {
+  const ownerId = await currentActorIdApi(request, ownerToken, opts);
+  const evidence = { kind: "explicit_address" } as const;
+  const inviteEvent = signedEventEnvelope({
+    actorId: ownerId,
+    server: opts.server,
+    realmId,
+    kind: "ak.invite.create",
+    payload: {
+      invitee_account_id: accountActorId(member.id, opts.server).account_id,
+      introduction_evidence_digest: `sha256:${sha256CanonicalJson(evidence)}`,
+      expires_at: canonicalTimestamp(
+        new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      ),
+    },
+  });
+  await submitSignedEventApi(request, ownerToken, inviteEvent, {
+    server: opts.server,
+    context: `directed invite ${member.id}`,
+  });
+  return await acceptInviteApi(
+    request,
+    member.token,
+    member.id,
+    realmId,
+    retypeEventDerivedId(String(inviteEvent.event_id), "invite"),
+    { server: opts.server },
+  );
+}
+
+// The current `realm_policy_bundle` typed result of a Realm.
+//
+// event-kind-registry.json projects every accepted `ak.realm.policy_bundle`
+// with `result_projection: {kind: "set", value: {field: "payload"}}`, and
+// authz/event-auth-state-resolution.md section 6 makes the last accepted write
+// on the Realm stream the current value. The committed stream scan
+// (`ak.self.realm.read.streams.v1` / `/_arkret/self/streams/scan`) is therefore
+// the read surface: the payload of the last committed bundle Event is the
+// complete current component set.
+export async function readCurrentRealmPolicyBundleApi(
   request: APIRequestContext,
   token: string,
   realmId: string,
-  memberId: string | ActorId,
   opts: { server?: SolandKey } = {},
-) {
-  const actorId = await currentActorIdApi(request, token, opts);
-  return await submitSignedEventApi(
-    request,
-    token,
-    signedEventEnvelope({
-      actorId,
-      server: opts.server,
-      realmId,
-      kind: "ak.member.state",
-      payload: {
-        // `realm_id` inside the payload is a spec-defined membership_payload
-        // property (event-payload.schema.json#/$defs/membership_payload) and is
-        // required by soland's registry-backed payload validator in dev-proof
-        // mode; include it so the membership op validates regardless of the
-        // active proof profile.
-        realm_id: realmId,
-        member_id: typeof memberId === "string" ? accountActorId(memberId, opts.server) : memberId,
-        membership: "join",
-      },
-    }),
-    { server: opts.server, context: `add member ${memberId}` },
+): Promise<Record<string, unknown>> {
+  const scan = await scanRealmStreamApi(request, token, realmId, { server: opts.server });
+  expect(scan.truncated, `Realm ${realmId} stream scan must reach the stream head`).toBe(false);
+  const bundles = scan.events.filter(
+    (event) => event?.kind === "ak.realm.policy_bundle",
   );
+  expect(bundles.length, `Realm ${realmId} has an accepted policy bundle`).toBeGreaterThan(0);
+  const payload = bundles[bundles.length - 1].payload;
+  expect(
+    payload !== null && typeof payload === "object" && !Array.isArray(payload),
+    `Realm ${realmId} policy bundle payload is a closed object`,
+  ).toBe(true);
+  const policy = payload as Record<string, unknown>;
+  expect(typeof policy.policy_revision, `Realm ${realmId} policy_revision`).toBe("number");
+  return policy;
 }
 
 // join-policy.md §3 — write the per-Realm `join_policy` component as a
@@ -876,11 +949,11 @@ export async function addRealmMemberApi(
 // `additionalProperties: false`) — not a `{value: ...}` state-payload wrapper,
 // and it carries no `realm_id`: the governed Realm is the envelope's.
 //
-// The cell is `sequenced_state`: every revision is a complete replacement and
-// must carry a `head_eq` guard over the exact current value. Preserve every
-// current component and change only `policy_revision` + `join_policy`; an
-// absent or stale guard is rejected as a sequenced-state precondition failure,
-// while omitting current components can violate one-way policy ratchets.
+// Every revision restates the complete component set with a strictly
+// monotonic `policy_revision` (models/realm-and-space.md section 2.5).
+// Preserve every current component and change only `policy_revision` +
+// `join_policy`; omitting current components can violate one-way policy
+// ratchets.
 export async function writeJoinPolicyApi(
   request: APIRequestContext,
   token: string,
@@ -890,23 +963,8 @@ export async function writeJoinPolicyApi(
 ): Promise<string> {
   const actorId = await currentActorIdApi(request, token, opts);
   const digest = `sha256:${sha256CanonicalJson(joinPolicy)}`;
-  const policyCell = "ak:cell:ak.component.realm.policy_bundle.v1:null";
-  const currentResponse = await request.get(
-    `${solandBaseUrl(opts.server)}/_soland/admin/cells/${encodeURIComponent(policyCell)}?realm_id=${encodeURIComponent(realmId)}`,
-    { headers: authHeaders(token, "GET", `${solandBaseUrl(opts.server)}/_soland/admin/cells/${encodeURIComponent(policyCell)}?realm_id=${encodeURIComponent(realmId)}`) },
-  );
-  const currentText = await currentResponse.text();
-  expect(currentResponse.status(), currentText).toBe(200);
-  const currentCell = JSON.parse(currentText) as {
-    state?: string;
-    value?: Record<string, unknown>;
-  };
-  expect(currentCell.state, currentText).toBe("value");
-  expect(currentCell.value, currentText).toBeTruthy();
-  const currentPolicy = currentCell.value!;
-  const currentRevision = currentPolicy.policy_revision;
-  expect(typeof currentRevision, currentText).toBe("number");
-  const policyRevision = Number(currentRevision) + 1;
+  const currentPolicy = await readCurrentRealmPolicyBundleApi(request, token, realmId, opts);
+  const policyRevision = Number(currentPolicy.policy_revision) + 1;
   const policyEvent = signedEventEnvelope({
     actorId,
     realmId,
@@ -924,27 +982,16 @@ export async function writeJoinPolicyApi(
   await expect
     .poll(
       async () => {
-        const response = await request.get(
-          `${solandBaseUrl(opts.server)}/_soland/admin/cells/${encodeURIComponent(policyCell)}?realm_id=${encodeURIComponent(realmId)}`,
-          { headers: authHeaders(token, "GET", `${solandBaseUrl(opts.server)}/_soland/admin/cells/${encodeURIComponent(policyCell)}?realm_id=${encodeURIComponent(realmId)}`) },
-        );
-        if (!response.ok()) {
-          return false;
-        }
-        const cell = (await response.json()) as {
-          state?: string;
-          value?: Record<string, unknown>;
-        };
-        const projectedJoinPolicy = cell.value?.join_policy;
+        const current = await readCurrentRealmPolicyBundleApi(request, token, realmId, opts);
+        const projectedJoinPolicy = current.join_policy;
         return (
-          cell.state === "value" &&
-          cell.value?.policy_revision === policyRevision &&
+          current.policy_revision === policyRevision &&
           projectedJoinPolicy !== undefined &&
           `sha256:${sha256CanonicalJson(projectedJoinPolicy)}` === digest
         );
       },
       {
-        message: `join policy ${realmId} revision ${policyRevision} reaches the reducer projection`,
+        message: `join policy ${realmId} revision ${policyRevision} is the current policy bundle`,
         timeout: 30_000,
         intervals: [250, 500, 1_000, 2_000],
       },
@@ -1221,6 +1268,9 @@ async function readOwnInviteDeliveryApi(
   const holder = await expectJsonOk<{ account_data_entries: Array<{
     account_data_key: string; content: { delivery_entries?: Array<{
       invite_id: string; realm_id: string;
+      // `invite-delivery.schema.json#/$defs/delivery_entry.authority_locator_hints`:
+      // the untrusted governance locators the delivery chain carried.
+      authority_locator_hints: RealmJoinPrepareRequestBody["target"]["authority_locator_hints"];
     }> };
   }> }>(await request.get(dataUrl, {
     headers: authHeaders(token, "GET", dataUrl),
@@ -1258,19 +1308,16 @@ export async function acceptPreparedInviteApi(
   const account = accountActorId(actorId, opts.server).account_id;
   const delivery = await readOwnInviteDeliveryApi(request, token, realmId, opts, inviteId);
   expect(Boolean(delivery), "own invitation credential must be available").toBe(true);
+  // realm-join-intake: the applicant's Station resolves the Realm's current
+  // governance Station from the locator hints the invitation delivered, never
+  // from its own identity. The hints stay untrusted; prepare verifies them.
+  expect(delivery!.authority_locator_hints.length).toBeGreaterThan(0);
   const input: RealmJoinPrepareRequestBody = {
     request_id: typedId("request"),
     target: {
       realm_id: realmId,
       invite_id: inviteId,
-      authority_locator_hints: [
-        {
-          service_kind: "station",
-          service_id: solandServiceId(opts.server),
-          source: "invite",
-          endpoint_url: solandBaseUrl(opts.server),
-        },
-      ],
+      authority_locator_hints: delivery!.authority_locator_hints,
     },
     intent: { kind: "invite_accept", invite_id: inviteId },
   };
@@ -1295,7 +1342,9 @@ export async function acceptPreparedInviteApi(
     actorId,
     realmId,
     kind: "ak.invite.accept",
-    payload: { invite_id: inviteId, invitee_account_id: account },
+    // `event-payload.schema.json#/$defs/invite_accept_payload`: a directed
+    // invite moves out of `pending` and carries the stored invitee account.
+    payload: { invite_id: inviteId, previous_state: "pending", invitee_account_id: account },
     server: opts.server,
   });
   const submitUrl = `${solandBaseUrl(opts.server)}/_arkret/self/events`;
@@ -1618,6 +1667,10 @@ export async function scanRealmStreamApi(
 /// Back-compatible projection of [`scanRealmStreamApi`] for callers that only
 /// read the Event list. The Events arrive in the order the governance Station
 /// committed them, which is the only order that exists.
+///
+/// A `CommittedEventView` withheld row (`{commit, event_disclosure}`,
+/// service-http-binding.md §3.1) carries no Event, so it is absent from
+/// `events`; `commits` keeps every slot of the verifiable chain.
 export async function queryRealmEventsApi(
   request: APIRequestContext,
   token: string,
@@ -1625,7 +1678,10 @@ export async function queryRealmEventsApi(
   opts: { server?: SolandKey; limit?: number } = {},
 ): Promise<Record<string, unknown>> {
   const scan = await scanRealmStreamApi(request, token, realmId, opts);
-  return { events: scan.events, commits: scan.commits };
+  return {
+    events: scan.events.filter((event) => event !== undefined),
+    commits: scan.commits,
+  };
 }
 
 /// The holder-signed `ak.account_data.set` both account-data endpoints now take.
@@ -2294,16 +2350,9 @@ function parseJsonOrRaw(text: string): unknown {
   }
 }
 
-// `authority-commit-operations.schema.json#/$defs/stream_row` — one accepted
-// Event together with the exact RealmCommit that covers it. That pair is the
-// whole federation evidence now: there is no ingress receipt, authorization
-// lease or Control Proposal Ack beside it.
-type PublicationEvidence = {
-  event: Record<string, unknown>;
-  commit?: Record<string, unknown>;
-};
-
-const publicationEvidenceByEventId = new Map<string, PublicationEvidence>();
+// Where each Event this process published was accepted. Federation reads the
+// exact accepted `(RealmCommit, Event)` pair back from that source Station
+// (`CommittedEventView`), so only the caller-scoped source is remembered.
 const publicationSourceByEventId = new Map<string, { token: string; server?: SolandKey }>();
 
 function rememberPublicationEvidence(
@@ -2326,15 +2375,11 @@ function rememberPublicationEvidence(
       )}`,
     );
   }
-  events.forEach((event, index) => {
+  events.forEach((event) => {
     const eventId = stringValue(event.event_id);
     if (!eventId) {
       throw new Error("published Event is missing event_id");
     }
-    publicationEvidenceByEventId.set(eventId, {
-      event: stripUndefined(event) as Record<string, unknown>,
-      ...(commits[index] ? { commit: commits[index] } : {}),
-    });
     publicationSourceByEventId.set(eventId, source);
   });
 }
@@ -2389,30 +2434,6 @@ export async function readCommitStreamHeadApi(
     if (!body.truncated) return head;
     afterPosition = last.stream_position;
   }
-}
-
-export async function seedConformanceRealmBasisApi(
-  request: APIRequestContext,
-  realmId: string,
-  subjectId: string,
-  dataPlaneActions: string[],
-  server?: SolandKey,
-): Promise<{
-  seal_id: string;
-  control_event_set_root: string;
-  state_root: string;
-}> {
-  const response = await request.post(
-    `${solandBaseUrl(server)}/_arkret/_conformance/realm-basis`,
-    {
-      data: {
-        realm_id: realmId,
-        subject: subjectId,
-        data_plane_actions: dataPlaneActions,
-      },
-    },
-  );
-  return await expectJsonOk(response, "seed conformance Realm basis");
 }
 
 // COT-06-004: discover a Realm's default discussion Strand via the projection face.
@@ -2599,6 +2620,23 @@ export function makeFederationEvent(args: {
   });
 }
 
+// `authority-commit-operations.schema.json#/$defs/peer_committed_replication_outcome_record`.
+export type PeerCommittedReplicationOutcomeRecord =
+  | { status: "stored" | "duplicate" }
+  | { status: "rejected"; reason_code: string };
+
+// `authority-commit-operations.schema.json#/$defs/peer_committed_replication_outcome`:
+// `replication_outcomes` has exactly the length and order of the request's
+// `replications`, so a row is identified by its position alone. There is no
+// top-level `accepted[]` / `duplicate[]` (api-conventions.md, Event submit).
+export type PeerCommittedReplicationOutcome = {
+  branch: "committed_replication";
+  replication_outcomes: PeerCommittedReplicationOutcomeRecord[];
+};
+
+/// Push exact source-committed `(Event, RealmCommit)` pairs to a peer through
+/// the `committed_replication` branch of `ak.peer.events.command.submit.v1`
+/// and return the per-item outcome, checked against the request order.
 export async function pushFederationEvents(
   request: APIRequestContext,
   events: Array<Record<string, unknown>>,
@@ -2607,63 +2645,99 @@ export async function pushFederationEvents(
     destination?: string;
     realmId: string;
     server?: SolandKey;
-    idempotencyKey?: string;
-    serviceBindingFrontier?: string[];
-    cbsProofBundles?: Array<Record<string, unknown>>;
   },
-) {
+): Promise<PeerCommittedReplicationOutcome> {
   const response = await rawPushFederationEvents(request, events, opts);
-  return await expectJsonOk<{
-    status?: string;
-    accepted?: string[];
-    duplicate?: string[];
-    rejections?: Array<Record<string, unknown>>;
-    quarantine?: unknown[];
-  }>(response, "push federation events");
+  const outcome = await expectJsonOk<PeerCommittedReplicationOutcome>(
+    response,
+    "push federation events",
+  );
+  expect(outcome.branch).toBe("committed_replication");
+  expect(outcome.replication_outcomes).toHaveLength(events.length);
+  return outcome;
 }
+
+/// The items of `outcome` whose status is not in `allowed`, paired with the
+/// Event they judged, for readable assertion messages.
+export function replicationOutcomesOutside(
+  events: Array<Record<string, unknown>>,
+  outcome: PeerCommittedReplicationOutcome,
+  allowed: ReadonlyArray<PeerCommittedReplicationOutcomeRecord["status"]>,
+): Array<{ event_id: unknown; kind: unknown } & PeerCommittedReplicationOutcomeRecord> {
+  return outcome.replication_outcomes.flatMap((record, index) =>
+    allowed.includes(record.status)
+      ? []
+      : [{ event_id: events[index]?.event_id, kind: events[index]?.kind, ...record }],
+  );
+}
+
+type PeerPushOpts = {
+  origin: string;
+  destination?: string;
+  realmId: string;
+  server?: SolandKey;
+  tamperSignature?: boolean;
+  // Negative-coverage hook: drive the RFC 9421 freshness window past its
+  // bound so verify rejects on expiry (federation.md §3.2). The signature
+  // itself stays cryptographically valid — only created/expires are stale.
+  expireSignature?: boolean;
+  relaySourceServiceId?: string;
+};
 
 export async function rawPushFederationEvents(
   request: APIRequestContext,
   events: Array<Record<string, unknown>>,
-  opts: {
-    origin: string;
-    destination?: string;
-    realmId: string;
-    server?: SolandKey;
-    idempotencyKey?: string;
-    tamperSignature?: boolean;
-    // Negative-coverage hook: drive the RFC 9421 freshness window past its
-    // bound so verify rejects on expiry (federation.md §3.2). The signature
-    // itself stays cryptographically valid — only created/expires are stale.
-    expireSignature?: boolean;
-    relaySourceServiceId?: string;
-    serviceBindingFrontier?: string[];
-    cbsProofBundles?: Array<Record<string, unknown>>;
+  opts: PeerPushOpts & {
     // Applet transactions accept Events outside the self-submit helper's
     // publication cache. Resolve their original accepted bytes at this source.
     acceptedSource?: { token: string; server?: SolandKey };
   },
 ) {
+  return await rawPushCommittedReplication(
+    request,
+    await committedReplicationRows(request, events, opts.acceptedSource),
+    opts,
+  );
+}
+
+/// Replicate already paired `(RealmCommit, Event)` rows, e.g. a page read
+/// through `scanPeerRealmStreamApi`, and return the per-item outcome.
+export async function pushCommittedRowsApi(
+  request: APIRequestContext,
+  rows: CommittedEventFullView[],
+  opts: PeerPushOpts,
+): Promise<PeerCommittedReplicationOutcome> {
+  const response = await rawPushCommittedReplication(
+    request,
+    rows.map((row) => ({ event_submission: { event: row.event }, source_commit: row.commit })),
+    opts,
+  );
+  const outcome = await expectJsonOk<PeerCommittedReplicationOutcome>(
+    response,
+    "push committed rows",
+  );
+  expect(outcome.branch).toBe("committed_replication");
+  expect(outcome.replication_outcomes).toHaveLength(rows.length);
+  return outcome;
+}
+
+async function rawPushCommittedReplication(
+  request: APIRequestContext,
+  replications: CommittedEventSubmission[],
+  opts: PeerPushOpts,
+) {
   const destination = opts.destination ?? solandServiceId(opts.server);
   const url = `${solandBaseUrl(opts.server)}/_arkret/peer/events`;
-  const body = peerEventsSubmitBody(
-    opts.realmId,
-    await federationEventWireBodies(request, events, opts.acceptedSource),
-    {
-      serviceBindingFrontier: opts.serviceBindingFrontier,
-      cbsProofBundles: opts.cbsProofBundles,
-    },
-  );
+  const body = peerCommittedReplicationBody(opts.realmId, replications);
   const sourceServiceId = opts.relaySourceServiceId ?? opts.origin;
+  // `ak.peer.events.command.submit.v1` is `canonical_hash / full_body`: the
+  // replay identity is the complete canonical body, never an Idempotency-Key.
   const headers = signedFederationPushHeaders(
     sourceServiceId,
     destination,
     url,
     body,
-    {
-      expireSignature: opts.expireSignature,
-      idempotencyKey: opts.idempotencyKey,
-    },
+    { expireSignature: opts.expireSignature },
   );
   if (opts.tamperSignature) {
     headers.signature = `sig1=:${Buffer.alloc(64).toString("base64")}:`;
@@ -2786,76 +2860,130 @@ export async function rawSubmitPeerInviteDeliveryApi(
   });
 }
 
-async function federationEventWireBodies(
-    request: APIRequestContext,
-    events: Array<Record<string, unknown>>,
-    acceptedSource?: { token: string; server?: SolandKey },
-): Promise<PublicationEvidence[]> {
-  const entries = events.map((event) => {
+// `authority-commit-operations.schema.json#/$defs/committed_event_submission`:
+// the exact source Event as `{event}` (never `approval_signatures`) paired with
+// the source-signed RealmCommit that accepted it.
+type CommittedEventSubmission = {
+  event_submission: { event: Record<string, unknown> };
+  source_commit: Record<string, unknown>;
+};
+
+async function committedReplicationRows(
+  request: APIRequestContext,
+  events: Array<Record<string, unknown>>,
+  acceptedSource?: { token: string; server?: SolandKey },
+): Promise<CommittedEventSubmission[]> {
+  return Promise.all(events.map(async (event) => {
     const eventId = stringValue(event.event_id);
-    const evidence = (eventId ? publicationEvidenceByEventId.get(eventId) : undefined)
-      ?? (acceptedSource ? { event: event as PublicationEvidence["event"], ingress_receipts: [] } : undefined);
     const source = (eventId ? publicationSourceByEventId.get(eventId) : undefined) ?? acceptedSource;
-    if (!eventId || !evidence || !source) {
-      throw new Error(`federation requires an accepted source Event and publication evidence: ${eventId ?? "<missing event_id>"}`);
+    if (!eventId || !source) {
+      throw new Error(`federation requires an accepted source Event: ${eventId ?? "<missing event_id>"}`);
     }
-    return { eventId, evidence, source };
-  });
-  return Promise.all(entries.map(async ({ eventId, evidence, source }) => {
+    if (event.kind === "ak.mls.commit") {
+      // A replicated MLS Commit also needs the governance-frozen
+      // `genesis_event_ref`; this helper has no such provenance to carry.
+      throw new Error(`committed replication of ak.mls.commit ${eventId} needs genesis_event_ref`);
+    }
     // Read the exact accepted Event and covering Commit from the registered
     // caller-scoped resource. A withheld view cannot be forwarded as an Event.
     const url = `${solandBaseUrl(source.server)}/_arkret/self/committed-events/${eventId}`;
     const response = await request.get(url, {
       headers: authHeaders(source.token, "GET", url),
     });
-    const body = await expectJsonOk<{ event?: PublicationEvidence["event"] }>(
-      response, "read accepted source Event for federation",
-    );
-    if (!body.event || body.event.event_id !== eventId) {
+    const view = await expectJsonOk<{
+      commit?: Record<string, unknown>;
+      event?: Record<string, unknown>;
+    }>(response, "read accepted source Event for federation");
+    if (!view.event || view.event.event_id !== eventId || !view.commit) {
       throw new Error(`source Station did not disclose the accepted Event ${eventId}`);
     }
-    return { ...evidence, event: body.event };
+    return { event_submission: { event: view.event }, source_commit: view.commit };
   }));
 }
 
-export async function queryPeerEventsApi(
+// `service-operation-dtos.schema.json#/$defs/CommittedEventView`, full branch:
+// one RealmCommit with the exact producer-signed Event it accepted.
+export type CommittedEventFullView = {
+  commit: Record<string, unknown>;
+  event: Record<string, unknown>;
+};
+
+// `authority-commit-operations.schema.json#/$defs/stream_scan_outcome`.
+export type StreamScanOutcome = {
+  committed_events: Array<CommittedEventFullView | {
+    commit: Record<string, unknown>;
+    event_disclosure: Record<string, unknown>;
+  }>;
+  readable_floor?: {
+    oldest_position: number;
+    floor_commit_id: string;
+    floor_reason: "stream_start" | "membership_join" | "history_access_policy";
+  };
+  truncated: boolean;
+};
+
+/// `ak.peer.committed_event.read.scan.v1`: one Station replicates one
+/// visibility-authorized stream from the Realm's current governance Station
+/// (federation.md §3). The request is signed as `sourceServiceId`; the Realm
+/// stream is scanned upward from the caller's readable floor.
+export async function scanPeerRealmStreamApi(
   request: APIRequestContext,
   opts: {
-    server?: SolandKey;
-    realmId?: string;
-    actorId?: string;
+    server: SolandKey;
+    sourceServiceId: string;
+    realmId: string;
+    afterPosition?: number | null;
     limit?: number;
-    after?: string;
-    sourceServiceId?: string;
   },
-) {
-  const body = stripUndefined({
-    realm_ids: opts.realmId ? [opts.realmId] : undefined,
-    actor_ids: opts.actorId ? [accountActorId(opts.actorId, opts.server)] : undefined,
+): Promise<StreamScanOutcome> {
+  const body = {
+    realm_id: opts.realmId,
+    stream_ref: { kind: "realm", realm_id: opts.realmId },
+    after_position: opts.afterPosition ?? null,
     limit: opts.limit ?? 100,
-    after: opts.after,
-  });
-  const targetUri = `${solandBaseUrl(opts.server)}/_arkret/peer/events`;
-  const sourceServiceId =
-    opts.sourceServiceId ?? COTEST_PEER_FIXTURE_CORE_ID;
-  const destinationServiceId = solandServiceId(opts.server);
-  const response = await request.fetch(targetUri, {
-    method: "QUERY",
+  };
+  const targetUri = `${solandBaseUrl(opts.server)}/_arkret/peer/streams/scan`;
+  const response = await request.post(targetUri, {
     data: canonicalJson(body),
     headers: signedFederationPushHeaders(
-      sourceServiceId,
-      destinationServiceId,
+      opts.sourceServiceId,
+      solandServiceId(opts.server),
       targetUri,
       body,
-      { method: "QUERY" },
     ),
   });
-  return await expectJsonOk<{
-    events: Array<Record<string, unknown>>;
-    next_cursor?: string;
-    prev_cursor?: string;
-    has_more?: boolean;
-  }>(response, "query peer events");
+  return await expectJsonOk<StreamScanOutcome>(response, "scan peer Realm stream");
+}
+
+/// The full rows of a scan page, in stream order. A withheld row carries no
+/// Event bytes and can never be replicated as one.
+export function fullCommittedRows(page: StreamScanOutcome): CommittedEventFullView[] {
+  return page.committed_events.filter(
+    (row): row is CommittedEventFullView => "event" in row,
+  );
+}
+
+/// Every full row of the Realm stream that `sourceServiceId` may read from
+/// `server`, in stream order. Continuation is the largest `stream_position`
+/// of the previous page; the scan stops when a page is not truncated.
+export async function scanPeerRealmStreamRowsApi(
+  request: APIRequestContext,
+  opts: { server: SolandKey; sourceServiceId: string; realmId: string },
+): Promise<CommittedEventFullView[]> {
+  const rows: CommittedEventFullView[] = [];
+  let afterPosition: number | null = null;
+  for (let page = 0; page < 100; page += 1) {
+    const outcome = await scanPeerRealmStreamApi(request, {
+      ...opts,
+      afterPosition,
+      limit: 1000,
+    });
+    rows.push(...fullCommittedRows(outcome));
+    const last = outcome.committed_events.at(-1);
+    if (!outcome.truncated || !last) return rows;
+    afterPosition = Number(last.commit.stream_position);
+  }
+  throw new Error(`peer scan of ${opts.realmId} did not reach the readable head`);
 }
 
 function schemaIdForEventKind(kind: string): string {
@@ -2933,61 +3061,39 @@ const E2E_FIXTURES_ROOT = resolve(
   "fixtures",
 );
 
-// federation.md §4.1: membership_frontier is the sender's causal frontier
-// (`id[]`). For a batch-local frontier, use the accepted nested Events rather
-// than their federation transport wrappers. A wider frontier is caller-supplied.
-function batchFrontierEventIds(
-  events: Array<PublicationEvidence["event"]>,
-): string[] {
-  const referenced = new Set<string>();
-  for (const event of events) {
-    const prevRefs = Array.isArray(event.prev_refs) ? event.prev_refs : [];
-    for (const entry of prevRefs) {
-      if (typeof entry === "string") {
-        referenced.add(entry);
-      }
+// `authority-commit-operations.schema.json#/$defs/peer_submit_request`,
+// `committed_replication` branch. Routing basis, membership witnesses and
+// destination echoes are absent: the receiver derives authorization from the
+// verified committed history alone (federation.md §4.1.1).
+function peerCommittedReplicationBody(
+  realmId: string,
+  replications: CommittedEventSubmission[],
+): { branch: "committed_replication"; replications: CommittedEventSubmission[] } {
+  if (replications.length < 1 || replications.length > 100) {
+    throw new Error(`committed_replication carries 1..100 items, got ${replications.length}`);
+  }
+  for (const row of replications) {
+    if (replicatedEventRealmId(row.event_submission.event) !== realmId) {
+      throw new Error(`replicated Event ${String(row.event_submission.event.event_id)} is not in ${realmId}`);
     }
   }
-  const heads = events
-    .map((event) => event.event_id)
-    .filter(
-      (id): id is string => typeof id === "string" && !referenced.has(id),
-    );
-  // An empty batch has no heads. Fabricating one would mean minting an
-  // `ak:event:` id, and an Event id is derived from an Event that exists.
-  return heads;
+  return { branch: "committed_replication", replications };
 }
 
-function peerEventsSubmitBody(
-  realmId: string,
-  events: PublicationEvidence[],
-  overrides: {
-    serviceBindingFrontier?: string[];
-    cbsProofBundles?: Array<Record<string, unknown>>;
-  } = {},
-): Record<string, unknown> {
-  const frontier =
-    overrides.serviceBindingFrontier &&
-    overrides.serviceBindingFrontier.length > 0
-      ? overrides.serviceBindingFrontier
-      : batchFrontierEventIds(events.map((submission) => submission.event));
-  return stripUndefined({
-    service_binding_ref: {
-      realm_id: realmId,
-      // Spec v1 registers no computation vector for realm_policy_digest (it
-      // is the sender-local "Realm policy hash", federation.md §4.1 table);
-      // hash an explicitly harness-scoped policy snapshot so the value can
-      // never be mistaken for a spec identifier.
-      realm_policy_digest: `sha256:${sha256CanonicalJson({
-        domain: "cotest.harness.realm_policy_snapshot.v1",
-        realm_id: realmId,
-      })}`,
-      membership_frontier: frontier,
-      destination_kind: "station",
-    },
-    events,
-    cbs_proof_bundles: overrides.cbsProofBundles,
-  }) as Record<string, unknown>;
+// realm-and-space.md §2.5.0: the genesis `ak.realm.create` omits the envelope
+// `realm_id` and carries `scope_ref = {"kind":"realm_genesis"}`; its Realm is
+// `retype(event_id, "realm")`. Every other Event names its Realm explicitly.
+function replicatedEventRealmId(event: Record<string, unknown>): unknown {
+  const scopeRef = event.scope_ref as { kind?: unknown } | undefined;
+  if (
+    event.kind === "ak.realm.create" &&
+    event.realm_id === undefined &&
+    scopeRef?.kind === "realm_genesis" &&
+    typeof event.event_id === "string"
+  ) {
+    return retypeEventDerivedId(event.event_id, "realm");
+  }
+  return event.realm_id;
 }
 
 function signedFederationPushHeaders(
@@ -2995,13 +3101,9 @@ function signedFederationPushHeaders(
   destinationServiceId: string,
   targetUri: string,
   body: unknown,
-  opts: {
-    expireSignature?: boolean;
-    idempotencyKey?: string;
-    method?: "POST" | "QUERY";
-  } = {},
+  opts: { expireSignature?: boolean } = {},
 ): Record<string, string> {
-  const method = opts.method ?? "POST";
+  const method = "POST";
   const selector = operationSelector(method, targetUri);
   if (!selector) {
     throw new Error(
@@ -3023,11 +3125,10 @@ function signedFederationPushHeaders(
     (key) => solandServiceId(key) === sourceServiceId,
   );
   const keyid = `${sourceKey ? solandServiceDid(sourceKey) : serviceCoreIdToDid(sourceServiceId)}#federation-fanout-key`;
-  const idempotencyComponent = opts.idempotencyKey ? ' "idempotency-key"' : "";
   const signatureParams =
     `("@method" "@target-uri" "@authority" "content-digest" "arkret-operation" "source-service-id" ` +
     `"destination-service-id" "source-trust-domain" "destination-trust-domain"` +
-    `${idempotencyComponent});created=${created};expires=${expires};keyid="${keyid}";alg="ed25519"`;
+    `);created=${created};expires=${expires};keyid="${keyid}";alg="ed25519"`;
   const signatureBase = [
     `"@method": ${method}`,
     `"@target-uri": ${targetUri}`,
@@ -3038,9 +3139,6 @@ function signedFederationPushHeaders(
     `"destination-service-id": ${destinationServiceId}`,
     `"source-trust-domain": ${sourceTrustDomain}`,
     `"destination-trust-domain": ${destinationTrustDomain}`,
-    ...(opts.idempotencyKey
-      ? [`"idempotency-key": ${opts.idempotencyKey}`]
-      : []),
     `"@signature-params": ${signatureParams}`,
   ].join("\n");
   const signature = sign(
@@ -3058,7 +3156,6 @@ function signedFederationPushHeaders(
     "destination-trust-domain": destinationTrustDomain,
     "signature-input": `sig1=${signatureParams}`,
     signature: `sig1=:${signature.toString("base64")}:`,
-    ...(opts.idempotencyKey ? { "idempotency-key": opts.idempotencyKey } : {}),
   };
 }
 

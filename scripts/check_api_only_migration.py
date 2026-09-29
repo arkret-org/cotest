@@ -33,18 +33,17 @@ MANIFEST_PATH = COTEST_ROOT / "api-only-migration.json"
 # all syntactic uses of a page or a browser context.
 # A spec also reaches a browser when it calls a helper that opens one for it.
 # `users.ts` has exactly one `browser.newContext()`, inside `openUser`; these are
-# the exported entry points whose call graph reaches it. Without them two specs
-# classified as API-only failed a real browserless run inside
-# `pairAcceptedSiblingDevice` -> `openUserPage` -> `openUser`, at the point
-# `inksonBaseUrl()` refuses to invent a URL. Keep this list in step with
-# `e2e/helpers/users.ts`: a new page-opening export belongs here.
+# the exported entry points whose call graph reaches it. A spec that only calls
+# them is browser coverage even though its own text drives no page, and running
+# it browserless fails where `inksonBaseUrl()` refuses to invent a URL. Keep
+# this list in step with `e2e/helpers/users.ts`: a new page-opening export
+# belongs here.
 BROWSER_ENTRY_HELPERS = (
     "openUser",
     "openUserPage",
     "openDpopUserPage",
     "openDpopUserPageForAccount",
     "openDpopUserPageFromSession",
-    "pairAcceptedSiblingDevice",
 )
 BROWSER_SIGNAL = re.compile(
     # Declaring the fixture is enough: Playwright resolves it before the test

@@ -109,11 +109,12 @@
 
 ## Edge cases / sub-tests
 
-- **E8.1 签名过期 / 密钥轮换**
-  - soland_a 用一个已过期的 keyid 签 POST /peer/events
-  - soland_b MUST 返回 `401` + body `{error: {code: "signature_expired" 或 "unknown_keyid", key_rotation_hint: {current_keyid, valid_from}}}`
-  - soland_a 收到 hint 后用新 keyid 重签 → 第二次请求 200
-  - 断言:server B 没有把过期签名 push 入库;新签名后入库成功
+- **E8.1 签名过期 / 签名无效**
+  - soland_a 以超出 `ak.http_signature.freshness.v1` 窗口的 `created`/`expires` 签 POST /peer/events
+    → soland_b 返回 `401` `signature_window_invalid`（service-http-binding.md §8.3）
+  - 签名字节被篡改 → soland_b 返回 `401` `signature_invalid`（federation.md §3.2）
+  - 两者 detail 为同一固定串；响应不含 `key_rotation_hint`、`signature_expired`、`unknown_keyid` 等私有原因（仅审计日志）
+  - 以当前 key 重新签名后通过 transport 认证
 
 - **E8.2 federation 跨越多个 hop (indirect relay)**
   - 拓扑:soland_a → relay (soland_c 或 mock relay) → soland_b

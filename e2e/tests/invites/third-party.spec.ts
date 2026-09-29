@@ -18,6 +18,7 @@ import {
   createRealmApi,
   expectJsonOk,
   projectDidToCoreId,
+  readCurrentRealmPolicyBundleApi,
   registerEventSigner,
   registeredEventSigningSeedB64url,
   registeredEventVerificationMethod,
@@ -184,11 +185,11 @@ async function submitSelfEvent(
   };
 }
 
-// Seed the Realm policy components cell with the verification-service allowlist
-// the reducer re-checks (third-party-invites.md §2.1 Allowlist MUST). The
-// allowlist entries are did_core_id and compared byte-for-byte against the
-// payload's verification_id, so the DID is projected first. The
-// createRealmApi genesis already occupies policy_revision 1.
+// Restate the current Realm policy bundle with the verification-service
+// allowlist the reducer re-checks (third-party-invites.md §2.1 Allowlist MUST,
+// §4.3 step 4 reads it from the `realm_policy_bundle` typed current result).
+// The allowlist entries are did_core_id and compared byte-for-byte against the
+// payload's verification_id, so the DID is projected first.
 async function allowlistVerificationService(
   request: APIRequestContext,
   token: string,
@@ -196,16 +197,7 @@ async function allowlistVerificationService(
   realmId: string,
   serviceId: string,
 ) {
-  const policyCell = "ak:cell:ak.component.realm.policy_bundle.v1:null";
-  const currentResponse = await request.get(
-    `${solandBaseUrl()}/_soland/admin/cells/${encodeURIComponent(policyCell)}?realm_id=${encodeURIComponent(realmId)}`,
-    { headers: authHeaders(token, "GET", `${solandBaseUrl()}/_soland/admin/cells/${encodeURIComponent(policyCell)}?realm_id=${encodeURIComponent(realmId)}`) },
-  );
-  const currentCell = await expectJsonOk<{state: string; value: Record<string, unknown>}>(
-    currentResponse, "read current policy before verification allowlist replacement",
-  );
-  expect(currentCell.state).toBe("value");
-  expect(typeof currentCell.value.policy_revision).toBe("number");
+  const currentPolicy = await readCurrentRealmPolicyBundleApi(request, token, realmId);
   await submitSignedEventApi(
     request,
     token,
@@ -214,8 +206,8 @@ async function allowlistVerificationService(
       realmId,
       kind: "ak.realm.policy_bundle",
       payload: {
-        ...currentCell.value,
-        policy_revision: Number(currentCell.value.policy_revision) + 1,
+        ...currentPolicy,
+        policy_revision: Number(currentPolicy.policy_revision) + 1,
         allowed_third_party_invite_verification_ids: [
           projectDidToCoreId(serviceId),
         ],
@@ -357,6 +349,26 @@ test.describe("third-party invite", () => {
       fixtureNonce: "s3-issue",
       allowlistService: false,
     });
+    // third-party-invites.md §2.1 Allowlist (MUST): a verification service
+    // outside the current policy bundle's
+    // `allowed_third_party_invite_verification_ids` MUST NOT be bound by an
+    // invite, so the same payload is refused until the owner allowlists it.
+    const unlisted = await submitThirdPartyInvite(
+      request,
+      ctx.aliceToken,
+      ctx.alice.id,
+      ctx.cell,
+      ctx.invitePayload,
+    );
+    expect(unlisted.accepted).toHaveLength(0);
+    expect(unlisted.rejectReason).toBe("capability_denied");
+    await allowlistVerificationService(
+      request,
+      ctx.aliceToken,
+      ctx.alice.id,
+      ctx.realmId,
+      ctx.verificationService.did,
+    );
     const outcome = await submitThirdPartyInvite(
       request,
       ctx.aliceToken,

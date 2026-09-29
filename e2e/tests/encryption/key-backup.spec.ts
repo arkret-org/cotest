@@ -141,6 +141,10 @@ test.describe("key backup + restore", () => {
         device.page.getByTestId("recovery-key-passphrase"),
       ).toHaveCount(0);
 
+      // key-management.md §7.6.1: list metadata only classifies an envelope
+      // (it never carries the signed `contents` index), and the durable
+      // backup is the one the accepted active-series pointer names. The
+      // recovery_public_key recipient is the passphrase-free §7.2 envelope.
       const backupsUrl = `${solandBaseUrl()}/_arkret/self/keys/backups?backup_kind=secret_storage`;
       await expect
         .poll(
@@ -156,20 +160,16 @@ test.describe("key backup + restore", () => {
               return false;
             }
             const body = await response.json();
-            const backups = Array.isArray(body?.backups)
-              ? body.backups
-              : Array.isArray(body)
-                ? body
-                : [];
+            const pointer = body?.active_series?.secret_storage;
+            if (pointer?.state !== "active") {
+              return false;
+            }
+            const backups: any[] = Array.isArray(body?.backups) ? body.backups : [];
             return backups.some(
-              (backup: any) =>
+              (backup) =>
                 backup?.backup_kind === "secret_storage" &&
-                backup?.encryption?.recipient_method ===
-                  "recovery_public_key" &&
-                Array.isArray(backup?.contents) &&
-                backup.contents.some(
-                  (item: any) => item?.item_kind === "mls_account_secret",
-                ),
+                backup?.series_id === pointer.active_series_id &&
+                backup?.encryption?.recipient_method === "recovery_public_key",
             );
           },
           { timeout: 120_000 },
@@ -1328,12 +1328,7 @@ async function updateCardDescription(
   await expect(page.getByTestId("card-detail-modal")).toBeVisible({
     timeout: 45_000,
   });
-  const add = page.getByTestId("card-detail-add-description-button");
-  if ((await add.count()) > 0 && (await add.first().isVisible())) {
-    await add.first().click();
-  } else {
-    await page.getByTestId("card-detail-edit-description-button").click();
-  }
+  await page.getByTestId("card-detail-edit-description-button").click();
   await setCardDetailEditorValue(page, description);
   await page.getByTestId("card-detail-save-button").click();
   await expect(page.getByTestId("card-description-panel")).toContainText(

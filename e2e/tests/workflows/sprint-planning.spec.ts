@@ -422,7 +422,7 @@ test.describe("workflow: sprint planning", () => {
         timeout: 30_000,
       });
       await meiPage.page
-        .getByTestId("card-detail-add-description-button")
+        .getByTestId("card-detail-edit-description-button")
         .click();
       await setCardDetailEditorValue(meiPage.page, detailDescription);
       await meiPage.page.getByTestId("card-detail-save-button").click();

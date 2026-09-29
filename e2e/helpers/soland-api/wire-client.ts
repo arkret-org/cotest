@@ -10,16 +10,28 @@ type CotestWireCommand =
   | "event-derived-id"
   | "verify-realm-state-snapshot"
   | "invite-subject-proof"
+  | "key-backup-auth-signature"
   | "mimi-consent-proof"
   | "mimi-request-consent-proof"
   | "mls-keypackage-upload-entry"
+  | "mls-keypackages"
+  | "mls-genesis"
+  | "mls-keypackage-claim-request"
+  | "mls-add-member"
+  | "mls-welcome-delivery"
+  | "mls-install-commit"
+  | "mls-join-welcome"
+  | "mls-encrypt-message"
   | "principal-control-realm-id"
   | "webvh-placeholder-did"
   | "webvh-genesis"
   | "account-handoff-outcome"
   | "account-handoff-request"
   | "principal-registration-fixture"
-  | "identity-creation-register-request";
+  | "identity-creation-register-request"
+  | "device-pairing-target-proof"
+  | "device-pairing-approval"
+  | "human-session-grant-request";
 
 type CotestWireCanonicalJson = { canonical: string };
 type CotestWireDigest = { digest: string; digest_hex: string };
@@ -115,6 +127,20 @@ export function sdkInviteSubjectProof(args: {
     verification_id: args.verificationId,
     binding_proof: args.bindingProof,
     verification_method: args.verificationMethod,
+    signing_seed_b64url: args.signingSeedB64url,
+  });
+}
+
+/// The device signature `auth_data.signature` of a key-backup envelope
+/// (key-management.md section 7.4.1), over the SDK transcript. `envelope` is
+/// unsigned; the same envelope comes back with the signature attached.
+export function sdkKeyBackupAuthSignature(args: {
+  envelope: Record<string, unknown>;
+  signingSeedB64url: string;
+}): Record<string, unknown> {
+  assertJsonTransportable(args.envelope, "$.envelope");
+  return cotestWire<Record<string, unknown>>("key-backup-auth-signature", {
+    envelope: args.envelope,
     signing_seed_b64url: args.signingSeedB64url,
   });
 }

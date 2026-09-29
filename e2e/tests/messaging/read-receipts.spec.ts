@@ -8,7 +8,6 @@ import {
   expect,
   test,
   type APIRequestContext,
-  type Browser,
 } from "../../helpers/arkret-test";
 import {
   authHeaders,
@@ -20,15 +19,20 @@ import { createTwoUserMessagingRealm } from "../../helpers/messaging-fixtures";
 import {
   accountActorId,
   canonicalJson,
+  registeredEventVerificationMethod,
   resolveDefaultStrandId,
   signedEventEnvelope,
   submitSignedEventApi,
   } from "../../helpers/soland-api";
 import {
+  encryptMlsMessageContent,
+  realmMlsCreatorGroupApi,
+} from "../../helpers/soland-api/mls";
+import {
   createDpopUserSession,
   ensureRegistered,
   issueUserSession,
-  pairAcceptedSiblingDevice,
+  pairSiblingDeviceSession,
   type JointUser,
   uniqueUser,
 } from "../../helpers/users";
@@ -73,51 +77,16 @@ test.describe("read receipts + privacy", () => {
       },
     );
     // read-receipts.md §2 defines the position as a message on the discussion
-    // track. The Realm is MLS-only, so prepare its accepted MLS basis and
-    // submit an encrypted Message rather than using plaintext or an unrelated
-    // durable Event merely as a test position.
-    const strandId = await resolveDefaultStrandId(request, bobToken, realmId);
-    const basisProbe = buildSignalEnvelope({
-      actorId: bob.id,
-      deviceId: bob.deviceId,
+    // track. The Realm is MLS-only (its Genesis and alice's Add Commit are
+    // accepted), so the target is a real MLS ciphertext at the current epoch.
+    const target = await sendEncryptedReceiptMessage(
+      request,
+      bobToken,
+      bob,
       realmId,
-      plaintext: {
-        kind: "ak.typing",
-        payload_sequence: Date.now(),
-        strand_id: strandId,
-        is_typing: false,
-      },
-    });
-    await prepareSignalEnvelope(request, bobToken, basisProbe);
-    const preparedPayload = basisProbe.encrypted_payload as Record<
-      string,
-      unknown
-    >;
-    const preparedKeyRef = preparedPayload.key_ref as Record<string, unknown>;
-    const messageEnvelope = signedEventEnvelope({
-      actorId: bob.id,
-      realmId,
-      kind: "ak.message.create",
-      payload: {
-        strand_id: strandId,
-        track_name: "discussion",
-        encrypted_content: {
-          version: "1.0",
-          content_type: "application/vnd.arkret.message+json",
-          encryption_context: {
-            epoch: Number(preparedPayload.epoch),
-            group_state_ref: String(preparedKeyRef.group_state_ref),
-          },
-          ciphertext: Buffer.from(`receipt-target-${stamp}`, "utf8").toString(
-            "base64url",
-          ),
-        },
-      },
-    });
-    await submitSignedEventApi(request, bobToken, messageEnvelope, {
-      context: "submit MLS receipt target message",
-    });
-    const targetEventId = String(messageEnvelope.event_id);
+      `receipt-target-${stamp}`,
+    );
+    const targetEventId = target.event_id;
 
     const envelope = buildReceiptSignal({
       actor: alice,
@@ -462,24 +431,22 @@ test.describe("read receipts + privacy", () => {
   });
 
   test("actor-private read marker (ak.read_cursor.advance) syncs across alice's devices but does NOT broadcast to bob", async ({
-    browser,
     request,
   }) => {
     // spec: read-receipts.md §3.1-§3.2 / §6.6 — ak.read_cursor.advance is an
     // actor-private durable cursor (POST /_arkret/self/read-cursors). The
     // Principal/Sync Service returns it only to the same principal's authorized
     // devices (account-private projection read-back), never to other Realm
-    // members. We model alice's two devices as two dev sessions over the same
-    // DID with distinct device ids, and assert: both alice devices read the
-    // converged marker, bob reads none.
+    // members. alice's second device is paired through the accepted-device
+    // ceremony and holds its own Standard grant, and we assert: both alice
+    // devices read the converged marker, bob reads none.
     const { fixture, aliceSession } = await createPairableReceiptFixture(
-      browser,
       request,
       "read-cursor-sync",
     );
     const aliceSecond = withDevice(
       fixture.alice,
-      await pairAcceptedSiblingDevice(browser, request, aliceSession),
+      (await pairSiblingDeviceSession(request, aliceSession)).user.deviceId,
     );
     const aliceSecondToken = await issueUserSession(request, aliceSecond);
 
@@ -612,7 +579,6 @@ test.describe("read receipts + privacy", () => {
   });
 
   test("E22.3 multi-device receipt coordination: HLC tie-break decides which device's marker fans out for shared receipt", async ({
-    browser,
     request,
   }) => {
     // spec: read-receipts.md §3.2 / §6.5 — concurrent read cursors for the same
@@ -621,13 +587,12 @@ test.describe("read receipts + privacy", () => {
     // two devices of one principal and assert the surviving marker is the one
     // from the lexicographically larger device_id, deterministically.
     const { fixture, aliceSession } = await createPairableReceiptFixture(
-      browser,
       request,
       "hlc-tiebreak",
     );
     const aliceSecond = withDevice(
       fixture.alice,
-      await pairAcceptedSiblingDevice(browser, request, aliceSession),
+      (await pairSiblingDeviceSession(request, aliceSession)).user.deviceId,
     );
     const aliceSecondToken = await issueUserSession(request, aliceSecond);
 
@@ -701,7 +666,6 @@ async function createReceiptFixture(request: APIRequestContext, label: string) {
 }
 
 async function createPairableReceiptFixture(
-  browser: Browser,
   request: APIRequestContext,
   label: string,
 ) {
@@ -750,25 +714,11 @@ async function sendEncryptedReceiptMessage(
   realmId: string,
   body: string,
 ) {
+  // encryption-and-audit.md §2.5.2: an application ciphertext is admitted only
+  // at the scope's accepted current epoch. The receipt fixtures' author is the
+  // Realm's MLS group creator, whose state installed every Add Commit.
   const strandId = await resolveDefaultStrandId(request, token, realmId);
-  const stamp = Date.now();
-  const basisProbe = buildSignalEnvelope({
-    actorId: actor.id,
-    deviceId: actor.deviceId,
-    realmId,
-    plaintext: {
-      kind: "ak.typing",
-      payload_sequence: stamp,
-      strand_id: strandId,
-      is_typing: false,
-    },
-  });
-  await prepareSignalEnvelope(request, token, basisProbe);
-  const preparedPayload = basisProbe.encrypted_payload as Record<
-    string,
-    unknown
-  >;
-  const preparedKeyRef = preparedPayload.key_ref as Record<string, unknown>;
+  const group = await realmMlsCreatorGroupApi(request, realmId);
   const messageEnvelope = signedEventEnvelope({
     actorId: actor.id,
     realmId,
@@ -776,17 +726,11 @@ async function sendEncryptedReceiptMessage(
     payload: {
       strand_id: strandId,
       track_name: "discussion",
-      encrypted_content: {
-        version: "1.0",
-        content_type: "application/vnd.arkret.message+json",
-        encryption_context: {
-          epoch: Number(preparedPayload.epoch),
-          group_state_ref: String(preparedKeyRef.group_state_ref),
-        },
-        ciphertext: Buffer.from(`${body} ${stamp}`, "utf8").toString(
-          "base64url",
-        ),
-      },
+      encrypted_content: encryptMlsMessageContent(group, {
+        kind: "ak.content.text",
+        body: `${body} ${Date.now()}`,
+        format: "plain",
+      }),
     },
   });
   await submitSignedEventApi(request, token, messageEnvelope, {
@@ -933,11 +877,14 @@ async function advanceReadCursor(
   // the derived `read_marker_outcome` takes it from there. A payload restating
   // it is a closed-shape violation (tasks/spec-done/2026-09-04-2130-read-cursor-advance-updated-at-envelope-equality.md).
   const updatedAt = new Date().toISOString();
+  // The producer proof is the writing device's own: a sibling device signs
+  // with its accepted key, never with the founding device's.
   const event = signedEventEnvelope({
     actorId: actor.id,
     realmId: body.realm_id,
     kind: "ak.read_cursor.advance",
     createdAt: updatedAt,
+    proofVerificationMethod: registeredEventVerificationMethod(actor.id, actor.deviceId),
     payload: {
       schema: "ak.schema.read_cursor.v1",
       actor_id: accountActorId(actor.id),

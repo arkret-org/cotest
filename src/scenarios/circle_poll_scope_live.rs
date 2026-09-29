@@ -170,10 +170,16 @@ async fn join_circle(
     circle: &CircleId,
     actor: &ActorId,
 ) -> Result<()> {
+    let parent = client.parent_membership_revision(realm, actor).await?;
     let join = circle_event(
-        client, realm, circle, EventKind::CircleMemberState,
-        json!({"circle_id":circle,"member_id":actor,"membership":"join","expected_membership":null}),
-    ).await?;
+        client,
+        realm,
+        circle,
+        EventKind::CircleMemberState,
+        json!({"circle_id":circle,"member_id":actor,"membership":"join",
+            "parent_membership_revision":parent,"expected_membership":null}),
+    )
+    .await?;
     expect_json(
         client
             .post(&format!(

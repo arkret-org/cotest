@@ -361,18 +361,22 @@ test.describe("contact graph federation (server1/server2)", () => {
         )
         .toBe("accepted");
 
-      await alicePage.gotoHome();
-      await alicePage.page.getByTestId("realm-sidebar-tab-direct").click();
-      await alicePage.page
+      // The normal-branch founder is the responder
+      // (contact-and-direct-conversation.md 5.2): only Bob's current Station
+      // can admit the founding unit, and Alice's resolver answers
+      // `awaiting_founder` until it is accepted (9.1). Bob opens first.
+      await bobPage.gotoHome();
+      await bobPage.page.getByTestId("realm-sidebar-tab-direct").click();
+      await bobPage.page
         .locator(
-          `[data-testid="direct-conversation-row"][data-peer=${JSON.stringify(canonicalJson(accountActorId(bob.id, "server2")))}]`,
+          `[data-testid="direct-conversation-row"][data-peer=${JSON.stringify(canonicalJson(accountActorId(alice.id, "server1")))}]`,
         )
         .click();
-      await expect(alicePage.page).toHaveURL(/\/direct\/ak:realm:.*\/ak:strand:/, {
+      await expect(bobPage.page).toHaveURL(/\/direct\/ak:realm:.*\/ak:strand:/, {
         timeout: 180_000,
       });
-      const alicePath = new URL(alicePage.page.url()).pathname;
-      const [, , encodedRealmId, encodedStrandId] = alicePath.split("/");
+      const bobPath = new URL(bobPage.page.url()).pathname;
+      const [, , encodedRealmId, encodedStrandId] = bobPath.split("/");
       const realmId = decodeURIComponent(encodedRealmId);
       const strandId = decodeURIComponent(encodedStrandId);
 
@@ -381,9 +385,9 @@ test.describe("contact graph federation (server1/server2)", () => {
           async () => {
             const row = await contactRow(
               request,
-              bobToken,
-              alice.id,
-              { server: "server2" },
+              aliceToken,
+              bob.id,
+              { server: "server1" },
             );
             return row?.direct_conversation;
           },
@@ -391,19 +395,19 @@ test.describe("contact graph federation (server1/server2)", () => {
         )
         .toMatchObject({ realm_id: realmId, main_strand_id: strandId });
 
-      await bobPage.gotoHome();
-      await bobPage.page.getByTestId("realm-sidebar-tab-direct").click();
-      await bobPage.page
-        .locator(
-          `[data-testid="direct-conversation-row"][data-peer=${JSON.stringify(canonicalJson(accountActorId(alice.id, "server1")))}]`,
-        )
-        .click();
-      await expect
-        .poll(() => decodeURIComponent(new URL(bobPage.page.url()).pathname), {
-          timeout: 120_000,
-          intervals: [500, 1_000, 2_000],
-        })
-        .toBe(`/direct/${realmId}/${strandId}`);
+      await alicePage.gotoHome();
+      await alicePage.page.getByTestId("realm-sidebar-tab-direct").click();
+      const bobRow = alicePage.page.locator(
+        `[data-testid="direct-conversation-row"][data-peer=${JSON.stringify(canonicalJson(accountActorId(bob.id, "server2")))}]`,
+      );
+      await expect(async () => {
+        if (!new URL(alicePage.page.url()).pathname.startsWith("/direct/")) {
+          await bobRow.click();
+        }
+        expect(decodeURIComponent(new URL(alicePage.page.url()).pathname)).toBe(
+          `/direct/${realmId}/${strandId}`,
+        );
+      }).toPass({ timeout: 120_000, intervals: [2_000] });
 
       const aliceMessage = `cross-ps alice ${Date.now()}`;
       await alicePage.page.getByTestId("chat-input").fill(aliceMessage);

@@ -28,6 +28,7 @@ import {
   typedId,
   wireErrCode,
 } from "../../helpers/soland-api";
+import { relationCreatePayload } from "../../helpers/relation-api";
 import {
   assertJointStackNotRequired,
   ensureRegistered,
@@ -73,26 +74,6 @@ function recordFloorViolations(page: Page): string[] {
       .catch(() => {});
   });
   return hits;
-}
-
-// `ak.relation.create` derives `ak:relation:` from the create Event, so the
-// object MUST NOT carry an `id` (`object_id_not_event_derived`).
-function relationObject(args: {
-  realmId: string;
-  relationKind: string;
-  fromRef: string;
-  toRef: string;
-  actorId: string;
-}): Record<string, unknown> {
-  return {
-    schema: "ak.schema.relation.v1",
-    realm_id: args.realmId,
-    relation_kind: args.relationKind,
-    from_ref: args.fromRef,
-    to_ref: args.toRef,
-    created_by: accountActorId(args.actorId),
-    created_at: canonicalTimestamp(),
-  };
 }
 
 async function waitForStrandProjection(
@@ -206,10 +187,11 @@ async function createCardStrandApi(
         schema: "ak.schema.strand.v1",
         realm_id: realmId,
         // `metadata.fields.status` is hard_reject forbidden wire
-        // (registry/forbidden-wire-fields.json, context strand_payload); the
-        // registered replacement is the top-level `stage` below.
+        // (registry/forbidden-wire-fields.json, context strand_payload), and
+        // the create payload carries no `stage`: the progress axis is
+        // initialized only by `ak.strand.stage.set`
+        // (strand-and-message.md section 2; event-kind-registry ak.strand.create).
         metadata: { title },
-        stage: "planned",
         tracks: { discussion: { enabled: true, is_primary: true } },
         created_by: accountActorId(actorId),
         created_at: createdAt,
@@ -553,15 +535,11 @@ test.describe("kanban end-to-end", () => {
       actorId: alice.id,
       realmId: realmA,
       kind: "ak.relation.create",
-      payload: {
-        relation: relationObject({
-          realmId: realmA,
-          relationKind: "contains",
-          fromRef: cardInA,
-          toRef: cardInB,
-          actorId: alice.id,
-        }),
-      },
+      payload: relationCreatePayload({
+        relationKind: "contains",
+        fromRef: cardInA,
+        toRef: cardInB,
+      }),
     });
     const response = await request.post(
       `${solandBaseUrl()}/_arkret/self/events`,
@@ -920,7 +898,7 @@ test.describe("kanban end-to-end", () => {
       await cardLocator.click();
       await expect(alicePage.page.getByTestId("card-detail-modal")).toBeVisible({ timeout: 45_000 });
       await alicePage.page.getByTestId("card-detail-tab-description").click();
-      await alicePage.page.getByTestId("card-detail-add-description-button").click();
+      await alicePage.page.getByTestId("card-detail-edit-description-button").click();
 
       const editor = alicePage.page.getByTestId("card-detail-description-input");
       await expect(editor).toBeAttached({ timeout: 45_000 });

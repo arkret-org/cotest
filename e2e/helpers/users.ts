@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { randomBytes, randomUUID } from "node:crypto";
+import { generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
 import {
   expect,
   request as playwrightRequest,
@@ -22,12 +22,15 @@ import {
 import { selectDxcOption } from "./dxc-select";
 import type { AccountId, PublicPrincipalResolution, RealmObject } from "./generated/spec-wire-objects";
 import {
+  accountHandoffHeaders,
+  createCanonicalAccountHandoff,
   registerCoauthPasswordAccount,
   type CoauthPasswordAccount,
 } from "./coauth-register";
 import {
   dpopDeviceKeyFromSeedB64url,
   dpopDeviceSeedB64url,
+  generateDpopDeviceKey,
   selfPathGrantHeaders,
   type DpopDeviceKey,
 } from "./session-grant-dpop";
@@ -35,6 +38,8 @@ import {
   authHeaders,
   accountActorId,
   canonicalJson,
+  cotestWire,
+  expectJsonOk,
   projectDidToCoreId,
   registerEventSigner,
   registerPrincipalControlRealm,
@@ -49,13 +54,9 @@ import {
   provisioningKey,
   type ProvisionedIdentity,
 } from "./provisioning-cache";
-import { deviceSuffix } from "./ids";
+import { deviceSuffix, newDeviceId } from "./ids";
 import { base58btcEncode } from "./encoding";
 import { withOperationSelectors } from "./arkret-test";
-import {
-  serverLoginViaCoauth,
-  submitCoauthPasswordCredentials,
-} from "./real-oidc-login";
 
 export type JointUser = {
   name: string;
@@ -1863,90 +1864,386 @@ export async function openDpopUserPageForAccount(
 }
 
 /**
- * Authorize a genuinely distinct sibling device through the protocol pairing
- * ceremony and return its accepted Device ID.  Callers may then obtain a
- * deployment-private dev session for that already-authorized device when they
- * need to exercise API-only cross-device surfaces.
+ * Pair a genuinely distinct sibling device for `foundingSession`'s principal
+ * through the protocol ceremony and return that device's accepted session.
+ *
+ * The harness plays both devices with keys it holds itself, as it already does
+ * for the founding device (crypto-media/device-lifecycle.md section 2.1):
+ * - the candidate generates its own device identity key, HPKE key and a
+ *   separate grant-binding key (section 3.3), stages the account-less request
+ *   on the Station and finalizes it with its own pending account handoff and
+ *   signed target proof (section 2.1.1 items 1-2);
+ * - the founding accepted device resolves the out-of-band pairing token,
+ *   verifies the target proof and submits its own signed `accepted_device`
+ *   authorize Event through `pair_device` (sections 2.1.1 item 4, 2.1.4, 5.4);
+ * - the candidate observes `authorized` through status, takes its Standard
+ *   grant from `issue_session_grant` with a fresh handoff and its
+ *   accepted-device possession proof, and checks the accepted authorize Event
+ *   against its own attestation before using the identity (section 5.4.1).
+ *
+ * The returned session is recorded like the founding one, so
+ * `issueUserSession(request, user, { deviceId })` resolves it afterwards. Its
+ * Event signer is registered explicit-only: the founding device stays the
+ * implicit signer, and callers acting as the sibling name its method.
  */
-export async function pairAcceptedSiblingDevice(
-  browser: Browser,
+export async function pairSiblingDeviceSession(
   request: APIRequestContext,
   foundingSession: DpopUserSession,
-): Promise<string> {
-  const first = await openDpopUserPageFromSession(browser, foundingSession, {
-    prepareMlsDevice: false,
-  });
-  expect(first, "founding device session must remain available").toBeTruthy();
-  const foundingPage = first!.page;
-  const second = await openUserPage(
-    browser,
-    uniqueUser(`paired-${foundingSession.user.name}`),
-    {
-      neutralLoginConfig: true,
-      autoCompleteRecoveryKeySetup: false,
-    },
+  opts: { server?: SolandKey } = {},
+): Promise<DpopUserSession> {
+  const coauth = coauthBaseUrl(opts.server);
+  if (!coauth) {
+    throw new Error("sibling device pairing requires a configured Account Authority");
+  }
+  const station = solandBaseUrl(opts.server);
+  const founding = foundingSession.user;
+  const accountId = foundingSession.accountId;
+  const deviceId = newDeviceId();
+  // Device identity key and grant-binding key are generated and kept apart
+  // (device-lifecycle.md section 3.3); the HPKE key is the device's own too.
+  const deviceKey = generateDpopDeviceKey();
+  const holderKey = generateDpopDeviceKey();
+  const hpkePublicKey = (
+    generateKeyPairSync("x25519").publicKey.export({ format: "jwk" }) as { x?: string }
+  ).x;
+  if (!hpkePublicKey) {
+    throw new Error("X25519 key generation returned no public key");
+  }
+  const deviceSeed = dpopDeviceSeedB64url(deviceKey);
+  const candidate = withOperationSelectors(
+    await playwrightRequest.newContext({
+      ignoreHTTPSErrors: process.env.COTEST_IGNORE_HTTPS === "1",
+    }),
   );
   try {
-    await second.page.goto("/login", { waitUntil: "domcontentloaded" });
-    await second.page.getByTestId("login-server-url").fill(solandBaseUrl());
-    await second.page.getByTestId("start-server-login-button").click();
-    await submitCoauthPasswordCredentials(
-      second.page,
-      foundingSession.account,
+    const stageRequest = {
+      new_device_pubkey: {
+        kty: "OKP",
+        kid: deviceId,
+        algorithm: "Ed25519",
+        key: deviceKey.publicJwk.x,
+      },
+      client_nonce: randomBytes(16).toString("base64url"),
+    };
+    const stage = await expectJsonOk<{
+      device_pairing_request_id: string;
+      pairing_code: string;
+    }>(
+      await candidate.post(`${station}/_arkret/open/device-pairing/requests`, {
+        headers: { "content-type": "application/json" },
+        data: canonicalJson(stageRequest),
+      }),
+      "stage sibling device pairing",
     );
-    const approve = second.page.getByTestId("coauth-oauth-approve");
-    if (
-      await approve
-        .waitFor({ state: "visible", timeout: 20_000 })
-        .then(() => true)
-        .catch(() => false)
-    ) {
-      await approve.click();
-    }
-    await expect(second.page.getByTestId("device-setup-required")).toBeVisible({
-      timeout: 120_000,
+    const pairingCredential = {
+      device_pairing_request_id: stage.device_pairing_request_id,
+      pairing_code: stage.pairing_code,
+    };
+
+    const pendingHandoff = await createCanonicalAccountHandoff(candidate, coauth, {
+      audience: accountId.station_id,
+      deviceId,
+      deviceKey: holderKey,
+      account: {
+        handle: foundingSession.account.handle,
+        password: foundingSession.account.password,
+      },
+    });
+    expectBoundHandoff(pendingHandoff.binding, founding);
+    const targetProof = cotestWire<Record<string, unknown>>(
+      "device-pairing-target-proof",
+      {
+        account_id: accountId,
+        stage_request: stageRequest,
+        stage_outcome: stage,
+        device_signing_seed_b64url: deviceSeed,
+        hpke_public_key_b64url: hpkePublicKey,
+      },
+    );
+    const finalizeUrl = `${coauth}/_arkret/gate/account/device-pairing/finalizations`;
+    const finalized = await expectJsonOk<{ state?: string }>(
+      await candidate.post(finalizeUrl, {
+        data: canonicalJson({ ...pairingCredential, target_proof: targetProof }),
+        headers: {
+          "content-type": "application/json",
+          ...accountHandoffHeaders({
+            deviceKey: holderKey,
+            accountHandoffGrant: pendingHandoff.accountHandoffGrant,
+            method: "POST",
+            url: finalizeUrl,
+          }),
+        },
+      }),
+      "finalize sibling device pairing",
+    );
+    expect(finalized.state).toBe("ready_for_claim");
+
+    // The founding device receives the short link out of band: the token
+    // resolves the staged bootstrap, the proof travels beside it.
+    const bootstrap = await expectJsonOk<Record<string, unknown>>(
+      await request.post(`${station}/_arkret/open/device-pairing/resolve`, {
+        headers: { "content-type": "application/json" },
+        data: canonicalJson({
+          pairing_token: Buffer.from(
+            canonicalJson({ r: stage.device_pairing_request_id, c: stage.pairing_code }),
+            "utf8",
+          ).toString("base64url"),
+        }),
+      }),
+      "resolve sibling device pairing on the founding device",
+    );
+    const pairRequest = cotestWire<{
+      authorize_event: { event: { event_id: string } };
+    }>("device-pairing-approval", {
+      bootstrap,
+      target_proof: targetProof,
+      approving_account_id: accountId,
+      approving_did: founding.did,
+      approving_device_id: founding.deviceId,
+      approving_signing_seed_b64url: foundingSession.eventSigningSeedB64url,
+      principal_control_realm_id: foundingSession.principalControlRealmId,
+      authorized_generation_ref: await currentDeviceGeneration(
+        request,
+        foundingSession,
+        station,
+      ),
+    });
+    const authorizeEventId = pairRequest.authorize_event.event.event_id;
+    const pairUrl = `${coauth}/_arkret/gate/account/device-pair`;
+    const paired = await expectJsonOk<{
+      device_id?: string;
+      authorized_event_ref?: { event_id?: string };
+    }>(
+      await request.post(pairUrl, {
+        headers: {
+          ...authHeaders(foundingSession.grantJwt, "POST", pairUrl),
+          "content-type": "application/json",
+        },
+        data: canonicalJson(pairRequest),
+      }),
+      "pair_device on the founding device",
+    );
+    expect(paired.device_id).toBe(deviceId);
+    expect(paired.authorized_event_ref?.event_id).toBe(authorizeEventId);
+
+    const status = await expectJsonOk<{
+      state?: string;
+      device_id?: string;
+      authorized_event_ref?: { event_id?: string };
+    }>(
+      await candidate.post(`${station}/_arkret/open/device-pairing/requests/status`, {
+        headers: { "content-type": "application/json" },
+        data: canonicalJson(pairingCredential),
+      }),
+      "observe sibling device pairing status",
+    );
+    expect(status.state).toBe("authorized");
+    expect(status.device_id).toBe(deviceId);
+    expect(status.authorized_event_ref?.event_id).toBe(authorizeEventId);
+
+    const returningHandoff = await createCanonicalAccountHandoff(candidate, coauth, {
+      audience: accountId.station_id,
+      deviceId,
+      deviceKey: holderKey,
+    });
+    expectBoundHandoff(returningHandoff.binding, founding);
+    const grantUrl = `${coauth}/_arkret/gate/account/session-grants`;
+    const grant = await expectJsonOk<{
+      session_grant?: string;
+      session_grant_id?: string;
+      account_id?: { principal_id?: string; station_id?: string };
+      audience_id?: string;
+      device_id?: string;
+    }>(
+      await candidate.post(grantUrl, {
+        data: canonicalJson(
+          cotestWire<Record<string, unknown>>("human-session-grant-request", {
+            principal_did: founding.did,
+            account_id: accountId,
+            device_id: deviceId,
+            holder_jkt: holderKey.thumbprint,
+            account_subject: returningHandoff.accountSubject,
+            account_handoff_grant: returningHandoff.accountHandoffGrant,
+            handoff_expires_at: returningHandoff.expiresAt,
+            device_signing_seed_b64url: deviceSeed,
+          }),
+        ),
+        headers: {
+          "content-type": "application/json",
+          ...accountHandoffHeaders({
+            deviceKey: holderKey,
+            accountHandoffGrant: returningHandoff.accountHandoffGrant,
+            method: "POST",
+            url: grantUrl,
+          }),
+        },
+      }),
+      "issue the sibling device Standard grant",
+    );
+    const grantJwt = grant.session_grant;
+    const grantId = grant.session_grant_id;
+    expect(grantJwt, "sibling session grant").toBeTruthy();
+    expect(grantId, "sibling session grant id").toBeTruthy();
+    expect(grant.account_id).toEqual(accountId);
+    expect(grant.audience_id).toBe(accountId.station_id);
+    expect(grant.device_id).toBe(deviceId);
+    registerRequestAuth(grantJwt!, (method, url) =>
+      selfPathGrantHeaders({ deviceKey: holderKey, grantJwt: grantJwt!, method, url }),
+    );
+
+    await verifyAcceptedSiblingAuthorization(request, {
+      station,
+      grantJwt: grantJwt!,
+      eventId: authorizeEventId,
+      principalDid: founding.did,
+      principalControlRealmId: foundingSession.principalControlRealmId,
+      targetProof,
     });
 
-    await second.page.getByTestId("device-setup-pairing-start").click();
-    const pairingCode = second.page.getByTestId("device-setup-pairing-code");
-    await expect(pairingCode).toBeVisible({ timeout: 30_000 });
-    const code = (await pairingCode.textContent())?.trim() ?? "";
-    expect(code).not.toBe("");
-    const pairingLink = await second.page
-      .getByTestId("device-setup-pairing-link")
-      .inputValue();
-    await approvePairingLinkOnAuthorizedDevice(
-      foundingPage,
-      pairingLink,
-      code,
-    );
-
-    await second.page.getByTestId("device-setup-pairing-status").click();
-    await expect(second.page.getByTestId("device-setup-status")).toContainText(
-      "Device authorization is accepted",
-      { timeout: 90_000 },
-    );
-    await second.page
-      .getByRole("link", { name: "Sign in again after approval" })
-      .click();
-    await expect(second.page.getByTestId("login-panel")).toBeVisible({
-      timeout: 30_000,
+    const user = { ...founding, deviceId };
+    const eventSigningSeedB64url = deviceSeed;
+    registerEventSigner({
+      actorId: user.id,
+      deviceId,
+      verificationMethod: `${user.did}#${deviceId}`,
+      signingSeedB64url: eventSigningSeedB64url,
+      explicitOnly: true,
     });
-    await serverLoginViaCoauth(second.page, foundingSession.account);
-    await expect(second.page.getByTestId("client-shell")).toBeVisible({
-      timeout: 120_000,
+    const session: DpopUserSession = {
+      user,
+      account: foundingSession.account,
+      grantJwt: grantJwt!,
+      grantId: grantId!,
+      accountId,
+      grantAudience: accountId.station_id,
+      dpopSeedB64url: dpopDeviceSeedB64url(holderKey),
+      eventSigningSeedB64url,
+      deviceKey: holderKey,
+      principalControlRealmId: foundingSession.principalControlRealmId,
+      principalControlEvents: foundingSession.principalControlEvents,
+    };
+    await verifyRegisteredEventSignerDeviceApi(request, session.grantJwt, {
+      actorId: user.id,
+      accountId,
+      deviceId,
+      verificationMethod: `${user.did}#${deviceId}`,
+      server: opts.server,
     });
-
-    const config = await second.page.evaluate(() =>
-      JSON.parse(window.localStorage.getItem("inkson.config.v1") ?? "{}"),
-    ) as { active_account?: { device_id?: string } };
-    const deviceId = config.active_account?.device_id ?? "";
-    expect(deviceId).toMatch(/^ak:device:/);
-    expect(deviceId).not.toBe(foundingSession.user.deviceId);
-    return deviceId;
+    canonicalSessionsByGrant.set(session.grantJwt, session);
+    return session;
   } finally {
-    await Promise.allSettled([foundingPage.close(), second.close()]);
+    await candidate.dispose();
   }
+}
+
+function expectBoundHandoff(
+  binding: Record<string, unknown>,
+  principal: JointUser,
+): void {
+  expect(binding, "pairing handoff must be bound to the founding principal").toEqual({
+    state: "bound",
+    principal_id: principal.id,
+    did: principal.did,
+  });
+}
+
+/// The PCR's current device generation, which an `accepted_device` authorize
+/// payload asserts (device-lifecycle.md section 5.5.2).
+async function currentDeviceGeneration(
+  request: APIRequestContext,
+  session: DpopUserSession,
+  station: string,
+): Promise<number> {
+  const url = `${station}/_arkret/self/keys/query`;
+  const keys = await expectJsonOk<{
+    device_generations?: Array<{
+      account_id?: unknown;
+      generation_state?: { current_device_generation_ref?: unknown };
+    }>;
+  }>(
+    await request.post(url, {
+      headers: {
+        ...authHeaders(session.grantJwt, "POST", url),
+        "content-type": "application/json",
+      },
+      data: canonicalJson({
+        device_keys: [
+          { account_id: session.accountId, device_ids: [session.user.deviceId] },
+        ],
+      }),
+    }),
+    "read the current PCR device generation",
+  );
+  const accountKey = canonicalJson(session.accountId);
+  const generations = (keys.device_generations ?? []).filter(
+    (entry) => canonicalJson(entry.account_id) === accountKey,
+  );
+  const generation = generations[0]?.generation_state?.current_device_generation_ref;
+  if (
+    generations.length !== 1 ||
+    typeof generation !== "number" ||
+    !Number.isSafeInteger(generation) ||
+    generation < 1
+  ) {
+    throw new Error(`keys/query returned no current device generation for ${accountKey}`);
+  }
+  return generation;
+}
+
+/// Target-side check before the sibling identity is used
+/// (device-lifecycle.md section 5.4.1): the accepted authorize Event must carry
+/// the candidate's own attestation, under the exact account it signed, in the
+/// principal control Realm, proven by the approving device it names.
+async function verifyAcceptedSiblingAuthorization(
+  request: APIRequestContext,
+  args: {
+    station: string;
+    grantJwt: string;
+    eventId: string;
+    principalDid: string;
+    principalControlRealmId: string;
+    targetProof: Record<string, unknown>;
+  },
+): Promise<void> {
+  const url = `${args.station}/_arkret/self/committed-events/${args.eventId}`;
+  const view = await expectJsonOk<{
+    event?: {
+      kind?: string;
+      realm_id?: string;
+      actor_id?: { kind?: string; account_id?: unknown };
+      payload?: Record<string, unknown>;
+      producer_proof?: { verification_method?: string };
+    };
+  }>(
+    await request.get(url, { headers: authHeaders(args.grantJwt, "GET", url) }),
+    "read the accepted sibling authorize Event",
+  );
+  const event = view.event;
+  const payload = event?.payload ?? {};
+  const proof = args.targetProof;
+  expect(event?.kind).toBe("ak.device.authorize");
+  expect(event?.realm_id).toBe(args.principalControlRealmId);
+  expect(event?.actor_id?.kind).toBe("account");
+  expect(canonicalJson(event?.actor_id?.account_id ?? null)).toBe(
+    canonicalJson(proof.account_id),
+  );
+  for (const member of [
+    "device_id",
+    "device_public_key_did",
+    "hpke_key",
+    "algorithms",
+    "device_signature",
+    "pairing_challenge_transcript_digest",
+  ]) {
+    expect(
+      canonicalJson(payload[member] ?? null),
+      `accepted authorize payload ${member} must equal the candidate attestation`,
+    ).toBe(canonicalJson(proof[member] ?? null));
+  }
+  expect(payload.authorization_binding_kind).toBe("accepted_device");
+  expect(event?.producer_proof?.verification_method).toBe(
+    `${args.principalDid}#${String(payload.authorized_by)}`,
+  );
 }
 
 /**

@@ -26,7 +26,6 @@ import {
 } from "../../helpers/env";
 import {
   accountActorId,
-  addRealmMemberApi,
   authHeaders,
   canonicalEventTimestamp,
   requireDidCoreId,
@@ -39,7 +38,6 @@ import {
   currentActorIdApi,
   queryRealmEventsApi,
   rawSubmitSignedEventApi,
-  registerEventSigner,
   prepareSignedEventBatchSubmissionsApi,
   projectDidToCoreId,
   realmAuthorityRootRef,
@@ -48,9 +46,9 @@ import {
   signedEventEnvelope,
   signedRealmGenesisEnvelope,
   submitSignedEventApi,
-  rawPushFederationEvents,
   typedId,
   serviceActorId,
+  sha256CanonicalJson,
   wireErrCode,
 } from "../../helpers/soland-api";
 import {
@@ -101,13 +99,9 @@ type AppletRegistration = {
   portal_realm_id: string;
   namespace: string;
   status: string;
+  /// `applet_install_outcome.registration_event_ref`: the bare EventId of the
+  /// accepted registration (applet-install-operations.schema.json).
   registration_event_ref: string;
-  /// Accepted commit coordinate of `registration_event_ref`, as the Station
-  /// reported it on the registration submit outcome.
-  registration_commit?: {
-    commit_id: string;
-    stream_position: number;
-  };
   capability_grants: Array<{
     grant_ref: string;
     actions: string[];
@@ -150,39 +144,69 @@ async function revokeAppletRuntime(
   });
   const previewText = await preview.text();
   expect(preview.status(), previewText).toBe(200);
+  // applet-integration.md §4b: the preview outcome carries only the canonical
+  // plan; the caller computes `revoke_plan_digest = SHA-256(JCS(revoke_plan))`.
+  // Every capability intent's `expected_revision` is copied byte-for-byte into
+  // the caller-signed `CapabilityRevokePayload`, and every managed membership
+  // intent gets one caller-signed `ak.member.state` removal.
   const plan = JSON.parse(previewText) as {
-    revoke_plan_digest: string;
     revoke_plan: {
       registration_epoch: string;
-      capability_revocations?: Array<{
+      reason_code: string;
+      capability_revocations: Array<{
         grant_id: string;
+        expected_revision: Record<string, unknown>;
         reason_code: string;
       }>;
-      membership_removals?: unknown[];
+      membership_removals: Array<{
+        member_id: ActorId;
+        membership: "leave" | "remove";
+        reason_code: string;
+      }>;
     };
   };
-  expect(plan.revoke_plan.membership_removals ?? []).toEqual([]);
-  const revokeEvents = (plan.revoke_plan.capability_revocations ?? []).map(
-    (intent) =>
-      signedEventEnvelope({
-        actorId,
-        realmId,
-        kind: "ak.capability.revoke",
-        scopeRef: effectiveScope,
-        authorizationRef: "ak:cell:ak.component.realm.authority_root.v1:null",
-        payload: {
-          grant_id: intent.grant_id,
-          reason: intent.reason_code,
-        },
-      }),
+  expect(plan).not.toHaveProperty("revoke_plan_digest");
+  const revokePlanDigest = `sha256:${sha256CanonicalJson(plan.revoke_plan)}`;
+  // The Realm controller's own authority comes from the committed genesis
+  // projection, so the revoke cites no authorization source.
+  const revokeEvents = plan.revoke_plan.capability_revocations.map((intent) =>
+    signedEventEnvelope({
+      actorId,
+      realmId,
+      kind: "ak.capability.revoke",
+      scopeRef: effectiveScope,
+      payload: {
+        grant_id: intent.grant_id,
+        expected_revision: intent.expected_revision,
+        reason: intent.reason_code,
+      },
+    }),
+  );
+  const membershipEvents = plan.revoke_plan.membership_removals.map((intent) =>
+    signedEventEnvelope({
+      actorId,
+      realmId,
+      kind: "ak.member.state",
+      scopeRef: effectiveScope,
+      payload: {
+        realm_id: realmId,
+        member_id: intent.member_id,
+        membership: intent.membership,
+        reason: intent.reason_code,
+      },
+    }),
   );
   const capabilityRevokeEvents = await prepareSignedEventBatchSubmissionsApi(
     request,
     token,
     revokeEvents,
-    {
-      context: `prepare Applet revoke ${appletId}`,
-    },
+    { context: `prepare Applet capability revoke ${appletId}` },
+  );
+  const membershipStateEvents = await prepareSignedEventBatchSubmissionsApi(
+    request,
+    token,
+    membershipEvents,
+    { context: `prepare Applet membership removal ${appletId}` },
   );
   onCommit?.();
   const response = await request.post(base, {
@@ -192,12 +216,12 @@ async function revokeAppletRuntime(
       "Idempotency-Key": idempotencyKey,
     },
     data: canonicalJson({
-      revoke_plan_digest: plan.revoke_plan_digest,
+      revoke_plan_digest: revokePlanDigest,
       effective_scope: effectiveScope,
       reason_code: reasonCode,
       revoke_mode: revokeMode,
       capability_revoke_events: capabilityRevokeEvents,
-      membership_state_events: [],
+      membership_state_events: membershipStateEvents,
     }),
   });
   const responseText = await response.text();
@@ -214,6 +238,232 @@ function capabilityGrantRefForAction(
   )?.grant_ref;
   expect(grantRef, `capability grant for ${action}`).toMatch(/^ak:grant:/);
   return grantRef!;
+}
+
+type ManagedActorId = Extract<ActorId, { kind: "account" }>;
+
+/// Issue one install-bound action grant whose subject is a managed actor.
+///
+/// authz/capabilities.md §2.1 / §8: a Bot or Ghost acts only through an
+/// explicit grant naming its own complete ActorId; the install grants name the
+/// Applet Service. applet-integration.md §6 / §11 bind the grant to the exact
+/// install with `authority_control` + `applet_authority` (`applet_id`,
+/// `executed_by = service_id`, `registration_epoch`) over the install scope.
+async function grantManagedActorActions(
+  request: APIRequestContext,
+  token: string,
+  signed: SignedPackage,
+  realmId: string,
+  actorId: ManagedActorId,
+  actions: string[],
+): Promise<string> {
+  const adminId = await currentActorIdApi(request, token);
+  const effectiveScope = { kind: "realm" as const, realm_id: realmId };
+  const createdAt = canonicalTimestamp();
+  const grant: Pick<CapabilityGrantObject,
+    "schema" | "realm_id" | "issuer_id" | "subject" | "actions" |
+    "resources" | "constraints" | "issued_at" | "issuer_authority_refs"
+  > = {
+    schema: "ak.schema.capability.v1",
+    realm_id: realmId,
+    issuer_id: accountActorId(adminId),
+    subject: actorId,
+    actions,
+    resources: [effectiveScope],
+    constraints: [
+      {
+        constraint_kind: "authority_control",
+        constraint_subkind: "applet_authority",
+        effect: "allow",
+        evaluation_class: "grant_local",
+        applet_id: signed.applet_package.applet_id,
+        executed_by: serviceActorId(signed.applet_package.service_id),
+        registration_epoch: signed.applet_package.registration_epoch,
+      },
+      {
+        constraint_kind: "temporal",
+        constraint_subkind: "window",
+        effect: "allow",
+        evaluation_class: "stateless",
+        not_before: createdAt,
+        expires_at: canonicalTimestamp(
+          new Date(Date.parse(createdAt) + 24 * 60 * 60 * 1000),
+        ),
+      },
+    ],
+    issued_at: createdAt,
+    issuer_authority_refs: [
+      {
+        kind: "realm_root",
+        realm_id: realmId,
+        authority_event_ref: realmAuthorityRootRef(undefined, realmId)!,
+        authority_generation: 0,
+      },
+    ],
+  };
+  const event = signedEventEnvelope({
+    actorId: adminId,
+    realmId,
+    kind: "ak.capability.grant",
+    createdAt,
+    scopeRef: effectiveScope,
+    payload: { grant },
+  });
+  await submitSignedEventApi(request, token, event, {
+    context: `grant ${actions.join(",")} to managed actor`,
+  });
+  return retypeEventDerivedId(String(event.event_id), "grant");
+}
+
+/// One Applet-carried Event of a managed actor: `actor_id` is the Bot or
+/// Ghost, the Applet Service executes and signs it with its registration
+/// producer key (applet-integration.md §8, §11).
+function managedActorEvent(args: {
+  signed: SignedPackage;
+  realmId: string;
+  actorId: ManagedActorId;
+  authorizationRef: string;
+  kind: string;
+  payload: Record<string, unknown>;
+}): Record<string, unknown> {
+  const unidentified = {
+    kind: args.kind,
+    realm_id: args.realmId,
+    scope_ref: { kind: "realm", realm_id: args.realmId },
+    actor_id: args.actorId,
+    executed_by: serviceActorId(args.signed.applet_package.service_id),
+    authorization_ref: args.authorizationRef,
+    applet_id: args.signed.applet_package.applet_id,
+    created_at: canonicalEventTimestamp(),
+    payload: args.payload,
+  };
+  const event = {
+    ...unidentified,
+    event_id: sdkEventDerivedIds(unidentified).event_id,
+  };
+  return {
+    ...event,
+    producer_proof: appletEventProof(
+      appletProducerKeyRef(args.signed),
+      event,
+      args.signed.service_signing_private_key,
+    ),
+  };
+}
+
+function appletProducerKeyRef(signed: SignedPackage): string {
+  return String(
+    (signed.applet_package.webhook_auth as Record<string, unknown>).key_ref,
+  );
+}
+
+/// Deliver Applet-carried Events through the inbound transaction rail with the
+/// Service's per-delivery RFC 9421 signature (applet-integration.md §7.3.1).
+async function rawDeliverAppletEvents(
+  request: APIRequestContext,
+  signed: SignedPackage,
+  events: Array<Record<string, unknown>>,
+  idempotencyKey: string,
+): Promise<APIResponse> {
+  const targetUri = `${solandBaseUrl()}/_arkret/edge/applet/transactions`;
+  const body = {
+    applet_id: signed.applet_package.applet_id,
+    source_id: signed.applet_package.service_id,
+    events,
+  };
+  return request.post(targetUri, {
+    headers: signedAppletTransactionHeaders({
+      body,
+      targetUri,
+      sourceServiceId: signed.applet_package.service_id,
+      keyId: appletProducerKeyRef(signed),
+      destinationServiceId: solandServiceId(),
+      idempotencyKey,
+      signingKey: signed.service_signing_private_key,
+    }),
+    data: canonicalJson(body),
+  });
+}
+
+async function deliverAppletEvents(
+  request: APIRequestContext,
+  signed: SignedPackage,
+  events: Array<Record<string, unknown>>,
+  idempotencyKey: string,
+): Promise<{
+  status: "accepted" | "partial" | "rejected";
+  rejections?: Array<Record<string, unknown>>;
+}> {
+  const response = await rawDeliverAppletEvents(
+    request,
+    signed,
+    events,
+    idempotencyKey,
+  );
+  const responseText = await response.text();
+  expect(response.status(), responseText).toBe(200);
+  return JSON.parse(responseText);
+}
+
+/// Bring an installed Applet's managed actor (Bot or Ghost) into a Realm.
+///
+/// common-fields.md §4.5 admits exactly two writers for `leave -> join`: the
+/// target itself, or the exact target's acceptance of an Invite; an
+/// administrator never writes somebody else's `member.state{join}`. Neither
+/// the install fixed set (applet-integration.md §4b) nor Ghost provisioning
+/// (§9.1) implies membership. The administrator therefore issues a directed
+/// `ak.invite.create`, and the managed actor's own `ak.invite.accept` is
+/// executed by its Applet Service. `ak.invite.accept` is `subject_only`: the
+/// Invite binding is its sole authority, while the cited grant of the actor
+/// binds the exact active install (§8, §9.1).
+async function admitManagedActorByInvite(args: {
+  request: APIRequestContext;
+  token: string;
+  signed: SignedPackage;
+  realmId: string;
+  actorId: ManagedActorId;
+  authorizationRef: string;
+  idempotencyKey: string;
+}): Promise<Record<string, unknown>> {
+  const adminId = await currentActorIdApi(args.request, args.token);
+  const evidence = { kind: "explicit_address" } as const;
+  const inviteEvent = signedEventEnvelope({
+    actorId: adminId,
+    realmId: args.realmId,
+    kind: "ak.invite.create",
+    payload: {
+      invitee_account_id: args.actorId.account_id,
+      introduction_evidence_digest: `sha256:${sha256CanonicalJson(evidence)}`,
+      expires_at: canonicalTimestamp(
+        new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      ),
+    },
+  });
+  await submitSignedEventApi(args.request, args.token, inviteEvent, {
+    context: "administrator invites the managed actor",
+  });
+  const accept = managedActorEvent({
+    signed: args.signed,
+    realmId: args.realmId,
+    actorId: args.actorId,
+    authorizationRef: args.authorizationRef,
+    kind: "ak.invite.accept",
+    payload: {
+      invite_id: retypeEventDerivedId(String(inviteEvent.event_id), "invite"),
+      previous_state: "pending",
+      invitee_account_id: args.actorId.account_id,
+    },
+  });
+  const outcome = await deliverAppletEvents(
+    args.request,
+    args.signed,
+    [accept],
+    args.idempotencyKey,
+  );
+  expect(outcome.status, JSON.stringify(outcome.rejections ?? [])).toBe(
+    "accepted",
+  );
+  return accept;
 }
 
 test.describe("applet bridge", () => {
@@ -260,26 +510,6 @@ test.describe("applet bridge", () => {
         ],
       });
       await publishAppletServiceIdDocument(request, signed);
-      const botVerificationMethod = `${signed.bot_actor_operation?.did}#bot-event-key`;
-      const botSigningJwk = signed.bot_signing_private_key?.export({
-        format: "jwk",
-      });
-      if (!botSigningJwk?.d || !signed.bot_actor_operation) {
-        throw new Error(
-          "Applet Bot is missing its durable runtime signing custody",
-        );
-      }
-      registerEventSigner({
-        actorId: signed.applet_package.bot_actor_id.account_id.principal_id,
-        deviceId: "bot-event-key",
-        verificationMethod: botVerificationMethod,
-        signingSeedB64url: botSigningJwk.d,
-      });
-      const botToken = await issueUserSession(request, {
-        ...uniqueUser(`applet-bot-${stamp}`),
-        id: signed.applet_package.bot_actor_id.account_id.principal_id,
-        did: signed.bot_actor_operation.did,
-      });
       const preInstallMembership = signedEventEnvelope({
         actorId: alice.id,
         realmId,
@@ -326,81 +556,70 @@ test.describe("applet bridge", () => {
         registration,
         "ak.applet.ghost.provision",
       );
-      const appletServiceToken = await issueUserSession(request, {
-        ...uniqueUser(`applet-service-${stamp}`),
-        id: signed.applet_package.service_id,
-      });
-      const botSelfJoinAttempt = signedEventEnvelope({
+      // Installation alone authorizes no Bot membership write: an
+      // Applet-carried Event must cite an active grant of the Bot itself, and
+      // the registration Event is not one (applet-integration.md §8, §11).
+      const registrationOnlyJoin = managedActorEvent({
+        signed,
+        realmId,
         actorId: registration.bot_actor_id,
-        realmId,
-        kind: "ak.member.state",
-        // The joining Bot cannot read the Realm before admission. The admin
-        appletId: registration.applet_id,
-        // Installation alone cannot authorize a Bot-authored membership write.
         authorizationRef: registration.registration_event_ref,
-        proofVerificationMethod: botVerificationMethod,
-        payload: {
-          realm_id: realmId,
-          member_id: registration.bot_actor_id,
-          membership: "join",
-        },
-      });
-      const selfJoinSubmit = await rawSubmitSignedEventApi(request, botToken, botSelfJoinAttempt);
-      expect(selfJoinSubmit.status()).toBe(403);
-      expect(wireErrCode(await selfJoinSubmit.json())).toBe("policy_violation");
-
-      // Membership management maps to ak.realm.admin in the capability
-      // registry. The human administrator signs the canonical member Event.
-      const botMembershipEvent = signedEventEnvelope({
-        actorId: alice.id,
-        realmId,
         kind: "ak.member.state",
-        authorizationRef: "ak:cell:ak.component.realm.authority_root.v1:null",
         payload: {
           realm_id: realmId,
           member_id: registration.bot_actor_id,
           membership: "join",
         },
       });
-      await submitSignedEventApi(request, aliceToken, botMembershipEvent, {
-        context: "administrator admits the installed Applet Bot",
-      });
-      const federatedMembershipReplay = await rawPushFederationEvents(
+      const registrationOnlyOutcome = await deliverAppletEvents(
         request,
-        [botMembershipEvent],
-        {
-          origin: solandServiceId(),
-          destination: solandServiceId(),
-          realmId,
-          idempotencyKey: `applet-bot-membership-peer-replay-${stamp}`,
-        },
+        signed,
+        [registrationOnlyJoin],
+        `bot-registration-only-join-${stamp}`,
       );
-      const federatedMembershipOutcome =
-        (await federatedMembershipReplay.json()) as {
-          accepted?: string[];
-          duplicate?: string[];
-        };
-      expect(federatedMembershipReplay.status(), JSON.stringify(federatedMembershipOutcome)).toBe(200);
-      expect([
-        ...(federatedMembershipOutcome.accepted ?? []),
-        ...(federatedMembershipOutcome.duplicate ?? []),
-      ]).toContain(String(botMembershipEvent.event_id));
+      expect(registrationOnlyOutcome.status).toBe("rejected");
+
+      // The administrator invites the Bot and the Bot accepts through its
+      // Service (common-fields.md §4.5; applet-integration.md §4b).
+      const botGrantRef = await grantManagedActorActions(
+        request,
+        aliceToken,
+        signed,
+        realmId,
+        registration.bot_actor_id,
+        ["ak.message.create"],
+      );
+      const botAcceptance = await admitManagedActorByInvite({
+        request,
+        token: aliceToken,
+        signed,
+        realmId,
+        actorId: registration.bot_actor_id,
+        authorizationRef: botGrantRef,
+        idempotencyKey: `bot-join-${stamp}`,
+      });
       const membershipTimeline = await queryRealmEventsApi(
         request,
         aliceToken,
         realmId,
       );
+      const membershipEvents = (membershipTimeline.events ?? []) as Array<
+        Record<string, unknown>
+      >;
       expect(
-        (
-          (membershipTimeline.events ?? []) as Array<Record<string, unknown>>
-        ).some(
+        membershipEvents.some(
           (event) =>
-            event.kind === "ak.member.state" &&
-            event.event_id === botMembershipEvent.event_id &&
-            canonicalJson(event.actor_id) === canonicalJson(botMembershipEvent.actor_id) &&
-            canonicalJson((event.payload as Record<string, unknown>)?.member_id) ===
-              canonicalJson(registration.bot_actor_id) &&
-            (event.payload as Record<string, unknown>)?.membership === "join",
+            event.event_id === registrationOnlyJoin.event_id,
+        ),
+      ).toBe(false);
+      expect(
+        membershipEvents.some(
+          (event) =>
+            event.kind === "ak.invite.accept" &&
+            event.event_id === botAcceptance.event_id &&
+            canonicalJson(event.actor_id) === canonicalJson(registration.bot_actor_id) &&
+            canonicalJson(event.executed_by) ===
+              canonicalJson(serviceActorId(signed.applet_package.service_id)),
         ),
       ).toBe(true);
 
@@ -423,19 +642,6 @@ test.describe("applet bridge", () => {
         }),
       });
       await submitPrincipalGenesisEntry(request, solandBaseUrl(), ghostBuilt);
-      const preGhostTimeline = await queryRealmEventsApi(
-        request,
-        aliceToken,
-        realmId,
-      );
-      const serviceEvents = (
-        Array.isArray(preGhostTimeline.events) ? preGhostTimeline.events : []
-      ) as Array<Record<string, unknown>>;
-      const serviceHead = serviceEvents
-        .filter((event) => canonicalJson(event.actor_id) === canonicalJson(serviceActorId(signed.applet_package.service_id)))
-        .sort(
-          (left, right) => Number(right.actor_seq) - Number(left.actor_seq),
-        )[0];
       const ghostCreation = await buildGhostManagedActorCreation({
         request,
         token: aliceToken,
@@ -444,7 +650,7 @@ test.describe("applet bridge", () => {
         realmId,
         ghostBuilt,
         externalUser,
-        registrationRef: registrationCommitRef(registration),
+        registrationRef: registration.registration_event_ref,
       });
       const standaloneGenesis = await rawSubmitSignedEventApi(
         request,
@@ -477,7 +683,26 @@ test.describe("applet bridge", () => {
       const provisionBody = JSON.parse(provisionText);
       const ghostActorId = accountActorId(projectDidToCoreId(ghostBuilt.did));
       expect(provisionBody.ghost_actor_id).toEqual(ghostActorId);
-      await addRealmMemberApi(request, aliceToken, realmId, ghostActorId);
+      // Provisioning implies no membership (applet-integration.md §9.1): the
+      // Ghost enters the portal Realm through the ordinary invite flow, and
+      // writes only through a grant naming the Ghost itself.
+      const ghostMessageGrantRef = await grantManagedActorActions(
+        request,
+        aliceToken,
+        signed,
+        realmId,
+        ghostActorId,
+        ["ak.message.create"],
+      );
+      await admitManagedActorByInvite({
+        request,
+        token: aliceToken,
+        signed,
+        realmId,
+        actorId: ghostActorId,
+        authorizationRef: ghostMessageGrantRef,
+        idempotencyKey: `ghost-join-${stamp}`,
+      });
       const portalStrandId = await resolveDefaultStrandId(
         request,
         aliceToken,
@@ -493,7 +718,7 @@ test.describe("applet bridge", () => {
           applet_id: registration.applet_id,
           realm_id: realmId,
           strand_id: portalStrandId,
-          authorization_ref: messageGrantRef,
+          authorization_ref: ghostMessageGrantRef,
           provision_authorization_ref: provisionGrantRef,
           external_user: externalUser,
           ghost_creation: ghostCreation,
@@ -515,20 +740,38 @@ test.describe("applet bridge", () => {
         event.kind === "ak.message.create" && JSON.stringify(event.payload).includes(text),
       );
       expect(bridgedMessage, "accepted external Ghost message").toBeDefined();
+      // Accountability chain (applet-integration.md §8, §9.1, §11): the Ghost
+      // is the principal of record, the installed Service executes and signs
+      // with its registration producer key, and the Ghost's own active grant is
+      // the action authority. The signed top-level `external_ref` carries the
+      // external provenance.
       expect(bridgedMessage?.actor_id).toEqual(ghostActorId);
       expect(bridgedMessage?.executed_by).toEqual(serviceActorId(String(signed.applet_package.service_id)));
-      const messageProofs = bridgedMessage?.proofs as Array<Record<string, unknown>>;
-      expect(messageProofs.map((proof) => proof.kind)).toEqual(["detached_jws"]);
-      // The producer proof is closed and carries no signer evidence ref.
-      expect(messageProofs[0]).not.toHaveProperty("signer_resolution_evidence_ref");
-      const ghostProfile = acceptedEvents.find(
-        (event) =>
-          event.kind === "ak.profile.create" &&
-          canonicalJson(event.actor_id) === canonicalJson(ghostActorId),
+      expect(bridgedMessage?.applet_id).toBe(registration.applet_id);
+      expect(bridgedMessage?.authorization_ref).toBe(ghostMessageGrantRef);
+      expect(bridgedMessage?.external_ref).toEqual(
+        expect.objectContaining({ protocol: "bridge", user_id: externalUser.id }),
       );
-      expect(ghostProfile, "accepted Ghost profile Event").toBeDefined();
+      // The sole portable producer proof is closed and carries no signer
+      // evidence ref (event-envelope.schema.json#/properties/producer_proof).
+      const messageProof = bridgedMessage?.producer_proof as Record<string, unknown>;
+      expect(messageProof).toEqual(
+        expect.objectContaining({
+          kind: "detached_jws",
+          verification_method: appletProducerKeyRef(signed),
+        }),
+      );
+      expect(messageProof).not.toHaveProperty("signer_resolution_evidence_ref");
+      // The provisioning aggregate the Ghost was created from: the
+      // accountability grant is portal-scoped shared history, while the
+      // Profile is principal-scoped state in the Ghost's own
+      // `applet_managed_control` PCR and is checked from the submitted unit.
+      const ghostBundle = ghostCreation.managed_actor_bundle;
+      const ghostProfile = ghostBundle.profile_event;
+      expect(ghostProfile.actor_id).toEqual(ghostActorId);
+      expect(ghostProfile.realm_id).toBe(provisionBody.principal_control_realm_id);
       expect(
-        (ghostProfile?.payload as Record<string, unknown> | undefined)?.object,
+        (ghostProfile.payload as Record<string, unknown> | undefined)?.object,
       ).toEqual(
         expect.objectContaining({
           principal_id: ghostActorId.account_id.principal_id,
@@ -537,16 +780,14 @@ test.describe("applet bridge", () => {
         }),
       );
       const accountabilityGrant = acceptedEvents.find(
-        (event) =>
-          event.kind === "ak.identity.accountability_grant" &&
-          (event.payload as Record<string, unknown> | undefined)?.subject_id ===
-            ghostActorId.account_id.principal_id,
+        (event) => event.event_id === ghostBundle.accountability_grant_event.event_id,
       );
       expect(
         accountabilityGrant,
         "accepted Ghost accountability grant",
       ).toEqual(
         expect.objectContaining({
+          kind: "ak.identity.accountability_grant",
           actor_id: serviceActorId(signed.applet_package.service_id),
           authorization_ref: provisionGrantRef,
         }),
@@ -558,39 +799,34 @@ test.describe("applet bridge", () => {
           grant_status: "active",
         }),
       );
-      const acceptedGhostHead = acceptedEvents
-        .filter((event) => canonicalJson(event.actor_id) === canonicalJson(ghostActorId))
-        .sort(
-          (left, right) => Number(right.actor_seq) - Number(left.actor_seq),
-        )[0];
-      expect(acceptedGhostHead, "accepted Ghost actor head").toBeDefined();
-      const unsignedDirectWrite = structuredClone(acceptedGhostHead);
-      delete unsignedDirectWrite.event_id;
-      delete unsignedDirectWrite.proofs;
-      unsignedDirectWrite.actor_seq = Number(acceptedGhostHead.actor_seq) + 1;
-      unsignedDirectWrite.created_at = canonicalTimestamp();
-      unsignedDirectWrite.hlc = hlcForStamp(stamp + 101);
-      unsignedDirectWrite.prev_refs = [String(acceptedGhostHead.event_id)];
-      const directPayload = structuredClone(
-        unsignedDirectWrite.payload as Record<string, unknown>,
+      expect(ghostProfile.semantic_refs).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: accountabilityGrant?.event_id,
+            role: "accountability",
+            critical: true,
+          }),
+        ]),
       );
-      const directContent = structuredClone(
-        directPayload.content as Record<string, unknown>,
-      );
-      directContent.body = `direct self write after revoke ${stamp}`;
-      directPayload.content = directContent;
-      unsignedDirectWrite.payload = directPayload;
-      const directWrite: Record<string, unknown> = {
-        ...unsignedDirectWrite,
-        event_id: sdkEventDerivedIds(unsignedDirectWrite).event_id,
-      };
-      directWrite.proofs = [
-        appletEventProof(
-          String(messageProofs[0].verification_method),
-          directWrite,
-          signed.service_signing_private_key,
-        ),
-      ];
+      // The provisioning outcome echoes the provisioning grant; it never
+      // authorizes later Ghost writes (§9.1).
+      expect(provisionBody.authorization_ref).toBe(provisionGrantRef);
+      expect(ghostMessageGrantRef).not.toBe(provisionGrantRef);
+      // A further Ghost message the Service authors and signs on its own,
+      // outside the registry, for the post-revoke fence below.
+      const directText = `direct Service write after revoke ${stamp}`;
+      const directWrite = managedActorEvent({
+        signed,
+        realmId,
+        actorId: ghostActorId,
+        authorizationRef: ghostMessageGrantRef,
+        kind: "ak.message.create",
+        payload: {
+          strand_id: portalStrandId,
+          track_name: "discussion",
+          content: { kind: "ak.content.text", body: directText },
+        },
+      });
       await alicePage.gotoTimelineRealm(realmId);
       await expect(alicePage.page.getByTestId("message-list")).toContainText(
         text,
@@ -621,7 +857,7 @@ test.describe("applet bridge", () => {
           applet_id: registration.applet_id,
           realm_id: realmId,
           strand_id: portalStrandId,
-          authorization_ref: messageGrantRef,
+          authorization_ref: ghostMessageGrantRef,
           provision_authorization_ref: provisionGrantRef,
           external_user: externalUser,
           ghost_creation: ghostCreation,
@@ -636,24 +872,23 @@ test.describe("applet bridge", () => {
         JSON.stringify(await queryRealmEventsApi(request, aliceToken, realmId)),
       ).not.toContain(afterRevokeText);
 
-      const directEventsUrl = `${solandBaseUrl()}/_arkret/self/events`;
-      const directAfterRevoke = await request.post(directEventsUrl, {
-        headers: {
-          ...authHeaders(appletServiceToken, "POST", directEventsUrl),
-          "content-type": "application/json",
-        },
-        data: canonicalJson({
-          event: directWrite,
-        }),
-      });
-      const directAfterRevokeBody = await directAfterRevoke.json();
-      expect(directAfterRevoke.status()).toBe(403);
-      // A service bearer cannot impersonate the Ghost through the self rail.
-      // Online submissions carry no pre-issued authorization lease.
-      expect(wireErrCode(directAfterRevokeBody), JSON.stringify(directAfterRevokeBody))
-        .toBe("capability_denied");
+      // The Service itself, bypassing the registry, delivers a correctly
+      // signed Ghost Event through the Applet inbound rail. With the exact
+      // install revoked there is no active effective install to select, so the
+      // delivery fails closed before any Event admission (applet-integration.md
+      // §7.3.1 failure codes; §9.1 Ghost writes follow the install fence).
+      const directAfterRevoke = await rawDeliverAppletEvents(
+        request,
+        signed,
+        [directWrite],
+        `ghost-direct-after-revoke-${stamp}`,
+      );
+      const directAfterRevokeText = await directAfterRevoke.text();
+      expect(directAfterRevoke.status(), directAfterRevokeText).toBe(403);
+      expect(wireErrCode(JSON.parse(directAfterRevokeText)), directAfterRevokeText)
+        .toBe("applet_registration_unauthorized");
       expect(JSON.stringify(await queryRealmEventsApi(request, aliceToken, realmId)))
-        .not.toContain(`direct self write after revoke ${stamp}`);
+        .not.toContain(directText);
     } finally {
       await alicePage.close();
     }
@@ -727,12 +962,22 @@ test.describe("applet bridge", () => {
       realmId,
       `revoke-${stamp}`,
     );
-    await addRealmMemberApi(
+    await admitManagedActorByInvite({
       request,
-      aliceToken,
+      token: aliceToken,
+      signed,
       realmId,
-      registration.bot_actor_id,
-    );
+      actorId: registration.bot_actor_id,
+      authorizationRef: await grantManagedActorActions(
+        request,
+        aliceToken,
+        signed,
+        realmId,
+        registration.bot_actor_id,
+        ["ak.message.create"],
+      ),
+      idempotencyKey: `revoke-bot-join-${stamp}`,
+    });
 
     const revoke = await revokeAppletRuntime(
       request,
@@ -825,10 +1070,12 @@ test.describe("applet bridge", () => {
       `idem-other-${stamp}`,
       firstResult.prepared,
     );
+    // `(applet_id, effective_scope)` is the durable install key
+    // (applet-integration.md §4b); reusing it under another Idempotency-Key is
+    // the registry's `duplicate_conflict`. `applet_already_registered` is a
+    // `reserved` row that no producer may emit (conformance/schema-registry.md).
     expect(conflict.status()).toBe(409);
-    expect(wireErrCode(await conflict.json())).toBe(
-      "applet_already_registered",
-    );
+    expect(wireErrCode(await conflict.json())).toBe("duplicate_conflict");
   });
 
   // COTEST-SEC-02: production-mode controller-signed package signature negative
@@ -930,9 +1177,17 @@ test.describe("applet bridge", () => {
     expect(misplaced.status()).toBe(422);
     expect(wireErrCode(await misplaced.json())).toBe("schema_violation");
 
+    // The nested evidence is schema-bound through
+    // `applet-install-authoring.schema.json#/$defs/registration_event` to
+    // `applet-registration-epoch-evidence.schema.json`: a shape violation is
+    // `schema_violation` (422). A schema-valid carrier that disagrees with the
+    // resolved service DID state fails closed as the active `param_invalid`
+    // (400); `applet_registration_epoch_evidence_mismatch` is only a reserved
+    // registry code and is never emitted as the top-level `error.code`.
     const expectNestedEvidenceRejected = async (
       label: string,
       evidence: Record<string, unknown>,
+      expected: { status: 400; code: "param_invalid" } | { status: 422; code: "schema_violation" },
     ) => {
       const candidate = await prepareAppletInstallAuthoringBasis(
         request,
@@ -955,19 +1210,49 @@ test.describe("applet bridge", () => {
           authoring_request_basis: candidate.basis,
         }),
       });
-      expect(denied.status(), label).toBe(400);
-      expect(wireErrCode(await denied.json()), label).toBe(
-        "applet_registration_epoch_evidence_mismatch",
+      const deniedBody = await denied.json();
+      expect(denied.status(), `${label}: ${JSON.stringify(deniedBody)}`).toBe(
+        expected.status,
       );
+      expect(wireErrCode(deniedBody), label).toBe(expected.code);
     };
+    const schemaViolation = { status: 422, code: "schema_violation" } as const;
+    const evidenceMismatch = { status: 400, code: "param_invalid" } as const;
 
+    // `accepted_signing_keys` is `minItems: 1`.
     const emptyKeys = structuredClone(registrationEvidence);
     emptyKeys.accepted_signing_keys = [];
-    await expectNestedEvidenceRejected("empty accepted key set", emptyKeys);
+    await expectNestedEvidenceRejected(
+      "empty accepted key set",
+      emptyKeys,
+      schemaViolation,
+    );
 
+    // Only `did:webvh` and `did:key` are admitted evidence methods.
+    const currentSnapshotDid = structuredClone(registrationEvidence);
+    currentSnapshotDid.did = "did:web:swapped-applet.example";
+    await expectNestedEvidenceRejected(
+      "did:web current snapshot",
+      currentSnapshotDid,
+      schemaViolation,
+    );
+
+    // A schema-valid did:webvh naming another service.
+    const serviceDid = String(registrationEvidence.did);
+    const swappedDid = serviceDid.replace(
+      /^(did:webvh:[^:]+):.+$/,
+      "$1:swapped-applet.example",
+    );
+    if (swappedDid === serviceDid) {
+      throw new Error(`fixture service DID is not did:webvh: ${serviceDid}`);
+    }
     const swappedService = structuredClone(registrationEvidence);
-    swappedService.did = "did:web:swapped-applet.example";
-    await expectNestedEvidenceRejected("swapped service DID", swappedService);
+    swappedService.did = swappedDid;
+    await expectNestedEvidenceRejected(
+      "swapped service DID",
+      swappedService,
+      evidenceMismatch,
+    );
 
     const rotatedSnapshot = structuredClone(registrationEvidence);
     rotatedSnapshot.document_digest = `sha256:${"44".repeat(32)}`;
@@ -982,6 +1267,7 @@ test.describe("applet bridge", () => {
     await expectNestedEvidenceRejected(
       "rotated DID snapshot under the sealed epoch",
       rotatedSnapshot,
+      evidenceMismatch,
     );
   });
 
@@ -1218,9 +1504,11 @@ test.describe("applet inbound transaction push — per-delivery source signature
       events: [
         {
           ...event,
-          proofs: [
-            appletEventProof(verificationMethod, event, args.signingKey),
-          ],
+          producer_proof: appletEventProof(
+            verificationMethod,
+            event,
+            args.signingKey,
+          ),
         },
       ],
     };
@@ -1271,26 +1559,35 @@ test.describe("applet inbound transaction push — per-delivery source signature
       realmId,
       `inbound-install-${stamp}`,
     );
-    await addRealmMemberApi(request, token, realmId, registration.bot_actor_id);
+    const botGrantRef = await grantManagedActorActions(
+      request,
+      token,
+      signed,
+      realmId,
+      registration.bot_actor_id,
+      ["ak.message.create"],
+    );
+    await admitManagedActorByInvite({
+      request,
+      token,
+      signed,
+      realmId,
+      actorId: registration.bot_actor_id,
+      authorizationRef: botGrantRef,
+      idempotencyKey: `inbound-bot-join-${stamp}`,
+    });
     const strandId = await resolveDefaultStrandId(request, token, realmId);
     // Freeze the ordinary Event basis only after installation grants, membership,
     // and the target Strand have reached accepted control finality.
 
     const idempotencyKey = `inbound-ok-${stamp}`;
-    const beforeInbound = await queryRealmEventsApi(request, token, realmId);
-    const botHead = (beforeInbound.events as Array<Record<string, unknown>>)
-      .filter((event) => canonicalJson(event.actor_id) === canonicalJson(registration.bot_actor_id))
-      .sort((left, right) => Number(right.actor_seq) - Number(left.actor_seq))[0];
     const body = transactionPushBody({
       stamp,
       sourceServiceId,
       realmId,
       actorId: registration.bot_actor_id,
       appletId: registration.applet_id,
-      authorizationRef: capabilityGrantRefForAction(
-        registration,
-        "ak.message.create",
-      ),
+      authorizationRef: botGrantRef,
       strandId,
       verificationMethod: String(
         (signed.applet_package.webhook_auth as Record<string, unknown>).key_ref,
@@ -1323,9 +1620,15 @@ test.describe("applet inbound transaction push — per-delivery source signature
     const outcome = JSON.parse(responseText) as {
       status: "accepted" | "partial" | "rejected";
       rejections?: unknown[];
+      committed_event_refs?: Array<Record<string, unknown>>;
     };
     expect(outcome.status, JSON.stringify(outcome.rejections ?? [])).toBe("accepted");
     expect(outcome.rejections ?? []).toEqual([]);
+    // applet-integration.md §11.1 / applet_transaction_outcome: an accepted
+    // Applet→Station submission names the exact Commit of every admitted Event.
+    expect(outcome.committed_event_refs?.map((ref) => ref.event_id)).toEqual([
+      body.events[0].event_id,
+    ]);
     const timeline = await queryRealmEventsApi(request, token, realmId);
     const accepted = (timeline.events as Array<Record<string, unknown>>).find(
       (event) => event.event_id === body.events[0].event_id,
@@ -1333,10 +1636,13 @@ test.describe("applet inbound transaction push — per-delivery source signature
     expect(accepted, "producer-only inbound is persisted as an accepted Event").toBeDefined();
     expect(accepted?.actor_id).toEqual(registration.bot_actor_id);
     expect(accepted?.executed_by).toEqual(serviceActorId(sourceServiceId));
-    const proofs = accepted?.proofs as Array<Record<string, unknown>>;
-    expect(proofs.map((proof) => proof.kind)).toEqual(["detached_jws"]);
-    expect(proofs[0]).toEqual(body.events[0].proofs[0]);
-    expect(proofs[0]).not.toHaveProperty("signer_resolution_evidence_ref");
+    // The unique original producer proof is preserved byte-for-byte; no
+    // Station signature joins the Event proof model.
+    const producerProof = accepted?.producer_proof as Record<string, unknown>;
+    expect(producerProof).toEqual(body.events[0].producer_proof);
+    expect(producerProof.kind).toBe("detached_jws");
+    expect(producerProof).not.toHaveProperty("signer_resolution_evidence_ref");
+    expect(accepted).not.toHaveProperty("proofs");
 
     const deliver = async (payload: Record<string, unknown>, key: string) => request.post(targetUri, {
       headers: signedAppletTransactionHeaders({
@@ -1354,53 +1660,98 @@ test.describe("applet inbound transaction push — per-delivery source signature
     const transactionRetry = await deliver(body, idempotencyKey);
     expect(transactionRetry.status(), await transactionRetry.text()).toBe(200);
     expect(await transactionRetry.json()).toEqual(JSON.parse(responseText));
-    for (const [label, submittedProofs] of [
-      ["duplicate-producer", [proofs[0], proofs[0]]],
-      ["second-producer", [proofs[0], { ...proofs[0], verification_method: (signed.applet_package.webhook_auth as Record<string, unknown>).key_ref }]],
-      ["replaced-producer", [{ ...proofs[0], jws: `${String(proofs[0].jws).slice(0, -8)}AAAAAAAA` }]],
+    // Only an exact retry preserves the verified producer proof. The same
+    // Event under a producer proof that does not verify is rejected per Event
+    // (§7.3 per-event dedup; §7.3.1 independent producer_proof check).
+    const { producer_proof: originalProducer, ...previousUnsigned } = body.events[0];
+    for (const [label, submittedProof] of [
+      [
+        "foreign-key-producer",
+        appletEventProof(
+          String(originalProducer.verification_method),
+          previousUnsigned,
+          generateWebvhKey().privateKey,
+        ),
+      ],
+      [
+        "replaced-producer",
+        { ...originalProducer, jws: `${String(originalProducer.jws).slice(0, -8)}AAAAAAAA` },
+      ],
     ] as const) {
-      const forbidden = { ...body, events: [{ ...body.events[0], proofs: submittedProofs }] };
+      const forbidden = { ...body, events: [{ ...previousUnsigned, producer_proof: submittedProof }] };
       const rejected = await deliver(forbidden, `inbound-forbidden-${label}-${stamp}`);
       const rejectedText = await rejected.text();
       expect(rejected.status(), rejectedText).toBe(200);
-      expect(JSON.parse(rejectedText).status).toBe("rejected");
+      const rejectedOutcome = JSON.parse(rejectedText);
+      expect(rejectedOutcome.status, `${label}: ${rejectedText}`).toBe("rejected");
+      expect(rejectedOutcome).not.toHaveProperty("committed_event_refs");
     }
+    // The retired `proofs[]` carrier is not an Event Envelope member
+    // (event-envelope.schema.json is closed and requires producer_proof).
+    const legacyCarrier = {
+      ...body,
+      events: [{ ...previousUnsigned, proofs: [originalProducer] }],
+    };
+    const legacy = await deliver(legacyCarrier, `inbound-legacy-proofs-${stamp}`);
+    const legacyText = await legacy.text();
+    expect(legacy.status(), legacyText).toBe(422);
+    expect(wireErrCode(JSON.parse(legacyText))).toBe("schema_violation");
     const after = await queryRealmEventsApi(request, token, realmId);
     const retained = (after.events as Array<Record<string, unknown>>).filter((event) => event.event_id === body.events[0].event_id);
     expect(retained).toHaveLength(1);
-    expect(retained[0].proofs).toEqual(proofs);
+    expect(retained[0].producer_proof).toEqual(originalProducer);
 
-    const { proofs: serviceDraftProofs, executed_by: delegatedExecutor, ...serviceDraft } = body.events[0];
-    const serviceHead = (after.events as Array<Record<string, unknown>>)
-      .filter((event) => canonicalJson(event.actor_id) === canonicalJson(delegatedExecutor))
-      .sort((left, right) => Number(right.actor_seq) - Number(left.actor_seq))[0];
-    const serviceUnsigned = {
-      ...serviceDraft, actor_id: delegatedExecutor,
-      actor_seq: Number(serviceHead?.actor_seq ?? -1) + 1,
-      prev_refs: serviceHead ? [String(serviceHead.event_id)] : [],
+    // A Service-actor self-signed write (§8): no delegation, so no
+    // executed_by. It cites an install grant, whose subject authority pair is
+    // `(service_id, target_station_id)` (§4b), and is signed with the same
+    // registration producer key.
+    const { executed_by: _delegatedExecutor, ...serviceDraft } = previousUnsigned;
+    const serviceUnidentified = {
+      ...serviceDraft,
+      actor_id: accountActorId(sourceServiceId),
+      authorization_ref: capabilityGrantRefForAction(registration, "ak.message.create"),
+      created_at: canonicalEventTimestamp(),
       external_ref: { ...serviceDraft.external_ref, external_id: `ext-service-${stamp}` },
     };
-    serviceUnsigned.event_id = sdkEventDerivedIds(serviceUnsigned).event_id;
-    const serviceEvent = { ...serviceUnsigned, proofs: [appletEventProof(String(serviceDraftProofs[0].verification_method), serviceUnsigned, signed.service_signing_private_key)] };
+    const serviceUnsigned = {
+      ...serviceUnidentified,
+      event_id: sdkEventDerivedIds(serviceUnidentified).event_id,
+    };
+    const serviceEvent = {
+      ...serviceUnsigned,
+      producer_proof: appletEventProof(
+        String(originalProducer.verification_method),
+        serviceUnsigned,
+        signed.service_signing_private_key,
+      ),
+    };
     const serviceResponse = await deliver({ ...body, events: [serviceEvent] }, `inbound-service-self-${stamp}`);
-    expect(serviceResponse.status(), await serviceResponse.text()).toBe(200);
-    expect((await serviceResponse.json()).status).toBe("accepted");
+    const serviceResponseText = await serviceResponse.text();
+    expect(serviceResponse.status(), serviceResponseText).toBe(200);
+    expect(JSON.parse(serviceResponseText).status, serviceResponseText).toBe("accepted");
     const serviceHistory = await queryRealmEventsApi(request, token, realmId);
     const acceptedService = (serviceHistory.events as Array<Record<string, unknown>>).find((event) => event.event_id === serviceEvent.event_id);
-    expect(acceptedService?.actor_id).toEqual(serviceActorId(sourceServiceId));
+    expect(acceptedService?.actor_id).toEqual(accountActorId(sourceServiceId));
     expect(acceptedService?.executed_by).toBeUndefined();
-    const serviceProofs = acceptedService?.proofs as Array<Record<string, unknown>>;
-    expect(serviceProofs[0]).toEqual(serviceEvent.proofs[0]);
-    expect(projectDidToCoreId(String(serviceProofs[1].verification_method).split("#")[0])).toBe(solandServiceId());
+    expect(acceptedService?.producer_proof).toEqual(serviceEvent.producer_proof);
 
-    const { proofs: originalProducer, ...previousUnsigned } = body.events[0];
-    const nextUnsigned = {
+    const nextUnidentified = {
       ...previousUnsigned,
       created_at: canonicalEventTimestamp(),
       external_ref: { ...previousUnsigned.external_ref, external_id: `ext-race-${stamp}` },
     };
-    nextUnsigned.event_id = sdkEventDerivedIds(nextUnsigned).event_id;
-    const next = { ...nextUnsigned, proofs: [appletEventProof(String(originalProducer[0].verification_method), nextUnsigned, signed.service_signing_private_key)] };
+    const nextUnsigned = {
+      ...nextUnidentified,
+      event_id: sdkEventDerivedIds(nextUnidentified).event_id,
+    };
+    const next = {
+      ...nextUnsigned,
+      producer_proof: appletEventProof(
+        String(originalProducer.verification_method),
+        nextUnsigned,
+        signed.service_signing_private_key,
+      ),
+    };
     let racingDelivery: ReturnType<typeof deliver> | undefined;
     const revoked = await revokeAppletRuntime(request, token, alice.id, registration.applet_id, realmId, `inbound-revoke-${stamp}`, () => {
       racingDelivery = deliver({ ...body, events: [next] }, `inbound-revoke-race-${stamp}`);
@@ -1408,39 +1759,53 @@ test.describe("applet inbound transaction push — per-delivery source signature
     expect(revoked.status).toBe("complete");
     expect(racingDelivery).toBeDefined();
     const raceResponse = await racingDelivery!;
-    const raceOutcome = await raceResponse.json();
+    const raceText = await raceResponse.text();
+    const raceOutcome = JSON.parse(raceText);
     const racedHistory = await queryRealmEventsApi(request, token, realmId);
     const racedEvents = racedHistory.events as Array<Record<string, unknown>>;
     const racedEvent = racedEvents.find((event) => event.event_id === next.event_id);
-    if (raceOutcome.status === "accepted") {
+    if (raceResponse.status() === 200 && raceOutcome.status === "accepted") {
       expect(racedEvent).toBeDefined();
       expect(racedEvents.filter((event) => event.event_id === next.event_id)).toHaveLength(1);
-      expect((racedEvent!.proofs as Array<Record<string, unknown>>)[0]).toEqual(next.proofs[0]);
+      expect(racedEvent!.producer_proof).toEqual(next.producer_proof);
     } else {
+      // Lost the race: either the per-Event admission saw the fence, or the
+      // delivery found no active effective install (§7.3.1).
+      if (raceResponse.status() !== 200) {
+        expect(raceResponse.status(), raceText).toBe(403);
+        expect(wireErrCode(raceOutcome), raceText).toBe("applet_registration_unauthorized");
+      }
       expect(racedEvent).toBeUndefined();
     }
-    const fencedUnsigned = {
-      ...nextUnsigned,
+    const fencedUnidentified = {
+      ...previousUnsigned,
       created_at: canonicalEventTimestamp(),
-      external_ref: { ...nextUnsigned.external_ref, external_id: `ext-fenced-${stamp}` },
+      external_ref: { ...previousUnsigned.external_ref, external_id: `ext-fenced-${stamp}` },
     };
-    fencedUnsigned.event_id = sdkEventDerivedIds(fencedUnsigned).event_id;
-    const fenced = { ...fencedUnsigned, proofs: [appletEventProof(String(originalProducer[0].verification_method), fencedUnsigned, signed.service_signing_private_key)] };
+    const fencedUnsigned = {
+      ...fencedUnidentified,
+      event_id: sdkEventDerivedIds(fencedUnidentified).event_id,
+    };
+    const fenced = {
+      ...fencedUnsigned,
+      producer_proof: appletEventProof(
+        String(originalProducer.verification_method),
+        fencedUnsigned,
+        signed.service_signing_private_key,
+      ),
+    };
+    // After the revoke commits there is no active effective install: the
+    // inbound delivery fails closed before Event admission (§7.3.1).
     const afterRevoke = await deliver({ ...body, events: [fenced] }, `inbound-after-revoke-${stamp}`);
-    const afterRevokeBody = await afterRevoke.json();
-    expect(afterRevokeBody.status).not.toBe("accepted");
+    const afterRevokeText = await afterRevoke.text();
+    expect(afterRevoke.status(), afterRevokeText).toBe(403);
+    expect(wireErrCode(JSON.parse(afterRevokeText)), afterRevokeText).toBe(
+      "applet_registration_unauthorized",
+    );
     const historical = await queryRealmEventsApi(request, token, realmId);
     const historicalEvents = historical.events as Array<Record<string, unknown>>;
-    expect(historicalEvents.find((event) => event.event_id === previousUnsigned.event_id)?.proofs).toEqual(proofs);
+    expect(historicalEvents.find((event) => event.event_id === previousUnsigned.event_id)?.producer_proof).toEqual(originalProducer);
     expect(historicalEvents.some((event) => event.event_id === fenced.event_id)).toBe(false);
-    const replicaReplay = await rawPushFederationEvents(request, [retained[0]], {
-      origin: solandServiceId(), destination: solandServiceId(), realmId,
-      idempotencyKey: `inbound-historical-peer-replay-${stamp}`,
-      acceptedSource: { token },
-    });
-    const replicaOutcome = await replicaReplay.json();
-    expect(replicaReplay.status(), JSON.stringify(replicaOutcome)).toBe(200);
-    expect([...(replicaOutcome.accepted ?? []), ...(replicaOutcome.duplicate ?? [])], JSON.stringify(replicaOutcome)).toContain(previousUnsigned.event_id);
   });
 
   test("missing Signature (bearer-only) inbound transaction push → 401 http_signature_required", async ({
@@ -2374,24 +2739,6 @@ function webvhManagedActorEvidence(built: BuiltWebvhGenesis) {
   };
 }
 
-function replaceWithAppletServiceProof(
-  event: Record<string, unknown>,
-  signed: SignedPackage,
-): Record<string, unknown> {
-  const unsigned = { ...event };
-  delete unsigned.proofs;
-  return {
-    ...unsigned,
-    proofs: [
-      appletEventProof(
-        requiredAppletServiceDid(signed),
-        unsigned,
-        signed.service_signing_private_key,
-      ),
-    ],
-  };
-}
-
 function requiredAppletServiceDid(signed: SignedPackage): string {
   const did = signed.service_id_operation?.did;
   if (!did) {
@@ -2408,8 +2755,9 @@ async function buildGhostManagedActorCreation(args: {
   realmId: string;
   ghostBuilt: BuiltWebvhGenesis;
   externalUser: { id: string; display_name?: string };
-  /// Accepted commit coordinate of the exact active Applet registration.
-  registrationRef: Record<string, unknown>;
+  /// EventId of the exact active Applet registration
+  /// (applet-managed-actor.schema.json `registration_ref`).
+  registrationRef: string;
 }) {
   const externalRef = {
     protocol: "bridge",
@@ -2498,6 +2846,12 @@ function installRegistrationFromResponse(
   expect(new Set(capabilityGrantRefs)).toEqual(
     new Set(grantActionsById.keys()),
   );
+  // applet-install-operations.schema.json#/$defs/applet_install_outcome:
+  // `registration_event_ref` is a bare EventId, not a CommittedEventRef.
+  expect(
+    response.registration_event_ref,
+    JSON.stringify(response.registration_event_ref),
+  ).toEqual(expect.stringMatching(/^ak:event:/));
   return {
     applet_id: String(response.applet_id),
     bot_actor_id: signed.applet_package.bot_actor_id,
@@ -2537,27 +2891,6 @@ function detachedJws(
   return `${protectedHeader}..${signature}`;
 }
 
-/// Accepted commit coordinate of an Applet registration Event.
-///
-/// TODO(cotest): source `commit_id` / `stream_position` from the
-/// `ak.self.events.command.submit.v1` outcome once the submission helpers
-/// return the `RealmCommit` the Station produced.
-function registrationCommitRef(
-  registration: AppletRegistration,
-): Record<string, unknown> {
-  const commit = registration.registration_commit;
-  if (!commit) {
-    throw new Error(
-      `Applet registration ${registration.applet_id} has no accepted commit coordinate`,
-    );
-  }
-  return {
-    event_id: registration.registration_event_ref,
-    commit_id: commit.commit_id,
-    stream_ref: { kind: "realm", realm_id: registration.portal_realm_id },
-    stream_position: commit.stream_position,
-  };
-}
 
 function canonicalHash(value: unknown): string {
   return `sha256:${createHash("sha256").update(canonicalJson(value)).digest("hex")}`;
@@ -2566,15 +2899,9 @@ function canonicalHash(value: unknown): string {
 function authoringRequestUnsigned(
   request: Record<string, unknown>,
 ): Record<string, unknown> {
-  const unsigned: Record<string, unknown> = {
-    schema: request.schema,
-    purpose: request.purpose,
-    basis: request.basis,
-    plan_digest: request.plan_digest,
-    authoring_authority: request.authoring_authority,
-    issued_at: request.issued_at,
-    expires_at: request.expires_at,
-  };
+  // The request proof binds the closed authoring request without its proof
+  // member; `plan_digest` is present only on the `install_bot` branch.
+  const { proof: _proof, ...unsigned } = request;
   return unsigned;
 }
 
@@ -2625,16 +2952,4 @@ function appletEventProof(
     createdAt: canonicalEventTimestamp(),
     signingSeedB64url,
   });
-}
-
-function hlcForStamp(stamp: number): string {
-  const physical = Math.max(Date.now(), stamp)
-    .toString(16)
-    .padStart(12, "0")
-    .slice(-12);
-  const node = createHash("sha256")
-    .update(String(stamp))
-    .digest("hex")
-    .slice(0, 8);
-  return `${physical}-0000-${node}`;
 }

@@ -39,6 +39,7 @@ import {
   readCommitStreamHeadApi,
   scanRealmStreamApi,
 } from "../../helpers/soland-api";
+import { relationCreatePayload } from "../../helpers/relation-api";
 import {
   assertJointStackNotRequired,
   ensureRegistered,
@@ -92,26 +93,6 @@ async function fetchRealmCommitHead(
   realmId: string,
 ): Promise<CommitStreamHead | undefined> {
   return await readCommitStreamHeadApi(request, token, realmId);
-}
-
-// `ak.relation.create` derives `ak:relation:` from the create Event, so the
-// object MUST NOT carry an `id` (`object_id_not_event_derived`).
-function relationObject(args: {
-  realmId: string;
-  relationKind: string;
-  fromRef: string;
-  toRef: string;
-  actorId: string;
-}): Record<string, unknown> {
-  return {
-    schema: "ak.schema.relation.v1",
-    realm_id: args.realmId,
-    relation_kind: args.relationKind,
-    from_ref: args.fromRef,
-    to_ref: args.toRef,
-    created_by: accountActorId(args.actorId),
-    created_at: canonicalTimestamp(),
-  };
 }
 
 test.describe.configure({ mode: "serial" });
@@ -436,16 +417,16 @@ test.describe("core object invariants", () => {
     );
   });
 
-  // ── Phase D — Relation cardinality (PROMOTED).
-  // soland's relation reducer (reducer/apply_relations.rs) is fully wired:
-  // - has_default_view default cardinality is many_to_one, so a second active
-  //   edge from the same from_ref auto-tombstones the prior winner (the
-  //   relation list MUST show ≤ 1 active edge).
-  // - duplicate (realm_id, relation_kind, from_ref, to_ref) writes dedupe.
+  // ── Phase D — Relation primary conflict domain CAS (relation.md section 6).
+  // - has_default_view registers a `from` domain: the first create at a
+  //   never-written domain (`expected_revision=null`) wins; a second create on
+  //   the same active domain is `failed_precondition` with zero writes, so the
+  //   relation list shows exactly the first edge. No implicit auto-tombstone.
+  // - an exact accepted Event replay returns the original Commit.
   // - structural `contains` across Realms is rejected with
-  //   `cross_realm_structural_relation` (HTTP 412) — relation.md §4.4.
-  // Reads use the product-private `/_soland/self/relations` projection list.
-  test("Phase D — has_default_view enforces many_to_one; duplicate Relation create is idempotent; cross-Realm contains rejected", async ({
+  //   `cross_realm_structural_relation` (HTTP 409) — relation.md section 4.4.
+  // Reads use the product-private `/_soland/self/relations` list.
+  test("Phase D — has_default_view is one active value per from domain; exact Relation replay is idempotent; cross-Realm contains rejected", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -457,12 +438,6 @@ test.describe("core object invariants", () => {
       ownerId: alice.id,
     });
 
-    // `has_default_view` is many_to_one on (from_ref, relation_kind). The
-    // relation reducer requires a structural from_ref endpoint
-    // (`ak:strand:`/`ak:space:`) to be projected, so anchor the edges on a
-    // real Strand created via the proven ak.strand.create path. The
-    // `ak:view:` to_ref does not need a local projection (View objects are
-    // not reduced today), so two synthetic view ids are valid targets.
     const sourceRef = await createStrandApi(
       request,
       aliceToken,
@@ -472,78 +447,68 @@ test.describe("core object invariants", () => {
     );
     const v1 = typedId("view");
     const v2 = typedId("view");
-
-    const createDefaultView = async (viewId: string, relationId: string) =>
-      submitSignedEventApi(
-        request,
-        aliceToken,
-        signedEventEnvelope({
-          actorId: alice.id,
-          realmId,
-          kind: "ak.relation.create",
-          payload: {
-            relation: relationObject({
-              realmId,
-              relationKind: "has_default_view",
-              fromRef: sourceRef,
-              toRef: viewId,
-              actorId: alice.id,
-            }),
-          },
+    const eventsUrl = `${solandBaseUrl()}/_arkret/self/events`;
+    const postEvent = (envelope: Record<string, unknown>) =>
+      request.post(eventsUrl, {
+        headers: {
+          ...authHeaders(aliceToken, "POST", eventsUrl),
+          "content-type": "application/json",
+        },
+        data: canonicalJson({ event: envelope }),
+      });
+    const defaultView = (viewId: string) =>
+      signedEventEnvelope({
+        actorId: alice.id,
+        realmId,
+        kind: "ak.relation.create",
+        payload: relationCreatePayload({
+          relationKind: "has_default_view",
+          fromRef: sourceRef,
+          toRef: viewId,
         }),
-        { context: `has_default_view -> ${viewId}` },
-      );
+      });
 
-    // First default-view edge succeeds.
-    await createDefaultView(v1, typedId("relation"));
-    // Second default-view edge for the same source: many_to_one means one
-    // edge is auto-tombstoned, leaving exactly 1 active edge. The surviving
-    // concurrent mutually exclusive edges cannot acquire active status from
-    // digest ordering. The projection exposes at most one active edge and
-    // normally none until an explicit complete-head resolution.
-    await createDefaultView(v2, typedId("relation"));
-
-    const activeEdges = await request.get(
-      `${solandBaseUrl()}/_soland/self/relations?from_ref=${encodeURIComponent(sourceRef)}&relation_kind=has_default_view&state=active`,
-      { headers: authHeaders(aliceToken, "GET", `${solandBaseUrl()}/_soland/self/relations?from_ref=${encodeURIComponent(sourceRef)}&relation_kind=has_default_view&state=active`) },
+    await submitSignedEventApi(request, aliceToken, defaultView(v1), {
+      context: `has_default_view -> ${v1}`,
+    });
+    const headBeforeSecond = await fetchRealmCommitHead(request, aliceToken, realmId);
+    const second = await postEvent(defaultView(v2));
+    expect(second.status(), await second.text()).toBe(409);
+    expect(wireErrCode(await second.json())).toBe("failed_precondition");
+    expect(await fetchRealmCommitHead(request, aliceToken, realmId)).toEqual(
+      headBeforeSecond,
     );
-    expect(activeEdges.ok()).toBeTruthy();
-    const edgesBody = await activeEdges.json();
-    const activeItems = (edgesBody.items ?? []) as Array<{ to_ref?: string }>;
-    // many_to_one: at most one active edge for this (from_ref, relation_kind).
-    expect(activeItems.length).toBeLessThanOrEqual(1);
-    if (activeItems.length === 1) {
-      expect([v1, v2]).toContain(activeItems[0].to_ref);
-    }
 
-    // A fully-duplicate edge (same relation_id) is idempotent — re-submitting
-    // the same signed envelope is accepted by the events submit surface.
-    const dupRelationId = typedId("relation");
+    const relationsUrl = `${solandBaseUrl()}/_soland/self/relations?from_ref=${encodeURIComponent(sourceRef)}&relation_kind=has_default_view&state=active`;
+    const activeEdges = await request.get(relationsUrl, {
+      headers: authHeaders(aliceToken, "GET", relationsUrl),
+    });
+    expect(activeEdges.ok()).toBeTruthy();
+    const activeItems = ((await activeEdges.json()).items ?? []) as Array<{
+      to_ref?: string;
+    }>;
+    expect(activeItems.map((item) => item.to_ref)).toEqual([v1]);
+
+    // An exact accepted Event replay is idempotent and returns the original
+    // Commit.
     const duplicateEnvelope = signedEventEnvelope({
       actorId: alice.id,
       realmId,
       kind: "ak.relation.create",
-      payload: {
-        relation: relationObject({
-          realmId,
-          relationKind: "has_default_view",
-          fromRef: sourceRef,
-          toRef: v2,
-          actorId: alice.id,
-        }),
-      },
+      payload: relationCreatePayload({
+        relationKind: "references",
+        fromRef: sourceRef,
+        toRef: v2,
+      }),
     });
-    await submitSignedEventApi(request, aliceToken, duplicateEnvelope, {
-      context: `create duplicate relation ${dupRelationId}`,
+    const first = await submitSignedEventApi(request, aliceToken, duplicateEnvelope, {
+      context: "create references relation",
     });
-    const dupAgain = await request.post(
-      `${solandBaseUrl()}/_arkret/self/events`,
-      {
-        headers: { ...authHeaders(aliceToken, "POST", `${solandBaseUrl()}/_arkret/self/events`), "content-type": "application/json" },
-        data: canonicalJson({ event: duplicateEnvelope }),
-      },
-    );
+    const dupAgain = await postEvent(duplicateEnvelope);
     expect(dupAgain.status(), "exact accepted Event replay must remain successful").toBe(200);
+    const replay = (await dupAgain.json()) as Record<string, unknown>;
+    expect(replay.status).toBe("duplicate");
+    expect(replay.commit).toEqual(first.commit);
 
     // Cross-Realm structural `contains` MUST fail (relation.md §4.4). Create a
     // strand in another Realm and try to `contains` it from this Realm.
@@ -569,23 +534,13 @@ test.describe("core object invariants", () => {
       actorId: alice.id,
       realmId,
       kind: "ak.relation.create",
-      payload: {
-        relation: relationObject({
-          realmId,
-          relationKind: "contains",
-          fromRef: strandInA,
-          toRef: strandInB,
-          actorId: alice.id,
-        }),
-      },
+      payload: relationCreatePayload({
+        relationKind: "contains",
+        fromRef: strandInA,
+        toRef: strandInB,
+      }),
     });
-    const crossRealm = await request.post(
-      `${solandBaseUrl()}/_arkret/self/events`,
-      {
-        headers: { ...authHeaders(aliceToken, "POST", `${solandBaseUrl()}/_arkret/self/events`), "content-type": "application/json" },
-        data: canonicalJson({ event: crossRealmEnvelope }),
-      },
-    );
+    const crossRealm = await postEvent(crossRealmEnvelope);
     expect(crossRealm.status()).toBe(409);
     const crossRealmBody = await crossRealm.json();
     expect(wireErrCode(crossRealmBody), JSON.stringify(crossRealmBody)).toBe(

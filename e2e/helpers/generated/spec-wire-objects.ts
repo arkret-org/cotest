@@ -2833,6 +2833,13 @@ export type EventAdmissionSubmission = {
         "grant_id": string;
       } | {
         "context_kind": "realm_governance";
+      } | {
+        "context_kind": "list_wip";
+        "list_space_id": string;
+        "list_policy_revision": {
+          "commit_id": string;
+          "stream_position": number;
+        };
       };
       "approval_target": {
         "target_kind": "event";

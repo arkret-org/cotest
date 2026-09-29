@@ -35,6 +35,10 @@ import {
   contactRow,
   requestContactArkret,
 } from "../../helpers/contact-api";
+import {
+  createMimiProvider,
+  postSignedMimiProviderRequest,
+} from "../../helpers/mimi-provider";
 
 test.describe.configure({ mode: "serial" });
 
@@ -485,7 +489,9 @@ test.describe("consent grant", () => {
       ensureRegistered(request, bob),
       ensureRegistered(request, charlie),
     ]);
-    const [aliceToken, bobToken, charlieToken] = await Promise.all([
+    // Each principal's canonical session provisions its device signer; only
+    // alice's session is used, to prepare her own consent Event.
+    const [aliceToken] = await Promise.all([
       issueUserSession(request, alice),
       issueUserSession(request, bob),
       issueUserSession(request, charlie),
@@ -525,20 +531,24 @@ test.describe("consent grant", () => {
       audience: describe.service_id,
       signingSeedB64url: bobSigningSeed,
     });
-    const open = await request.post(
+    // mimi-interop.md section 5: both consent operations are provider-to-
+    // provider and MUST carry the RFC 9421 provider-source signature. One
+    // provider opens the correlation and answers it, because the correlation
+    // is bound to the authenticated source service.
+    const provider = createMimiProvider("g2t5-consent");
+    const open = await postSignedMimiProviderRequest(
+      request,
+      provider,
+      describe.service_id,
       `${solandBaseUrl()}/_arkret/open/mimi/consent/request`,
-      {
-        headers: {
-          ...authHeaders(bobToken, "POST", `${solandBaseUrl()}/_arkret/open/mimi/consent/request`),
-          "content-type": "application/json",
-        },
-        data: canonicalJson({ ...openUnsigned, proofs: [openProof] }),
-      },
+      { ...openUnsigned, proofs: [openProof] },
     );
     const openText = await open.text();
     expect(open.status(), openText).toBe(200);
     const openBody = JSON.parse(openText) as Record<string, unknown>;
-    expect(openBody.status).toBe("requested");
+    // `mimi_request_consent_outcome` is closed over `consent_id` and an
+    // optional `challenge`; it carries no status member.
+    expect(Object.keys(openBody).filter((key) => key !== "challenge")).toEqual(["consent_id"]);
     expect(openBody.consent_id).toMatch(/^ak:consent:/);
 
     const updateUrl = `${solandBaseUrl()}/_arkret/open/mimi/consent/update`;
@@ -574,26 +584,28 @@ test.describe("consent grant", () => {
     });
 
     const signedUpdate = { ...unsignedUpdate, signature };
-    const update = await request.post(updateUrl, {
-      headers: {
-        ...authHeaders(aliceToken, "POST", updateUrl),
-        "content-type": "application/json",
-      },
-      data: canonicalJson(signedUpdate),
-    });
+    const update = await postSignedMimiProviderRequest(
+      request,
+      provider,
+      describe.service_id,
+      updateUrl,
+      signedUpdate,
+    );
     const updateText = await update.text();
     expect(update.status(), updateText).toBe(200);
     const updateBody = JSON.parse(updateText);
-    expect(updateBody.status).toBe("accepted");
+    // `mimi_update_consent_outcome` reports the decision it admitted.
+    expect(updateBody.decision).toBe("accept");
+    expect(updateBody.consent_id).toBe(openBody.consent_id);
     expect(updateBody.event_ref).toBe(grantEvent.event_id);
 
-    const replay = await request.post(updateUrl, {
-      headers: {
-        ...authHeaders(aliceToken, "POST", updateUrl),
-        "content-type": "application/json",
-      },
-      data: canonicalJson(signedUpdate),
-    });
+    const replay = await postSignedMimiProviderRequest(
+      request,
+      provider,
+      describe.service_id,
+      updateUrl,
+      signedUpdate,
+    );
     expect(replay.status()).toBe(200);
     const replayBody = await replay.json();
     expect(replayBody).toEqual(updateBody);
@@ -609,8 +621,6 @@ test.describe("consent grant", () => {
         consent_scope: "voice_call",
       },
     });
-    conflictingEvent.seal_basis = structuredClone(grantEvent.seal_basis);
-    delete conflictingEvent.auth_context;
     const conflictingUnsigned = {
       ...unsignedUpdate,
       consent_event: { ...consentEvent, event: conflictingEvent },
@@ -626,13 +636,13 @@ test.describe("consent grant", () => {
         signingSeedB64url: aliceSigningSeed,
       }),
     };
-    const conflicting = await request.post(updateUrl, {
-      headers: {
-        ...authHeaders(aliceToken, "POST", updateUrl),
-        "content-type": "application/json",
-      },
-      data: canonicalJson(conflictingBody),
-    });
+    const conflicting = await postSignedMimiProviderRequest(
+      request,
+      provider,
+      describe.service_id,
+      updateUrl,
+      conflictingBody,
+    );
     expect(conflicting.status()).toBe(422);
     const conflictingOutcome = await conflicting.json();
     expect(conflictingOutcome.type).toBe(
@@ -659,13 +669,13 @@ test.describe("consent grant", () => {
         signingSeedB64url: charlieSigningSeed,
       }),
     };
-    const invisible = await request.post(updateUrl, {
-      headers: {
-        ...authHeaders(charlieToken, "POST", updateUrl),
-        "content-type": "application/json",
-      },
-      data: canonicalJson(invisibleBody),
-    });
+    const invisible = await postSignedMimiProviderRequest(
+      request,
+      provider,
+      describe.service_id,
+      updateUrl,
+      invisibleBody,
+    );
 
     const unknownConsentId = typedId("operation").replace(
       "ak:operation:",
@@ -691,13 +701,13 @@ test.describe("consent grant", () => {
         signingSeedB64url: charlieSigningSeed,
       }),
     };
-    const unknown = await request.post(updateUrl, {
-      headers: {
-        ...authHeaders(charlieToken, "POST", updateUrl),
-        "content-type": "application/json",
-      },
-      data: canonicalJson(unknownBody),
-    });
+    const unknown = await postSignedMimiProviderRequest(
+      request,
+      provider,
+      describe.service_id,
+      updateUrl,
+      unknownBody,
+    );
     expect(unknown.status()).toBe(invisible.status());
     const invisibleOutcome = await invisible.json();
     const unknownOutcome = await unknown.json();

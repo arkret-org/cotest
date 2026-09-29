@@ -10,15 +10,22 @@ import { createHash } from "node:crypto";
 import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 import { solandBaseUrl } from "../../helpers/env";
 import {
-  acceptInviteViaApi,
+  createSharedRealmViaApi,
   sendPlaintextMessageViaApi,
 } from "../../helpers/api";
+import {
+  encryptMlsMessageContent,
+  joinRealmMlsWelcomeApi,
+  type MlsDevice,
+  type MlsMemberGroup,
+} from "../../helpers/soland-api/mls";
 import {
   accountSubscribeDeltaApi,
   authHeaders,
   accountActorId,
   canonicalJson,
   createRealmApi,
+  registeredEventVerificationMethod,
   resolveDefaultStrandId,
   signedEventEnvelope,
   submitSignedEventApi,
@@ -29,7 +36,7 @@ import {
   createDpopUserSession,
   ensureRegistered,
   issueUserSession,
-  pairAcceptedSiblingDevice,
+  pairSiblingDeviceSession,
   uniqueUser,
 } from "../../helpers/users";
 
@@ -159,7 +166,6 @@ test.describe("private read marker", () => {
   // observes on its next `account/subscribe` poll. mark-all-read from device-2
   // then propagates back to device-1.
   test("alice's read marker syncs across devices via to-device; mark-all-read advances marker on all devices within sync window", async ({
-    browser,
     request,
   }) => {
     const stamp = Date.now();
@@ -174,7 +180,7 @@ test.describe("private read marker", () => {
     }
     const alice = session.user;
     const device1 = alice.deviceId;
-    const device2 = await pairAcceptedSiblingDevice(browser, request, session);
+    const device2 = (await pairSiblingDeviceSession(request, session)).user.deviceId;
     const token1 = await issueUserSession(request, alice, { deviceId: device1 });
     const token2 = await issueUserSession(request, alice, { deviceId: device2 });
 
@@ -247,7 +253,6 @@ test.describe("private read marker", () => {
   });
 
   test("E10.1 multi-device read marker eventual consistency: device-2 may lag but converges to device-1's last write within bounded sync window (spec §3)", async ({
-    browser,
     request,
   }) => {
     const stamp = Date.now();
@@ -262,7 +267,7 @@ test.describe("private read marker", () => {
     }
     const alice = session.user;
     const device1 = alice.deviceId;
-    const device2 = await pairAcceptedSiblingDevice(browser, request, session);
+    const device2 = (await pairSiblingDeviceSession(request, session)).user.deviceId;
     const token1 = await issueUserSession(request, alice, { deviceId: device1 });
     const token2 = await issueUserSession(request, alice, { deviceId: device2 });
 
@@ -323,16 +328,19 @@ test.describe("private read marker", () => {
     const aliceToken = await issueUserSession(request, alice);
     const bobToken = await issueUserSession(request, bob);
 
-    // E2EE Realm (per_realm_mls encryption locus): bob is a member.
-    const realmId = await createRealmApi(request, bobToken, {
+    // E2EE Realm (per_realm_mls encryption locus) founded by alice. bob's join
+    // advances the scope's key-access revision, so the shared fixture admits
+    // him with a covering Add Commit (encryption-and-audit.md §2.4.1, §2.5.2)
+    // and bob joins the group from his Welcome.
+    const realmId = await createSharedRealmViaApi(request, alice, aliceToken, bob, {
       title: `read cursor e2ee ${stamp}`,
       discoverability: "listed",
-      history_access: "since_join",
-      mls_activated: true,
-      invitees: [alice.id],
-      ownerId: bob.id,
+      historyAccess: "since_join",
+      mlsActivated: true,
     });
-    await acceptInviteViaApi(request, aliceToken, alice.id, realmId);
+    const strandId = await resolveDefaultStrandId(request, aliceToken, realmId);
+    const bobDevice: MlsDevice = { id: bob.id, deviceId: bob.deviceId, token: bobToken };
+    const bobGroup = await joinRealmMlsWelcomeApi(request, realmId, bobDevice);
 
     // bob sends an encrypted message that mentions alice. Message notifications
     // are derived locally from the timeline; the account notification stream is
@@ -341,7 +349,8 @@ test.describe("private read marker", () => {
     const encryptedEvent = await sendEncryptedMentionMessage(
       request,
       bobToken,
-      realmId,
+      bobGroup,
+      strandId,
       bob.id,
       alice.id,
       secretBody,
@@ -481,11 +490,14 @@ async function postReadCursor(
   // the derived `read_marker_outcome` takes it from there. A payload restating
   // it is a closed-shape violation (tasks/spec-done/2026-09-04-2130-read-cursor-advance-updated-at-envelope-equality.md).
   const updatedAt = new Date().toISOString();
+  // The producer proof is the writing device's own: a sibling device signs
+  // with its accepted key, never with the founding device's.
   const event = signedEventEnvelope({
     actorId,
     realmId,
     kind: "ak.read_cursor.advance",
     createdAt: updatedAt,
+    proofVerificationMethod: registeredEventVerificationMethod(actorId, deviceId),
     payload: {
       schema: "ak.schema.read_cursor.v1",
       actor_id: accountActorId(actorId),
@@ -576,56 +588,38 @@ async function pollToDeviceReadMarker(
   );
 }
 
-// Send an encrypted (E2EE) message that mentions `mentionId`. The body is
-// sealed (`encrypted_content` ciphertext); the plaintext `secretBody` is the
-// canary the notification projection MUST NOT expose.
+// Send an MLS-encrypted message that mentions `mentionId`. The direct mention
+// lives only in the sealed Content Block (message.schema.json
+// content_block.mentions), so the Station never sees it; the plaintext
+// `secretBody` is the canary the notification projection MUST NOT expose.
 async function sendEncryptedMentionMessage(
   request: APIRequestContext,
   token: string,
-  realmId: string,
+  group: MlsMemberGroup,
+  strandId: string,
   actorId: string,
   mentionId: string,
   secretBody: string,
 ): Promise<string> {
-  const strandId = await resolveDefaultStrandId(request, token, realmId);
-  const ciphertext = Buffer.from(`opaque-ciphertext-${secretBody}`, "utf8").toString(
-    "base64url",
-  );
   const envelope = signedEventEnvelope({
     actorId,
-    realmId,
+    realmId: group.realmId,
     kind: "ak.message.create",
     payload: {
       strand_id: strandId,
       track_name: "discussion",
-      mention_sidecar_digest: [mentionSidecarHash(realmId, mentionId)],
-      encrypted_content: encryptedEnvelope(ciphertext, realmId),
+      encrypted_content: encryptMlsMessageContent(group, {
+        kind: "ak.content.text",
+        body: secretBody,
+        format: "plain",
+        mentions: [
+          { kind: "mention", subject_account_id: accountActorId(mentionId).account_id },
+        ],
+      }),
     },
   });
   await submitSignedEventApi(request, token, envelope, {
-    context: `send encrypted mention ${realmId}`,
+    context: `send encrypted mention ${group.realmId}`,
   });
   return String(envelope.event_id);
-}
-
-function mentionSidecarHash(realmId: string, did: string): string {
-  return createHash("sha256").update(`${realmId}|${did}`).digest("hex");
-}
-
-function encryptedEnvelope(
-  ciphertext: string,
-  realmId: string,
-): Record<string, unknown> {
-  void realmId;
-  return {
-    version: "1.0",
-    content_type: "application/vnd.arkret.message+json",
-    encryption_context: {
-      epoch: 1,
-      group_state_ref:
-        "ak:event:ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM",
-      counter: 1,
-    },
-    ciphertext,
-  };
 }

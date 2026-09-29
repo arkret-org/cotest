@@ -5,6 +5,7 @@
 //! reach the same oracle through stdin/stdout.
 
 use anyhow::{Context, Result, bail};
+use cotest_test_support::mls_wire;
 use cotest_test_support::wire::{self, EventDigestMode};
 
 fn main() -> Result<()> {
@@ -22,7 +23,16 @@ fn main() -> Result<()> {
         "mimi-consent-proof" => wire::mimi_consent_proof(input)?,
         "mimi-request-consent-proof" => wire::mimi_request_consent_proof(input)?,
         "invite-subject-proof" => wire::invite_subject_proof(input)?,
+        "key-backup-auth-signature" => wire::key_backup_auth_signature(input)?,
         "mls-keypackage-upload-entry" => wire::mls_keypackage_upload_entry(input)?,
+        "mls-keypackages" => mls_wire::mls_keypackages(input)?,
+        "mls-genesis" => mls_wire::mls_genesis(input)?,
+        "mls-keypackage-claim-request" => mls_wire::mls_keypackage_claim_request(input)?,
+        "mls-add-member" => mls_wire::mls_add_member(input)?,
+        "mls-welcome-delivery" => mls_wire::mls_welcome_delivery(input)?,
+        "mls-install-commit" => mls_wire::mls_install_commit(input)?,
+        "mls-join-welcome" => mls_wire::mls_join_welcome(input)?,
+        "mls-encrypt-message" => mls_wire::mls_encrypt_message(input)?,
         "principal-control-realm-id" => wire::principal_control_realm(input)?,
         "webvh-placeholder-did" => wire::webvh_placeholder_did_command(input)?,
         "webvh-genesis" => wire::webvh_genesis(input)?,
@@ -31,6 +41,9 @@ fn main() -> Result<()> {
         "account-handoff-request" => wire::account_handoff_request(input)?,
         "principal-registration-fixture" => wire::principal_registration_fixture(input)?,
         "identity-creation-register-request" => wire::identity_creation_register_request(input)?,
+        "device-pairing-target-proof" => wire::device_pairing_target_proof(input)?,
+        "device-pairing-approval" => wire::device_pairing_approval(input)?,
+        "human-session-grant-request" => wire::human_session_grant_request(input)?,
         "managed-actor-author" => wire::managed_actor_author(input)?,
         _ => bail!("unknown cotest-wire command {command:?}"),
     };

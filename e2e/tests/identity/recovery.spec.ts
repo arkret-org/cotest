@@ -11,7 +11,14 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
-import { accountActorId, canonicalJson } from "../../helpers/soland-api";
+import {
+  accountActorId,
+  canonicalJson,
+  expectJsonOk,
+  registeredEventSigningSeedB64url,
+  registeredEventVerificationMethod,
+} from "../../helpers/soland-api";
+import { sdkKeyBackupAuthSignature } from "../../helpers/soland-api/wire-client";
 import {
   ensureRegistered,
   issueUserSession,
@@ -49,13 +56,51 @@ function uuidv7Like(): string {
  * satisfied so the test exercises the *profile* gate rather than tripping a
  * generic schema_violation first.
  */
+type BackupDeviceSigner = {
+  deviceId: string;
+  // `auth_data.verification_method` is the accepted device method: the
+  // holder's DID URL whose fragment is the device id (key-management.md
+  // section 7.4.1).
+  verificationMethod: string;
+  deviceAuthorizeEventId: string;
+  signingSeedB64url: string;
+};
+
+// key-management.md section 7.4.1: a receiver anchors `auth_data.signature` to
+// the accepted `ak.device.authorize` of the signing device, so the envelope is
+// signed by the session device over the SDK transcript and names that exact
+// authorization Event.
+async function sessionBackupSigner(
+  request: APIRequestContext,
+  token: string,
+  actorId: string,
+  deviceId: string,
+): Promise<BackupDeviceSigner> {
+  const viewerUrl = `${solandBaseUrl()}/_arkret/self/account/viewer`;
+  const viewer = await expectJsonOk<{
+    devices?: Array<{ device_id?: unknown; authorized_event_ref?: unknown }>;
+  }>(
+    await request.get(viewerUrl, {
+      headers: authHeaders(token, "GET", viewerUrl),
+    }),
+    "read the session device authorization",
+  );
+  const row = (viewer.devices ?? []).find((device) => device.device_id === deviceId);
+  const deviceAuthorizeEventId = row?.authorized_event_ref;
+  if (typeof deviceAuthorizeEventId !== "string") {
+    throw new Error(`account viewer has no accepted authorization for ${deviceId}`);
+  }
+  const verificationMethod = registeredEventVerificationMethod(actorId, deviceId);
+  const signingSeedB64url = registeredEventSigningSeedB64url(actorId);
+  if (!verificationMethod || !signingSeedB64url) {
+    throw new Error(`canonical provisioning omitted the device signer of ${deviceId}`);
+  }
+  return { deviceId, verificationMethod, deviceAuthorizeEventId, signingSeedB64url };
+}
+
 function secretStorageEnvelope(opts: {
   actorId: string;
-  // `auth_data.verification_method` is a DID URL, so it is built from the
-  // holder's DID — never from the projected `ak:did_core:` actor id, which is
-  // not a DID and fails the request-body schema before any KDF rule runs.
-  actorDid: string;
-  deviceId: string;
+  signer: BackupDeviceSigner;
   mixed: boolean;
   argon2: { memory_kib: number; iterations: number; parallelism: number };
 }): { backupId: string; envelope: Record<string, unknown> } {
@@ -69,7 +114,7 @@ function secretStorageEnvelope(opts: {
   const envelope: Record<string, unknown> = {
     backup_id: backupId,
     actor_id: accountActorId(opts.actorId),
-    device_id: opts.deviceId,
+    device_id: opts.signer.deviceId,
     backup_kind: backupClass,
     mixed_secret_storage: opts.mixed,
     backup_version: "kb_1",
@@ -110,16 +155,20 @@ function secretStorageEnvelope(opts: {
     series_id: seriesId,
     series_seq: 0,
     auth_data: {
-      device_id: opts.deviceId,
-      verification_method: `${opts.actorDid}#device-test`,
+      device_id: opts.signer.deviceId,
+      verification_method: opts.signer.verificationMethod,
       signature_algorithm: "Ed25519",
-      signature: randomBytes(64).toString("base64url"),
       // The PCR accepted-device Event is the sole device trust anchor.
-      device_authorize_event_id:
-        "ak:event:ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM",
+      device_authorize_event_id: opts.signer.deviceAuthorizeEventId,
     },
   };
-  return { backupId, envelope };
+  return {
+    backupId,
+    envelope: sdkKeyBackupAuthSignature({
+      envelope,
+      signingSeedB64url: opts.signer.signingSeedB64url,
+    }),
+  };
 }
 
 async function putBackup(
@@ -319,12 +368,15 @@ test.describe("account recovery", () => {
     const alice = uniqueUser("recovery-e8-6");
     await ensureRegistered(request, alice);
     const token = await issueUserSession(request, alice);
+    // Both envelopes carry a genuine anchored device signature, so the only
+    // difference between the rejection and the accepted baseline is the KDF
+    // floor the mixed flag raises.
+    const signer = await sessionBackupSigner(request, token, alice.id, alice.deviceId);
 
     // mixed_secret_storage=true with a weak Argon2id floor is rejected.
     const weakMixed = secretStorageEnvelope({
       actorId: alice.id,
-      actorDid: alice.did,
-      deviceId: alice.deviceId,
+      signer,
       mixed: true,
       // Below the §7.1 mixed floor (262144 / 4): base secret_storage floor
       // (65536 / 3) is NOT sufficient once the mixed flag is set.
@@ -346,8 +398,7 @@ test.describe("account recovery", () => {
     // specific, not a generic envelope-shape failure).
     const baseline = secretStorageEnvelope({
       actorId: alice.id,
-      actorDid: alice.did,
-      deviceId: alice.deviceId,
+      signer,
       mixed: false,
       argon2: { memory_kib: 65_536, iterations: 3, parallelism: 1 },
     });

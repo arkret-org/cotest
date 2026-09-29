@@ -852,17 +852,19 @@ pub(crate) fn canonical(value: Value) -> Result<Value> {
     )?)
 }
 
-/// Upload one public MLS state Blob and return its content-addressed ref.
+/// Upload one public MLS state Blob, bound to `realm_id` through the
+/// `blob_upload_request_body` form member, and return its content-addressed
+/// ref.
 pub(crate) async fn upload_public_blob(
     client: &TestActorClient,
     realm_id: &RealmId,
     bytes: &[u8],
 ) -> Result<String> {
     let uploaded = expect_json(
-        client
-            .post("/_arkret/self/blob/upload")
-            .header("x-arkret-realm-id", realm_id.as_str())
-            .multipart(blob_upload_form(bytes, "application/octet-stream")?),
+        client.post("/_arkret/self/blob/upload").multipart(
+            blob_upload_form(bytes, "application/octet-stream")?
+                .text("realm_id", realm_id.as_str().to_owned()),
+        ),
         StatusCode::OK,
     )
     .await?;

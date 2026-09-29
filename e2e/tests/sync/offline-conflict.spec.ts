@@ -1,6 +1,6 @@
-// Offline edit / reconnect sync / conflict repair (bottom_cells)
+// Offline edit / reconnect sync / ordered Realm profile succession
 // Contract: e2e/scenarios/sync/offline-conflict.md
-// Spec: sync/client-sync.md §2, sync/operations-sync.md §2-§2.1, authz/event-auth-state-resolution.md §2, §8.1
+// Spec: sync/client-sync.md §2, sync/operations-sync.md §9, authz/event-auth-state-resolution.md §6, §8
 
 import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 import { grantInviteConsentArkret } from "../../helpers/contact-api";
@@ -10,29 +10,27 @@ import {
   sendPlaintextMessageViaApi,
 } from "../../helpers/api";
 import {
-  acceptInviteApi,
-  authHeaders,
+  acceptPreparedInviteApi,
   createRealmApi,
-  listInvitesApi,
-  makeFederationEvent,
-  pushFederationEvents,
-  queryPeerEventsApi,
+  grantCapabilityEventApi,
+  pushCommittedRowsApi,
   queryRealmEventsApi,
+  scanPeerRealmStreamRowsApi,
+  sendMessageApi,
   signedEventEnvelope,
   submitSignedEventApi,
-  typedId,
+  waitForInviteDeliveryApi,
 } from "../../helpers/soland-api";
 import {
   hasServerCount,
-  solandBaseUrl,
   solandServiceId,
 } from "../../helpers/env";
 import {
+  allowExplicitInviteNotifications,
   ensureRegistered,
   issueUserSession,
   openDpopUserPage,
   uniqueUser,
-  type JointUser,
   type JointUserPage,
 } from "../../helpers/users";
 
@@ -160,84 +158,51 @@ test.describe("offline sync + conflict repair", () => {
       .toEqual(messages);
   });
 
-  test("causally ordered realm title updates do not create bottom_expose diagnostics", async ({
+  test("causally ordered realm title updates commit in order and the successor is the current profile", async ({
     browser,
     request,
   }) => {
-    const fixture = await createBottomConflictFixture(
-      browser,
-      request,
-      "banner",
-    );
+    // spec: authz/event-auth-state-resolution.md section 6 - the current value
+    // of a typed target is the last accepted write on its stream, ordered only
+    // by the governance Station's stream_position; concurrent writes serialize
+    // into positions and never produce a multi-head that needs repair.
+    // models/realm-and-space.md section 2.3.A and event-kind-registry.json
+    // (ak.realm.profile result_projection "set") make every accepted profile
+    // Event a wholesale replacement of the realm_profile singleton.
+    const fixture = await createRealmProfileSuccessionFixture(browser, request);
     try {
-      const bottomCells = await listBottomCells(
-        request,
-        fixture.bobToken,
-        fixture.realmId,
-      );
-      expect(bottomCells).toEqual([]);
+      await expect
+        .poll(
+          async () =>
+            realmProfileTitles(
+              await listRealmEventsViaApi(request, fixture.bobToken, fixture.realmId, {
+                limit: 100,
+              }),
+              [fixture.aliceTitle, fixture.bobTitle],
+            ),
+          { timeout: 30_000 },
+        )
+        .toEqual([fixture.aliceTitle, fixture.bobTitle]);
 
-      await fixture.bobPage.gotoRealmAdminSection(fixture.realmId, "repair");
-      await expect(
-        fixture.bobPage.page.getByTestId("realm-admin-panel"),
-      ).toBeVisible();
-      await expect(
-        fixture.bobPage.page.getByTestId("prefer-safer-side-button"),
-      ).toHaveCount(0);
+      await fixture.bobPage.gotoRealmAdminSection(fixture.realmId, "profile");
+      const profile = fixture.bobPage.page.getByTestId("realm-profile");
+      await expect(profile).toBeVisible({ timeout: 60_000 });
+      await expect(profile.getByTestId("realm-name-input")).toHaveValue(
+        fixture.bobTitle,
+        { timeout: 60_000 },
+      );
     } finally {
-      await closeBottomFixture(fixture);
+      await fixture.bobPage.close();
     }
   });
 
-  test("repair surface remains read-only when no registered bottom repair kind exists", async ({
-    browser,
+  test("long offline → on reconnect, the authorized peer stream scan backfills missing Commits; bob's timeline catches up to head", async ({
     request,
   }) => {
-    const fixture = await createBottomConflictFixture(
-      browser,
-      request,
-      "read-only",
-    );
-    try {
-      const before = await listBottomCells(
-        request,
-        fixture.bobToken,
-        fixture.realmId,
-      );
-      expect(before).toEqual([]);
-      await fixture.bobPage.gotoRealmAdminSection(fixture.realmId, "repair");
-      await expect(
-        fixture.bobPage.page.getByTestId("prefer-safer-side-button"),
-      ).toHaveCount(0);
-      await expect(
-        fixture.bobPage.page.getByTestId("repair-target-cell-input"),
-      ).toHaveCount(0);
-      await expect(
-        fixture.bobPage.page.getByTestId("repair-winner-json-input"),
-      ).toHaveCount(0);
-      await expect(
-        fixture.bobPage.page.getByTestId("repair-submit-button"),
-      ).toHaveCount(0);
-
-      const after = await listBottomCells(
-        request,
-        fixture.bobToken,
-        fixture.realmId,
-      );
-      expect(after).toHaveLength(before.length);
-    } finally {
-      await closeBottomFixture(fixture);
-    }
-  });
-
-  test("long offline → on reconnect, peer events query backfills missing events; bob's timeline catches up to head", async ({
-    request,
-  }) => {
-    // spec: sync/federation.md §4.2 (pull / backfill uses the same peer events
-    // query endpoint). Mirrors the federation "peer query recovery" active
-    // test: while bob is offline alice writes, and on reconnect the missing
-    // event is pulled via GET /_arkret/peer/events and bob's timeline catches
-    // up to head.
+    // spec: sync/federation.md §3 — recovery reads each authorized stream
+    // through ak.peer.committed_event.read.scan.v1 and replicates the exact
+    // (RealmCommit, Event) pairs through committed_replication; QUERY
+    // peer/events is not a v1 read surface.
     test.skip(
       !hasServerCount(2),
       "requires two-server topology — pass -ServerCount 2 to scripts/run-joint-e2e.ps1",
@@ -256,6 +221,8 @@ test.describe("offline sync + conflict repair", () => {
     await grantInviteConsentArkret(request, bobToken, bob, alice.id, {
       server: "server2", peerStationId: solandServiceId("server1"),
     });
+    // createRealmApi addresses the invitation with explicit_address evidence.
+    await allowExplicitInviteNotifications(request, bobToken, "server2");
     const realmId = await createRealmApi(
       request,
       aliceToken,
@@ -275,233 +242,67 @@ test.describe("offline sync + conflict repair", () => {
       },
       { server: "server1" },
     );
-    const server2Invite = await waitForInvite(
-      request,
-      bobToken,
-      bob.id,
-      realmId,
-      "server2",
-    );
-    await acceptInviteApi(
-      request,
-      bobToken,
-      bob.id,
-      server2Invite.realm_id,
-      server2Invite.id,
-      { server: "server2" },
-    );
-    await waitForMember(request, aliceToken, bob.id, realmId, "server1");
+    // bob joins through his own Station, which forwards the exact Event to
+    // the governance Station and answers with its RealmCommit.
+    const invitation = await waitForInviteDeliveryApi(request, bobToken, bob.id, realmId, "server2");
+    await acceptPreparedInviteApi(request, bobToken, bob.id, realmId, invitation.id, { server: "server2" });
 
-    // Offline window: alice writes an event that bob never pulled.
+    // Offline window: alice writes while bob is away.
     const missingBody = `offline payload body ${stamp}`;
-    const missingEvent = makeFederationEvent({
-      realmId,
-      kind: "ak.message.create",
-      actorId: alice.id,
-      payload: {
-        strand_id: typedId("strand"),
-        track_name: "discussion",
-        content: {
-          kind: "ak.content.text",
-          body: missingBody,
-        },
-      },
-    });
-    const server1EventsBeforeOfflineWrite = await queryRealmEventsApi(
-      request,
-      aliceToken,
-      realmId,
-      { server: "server1", limit: 100 },
-    );
-    const creatorBindingEvent = (
-      Array.isArray(server1EventsBeforeOfflineWrite.events)
-        ? server1EventsBeforeOfflineWrite.events
-        : []
-    ).find((event) => {
-      if (!event || typeof event !== "object") {
-        return false;
-      }
-      const envelope = event as Record<string, unknown>;
-      const payload =
-        envelope.payload && typeof envelope.payload === "object"
-          ? (envelope.payload as Record<string, unknown>)
-          : undefined;
-      const actor =
-        payload?.actor_id && typeof payload.actor_id === "object"
-          ? (payload.actor_id as Record<string, unknown>)
-          : undefined;
-      const account =
-        actor?.account_id && typeof actor.account_id === "object"
-          ? (actor.account_id as Record<string, unknown>)
-          : undefined;
-      return (
-        envelope.kind === "ak.member.state" &&
-        actor?.kind === "account" &&
-        account?.principal_id === alice.id &&
-        account.station_id === solandServiceId("server1") &&
-        payload?.membership === "join"
-      );
-    }) as Record<string, unknown> | undefined;
-    expect(
-      creatorBindingEvent?.event_id,
-      "creator Station-account membership frontier",
-    ).toEqual(expect.any(String));
-    await pushFederationEvents(request, [missingEvent], {
-      // Relay through the configured peer profile. A service's own
-      // ServiceDescribe is not negotiated as a remote profile.
-      origin: solandServiceId("server2"),
-      destination: solandServiceId("server1"),
+    const sent = await sendMessageApi(request, aliceToken, realmId, missingBody, {
       server: "server1",
-      realmId,
-      idempotencyKey: `${solandServiceId("server2")}#cotest-offline-source`,
-      serviceBindingFrontier: [String(creatorBindingEvent!.event_id)],
     });
     await waitForEventBody(request, aliceToken, realmId, missingBody, "server1");
 
-    // Bob's server has not seen the event while offline.
-    const server2BeforeEvents = await queryRealmEventsApi(
-      request,
-      bobToken,
-      realmId,
-      { server: "server2", limit: 100 },
+    // On reconnect server2 reads its authorized Realm stream from server1 and
+    // replicates every exact pair it does not yet hold, in stream order.
+    const server2Before = await queryRealmEventsApi(request, bobToken, realmId, {
+      server: "server2",
+      limit: 100,
+    });
+    const server2BeforeIds = new Set(
+      (Array.isArray(server2Before.events)
+        ? (server2Before.events as Array<Record<string, unknown>>)
+        : []
+      ).map((event) => String(event.event_id)),
     );
-    expect(JSON.stringify(server2BeforeEvents)).not.toContain(missingBody);
-    // On reconnect: pull the missing event via the peer events query endpoint
-    // and ingest it so bob's timeline catches up.
-    const backfill = await queryPeerEventsApi(request, {
+    const rows = await scanPeerRealmStreamRowsApi(request, {
       server: "server1",
       sourceServiceId: solandServiceId("server2"),
       realmId,
-      limit: 100,
     });
-    const backfilledEvents = backfill.events ?? [];
-    expect(backfilledEvents.map((event) => event.event_id)).toContain(
-      missingEvent.event_id,
-    );
-    const server2BeforeEventIds = new Set(
-      (Array.isArray(server2BeforeEvents.events)
-        ? (server2BeforeEvents.events as Array<Record<string, unknown>>)
-        : []
-      )
-        .map((event) => event.event_id)
-        .filter((eventId): eventId is string => typeof eventId === "string"),
-    );
-    const eventsToIngest = backfilledEvents.filter(
-      (event) =>
-        typeof event.event_id === "string" &&
-        !server2BeforeEventIds.has(event.event_id),
-    );
-    expect(eventsToIngest.map((event) => event.event_id)).toContain(
-      missingEvent.event_id,
-    );
-    const server2BindingEvent = backfilledEvents.find((event) => {
-      const payload =
-        event.payload && typeof event.payload === "object"
-          ? (event.payload as Record<string, unknown>)
-          : undefined;
-      const invitee =
-        payload?.invitee_account_id &&
-        typeof payload.invitee_account_id === "object"
-          ? (payload.invitee_account_id as Record<string, unknown>)
-          : undefined;
-      return (
-        event.kind === "ak.invite.create" &&
-        invitee?.principal_id === bob.id &&
-        invitee.station_id === solandServiceId("server2")
-      );
-    });
-    expect(
-      server2BindingEvent?.event_id,
-      "server2 invite account-routing frontier",
-    ).toEqual(expect.any(String));
-    const ingest = await pushFederationEvents(request, eventsToIngest, {
-      origin: solandServiceId("server1"),
-      destination: solandServiceId("server2"),
-      server: "server2",
-      realmId,
-      idempotencyKey: `${solandServiceId("server2")}#cotest-offline-backfill`,
-      serviceBindingFrontier: [String(server2BindingEvent!.event_id)],
-    });
-    expect(ingest.rejections ?? []).toEqual([]);
-    expect(ingest.accepted).toContain(String(missingEvent.event_id));
+    expect(rows.map((row) => row.event.event_id)).toContain(sent.event_id);
+    const missing = rows.filter((row) => !server2BeforeIds.has(String(row.event.event_id))).slice(0, 100);
+    if (missing.length > 0) {
+      const ingest = await pushCommittedRowsApi(request, missing, {
+        origin: solandServiceId("server1"),
+        destination: solandServiceId("server2"),
+        server: "server2",
+        realmId,
+      });
+      expect(
+        ingest.replication_outcomes.filter((outcome) => outcome.status === "rejected"),
+        JSON.stringify(ingest),
+      ).toEqual([]);
+    }
     await waitForEventBody(request, bobToken, realmId, missingBody, "server2");
 
-    // Timeline caught up: server2's peer-readable event set now covers every
-    // event returned by server1 for this Realm. The standard peer frontier
-    // surface is intentionally fail-closed for this profile.
-    const server2After = await queryPeerEventsApi(request, {
+    // Timeline caught up: server2 now holds every Commit the scan disclosed,
+    // each exactly once.
+    const server2After = await queryRealmEventsApi(request, bobToken, realmId, {
       server: "server2",
-      sourceServiceId: solandServiceId("server1"),
-      realmId,
       limit: 100,
     });
-    const server2AfterEventIds = new Set(
-      (server2After.events ?? [])
-        .map((event) => event.event_id)
-        .filter((eventId): eventId is string => typeof eventId === "string"),
-    );
-    for (const event of backfilledEvents) {
-      expect(server2AfterEventIds).toContain(String(event.event_id));
+    const server2AfterIds = (Array.isArray(server2After.events)
+      ? (server2After.events as Array<Record<string, unknown>>)
+      : []
+    ).map((event) => String(event.event_id));
+    expect(new Set(server2AfterIds).size).toBe(server2AfterIds.length);
+    for (const row of rows) {
+      expect(server2AfterIds).toContain(String(row.event.event_id));
     }
   });
 });
-
-async function waitForInvite(
-  request: APIRequestContext,
-  token: string,
-  inviteeId: string,
-  realmId: string,
-  server: "server1" | "server2",
-) {
-  let found:
-    | {
-        id: string;
-        realm_id: string;
-        invitee_id?: string;
-        state?: string;
-        status?: string;
-      }
-    | undefined;
-  await expect
-    .poll(
-      async () => {
-        const invites = await listInvitesApi(request, token, { server });
-        found = invites.find(
-          (invite) =>
-            invite.invitee_account_id?.principal_id === inviteeId && invite.invitee_account_id.station_id === solandServiceId(server) && invite.realm_id === realmId,
-        );
-        return Boolean(found);
-      },
-      { timeout: 45_000, intervals: [1_000, 2_000, 5_000] },
-    )
-    .toBeTruthy();
-  return found!;
-}
-
-async function waitForMember(
-  request: APIRequestContext,
-  token: string,
-  memberId: string,
-  realmId: string,
-  server: "server1" | "server2",
-) {
-  await expect
-    .poll(
-      async () => {
-        const response = await request.get(
-          `${solandBaseUrl(server)}/_arkret/self/realms/${encodeURIComponent(realmId)}`,
-          { headers: authHeaders(token, "GET", `${solandBaseUrl(server)}/_arkret/self/realms/${encodeURIComponent(realmId)}`) },
-        );
-        if (!response.ok()) {
-          return false;
-        }
-        const body = await response.json();
-        return Array.isArray(body.members) && body.members.includes(memberId);
-      },
-      { timeout: 45_000, intervals: [1_000, 2_000, 5_000] },
-    )
-    .toBeTruthy();
-}
 
 async function waitForEventBody(
   request: APIRequestContext,
@@ -525,37 +326,34 @@ async function waitForEventBody(
     .toBeTruthy();
 }
 
-type BottomConflictFixture = {
-  alice: JointUser;
-  bob: JointUser;
-  aliceToken: string;
+type RealmProfileSuccessionFixture = {
   bobToken: string;
   bobPage: JointUserPage;
   realmId: string;
   aliceTitle: string;
+  bobTitle: string;
 };
 
-async function createBottomConflictFixture(
+async function createRealmProfileSuccessionFixture(
   browser: Parameters<typeof openDpopUserPage>[0],
   request: APIRequestContext,
-  label: string,
-): Promise<BottomConflictFixture> {
+): Promise<RealmProfileSuccessionFixture> {
   const stamp = Date.now();
-  const alice = uniqueUser(`bottom-${label}-alice`);
+  const alice = uniqueUser(`profile-succession-alice`);
   const bobFlow = await openDpopUserPage(
     browser,
     request,
-    `bottom-${label}-bob-${stamp}`,
+    `profile-succession-bob-${stamp}`,
     { prepareMlsDevice: false },
   );
-  expect(bobFlow, "bottom repair fixture requires the joint DPoP stack").toBeDefined();
+  expect(bobFlow, "profile succession fixture requires the joint DPoP stack").toBeDefined();
   const bob = bobFlow!.user;
   await ensureRegistered(request, alice);
   const [aliceToken, bobToken] = await Promise.all([
     issueUserSession(request, alice),
     issueUserSession(request, bob),
   ]);
-  const initialTitle = `bottom conflict ${label} ${stamp}`;
+  const initialTitle = `profile succession ${stamp}`;
   const realmId = await createSharedRealmViaApi(
     request,
     alice,
@@ -566,26 +364,30 @@ async function createBottomConflictFixture(
       historyAccess: "all_history_for_current_members",
     },
   );
+  // Membership is not an authorization source (capabilities.md section 3.2):
+  // bob writes the Realm profile under an explicit `ak.realm.profile` grant.
+  // Its registry row requires `allowed_write_fields`, and a profile Event is a
+  // complete replacement of the closed realm-profile value, so the grant
+  // covers every profile member (constraint-schema.md sections 4.1 and 16.2).
+  await grantCapabilityEventApi(request, aliceToken, {
+    ownerId: alice.id,
+    realmId,
+    subjectId: bob.id,
+    actions: ["ak.realm.profile"],
+    constraints: [
+      {
+        constraint_kind: "field_access",
+        effect: "allow",
+        evaluation_class: "stateless",
+        allowed_write_fields: ["title", "summary", "avatar_blob_ref"],
+      },
+    ],
+  });
   const aliceTitle = `renamed by alice ${stamp}`;
   const bobTitle = `renamed by bob ${stamp}`;
-  await submitRealmTitleUpdate(
-    request,
-    aliceToken,
-    alice.id,
-    realmId,
-    aliceTitle,
-    initialTitle,
-  );
-  await submitRealmTitleUpdate(
-    request,
-    bobToken,
-    bob.id,
-    realmId,
-    bobTitle,
-    aliceTitle,
-  );
-  const bobPage = bobFlow!.page;
-  return { alice, bob, aliceToken, bobToken, bobPage, realmId, aliceTitle };
+  await submitRealmTitleUpdate(request, aliceToken, alice.id, realmId, aliceTitle);
+  await submitRealmTitleUpdate(request, bobToken, bob.id, realmId, bobTitle);
+  return { bobToken, bobPage: bobFlow!.page, realmId, aliceTitle, bobTitle };
 }
 
 async function submitRealmTitleUpdate(
@@ -594,7 +396,6 @@ async function submitRealmTitleUpdate(
   actorId: string,
   realmId: string,
   title: string,
-  previousTitle: string,
 ) {
   await submitSignedEventApi(
     request,
@@ -612,18 +413,20 @@ async function submitRealmTitleUpdate(
   );
 }
 
-async function listBottomCells(
-  request: APIRequestContext,
-  token: string,
-  realmId: string,
-): Promise<Array<Record<string, unknown>>> {
-  const response = await request.get(
-    `${solandBaseUrl()}/_soland/admin/realms/${encodeURIComponent(realmId)}/bottom`,
-    { headers: authHeaders(token, "GET", `${solandBaseUrl()}/_soland/admin/realms/${encodeURIComponent(realmId)}/bottom`) },
-  );
-  const text = await response.text();
-  expect(response.status(), `list bottom cells: ${text}`).toBe(200);
-  return JSON.parse(text);
+/// Titles of the committed `ak.realm.profile` Events in RealmCommit stream
+/// order, restricted to the titles this fixture authored.
+function realmProfileTitles(
+  events: Array<Record<string, unknown>>,
+  titles: string[],
+): string[] {
+  const wanted = new Set(titles);
+  return events.flatMap((event) => {
+    if (event.kind !== "ak.realm.profile" || !isRecord(event.payload)) {
+      return [];
+    }
+    const title = event.payload.title;
+    return typeof title === "string" && wanted.has(title) ? [title] : [];
+  });
 }
 
 function orderedMessageBodies(
@@ -656,8 +459,4 @@ function messageBody(event: Record<string, unknown>): string | undefined {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-async function closeBottomFixture(fixture: BottomConflictFixture) {
-  await fixture.bobPage.close();
 }

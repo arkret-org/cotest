@@ -94,7 +94,7 @@ one explicit evidence role:
 |---|---|---|
 | Independent oracle | `canonical-json`, `sha256-canonical-json`, `event-derived-id`, `event-envelope-parse`, `principal-control-realm-id`, `webvh-verify-log`, `account-handoff-outcome` | Cross-language canonicalization, parsing, derived identifiers, spec checks, and verification independent of the SUT. |
 | Protocol fixture or negative generator | `event-envelope-proof`, `mimi-consent-proof`, `principal-bootstrap-seal`, `principal-successor-seal` | Server-conformance inputs and mutation matrices. These commands may sign fixtures but cannot establish live-product evidence. |
-| Product bypass | `mls-keypackage-upload-entry`, `webvh-placeholder-did`, `webvh-genesis`, `account-handoff-request`, `principal-registration-fixture`, `identity-creation-register-request` | Fixture-only or server-contract setup. Scenario evidence must declare `test_only_signer_or_wire_builder`; live-product scenarios must not call them. |
+| Product bypass | `mls-keypackage-upload-entry`, `mls-keypackages`, `mls-genesis`, `mls-keypackage-claim-request`, `mls-add-member`, `mls-welcome-delivery`, `mls-install-commit`, `mls-join-welcome`, `mls-encrypt-message`, `webvh-placeholder-did`, `webvh-genesis`, `account-handoff-request`, `principal-registration-fixture`, `identity-creation-register-request` | Fixture-only or server-contract setup. Scenario evidence must declare `test_only_signer_or_wire_builder`; live-product scenarios must not call them. |
 
 The retired `event-proof` alias was removed; all callers use the single
 `event-envelope-proof` command. The generated scenario evidence manifest
