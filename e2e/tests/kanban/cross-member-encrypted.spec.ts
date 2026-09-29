@@ -42,7 +42,7 @@ import {
   type Page,
 } from "../../helpers/arkret-test";
 import { solandBaseUrl } from "../../helpers/env";
-import { canonicalJson } from "../../helpers/soland-api";
+import { assertAuthoritySubmitOutcome, canonicalJson } from "../../helpers/soland-api";
 import { grantInviteConsentArkret } from "../../helpers/contact-api";
 import { stepShot } from "../../helpers/screenshots";
 import { selfPathGrantHeaders } from "../../helpers/session-grant-dpop";
@@ -289,6 +289,13 @@ async function addEncryptedDescription(
   await expect(page.getByTestId("card-detail-modal")).toBeVisible({
     timeout: 45_000,
   });
+  await expect
+    .poll(() => decodeURIComponent(new URL(page.url()).pathname), { timeout: 15_000 })
+    .toContain("/task/ak:strand:");
+  const taskId = decodeURIComponent(
+    new URL(page.url()).pathname.split("/task/")[1]?.split("/")[0] ?? "",
+  );
+  expect(taskId, `card detail route for ${cardTitle}`).toMatch(/^ak:strand:/);
   await page.getByTestId("card-detail-tab-description").click();
   await page.getByTestId("card-detail-edit-description-button").click();
 
@@ -357,6 +364,21 @@ async function addEncryptedDescription(
     acceptedResponse.status(),
     `ak.strand.update should be accepted; body=${body.slice(0, 500)}`,
   ).toBeLessThan(400);
+  const submitted = JSON.parse(acceptedResponse.request().postData() ?? "{}") as {
+    event?: Record<string, unknown>;
+  };
+  expect(submitted.event?.kind).toBe("ak.strand.update");
+  if (!submitted.event) {
+    throw new Error("description edit did not submit an Event envelope");
+  }
+  expect((submitted.event.payload as Record<string, unknown>)?.target_ref).toBe(taskId);
+  const outcome = JSON.parse(body) as Record<string, unknown>;
+  expect(outcome.status, "a new description edit must commit").toBe("committed");
+  assertAuthoritySubmitOutcome(
+    outcome,
+    submitted.event,
+    `encrypted description edit for ${cardTitle}`,
+  );
   expect(
     (acceptedResponse.request().postData() ?? "").includes(description),
     "description leaked as plaintext into the ak.strand.update wire — realm not actually encrypted",
@@ -603,7 +625,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
       // encrypt, invite, Welcome, join, cross-member decrypt, reload, reverse
       // direction) does not fit the 180s default — mirror the sibling MLS browser
       // budget so it does not time out mid-flow.
-      test.setTimeout(fault ? 600_000 : 360_000);
+      test.setTimeout(600_000);
 
       const stamp = Date.now();
       const [aliceSession, bobSession] = await Promise.all([
@@ -637,6 +659,8 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
       const aliceDescription = `Alice private detail ${stamp}`;
       const bobCard = `Bob reply card ${stamp}`;
       const bobDescription = `Bob private reply ${stamp}`;
+      const bobEditOfAliceCard = `Bob edited Alice card ${stamp}`;
+      const aliceEditOfBobCard = `Alice edited Bob card ${stamp}`;
 
       try {
         await alicePage.gotoHome();
@@ -780,6 +804,17 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         await assertE2eeStorageIsHardened(bobPage.page, [aliceDescription]);
         await stepShot(bobPage.page, testInfo, "C-bob-card-survives-reload");
 
+        if (!fault) {
+          // Both members must be able to edit the same accepted encrypted
+          // Strand, rather than merely decrypt each other's own cards.
+          await addEncryptedDescription(bobPage.page, aliceCard, bobEditOfAliceCard);
+          await openReaderBoard(alicePage, realmId, boardId);
+          await assertCardDecrypts(alicePage, aliceCard, bobEditOfAliceCard);
+          await alicePage.page.reload({ waitUntil: "domcontentloaded" });
+          await readyReaderBoard(alicePage, boardId);
+          await assertCardDecrypts(alicePage, aliceCard, bobEditOfAliceCard);
+        }
+
         // 6) Reverse direction: bob adds his own card; it must project back to
         //    alice (the admission fork historically broke BOTH directions).
         const bobColumn = bobPage.page
@@ -813,6 +848,16 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         await assertE2eeStorageIsHardened(alicePage.page, [bobDescription]);
         await stepShot(alicePage.page, testInfo, "D-alice-sees-bob-card");
 
+        if (!fault) {
+          await alicePage.page.reload({ waitUntil: "domcontentloaded" });
+          await readyReaderBoard(alicePage, boardId);
+          await assertCardDecrypts(alicePage, bobCard, bobDescription);
+          await addEncryptedDescription(alicePage.page, bobCard, aliceEditOfBobCard);
+          await bobPage.page.reload({ waitUntil: "domcontentloaded" });
+          await readyReaderBoard(bobPage, boardId);
+          await assertCardDecrypts(bobPage, bobCard, aliceEditOfBobCard);
+        }
+
         // 7) Raw wire stays ciphertext for the private body: the encrypted realm
         //    must never expose alice's description verbatim in the event log.
         const rawEventsUrl = `${solandBaseUrl()}/_arkret/self/events`;
@@ -833,6 +878,8 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         const rawEventBody = JSON.stringify(await rawEvents.json());
         expect(rawEventBody).not.toContain(aliceDescription);
         expect(rawEventBody).not.toContain(bobDescription);
+        expect(rawEventBody).not.toContain(bobEditOfAliceCard);
+        expect(rawEventBody).not.toContain(aliceEditOfBobCard);
         outboundFault?.assertExactReplay();
       } finally {
         await outboundFault?.dispose();
