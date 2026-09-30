@@ -47,6 +47,7 @@ import { grantInviteConsentArkret } from "../../helpers/contact-api";
 import { stepShot } from "../../helpers/screenshots";
 import { selfPathGrantHeaders } from "../../helpers/session-grant-dpop";
 import { installMlsOutboundFault } from "../../helpers/mls-outbound-fault";
+import { selectDxcOption } from "../../helpers/dxc-select";
 import {
   assertJointStackNotRequired,
   createDpopUserSession,
@@ -584,7 +585,9 @@ async function openPendingTimeline(reader: JointUserPage, realmId: string): Prom
 }
 
 test.describe("cross-member encrypted kanban @fully-implemented", () => {
-  test("creator E2EE plaintext cache is encrypted in IndexedDB and survives reload", async ({
+  for (const loseCreateResponse of [false, true]) {
+  test("creator E2EE plaintext cache is encrypted in IndexedDB and survives reload" +
+    (loseCreateResponse ? "; recovers accepted-create response loss before epoch zero" : ""), async ({
     browser,
     request,
   }, testInfo) => {
@@ -622,9 +625,17 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
     const cardTitle = `Secure cache card ${stamp}`;
     const privateDescription = `Secure cache private description ${stamp}`;
     const submittedCreateIds = new Set<string>();
+    const submittedGenesisIds = new Set<string>();
+    let frozenCreateBytes: string | undefined;
+    let cutRealmId: string | undefined;
+    let intentAtCut: Record<string, any> | undefined;
+    let cutActive = loseCreateResponse;
     await creator.page.route(/\/_arkret\/self\/events(?:\?.*)?$/, async (route) => {
       const payload = route.request().postDataJSON() as Record<string, any>;
       const create = payload.events?.[0]?.event;
+      if (payload.event?.kind === "ak.mls.genesis" && payload.event.realm_id === cutRealmId) {
+        submittedGenesisIds.add(payload.event.event_id);
+      }
       if (create?.kind === "ak.realm.create") {
         const intents = await readCreatorIntents(creator.page);
         const intent = intents.find((value) => value.scope_create_event_id === create.event_id);
@@ -634,6 +645,26 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         expect(intent!.creator_signer_method).toBe(create.producer_proof.verification_method);
         expect(intent!.signed_scope_create_unit).toEqual(payload);
         submittedCreateIds.add(create.event_id);
+        frozenCreateBytes ??= route.request().postData()!;
+        expect(route.request().postData(), "create recovery must retain the original signed request bytes").toBe(frozenCreateBytes);
+        if (cutActive) {
+          if (!cutRealmId) {
+            const response = await route.fetch();
+            expect(response.ok(), "the real authority must accept the create before response loss").toBe(true);
+            const outcome = await response.json();
+            expect(outcome.unit_kind).toBe("ordinary_realm_bootstrap");
+            expect(outcome.status).toMatch(/^(committed|duplicate)$/);
+            expect(outcome.commits).toHaveLength(payload.events.length);
+            payload.events.forEach((submission: Record<string, any>, index: number) => {
+              assertAuthoritySubmitOutcome({ status: outcome.status, commit: outcome.commits[index] },
+                submission.event, "accepted create response loss");
+            });
+            intentAtCut = intent;
+            cutRealmId = intent!.effective_scope.realm_id;
+          }
+          await route.abort("connectionfailed");
+          return;
+        }
       }
       await route.continue();
     });
@@ -643,18 +674,46 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
       await creator.completeRecoveryKeySetupIfPrompted();
       await creator.acknowledgeRecommendedEncryptionPromptIfVisible();
 
-      const realmId = await creator.createRealm({
+      const createOptions = {
         title: `Secure cache realm ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
-        historyAccess: "since_join",
+        historyAccess: "since_join" as const,
         mlsActivated: true,
-      });
+      };
+      let realmId: string;
+      if (loseCreateResponse) {
+        // Submit through the real wizard, then destroy its runtime before an
+        // accepted response can release foreground epoch-zero authoring.
+        await creator.gotoSetup();
+        const wizard = creator.page.getByTestId("realm-lifecycle-strand").last();
+        const title = wizard.getByTestId("realm-title-input");
+        if (!(await title.isVisible().catch(() => false))) {
+          await wizard.getByRole("button", { name: /^Basics/ }).first().click();
+        }
+        await title.fill(createOptions.title);
+        await wizard.getByTestId("new-realm-next-button").first().click();
+        await selectDxcOption(wizard.getByTestId("realm-discoverability-input"), createOptions.discoverability);
+        await selectDxcOption(wizard.getByTestId("realm-policy-join-rule-input"), createOptions.joinRule);
+        await selectDxcOption(wizard.getByTestId("realm-policy-history-access-input"), createOptions.historyAccess);
+        await selectDxcOption(wizard.getByTestId("realm-mls-activation-input"), "after_create");
+        await wizard.getByTestId("new-realm-next-button").first().click();
+        await wizard.getByTestId("create-realm-button").click();
+        await expect.poll(() => cutRealmId, { timeout: 120_000 }).toBeTruthy();
+        expect(submittedGenesisIds.size, "the crash cut precedes every Genesis submission").toBe(0);
+        realmId = cutRealmId!;
+        await stepShot(creator.page, testInfo, "A-accepted-create-response-lost");
+        await creator.page.goto(`/chat/${encodeURIComponent(realmId)}`, { waitUntil: "domcontentloaded" });
+        cutActive = false;
+      } else {
+        realmId = await creator.createRealm(createOptions);
+      }
       expect(submittedCreateIds.size).toBe(1);
       const intentBeforeReload = (await readCreatorIntents(creator.page)).find(
         (intent) => intent.effective_scope.realm_id === realmId,
       );
       expect(intentBeforeReload).toBeDefined();
+      if (loseCreateResponse) expect(intentBeforeReload).toEqual(intentAtCut);
       const boardId = await buildEncryptedBoardListCard(
         creator.page,
         realmId,
@@ -667,6 +726,10 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         cardTitle,
         privateDescription,
       );
+      if (loseCreateResponse) {
+        expect(submittedGenesisIds.size, "background recovery must author one Genesis for the original scope").toBe(1);
+        expect(submittedCreateIds.size).toBe(1);
+      }
 
       await assertE2eeStorageIsHardened(creator.page, [privateDescription]);
       await stepShot(creator.page, testInfo, "A-secure-cache-before-reload");
@@ -684,6 +747,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
       await creator.close();
     }
   });
+  }
 
   for (const fault of [undefined, "commit-response-lost", "welcome-before-durable", "welcome-response-lost", "retryable-unavailable", "private-state-blocked", "late-transition-tail"] as const) {
     test("bob joins an MLS-encrypted realm and decrypts alice's encrypted card content; survives reload; bob's own card projects back to alice" + (fault ? `; recovers ${fault}` : ""), async ({
