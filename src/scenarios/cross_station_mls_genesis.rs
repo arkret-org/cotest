@@ -238,6 +238,10 @@ pub async fn cross_station_mls_genesis_run() -> Result<()> {
         &[arkret_wire::CapabilityActionId::MLS_GENESIS],
     )
     .await?;
+    eprintln!(
+        "cross_station_mls_genesis: indefinite remote MLS grant committed as {}",
+        grant_commit.event_ref
+    );
     // Y answers Bob's read of Alice's later grant from its own typed current;
     // Alice's Invite before his join and every read by Eve, who is not a
     // member, stay not found.

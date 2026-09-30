@@ -9,6 +9,8 @@ pub mod certification_report;
 pub mod chaos_kill_midwrite;
 pub mod circle;
 pub mod circle_full_view_live;
+pub mod circle_parent_membership_live;
+pub mod sidecar_authority_live;
 pub mod circle_poll_scope_live;
 pub mod coauth_session_grant_response_loss;
 pub mod collaboration_workflow;
@@ -63,3 +65,9 @@ pub mod strand_lifecycle_live;
 pub mod strand_watch_live;
 pub mod teabay_resolve_realm;
 pub mod to_device_offline_ordering;
+
+pub mod mimi_facade_live;
+
+pub mod third_party_invite_claim_live;
+
+pub mod approval_admission_live;

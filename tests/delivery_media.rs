@@ -3,6 +3,12 @@ use serial_test::serial;
 
 #[tokio::test]
 #[serial]
+async fn blob_storage_classification_survives_restart() -> Result<()> {
+    cotest::scenarios::delivery_media::blob_storage_classification_survives_restart().await
+}
+
+#[tokio::test]
+#[serial]
 async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
     cotest::scenarios::delivery_media::key_upload_query_and_claim_edges_are_enforced().await
 }

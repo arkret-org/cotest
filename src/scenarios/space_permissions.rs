@@ -164,11 +164,24 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
     )
     .await?;
 
-    // History reads after terminal acceptance are optional. Prepare a valid
-    // member write first, then prove that terminal acceptance fences it out.
-    // Bob's actor chain is unchanged by Alice's destroy, isolating this guard
-    // from an unrelated author-sequence conflict.
-    let after_destroy = bob
+    let destroy = alice
+        .author_event(
+            &realm_id,
+            "ak.realm.destroy",
+            json!({"reason": "owner_requested"}),
+        )
+        .await?;
+    expect_api_error(
+        alice
+            .authorize(server.http().post(server.url("/_arkret/self/events")))
+            .json(&crate::publication::initial_submission(destroy, "")?),
+        StatusCode::CONFLICT,
+        "failed_precondition",
+    )
+    .await?;
+    let successor = alice.create_realm("Successor Space").await?;
+    // A prepared member write cannot cross the accepted terminal fence.
+    let after_tombstone = bob
         .author_event(
             &realm_id,
             "ak.message.create",
@@ -178,17 +191,17 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
     alice
         .submit_event(
             &realm_id,
-            "ak.realm.destroy",
-            json!({"reason": "owner_requested"}),
+            "ak.realm.tombstone",
+            json!({"reason": "migrated", "successor_realm_id": successor}),
         )
         .await?;
     expect_api_error(
         bob.authorize(server.http().post(server.url("/_arkret/self/events")))
-            .json(&crate::publication::initial_submission(after_destroy, "")?),
+            .json(&crate::publication::initial_submission(
+                after_tombstone,
+                "",
+            )?),
         StatusCode::CONFLICT,
-        // The top-level wire error code is `failed_precondition`; the
-        // terminal-state condition is carried as the `realm_terminal_state`
-        // sub-reason (it is a spec `reason_code`, not a top-level error code).
         "failed_precondition",
     )
     .await?;

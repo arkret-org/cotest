@@ -356,12 +356,159 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
 /// blob uploads to be `multipart/form-data` with a single `content` file part
 /// and a `size_bytes` field matching the part size (blob.rs upload parser).
 pub(crate) fn blob_upload_form(bytes: &[u8], media_type: &str) -> Result<reqwest::multipart::Form> {
+    blob_upload_classified_form(bytes, media_type, None)
+}
+
+fn blob_upload_classified_form(
+    bytes: &[u8],
+    media_type: &str,
+    encryption: Option<arkret_models_collaboration::objects::blob::BlobStorageEncryption>,
+) -> Result<reqwest::multipart::Form> {
     let part = reqwest::multipart::Part::bytes(bytes.to_vec())
         .file_name("blob.bin")
         .mime_str(media_type)?;
     Ok(reqwest::multipart::Form::new()
         .text("size_bytes", bytes.len().to_string())
+        .part(
+            "encryption",
+            reqwest::multipart::Part::text(serde_json::to_string(&encryption)?)
+                .mime_str("application/json")?,
+        )
         .part("content", part))
+}
+
+pub async fn blob_storage_classification_survives_restart() -> Result<()> {
+    use arkret_models_collaboration::objects::blob::{
+        BlobStorageEncryption, BlobStorageEncryptionScheme,
+    };
+    let mut station = spawn_with_standard_grant_authority("blob-classification", &[]).await?;
+    let alice_did = actor_did_for_service_did(station.server.service_did(), "blob-class-alice")?;
+    let alice = station
+        .server
+        .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
+        .await?;
+    let alice = station.standard_grant_client(&alice)?;
+    let upload_path = "/_arkret/self/blob/upload";
+    let bytes = b"opaque-storage-classification";
+    let missing = reqwest::multipart::Form::new()
+        .text("size_bytes", bytes.len().to_string())
+        .part(
+            "content",
+            reqwest::multipart::Part::bytes(bytes.to_vec()).mime_str("application/octet-stream")?,
+        );
+    expect_api_error(
+        alice.post(upload_path).multipart(missing),
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "schema_violation",
+    )
+    .await?;
+    expect_api_error(
+        alice
+            .post(upload_path)
+            .multipart(blob_upload_form(bytes, "text/plain")?.text("media_type", "image/png")),
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "schema_violation",
+    )
+    .await?;
+    expect_api_error(
+        alice
+            .post(upload_path)
+            .multipart(blob_upload_form(bytes, "text/plain")?.text("purpose", "file_transfer")),
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "schema_violation",
+    )
+    .await?;
+    let plaintext = expect_json(
+        alice
+            .post(upload_path)
+            .multipart(blob_upload_form(b"plaintext-classification", "text/plain")?),
+        StatusCode::OK,
+    )
+    .await?;
+    let plaintext_ref = plaintext["blob_ref"]
+        .as_str()
+        .context("plaintext blob_ref")?;
+    assert_eq!(
+        expect_text(
+            alice.get(&format!("/_arkret/self/blob/get?blob_ref={plaintext_ref}")),
+            StatusCode::OK
+        )
+        .await?,
+        "plaintext-classification"
+    );
+    let mut encrypted_refs = Vec::new();
+    for (index, scheme) in [
+        BlobStorageEncryptionScheme::WholeFileV1,
+        BlobStorageEncryptionScheme::StreamV1,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let encryption = Some(BlobStorageEncryption { scheme });
+        expect_api_error(
+            alice
+                .post(upload_path)
+                .multipart(blob_upload_classified_form(
+                    bytes,
+                    "text/plain",
+                    encryption,
+                )?),
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "schema_violation",
+        )
+        .await?;
+        let ciphertext = format!("opaque ciphertext {index}");
+        let outcome = expect_json(
+            alice
+                .post(upload_path)
+                .multipart(blob_upload_classified_form(
+                    ciphertext.as_bytes(),
+                    "application/octet-stream",
+                    encryption,
+                )?),
+            StatusCode::OK,
+        )
+        .await?;
+        encrypted_refs.push((
+            outcome["blob_ref"]
+                .as_str()
+                .context("ciphertext blob_ref")?
+                .to_owned(),
+            ciphertext,
+        ));
+    }
+    for restart in [false, true] {
+        if restart {
+            station.server.restart_external_process().await?;
+        }
+        for (blob_ref, ciphertext) in &encrypted_refs {
+            let response = alice.get(&format!("/_arkret/self/blob/get?blob_ref={blob_ref}"));
+            let response = expect_response(response, StatusCode::OK).await?;
+            assert_eq!(
+                response.headers.get("content-type").unwrap(),
+                "application/octet-stream"
+            );
+            assert_eq!(response.body, ciphertext.as_bytes());
+            expect_api_error(
+                alice.post(upload_path).multipart(blob_upload_form(
+                    ciphertext.as_bytes(),
+                    "application/octet-stream",
+                )?),
+                StatusCode::CONFLICT,
+                "failed_precondition",
+            )
+            .await?;
+            expect_api_error(
+                alice
+                    .post("/_arkret/self/blob/presign")
+                    .json(&json!({"blob_ref": blob_ref, "purpose": "download"})),
+                StatusCode::FORBIDDEN,
+                "capability_denied",
+            )
+            .await?;
+        }
+    }
+    Ok(())
 }
 
 pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {

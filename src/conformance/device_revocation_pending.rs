@@ -2,10 +2,10 @@
 
 use anyhow::{Result, bail};
 use arkret_wire::{
-    AccountId, DeviceId, DeviceRevocationAdmissionAction, DeviceRevocationAdmissionDecision,
-    DeviceRevocationAdmissionInput, DeviceRevocationAdmissionRecord,
-    DeviceRevocationAdmissionResult, DidCoreId, EventId, Hash, RealmCommitId,
-    SessionGrantAdmission, SessionGrantAdmissionBlockReason,
+    AccountId, DeviceId, DeviceRevocationAdmissionDecision, DeviceRevocationAdmissionInput,
+    DeviceRevocationAdmissionRecord, DeviceRevocationAdmissionResult, DeviceRevocationDeniedAction,
+    DidCoreId, EventId, Hash, RealmCommitId, SessionGrantAdmission,
+    SessionGrantAdmissionBlockReason,
 };
 use chrono::{DateTime, Duration, TimeZone as _, Utc};
 
@@ -97,7 +97,7 @@ fn request() -> Result<DeviceRevocationAdmissionInput> {
         device_id: "ak:device:0196419b-0000-7000-8000-000000000001".parse::<DeviceId>()?,
         expected_device_authorize_event_id: Some(event_id()?),
         expected_device_generation_ref: Some(7),
-        action_class: DeviceRevocationAdmissionAction::SessionGrantIssueOrRefresh,
+        action_class: DeviceRevocationDeniedAction::SessionGrantIssueOrRefresh,
         intent_digest: hash('a')?,
         accepted_device_possession_proof: None,
         requested_at: at(0)?,

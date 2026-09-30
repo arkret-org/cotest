@@ -831,3 +831,6 @@ pub(crate) fn validate_rank(rank: &str, max_length: usize) -> Result<()> {
 
 mod service_did_routes;
 pub use service_did_routes::run_service_did_routes_suite;
+
+mod mimi_facade;
+pub use mimi_facade::{run_mimi_admission_guards_suite, run_mimi_room_binding_migration_suite};

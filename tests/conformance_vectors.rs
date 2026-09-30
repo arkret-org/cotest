@@ -312,8 +312,8 @@ fn expected_state_digest_known_answers_recompute_every_fold() -> Result<()> {
 fn named_suite_audit_executes_registered_runners_and_exposes_every_gap() -> Result<()> {
     let report = run_named_suite_audit()?;
     assert_eq!(report.fixture_count, 82);
-    assert_eq!(report.executed_entrypoints.len(), 50);
-    assert_eq!(report.unwired_entrypoints.len(), 32);
+    assert_eq!(report.executed_entrypoints.len(), 52);
+    assert_eq!(report.unwired_entrypoints.len(), 30);
     for required_gap in [
         "ak.suite.call.force_mute_v1_boundary.v1",
         "ak.suite.current.cas_failure_read_boundary.v1",
@@ -323,7 +323,6 @@ fn named_suite_audit_executes_registered_runners_and_exposes_every_gap() -> Resu
         "ak.suite.federation.idempotency_after_key_revoke.v1",
         "ak.suite.reaction.authority_order.v1",
         "ak.suite.invite.claim_security.v1",
-        "ak.suite.mimi.admission_guards.v1",
         "ak.suite.peer.event_submit.semantic_union.v1",
         "ak.suite.signer_key.historical_commit_coordinate.v1",
     ] {

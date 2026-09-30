@@ -734,6 +734,85 @@ async fn wait_for_activation(
 /// An Agent is provisioned, founded, paired and reads its recipient queue
 /// with its runtime SessionGrant; the controller's own queue read stays a
 /// human-device read.
+/// The live admission half of `ak.vector.agent.longevity_no_expiry.v1`.
+/// A provisioned Agent and a Service receive the same indefinite grants at
+/// every risk tier, without fetching either subject's display profile.
+pub async fn run_agent_capability_longevity_live() -> Result<()> {
+    let scenario = "agent-capability-longevity";
+    let Some(database) = database(scenario)? else {
+        return Ok(());
+    };
+    let coauth = MockCoauthIntrospectionServer::spawn_with_internal_secret(
+        HARNESS_INTERNAL_AUTHORITY_SECRET,
+    )
+    .await?;
+    let Some(group) = TestServerGroup::try_multi_external_with_node_envs(
+        scenario,
+        &[station_env(&database.connect_url, &coauth)],
+    )
+    .await?
+    else {
+        return skip_or_fail(scenario, "prebuilt Soland unavailable");
+    };
+    let station = group.server(0);
+    let (controller, controller_account) =
+        standard_client(station, &coauth, CONTROLLER_LABEL, CONTROLLER_DEVICE).await?;
+    let agent = AgentRuntimeSession::establish(
+        station,
+        &coauth,
+        &controller,
+        &controller_account,
+        "longevity-agent",
+    )
+    .await?;
+    let realm = RealmId::new(controller.create_realm("Grant Longevity Realm").await?)?;
+    let subjects = [
+        ("Agent", ActorId::account(agent.agent_account)),
+        ("Service", ActorId::service(station.service_id().clone())),
+    ];
+    for (label, subject) in subjects {
+        for action in ["ak.event.read", "ak.message.create", "ak.realm.admin"] {
+            let grant = arkret_models_collaboration::events_payloads::CapabilityGrantCreateBody {
+                schema: SchemaId::CAPABILITY_V1.to_owned(),
+                realm_id: Some(realm.clone()),
+                issuer_id: ActorId::account(controller_account.clone()),
+                subject: arkret_models_collaboration::governance::grant_constraint::CapabilitySubject::Actor(subject.clone()),
+                actions: vec![action.to_owned()],
+                resources: vec![serde_json::from_value(json!({
+                    "kind": "realm", "realm_id": realm, "match_scope": "realm_wide"
+                }))?],
+                constraints: Vec::new(),
+                issuer_authority_refs: vec![arkret::IssuerAuthorityRef::RealmRoot {
+                    realm_id: realm.clone(),
+                    authority_event_ref: realm.event_id(),
+                    authority_generation: 0,
+                }],
+                issued_at: Utc::now(),
+            };
+            let payload = arkret_models_collaboration::events_payloads::CapabilityGrantPayload {
+                grant,
+            };
+            let outcome: AuthoritySubmitOutcome = serde_json::from_value(
+                controller
+                    .submit_event(
+                        realm.as_str(),
+                        arkret_wire::EventKind::CapabilityGrant.as_str(),
+                        serde_json::to_value(payload)?,
+                    )
+                    .await?,
+            )?;
+            ensure!(
+                matches!(outcome, AuthoritySubmitOutcome::Accepted {
+                    status: AuthorityCommitStatus::Committed, ..
+                }),
+                "indefinite Realm-wide {action} grant to {label} was not committed: {outcome:?}"
+            );
+            eprintln!("agent longevity: indefinite Realm-wide {action} grant to {label} committed");
+        }
+    }
+    Ok(())
+}
+
 pub async fn run_agent_runtime_session_live() -> Result<()> {
     let Some(database) = database(GROUP)? else {
         return Ok(());

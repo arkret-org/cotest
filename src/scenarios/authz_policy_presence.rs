@@ -14,7 +14,7 @@ use crate::harness::{
     TestActorClient, actor_core_id, expect_api_error, expect_json, expect_status,
 };
 use crate::scenarios::identity_test_support::{
-    actor_did_for_service_did, create_human_actor_profile, spawn_with_standard_grant_authority,
+    actor_did_for_service_did, spawn_with_standard_grant_authority,
 };
 
 pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
@@ -43,7 +43,6 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
             )
             .await?,
     )?;
-    create_human_actor_profile(&bob, "Bob Authz").await?;
     let bob_core_id = actor_core_id(&bob.actor)?;
     let realm_id = alice.create_realm("Grant Lifecycle Realm").await?;
 
@@ -76,7 +75,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
         .await?;
     assert_eq!(manage_grant["status"], "committed");
 
-    // Human kind comes from Bob's accepted PCR profile above. A regular
+    // Grant admission does not inspect Bob's display classification. A
     // high-risk Realm admin grant may be indefinite, while the broadcast
     // action's registry entry requires a finite global grant lifetime for
     // every subject.

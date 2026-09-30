@@ -79,7 +79,7 @@ const EVE_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002608";
 const CLAIM_QUERY: &str = "/_arkret/self/keys/keypackages/claims/query";
 const PEER_ATTEST_ADD: &str = "/_arkret/peer/mls/add-authority-attestations";
 
-fn genesis_creator_leaf_authority(
+pub(crate) fn genesis_creator_leaf_authority(
     group: &mut ArkretMlsGroup,
     creator: &Member,
 ) -> Result<MlsGenesisCreatorLeafAuthority> {
@@ -433,7 +433,7 @@ async fn cross_station_mls_welcome_original_run() -> Result<()> {
     ] {
         join_through_invite(&alice, x, member, &realm, request_id, digest).await?;
     }
-    grant_realm_actions(
+    let bob_grant = grant_realm_actions(
         &alice.client,
         x,
         &realm,
@@ -444,7 +444,11 @@ async fn cross_station_mls_welcome_original_run() -> Result<()> {
         ],
     )
     .await?;
-    grant_realm_actions(
+    eprintln!(
+        "cross_station_mls_welcome: indefinite Bob MLS grant committed as {}",
+        bob_grant.event_ref
+    );
+    let carol_grant = grant_realm_actions(
         &alice.client,
         x,
         &realm,
@@ -452,6 +456,10 @@ async fn cross_station_mls_welcome_original_run() -> Result<()> {
         &[arkret_wire::CapabilityActionId::MLS_COMMIT],
     )
     .await?;
+    eprintln!(
+        "cross_station_mls_welcome: indefinite Carol MLS grant committed as {}",
+        carol_grant.event_ref
+    );
     let scope = ScopeRef::Realm {
         realm_id: realm_id.clone(),
     };

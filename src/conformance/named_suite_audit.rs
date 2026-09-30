@@ -13,10 +13,9 @@ use serde_json::Value;
 
 use super::{
     ACCOUNT_BLOCKLIST_PROJECTION_ENTRYPOINT, ACCOUNT_DATA_CAS_CONVERGENCE_ENTRYPOINT,
-    ACTOR_PRIVATE_EVENTS_SUBMIT_ENTRYPOINT,
-    AEAD_NONCE_REPLAY_ENTRYPOINT, AGENT_MLS_KEYPACKAGE_AUTHORIZATION_ENTRYPOINT,
-    AUTHORITY_FORWARD_GENESIS_MATERIAL_ENTRYPOINT, BLOB_STREAM_AEAD_ENTRYPOINT,
-    CALL_MEDIA_LIFECYCLE_ENTRYPOINT, CALL_STATE_CORE_ENTRYPOINT,
+    ACTOR_PRIVATE_EVENTS_SUBMIT_ENTRYPOINT, AEAD_NONCE_REPLAY_ENTRYPOINT,
+    AGENT_MLS_KEYPACKAGE_AUTHORIZATION_ENTRYPOINT, AUTHORITY_FORWARD_GENESIS_MATERIAL_ENTRYPOINT,
+    BLOB_STREAM_AEAD_ENTRYPOINT, CALL_MEDIA_LIFECYCLE_ENTRYPOINT, CALL_STATE_CORE_ENTRYPOINT,
     CAPABILITY_RELINQUISH_AUTHORING_ENTRYPOINT, CRYPTO_HPKE_ENTRYPOINT, CURSOR_NEGATIVE_ENTRYPOINT,
     DETACHED_OBJECT_SIGNATURE_ENTRYPOINT, FRANKING_PROOF_ENTRYPOINT,
     KEY_BACKUP_HARDENING_ENTRYPOINT, KEYPACKAGE_LIFECYCLE_ENTRYPOINT,
@@ -29,12 +28,11 @@ use super::{
     STRAND_WATCH_CURRENT_ENTRYPOINT, STRING_PROFILE_ENTRYPOINT, SuiteExecutionResult,
     TEST_MATERIAL_REJECTION_ENTRYPOINT, VIEW_WRITE_CONTRACT_ENTRYPOINT,
     run_account_blocklist_projection_suite, run_account_data_cas_convergence_suite,
-    run_account_status_issuer_ledger_vector,
-    run_actor_private_events_submit_suite, run_aead_nonce_replay_suite,
-    run_agent_membership_cascade_suite, run_agent_mls_keypackage_authorization_suite,
-    run_applet_registration_epoch_kat_suite, run_authority_commit_suite,
-    run_authority_forward_genesis_material_suite, run_blob_stream_aead_suite,
-    run_call_media_lifecycle_suite, run_call_state_core_suite,
+    run_account_status_issuer_ledger_vector, run_actor_private_events_submit_suite,
+    run_aead_nonce_replay_suite, run_agent_membership_cascade_suite,
+    run_agent_mls_keypackage_authorization_suite, run_applet_registration_epoch_kat_suite,
+    run_authority_commit_suite, run_authority_forward_genesis_material_suite,
+    run_blob_stream_aead_suite, run_call_media_lifecycle_suite, run_call_state_core_suite,
     run_capability_relinquish_authoring_suite, run_crypto_hpke_suite, run_cursor_negative_suite,
     run_detached_object_signature_suite, run_encoding_fixture_suite,
     run_event_envelope_fixture_suite, run_fanout_route_miss_suite,
@@ -42,6 +40,7 @@ use super::{
     run_invite_new_source_quota_suite, run_key_backup_hardening_suite,
     run_keypackage_lifecycle_suite, run_keypackage_recipient_claim_read_suite,
     run_keypackage_write_transcripts_suite, run_media_binding_suite,
+    run_mimi_admission_guards_suite, run_mimi_room_binding_migration_suite,
     run_mls_creator_bootstrap_recovery_suite, run_mls_cross_station_welcome_replication_suite,
     run_mls_governance_binding_suite, run_object_identity_collision_suite,
     run_private_view_inbox_suite, run_producer_identity_suite, run_protocol_time_tolerance_suite,
@@ -58,7 +57,7 @@ const ACCOUNT_STATUS_ENTRYPOINT: &str = "ak.suite.account_status.issuer_ledger.v
 /// Exact acknowledged gap ledger. This is deliberately closed: adding or
 /// renaming a canonical named suite cannot remain invisible merely because the
 /// total number of unwired suites happened to stay constant.
-const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 32] = [
+const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 30] = [
     "ak.suite.agent.draft_pending_intent.v1",
     "ak.suite.agent.participation.v1",
     "ak.suite.agent.vectors.v1",
@@ -79,8 +78,6 @@ const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 32] = [
     "ak.suite.identity.independent_admission.v1",
     "ak.suite.identity.pcr_genesis.v1",
     "ak.suite.invite.claim_security.v1",
-    "ak.suite.mimi.admission_guards.v1",
-    "ak.suite.mimi.room_binding_migration.v1",
     "ak.suite.mls.rfc9420_kat.v1",
     "ak.suite.mls.roster_authority.v1",
     "ak.suite.peer.event_submit.semantic_union.v1",
@@ -106,7 +103,15 @@ enum Runner {
     EvidenceMapped(fn() -> Result<()>),
 }
 
-const RUNNERS: [(&str, Runner); 50] = [
+const RUNNERS: [(&str, Runner); 52] = [
+    (
+        "ak.suite.mimi.admission_guards.v1",
+        Runner::Cases(run_mimi_admission_guards_suite),
+    ),
+    (
+        "ak.suite.mimi.room_binding_migration.v1",
+        Runner::Cases(run_mimi_room_binding_migration_suite),
+    ),
     (
         ACCOUNT_BLOCKLIST_PROJECTION_ENTRYPOINT,
         Runner::Cases(run_account_blocklist_projection_suite),

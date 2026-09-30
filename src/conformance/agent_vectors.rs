@@ -815,6 +815,9 @@ pub fn run_agent_repairing_supersede_vector() -> Result<()> {
 // ─── VECT-AG-2c — longevity_no_expiry ──────────────────────────────────────
 
 pub fn run_agent_longevity_no_expiry_vector() -> Result<()> {
+    // This synchronous half verifies the key/accountability wire contracts.
+    // Capability admission at every risk tier is exercised against a real
+    // provisioned Agent by agent_runtime_live::run_agent_capability_longevity_live.
     if arkret_wire::ReasonCode::AGENT_KEY_AUTHORIZATION_EXPIRED != "agent_key_authorization_expired"
     {
         bail!(
