@@ -539,6 +539,13 @@ async function openReaderBoard(
   await readyReaderBoard(reader, boardId);
 }
 
+async function openPendingTimeline(reader: JointUserPage, realmId: string): Promise<void> {
+  await reader.page.goto(`/chat/${encodeURIComponent(realmId)}`, { waitUntil: "domcontentloaded" });
+  await expect(reader.page.getByTestId("chat-panel")).toBeVisible({ timeout: 120_000 });
+  await expect(reader.page.getByTestId("message-list")).toBeVisible({ timeout: 120_000 });
+  await expect(reader.page.getByTestId("chat-panel")).toHaveAttribute("data-initial-sync", "pending");
+}
+
 test.describe("cross-member encrypted kanban @fully-implemented", () => {
   test("creator E2EE plaintext cache is encrypted in IndexedDB and survives reload", async ({
     browser,
@@ -616,7 +623,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
     }
   });
 
-  for (const fault of [undefined, "commit-response-lost", "welcome-before-durable", "welcome-response-lost"] as const) {
+  for (const fault of [undefined, "commit-response-lost", "welcome-before-durable", "welcome-response-lost", "private-state-blocked"] as const) {
     test("bob joins an MLS-encrypted realm and decrypts alice's encrypted card content; survives reload; bob's own card projects back to alice" + (fault ? `; recovers ${fault}` : ""), async ({
       browser,
       request,
@@ -652,6 +659,9 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
       const alicePage = aliceFlow!.page;
       let bobPage: JointUserPage | undefined;
       let outboundFault: Awaited<ReturnType<typeof installMlsOutboundFault>> | undefined;
+      const privateClaimQuery = /\/_arkret\/self\/keys\/keypackages\/claims\/query(?:\?.*)?$/;
+      let holdPrivateState = fault === "private-state-blocked";
+      let privateReadCuts = 0;
 
       const boardTitle = `Enc XM Board ${stamp}`;
       const listTitle = `Todo-${stamp}`;
@@ -718,8 +728,18 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         //    is the content bob can legitimately both see and decrypt. (Pre-join
         //    history sharing is a separate, optional capability — not the core
         //    cross-member collaboration path this test exercises.)
-        if (fault) {
+        if (fault && fault !== "private-state-blocked") {
           outboundFault = await installMlsOutboundFault(alicePage.page, realmId, fault);
+        }
+        if (holdPrivateState) {
+          await bobPage.page.route(privateClaimQuery, async (route) => {
+            if (holdPrivateState) {
+              privateReadCuts += 1;
+              await route.abort("failed");
+            } else {
+              await route.continue();
+            }
+          });
         }
         await bobPage.acceptInvite(realmId);
         if (outboundFault) {
@@ -729,7 +749,11 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           await alicePage.page.reload({ waitUntil: "domcontentloaded" });
           await outboundFault.restore();
         }
-        await bobPage.gotoTimelineRealm(realmId);
+        if (holdPrivateState) {
+          await openPendingTimeline(bobPage, realmId);
+        } else {
+          await bobPage.gotoTimelineRealm(realmId);
+        }
         await waitForMlsCommit(request, aliceSession, realmId, bob.id);
         await bobPage.page.reload({ waitUntil: "domcontentloaded" });
         await bobPage.completeRecoveryKeySetupIfPrompted();
@@ -792,6 +816,19 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         // 5) THE CORE ASSERTION: bob opens the board and decrypts alice's private
         //    card content.
         await openReaderBoard(bobPage, realmId, boardId);
+        if (holdPrivateState) {
+          await expect.poll(() => privateReadCuts, { timeout: 90_000 }).toBeGreaterThan(0);
+          const committedList = bobPage.page.getByTestId("kanban-column").filter({ hasText: listTitle }).first();
+          await expect(committedList).toBeVisible({ timeout: 90_000 });
+          await expect(committedList).toHaveAttribute("data-column-draft", "false");
+          await expect(committedList.getByTestId("add-card-button")).toBeDisabled();
+          await openPendingTimeline(bobPage, realmId);
+          await expect(bobPage.page.getByTestId("chat-panel")).toHaveAttribute("data-initial-sync", "pending");
+          holdPrivateState = false;
+          await bobPage.page.unroute(privateClaimQuery);
+          await expect(bobPage.page.getByTestId("chat-panel")).toHaveAttribute("data-initial-sync", "complete", { timeout: 120_000 });
+          await openReaderBoard(bobPage, realmId, boardId);
+        }
         await assertCardDecrypts(bobPage, aliceCard, aliceDescription);
         await assertE2eeStorageIsHardened(bobPage.page, [aliceDescription]);
         await stepShot(bobPage.page, testInfo, "B-bob-decrypted-card");
@@ -909,6 +946,8 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         expect(rawEventBody).not.toContain(aliceEditOfBobCard);
         outboundFault?.assertExactReplay();
       } finally {
+        holdPrivateState = false;
+        await bobPage?.page.unroute(privateClaimQuery);
         await outboundFault?.dispose();
         await Promise.allSettled([
           bobPage?.close() ?? Promise.resolve(),
