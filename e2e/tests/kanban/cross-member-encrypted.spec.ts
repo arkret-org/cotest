@@ -75,6 +75,7 @@ async function waitForMlsCommit(
   session: DpopUserSession,
   realmId: string,
   recipientId: string,
+  minimumEpoch = 1,
 ): Promise<void> {
   await expect
     .poll(
@@ -104,7 +105,7 @@ async function waitForMlsCommit(
         const body = await response.json();
         return (body.committed_events ?? []).some(
           (item: { event?: Record<string, any> }) =>
-            item.event?.kind === "ak.mls.commit",
+            item.event?.kind === "ak.mls.commit" && Number(item.event.payload?.next_epoch) >= minimumEpoch,
         );
       },
       {
@@ -623,7 +624,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
     }
   });
 
-  for (const fault of [undefined, "commit-response-lost", "welcome-before-durable", "welcome-response-lost", "private-state-blocked"] as const) {
+  for (const fault of [undefined, "commit-response-lost", "welcome-before-durable", "welcome-response-lost", "private-state-blocked", "late-transition-tail"] as const) {
     test("bob joins an MLS-encrypted realm and decrypts alice's encrypted card content; survives reload; bob's own card projects back to alice" + (fault ? `; recovers ${fault}` : ""), async ({
       browser,
       request,
@@ -658,6 +659,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
       expect(aliceFlow).toBeTruthy();
       const alicePage = aliceFlow!.page;
       let bobPage: JointUserPage | undefined;
+      let carolPage: JointUserPage | undefined;
       let outboundFault: Awaited<ReturnType<typeof installMlsOutboundFault>> | undefined;
       const privateClaimQuery = /\/_arkret\/self\/keys\/keypackages\/claims\/query(?:\?.*)?$/;
       let holdPrivateState = fault === "private-state-blocked";
@@ -728,7 +730,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         //    is the content bob can legitimately both see and decrypt. (Pre-join
         //    history sharing is a separate, optional capability — not the core
         //    cross-member collaboration path this test exercises.)
-        if (fault && fault !== "private-state-blocked") {
+        if (fault === "commit-response-lost" || fault === "welcome-before-durable" || fault === "welcome-response-lost") {
           outboundFault = await installMlsOutboundFault(alicePage.page, realmId, fault);
         }
         if (holdPrivateState) {
@@ -841,6 +843,30 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         await assertE2eeStorageIsHardened(bobPage.page, [aliceDescription]);
         await stepShot(bobPage.page, testInfo, "C-bob-card-survives-reload");
 
+        if (fault === "late-transition-tail") {
+          const carolSession = await createDpopUserSession(request, "xmenc-carol");
+          expect(carolSession).toBeTruthy();
+          const carol = carolSession!.user;
+          await grantInviteConsentArkret(request, carolSession!.grantJwt, carol, alice.id);
+          const locator = await issueInviteLocatorToken(request, carolSession!.grantJwt);
+          expect(await alicePage.inviteFromAdmin(realmId, carol.id, carol.id, { token: locator })).toContain("invited");
+          const flow = await openDpopUserPageFromSession(browser, carolSession!);
+          expect(flow).toBeTruthy();
+          carolPage = flow!.page;
+          await carolPage.gotoHome();
+          await carolPage.completeRecoveryKeySetupIfPrompted();
+          await carolPage.acknowledgeRecommendedEncryptionPromptIfVisible();
+          await carolPage.acceptInvite(realmId);
+          await waitForMlsCommit(request, aliceSession, realmId, carol.id, 2);
+          await carolPage.gotoTimelineRealm(realmId);
+          // Bob was not a new recipient of this Welcome. His durable epoch-one
+          // group must apply the accepted tail, rather than borrow Carol's secret.
+          await bobPage.page.reload({ waitUntil: "domcontentloaded" });
+          await readyReaderBoard(bobPage, boardId);
+          await assertCardDecrypts(bobPage, aliceCard, aliceDescription);
+          await stepShot(bobPage.page, testInfo, "C2-bob-after-next-accepted-commit");
+        }
+
         // Joining grants visibility, not collaboration authority. The owner
         // explicitly permits card creation/placement and Description editing;
         // the field constraint does not grant Synthesis or metadata editing.
@@ -863,7 +889,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           }],
         });
 
-        if (!fault) {
+        if (!fault || fault === "late-transition-tail") {
           // Both members must be able to edit the same accepted encrypted
           // Strand, rather than merely decrypt each other's own cards.
           await addEncryptedDescription(bobPage.page, aliceCard, bobEditOfAliceCard);
@@ -951,6 +977,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         await outboundFault?.dispose();
         await Promise.allSettled([
           bobPage?.close() ?? Promise.resolve(),
+          carolPage?.close() ?? Promise.resolve(),
           alicePage.close(),
         ]);
       }

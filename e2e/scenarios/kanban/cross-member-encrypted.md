@@ -88,6 +88,12 @@ EventId 必须保持唯一且等于断点前原 ID，完整提交字节必须逐
 已有 accepted List 仍可见时，Add Card 必须禁用，初始同步仍为 pending；恢复查询后必须完成私有安装、解密、双向编辑与 reload。
 该断点用于区分公共详情 baseline 与密码学可写状态，不用伪造成功响应或修改 current 值。
 
+## 连续 accepted Commit 恢复
+
+`late-transition-tail` 在 Bob 已耐久持有 epoch 1、解密并刷新旧卡片后，再邀请真实第三成员 Carol，等待 accepted epoch 2。
+Carol 按自身 Welcome 加入；Bob 不取得 Carol 的加入 secret，必须在刷新后由获准连续 Commit tail 恢复原私有组，继续双向编辑与创建加密卡片。
+等待 Commit 的助手检查 `next_epoch`，不能把此前 epoch 1 的 Commit 当成第三成员已加入的证据。
+
 ## 退役的历史共享分支
 
 现行 v1 `models/realm-and-space.md` §2.2 要求 MLS Genesis 接纳时 current history policy 为 `since_join`；
