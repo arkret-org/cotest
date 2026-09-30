@@ -104,6 +104,50 @@ async fn canonical_rows(
     }).await?
 }
 
+async fn wait_for_membership_current(
+    database_url: &str,
+    commit: &arkret_wire::RealmCommit,
+    actor: &ActorId,
+    membership: &str,
+) -> Result<()> {
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(120);
+    loop {
+        let database_url = database_url.to_owned();
+        let commit = commit.clone();
+        let member = actor.to_string();
+        let membership = membership.to_owned();
+        let installed = tokio::task::spawn_blocking(move || -> Result<bool> {
+            let mut client = postgres::Client::connect(&database_url, postgres::NoTls)?;
+            let realm = commit.realm_id.as_str();
+            let row = match &commit.stream_ref {
+                arkret_wire::CommitStreamRef::Realm { .. } => client.query_opt(
+                    "SELECT current_commit_id,current_stream_position,jsonb_build_object('kind','realm','realm_id',realm_id),membership FROM member_state_current_results WHERE realm_id=$1 AND member_id=$2",
+                    &[&realm,&member],
+                )?,
+                arkret_wire::CommitStreamRef::Circle { circle_id, .. } => client.query_opt(
+                    "SELECT current_commit_id,current_stream_position,source_stream_ref,membership FROM circle_member_state_current_results WHERE realm_id=$1 AND member_id=$2 AND circle_id=$3",
+                    &[&realm,&member,&circle_id.as_str()],
+                )?,
+                _ => anyhow::bail!("membership current has an unsupported source stream"),
+            };
+            Ok(row.is_some_and(|row| {
+                row.get::<_, String>(0) == commit.commit_id.as_str()
+                    && row.get::<_, i64>(1) as u64 == commit.stream_position
+                    && row.get::<_, serde_json::Value>(2) == json!(commit.stream_ref)
+                    && row.get::<_, String>(3) == membership
+            }))
+        }).await??;
+        if installed {
+            return Ok(());
+        }
+        ensure!(
+            tokio::time::Instant::now() < deadline,
+            "the member Station did not install the exact membership current"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    }
+}
+
 const SELF_MATERIAL: &str = "/_arkret/self/mls/group-state-material/query";
 const PEER_MATERIAL: &str = "/_arkret/peer/mls/group-state-material";
 
@@ -467,19 +511,38 @@ async fn assert_circle_stream_scan(
             );
         }
     }
-    let request = StreamScanRequest {
+    let unknown_circle = CircleId::from_event_id(&realm_id.event_id());
+    let mut request = StreamScanRequest {
         realm_id,
         stream_ref: stream,
         direction: StreamScanDirection::After(None),
         limit: 1,
     };
-    expect_json(
+    let hidden = expect_json(
         outsider
             .post("/_arkret/self/streams/scan")
             .canonical_json(&request)?,
-        StatusCode::NOT_FOUND,
+        StatusCode::FORBIDDEN,
     )
     .await?;
+    ensure!(hidden["type"] == "https://arkret.org/problems/capability_denied");
+    request.stream_ref = CommitStreamRef::Circle {
+        realm_id: request.realm_id.clone(),
+        circle_id: unknown_circle,
+    };
+    let unknown = expect_json(
+        outsider
+            .post("/_arkret/self/streams/scan")
+            .canonical_json(&request)?,
+        StatusCode::FORBIDDEN,
+    )
+    .await?;
+    for field in ["type", "title", "status", "detail"] {
+        ensure!(
+            hidden[field] == unknown[field],
+            "Circle scan disclosed target existence through {field}"
+        );
+    }
     Ok(())
 }
 
@@ -542,7 +605,8 @@ pub async fn run() -> Result<()> {
     .await?;
     wait_for_committed(&bob, &join.event_ref).await?;
 
-    let parent = bob.parent_membership_revision(&realm, &actor).await?;
+    // The governing Station signs Snapshot heads; the Account replica cannot.
+    let parent = alice.parent_membership_revision(&realm, &actor).await?;
     let mut circles = Vec::new();
     let mut circle_mls = Vec::new();
     for (title, history) in [
@@ -642,7 +706,8 @@ pub async fn run() -> Result<()> {
             None,
         )
         .await?;
-        wait_for_committed(&bob, &left.event_ref).await?;
+        // Leaving revokes Event reads; inspect the exact durable replica cut.
+        wait_for_membership_current(&account_db.connect_url, &left, &actor, "leave").await?;
         let joined = circle_state(
             &bob,
             &bob_account,
@@ -668,7 +733,7 @@ pub async fn run() -> Result<()> {
         MembershipPayloadState::Leave,
     )
     .await?;
-    wait_for_committed(&bob, &left.event_ref).await?;
+    wait_for_membership_current(&account_db.connect_url, &left, &actor, "leave").await?;
     for circle in &circles {
         expect_json(
             bob.get(&format!("/_arkret/self/circles/{}", circle.as_str())),
@@ -704,7 +769,7 @@ pub async fn run() -> Result<()> {
     for material in circle_mls.iter().flatten() {
         assert_circle_mls_reads(material, &bob, governance, account_station, false).await?;
     }
-    let next_parent = bob.parent_membership_revision(&realm, &actor).await?;
+    let next_parent = alice.parent_membership_revision(&realm, &actor).await?;
     ensure!(
         serde_json::to_value(&parent)? != serde_json::to_value(&next_parent)?,
         "parent rejoin reused the old exact revision"
@@ -730,7 +795,7 @@ pub async fn run() -> Result<()> {
             None,
         )
         .await?;
-        circle_state(
+        let joined = circle_state(
             &bob,
             &bob_account,
             &realm,
@@ -740,6 +805,7 @@ pub async fn run() -> Result<()> {
             Some(serde_json::to_value(&next_parent)?),
         )
         .await?;
+        wait_for_committed(&bob, &joined.event_ref).await?;
         expect_json(
             bob.get(&format!("/_arkret/self/circles/{}", circle.as_str())),
             StatusCode::OK,
@@ -761,7 +827,7 @@ pub async fn run() -> Result<()> {
         MembershipPayloadState::Ban,
     )
     .await?;
-    wait_for_committed(&bob, &banned.event_ref).await?;
+    wait_for_membership_current(&account_db.connect_url, &banned, &actor, "ban").await?;
     for circle in &circles {
         expect_json(
             bob.get(&format!("/_arkret/self/circles/{}", circle.as_str())),
