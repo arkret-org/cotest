@@ -72,26 +72,6 @@ async fn activate_rsvp_mls(client: &TestActorClient, realm_id: &str) -> Result<R
     )?;
     let binding = MlsGovernanceBindingPayload::new(scope.clone(), None, 0, 0, 0)?;
     let mut group = identity.create_group_with_governance_binding(&scope, &binding)?;
-    let (group_info, tree) = group.public_group_state_bytes()?;
-    let group_info_ref =
-        super::mls_lifecycle_live::upload_public_blob(client, &realm, &group_info).await?;
-    let tree_ref = super::mls_lifecycle_live::upload_public_blob(client, &realm, &tree).await?;
-    let genesis = client
-        .author_event(
-            realm_id,
-            arkret_wire::EventKind::MlsGenesis.as_str(),
-            super::mls_lifecycle_live::canonical(json!({
-                "cipher_suite": super::mls_lifecycle_live::ACTIVE_SUITE,
-                "group_info_ref": group_info_ref,
-                "ratchet_tree_ref": tree_ref,
-                "governance_binding": binding,
-                "created_at": arkret_canonical::format_timestamp_canonical(chrono::Utc::now()),
-            }))?,
-        )
-        .await?;
-    let commit = submit_prepared_event(client, &genesis).await?;
-    ensure!(commit.event_ref == genesis.event_id);
-    assert_committed(client, realm_id, &genesis.event_id).await?;
     let member = super::mls_lifecycle_live::Member {
         client: client.clone(),
         account: actor
@@ -109,6 +89,34 @@ async fn activate_rsvp_mls(client: &TestActorClient, realm_id: &str) -> Result<R
         key: principal.device_signing_key.clone(),
         authorize_event_id: principal.founding_authorize_event_id.clone(),
     };
+    let creator_leaf_authority =
+        super::cross_station_mls_welcome::genesis_creator_leaf_authority(&mut group, &member)?;
+    let (group_info, tree) = group.public_group_state_bytes()?;
+    let group_info_ref =
+        super::mls_lifecycle_live::upload_public_blob(client, &realm, &group_info).await?;
+    let tree_ref = super::mls_lifecycle_live::upload_public_blob(client, &realm, &tree).await?;
+    let genesis_payload = arkret::MlsGenesisPayload {
+        cipher_suite: arkret::NonEmptyString::new(
+            super::mls_lifecycle_live::ACTIVE_SUITE.to_owned(),
+        )
+        .map_err(anyhow::Error::msg)?,
+        group_info_ref: arkret_wire::BlobRef::new(group_info_ref)?,
+        ratchet_tree_ref: arkret_wire::BlobRef::new(tree_ref)?,
+        creator_leaf_authority,
+        governance_binding: binding,
+        created_at: chrono::Utc::now(),
+    };
+    genesis_payload.validate()?;
+    let genesis = client
+        .author_event(
+            realm_id,
+            arkret_wire::EventKind::MlsGenesis.as_str(),
+            super::mls_lifecycle_live::canonical(serde_json::to_value(genesis_payload)?)?,
+        )
+        .await?;
+    let commit = submit_prepared_event(client, &genesis).await?;
+    ensure!(commit.event_ref == genesis.event_id);
+    assert_committed(client, realm_id, &genesis.event_id).await?;
     super::message_mls_cross_station_live::install_bindings(&mut group, &[&member]).await?;
     Ok(RsvpMls {
         group,
