@@ -88,6 +88,10 @@ EventId 必须保持唯一且等于断点前原 ID，完整提交字节必须逐
 已有 accepted List 仍可见时，Add Card 必须禁用，初始同步仍为 pending；恢复查询后必须完成私有安装、解密、双向编辑与 reload。
 该断点用于区分公共详情 baseline 与密码学可写状态，不用伪造成功响应或修改 current 值。
 
+## 非终局 authority outcome 与重启
+
+`retryable-unavailable` 在原子 MLS Commit／Welcome 请求到达治理站前返回正式 `retryable_unavailable` outcome，不伪造 Commit。sender 刷新后仍由原耐久队列自动发送相同 EventId 与签名 bytes；恢复真实 transport 后完成 Welcome、双向加密卡片与 reload。该分支必须保留可诊断 authority status／reason，队列不得落为终局 rejected 或依赖交互再次 requeue。
+
 ## 连续 accepted Commit 恢复
 
 `late-transition-tail` 在 Bob 已耐久持有 epoch 1、解密并刷新旧卡片后，再邀请真实第三成员 Carol，等待 accepted epoch 2。

@@ -624,7 +624,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
     }
   });
 
-  for (const fault of [undefined, "commit-response-lost", "welcome-before-durable", "welcome-response-lost", "private-state-blocked", "late-transition-tail"] as const) {
+  for (const fault of [undefined, "commit-response-lost", "welcome-before-durable", "welcome-response-lost", "retryable-unavailable", "private-state-blocked", "late-transition-tail"] as const) {
     test("bob joins an MLS-encrypted realm and decrypts alice's encrypted card content; survives reload; bob's own card projects back to alice" + (fault ? `; recovers ${fault}` : ""), async ({
       browser,
       request,
@@ -730,7 +730,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         //    is the content bob can legitimately both see and decrypt. (Pre-join
         //    history sharing is a separate, optional capability — not the core
         //    cross-member collaboration path this test exercises.)
-        if (fault === "commit-response-lost" || fault === "welcome-before-durable" || fault === "welcome-response-lost") {
+        if (fault === "commit-response-lost" || fault === "welcome-before-durable" || fault === "welcome-response-lost" || fault === "retryable-unavailable") {
           outboundFault = await installMlsOutboundFault(alicePage.page, realmId, fault);
         }
         if (holdPrivateState) {
@@ -746,6 +746,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         await bobPage.acceptInvite(realmId);
         if (outboundFault) {
           await outboundFault.waitForCut();
+          if (fault === "retryable-unavailable") await alicePage.page.waitForTimeout(1_500);
           // Destroy the sender's wasm runtime while the real transport remains
           // cut. Recovery must reload the original durable saga and signed IDs.
           await alicePage.page.reload({ waitUntil: "domcontentloaded" });

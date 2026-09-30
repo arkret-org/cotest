@@ -1,7 +1,7 @@
 import { expect, type Page, type Request, type Route } from "@playwright/test";
 import { decodeIngressEvents } from "./event-ingress";
 
-export type MlsOutboundFault = "commit-response-lost" | "welcome-before-durable" | "welcome-response-lost";
+export type MlsOutboundFault = "commit-response-lost" | "welcome-before-durable" | "welcome-response-lost" | "retryable-unavailable";
 
 // Cut the real product submission; never replace its signed Event or receipt.
 // The caller destroys the page runtime with reload while this cut remains in
@@ -62,6 +62,18 @@ export async function installMlsOutboundFault(
     expect(events).toHaveLength(1);
     const eventId = events[0].event_id;
     expect(typeof eventId).toBe("string");
+    if (fault === "retryable-unavailable") {
+      // No request reaches the authority and no shared fact is claimed. The
+      // registered nonterminal outcome must survive a real runtime restart.
+      cutEventId ??= eventId as string;
+      expect(eventId).toBe(cutEventId);
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ status: "retryable_unavailable", reason_code: "temporarily_unavailable" }),
+      });
+      return;
+    }
     if (cutEventId === undefined && fault !== "welcome-before-durable") {
       // The server really commits its normal admission transaction. Only the
       // response is lost; the client must query/replay its original outcome.
