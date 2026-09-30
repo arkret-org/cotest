@@ -254,7 +254,7 @@
         },
         {
           "kind": "joint_e2e",
-          "path": "src/scenarios/api_contracts_auth.rs",
+          "path": "src/scenarios/collaboration_workflow.rs",
           "markers": [
             "/_arkret/gate/account/session-grants/revoke"
           ]

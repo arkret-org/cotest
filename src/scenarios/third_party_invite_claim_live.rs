@@ -236,10 +236,21 @@ pub async fn third_party_invite_claim_run() -> Result<()> {
         "2162 third-party claim verified and committed: {}",
         claim_commit.event_ref
     );
-    let replay = submit_and_expect_commit(&bob, &account, &bob.device_id, &claim).await?;
+    let (replay_status, replay_body) = submit_raw(&bob, &claim).await?;
     ensure!(
-        claim_commit == replay,
-        "exact claim replay changed the complete signed Commit"
+        replay_status == reqwest::StatusCode::OK,
+        "exact claim replay refused: {replay_body}"
+    );
+    let replay: arkret_wire::AuthoritySubmitOutcome = serde_json::from_value(replay_body)?;
+    ensure!(
+        matches!(replay, arkret_wire::AuthoritySubmitOutcome::Accepted {
+            status: arkret_wire::AuthorityCommitStatus::Duplicate, commit
+        } if commit == claim_commit),
+        "exact claim replay must return duplicate with the original complete signed Commit"
+    );
+    ensure!(
+        observation(&governance_db.connect_url, realm).await? == claimed,
+        "exact claim replay changed canonical/current state"
     );
     let accept = bob
         .author_event(

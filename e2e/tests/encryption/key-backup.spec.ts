@@ -567,7 +567,8 @@ test.describe("key backup + restore", () => {
         cardTitle,
       );
       // Board/List/Strand creation is structural. Write encrypted content
-      // before requiring the after-encrypted-write history backup trigger.
+      // before requiring a new encrypted private-plaintext backup item.
+      const privateBackupsBefore = mlsPrivatePlaintextBackupPutCount(keyBackupPuts);
       await updateCardDescription(
         deviceA.page,
         cardTitle,
@@ -575,17 +576,10 @@ test.describe("key backup + restore", () => {
       );
       await expect
         .poll(
-          () =>
-            keyBackupPuts.some(
-              (hit) =>
-                hit.status === 200 &&
-                /"backup_kind"\s*:\s*"mls_history"/.test(
-                  keyBackupWireData(hit),
-                ),
-            ),
+          () => mlsPrivatePlaintextBackupPutCount(keyBackupPuts),
           { timeout: 120_000 },
         )
-        .toBe(true);
+        .toBeGreaterThan(privateBackupsBefore);
 
       await expect
         .poll(
@@ -1171,14 +1165,6 @@ async function expectMlsAccountSecretBackupUploaded(
       { timeout: 120_000 },
     )
     .toBe(true);
-}
-
-function mlsHistoryBackupPutCount(keyBackupPuts: KeyBackupPut[]): number {
-  return keyBackupPuts.filter(
-    (hit) =>
-      hit.status === 200 &&
-      /"backup_kind"\s*:\s*"mls_history"/.test(keyBackupWireData(hit)),
-  ).length;
 }
 
 function mlsPrivatePlaintextBackupPutCount(

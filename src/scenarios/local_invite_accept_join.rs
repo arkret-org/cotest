@@ -339,8 +339,8 @@ pub async fn local_invite_accept_join_run() -> Result<()> {
         "Bob's Snapshot carries his Invite, membership and grant rows: {head_body}"
     );
 
-    // Bob's whole readable interval starts exactly at his nonzero floor, so
-    // the formal rule makes it preview only with no basis.
+    // After issuing /head, the stream window is the exact snapshot-backed
+    // tail. With no newer Commit, the tail is empty above Bob's join floor.
     let whole = realm_window(&bob, &realm, 20).await?;
     let whole_window = whole
         .streams
@@ -348,16 +348,18 @@ pub async fn local_invite_accept_join_run() -> Result<()> {
         .and_then(|streams| streams.first())
         .context("Bob's Realm stream window")?;
     ensure!(
-        window_positions(&whole)
-            == (accept_commit.stream_position..=head_position).collect::<Vec<_>>()
-            && !whole_window.limited
-            && whole_window.preview_only == Some(true)
-            && whole_window.window_start_basis.is_none(),
-        "Bob's window starts at his floor and has no pre-floor basis: {whole_window:?}"
+        window_positions(&whole).is_empty()
+            && whole_window.limited
+            && whole_window.preview_only.is_none()
+            && whole_window
+                .window_start_basis
+                .as_ref()
+                .is_some_and(|basis| basis.anchor_position == head_position
+                    && basis.snapshot_ref == head_snapshot.snapshot_id),
+        "Bob's empty tail must bind his exact issued snapshot: {whole_window:?}"
     );
 
-    // One more Commit: a one-row window names Bob's issued `/head` as its
-    // exact anchor.
+    // One more Commit: the one-row tail retains the same exact /head anchor.
     bob.send_message(&realm, &strand_id, "after the head")
         .await
         .context("Bob's second Message is committed")?;

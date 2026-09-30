@@ -789,9 +789,8 @@ pub async fn run_agent_capability_longevity_live() -> Result<()> {
                 }],
                 issued_at: Utc::now(),
             };
-            let payload = arkret_models_collaboration::events_payloads::CapabilityGrantPayload {
-                grant,
-            };
+            let payload =
+                arkret_models_collaboration::events_payloads::CapabilityGrantPayload { grant };
             let outcome: AuthoritySubmitOutcome = serde_json::from_value(
                 controller
                     .submit_event(
@@ -802,9 +801,13 @@ pub async fn run_agent_capability_longevity_live() -> Result<()> {
                     .await?,
             )?;
             ensure!(
-                matches!(outcome, AuthoritySubmitOutcome::Accepted {
-                    status: AuthorityCommitStatus::Committed, ..
-                }),
+                matches!(
+                    outcome,
+                    AuthoritySubmitOutcome::Accepted {
+                        status: AuthorityCommitStatus::Committed,
+                        ..
+                    }
+                ),
                 "indefinite Realm-wide {action} grant to {label} was not committed: {outcome:?}"
             );
             eprintln!("agent longevity: indefinite Realm-wide {action} grant to {label} committed");
@@ -1418,6 +1421,29 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
     let genesis_binding = arkret::MlsGovernanceBindingPayload::new(scope.clone(), None, 0, 0, 0)?;
     let mut controller_group =
         controller_identity.create_group_with_governance_binding(&scope, &genesis_binding)?;
+    controller_group.install_local_creator_binding(
+        ActorId::account(controller_account.clone()),
+        Some(controller_principal.founding_authorize_event_id.clone()),
+    )?;
+    let leaves = controller_group.verified_leaf_bindings()?;
+    let [creator] = leaves.as_slice() else {
+        bail!("Genesis requires exactly one verified controller leaf");
+    };
+    ensure!(
+        creator.leaf_index == 0 && creator.actor_id == ActorId::account(controller_account.clone())
+    );
+    let creator_leaf_authority =
+        arkret_models_collaboration::events_payloads::MlsGenesisCreatorLeafAuthority {
+            leaf_signature_key_b64u: creator.signature_key.clone(),
+            endpoint: arkret_wire::MlsWelcomeRecipientEndpoint::Device {
+                device_id: controller_principal.device_id.clone(),
+            },
+            authorization_event_ref: creator
+                .device_authorize_event_id
+                .clone()
+                .context("Genesis controller leaf lacks accepted device authorization")?,
+        };
+    creator_leaf_authority.validate()?;
     let (group_info, tree) = controller_group.public_group_state_bytes()?;
     let group_info_ref = crate::scenarios::mls_lifecycle_live::upload_public_blob(
         &controller,
@@ -1437,6 +1463,7 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
                 "group_info_ref": group_info_ref,
                 "ratchet_tree_ref": tree_ref,
                 "governance_binding": genesis_binding,
+                "creator_leaf_authority": creator_leaf_authority,
                 "created_at": arkret_canonical::format_timestamp_canonical(Utc::now()),
             }))?,
         )

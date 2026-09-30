@@ -1038,8 +1038,7 @@ pub fn run_applet_registration_epoch_kat_suite() -> Result<()> {
     if transcript_schema.is_valid(&unversioned) {
         bail!("authoritative schema accepted unversioned evidence with version_id");
     }
-    let unversioned: AppletRegistrationEpochTranscript = serde_json::from_value(unversioned)?;
-    if unversioned.validate_normalized().is_ok() {
+    if serde_json::from_value::<AppletRegistrationEpochTranscript>(unversioned).is_ok() {
         bail!("unversioned DID evidence retained a version_id");
     }
 

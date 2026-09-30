@@ -1485,6 +1485,19 @@ fn infer_method_from_line(line: &str) -> Option<String> {
         }
     }
     let prefix = &line[..arkret_index];
+    // A request verb on this URL's line outranks unrelated row.get calls in
+    // the fallback context window.
+    if let Some((_, method)) = INFERABLE_METHODS
+        .iter()
+        .filter_map(|method| {
+            prefix
+                .rfind(&format!(".{}(", method.to_ascii_lowercase()))
+                .map(|offset| (offset, *method))
+        })
+        .max_by_key(|(offset, _)| *offset)
+    {
+        return Some(method.to_owned());
+    }
     for token in prefix.split(|ch: char| !ch.is_ascii_alphabetic()) {
         for method in INFERABLE_METHODS {
             if token == *method {
@@ -1956,6 +1969,22 @@ mod tests {
         let method = infer_method_from_line("surface GET    /_arkret/self/account/subscribe")
             .expect("aligned method should parse");
         assert_eq!(method, "GET");
+    }
+
+    #[test]
+    fn exact_lowercase_request_verb_wins_over_sql_row_access() {
+        let lines = [
+            r#"let value = row.get(0);"#,
+            r#"let response = client.post("/_arkret/self/events").send().await?;"#,
+        ];
+        assert_eq!(infer_method_near(&lines, 1).as_deref(), Some("POST"));
+        assert_eq!(
+            infer_method_from_line(
+                r#"let previous = row.get(0); client.post("/_arkret/self/events");"#
+            )
+            .as_deref(),
+            Some("POST")
+        );
     }
 
     #[test]

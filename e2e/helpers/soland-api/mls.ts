@@ -164,7 +164,8 @@ async function deviceAuthorizeEventId(
 /// is no `plaintext_data_class` private content and carries no encryption
 /// envelope. The request is the canonical `BlobUploadRequestBody`
 /// (blob-operations.schema.json): `content`, `size_bytes` and the owning
-/// `realm_id` are all multipart form fields.
+/// `realm_id` and the required JSON `encryption: null` classification are
+/// multipart form fields.
 async function uploadPublicBlob(
   request: APIRequestContext,
   device: MlsDevice,
@@ -179,6 +180,7 @@ async function uploadPublicBlob(
       multipart: {
         size_bytes: String(bytes.length),
         realm_id: realmId,
+        encryption: "null",
         content: {
           name: "blob.bin",
           mimeType: "application/octet-stream",

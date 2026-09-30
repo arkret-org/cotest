@@ -499,9 +499,14 @@ pub async fn blob_storage_classification_survives_restart() -> Result<()> {
             )
             .await?;
             expect_api_error(
-                alice
-                    .post("/_arkret/self/blob/presign")
-                    .json(&json!({"blob_ref": blob_ref, "purpose": "download"})),
+                alice.post("/_arkret/self/blob/presign").json(
+                    &arkret_models_collaboration::objects::blob::BlobPresignRequestBody {
+                        blob_ref: blob_ref.parse()?,
+                        realm_id: None,
+                        max_age_seconds: None,
+                        purpose: Some("download".to_owned()),
+                    },
+                ),
                 StatusCode::FORBIDDEN,
                 "capability_denied",
             )
@@ -728,14 +733,16 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
         "param_invalid",
     )
     .await?;
+    // Alice's signed report under Bob's session is an identity-binding
+    // negative; it never reaches capability admission.
     expect_api_error(
         server
             .http()
             .post(server.url("/_arkret/self/moderation/report"))
             .bearer_auth(&bob)
             .json(&moderation_request),
-        StatusCode::FORBIDDEN,
-        "capability_denied",
+        StatusCode::BAD_REQUEST,
+        "param_invalid",
     )
     .await?;
 

@@ -85,6 +85,10 @@ async fn signed_post(
     let signature = sign_message(&transcript, &ed25519_dalek::SigningKey::from_bytes(&seed));
     let mut request = server.http().post(target).body(body);
     for (name, value) in headers {
+        // The operation-selecting client already installs the signed selector.
+        if name == "arkret-operation" {
+            continue;
+        }
         request = request.header(name, value);
     }
     let response = request
@@ -286,6 +290,26 @@ pub async fn run_evidence() -> Result<Option<(Vec<CaseExecutionResult>, Vec<Case
     ensure!(
         after[0] == before[0] + 1 && after[1] == before[1] + 1 && after[5] == before[5] + 1,
         "report Event/Commit/idempotency were not one accepting effect"
+    );
+    let report_database = db.connect_url.clone();
+    let report_realm = realm.clone();
+    let report_commit: arkret_wire::RealmCommit =
+        tokio::task::spawn_blocking(move || -> Result<_> {
+            let mut database = postgres::Client::connect(&report_database, postgres::NoTls)?;
+            let row = database.query_one(
+            "SELECT c.commit_json FROM realm_commits c JOIN canonical_events e ON e.pk=c.event_pk \
+             WHERE c.realm_id=$1 AND e.kind=$2 ORDER BY c.stream_position DESC LIMIT 1",
+            &[&report_realm, &EventKind::SelfModerationReport.as_str()],
+        )?;
+            Ok(serde_json::from_value(row.get::<_, Value>(0))?)
+        })
+        .await??;
+    ensure!(
+        first["report_id"]
+            == serde_json::to_value(arkret_wire::ReportId::from_event_id(
+                &report_commit.event_ref
+            ))?,
+        "MIMI receipt report id is not derived from its actual committed Event"
     );
     let (status, replay) = signed_post(
         server,

@@ -76,12 +76,12 @@ pub async fn run() -> Result<()> {
         .parse()?;
     let operation = arkret_wire::ProtocolOperationId::new("ak:operation:sidecar-live-create-0001")
         .map_err(|error| anyhow!(error))?;
-    let idempotency = arkret_wire::IdempotencyKey::new("sidecar-live-create-0001")
+    let prepare_idempotency = arkret_wire::IdempotencyKey::new("sidecar-live-prepare-0001")
         .map_err(|error| anyhow!(error))?;
     let prepare = SidecarEnsureRequestBody::Prepare(SidecarEnsurePrepareRequestBody {
         phase: SidecarEnsurePreparePhase::Prepare,
         operation_id: operation.clone(),
-        idempotency_key: idempotency.clone(),
+        idempotency_key: prepare_idempotency,
         source_realm_id: realm.clone(),
         controller_account_id: controller.account.clone(),
         context_ref: SidecarContextRef::Strand { strand_id: strand },
@@ -105,7 +105,8 @@ pub async fn run() -> Result<()> {
     let request = SidecarEnsureRequestBody::Commit(SidecarEnsureCommitRequestBody {
         phase: SidecarEnsureCommitPhase::Commit,
         operation_id: operation,
-        idempotency_key: idempotency,
+        idempotency_key: arkret_wire::IdempotencyKey::new("sidecar-live-commit-0001")
+            .map_err(|error| anyhow!(error))?,
         reservation_handle: prepared.reservation_handle,
         create_event: create.clone(),
         context_attach_event: attach.clone(),
