@@ -7,7 +7,7 @@
     "test_layers": {
       "soland_unit": {
         "source_file_count": 369,
-        "source_sha256": "3179903a6acc2b8395d5a5f541fe304688083943cbc2b01b9d4242ce5f2b7118",
+        "source_sha256": "e63099e69c50026f090de3e9f30ccd1c457c2404c998835d1ef01ad0db248b8a",
         "evidence_count": 282,
         "covered_operation_count": 139
       },
@@ -19,7 +19,7 @@
       },
       "cotest_rust": {
         "source_file_count": 404,
-        "source_sha256": "17812be99870e0da33b8a4aadd68310f096e3f2f94e2ed33b6dd331d31efe9ad",
+        "source_sha256": "642ecc2ede33949da7e71981221072470720cdea1f82a4af3a0d227a88a7ce8c",
         "evidence_count": 132,
         "covered_operation_count": 71
       },
@@ -11801,11 +11801,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/identity/agents/sidecar.rs",
-            "line": 1207,
+            "line": 1189,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1207
+              1189
             ],
             "protected_oracle": false,
             "scope_sha256": "5f4759b3b97204d7384e27b94d27a1ef1c308bee2e7dc5ce661a1f1a5c737e39",

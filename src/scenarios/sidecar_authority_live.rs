@@ -254,14 +254,18 @@ pub async fn run() -> Result<()> {
             committed.commit().stream_ref == stream && committed.commit().stream_position == 0,
             "Sidecar used parent Realm positions"
         );
-        expect_json(
+        let denial = expect_json(
             outsider
                 .client
                 .post("/_arkret/self/streams/scan")
                 .canonical_json(&query)?,
-            reqwest::StatusCode::NOT_FOUND,
+            reqwest::StatusCode::FORBIDDEN,
         )
         .await?;
+        ensure!(
+            denial["type"] == "https://arkret.org/problems/capability_denied",
+            "another Realm member must receive the universal private scan denial"
+        );
     }
     // Activate a real native OpenMLS group after proving the plaintext
     // context unit alone never claims MLS readiness.
