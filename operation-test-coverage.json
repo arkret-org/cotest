@@ -19,13 +19,13 @@
       },
       "cotest_rust": {
         "source_file_count": 404,
-        "source_sha256": "642ecc2ede33949da7e71981221072470720cdea1f82a4af3a0d227a88a7ce8c",
+        "source_sha256": "eb6000b3917209915d4b004bb9f232b4240c77be062394095a6331f33422d119",
         "evidence_count": 132,
         "covered_operation_count": 71
       },
       "cotest_e2e": {
         "source_file_count": 108,
-        "source_sha256": "72d70a609a3ac4bf60bf6fcad06de900a73669c656fe0ede62c614912b9dc7e6",
+        "source_sha256": "5c3c02c7bcf97e23a6d86bf20ca60c23452d318eeeb3d777fd99b3af3d191cf2",
         "evidence_count": 48,
         "covered_operation_count": 21
       },
