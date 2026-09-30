@@ -85,7 +85,7 @@ async fn seed_stale_circle_mirror(
     Ok(())
 }
 
-async fn circle_create(
+pub(crate) async fn circle_create(
     client: &TestActorClient,
     realm: &str,
     actor: &ActorId,
@@ -133,7 +133,7 @@ async fn circle_create(
     Ok(circle)
 }
 
-async fn circle_event(
+pub(crate) async fn circle_event(
     client: &TestActorClient,
     realm: &str,
     circle: &CircleId,
@@ -164,7 +164,7 @@ async fn circle_event(
     Ok(event)
 }
 
-async fn join_circle(
+pub(crate) async fn join_circle(
     client: &TestActorClient,
     realm: &str,
     circle: &CircleId,
