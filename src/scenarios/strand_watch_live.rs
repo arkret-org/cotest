@@ -406,6 +406,73 @@ pub async fn run_strand_watch_current_live() -> Result<()> {
         if strand_id == &request.strand_id && watcher_actor_id == &request.watcher_actor_id
     )), "ordinary member signed snapshot disclosed Alice's private muted watch cell");
 
+    let public_payload = StrandWatchSetPayload::set(
+        strand.clone(),
+        request.watcher_actor_id.clone(),
+        StrandWatchLevel::All,
+        Some(true),
+    )
+    .with_expected_value(StrandWatchCurrentValue::Set(StrandWatchExpectedValue {
+        level: StrandWatchLevel::Muted,
+        level_public: None,
+    }));
+    let public_event = event(&alice, &realm, &public_payload).await?;
+    submit_and_expect_commit(&alice, &alice_account, ALICE_DEVICE, &public_event).await?;
+    let scan = bob
+        .sdk()
+        .scan_commit_stream_to_head(
+            request.realm_id.clone(),
+            CommitStreamRef::Realm {
+                realm_id: request.realm_id.clone(),
+            },
+            None,
+            1000,
+        )
+        .await?;
+    ensure!(
+        scan.committed_events
+            .iter()
+            .any(|view| view.commit().event_ref == public_event.event_id
+                && matches!(view, CommittedEventView::Withheld(_))),
+        "public opt-in leaked a private muted CAS preimage"
+    );
+    let public_snapshot = signed_snapshot(&bob, &request.realm_id).await?;
+    ensure!(public_snapshot.current_state_entries.iter().any(|entry| matches!(entry,
+        arkret_wire::TypedCurrentResult::Value { selector: arkret_wire::CurrentSelector::StrandWatch { strand_id, watcher_actor_id }, value, .. }
+        if strand_id == &request.strand_id && watcher_actor_id == &request.watcher_actor_id
+            && value == &serde_json::json!({"level":"all","level_public":true})
+    )), "explicit public opt-in was absent from the member snapshot");
+    let next_public = StrandWatchSetPayload::set(
+        strand.clone(),
+        request.watcher_actor_id.clone(),
+        StrandWatchLevel::Participating,
+        Some(true),
+    )
+    .with_expected_value(StrandWatchCurrentValue::Set(StrandWatchExpectedValue {
+        level: StrandWatchLevel::All,
+        level_public: Some(true),
+    }));
+    let next_public_event = event(&alice, &realm, &next_public).await?;
+    submit_and_expect_commit(&alice, &alice_account, ALICE_DEVICE, &next_public_event).await?;
+    let scan = bob
+        .sdk()
+        .scan_commit_stream_to_head(
+            request.realm_id.clone(),
+            CommitStreamRef::Realm {
+                realm_id: request.realm_id.clone(),
+            },
+            None,
+            1000,
+        )
+        .await?;
+    ensure!(
+        scan.committed_events
+            .iter()
+            .any(|view| view.commit().event_ref == next_public_event.event_id
+                && matches!(view, CommittedEventView::Full(_))),
+        "fully public watch transition was withheld"
+    );
+
     let bob_payload = StrandWatchSetPayload::set(
         strand,
         bob_request.watcher_actor_id.clone(),
@@ -468,8 +535,8 @@ pub async fn run_strand_watch_current_live() -> Result<()> {
     let final_payload =
         StrandWatchSetPayload::clear(request.strand_id.clone(), request.watcher_actor_id.clone())
             .with_expected_value(StrandWatchCurrentValue::Set(StrandWatchExpectedValue {
-                level: StrandWatchLevel::Muted,
-                level_public: None,
+                level: StrandWatchLevel::Participating,
+                level_public: Some(true),
             }));
     let final_event = event(&alice, &realm, &final_payload).await?;
     let final_commit =
