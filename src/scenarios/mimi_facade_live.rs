@@ -749,5 +749,28 @@ async fn migration_matrix(
     )
     .await?;
     record(&mut results, "target_mls_group_not_current", 2);
+    // Stateful refusals must run before the accepting transition. Return
+    // their evidence in the normative fixture order for the completeness gate.
+    // Unknown, duplicate or missing cases still fail that gate.
+    let fixture_order = [
+        "completed_candidate_topology",
+        "rolled_back_previous_topology",
+        "outcome_without_proof",
+        "proof_without_outcome",
+        "both_migration_fields_missing",
+        "stale_migrating_commit",
+        "cross_room_previous_event",
+        "non_adjacent_previous_event",
+        "completed_with_previous_topology",
+        "rolled_back_with_candidate_topology",
+        "target_mls_group_not_current",
+        "migration_fields_on_other_transition",
+    ];
+    results.sort_by_key(|result| {
+        fixture_order
+            .iter()
+            .position(|case| *case == result.case_id)
+            .unwrap_or(usize::MAX)
+    });
     Ok(results)
 }

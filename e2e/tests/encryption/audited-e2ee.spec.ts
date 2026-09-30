@@ -13,6 +13,7 @@ import {
   canonicalTimestamp,
   createRealmApi,
   grantCapabilityEventApi,
+  scanRealmStreamApi,
   signedEventEnvelope,
   submitSignedEventApi,
 } from "../../helpers/soland-api";
@@ -36,31 +37,43 @@ test.describe("moderation reports and audited E2EE", () => {
     request,
   }) => {
     const setup = await setupEncryptedMessage(request, "s25-report");
+    const before = await scanRealmStreamApi(
+      request,
+      setup.aliceToken,
+      setup.realmId,
+    );
+    expect(before.truncated).toBe(false);
     const report = await fileModerationReport(request, setup);
 
     expect(report.status).toBe("submitted");
     expect(report.routed_to).toBeUndefined();
 
-    const localReportEvents = await queryActorAuditEvents(
-      request,
-      setup.reporterToken,
-      "ak.self.moderation.report",
-    );
-    expect(JSON.stringify(localReportEvents)).toContain(
-      report.report_id.replace("ak:report:", "ak:event:"),
-    );
-
-    // content-moderation.md §3.4.1 and capabilities.md §5.5: a report releases
-    // no key and grants no privileged read, so it leaves no audit access
-    // record in the Realm.
-    const auditAccess = await queryAuditEvents(
+    const after = await scanRealmStreamApi(
       request,
       setup.aliceToken,
       setup.realmId,
-      "ak.audit.accessed",
     );
+    expect(after.truncated).toBe(false);
+    expect(after.commits.slice(0, before.commits.length)).toEqual(before.commits);
+    const accepted = after.commits.slice(before.commits.length);
+    const reportEventId = report.report_id.replace("ak:report:", "ak:event:");
     expect(
-      auditAccess,
+      accepted,
+      "the ordinary report commits exactly one Event and no audit-release Event",
+    ).toHaveLength(1);
+    expect(accepted[0].event_ref).toBe(reportEventId);
+    const reportEvent = after.events[before.commits.length];
+    expect(reportEvent?.event_id).toBe(reportEventId);
+    expect(reportEvent?.kind).toBe("ak.self.moderation.report");
+    expect(reportEvent?.payload).toMatchObject({
+      target_ref: setup.message.event_id,
+      reporter_id: setup.reporterId,
+    });
+
+    // The complete post-report suffix contains only that covering Commit;
+    // even a withheld audit Event would add a slot and fail this assertion.
+    expect(
+      after.events.filter((event) => event?.kind === "ak.audit.accessed"),
       "ak.audit.accessed must not be derived from a moderation report",
     ).toEqual([]);
   });
@@ -194,7 +207,6 @@ async function setupEncryptedMessage(
     message,
   };
 }
-
 /// content-moderation.md §3.1: the closed `{report_event}` body carries only
 /// the reporter's own signed Event. An ordinary report on E2EE content has no
 /// franking proof: the reporter can read only the minimized, non-verifiable
@@ -232,33 +244,4 @@ async function fileModerationReport(
     status: string;
     routed_to?: string[];
   };
-}
-
-async function queryAuditEvents(
-  request: APIRequestContext,
-  token: string,
-  realmId: string,
-  kind: string,
-): Promise<Array<Record<string, unknown>>> {
-  const url = `${solandBaseUrl()}/_soland/admin/audit/events?realm_id=${encodeURIComponent(realmId)}&kind=${encodeURIComponent(kind)}`;
-  const response = await request.get(url, {
-    headers: authHeaders(token, "GET", url),
-  });
-  const text = await response.text();
-  expect(response.ok(), text).toBeTruthy();
-  return (JSON.parse(text).events ?? []) as Array<Record<string, unknown>>;
-}
-
-async function queryActorAuditEvents(
-  request: APIRequestContext,
-  token: string,
-  kind: string,
-): Promise<Array<Record<string, unknown>>> {
-  const url = `${solandBaseUrl()}/_soland/admin/audit/events?kind=${encodeURIComponent(kind)}`;
-  const response = await request.get(url, {
-    headers: authHeaders(token, "GET", url),
-  });
-  const text = await response.text();
-  expect(response.ok(), text).toBeTruthy();
-  return (JSON.parse(text).events ?? []) as Array<Record<string, unknown>>;
 }
