@@ -16,7 +16,7 @@ use crate::harness::TestServerGroup;
 use crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
 use crate::scenarios::_helpers::live_gate::skip_or_fail;
 use crate::scenarios::cross_station_mls_welcome::{
-    claim_for, join_through_invite, publish_one, wait_for_welcome,
+    claim_for, genesis_creator_leaf_authority, join_through_invite, publish_one, wait_for_welcome,
 };
 use crate::scenarios::human_device_producer_live::{
     create_realm_with_join_rule, database, ensure_commit_signed_by, grant_message_create,
@@ -277,14 +277,28 @@ pub async fn run() -> Result<()> {
         &scope,
         &MlsGovernanceBindingPayload::new(scope.clone(), None, 0, 0, 0)?,
     )?;
+    let creator_leaf_authority = genesis_creator_leaf_authority(&mut alice_group, &alice)?;
     let (info, tree) = alice_group.public_group_state_bytes()?;
     let info_ref = upload_public_blob(&alice.client, &realm_id, &info).await?;
     let tree_ref = upload_public_blob(&alice.client, &realm_id, &tree).await?;
-    let genesis = alice.client.author_event(&realm, EventKind::MlsGenesis.as_str(), canonical(serde_json::json!({
-        "cipher_suite": ACTIVE_SUITE, "group_info_ref": info_ref, "ratchet_tree_ref": tree_ref,
-        "governance_binding": MlsGovernanceBindingPayload::new(scope.clone(), None, 0, 0, 0)?,
-        "created_at": arkret_canonical::format_timestamp_canonical(chrono::Utc::now()),
-    }))?).await?;
+    let genesis_payload = arkret::MlsGenesisPayload {
+        cipher_suite: arkret::NonEmptyString::new(ACTIVE_SUITE.to_owned())
+            .map_err(anyhow::Error::msg)?,
+        group_info_ref: arkret_wire::BlobRef::new(info_ref)?,
+        ratchet_tree_ref: arkret_wire::BlobRef::new(tree_ref.clone())?,
+        creator_leaf_authority,
+        governance_binding: MlsGovernanceBindingPayload::new(scope.clone(), None, 0, 0, 0)?,
+        created_at: chrono::Utc::now(),
+    };
+    genesis_payload.validate()?;
+    let genesis = alice
+        .client
+        .author_event(
+            &realm,
+            EventKind::MlsGenesis.as_str(),
+            canonical(serde_json::to_value(genesis_payload)?)?,
+        )
+        .await?;
     let genesis_commit =
         submit_and_expect_commit(&alice.client, &alice.account, ALICE_DEVICE, &genesis).await?;
     ensure_commit_signed_by(&genesis_commit, x)?;

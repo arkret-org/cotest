@@ -11,15 +11,41 @@ export async function installMlsOutboundFault(
   realmId: string,
   fault: MlsOutboundFault,
 ) {
-  const kind = fault === "commit-response-lost" ? "ak.mls.commit" : "ak.mls.welcome";
+  // Welcome deliveries and their Commit share one atomic submission. Both
+  // response-loss cases cut the response of that same transaction; the
+  // before-durable case cuts the complete request before it reaches authority.
+  const kind = "ak.mls.commit";
   const isSubmit = ({ pathname }: URL) => pathname === "/_arkret/self/events";
   const observedIds = new Set<string>();
   let cutEventId: string | undefined;
+  let frozenSubmission: string | undefined;
   let active = true;
   const selected = (request: Request) => {
     if (request.method() !== "POST" || !isSubmit(new URL(request.url()))) return [];
-    return decodeIngressEvents(request.postData(), { context: "MLS outbound fault" })
+    const events = decodeIngressEvents(request.postData(), { context: "MLS outbound fault" })
       .filter((event) => event.realm_id === realmId && event.kind === kind);
+    if (events.length > 0) {
+      const submission = request.postDataJSON();
+      expect(submission.commit_event).toBeTruthy();
+      expect(submission.welcomes.length, "member Add must carry its atomic Welcome deliveries").toBeGreaterThan(0);
+      const bytes = request.postData()!;
+      frozenSubmission ??= bytes;
+      const changes: string[] = [];
+      const compare = (before: unknown, after: unknown, path: string) => {
+        if (JSON.stringify(before) === JSON.stringify(after)) return;
+        if (before && after && typeof before === "object" && typeof after === "object") {
+          for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
+            compare((before as Record<string, unknown>)[key], (after as Record<string, unknown>)[key], path ? `${path}.${key}` : key);
+          }
+        } else if (changes.length < 20) {
+          changes.push(path);
+        }
+      };
+      // Report protocol field names only, never ciphertext, signatures or keys.
+      compare(JSON.parse(frozenSubmission), submission, "");
+      expect(bytes === frozenSubmission, `recovery must replay the byte-identical Commit and Welcome submission; changed fields: ${changes.join(", ") || "encoding only"}`).toBe(true);
+    }
+    return events;
   };
   const observe = (request: Request) => {
     for (const event of selected(request)) {

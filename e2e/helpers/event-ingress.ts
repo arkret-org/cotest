@@ -1,7 +1,9 @@
 // One typed decoder for everything a test observes on Event ingress.
 //
 // `POST /_arkret/self/events` carries an EventAdmissionSubmission or a
-// registered atomic unit whose events[] contain that same wrapper.
+// registered atomic unit whose events[] contain that same wrapper, or an
+// MlsCommitSubmission whose commit_event is the sole shared Event and whose
+// welcomes are recipient deliveries in the same authority transaction.
 // Every listener that reached into `events[0].kind` directly kept working right
 // up to the moment the wire shape moved, and then reported "no request" for a
 // submission the server had actually accepted.
@@ -68,9 +70,16 @@ export function decodeEventIngressBody(
   if (isRecord(body.event)) {
     return [decodeSubmission(body, 0, options)];
   }
+  if (isRecord(body.commit_event)) {
+    if (body.commit_event.kind !== "ak.mls.commit" ||
+        !Array.isArray(body.welcomes) || typeof body.idempotency_key !== "string") {
+      throw new Error(`${options.context ?? "Event ingress"} is not an MlsCommitSubmission`);
+    }
+    return [{ event: body.commit_event as IngressEvent }];
+  }
   throw new Error(
     `${options.context ?? "Event ingress"} body is neither a single ` +
-      `EventAdmissionSubmission nor a registered atomic unit`,
+      `EventAdmissionSubmission, MlsCommitSubmission nor a registered atomic unit`,
   );
 }
 
