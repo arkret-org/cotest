@@ -68,6 +68,42 @@ type E2eeStorageEvidence = {
   wrappingKeyExtractable: boolean | null;
 };
 
+// Read only the holder's outbound vault, using its non-extractable wrapping
+// key. This is a local persistence assertion, never authority evidence.
+async function readCreatorIntents(page: Page): Promise<Record<string, any>[]> {
+  return page.evaluate(async () => {
+    const result = <T>(request: IDBRequest<T>): Promise<T> => new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const db = await result(indexedDB.open("inkson.secret.inkson", 1));
+    try {
+      const tx = db.transaction(["entries", "wrapping_keys"], "readonly");
+      const entries = tx.objectStore("entries");
+      const [key, names, encrypted] = await Promise.all([
+        result(tx.objectStore("wrapping_keys").get("primary")) as Promise<CryptoKey>,
+        result(entries.getAllKeys()),
+        result(entries.getAll()),
+      ]);
+      if (!key || key.extractable) throw new Error("creator vault has no non-extractable wrapping key");
+      const intents: Record<string, any>[] = [];
+      for (let index = 0; index < names.length; index += 1) {
+        const name = String(names[index]);
+        if (!name.startsWith("inkson.outbound.v1::") || !name.endsWith(".standard")) continue;
+        const entry = encrypted[index] as { iv: Uint8Array; ct: Uint8Array };
+        const plaintext = await crypto.subtle.decrypt(
+          { name: "AES-GCM", iv: Uint8Array.from(entry.iv).buffer }, key, Uint8Array.from(entry.ct).buffer,
+        );
+        const state = JSON.parse(new TextDecoder().decode(plaintext));
+        intents.push(...(state.creator_bootstrap_intents ?? []));
+      }
+      return intents;
+    } finally {
+      db.close();
+    }
+  });
+}
+
 // The Welcome is a recipient delivery, not a shared Event. Wait for the
 // accepted member-add Commit before the recipient reload/decrypt assertions.
 async function waitForMlsCommit(
@@ -585,6 +621,22 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
     const listTitle = `Secure cache list ${stamp}`;
     const cardTitle = `Secure cache card ${stamp}`;
     const privateDescription = `Secure cache private description ${stamp}`;
+    const submittedCreateIds = new Set<string>();
+    await creator.page.route(/\/_arkret\/self\/events(?:\?.*)?$/, async (route) => {
+      const payload = route.request().postDataJSON() as Record<string, any>;
+      const create = payload.events?.[0]?.event;
+      if (create?.kind === "ak.realm.create") {
+        const intents = await readCreatorIntents(creator.page);
+        const intent = intents.find((value) => value.scope_create_event_id === create.event_id);
+        expect(intent, "the closed MLS intent must be durable before the first create request").toBeDefined();
+        expect(intent!.owner_actor_id).toEqual(create.actor_id);
+        expect(intent!.effective_scope).toEqual({ kind: "realm", realm_id: create.event_id.replace("ak:event:", "ak:realm:") });
+        expect(intent!.creator_signer_method).toBe(create.producer_proof.verification_method);
+        expect(intent!.signed_scope_create_unit).toEqual(payload);
+        submittedCreateIds.add(create.event_id);
+      }
+      await route.continue();
+    });
 
     try {
       await creator.gotoHome();
@@ -598,6 +650,11 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         historyAccess: "since_join",
         mlsActivated: true,
       });
+      expect(submittedCreateIds.size).toBe(1);
+      const intentBeforeReload = (await readCreatorIntents(creator.page)).find(
+        (intent) => intent.effective_scope.realm_id === realmId,
+      );
+      expect(intentBeforeReload).toBeDefined();
       const boardId = await buildEncryptedBoardListCard(
         creator.page,
         realmId,
@@ -616,6 +673,10 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
 
       await creator.page.reload({ waitUntil: "domcontentloaded" });
       await readyReaderBoard(creator, boardId);
+      expect((await readCreatorIntents(creator.page)).find(
+        (intent) => intent.effective_scope.realm_id === realmId,
+      )).toEqual(intentBeforeReload);
+      expect(submittedCreateIds.size).toBe(1);
       await assertCardDecrypts(creator, cardTitle, privateDescription);
       await assertE2eeStorageIsHardened(creator.page, [privateDescription]);
       await stepShot(creator.page, testInfo, "B-secure-cache-after-reload");
