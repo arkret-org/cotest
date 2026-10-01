@@ -71,7 +71,7 @@ type E2eeStorageEvidence = {
 
 // Read only the holder's outbound vault, using its non-extractable wrapping
 // key. This is a local persistence assertion, never authority evidence.
-async function readCreatorIntents(page: Page): Promise<Record<string, any>[]> {
+async function readCreatorRecords(page: Page): Promise<Record<string, any>[]> {
   return page.evaluate(async () => {
     const result = <T>(request: IDBRequest<T>): Promise<T> => new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
@@ -87,7 +87,7 @@ async function readCreatorIntents(page: Page): Promise<Record<string, any>[]> {
         result(entries.getAll()),
       ]);
       if (!key || key.extractable) throw new Error("creator vault has no non-extractable wrapping key");
-      const intents: Record<string, any>[] = [];
+      const records: Record<string, any>[] = [];
       for (let index = 0; index < names.length; index += 1) {
         const name = String(names[index]);
         if (!name.startsWith("inkson.outbound.v1::") || !name.endsWith(".standard")) continue;
@@ -96,13 +96,17 @@ async function readCreatorIntents(page: Page): Promise<Record<string, any>[]> {
           { name: "AES-GCM", iv: Uint8Array.from(entry.iv).buffer }, key, Uint8Array.from(entry.ct).buffer,
         );
         const state = JSON.parse(new TextDecoder().decode(plaintext));
-        intents.push(...(state.creator_bootstrap_intents ?? []));
+        records.push(...(state.creator_bootstrap_records ?? []));
       }
-      return intents;
+      return records;
     } finally {
       db.close();
     }
   });
+}
+
+async function readCreatorIntents(page: Page): Promise<Record<string, any>[]> {
+  return (await readCreatorRecords(page)).map((record) => record.intent);
 }
 
 // The Welcome is a recipient delivery, not a shared Event. Wait for the
@@ -633,6 +637,23 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
     await creator.page.route(/\/_arkret\/self\/events(?:\?.*)?$/, async (route) => {
       const payload = route.request().postDataJSON() as Record<string, any>;
       const create = payload.events?.[0]?.event;
+      if (payload.event?.kind === "ak.mls.genesis"
+        && submittedCreateIds.has(payload.event.realm_id.replace("ak:realm:", "ak:event:"))) {
+        const record = (await readCreatorRecords(creator.page)).find(
+          (value) => value.intent.effective_scope.realm_id === payload.event.realm_id,
+        );
+        expect(record, "Genesis submission must retain its formal durable creator record").toBeDefined();
+        expect(record!.state).toBe("realm_accepted");
+        expect(record!.accepted_create.accepted_event).toEqual(record!.intent.signed_scope_create_unit.events[0].event);
+        expect(record!.accepted_create.covering_commit.event_ref).toBe(record!.intent.scope_create_event_id);
+        expect(record!.genesis_absence.realm_id).toBe(payload.event.realm_id);
+        expect(record!.genesis_absence.visible_stream_heads.some(
+          (head: Record<string, any>) => head.stream_ref.kind === "realm" && head.stream_ref.realm_id === payload.event.realm_id,
+        )).toBe(true);
+        expect(record!.genesis_absence.current_state_entries.some(
+          (entry: Record<string, any>) => entry.selector?.kind === "mls_group" && entry.selector.scope_ref.realm_id === payload.event.realm_id,
+        )).toBe(false);
+      }
       if (payload.event?.kind === "ak.mls.genesis" && payload.event.realm_id === cutRealmId) {
         submittedGenesisIds.add(payload.event.event_id);
       }
