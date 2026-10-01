@@ -11,6 +11,7 @@ import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
   accountActorId,
+  canonicalJson,
   canonicalTimestamp,
   createRealmApi,
   queryRealmEventsApi,
@@ -18,6 +19,7 @@ import {
   submitSignedEventApi,
   retypeEventDerivedId,
   typedId,
+  type StreamScanOutcome,
 } from "../../helpers/soland-api";
 import {
   assertJointStackNotRequired,
@@ -313,7 +315,7 @@ test.describe("workflow: incident response", () => {
         timeout: 30_000,
       });
 
-      const eventLog = await queryRealmEventsWithDpop(
+      const eventLog = await scanRealmEventsWithDpop(
         request,
         commanderFlow.session,
         realmId,
@@ -338,17 +340,30 @@ test.describe("workflow: incident response", () => {
   });
 });
 
-async function queryRealmEventsWithDpop(
+async function scanRealmEventsWithDpop(
   request: APIRequestContext,
   session: DpopUserSession,
   realmId: string,
 ): Promise<Record<string, unknown>> {
-  const url = `${solandBaseUrl()}/_arkret/self/events`;
-  const response = await request.fetch(url, {
-    method: "QUERY",
-    data: { realm_ids: [realmId], limit: 100 },
-    headers: selfPathHeadersForDpopSession(session, "QUERY", url),
+  const url = `${solandBaseUrl()}/_arkret/self/streams/scan`;
+  const streamRef = { kind: "realm", realm_id: realmId };
+  const response = await request.post(url, {
+    data: canonicalJson({ realm_id: realmId, stream_ref: streamRef, after_position: null, limit: 100 }),
+    headers: {
+      ...selfPathHeadersForDpopSession(session, "POST", url),
+      "content-type": "application/json",
+    },
   });
-  expect(response.status()).toBe(200);
-  return (await response.json()) as Record<string, unknown>;
+  const text = await response.text();
+  expect(response.status(), `incident authorized stream scan returned ${text}`).toBe(200);
+  const scan = JSON.parse(text) as StreamScanOutcome;
+  expect(Array.isArray(scan.committed_events)).toBe(true);
+  expect(scan.truncated, "privacy readback must cover the complete authorized interval").toBe(false);
+  const events = scan.committed_events.map((row) => {
+    expect(row.commit.stream_ref).toEqual(streamRef);
+    if (!("event" in row)) throw new Error("the owner's incident Event readback must be fully disclosed");
+    expect(row.event.event_id).toBe(row.commit.event_ref);
+    return row.event;
+  });
+  return { events };
 }
