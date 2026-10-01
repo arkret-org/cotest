@@ -25,7 +25,7 @@
       },
       "cotest_e2e": {
         "source_file_count": 110,
-        "source_sha256": "bc367a490d05560eac629cf73db71b5370ae5b05726f716a6f6826b370862d94",
+        "source_sha256": "01b4029917007c8424146b636456895b852fc537bc4a99281a52c77db8771fcd",
         "evidence_count": 48,
         "covered_operation_count": 21
       },
@@ -5639,16 +5639,16 @@
           },
           {
             "file": "cotest/e2e/tests/sync/offline-conflict.spec.ts",
-            "line": 199,
+            "line": 202,
             "scope": "long offline → on reconnect, the authorized peer stream scan backfills missing Commits; bob's timeline catches up to head",
             "scope_kind": "typescript_test",
             "occurrence_lines": [
-              203
+              206
             ],
             "protected_oracle": false,
-            "scope_sha256": "4e50976775386b8db4f706891ef91b251cbef2c86076e582bc6e60cac0acfa0d",
-            "input_sha256": "8953eab5b0443a50df681f4e8c17b08ff479eeef6da0f8fdf1a14955fc66ce44",
-            "assertion_sha256": "dbfecac1b37e32b2a3babb3bb3a6dfc9e06746248ad2beae43bca73fa8234311",
+            "scope_sha256": "d93817092be8938f1d1aba4661eb366978ce81a4500141b056fb43a6fb7a4a98",
+            "input_sha256": "952f5bc752ee74a9f6e86545c230a1560b478945882631c21bb1d46655c48acd",
+            "assertion_sha256": "726be1403d1ca9a6838dc3202020081a98e04f01d88d5d884c2691b3cb9de41c",
             "input_preview": [
               "test(\"long offline → on reconnect, the authorized peer stream scan backfills missing Commits; bob's timeline catches up to head\", async ({",
               "request,",
@@ -5656,10 +5656,10 @@
               "test.skip("
             ],
             "assertion_preview": [
-              "expect(rows.map((row) => row.event.event_id)).toContain(sent.event_id);",
-              "expect(",
-              ").toEqual([]);",
-              "expect(new Set(server2AfterIds).size).toBe(server2AfterIds.length);"
+              "expect([200, 404], \"the member's own join baseline must not hide service errors\")",
+              ".toContain(response.status());",
+              "}, { timeout: 45_000, intervals: [1_000, 2_000, 5_000] }).toBe(true);",
+              "expect(rows.map((row) => row.event.event_id)).toContain(sent.event_id);"
             ]
           }
         ],

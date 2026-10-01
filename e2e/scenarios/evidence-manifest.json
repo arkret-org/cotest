@@ -1481,7 +1481,8 @@
       "realism_level": "fixture-only",
       "evidence_class": "fixture-only",
       "real_services": [
-        "inkson"
+        "inkson",
+        "soland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -1489,17 +1490,20 @@
       ],
       "protocol_object_producers": [
         "cotest_wire_oracle",
-        "inkson_product_client"
+        "inkson_product_client",
+        "raw_http_fixture"
       ],
       "declared_test_bypasses": [
         "prepare_mls_device_false",
+        "raw_http_fixture_or_oracle",
         "session_injection",
         "test_only_signer_or_wire_builder"
       ],
       "claims_excluded": [
         "mls_device_and_keypackage_readiness",
         "product_protocol_object_generation",
-        "registration_login_authorization"
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
       ]
     },
     {

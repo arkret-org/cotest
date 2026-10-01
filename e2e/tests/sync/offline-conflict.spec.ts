@@ -11,10 +11,12 @@ import {
 } from "../../helpers/api";
 import {
   acceptPreparedInviteApi,
+  authHeaders,
   createRealmApi,
   grantCapabilityEventApi,
   pushCommittedRowsApi,
   queryRealmEventsApi,
+  resolveDefaultStrandId,
   scanPeerRealmStreamRowsApi,
   sendMessageApi,
   signedEventEnvelope,
@@ -23,6 +25,7 @@ import {
 } from "../../helpers/soland-api";
 import {
   hasServerCount,
+  solandBaseUrl,
   solandServiceId,
 } from "../../helpers/env";
 import {
@@ -229,7 +232,7 @@ test.describe("offline sync + conflict repair", () => {
       {
         title: `G2.T3 offline backfill ${stamp}`,
         discoverability: "listed",
-        history_access: "all_history_for_current_members",
+        history_access: "since_join",
         invitees: [bob.id],
         invitee_ids: { [bob.id]: solandServiceId("server2") },
         ownerId: alice.id,
@@ -244,8 +247,22 @@ test.describe("offline sync + conflict repair", () => {
     );
     // bob joins through his own Station, which forwards the exact Event to
     // the governance Station and answers with its RealmCommit.
+    await resolveDefaultStrandId(request, aliceToken, realmId, { server: "server1" });
     const invitation = await waitForInviteDeliveryApi(request, bobToken, bob.id, realmId, "server2");
     await acceptPreparedInviteApi(request, bobToken, bob.id, realmId, invitation.id, { server: "server2" });
+    const realmUrl = `${solandBaseUrl("server2")}/_arkret/self/realms/${encodeURIComponent(realmId)}`;
+    await expect.poll(async () => {
+      const response = await request.get(realmUrl, { headers: authHeaders(bobToken, "GET", realmUrl) });
+      expect([200, 404], "the member's own join baseline must not hide service errors")
+        .toContain(response.status());
+      if (response.status() === 404) return false;
+      const realm = await response.json() as { member_ids?: Array<{
+        kind?: string; account_id?: { station_id?: string; principal_id?: string };
+      }> };
+      return realm.member_ids?.some((member) => member.kind === "account" &&
+        member.account_id?.station_id === solandServiceId("server2") &&
+        member.account_id?.principal_id === bob.id) === true;
+    }, { timeout: 45_000, intervals: [1_000, 2_000, 5_000] }).toBe(true);
 
     // Offline window: alice writes while bob is away.
     const missingBody = `offline payload body ${stamp}`;

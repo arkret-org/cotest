@@ -1,73 +1,30 @@
-# 离线编辑 / 重连同步 / 冲突修复
+# 离线期间写入 / 重连回补 / 有序 profile
 
-## 目标
+本场景验证未轮询期间另一成员的已接受写入，在后续获准 stream scan 中按治理 Station 的 Commit 顺序出现。包含两个同站消息回补、一条有序 profile succession 与一条双站 peer 回补用例。浏览器实际断网、耐久 outbox 与重连自动发送由 `sync/offline-queue-replay` 独立验收；本文件的 API 夹具不代表该浏览器流程已通过。
 
-bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending Event。Realm title / summary / avatar 的唯一写入面 `ak.realm.profile` 是 `realm_profile` 单例的整值替换；同一 Realm stream 上的写入只按治理 Station 给出的 `stream_position` 排序，后接纳者即 current，不存在需要合并的多头或通用 repair event。
+## 规范依据
 
-## Spec 锚点
+- `sync/client-sync.md` §2：客户端同步与游标。
+- `sync/operations-sync.md` §9、`authz/event-auth-state-resolution.md` §6/§8：唯一 authority 的 stream_position、typed current 与 RealmCommit finality。
+- `models/realm-and-space.md` §2.3.A：`ak.realm.profile` 为完整 profile 单例替换。
+- `sync/federation.md` §3/§4.1.1：逐流 peer scan、exact pair复制与成员获准区间。
+- `sync/service-http-binding.md` §3.1：本站授权 stream scan，读区间不可证时失败关闭。
 
-- `sync/client-sync.md` §2 — Sync 协议 + cursor
-- `sync/operations-sync.md` §9 — 单 authority 顺序裁决冲突，无通用合流
-- `authz/event-auth-state-resolution.md` §6 — typed 当前值 = 该 stream 最后一个被接受的写入
-- `authz/event-auth-state-resolution.md` §8 — RealmCommit 是唯一 finality
-- `models/realm-and-space.md` §2.3.A — `ak.realm.profile` 是 title / summary / avatar 的唯一 carrier
+## 当前步骤与断言
 
-## 拓扑
+1. 同站 Alice/Bob 通过真实 Coauth/Soland API fixture 注册与加入；Bob 首次读取没有目标消息。Alice 写入后，Bob 再读包含目标消息；三条消息的回读顺序与接受顺序一致。
+2. Profile succession 明确向 Bob 签发 `ak.realm.profile` grant，field_access 覆盖完整 profile。Alice 写 title A，Bob 随后写 B；scan 中顺序为[A,B]，Bob 浏览器的 Realm profile 输入显示 current B。不存在多头合并或通用 repair Event。
+3. 双站回补要求 runner `-ServerCount 2`，每站独立身份与 PostgreSQL，DualCoauth、mock email 与 TLS 保留。Realm 明确 `since_join`，Alice 在 Bob join 前接受默认 discussion。
+4. Bob 从自身 server2 的受保护邀请通知取得 locator，经本站 prepare、自签接受、提交本站，取得治理 Station covering Commit。随后在 Bob 本站等待包含完整 server2 AccountId 的获准成员 current；只允许200或暂未出现的404，其它错误致命。
+5. Alice 在 Bob 未轮询期间接受消息。恢复阶段 Bob 读取本站当前持有集，server2 从 server1 的 `POST /_arkret/peer/streams/scan` 取得获准 source pairs，以 `committed_replication` 接收缺失的 exact Event/Commit；零 rejected。
+6. Bob 通过 `POST /_arkret/self/streams/scan` 读回该消息；每个 source scan 披露的 Event 都在本站恰一次。不能要求加入前历史，不能把不可证明的区间503当空结果、绕过授权或伪造 source pairs。
 
-- 1 × soland + 1 × coauth
+双站用例的“离线”是读取间隔：它没有停止 server2 或断开浏览器网络，durable delivery 可能已经送达，此时无需再次写入。真实停站、重启持久性与浏览器断网分别由三站 P0 和 offline outbox 具名用例提供证据。API/session fixture 的通过不冒充真实注册产品分类。
 
-## Actors
+## 尚需独立验收的边界
 
-| 名字  | 角色            |
-| ----- | --------------- |
-| alice | 在线,持续编辑   |
-| bob   | 离线编辑,后重连 |
+- outbox 容量与用户可见满队列状态。
+- sequenced_state 旧 revision 的耐久拒绝，以及取得新 revision 后显式重建新 Event；服务不能改写原签 Event。
+- 并发 profile 写入按 authority 接受位置序列化，要求 CAS 的 kind 另验 expected_revision loser 的重读重签。
 
-## Steps
-
-### Phase A — Setup space
-
-1. alice createRealm,seedMembers=[bob],bob acceptInvite
-2. alice 和 bob 各自打开 `/timeline/<S>`
-
-### Phase B — bob 离线
-
-3. 测试 harness 用 `page.context().setOffline(true)` 把 bob 断网
-4. bob 在 inkson 中尝试发消息 `M_b_offline`
-5. inkson 客户端:看到网络错误,把 move 写入本地 outbox(IndexedDB / localStorage)
-6. UI 显示 `M_b_offline` 标 "pending sync" (`pending-sync-message` testid)
-7. 同时 alice 在线发 `M_a_online`
-
-### Phase C — bob 重连
-
-8. `page.context().setOffline(false)`
-9. bob 客户端检测网络恢复 → 自动 flush outbox 到 soland
-10. 断言:30s 内 `M_b_offline` 状态从 pending 变 persisted;UI 标记移除
-11. 断言:alice 和 bob 双方都看到 `M_a_online` 和 `M_b_offline`
-
-### Phase D — 因果有序 title update 按 stream 顺序收敛
-
-12. alice 提交完整 `ak.realm.profile`（title=A）；bob 在 `ak.realm.profile` grant 下再提交完整 profile（title=B）
-13. 断言：Realm stream scan 中这两条 profile Event 按 RealmCommit 顺序为 [A, B]
-14. 断言：bob 打开 inkson Realm 设置 profile 区，`realm-name-input` 显示 B（current = 最后接纳的写入）
-
-### Phase F — Backfill via pull
-
-20. (sub-test)假设 bob 离线很久,本地缺很多 events;重连后先用 `GET /_arkret/self/account/subscribe?after=<old>&catchup=true`,缺口再用 `GET /_arkret/self/events?after=<old>`
-21. 断言:bob timeline 自动补齐离线期间的所有消息
-
-## Edge cases
-
-- **E26.1 outbox 满**:bob 长期离线,outbox 满;客户端 UI 显示 "Too many pending changes, please reconnect"
-- **E26.2 旧 revision 再写**:同一 `sequenced_state` 的首条确认命令推进 revision；其余旧 revision 命令持久拒绝且不改变状态
-- **E26.3 重新 author**:客户端取得新 revision 后显式重建新 Event；旧签名 Event 本身不得被服务器改写或升级
-- **E26.4 并发 profile 写入**：两条并发 `ak.realm.profile` 由治理 Station 串行化为两个 stream position，后者即 current；需要防覆盖的 kind 用 `expected_revision` CAS，loser 收到 `failed_precondition` 后重读重签
-
-## Implementation notes
-
-- **测试侧已激活**:offline outbox / pending reconcile 在 `sync/offline-queue-replay` live 覆盖；本 scenario 覆盖两条 `ak.realm.profile` 的 stream 顺序与 current 值。
-- **剩余边界**:outbox capacity、旧 revision 持久拒绝与重新 author 仍保留为后续边界 fixme。
-
-## 总耗时预估
-
-约 90s。
+这些边界不在本文件四个 live 定义内，不能由四项通过自动标记完成。
