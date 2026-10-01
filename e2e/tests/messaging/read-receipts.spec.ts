@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 // Read receipts + privacy toggle
 // Contract: e2e/scenarios/messaging/read-receipts.md
 // Spec refs:
@@ -14,7 +15,8 @@ import {
   createSharedRealmViaApi,
   listReadMarkersViaApi,
 } from "../../helpers/api";
-import { solandBaseUrl } from "../../helpers/env";
+import { solandBaseUrl, solandServiceId, solandServiceResolution } from "../../helpers/env";
+import { cotestWire } from "../../helpers/soland-api/wire-client";
 import { createTwoUserMessagingRealm } from "../../helpers/messaging-fixtures";
 import {
   accountActorId,
@@ -826,17 +828,40 @@ async function setReadReceiptPolicy(
   fixture: ReceiptFixture,
   payload: Record<string, unknown>,
 ) {
-  await submitSignedEventApi(
-    request,
-    token,
-    signedEventEnvelope({
-      actorId: fixture.bob.id,
-      realmId: fixture.realmId,
-      kind: "ak.realm.read_receipt_policy",
-      payload,
-    }),
-    { context: `read receipt policy ${fixture.realmId}` },
-  );
+  const event = signedEventEnvelope({
+    actorId: fixture.bob.id,
+    realmId: fixture.realmId,
+    kind: "ak.realm.read_receipt_policy",
+    payload,
+  });
+  const outcome = await submitSignedEventApi(request, token, event, {
+    context: `read receipt policy ${fixture.realmId}`,
+  });
+  const acceptedCommit = outcome.commit as Record<string, unknown>;
+  const snapshotUrl = `${solandBaseUrl()}/_arkret/self/realm-state-snapshot/head?realm_id=${encodeURIComponent(fixture.realmId)}`;
+  const snapshotResponse = await request.get(snapshotUrl, { headers: authHeaders(token, "GET", snapshotUrl) });
+  expect(snapshotResponse.status(), snapshotResponse.ok() ? "policy snapshot read" : await snapshotResponse.text()).toBe(200);
+  const snapshot = await snapshotResponse.json();
+  const rows = snapshot.current_state_entries.filter((row: { selector: { kind: string } }) =>
+    row.selector.kind === "realm_read_receipt_policy");
+  expect(rows).toHaveLength(1);
+  expect(rows[0].selector).toEqual({ kind: "realm_read_receipt_policy" });
+  expect(rows[0].source_stream_ref).toEqual(acceptedCommit.stream_ref);
+  expect(rows[0].revision).toEqual({ commit_id: acceptedCommit.commit_id, stream_position: acceptedCommit.stream_position });
+  expect(rows[0].value).toEqual(payload);
+  const authorityRequest = { realm_id: fixture.realmId, nonce: randomBytes(32).toString("base64url") };
+  const authorityResponse = await request.post(`${solandBaseUrl()}/_arkret/open/realm-authority/bundle`, {
+    headers: { "content-type": "application/json" }, data: canonicalJson(authorityRequest),
+  });
+  expect(authorityResponse.status()).toBe(200);
+  const resolutionResponse = await request.get(solandServiceResolution().resolution_url);
+  expect(resolutionResponse.status()).toBe(200);
+  expect(cotestWire("verify-realm-state-snapshot", {
+    snapshot, expected_snapshot_id: snapshot.snapshot_id,
+    authority_request: authorityRequest, authority_bundle: await authorityResponse.json(),
+    trusted_service_id: solandServiceId(), service_resolution: await resolutionResponse.json(),
+  })).toEqual({ verified: true });
+
   acceptedReceiptPolicies.set(fixture, payload);
 }
 

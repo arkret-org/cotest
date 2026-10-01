@@ -7,7 +7,7 @@
     "test_layers": {
       "soland_unit": {
         "source_file_count": 370,
-        "source_sha256": "933f9a41c521b77a0a6b69ec6f13517b66b7855a495afc8ad338b5c937923c77",
+        "source_sha256": "176db8234047d92c4ce222241f60c9744f8568d1a8329402bdee7eae3f44c38c",
         "evidence_count": 282,
         "covered_operation_count": 139
       },
@@ -25,7 +25,7 @@
       },
       "cotest_e2e": {
         "source_file_count": 110,
-        "source_sha256": "01b4029917007c8424146b636456895b852fc537bc4a99281a52c77db8771fcd",
+        "source_sha256": "4ebc44f3012029d1231108fbd949583f32041c36dec2fad7e0c3ac944fb7fb88",
         "evidence_count": 48,
         "covered_operation_count": 21
       },
@@ -7283,11 +7283,11 @@
         "storage_parity": [
           {
             "file": "soland/crates/storage-postgres/src/snapshot_disclosure_gate.rs",
-            "line": 335,
+            "line": 336,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              335
+              336
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",

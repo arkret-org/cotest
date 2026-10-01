@@ -1,5 +1,7 @@
 # Read receipts + 隐私开关
 
+本次policy准入切片必须在原owner签发后，回读真实signed Snapshot的唯一 `realm_read_receipt_policy` row：source stream、covering revision/value与accepted Commit逐一匹配，再由cotest-wire复用SDK/Garth验证authority nonce、Station history与Snapshot签名。已接受策略才供接收端解密fixture使用。API测试与session injection分类保留，不用测试本地policy缓存冒充持久current，也不把服务改为识别Signal密文中的receipt类型。其余UI目标仍是产品待验收边界。
+
 ## 目标
 
 验证 read receipt 三层语义:client preference(关闭自己的 receipt 发送)、Realm disclosure policy(`optional`/`required`/`disabled`)、actor-private read marker(多设备同步)。alice 关掉自己的 receipt,bob 看不到 alice 读;alice 重开,bob "catch up";policy=required 时强制覆盖 client 偏好。
