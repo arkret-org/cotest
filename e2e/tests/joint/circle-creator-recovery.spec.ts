@@ -2,13 +2,23 @@
 // Session injection and holder diagnostics make this fixture-only evidence.
 import { expect, test } from "../../helpers/arkret-test";
 import { createDpopUserSession, openUserPage, type JointUserPage } from "../../helpers/users";
-import { readCreatorRecords } from "../../helpers/creator-bootstrap";
+import { installCircleCreatorCommitFault, readCreatorRecords } from "../../helpers/creator-bootstrap";
 import { canonicalJson, scanRealmStreamApi } from "../../helpers/soland-api";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-for (const cut of ["none", "create_response_loss", "public_blob_response_loss"] as const) {
+const commitCuts = {
+  realm_accepted: "genesis_intent_persisted",
+  governance_result_pinned: "realm_accepted",
+  epoch0_state_persisted: "governance_result_pinned",
+  genesis_queued: "epoch0_state_persisted",
+  genesis_accepted: "genesis_queued",
+  artifacts_converged: "genesis_accepted",
+  ready: "artifacts_converged",
+} as const;
+
+for (const cut of ["none", "create_response_loss", "public_blob_response_loss", ...Object.keys(commitCuts)] as const) {
   test("Circle creator independently encrypts and resumes original bytes; " + cut, async ({ browser, request }, testInfo) => {
     test.setTimeout(360_000);
     const session = await createDpopUserSession(request, "circle-creator");
@@ -50,6 +60,10 @@ for (const cut of ["none", "create_response_loss", "public_blob_response_loss"] 
       const createIds = new Set<string>();
       const genesisIds = new Set<string>();
       const createBytes = new Set<string>();
+      const genesisBytes = new Set<string>();
+      let signedAtCut: Record<string, any> | undefined;
+      const commitCut = Object.hasOwn(commitCuts, cut);
+      if (commitCut) await installCircleCreatorCommitFault(page, cut);
       await page.route(/\/_arkret\/self\/events(?:\?.*)?$/, async route => {
         const body = route.request().postDataJSON() as Record<string, any>;
         const event = body.event;
@@ -78,6 +92,7 @@ for (const cut of ["none", "create_response_loss", "public_blob_response_loss"] 
         }
         if (event?.kind === "ak.mls.genesis" && event.scope_ref.circle_id === circle) {
           genesisIds.add(event.event_id);
+          genesisBytes.add(canonicalJson(body));
           const record = (await readCreatorRecords(page)).find(value => value.intent.effective_scope.circle_id === circle)!;
           expect(record.state).toBe("genesis_queued");
           expect(record.queued_genesis.signed_genesis.event).toEqual(event);
@@ -105,11 +120,31 @@ for (const cut of ["none", "create_response_loss", "public_blob_response_loss"] 
       await page.getByTestId("circle-create-submit").click();
       await expect.poll(() => circle, { timeout: 60_000 }).toMatch(/^ak:circle:/);
       if (cut !== "none") {
-        await expect.poll(() => lost, { timeout: 60_000 }).toBe(true);
+        if (commitCut) {
+          await expect.poll(() => page.evaluate(() => (window as any).__circleCreatorCommitFault),
+            { timeout: 120_000 }).toEqual({ state: cut, circle });
+        } else {
+          await expect.poll(() => lost, { timeout: 60_000 }).toBe(true);
+        }
         expect(intentAtCut).toBeDefined();
         const original = (await readCreatorRecords(page)).find(value => value.intent.effective_scope.circle_id === circle)!;
-        expect(original.state).toBe(cut === "create_response_loss" ? "genesis_intent_persisted" : "epoch0_state_persisted");
+        expect(original.state).toBe(commitCut ? commitCuts[cut as keyof typeof commitCuts]
+          : cut === "create_response_loss" ? "genesis_intent_persisted" : "epoch0_state_persisted");
+        if (commitCut) epochAtCut = original.epoch_zero;
         expect(original.epoch_zero).toEqual(epochAtCut);
+        expect(original.ready_receipt).toBeUndefined();
+        expect(original.ready_index.filter((receipt: Record<string, any>) => receipt.effective_scope.circle_id === circle)).toHaveLength(0);
+        signedAtCut = original.queued_genesis;
+        // Repeated worker attempts must not change any formal transaction field.
+        await page.waitForTimeout(500);
+        const still = (await readCreatorRecords(page)).find(value => value.intent.effective_scope.circle_id === circle)!;
+        expect(still.state).toBe(original.state);
+        expect(still.intent).toEqual(original.intent);
+        expect(still.governance_evidence).toEqual(original.governance_evidence);
+        expect(still.epoch_zero).toEqual(original.epoch_zero);
+        expect(still.queued_genesis).toEqual(original.queued_genesis);
+        expect(still.accepted_genesis).toEqual(original.accepted_genesis);
+        expect(still.artifacts).toEqual(original.artifacts);
         // Destroy the browser process, retain the same non-extractable key.
         await client.session.context.close();
         blocked = false;
@@ -122,6 +157,7 @@ for (const cut of ["none", "create_response_loss", "public_blob_response_loss"] 
       const ready = (await readCreatorRecords(page)).find(value => value.intent.effective_scope.circle_id === circle)!;
       expect(ready.intent).toEqual(intentAtCut);
       if (epochAtCut) expect(ready.epoch_zero).toEqual(epochAtCut);
+      if (signedAtCut) expect(ready.queued_genesis).toEqual(signedAtCut);
       expect(ready.accepted_create.accepted_event.kind).toBe("ak.circle.create");
       expect(ready.accepted_create.accepted_event.event_id).toBe(ready.intent.scope_create_event_id);
       expect(ready.accepted_create.covering_commit.stream_ref).toEqual({ kind: "realm", realm_id: realm });
@@ -130,6 +166,7 @@ for (const cut of ["none", "create_response_loss", "public_blob_response_loss"] 
       expect(createIds.size).toBe(1);
       expect(createBytes.size).toBe(1);
       if (cut === "none") expect(genesisIds.size).toBe(1);
+      expect(genesisBytes.size).toBeLessThanOrEqual(1);
       const parent = await scanRealmStreamApi(request, session!.grantJwt, realm);
       expect(parent.events.filter(event => event.kind === "ak.mls.genesis")).toHaveLength(0);
       expect(parent.events.filter(event => event.kind === "ak.circle.create")).toHaveLength(2);
