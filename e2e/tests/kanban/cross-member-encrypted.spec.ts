@@ -1,3 +1,4 @@
+import { readCreatorRecords } from "../../helpers/creator-bootstrap";
 // Cross-member encrypted kanban
 // Contract: e2e/scenarios/kanban/cross-member-encrypted.md
 // Spec refs:
@@ -72,40 +73,6 @@ type E2eeStorageEvidence = {
 
 // Read only the holder's outbound vault, using its non-extractable wrapping
 // key. This is a local persistence assertion, never authority evidence.
-async function readCreatorRecords(page: Page): Promise<Record<string, any>[]> {
-  return page.evaluate(async () => {
-    const result = <T>(request: IDBRequest<T>): Promise<T> => new Promise((resolve, reject) => {
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-    const db = await result(indexedDB.open("inkson.secret.inkson", 1));
-    try {
-      const tx = db.transaction(["entries", "wrapping_keys"], "readonly");
-      const entries = tx.objectStore("entries");
-      const [key, names, encrypted] = await Promise.all([
-        result(tx.objectStore("wrapping_keys").get("primary")) as Promise<CryptoKey>,
-        result(entries.getAllKeys()),
-        result(entries.getAll()),
-      ]);
-      if (!key || key.extractable) throw new Error("creator vault has no non-extractable wrapping key");
-      const records: Record<string, any>[] = [];
-      for (let index = 0; index < names.length; index += 1) {
-        const name = String(names[index]);
-        if (!name.startsWith("inkson.outbound.v1::") || !name.endsWith(".standard")) continue;
-        const entry = encrypted[index] as { iv: Uint8Array; ct: Uint8Array };
-        const plaintext = await crypto.subtle.decrypt(
-          { name: "AES-GCM", iv: Uint8Array.from(entry.iv).buffer }, key, Uint8Array.from(entry.ct).buffer,
-        );
-        const state = JSON.parse(new TextDecoder().decode(plaintext));
-        records.push(...(state.creator_bootstrap_records ?? []).map((record: Record<string, any>) => ({ ...record, queue_items: state.items, ready_index: state.creator_ready_index ?? [], vault_commit_position: state.commit_position })));
-      }
-      return records;
-    } finally {
-      db.close();
-    }
-  });
-}
-
 // Damage authenticated local recovery data, never wire authority evidence.
 // Encryption uses the actual non-extractable holder key and replacement uses
 // a readwrite transaction comparing the committed ciphertext.

@@ -7,7 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-test("Circle poll survives readback, replacement, a new browser process and another replacement", async ({ request, browser }) => {
+test("Circle poll survives readback, replacement, a new browser process and another replacement", async ({ request, browser }, testInfo) => {
   test.setTimeout(420_000);
   // Keep the Chromium profile path short on Windows: deeply nested artifact
   // paths can make IndexedDB fail to open its LevelDB backing store.
@@ -187,6 +187,11 @@ test("Circle poll survives readback, replacement, a new browser process and anot
       }
       const card = page.getByTestId("poll-card").filter({ hasText: question }).first();
       await card.getByTestId("poll-option").filter({ hasText: answer }).click();
+      await testInfo.attach("safe-poll-vote-dispatch", { contentType: "application/json",
+        body: JSON.stringify({ index, pollState: await card.getByTestId("poll-state").textContent(),
+          status: await page.getByTestId("chat-status").textContent(),
+          pollRef: await card.getAttribute("data-poll-id") }) });
+      await expect(page.getByTestId("chat-status")).toContainText(/poll vote/i, { timeout: 10_000 });
       const expectedCounts = index === 1 ? ["0", "1"] : ["1", "0"];
       for (const [optionIndex, count] of expectedCounts.entries()) {
         await expect(card.getByTestId("poll-result-row").filter({ hasText: answers[optionIndex]! })
