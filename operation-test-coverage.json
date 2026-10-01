@@ -25,7 +25,7 @@
       },
       "cotest_e2e": {
         "source_file_count": 110,
-        "source_sha256": "ba4711d1993f0ed9e858dd6a52e34d322b9d79f173db569265d8efacdbaa9a6d",
+        "source_sha256": "bc367a490d05560eac629cf73db71b5370ae5b05726f716a6f6826b370862d94",
         "evidence_count": 48,
         "covered_operation_count": 21
       },
@@ -5590,11 +5590,11 @@
           },
           {
             "file": "cotest/e2e/tests/federation/cross-server.spec.ts",
-            "line": 190,
+            "line": 193,
             "scope": "both soland instances expose the peer Event submit and peer stream scan endpoints",
             "scope_kind": "typescript_test",
             "occurrence_lines": [
-              200
+              203
             ],
             "protected_oracle": false,
             "scope_sha256": "e56d5ca3158d8c3290357803f2d070b492ee26ae89229d947b1ee19b0cdfdce2",
@@ -5666,15 +5666,15 @@
         "fault_recovery": [
           {
             "file": "cotest/e2e/tests/federation/cross-server.spec.ts",
-            "line": 503,
+            "line": 508,
             "scope": "peer stream scan recovery: server2 reads a committed message from server1 through ak.peer.committed_event.read.scan.v1 and holds it exactly once",
             "scope_kind": "typescript_test",
             "occurrence_lines": [
-              503
+              508
             ],
             "protected_oracle": false,
-            "scope_sha256": "d6ebad3d37f217277d4197a74dd314276defe738cd2a68a10e9df57bed849ae1",
-            "input_sha256": "177b9675e16827211c2e135c4178a43394f8da50d4c9a177d23d73d9def88b7e",
+            "scope_sha256": "c470373d5b440bcc3a149d4dc4dfedad0a7fe21468cab80255f09e373ec5b3ea",
+            "input_sha256": "27a1e738f653e0f887c121beebec53c802e09fc897e9a8f77dac133ea9eb43c0",
             "assertion_sha256": "57060f95b501cbaf98ad81af8a53e4a11d9c762310854ba0c7ca70bc86aebc57",
             "input_preview": [
               "test(\"peer stream scan recovery: server2 reads a committed message from server1 through ak.peer.committed_event.read.scan.v1 and holds it exactly once\", async ({",
@@ -6247,11 +6247,11 @@
           },
           {
             "file": "cotest/e2e/tests/federation/cross-server.spec.ts",
-            "line": 190,
+            "line": 193,
             "scope": "both soland instances expose the peer Event submit and peer stream scan endpoints",
             "scope_kind": "typescript_test",
             "occurrence_lines": [
-              200
+              203
             ],
             "protected_oracle": false,
             "scope_sha256": "e56d5ca3158d8c3290357803f2d070b492ee26ae89229d947b1ee19b0cdfdce2",

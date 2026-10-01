@@ -4,7 +4,7 @@
 //   - sync/federation.md §2.1-§2.4 (trust roots, Event verification, profiles)
 //   - §3.1-§3.2 DID server identity + RFC 9421 request signature
 //   - §4.1 push protocol, §4.1.0 push sequence
-//   - §4.2 pull / backfill, §4.5 fork detection / frontier exchange
+//   - §4.2 authorized per-stream backfill and continuity
 //   - §5.1 cross-domain invite
 //
 // Peer surfaces exercised (spec v1):
@@ -33,6 +33,10 @@ import {
   authHeaders,
   canonicalJson,
   createRealmApi,
+  grantCapabilityEventApi,
+  resolveDefaultStrandId,
+  type StreamScanOutcome,
+  type CommittedEventFullView,
   pushCommittedRowsApi,
   pushFederationEvents,
   rawPushFederationEvents,
@@ -119,20 +123,19 @@ async function waitForMember(
   memberId: string,
   realmId: string,
   server: "server1" | "server2",
+  memberServer: "server1" | "server2",
 ) {
   await expect
     .poll(
       async () => {
         const url = `${solandBaseUrl(server)}/_arkret/self/realms/${encodeURIComponent(realmId)}`;
         const response = await request.get(url, { headers: authHeaders(token, "GET", url) });
-        if (!response.ok()) {
-          return false;
-        }
+        expect([200, 404], "membership baseline read uses the member's exact AccountId")
+          .toContain(response.status());
+        if (response.status() === 404) return false;
         const body = await response.json();
         return Array.isArray(body.member_ids) && body.member_ids.some(
-          (member: unknown) => member !== null && typeof member === "object" &&
-            (member as { kind?: string }).kind === "account" &&
-            (member as { account_id?: { principal_id?: string } }).account_id?.principal_id === memberId,
+          (member: unknown) => accountActorRoutesThrough(member, solandServiceId(memberServer), memberId),
         );
       },
       { timeout: 45_000, intervals: [1_000, 2_000, 5_000] },
@@ -359,7 +362,7 @@ test.describe("cross-server federation", () => {
       {
         title: `S2 committed replication ${stamp}`,
         discoverability: "listed",
-        history_access: "all_history_for_current_members",
+        history_access: "since_join",
         invitees: [bob.id],
         invitee_ids: { [bob.id]: solandServiceId("server2") },
         ownerId: alice.id,
@@ -397,8 +400,10 @@ test.describe("cross-server federation", () => {
       "a Station without a hosted joined member must not hold the Realm",
     ).toEqual([]);
 
+    await resolveDefaultStrandId(request, aliceToken, realmId, { server: "server1" });
     await joinFromOwnStation(request, bobToken, bob.id, realmId, "server2");
-    await waitForMember(request, aliceToken, bob.id, realmId, "server1");
+    await waitForMember(request, aliceToken, bob.id, realmId, "server1", "server2");
+    await waitForMember(request, bobToken, bob.id, realmId, "server2", "server2");
 
     const body = `committed replication smoke ${stamp}`;
     const sent = await sendMessageApi(request, aliceToken, realmId, body, {
@@ -520,7 +525,7 @@ test.describe("cross-server federation", () => {
       {
         title: `S2 backfill ${stamp}`,
         discoverability: "listed",
-        history_access: "all_history_for_current_members",
+        history_access: "since_join",
         invitees: [bob.id],
         invitee_ids: { [bob.id]: solandServiceId("server2") },
         ownerId: alice.id,
@@ -532,8 +537,10 @@ test.describe("cross-server federation", () => {
       },
       { server: "server1" },
     );
+    await resolveDefaultStrandId(request, aliceToken, realmId, { server: "server1" });
     await joinFromOwnStation(request, bobToken, bob.id, realmId, "server2");
-    await waitForMember(request, aliceToken, bob.id, realmId, "server1");
+    await waitForMember(request, aliceToken, bob.id, realmId, "server1", "server2");
+    await waitForMember(request, bobToken, bob.id, realmId, "server2", "server2");
 
     const missingBody = `recovered through peer scan ${stamp}`;
     const sent = await sendMessageApi(request, aliceToken, realmId, missingBody, {
@@ -596,7 +603,7 @@ test.describe("cross-server federation", () => {
       {
         title: `S2 leave fanout ${stamp}`,
         discoverability: "listed",
-        history_access: "all_history_for_current_members",
+        history_access: "since_join",
         invitees: [bob.id],
         invitee_ids: { [bob.id]: solandServiceId("server2") },
         ownerId: alice.id,
@@ -608,8 +615,10 @@ test.describe("cross-server federation", () => {
       },
       { server: "server1" },
     );
+    await resolveDefaultStrandId(request, aliceToken, realmId, { server: "server1" });
     await joinFromOwnStation(request, bobToken, bob.id, realmId, "server2");
-    await waitForMember(request, aliceToken, bob.id, realmId, "server1");
+    await waitForMember(request, aliceToken, bob.id, realmId, "server1", "server2");
+    await waitForMember(request, bobToken, bob.id, realmId, "server2", "server2");
 
     // Baseline: while bob is joined, server2 is a routable target.
     const beforeBody = `before leave ${stamp}`;
@@ -705,7 +714,7 @@ test.describe("prepared authoring and join", () => {
   for (const largeHistory of [false, true]) {
     test(`two-way timeline messaging${largeHistory ? " after paged governance history" : ""}: alice@server1 and bob@server2 exchange messages and both servers converge on identical effective state`, async ({
       request,
-    }) => {
+    }, testInfo) => {
       test.setTimeout(600_000);
       const stamp = Date.now();
       const aliceSession = await createDpopUserSession(request, `s2-msg-alice-${stamp}`, { server: "server1" });
@@ -730,7 +739,7 @@ test.describe("prepared authoring and join", () => {
         {
           title: `S2 two-way ${stamp}`,
           discoverability: "listed",
-          history_access: "all_history_for_current_members",
+          history_access: "since_join",
           invitees: [bob.id, ...(charlie ? [charlie.id] : [])],
           invitee_ids: {
             [bob.id]: solandServiceId("server2"),
@@ -762,7 +771,7 @@ test.describe("prepared authoring and join", () => {
         expect(afterJoin, "join must advance the Realm commit stream").toBeTruthy();
         expect(afterJoin!.stream_position).toBeGreaterThan(beforeJoin?.stream_position ?? -1);
         expect(String(joined.event_id)).toMatch(/^ak:event:/);
-        await waitForMember(request, aliceToken, charlie.id, realmId, "server1");
+        await waitForMember(request, aliceToken, charlie.id, realmId, "server1", "server1");
         await submitSignedEventApi(request, charlieToken, signedEventEnvelope({
           actorId: charlie.id,
           realmId,
@@ -770,23 +779,71 @@ test.describe("prepared authoring and join", () => {
           payload: { member_id: accountActorId(charlie.id, "server1"), membership: "leave" },
         }), { server: "server1", controlObserverToken: aliceToken });
 
-        // Eighteen real accepted Schema definition Control Moves contribute
-        // more than 8 MiB before envelopes, Seals and signer evidence. The
-        // applicant's Station has not joined while this history is authored.
-        let historicalPayloadBytes = 0;
+        // One immutable Schema subject keeps the current Snapshot bounded.
+        // Distinct signed Events of the same definition create real accepted
+        // history; changing the occupied subject's bytes is forbidden.
+        const payload = { value: {
+          $schema: "https://json-schema.org/draft/2020-12/schema",
+          $id: "ak.schema.bootstrap_history_0.v1",
+          type: "object",
+          description: `Historical schema: ${"x".repeat(512 * 1024)}`,
+        } };
+        const acceptedSchemas = new Set<string>();
         for (let index = 0; index < 18; index += 1) {
-          const payload = { value: {
-            $schema: "https://json-schema.org/draft/2020-12/schema",
-            $id: `ak.schema.bootstrap_history_${index}.v1`,
-            type: "object",
-            description: `Historical schema ${index}: ${"x".repeat(512 * 1024)}`,
-          } };
-          historicalPayloadBytes += Buffer.byteLength(canonicalJson(payload), "utf8");
-          await submitSignedEventApi(request, aliceToken, signedEventEnvelope({
+          const event = signedEventEnvelope({
             actorId: alice.id, realmId, kind: "ak.schema.define", payload,
-          }), { server: "server1", context: `accept historical schema ${index}` });
+          });
+          await submitSignedEventApi(request, aliceToken, event, {
+            server: "server1", context: `accept historical schema Event ${index}`,
+          });
+          acceptedSchemas.add(String(event.event_id));
         }
+        expect(acceptedSchemas.size).toBe(18);
+        const observedSchemas = new Set<string>();
+        let historicalPayloadBytes = 0;
+        let afterPosition: number | null = null;
+        let historyPages = 0;
+        const streamRef = { kind: "realm", realm_id: realmId };
+        const scanUrl = `${solandBaseUrl("server1")}/_arkret/self/streams/scan`;
+        for (;;) {
+          historyPages += 1;
+          expect(historyPages, "historical scan must make bounded progress").toBeLessThanOrEqual(100);
+          const response = await request.post(scanUrl, {
+            headers: { ...authHeaders(aliceToken, "POST", scanUrl), "content-type": "application/json" },
+            data: canonicalJson({ realm_id: realmId, stream_ref: streamRef, after_position: afterPosition, limit: 5 }),
+          });
+          expect(response.status(), response.ok() ? "accepted historical stream scan" : await response.text()).toBe(200);
+          const scan = await response.json() as StreamScanOutcome;
+          expect(scan.committed_events.length).toBeGreaterThan(0);
+          expect(scan.committed_events.length).toBeLessThanOrEqual(5);
+          for (const row of scan.committed_events) {
+            expect(row.commit.stream_ref).toEqual(streamRef);
+            if (!("event" in row)) throw new Error("the owner's historical Schema readback must be full");
+            expect(row.event.event_id).toBe(row.commit.event_ref);
+            const position = Number(row.commit.stream_position);
+            expect(Number.isSafeInteger(position)).toBe(true);
+            if (afterPosition !== null) expect(position).toBe(afterPosition + 1);
+            afterPosition = position;
+            const eventId = String(row.event.event_id);
+            if (acceptedSchemas.has(eventId)) {
+              expect(observedSchemas.has(eventId), "a historical Schema is read exactly once").toBe(false);
+              expect(row.event.payload).toEqual(payload);
+              observedSchemas.add(eventId);
+              historicalPayloadBytes += Buffer.byteLength(canonicalJson(row.event.payload), "utf8");
+            }
+          }
+          expect(typeof scan.truncated).toBe("boolean");
+          if (!scan.truncated) break;
+        }
+        expect([...observedSchemas].sort()).toEqual([...acceptedSchemas].sort());
+        expect(historyPages).toBeGreaterThan(1);
         expect(historicalPayloadBytes).toBeGreaterThan(8 * 1024 * 1024);
+        await testInfo.attach("accepted-history-audit.json", {
+          body: JSON.stringify({ schema_subjects: 1, accepted_schema_events: observedSchemas.size,
+            accepted_payload_bytes: historicalPayloadBytes, stream_scan_pages: historyPages,
+            final_stream_position: afterPosition }),
+          contentType: "application/json",
+        });
       }
 
       const server2Invite = await waitForInviteDeliveryApi(
@@ -806,7 +863,26 @@ test.describe("prepared authoring and join", () => {
           server: "server2",
         },
       );
-      await waitForMember(request, aliceToken, bob.id, realmId, "server1");
+      await waitForMember(request, aliceToken, bob.id, realmId, "server1", "server2");
+      await waitForMember(request, bobToken, bob.id, realmId, "server2", "server2");
+      const messageGrant = await grantCapabilityEventApi(request, aliceToken, {
+        ownerId: alice.id,
+        realmId,
+        subjectId: bob.id,
+        subjectServer: "server2",
+        actions: ["ak.message.create"],
+        server: "server1",
+      });
+      const grantUrl = `${solandBaseUrl("server2")}/_arkret/self/committed-events/${messageGrant.eventId}`;
+      await expect.poll(async () => {
+        const response = await request.get(grantUrl, { headers: authHeaders(bobToken, "GET", grantUrl) });
+        expect([200, 404], "the member's exact grant read must not bypass a service error").toContain(response.status());
+        if (!response.ok()) return false;
+        const pair = await response.json() as CommittedEventFullView;
+        expect(pair.commit?.event_ref).toBe(messageGrant.eventId);
+        expect(pair.event?.event_id).toBe(messageGrant.eventId);
+        return true;
+      }, { timeout: 60_000, intervals: [500, 1_000, 2_000] }).toBe(true);
 
       const aliceBody = `alice from server1 ${stamp}`;
       await sendPreparedMessageApi(request, aliceToken, realmId, aliceBody, {
