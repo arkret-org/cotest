@@ -589,14 +589,16 @@ async function openPendingTimeline(reader: JointUserPage, realmId: string): Prom
 }
 
 test.describe("cross-member encrypted kanban @fully-implemented", () => {
-  for (const cut of ["none", "create_response_loss", "device_evidence_unavailable", "public_blob_response_loss"] as const) {
+  for (const cut of ["none", "create_response_loss", "device_evidence_unavailable", "public_blob_response_loss", "genesis_response_loss"] as const) {
   const loseCreateResponse = cut === "create_response_loss";
   const loseDeviceEvidence = cut === "device_evidence_unavailable";
   const loseBlobResponse = cut === "public_blob_response_loss";
+  const loseGenesisResponse = cut === "genesis_response_loss";
   test("creator E2EE plaintext cache is encrypted in IndexedDB and survives reload" +
     (loseCreateResponse ? "; recovers accepted-create response loss before epoch zero" : "") +
     (loseDeviceEvidence ? "; Device evidence unavailable keeps acceptance before randomness" : "") +
-    (loseBlobResponse ? "; restores epoch-zero unit after public blob response loss" : ""), async ({
+    (loseBlobResponse ? "; restores epoch-zero unit after public blob response loss" : "") +
+    (loseGenesisResponse ? "; reconciles exact accepted Genesis after response loss and unavailable query" : ""), async ({
     browser,
     request,
   }, testInfo) => {
@@ -643,6 +645,18 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
     let deviceCutSeen = false;
     let blobCutActive = loseBlobResponse;
     let epochUnitAtCut: Record<string, any> | undefined;
+    let genesisCutActive = loseGenesisResponse;
+    let acceptedGenesisAtCut: Record<string, any> | undefined;
+    let signedGenesisAtCut: Record<string, any> | undefined;
+    await creator.page.route(/\/_arkret\/self\/streams\/scan(?:\?.*)?$/, async (route) => {
+      if (genesisCutActive && acceptedGenesisAtCut) {
+        await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({
+          error: { code: "temporarily_unavailable", message: "creator exact query cut" },
+        }) });
+        return;
+      }
+      await route.continue();
+    });
     await creator.page.route(/\/_arkret\/self\/keys\/query(?:\?.*)?$/, async (route) => {
       if (deviceCutActive && deviceCutSeen) {
         await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
@@ -677,7 +691,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         await route.continue();
         return;
       }
-      expect(record.state, "the complete recovery unit must precede public blob observability").toMatch(/^(epoch0_state_persisted|genesis_queued)$/);
+      expect(record.state, "the complete recovery unit must precede public blob observability").toMatch(/^(epoch0_state_persisted|genesis_queued|genesis_accepted)$/);
       expect(record.epoch_zero.encrypted_private_state.length).toBeGreaterThan(0);
       if (blobCutActive) {
         if (!epochUnitAtCut) {
@@ -735,6 +749,23 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           (entry: Record<string, any>) => entry.selector?.kind === "mls_group" && entry.selector.scope_ref.realm_id === payload.event.realm_id,
         )).toBe(false);
       }
+      if (genesisCutActive && payload.event?.kind === "ak.mls.genesis"
+        && submittedCreateIds.has(payload.event.realm_id.replace("ak:realm:", "ak:event:"))) {
+        submittedGenesisIds.add(payload.event.event_id);
+        if (!acceptedGenesisAtCut) {
+          const record = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === payload.event.realm_id)!;
+          const response = await route.fetch();
+          expect(response.ok()).toBe(true);
+          acceptedGenesisAtCut = await response.json();
+          assertAuthoritySubmitOutcome(acceptedGenesisAtCut!, payload.event, "accepted Genesis response loss");
+          cutRealmId = payload.event.realm_id;
+          intentAtCut = record.intent;
+          epochUnitAtCut = record.epoch_zero;
+          signedGenesisAtCut = record.queued_genesis;
+        }
+        await route.abort("connectionfailed");
+        return;
+      }
       if (payload.event?.kind === "ak.mls.genesis" && payload.event.realm_id === cutRealmId) {
         submittedGenesisIds.add(payload.event.event_id);
       }
@@ -784,7 +815,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         mlsActivated: true,
       };
       let realmId: string;
-      if (loseCreateResponse || loseDeviceEvidence || loseBlobResponse) {
+      if (loseCreateResponse || loseDeviceEvidence || loseBlobResponse || loseGenesisResponse) {
         // Submit through the real wizard, then destroy its runtime at the
         // accepted-create response or current Device evidence boundary.
         await creator.gotoSetup();
@@ -814,13 +845,22 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           expect(before!.queued_genesis).toBeUndefined();
           expect(before!.epoch_zero).toEqual(epochUnitAtCut);
         }
-        expect(submittedGenesisIds.size, "the crash cut precedes every Genesis submission").toBe(0);
+        if (loseGenesisResponse) {
+          const before = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId)!;
+          expect(before.state).toBe("genesis_queued");
+          expect(before.accepted_genesis, "HTTP acceptance cannot bypass the unavailable exact query").toBeUndefined();
+          expect(before.epoch_zero).toEqual(epochUnitAtCut);
+          expect(before.queued_genesis).toEqual(signedGenesisAtCut);
+        } else {
+          expect(submittedGenesisIds.size, "the crash cut precedes every Genesis submission").toBe(0);
+        }
         realmId = cutRealmId!;
-        await stepShot(creator.page, testInfo, loseBlobResponse ? "A-public-blob-response-lost" : loseDeviceEvidence ? "A-device-evidence-unavailable" : "A-accepted-create-response-lost");
+        await stepShot(creator.page, testInfo, loseGenesisResponse ? "A-genesis-response-and-query-lost" : loseBlobResponse ? "A-public-blob-response-lost" : loseDeviceEvidence ? "A-device-evidence-unavailable" : "A-accepted-create-response-lost");
         await creator.page.goto(`/chat/${encodeURIComponent(realmId)}`, { waitUntil: "domcontentloaded" });
         cutActive = false;
         deviceCutActive = false;
         blobCutActive = false;
+        genesisCutActive = false;
       } else {
         realmId = await creator.createRealm(createOptions);
       }
@@ -829,7 +869,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         (intent) => intent.effective_scope.realm_id === realmId,
       );
       expect(intentBeforeReload).toBeDefined();
-      if (loseCreateResponse || loseDeviceEvidence || loseBlobResponse) expect(intentBeforeReload).toEqual(intentAtCut);
+      if (loseCreateResponse || loseDeviceEvidence || loseBlobResponse || loseGenesisResponse) expect(intentBeforeReload).toEqual(intentAtCut);
       const boardId = await buildEncryptedBoardListCard(
         creator.page,
         realmId,
@@ -842,7 +882,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         cardTitle,
         privateDescription,
       );
-      if (loseCreateResponse || loseDeviceEvidence || loseBlobResponse) {
+      if (loseCreateResponse || loseDeviceEvidence || loseBlobResponse || loseGenesisResponse) {
         expect(submittedGenesisIds.size, "background recovery must author one Genesis for the original scope").toBe(1);
         expect(submittedCreateIds.size).toBe(1);
       }
@@ -850,6 +890,17 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
       await assertE2eeStorageIsHardened(creator.page, [privateDescription]);
       const recordBeforeReload = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === realmId)!;
       const pinBeforeReload = recordBeforeReload.governance_evidence;
+      expect(recordBeforeReload.state).toBe("genesis_accepted");
+      const accepted = recordBeforeReload.accepted_genesis;
+      expect(accepted.accepted.event).toEqual(recordBeforeReload.queued_genesis.signed_genesis.event);
+      expect(accepted.canonical_accepted_bytes).toEqual(recordBeforeReload.queued_genesis.canonical_signed_bytes);
+      expect(accepted.accepted_bytes_digest).toBe(recordBeforeReload.queued_genesis.canonical_bytes_digest);
+      const ledger = recordBeforeReload.queue_items.find((item: Record<string, any>) => item.submission.event_id === accepted.accepted.event.event_id);
+      expect(ledger.status).toBe("committed");
+      expect(ledger.submission.state.commit).toEqual(accepted.accepted.commit);
+      expect(ledger.settled_at).toBeTruthy();
+      if (acceptedGenesisAtCut) expect(accepted.accepted.commit).toEqual(acceptedGenesisAtCut.commit);
+      if (signedGenesisAtCut) expect(recordBeforeReload.queued_genesis).toEqual(signedGenesisAtCut);
       expect(recordBeforeReload.epoch_zero).toBeDefined();
       expect(recordBeforeReload.queued_genesis).toBeDefined();
       if (epochUnitAtCut) expect(recordBeforeReload.epoch_zero).toEqual(epochUnitAtCut);
@@ -864,6 +915,8 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
       expect(submittedCreateIds.size).toBe(1);
       expect((await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === realmId)!.governance_evidence).toEqual(pinBeforeReload);
       const recordAfterReload = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === realmId)!;
+      expect(recordAfterReload.state).toBe("genesis_accepted");
+      expect(recordAfterReload.accepted_genesis).toEqual(recordBeforeReload.accepted_genesis);
       expect(recordAfterReload.epoch_zero).toEqual(recordBeforeReload.epoch_zero);
       expect(recordAfterReload.queued_genesis).toEqual(recordBeforeReload.queued_genesis);
       await assertCardDecrypts(creator, cardTitle, privateDescription);
