@@ -87,6 +87,10 @@ test.describe("contact confirmed display name", () => {
       expect(bobFlow, "Bob's founder device opens").toBeTruthy();
       const bobPage = bobFlow!.page;
       try {
+        await Promise.all([
+          alicePage.completeRecoveryKeySetupIfPrompted(30_000),
+          bobPage.completeRecoveryKeySetupIfPrompted(30_000),
+        ]);
         await bobPage.page.getByTestId("realm-sidebar-tab-direct").click();
         const aliceRow = bobPage.page.locator(
           `[data-testid="direct-conversation-row"][data-peer=${JSON.stringify(canonicalJson(accountActorId(alice.id)))}]`,
@@ -100,6 +104,15 @@ test.describe("contact confirmed display name", () => {
           });
         }).toPass({ timeout: 180_000, intervals: [2_000] });
         const [, , encodedRealmId, encodedStrandId] = new URL(bobPage.page.url()).pathname.split("/");
+        // The recipient opens the same conversation to demand its verified
+        // scope current before installing and acknowledging the Welcome.
+        await alicePage.page.getByTestId("realm-sidebar-tab-direct").click();
+        const bobRow = alicePage.page.locator(
+          `[data-testid="direct-conversation-row"][data-peer=${JSON.stringify(canonicalJson(accountActorId(bob.id)))}]`,
+        );
+        await bobRow.click();
+        await expect(alicePage.page).toHaveURL(/\/direct\/ak:realm:.*\/ak:strand:/, { timeout: 180_000 });
+        expect(new URL(alicePage.page.url()).pathname).toBe(new URL(bobPage.page.url()).pathname);
         await expect.poll(async () =>
           (await contactRow(request, aliceToken, bob.id))?.direct_conversation,
         { timeout: 90_000, intervals: [500, 1_000, 2_000] }).toMatchObject({
@@ -166,9 +179,8 @@ test.describe("contact confirmed display name", () => {
 
       // The petname editor lives on the advanced Contacts settings surface.
       await alicePage.gotoAppPanel("/settings/contacts", "settings-panel");
-      const row = alicePage.page
-        .getByTestId("contact-row")
-        .filter({ hasText: bob.id.slice(-6) });
+      const peerSelector = `[data-testid="contact-row"][data-peer=${JSON.stringify(canonicalJson(accountActorId(bob.id)))}]`;
+      const row = alicePage.page.locator(peerSelector);
       await expect(row).toBeVisible({ timeout: 60_000 });
       // The live verified Profile display arrives through the authorized
       // resolve, not through the Contact row itself.
@@ -211,9 +223,9 @@ test.describe("contact confirmed display name", () => {
       // The cached row is only refreshed on its own freshness window, so the
       // notice is asserted after a fresh page load rather than in place.
       await alicePage.gotoAppPanel("/settings/contacts", "settings-panel");
-      const renamedRow = alicePage.page
-        .getByTestId("contact-row")
-        .filter({ hasText: bob.id });
+      await alicePage.page.reload();
+      await expect(alicePage.page.getByTestId("settings-panel")).toBeVisible({ timeout: 60_000 });
+      const renamedRow = alicePage.page.locator(peerSelector);
       const notice = renamedRow.getByTestId(/^contact-display-name-changed-/);
       await expect(notice).toBeVisible({ timeout: 120_000 });
       await expect(notice).toContainText(firstDisplay);

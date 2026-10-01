@@ -1,7 +1,7 @@
 import { test, expect, type JointUsersFixture } from "../../helpers/joint-fixture";
 import type { APIRequestContext } from "@playwright/test";
 import { requestContactArkret, respondContactArkret } from "../../helpers/contact-api";
-import { accountActorId, canonicalJson } from "../../helpers/soland-api";
+import { accountActorId, assertAuthoritySubmitOutcome, canonicalJson } from "../../helpers/soland-api";
 import { decodeEventIngressBody, ingressEvents } from "../../helpers/event-ingress";
 
 function directConversationCase(mode: "normal" | "interrupted" | "offline") {
@@ -100,10 +100,10 @@ return async ({ jointUsers, request }: { jointUsers: JointUsersFixture; request:
     expect(response.ok(), await response.text()).toBeTruthy();
     const sentEvent = ingressEvents(decodeEventIngressBody(response.request().postDataJSON()))
       .find(event => event.kind === "ak.message.create");
-    const submission = await response.json() as { status: string; accepted: string[]; rejections?: unknown[] };
-    expect(submission.status).toBe("accepted");
-    expect(submission.accepted).toContain(sentEvent?.event_id);
-    expect(submission.rejections ?? []).toEqual([]);
+    const submission = await response.json() as Record<string, unknown>;
+    expect(sentEvent, "the provisional submission carries its message").toBeTruthy();
+    expect(submission.status, `provisional outcome reason: ${String(submission.reason_code ?? "none")}`).toBe("committed");
+    assertAuthoritySubmitOutcome(submission, sentEvent!, "provisional Direct message");
     const envelope = sentEvent?.payload?.encrypted_content as { encryption_context?: { epoch?: number } } | undefined;
     if (mode === "offline") {
       expect(envelope?.encryption_context?.epoch).toBe(0);
@@ -142,10 +142,10 @@ return async ({ jointUsers, request }: { jointUsers: JointUsersFixture; request:
     expect(offlineResponse.ok(), await offlineResponse.text()).toBeTruthy();
     const offlineEvent = ingressEvents(decodeEventIngressBody(offlineResponse.request().postDataJSON()))
       .find(event => event.kind === "ak.message.create");
-    const offlineOutcome = await offlineResponse.json() as { status: string; accepted: string[]; rejections?: unknown[] };
-    expect(offlineOutcome.status).toBe("accepted");
-    expect(offlineOutcome.accepted).toContain(offlineEvent?.event_id);
-    expect(offlineOutcome.rejections ?? []).toEqual([]);
+    const offlineOutcome = await offlineResponse.json() as Record<string, unknown>;
+    expect(offlineEvent, "the offline submission carries its message").toBeTruthy();
+    expect(offlineOutcome.status, `post-join outcome reason: ${String(offlineOutcome.reason_code ?? "none")}`).toBe("committed");
+    assertAuthoritySubmitOutcome(offlineOutcome, offlineEvent!, "post-join offline Direct message");
     const offlineEnvelope = offlineEvent?.payload?.encrypted_content as { encryption_context?: { epoch?: number } } | undefined;
     expect(offlineEnvelope?.encryption_context?.epoch).toBeGreaterThan(0);
     await expect(bob.getByTestId("chat-message").filter({ hasText: offlineMessage })).toBeVisible();
