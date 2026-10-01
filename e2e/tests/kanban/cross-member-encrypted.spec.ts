@@ -96,7 +96,7 @@ async function readCreatorRecords(page: Page): Promise<Record<string, any>[]> {
           { name: "AES-GCM", iv: Uint8Array.from(entry.iv).buffer }, key, Uint8Array.from(entry.ct).buffer,
         );
         const state = JSON.parse(new TextDecoder().decode(plaintext));
-        records.push(...(state.creator_bootstrap_records ?? []).map((record: Record<string, any>) => ({ ...record, queue_items: state.items })));
+        records.push(...(state.creator_bootstrap_records ?? []).map((record: Record<string, any>) => ({ ...record, queue_items: state.items, ready_index: state.creator_ready_index ?? [], vault_commit_position: state.commit_position })));
       }
       return records;
     } finally {
@@ -589,16 +589,21 @@ async function openPendingTimeline(reader: JointUserPage, realmId: string): Prom
 }
 
 test.describe("cross-member encrypted kanban @fully-implemented", () => {
-  for (const cut of ["none", "create_response_loss", "device_evidence_unavailable", "public_blob_response_loss", "genesis_response_loss"] as const) {
+  for (const cut of ["none", "create_response_loss", "device_evidence_unavailable", "public_blob_response_loss", "genesis_response_loss", "artifact_install_failure", "ready_publish_failure"] as const) {
   const loseCreateResponse = cut === "create_response_loss";
   const loseDeviceEvidence = cut === "device_evidence_unavailable";
   const loseBlobResponse = cut === "public_blob_response_loss";
   const loseGenesisResponse = cut === "genesis_response_loss";
+  const failArtifactInstall = cut === "artifact_install_failure";
+  const failReadyPublish = cut === "ready_publish_failure";
+  const failLocalPublication = failArtifactInstall || failReadyPublish;
   test("creator E2EE plaintext cache is encrypted in IndexedDB and survives reload" +
     (loseCreateResponse ? "; recovers accepted-create response loss before epoch zero" : "") +
     (loseDeviceEvidence ? "; Device evidence unavailable keeps acceptance before randomness" : "") +
     (loseBlobResponse ? "; restores epoch-zero unit after public blob response loss" : "") +
-    (loseGenesisResponse ? "; reconciles exact accepted Genesis after response loss and unavailable query" : ""), async ({
+    (loseGenesisResponse ? "; reconciles exact accepted Genesis after response loss and unavailable query" : "") +
+    (failArtifactInstall ? "; retries the whole accepted artifact install after durable write failure" : "") +
+    (failReadyPublish ? "; publishes ready and its send-gate index atomically after durable write failure" : ""), async ({
     browser,
     request,
   }, testInfo) => {
@@ -691,7 +696,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         await route.continue();
         return;
       }
-      expect(record.state, "the complete recovery unit must precede public blob observability").toMatch(/^(epoch0_state_persisted|genesis_queued|genesis_accepted)$/);
+      expect(record.state, "the complete recovery unit must precede public blob observability").toMatch(/^(epoch0_state_persisted|genesis_queued|genesis_accepted|artifacts_converged|ready)$/);
       expect(record.epoch_zero.encrypted_private_state.length).toBeGreaterThan(0);
       if (blobCutActive) {
         if (!epochUnitAtCut) {
@@ -719,6 +724,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           (value) => value.intent.effective_scope.realm_id === payload.event.realm_id,
         );
         expect(record, "Genesis submission must retain its formal durable creator record").toBeDefined();
+        submittedGenesisIds.add(payload.event.event_id);
         expect(record!.state).toBe("genesis_queued");
         const unsigned = { ...payload.event };
         delete unsigned.producer_proof;
@@ -815,7 +821,25 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         mlsActivated: true,
       };
       let realmId: string;
-      if (loseCreateResponse || loseDeviceEvidence || loseBlobResponse || loseGenesisResponse) {
+      if (failLocalPublication) {
+        await creator.page.evaluate((targetState) => {
+          const original = SubtleCrypto.prototype.encrypt;
+          SubtleCrypto.prototype.encrypt = async function(algorithm, key, data) {
+            const bytes = ArrayBuffer.isView(data)
+              ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
+              : new Uint8Array(data);
+            let state: Record<string, any> | undefined;
+            try { state = JSON.parse(new TextDecoder().decode(bytes)); } catch { /* unrelated encryption */ }
+            const record = state?.creator_bootstrap_records?.find((value: Record<string, any>) => value.state === targetState);
+            if (record) {
+              (window as any).__creatorPublicationCut = record;
+              throw new DOMException("creator durable publication cut", "OperationError");
+            }
+            return original.call(this, algorithm, key, data);
+          };
+        }, failArtifactInstall ? "artifacts_converged" : "ready");
+      }
+      if (loseCreateResponse || loseDeviceEvidence || loseBlobResponse || loseGenesisResponse || failLocalPublication) {
         // Submit through the real wizard, then destroy its runtime at the
         // accepted-create response or current Device evidence boundary.
         await creator.gotoSetup();
@@ -832,6 +856,24 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         await selectDxcOption(wizard.getByTestId("realm-mls-activation-input"), "after_create");
         await wizard.getByTestId("new-realm-next-button").first().click();
         await wizard.getByTestId("create-realm-button").click();
+        if (failLocalPublication) {
+          await expect.poll(() => creator.page.evaluate(() => (window as any).__creatorPublicationCut?.intent.effective_scope.realm_id), { timeout: 120_000 }).toBeTruthy();
+          cutRealmId = await creator.page.evaluate(() => (window as any).__creatorPublicationCut.intent.effective_scope.realm_id);
+          const before = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId)!;
+          expect(before.state).toBe(failArtifactInstall ? "genesis_accepted" : "artifacts_converged");
+          expect(before.ready_receipt).toBeUndefined();
+          expect(before.ready_index.filter((receipt: Record<string, any>) => receipt.effective_scope.realm_id === cutRealmId)).toHaveLength(0);
+          expect(before.accepted_genesis.accepted.event).toEqual(before.queued_genesis.signed_genesis.event);
+          expect(Boolean(before.artifacts)).toBe(failReadyPublish);
+          intentAtCut = before.intent;
+          epochUnitAtCut = before.epoch_zero;
+          signedGenesisAtCut = before.queued_genesis;
+          acceptedGenesisAtCut = before.accepted_genesis.accepted;
+          await creator.page.waitForTimeout(500);
+          const still = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId)!;
+          expect(still.state).toBe(before.state);
+          expect(still.epoch_zero).toEqual(epochUnitAtCut);
+        }
         await expect.poll(() => cutRealmId, { timeout: 120_000 }).toBeTruthy();
         if (loseDeviceEvidence) {
           expect(deviceCutSeen).toBe(true);
@@ -851,7 +893,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           expect(before.accepted_genesis, "HTTP acceptance cannot bypass the unavailable exact query").toBeUndefined();
           expect(before.epoch_zero).toEqual(epochUnitAtCut);
           expect(before.queued_genesis).toEqual(signedGenesisAtCut);
-        } else {
+        } else if (!failLocalPublication) {
           expect(submittedGenesisIds.size, "the crash cut precedes every Genesis submission").toBe(0);
         }
         realmId = cutRealmId!;
@@ -869,7 +911,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         (intent) => intent.effective_scope.realm_id === realmId,
       );
       expect(intentBeforeReload).toBeDefined();
-      if (loseCreateResponse || loseDeviceEvidence || loseBlobResponse || loseGenesisResponse) expect(intentBeforeReload).toEqual(intentAtCut);
+      if (loseCreateResponse || loseDeviceEvidence || loseBlobResponse || loseGenesisResponse || failLocalPublication) expect(intentBeforeReload).toEqual(intentAtCut);
       const boardId = await buildEncryptedBoardListCard(
         creator.page,
         realmId,
@@ -882,7 +924,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         cardTitle,
         privateDescription,
       );
-      if (loseCreateResponse || loseDeviceEvidence || loseBlobResponse || loseGenesisResponse) {
+      if (loseCreateResponse || loseDeviceEvidence || loseBlobResponse || loseGenesisResponse || failLocalPublication) {
         expect(submittedGenesisIds.size, "background recovery must author one Genesis for the original scope").toBe(1);
         expect(submittedCreateIds.size).toBe(1);
       }
@@ -890,7 +932,18 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
       await assertE2eeStorageIsHardened(creator.page, [privateDescription]);
       const recordBeforeReload = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === realmId)!;
       const pinBeforeReload = recordBeforeReload.governance_evidence;
-      expect(recordBeforeReload.state).toBe("genesis_accepted");
+      expect(recordBeforeReload.state).toBe("ready");
+      const readyReceipt = recordBeforeReload.ready_receipt;
+      expect(readyReceipt.accepted_genesis_event_id).toBe(recordBeforeReload.accepted_genesis.accepted.event.event_id);
+      expect(readyReceipt.accepted_genesis_digest).toBe(recordBeforeReload.accepted_genesis.accepted_bytes_digest);
+      expect(readyReceipt.immutable_genesis_binding).toEqual(recordBeforeReload.governance_evidence.governance_binding);
+      expect(readyReceipt.accepted_artifact_ref).toBe(readyReceipt.accepted_genesis_event_id);
+      expect(readyReceipt.ready_commit_position).toBeGreaterThan(0);
+      expect(readyReceipt.ready_commit_position).toBeLessThanOrEqual(recordBeforeReload.vault_commit_position);
+      expect(recordBeforeReload.ready_index.filter((receipt: Record<string, any>) => receipt.effective_scope.realm_id === realmId)).toEqual([readyReceipt]);
+      expect(recordBeforeReload.artifacts.accepted_artifact_ref).toBe(readyReceipt.accepted_artifact_ref);
+      expect(recordBeforeReload.artifacts.consistency_checks.group_info_bytes).toEqual(recordBeforeReload.epoch_zero.group_info_bytes);
+      expect(recordBeforeReload.artifacts.consistency_checks.ratchet_tree_bytes).toEqual(recordBeforeReload.epoch_zero.ratchet_tree_bytes);
       const accepted = recordBeforeReload.accepted_genesis;
       expect(accepted.accepted.event).toEqual(recordBeforeReload.queued_genesis.signed_genesis.event);
       expect(accepted.canonical_accepted_bytes).toEqual(recordBeforeReload.queued_genesis.canonical_signed_bytes);
@@ -915,7 +968,10 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
       expect(submittedCreateIds.size).toBe(1);
       expect((await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === realmId)!.governance_evidence).toEqual(pinBeforeReload);
       const recordAfterReload = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === realmId)!;
-      expect(recordAfterReload.state).toBe("genesis_accepted");
+      expect(recordAfterReload.state).toBe("ready");
+      expect(recordAfterReload.ready_receipt).toEqual(readyReceipt);
+      expect(recordAfterReload.artifacts).toEqual(recordBeforeReload.artifacts);
+      expect(recordAfterReload.ready_index.filter((receipt: Record<string, any>) => receipt.effective_scope.realm_id === realmId)).toEqual([readyReceipt]);
       expect(recordAfterReload.accepted_genesis).toEqual(recordBeforeReload.accepted_genesis);
       expect(recordAfterReload.epoch_zero).toEqual(recordBeforeReload.epoch_zero);
       expect(recordAfterReload.queued_genesis).toEqual(recordBeforeReload.queued_genesis);
