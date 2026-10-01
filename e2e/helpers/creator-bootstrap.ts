@@ -1,5 +1,27 @@
 import type { Page } from "@playwright/test";
 
+// Fail the real encrypted-vault write before IndexedDB can commit a transition.
+// This observes local persistence only; it supplies no authority evidence.
+export async function installCircleCreatorCommitFault(page: Page, targetState: string): Promise<void> {
+  await page.evaluate(target => {
+    const original = SubtleCrypto.prototype.encrypt;
+    SubtleCrypto.prototype.encrypt = async function(algorithm, key, data) {
+      const bytes = ArrayBuffer.isView(data)
+        ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
+        : new Uint8Array(data);
+      let vault: Record<string, any> | undefined;
+      try { vault = JSON.parse(new TextDecoder().decode(bytes)); } catch { /* unrelated encryption */ }
+      const record = vault?.creator_bootstrap_records?.find((value: Record<string, any>) =>
+        value.state === target && value.intent.effective_scope.kind === "circle");
+      if (record) {
+        (window as any).__circleCreatorCommitFault = { state: target, circle: record.intent.effective_scope.circle_id };
+        throw new DOMException("Circle creator durable commit fault", "OperationError");
+      }
+      return original.call(this, algorithm, key, data);
+    };
+  }, targetState);
+}
+
 // Holder diagnostics are fixture evidence, never portable authority proof.
 export async function readCreatorRecords(page: Page, checkpointCoordinates = false): Promise<Record<string, any>[]> {
   return page.evaluate(async includeCheckpoints => {
