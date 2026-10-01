@@ -592,7 +592,7 @@ async function openPendingTimeline(reader: JointUserPage, realmId: string): Prom
 }
 
 test.describe("cross-member encrypted kanban @fully-implemented", () => {
-  for (const cut of ["none", "create_response_loss", "device_evidence_unavailable", "public_blob_response_loss", "genesis_response_loss", "artifact_install_failure", "ready_publish_failure", "genesis_superseded"] as const) {
+  for (const cut of ["none", "create_response_loss", "device_evidence_unavailable", "public_blob_response_loss", "genesis_response_loss", "artifact_install_failure", "ready_publish_failure", "genesis_superseded", "genesis_rejected", "genesis_rejected_winner"] as const) {
   const loseCreateResponse = cut === "create_response_loss";
   const loseDeviceEvidence = cut === "device_evidence_unavailable";
   const loseBlobResponse = cut === "public_blob_response_loss";
@@ -600,7 +600,9 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
   const failArtifactInstall = cut === "artifact_install_failure";
   const failReadyPublish = cut === "ready_publish_failure";
   const failLocalPublication = failArtifactInstall || failReadyPublish;
-  const competingGenesisWins = cut === "genesis_superseded";
+  const winnerAfterRejection = cut === "genesis_rejected_winner";
+  const competingGenesisWins = cut === "genesis_superseded" || winnerAfterRejection;
+  const rejectGenesis = cut === "genesis_rejected";
   test("creator E2EE plaintext cache is encrypted in IndexedDB and survives reload" +
     (loseCreateResponse ? "; recovers accepted-create response loss before epoch zero" : "") +
     (loseDeviceEvidence ? "; Device evidence unavailable keeps acceptance before randomness" : "") +
@@ -608,7 +610,9 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
     (loseGenesisResponse ? "; reconciles exact accepted Genesis after response loss and unavailable query" : "") +
     (failArtifactInstall ? "; retries the whole accepted artifact install after durable write failure" : "") +
     (failReadyPublish ? "; publishes ready and its send-gate index atomically after durable write failure" : "") +
-    (competingGenesisWins ? "; stops the losing queue after a distinct accepted Genesis wins" : ""), async ({
+    (competingGenesisWins ? "; stops the losing queue after a distinct accepted Genesis wins" : "") +
+    (rejectGenesis ? "; retains a terminal rejection and explicitly opens a new verified attempt" : "") +
+    (winnerAfterRejection ? "; preserves a real Station rejection before resolving its winner" : ""), async ({
     browser,
     request,
   }, testInfo) => {
@@ -659,6 +663,8 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
     let acceptedGenesisAtCut: Record<string, any> | undefined;
     let signedGenesisAtCut: Record<string, any> | undefined;
     let competingWinnerId: string | undefined;
+    let rejectionActive = rejectGenesis;
+    let closedRejection: Record<string, any> | undefined;
     await creator.page.route(/\/_arkret\/self\/streams\/scan(?:\?.*)?$/, async (route) => {
       if (genesisCutActive && acceptedGenesisAtCut) {
         await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({
@@ -761,6 +767,21 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           (entry: Record<string, any>) => entry.selector?.kind === "mls_group" && entry.selector.scope_ref.realm_id === payload.event.realm_id,
         )).toBe(false);
       }
+      if (rejectionActive && payload.event?.kind === "ak.mls.genesis"
+        && submittedCreateIds.has(payload.event.realm_id.replace("ak:realm:", "ak:event:"))) {
+        const record = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === payload.event.realm_id)!;
+        cutRealmId = payload.event.realm_id;
+        intentAtCut = record.intent;
+        epochUnitAtCut = record.epoch_zero;
+        signedGenesisAtCut = record.queued_genesis;
+        // Fixture-only ordinary Event admission refusal. Production owns the
+        // durable cut and obtains fresh authenticated absence on explicit retry.
+        await route.fulfill({ status: 403, contentType: "application/problem+json", body: JSON.stringify({
+          type: "https://arkret.org/problems/capability_denied", title: "Capability denied",
+          status: 403, detail: "creator terminal rejection fixture",
+        }) });
+        return;
+      }
       if (competingGenesisWins && payload.event?.kind === "ak.mls.genesis"
         && submittedCreateIds.has(payload.event.realm_id.replace("ak:realm:", "ak:event:"))) {
         const record = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === payload.event.realm_id)!;
@@ -777,7 +798,8 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           }, cutRealmId!, { stationId: creatorSession.accountId.station_id });
           expect(competingWinnerId).not.toBe(payload.event.event_id);
         }
-        await route.abort("connectionfailed");
+        if (winnerAfterRejection) { await route.continue(); }
+        else { await route.abort("connectionfailed"); }
         return;
       }
       if (genesisCutActive && payload.event?.kind === "ak.mls.genesis"
@@ -864,7 +886,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           };
         }, failArtifactInstall ? "artifacts_converged" : "ready");
       }
-      if (loseCreateResponse || loseDeviceEvidence || loseBlobResponse || loseGenesisResponse || failLocalPublication || competingGenesisWins) {
+      if (loseCreateResponse || loseDeviceEvidence || loseBlobResponse || loseGenesisResponse || failLocalPublication || competingGenesisWins || rejectGenesis) {
         // Submit through the real wizard, then destroy its runtime at the
         // accepted-create response or current Device evidence boundary.
         await creator.gotoSetup();
@@ -901,7 +923,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         }
         let resumedBeforeGenesisCut = false;
         await expect.poll(async () => {
-          if (!cutRealmId && !resumedBeforeGenesisCut && (loseGenesisResponse || competingGenesisWins)) {
+          if (!cutRealmId && !resumedBeforeGenesisCut && (loseGenesisResponse || competingGenesisWins || rejectGenesis)) {
             const openRealm = wizard.getByTestId("realm-setup-done").getByRole("link", { name: /Open (?:Realm|workspace)/i });
             if (await openRealm.isVisible().catch(() => false)) {
               // A real unavailable snapshot can stop setup before our target
@@ -914,12 +936,56 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         }, { timeout: 120_000 }).toBeTruthy();
         if (competingGenesisWins) {
           await expect.poll(() => competingWinnerId, { timeout: 60_000 }).toBeTruthy();
+          if (winnerAfterRejection) {
+            await expect.poll(async () => (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId)?.state,
+              { timeout: 60_000 }).toBe("rejected");
+            const refused = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId)!;
+            expect(refused.rejection.reason_code).toBe("mls_activation_irreversible");
+            expect(refused.rejection.authority_problem.status).toBe(409);
+            expect(refused.queue_items.find((item: Record<string, any>) => item.submission.event_id === refused.rejection.event_id).status).toBe("failed");
+            await creator.page.goto(`/chat/${encodeURIComponent(cutRealmId!)}`, { waitUntil: "domcontentloaded" });
+            await expect(creator.page.getByTestId("creator-mls-retry-button")).toBeVisible({ timeout: 60_000 });
+            expect((await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId)!.rejection).toEqual(refused.rejection);
+            let unavailableDecisions = 0;
+            const captureUnavailable = async (response: import("@playwright/test").Response) => {
+              if (!response.url().includes("/_arkret/self/realm-state-snapshot/head") || response.status() !== 503) return;
+              const problem = await response.json().catch(() => undefined);
+              if (problem?.type === "https://arkret.org/problems/realm_state_snapshot_unavailable") unavailableDecisions += 1;
+            };
+            creator.page.on("response", captureUnavailable);
+            try {
+              for (let attempt = 0; attempt < 3; attempt += 1) {
+                const beforeUnavailable = unavailableDecisions;
+                const retry = creator.page.getByTestId("creator-mls-retry-button");
+                await expect(retry).toBeEnabled();
+                await retry.click();
+                await expect.poll(async () => {
+                  const record = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId)!;
+                  if (record.state === "superseded") return true;
+                  return unavailableDecisions > beforeUnavailable && await retry.isEnabled().catch(() => false)
+                    && (await creator.page.getByTestId("creator-mls-retry").textContent())?.includes("realm_state_snapshot_unavailable");
+                }, { timeout: 60_000 }).toBeTruthy();
+                const afterRetry = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId)!;
+                if (afterRetry.state === "superseded") break;
+                // A real issuance-cut change leaves the exact rejection intact.
+                // A second explicit product action repeats the verified query.
+                expect(afterRetry.state).toBe("rejected");
+                expect(afterRetry.rejection).toEqual(refused.rejection);
+                expect(afterRetry.intent).toEqual(refused.intent);
+                expect(afterRetry.rejected_record).toEqual(refused.rejected_record);
+                expect(afterRetry.queue_items).toEqual(refused.queue_items);
+                expect(afterRetry.ready_index).toHaveLength(0);
+                expect(submittedGenesisIds.size).toBe(1);
+              }
+            } finally { creator.page.off("response", captureUnavailable); }
+          }
           await expect.poll(async () => (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId)?.state, { timeout: 60_000 }).toBe("superseded");
           const terminal = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId)!;
           expect(terminal.intent).toEqual(intentAtCut);
           expect(terminal.winner.accepted.event.event_id).toBe(competingWinnerId);
-          expect(terminal.loser_record.epoch_zero).toEqual(epochUnitAtCut);
-          expect(terminal.loser_record.queued_genesis).toEqual(signedGenesisAtCut);
+          const losingAttempt = terminal.loser_record.rejected_record ?? terminal.loser_record;
+          expect(losingAttempt.epoch_zero).toEqual(epochUnitAtCut);
+          expect(losingAttempt.queued_genesis).toEqual(signedGenesisAtCut);
           expect(terminal.loser_genesis).toEqual([signedGenesisAtCut!.outbound_queue_item_id, signedGenesisAtCut!.canonical_bytes_digest]);
           expect(terminal.queue_items.some((item: Record<string, any>) => item.submission.event_id === terminal.loser_genesis[0])).toBe(false);
           expect(terminal.ready_index).toHaveLength(0);
@@ -950,6 +1016,68 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           await stepShot(creator.page, testInfo, "A-superseded-loser-stays-unwritable-after-reload");
           return;
         }
+        if (rejectGenesis) {
+          await expect.poll(async () => (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId)?.state,
+            { timeout: 60_000 }).toBe("rejected");
+          const terminal = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId)!;
+          closedRejection = terminal.rejection;
+          expect(terminal.intent).toEqual(intentAtCut);
+          expect(terminal.rejected_record.epoch_zero).toEqual(epochUnitAtCut);
+          expect(terminal.rejected_record.queued_genesis).toEqual(signedGenesisAtCut);
+          expect(closedRejection!.event_id).toBe(signedGenesisAtCut!.outbound_queue_item_id);
+          expect(closedRejection!.canonical_bytes_digest).toBe(signedGenesisAtCut!.canonical_bytes_digest);
+          expect(closedRejection!.reason_code).toBe("capability_denied");
+          expect(closedRejection!.stage).toBe("authority_submit");
+          expect(closedRejection!.authority_problem.status).toBe(403);
+          expect(closedRejection!.last_verified.current_snapshot.realm_id).toBe(cutRealmId);
+          const stopped = terminal.queue_items.find((item: Record<string, any>) => item.submission.event_id === closedRejection!.event_id);
+          expect(stopped.status).toBe("failed");
+          expect(stopped.last_problem).toEqual(closedRejection!.authority_problem);
+          expect(stopped.settled_at).toBeTruthy();
+          expect(terminal.ready_index).toHaveLength(0);
+          await creator.page.goto(`/chat/${encodeURIComponent(cutRealmId!)}`, { waitUntil: "domcontentloaded" });
+          await expect(creator.page.getByTestId("creator-mls-retry-button")).toBeVisible({ timeout: 60_000 });
+          const afterReentry = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId)!;
+          expect(afterReentry.state).toBe("rejected");
+          expect(afterReentry.rejection).toEqual(closedRejection);
+          expect(submittedGenesisIds.size).toBe(1);
+          let holdRetryAbsence = true;
+          let retryAbsenceCuts = 0;
+          await creator.page.route(/\/_arkret\/self\/streams\/scan(?:\?.*)?$/, async (route) => {
+            const query = route.request().postDataJSON() as Record<string, any>;
+            if (holdRetryAbsence && query.realm_id === cutRealmId) {
+              retryAbsenceCuts += 1;
+              await route.fulfill({ status: 503, contentType: "application/problem+json", body: JSON.stringify({
+                type: "https://arkret.org/problems/temporarily_unavailable", title: "Temporarily unavailable",
+                status: 503, detail: "creator new-attempt absence cut",
+              }) });
+            } else { await route.fallback(); }
+          });
+          await creator.page.getByTestId("creator-mls-retry-button").click();
+          await expect.poll(() => retryAbsenceCuts, { timeout: 60_000 }).toBeGreaterThan(0);
+          await expect(creator.page.getByTestId("creator-mls-retry-button")).toBeEnabled({ timeout: 60_000 });
+          const blocked = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId)!;
+          expect(blocked.state).toBe("rejected");
+          expect(blocked.rejection).toEqual(closedRejection);
+          expect(submittedGenesisIds.size).toBe(1);
+          holdRetryAbsence = false;
+          rejectionActive = false;
+          epochUnitAtCut = undefined;
+          signedGenesisAtCut = undefined;
+          await creator.page.getByTestId("creator-mls-retry-button").click();
+          await expect.poll(async () => (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId)?.state,
+            { timeout: 90_000 }).toBe("ready");
+          const retried = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId)!;
+          expect(retried.intent).toEqual(intentAtCut);
+          expect(retried.closed_attempts).toEqual([closedRejection]);
+          expect(retried.queue_items.some((item: Record<string, any>) => item.submission.event_id === closedRejection!.event_id)).toBe(false);
+          expect(retried.queued_genesis.outbound_queue_item_id).not.toBe(closedRejection!.event_id);
+          expect(retried.governance_evidence.accepted_create.authority_root.current_assertion.nonce)
+            .not.toBe(closedRejection!.last_verified.accepted_create.authority_root.current_assertion.nonce);
+          expect(submittedGenesisIds.size).toBe(2);
+          epochUnitAtCut = undefined;
+          signedGenesisAtCut = undefined;
+        }
         if (loseDeviceEvidence) {
           expect(deviceCutSeen).toBe(true);
           const before = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId);
@@ -968,7 +1096,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           expect(before.accepted_genesis, "HTTP acceptance cannot bypass the unavailable exact query").toBeUndefined();
           expect(before.epoch_zero).toEqual(epochUnitAtCut);
           expect(before.queued_genesis).toEqual(signedGenesisAtCut);
-        } else if (!failLocalPublication) {
+        } else if (!failLocalPublication && !rejectGenesis) {
           expect(submittedGenesisIds.size, "the crash cut precedes every Genesis submission").toBe(0);
         }
         realmId = cutRealmId!;
@@ -1007,6 +1135,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
       await assertE2eeStorageIsHardened(creator.page, [privateDescription]);
       const recordBeforeReload = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === realmId)!;
       const pinBeforeReload = recordBeforeReload.governance_evidence;
+      if (rejectGenesis) expect(recordBeforeReload.closed_attempts).toEqual([closedRejection]);
       expect(recordBeforeReload.state).toBe("ready");
       const readyReceipt = recordBeforeReload.ready_receipt;
       expect(readyReceipt.accepted_genesis_event_id).toBe(recordBeforeReload.accepted_genesis.accepted.event.event_id);
@@ -1044,6 +1173,11 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
       expect((await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === realmId)!.governance_evidence).toEqual(pinBeforeReload);
       const recordAfterReload = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === realmId)!;
       expect(recordAfterReload.state).toBe("ready");
+      if (rejectGenesis) {
+        expect(recordAfterReload.closed_attempts).toEqual([closedRejection]);
+        expect(submittedGenesisIds.size).toBe(2);
+        expect(recordAfterReload.queue_items.some((item: Record<string, any>) => item.submission.event_id === closedRejection!.event_id)).toBe(false);
+      }
       expect(recordAfterReload.ready_receipt).toEqual(readyReceipt);
       expect(recordAfterReload.artifacts).toEqual(recordBeforeReload.artifacts);
       expect(recordAfterReload.ready_index.filter((receipt: Record<string, any>) => receipt.effective_scope.realm_id === realmId)).toEqual([readyReceipt]);
