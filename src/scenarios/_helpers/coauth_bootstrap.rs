@@ -69,6 +69,8 @@ pub struct EphemeralPg {
     cleanup: bool,
     external_database: Option<ExternalDatabase>,
     _port_reservation: Option<ReservedPort>,
+    #[cfg(all(not(target_os = "windows"), feature = "test-with-containers"))]
+    managed_container: Option<testcontainers::Container<testcontainers::GenericImage>>,
 }
 
 struct ExternalDatabase {
@@ -111,6 +113,11 @@ impl Drop for EphemeralPg {
                 }
             })
             .join();
+        }
+        #[cfg(all(not(target_os = "windows"), feature = "test-with-containers"))]
+        if let Some(container) = self.managed_container.take() {
+            // The blocking runner owns a Tokio runtime; drop it outside any caller runtime.
+            let _ = thread::spawn(move || drop(container)).join();
         }
         if !self.cleanup {
             return;
@@ -374,6 +381,8 @@ pub fn spawn_ephemeral_postgres_for(database_url_env: &str) -> Result<Option<Eph
             cleanup: false,
             external_database: Some(external_database),
             _port_reservation: None,
+            #[cfg(all(not(target_os = "windows"), feature = "test-with-containers"))]
+            managed_container: None,
         }));
     }
     if !docker_available() {
@@ -420,6 +429,8 @@ pub fn spawn_ephemeral_postgres_for(database_url_env: &str) -> Result<Option<Eph
         cleanup: true,
         external_database: None,
         _port_reservation: Some(host_port),
+        #[cfg(all(not(target_os = "windows"), feature = "test-with-containers"))]
+        managed_container: None,
     };
 
     // Wait for an authenticated SQL query over the host-published endpoint.
@@ -993,51 +1004,44 @@ fn probe_postgres_ready(connect_url: &str, deadline: Duration) -> bool {
     false
 }
 
-// ── testcontainers-backed bring-up (Linux-only, opt-in) ──────────────────
+// ── testcontainers-backed bring-up (non-Windows, opt-in) ────────────────
 //
-// When the `test-with-containers` feature is on AND we're not on Windows,
-// scenarios can prefer this entry point over the docker-CLI path. It
-// returns an `EphemeralPg` shaped identically to the CLI variant so the
-// downstream `spawn_coauth_with_db` orchestration doesn't need to know
-// which backend produced the handle.
+// Keep the managed handle until EphemeralPg is dropped. Start and stop the
+// blocking runner on a separate thread so async scenario callers can use it.
 #[cfg(all(not(target_os = "windows"), feature = "test-with-containers"))]
 pub fn spawn_ephemeral_postgres_testcontainers() -> Result<Option<EphemeralPg>> {
-    use testcontainers::GenericImage;
-    use testcontainers::clients::Cli;
-    use testcontainers::core::WaitFor;
+    use testcontainers::core::{IntoContainerPort, WaitFor};
+    use testcontainers::runners::SyncRunner;
+    use testcontainers::{GenericImage, ImageExt};
 
-    // testcontainers' default client holds a leaked CLI handle, which is
-    // exactly what we want for the duration of a single `cargo test`
-    // process. We DO NOT keep the returned `Container<'_>` because its
-    // lifetime is tied to the `Cli`; instead we capture the
-    // host-published port and let the container shut down when the
-    // process exits. EphemeralPg's `Drop` still runs `docker rm -fv` as
-    // a belt-and-braces cleanup.
-    static DOCKER: std::sync::OnceLock<Cli> = std::sync::OnceLock::new();
-    let docker = DOCKER.get_or_init(Cli::default);
-
-    let image = GenericImage::new("postgres", "16-alpine")
-        .with_env_var("POSTGRES_USER", "arkret")
-        .with_env_var("POSTGRES_PASSWORD", "arkret")
-        .with_env_var("POSTGRES_DB", "arkret")
-        .with_wait_for(WaitFor::message_on_stderr(
-            "database system is ready to accept connections",
-        ));
-    let container = docker.run(image);
-    let host_port = container.get_host_port_ipv4(5432);
-    let container_name = container.id().to_owned();
-    // Detach the container handle: testcontainers will reap it when the
-    // process exits, and our `EphemeralPg::Drop` provides the explicit
-    // cleanup path.
-    std::mem::forget(container);
-
-    let pg = EphemeralPg {
-        connect_url: format!("postgresql://arkret:arkret@127.0.0.1:{host_port}/arkret"),
-        container_name,
-        cleanup: true,
-        external_database: None,
-        _port_reservation: None,
-    };
+    if !docker_available() {
+        return Ok(None);
+    }
+    let pg = thread::spawn(|| -> Result<EphemeralPg> {
+        let container = GenericImage::new("postgres", "18.6-alpine")
+            .with_exposed_port(5432.tcp())
+            .with_wait_for(WaitFor::message_on_stderr(
+                "database system is ready to accept connections",
+            ))
+            .with_env_var("POSTGRES_USER", "arkret")
+            .with_env_var("POSTGRES_PASSWORD", "arkret")
+            .with_env_var("POSTGRES_DB", "arkret")
+            .start()
+            .context("start managed test Postgres")?;
+        let host_port = container
+            .get_host_port_ipv4(5432.tcp())
+            .context("resolve managed test Postgres port")?;
+        Ok(EphemeralPg {
+            connect_url: format!("postgresql://arkret:arkret@127.0.0.1:{host_port}/arkret"),
+            container_name: container.id().to_owned(),
+            cleanup: false,
+            external_database: None,
+            _port_reservation: None,
+            managed_container: Some(container),
+        })
+    })
+    .join()
+    .map_err(|_| anyhow::anyhow!("managed test Postgres startup thread panicked"))??;
     if !wait_for_postgres_ready(&pg, Duration::from_secs(60)) {
         return Ok(None);
     }

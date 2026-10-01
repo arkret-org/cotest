@@ -119,3 +119,9 @@ Carol 按自身 Welcome 加入；Bob 不取得 Carol 的加入 secret，必须�
 现行 v1 `models/realm-and-space.md` §2.2 要求 MLS Genesis 接纳时 current history policy 为 `since_join`；
 `all_history_for_current_members`＋MLS 与 exporter history-key 分支已删除，不能作为合法产品验收。
 对应旧浏览器用例已移除；激活选择的拒绝门由 `views::setup::helpers::tests` 验证，不增加跳过测试。
+
+`quarantines record/private/queue/index/write_failure inconsistency` 先通过真实产品创建、加密卡片、解密和 reload，确认完整 `ready` record 与同 vault index，然后使用实际 non-extractable wrapping key 在严格 ciphertext compare 的 IndexedDB readwrite 事务中损坏本地恢复记录。分别覆盖不可解码的 private carrier、可解码但不能恢复的原 RFC private bytes、原 frozen queue 请求不一致、ready index 缺失；第五例在真实 SubtleCrypto 加密隔离提交时拒绝写入。失败写入必须保持整个原持久 record/index，不能显示已提交的隔离；重新打开后产品必须提交 `quarantined`、保留最后状态／失败 invariant／EventId／digest／queue id／已知 acceptance／检测时间／完整原记录和相关原队列，并移除 ready index。实际 Add Card 关闭、产品显示只读隔离提示、没有重试按钮，再次 reload 后诊断原样保留且不重新提交 create 或 Genesis。注入只操作认证过的本地 vault，不制造 wire authority evidence；全部仍为 fixture-only，不扩大为 UI 注册登录或跨设备证明。
+
+`quarantines a rejected original independently proved accepted` 先注入本地 403 拒绝并保留9，再用独立 fixture HTTP caller 将完全相同的原 frozen request送达真实 Station并取得 accepted outcome。产品明确重试必须独立认证 accepted 原 Event，由9进入11，保留原拒绝、私有单元、signed coordinates及已知 accepted winner，不能把同一拒绝原件当新代或 distinct winner进入10。真实 snapshot cut不可用时只核原9原样并有界明确重试；reload后11诊断不变、无重试入口、不重新提交 create／Genesis。注入拒绝和独立 caller仍为 fixture-only；实际 Station acceptance不能将整个身份设置改标 live product。
+
+Quarantine private／write-failure 切点保持原私有信封的合法 JSON 与字段坐标，只篡改合法 hex 密文，同时重算测试 fixture 声明的 private byte binding。因此 SDK opaque-byte 结构检查仍可通过，失败必须由持有原设备密钥的真实私有解密恢复入口发现；该切点不把 fixture vault 读写当作 portable authority proof。

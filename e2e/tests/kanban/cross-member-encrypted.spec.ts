@@ -106,6 +106,72 @@ async function readCreatorRecords(page: Page): Promise<Record<string, any>[]> {
   });
 }
 
+// Damage authenticated local recovery data, never wire authority evidence.
+// Encryption uses the actual non-extractable holder key and replacement uses
+// a readwrite transaction comparing the committed ciphertext.
+async function damageCreatorVault(page: Page, realmId: string, cut: string): Promise<Record<string, any>> {
+  return page.evaluate(async ({ realmId, cut }) => {
+    const result = <T>(request: IDBRequest<T>): Promise<T> => new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const db = await result(indexedDB.open("inkson.secret.inkson", 1));
+    try {
+      const tx = db.transaction(["entries", "wrapping_keys"], "readonly");
+      const [key, names, encrypted] = await Promise.all([
+        result(tx.objectStore("wrapping_keys").get("primary")) as Promise<CryptoKey>,
+        result(tx.objectStore("entries").getAllKeys()), result(tx.objectStore("entries").getAll()),
+      ]);
+      for (let index = 0; index < names.length; index += 1) {
+        const name = String(names[index]);
+        if (!name.startsWith("inkson.outbound.v1::") || !name.endsWith(".standard")) continue;
+        const entry = encrypted[index] as { iv: Uint8Array; ct: Uint8Array };
+        const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: Uint8Array.from(entry.iv).buffer }, key, Uint8Array.from(entry.ct).buffer);
+        const state = JSON.parse(new TextDecoder().decode(plain));
+        const record = state.creator_bootstrap_records?.find((record: Record<string, any>) => record.intent.effective_scope.realm_id === realmId);
+        if (!record) continue;
+        if (record.state !== "ready") throw new Error("local inconsistency cut requires the real ready state");
+        if (cut === "quarantine_record") record.epoch_zero.encrypted_private_state = { retained_damage: [1, 2, 3] };
+        else if (cut === "quarantine_private" || cut === "quarantine_write_failure") {
+          const envelope = JSON.parse(new TextDecoder().decode(Uint8Array.from(record.epoch_zero.encrypted_private_state)));
+          const ciphertext = String(envelope.ciphertext_hex);
+          if (!/^[0-9a-f]{34,}$/.test(ciphertext)) throw new Error("the fixture needs the original valid private AEAD envelope");
+          envelope.ciphertext_hex = (ciphertext[0] === "0" ? "1" : "0") + ciphertext.slice(1);
+          record.epoch_zero.encrypted_private_state = Array.from(new TextEncoder().encode(JSON.stringify(envelope)));
+          if (!record.artifacts.private_state_binding.startsWith("sha256:")) throw new Error("the fixture requires its declared SHA-256 material suite");
+          const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", Uint8Array.from(record.epoch_zero.encrypted_private_state)));
+          // Keep the saved byte binding coherent so only the actual original
+          // private restore can detect this cut, not the SDK shape validator.
+          record.artifacts.private_state_binding = `sha256:${Array.from(digest, byte => byte.toString(16).padStart(2, "0")).join("")}`;
+        }
+        else if (cut === "quarantine_queue") {
+          const queue = state.items.find((item: Record<string, any>) => item.submission.event_id === record.queued_genesis.outbound_queue_item_id);
+          queue.submission.request.event.created_at = "2026-01-01T00:00:00.000Z";
+        } else if (cut === "quarantine_index") state.creator_ready_index = state.creator_ready_index.filter((receipt: Record<string, any>) => receipt.effective_scope.realm_id !== realmId);
+        else throw new Error(`unknown creator inconsistency cut ${cut}`);
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+        const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(JSON.stringify(state))));
+        await new Promise<void>((resolve, reject) => {
+          const write = db.transaction("entries", "readwrite");
+          const entries = write.objectStore("entries");
+          const current = entries.get(name);
+          current.onsuccess = () => {
+            const old = current.result as { iv: Uint8Array; ct: Uint8Array };
+            if (!old || old.ct.length !== entry.ct.length || old.iv.length !== entry.iv.length
+              || old.ct.some((byte, index) => byte !== entry.ct[index]) || old.iv.some((byte, index) => byte !== entry.iv[index])) { write.abort(); return; }
+            entries.put({ iv, ct }, name);
+          };
+          write.oncomplete = () => resolve();
+          write.onabort = () => reject(write.error ?? new Error("creator vault changed during the local fault cut"));
+          write.onerror = () => reject(write.error);
+        });
+        return record;
+      }
+      throw new Error("creator ready vault not found");
+    } finally { db.close(); }
+  }, { realmId, cut });
+}
+
 async function readCreatorIntents(page: Page): Promise<Record<string, any>[]> {
   return (await readCreatorRecords(page)).map((record) => record.intent);
 }
@@ -592,7 +658,8 @@ async function openPendingTimeline(reader: JointUserPage, realmId: string): Prom
 }
 
 test.describe("cross-member encrypted kanban @fully-implemented", () => {
-  for (const cut of ["none", "create_response_loss", "device_evidence_unavailable", "public_blob_response_loss", "genesis_response_loss", "artifact_install_failure", "ready_publish_failure", "genesis_superseded", "genesis_rejected", "genesis_rejected_winner"] as const) {
+  for (const cut of ["none", "create_response_loss", "device_evidence_unavailable", "public_blob_response_loss", "genesis_response_loss", "artifact_install_failure", "ready_publish_failure", "genesis_superseded", "genesis_rejected", "genesis_rejected_winner", "genesis_rejected_accepted", "quarantine_record", "quarantine_private", "quarantine_queue", "quarantine_index", "quarantine_write_failure"] as const) {
+  const quarantineCut = cut.startsWith("quarantine_");
   const loseCreateResponse = cut === "create_response_loss";
   const loseDeviceEvidence = cut === "device_evidence_unavailable";
   const loseBlobResponse = cut === "public_blob_response_loss";
@@ -602,7 +669,8 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
   const failLocalPublication = failArtifactInstall || failReadyPublish;
   const winnerAfterRejection = cut === "genesis_rejected_winner";
   const competingGenesisWins = cut === "genesis_superseded" || winnerAfterRejection;
-  const rejectGenesis = cut === "genesis_rejected";
+  const rejectedOriginalAccepted = cut === "genesis_rejected_accepted";
+  const rejectGenesis = cut === "genesis_rejected" || rejectedOriginalAccepted;
   test("creator E2EE plaintext cache is encrypted in IndexedDB and survives reload" +
     (loseCreateResponse ? "; recovers accepted-create response loss before epoch zero" : "") +
     (loseDeviceEvidence ? "; Device evidence unavailable keeps acceptance before randomness" : "") +
@@ -612,7 +680,9 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
     (failReadyPublish ? "; publishes ready and its send-gate index atomically after durable write failure" : "") +
     (competingGenesisWins ? "; stops the losing queue after a distinct accepted Genesis wins" : "") +
     (rejectGenesis ? "; retains a terminal rejection and explicitly opens a new verified attempt" : "") +
-    (winnerAfterRejection ? "; preserves a real Station rejection before resolving its winner" : ""), async ({
+    (winnerAfterRejection ? "; preserves a real Station rejection before resolving its winner" : "") +
+    (rejectedOriginalAccepted ? "; quarantines a rejected original independently proved accepted" : "") +
+    (quarantineCut ? `; quarantines ${cut.replace("quarantine_", "")} inconsistency without erasing recovery material` : ""), async ({
     browser,
     request,
   }, testInfo) => {
@@ -1035,6 +1105,58 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           expect(stopped.last_problem).toEqual(closedRejection!.authority_problem);
           expect(stopped.settled_at).toBeTruthy();
           expect(terminal.ready_index).toHaveLength(0);
+          if (rejectedOriginalAccepted) {
+            const url = `${solandBaseUrl()}/_arkret/self/events`;
+            const response = await request.post(url, {
+              data: canonicalJson(stopped.submission.request),
+              headers: { "content-type": "application/json", ...selfPathGrantHeaders({
+                deviceKey: creatorSession.deviceKey, grantJwt: creatorSession.grantJwt, method: "POST", url,
+              }) },
+            });
+            expect(response.ok(), "the actual Station accepts the exact previously rejected original fixture").toBe(true);
+            const outcome = await response.json();
+            assertAuthoritySubmitOutcome(outcome, stopped.submission.request.event, "accepted original contradicting local rejection");
+            rejectionActive = false;
+            await creator.page.goto(`/chat/${encodeURIComponent(cutRealmId!)}`, { waitUntil: "domcontentloaded" });
+            for (let retry = 0; retry < 3; retry += 1) {
+              await expect(creator.page.getByTestId("creator-mls-retry-button").first()).toBeEnabled({ timeout: 60_000 });
+              await creator.page.getByTestId("creator-mls-retry-button").first().click();
+              await expect.poll(async () => {
+                const current = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId)!;
+                if (current.state === "quarantined") return "quarantined";
+                if (await creator.page.getByTestId("creator-mls-retry").filter({ hasText: "realm_state_snapshot_unavailable" }).count()) return "retryable_unavailable";
+                return "pending";
+              }, { timeout: 60_000 }).not.toBe("pending");
+              const current = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId)!;
+              if (current.state === "quarantined") break;
+              expect(current.state).toBe("rejected");
+              expect(current.rejection).toEqual(terminal.rejection);
+              expect(current.rejected_record).toEqual(terminal.rejected_record);
+              expect(current.queue_items).toEqual(terminal.queue_items);
+            }
+            const quarantined = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId)!;
+            expect(quarantined.state).toBe("quarantined");
+            expect(quarantined.intent).toEqual(terminal.intent);
+            expect(quarantined.diagnostic.last_state).toBe("rejected");
+            expect(quarantined.diagnostic.invariant).toBe("accepted_result");
+            expect(quarantined.diagnostic.event_id).toBe(closedRejection!.event_id);
+            expect(quarantined.diagnostic.accepted_winner.kind).toBe("winner");
+            expect(quarantined.diagnostic.accepted_winner.winner.accepted.event).toEqual(stopped.submission.request.event);
+            expect(quarantined.diagnostic.recovery_record.rejection).toEqual(terminal.rejection);
+            expect(quarantined.diagnostic.recovery_record.rejected_record).toEqual(terminal.rejected_record);
+            expect(quarantined.ready_index).toHaveLength(0);
+            await expect(creator.page.getByTestId("creator-mls-quarantined").first()).toBeVisible({ timeout: 60_000 });
+            await expect(creator.page.getByTestId("creator-mls-retry-button")).toHaveCount(0);
+            await creator.page.reload({ waitUntil: "domcontentloaded" });
+            await expect(creator.page.getByTestId("creator-mls-quarantined").first()).toBeVisible({ timeout: 60_000 });
+            const reopened = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId)!;
+            expect(reopened.diagnostic).toEqual(quarantined.diagnostic);
+            expect(reopened.intent).toEqual(terminal.intent);
+            expect(submittedGenesisIds.size).toBe(1);
+            expect(submittedCreateIds.size).toBe(1);
+            await stepShot(creator.page, testInfo, "A-rejected-original-accepted-conflict-stays-quarantined");
+            return;
+          }
           await creator.page.goto(`/chat/${encodeURIComponent(cutRealmId!)}`, { waitUntil: "domcontentloaded" });
           await expect(creator.page.getByTestId("creator-mls-retry-button")).toBeVisible({ timeout: 60_000 });
           const afterReentry = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId)!;
@@ -1187,6 +1309,67 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
       await assertCardDecrypts(creator, cardTitle, privateDescription);
       await assertE2eeStorageIsHardened(creator.page, [privateDescription]);
       await stepShot(creator.page, testInfo, "B-secure-cache-after-reload");
+      if (quarantineCut) {
+        const damaged = await damageCreatorVault(creator.page, realmId, cut);
+        const genesisCount = submittedGenesisIds.size;
+        const genesisId = damaged.queued_genesis.outbound_queue_item_id;
+        const boardUrl = `/kanban/${realmId}/board/${boardId}`;
+        if (cut === "quarantine_write_failure") {
+          await creator.page.addInitScript(() => {
+            if (!new URL(location.href).searchParams.has("creator-vault-write-cut")) return;
+            const original = SubtleCrypto.prototype.encrypt;
+            SubtleCrypto.prototype.encrypt = async function(algorithm, key, data) {
+              const bytes = ArrayBuffer.isView(data) ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength) : new Uint8Array(data);
+              let value: Record<string, any> | undefined;
+              try { value = JSON.parse(new TextDecoder().decode(bytes)); } catch { /* unrelated encryption */ }
+              if (value?.creator_bootstrap_records?.some((record: Record<string, any>) => record.state === "quarantined")) {
+                (window as any).__creatorQuarantineWriteFailed = true;
+                throw new DOMException("creator quarantine durable write cut", "OperationError");
+              }
+              return original.call(this, algorithm, key, data);
+            };
+          });
+          await creator.page.goto(`${boardUrl}?creator-vault-write-cut=1`, { waitUntil: "domcontentloaded" });
+          await expect.poll(() => creator.page.evaluate(() => Boolean((window as any).__creatorQuarantineWriteFailed)), { timeout: 60_000 }).toBe(true);
+          const pending = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === realmId)!;
+          const { queue_items, ready_index, vault_commit_position, ...pendingRecord } = pending;
+          expect(pendingRecord, "failed quarantine publication must retain the entire prior durable record").toEqual(damaged);
+          expect(ready_index.filter((receipt: Record<string, any>) => receipt.effective_scope.realm_id === realmId)).toEqual([readyReceipt]);
+          await expect(creator.page.getByTestId("creator-mls-quarantined")).toHaveCount(0);
+        }
+        await creator.page.goto(boardUrl, { waitUntil: "domcontentloaded" });
+        await expect.poll(async () => (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === realmId)?.state, { timeout: 60_000 }).toBe("quarantined");
+        const terminal = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === realmId)!;
+        expect(terminal.intent).toEqual(damaged.intent);
+        expect(terminal.diagnostic.last_state).toBe("ready");
+        expect(terminal.diagnostic.invariant).toBeTruthy();
+        if (cut === "quarantine_private" || cut === "quarantine_write_failure") expect(terminal.diagnostic.invariant).toBe("private_material");
+        expect(terminal.diagnostic.invariant_detail).toBeTruthy();
+        expect(terminal.diagnostic.reason_code).toMatch(/^creator_.+_mismatch$/);
+        expect(terminal.diagnostic.detected_at).toBeTruthy();
+        expect(terminal.diagnostic.event_id).toBe(genesisId);
+        expect(terminal.diagnostic.canonical_bytes_digest).toBe(damaged.queued_genesis.canonical_bytes_digest);
+        expect(terminal.diagnostic.outbound_queue_item_id).toBe(genesisId);
+        expect(terminal.diagnostic.recovery_record).toEqual(damaged);
+        expect(terminal.diagnostic.accepted_winner).toEqual({ kind: "original", acceptance: damaged.accepted_genesis });
+        expect(terminal.diagnostic.recovery_queue_items.some((item: Record<string, any>) => item.submission.event_id === genesisId)).toBe(true);
+        expect(terminal.ready_index.filter((receipt: Record<string, any>) => receipt.effective_scope.realm_id === realmId)).toHaveLength(0);
+        expect(terminal.ready_receipt).toBeUndefined();
+        await expect(creator.page.getByTestId("creator-mls-quarantined").first()).toBeVisible({ timeout: 60_000 });
+        await expect(creator.page.getByTestId("creator-mls-retry-button")).toHaveCount(0);
+        await expect(creator.page.getByTestId("kanban-column").filter({ hasText: listTitle }).first().getByTestId("add-card-button")).toBeDisabled();
+        const createCount = submittedCreateIds.size;
+        await creator.page.reload({ waitUntil: "domcontentloaded" });
+        await expect(creator.page.getByTestId("creator-mls-quarantined").first()).toBeVisible({ timeout: 60_000 });
+        const reopened = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === realmId)!;
+        expect(reopened.diagnostic).toEqual(terminal.diagnostic);
+        expect(reopened.intent).toEqual(terminal.intent);
+        expect(reopened.ready_index.filter((receipt: Record<string, any>) => receipt.effective_scope.realm_id === realmId)).toHaveLength(0);
+        await expect(creator.page.getByTestId("kanban-column").filter({ hasText: listTitle }).first().getByTestId("add-card-button")).toBeDisabled();
+        expect(submittedCreateIds.size).toBe(createCount);
+        expect(submittedGenesisIds.size).toBe(genesisCount);
+        await stepShot(creator.page, testInfo, "C-quarantined-original-survives-reload-with-closed-send-gate");
+      }
     } finally {
       await creator.close();
     }

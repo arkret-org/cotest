@@ -291,7 +291,7 @@ soland-services = { workspace = true }
 soland-storage = { workspace = true }
 soland-storage-postgres = { workspace = true }
 tempfile = { workspace = true }
-testcontainers = { workspace = true, optional = true }
+testcontainers = { workspace = true, optional = true, features = ["blocking"] }
 tokio = { workspace = true, features = ["macros", "process", "rt-multi-thread", "time"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "json"] }
