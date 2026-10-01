@@ -82,6 +82,8 @@
 
 `retries the whole accepted artifact install after durable write failure` 与 `publishes ready and its send-gate index atomically after durable write failure` 在真实浏览器 SubtleCrypto 加密 vault 写入时分别阻断 `artifacts_converged` 和 `ready`。前者必须保持 `genesis_accepted`、无 artifact；后者必须保持 `artifacts_converged`、无 ready receipt／索引。两者都保留原 epoch-zero unit、签名和 exact acceptance；销毁页面 runtime 后仅重试原完整安装及发布，不能再生成或再提交 Genesis。所有七个 creator 场景在实际加密写入、解密及 reload 后核对 `ready` receipt、winning artifact 与同 vault send-gate index 完全一致，ready commit position 不超过持久 vault position。故障注入和 session setup 属于 fixture-only，不扩大为完整 UI 注册登录或跨设备证明。
 
+`stops the losing queue after a distinct accepted Genesis wins` 在原浏览器正式进入 `genesis_queued` 后，让独立 fixture client 生成另一份真实 RFC 9420 group／签名 Genesis，并赢得真实 Station 的唯一接受位置；它不把私有材料安装到原浏览器。原浏览器必须从独立认证的 exact query 原子进入 `superseded` 并移除 loser queue，保留原 intent、epoch-zero unit、原签 Event／digest 和 winner，不发布 ready receipt／索引。看板及 List 元数据仍可操作，但 Add Card 必须禁用；刷新后终态及材料不变，不重新作者。此例仍为 fixture-only，不作为完整 UI 注册或 Welcome／迁移／恢复的成功证明。完整创建流程在目标 Genesis 故障注入前若遇到真实 unavailable snapshot，可通过页面已有 Open Realm 入口重进原接受 Realm，继续同一持久记录。
+
 同一主链另覆盖三个发送方刷新断点；均操作完整原子 `MlsCommitSubmission`，不替换签名 Event 或服务器结果：
 
 - `commit-response-lost`：服务器实际接收 Commit 后丢弃 HTTP 响应，刷新 Alice，再恢复传输。

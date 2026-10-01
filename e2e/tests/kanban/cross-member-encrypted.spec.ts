@@ -46,6 +46,7 @@ import { assertAuthoritySubmitOutcome, canonicalJson, grantCapabilityEventApi } 
 import { grantInviteConsentArkret } from "../../helpers/contact-api";
 import { stepShot } from "../../helpers/screenshots";
 import { selfPathGrantHeaders } from "../../helpers/session-grant-dpop";
+import { activateRealmMlsApi, readScopeMlsGroupCurrentApi } from "../../helpers/soland-api/mls";
 import { installMlsOutboundFault } from "../../helpers/mls-outbound-fault";
 import { selectDxcOption } from "../../helpers/dxc-select";
 import {
@@ -273,6 +274,7 @@ async function buildEncryptedBoardListCard(
   boardTitle: string,
   listTitle: string,
   cardTitle: string,
+  createCard = true,
 ): Promise<string> {
   await page.goto(`/kanban/${realmId}`, { waitUntil: "domcontentloaded" });
   await expect(page.getByTestId("kanban-panel")).toBeVisible({
@@ -302,6 +304,7 @@ async function buildEncryptedBoardListCard(
     .filter({ hasText: listTitle })
     .first();
   await expect(column).toBeVisible({ timeout: 45_000 });
+  if (!createCard) return boardId;
   await column.getByTestId("add-card-button").click();
   await column.getByTestId("new-card-title-input").fill(cardTitle);
   await column.getByTestId("save-card-button").click();
@@ -589,7 +592,7 @@ async function openPendingTimeline(reader: JointUserPage, realmId: string): Prom
 }
 
 test.describe("cross-member encrypted kanban @fully-implemented", () => {
-  for (const cut of ["none", "create_response_loss", "device_evidence_unavailable", "public_blob_response_loss", "genesis_response_loss", "artifact_install_failure", "ready_publish_failure"] as const) {
+  for (const cut of ["none", "create_response_loss", "device_evidence_unavailable", "public_blob_response_loss", "genesis_response_loss", "artifact_install_failure", "ready_publish_failure", "genesis_superseded"] as const) {
   const loseCreateResponse = cut === "create_response_loss";
   const loseDeviceEvidence = cut === "device_evidence_unavailable";
   const loseBlobResponse = cut === "public_blob_response_loss";
@@ -597,13 +600,15 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
   const failArtifactInstall = cut === "artifact_install_failure";
   const failReadyPublish = cut === "ready_publish_failure";
   const failLocalPublication = failArtifactInstall || failReadyPublish;
+  const competingGenesisWins = cut === "genesis_superseded";
   test("creator E2EE plaintext cache is encrypted in IndexedDB and survives reload" +
     (loseCreateResponse ? "; recovers accepted-create response loss before epoch zero" : "") +
     (loseDeviceEvidence ? "; Device evidence unavailable keeps acceptance before randomness" : "") +
     (loseBlobResponse ? "; restores epoch-zero unit after public blob response loss" : "") +
     (loseGenesisResponse ? "; reconciles exact accepted Genesis after response loss and unavailable query" : "") +
     (failArtifactInstall ? "; retries the whole accepted artifact install after durable write failure" : "") +
-    (failReadyPublish ? "; publishes ready and its send-gate index atomically after durable write failure" : ""), async ({
+    (failReadyPublish ? "; publishes ready and its send-gate index atomically after durable write failure" : "") +
+    (competingGenesisWins ? "; stops the losing queue after a distinct accepted Genesis wins" : ""), async ({
     browser,
     request,
   }, testInfo) => {
@@ -653,6 +658,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
     let genesisCutActive = loseGenesisResponse;
     let acceptedGenesisAtCut: Record<string, any> | undefined;
     let signedGenesisAtCut: Record<string, any> | undefined;
+    let competingWinnerId: string | undefined;
     await creator.page.route(/\/_arkret\/self\/streams\/scan(?:\?.*)?$/, async (route) => {
       if (genesisCutActive && acceptedGenesisAtCut) {
         await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({
@@ -755,6 +761,25 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           (entry: Record<string, any>) => entry.selector?.kind === "mls_group" && entry.selector.scope_ref.realm_id === payload.event.realm_id,
         )).toBe(false);
       }
+      if (competingGenesisWins && payload.event?.kind === "ak.mls.genesis"
+        && submittedCreateIds.has(payload.event.realm_id.replace("ak:realm:", "ak:event:"))) {
+        const record = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === payload.event.realm_id)!;
+        cutRealmId = payload.event.realm_id;
+        intentAtCut = record.intent;
+        epochUnitAtCut = record.epoch_zero;
+        signedGenesisAtCut = record.queued_genesis;
+        if (!competingWinnerId) {
+          // A separate fixture client wins the real Station CAS. It never
+          // installs its private material into the losing browser vault.
+          competingWinnerId = await activateRealmMlsApi(request, {
+            id: creatorSession.user.id, deviceId: creatorSession.user.deviceId,
+            token: creatorSession.grantJwt,
+          }, cutRealmId!, { stationId: creatorSession.accountId.station_id });
+          expect(competingWinnerId).not.toBe(payload.event.event_id);
+        }
+        await route.abort("connectionfailed");
+        return;
+      }
       if (genesisCutActive && payload.event?.kind === "ak.mls.genesis"
         && submittedCreateIds.has(payload.event.realm_id.replace("ak:realm:", "ak:event:"))) {
         submittedGenesisIds.add(payload.event.event_id);
@@ -839,7 +864,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           };
         }, failArtifactInstall ? "artifacts_converged" : "ready");
       }
-      if (loseCreateResponse || loseDeviceEvidence || loseBlobResponse || loseGenesisResponse || failLocalPublication) {
+      if (loseCreateResponse || loseDeviceEvidence || loseBlobResponse || loseGenesisResponse || failLocalPublication || competingGenesisWins) {
         // Submit through the real wizard, then destroy its runtime at the
         // accepted-create response or current Device evidence boundary.
         await creator.gotoSetup();
@@ -874,7 +899,57 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           expect(still.state).toBe(before.state);
           expect(still.epoch_zero).toEqual(epochUnitAtCut);
         }
-        await expect.poll(() => cutRealmId, { timeout: 120_000 }).toBeTruthy();
+        let resumedBeforeGenesisCut = false;
+        await expect.poll(async () => {
+          if (!cutRealmId && !resumedBeforeGenesisCut && (loseGenesisResponse || competingGenesisWins)) {
+            const openRealm = wizard.getByTestId("realm-setup-done").getByRole("link", { name: /Open (?:Realm|workspace)/i });
+            if (await openRealm.isVisible().catch(() => false)) {
+              // A real unavailable snapshot can stop setup before our target
+              // cut. Re-enter its accepted Realm and resume the same record.
+              resumedBeforeGenesisCut = true;
+              await openRealm.click();
+            }
+          }
+          return cutRealmId;
+        }, { timeout: 120_000 }).toBeTruthy();
+        if (competingGenesisWins) {
+          await expect.poll(() => competingWinnerId, { timeout: 60_000 }).toBeTruthy();
+          await expect.poll(async () => (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId)?.state, { timeout: 60_000 }).toBe("superseded");
+          const terminal = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId)!;
+          expect(terminal.intent).toEqual(intentAtCut);
+          expect(terminal.winner.accepted.event.event_id).toBe(competingWinnerId);
+          expect(terminal.loser_record.epoch_zero).toEqual(epochUnitAtCut);
+          expect(terminal.loser_record.queued_genesis).toEqual(signedGenesisAtCut);
+          expect(terminal.loser_genesis).toEqual([signedGenesisAtCut!.outbound_queue_item_id, signedGenesisAtCut!.canonical_bytes_digest]);
+          expect(terminal.queue_items.some((item: Record<string, any>) => item.submission.event_id === terminal.loser_genesis[0])).toBe(false);
+          expect(terminal.ready_index).toHaveLength(0);
+          expect(terminal.ready_receipt).toBeUndefined();
+          const current = await readScopeMlsGroupCurrentApi(request, creatorSession.grantJwt, cutRealmId!);
+          expect(current!.genesis_event_ref).toBe(competingWinnerId);
+          expect(current!.public_tree_ref).toBe(terminal.winner.accepted.event.payload.ratchet_tree_ref);
+          const boardId = await buildEncryptedBoardListCard(creator.page, cutRealmId!, boardTitle, listTitle, cardTitle, false);
+          const column = creator.page.getByTestId("kanban-column").filter({ hasText: listTitle }).first();
+          await expect(column.getByTestId("add-card-button")).toBeDisabled();
+          const afterNavigation = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId)!;
+          expect(afterNavigation.state).toBe("superseded");
+          expect(afterNavigation.winner).toEqual(terminal.winner);
+          expect(afterNavigation.loser_record).toEqual(terminal.loser_record);
+          expect(submittedGenesisIds.size).toBe(1);
+          await creator.page.reload({ waitUntil: "domcontentloaded" });
+          await expect(creator.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 60_000 });
+          await expect(creator.page.getByTestId("kanban-column").filter({ hasText: listTitle }).first().getByTestId("add-card-button")).toBeDisabled();
+          const afterReload = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId)!;
+          expect(afterReload.state).toBe("superseded");
+          expect(afterReload.winner).toEqual(terminal.winner);
+          expect(afterReload.loser_record).toEqual(terminal.loser_record);
+          expect(afterReload.queue_items.some((item: Record<string, any>) => item.submission.event_id === terminal.loser_genesis[0])).toBe(false);
+          expect(afterReload.ready_index).toHaveLength(0);
+          expect(submittedGenesisIds.size).toBe(1);
+          expect(submittedCreateIds.size).toBe(1);
+          expect(boardId).toMatch(/^ak:space:/);
+          await stepShot(creator.page, testInfo, "A-superseded-loser-stays-unwritable-after-reload");
+          return;
+        }
         if (loseDeviceEvidence) {
           expect(deviceCutSeen).toBe(true);
           const before = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId);
