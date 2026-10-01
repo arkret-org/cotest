@@ -1537,6 +1537,7 @@ export async function sendMessageApi(
   });
   const envelope = signedEventEnvelope({
     actorId,
+    server: opts.server,
     realmId,
     kind: "ak.message.create",
     createdAt: opts.createdAt,
