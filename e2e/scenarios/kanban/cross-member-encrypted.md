@@ -74,6 +74,8 @@
 
 创建者另覆盖 `accepted-create response loss before epoch zero`：真实创建向导选择 MLS，首个 create 请求发出前从 encrypted IndexedDB authoring vault 读取并对照完整 closed intent／原签 unit。真实服务接受整个 ordinary Realm bootstrap 后仅丢弃客户端响应，确认尚无 Genesis 请求，再销毁页面 runtime 并深链重进原 Realm。后台必须从 durable intent 接续，create 重试保留原请求字节与唯一 EventId，原 scope 只提交一个 Genesis；随后创建加密看板、私密卡片正文并实际解密、刷新重读。此处读取本地 intent 不作为 authority evidence，也不替代完整 creator FSM／pinned governance 验收。
 
+创建者在首个 Genesis 请求前还检查 encrypted vault 中的 `governance_result_pinned`：exact accepted create、独立 authority／完整签名 current cut、原 canonical proposal bytes／binding、exact Account／Device 与 generation 保存在同一正式记录；刷新后原 pin 不被替换。`Device evidence unavailable keeps acceptance before randomness` 在正式 `realm_accepted` 后让现有 self keys/query 返回合法缺席结果，要求 pin 不出现且没有 Genesis 请求；销毁 runtime、恢复查询后仅一个 Genesis、真实加密卡片解密与 reload 完成。故障结果是测试注入，self projection 不是可转交的 origin attestation；此子片不替代完整 11-state FSM、Agent／Circle、epoch-0 原子恢复单元和 ready 原子发布验收。
+
 同一主链另覆盖三个发送方刷新断点；均操作完整原子 `MlsCommitSubmission`，不替换签名 Event 或服务器结果：
 
 - `commit-response-lost`：服务器实际接收 Commit 后丢弃 HTTP 响应，刷新 Alice，再恢复传输。

@@ -589,9 +589,12 @@ async function openPendingTimeline(reader: JointUserPage, realmId: string): Prom
 }
 
 test.describe("cross-member encrypted kanban @fully-implemented", () => {
-  for (const loseCreateResponse of [false, true]) {
+  for (const cut of ["none", "create_response_loss", "device_evidence_unavailable"] as const) {
+  const loseCreateResponse = cut === "create_response_loss";
+  const loseDeviceEvidence = cut === "device_evidence_unavailable";
   test("creator E2EE plaintext cache is encrypted in IndexedDB and survives reload" +
-    (loseCreateResponse ? "; recovers accepted-create response loss before epoch zero" : ""), async ({
+    (loseCreateResponse ? "; recovers accepted-create response loss before epoch zero" : "") +
+    (loseDeviceEvidence ? "; Device evidence unavailable keeps acceptance before randomness" : ""), async ({
     browser,
     request,
   }, testInfo) => {
@@ -634,6 +637,30 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
     let cutRealmId: string | undefined;
     let intentAtCut: Record<string, any> | undefined;
     let cutActive = loseCreateResponse;
+    let deviceCutActive = loseDeviceEvidence;
+    let deviceCutSeen = false;
+    await creator.page.route(/\/_arkret\/self\/keys\/query(?:\?.*)?$/, async (route) => {
+      if (deviceCutActive && deviceCutSeen) {
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+          device_keys: [], device_generations: [], failures: [],
+        }) });
+        return;
+      }
+      if (deviceCutActive) {
+        const record = (await readCreatorRecords(creator.page)).find((value) =>
+          value.state === "realm_accepted" && submittedCreateIds.has(value.intent.scope_create_event_id));
+        if (record) {
+          deviceCutSeen = true;
+          cutRealmId = record.intent.effective_scope.realm_id;
+          intentAtCut = record.intent;
+          await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+            device_keys: [], device_generations: [], failures: [],
+          }) });
+          return;
+        }
+      }
+      await route.continue();
+    });
     await creator.page.route(/\/_arkret\/self\/events(?:\?.*)?$/, async (route) => {
       const payload = route.request().postDataJSON() as Record<string, any>;
       const create = payload.events?.[0]?.event;
@@ -643,7 +670,17 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           (value) => value.intent.effective_scope.realm_id === payload.event.realm_id,
         );
         expect(record, "Genesis submission must retain its formal durable creator record").toBeDefined();
-        expect(record!.state).toBe("realm_accepted");
+        expect(record!.state).toBe("governance_result_pinned");
+        const pin = record!.governance_evidence;
+        expect(pin.accepted_create.accepted_event).toEqual(record!.accepted_create.accepted_event);
+        expect(pin.governance_binding).toEqual(record!.intent.proposed_group_genesis_binding.proposed_group_genesis_binding);
+        expect(pin.canonical_proposal_bytes).toEqual(Array.from(new TextEncoder().encode(canonicalJson(record!.intent.proposed_group_genesis_binding))));
+        expect(pin.creator_device_authority.account_id).toEqual(record!.intent.owner_actor_id.account_id);
+        expect(pin.creator_device_authority.device_id).toBe(record!.intent.creator_device_id);
+        expect(pin.creator_device_authority.projection.authorized_generation_ref).toBe(pin.creator_device_authority.generation.current_device_generation_ref);
+        expect(pin.genesis_absence.current_state_entries.some(
+          (entry: Record<string, any>) => entry.selector?.kind === "mls_group" && entry.selector.scope_ref.realm_id === payload.event.realm_id,
+        )).toBe(false);
         expect(record!.accepted_create.accepted_event).toEqual(record!.intent.signed_scope_create_unit.events[0].event);
         expect(record!.accepted_create.covering_commit.event_ref).toBe(record!.intent.scope_create_event_id);
         expect(record!.genesis_absence.realm_id).toBe(payload.event.realm_id);
@@ -703,9 +740,9 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         mlsActivated: true,
       };
       let realmId: string;
-      if (loseCreateResponse) {
-        // Submit through the real wizard, then destroy its runtime before an
-        // accepted response can release foreground epoch-zero authoring.
+      if (loseCreateResponse || loseDeviceEvidence) {
+        // Submit through the real wizard, then destroy its runtime at the
+        // accepted-create response or current Device evidence boundary.
         await creator.gotoSetup();
         const wizard = creator.page.getByTestId("realm-lifecycle-strand").last();
         const title = wizard.getByTestId("realm-title-input");
@@ -721,11 +758,18 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         await wizard.getByTestId("new-realm-next-button").first().click();
         await wizard.getByTestId("create-realm-button").click();
         await expect.poll(() => cutRealmId, { timeout: 120_000 }).toBeTruthy();
+        if (loseDeviceEvidence) {
+          expect(deviceCutSeen).toBe(true);
+          const before = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId);
+          expect(before!.state).toBe("realm_accepted");
+          expect(before!.governance_evidence).toBeUndefined();
+        }
         expect(submittedGenesisIds.size, "the crash cut precedes every Genesis submission").toBe(0);
         realmId = cutRealmId!;
-        await stepShot(creator.page, testInfo, "A-accepted-create-response-lost");
+        await stepShot(creator.page, testInfo, loseDeviceEvidence ? "A-device-evidence-unavailable" : "A-accepted-create-response-lost");
         await creator.page.goto(`/chat/${encodeURIComponent(realmId)}`, { waitUntil: "domcontentloaded" });
         cutActive = false;
+        deviceCutActive = false;
       } else {
         realmId = await creator.createRealm(createOptions);
       }
@@ -734,7 +778,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         (intent) => intent.effective_scope.realm_id === realmId,
       );
       expect(intentBeforeReload).toBeDefined();
-      if (loseCreateResponse) expect(intentBeforeReload).toEqual(intentAtCut);
+      if (loseCreateResponse || loseDeviceEvidence) expect(intentBeforeReload).toEqual(intentAtCut);
       const boardId = await buildEncryptedBoardListCard(
         creator.page,
         realmId,
@@ -747,12 +791,14 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         cardTitle,
         privateDescription,
       );
-      if (loseCreateResponse) {
+      if (loseCreateResponse || loseDeviceEvidence) {
         expect(submittedGenesisIds.size, "background recovery must author one Genesis for the original scope").toBe(1);
         expect(submittedCreateIds.size).toBe(1);
       }
 
       await assertE2eeStorageIsHardened(creator.page, [privateDescription]);
+      const pinBeforeReload = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === realmId)!.governance_evidence;
+      expect(pinBeforeReload).toBeDefined();
       await stepShot(creator.page, testInfo, "A-secure-cache-before-reload");
 
       await creator.page.reload({ waitUntil: "domcontentloaded" });
@@ -761,6 +807,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         (intent) => intent.effective_scope.realm_id === realmId,
       )).toEqual(intentBeforeReload);
       expect(submittedCreateIds.size).toBe(1);
+      expect((await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === realmId)!.governance_evidence).toEqual(pinBeforeReload);
       await assertCardDecrypts(creator, cardTitle, privateDescription);
       await assertE2eeStorageIsHardened(creator.page, [privateDescription]);
       await stepShot(creator.page, testInfo, "B-secure-cache-after-reload");
