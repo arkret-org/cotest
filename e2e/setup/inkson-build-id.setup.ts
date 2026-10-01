@@ -27,7 +27,8 @@ test("served Inkson bundle was built from the checked-out source", async ({
   }
   const here = path.dirname(fileURLToPath(import.meta.url));
   const workspaceRoot = path.resolve(here, "../../..");
-  const inksonRoot = path.join(workspaceRoot, "inkson");
+  const inksonRoot =
+    process.env.COTEST_INKSON_ROOT?.trim() || path.join(workspaceRoot, "inkson");
   const expectedSourceSha = execFileSync(
     "git",
     ["-C", inksonRoot, "rev-parse", "--short", "HEAD"],

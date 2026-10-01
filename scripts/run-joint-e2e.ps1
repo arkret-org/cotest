@@ -847,6 +847,7 @@ function Invoke-JointE2ePreflight {
         # bundle" and fails the run on a bundle it is never going to load.
         [bool]$RequiresInkson = $true,
         [bool]$WillStartDefaultInkson = $false,
+        [string]$InksonRoot,
         [string]$InksonStaticIndex,
         [bool]$JointTlsTopology = $false,
         [string]$JsonPath,
@@ -1008,7 +1009,7 @@ function Invoke-JointE2ePreflight {
             $inksonFreshness = Get-ArtifactFreshness `
                 -ArtifactPath $InksonStaticIndex `
                 -RepositoryRoots @(
-                    (Join-Path $WorkspaceRoot "inkson"),
+                    $InksonRoot,
                     (Join-Path $WorkspaceRoot "arkret-rust-sdk"),
                     (Join-Path $WorkspaceRoot "garth"),
                     (Join-Path $WorkspaceRoot "chime")
@@ -2357,6 +2358,9 @@ function Start-ManagedCommand {
     if ($Name.StartsWith("prepare-", [System.StringComparison]::Ordinal)) {
         $process.WaitForExit()
         $process.Refresh()
+        if ($process.ExitCode -ne 0) {
+            throw "preparing $Name failed (exit=$($process.ExitCode)); see $stdout and $stderr"
+        }
     }
 
     [pscustomobject]@{
@@ -2888,13 +2892,18 @@ function Invoke-RunnerSelfTest {
             -Command "& $selfTestShell -NoProfile -EncodedCommand $nativeFailureCommand" `
             -WorkingDirectory $tempRoot `
             -LogDirectory $tempRoot
-        $preparedFailure = Start-ManagedCommand `
-            -Name "prepare-self-test-failure" `
-            -Command "Start-Sleep -Milliseconds 30; exit 31" `
-            -WorkingDirectory $tempRoot `
-            -LogDirectory $tempRoot
-        if (-not $preparedFailure.Process.HasExited -or $preparedFailure.Process.ExitCode -ne 31) {
-            throw "preparation did not finish before the next workspace or lost its exit code"
+        $preparedFailureMessage = $null
+        try {
+            Start-ManagedCommand `
+                -Name "prepare-self-test-failure" `
+                -Command "Start-Sleep -Milliseconds 30; exit 31" `
+                -WorkingDirectory $tempRoot `
+                -LogDirectory $tempRoot | Out-Null
+        } catch {
+            $preparedFailureMessage = $_.Exception.Message
+        }
+        if (-not $preparedFailureMessage -or $preparedFailureMessage -notmatch 'prepare-self-test-failure failed \(exit=31\)') {
+            throw "preparation failure did not stop before the next workspace or lost its exit code"
         }
         $wrappedFailure.Process.WaitForExit()
         $wrappedFailure.Process.Refresh()
@@ -3852,6 +3861,7 @@ try {
         -InksonCommand $InksonCommand `
         -RequiresInkson $requiresInkson `
         -WillStartDefaultInkson $willStartDefaultInkson `
+        -InksonRoot $InksonRoot `
         -InksonStaticIndex $inksonStaticIndex `
         -JointTlsTopology ([bool]$jointTlsEnabled) `
         -JsonPath $preflightJson `
@@ -4846,6 +4856,11 @@ try {
     }
 
     $env:COTEST_JOINT_RUN_DIR = $jointDir
+    if ($requiresInkson) {
+        $env:COTEST_INKSON_ROOT = $InksonRoot
+    } else {
+        Remove-Item Env:COTEST_INKSON_ROOT -ErrorAction SilentlyContinue
+    }
     $env:COTEST_UI_SCREENSHOT_DIR = $screenshotDir
     $env:COTEST_UI_VISUAL_BASELINE_DIR = $visualBaselineDir
     $env:COTEST_SOLAND_BASE_URL = $SolandBaseUrl
