@@ -557,9 +557,12 @@ async function pollToDeviceReadMarker(
     const delta = await accountSubscribeDeltaApi(request, token, {
       timeoutMs: 10_000,
     });
-    const toDevice = (delta.to_device ?? {}) as { messages?: unknown };
-    const messages = Array.isArray(toDevice.messages) ? toDevice.messages : [];
-    for (const message of messages as Array<Record<string, any>>) {
+    const toDevice = (delta.to_device ?? {}) as { deliveries?: unknown };
+    const deliveries = Array.isArray(toDevice.deliveries) ? toDevice.deliveries : [];
+    for (const delivery of deliveries as Array<Record<string, any>>) {
+      if (delivery.delivery_kind !== "device_message") continue;
+      const message = delivery.device_message as Record<string, any> | undefined;
+      if (!message) continue;
       if (message.kind !== READ_MARKER_UPDATE_KIND) {
         continue;
       }

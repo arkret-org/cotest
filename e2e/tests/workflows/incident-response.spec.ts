@@ -192,7 +192,6 @@ test.describe("workflow: incident response", () => {
             schema: "ak.schema.strand.v1",
             realm_id: realmId,
             metadata: { title: "SEV-2 checkout outage" },
-            stage: "in_progress",
             tracks: { discussion: { enabled: true, is_primary: true } },
             created_by: accountActorId(oncall.id),
             created_at: createdAt,
@@ -205,6 +204,21 @@ test.describe("workflow: incident response", () => {
     const incidentStrandId = retypeEventDerivedId(
       String(incidentStrandEnvelope.event_id),
       "strand",
+    );
+
+    await submitSignedEventApi(
+      request,
+      token,
+      signedEventEnvelope({
+        actorId: oncall.id,
+        realmId,
+        kind: "ak.strand.stage.set",
+        payload: {
+          strand_id: incidentStrandId,
+          stage: "in_progress",
+        },
+      }),
+      { context: "start incident investigation at the protocol stage layer" },
     );
 
     await submitSignedEventApi(
@@ -235,8 +249,11 @@ test.describe("workflow: incident response", () => {
         JSON.stringify(record.payload ?? {}).includes(incidentStrandId)
       );
     });
-    expect(stageUpdates).toHaveLength(1);
-    expect((stageUpdates[0]?.payload as Record<string, unknown>)?.stage).toBe(
+    expect(stageUpdates).toHaveLength(2);
+    expect(stageUpdates.map((event) => (event.payload as Record<string, unknown>)?.stage)).toEqual([
+      "in_progress", "done",
+    ]);
+    expect((stageUpdates[1]?.payload as Record<string, unknown>)?.stage).toBe(
       "done",
     );
   });

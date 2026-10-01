@@ -58,10 +58,35 @@ const GLOBAL_ASSERTIONS: [&str; 6] = [
 ///   `genesis_accepted`;
 /// * amending the intent at or after `realm_accepted` is not a transition at all — the registry has
 ///   no arrow for it, and fail-closed is the absence of one.
-const NON_ARROW_SCENARIO_OUTCOMES: [&str; 3] = [
+const NON_ARROW_SCENARIO_OUTCOMES: [&str; 4] = [
     "fail_closed",
     "reupload_the_missing_blob_from_the_persisted_bytes",
     "resolve_the_accepted_event_and_commit_genesis_accepted",
+    "remain_at_realm_accepted_without_random_material",
+];
+
+const UNVERIFIED_PIN_CASES: [(&str, [&str; 2]); 3] = [
+    (
+        "governance_evidence_unauthenticated",
+        [
+            "no local proposal is treated as a Station-signed outcome",
+            "no MLS material, upload, signature or queue item is created",
+        ],
+    ),
+    (
+        "genesis_absence_unproved",
+        [
+            "only a verified complete authorized cut covering the exact scope proves Genesis absence",
+            "the missing projection row or HTTP status does not advance the state",
+        ],
+    ),
+    (
+        "creator_endpoint_unverified",
+        [
+            "the immutable complete owner ActorId, creator device and signer method remain unchanged",
+            "the mismatched endpoint cannot take over the record or create a second intent",
+        ],
+    ),
 ];
 
 pub fn run_mls_creator_bootstrap_recovery_suite() -> Result<()> {
@@ -314,8 +339,24 @@ fn run_scenario_cases(fixture: &Value, recovery_actions: &BTreeSet<String>) -> R
             "scenario case {name} publishes no invariant to check"
         );
         let expected = value_field_str(case, "expected")?;
+        if let Some((_, invariants)) = UNVERIFIED_PIN_CASES.iter().find(|(id, _)| *id == name) {
+            ensure!(
+                value_field_str(case, "given")?.starts_with("the record is at realm_accepted")
+                    && expected == "remain_at_realm_accepted_without_random_material",
+                "unverified creator pin {name} must retain Realm acceptance without generating material"
+            );
+            let published = value_array(&case["invariants"], "unverified pin invariants")?;
+            for invariant in invariants {
+                ensure!(
+                    published
+                        .iter()
+                        .any(|value| value.as_str() == Some(*invariant)),
+                    "unverified creator pin {name} lost safety invariant {invariant}"
+                );
+            }
+        }
         // A scenario may only end where an arrow can end: in a recovery action
-        // some arrow produces, in a registered state, or in one of the three
+        // some arrow produces, in a registered state, or in one of the closed
         // outcomes that are deliberately not arrows.
         let reaches_registered_state = MlsCreatorBootstrapState::ALL.iter().any(|state| {
             expected == state.as_str() || expected.starts_with(&format!("{}_", state.as_str()))
@@ -333,7 +374,13 @@ fn run_scenario_cases(fixture: &Value, recovery_actions: &BTreeSet<String>) -> R
             &json!({"derived_from_arrows": recovery_actions.contains(expected)}),
         );
     }
-    // The three outcomes that are not arrows all have to be exercised, or the
+    for (name, _) in UNVERIFIED_PIN_CASES {
+        ensure!(
+            names.contains(name),
+            "creator pin negative case {name} is missing"
+        );
+    }
+    // The outcomes that are not arrows all have to be exercised, or the
     // allowance above would be dead weight that could hide a real gap.
     for outcome in NON_ARROW_SCENARIO_OUTCOMES {
         ensure!(

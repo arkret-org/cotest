@@ -1090,9 +1090,7 @@ export type CapabilityGrantObject = {
     "approval_actor_ids"?: string[];
     "approval_relation"?: "responsible" | "controller" | "guardian" | "realm_admin" | "custom";
     "timeout"?: string;
-    "auto_reject_on_timeout"?: boolean;
-    "approval_threshold"?: "majority" | "unanimous" | "quorum" | "custom";
-    "approver_ids"?: string[];
+    "approval_threshold"?: "majority" | "unanimous" | number;
     "accountability_required"?: boolean;
     "guardian_approval_required"?: boolean;
     "controller_approval_required"?: boolean;
@@ -1312,9 +1310,7 @@ export type CapabilityGrantPayload = {
       "approval_actor_ids"?: string[];
       "approval_relation"?: "responsible" | "controller" | "guardian" | "realm_admin" | "custom";
       "timeout"?: string;
-      "auto_reject_on_timeout"?: boolean;
-      "approval_threshold"?: "majority" | "unanimous" | "quorum" | "custom";
-      "approver_ids"?: string[];
+      "approval_threshold"?: "majority" | "unanimous" | number;
       "accountability_required"?: boolean;
       "guardian_approval_required"?: boolean;
       "controller_approval_required"?: boolean;

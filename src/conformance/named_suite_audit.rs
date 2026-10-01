@@ -103,7 +103,11 @@ enum Runner {
     EvidenceMapped(fn() -> Result<()>),
 }
 
-const RUNNERS: [(&str, Runner); 52] = [
+const RUNNERS: [(&str, Runner); 53] = [
+    (
+        "ak.suite.pin.admission_and_scope.v1",
+        Runner::Cases(super::pin_admission::run_pin_admission_suite),
+    ),
     (
         "ak.suite.mimi.admission_guards.v1",
         Runner::Cases(run_mimi_admission_guards_suite),

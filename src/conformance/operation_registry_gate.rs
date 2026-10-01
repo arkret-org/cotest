@@ -1631,6 +1631,13 @@ fn extract_regex_path_candidates(line: &str) -> Vec<String> {
     }
     let normalized = raw
         .replace(r"\/", "/")
+        // Query and fragment suffixes are transport matching, not route
+        // segments. Remove their group opener before path normalization
+        // splits at the delimiter and leaves a spurious trailing parenthesis.
+        .replace(r"(?:\?", "?")
+        .replace(r"(\?", "?")
+        .replace(r"(?:\#", "#")
+        .replace(r"(\#", "#")
         .replace("([^/]+)", "{wildcard}")
         .replace(r"[^/]+", "{wildcard}")
         .replace("\\", "");
@@ -1951,6 +1958,29 @@ mod tests {
         let paths = extract_regex_path_candidates(line);
         assert_eq!(
             paths,
+            vec![
+                "/_arkret/self/agents/{wildcard}/pause",
+                "/_arkret/self/agents/{wildcard}/resume",
+            ]
+        );
+    }
+
+    #[test]
+    fn regex_optional_query_suffix_does_not_become_a_route_segment() {
+        for line in [
+            r#"page.route(/\/_arkret\/self\/events(?:\?.*)?$/, handler)"#,
+            r#"page.route(/\/_arkret\/self\/events(\?.*)?$/, handler)"#,
+            r#"page.route(/\/_arkret\/self\/events(?:\#.*)?$/, handler)"#,
+        ] {
+            assert_eq!(
+                extract_regex_path_candidates(line),
+                vec!["/_arkret/self/events"]
+            );
+        }
+        let line =
+            r#"page.route(/\/_arkret\/self\/agents\/([^/]+)\/(pause|resume)(?:\?.*)?$/, handler)"#;
+        assert_eq!(
+            extract_regex_path_candidates(line),
             vec![
                 "/_arkret/self/agents/{wildcard}/pause",
                 "/_arkret/self/agents/{wildcard}/resume",

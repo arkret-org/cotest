@@ -9,6 +9,7 @@
 
 import { expect, test } from "../../helpers/arkret-test";
 import {
+  contactRow,
   requestContactArkret,
   respondContactArkret,
 } from "../../helpers/contact-api";
@@ -98,6 +99,13 @@ test.describe("contact confirmed display name", () => {
             timeout: 5_000,
           });
         }).toPass({ timeout: 180_000, intervals: [2_000] });
+        const [, , encodedRealmId, encodedStrandId] = new URL(bobPage.page.url()).pathname.split("/");
+        await expect.poll(async () =>
+          (await contactRow(request, aliceToken, bob.id))?.direct_conversation,
+        { timeout: 90_000, intervals: [500, 1_000, 2_000] }).toMatchObject({
+          realm_id: decodeURIComponent(encodedRealmId),
+          main_strand_id: decodeURIComponent(encodedStrandId),
+        });
       } finally {
         await bobPage.close();
       }

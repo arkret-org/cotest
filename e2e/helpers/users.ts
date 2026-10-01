@@ -83,6 +83,7 @@ type UserSession = {
   /// Real grant + DPoP material for direct (non-browser) self-path API calls.
   /// Present when the session was opened with an injected grant.
   grant?: SessionGrantMaterial;
+  onRecoveryKeyConfigured?: (key: string) => void;
 };
 type SessionGrantMaterial = {
   grantJwt: string;
@@ -125,6 +126,7 @@ type OpenUserOpts = {
   grantAudience?: string;
   recoveryKey?: string;
   recoveryMaterialEvidence?: Record<string, unknown>;
+  onRecoveryKeyConfigured?: (key: string) => void;
   /// Keep this user's real browser storage, including IndexedDB secrets,
   /// across closing and relaunching the Chromium process.
   persistentUserDataDir?: string;
@@ -844,6 +846,7 @@ export class JointUserPage {
     // revision_unavailable answer for up to 30 seconds.  Give that protocol retry a full window,
     // plus one locator-handler retry and UI propagation time, before failing.
     await expect(dialog).toBeHidden({ timeout: 90_000 });
+    if (keyReadable) this.session.onRecoveryKeyConfigured?.(recoveryKey);
     return keyReadable ? recoveryKey : undefined;
   }
 
@@ -2330,6 +2333,9 @@ function canonicalSessionOptions(session: DpopUserSession): OpenUserOpts {
     grantAudience: session.grantAudience,
     recoveryKey: session.recoveryKey,
     recoveryMaterialEvidence: session.recoveryMaterialEvidence,
+    onRecoveryKeyConfigured: (key) => {
+      session.recoveryKey = key;
+    },
   };
 }
 
@@ -2358,7 +2364,8 @@ export async function openDpopUserPageFromSession(
   // authenticated-login redirect.
   await page.gotoHome();
   if (opts.prepareMlsDevice !== false) {
-    await page.completeRecoveryKeySetupIfPrompted();
+    const recoveryKey = await page.completeRecoveryKeySetupIfPrompted();
+    if (recoveryKey) session.recoveryKey = recoveryKey;
     await page.acknowledgeRecommendedEncryptionPromptIfVisible();
   }
   return { user: session.user, session, page };
@@ -2599,6 +2606,20 @@ export async function openUser(
           .last()
           .click({ timeout: 10_000 })
           .catch(() => undefined);
+        const configured = page
+          .getByTestId("recovery-key-setup-banner")
+          .last()
+          .waitFor({ state: "hidden", timeout: 90_000 })
+          .then(() => {
+            opts.onRecoveryKeyConfigured?.(recoveryKey);
+          })
+          .catch(() => false);
+        // Keep tracking successful publication after a transient pending
+        // result, while allowing the locator handler to retry the same key.
+        await Promise.race([
+          configured,
+          new Promise((resolve) => setTimeout(resolve, 5_000)),
+        ]);
         // A pending recovery policy Commit is reported as a transient publication
         // outcome and re-enables this button. With noWaitAfter, Playwright can
         // retry the blocked action; if the modal is still present the locator
@@ -2694,6 +2715,7 @@ export async function openUser(
     keepDeviceAuthorizationModal: opts.keepDeviceAuthorizationModal === true,
     sessionCredential,
     grant,
+    onRecoveryKeyConfigured: opts.onRecoveryKeyConfigured,
   };
 }
 

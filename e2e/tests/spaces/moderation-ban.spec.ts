@@ -323,12 +323,7 @@ test.describe("moderation and ban", () => {
     };
     expect(secondBanSubmit.status()).toBe(409);
     expect(wireErrCode(secondBanProblem)).toBe("failed_precondition");
-    // models/realm-and-space.md section 2.7 names the transition failure
-    // `invalid_membership_transition`, but error-code-registry.json
-    // reason_codes[] keeps that code `reserved` until a canonical machine
-    // producer path exists, so a producer MUST NOT put it on the stable
-    // reason_code channel yet.
-    expect(secondBanProblem.reason_code).toBeUndefined();
+    expect(secondBanProblem.reason_code).toBe("invalid_membership_transition");
 
     const realm = await request.get(`${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}`, {
       headers: authHeaders(aliceToken, "GET", `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}`),

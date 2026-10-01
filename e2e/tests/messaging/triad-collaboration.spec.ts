@@ -28,6 +28,7 @@ import { grantInviteConsentArkret } from "../../helpers/contact-api";
 import {
   assertJointStackNotRequired,
   ensureRegistered,
+  issueInviteLocatorToken,
   issueUserSession,
   openDpopUserPage,
   openUserPage,
@@ -390,18 +391,21 @@ test.describe("single-server triad collaboration", () => {
     // Both halves of the proof matter and neither substitutes for the other:
     // the Realm log shows exactly one accepted create (authoritative state),
     // and Bob's private delivery list shows exactly one credential. The list is
-    // only evidence because Bob granted an active invite consent first —
-    // without it both deliveries are correctly quarantined
+    // only evidence because Alice presents Bob's issued principal locator —
+    // a grant stored only at Bob's holder does not turn an explicit address
+    // into consent_grant evidence. Without presented high-trust material,
+    // both deliveries are correctly quarantined
     // (sync/invite-addressing.md section 7) and a count of zero would say
     // nothing about the reducer.
     test("E1.1 live-target slot — a second directed invite for the same account is refused", async ({
       browser,
       request,
-    }) => {
+    }, testInfo) => {
       const stamp = Date.now();
       const bob = uniqueUser("s1e11-bob");
       await ensureRegistered(request, bob);
       const bobToken = await issueUserSession(request, bob);
+      const locator = { token: await issueInviteLocatorToken(request, bobToken) };
       const aliceFlow = await openDpopUserPage(
         browser,
         request,
@@ -434,18 +438,36 @@ test.describe("single-server triad collaboration", () => {
         // submitting — that already defeats the RealmAdminPanel hydration race
         // that historically caused fresh-nav fails (see
         // scenarios/spaces/admin-section-route.md).
-        await alicePage.inviteFromAdmin(realmId, bob.id);
+        const firstDelivery = alicePage.page.waitForResponse((response) =>
+          new URL(response.url()).pathname === "/_arkret/self/invites/dispatch" &&
+          response.request().method() === "POST",
+        );
+        await alicePage.inviteFromAdmin(realmId, bob.id, undefined, locator);
+        const firstDeliveryBody = await (await firstDelivery).json();
 
         // Second issue for the same account. The client MUST NOT re-sign the
         // create under a fresh event_id — that only collides with the same
         // cell again — so it acts on the occupant instead and says so.
+        const repeatedDelivery = alicePage.page.waitForResponse((response) =>
+          new URL(response.url()).pathname === "/_arkret/self/invites/dispatch" &&
+          response.request().method() === "POST",
+        );
         await alicePage.inviteFromAdmin(
           realmId,
           bob.id,
           undefined,
-          undefined,
+          locator,
           /already has a live invite/,
         );
+        const repeatedDeliveryBody = await (await repeatedDelivery).json();
+        await testInfo.attach("invite-delivery-outcomes", {
+          body: JSON.stringify([firstDeliveryBody, repeatedDeliveryBody].map((body) => ({
+            status: body.status,
+            disclosed_outcome: body.disclosed_outcome,
+            retry_after_ms: body.retry_after_ms,
+          }))),
+          contentType: "application/json",
+        });
 
         // Realm authoritative state: exactly one accepted ak.invite.create.
         // The refused Event enters no canonical history at all, so a second

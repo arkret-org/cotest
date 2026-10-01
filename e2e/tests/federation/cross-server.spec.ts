@@ -153,6 +153,7 @@ async function waitForEventBody(
         const body = await queryRealmEventsApi(request, token, realmId, {
           server,
           limit: 100,
+          waitForJoinedCut: true,
         });
         const events = Array.isArray(body.events) ? body.events : [];
         return events.some((event) => JSON.stringify(event).includes(bodyText));

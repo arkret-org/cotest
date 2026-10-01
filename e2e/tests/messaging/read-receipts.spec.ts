@@ -214,7 +214,7 @@ test.describe("read receipts + privacy", () => {
     // `read-receipts.md` §2.1 fixes the admission (the sender must be a joined
     // member of the declared signed Seal basis) but not the human-readable
     // detail string, so the contract to assert is the registered problem type.
-    expect(body.type).toBe("https://arkret.org/problems/capability_denied");
+    expect(body.type).toBe("https://arkret.org/problems/signal_class_denied");
   });
 
   test("alice reads N messages while preference=send_read_receipts true; bob sees alice's receipt at the highest visible event within debounce window", async ({

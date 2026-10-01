@@ -74,6 +74,7 @@ mod object_addressing_vectors;
 mod object_identity_collision;
 mod operation_clause_registry;
 mod operation_registry_gate;
+mod pin_admission;
 mod poll_reducer;
 mod presence_signal;
 mod primary_handle_vectors;

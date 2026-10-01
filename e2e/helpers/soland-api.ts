@@ -1628,11 +1628,13 @@ export async function scanRealmStreamApi(
     server?: SolandKey;
     limit?: number;
     streamRef?: Record<string, unknown>;
+    waitForJoinedCut?: boolean;
   } = {},
 ): Promise<{
   commits: Array<Record<string, unknown>>;
   events: Array<Record<string, unknown>>;
   truncated: boolean;
+  authorizationPending?: boolean;
 }> {
   const streamRef = opts.streamRef ?? { kind: "realm", realm_id: realmId };
   const url = `${solandBaseUrl(opts.server)}/_arkret/self/streams/scan`;
@@ -1648,6 +1650,13 @@ export async function scanRealmStreamApi(
       limit: opts.limit ?? 256,
     }),
   });
+  if (opts.waitForJoinedCut && response.status() === 403) {
+    const problem = await response.json() as { type?: string; detail?: string };
+    if (problem.type === "https://arkret.org/problems/capability_denied" &&
+        problem.detail === "the stream is not readable by this caller") {
+      return { commits: [], events: [], truncated: false, authorizationPending: true };
+    }
+  }
   const body = await expectJsonOk<{
     committed_events: Array<{
       commit: Record<string, unknown>;
@@ -1675,12 +1684,13 @@ export async function queryRealmEventsApi(
   request: APIRequestContext,
   token: string,
   realmId: string,
-  opts: { server?: SolandKey; limit?: number } = {},
+  opts: { server?: SolandKey; limit?: number; waitForJoinedCut?: boolean } = {},
 ): Promise<Record<string, unknown>> {
   const scan = await scanRealmStreamApi(request, token, realmId, opts);
   return {
     events: scan.events.filter((event) => event !== undefined),
     commits: scan.commits,
+    ...(scan.authorizationPending ? { authorizationPending: true } : {}),
   };
 }
 
@@ -2450,8 +2460,47 @@ export async function resolveDefaultStrandId(
     authorityRootController?: string;
   } = {},
 ): Promise<string> {
-  // Primary: Realm projection carries the authoritative default_strand_id.
   const realmUrl = `${solandBaseUrl(opts.server)}/_arkret/self/realms/${encodeURIComponent(realmId)}`;
+  const strandsUrl = `${solandBaseUrl(opts.server)}/_arkret/self/realms/${encodeURIComponent(realmId)}/strands`;
+  const actorId = await currentActorIdApi(request, token, opts);
+  const controller = realmAuthorityControllers.get(
+    realmAuthorityControllerKey(opts.server, realmId),
+  );
+  if (opts.authorityRootController === undefined &&
+      canonicalJson(controller ?? null) !== canonicalJson(accountActorId(actorId, opts.server))) {
+    let observed: string | undefined;
+    await expect.poll(async () => {
+      const response = await request.get(realmUrl, {
+        headers: authHeaders(token, "GET", realmUrl),
+      });
+      if (response.ok()) {
+        const realm = await response.json() as { default_strand_id?: unknown };
+        if (typeof realm.default_strand_id === "string" && realm.default_strand_id) {
+          observed = realm.default_strand_id;
+          return true;
+        }
+      } else if (![403, 404].includes(response.status())) {
+        throw new Error(`default Strand read returned ${response.status()}`);
+      }
+      const responseStrands = await request.get(strandsUrl, {
+        headers: authHeaders(token, "GET", strandsUrl),
+      });
+      if (![200, 403, 404].includes(responseStrands.status())) {
+        throw new Error(`default Strand projection returned ${responseStrands.status()}`);
+      }
+      if (responseStrands.ok()) {
+        const projection = await responseStrands.json() as {
+          strands?: Array<{ strand_id?: string; is_default?: boolean }>;
+        };
+        observed = projection.strands?.find((strand) => strand.is_default)?.strand_id;
+      }
+      return observed !== undefined;
+    }, { timeout: 45_000, intervals: [100, 250, 500, 1_000],
+      message: `accepted default Strand reaches member Station for ${realmId}` }).toBe(true);
+    return observed!;
+  }
+
+  // Primary: Realm projection carries the authoritative default_strand_id.
   const realmResp = await request.get(realmUrl, {
     headers: authHeaders(token, "GET", realmUrl),
   });
@@ -2466,7 +2515,6 @@ export async function resolveDefaultStrandId(
   }
 
   // Fallback: discover via the Strand projection's derived is_default marker.
-  const strandsUrl = `${solandBaseUrl(opts.server)}/_arkret/self/realms/${encodeURIComponent(realmId)}/strands`;
   const flowsResp = await request.get(strandsUrl, {
     headers: authHeaders(token, "GET", strandsUrl),
   });
@@ -2482,7 +2530,6 @@ export async function resolveDefaultStrandId(
   if (def?.strand_id) {
     return def.strand_id;
   }
-  const actorId = await currentActorIdApi(request, token, opts);
   if (opts.authorityRootController !== undefined) {
     expect(
       requireDidCoreId(opts.authorityRootController),

@@ -658,12 +658,12 @@ test.describe("applet bridge", () => {
         ghostCreation.managed_actor_bundle.pcr_genesis_event,
       );
       const standaloneGenesisText = await standaloneGenesis.text();
-      // Managed PCR founding is one closed aggregate. A standalone create
-      // cannot be admitted through ordinary Event submission or become a
-      // federatable accepted Event.
-      expect(standaloneGenesis.status(), standaloneGenesisText).toBe(422);
-      expect(wireErrCode(JSON.parse(standaloneGenesisText))).toBe("schema_violation");
-      expect(JSON.parse(standaloneGenesisText).detail).toContain("not_ordinary_realm_bootstrap");
+      // Alice's session cannot submit another Actor's PCR founding Event.
+      // This producer refusal precedes managed-aggregate admission. The
+      // authenticated Applet aggregate below remains the provisioning path.
+      expect(standaloneGenesis.status(), standaloneGenesisText).toBe(409);
+      expect(wireErrCode(JSON.parse(standaloneGenesisText))).toBe("failed_precondition");
+      expect(JSON.parse(standaloneGenesisText).detail).toContain("exact authenticated actor");
       const provision = await request.post(`${registryBase}/external-event`, {
         headers: authHeaders(aliceToken, "POST", `${registryBase}/external-event`),
         data: {
