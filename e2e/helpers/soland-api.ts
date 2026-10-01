@@ -1069,6 +1069,7 @@ type CapabilityGrantEventArgs = {
   ownerId: string;
   realmId: string;
   subjectId: string;
+  subjectServer?: SolandKey;
   actions: string[];
   // capabilities.md §6.1 / §8: optional finite validity upper bound. The
   // helper lowers this shorthand into a standalone global temporal
@@ -1117,7 +1118,7 @@ export function buildCapabilityGrantEnvelope(args: CapabilityGrantEventArgs): {
     schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
     issuer_id: accountActorId(args.ownerId, args.server),
-    subject: accountActorId(args.subjectId, args.server),
+    subject: accountActorId(args.subjectId, args.subjectServer ?? args.server),
     actions: args.actions,
     resources: [{ kind: "realm", realm_id: args.realmId }],
     issued_at: issuedAt,
@@ -1133,6 +1134,7 @@ export function buildCapabilityGrantEnvelope(args: CapabilityGrantEventArgs): {
   };
   const envelope = signedEventEnvelope({
     actorId: args.ownerId,
+    server: args.server,
     realmId: args.realmId,
     kind: "ak.capability.grant",
     createdAt: issuedAt,
@@ -1303,7 +1305,10 @@ export async function acceptPreparedInviteApi(
   actorId: string,
   realmId: string,
   inviteId: string,
-  opts: { server?: SolandKey } = {},
+  opts: {
+    server?: SolandKey;
+    onAccepted?: (outcome: Record<string, unknown>) => void;
+  } = {},
 ) {
   const account = accountActorId(actorId, opts.server).account_id;
   const delivery = await readOwnInviteDeliveryApi(request, token, realmId, opts, inviteId);
@@ -1361,6 +1366,7 @@ export async function acceptPreparedInviteApi(
   const replay = await expectJsonOk<Record<string, any>>(await submit(), "exact join submit replay");
   expect(replay.status).toBe("duplicate");
   expect(replay.commit?.commit_id).toBe(accepted.commit?.commit_id);
+  opts.onAccepted?.(structuredClone(accepted));
   return event;
 }
 
@@ -1516,6 +1522,7 @@ export async function sendMessageApi(
     server?: SolandKey;
     encrypted?: boolean;
     createdAt?: string;
+    retryTemporarilyUnavailable?: boolean;
     // A bare string is the mention subject's principal DID; it is completed
     // with this server's Station to form the whole AccountId the wire needs
     // (identity-handles.md 3.8). Pass the object form to address another
@@ -1566,6 +1573,7 @@ export async function sendMessageApi(
   const submission = await submitSignedEventApi(request, token, envelope, {
     server: opts.server,
     context: `send message to ${realmId}`,
+    retryTemporarilyUnavailable: opts.retryTemporarilyUnavailable,
   });
   const commit = submission.commit as Record<string, unknown> | undefined;
   return {
@@ -2176,7 +2184,7 @@ function eventEnvelopeProof(args: {
 ///
 /// The producer Event carries no position, predecessor or coverage: the Station
 /// supplies all three by returning the `RealmCommit` that admitted it. There is
-/// therefore no preparation step and no retry ladder — either the Station
+/// therefore no preparation step — either the Station
 /// commits the exact submitted Event into the stream its scope names, or the
 /// submission is rejected with a reason code.
 export async function submitSignedEventApi(
@@ -2187,18 +2195,36 @@ export async function submitSignedEventApi(
     server?: SolandKey;
     context?: string;
     controlObserverToken?: string;
+    retryTemporarilyUnavailable?: boolean;
   } = {},
 ) {
   const context = opts.context ?? `submit ${String(envelope.kind)}`;
   const eventsUrl = `${solandBaseUrl(opts.server)}/_arkret/self/events`;
-  const response = await request.post(eventsUrl, {
-    headers: {
-      ...authHeaders(token, "POST", eventsUrl),
-      "content-type": "application/json",
-    },
-    data: canonicalJson({ event: envelope }),
-  });
-  const text = await response.text();
+  // Concurrent writes may lose the Station-assigned head CAS (§4 of
+  // authority-commit-log.md). Opt-in callers retry only that registered
+  // unavailability, preserving the exact signed Event and canonical body.
+  // Each self request lets the Account Station attest fresh producer evidence.
+  const body = canonicalJson({ event: envelope });
+  const maxAttempts = opts.retryTemporarilyUnavailable ? 3 : 1;
+  let response!: APIResponse;
+  let text = "";
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    response = await request.post(eventsUrl, {
+      headers: {
+        ...authHeaders(token, "POST", eventsUrl),
+        "content-type": "application/json",
+      },
+      data: body,
+    });
+    text = await response.text();
+    if (response.status() !== 503 || attempt === maxAttempts) break;
+    const problem = JSON.parse(text) as Record<string, unknown>;
+    expect(wireErrCode(problem), `${context}: retry requires registered unavailability`)
+      .toBe("temporarily_unavailable");
+    console.info(JSON.stringify({ event_id: envelope.event_id, server: opts.server,
+      unavailable_attempt: attempt, status: response.status() }));
+    await new Promise((resolve) => setTimeout(resolve, attempt * 100));
+  }
   expect(
     [200, 201],
     `${context} returned ${response.status()}: ${text}`,

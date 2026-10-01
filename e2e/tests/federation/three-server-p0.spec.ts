@@ -18,15 +18,18 @@ import {
   authHeaders,
   canonicalJson,
   createRealmApi,
+  grantCapabilityEventApi,
   pushCommittedRowsApi,
   readCommitStreamHeadApi,
   queryRealmEventsApi,
+  resolveDefaultStrandId,
   replicationOutcomesOutside,
   scanPeerRealmStreamRowsApi,
   sendMessageApi,
   signedEventEnvelope,
   submitSignedEventApi,
   waitForInviteDeliveryApi,
+  type CommittedEventFullView,
 } from "../../helpers/soland-api";
 import {
   ensureRegistered,
@@ -50,6 +53,7 @@ type ThreeServerRealm = {
   carol: Participant;
   // The accepted own-Station join Event of each invitee.
   joinEventIds: { bob: string; carol: string };
+  commonFloorPosition: number;
 };
 
 const execFileAsync = promisify(execFile);
@@ -160,12 +164,17 @@ async function eventIds(
   request: APIRequestContext,
   participant: Participant,
   realmId: string,
+  minPosition?: number,
 ) {
   const page = await queryRealmEventsApi(request, participant.token, realmId, {
     server: participant.server,
     limit: 500,
   });
+  const readableIds = new Set((Array.isArray(page.commits) ? page.commits : [])
+    .filter((commit) => minPosition === undefined || Number(commit.stream_position) >= minPosition)
+    .map((commit) => String(commit.event_ref)));
   return (Array.isArray(page.events) ? page.events : [])
+    .filter((event) => readableIds.has(String((event as Record<string, unknown>).event_id)))
     .map((event) => String((event as Record<string, unknown>).event_id))
     .sort();
 }
@@ -194,7 +203,7 @@ async function createThreeServerRealm(
   const realmId = await createRealmApi(request, alice.token, {
     title: `${label} ${stamp}`,
     discoverability: "listed",
-    history_access: "all_history_for_current_members",
+    history_access: "since_join",
     invitees: [bob.user.id, carol.user.id],
     invitee_ids: {
       [bob.user.id]: solandServiceId("server2"),
@@ -209,9 +218,13 @@ async function createThreeServerRealm(
     ],
     federation_policy: "open",
   }, { server: "server1" });
+  // Initialize the accepted discussion before join snapshots are installed;
+  // a remote member cannot create the owner's missing default Strand.
+  await resolveDefaultStrandId(request, alice.token, realmId, { server: "server1" });
   // Each invitee joins through its own Station, which prepares against the
   // verified current governance Station and forwards the exact Event there.
   const joinEventIds: Record<string, string> = {};
+  const joinPositions: number[] = [];
   for (const participant of [bob, carol]) {
     const invitation = await waitForInviteDeliveryApi(
       request,
@@ -220,34 +233,84 @@ async function createThreeServerRealm(
       realmId,
       participant.server,
     );
+    let joinCommit: Record<string, unknown> | undefined;
     const joined = await acceptPreparedInviteApi(
       request,
       participant.token,
       participant.user.id,
       realmId,
       invitation.id,
-      { server: participant.server },
+      {
+        server: participant.server,
+        onAccepted: (outcome) => { joinCommit = outcome.commit as Record<string, unknown>; },
+      },
     );
+    expect(joinCommit, "the join returns its exact accepted Commit").toBeTruthy();
+    expect(joinCommit!.event_ref).toBe(joined.event_id);
+    expect(Number.isSafeInteger(joinCommit!.stream_position)).toBe(true);
     joinEventIds[participant.server] = String(joined.event_id);
+    joinPositions.push(Number(joinCommit!.stream_position));
+    // Freeze the pre-grant readable baseline so the following grant really
+    // invalidates an installed cut instead of racing the first snapshot.
+    const memberRealmUrl = `${solandBaseUrl(participant.server)}/_arkret/self/realms/${encodeURIComponent(realmId)}`;
+    await expect.poll(async () => {
+      const response = await request.get(memberRealmUrl, {
+        headers: authHeaders(participant.token, "GET", memberRealmUrl),
+      });
+      expect([200, 404], "join baseline read must not bypass a service error").toContain(response.status());
+      return response.ok();
+    }, { timeout: 60_000, intervals: [500, 1_000, 2_000] }).toBe(true);
+    // Membership provides the read interval, not Message write authority.
+    const grant = await grantCapabilityEventApi(request, alice.token, {
+      ownerId: alice.user.id,
+      realmId,
+      subjectId: participant.user.id,
+      subjectServer: participant.server,
+      actions: ["ak.message.create"],
+      server: "server1",
+    });
+    const grantUrl = `${solandBaseUrl(participant.server)}/_arkret/self/committed-events/${grant.eventId}`;
+    await expect.poll(async () => {
+      const response = await request.get(grantUrl, {
+        headers: authHeaders(participant.token, "GET", grantUrl),
+      });
+      expect([200, 404], "the exact accepted grant read must not bypass a service error").toContain(response.status());
+      if (!response.ok()) return false;
+      const pair = await response.json() as CommittedEventFullView;
+      expect(pair.commit?.event_ref).toBe(grant.eventId);
+      expect(pair.event?.event_id).toBe(grant.eventId);
+      return true;
+    }, { timeout: 60_000, intervals: [500, 1_000, 2_000] }).toBe(true);
   }
-  await expect.poll(async () => {
-    const views = await Promise.all(participants.map(async (participant) => {
-      const response = await request.get(
-        `${solandBaseUrl(participant.server)}/_arkret/self/realms/${encodeURIComponent(realmId)}`,
-        { headers: authHeaders(participant.token, "GET", `${solandBaseUrl(participant.server)}/_arkret/self/realms/${encodeURIComponent(realmId)}`) },
-      );
-      return response.ok() ? JSON.stringify(await response.json()) : "";
-    }));
-    return views.every((view) =>
-      [alice, bob, carol].every((participant) => view.includes(participant.user.id))
-    );
-  }, { timeout: 60_000, intervals: [1_000, 2_000, 5_000] }).toBeTruthy();
+  let lastViews: Array<{ server: string; status: number; members: boolean[] }> = [];
+  try {
+    await expect.poll(async () => {
+      const views = await Promise.all(participants.map(async (participant) => {
+        const response = await request.get(
+          `${solandBaseUrl(participant.server)}/_arkret/self/realms/${encodeURIComponent(realmId)}`,
+          { headers: authHeaders(participant.token, "GET", `${solandBaseUrl(participant.server)}/_arkret/self/realms/${encodeURIComponent(realmId)}`) },
+        );
+        const view = response.ok() ? JSON.stringify(await response.json()) : "";
+        return {
+          server: participant.server,
+          status: response.status(),
+          members: [alice, bob, carol].map((member) => view.includes(member.user.id)),
+        };
+      }));
+      lastViews = views;
+      return views.every((view) => view.members.every(Boolean));
+    }, { timeout: 60_000, intervals: [1_000, 2_000, 5_000] }).toBeTruthy();
+  } catch (error) {
+    console.error(JSON.stringify({ realm_id: realmId, join_event_ids: joinEventIds, last_views: lastViews }));
+    throw error;
+  }
   return {
     realmId,
     alice,
     bob,
     carol,
     joinEventIds: { bob: joinEventIds.server2, carol: joinEventIds.server3 },
+    commonFloorPosition: Math.max(...joinPositions),
   };
 }
 
@@ -273,9 +336,9 @@ test.describe("three-server federation P0 @three-server-p0", () => {
     }
     await expect.poll(async () => {
       const sets = await Promise.all([
-        eventIds(request, realm.alice, realm.realmId),
-        eventIds(request, realm.bob, realm.realmId),
-        eventIds(request, realm.carol, realm.realmId),
+        eventIds(request, realm.alice, realm.realmId, realm.commonFloorPosition),
+        eventIds(request, realm.bob, realm.realmId, realm.commonFloorPosition),
+        eventIds(request, realm.carol, realm.realmId, realm.commonFloorPosition),
       ]);
       return sets[0].join("\n") === sets[1].join("\n") && sets[1].join("\n") === sets[2].join("\n");
     }, { timeout: 60_000, intervals: [2_000, 5_000] }).toBeTruthy();
@@ -443,17 +506,21 @@ test.describe("three-server federation P0 @three-server-p0", () => {
     const bodies = [realm.alice, realm.bob, realm.carol].map((participant) =>
       `${participant.server} concurrent ${Date.now()}-${Math.random()}`
     );
-    await Promise.all([realm.alice, realm.bob, realm.carol].map((participant, index) =>
-      sendMessageApi(request, participant.token, realm.realmId, bodies[index], { server: participant.server })
+    const writes = await Promise.all([realm.alice, realm.bob, realm.carol].map((participant, index) =>
+      sendMessageApi(request, participant.token, realm.realmId, bodies[index], {
+        server: participant.server,
+        retryTemporarilyUnavailable: true,
+      })
     ));
+    expect(new Set(writes.map((write) => write.event_id)).size).toBe(3);
     for (const participant of [realm.alice, realm.bob, realm.carol]) {
       for (const body of bodies) await waitForText(request, participant, realm.realmId, body);
     }
     await expect.poll(async () => {
       const sets = await Promise.all([
-        eventIds(request, realm.alice, realm.realmId),
-        eventIds(request, realm.bob, realm.realmId),
-        eventIds(request, realm.carol, realm.realmId),
+        eventIds(request, realm.alice, realm.realmId, realm.commonFloorPosition),
+        eventIds(request, realm.bob, realm.realmId, realm.commonFloorPosition),
+        eventIds(request, realm.carol, realm.realmId, realm.commonFloorPosition),
       ]);
       return JSON.stringify(sets[0]) === JSON.stringify(sets[1]) && JSON.stringify(sets[1]) === JSON.stringify(sets[2]);
     }, { timeout: 60_000, intervals: [2_000, 5_000] }).toBeTruthy();
@@ -462,6 +529,9 @@ test.describe("three-server federation P0 @three-server-p0", () => {
       eventIds(request, realm.bob, realm.realmId),
       eventIds(request, realm.carol, realm.realmId),
     ]);
+    for (const ids of beforeRestart) {
+      for (const write of writes) expect(ids.filter((id) => id === write.event_id)).toHaveLength(1);
+    }
     const restartState = await controlServer("server2", "restart");
     expect(restartState.restarted).toBeTruthy();
     await waitForServerHealth(request, "server2");

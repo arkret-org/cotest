@@ -6,32 +6,32 @@
     "operation_registry_sha256": "0a3811c8f9be359ece4179efac6e9bac17756456cf2fda614bf8b985eb9d337c",
     "test_layers": {
       "soland_unit": {
-        "source_file_count": 369,
-        "source_sha256": "e63099e69c50026f090de3e9f30ccd1c457c2404c998835d1ef01ad0db248b8a",
+        "source_file_count": 370,
+        "source_sha256": "933f9a41c521b77a0a6b69ec6f13517b66b7855a495afc8ad338b5c937923c77",
         "evidence_count": 282,
         "covered_operation_count": 139
       },
       "soland_http": {
         "source_file_count": 46,
-        "source_sha256": "4e4dd5dc97e270dc1052785dd1ec80e0a70e09d1f6c897f55c87ec5eb51d03ed",
+        "source_sha256": "e857dfb6789b2cdc1d5b28c32ff601253f8fb1849c84ee8ae5c2879059e07053",
         "evidence_count": 31,
         "covered_operation_count": 20
       },
       "cotest_rust": {
-        "source_file_count": 404,
-        "source_sha256": "eb6000b3917209915d4b004bb9f232b4240c77be062394095a6331f33422d119",
+        "source_file_count": 405,
+        "source_sha256": "0907259755c1389ba84ce18d74c67d34af260b24fc5551d5e559d1b073e61ce1",
         "evidence_count": 132,
         "covered_operation_count": 71
       },
       "cotest_e2e": {
-        "source_file_count": 108,
-        "source_sha256": "5c3c02c7bcf97e23a6d86bf20ca60c23452d318eeeb3d777fd99b3af3d191cf2",
+        "source_file_count": 110,
+        "source_sha256": "bcc9040c31e0f02dbd546d0c11906c9153b5b61f2754a924d3cedad2872d318b",
         "evidence_count": 48,
         "covered_operation_count": 21
       },
       "inkson_e2e": {
-        "source_file_count": 14,
-        "source_sha256": "3d37c9e7441f0da333587897cb5b79e38ce5a414980181b922a5426f1941ed38",
+        "source_file_count": 15,
+        "source_sha256": "652a9f336f740f25d07d9564a1b7b2f5e253a97b44510815a3f7ff1263d02b0a",
         "evidence_count": 18,
         "covered_operation_count": 12
       }
@@ -1547,11 +1547,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 4054,
+            "line": 4050,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4054
+              4050
             ],
             "protected_oracle": false,
             "scope_sha256": "0d902215a82c1afa6ace39d1ae2490a854c2fce2ae31527d45267ed2971f6342",
@@ -1648,11 +1648,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 4049,
+            "line": 4045,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4049
+              4045
             ],
             "protected_oracle": false,
             "scope_sha256": "289c7d2d3ee6c0b2e5b712e781db2e9157556c8c3a1f2ba3a28c52c8e1af93e1",
@@ -3919,11 +3919,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/interop/mimi/handlers.rs",
-            "line": 1307,
+            "line": 1276,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1307
+              1276
             ],
             "protected_oracle": false,
             "scope_sha256": "0a715600a06a1a5f9141ff5dc51a9235639497d81f60277455ebae706846bfc4",
@@ -4002,11 +4002,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/interop/mimi/handlers.rs",
-            "line": 1149,
+            "line": 1118,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1149
+              1118
             ],
             "protected_oracle": false,
             "scope_sha256": "a2839ed8bf6fbb24df82ad7f8e530def2789dfbf7617ad0e83083bceb6e5cc76",
@@ -4518,11 +4518,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/interop/mimi/handlers.rs",
-            "line": 1078,
+            "line": 1047,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1078
+              1047
             ],
             "protected_oracle": false,
             "scope_sha256": "e5975f0de2b5e82624499a251d0c929f0b33a9f92041973cc2bb00b0079c5239",
@@ -4708,11 +4708,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 4044,
+            "line": 4040,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4044
+              4040
             ],
             "protected_oracle": false,
             "scope_sha256": "dfa117ced15fa63b40362435ed19e8545f4cdf47b8ad9d9608fec60ed6850fbc",
@@ -5556,11 +5556,11 @@
         "product_flow": [
           {
             "file": "cotest/e2e/helpers/soland-api.ts",
-            "line": 2925,
+            "line": 2999,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2925
+              2999
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -5590,11 +5590,11 @@
           },
           {
             "file": "cotest/e2e/tests/federation/cross-server.spec.ts",
-            "line": 189,
+            "line": 190,
             "scope": "both soland instances expose the peer Event submit and peer stream scan endpoints",
             "scope_kind": "typescript_test",
             "occurrence_lines": [
-              199
+              200
             ],
             "protected_oracle": false,
             "scope_sha256": "e56d5ca3158d8c3290357803f2d070b492ee26ae89229d947b1ee19b0cdfdce2",
@@ -5614,11 +5614,11 @@
           },
           {
             "file": "cotest/e2e/tests/federation/three-server-p0.spec.ts",
-            "line": 358,
+            "line": 421,
             "scope": "P0.3 a lagging server recovers through the authorized peer stream scan without duplicate materialization",
             "scope_kind": "typescript_test",
             "occurrence_lines": [
-              387
+              450
             ],
             "protected_oracle": false,
             "scope_sha256": "1428c8111d9e54fbe86256ccffdf77c3c88f0a7be8133fea2752f12d72339424",
@@ -5666,11 +5666,11 @@
         "fault_recovery": [
           {
             "file": "cotest/e2e/tests/federation/cross-server.spec.ts",
-            "line": 502,
+            "line": 503,
             "scope": "peer stream scan recovery: server2 reads a committed message from server1 through ak.peer.committed_event.read.scan.v1 and holds it exactly once",
             "scope_kind": "typescript_test",
             "occurrence_lines": [
-              502
+              503
             ],
             "protected_oracle": false,
             "scope_sha256": "d6ebad3d37f217277d4197a74dd314276defe738cd2a68a10e9df57bed849ae1",
@@ -6213,11 +6213,11 @@
         "product_flow": [
           {
             "file": "cotest/e2e/helpers/soland-api.ts",
-            "line": 2638,
+            "line": 2712,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2638
+              2712
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -6230,11 +6230,11 @@
           },
           {
             "file": "cotest/e2e/helpers/soland-api.ts",
-            "line": 2733,
+            "line": 2807,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2733
+              2807
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -6247,11 +6247,11 @@
           },
           {
             "file": "cotest/e2e/tests/federation/cross-server.spec.ts",
-            "line": 189,
+            "line": 190,
             "scope": "both soland instances expose the peer Event submit and peer stream scan endpoints",
             "scope_kind": "typescript_test",
             "occurrence_lines": [
-              199
+              200
             ],
             "protected_oracle": false,
             "scope_sha256": "e56d5ca3158d8c3290357803f2d070b492ee26ae89229d947b1ee19b0cdfdce2",
@@ -6492,11 +6492,11 @@
           },
           {
             "file": "cotest/e2e/helpers/soland-api.ts",
-            "line": 2819,
+            "line": 2893,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2819
+              2893
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -7283,11 +7283,11 @@
         "storage_parity": [
           {
             "file": "soland/crates/storage-postgres/src/snapshot_disclosure_gate.rs",
-            "line": 328,
+            "line": 335,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              328
+              335
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -8230,11 +8230,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 4064,
+            "line": 4060,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4064
+              4060
             ],
             "protected_oracle": false,
             "scope_sha256": "e791abbdd61c9daf8ef38b51a13620dae92b40ad2a374ccd5d3dbb524a3b60c2",
@@ -8409,18 +8409,18 @@
           },
           {
             "file": "cotest/e2e/tests/identity/recovery-key-to-encrypted-realm.spec.ts",
-            "line": 18,
-            "scope": "fresh browser registration creates, writes, and reloads plaintext and encrypted Realms",
+            "line": 26,
+            "scope": "fresh browser registration creates, writes, and reloads plaintext and encrypted Realms; ",
             "scope_kind": "typescript_test",
             "occurrence_lines": [
-              443
+              624
             ],
             "protected_oracle": false,
-            "scope_sha256": "411b8c5bcdaed3d6ea40ba65d469cec395f025e34bf11c4b11ce5f703fe10804",
-            "input_sha256": "77d83382cd117d35a3591eaa05b5cca17773d238622cd21044931524195469f9",
-            "assertion_sha256": "68c2576ec6e963015c0f172739e46484cf9ee75e7d9e036d050288618bbfc7ca",
+            "scope_sha256": "c927f525acabee4d2e10b71d3e0607f0a10e212ac6680c46f44ecfdbadb47c03",
+            "input_sha256": "4649fad54cb000eb8c24e94a82cb9832f825aa43e48e24e04d73789ea747f9df",
+            "assertion_sha256": "e5a379a6f5737b074b6481d87641a1aaf1b349d4264d58e4fa78e31d11545d2a",
             "input_preview": [
-              "test(\"fresh browser registration creates, writes, and reloads plaintext and encrypted Realms\", async ({",
+              "test(\"fresh browser registration creates, writes, and reloads plaintext and encrypted Realms; \" + cut, async ({",
               "browser,",
               "request,",
               "}) => {"
@@ -8862,11 +8862,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 4059,
+            "line": 4055,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4059
+              4055
             ],
             "protected_oracle": false,
             "scope_sha256": "de2f906f6a0ed8887a7ac00f9ef1e6a081552297e4681ccfcb5c0f3c3923ada5",
@@ -9444,11 +9444,11 @@
         "product_flow": [
           {
             "file": "cotest/e2e/helpers/users.ts",
-            "line": 1694,
+            "line": 1697,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1694
+              1697
             ],
             "protected_oracle": false,
             "scope_sha256": "7bc8e550bf2b5d638557096f7f54d8426af60f20d53a5e4bfaa690c96eaf9e9e",
@@ -9475,11 +9475,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 1990,
+            "line": 1986,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1990
+              1986
             ],
             "protected_oracle": false,
             "scope_sha256": "7bc8e550bf2b5d638557096f7f54d8426af60f20d53a5e4bfaa690c96eaf9e9e",
@@ -9492,11 +9492,11 @@
           },
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 4069,
+            "line": 4065,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4069
+              4065
             ],
             "protected_oracle": false,
             "scope_sha256": "43e41ea2dcba1bf5ffc01365ea7b25bd575260e8ed6599c21bbd64595acbb106",
@@ -10464,11 +10464,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/storage/src/lib.rs",
-            "line": 741,
+            "line": 750,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              741
+              750
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -12705,11 +12705,11 @@
         "product_flow": [
           {
             "file": "cotest/e2e/helpers/users.ts",
-            "line": 551,
+            "line": 553,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              551
+              553
             ],
             "protected_oracle": false,
             "scope_sha256": "20358a78ab304f13d29748034b4769703c7268542adcaca6d8b03705be2a2fa9",
@@ -12883,11 +12883,11 @@
           },
           {
             "file": "cotest/e2e/helpers/soland-api.ts",
-            "line": 1379,
+            "line": 1385,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1379
+              1385
             ],
             "protected_oracle": false,
             "scope_sha256": "2373fff14a20d85da0146a37b391dee3849e61eeb485e77de39e962b32d2c539",
@@ -12900,11 +12900,11 @@
           },
           {
             "file": "cotest/e2e/helpers/users.ts",
-            "line": 1199,
+            "line": 1202,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1199
+              1202
             ],
             "protected_oracle": false,
             "scope_sha256": "2373fff14a20d85da0146a37b391dee3849e61eeb485e77de39e962b32d2c539",
@@ -14621,11 +14621,11 @@
         "product_flow": [
           {
             "file": "cotest/e2e/helpers/soland-api.ts",
-            "line": 1617,
+            "line": 1626,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1617
+              1626
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -14638,11 +14638,11 @@
           },
           {
             "file": "cotest/e2e/helpers/soland-api.ts",
-            "line": 2395,
+            "line": 2432,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2395
+              2432
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -14655,11 +14655,11 @@
           },
           {
             "file": "cotest/e2e/helpers/users.ts",
-            "line": 1695,
+            "line": 1698,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1695
+              1698
             ],
             "protected_oracle": false,
             "scope_sha256": "7c1edd881c90220c5ec6cf29be16f46e907e823dd6305f49bcbc5f8ae5d35a8c",
@@ -14724,11 +14724,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 875,
+            "line": 871,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              875
+              871
             ],
             "protected_oracle": false,
             "scope_sha256": "300b0c4a8dcdc344661819a17d7e3d393ce3fe3eb9185325c5f8e02d5582530b",
@@ -14741,11 +14741,11 @@
           },
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 926,
+            "line": 922,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              926
+              922
             ],
             "protected_oracle": false,
             "scope_sha256": "7c1edd881c90220c5ec6cf29be16f46e907e823dd6305f49bcbc5f8ae5d35a8c",
@@ -14758,11 +14758,11 @@
           },
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 1991,
+            "line": 1987,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1991
+              1987
             ],
             "protected_oracle": false,
             "scope_sha256": "7c1edd881c90220c5ec6cf29be16f46e907e823dd6305f49bcbc5f8ae5d35a8c",
@@ -14775,11 +14775,11 @@
           },
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 2503,
+            "line": 2499,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2503
+              2499
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -15264,11 +15264,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 925,
+            "line": 921,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              925
+              921
             ],
             "protected_oracle": false,
             "scope_sha256": "b3fd7f441260b97a91b25096e04ab6416d325ac7ca75d2bd1cb30a9048e62af6",
@@ -15281,11 +15281,11 @@
           },
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 932,
+            "line": 928,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              932
+              928
             ],
             "protected_oracle": false,
             "scope_sha256": "8e3f776dda16f75f311fa1a1c80dd8129b2d3fbf7ae7be6f71a4223cd85f9fca",
@@ -17455,11 +17455,11 @@
         "product_flow": [
           {
             "file": "cotest/e2e/helpers/soland-api.ts",
-            "line": 2389,
+            "line": 2426,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2389
+              2426
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -17562,11 +17562,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 927,
+            "line": 923,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              927
+              923
             ],
             "protected_oracle": false,
             "scope_sha256": "a49aa403833e455f456910b66763a0177dd1ba3c23a71ccea9018a091007b008",
@@ -18316,11 +18316,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 2522,
+            "line": 2518,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2522
+              2518
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -21731,11 +21731,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 2552,
+            "line": 2548,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2552
+              2548
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -23191,11 +23191,11 @@
         "product_flow": [
           {
             "file": "cotest/e2e/helpers/users.ts",
-            "line": 1083,
+            "line": 1086,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1083
+              1086
             ],
             "protected_oracle": false,
             "scope_sha256": "406ae34ca80eb063c081a8492c23c11d38410ad57224a0a732498aa3f02f5ef9",
@@ -23222,11 +23222,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 4034,
+            "line": 4030,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4034
+              4030
             ],
             "protected_oracle": false,
             "scope_sha256": "bff91b0dd11264a51db00878778fe137a8879146a8ff78e3d6e2252bf7f48fe8",
@@ -23239,11 +23239,11 @@
           },
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 4039,
+            "line": 4035,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4039
+              4035
             ],
             "protected_oracle": false,
             "scope_sha256": "bff91b0dd11264a51db00878778fe137a8879146a8ff78e3d6e2252bf7f48fe8",
