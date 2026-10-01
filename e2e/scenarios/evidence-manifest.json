@@ -736,7 +736,9 @@
         "inkson",
         "soland"
       ],
-      "mocks": [],
+      "mocks": [
+        "email"
+      ],
       "identity_establishment": [
         "coauth_registration_ui",
         "inkson_identity_onboarding_ui",

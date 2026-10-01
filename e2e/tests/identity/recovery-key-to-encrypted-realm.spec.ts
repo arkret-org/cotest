@@ -1,12 +1,19 @@
 import { expect, test, type Page, type Response } from "../../helpers/arkret-test";
 import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
+// The mock_email delivery boundary supplies the verification code; registration stays in the UI.
 import { registrationEmailCode } from "../../helpers/coauth-register";
 import { openUserPage, uniqueUser } from "../../helpers/users";
+import { assertAuthoritySubmitOutcome } from "../../helpers/soland-api";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 type ProtocolHit = {
   method: string;
   path: string;
   status: number;
+  observedAt: number;
+  requestRealmId?: string;
   requestBody?: Record<string, unknown>;
   responseBody?: Record<string, unknown>;
   errorCode?: string;
@@ -15,7 +22,8 @@ type ProtocolHit = {
 test.describe.configure({ mode: "serial" });
 
 test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () => {
-  test("fresh browser registration creates, writes, and reloads plaintext and encrypted Realms", async ({
+  for (const cut of ["none", "accepted_create_response_loss", "accepted_discussion_response_loss", "accepted_default_selection_response_loss"] as const) {
+  test("fresh browser registration creates, writes, and reloads plaintext and encrypted Realms; " + cut, async ({
     browser,
     request,
   }) => {
@@ -29,11 +37,13 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
 
     const user = uniqueUser("canonical-encrypted-realm");
     const password = "1amTester!";
-    const jointPage = await openUserPage(browser, user, {
+    const profile = fs.mkdtempSync(path.join(os.tmpdir(), "arkret-live-creator-"));
+    let jointPage = await openUserPage(browser, user, {
+      persistentUserDataDir: profile,
       neutralLoginConfig: true,
       autoCompleteRecoveryKeySetup: false,
     });
-    const page = jointPage.page;
+    let page = jointPage.page;
     const protocolHits: ProtocolHit[] = [];
     const protocolDiagnostics: string[] = [];
     observeProtocol(page, protocolHits, protocolDiagnostics);
@@ -200,7 +210,69 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
         await expect(
           page.getByTestId("encrypted-realm-recovery-gate"),
         ).toHaveCount(0);
-        realmId = await jointPage.createRealm({
+        const faultKind = cut === "accepted_create_response_loss" ? "ak.realm.create"
+          : cut === "accepted_discussion_response_loss" ? "ak.strand.create"
+          : "ak.realm.set_default_strand";
+        let scopeCreateRequest: Record<string, unknown> | undefined;
+        let acceptedInterrupted: Record<string, unknown> | undefined;
+        let lostResponse = false;
+        const createRequests: string[] = [];
+        const interruptedRequests: string[] = [];
+        const genesisRequests: string[] = [];
+        const initializationRequests: Array<{ kind: string; raw: string; event: Record<string, unknown> }> = [];
+        const primaryEvent = (body?: Record<string, unknown>) => body?.unit_kind === "ordinary_realm_bootstrap"
+          ? (body.events as Array<{ event: Record<string, unknown> }>)[0]?.event
+          : body?.event as Record<string, unknown> | undefined;
+        const trackCreate = (eventPage: Page) => eventPage.on("request", (outgoing) => {
+          if (new URL(outgoing.url()).pathname !== "/_arkret/self/events") return;
+          const body = safeRecord(outgoing.postData() ?? "");
+          const event = primaryEvent(body);
+          if (event?.kind === "ak.realm.create") {
+            const candidateRealm = String(event.event_id).replace(/^ak:event:/, "ak:realm:");
+            if (!realmId) realmId = candidateRealm;
+            if (candidateRealm === realmId) {
+              scopeCreateRequest ??= body;
+              createRequests.push(outgoing.postData()!);
+              if (faultKind === event.kind) interruptedRequests.push(outgoing.postData()!);
+            }
+          }
+          if (event?.realm_id !== realmId) return;
+          if (["ak.strand.create", "ak.realm.set_default_strand", "ak.mls.genesis"].includes(String(event.kind))) {
+            initializationRequests.push({ kind: String(event.kind), raw: outgoing.postData()!, event });
+          }
+          if (event.kind === "ak.mls.genesis") genesisRequests.push(outgoing.postData()!);
+          if (event.kind === faultKind) interruptedRequests.push(outgoing.postData()!);
+        });
+        trackCreate(page);
+        if (cut !== "none") {
+          await page.route(/\/_arkret\/self\/events(?:\?.*)?$/, async (route) => {
+            const body = route.request().postDataJSON() as Record<string, unknown>;
+            const event = primaryEvent(body);
+            const matchesRealm = event?.kind === "ak.realm.create"
+              ? String(event.event_id).replace(/^ak:event:/, "ak:realm:") === realmId
+              : event?.realm_id === realmId;
+            if (event?.kind !== faultKind || !matchesRealm) { await route.continue(); return; }
+            if (!lostResponse) {
+              const accepted = await route.fetch();
+              expect(accepted.ok(), "the original product initialization Event must be accepted before response loss").toBe(true);
+              const outcome = await accepted.json() as Record<string, unknown>;
+              if (body.unit_kind === "ordinary_realm_bootstrap") {
+                const events = body.events as Array<{ event: Record<string, unknown> }>;
+                const commits = outcome.commits as Array<Record<string, unknown>>;
+                expect(outcome.unit_kind).toBe("ordinary_realm_bootstrap");
+                expect(commits).toHaveLength(events.length);
+                events.forEach((submission, index) => assertAuthoritySubmitOutcome(
+                  { status: outcome.status, commit: commits[index] }, submission.event, "accepted original bootstrap"));
+              } else {
+                assertAuthoritySubmitOutcome(outcome, event, "accepted original discussion initialization");
+              }
+              acceptedInterrupted = body;
+              lostResponse = true;
+            }
+            await route.abort("aborted");
+          });
+        }
+        const creating = jointPage.createRealm({
           title: `Canonical encrypted Realm ${Date.now()}`,
           summary: "fresh-user real-stack encrypted Realm acceptance",
           discoverability: "unlisted",
@@ -209,10 +281,60 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
           mlsActivated: true,
           completeRecoveryKeySetup: false,
           allowPassivePromptDismissal: false,
-        });
+        }).then(value => ({ value }), error => ({ error }));
+        if (cut !== "none") {
+          await expect.poll(() => lostResponse, { timeout: 120_000 }).toBe(true);
+          expect(acceptedInterrupted).toBeDefined();
+          expect(realmId).toMatch(/^ak:realm:/);
+          expect(genesisRequests, "response loss must interrupt the creator before Genesis authoring").toHaveLength(0);
+          await jointPage.close();
+          await creating;
+          jointPage = await openUserPage(browser, user, {
+            persistentUserDataDir: profile,
+            resumePersistentProfile: true,
+            neutralLoginConfig: true,
+            autoCompleteRecoveryKeySetup: false,
+          });
+          page = jointPage.page;
+          observeProtocol(page, protocolHits, protocolDiagnostics);
+          trackCreate(page);
+          await jointPage.gotoHome();
+          await expect(page.getByTestId("client-shell")).toBeVisible({ timeout: 120_000 });
+          expect(await readActiveIdentity(page)).toEqual(identity);
+          await waitForEventIngress(protocolHits,
+            (wire) => wire.includes(realmId) && wire.includes("ak.mls.genesis"),
+            "resumed original creator Genesis ingress");
+          expect(interruptedRequests.length, "resume must replay the original accepted initialization bytes").toBeGreaterThan(1);
+          for (const raw of interruptedRequests) {
+            expect(raw).toBe(interruptedRequests[0]);
+            expect(safeRecord(raw)).toEqual(acceptedInterrupted);
+          }
+          for (const raw of createRequests) {
+            expect(raw).toBe(createRequests[0]);
+            expect(safeRecord(raw)).toEqual(scopeCreateRequest);
+          }
+        } else {
+          const result = await creating;
+          if ("error" in result) throw result.error;
+          realmId = result.value;
+        }
         await expect(
           page.getByTestId("encrypted-realm-recovery-gate"),
         ).toHaveCount(0);
+        await waitForEventIngress(protocolHits,
+          (wire) => wire.includes(realmId) && wire.includes("ak.mls.genesis"),
+          "original creator Genesis follows product discussion initialization");
+        const discussionCreates = initializationRequests.filter(hit => hit.kind === "ak.strand.create");
+        const defaultSelections = initializationRequests.filter(hit => hit.kind === "ak.realm.set_default_strand");
+        expect(discussionCreates.length).toBeGreaterThan(0);
+        expect(defaultSelections.length).toBeGreaterThan(0);
+        expect(new Set(discussionCreates.map(hit => hit.raw)).size, "one original default discussion").toBe(1);
+        expect(new Set(defaultSelections.map(hit => hit.raw)).size, "one original default selection").toBe(1);
+        const defaultStrandId = String(discussionCreates[0].event.event_id).replace(/^ak:event:/, "ak:strand:");
+        expect((defaultSelections[0].event.payload as Record<string, unknown>).strand_id).toBe(defaultStrandId);
+        const genesisIndex = initializationRequests.findIndex(hit => hit.kind === "ak.mls.genesis");
+        expect(genesisIndex, "Genesis follows the original default selection").toBeGreaterThan(
+          initializationRequests.findIndex(hit => hit.kind === "ak.realm.set_default_strand"));
         await jointPage.sendTimelineMessage(realmId, message);
         await expect(jointPage.timelineEvent(message)).toBeVisible({
           timeout: 120_000,
@@ -255,6 +377,47 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
           ),
           "healthy local KeyPackage inventory reload must perform zero uploads",
         ).toHaveLength(uploadCountBeforeReload);
+      });
+
+      await test.step("restart the browser process and resume the original encrypted Realm", async () => {
+        const genesis = await waitForEventIngress(
+          protocolHits,
+          (wire) => wire.includes(realmId) && wire.includes("ak.mls.genesis"),
+          "original encrypted Realm Genesis ingress",
+        );
+        const originalGenesis = genesis.requestBody;
+        await jointPage.close();
+        jointPage = await openUserPage(browser, user, {
+          persistentUserDataDir: profile,
+          resumePersistentProfile: true,
+          neutralLoginConfig: true,
+          autoCompleteRecoveryKeySetup: false,
+        });
+        page = jointPage.page;
+        observeProtocol(page, protocolHits, protocolDiagnostics);
+        await jointPage.gotoHome();
+        await expect(page.getByTestId("client-shell")).toBeVisible({ timeout: 120_000 });
+        expect(await readActiveIdentity(page)).toEqual(identity);
+        await jointPage.gotoTimelineRealm(realmId);
+        await expect(jointPage.timelineEvent(message)).toBeVisible({ timeout: 120_000 });
+        const originalIngress = new Set(protocolHits);
+        const resumedMessage = `process resumed encrypted message ${Date.now()}`;
+        await jointPage.sendTimelineMessage(realmId, resumedMessage);
+        await expect(jointPage.timelineEvent(resumedMessage)).toBeVisible({ timeout: 120_000 });
+        const resumedWrite = await waitForEventIngress(
+          protocolHits,
+          (wire) => wire.includes(realmId) && wire.includes("ak.message.create") && wire.includes("encrypted_content") &&
+            ![...originalIngress].some((hit) => JSON.stringify(hit.requestBody) === wire),
+          "resumed encrypted Realm message ingress",
+        );
+        expect(JSON.stringify(resumedWrite.requestBody)).not.toContain(resumedMessage);
+        const genesisWrites = protocolHits.filter(
+          (hit) => hit.path === "/_arkret/self/events" && hit.requestBody &&
+            JSON.stringify(hit.requestBody).includes(realmId) &&
+            JSON.stringify(hit.requestBody).includes("ak.mls.genesis"),
+        );
+        expect(genesisWrites.length).toBeGreaterThan(0);
+        for (const hit of genesisWrites) expect(hit.requestBody).toEqual(originalGenesis);
       });
 
       const plaintextMessage = `canonical plaintext message ${Date.now()}`;
@@ -334,19 +497,33 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
         ),
         "Realm bootstrap/write event ingress was not observed",
       ).toBe(true);
+      const journeyRealms = [realmId, plaintextRealmId];
+      const pendingSnapshots = protocolHits.filter(hit =>
+        isExpectedSnapshotCutPending(hit, journeyRealms));
+      if (pendingSnapshots.length > 0) {
+        await expect.poll(() => protocolHits.filter(hit => isExpectedSnapshotCutPending(hit, journeyRealms)).every(pending => protocolHits.some(hit =>
+          hit.path === pending.path && hit.method === "GET" && hit.status === 200 &&
+          hit.observedAt > pending.observedAt && hit.requestRealmId === pending.requestRealmId &&
+          hit.responseBody?.realm_id === pending.requestRealmId && Boolean(hit.responseBody?.signature))),
+          { timeout: 120_000, message: "each unavailable exact Realm cut must resolve to a later signed snapshot" },
+        ).toBe(true);
+      }
       expect(
         protocolHits.filter(
           (hit) =>
             hit.status >= 500 &&
-            !isExpectedRecoveryPolicyPending(hit),
+            !isExpectedRecoveryPolicyPending(hit) &&
+            !isExpectedSnapshotCutPending(hit, journeyRealms),
         ),
         "unexpected Arkret 5xx responses",
       ).toEqual([]);
       expect(protocolDiagnostics, protocolDiagnostics.join("\n")).toEqual([]);
     } finally {
       await jointPage.close();
+      fs.rmSync(profile, { recursive: true, force: true });
     }
   });
+  }
 });
 
 function observeProtocol(
@@ -388,13 +565,15 @@ function observeProtocol(
   page.on("response", (response) => {
     const path = new URL(response.url()).pathname;
     if (!path.startsWith("/_arkret/")) return;
-    void recordResponse(response, path).then((hit) => hits.push(hit));
+    const observedAt = Date.now();
+    void recordResponse(response, path, observedAt).then((hit) => hits.push(hit));
   });
 }
 
 async function recordResponse(
   response: Response,
   path: string,
+  observedAt: number,
 ): Promise<ProtocolHit> {
   const request = response.request();
   const requestBody = request.postData()
@@ -405,6 +584,8 @@ async function recordResponse(
     method: request.method(),
     path,
     status: response.status(),
+    observedAt,
+    requestRealmId: new URL(response.url()).searchParams.get("realm_id") ?? undefined,
     requestBody,
     responseBody,
     errorCode: errorCode(responseBody),
@@ -449,6 +630,14 @@ function isExpectedRecoveryPolicyPending(hit: ProtocolHit): boolean {
     hit.method === "POST" &&
     hit.path === "/_arkret/root/identity/recovery-policy"
   );
+}
+
+// A mixed durable cut cannot be signed as a valid snapshot. This registered
+// unavailable response is pending, and the journey requires a later real read.
+function isExpectedSnapshotCutPending(hit: ProtocolHit, realmIds: string[]): boolean {
+  return hit.status === 503 && hit.errorCode === "realm_state_snapshot_unavailable" &&
+    hit.method === "GET" && hit.path === "/_arkret/self/realm-state-snapshot/head" &&
+    hit.requestRealmId !== undefined && realmIds.includes(hit.requestRealmId);
 }
 
 async function readActiveIdentity(page: Page): Promise<{
