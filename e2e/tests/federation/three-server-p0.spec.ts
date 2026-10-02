@@ -169,6 +169,7 @@ async function eventIds(
   const page = await queryRealmEventsApi(request, participant.token, realmId, {
     server: participant.server,
     limit: 500,
+    afterPosition: minPosition === undefined ? undefined : minPosition - 1,
   });
   const readableIds = new Set((Array.isArray(page.commits) ? page.commits : [])
     .filter((commit) => minPosition === undefined || Number(commit.stream_position) >= minPosition)
@@ -420,7 +421,7 @@ test.describe("three-server federation P0 @three-server-p0", () => {
 
   test("P0.3 a lagging server recovers through the authorized peer stream scan without duplicate materialization", async ({ request }, testInfo) => {
     const realm = await createThreeServerRealm(request, "p0-recovery");
-    const before = new Set(await eventIds(request, realm.bob, realm.realmId));
+    const before = new Set(await eventIds(request, realm.bob, realm.realmId, realm.commonFloorPosition));
     const body1 = `available pair server1 ${Date.now()}`;
     const body3 = `available pair server3 ${Date.now()}`;
     let isolationState: Awaited<ReturnType<typeof controlServer>> | undefined;
@@ -471,7 +472,7 @@ test.describe("three-server federation P0 @three-server-p0", () => {
       waitForText(request, realm.bob, realm.realmId, body1),
       waitForText(request, realm.bob, realm.realmId, body3),
     ]);
-    const after = await eventIds(request, realm.bob, realm.realmId);
+    const after = await eventIds(request, realm.bob, realm.realmId, realm.commonFloorPosition);
     expect(new Set(after).size).toBe(after.length);
     await testInfo.attach("recovery-audit.json", {
       body: JSON.stringify({ source: "server1", destination: "server2", before: before.size, after: after.length, missing: missing.length, fault_control: isolationState }),
@@ -525,9 +526,9 @@ test.describe("three-server federation P0 @three-server-p0", () => {
       return JSON.stringify(sets[0]) === JSON.stringify(sets[1]) && JSON.stringify(sets[1]) === JSON.stringify(sets[2]);
     }, { timeout: 60_000, intervals: [2_000, 5_000] }).toBeTruthy();
     const beforeRestart = await Promise.all([
-      eventIds(request, realm.alice, realm.realmId),
-      eventIds(request, realm.bob, realm.realmId),
-      eventIds(request, realm.carol, realm.realmId),
+      eventIds(request, realm.alice, realm.realmId, realm.commonFloorPosition),
+      eventIds(request, realm.bob, realm.realmId, realm.commonFloorPosition),
+      eventIds(request, realm.carol, realm.realmId, realm.commonFloorPosition),
     ]);
     for (const ids of beforeRestart) {
       for (const write of writes) expect(ids.filter((id) => id === write.event_id)).toHaveLength(1);
@@ -537,9 +538,9 @@ test.describe("three-server federation P0 @three-server-p0", () => {
     await waitForServerHealth(request, "server2");
     await expect.poll(async () => {
       const afterRestart = await Promise.all([
-        eventIds(request, realm.alice, realm.realmId),
-        eventIds(request, realm.bob, realm.realmId),
-        eventIds(request, realm.carol, realm.realmId),
+        eventIds(request, realm.alice, realm.realmId, realm.commonFloorPosition),
+        eventIds(request, realm.bob, realm.realmId, realm.commonFloorPosition),
+        eventIds(request, realm.carol, realm.realmId, realm.commonFloorPosition),
       ]);
       return afterRestart.every((ids, index) => JSON.stringify(ids) === JSON.stringify(beforeRestart[index]));
     }, { timeout: 60_000, intervals: [2_000, 5_000] }).toBeTruthy();

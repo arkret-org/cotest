@@ -27,9 +27,15 @@ for (const cut of ["none", "create_response_loss", "public_blob_response_loss", 
     const device = { ...session!, persistentUserDataDir: profile };
     let client: JointUserPage | undefined;
     const refusals: Record<string, unknown>[] = [];
-    try {
-      client = await openUserPage(browser, session!.user, device);
-      let page = client.page;
+    const authoringFailures: string[] = [];
+    const watchAuthoring = (page: JointUserPage["page"]) => {
+      page.on("console", message => {
+        const text = message.text();
+        if (/ordinary message authoring failed|ordinary message pre-submit (?:gate failed|stage)|encrypted message (?:preparation|send|authoring) failed|MLS send readiness probe failed/.test(text)
+          && !/bearer |recovery_key|mnemonic|access_token|dpop:|eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/i.test(text)) {
+          authoringFailures.push(text.slice(0, 1800));
+        }
+      });
       page.on("response", async response => {
         if (!/\/_arkret\/self\/events(?:\?.*)?$/.test(response.url()) || response.status() < 400) return;
         const body = response.request().postDataJSON() as Record<string, any>;
@@ -37,6 +43,11 @@ for (const cut of ["none", "create_response_loss", "public_blob_response_loss", 
         refusals.push({ kind: body.event?.kind, scope: body.event?.scope_ref,
           status: response.status(), type: problem.type, detail: problem.detail, reason: problem.reason });
       });
+    };
+    try {
+      client = await openUserPage(browser, session!.user, device);
+      let page = client.page;
+      watchAuthoring(page);
       await client.gotoHome();
       const realm = await client.createRealm({ title: `Circle creator parent ${Date.now()}`,
         discoverability: "public", joinRule: "invite", historyAccess: "since_join", mlsActivated: false });
@@ -150,6 +161,7 @@ for (const cut of ["none", "create_response_loss", "public_blob_response_loss", 
         blocked = false;
         client = await openUserPage(browser, session!.user, device);
         page = client.page;
+        watchAuthoring(page);
         await client.gotoHome();
       }
       await expect.poll(async () => (await readCreatorRecords(page)).find(value => value.intent.effective_scope.circle_id === circle)?.state,
@@ -179,6 +191,7 @@ for (const cut of ["none", "create_response_loss", "public_blob_response_loss", 
 
       await client.gotoTimelineRealm(realm);
       await client.completeRecoveryKeySetupIfPrompted(2_000);
+      await expect(page.getByTestId("open-poll-composer-button")).toBeVisible({ timeout: 60_000 });
       const initialDiscussions = own.events.filter(event => event.kind === "ak.strand.create");
       expect(initialDiscussions).toHaveLength(1);
       expect((initialDiscussions[0].payload as Record<string, any>).object).not.toHaveProperty("metadata");
@@ -186,6 +199,7 @@ for (const cut of ["none", "create_response_loss", "public_blob_response_loss", 
       const channel = page.getByTestId("channel-item").filter({ hasText: strand });
       await expect(channel).toBeVisible({ timeout: 60_000 });
       await channel.click();
+      await expect(page.getByTestId("open-poll-composer-button")).toHaveCount(0);
       const secret = `Circle private body ${Date.now()}`;
       await expect(page.getByTestId("chat-input")).toBeEnabled({ timeout: 60_000 });
       await page.getByTestId("chat-input").fill(secret);
@@ -208,6 +222,7 @@ for (const cut of ["none", "create_response_loss", "public_blob_response_loss", 
     } catch (error) {
       const records = client ? await readCreatorRecords(client.page, true).catch(() => []) : [];
       const bootstrap = client ? await client.page.locator('[role="status"]').allTextContents().catch(() => []) : [];
+      const chatStatus = client ? await client.page.getByTestId("chat-status").allTextContents().catch(() => []) : [];
       const sendGate = client ? await client.page.getByTestId("send-chat-button").evaluate(button => ({
         bindingPending: button.getAttribute("data-mls-binding-pending"),
         creatorPending: button.getAttribute("data-creator-bootstrap-pending"),
@@ -219,7 +234,7 @@ for (const cut of ["none", "create_response_loss", "public_blob_response_loss", 
         state: item.submission.state.Rejected ?? item.submission.state.Queued,
       }));
       await testInfo.attach("safe-circle-failure-coordinates", { contentType: "application/json",
-        body: JSON.stringify({ refusals, sendGate, bootstrap: bootstrap.filter(text => text.includes("Creator MLS bootstrap:")), records: records.map(record => ({ scope: record.intent.effective_scope, state: record.state, group: record.intent.mls_group_id, accepted: record.accepted_genesis?.accepted.event.event_id, checkpoints: record.checkpoint_coordinates })), queue }, null, 2) });
+        body: JSON.stringify({ refusals, sendGate, chatStatus, authoringFailures: authoringFailures.slice(-12), bootstrap: bootstrap.filter(text => text.includes("Creator MLS bootstrap:")), records: records.map(record => ({ scope: record.intent.effective_scope, state: record.state, group: record.intent.mls_group_id, accepted: record.accepted_genesis?.accepted.event.event_id, checkpoints: record.checkpoint_coordinates })), queue }, null, 2) });
       throw error;
     } finally {
       await client?.session.context.close();

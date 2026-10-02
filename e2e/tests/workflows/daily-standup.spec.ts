@@ -200,6 +200,7 @@ test.describe("workflow: async daily standup", () => {
 
       // Drop connectivity mid-post: navigator.onLine flips false and the
       // composer parks the send into the offline outbox instead of failing.
+      await patPage.completeRecoveryKeySetupIfPrompted(30_000);
       await context.setOffline(true);
       await expect
         .poll(

@@ -37,7 +37,7 @@
    revision 的 inline Add Commit 与 producer-signed Welcome。bob 最后加入，因此从自己 recipient queue 读取
    Welcome、验证 producer proof 后直接处于 current epoch。
 4. bob 用 SDK MLS 状态加密消息，以 current epoch 与 `group_state_ref` 提交 `ak.message.create`。
-5. reporter 对该消息调用 `POST /_arkret/self/moderation/report`，不携带 franking proof（普通 reporter 只能看到
+5. 等待 receiving service 为该密文发布独立的 `ak.moderation.franking_proof`，将其 accepted Commit 纳入举报前基线；后台发布不属于举报副作用。reporter 对该消息调用 `POST /_arkret/self/moderation/report`，不携带 franking proof（普通 reporter 只能看到
    不可验签的最小化投影，§3.4）。
 6. 响应为 `{report_id,status:"submitted"}`，不含 `routed_to`。
 7. reporter 从部署本地审计查询面看到自己的 `ak.self.moderation.report` 留痕。

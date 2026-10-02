@@ -13,10 +13,13 @@ import {
 } from "../../helpers/env";
 import {
   authHeaders,
+  acceptInviteApi,
   requireDidCoreId,
   canonicalJson,
   canonicalTimestamp,
   cotestWire,
+  registeredEventSigningSeedB64url,
+  registeredEventVerificationMethod,
   createRealmApi,
   expectJsonOk,
   projectDidToCoreId,
@@ -43,6 +46,7 @@ import {
   type DidKeyIdentity,
   type ThirdPartyInviteCell,
 } from "../../helpers/third-party-invite";
+import { sdkInviteSubjectProof } from "../../helpers/soland-api/wire-client";
 import { ed25519PrivateKeySeedB64url } from "../../helpers/encoding";
 import {
   buildWebvhGenesisEntry,
@@ -448,6 +452,24 @@ test.describe("third-party invite", () => {
       subjectProof,
     });
 
+    const deviceMethod = registeredEventVerificationMethod(ctx.bob.id, ctx.bob.deviceId);
+    const deviceSeed = registeredEventSigningSeedB64url(ctx.bob.id);
+    expect(Boolean(deviceMethod && deviceSeed), "negative proof uses the accepted PCR device key").toBe(true);
+    const deviceSubjectProof = sdkInviteSubjectProof({
+      subjectAccountId: { principal_id: ctx.bob.id, station_id: solandServiceId() },
+      inviteId: ctx.cell.inviteId!, realmId: ctx.cell.realmId,
+      tokenCommitment: ctx.cell.tokenCommitment, claimNonce,
+      verificationId: projectDidToCoreId(ctx.verificationService.did), bindingProof,
+      verificationMethod: deviceMethod!, subjectDid: ctx.bobIdentity.did,
+      rootPublicKeyMultibase: ctx.bobIdentity.rootPublicKeyMultibase,
+      recoveryKey: ctx.bobIdentity.recoveryKey,
+      negativeDeviceSigningSeedB64url: deviceSeed!,
+    });
+    const deviceClaim = await submitClaim(request, ctx.bobToken,
+      ctx.bob, ctx.cell, { ...claimPayload, subject_proof: deviceSubjectProof });
+    expect(deviceClaim.accepted).toHaveLength(0);
+    expect(deviceClaim.rejected, "PCR device proof cannot replace DID subject authority").toHaveLength(1);
+
     const claim = await submitClaim(
       request,
       ctx.bobToken,
@@ -480,26 +502,30 @@ test.describe("third-party invite", () => {
       principal_id: ctx.bob.id,
       station_id: solandServiceId(),
     });
-    const snapshotUrl = `${solandBaseUrl()}/_arkret/self/realm-state-snapshot/head?realm_id=${encodeURIComponent(ctx.realmId)}`;
-    const snapshot = await expectJsonOk<Record<string, any>>(
-      await request.get(snapshotUrl, {
-        headers: authHeaders(ctx.aliceToken, "GET", snapshotUrl),
-      }),
-      "read third-party claim lifecycle at the accepted Realm cut",
-    );
-    const authorityRequest = { realm_id: ctx.realmId, nonce: randomBytes(32).toString("base64url") };
-    const authorityResponse = await request.post(`${solandBaseUrl()}/_arkret/open/realm-authority/bundle`, {
-      headers: { "content-type": "application/json" }, data: canonicalJson(authorityRequest),
-    });
-    const authorityBundle = await expectJsonOk(authorityResponse, "claim Realm authority");
-    const serviceResolution = await expectJsonOk(
-      await request.get(solandServiceResolution().resolution_url), "governing Station resolution",
-    );
-    expect(cotestWire("verify-realm-state-snapshot", {
-      snapshot, expected_snapshot_id: snapshot.snapshot_id,
-      authority_request: authorityRequest, authority_bundle: authorityBundle,
-      trusted_service_id: solandServiceId(), service_resolution: serviceResolution,
-    })).toEqual({ verified: true });
+    const readVerifiedSnapshot = async () => {
+      const snapshotUrl = `${solandBaseUrl()}/_arkret/self/realm-state-snapshot/head?realm_id=${encodeURIComponent(ctx.realmId)}`;
+      const snapshot = await expectJsonOk<Record<string, any>>(
+        await request.get(snapshotUrl, {
+          headers: authHeaders(ctx.aliceToken, "GET", snapshotUrl),
+        }),
+        "read third-party claim lifecycle at the accepted Realm cut",
+      );
+      const authorityRequest = { realm_id: ctx.realmId, nonce: randomBytes(32).toString("base64url") };
+      const authorityResponse = await request.post(`${solandBaseUrl()}/_arkret/open/realm-authority/bundle`, {
+        headers: { "content-type": "application/json" }, data: canonicalJson(authorityRequest),
+      });
+      const authorityBundle = await expectJsonOk(authorityResponse, "claim Realm authority");
+      const serviceResolution = await expectJsonOk(
+        await request.get(solandServiceResolution().resolution_url), "governing Station resolution",
+      );
+      expect(cotestWire("verify-realm-state-snapshot", {
+        snapshot, expected_snapshot_id: snapshot.snapshot_id,
+        authority_request: authorityRequest, authority_bundle: authorityBundle,
+        trusted_service_id: solandServiceId(), service_resolution: serviceResolution,
+      })).toEqual({ verified: true });
+      return snapshot;
+    };
+    const snapshot = await readVerifiedSnapshot();
     const lifecycle = snapshot.current_state_entries.filter((row: Record<string, any>) =>
       row.selector.kind === "invite_lifecycle" && row.selector.invite_id === ctx.cell.inviteId);
     expect(lifecycle).toHaveLength(1);
@@ -533,6 +559,21 @@ test.describe("third-party invite", () => {
     }>(invitesResp, "list claimed invites");
     expect((invitesBody.invites ?? []).filter((invite) => invite.id === ctx.cell.inviteId))
       .toHaveLength(0);
+
+    // Membership is a separate explicit acceptance after the claimed proposal.
+    const acceptance = await acceptInviteApi(request, ctx.bobToken, ctx.bob.id,
+      ctx.realmId, ctx.cell.inviteId!, { previousState: "claimed", directed: false });
+    const acceptanceCommit = acceptance.commit as Record<string, unknown>;
+    expect(acceptanceCommit.event_ref).toBeTruthy();
+    const joinedSnapshot = await readVerifiedSnapshot();
+    const joinedLifecycle = joinedSnapshot.current_state_entries.filter((row: Record<string, any>) =>
+      row.selector.kind === "invite_lifecycle" && row.selector.invite_id === ctx.cell.inviteId);
+    expect(joinedLifecycle).toHaveLength(1);
+    expect(joinedLifecycle[0].value).toBe("joined");
+    expect(joinedLifecycle[0].source_stream_ref).toEqual(acceptanceCommit.stream_ref);
+    expect(joinedLifecycle[0].revision).toEqual({
+      commit_id: acceptanceCommit.commit_id, stream_position: acceptanceCommit.stream_position,
+    });
   });
 
   // Live since 2026-08-06. The canonical allowlist carrier landed in spec + SDK

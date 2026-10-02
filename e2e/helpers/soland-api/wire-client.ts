@@ -119,6 +119,7 @@ export function sdkInviteSubjectProof(args: {
   subjectDid: string;
   rootPublicKeyMultibase: string;
   recoveryKey: string;
+  negativeDeviceSigningSeedB64url?: string;
 }): Record<string, unknown> {
   return cotestWire<Record<string, unknown>>("invite-subject-proof", {
     subject_account_id: args.subjectAccountId,
@@ -131,6 +132,7 @@ export function sdkInviteSubjectProof(args: {
     verification_method: args.verificationMethod,
     subject_did: args.subjectDid,
     root_public_key_multibase: args.rootPublicKeyMultibase,
+    negative_device_signing_seed_b64url: args.negativeDeviceSigningSeedB64url,
     recovery_key: args.recoveryKey,
   });
 }
