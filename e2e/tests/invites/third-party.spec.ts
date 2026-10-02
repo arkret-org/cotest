@@ -24,6 +24,7 @@ import {
   registeredEventVerificationMethod,
   retypeEventDerivedId,
   signedEventEnvelope,
+  assertAuthoritySubmitOutcome,
   submitSignedEventApi,
   wireErrCode,
 } from "../../helpers/soland-api";
@@ -120,17 +121,13 @@ type SelfEventsOutcome = {
   body: Record<string, unknown>;
 };
 
-// `/_arkret/self/events` is a batch endpoint: a reducer rejection comes back as
-// HTTP 200 with `status:"partial"` and the failure in `rejected[].reason_code`,
-// NOT as a 4xx. Submit one envelope and surface that outcome uniformly.
+// Single self submissions return the exact accepted RealmCommit. Rejections
+// use the registered Problem response; accepted/rejected below are fixture views.
 async function submitSelfEvent(
   request: APIRequestContext,
   token: string,
   envelope: Record<string, unknown>,
-  opts: { alignFrontier?: boolean } = {},
 ): Promise<SelfEventsOutcome> {
-  if (opts.alignFrontier !== false) {
-  }
   const response = await request.post(
     `${solandBaseUrl()}/_arkret/self/events`,
     {
@@ -139,42 +136,21 @@ async function submitSelfEvent(
     },
   );
   const text = await response.text();
-  let body: Record<string, unknown> = {};
-  try {
-    body = text ? (JSON.parse(text) as Record<string, unknown>) : {};
-  } catch {
-    body = { raw: text };
+  const body = JSON.parse(text) as Record<string, unknown>;
+  const accepted: string[] = [];
+  const rejected: SelfEventsOutcome["rejected"] = [];
+  if ([200, 201].includes(response.status())) {
+    assertAuthoritySubmitOutcome(body, envelope, "3PID single self submission");
+    accepted.push(String((body.commit as Record<string, unknown>).event_ref));
+  } else {
+    const reason = wireErrCode(body);
+    expect(reason, `3PID submission has no registered Problem type: ${text}`)
+      .toBeDefined();
+    rejected.push({
+      reason_code: reason,
+      detail: typeof body.detail === "string" ? body.detail : undefined,
+    });
   }
-  const accepted = Array.isArray(body.accepted)
-    ? (body.accepted as string[])
-    : [];
-  const rawRejected = Array.isArray(body.rejections)
-    ? (body.rejections as Array<{
-        reason_code?: string;
-        detail?: string;
-      }>)
-    : [];
-  const topLevelReason = wireErrCode(body);
-  const topLevelError =
-    body.error && typeof body.error === "object"
-      ? (body.error as Record<string, unknown>)
-      : undefined;
-  const topLevelDetail =
-    typeof topLevelError?.detail === "string"
-      ? topLevelError.detail
-      : typeof topLevelError?.message === "string"
-        ? topLevelError.message
-        : typeof body.detail === "string"
-          ? body.detail
-          : typeof body.message === "string"
-            ? body.message
-            : undefined;
-  const rejected =
-    rawRejected.length > 0
-      ? rawRejected
-      : topLevelReason
-        ? [{ reason_code: topLevelReason, detail: topLevelDetail }]
-        : [];
   const rejectReason = rejected[0]?.reason_code;
   return {
     status: response.status(),
@@ -250,10 +226,8 @@ async function submitClaim(
   cell: ThirdPartyInviteCell,
   claimPayload: Record<string, unknown>,
 ): Promise<SelfEventsOutcome> {
-  // The claimant is not a Realm member yet. Carry the current accepted CBS
-  // basis obtained by an existing member as part of the out-of-band claim
-  // flow; the claimant's self surface cannot discover membership-private
-  // Realm state before the claim succeeds.
+  // The claimant presents the out-of-band claim; its Account Station binds
+  // fresh producer evidence without a membership-private frontier read.
   return await submitSelfEvent(
     request,
     bobToken,
@@ -263,7 +237,6 @@ async function submitClaim(
       kind: "ak.invite.claim",
       payload: claimPayload,
     }),
-    { alignFrontier: false },
   );
 }
 
