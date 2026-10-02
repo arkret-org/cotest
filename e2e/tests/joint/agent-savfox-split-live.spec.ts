@@ -1186,6 +1186,13 @@ async function openSavfoxArkretChannel(
     await connect.click();
   }
   await expect(configureHeading).toBeVisible({ timeout: 30_000 });
+  // This scenario asserts ordinary chat replies. Task delivery intentionally
+  // keeps assistant output private until an explicit delivery checkpoint.
+  const deliveryMode = savfox.locator("select").filter({
+    has: savfox.locator('option[value="interactive_chat"]'),
+  });
+  await deliveryMode.selectOption("interactive_chat");
+  await expect(deliveryMode).toHaveValue("interactive_chat");
 }
 
 async function startSavfoxPairing(

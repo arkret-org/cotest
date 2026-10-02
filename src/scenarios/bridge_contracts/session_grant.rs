@@ -89,7 +89,12 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
         .context("registered client carries its provisioned principal")?;
     let principal_core_id = principal.core_id.as_str().to_owned();
     let device_id = principal.device_id.as_str().to_owned();
-    let holder_key = principal.device_signing_key.clone();
+    let holder_key = ed25519_dalek::SigningKey::from_bytes(&[0xda; 32]);
+    assert_ne!(
+        holder_key.verifying_key(),
+        principal.device_signing_key.verifying_key(),
+        "the short-lived grant holder must be independent from the Event device key",
+    );
     let grant_jwt =
         mock_session_grant_jwt(&principal_core_id, &device_id, server.service_id().as_str());
     // The Account Authority's issuer ledger holds this exact credential; the

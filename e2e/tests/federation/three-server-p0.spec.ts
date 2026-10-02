@@ -464,15 +464,22 @@ test.describe("three-server federation P0 @three-server-p0", () => {
     // destination's accepted anchor as though they were stream successors.
     const missing = rows.filter((row) => Number(row.commit.stream_position) > before!.stream_position).slice(0, 100);
     if (missing.length > 0) {
-      const outcome = await pushCommittedRowsApi(request, missing, {
+      // Recovered fanout and independent catch-up requests may race. Every
+      // exact body must remain stored/duplicate under the atomic replica lock.
+      const recoveryOptions = {
         origin: solandServiceId("server1"),
         destination: solandServiceId("server2"),
-        server: "server2",
+        server: "server2" as const,
         realmId: realm.realmId,
-      });
-      expect(
-        replicationOutcomesOutside(missing.map((row) => row.event), outcome, ["stored", "duplicate"]),
-      ).toEqual([]);
+      };
+      const outcomes = await Promise.all(Array.from({ length: 4 }, () =>
+        pushCommittedRowsApi(request, missing, recoveryOptions),
+      ));
+      for (const outcome of outcomes) {
+        expect(
+          replicationOutcomesOutside(missing.map((row) => row.event), outcome, ["stored", "duplicate"]),
+        ).toEqual([]);
+      }
     }
     await Promise.all([
       waitForText(request, realm.bob, realm.realmId, body1),
