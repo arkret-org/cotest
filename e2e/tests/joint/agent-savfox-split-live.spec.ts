@@ -21,7 +21,7 @@ import {
   test as jointTest,
   type JointRealmFixture,
 } from "../../helpers/joint-fixture";
-import { canonicalJson } from "../../helpers/soland-api";
+import { canonicalJson, expectJsonOk } from "../../helpers/soland-api";
 import {
   approvePairingLinkOnAuthorizedDevice,
   createDpopUserSessionForAccount,
@@ -32,10 +32,11 @@ import {
 } from "../../helpers/users";
 
 // Mirrors inkson `APPROVAL_FALLBACK_POLL_INTERVAL`
-// (src/components/agent_runtime_approval_prompt.rs). The prompt has exactly two
-// discovery paths: the notification projection (wakeup) and this periodic
-// poll. The scenario proves each one by disabling the other.
+// (src/components/agent_runtime_approval_prompt.rs). A successfully parsed
+// describe without the notification feature alone permits the fallback poll.
+// This capable Station must replay notifications after a transport outage.
 const APPROVAL_FALLBACK_POLL_MS = 30_000;
+const APPROVAL_NOTIFICATION_FEATURE = "ak.feature.agent_runtime_approval_notifications.v1";
 const AGENT_LIST_PATH = "/_arkret/self/agents";
 const AGENT_LIST_GLOB = "**/_arkret/self/agents";
 const ACCOUNT_SUBSCRIBE_PATH = "/_arkret/self/account/subscribe";
@@ -113,6 +114,12 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
       const agentSlug = `savfox-live-${Date.now().toString(36)}`;
       const lifecycleEvidenceOnly =
         process.env.COTEST_AGENT_LIFECYCLE_EVIDENCE_ONLY === "1";
+      const stationDescribe = await expectJsonOk(
+        await request.get(`${solandBaseUrl()}/_arkret/describe`),
+        "Station describe for approval notifications",
+      );
+      expect(Array.isArray(stationDescribe.supported_features)).toBe(true);
+      expect(stationDescribe.supported_features).toContain(APPROVAL_NOTIFICATION_FEATURE);
 
       // Bob is a real ordinary member of the source Realm. He is deliberately
       // neither a controller nor an Agent and later proves the non-disclosure
@@ -213,11 +220,9 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         await openSavfoxArkretChannel(savfox, savfoxBaseUrl, savfoxToken);
 
         // ── Phase 2: the notification wakeup alone must raise the prompt ──
-        // The periodic fallback poll is the only other discovery path and its
-        // sole entry point is the agent list query. Keep that query failing for
-        // the whole window: whether or not a poll tick lands inside it, the
-        // fallback cannot discover the request, so a prompt that appears here
-        // can only have come from the notification projection.
+        // Block list discovery as an independent guard. The announced feature
+        // also forbids fallback polling, so the prompt must come from the
+        // notification projection.
         if (lifecycleEvidenceOnly) {
           await startSavfoxPairing(savfox, pairingLink);
           await expect(approvalModal).toBeVisible({ timeout: 120_000 });
@@ -363,10 +368,10 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           .inputValue();
         expect(replacementLink).not.toBe(pairingLink);
 
-        // ── Phase 5: with the wakeup channel dead, the fallback poll recovers ──
-        // Drop the account stream that carries notification deltas. The
-        // notification projection can no longer learn about the request, so the
-        // prompt can only be raised by the periodic fallback poll.
+        // ── Phase 5: a capable Station replays the durable notification ──
+        // A failed notification transport does not grant permission to poll.
+        // Keep the visible, online client without list discovery for a full
+        // fallback-sized window, then recover the same pending request.
         if (lifecycleEvidenceOnly) {
           await openSavfoxArkretChannel(savfox, savfoxBaseUrl, savfoxToken);
           await startSavfoxPairing(savfox, replacementLink);
@@ -375,19 +380,44 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           });
         } else {
           const streamOutage = await dropAccountSubscribeStream(inkson);
+          let listReadsDuringOutage = 0;
+          const observeList = (outgoing: Request) => {
+            if (outgoing.method() === "GET" &&
+                new URL(outgoing.url()).pathname === AGENT_LIST_PATH) {
+              listReadsDuringOutage += 1;
+            }
+          };
+          inkson.on("request", observeList);
+          let retainedApprovalRequestId: string | undefined;
           try {
             await openSavfoxArkretChannel(savfox, savfoxBaseUrl, savfoxToken);
             await startSavfoxPairing(savfox, replacementLink);
-            await expect(approvalModal).toBeVisible({
-              timeout: 3 * APPROVAL_FALLBACK_POLL_MS,
-            });
+            await expect.poll(async () => {
+              const status = await runtimeKeyRequestStatus(request, replacementPairing);
+              retainedApprovalRequestId = status.approval_request_id ?? undefined;
+              return Boolean(retainedApprovalRequestId);
+            }, { timeout: 120_000 }).toBe(true);
+            const outageEndsAt = Date.now() + 3 * APPROVAL_FALLBACK_POLL_MS;
+            while (Date.now() < outageEndsAt) {
+              expect(await approvalModal.count()).toBe(0);
+              expect(listReadsDuringOutage, "supported notifications forbid list fallback").toBe(0);
+              // This is an intentional fault duration, not a readiness delay.
+              const remaining = outageEndsAt - Date.now();
+              if (remaining > 0) await inkson.waitForTimeout(Math.min(1_000, remaining));
+            }
+            expect(await approvalModal.count()).toBe(0);
+            expect(listReadsDuringOutage).toBe(0);
           } finally {
+            inkson.off("request", observeList);
             await streamOutage.restore();
           }
           expect(
             streamOutage.blockedCount(),
-            "the notification wakeup channel must have been down while the prompt appeared",
+            "the notification transport must have been cut before creating the request",
           ).toBeGreaterThan(0);
+          await expect(approvalModal).toBeVisible({ timeout: 120_000 });
+          const replayed = await runtimeKeyRequestStatus(request, replacementPairing);
+          expect(replayed.approval_request_id).toBe(retainedApprovalRequestId);
         }
         await expect(approvalModal).toContainText("replaces the runtime key");
         expect(
@@ -1804,6 +1834,11 @@ async function dropAccountSubscribeStream(page: Page): Promise<{
     await route.abort("connectionfailed");
   };
   await page.route(isAccountSubscribe, handler);
+  // Routing only affects new requests. Terminate the already-open stream,
+  // restore ordinary transport, and prove its reconnect reached the cut.
+  await page.context().setOffline(true);
+  await page.context().setOffline(false);
+  await expect.poll(() => blocked, { timeout: 60_000 }).toBeGreaterThan(0);
   return {
     blockedCount: () => blocked,
     restore: async () => {
