@@ -479,8 +479,10 @@ test.describe("workflow: sprint planning", () => {
         timeout: 30_000,
       });
 
+      // M1 continuous create keeps the cleared composer open until Cancel.
+      // Opening card details must not discard that existing creation flow.
+      await expect(backlogColumn.getByTestId("new-card-title-input")).toBeVisible();
       for (const story of stories.slice(1)) {
-        await backlogColumn.getByTestId("add-card-button").click();
         await backlogColumn.getByTestId("new-card-title-input").fill(story);
         await backlogColumn.getByTestId("save-card-button").click();
         await expect(
