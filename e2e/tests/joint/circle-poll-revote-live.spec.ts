@@ -1,6 +1,6 @@
 // Real Station Circle stream plus Inkson poll authoring and verified readback.
 import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
-import { accountSubscribeFramesApi, canonicalJson, scanRealmStreamApi, accountActorId } from "../../helpers/soland-api";
+import { accountSubscribeRealmFramesApi, canonicalJson, scanRealmStreamApi, accountActorId } from "../../helpers/soland-api";
 import { createDpopUserSession, openUserPage, type JointUserPage } from "../../helpers/users";
 import { solandBaseUrl } from "../../helpers/env";
 import fs from "node:fs";
@@ -161,8 +161,13 @@ test("Circle poll survives readback, replacement, a new browser process and anot
         const acceptedAfterRestart = await circlePollEvents(request, aliceToken, realmId, circleId);
         expect(acceptedAfterRestart.events.some((event) => event.event_id === pollEventRef),
           "the governing Circle stream retains the accepted poll after process restart").toBe(true);
-        const accountFrames = await accountSubscribeFramesApi(request, aliceToken, {
+        const accountFrames = await accountSubscribeRealmFramesApi(request, aliceToken, realmId, {
           filter: { realm_ids: [realmId], window_limit: 20 },
+          onRead: async (diagnostic) => {
+            await testInfo.attach("safe-poll-account-current-read", {
+              contentType: "application/json", body: JSON.stringify(diagnostic),
+            });
+          },
         });
         const accountCurrent = accountFrames.flatMap((frame) => {
           const realms = frame.realms as Record<string, Record<string, unknown>> | undefined;

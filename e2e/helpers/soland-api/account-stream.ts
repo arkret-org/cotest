@@ -14,6 +14,85 @@ type AccountSubscribeOptions = {
   headers?: Record<string, string>;
 };
 
+// A catchup_complete frame completes one response, not a selected Realm's
+// detail baseline. Keep the exact filter and opaque continuation until the
+// Station discloses the complete current window or refuses it.
+export async function accountSubscribeRealmFramesApi(
+  request: APIRequestContext,
+  token: string,
+  realmId: string,
+  opts: AccountSubscribeOptions & {
+    onRead?: (diagnostic: Record<string, unknown>) => Promise<void>;
+  } = {},
+): Promise<Array<Record<string, unknown>>> {
+  const { onRead, ...subscription } = opts;
+  const timeoutMs = opts.timeoutMs ?? 60_000;
+  const deadline = Date.now() + timeoutMs;
+  let after = opts.after;
+  let attempt = 0;
+  while (Date.now() < deadline) {
+    const frames = await accountSubscribeFramesApi(request, token, {
+      ...subscription,
+      after,
+      timeoutMs: Math.max(1, Math.min(35_000, deadline - Date.now())),
+    });
+    const kinds = [
+      "delta", "catchup_complete", "checkpoint", "heartbeat",
+      "dropped", "resync_required", "unauthorized",
+    ];
+    const codes = [
+      "revision_unavailable", "limit_exceeded", "temporarily_unavailable",
+      "not_found", "witness_disagreement",
+    ];
+    const buckets = frames.map((frame) =>
+      (frame.realms as Record<string, Record<string, unknown>> | undefined)?.[realmId],
+    );
+    await onRead?.({
+      attempt: ++attempt,
+      resumed: !!after,
+      frames: frames.map((frame, index) => {
+        const bucket = buckets[index];
+        const code = (bucket?.unavailable as Record<string, unknown> | undefined)?.error_code;
+        return {
+          kind: kinds.includes(String(frame.kind)) ? String(frame.kind) : "unknown",
+          selectedRealm: !!bucket,
+          current: !!bucket?.current,
+          hasCursor: typeof frame.cursor === "string",
+          accountBaseline: !!frame.baseline,
+          errorCode: code === undefined ? null
+            : codes.includes(String(code)) ? String(code) : "unknown",
+        };
+      }),
+    });
+    expect(frames.every((frame) => kinds.includes(String(frame.kind))),
+      "Account read carries registered frame kinds").toBe(true);
+    expect(frames.some((frame) => frame.kind === "unauthorized"),
+      "Account Realm read remains authorized").toBe(false);
+    for (const bucket of buckets) {
+      const unavailable = bucket?.unavailable as Record<string, unknown> | undefined;
+      expect(unavailable === undefined || unavailable.error_code === "temporarily_unavailable",
+        "Account Realm read retries only registered temporary unavailability").toBe(true);
+    }
+    const control = frames.find((frame) =>
+      frame.kind === "dropped" || frame.kind === "resync_required");
+    if (!control && buckets.some((bucket) => !!bucket?.current)) return frames;
+    if (control?.kind === "resync_required") {
+      after = undefined;
+    } else {
+      after = [...frames].reverse()
+        .find((frame) => typeof frame.cursor === "string")?.cursor as string | undefined;
+      expect(typeof after === "string",
+        "Account segmented baseline or dropped stream carries its opaque continuation").toBe(true);
+    }
+    const delay = Number(control?.reconnect_after_ms ?? 500);
+    expect(Number.isInteger(delay) && delay > 0,
+      "Account reconnect delay is a positive server hint").toBe(true);
+    if (Date.now() + delay >= deadline) break;
+    await new Promise((resolve) => setTimeout(resolve, delay));
+  }
+  throw new Error(`Account stream did not disclose selected Realm current within ${timeoutMs}ms`);
+}
+
 export async function accountSubscribeDeltaApi(
   request: APIRequestContext,
   token: string,

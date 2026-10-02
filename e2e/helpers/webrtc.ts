@@ -214,37 +214,75 @@ async function captureSignalEnvelopes<T>(
   action: () => Promise<T>,
 ): Promise<{ result: T; envelopes: Array<Record<string, unknown>> }> {
   const url = new URL(`${solandBaseUrl()}/_arkret/self/signal/subscribe`);
-  url.searchParams.set("max_duration_ms", "800");
-  url.searchParams.set("heartbeat_ms", "25");
-  const responsePromise = fetch(url, {
-    headers: {
-      ...authHeaders(token, "GET", url.toString()),
-      accept: "application/x-ndjson",
-      "Arkret-Operation": "ak.self.signal.stream.subscribe.v1",
-    },
-  });
-  // Let the HTTP request reach the live subscriber registry before sending.
-  await new Promise((resolve) => setTimeout(resolve, 75));
-  const result = await action();
-  const response = await responsePromise;
-  const text = await response.text();
-  expect(
-    response.status,
-    `signal subscribe returned ${response.status}: ${text}`,
-  ).toBe(200);
-  const envelopes = text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => JSON.parse(line) as Record<string, unknown>)
-    .filter((frame) => frame.kind === "signal")
-    .map((frame) => frame.envelope as Record<string, unknown>)
-    .filter(
-      (envelope) =>
-        envelope.realm_id === realmId &&
-        envelope.encrypted_payload !== undefined,
-    );
-  return { result, envelopes };
+  url.searchParams.set("max_duration_ms", "5000");
+  url.searchParams.set("heartbeat_ms", "100");
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  try {
+    const response = await fetch(url, {
+      headers: {
+        ...authHeaders(token, "GET", url.toString()),
+        accept: "application/x-ndjson",
+        "Arkret-Operation": "ak.self.signal.stream.subscribe.v1",
+      },
+      signal: controller.signal,
+    });
+    expect(response.status, "receiver Signal rail is authorized").toBe(200);
+    expect(!!response.body, "receiver Signal rail has an NDJSON body").toBe(true);
+    reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let pending = "";
+    async function nextFrame(): Promise<Record<string, unknown> | undefined> {
+      while (true) {
+        const newline = pending.indexOf("\n");
+        if (newline >= 0) {
+          const line = pending.slice(0, newline).trim();
+          pending = pending.slice(newline + 1);
+          if (line) return JSON.parse(line) as Record<string, unknown>;
+          continue;
+        }
+        const chunk = await reader!.read();
+        if (chunk.done) {
+          const tail = (pending + decoder.decode()).trim();
+          pending = "";
+          return tail ? JSON.parse(tail) as Record<string, unknown> : undefined;
+        }
+        pending += decoder.decode(chunk.value, { stream: true });
+      }
+    }
+    const envelopes: Array<Record<string, unknown>> = [];
+    function retain(frame: Record<string, unknown>) {
+      if (frame.kind !== "signal") return;
+      const envelope = frame.envelope as Record<string, unknown>;
+      if (envelope.realm_id === realmId && envelope.encrypted_payload !== undefined) {
+        envelopes.push(envelope);
+      }
+    }
+    // A received heartbeat proves the real authenticated live rail is running.
+    // Preparation and an arbitrary delay cannot prove that under a busy stack.
+    while (true) {
+      const frame = await nextFrame();
+      expect(!!frame && (frame.kind === "heartbeat" || frame.kind === "signal"),
+        "receiver Signal rail becomes ready before closing").toBe(true);
+      if (frame!.kind === "heartbeat") break;
+      retain(frame!);
+    }
+    const [result] = await Promise.all([action(), (async () => {
+      while (true) {
+        const frame = await nextFrame();
+        if (!frame || frame.kind === "drain") break;
+        expect(frame.kind === "heartbeat" || frame.kind === "signal",
+          "receiver Signal rail remains live during capture").toBe(true);
+        retain(frame);
+      }
+    })()]);
+    return { result, envelopes };
+  } finally {
+    controller.abort();
+    await reader?.cancel().catch(() => undefined);
+    clearTimeout(timeout);
+  }
 }
 
 /**

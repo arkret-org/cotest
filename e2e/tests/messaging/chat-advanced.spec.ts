@@ -19,7 +19,7 @@ import { createTwoUserMessagingRealm } from "../../helpers/messaging-fixtures";
 import { stepShot } from "../../helpers/screenshots";
 import {
   accountActorId,
-  accountSubscribeFramesApi,
+  accountSubscribeRealmFramesApi,
   authHeaders,
   canonicalJson,
   createRealmApi,
@@ -86,8 +86,13 @@ async function accountSubscribeTimelineEvents(
   // explicitly. Its delivered rows are `realm_sync_entry.committed_events[]`
   // (`CommittedEventView`: a RealmCommit plus the exact signed Event, or a
   // withheld marker without Event bytes); a window may span several frames.
-  const frames = await accountSubscribeFramesApi(request, token, {
+  const frames = await accountSubscribeRealmFramesApi(request, token, realmId, {
     filter: { realm_ids: [realmId], window_limit: 100 },
+    onRead: async (diagnostic) => {
+      await test.info().attach("safe-chat-account-timeline-read", {
+        contentType: "application/json", body: JSON.stringify(diagnostic),
+      });
+    },
   });
   const buckets = frames.flatMap((frame) => {
     if (frame.kind !== "delta") return [];
