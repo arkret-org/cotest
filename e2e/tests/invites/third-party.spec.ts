@@ -220,8 +220,7 @@ async function submitThirdPartyInvite(
 // third-party-invites.md §4.3).
 async function submitClaim(
   request: APIRequestContext,
-  bobToken: string,
-  realmMemberToken: string,
+  claimantToken: string,
   claimant: JointUser,
   cell: ThirdPartyInviteCell,
   claimPayload: Record<string, unknown>,
@@ -230,7 +229,7 @@ async function submitClaim(
   // fresh producer evidence without a membership-private frontier read.
   return await submitSelfEvent(
     request,
-    bobToken,
+    claimantToken,
     signedEventEnvelope({
       actorId: claimant.id,
       realmId: cell.realmId,
@@ -476,7 +475,6 @@ test.describe("third-party invite", () => {
     const claim = await submitClaim(
       request,
       ctx.bobToken,
-      ctx.aliceToken,
       ctx.bob,
       ctx.cell,
       claimPayload,
@@ -563,7 +561,6 @@ test.describe("third-party invite", () => {
     const claim = await submitClaim(
       request,
       ctx.bobToken,
-      ctx.aliceToken,
       ctx.bob,
       ctx.cell,
       buildClaimPayload({
@@ -634,7 +631,6 @@ test.describe("third-party invite", () => {
     const claim = await submitClaim(
       request,
       malloryToken,
-      ctx.aliceToken,
       mallory,
       ctx.cell,
       buildClaimPayload({
@@ -706,7 +702,6 @@ test.describe("third-party invite", () => {
     const firstClaim = await submitClaim(
       request,
       ctx.bobToken,
-      ctx.aliceToken,
       ctx.bob,
       ctx.cell,
       buildClaimPayload({
@@ -743,7 +738,6 @@ test.describe("third-party invite", () => {
     const secondClaim = await submitClaim(
       request,
       ctx.bobToken,
-      ctx.aliceToken,
       ctx.bob,
       ctx.cell,
       buildClaimPayload({
