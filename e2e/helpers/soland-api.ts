@@ -43,6 +43,7 @@ import type {
 import {
   accountSubscribeDeltaApi,
   accountSubscribeFramesApi,
+  accountSubscribeRealmFramesApi,
 } from "./soland-api/account-stream";
 import { activateRealmMlsApi } from "./soland-api/mls";
 import {
@@ -69,6 +70,7 @@ import {
 export {
   accountSubscribeDeltaApi,
   accountSubscribeFramesApi,
+  accountSubscribeRealmFramesApi,
   authHeaders,
   base64urlJsonCanonical,
   base64urlJsonRaw,
