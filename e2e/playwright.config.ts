@@ -28,20 +28,18 @@ const baseURL =
   process.env.COTEST_INKSON_BASE_URL ??
   "http://127.0.0.1:4527";
 
-// COT-08-004: bounded file-level parallelism across spec files. Per-test state is
-// isolated via `uniqueUser` / unique handles (the large majority of specs), and
-// within-file ordering is preserved (`fullyParallel: false`) so multi-step
-// strands stay intact. Browser specs often create two or three Coauth sessions
-// concurrently inside one test, so two file workers are the safe default for
-// the shared Coauth/Soland stack. The count remains env-tunable; use
-// `COTEST_PW_WORKERS=1` for fully serial execution or raise it only for a stack
-// provisioned and verified for the resulting authentication fan-out.
+// COT-08-004: shared-stack files run serially by default. Unique Accounts do
+// not isolate key-management.md section 7.8's sustained per-IP unlock quota:
+// concurrent recovery journeys can repeatedly consume another file's slots.
+// Scenario-internal concurrency remains explicit (for example head-CAS races).
+// The count remains env-tunable; raise `COTEST_PW_WORKERS` only for a stack
+// provisioned and verified for the resulting authentication and unlock fan-out.
 const workersEnv = process.env.COTEST_PW_WORKERS?.trim();
 const workers = workersEnv
   ? workersEnv.endsWith("%")
     ? workersEnv
     : Number(workersEnv)
-  : 2;
+  : 1;
 const tlsSpkiSha256 = process.env.COTEST_TLS_SPKI_SHA256?.trim();
 const tlsLaunchArgs = tlsSpkiSha256
   ? [`--ignore-certificate-errors-spki-list=${tlsSpkiSha256}`]

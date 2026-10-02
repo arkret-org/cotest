@@ -3,11 +3,11 @@
   "source_of_truth": false,
   "generated_from": {
     "operation_registry": "arkret-spec/spec/v1/artifacts/registry/operation-registry.json",
-    "operation_registry_sha256": "0a3811c8f9be359ece4179efac6e9bac17756456cf2fda614bf8b985eb9d337c",
+    "operation_registry_sha256": "15b906f7ff3f437be52ee9406ec40610acffc101c43ddc7cbac47dc6f379ce12",
     "test_layers": {
       "soland_unit": {
         "source_file_count": 370,
-        "source_sha256": "228698f74e5d2e9cb059e21826da743c50f56af836e83ad645c9c56a851b5554",
+        "source_sha256": "520997f27de73e5c11c92c0ec380ad0de455b3809453f49443ddee908d91b857",
         "evidence_count": 282,
         "covered_operation_count": 139
       },
@@ -19,13 +19,13 @@
       },
       "cotest_rust": {
         "source_file_count": 405,
-        "source_sha256": "0907259755c1389ba84ce18d74c67d34af260b24fc5551d5e559d1b073e61ce1",
+        "source_sha256": "fcc15185480c6e38cd44457c26b9b41c32d9d286e4aec08651977024bad7e148",
         "evidence_count": 132,
         "covered_operation_count": 71
       },
       "cotest_e2e": {
         "source_file_count": 110,
-        "source_sha256": "fb00118cdcff0816883cb8d75f5e300d9c6928af52e58961f11fd61eb8e20441",
+        "source_sha256": "ed3879be863da3ca8f7ba19438aabae3927581e1ad9bbc4f3b46b1657d18b7ce",
         "evidence_count": 48,
         "covered_operation_count": 21
       },
@@ -14313,11 +14313,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/identity/agents/pairing.rs",
-            "line": 2146,
+            "line": 2144,
             "scope": "authorize_scope_may_narrow_but_cannot_widen_provision_ceiling",
             "scope_kind": "rust_test",
             "occurrence_lines": [
-              2214
+              2212
             ],
             "protected_oracle": false,
             "scope_sha256": "07da9e0978a246efa13c4dfca1ac618ba0c87cf03fe22977681a110cea2b578d",
@@ -15136,15 +15136,15 @@
         "security_negative": [
           {
             "file": "soland/crates/http/src/routing/identity/agents/tests.rs",
-            "line": 1086,
+            "line": 1091,
             "scope": "key_authorize_event_accepts_narrower_scope_and_rejects_widening",
             "scope_kind": "rust_test",
             "occurrence_lines": [
-              1105
+              1110
             ],
             "protected_oracle": false,
-            "scope_sha256": "b4d9d42b7fe69e86dc48b0581cec11f50ba428914a7ff6a3e14ba599ab1995e6",
-            "input_sha256": "42b88fa042100a6e973395cc5fadd526c0daf07f350ac60d7b0ddef0b2b38086",
+            "scope_sha256": "2cf5c0cbff93206253b6cd6d1c2c9519075ec9b47115e21accdb6d240f9c8ecc",
+            "input_sha256": "dee2b858bb96328403d89f92c1c7e8f17707c7ce4456673fc585bcd6cd52df5f",
             "assertion_sha256": "ed099e11784d46dfb8a94bb326f02b809686b88ba0a6a001b6777fd1a0416017",
             "input_preview": [
               "let controller = CONTROLLER_CORE;",
@@ -17071,16 +17071,16 @@
           },
           {
             "file": "soland/crates/http/src/routing/identity/agents/pairing.rs",
-            "line": 2146,
+            "line": 2144,
             "scope": "authorize_scope_may_narrow_but_cannot_widen_provision_ceiling",
             "scope_kind": "rust_test",
             "occurrence_lines": [
-              2151,
-              2154,
-              2160,
-              2181,
-              2197,
-              2211
+              2149,
+              2152,
+              2158,
+              2179,
+              2195,
+              2209
             ],
             "protected_oracle": false,
             "scope_sha256": "07da9e0978a246efa13c4dfca1ac618ba0c87cf03fe22977681a110cea2b578d",
