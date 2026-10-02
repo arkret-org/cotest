@@ -976,9 +976,16 @@ pub async fn run_signer_keys_query_live() -> Result<()> {
     };
     ensure!(selector == &request.queries[0]);
     key.validate()?;
-    ensure!(key.public_key_b64u.as_str() == arkret_canonical::base64url_encode(
-        &alice_principal.device_signing_key.verifying_key().to_bytes()
-    ), "the resolved current key is not the sender device key");
+    ensure!(
+        key.public_key_b64u.as_str()
+            == arkret_canonical::base64url_encode(
+                &alice_principal
+                    .device_signing_key
+                    .verifying_key()
+                    .to_bytes()
+            ),
+        "the resolved current key is not the sender device key"
+    );
 
     let serialized = serde_json::to_value(&outcome)?;
     ensure!(

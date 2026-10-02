@@ -1263,7 +1263,8 @@ async fn run(
                 account_id: bob.account.clone(),
             },
         })
-        .await?;
+        .await
+        .context("founding provisional resolver")?;
     let DirectConversationResolveOutcome::Provisional {
         coordinates,
         authorization_basis,
@@ -1536,7 +1537,8 @@ async fn run(
                 account_id: bob.account.clone(),
             },
         })
-        .await?;
+        .await
+        .context("occupied leaf pending resolver")?;
     ensure!(
         matches!(admission, DirectConversationResolveOutcome::Provisional {
         initial_exact_pair_group_state_ref: Some(ref initial),
