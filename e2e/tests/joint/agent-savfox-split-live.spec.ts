@@ -611,6 +611,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
               .last();
             await expect(historicalMessage).toBeVisible({ timeout: 180_000 });
             expect(await eventIdFromMessage(historicalMessage)).toBe(responseEventId);
+            await expect(historicalMessage).toHaveAttribute("data-crypto-state", "plaintext");
             await expect(
               historicalMessage.getByTestId("member-badge-agent"),
             ).toBeVisible();
