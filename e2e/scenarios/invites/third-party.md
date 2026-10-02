@@ -48,8 +48,10 @@ Claimant 不读取 membership-private frontier；它向自己的 Account Station
    返回 binding artifact；第二次 broker claim 返回 409。这是 mock 契约测试，
    不替代正式 open present-token operation 的端到端验收。
 3. **合法 claim**：验证服务签 binding proof，Bob 用原生身份控制 key 签 subject
-   proof，提交成功；通过标准 authz invite list 读回精确 Bob AccountId
-   （principal 与 station）、Realm 和 `claimed` 状态。它是后续成员确认的 proposal，
+   proof，提交成功；Alice 通过标准 committed-event 读回 exact claim 及 Bob AccountId
+   （principal 与 station），并经 nonce-bound SDK 验签的 Realm snapshot 核对
+   `invite_lifecycle=claimed` 与该 claim 的 exact Commit revision。Bob 的 holder-private
+   authz list 不凭 claim 伪造独立的 directed delivery。它是后续成员确认的 proposal，
    不能当作已加入或 MLS 可写。
 4. **E3.1 过期**：以已过期的签名 claim 时间提交，零接受，外部返回 `not_found`。
 5. **E3.2 subject 不一致**：binding proof 指向 Bob、subject proof 与提交者为

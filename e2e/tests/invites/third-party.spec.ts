@@ -2,19 +2,21 @@
 // Contract: e2e/scenarios/invites/third-party.md
 // Spec: sync/third-party-invites.md section 3-4
 
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { expect, test } from "../../helpers/arkret-test";
 import type { APIRequestContext } from "../../helpers/arkret-test";
 import {
   mockEmailBaseUrl,
   solandBaseUrl,
   solandServiceId,
+  solandServiceResolution,
 } from "../../helpers/env";
 import {
   authHeaders,
   requireDidCoreId,
   canonicalJson,
   canonicalTimestamp,
+  cotestWire,
   createRealmApi,
   expectJsonOk,
   projectDidToCoreId,
@@ -403,7 +405,7 @@ test.describe("third-party invite", () => {
   // soland's reducer (`apply_invites.rs` reads that top-level component only).
   // Former blocker and current live-verification owner:
   // arkret-work/tasks/impl-tailin/2026-08-02-account-status-allowlist-and-personal-blocklist-downstream.md
-  test("bob submits ak.invite.claim with binding_proof + subject_proof; reducer accepts and converts to membership", async ({
+  test("bob submits ak.invite.claim with binding_proof + subject_proof; reducer accepts and records claimed lifecycle", async ({
     request,
   }) => {
     // third-party-invites.md §4.1-4.3 — happy path. The did:webvh verification
@@ -459,7 +461,56 @@ test.describe("third-party invite", () => {
     ).toHaveLength(0);
     expect(claim.accepted.length).toBeGreaterThan(0);
 
-    // Reducer effect: bob is now an invite-membership proposal in the Realm.
+    // Claim creates a subject-bound proposal, not a directed private delivery
+    // or joined membership. Verify its accepted source and typed lifecycle
+    // through Alice's already-authorized Realm view.
+    const acceptedCommit = claim.body.commit as Record<string, unknown>;
+    const acceptedUrl = `${solandBaseUrl()}/_arkret/self/committed-events/${claim.accepted[0]}`;
+    const accepted = await expectJsonOk<Record<string, any>>(
+      await request.get(acceptedUrl, {
+        headers: authHeaders(ctx.aliceToken, "GET", acceptedUrl),
+      }),
+      "read the exact accepted third-party claim",
+    );
+    expect(accepted.commit).toEqual(acceptedCommit);
+    expect(accepted.event.kind).toBe("ak.invite.claim");
+    expect(accepted.event.event_id).toBe(claim.accepted[0]);
+    expect(accepted.event.payload).toEqual(claimPayload);
+    expect(accepted.event.payload.subject_account_id).toEqual({
+      principal_id: ctx.bob.id,
+      station_id: solandServiceId(),
+    });
+    const snapshotUrl = `${solandBaseUrl()}/_arkret/self/realm-state-snapshot/head?realm_id=${encodeURIComponent(ctx.realmId)}`;
+    const snapshot = await expectJsonOk<Record<string, any>>(
+      await request.get(snapshotUrl, {
+        headers: authHeaders(ctx.aliceToken, "GET", snapshotUrl),
+      }),
+      "read third-party claim lifecycle at the accepted Realm cut",
+    );
+    const authorityRequest = { realm_id: ctx.realmId, nonce: randomBytes(32).toString("base64url") };
+    const authorityResponse = await request.post(`${solandBaseUrl()}/_arkret/open/realm-authority/bundle`, {
+      headers: { "content-type": "application/json" }, data: canonicalJson(authorityRequest),
+    });
+    const authorityBundle = await expectJsonOk(authorityResponse, "claim Realm authority");
+    const serviceResolution = await expectJsonOk(
+      await request.get(solandServiceResolution().resolution_url), "governing Station resolution",
+    );
+    expect(cotestWire("verify-realm-state-snapshot", {
+      snapshot, expected_snapshot_id: snapshot.snapshot_id,
+      authority_request: authorityRequest, authority_bundle: authorityBundle,
+      trusted_service_id: solandServiceId(), service_resolution: serviceResolution,
+    })).toEqual({ verified: true });
+    const lifecycle = snapshot.current_state_entries.filter((row: Record<string, any>) =>
+      row.selector.kind === "invite_lifecycle" && row.selector.invite_id === ctx.cell.inviteId);
+    expect(lifecycle).toHaveLength(1);
+    expect(lifecycle[0].value).toBe("claimed");
+    expect(lifecycle[0].source_stream_ref).toEqual(acceptedCommit.stream_ref);
+    expect(lifecycle[0].revision).toEqual({
+      commit_id: acceptedCommit.commit_id, stream_position: acceptedCommit.stream_position,
+    });
+
+    // Holder-private authz listing requires a directed delivery. A claimed
+    // placeholder must not fabricate that independent notification state.
     const invitesResp = await request.get(
       `${solandBaseUrl()}/_arkret/self/authz/invites?realm_id=${encodeURIComponent(ctx.realmId)}`,
       {
@@ -480,14 +531,8 @@ test.describe("third-party invite", () => {
         state?: string;
       }>;
     }>(invitesResp, "list claimed invites");
-    const claimed = (invitesBody.invites ?? []).find(
-      (invite) =>
-        invite.realm_id === ctx.realmId &&
-        invite.invitee_account_id?.principal_id === ctx.bob.id &&
-        invite.invitee_account_id.station_id === solandServiceId() &&
-        invite.state === "claimed",
-    );
-    expect(claimed, `claimed invite for ${ctx.bob.id}`).toBeTruthy();
+    expect((invitesBody.invites ?? []).filter((invite) => invite.id === ctx.cell.inviteId))
+      .toHaveLength(0);
   });
 
   // Live since 2026-08-06. The canonical allowlist carrier landed in spec + SDK
