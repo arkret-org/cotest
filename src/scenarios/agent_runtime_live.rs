@@ -544,6 +544,23 @@ impl AgentRuntimeSession {
         )
         .await?;
 
+        let committed: arkret_wire::CommittedEventView = serde_json::from_value(
+            expect_json(
+                controller.get(&format!(
+                    "/_arkret/self/committed-events/{}",
+                    authorize.event_id
+                )),
+                StatusCode::OK,
+            )
+            .await?,
+        )?;
+        committed.validate_shape()?;
+        ensure!(
+            committed.commit().event_ref == authorize.event_id
+                && committed.reducer_input() == Some(&authorize),
+            "the controller must resolve the exact committed Agent authorization"
+        );
+
         // 10. The Account Authority binds the runtime's SessionGrant.
         let grant = crate::scenarios::bridge_contracts::session_grant::mock_session_grant_jwt(
             agent_id.as_str(),
