@@ -225,6 +225,51 @@ async fn expect_rejected(member: &Member, event: &Event, reason: &str) -> Result
 
 /// The accepted normal round `holder` sees with `peer`, with its accepted
 /// request and accept Event refs.
+async fn assert_peer_endpoint(
+    holder: &Member,
+    peer: &Member,
+    expected_source: Option<&EventId>,
+) -> Result<()> {
+    let mut previous = None;
+    // Each call is a fresh authenticated read, without client receipt caches.
+    for _ in 0..2 {
+        let row = holder
+            .client
+            .sdk()
+            .contacts_list()
+            .await?
+            .contacts
+            .into_iter()
+            .find(|row| row.peer.contact_actor_id() == peer.actor)
+            .context("accepted peer row")?;
+        ensure!(row.state == arkret::ContactState::Accepted);
+        let endpoint = row.peer_endpoint.context("accepted peer endpoint")?;
+        ensure!(endpoint.device_id == peer.device);
+        if let Some(source) = expected_source {
+            ensure!(&endpoint.contact_event_ref == source);
+        }
+        if let Some(previous) = &previous {
+            ensure!(previous == &endpoint);
+        }
+        if holder.account.station_id != peer.account.station_id {
+            let response = holder
+                .client
+                .get(&format!(
+                    "/_arkret/self/committed-events/{}",
+                    endpoint.contact_event_ref
+                ))
+                .send()
+                .await?;
+            ensure!(
+                response.status() == StatusCode::NOT_FOUND,
+                "peer PCR Event was disclosed through the self read"
+            );
+        }
+        previous = Some(endpoint);
+    }
+    Ok(())
+}
+
 async fn accepted_round(
     holder: &Member,
     peer: &AccountId,
@@ -605,6 +650,8 @@ pub async fn cross_station_two_authorized_devices_race_founding() -> Result<()> 
     .await?;
     alice_first.client.accept_contact(&bob.client).await?;
     wait_contact_state(&bob, &alice_first.account, arkret::ContactState::Accepted).await?;
+    assert_peer_endpoint(&alice_first, &bob, None).await?;
+    assert_peer_endpoint(&alice_second, &bob, None).await?;
     let (round, _) = accepted_round(&alice_first, &bob.account).await?;
     let key_a = arkret_wire::UuidV7::new(fresh_uuid_v7().parse()?)?;
     let key_b = arkret_wire::UuidV7::new(fresh_uuid_v7().parse()?)?;
@@ -752,6 +799,13 @@ pub async fn cross_station_glare_founds_direct_conversation() -> Result<()> {
     );
     wait_contact_state(&first, &second.account, arkret::ContactState::Accepted).await?;
     wait_contact_state(&second, &first.account, arkret::ContactState::Accepted).await?;
+    assert_peer_endpoint(
+        &first,
+        &second,
+        Some(&second_request.core.request_event_ref),
+    )
+    .await?;
+    assert_peer_endpoint(&second, &first, Some(&first_request.core.request_event_ref)).await?;
     let first_resolution = first
         .client
         .sdk()
@@ -975,6 +1029,8 @@ async fn run(
     if cross_station {
         wait_contact_state(&bob, &alice.account, arkret::ContactState::Accepted).await?;
     }
+    assert_peer_endpoint(&alice, &bob, None).await?;
+    assert_peer_endpoint(&bob, &alice, None).await?;
     let (contact_round_id, heads) = accepted_round(&alice, &bob.account).await?;
     ensure!(
         accepted_round(&bob, &alice.account).await?.0 == contact_round_id,
@@ -1562,15 +1618,32 @@ async fn run(
         String::from_utf8_lossy(&consumed)
     );
 
-    let admission = alice
-        .client
-        .sdk()
-        .direct_conversation_resolve(&DirectConversationResolveRequestBody {
-            peer: arkret::contact_operations::ContactPeer::Human {
-                account_id: bob.account.clone(),
-            },
-        })
-        .await?;
+    // Cross-Station consumption and the source Welcome outbox acknowledgement
+    // converge independently. Require the same exact leaf's Durable cut rather
+    // than assuming both relay transactions finish with Bob's HTTP response.
+    let deadline = Instant::now() + Duration::from_secs(120);
+    let admission = loop {
+        let result = alice
+            .client
+            .sdk()
+            .direct_conversation_resolve(&DirectConversationResolveRequestBody {
+                peer: arkret::contact_operations::ContactPeer::Human {
+                    account_id: bob.account.clone(),
+                },
+            })
+            .await;
+        match result {
+            Ok(ref outcome) if !cross_station || matches!(outcome,
+                DirectConversationResolveOutcome::Provisional {
+                    peer_mls_admission: arkret::direct_conversation::DirectConversationPeerMlsAdmission::Durable,
+                    ..
+                }) => break result?,
+            _ if cross_station && Instant::now() < deadline => {
+                tokio::time::sleep(Duration::from_millis(250)).await;
+            }
+            _ => break result?,
+        }
+    };
     ensure!(
         matches!(admission, DirectConversationResolveOutcome::Provisional {
         initial_exact_pair_group_state_ref: Some(ref initial),

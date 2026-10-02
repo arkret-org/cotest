@@ -969,13 +969,53 @@ pub async fn run_signer_keys_query_live() -> Result<()> {
     request.validate()?;
     let outcome = bob.sdk().signer_keys_query(&request).await?;
     outcome.validate_for_request(&request)?;
-    let [SignerKeyQueryResult::CurrentResolved { selector, key }] = outcome.results.as_slice()
+    let [SignerKeyQueryResult::CurrentDeviceResolved { selector, key }] =
+        outcome.results.as_slice()
     else {
         bail!("recipient Station did not resolve the current admitted sender");
     };
     ensure!(selector == &request.queries[0]);
     key.validate()?;
+    ensure!(key.public_key_b64u.as_str() == arkret_canonical::base64url_encode(
+        &alice_principal.device_signing_key.verifying_key().to_bytes()
+    ), "the resolved current key is not the sender device key");
 
+    let serialized = serde_json::to_value(&outcome)?;
+    ensure!(
+        serialized["results"][0]["key"]
+            .as_object()
+            .context("key object")?
+            .len()
+            == 1
+    );
+    for wrong in ["method", "device"] {
+        let mut changed = request.clone();
+        let SignerKeyQuerySelector::CurrentAdmission {
+            sender:
+                CurrentSignerKeyQuerySender::AccountDevice {
+                    device_id,
+                    verification_method,
+                    ..
+                },
+        } = &mut changed.queries[0]
+        else {
+            bail!("current device selector");
+        };
+        if wrong == "method" {
+            *verification_method =
+                DidUrl::new("did:web:wrong.example#ak:device:01904100-0000-7000-8000-000000000001")
+                    .map_err(anyhow::Error::msg)?;
+        } else {
+            *device_id =
+                arkret_wire::DeviceId::new("ak:device:01904100-0000-7000-8000-000000000001")?;
+        }
+        let unavailable = bob.sdk().signer_keys_query(&changed).await?;
+        unavailable.validate_for_request(&changed)?;
+        ensure!(matches!(
+            unavailable.results.as_slice(),
+            [SignerKeyQueryResult::Unavailable { .. }]
+        ));
+    }
     let mut wrong_station = request.clone();
     wrong_station.request_id = RequestId::new("ak:request:019b0000-0000-7000-8000-000000000102")?;
     let SignerKeyQuerySelector::CurrentAdmission {
@@ -995,7 +1035,7 @@ pub async fn run_signer_keys_query_live() -> Result<()> {
         [SignerKeyQueryResult::Unavailable { .. }]
     ));
     let mut misbound = outcome;
-    let SignerKeyQueryResult::CurrentResolved {
+    let SignerKeyQueryResult::CurrentDeviceResolved {
         selector:
             SignerKeyQuerySelector::CurrentAdmission {
                 sender: CurrentSignerKeyQuerySender::AccountDevice { actor, .. },
