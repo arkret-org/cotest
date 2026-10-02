@@ -323,6 +323,10 @@ test.describe("kanban end-to-end", () => {
       });
       await cardALocator.hover();
       await cardALocator.getByTestId("card-archive-button").click();
+      await expect(alicePage.page.getByTestId("board-status")).toContainText(
+        "ak.strand.archive accepted; card lifecycle = Archived",
+        { timeout: 120_000 },
+      );
       await expect(todoColumn.getByTestId("kanban-card").filter({ hasText: cardA })).toHaveCount(0, {
         timeout: 30_000,
       });
@@ -349,6 +353,12 @@ test.describe("kanban end-to-end", () => {
         .filter({ hasText: cardA })
         .first();
       await archivedRow.getByTestId("card-restore-button").click();
+      // The card appears optimistically before its lifecycle Event is signed
+      // and durably submitted. Destroy the runtime only after exact acceptance.
+      await expect(alicePage.page.getByTestId("board-status")).toContainText(
+        "ak.strand.restore accepted; card lifecycle = Active",
+        { timeout: 120_000 },
+      );
       await expect(
         alicePage.page.getByTestId("kanban-card").filter({ hasText: cardA }),
       ).toBeVisible({ timeout: 30_000 });

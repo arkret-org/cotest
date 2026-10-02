@@ -26,11 +26,14 @@ import {
   grantCapabilityEventApi,
   joinRealmMemberByInviteApi,
   resolveDefaultStrandId,
+  rawSubmitSignedEventApi,
+  readCommitStreamHeadApi,
+  wireErrCode,
   sendMessageApi,
   signedEventEnvelope,
   submitSignedEventApi,
 } from "../../helpers/soland-api";
-import { addRealmMlsMemberApi } from "../../helpers/soland-api/mls";
+import { addRealmMlsMemberApi, encryptMlsMessageContent, realmMlsCreatorGroupApi } from "../../helpers/soland-api/mls";
 import {
   assertJointStackNotRequired,
   ensureRegistered,
@@ -1025,10 +1028,10 @@ test.describe("chat advanced", () => {
   });
 
   test(// @user-promise: e2e/scenarios/messaging/chat-advanced.md
-  "E14.2 mention in E2EE Realm uses sidecar hash; server log does not contain mentionee.did plaintext", async ({
+  "E14.2 encrypted mention exposes no recipient and rejects cleartext routing sidecars", async ({
     request,
   }) => {
-    // spec: push-notifications.md §4.5 evaluation_locus + mention sidecar hash
+    // push-notifications.md §4.5 forbids dedicated E2EE mention routing inputs.
     const stamp = Date.now();
     const alice = uniqueUser("s142-alice");
     const bob = uniqueUser("s142-bob");
@@ -1052,7 +1055,11 @@ test.describe("chat advanced", () => {
       },
     );
     const plaintext = `Encrypted mention for @${bob.handle.replace(/^@/, "")} ${stamp}`;
-    const sidecarHash = mentionSidecarHash(realmId, bob.id);
+    const group = await realmMlsCreatorGroupApi(request, realmId);
+    const encryptedContent = encryptMlsMessageContent(group, {
+      kind: "ak.content.text",
+      body: plaintext,
+    });
     const strandId = await resolveDefaultStrandId(request, aliceToken, realmId);
     const envelope = signedEventEnvelope({
       actorId: alice.id,
@@ -1061,16 +1068,11 @@ test.describe("chat advanced", () => {
       payload: {
         strand_id: strandId,
         track_name: "discussion",
-        mention_sidecar_digest: [sidecarHash],
-        encrypted_content: encryptedEnvelope(
-          "ak.message.v1",
-          "opaque-e2ee-mention",
-          realmId,
-        ),
+        encrypted_content: encryptedContent,
       },
     });
     await submitSignedEventApi(request, aliceToken, envelope, {
-      context: "submit E2EE mention sidecar message",
+      context: "submit encrypted mention without routing sidecar",
     });
 
     const events = await listRealmEventsViaApi(request, aliceToken, realmId, {
@@ -1083,32 +1085,28 @@ test.describe("chat advanced", () => {
     const rawServerView = JSON.stringify(messageEvent);
     expect(rawServerView).not.toContain(bob.id);
     expect(rawServerView).not.toContain(plaintext);
-    expect(rawServerView).toContain("mention_sidecar_digest");
-    expect(rawServerView).toContain(sidecarHash);
+    expect(rawServerView).not.toContain("mention_sidecar_digest");
+    const head = await readCommitStreamHeadApi(request, aliceToken, realmId);
+    const forbidden = signedEventEnvelope({
+      actorId: alice.id,
+      realmId,
+      kind: "ak.message.create",
+      payload: {
+        ...envelope.payload as Record<string, unknown>,
+        mention_sidecar_digest: [mentionSidecarHash(realmId, bob.id)],
+      },
+    });
+    const refused = await rawSubmitSignedEventApi(request, aliceToken, forbidden);
+    expect(refused.status()).toBe(422);
+    expect(wireErrCode(await refused.json())).toBe("schema_violation");
+    expect(await readCommitStreamHeadApi(request, aliceToken, realmId)).toEqual(head);
+    const after = await listRealmEventsViaApi(request, aliceToken, realmId, { limit: 100 });
+    expect(after.some(event => event.event_id === forbidden.event_id)).toBe(false);
   });
 });
 
 function mentionSidecarHash(realmId: string, did: string): string {
   return createHash("sha256").update(`${realmId}|${did}`).digest("hex");
-}
-
-function encryptedEnvelope(
-  contentType: string,
-  ciphertext: string,
-  realmId: string,
-): Record<string, unknown> {
-  void contentType;
-  void realmId;
-  return {
-    version: "1.0",
-    content_type: "application/vnd.arkret.message+json",
-    encryption_context: {
-      epoch: 1,
-      group_state_ref:
-        "ak:event:ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM",
-    },
-    ciphertext,
-  };
 }
 
 

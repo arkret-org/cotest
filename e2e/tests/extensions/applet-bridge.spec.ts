@@ -661,8 +661,9 @@ test.describe("applet bridge", () => {
       // Alice's session cannot submit another Actor's PCR founding Event.
       // This producer refusal precedes managed-aggregate admission. The
       // authenticated Applet aggregate below remains the provisioning path.
+      // The producer preflight reports registered conflict before reducer/CAS admission.
       expect(standaloneGenesis.status(), standaloneGenesisText).toBe(409);
-      expect(wireErrCode(JSON.parse(standaloneGenesisText))).toBe("failed_precondition");
+      expect(wireErrCode(JSON.parse(standaloneGenesisText))).toBe("conflict");
       expect(JSON.parse(standaloneGenesisText).detail).toContain("exact authenticated actor");
       const provision = await request.post(`${registryBase}/external-event`, {
         headers: authHeaders(aliceToken, "POST", `${registryBase}/external-event`),
@@ -1708,7 +1709,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
     const { executed_by: _delegatedExecutor, ...serviceDraft } = previousUnsigned;
     const serviceUnidentified = {
       ...serviceDraft,
-      actor_id: accountActorId(sourceServiceId),
+      actor_id: serviceActorId(sourceServiceId),
       authorization_ref: capabilityGrantRefForAction(registration, "ak.message.create"),
       created_at: canonicalEventTimestamp(),
       external_ref: { ...serviceDraft.external_ref, external_id: `ext-service-${stamp}` },
@@ -1731,7 +1732,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
     expect(JSON.parse(serviceResponseText).status, serviceResponseText).toBe("accepted");
     const serviceHistory = await queryRealmEventsApi(request, token, realmId);
     const acceptedService = (serviceHistory.events as Array<Record<string, unknown>>).find((event) => event.event_id === serviceEvent.event_id);
-    expect(acceptedService?.actor_id).toEqual(accountActorId(sourceServiceId));
+    expect(acceptedService?.actor_id).toEqual(serviceActorId(sourceServiceId));
     expect(acceptedService?.executed_by).toBeUndefined();
     expect(acceptedService?.producer_proof).toEqual(serviceEvent.producer_proof);
 
