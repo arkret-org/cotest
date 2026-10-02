@@ -394,7 +394,11 @@ impl AgentRuntimeSession {
         let pairing_code = complete
             .pairing_code
             .clone()
-            .context("the complete outcome carries the pairing secret")?;
+            .context("the complete outcome carries the pairing code")?;
+        ensure!(
+            pairing_code.len() == 8 && pairing_code.bytes().all(|byte| byte.is_ascii_digit()),
+            "the live Station must mint an eight-digit decimal Agent pairing code"
+        );
 
         // 7. The runtime resolves its pairing handle and submits its key.
         let pairing_token = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&json!({
