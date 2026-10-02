@@ -237,14 +237,14 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         const inksonCode = (
           await inkson.getByTestId("agent-runtime-approval-code").innerText()
         ).trim();
-        expect(inksonCode).toBe(firstPairing.pairingCode);
-        const groupedPairingCode = inksonCode.match(/.{1,4}/g)?.join(" ") ?? "";
+        const groupedPairingCode = displayPairingCode(firstPairing.pairingCode);
+        expect(inksonCode).toBe(groupedPairingCode);
         await expect(
           savfox.getByText(groupedPairingCode, { exact: true }),
         ).toBeVisible();
         await expect(
           savfox.getByText(
-            `Waiting for Inkson approval... Compare pairing code ${inksonCode} with the Inkson prompt.`,
+            `Waiting for Inkson approval... Compare pairing code ${firstPairing.pairingCode} with the Inkson prompt.`,
           ),
         ).toBeVisible({ timeout: 30_000 });
 
@@ -394,7 +394,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           (
             await inkson.getByTestId("agent-runtime-approval-code").innerText()
           ).trim(),
-        ).toBe(replacementPairing.pairingCode);
+        ).toBe(displayPairingCode(replacementPairing.pairingCode));
 
         // ── Phase 6: approving the replacement supersedes the old binding ──
         await inkson.getByTestId("agent-runtime-approval-approve").click();
@@ -2020,4 +2020,9 @@ function trackDirectConversationBindings(page: Page): {
         (binding): binding is DirectConversationBinding => binding !== null,
       ),
   };
+}
+
+function displayPairingCode(pairingCode: string): string {
+  expect(pairingCode).toMatch(/^[0-9]{8}$/);
+  return `${pairingCode.slice(0, 4)} ${pairingCode.slice(4)}`;
 }
