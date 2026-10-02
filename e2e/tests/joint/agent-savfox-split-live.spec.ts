@@ -1683,13 +1683,14 @@ async function addAgentToRealm(
   await expect(page.getByTestId("realm-members-panel")).toBeVisible({
     timeout: 120_000,
   });
+  await page.getByTestId("members-section-my-agents").click();
   const existing = page.locator(
-    `[data-testid="member-self-agent-row"][data-agent-did="${agentId}"]`,
+    `[data-testid="member-self-agent-row"][data-agent-id="${agentId}"]`,
   );
   if ((await existing.count()) === 0) {
     await page.getByTestId("open-add-realm-agent-modal-button").click();
     const available = page.locator(
-      `[data-testid="available-realm-agent-row"][data-agent-did="${agentId}"]`,
+      `[data-testid="available-realm-agent-row"][data-agent-id="${agentId}"]`,
     );
     await expect(available).toBeVisible({ timeout: 120_000 });
     await available.getByTestId("confirm-add-agent-to-realm").click();
@@ -1699,7 +1700,7 @@ async function addAgentToRealm(
     );
   }
   const agentRow = page.locator(
-    `[data-testid="member-self-agent-row"][data-agent-did="${agentId}"]`,
+    `[data-testid="member-self-agent-row"][data-agent-id="${agentId}"]`,
   );
   await expect(agentRow).toBeVisible({ timeout: 120_000 });
   const reply = agentRow.getByTestId("member-agent-reply-toggle");
