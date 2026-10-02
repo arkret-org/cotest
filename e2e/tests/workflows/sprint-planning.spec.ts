@@ -604,10 +604,14 @@ test.describe("workflow: sprint planning", () => {
         .filter({ hasText: column });
       await expect(backlogColumn).toBeVisible({ timeout: 30_000 });
 
+      await backlogColumn.getByTestId("add-card-button").click();
+      const cardTitleInput = backlogColumn.getByTestId("new-card-title-input");
+      // M1 continuous create retains the composer and clears it after Save.
       for (const card of cards) {
-        await backlogColumn.getByTestId("add-card-button").click();
-        await backlogColumn.getByTestId("new-card-title-input").fill(card);
+        await expect(cardTitleInput).toBeVisible();
+        await cardTitleInput.fill(card);
         await backlogColumn.getByTestId("save-card-button").click();
+        await expect(cardTitleInput).toHaveValue("");
         const cardLocator = backlogColumn
           .getByTestId("kanban-card")
           .filter({ hasText: card });
