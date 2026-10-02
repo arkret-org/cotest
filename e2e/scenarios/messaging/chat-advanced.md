@@ -2,7 +2,7 @@
 
 ## 目标
 
-验证 chat 完整功能面:reactions(OR-Set 收敛)、replies、@-mention 触发通知(明文 / E2EE mention-sidecar hash)、polls 投票收敛、ephemeral typing + presence、read receipts(详见 messaging/read-receipts)。
+验证 chat 完整功能面:reactions(OR-Set 收敛)、replies、@-mention 触发通知(明文；E2EE 仅由客户端解密后求值)、polls 投票收敛、ephemeral typing + presence、read receipts(详见 messaging/read-receipts)。
 
 不验证:基础 message 发/edit/redact(messaging/triad-collaboration 已覆盖)、E2EE 群组生命周期(encryption/mls-group)、read receipts 隐私开关(messaging/read-receipts 独立)。
 
@@ -58,7 +58,7 @@
 15. inkson 客户端:
     - 解析 `@bob` token,生成 `ak.relation.mention` payload
     - 在 plain text Realm:`ak.message.create.payload.mentions = [bob.did]`
-    - 在 E2EE Realm:消息正文 encrypted,但 mention 用 `mention-sidecar hash`(SHA256(salt + bob.did))明文携带,让服务端能路由通知
+    - 在 E2EE Realm:mention 仅留在 ciphertext，Station 按 push-notifications §4.5 做 blind/batch wakeup；禁止专用 routing sidecar/hash 输入。
 16. 断言:bob 收到由 account timeline 本地派生的 notification(检查 inkson 的 in-app notification panel)
 17. 断言:carol **没**收到 mention 通知(她没被点名)
 
@@ -99,7 +99,7 @@
 ## Edge cases / sub-tests
 
 - **E14.1 reaction 并发竞态**:alice 和 bob 同时对 `M1` 加 + 撤 → OR-Set 仍正确(spec §8.5)
-- **E14.2 mention E2EE sidecar**:E2EE Realm 中,服务端只能用 hash 路由,**不能**回推出 bob.did;断言服务端 log 不含 bob.did 明文
+- **E14.2 E2EE mention 隐私**：以当前 MLS group 生成真实 ciphertext 并接受，accepted Event 不含 Bob 身份或明文；同一 encrypted payload 增加退休 mention_sidecar_digest 输入必须 schema_violation/422，commit head 不推进且没有 rejected Event 的接受事实。本条为 fixture 契约，不替代客户端解密后的实际通知验收。
 - **E14.3 poll closed**:本地关闭后隐藏该客户端的选项按钮；v1 不存在关闭 carrier，不能据此断言 reducer 拒绝合法迟到 vote
 - **E14.4 max_selections > 1**:多选 poll;一个 actor 可选 2 个 option;断言计数正确
 - **E14.5 typing 在 redact 后**:bob 发了消息后 redact;typing 指示不应"复活"
@@ -107,7 +107,7 @@
 
 ## Implementation notes
 
-- **soland 缺口**:`ak.content.poll{,.response}`、`ak.relation.mention`、mention sidecar hash 路由、`ak.typing` / `ak.presence` ephemeral channel — 实现度未知;reactions(OR-Set)应该已有
+- **soland 缺口**:`ak.content.poll{,.response}`、`ak.relation.mention`、E2EE 客户端 mention 求值、`ak.typing` / `ak.presence` ephemeral channel — 实现度未知;reactions(OR-Set)应该已有
 - **inkson 缺口**:poll UI(`poll-option-button`、`poll-close-button`、`poll-vote-count`)、typing indicator、presence indicator — 这些 testid 未确认存在
 - **测试侧**:典型测 typing 需要"无 send" 状态;Playwright 用 `composer-input.fill()` 不 click send,等 N ms 然后查 alice 视图
 
