@@ -1037,12 +1037,22 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
         standard_client(station, &coauth, "mls-agent-controller", CONTROLLER_DEVICE).await?;
     let operations = [
         ServiceOperationId::SELF_KEYS_KEYPACKAGES_UPLOAD_CREATE_V1,
+        ServiceOperationId::SELF_COMMITTED_EVENT_READ_SCAN_V1,
+        ServiceOperationId::SELF_REALM_STATE_SNAPSHOT_READ_MANIFEST_HEAD_V1,
+        ServiceOperationId::SELF_MLS_READ_ROSTER_AUTHORITY_V1,
+        ServiceOperationId::SELF_MLS_READ_GROUP_STATE_MATERIAL_V1,
         ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_CLAIM_V1,
         ServiceOperationId::SELF_KEYS_KEYPACKAGES_READ_CLAIM_V1,
         ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_CONSUME_V1,
         ServiceOperationId::SELF_DEVICE_MESSAGES_READ_LIST_V1,
         ServiceOperationId::SELF_DEVICE_MESSAGES_COMMAND_ACK_V1,
     ];
+    let completed_operations =
+        arkret_schema::agent_runtime_scope::complete_agent_runtime_scope(operations)?;
+    let operations = completed_operations
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
     let agent = AgentRuntimeSession::establish_with_operations(
         station,
         &coauth,
@@ -1602,9 +1612,77 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
         queued == vec![welcome.clone()],
         "Agent queue did not receive exact Welcome: {queued:?}"
     );
-    let agent_group =
+    let mut agent_group =
         arkret::ArkretMlsGroup::join_from_verified_welcome_delivery(restored, &welcome, &accepted)?;
     ensure!(agent_group.epoch() == 1, "Agent did not install epoch 1");
+    // Exercise the same independently verified complete roster used by native
+    // runtimes. Joining OpenMLS alone cannot authenticate the founder's leaf.
+    let http = agent.runtime.sdk();
+    let snapshot = http.realm_state_snapshot_head(&joined_realm).await?;
+    let authority_request = arkret::AuthorityBundleRequest {
+        realm_id: joined_realm.clone(),
+        nonce: arkret::Base64UrlString::new(
+            URL_SAFE_NO_PAD.encode(arkret_canonical::sha256_bytes(unique_uuid7().as_bytes())),
+        )
+        .map_err(anyhow::Error::msg)?,
+    };
+    let bundle = http.realm_authority_bundle(&authority_request).await?;
+    let keys = garth::fetch_historical_station_key_directory(&http, &bundle, None, Some(&snapshot))
+        .await?;
+    let freshness =
+        arkret_identity::RealmAuthorityFreshness::new(Utc::now(), authority_request.nonce.clone());
+    let mut replica = garth::RealmReplica::new(joined_realm.clone());
+    replica.install_verified_authority(&authority_request, bundle.clone(), &freshness, &keys)?;
+    replica.install_verified_current_snapshot_heads(&snapshot, &freshness, &keys)?;
+    let roster_request = arkret::MlsRosterAuthorityReadRequestBody {
+        realm_id: joined_realm.clone(),
+        effective_scope: welcome.effective_scope.clone(),
+        mls_group_id: welcome.effective_scope.canonical_mls_group_id()?,
+        genesis_event_ref: genesis.event_id.clone(),
+        target_commit_event_ref: commit_event.event_id.clone(),
+        target_epoch: 1,
+        caller_actor_id: ActorId::account(agent.agent_account.clone()),
+        cursor: None,
+    };
+    let page = http.self_mls_roster_authority(&roster_request).await?;
+    ensure!(
+        page.next_cursor.is_none() && page.records.len() == 2,
+        "Agent must receive the complete Genesis and Add roster"
+    );
+    let resolution = serde_json::from_value(bundle.current_route_record.clone())?;
+    let material_request =
+        arkret::mls_roster_genesis_material_request(&roster_request, &page.manifest);
+    let material = http
+        .self_mls_group_state_material(&material_request)
+        .await?;
+    arkret::install_verified_mls_roster_bindings(
+        &mut agent_group,
+        &[page],
+        &roster_request,
+        &bundle.current_service_id,
+        &commit_event.event_id,
+        &resolution,
+        &material,
+    )
+    .map_err(anyhow::Error::msg)?;
+    ensure!(
+        agent_group.verified_leaf_bindings()?.len() == 2,
+        "complete roster did not bind both the founder and Agent leaves"
+    );
+    let scan = arkret::StreamScanRequest {
+        realm_id: joined_realm.clone(),
+        stream_ref: arkret::CommitStreamRef::from_scope(&welcome.effective_scope, None)?,
+        direction: arkret::StreamScanDirection::After(None),
+        limit: 200,
+    };
+    let scanned = http.scan_commit_stream(&scan).await?;
+    ensure!(
+        scanned
+            .committed_events
+            .iter()
+            .any(|row| row.commit().event_ref == commit_event.event_id),
+        "Agent stream scan did not return its accepted Add Commit"
+    );
     agent
         .runtime
         .post("/_arkret/self/device_messages/ack")
