@@ -7,7 +7,7 @@
     "test_layers": {
       "soland_unit": {
         "source_file_count": 370,
-        "source_sha256": "520997f27de73e5c11c92c0ec380ad0de455b3809453f49443ddee908d91b857",
+        "source_sha256": "9e46d2eba731ae4a9e9a77e84fe7c83f816dd6e44988611435c87bdb137915e9",
         "evidence_count": 282,
         "covered_operation_count": 139
       },
@@ -19,7 +19,7 @@
       },
       "cotest_rust": {
         "source_file_count": 405,
-        "source_sha256": "fcc15185480c6e38cd44457c26b9b41c32d9d286e4aec08651977024bad7e148",
+        "source_sha256": "280ab983e51db8d0ec8e44208ac9f970f309e3d8cd4b118a0fe4c43672492a76",
         "evidence_count": 132,
         "covered_operation_count": 71
       },
