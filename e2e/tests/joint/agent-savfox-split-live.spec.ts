@@ -2060,18 +2060,16 @@ function trackDirectConversationBindings(page: Page): {
     pending.push(
       response
         .json()
-        .then((body: Record<string, string>) =>
-          body.state === "found" &&
-          body.realm_id &&
-          body.main_strand_id &&
-          body.binding_event_ref
-            ? {
-                realm_id: body.realm_id,
-                main_strand_id: body.main_strand_id,
-                binding_event_ref: body.binding_event_ref,
-              }
-            : null,
-        )
+        .then((body: Record<string, unknown>) => {
+          const coordinates = body.coordinates as Record<string, unknown> | undefined;
+          if (body.state !== "found" || !coordinates) return null;
+          const { realm_id, main_strand_id, binding_event_ref } = coordinates;
+          return typeof realm_id === "string" && realm_id !== "" &&
+            typeof main_strand_id === "string" && main_strand_id !== "" &&
+            typeof binding_event_ref === "string" && binding_event_ref !== ""
+            ? { realm_id, main_strand_id, binding_event_ref }
+            : null;
+        })
         .catch(() => null),
     );
   });
