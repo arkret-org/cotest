@@ -25,7 +25,7 @@
       },
       "cotest_e2e": {
         "source_file_count": 110,
-        "source_sha256": "ed3879be863da3ca8f7ba19438aabae3927581e1ad9bbc4f3b46b1657d18b7ce",
+        "source_sha256": "927f185f21f8ad74680487db8892e92e4314f8752e83fc714ba1574702a47241",
         "evidence_count": 48,
         "covered_operation_count": 21
       },
@@ -15764,11 +15764,11 @@
         "product_flow": [
           {
             "file": "cotest/e2e/tests/identity/consent-grant.spec.ts",
-            "line": 200,
+            "line": 201,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              200
+              201
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -15891,11 +15891,11 @@
           },
           {
             "file": "cotest/e2e/tests/identity/consent-grant.spec.ts",
-            "line": 250,
+            "line": 251,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              250
+              251
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",

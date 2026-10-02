@@ -13,6 +13,7 @@ import {
   expectJsonOk,
   prepareSignedEventSubmissionApi,
   principalControlRealmForId,
+  principalControlRootAuthorizationRefForId,
   registeredEventSigningSeedB64url,
   registeredEventVerificationMethod,
   signedEventEnvelope,
@@ -555,6 +556,7 @@ test.describe("consent grant", () => {
     const grantEvent = signedEventEnvelope({
       actorId: alice.id,
       realmId: principalControlRealmForId(alice.id),
+      authorizationRef: principalControlRootAuthorizationRefForId(alice.id),
       kind: "ak.consent.grant",
       payload: {
         consent_id: openBody.consent_id,
@@ -614,6 +616,7 @@ test.describe("consent grant", () => {
       actorId: alice.id,
       realmId: principalControlRealmForId(alice.id),
       eventId: String(grantEvent.event_id),
+      authorizationRef: principalControlRootAuthorizationRefForId(alice.id),
       kind: "ak.consent.grant",
       payload: {
         consent_id: openBody.consent_id,
@@ -750,6 +753,7 @@ test.describe("consent grant", () => {
     const grantEnvelope = signedEventEnvelope({
       actorId: alice.id,
       realmId,
+      authorizationRef: principalControlRootAuthorizationRefForId(alice.id),
       kind: "ak.consent.grant",
       payload: {
         consent_id: consentId,
@@ -779,6 +783,7 @@ test.describe("consent grant", () => {
     const revokeEnvelope = signedEventEnvelope({
       actorId: alice.id,
       realmId,
+      authorizationRef: principalControlRootAuthorizationRefForId(alice.id),
       kind: "ak.consent.revoke",
       payload: {
         consent_id: consentId,
@@ -874,14 +879,14 @@ test.describe("consent grant", () => {
         "pending_outgoing",
       ]);
 
-      await alicePage.page.goto("/contacts", { waitUntil: "domcontentloaded" });
+      await alicePage.gotoAppPanel("/contacts", "contacts-panel");
       const incomingRow = await expectContactState(alicePage, bob.id, [
         "pending",
         "pending_incoming",
       ]);
-      await incomingRow
-        .getByRole("button", { name: /accept|接受/i })
-        .click();
+      await alicePage.clickWithPassivePromptRetry(
+        incomingRow.getByRole("button", { name: /accept|接受/i }),
+      );
       await expectContactState(alicePage, bob.id, ["accepted"]);
 
       const aliceActor = canonicalJson(accountActorId(alice.id));
@@ -1023,7 +1028,7 @@ test.describe("consent grant", () => {
       await requestContact(bobPage, alice.id);
       await gotoConsentSettings(alicePage);
       await grantConsentDirect(alicePage, bob.id, "voice_call");
-      await expectConsentResult(
+      const firstGrant = await expectConsentResult(
         request,
         aliceToken,
         alice.id,
@@ -1059,7 +1064,7 @@ test.describe("consent grant", () => {
         "pending_outgoing",
       ]);
       await grantConsentDirect(alicePage, bob.id, "voice_call");
-      await expectConsentResult(
+      const secondGrant = await expectConsentResult(
         request,
         aliceToken,
         alice.id,
@@ -1067,6 +1072,26 @@ test.describe("consent grant", () => {
         "voice_call",
         "active",
       );
+      expect(secondGrant.consent_id).not.toBe(firstGrant.consent_id);
+      const rows = await listConsentResults(request, aliceToken);
+      expect(rows.find((row) => row.consent_id === firstGrant.consent_id)?.state)
+        .toBe("revoked");
+      // Multiple stable records cannot be collapsed into one peer/scope result.
+      const ambiguous = await request.get(consentResultUrl(bob.id, "voice_call"), {
+        headers: authHeaders(aliceToken, "GET", consentResultUrl(bob.id, "voice_call")),
+      });
+      expect(ambiguous.status()).toBe(409);
+      const regrantedRow = alicePage.page.locator(
+        `[data-testid="consent-granted-row"][data-consent-id="${secondGrant.consent_id}"]`,
+      );
+      await regrantedRow.getByTestId("revoke-consent-button").click();
+      await expect(alicePage.page.getByTestId("write-status"))
+        .toContainText(/revoked/i, { timeout: 30_000 });
+      const finalRows = await listConsentResults(request, aliceToken);
+      expect(finalRows.find((row) => row.consent_id === firstGrant.consent_id)?.state)
+        .toBe("revoked");
+      expect(finalRows.find((row) => row.consent_id === secondGrant.consent_id)?.state)
+        .toBe("revoked");
       await expectContactState(bobPage, alice.id, [
         "pending",
         "pending_outgoing",
