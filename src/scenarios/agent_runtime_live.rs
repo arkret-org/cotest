@@ -1961,6 +1961,46 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
         key == &frozen_key,
         "historical Agent signer query used the later PCR state"
     );
+    // The receiving Station must also publish its durable franking carrier
+    // using this original Agent cut, even after the runtime is paused.
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let stream = controller
+            .sdk()
+            .scan_commit_stream_to_head(
+                joined_realm.clone(),
+                arkret::CommitStreamRef::Realm {
+                    realm_id: joined_realm.clone(),
+                },
+                Some(accepted.commit.stream_position),
+                100,
+            )
+            .await?;
+        let proofs = stream
+            .committed_events
+            .iter()
+            .filter_map(arkret::CommittedEventView::reducer_input)
+            .filter(|event| {
+                event.kind == arkret_wire::EventKind::ModerationFrankingProof
+                    && event.payload["event_id"] == reply.event_id.as_str()
+            })
+            .collect::<Vec<_>>();
+        if let [proof] = proofs.as_slice() {
+            ensure!(proof.actor_id == ActorId::service(station.service_id().clone()));
+            ensure!(proof.payload["realm_id"] == joined_realm.as_str());
+            ensure!(proof.payload["received_by"] == station.service_id().as_str());
+            break;
+        }
+        ensure!(
+            proofs.is_empty(),
+            "Agent receipt published duplicate franking carriers"
+        );
+        ensure!(
+            Instant::now() < deadline,
+            "accepted Agent reply has no durable franking carrier"
+        );
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
     Ok(())
 }
 
