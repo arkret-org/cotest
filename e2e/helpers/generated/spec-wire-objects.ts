@@ -1109,6 +1109,23 @@ export type CapabilityGrantObject = {
     "key_backup_required"?: boolean;
     "approved_key_issuer_ids"?: string[];
     "depends_on_moderation_state"?: boolean;
+    "invocation_ref"?: {
+      "event_id": string;
+      "commit_id": string;
+      "stream_ref": {
+        "kind": "realm";
+        "realm_id": string;
+      } | {
+        "kind": "circle";
+        "realm_id": string;
+        "circle_id": string;
+      } | {
+        "kind": "sidecar";
+        "realm_id": string;
+        "sidecar_id": string;
+      };
+      "stream_position": number;
+    };
   }>;
   "issued_at": string;
   "status": "active" | "revoked" | "relinquished";
@@ -1329,6 +1346,23 @@ export type CapabilityGrantPayload = {
       "key_backup_required"?: boolean;
       "approved_key_issuer_ids"?: string[];
       "depends_on_moderation_state"?: boolean;
+      "invocation_ref"?: {
+        "event_id": string;
+        "commit_id": string;
+        "stream_ref": {
+          "kind": "realm";
+          "realm_id": string;
+        } | {
+          "kind": "circle";
+          "realm_id": string;
+          "circle_id": string;
+        } | {
+          "kind": "sidecar";
+          "realm_id": string;
+          "sidecar_id": string;
+        };
+        "stream_position": number;
+      };
     }>;
     "issued_at": string;
     "issuer_authority_refs": Array<{
