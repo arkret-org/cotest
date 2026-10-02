@@ -52,7 +52,9 @@ Claimant 不读取 membership-private frontier；它向自己的 Account Station
    （principal 与 station），并经 nonce-bound SDK 验签的 Realm snapshot 核对
    `invite_lifecycle=claimed` 与该 claim 的 exact Commit revision。Bob 的 holder-private
    authz list 不凭 claim 伪造独立的 directed delivery。它是后续成员确认的 proposal，
-   不能当作已加入或 MLS 可写。
+   不能当作已加入或 MLS 可写。随后 Bob 独立提交 `previous_state=claimed`、
+   不携 directed invitee 的接受 Event，已验签 snapshot 的 lifecycle 必须为 joined，
+   source/revision 必须对应本次 acceptance Commit。
 4. **E3.1 过期**：以已过期的签名 claim 时间提交，零接受，外部返回 `not_found`。
 5. **E3.2 subject 不一致**：binding proof 指向 Bob、subject proof 与提交者为
    Mallory，零接受，返回 `schema_violation`；detail 不泄露两者身份或 commitment。
@@ -62,6 +64,6 @@ Claimant 不读取 membership-private frontier；它向自己的 Account Station
 ## 尚未由本组覆盖
 
 Invite-by-email 与 verification 等待 UI、正式 provision/activate/delivery/present
-产品链、verification service 离线、Alice 撤销后 claim、最终成员接受与
+产品链、verification service 离线、Alice 撤销后 claim，以及
 E2EE Welcome/实际消息仍须独立验收。旧 scenario 的 UI 与 MLS 步骤不能作为
 这六条 API/mock 测试的已执行证据。

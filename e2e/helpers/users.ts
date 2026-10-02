@@ -869,6 +869,66 @@ export class JointUserPage {
     await expect(unlockPrompt).not.toBeVisible({ timeout: 120_000 });
   }
 
+  async completeMlsAccountBackupIfPrompted(
+    recoveryKey: string,
+    timeoutMs = 15_000,
+  ): Promise<boolean> {
+    const prompt = this.page.getByTestId("mls-backup-modal").last();
+    if (!(await prompt.waitFor({ state: "visible", timeout: timeoutMs })
+      .then(() => true).catch(() => false))) return false;
+    expect(recoveryKey.trim().split(/\s+/).length === 24,
+      "the account's confirmed Recovery Key is required for the MLS backup").toBe(true);
+    const existingKey = prompt.getByTestId("mls-backup-existing-key");
+    await expect(existingKey).toBeVisible({ timeout: 30_000 });
+    await existingKey.fill(recoveryKey);
+    const submit = prompt.getByTestId("mls-backup-submit");
+    await expect(submit).toBeEnabled({ timeout: 30_000 });
+    const accepted = this.page.waitForResponse((response) =>
+      response.request().method() === "PUT"
+      && /\/_arkret\/self\/keys\/backups\/ak:backup:/.test(decodeURIComponent(new URL(response.url()).pathname))
+      && response.status() === 200
+      && /"item_kind"\s*:\s*"mls_account_secret"/.test(response.request().postData() ?? ""),
+    { timeout: 120_000 });
+    try {
+      await Promise.all([accepted, submit.click()]);
+    } catch (error) {
+      // Classify only public status copy; never put recovery words or raw
+      // request/response bodies into the Playwright error or its attachments.
+      const status = await prompt.getByTestId("mls-backup-status").textContent().catch(() => "");
+      const reasons = [
+        ["missing-pcr-evidence", "Frozen PCR authority evidence is required"],
+        ["wrong-pcr-evidence", "Frozen PCR authority evidence does not match this account"],
+        ["missing-local-secret", "no local account MLS secret"],
+        ["wrong-policy-recipient", "recovery public key must uniquely match"],
+        ["unresolved-pcr", "server no longer resolves the exact committed PCR genesis unit"],
+        ["invalid-key", "Enter a valid 24-word Recovery Key"],
+        ["uploading", "Encrypting and uploading"],
+        ["uploading-zh", "正在加密并上传备份"],
+      ] as const;
+      const reason = reasons.find(([, copy]) => status?.includes(copy))?.[0] ?? "unclassified";
+      throw new Error(`MLS account backup did not upload: status=${reason}; modalVisible=${await prompt.isVisible()}; submitEnabled=${await submit.isEnabled().catch(() => false)}`, { cause: error });
+    }
+    await expect(prompt).toBeHidden({ timeout: 120_000 });
+    this.session.onRecoveryKeyConfigured?.(recoveryKey);
+    return true;
+  }
+
+  async completeMlsAccountRecoveryIfPrompted(recoveryKey: string): Promise<boolean> {
+    const prompt = this.page.locator(
+      '[data-testid="mls-unlock-modal"], [data-testid="mls-unlock-banner"], [data-testid="mls-backup-modal"]',
+    ).last();
+    if (!(await prompt.waitFor({ state: "visible", timeout: 15_000 })
+      .then(() => true).catch(() => false))) return false;
+    const unlock = this.page.locator(
+      '[data-testid="mls-unlock-modal"], [data-testid="mls-unlock-banner"]',
+    ).last();
+    if (await unlock.isVisible()) {
+      await this.unlockMlsAccountSecret(recoveryKey);
+      return true;
+    }
+    return await this.completeMlsAccountBackupIfPrompted(recoveryKey);
+  }
+
   async acknowledgeRecommendedEncryptionPromptIfVisible(
     timeoutMs = 5_000,
   ): Promise<boolean> {
@@ -1262,6 +1322,9 @@ export class JointUserPage {
     }
     await this.dismissPassiveBlockingPrompts();
     await this.page.getByTestId("chat-input").fill(body);
+    // A restored history can render before the verified current cut opens the
+    // send gate. Wait for the actual gate, then retain the ordinary click.
+    await expect(this.page.getByTestId("send-chat-button")).toBeEnabled({ timeout: 90_000 });
     await this.clickWithPassivePromptRetry(
       this.page.getByTestId("send-chat-button"),
     );
@@ -1293,6 +1356,7 @@ export class JointUserPage {
     const prefix = (await input.inputValue()).trimEnd();
     const body = `${prefix} ${suffix.trim()}`.trim();
     await input.fill(body);
+    await expect(this.page.getByTestId("send-chat-button")).toBeEnabled({ timeout: 90_000 });
     await this.clickWithPassivePromptRetry(
       this.page.getByTestId("send-chat-button"),
     );
@@ -1331,7 +1395,12 @@ export class JointUserPage {
       .toHaveCount(0, { timeout: initialTimeout })
       .then(() => true)
       .catch(() => false);
-    if (settledWithoutReload) {
+    const acceptedEventId = /^chat-msg-ak:event:[A-Za-z0-9_-]+$/;
+    const acceptedWithoutReload = settledWithoutReload && acceptedEventId.test(
+      (await event.getAttribute("id")) ?? "",
+    );
+    if (acceptedWithoutReload) {
+      await expect(event.getByTestId("chat-message-error")).toHaveCount(0);
       return;
     }
 
@@ -1347,6 +1416,8 @@ export class JointUserPage {
       timeout: Math.min(remainingTimeout, 60_000),
     });
     await expect(event).toBeVisible({ timeout: remainingTimeout });
+    await expect(event).toHaveAttribute("id", acceptedEventId, { timeout: remainingTimeout });
+    await expect(event.getByTestId("chat-message-error")).toHaveCount(0);
     await expect(pending).toHaveCount(0, {
       timeout: remainingTimeout,
     });
@@ -1484,6 +1555,20 @@ type ProvisionedPrincipal = ProvisionedIdentity & { session: DpopUserSession };
 const provisionedPrincipals = new Map<string, Promise<ProvisionedPrincipal>>();
 const canonicalSessionsByGrant = new Map<string, DpopUserSession>();
 const provisioningLedger = new ProvisioningLedger();
+
+// Test-owned native identity control is independent from the Event device key.
+// Recovery derivation and signing stay in the SDK oracle; no root seed is exposed.
+export function registeredSubjectIdentityControl(user: JointUser, server?: SolandKey) {
+  const session = Array.from(canonicalSessionsByGrant.values()).find((candidate) =>
+    candidate.user.id === user.id && candidate.user.did === user.did &&
+    candidate.user.deviceId === user.deviceId &&
+    candidate.accountId.station_id === solandServiceId(server));
+  const verificationMethod = session?.account.principalRegistrationCheckpoint.root_verification_method;
+  if (!session?.account.recoveryKey || typeof verificationMethod !== "string") {
+    throw new Error("subject native identity control is unavailable");
+  }
+  return { did: user.did, verificationMethod, recoveryKey: session.account.recoveryKey };
+}
 
 export async function ensureRegistered(
   request: APIRequestContext,

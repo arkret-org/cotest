@@ -205,6 +205,7 @@ export async function sendPlaintextMessageViaApi(
     actorId: opts.actorId!,
     realmId,
     kind: "ak.message.create",
+    server: opts.server,
     payload: {
       strand_id: strandId,
       track_name: "discussion",

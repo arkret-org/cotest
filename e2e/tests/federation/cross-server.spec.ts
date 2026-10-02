@@ -559,13 +559,29 @@ test.describe("cross-server federation", () => {
     expect(row, "server2 may read the committed message on the Realm stream").toBeTruthy();
     const positions = rows.map((candidate) => Number(candidate.commit.stream_position));
     expect(positions).toEqual([...positions].sort((left, right) => left - right));
-    const ingest = await pushCommittedRowsApi(request, [row!], {
+    const replicaRows = [row!];
+    const replicaTarget = {
       origin: solandServiceId("server1"),
       destination: solandServiceId("server2"),
-      server: "server2",
+      server: "server2" as const,
       realmId,
-    });
-    expect(["stored", "duplicate"]).toContain(ingest.replication_outcomes[0].status);
+    };
+    // A missing predecessor triggers receiver-side peer scan convergence.
+    // federation.md section 4.1.1 keeps the exact complete body pending;
+    // only dependency_missing may be retried, never another refusal.
+    const recoveryDeadline = Date.now() + 45_000;
+    for (;;) {
+      const ingest = await pushCommittedRowsApi(request, replicaRows, replicaTarget);
+      const result = ingest.replication_outcomes[0];
+      if (result.status === "rejected") {
+        expect(result.reason_code, "peer recovery refusal").toBe("dependency_missing");
+        expect(Date.now(), "peer recovery must finish anchoring its authorized prefix").toBeLessThan(recoveryDeadline);
+        await new Promise((resolve) => setTimeout(resolve, 1_000));
+        continue;
+      }
+      expect(["stored", "duplicate"], JSON.stringify(result)).toContain(result.status);
+      break;
+    }
     await waitForEventBody(request, bobToken, realmId, missingBody, "server2");
 
     const server2After = await queryRealmEventsApi(request, bobToken, realmId, {
@@ -883,6 +899,15 @@ test.describe("prepared authoring and join", () => {
         expect(pair.event?.event_id).toBe(messageGrant.eventId);
         return true;
       }, { timeout: 60_000, intervals: [500, 1_000, 2_000] }).toBe(true);
+
+      await grantCapabilityEventApi(request, aliceToken, {
+        ownerId: alice.id,
+        realmId,
+        subjectId: bob.id,
+        subjectStationId: solandServiceId("server2"),
+        actions: ["ak.message.create"],
+        server: "server1",
+      });
 
       const aliceBody = `alice from server1 ${stamp}`;
       await sendPreparedMessageApi(request, aliceToken, realmId, aliceBody, {

@@ -1050,7 +1050,7 @@ test.describe("consent grant", () => {
           timeout: 30_000,
         },
       );
-      await expectConsentResult(
+      const revokedGrant = await expectConsentResult(
         request,
         aliceToken,
         alice.id,
@@ -1058,6 +1058,7 @@ test.describe("consent grant", () => {
         "voice_call",
         "revoked",
       );
+      expect(revokedGrant.consent_id).toBe(firstGrant.consent_id);
 
       await expectContactState(bobPage, alice.id, [
         "pending",

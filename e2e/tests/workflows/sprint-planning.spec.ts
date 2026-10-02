@@ -483,6 +483,10 @@ test.describe("workflow: sprint planning", () => {
       // Opening card details must not discard that existing creation flow.
       await expect(backlogColumn.getByTestId("new-card-title-input")).toBeVisible();
       for (const story of stories.slice(1)) {
+        // The continuous-create composer remains open after saving a card.
+        if (!(await backlogColumn.getByTestId("new-card-title-input").isVisible())) {
+          await backlogColumn.getByTestId("add-card-button").click();
+        }
         await backlogColumn.getByTestId("new-card-title-input").fill(story);
         await backlogColumn.getByTestId("save-card-button").click();
         await expect(
@@ -695,17 +699,12 @@ async function setCardDetailEditorValue(
   page: Page,
   value: string,
 ): Promise<void> {
+  const editor = page.getByTestId("card-detail-description-rich-editor")
+    .locator('.ProseMirror.toastui-editor-contents[contenteditable="true"]');
+  await expect(editor).toBeVisible({ timeout: 45_000 });
+  await editor.click();
+  await editor.press("ControlOrMeta+A");
+  await editor.pressSequentially(value);
   const input = page.getByTestId("card-detail-description-input");
-  await expect(input).toBeAttached({ timeout: 30_000 });
-  await input.evaluate((node, nextValue) => {
-    const textarea = node as HTMLTextAreaElement;
-    textarea.value = nextValue;
-    textarea.dispatchEvent(
-      new InputEvent("input", {
-        bubbles: true,
-        inputType: "insertText",
-        data: nextValue,
-      }),
-    );
-  }, value);
+  await expect(input).toHaveValue(value);
 }

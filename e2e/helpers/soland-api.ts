@@ -1069,6 +1069,7 @@ type CapabilityGrantEventArgs = {
   ownerId: string;
   realmId: string;
   subjectId: string;
+  subjectStationId?: string;
   subjectServer?: SolandKey;
   actions: string[];
   // capabilities.md §6.1 / §8: optional finite validity upper bound. The
@@ -1118,7 +1119,7 @@ export function buildCapabilityGrantEnvelope(args: CapabilityGrantEventArgs): {
     schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
     issuer_id: accountActorId(args.ownerId, args.server),
-    subject: accountActorId(args.subjectId, args.subjectServer ?? args.server),
+    subject: accountActorId(args.subjectId, args.subjectServer ?? args.server, args.subjectStationId),
     actions: args.actions,
     resources: [{ kind: "realm", realm_id: args.realmId }],
     issued_at: issuedAt,
@@ -1638,6 +1639,7 @@ export async function scanRealmStreamApi(
     limit?: number;
     streamRef?: Record<string, unknown>;
     waitForJoinedCut?: boolean;
+    afterPosition?: number;
   } = {},
 ): Promise<{
   commits: Array<Record<string, unknown>>;
@@ -1655,14 +1657,18 @@ export async function scanRealmStreamApi(
     data: canonicalJson({
       realm_id: realmId,
       stream_ref: streamRef,
-      after_position: null,
+      after_position: opts.afterPosition ?? null,
       limit: opts.limit ?? 256,
     }),
   });
-  if (opts.waitForJoinedCut && response.status() === 403) {
+  if (opts.waitForJoinedCut && [403, 503].includes(response.status())) {
     const problem = await response.json() as { type?: string; detail?: string };
-    if (problem.type === "https://arkret.org/problems/capability_denied" &&
-        problem.detail === "the stream is not readable by this caller") {
+    if ((response.status() === 403 &&
+         problem.type === "https://arkret.org/problems/capability_denied" &&
+         problem.detail === "the stream is not readable by this caller") ||
+        (response.status() === 503 &&
+         problem.type === "https://arkret.org/problems/temporarily_unavailable" &&
+         problem.detail === "the caller's readable interval cannot be proved at this cut")) {
       return { commits: [], events: [], truncated: false, authorizationPending: true };
     }
   }
@@ -1693,7 +1699,7 @@ export async function queryRealmEventsApi(
   request: APIRequestContext,
   token: string,
   realmId: string,
-  opts: { server?: SolandKey; limit?: number; waitForJoinedCut?: boolean } = {},
+  opts: { server?: SolandKey; limit?: number; waitForJoinedCut?: boolean; afterPosition?: number } = {},
 ): Promise<Record<string, unknown>> {
   const scan = await scanRealmStreamApi(request, token, realmId, opts);
   return {
@@ -2184,9 +2190,8 @@ function eventEnvelopeProof(args: {
 ///
 /// The producer Event carries no position, predecessor or coverage: the Station
 /// supplies all three by returning the `RealmCommit` that admitted it. There is
-/// therefore no preparation step — either the Station
-/// commits the exact submitted Event into the stream its scope names, or the
-/// submission is rejected with a reason code.
+/// A temporarily unavailable cut is retried with the exact signed submission;
+/// an admission refusal fails immediately without re-authoring the Event.
 export async function submitSignedEventApi(
   request: APIRequestContext,
   token: string,
@@ -2200,30 +2205,24 @@ export async function submitSignedEventApi(
 ) {
   const context = opts.context ?? `submit ${String(envelope.kind)}`;
   const eventsUrl = `${solandBaseUrl(opts.server)}/_arkret/self/events`;
-  // Concurrent writes may lose the Station-assigned head CAS (§4 of
-  // authority-commit-log.md). Opt-in callers retry only that registered
-  // unavailability, preserving the exact signed Event and canonical body.
-  // Each self request lets the Account Station attest fresh producer evidence.
-  const body = canonicalJson({ event: envelope });
-  const maxAttempts = opts.retryTemporarilyUnavailable ? 3 : 1;
-  let response!: APIResponse;
-  let text = "";
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+  const submission = canonicalJson({ event: envelope });
+  const deadline = Date.now() + 30_000;
+  let response: APIResponse;
+  let text: string;
+  for (;;) {
     response = await request.post(eventsUrl, {
       headers: {
         ...authHeaders(token, "POST", eventsUrl),
         "content-type": "application/json",
       },
-      data: body,
+      data: submission,
     });
     text = await response.text();
-    if (response.status() !== 503 || attempt === maxAttempts) break;
-    const problem = JSON.parse(text) as Record<string, unknown>;
-    expect(wireErrCode(problem), `${context}: retry requires registered unavailability`)
-      .toBe("temporarily_unavailable");
-    console.info(JSON.stringify({ event_id: envelope.event_id, server: opts.server,
-      unavailable_attempt: attempt, status: response.status() }));
-    await new Promise((resolve) => setTimeout(resolve, attempt * 100));
+    if (response.status() !== 503 || Date.now() >= deadline || opts.retryTemporarilyUnavailable === false) break;
+    let problem: unknown;
+    try { problem = JSON.parse(text); } catch { break; }
+    if (wireErrCode(problem) !== "temporarily_unavailable") break;
+    await new Promise((resolve) => setTimeout(resolve, 500));
   }
   expect(
     [200, 201],

@@ -1337,6 +1337,24 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         expect(submittedGenesisIds.size).toBe(genesisCount);
         await stepShot(creator.page, testInfo, "C-quarantined-original-survives-reload-with-closed-send-gate");
       }
+    } catch (error) {
+      const records = await readCreatorRecords(creator.page, true).catch(() => []);
+      const retryStatus = await creator.page.getByTestId("creator-mls-retry").allTextContents().catch(() => []);
+      const safeStatus = retryStatus.filter((text) =>
+        !/bearer |recovery_key|mnemonic|access_token|dpop:|eyJ[A-Za-z0-9_-]+\./i.test(text));
+      await testInfo.attach("safe-creator-failure-coordinates", { contentType: "application/json",
+        body: JSON.stringify({ cut, retryStatus: safeStatus, records: records.map((record) => ({
+          scope: record.intent.effective_scope, state: record.state,
+          rejectionReason: record.rejection?.reason_code,
+          quarantineReason: record.diagnostic?.reason_code,
+          accepted: record.accepted_genesis?.accepted.event.event_id,
+          winner: record.winner?.accepted.event.event_id,
+          checkpoints: record.checkpoint_coordinates,
+          queue: (record.queue_items ?? []).map((item: Record<string, any>) => ({
+            kind: item.submission.request.event?.kind, status: item.status,
+          })),
+        })) }, null, 2) });
+      throw error;
     } finally {
       await creator.close();
     }
@@ -1394,9 +1412,12 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
       const aliceEditOfBobCard = `Alice edited Bob card ${stamp}`;
 
       try {
-        await alicePage.gotoHome();
+        // The session opener already bootstraps Home. A second hard navigation
+        // interrupts its first backup publication before this flow has begun.
         await alicePage.completeRecoveryKeySetupIfPrompted();
         await alicePage.acknowledgeRecommendedEncryptionPromptIfVisible();
+        expect(Boolean(aliceSession.recoveryKey), "Alice retains her confirmed account Recovery Key").toBe(true);
+        await alicePage.completeMlsAccountRecoveryIfPrompted(aliceSession.recoveryKey!);
 
         // 1) Alice creates an EMPTY realm, then activates it with accepted MLS Genesis.
         const realmId = await alicePage.createRealm({
@@ -1406,6 +1427,10 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           historyAccess: "since_join",
           mlsActivated: true,
         });
+        // First MLS use can require the already confirmed account Recovery
+        // Key to seal its new checkpoint secret. Complete the real backup,
+        // rather than hiding a modal or treating an optimistic Realm as ready.
+        await alicePage.completeMlsAccountRecoveryIfPrompted(aliceSession.recoveryKey!);
         await grantInviteConsentArkret(
           request,
           bobSession.grantJwt,
@@ -1438,9 +1463,10 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         const bobFlow = await openDpopUserPageFromSession(browser, bobSession);
         expect(bobFlow).toBeTruthy();
         bobPage = bobFlow!.page;
-        await bobPage.gotoHome();
         await bobPage.completeRecoveryKeySetupIfPrompted();
         await bobPage.acknowledgeRecommendedEncryptionPromptIfVisible();
+        expect(Boolean(bobSession.recoveryKey), "Bob retains his confirmed account Recovery Key").toBe(true);
+        await bobPage.completeMlsAccountRecoveryIfPrompted(bobSession.recoveryKey!);
 
         // 3) Bob JOINS before any board content exists. This matters twice over:
         //    under history_access=since_join, soland crops pre-join events from
@@ -1477,6 +1503,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           await bobPage.gotoTimelineRealm(realmId);
         }
         await waitForMlsCommit(request, aliceSession, realmId, bob.id);
+        await bobPage.completeMlsAccountRecoveryIfPrompted(bobSession.recoveryKey!);
         await bobPage.page.reload({ waitUntil: "domcontentloaded" });
         await bobPage.completeRecoveryKeySetupIfPrompted();
 
@@ -1691,6 +1718,27 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         expect(rawEventBody).not.toContain(bobEditOfAliceCard);
         expect(rawEventBody).not.toContain(aliceEditOfBobCard);
         outboundFault?.assertExactReplay();
+      } catch (error) {
+        const records = await readCreatorRecords(alicePage.page, true).catch(() => []);
+        const privateFailure = (detail: unknown) => {
+          if (detail === "creator private cache has another Genesis ref") return "cache-genesis-ref";
+          if (detail === "creator durable private cache differs from the winning unit") return "cache-private-unit";
+          if (detail === "creator durable artifact/private state mismatch") return "artifact-private-mismatch";
+          return "other-private-invariant";
+        };
+        await testInfo.attach("safe-creator-cross-member-failure-coordinates", {
+          contentType: "application/json",
+          body: JSON.stringify({ fault: fault ?? "ordinary", records: records.map(record => ({
+            scope: record.intent.effective_scope, state: record.state,
+            quarantineReason: record.diagnostic?.reason_code,
+            invariant: record.diagnostic?.invariant,
+            privateFailure: record.diagnostic ? privateFailure(record.diagnostic.invariant_detail) : undefined,
+            lastState: record.diagnostic?.last_state,
+            accepted: record.accepted_genesis?.accepted.event.event_id,
+            checkpoints: record.checkpoint_coordinates,
+          })) }, null, 2),
+        });
+        throw error;
       } finally {
         holdPrivateState = false;
         await bobPage?.page.unroute(privateClaimQuery);

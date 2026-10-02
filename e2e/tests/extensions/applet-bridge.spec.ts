@@ -764,7 +764,7 @@ test.describe("applet bridge", () => {
       );
       expect(messageProof).not.toHaveProperty("signer_resolution_evidence_ref");
       // The provisioning aggregate the Ghost was created from: the
-      // accountability grant is portal-scoped shared history, while the
+      // accountability grant is portal-scoped private source material, while the
       // Profile is principal-scoped state in the Ghost's own
       // `applet_managed_control` PCR and is checked from the submitted unit.
       const ghostBundle = ghostCreation.managed_actor_bundle;
@@ -780,9 +780,18 @@ test.describe("applet bridge", () => {
           accountable_principal_ids: [signed.applet_package.service_id],
         }),
       );
-      const accountabilityGrant = acceptedEvents.find(
+      // federation.md §3.2 keeps private source Events withheld from members.
+      // A covering Commit proves acceptance of the exact producer Event.
+      expect((events.commits as Array<Record<string, unknown>>).find(
+        (commit) => commit.event_ref === ghostBundle.accountability_grant_event.event_id,
+      ), "accepted Ghost accountability grant Commit").toBeDefined();
+      const disclosedAccountabilityGrant = acceptedEvents.find(
         (event) => event.event_id === ghostBundle.accountability_grant_event.event_id,
       );
+      if (disclosedAccountabilityGrant) {
+        expect(disclosedAccountabilityGrant).toEqual(ghostBundle.accountability_grant_event);
+      }
+      const accountabilityGrant = ghostBundle.accountability_grant_event;
       expect(
         accountabilityGrant,
         "accepted Ghost accountability grant",
@@ -1546,7 +1555,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
     const signed = await signPackage(request, registryBase, {
       package_id: `package:bridge:inbound-${stamp}`,
       namespace: `bridge.inbound.${stamp}`,
-      capabilities: ["ak.message.create"],
+      capabilities: ["ak.message.create", "ak.applet.bridge_error"],
       webhook_auth: {
         kind: "http_message_signature",
         accepted_signature_algorithms: ["ed25519"],
@@ -1703,26 +1712,53 @@ test.describe("applet inbound transaction push — per-delivery source signature
     expect(retained[0].producer_proof).toEqual(originalProducer);
 
     // A Service-actor self-signed write (§8): no delegation, so no
-    // executed_by. It cites an install grant, whose subject authority pair is
+    // executed_by. Its explicit grant must name the Service subject pair
     // `(service_id, target_station_id)` (§4b), and is signed with the same
     // registration producer key.
-    const { executed_by: _delegatedExecutor, ...serviceDraft } = previousUnsigned;
-    const serviceUnidentified = {
-      ...serviceDraft,
+    const serviceDraft = {
+      kind: "ak.applet.bridge_error",
+      realm_id: realmId,
+      scope_ref: { kind: "realm", realm_id: realmId },
       actor_id: serviceActorId(sourceServiceId),
-      authorization_ref: capabilityGrantRefForAction(registration, "ak.message.create"),
+      applet_id: registration.applet_id,
+      authorization_ref: capabilityGrantRefForAction(registration, "ak.applet.bridge_error"),
       created_at: canonicalEventTimestamp(),
-      external_ref: { ...serviceDraft.external_ref, external_id: `ext-service-${stamp}` },
+      payload: {
+        applet_id: registration.applet_id,
+        realm_id: realmId,
+        failed_transaction_ref: body.events[0].event_id,
+        error_class: "external_network",
+        error_code: "external_unavailable",
+        retriable: true,
+        visibility_scope: "realm_members",
+      },
     };
-    const serviceUnsigned = {
-      ...serviceUnidentified,
-      event_id: sdkEventDerivedIds(serviceUnidentified).event_id,
+    for (const [label, forbiddenDraft] of [
+      ["borrowed-bot-grant", { ...serviceDraft, authorization_ref: botGrantRef }],
+      ["account-masquerade", { ...serviceDraft, actor_id: accountActorId(sourceServiceId) }],
+    ] as const) {
+      const unsigned = { ...forbiddenDraft, event_id: sdkEventDerivedIds(forbiddenDraft).event_id };
+      const forbiddenEvent = {
+        ...unsigned,
+        producer_proof: appletEventProof(String(originalProducer.verification_method), unsigned, signed.service_signing_private_key),
+      };
+      const rejected = await deliver({ ...body, events: [forbiddenEvent] }, `inbound-service-${label}-${stamp}`);
+      const text = await rejected.text();
+      expect(rejected.status(), text).toBe(200);
+      expect(JSON.parse(text).status, text).toBe("rejected");
+      expect(JSON.parse(text)).not.toHaveProperty("committed_event_refs");
+      const history = await queryRealmEventsApi(request, token, realmId);
+      expect((history.events as Array<Record<string, unknown>>).some((event) => event.event_id === forbiddenEvent.event_id)).toBe(false);
+    }
+    const authorizedServiceUnsigned = {
+      ...serviceDraft,
+      event_id: sdkEventDerivedIds(serviceDraft).event_id,
     };
     const serviceEvent = {
-      ...serviceUnsigned,
+      ...authorizedServiceUnsigned,
       producer_proof: appletEventProof(
         String(originalProducer.verification_method),
-        serviceUnsigned,
+        authorizedServiceUnsigned,
         signed.service_signing_private_key,
       ),
     };
@@ -1803,10 +1839,21 @@ test.describe("applet inbound transaction push — per-delivery source signature
     expect(wireErrCode(JSON.parse(afterRevokeText)), afterRevokeText).toBe(
       "applet_registration_unauthorized",
     );
+    const fencedServiceDraft = { ...serviceDraft, created_at: canonicalEventTimestamp() };
+    const fencedServiceUnsigned = { ...fencedServiceDraft, event_id: sdkEventDerivedIds(fencedServiceDraft).event_id };
+    const fencedService = {
+      ...fencedServiceUnsigned,
+      producer_proof: appletEventProof(String(originalProducer.verification_method), fencedServiceUnsigned, signed.service_signing_private_key),
+    };
+    const serviceAfterRevoke = await deliver({ ...body, events: [fencedService] }, `inbound-service-after-revoke-${stamp}`);
+    const serviceAfterRevokeText = await serviceAfterRevoke.text();
+    expect(serviceAfterRevoke.status(), serviceAfterRevokeText).toBe(403);
+    expect(wireErrCode(JSON.parse(serviceAfterRevokeText)), serviceAfterRevokeText).toBe("applet_registration_unauthorized");
     const historical = await queryRealmEventsApi(request, token, realmId);
     const historicalEvents = historical.events as Array<Record<string, unknown>>;
     expect(historicalEvents.find((event) => event.event_id === previousUnsigned.event_id)?.producer_proof).toEqual(originalProducer);
     expect(historicalEvents.some((event) => event.event_id === fenced.event_id)).toBe(false);
+    expect(historicalEvents.some((event) => event.event_id === fencedService.event_id)).toBe(false);
   });
 
   test("missing Signature (bearer-only) inbound transaction push → 401 http_signature_required", async ({

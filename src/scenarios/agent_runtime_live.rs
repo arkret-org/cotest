@@ -1041,6 +1041,7 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
         ServiceOperationId::SELF_REALM_STATE_SNAPSHOT_READ_MANIFEST_HEAD_V1,
         ServiceOperationId::SELF_MLS_READ_ROSTER_AUTHORITY_V1,
         ServiceOperationId::SELF_MLS_READ_GROUP_STATE_MATERIAL_V1,
+        ServiceOperationId::SELF_EVENTS_COMMAND_SUBMIT_V1,
         ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_CLAIM_V1,
         ServiceOperationId::SELF_KEYS_KEYPACKAGES_READ_CLAIM_V1,
         ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_CONSUME_V1,
@@ -1233,6 +1234,7 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
             .context("creator join Commit event ref")?
             .to_owned(),
     )?;
+    let strand_id = controller.default_strand_id(joined_realm.as_str())?;
     let mut agent_join = MembershipPayload::join(
         joined_realm.clone(),
         ActorId::account(agent.agent_account.clone()),
@@ -1709,7 +1711,7 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
             agent_key_authorize_event_id: agent.key_authorization.clone(),
         },
         recipient_id: station.service_id().clone(),
-        realm_id: joined_realm,
+        realm_id: joined_realm.clone(),
         mls_group_id: controller_claim.mls_group_id.clone(),
         mls_epoch: 1,
         welcome_ref: welcome.welcome_id.clone(),
@@ -1765,6 +1767,240 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
         status == StatusCode::OK,
         "Agent durable consume refused: {status} {result}"
     );
+    let first_consume = result;
+    let (status, replay) = crate::scenarios::mls_lifecycle_live::post_json_at(
+        &agent.runtime,
+        "/_arkret/self/keys/keypackages/consume",
+        &consume,
+    )
+    .await?;
+    ensure!(
+        status == StatusCode::OK && replay == first_consume,
+        "exact Agent receipt replay must preserve the original result: {status} {replay}"
+    );
+    let mut changed_receipt = consume.recipient_durable_receipt.clone();
+    changed_receipt.durable_at += chrono::Duration::milliseconds(1);
+    let changed_receipt = identity.sign_recipient_mls_durable_receipt(changed_receipt)?;
+    let changed_consume = identity.signed_key_packages_consume_request(
+        arkret_wire::KeypackageClaimId::new(add_claim.claim_id.clone())?,
+        changed_receipt,
+    )?;
+    let (status, _) = crate::scenarios::mls_lifecycle_live::post_json_at(
+        &agent.runtime,
+        "/_arkret/self/keys/keypackages/consume",
+        &changed_consume,
+    )
+    .await?;
+    ensure!(
+        status == StatusCode::CONFLICT,
+        "a regenerated Agent receipt changed the original consume: {status}"
+    );
+
+    // Ordinary encrypted replies use the runtime leaf, while historical signer
+    // authorization remains in the independent Agent PCR.
+    let header = arkret::EventContentPreEncryptionHeader::reconstruct(
+        "1.0",
+        "application/vnd.arkret.message+json",
+        arkret::EncryptedPayloadScheme::MlsRfc9420,
+        welcome.effective_scope.clone(),
+        arkret_wire::EventKind::MessageCreate.as_str(),
+        1,
+        commit_event.event_id.clone(),
+        agent_group.local_content_sender_domain()?,
+        arkret::EventContentRoutingContext::None,
+    )?;
+    let plaintext =
+        arkret::canonical::canonical_json_bytes(&arkret::ContentBlock::text("Agent reply"))?;
+    let sealed =
+        arkret::MessageCrypto::encrypt(&mut agent_group, "agent-reply", header, &plaintext)?;
+    let reply = actor_private_event(
+        arkret_wire::EventKind::MessageCreate,
+        &agent.agent_account,
+        &joined_realm,
+        json!({"strand_id": strand_id, "track_name": "discussion", "encrypted_content": sealed.payload.to_envelope()?}),
+        &agent.verification_method,
+        agent.runtime_key.to_bytes(),
+    )?;
+    let (status, result) = crate::scenarios::mls_lifecycle_live::post_json_at(
+        &agent.runtime,
+        "/_arkret/self/events",
+        &crate::publication::initial_submission(reply.clone(), "")?,
+    )
+    .await?;
+    ensure!(
+        status == StatusCode::FORBIDDEN
+            && result["type"] == "https://arkret.org/problems/capability_denied",
+        "membership alone authorized an ordinary Agent reply: {status} {result}"
+    );
+    controller
+        .grant_realm_actions_to(
+            joined_realm.as_str(),
+            agent.agent_did.as_str(),
+            &["ak.message.create"],
+        )
+        .await?;
+    let (status, result) = crate::scenarios::mls_lifecycle_live::post_json_at(
+        &agent.runtime,
+        "/_arkret/self/events",
+        &crate::publication::initial_submission(reply.clone(), "")?,
+    )
+    .await?;
+    ensure!(
+        status == StatusCode::OK,
+        "ordinary Agent reply refused: {status} {result}"
+    );
+    let accepted =
+        crate::scenarios::mls_lifecycle_live::accepted_full_view(&controller, &reply.event_id)
+            .await?;
+    ensure!(
+        accepted.event == reply,
+        "Station changed the signed Agent reply"
+    );
+    let target = arkret::CommittedEventRef {
+        event_id: accepted.event.event_id.clone(),
+        commit_id: accepted.commit.commit_id.clone(),
+        stream_ref: accepted.commit.stream_ref.clone(),
+        stream_position: accepted.commit.stream_position,
+    };
+    let query = arkret::SignerKeysQueryRequestBody {
+        request_id: RequestId::new(format!("ak:request:{}", unique_uuid7()))?,
+        realm_id: joined_realm.clone(),
+        recipient_account_id: controller_account.clone(),
+        queries: vec![arkret::SignerKeyQuerySelector::HistoricalEvent {
+            sender: arkret::HistoricalSignerKeyQuerySender::Agent {
+                actor: ActorId::account(agent.agent_account.clone()),
+                verification_method: agent.verification_method.clone(),
+                committed_event_ref: target,
+            },
+        }],
+    };
+    let evidence = controller.sdk().signer_keys_query(&query).await?;
+    evidence.validate_for_request(&query)?;
+    let [arkret::SignerKeyQueryResult::HistoricalResolved { key, .. }] =
+        evidence.results.as_slice()
+    else {
+        bail!(
+            "the accepted ordinary Agent reply lacks exact historical signer evidence: {evidence:?}"
+        );
+    };
+    ensure!(
+        key.authorization_ref.event_id == agent.key_authorization
+            && key.authorization_ref.stream_ref.realm_id() == &agent.agent_pcr,
+        "historical Agent evidence replaced its independent PCR authorization"
+    );
+    ensure!(
+        arkret::base64url_decode(key.public_key_b64u.as_str().as_bytes())?
+            == agent.runtime_key.verifying_key().to_bytes()
+    );
+    let proof = accepted
+        .event
+        .producer_proof
+        .as_ref()
+        .context("accepted reply producer proof")?;
+    arkret_signatures::verify_ed25519_detached_jws_proof_with_digest_suite(
+        proof,
+        &arkret_signatures::EventProofBuilder::new().envelope_bytes(&accepted.event)?,
+        &accepted.event.actor_id,
+        &arkret_signatures::PublicKeyMaterial::Ed25519Raw {
+            bytes: arkret::base64url_decode(key.public_key_b64u.as_str().as_bytes())?,
+        },
+        arkret::canonical::DigestSuite::Sha256,
+    )?;
+    let received: arkret::EncryptedEnvelope = serde_json::from_value(
+        accepted
+            .event
+            .payload
+            .get("encrypted_content")
+            .context("accepted reply ciphertext")?
+            .clone(),
+    )?;
+    let sender = arkret::mls_basic_credential_identity(accepted.event.actual_signer())?;
+    let header = received.reconstruct_pre_encryption_header(
+        arkret::EncryptedPayloadScheme::MlsRfc9420,
+        accepted.event.scope_ref.clone(),
+        accepted.event.kind.as_str(),
+        std::str::from_utf8(&sender)?,
+        None,
+    )?;
+    let received =
+        arkret::mls::encrypted_envelope_to_payload_with_verified_header(&received, header)?;
+    ensure!(controller_group.decrypt_payload(&received)? == plaintext);
+    let frozen_key = key.clone();
+    let mut wrong_query = query.clone();
+    let arkret::SignerKeyQuerySelector::HistoricalEvent {
+        sender:
+            arkret::HistoricalSignerKeyQuerySender::Agent {
+                committed_event_ref,
+                ..
+            },
+    } = &mut wrong_query.queries[0]
+    else {
+        unreachable!()
+    };
+    committed_event_ref.stream_position += 1;
+    let unavailable = controller.sdk().signer_keys_query(&wrong_query).await?;
+    unavailable.validate_for_request(&wrong_query)?;
+    ensure!(
+        matches!(
+            unavailable.results.as_slice(),
+            [arkret::SignerKeyQueryResult::Unavailable { .. }]
+        ),
+        "historical Agent lookup accepted a substituted target coordinate"
+    );
+    agent
+        .transition(&controller, &controller_account, AgentTransition::Pause)
+        .await?;
+    let historical = controller.sdk().signer_keys_query(&query).await?;
+    historical.validate_for_request(&query)?;
+    let [arkret::SignerKeyQueryResult::HistoricalResolved { key, .. }] =
+        historical.results.as_slice()
+    else {
+        bail!("pausing a runtime erased its accepted historical proof");
+    };
+    ensure!(
+        key == &frozen_key,
+        "historical Agent signer query used the later PCR state"
+    );
+    // The receiving Station must also publish its durable franking carrier
+    // using this original Agent cut, even after the runtime is paused.
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let stream = controller
+            .sdk()
+            .scan_commit_stream_to_head(
+                joined_realm.clone(),
+                arkret::CommitStreamRef::Realm {
+                    realm_id: joined_realm.clone(),
+                },
+                Some(accepted.commit.stream_position),
+                100,
+            )
+            .await?;
+        let proofs = stream
+            .committed_events
+            .iter()
+            .filter_map(arkret::CommittedEventView::reducer_input)
+            .filter(|event| {
+                event.kind == arkret_wire::EventKind::ModerationFrankingProof
+                    && event.payload["event_id"] == reply.event_id.as_str()
+            })
+            .collect::<Vec<_>>();
+        if let [proof] = proofs.as_slice() {
+            ensure!(proof.actor_id == ActorId::service(station.service_id().clone()));
+            ensure!(proof.payload["realm_id"] == joined_realm.as_str());
+            ensure!(proof.payload["received_by"] == station.service_id().as_str());
+            break;
+        }
+        ensure!(
+            proofs.is_empty(),
+            "Agent receipt published duplicate franking carriers"
+        );
+        ensure!(
+            Instant::now() < deadline,
+            "accepted Agent reply has no durable franking carrier"
+        );
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
     Ok(())
 }
 

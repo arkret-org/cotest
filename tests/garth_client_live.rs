@@ -111,11 +111,8 @@ async fn garth_syncs_an_account_over_its_own_durable_store() -> Result<()> {
     )
     .map_err(anyhow::Error::msg)?;
     let device = DeviceId::new(device_id.clone()).map_err(anyhow::Error::msg)?;
-    let station_id = arkret_identifiers::project_did_to_core_id(
-        &arkret_identifiers::Did::new(client.service_id().to_owned())
-            .map_err(anyhow::Error::msg)?,
-    )
-    .map_err(anyhow::Error::msg)?;
+    let station_id = arkret_identifiers::DidCoreId::new(client.service_id().to_owned())
+        .map_err(anyhow::Error::msg)?;
     let actor =
         arkret_wire::ActorId::account(arkret_wire::AccountId::new(actor_id.clone(), station_id));
 
@@ -145,8 +142,13 @@ async fn garth_syncs_an_account_over_its_own_durable_store() -> Result<()> {
     struct CancelAfterFirst {
         control: SubscriptionControl,
         rounds: AtomicUsize,
+        resets: AtomicUsize,
     }
     impl AccountBatchProjector for CancelAfterFirst {
+        async fn reset_baseline(&self) -> garth::Result<()> {
+            self.resets.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
         async fn project(
             &self,
             _batch: &arkret_models_collaboration::sync_frames::account_subscribe::AccountSubscribeBatch,
@@ -161,6 +163,7 @@ async fn garth_syncs_an_account_over_its_own_durable_store() -> Result<()> {
     let projector = CancelAfterFirst {
         control: subscription.control(),
         rounds: AtomicUsize::new(0),
+        resets: AtomicUsize::new(0),
     };
     let stop = tokio::time::timeout(
         std::time::Duration::from_secs(120),
@@ -168,8 +171,8 @@ async fn garth_syncs_an_account_over_its_own_durable_store() -> Result<()> {
             &client.sdk(),
             &projector,
             None,
-            actor,
-            device,
+            actor.clone(),
+            device.clone(),
             Default::default(),
         ),
     )
@@ -200,7 +203,7 @@ async fn garth_syncs_an_account_over_its_own_durable_store() -> Result<()> {
     drop(store);
     let reopened = FileStore::open(&store_path).map_err(anyhow::Error::msg)?;
     let restored = reopened
-        .load_account_checkpoint(scope)
+        .load_account_checkpoint(scope.clone())
         .await
         .map_err(anyhow::Error::msg)?
         .context("the reopened store lost the cursor Garth had committed")?;
@@ -208,6 +211,83 @@ async fn garth_syncs_an_account_over_its_own_durable_store() -> Result<()> {
         restored, persisted,
         "the reopened store returned a different cursor than Garth committed"
     );
+
+    // Corrupt one byte of the real Station cursor. The real HTTP decoder
+    // must reject it; Garth then resets only the Account baseline and obtains
+    // a fresh signed snapshot using the same authenticated client.
+    let mut rejected = restored.clone();
+    let last = rejected
+        .cursor
+        .pop()
+        .context("the Station returned an empty cursor")?;
+    rejected.cursor.push(if last == 'A' { 'B' } else { 'A' });
+    let rejected_cursor = rejected.cursor.clone();
+    reopened
+        .save_account_checkpoint(scope.clone(), rejected)
+        .await?;
+    struct ObservedTransport {
+        client: arkret_http_client::Client,
+        requests: std::sync::Mutex<
+            Vec<arkret_models_collaboration::sync_frames::account_subscribe::SyncRequestBody>,
+        >,
+        cursor_errors: AtomicUsize,
+    }
+    impl garth::AccountSubscribeTransport for ObservedTransport {
+        async fn subscribe(&self, request: &arkret_models_collaboration::sync_frames::account_subscribe::SyncRequestBody)
+        -> garth::Result<arkret_models_collaboration::sync_frames::account_subscribe::AccountSubscribeSnapshotResult>{
+            self.requests.lock().unwrap().push(request.clone());
+            let result = garth::AccountSubscribeTransport::subscribe(&self.client, request).await;
+            if result
+                .as_ref()
+                .err()
+                .is_some_and(garth::Error::is_invalid_cursor)
+            {
+                self.cursor_errors.fetch_add(1, Ordering::SeqCst);
+            }
+            result
+        }
+    }
+    let transport = ObservedTransport {
+        client: client.sdk(),
+        requests: Default::default(),
+        cursor_errors: AtomicUsize::new(0),
+    };
+    let recovery = AccountSubscription::new(NativeExecutor, reopened.clone());
+    let recovered_projector = CancelAfterFirst {
+        control: recovery.control(),
+        rounds: AtomicUsize::new(0),
+        resets: AtomicUsize::new(0),
+    };
+    tokio::time::timeout(
+        std::time::Duration::from_secs(120),
+        recovery.run(
+            &transport,
+            &recovered_projector,
+            None,
+            actor,
+            device,
+            Default::default(),
+        ),
+    )
+    .await
+    .context("rejected-cursor recovery did not complete")??;
+    assert_eq!(
+        transport.cursor_errors.load(Ordering::SeqCst),
+        1,
+        "the real Station never exercised its cursor refusal gate"
+    );
+    assert_eq!(recovered_projector.resets.load(Ordering::SeqCst), 1);
+    let requests = transport.requests.lock().unwrap();
+    assert_eq!(requests[0].after.as_deref(), Some(rejected_cursor.as_str()));
+    assert!(requests.len() >= 2);
+    assert_eq!(requests[1].after, None);
+    assert_eq!(requests[1].catchup, Some(true));
+    assert_eq!(requests[1].replace_filter, None);
+    let fresh = FileStore::open(&store_path)?
+        .load_account_checkpoint(scope)
+        .await?
+        .context("recovery did not persist a new Account checkpoint")?;
+    assert_ne!(fresh.cursor, rejected_cursor);
 
     let _ = std::fs::remove_dir_all(&store_dir);
     Ok(())
