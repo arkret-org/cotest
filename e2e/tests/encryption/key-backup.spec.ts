@@ -1,4 +1,5 @@
 import { authHeaders } from "../../helpers/soland-api";
+import { readCreatorRecords } from "../../helpers/creator-bootstrap";
 // Key backup + restore
 // Contract: e2e/scenarios/encryption/key-backup.md
 // Spec refs:
@@ -192,7 +193,7 @@ test.describe("key backup + restore", () => {
   test("A1 automatic MLS recovery-key dialogs restore encrypted cards on a fresh browser", async ({
     browser,
     request,
-  }) => {
+  }, testInfo) => {
     test.setTimeout(360_000);
     const stamp = Date.now();
     const coauth = coauthBaseUrl();
@@ -308,6 +309,12 @@ test.describe("key backup + restore", () => {
         timeout: 90_000,
       });
 
+      const deviceACard = `A1 original device continues encrypted writes ${stamp}`;
+      await sendTimelineMessageAndWaitForPrivateBackup(
+        deviceA, realmId, deviceACard, keyBackupPuts,
+      );
+      await expect(deviceB.timelineEvent(deviceACard)).toBeVisible({ timeout: 90_000 });
+
       expect(
         protocolFailures.filter((line) =>
           /MLS runtime|SnapshotDecryptFailed|\/(?:api\/v1|_arkret\/self)\/(account\/subscribe|subscribe|describe|events)/.test(
@@ -316,6 +323,26 @@ test.describe("key backup + restore", () => {
         ),
         protocolFailures.join("\n"),
       ).toEqual([]);
+    } catch (error) {
+      const records = await readCreatorRecords(deviceA.page, true).catch(() => []);
+      const privateFailure = (detail: unknown) => {
+        if (detail === "advanced creator cache has no accepted Genesis") return "advanced-cache-current-unavailable";
+        if (detail === "creator private cache has another Genesis ref") return "cache-genesis-ref";
+        if (detail === "creator durable private cache differs from the winning unit") return "cache-private-unit";
+        return "other-private-invariant";
+      };
+      await testInfo.attach("safe-a1-creator-failure-coordinates", {
+        contentType: "application/json",
+        body: JSON.stringify(records.map(record => ({
+          scope: record.intent.effective_scope, state: record.state,
+          invariant: record.diagnostic?.invariant,
+          privateFailure: record.diagnostic ? privateFailure(record.diagnostic.invariant_detail) : undefined,
+          lastState: record.diagnostic?.last_state,
+          accepted: record.accepted_genesis?.accepted.event.event_id,
+          checkpoints: record.checkpoint_coordinates,
+        })), null, 2),
+      });
+      throw error;
     } finally {
       await Promise.allSettled(
         sessionsToClose.map((session) => session.close()),

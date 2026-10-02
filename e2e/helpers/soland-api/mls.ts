@@ -293,19 +293,21 @@ export async function activateRealmMlsApi(
     realmId,
     genesis.ratchet_tree_b64url,
   );
+  const createdAt = canonicalTimestamp();
   const event = signedEventEnvelope({
     actorId: owner.id,
     server: owner.server,
     stationId: opts.stationId,
     realmId,
     kind: "ak.mls.genesis",
+    createdAt,
     payload: {
       cipher_suite: genesis.cipher_suite,
       group_info_ref: groupInfoRef,
       ratchet_tree_ref: ratchetTreeRef,
       governance_binding: genesis.governance_binding,
       creator_leaf_authority: genesis.creator_leaf_authority,
-      created_at: canonicalTimestamp(),
+      created_at: createdAt,
     },
   });
   await submitSignedEventApi(request, owner.token, event, {

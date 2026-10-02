@@ -30,6 +30,7 @@ test.describe("offline queue replay", () => {
       return;
     }
     try {
+      await fixture.bobPage.completeRecoveryKeySetupIfPrompted(30_000);
       await fixture.bobPage.page.context().setOffline(true);
       const body = `offline queued replay ${Date.now()}`;
       await composeMessage(fixture.bobPage, body);

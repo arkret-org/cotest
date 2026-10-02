@@ -37,6 +37,17 @@ test.describe("moderation reports and audited E2EE", () => {
     request,
   }) => {
     const setup = await setupEncryptedMessage(request, "s25-report");
+    // Receiving-service proof publication is asynchronous and independent of
+    // the report (content-moderation.md section 3.4). Put its accepted Commit
+    // in the baseline so the report's exact-one-write assertion stays strict.
+    await expect.poll(async () => {
+      const scan = await scanRealmStreamApi(request, setup.aliceToken, setup.realmId);
+      expect(scan.truncated).toBe(false);
+      return scan.events.some((event) =>
+        event?.kind === "ak.moderation.franking_proof"
+        && (event.payload as Record<string, unknown>)?.event_id === setup.message.event_id,
+      );
+    }, { timeout: 30_000 }).toBe(true);
     const before = await scanRealmStreamApi(
       request,
       setup.aliceToken,
@@ -54,13 +65,17 @@ test.describe("moderation reports and audited E2EE", () => {
       setup.realmId,
     );
     expect(after.truncated).toBe(false);
-    expect(after.commits.slice(0, before.commits.length)).toEqual(before.commits);
+    // Keep proof-bearing Commit objects out of assertion telemetry.
+    expect(
+      canonicalJson(after.commits.slice(0, before.commits.length)) === canonicalJson(before.commits),
+      "the complete pre-report Commit prefix remains byte-identical",
+    ).toBe(true);
     const accepted = after.commits.slice(before.commits.length);
     const reportEventId = report.report_id.replace("ak:report:", "ak:event:");
     expect(
-      accepted,
+      accepted.length,
       "the ordinary report commits exactly one Event and no audit-release Event",
-    ).toHaveLength(1);
+    ).toBe(1);
     expect(accepted[0].event_ref).toBe(reportEventId);
     const reportEvent = after.events[before.commits.length];
     expect(reportEvent?.event_id).toBe(reportEventId);
@@ -73,9 +88,9 @@ test.describe("moderation reports and audited E2EE", () => {
     // The complete post-report suffix contains only that covering Commit;
     // even a withheld audit Event would add a slot and fail this assertion.
     expect(
-      after.events.filter((event) => event?.kind === "ak.audit.accessed"),
+      after.events.filter((event) => event?.kind === "ak.audit.accessed").length,
       "ak.audit.accessed must not be derived from a moderation report",
-    ).toEqual([]);
+    ).toBe(0);
   });
 });
 

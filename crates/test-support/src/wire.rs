@@ -186,6 +186,8 @@ struct InviteSubjectProofInput {
     subject_did: Did,
     root_public_key_multibase: String,
     recovery_key: String,
+    #[serde(default)]
+    negative_device_signing_seed_b64url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -315,11 +317,24 @@ pub fn invite_subject_proof(input: Value) -> Result<Value> {
         "did:key:{}#{}",
         material.root_public_key_multikey, material.root_public_key_multikey
     );
-    ensure!(
-        input.verification_method.as_str() == root_method,
-        "subject proof requires the accepted native update-key method"
-    );
-    let signing_key = SigningKey::from_bytes(&material.root_seed);
+    let signing_key = match input.negative_device_signing_seed_b64url {
+        Some(seed) => {
+            // Deliberately valid device signatures exercise the server's
+            // native-control rejection; ordinary proofs use the root below.
+            ensure!(
+                input.verification_method.as_str() != root_method,
+                "device rejection fixture must not name the native root method"
+            );
+            signing_key_from_seed(&seed)?
+        }
+        None => {
+            ensure!(
+                input.verification_method.as_str() == root_method,
+                "subject proof requires the accepted native update-key method"
+            );
+            SigningKey::from_bytes(&material.root_seed)
+        }
+    };
     let signature = signing_key.sign(&transcript.canonical_bytes()?).to_bytes();
     let proof = InviteSubjectProof::new(
         input.verification_method,

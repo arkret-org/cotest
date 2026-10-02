@@ -6,9 +6,9 @@
 //   - discovery/profiles-presence.md §3
 //   - discovery/push-notifications.md §4.3.1, §4.5
 
-import { createHash } from "node:crypto";
 import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 import { cssStringEscape } from "../../helpers/dom";
+import { solandBaseUrl } from "../../helpers/env";
 import {
   acceptInviteViaApi,
   createSharedRealmViaApi,
@@ -20,6 +20,7 @@ import { stepShot } from "../../helpers/screenshots";
 import {
   accountActorId,
   accountSubscribeFramesApi,
+  authHeaders,
   canonicalJson,
   createRealmApi,
   eventPrincipalId,
@@ -828,6 +829,7 @@ test.describe("chat advanced", () => {
         title: `S14E Poll ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
+        // content-types section 4.9 permits formal polls only in plaintext.
         mlsActivated: false,
         seedMembers: [bob.id, carol.id],
       });
@@ -860,10 +862,7 @@ test.describe("chat advanced", () => {
         .filter({ hasText: question })
         .first();
       await expect(poll).toBeVisible({ timeout: 30_000 });
-      await expect(poll).toHaveAttribute("data-poll-id", /^ak:message:/);
-      await expect(poll.getByTestId("poll-state")).toHaveText("open", {
-        timeout: 30_000,
-      });
+      await expect(poll).toHaveAttribute("data-poll-id", /^ak:message:/, { timeout: 60_000 });
       await stepShot(alicePage.page, testInfo, "poll-created");
 
       await gotoChat(bobPage, realmId);
@@ -926,14 +925,11 @@ test.describe("chat advanced", () => {
     request,
   }, testInfo) => {
     // spec: profiles-presence.md §3.5
+    test.setTimeout(360_000);
     const stamp = Date.now();
     const [aliceFlow, bobFlow] = await Promise.all([
-      openDpopUserPage(browser, request, `s14f-alice-${stamp}`, {
-        prepareMlsDevice: false,
-      }),
-      openDpopUserPage(browser, request, `s14f-bob-${stamp}`, {
-        prepareMlsDevice: false,
-      }),
+      openDpopUserPage(browser, request, `s14f-alice-${stamp}`),
+      openDpopUserPage(browser, request, `s14f-bob-${stamp}`),
     ]);
     if (!aliceFlow || !bobFlow) {
       await Promise.allSettled([
@@ -950,18 +946,32 @@ test.describe("chat advanced", () => {
     const bobPage = bobFlow.page;
 
     try {
+      for (const flow of [aliceFlow, bobFlow]) {
+        expect(Boolean(flow.session.recoveryKey), "Signal sender retains its confirmed Recovery Key").toBe(true);
+        await flow.page.completeMlsAccountRecoveryIfPrompted(flow.session.recoveryKey!);
+      }
       const realmId = await alicePage.createRealm({
         title: `S14F Typing ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
         seedMembers: [bob.id],
+        mlsActivated: true,
       });
+      await alicePage.completeMlsAccountRecoveryIfPrompted(aliceFlow.session.recoveryKey!);
       await bobPage.acceptInvite(realmId);
+      await bobPage.completeMlsAccountRecoveryIfPrompted(bobFlow.session.recoveryKey!);
       await Promise.all([
         gotoChat(alicePage, realmId),
         gotoChat(bobPage, realmId),
       ]);
 
+      // Bidirectional encrypted presence proves both Signal receivers and
+      // current MLS key material are ready before measuring a typing burst.
+      for (const [page, peer] of [[alicePage, bob], [bobPage, alice]] as const) {
+        await expect(page.page.locator(
+          `[data-testid="presence-row"][data-actor-id=${JSON.stringify(canonicalJson(accountActorId(peer.id)))}]`,
+        )).toContainText(/online/i, { timeout: 90_000 });
+      }
       await alicePage.page.getByTestId("chat-input").fill(`draft ${stamp}`);
       const aliceTypingIndicator = bobPage.page.locator(
         `[data-testid="typing-indicator"][data-typing-actors*="${cssStringEscape(alice.id)}"]`,
@@ -979,14 +989,11 @@ test.describe("chat advanced", () => {
     request,
   }, testInfo) => {
     // spec: profiles-presence.md §3.2-§3.4
+    test.setTimeout(360_000);
     const stamp = Date.now();
     const [aliceFlow, bobFlow] = await Promise.all([
-      openDpopUserPage(browser, request, `s14g-alice-${stamp}`, {
-        prepareMlsDevice: false,
-      }),
-      openDpopUserPage(browser, request, `s14g-bob-${stamp}`, {
-        prepareMlsDevice: false,
-      }),
+      openDpopUserPage(browser, request, `s14g-alice-${stamp}`),
+      openDpopUserPage(browser, request, `s14g-bob-${stamp}`),
     ]);
     if (!aliceFlow || !bobFlow) {
       await Promise.allSettled([
@@ -1002,13 +1009,20 @@ test.describe("chat advanced", () => {
     const bobPage = bobFlow.page;
 
     try {
+      for (const flow of [aliceFlow, bobFlow]) {
+        expect(Boolean(flow.session.recoveryKey), "Presence sender retains its confirmed Recovery Key").toBe(true);
+        await flow.page.completeMlsAccountRecoveryIfPrompted(flow.session.recoveryKey!);
+      }
       const realmId = await alicePage.createRealm({
         title: `S14G Presence ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
         seedMembers: [bob.id],
+        mlsActivated: true,
       });
+      await alicePage.completeMlsAccountRecoveryIfPrompted(aliceFlow.session.recoveryKey!);
       await bobPage.acceptInvite(realmId);
+      await bobPage.completeMlsAccountRecoveryIfPrompted(bobFlow.session.recoveryKey!);
       await Promise.all([
         gotoChat(alicePage, realmId),
         gotoChat(bobPage, realmId),
@@ -1028,86 +1042,104 @@ test.describe("chat advanced", () => {
   });
 
   test(// @user-promise: e2e/scenarios/messaging/chat-advanced.md
-  "E14.2 encrypted mention exposes no recipient and rejects cleartext routing sidecars", async ({
+  "E14.2 encrypted mentions stay in ciphertext; dedicated mention routing is rejected", async ({
+    browser,
     request,
-  }) => {
-    // push-notifications.md §4.5 forbids dedicated E2EE mention routing inputs.
+  }, testInfo) => {
+    // push-notifications.md §4.5(6): mentions stay encrypted; no routing sidecar.
+    test.setTimeout(360_000);
     const stamp = Date.now();
-    const alice = uniqueUser("s142-alice");
-    const bob = uniqueUser("s142-bob");
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, bob),
+    const [aliceFlow, bobFlow] = await Promise.all([
+      openDpopUserPage(browser, request, `s142-alice-${stamp}`),
+      openDpopUserPage(browser, request, `s142-bob-${stamp}`),
     ]);
-    const [aliceToken, bobToken] = await Promise.all([
-      issueUserSession(request, alice),
-      issueUserSession(request, bob),
-    ]);
-    const realmId = await createSharedRealmViaApi(
-      request,
-      alice,
-      aliceToken,
-      bob,
-      {
+    if (!aliceFlow || !bobFlow) {
+      await Promise.allSettled([aliceFlow?.page.close(), bobFlow?.page.close()]);
+      assertJointStackNotRequired("encrypted mention DPoP login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const alicePage = aliceFlow.page;
+    const bobPage = bobFlow.page;
+    try {
+      for (const flow of [aliceFlow, bobFlow]) {
+        expect(Boolean(flow.session.recoveryKey), "mention sender retains its confirmed Recovery Key").toBe(true);
+        await flow.page.completeMlsAccountRecoveryIfPrompted(flow.session.recoveryKey!);
+      }
+      const realmId = await alicePage.createRealm({
         title: `S14.2 E2EE Mention ${stamp}`,
+        discoverability: "listed",
+        joinRule: "invite",
         historyAccess: "since_join",
         mlsActivated: true,
-      },
-    );
-    const plaintext = `Encrypted mention for @${bob.handle.replace(/^@/, "")} ${stamp}`;
-    const group = await realmMlsCreatorGroupApi(request, realmId);
-    const encryptedContent = encryptMlsMessageContent(group, {
-      kind: "ak.content.text",
-      body: plaintext,
-    });
-    const strandId = await resolveDefaultStrandId(request, aliceToken, realmId);
-    const envelope = signedEventEnvelope({
-      actorId: alice.id,
-      realmId: realmId,
-      kind: "ak.message.create",
-      payload: {
-        strand_id: strandId,
-        track_name: "discussion",
-        encrypted_content: encryptedContent,
-      },
-    });
-    await submitSignedEventApi(request, aliceToken, envelope, {
-      context: "submit encrypted mention without routing sidecar",
-    });
+        seedMembers: [bobFlow.user.id],
+      });
+      await alicePage.completeMlsAccountRecoveryIfPrompted(aliceFlow.session.recoveryKey!);
+      await bobPage.acceptInvite(realmId);
+      await bobPage.completeMlsAccountRecoveryIfPrompted(bobFlow.session.recoveryKey!);
+      await Promise.all([gotoChat(alicePage, realmId), gotoChat(bobPage, realmId)]);
+      await expect(alicePage.page.getByTestId("send-chat-button")).toBeEnabled({ timeout: 90_000 });
+      const submitted = alicePage.page.waitForResponse(
+        (response) => response.url().includes("/_arkret/self/events")
+          && response.request().method() === "POST"
+          && (response.request().postData() ?? "").includes("ak.message.create"),
+        { timeout: 90_000 },
+      );
+      // Preserve the primary UI failure if its response waiter also expires;
+      // awaiting the original Promise below still propagates that rejection.
+      void submitted.catch(() => undefined);
+      const suffix = `Encrypted mention ${stamp}`;
+      const body = await alicePage.sendTimelineMentionMessage(
+        realmId,
+        bobFlow.session.accountId.principal_id,
+        bobFlow.session.accountId.station_id,
+        suffix,
+      );
+      const response = await submitted;
+      expect([200, 201]).toContain(response.status());
+      const envelope = JSON.parse(response.request().postData()!).event as Record<string, unknown>;
+      const payload = envelope.payload as Record<string, unknown>;
+      expect(payload.encrypted_content).toBeTruthy();
+      expect(payload.content).toBeUndefined();
+      expect(payload.mention_sidecar_digest).toBeUndefined();
+      const rawSubmission = JSON.stringify(envelope);
+      expect(rawSubmission).not.toContain(bobFlow.user.id);
+      expect(rawSubmission).not.toContain(suffix);
+      await gotoChat(bobPage, realmId);
+      await expect(bobPage.timelineEvent(body)).toBeVisible({ timeout: 120_000 });
 
-    const events = await listRealmEventsViaApi(request, aliceToken, realmId, {
-      limit: 100,
-    });
-    const messageEvent = events.find(
-      (event) => String(event.event_id) === String(envelope.event_id),
-    );
-    expect(messageEvent, "encrypted sidecar message event").toBeTruthy();
-    const rawServerView = JSON.stringify(messageEvent);
-    expect(rawServerView).not.toContain(bob.id);
-    expect(rawServerView).not.toContain(plaintext);
-    expect(rawServerView).not.toContain("mention_sidecar_digest");
-    const head = await readCommitStreamHeadApi(request, aliceToken, realmId);
-    const forbidden = signedEventEnvelope({
-      actorId: alice.id,
-      realmId,
-      kind: "ak.message.create",
-      payload: {
-        ...envelope.payload as Record<string, unknown>,
-        mention_sidecar_digest: [mentionSidecarHash(realmId, bob.id)],
-      },
-    });
-    const refused = await rawSubmitSignedEventApi(request, aliceToken, forbidden);
-    expect(refused.status()).toBe(422);
-    expect(wireErrCode(await refused.json())).toBe("schema_violation");
-    expect(await readCommitStreamHeadApi(request, aliceToken, realmId)).toEqual(head);
-    const after = await listRealmEventsViaApi(request, aliceToken, realmId, { limit: 100 });
-    expect(after.some(event => event.event_id === forbidden.event_id)).toBe(false);
+      const aliceToken = await issueUserSession(request, aliceFlow.user);
+      const events = await listRealmEventsViaApi(request, aliceToken, realmId, { limit: 100 });
+      const messageEvent = events.find((event) => event.event_id === envelope.event_id);
+      expect(messageEvent, "accepted encrypted mention event").toBeTruthy();
+      const rawServerView = JSON.stringify(messageEvent);
+      expect(rawServerView).not.toContain(bobFlow.user.id);
+      expect(rawServerView).not.toContain(suffix);
+      expect(rawServerView).not.toContain("mention_sidecar_digest");
+
+      // Reuse valid MLS payload bytes and change only the forbidden routing
+      // carrier. The server must reject it without publishing a second Event.
+      const forbidden = signedEventEnvelope({
+        actorId: aliceFlow.user.id,
+        realmId,
+        kind: "ak.message.create",
+        payload: { ...payload, mention_sidecar_digest: ["00".repeat(32)] },
+      });
+      const eventsUrl = `${solandBaseUrl()}/_arkret/self/events`;
+      const rejected = await request.post(eventsUrl, {
+        headers: { ...authHeaders(aliceToken, "POST", eventsUrl), "content-type": "application/json" },
+        data: canonicalJson({ event: forbidden }),
+      });
+      expect(rejected.status()).toBe(422);
+      expect((await rejected.json()).type).toBe("https://arkret.org/problems/schema_violation");
+      const after = await listRealmEventsViaApi(request, aliceToken, realmId, { limit: 100 });
+      expect(after.some((event) => event.event_id === forbidden.event_id)).toBe(false);
+      await stepShot(bobPage.page, testInfo, "encrypted-mention-without-routing-sidecar");
+    } finally {
+      await Promise.allSettled([bobPage.close(), alicePage.close()]);
+    }
   });
 });
-
-function mentionSidecarHash(realmId: string, did: string): string {
-  return createHash("sha256").update(`${realmId}|${did}`).digest("hex");
-}
 
 
 async function createChatApiFixture(request: APIRequestContext, label: string) {

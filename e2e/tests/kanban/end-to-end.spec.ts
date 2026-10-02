@@ -148,21 +148,22 @@ async function buildEncryptedBoardAndCard(
   await expect(column.getByTestId("kanban-card").filter({ hasText: cardTitle })).toBeVisible({
     timeout: 45_000,
   });
+  await expect(column.getByTestId("kanban-card").filter({ hasText: cardTitle })).toHaveAttribute(
+    "data-card-draft", "false", { timeout: 45_000 },
+  );
 }
 
-// The card-detail rich editor renders its fallback <textarea> under a fixed
-// testid regardless of slot (description vs synthesis), so both editors are
-// driven the same way. Only one edit form is mounted at a time.
+// Drive the visible editor and verify its product bridge updates the fallback
+// value. Both slots use this editor; only one edit form is mounted at a time.
 async function setCardDetailEditorValue(page: Page, value: string): Promise<void> {
+  const editor = page.getByTestId("card-detail-description-rich-editor")
+    .locator('.ProseMirror.toastui-editor-contents[contenteditable="true"]');
+  await expect(editor).toBeVisible({ timeout: 45_000 });
+  await editor.click();
+  await editor.press("ControlOrMeta+A");
+  await editor.pressSequentially(value);
   const input = page.getByTestId("card-detail-description-input");
-  await expect(input).toBeAttached({ timeout: 45_000 });
-  await input.evaluate((node, nextValue) => {
-    const textarea = node as HTMLTextAreaElement;
-    textarea.value = nextValue;
-    textarea.dispatchEvent(
-      new InputEvent("input", { bubbles: true, inputType: "insertText", data: nextValue }),
-    );
-  }, value);
+  await expect(input).toHaveValue(value);
 }
 
 // API-level Card creation that mirrors kanban/project-simulation's active
@@ -900,6 +901,7 @@ test.describe("kanban end-to-end", () => {
         .filter({ hasText: cardTitle })
         .first();
       await expect(cardLocator).toBeVisible({ timeout: 45_000 });
+      await expect(cardLocator).toHaveAttribute("data-card-draft", "false", { timeout: 45_000 });
       await stepShot(alicePage.page, testInfo, "A-encrypted-card-created");
 
       // Open the card → Description tab → add a description through the UI.
@@ -910,15 +912,7 @@ test.describe("kanban end-to-end", () => {
       await alicePage.page.getByTestId("card-detail-tab-description").click();
       await alicePage.page.getByTestId("card-detail-edit-description-button").click();
 
-      const editor = alicePage.page.getByTestId("card-detail-description-input");
-      await expect(editor).toBeAttached({ timeout: 45_000 });
-      await editor.evaluate((node, value) => {
-        const textarea = node as HTMLTextAreaElement;
-        textarea.value = value;
-        textarea.dispatchEvent(
-          new InputEvent("input", { bubbles: true, inputType: "insertText", data: value }),
-        );
-      }, description);
+      await setCardDetailEditorValue(alicePage.page, description);
 
       // The encrypted ak.strand.update submit must reach soland and be accepted,
       // not bounced by the content-encryption floor.
@@ -1085,6 +1079,8 @@ test.describe("kanban end-to-end", () => {
       await alicePage.page.getByTestId("card-detail-tab-discussion").click();
       await expect(alicePage.page.getByTestId("chat-panel")).toBeVisible({ timeout: 45_000 });
 
+      await alicePage.page.getByTestId("chat-input").fill(comment);
+      await expect(alicePage.page.getByTestId("send-chat-button")).toBeEnabled({ timeout: 90_000 });
       const messageCreate = alicePage.page.waitForResponse(
         (response) =>
           response.url().includes("/_arkret/self/events") &&
@@ -1092,7 +1088,6 @@ test.describe("kanban end-to-end", () => {
           (response.request().postData() ?? "").includes("ak.message.create"),
         { timeout: 60_000 },
       );
-      await alicePage.page.getByTestId("chat-input").fill(comment);
       await alicePage.page.getByTestId("send-chat-button").click();
 
       const response = await messageCreate;

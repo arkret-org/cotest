@@ -99,7 +99,7 @@
 ## Edge cases / sub-tests
 
 - **E14.1 reaction 并发竞态**:alice 和 bob 同时对 `M1` 加 + 撤 → OR-Set 仍正确(spec §8.5)
-- **E14.2 E2EE mention 隐私**：以当前 MLS group 生成真实 ciphertext 并接受，accepted Event 不含 Bob 身份或明文；同一 encrypted payload 增加退休 mention_sidecar_digest 输入必须 schema_violation/422，commit head 不推进且没有 rejected Event 的接受事实。本条为 fixture 契约，不替代客户端解密后的实际通知验收。
+- **E14.2 E2EE mention 隐私**:真实 MLS mention 只保留在密文内，Bob 本地解密可读；服务端 Event 不含 Bob 主体或正文明文，不携带专用 mention 路由字段。携带旧 mention sidecar 字段的请求必须 schema reject 且不发布 Event（push-notifications.md §4.5）。
 - **E14.3 poll closed**:本地关闭后隐藏该客户端的选项按钮；v1 不存在关闭 carrier，不能据此断言 reducer 拒绝合法迟到 vote
 - **E14.4 max_selections > 1**:多选 poll;一个 actor 可选 2 个 option;断言计数正确
 - **E14.5 typing 在 redact 后**:bob 发了消息后 redact;typing 指示不应"复活"
@@ -107,7 +107,7 @@
 
 ## Implementation notes
 
-- **soland 缺口**:`ak.content.poll{,.response}`、`ak.relation.mention`、E2EE 客户端 mention 求值、`ak.typing` / `ak.presence` ephemeral channel — 实现度未知;reactions(OR-Set)应该已有
+- **soland 缺口**:`ak.content.poll{,.response}`、`ak.relation.mention`、`ak.typing` / `ak.presence` ephemeral channel — 实现度未知;reactions(OR-Set)应该已有。v1 禁止专用 mention sidecar/hash 路由。
 - **inkson 缺口**:poll UI(`poll-option-button`、`poll-close-button`、`poll-vote-count`)、typing indicator、presence indicator — 这些 testid 未确认存在
 - **测试侧**:典型测 typing 需要"无 send" 状态;Playwright 用 `composer-input.fill()` 不 click send,等 N ms 然后查 alice 视图
 
