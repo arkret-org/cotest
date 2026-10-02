@@ -9,8 +9,8 @@
 // over the exact canonical transcripts.
 //
 // The verification-service fixture owns a submitted DID document. The subject
-// proof uses the claimant's current accepted PCR device key, matching the
-// `#device-1` authority shape in third-party-invites.md §4.2-4.3.
+// proof uses the accepted native WebVH update key (third-party-invites.md
+// §4.3). The outer Event's PCR device producer is independent of that authority.
 
 import { generateKeyPairSync, sign as nodeSign, type KeyObject } from "node:crypto";
 import {
@@ -42,7 +42,8 @@ export type DidKeyIdentity = {
 export type InviteSubjectIdentity = {
   did: string;
   verificationMethod: string;
-  signingSeedB64url: string;
+  rootPublicKeyMultibase: string;
+  recoveryKey: string;
 };
 
 export type ThirdPartyInviteCell = {
@@ -222,7 +223,9 @@ export function signSubjectProof(args: {
     verificationId: projectDidToCoreId(args.verificationServiceDid),
     bindingProof: args.bindingProof,
     verificationMethod: args.subject.verificationMethod,
-    signingSeedB64url: args.subject.signingSeedB64url,
+    subjectDid: args.subject.did,
+    rootPublicKeyMultibase: args.subject.rootPublicKeyMultibase,
+    recoveryKey: args.subject.recoveryKey,
   });
 }
 
