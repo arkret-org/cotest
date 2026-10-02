@@ -19,9 +19,6 @@ import {
   expectJsonOk,
   projectDidToCoreId,
   readCurrentRealmPolicyBundleApi,
-  registerEventSigner,
-  registeredEventSigningSeedB64url,
-  registeredEventVerificationMethod,
   retypeEventDerivedId,
   signedEventEnvelope,
   assertAuthoritySubmitOutcome,
@@ -31,6 +28,7 @@ import {
 import {
   ensureRegistered,
   issueUserSession,
+  registeredPrincipalControlIdentity,
   uniqueUser,
   type JointUser,
 } from "../../helpers/users";
@@ -49,24 +47,6 @@ import {
   generateWebvhKey,
   submitPrincipalGenesisEntry,
 } from "../../helpers/webvh-api";
-
-function currentSubjectIdentity(user: JointUser) {
-  const verificationMethod = registeredEventVerificationMethod(
-    user.id,
-    user.deviceId,
-  );
-  const signingSeedB64url = registeredEventSigningSeedB64url(user.id);
-  if (!verificationMethod || !signingSeedB64url) {
-    throw new Error(
-      `current accepted device authority material is unavailable for ${user.id}`,
-    );
-  }
-  return {
-    did: user.did,
-    verificationMethod,
-    signingSeedB64url,
-  };
-}
 
 async function createVerificationService(
   request: APIRequestContext,
@@ -258,17 +238,11 @@ test.describe("third-party invite", () => {
     const bob = uniqueUser(`${opts.fixtureNonce}-bob`);
     await ensureRegistered(request, alice);
     await ensureRegistered(request, bob);
-    const bobSubjectIdentity = currentSubjectIdentity(bob);
+    const bobSubjectIdentity = await registeredPrincipalControlIdentity(request, bob);
     const aliceToken = await issueUserSession(request, alice);
     const bobToken = await issueUserSession(request, bob);
-    // The outer Event and subject proof are both signed by the current PCR
-    // device authority. A device is not a DID actor and its method is therefore
-    // resolved through the accepted device authorization, not a DID document.
-    registerEventSigner({
-      actorId: bob.id,
-      deviceId: bob.deviceId,
-      verificationMethod: `${bob.did}#${bob.deviceId}`,
-    });
+    // The Event keeps its accepted PCR device producer. Its subject proof
+    // instead proves native DID control from the registration's update key.
     const realmId = await createRealmApi(request, aliceToken, {
       title: `3PID invite reducer ${opts.fixtureNonce}`,
       ownerId: alice.id,
@@ -601,14 +575,8 @@ test.describe("third-party invite", () => {
 
     const mallory = uniqueUser("s3-mallory");
     await ensureRegistered(request, mallory);
-    const mallorySubjectIdentity = currentSubjectIdentity(mallory);
+    const mallorySubjectIdentity = await registeredPrincipalControlIdentity(request, mallory);
     const malloryToken = await issueUserSession(request, mallory);
-    registerEventSigner({
-      actorId: mallory.id,
-      deviceId: mallory.deviceId,
-      // The outer Event and subject proof use Mallory's accepted PCR device.
-      verificationMethod: `${mallory.did}#${mallory.deviceId}`,
-    });
 
     const claimNonce = `claim-${randomUUID()}`;
     // Verification service still signs a binding_proof for the legitimate

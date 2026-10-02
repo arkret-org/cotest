@@ -172,7 +172,8 @@ struct MlsKeyPackageUploadEntryInput {
     signing_seed_b64url: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct InviteSubjectProofInput {
     subject_account_id: AccountId,
     invite_id: String,
@@ -182,7 +183,9 @@ struct InviteSubjectProofInput {
     verification_id: String,
     binding_proof: InviteClaimBindingProof,
     verification_method: DidUrl,
-    signing_seed_b64url: String,
+    subject_did: Did,
+    root_public_key_multibase: String,
+    recovery_key: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -295,7 +298,28 @@ pub fn invite_subject_proof(input: Value) -> Result<Value> {
         binding_digest.as_str(),
     )?;
     let transcript_digest = transcript.transcript_digest()?;
-    let signing_key = signing_key_from_seed(&input.signing_seed_b64url)?;
+    ensure!(
+        project_did_to_core_id(&input.subject_did)? == transcript.subject_account_id.principal_id,
+        "native subject DID differs from the signed Account"
+    );
+    let material = arkret::identity_root::derive_identity_recovery_key_material_from_bip39(
+        &input.recovery_key,
+        "",
+        0,
+    )?;
+    ensure!(
+        material.root_public_key_multikey == input.root_public_key_multibase,
+        "native control key differs from the accepted registration checkpoint"
+    );
+    let root_method = format!(
+        "did:key:{}#{}",
+        material.root_public_key_multikey, material.root_public_key_multikey
+    );
+    ensure!(
+        input.verification_method.as_str() == root_method,
+        "subject proof requires the accepted native update-key method"
+    );
+    let signing_key = SigningKey::from_bytes(&material.root_seed);
     let signature = signing_key.sign(&transcript.canonical_bytes()?).to_bytes();
     let proof = InviteSubjectProof::new(
         input.verification_method,
@@ -1703,6 +1727,89 @@ fn development_event_signing_key(verification_method: &str) -> SigningKey {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn invite_subject_oracle_signs_native_control_and_rejects_device_or_mismatched_custody() {
+        let mnemonic = bip39::Mnemonic::from_entropy(&[37; 32]).unwrap();
+        let recovery_key = mnemonic.words().collect::<Vec<_>>().join(" ");
+        let material = arkret::identity_root::derive_identity_recovery_key_material_from_bip39(
+            &recovery_key,
+            "",
+            0,
+        )
+        .unwrap();
+        let (did, principal_id) = actor_ids(
+            "did:webvh:zQmV5MGgUvFGbi15ajBaMzdXR5KQzL3TVDxM7VFQCv5nCwH5C:01kwxhre7cexz894j3nmsvmqh5",
+        );
+        let subject_account_id = AccountId::new(
+            principal_id,
+            DidCoreId::new("ak:did_core:web:station.example").unwrap(),
+        );
+        let root_method = format!(
+            "did:key:{}#{}",
+            material.root_public_key_multikey, material.root_public_key_multikey
+        );
+        let input = json!({
+            "subject_account_id": subject_account_id,
+            "invite_id": "ak:invite:AY6DJbBwavsGTQuBZZiqqw9MVcqPZ8QX8invQ3i2kpi7",
+            "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP",
+            "token_commitment": format!("sha256:{}", "ab".repeat(32)),
+            "claim_nonce": "native-control-claim-nonce",
+            "verification_id": "ak:did_core:web:verifier.example",
+            "binding_proof": {
+                "verification_id": "ak:did_core:web:verifier.example",
+                "verification_method": "did:web:verifier.example#verification-1",
+                "subject_account_id": subject_account_id,
+                "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP",
+                "audience": "arkret.invite.claim",
+                "claim_nonce": "native-control-claim-nonce",
+                "expires_at": "2026-10-02T12:00:00.000Z",
+                "signature": canonical::base64url_encode(&[19; 64])
+            },
+            "verification_method": root_method,
+            "subject_did": did,
+            "root_public_key_multibase": material.root_public_key_multikey,
+            "recovery_key": recovery_key
+        });
+        let proof: InviteSubjectProof =
+            serde_json::from_value(invite_subject_proof(input.clone()).unwrap()).unwrap();
+        let parsed: InviteSubjectProofInput = serde_json::from_value(input.clone()).unwrap();
+        let transcript = InviteSubjectProofBody::from_wire_parts(
+            parsed.subject_account_id,
+            parsed.invite_id,
+            parsed.realm_id,
+            parsed.token_commitment,
+            parsed.claim_nonce,
+            parsed.verification_id,
+            parsed.binding_proof.canonical_digest().unwrap().as_str(),
+        )
+        .unwrap();
+        assert_eq!(
+            proof.transcript_digest,
+            transcript.transcript_digest().unwrap()
+        );
+        let signature = ed25519_dalek::Signature::from_slice(
+            &canonical::base64url_decode(&proof.signature).unwrap(),
+        )
+        .unwrap();
+        SigningKey::from_bytes(&material.root_seed)
+            .verifying_key()
+            .verify_strict(&transcript.canonical_bytes().unwrap(), &signature)
+            .unwrap();
+
+        let mut device = input.clone();
+        device["verification_method"] = json!(format!("{}#ak:device:fixture", did));
+        assert!(invite_subject_proof(device).is_err());
+        let mut wrong_subject = input.clone();
+        wrong_subject["subject_did"] = json!("did:web:other.example");
+        assert!(invite_subject_proof(wrong_subject).is_err());
+        let mut wrong_key = input.clone();
+        wrong_key["root_public_key_multibase"] = json!("unaccepted-key");
+        assert!(invite_subject_proof(wrong_key).is_err());
+        let mut retired_seed = input;
+        retired_seed["signing_seed_b64url"] = json!(canonical::base64url_encode(&[37; 32]));
+        assert!(invite_subject_proof(retired_seed).is_err());
+    }
 
     #[test]
     fn event_identity_excludes_only_current_envelope_carriers() {

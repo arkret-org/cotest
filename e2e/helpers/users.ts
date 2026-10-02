@@ -1620,6 +1620,35 @@ export async function issueUserSession(
   return session.grantJwt;
 }
 
+/// Local test custody for a principal's accepted inception update key.
+/// Recovery material stays in the oracle input; no root seed is returned.
+export async function registeredPrincipalControlIdentity(
+  request: APIRequestContext,
+  user: JointUser,
+  opts: { server?: SolandKey } = {},
+) {
+  await ensureRegistered(request, user, opts);
+  const session = Array.from(canonicalSessionsByGrant.values()).find(
+    (candidate) => candidate.accountId.principal_id === user.id &&
+      candidate.accountId.station_id === solandServiceId(opts.server) &&
+      candidate.user.did === user.did && candidate.user.deviceId === user.deviceId,
+  );
+  if (!session) throw new Error("native control identity has no accepted registration");
+  const checkpoint = session.account.principalRegistrationCheckpoint;
+  const verificationMethod = checkpoint.root_verification_method;
+  const rootPublicKeyMultibase = checkpoint.root_public_key_multibase;
+  if (checkpoint.did !== user.did || typeof verificationMethod !== "string" ||
+      typeof rootPublicKeyMultibase !== "string" || !session.account.recoveryKey) {
+    throw new Error("accepted registration omitted its native control material");
+  }
+  return {
+    did: user.did,
+    verificationMethod,
+    rootPublicKeyMultibase,
+    recoveryKey: session.account.recoveryKey,
+  };
+}
+
 export async function createDpopUserSession(
   _request: APIRequestContext,
   prefix: string,

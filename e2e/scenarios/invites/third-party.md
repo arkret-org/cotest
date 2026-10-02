@@ -18,7 +18,11 @@
 ## 拓扑与前置
 
 - Soland 与 Coauth 提供真实注册、Standard session 和逐请求 DPoP。
-- Alice 与 Bob 使用已接受 PCR 身份；Mallory 只用于 subject 不一致反例。
+- 外层 Event 使用已接受 PCR device producer；subject proof 使用注册 checkpoint
+  对应的原生 WebVH effective update key，由 SDK oracle 在本地恢复材料托管下签名。
+  Station 独立认证 authority cut 的原生 DID 历史，PCR device method 不能代替 subject
+  控制证明，bare did:key 的投影也不能代替原生 subject identity。
+  Mallory 只用于 subject 不一致反例。
 - 验证服务 DID、临时密钥和签名 transcript 由 fixture 构造。
 - mock-email 是独立 harness 依赖；仅第二条 broker 测试在未配置它时跳过。
   官方完整全量须启动 mock，并保留 `ForbidSkippedTests`。
@@ -43,7 +47,7 @@ Claimant 不读取 membership-private frontier；它向自己的 Account Station
 2. **邮件 broker**：mock-email 投递 token，Bob 从 inbox 获取后 claim 成功，
    返回 binding artifact；第二次 broker claim 返回 409。这是 mock 契约测试，
    不替代正式 open present-token operation 的端到端验收。
-3. **合法 claim**：验证服务签 binding proof，Bob 用当前有效身份签 subject
+3. **合法 claim**：验证服务签 binding proof，Bob 用原生身份控制 key 签 subject
    proof，提交成功；通过标准 authz invite list 读回精确 Bob AccountId
    （principal 与 station）、Realm 和 `claimed` 状态。它是后续成员确认的 proposal，
    不能当作已加入或 MLS 可写。
