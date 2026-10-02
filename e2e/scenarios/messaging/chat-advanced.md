@@ -64,11 +64,11 @@
 
 ### Phase E — Poll
 
-18. Alice 创建投票：标准 `ak.message.create` 的 Content Block 为 `ak.content.poll`，使用 `poll.answers[{id,text}]` 和 `poll.max_selections=1`；题目位于 fallback `body`。
+18. Alice 显式创建未激活 MLS 的明文 Realm，并创建投票：标准 `ak.message.create` 的 Content Block 为 `ak.content.poll`，使用 `poll.answers[{id,text}]` 和 `poll.max_selections=1`；题目位于 fallback `body`。
 19. Bob、Carol 加入后，由 Alice 分别授予 `ak.message.create`。成员身份本身不授予发送或投票权限。
 20. Bob 发送标准 Message，Content Block 为 `ak.content.poll.response`，其中 `poll_response.poll_ref` 是原投票的 Message ID，`selections` 是 answer ID 数组。
 21. Bob 从选项 A 改选 B，Carol 选 B；精确断言 `poll-vote-count` 的 A=0、B=2，不匹配包含时间戳的选项整行。
-22. 创建和回复均遵守有效 scope 的加密下限；要求 E2EE 时复用普通消息的 MLS 发送管道，失败不得降级为明文或把乐观计数视为接受结果。
+22. v1 只允许明文 `payload.content` 中的正式 poll／response；不得放入 `encrypted_content`，也不得为投票降级 E2EE scope。Alice 的卡片须取得正式 Message ID 和已验证的 open 状态后才进入成员投票流程，不能把本地乐观卡片视为接受结果。
 23. 当前“Close poll”只关闭本地卡片控件。v1 没有关闭投票的 wire carrier；该 UI 操作不声称改变其他客户端或服务端的投票权限，也不以其拒绝迟到的合法 response。
 
 ### Phase F — Typing indicator (ephemeral)
@@ -100,7 +100,7 @@
 
 - **E14.1 reaction 并发竞态**:alice 和 bob 同时对 `M1` 加 + 撤 → OR-Set 仍正确(spec §8.5)
 - **E14.2 mention E2EE sidecar**:E2EE Realm 中,服务端只能用 hash 路由,**不能**回推出 bob.did;断言服务端 log 不含 bob.did 明文
-- **E14.3 poll closed**:`closes_at` 过后 vote 被 reducer 拒
+- **E14.3 poll closed**:本地关闭后隐藏该客户端的选项按钮；v1 不存在关闭 carrier，不能据此断言 reducer 拒绝合法迟到 vote
 - **E14.4 max_selections > 1**:多选 poll;一个 actor 可选 2 个 option;断言计数正确
 - **E14.5 typing 在 redact 后**:bob 发了消息后 redact;typing 指示不应"复活"
 - **E14.6 presence 隐私**:carol 在 client preferences 关 presence broadcast → 即使她在线,alice 看到的是 unknown / offline

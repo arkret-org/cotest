@@ -825,6 +825,7 @@ test.describe("chat advanced", () => {
         title: `S14E Poll ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
+        mlsActivated: false,
         seedMembers: [bob.id, carol.id],
       });
       await Promise.all([
@@ -856,6 +857,10 @@ test.describe("chat advanced", () => {
         .filter({ hasText: question })
         .first();
       await expect(poll).toBeVisible({ timeout: 30_000 });
+      await expect(poll).toHaveAttribute("data-poll-id", /^ak:message:/);
+      await expect(poll.getByTestId("poll-state")).toHaveText("open", {
+        timeout: 30_000,
+      });
       await stepShot(alicePage.page, testInfo, "poll-created");
 
       await gotoChat(bobPage, realmId);
