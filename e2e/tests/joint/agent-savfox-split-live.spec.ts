@@ -511,6 +511,10 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           replayed().length,
           "the cut submission must have been retried after the reload",
         ).toBeGreaterThanOrEqual(2);
+        await testInfo.attach("direct-mls-public-governance-diagnostics", {
+          body: JSON.stringify(mlsSubmissions.diagnostics()),
+          contentType: "application/json",
+        });
         expect(
           mlsSubmissions.distinctEventIds("ak.mls.commit", 1),
           "a resumed materialization must not author a second epoch-1 Commit",
