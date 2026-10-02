@@ -566,6 +566,23 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           pongMessage.getByTestId("crypto-status-needs-verification"),
         ).toHaveCount(0);
 
+        // Realm receive and its durable signer evidence must survive a reload
+        // without an Account notification carrying the Agent reply again.
+        const acceptedReplyId = await eventIdFromMessage(pongMessage);
+        const accountOutage = await dropAccountSubscribeStream(inkson);
+        try {
+          await inkson.reload();
+          await expect.poll(accountOutage.blockedCount, { timeout: 30_000 }).toBeGreaterThan(0);
+          await expect(pongMessage).toBeVisible({ timeout: 180_000 });
+          expect(await eventIdFromMessage(pongMessage)).toBe(acceptedReplyId);
+          await expect(pongMessage).toHaveAttribute("data-crypto-state", "plaintext");
+          await expect(pongMessage.getByTestId("member-badge-agent")).toBeVisible();
+          await expect(pongMessage.getByTestId("crypto-status-needs-verification")).toHaveCount(0);
+          await expect(inkson.getByText(/GroupStateError\(PendingCommit\)/)).toHaveCount(0);
+        } finally {
+          await accountOutage.restore();
+        }
+
         if (lifecycleEvidenceOnly) {
           const directConversationUrl = inkson.url();
           const responseEventId = await eventIdFromMessage(pongMessage);
