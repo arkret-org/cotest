@@ -14,7 +14,7 @@
 import { createHash, createPrivateKey, createPublicKey, randomBytes } from "node:crypto";
 import { expect, type APIRequestContext } from "@playwright/test";
 import { type SolandKey, solandBaseUrl, solandServiceId } from "../env";
-import { authHeaders, expectJsonOk } from "./request";
+import { authHeaders, expectJsonOk, wireErrCode } from "./request";
 import { canonicalJson, cotestWire } from "./wire-client";
 import {
   accountActorId,
@@ -238,15 +238,26 @@ export async function readScopeMlsGroupCurrentApi(
 ): Promise<MlsGroupCurrent | undefined> {
   const url = new URL(`${solandBaseUrl(server)}/_arkret/self/realm-state-snapshot/head`);
   url.searchParams.set("realm_id", realmId);
+  const deadline = Date.now() + 30_000;
+  let response;
+  for (;;) {
+    response = await request.get(url.toString(), {
+      headers: authHeaders(token, "GET", url.toString()),
+    });
+    if (response.status() !== 503 || Date.now() >= deadline) break;
+    const problem: unknown = await response.json().catch(() => undefined);
+    if (wireErrCode(problem) !== "realm_state_snapshot_unavailable") break;
+    // Snapshot schema section 3 requires one complete durable cut. A raced
+    // read is retried; no cached row or partial response stands in for it.
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
   const snapshot = await expectJsonOk<{
     current_state_entries?: Array<{
       selector?: { kind?: unknown; scope_ref?: unknown };
       value?: unknown;
     }>;
   }>(
-    await request.get(url.toString(), {
-      headers: authHeaders(token, "GET", url.toString()),
-    }),
+    response,
     `read Realm state snapshot for ${realmId}`,
   );
   const scopeKey = canonicalJson(scopeRef);

@@ -13,6 +13,7 @@ import {
 } from "../../helpers/env";
 import {
   authHeaders,
+  accountActorId,
   acceptInviteApi,
   requireDidCoreId,
   canonicalJson,
@@ -569,9 +570,20 @@ test.describe("third-party invite", () => {
     const joinedLifecycle = joinedSnapshot.current_state_entries.filter((row: Record<string, any>) =>
       row.selector.kind === "invite_lifecycle" && row.selector.invite_id === ctx.cell.inviteId);
     expect(joinedLifecycle).toHaveLength(1);
-    expect(joinedLifecycle[0].value).toBe("joined");
+    expect(joinedLifecycle[0].value).toBe("accepted");
     expect(joinedLifecycle[0].source_stream_ref).toEqual(acceptanceCommit.stream_ref);
     expect(joinedLifecycle[0].revision).toEqual({
+      commit_id: acceptanceCommit.commit_id, stream_position: acceptanceCommit.stream_position,
+    });
+    // governance-objects.md section 5.3: one acceptance atomically writes
+    // the accepted invite lifecycle and the full subject Actor's join.
+    const joinedMember = joinedSnapshot.current_state_entries.filter((row: Record<string, any>) =>
+      row.selector.kind === "member_state" &&
+      canonicalJson(row.selector.actor_id) === canonicalJson(accountActorId(ctx.bob.id)));
+    expect(joinedMember).toHaveLength(1);
+    expect(joinedMember[0].value.membership).toBe("join");
+    expect(joinedMember[0].source_stream_ref).toEqual(acceptanceCommit.stream_ref);
+    expect(joinedMember[0].revision).toEqual({
       commit_id: acceptanceCommit.commit_id, stream_position: acceptanceCommit.stream_position,
     });
   });
