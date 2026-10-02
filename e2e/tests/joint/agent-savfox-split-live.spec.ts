@@ -490,9 +490,13 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         ).toBeGreaterThan(0);
         await crash.restore();
 
+        const replayed = () => mlsSubmissions.all().filter(
+          (events) => events.map((event) => event.eventId).join("|") === crashedEventIds.join("|"),
+        );
         await inkson.reload();
         await openOwnAgentDirectChat(inkson, agentSlug, {
           retryUntilChatReady: true,
+          resumedSubmissionReady: () => replayed().length >= 2,
           diagnostics: () => JSON.stringify(mlsSubmissions.diagnostics()),
         });
         await expect(inkson.getByTestId("chat-panel")).toBeVisible({
@@ -502,15 +506,8 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           timeout: 30_000,
         });
 
-        const replayed = mlsSubmissions
-          .all()
-          .filter(
-            (events) =>
-              events.map((event) => event.eventId).join("|") ===
-              crashedEventIds.join("|"),
-          );
         expect(
-          replayed.length,
+          replayed().length,
           "the cut submission must have been retried after the reload",
         ).toBeGreaterThanOrEqual(2);
         expect(
@@ -1294,6 +1291,7 @@ async function openOwnAgentDirectChat(
   agentSlug: string,
   options: {
     retryUntilChatReady?: boolean;
+    resumedSubmissionReady?: () => boolean;
     diagnostics?: () => string | Promise<string>;
   } = {},
 ): Promise<void> {
@@ -1317,7 +1315,9 @@ async function openOwnAgentDirectChat(
     await expect
       .poll(
         async () => {
-          if (await chatPanel.isVisible().catch(() => false)) return true;
+          if (await chatPanel.isVisible().catch(() => false)) {
+            return options.resumedSubmissionReady?.() ?? true;
+          }
           const toastText = (
             await inkson.getByTestId("toast-item").allTextContents()
           )
@@ -1342,7 +1342,8 @@ async function openOwnAgentDirectChat(
           ) {
             await ownAgentRow.click();
           }
-          return await chatPanel.isVisible().catch(() => false);
+          return (await chatPanel.isVisible().catch(() => false)) &&
+            (options.resumedSubmissionReady?.() ?? true);
         },
         {
           timeout: 180_000,
