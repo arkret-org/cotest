@@ -1212,6 +1212,8 @@ async fn run(
         coordinates,
         authorization_basis,
         group_state_ref,
+        initial_exact_pair_group_state_ref,
+        peer_mls_admission,
     } = resolved
     else {
         bail!("founding slot did not resolve as provisional: {resolved:?}");
@@ -1220,13 +1222,18 @@ async fn run(
         coordinates.realm_id == realm_id
             && coordinates.main_strand_id == strand_id
             && coordinates.binding_event_ref.is_none()
-            && group_state_ref.is_none(),
+            && group_state_ref.is_none()
+            && initial_exact_pair_group_state_ref.is_none()
+            && peer_mls_admission
+                == arkret::direct_conversation::DirectConversationPeerMlsAdmission::Missing,
         "resolver did not return the accepted founding coordinates"
     );
     authorization_basis.validate_shape()?;
+    let mut founding_refs = heads.to_vec();
+    founding_refs.sort_by(|left, right| left.as_str().as_bytes().cmp(right.as_str().as_bytes()));
     ensure!(
         authorization_basis
-            == DirectConversationAuthorizationBasis::accepted_contact(heads.to_vec()),
+            == DirectConversationAuthorizationBasis::accepted_contact(founding_refs),
         "resolver changed the accepted founding basis"
     );
     let pair_key = coordinates.pair_key.clone();
@@ -1465,6 +1472,24 @@ async fn run(
         .await?
         .error_for_status()?;
 
+    let admission = alice
+        .client
+        .sdk()
+        .direct_conversation_resolve(&DirectConversationResolveRequestBody {
+            peer: arkret::contact_operations::ContactPeer::Human {
+                account_id: bob.account.clone(),
+            },
+        })
+        .await?;
+    ensure!(
+        matches!(admission, DirectConversationResolveOutcome::Provisional {
+        initial_exact_pair_group_state_ref: Some(ref initial),
+        peer_mls_admission: arkret::direct_conversation::DirectConversationPeerMlsAdmission::Pending,
+        ..
+    } if initial == &add_ref),
+        "resolver did not return the exact occupied leaf Pending cut"
+    );
+
     // Before Bob consumes his claim the Realm is still provisional.
     let endorsement = |group_state_ref: &EventId| -> Result<Value> {
         let payload = DirectConversationBoundPayload {
@@ -1535,6 +1560,24 @@ async fn run(
         status == StatusCode::OK,
         "Bob's consume was not admitted: {status} {}",
         String::from_utf8_lossy(&consumed)
+    );
+
+    let admission = alice
+        .client
+        .sdk()
+        .direct_conversation_resolve(&DirectConversationResolveRequestBody {
+            peer: arkret::contact_operations::ContactPeer::Human {
+                account_id: bob.account.clone(),
+            },
+        })
+        .await?;
+    ensure!(
+        matches!(admission, DirectConversationResolveOutcome::Provisional {
+        initial_exact_pair_group_state_ref: Some(ref initial),
+        peer_mls_admission: arkret::direct_conversation::DirectConversationPeerMlsAdmission::Durable,
+        ..
+    } if initial == &add_ref),
+        "resolver did not return the exact occupied leaf Durable cut"
     );
 
     // Completion: only an exact endorsement. One naming another group state
