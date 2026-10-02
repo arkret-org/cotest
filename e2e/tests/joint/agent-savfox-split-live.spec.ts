@@ -488,6 +488,8 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           crashedEventIds.length,
           "the cut submission must carry the signed Commit and Welcome",
         ).toBeGreaterThan(0);
+        const claimRequestsAtCrash = keyPackageClaims.count();
+        expect(claimRequestsAtCrash).toBeGreaterThan(0);
         await crash.restore();
 
         const replayed = () => mlsSubmissions.all().filter(
@@ -525,8 +527,8 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         ).toBeLessThanOrEqual(1);
         expect(
           keyPackageClaims.count(),
-          "a resumed materialization must not claim a second peer KeyPackage",
-        ).toBeLessThanOrEqual(1);
+          "resuming the frozen MLS unit must not make another peer KeyPackage claim request",
+        ).toBe(claimRequestsAtCrash);
 
         // The canonical binding is idempotent across the crash: every resolve
         // returns the same Realm, main Strand and binding Event, so the generic
