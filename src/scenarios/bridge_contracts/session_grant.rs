@@ -95,13 +95,6 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
     // The Account Authority's issuer ledger holds this exact credential; the
     // Station submits the complete token and consumes the returned authority
     // metadata instead of rebuilding any issuer fact locally.
-    coauth.bind_founding_device_grant(
-        &grant_jwt,
-        &principal_core_id,
-        &device_id,
-        principal.founding_authorize_event_id.as_str(),
-        &holder_key.verifying_key(),
-    )?;
     let push_url = server.url("/_arkret/edge/push/register-device");
     let push_body = arkret_models_integration::PushRegisterDeviceRequestBody {
         device_id: arkret_wire::DeviceId::new(device_id.clone())?,
@@ -113,6 +106,32 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
         display_name: None,
         visible_notification_opt_in: false,
     };
+
+    // The fixture Authority returns 503 until its issuer ledger is available.
+    // This is an unavailable dependency, not an authoritative inactive grant;
+    // the Station must neither authenticate it nor tell the holder to log out.
+    let unavailable_dpop = arkret_signatures::build_dpop_proof(
+        &arkret_signatures::DpopProofRequest::new("POST", &push_url).access_token(&grant_jwt),
+        &holder_key,
+    )?;
+    expect_api_error(
+        server
+            .http()
+            .post(&push_url)
+            .header(reqwest::header::AUTHORIZATION, format!("DPoP {grant_jwt}"))
+            .header("DPoP", &unavailable_dpop.header_value)
+            .json(&push_body),
+        StatusCode::SERVICE_UNAVAILABLE,
+        "temporarily_unavailable",
+    )
+    .await?;
+    coauth.bind_founding_device_grant(
+        &grant_jwt,
+        &principal_core_id,
+        &device_id,
+        principal.founding_authorize_event_id.as_str(),
+        &holder_key.verifying_key(),
+    )?;
 
     // §3.3 presentation: `Authorization: DPoP <grant jwt>` plus a
     // sender-constrained DPoP proof bound to the grant (`ath`) and to this
