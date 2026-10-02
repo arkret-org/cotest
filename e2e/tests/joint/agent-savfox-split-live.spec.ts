@@ -496,7 +496,8 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         await inkson.reload();
         await openOwnAgentDirectChat(inkson, agentSlug, {
           retryUntilChatReady: true,
-          resumedSubmissionReady: () => replayed().length >= 2,
+          resumedSubmissionReady: async () => replayed().length >= 2 &&
+            (await bindings.all()).length > 0,
           diagnostics: () => JSON.stringify(mlsSubmissions.diagnostics()),
         });
         await expect(inkson.getByTestId("chat-panel")).toBeVisible({
@@ -1291,7 +1292,7 @@ async function openOwnAgentDirectChat(
   agentSlug: string,
   options: {
     retryUntilChatReady?: boolean;
-    resumedSubmissionReady?: () => boolean;
+    resumedSubmissionReady?: () => boolean | Promise<boolean>;
     diagnostics?: () => string | Promise<string>;
   } = {},
 ): Promise<void> {
@@ -1316,7 +1317,7 @@ async function openOwnAgentDirectChat(
       .poll(
         async () => {
           if (await chatPanel.isVisible().catch(() => false)) {
-            return options.resumedSubmissionReady?.() ?? true;
+            return (await options.resumedSubmissionReady?.()) ?? true;
           }
           const toastText = (
             await inkson.getByTestId("toast-item").allTextContents()
@@ -1343,7 +1344,7 @@ async function openOwnAgentDirectChat(
             await ownAgentRow.click();
           }
           return (await chatPanel.isVisible().catch(() => false)) &&
-            (options.resumedSubmissionReady?.() ?? true);
+            ((await options.resumedSubmissionReady?.()) ?? true);
         },
         {
           timeout: 180_000,
@@ -1877,6 +1878,7 @@ type MlsTransactionEvent = {
   kind: string;
   eventId: string;
   nextEpoch?: number;
+  governanceMetadata?: Record<string, unknown>;
 };
 /// The signed Event carried by an `EventInitialSubmission`; the shared decoder
 /// owns the wrapper shape.
@@ -1904,6 +1906,12 @@ function mlsTransactionEvents(postData: string | null): MlsTransactionEvent[] {
         kind: event.kind!,
         eventId: event.event_id!,
         nextEpoch: typeof nextEpoch === "number" ? nextEpoch : undefined,
+        governanceMetadata: typeof governanceBinding === "object" && governanceBinding !== null
+          ? Object.fromEntries([
+              "effective_scope", "base_group_state_ref", "previous_epoch",
+              "next_epoch", "key_access_revision",
+            ].map((field) => [field, (governanceBinding as Record<string, unknown>)[field]]))
+          : undefined,
       };
     });
 }
