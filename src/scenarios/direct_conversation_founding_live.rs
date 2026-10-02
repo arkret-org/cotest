@@ -1210,6 +1210,7 @@ async fn run(
         .await?;
     let DirectConversationResolveOutcome::Provisional {
         coordinates,
+        authorization_basis,
         group_state_ref,
     } = resolved
     else {
@@ -1221,6 +1222,12 @@ async fn run(
             && coordinates.binding_event_ref.is_none()
             && group_state_ref.is_none(),
         "resolver did not return the accepted founding coordinates"
+    );
+    authorization_basis.validate_shape()?;
+    ensure!(
+        authorization_basis
+            == DirectConversationAuthorizationBasis::accepted_contact(heads.to_vec()),
+        "resolver changed the accepted founding basis"
     );
     let pair_key = coordinates.pair_key.clone();
     let realm_id = coordinates.realm_id;
@@ -1466,9 +1473,7 @@ async fn run(
             realm_id: realm_id.clone(),
             main_strand_id: strand_id.clone(),
             founding_unit_digest: plan.founding_unit_digest.clone(),
-            authorization_basis: DirectConversationAuthorizationBasis::accepted_contact(
-                heads.to_vec(),
-            ),
+            authorization_basis: authorization_basis.clone(),
             initial_exact_pair_group_state_ref: group_state_ref.clone(),
             created_at: arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now()),
         };
