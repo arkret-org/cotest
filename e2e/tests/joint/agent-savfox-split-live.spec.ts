@@ -393,8 +393,9 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
             await openSavfoxArkretChannel(savfox, savfoxBaseUrl, savfoxToken);
             await startSavfoxPairing(savfox, replacementLink);
             await expect.poll(async () => {
-              const status = await runtimeKeyRequestStatus(request, replacementPairing);
-              retainedApprovalRequestId = status.approval_request_id ?? undefined;
+              retainedApprovalRequestId = await pendingControllerApprovalId(
+                request, jointRealm, replacementPairing,
+              );
               return Boolean(retainedApprovalRequestId);
             }, { timeout: 120_000 }).toBe(true);
             const outageEndsAt = Date.now() + 3 * APPROVAL_FALLBACK_POLL_MS;
@@ -416,8 +417,8 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
             "the notification transport must have been cut before creating the request",
           ).toBeGreaterThan(0);
           await expect(approvalModal).toBeVisible({ timeout: 120_000 });
-          const replayed = await runtimeKeyRequestStatus(request, replacementPairing);
-          expect(replayed.approval_request_id).toBe(retainedApprovalRequestId);
+          expect(await pendingControllerApprovalId(request, jointRealm, replacementPairing))
+            .toBe(retainedApprovalRequestId);
         }
         await expect(approvalModal).toContainText("replaces the runtime key");
         expect(
@@ -1771,6 +1772,30 @@ async function eventIdFromMessage(message: ReturnType<Page["getByTestId"]>) {
     ];
     return candidates.find((value) => value?.startsWith("ak:event:")) ?? "";
   });
+}
+
+// The open runtime status has an optional approval id; a replacing runtime
+// still has an active key. Only the controller's authenticated exact handle
+// projection establishes the pending candidate observed by this fixture.
+async function pendingControllerApprovalId(
+  request: APIRequestContext,
+  jointRealm: JointRealmFixture,
+  pairing: PairingHandle,
+): Promise<string | undefined> {
+  const url = `${solandBaseUrl()}${AGENT_LIST_PATH}/${encodeURIComponent(pairing.agentId)}`;
+  const view = await expectJsonOk(await request.get(url, {
+    headers: selfPathHeadersForDpopSession(jointRealm.aliceSession, "GET", url),
+  }), "controller pending runtime candidate");
+  const keyState = view.key_state as Record<string, unknown> | undefined;
+  const pending = keyState?.pending_runtime_key_request as Record<string, unknown> | undefined;
+  if (!pending) return undefined;
+  expect(keyState?.pairing_request_id).toBe(pairing.pairingRequestId);
+  expect(pending.pairing_request_id).toBe(pairing.pairingRequestId);
+  expect(pending.agent_id).toBe(pairing.agentId);
+  expect(typeof pending.approval_request_id).toBe("string");
+  expect(pending.approval_request_id).not.toBe("");
+  expect(keyState?.approval_request_id).toBe(pending.approval_request_id);
+  return pending.approval_request_id as string;
 }
 
 async function runtimeKeyRequestStatus(
