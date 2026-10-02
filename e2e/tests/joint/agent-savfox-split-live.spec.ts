@@ -23,12 +23,16 @@ import {
 } from "../../helpers/joint-fixture";
 import { canonicalJson, expectJsonOk } from "../../helpers/soland-api";
 import {
+  serverLoginViaCoauth,
+  submitCoauthPasswordCredentials,
+} from "../../helpers/real-oidc-login";
+import {
   approvePairingLinkOnAuthorizedDevice,
-  createDpopUserSessionForAccount,
   type DpopUserSession,
   type JointUserPage,
   openUserPage,
   selfPathHeadersForDpopSession,
+  uniqueUser,
 } from "../../helpers/users";
 
 // Mirrors inkson `APPROVAL_FALLBACK_POLL_INTERVAL`
@@ -683,10 +687,10 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           jointRealm,
         );
         secondController = secondControllerFlow.page;
-        expect(secondControllerFlow.session.user.id).toBe(
-          jointRealm.alice.id,
+        expect(secondControllerFlow.accountId).toEqual(
+          jointRealm.aliceSession.accountId,
         );
-        expect(secondControllerFlow.session.user.deviceId).not.toBe(
+        expect(secondControllerFlow.deviceId).not.toBe(
           jointRealm.alice.deviceId,
         );
         await expect(
@@ -896,7 +900,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
                 controller_account_id: jointRealm.aliceSession.accountId,
                 device_ids: [
                   jointRealm.alice.deviceId,
-                  secondControllerFlow.session.user.deviceId,
+                  secondControllerFlow.deviceId,
                 ],
                 forced_page_size: 1,
                 backfill_request_count: paginatedBackfill.requestCount(),
@@ -1399,39 +1403,45 @@ async function openAndPairSecondController(
   browser: Browser,
   request: APIRequestContext,
   jointRealm: JointRealmFixture,
-): Promise<{ page: JointUserPage; session: DpopUserSession }> {
+): Promise<{
+  page: JointUserPage;
+  accountId: DpopUserSession["accountId"];
+  deviceId: string;
+}> {
   const coauth = coauthBaseUrl();
   expect(coauth, "joint stack must expose Coauth for Device 2").toBeTruthy();
-  const session = await createDpopUserSessionForAccount(
-    request,
-    `sidecar-controller-device-2-${Date.now()}`,
-    jointRealm.aliceSession.account,
-    {
-      coauthBase: coauth!,
-    },
+  const device = await openUserPage(
+    browser,
+    uniqueUser(`sidecar-controller-device-2-${Date.now()}`),
+    { neutralLoginConfig: true, autoCompleteRecoveryKeySetup: false },
   );
-  expect(session, "same-principal Device 2 session").toBeTruthy();
-  const device = await openUserPage(browser, session!.user, {
-    grantJwt: session!.grantJwt,
-    dpopSeedB64url: session!.dpopSeedB64url,
-    eventSigningSeedB64url: session!.eventSigningSeedB64url,
-    grantId: session!.grantId,
-    accountId: session!.accountId,
-    principalControlRealmId: session!.principalControlRealmId,
-    grantAudience: session!.grantAudience,
-  });
   try {
     await jointRealm.alicePage.gotoHome();
-    await device.page.goto("/settings/devices/pair", {
+    await device.page.goto("/login", {
       waitUntil: "domcontentloaded",
     });
-    await device.page.getByTestId("pair-device-start-button").click();
-    const pairingCode = device.page.getByTestId("pair-device-code");
+    await device.page.getByTestId("login-server-url").fill(solandBaseUrl());
+    await device.page.getByTestId("start-server-login-button").click();
+    await submitCoauthPasswordCredentials(device.page, jointRealm.aliceSession.account);
+    const approve = device.page.getByTestId("coauth-oauth-approve");
+    const consentShown = await approve
+      .waitFor({ state: "visible", timeout: 20_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (consentShown) {
+      await approve.click();
+    }
+    await expect(device.page.getByTestId("device-setup-required")).toBeVisible({
+      timeout: 120_000,
+    });
+    await expect(device.page.getByTestId("client-shell")).toHaveCount(0);
+    await device.page.getByTestId("device-setup-pairing-start").click();
+    const pairingCode = device.page.getByTestId("device-setup-pairing-code");
     await expect(pairingCode).toBeVisible({ timeout: 30_000 });
     const code = (await pairingCode.textContent())?.trim() ?? "";
     expect(code).not.toBe("");
     const pairingLink = await device.page
-      .getByTestId("pair-device-secret")
+      .getByTestId("device-setup-pairing-link")
       .inputValue();
     await approvePairingLinkOnAuthorizedDevice(
       jointRealm.alicePage,
@@ -1439,34 +1449,40 @@ async function openAndPairSecondController(
       code,
     );
 
-    await device.page.getByTestId("pair-device-status-button").click();
-    await expect(device.page.getByTestId("pair-device-status")).toContainText(
-      "Approved.",
-      { timeout: 30_000 },
+    await device.page.getByTestId("device-setup-pairing-status").click();
+    await expect(device.page.getByTestId("device-setup-status")).toContainText(
+      "Device authorization is accepted",
+      { timeout: 90_000 },
     );
+    await device.page.getByRole("link", { name: "Sign in again after approval" }).click();
+    await expect(device.page.getByTestId("login-panel")).toBeVisible({ timeout: 30_000 });
+    await serverLoginViaCoauth(device.page, jointRealm.aliceSession.account);
+    await expect(device.page.getByTestId("device-setup-required")).toHaveCount(0);
+    const identity = await device.page.evaluate(() => {
+      const config = JSON.parse(window.localStorage.getItem("inkson.config.v1") ?? "{}");
+      return {
+        accountId: config.active_account?.authority,
+        deviceId: config.active_account?.device_id ?? "",
+      };
+    });
+    expect(identity.accountId).toEqual(jointRealm.aliceSession.accountId);
+    expect(identity.deviceId).toMatch(/^ak:device:/);
+    expect(identity.deviceId).not.toBe(jointRealm.alice.deviceId);
     const viewerUrl = `${solandBaseUrl()}/_arkret/self/account/viewer`;
-    await expect
-      .poll(
-        async () => {
-          const response = await request.get(viewerUrl, {
-            headers: selfPathHeadersForDpopSession(session!, "GET", viewerUrl),
-          });
-          if (!response.ok()) return `http-${response.status()}`;
-          const body = (await response.json()) as {
-            devices?: Array<{ device_id?: string; status?: string }>;
-          };
-          return (
-            body.devices?.find(
-              (candidate) => candidate.device_id === session!.user.deviceId,
-            )?.status ?? "missing"
-          );
-        },
-        { timeout: 90_000, intervals: [500, 1_000, 2_000] },
-      )
-      .toBe("active");
+    await expect.poll(async () => {
+      const response = await request.get(viewerUrl, {
+        headers: selfPathHeadersForDpopSession(jointRealm.aliceSession, "GET", viewerUrl),
+      });
+      if (!response.ok()) return `http-${response.status()}`;
+      const body = await response.json();
+      return body.devices?.find(
+        (candidate: { device_id?: string; status?: string }) =>
+          candidate.device_id === identity.deviceId,
+      )?.status ?? "missing";
+    }, { timeout: 90_000, intervals: [500, 1_000, 2_000] }).toBe("active");
     await device.gotoHome();
     await device.acknowledgeRecommendedEncryptionPromptIfVisible(30_000);
-    return { page: device, session: session! };
+    return { page: device, ...identity };
   } catch (error) {
     await device.close();
     throw error;

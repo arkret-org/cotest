@@ -863,6 +863,7 @@
       ],
       "mocks": [],
       "identity_establishment": [
+        "oauth_authorization_ui",
         "session_injection"
       ],
       "protocol_object_producers": [
@@ -960,15 +961,17 @@
       ],
       "mocks": [],
       "identity_establishment": [
-        "fixture_or_not_applicable"
+        "session_injection"
       ],
       "protocol_object_producers": [
         "raw_http_fixture"
       ],
       "declared_test_bypasses": [
-        "raw_http_fixture_or_oracle"
+        "raw_http_fixture_or_oracle",
+        "session_injection"
       ],
       "claims_excluded": [
+        "registration_login_authorization",
         "ui_driven_business_flow_for_raw_http_steps"
       ]
     },
@@ -982,16 +985,18 @@
       ],
       "mocks": [],
       "identity_establishment": [
-        "fixture_or_not_applicable"
+        "session_injection"
       ],
       "protocol_object_producers": [
         "cotest_wire_oracle",
         "raw_http_fixture"
       ],
       "declared_test_bypasses": [
-        "raw_http_fixture_or_oracle"
+        "raw_http_fixture_or_oracle",
+        "session_injection"
       ],
       "claims_excluded": [
+        "registration_login_authorization",
         "ui_driven_business_flow_for_raw_http_steps"
       ]
     },
@@ -1005,13 +1010,17 @@
       ],
       "mocks": [],
       "identity_establishment": [
-        "fixture_or_not_applicable"
+        "session_injection"
       ],
       "protocol_object_producers": [
         "cotest_wire_oracle"
       ],
-      "declared_test_bypasses": [],
-      "claims_excluded": []
+      "declared_test_bypasses": [
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "registration_login_authorization"
+      ]
     },
     {
       "scenario_key": "joint/joint-inkson-smoke",

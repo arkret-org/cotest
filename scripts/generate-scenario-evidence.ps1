@@ -15,11 +15,14 @@ foreach ($file in Get-ChildItem -LiteralPath $testsRoot -Recurse -File -Filter "
     $usesProductUi = $source -match 'open(?:Dpop)?UserPage|openUserPage|\.goto(?:Home|Login|Setup|Timeline)|\.createRealm\(|\.sendTimelineMessage\('
     $usesRawHttp = $source -match '\brequest\.(?:get|post|put|patch|delete|fetch)\('
     $usesCanonicalProvisioning = $source -match 'ProvisioningBridge|canonicalProvisioning|provisioning-fixture'
+    # The joint fixture injects the founding sessions before the spec body.
+    # A later OAuth ceremony does not remove that earlier evidence boundary.
+    $usesJointSessionFixture = $source -match 'helpers/joint-fixture' -and $source -match '\bjoint(?:Users|Realm)\b'
     $bypasses = New-Object System.Collections.Generic.List[string]
     if ($source -match 'prepareMlsDevice\s*:\s*false') { $bypasses.Add("prepare_mls_device_false") }
     if ($source -match 'allowRecoveryOverride\s*:\s*true') { $bypasses.Add("recovery_override") }
     if ($source -match '\.createRealm\s*\(' -and $source -notmatch 'allowPassivePromptDismissal\s*:\s*false') { $bypasses.Add("create_realm_passive_prompt_dismissal") }
-    if ($source -match 'sessionCredential\s*:|openDpopUserPage|openDpopUserPageFromSession|createDpopUserSession') { $bypasses.Add("session_injection") }
+    if (($source -match 'sessionCredential\s*:|openDpopUserPage|openDpopUserPageFromSession|createDpopUserSession') -or $usesJointSessionFixture) { $bypasses.Add("session_injection") }
     if ($source -match 'cotestWire|signedEventEnvelope|registerEventSigner') { $bypasses.Add("test_only_signer_or_wire_builder") }
     if ($usesRawHttp) { $bypasses.Add("raw_http_fixture_or_oracle") }
 
