@@ -103,7 +103,11 @@ enum Runner {
     EvidenceMapped(fn() -> Result<()>),
 }
 
-const RUNNERS: [(&str, Runner); 53] = [
+const RUNNERS: [(&str, Runner); 54] = [
+    (
+        super::APPLET_SELF_ACTOR_ENTRYPOINT,
+        Runner::Cases(super::run_applet_self_actor_suite),
+    ),
     (
         "ak.suite.pin.admission_and_scope.v1",
         Runner::Cases(super::pin_admission::run_pin_admission_suite),

@@ -13,6 +13,8 @@ mod agent_participation;
 mod agent_runtime_scope;
 mod agent_vectors;
 mod applet_install;
+mod applet_self_actor;
+pub use applet_self_actor::{APPLET_SELF_ACTOR_ENTRYPOINT, run_applet_self_actor_suite};
 mod arkret_private_kdf_and_durability;
 mod auth_session_proof;
 mod authority_commit;

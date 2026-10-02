@@ -23,7 +23,7 @@ const MANAGED_ACTOR_FIXTURE: &str = "applet-managed-actor-fixture.json";
 const REGISTRATION_EPOCH_FIXTURE: &str = "applet-registration-epoch-fixture.json";
 const MANAGED_ACTOR_ENTRYPOINT: &str = "ak.suite.applet.managed_actor_authority.v1";
 const MANAGED_ACTOR_CASES: [&str; 36] = [
-    "bot_exact_pair_and_initial_resolution",
+    "applet_exact_pair_and_initial_resolution",
     "ghost_namespace_matches_verified_did",
     "ghost_namespace_pattern_pins_service_scid",
     "ghost_host_segment_differs_from_service_host",
@@ -33,8 +33,8 @@ const MANAGED_ACTOR_CASES: [&str; 36] = [
     "ghost_external_tuple_rejects_extra_mirrors",
     "ghost_provision_requires_registration_service_signature",
     "remote_station_claim",
-    "actor_reuses_service_or_controller",
-    "bot_does_not_equal_registration_bot",
+    "ghost_reuses_service_or_controller",
+    "applet_does_not_equal_registration_actor",
     "ghost_core_used_for_did_namespace",
     "invalid_method_history_or_witness",
     "non_webvh_method_evidence_is_not_a_managed_authority",
@@ -145,7 +145,7 @@ fn consume_managed_actor_case(
                 bail!("Ghost external tuple accepted an extra mirror");
             }
         }
-        "rotation_keeps_creation_anchor" | "bot_exact_pair_and_initial_resolution" => {
+        "rotation_keeps_creation_anchor" | "applet_exact_pair_and_initial_resolution" => {
             if !applet_grant_binding_matches(
                 constraint,
                 resource,
@@ -202,7 +202,7 @@ fn consume_managed_actor_case(
                 bail!("mismatched managed authority pair was admitted");
             }
         }
-        "actor_reuses_service_or_controller" => {
+        "ghost_reuses_service_or_controller" => {
             let actor = service_id.as_str();
             let distinct =
                 actor != service_id.as_str() && actor != "ak:did_core:web:controller.example";
@@ -210,7 +210,7 @@ fn consume_managed_actor_case(
                 bail!("service identity reuse was not detected");
             }
         }
-        "bot_does_not_equal_registration_bot" => {
+        "applet_does_not_equal_registration_actor" => {
             if "ak:did_core:web:bot-a.example" == "ak:did_core:web:bot-b.example" {
                 bail!("Bot mismatch model is invalid");
             }
@@ -368,7 +368,7 @@ enum DelegatedDeviceMutation {
     /// principal's own `applet_managed_control` PCR.
     None,
     /// Carried as a fifth Event of the Ghost authoring bundle, or as a seventh
-    /// fact of the Bot install fixed set.
+    /// fact of the Applet install fixed set.
     InsideClosedAggregate,
     /// Signed with a controller method that exists only in a unit-local
     /// candidate overlay, not in the managed principal's accepted current
@@ -711,7 +711,7 @@ fn require_closed_carriers_have_no_device_authorize_slot() -> Result<()> {
         .cloned()
         .collect::<BTreeSet<_>>();
     if refs.iter().any(|name| name.contains("device")) {
-        bail!("the Bot install fixed set grew a device slot: {refs:?}");
+        bail!("the Applet install fixed set grew a device slot: {refs:?}");
     }
     Ok(())
 }

@@ -1,0 +1,19 @@
+[package]
+name = "cotest-applet-self-actor-runner"
+version = "0.3.0"
+edition = "2024"
+rust-version = "1.98"
+publish = false
+
+[dependencies]
+anyhow = { workspace = true }
+arkret-canonical = { workspace = true }
+arkret-mls = { workspace = true, features = ["test-utils"] }
+arkret-models-crypto = { workspace = true }
+arkret-signatures = { workspace = true }
+arkret-wire = { workspace = true }
+chrono = { workspace = true }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

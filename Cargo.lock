@@ -2844,6 +2844,7 @@ dependencies = [
  "cotest-account-data-cas-convergence-runner",
  "cotest-aead-nonce-replay-runner",
  "cotest-agent-mls-keypackage-authorization-runner",
+ "cotest-applet-self-actor-runner",
  "cotest-blob-stream-aead-runner",
  "cotest-call-state-core-runner",
  "cotest-capability-relinquish-authoring-runner",
@@ -2933,6 +2934,20 @@ dependencies = [
  "arkret-wire",
  "ed25519-dalek 3.0.0",
  "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "cotest-applet-self-actor-runner"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "arkret-canonical",
+ "arkret-mls",
+ "arkret-models-crypto",
+ "arkret-signatures",
+ "arkret-wire",
+ "chrono",
  "serde_json",
 ]
 
