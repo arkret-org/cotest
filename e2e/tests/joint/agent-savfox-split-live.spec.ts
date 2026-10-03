@@ -7,6 +7,7 @@ import {
   type Page,
   type Request,
   type Route,
+  type TestInfo,
 } from "../../helpers/arkret-test";
 import { readFile } from "node:fs/promises";
 import type {
@@ -29,7 +30,7 @@ import {
   test as jointTest,
   type JointRealmFixture,
 } from "../../helpers/joint-fixture";
-import { canonicalJson, expectJsonOk } from "../../helpers/soland-api";
+import { canonicalJson, expectJsonOk, wireErrCode } from "../../helpers/soland-api";
 import {
   serverLoginViaCoauth,
   submitCoauthPasswordCredentials,
@@ -736,9 +737,43 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         await expect(sourceCard.getByTestId("send-chat-button")).toBeEnabled({
           timeout: 30_000,
         });
-        const ensureResponsePromise = waitForSidecarEnsureAcceptance(inkson);
-        await sourceCard.getByTestId("send-chat-button").click();
-        const ensured = await ensureResponsePromise;
+        let ensureCutFaults = 0;
+        let frozenEnsureBody: string | undefined;
+        const ensureCutFault = async (route: Route) => {
+          const outgoing = route.request();
+          if (outgoing.method() === "POST" && outgoing.postDataJSON()?.phase === "commit") {
+            const body = outgoing.postData()!;
+            if (frozenEnsureBody === undefined) frozenEnsureBody = body;
+            expect(body, "Sidecar cut recovery must replay the original signed request").toBe(frozenEnsureBody);
+            if (ensureCutFaults === 0) {
+              ensureCutFaults += 1;
+              await route.fulfill({
+                status: 503,
+                contentType: "application/problem+json",
+                body: JSON.stringify({
+                  type: "https://arkret.org/problems/temporarily_unavailable",
+                  title: "Temporarily unavailable",
+                  status: 503,
+                  detail: "fixture: accepting stream head advanced before the unit",
+                }),
+              });
+              return;
+            }
+          }
+          await route.continue();
+        };
+        await inkson.route("**/_arkret/self/agent-sidecars:ensure", ensureCutFault);
+        let ensured: SidecarEnsureAcceptedOutcome;
+        try {
+          const ensureResponsePromise = waitForSidecarEnsureAcceptance(inkson, testInfo);
+          [ensured] = await Promise.all([
+            ensureResponsePromise,
+            sourceCard.getByTestId("send-chat-button").click(),
+          ]);
+          expect(ensureCutFaults).toBe(1);
+        } finally {
+          await inkson.unroute("**/_arkret/self/agent-sidecars:ensure", ensureCutFault);
+        }
         expect(ensured.sidecar_id).toMatch(/^ak:sidecar:/);
         await assertSidecarNonDisclosure(
           request,
@@ -986,9 +1021,11 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         await expect(privacyCard.getByTestId("send-chat-button")).toBeEnabled({
           timeout: 30_000,
         });
-        const privacyEnsurePromise = waitForSidecarEnsureAcceptance(inkson);
-        await privacyCard.getByTestId("send-chat-button").click();
-        const privacyEnsure = await privacyEnsurePromise;
+        const privacyEnsurePromise = waitForSidecarEnsureAcceptance(inkson, testInfo);
+        const [privacyEnsure] = await Promise.all([
+          privacyEnsurePromise,
+          privacyCard.getByTestId("send-chat-button").click(),
+        ]);
         expect(privacyEnsure.sidecar_id).toBe(ensured.sidecar_id);
         await expect(inkson.getByTestId("sidecar-security-state")).toHaveText(
           "E2EE",
@@ -1703,23 +1740,51 @@ async function addAgentToRealm(
 
 async function waitForSidecarEnsureAcceptance(
   page: Page,
+  testInfo: TestInfo,
 ): Promise<SidecarEnsureAcceptedOutcome> {
+  let frozenSubmission: string | undefined;
   const response = await page.waitForResponse(
-    (candidate) => {
+    async (candidate) => {
       const outgoing = candidate.request();
       if (
         outgoing.method() !== "POST" ||
         new URL(candidate.url()).pathname !== "/_arkret/self/agent-sidecars:ensure"
       ) return false;
       const phase = outgoing.postDataJSON()?.phase;
-      return phase === "commit" || phase === "attach";
+      if (phase === "commit" || phase === "attach") {
+        const body = outgoing.postData()!;
+        if (frozenSubmission === undefined) frozenSubmission = body;
+        expect(body, "Sidecar ensure retry must retain every frozen request byte").toBe(frozenSubmission);
+        if (candidate.status() === 503) {
+          const problem = await candidate.json().catch(() => undefined);
+          if (wireErrCode(problem) === "temporarily_unavailable") return false;
+        }
+      }
+      return phase === "commit" || phase === "attach" ||
+        (phase === "prepare" && candidate.status() >= 400);
     },
     { timeout: 120_000 },
   );
   const text = await response.text();
+  const submitted = response.request().postDataJSON();
+  if (response.status() !== 200) {
+    // Keep only the source selection and complete controller identity. Request
+    // headers, credentials, proofs and private signed drafts are excluded.
+    await testInfo.attach("sidecar-ensure-failure", {
+      body: Buffer.from(JSON.stringify({
+        phase: submitted.phase,
+        status: response.status(),
+        ...(submitted.phase === "prepare" ? {
+          source_realm_id: submitted.source_realm_id,
+          controller_account_id: submitted.controller_account_id,
+          context_ref: submitted.context_ref,
+        } : {}),
+      }, null, 2)),
+      contentType: "application/json",
+    });
+  }
   expect(response.status(), text).toBe(200);
   const accepted = JSON.parse(text) as SidecarEnsureAcceptedOutcome;
-  const submitted = response.request().postDataJSON();
   expect(accepted.status).toBe("accepted");
   expect(accepted.accepted_phase).toBe(submitted.phase);
   expect(accepted.operation_id).toBe(submitted.operation_id);
