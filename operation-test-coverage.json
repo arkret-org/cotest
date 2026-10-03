@@ -6,8 +6,8 @@
     "operation_registry_sha256": "e988f554197d3463a669fcb9e67e582655b854b4b55bc0403a9fb48396ed0bb5",
     "test_layers": {
       "soland_unit": {
-        "source_file_count": 374,
-        "source_sha256": "d9cdb0b99424269c245b6d892f911b8a46e5faa59ad4645a8acc8eb951f3625e",
+        "source_file_count": 375,
+        "source_sha256": "690f5a0a8b8e4c710949e0c763672b78c3af5ad2ffb643b538ca90473b4e81a9",
         "evidence_count": 283,
         "covered_operation_count": 139
       },
@@ -7332,11 +7332,11 @@
         "storage_parity": [
           {
             "file": "soland/crates/storage-postgres/src/snapshot_disclosure_gate.rs",
-            "line": 340,
+            "line": 341,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              340
+              341
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -20488,11 +20488,11 @@
           },
           {
             "file": "soland/crates/http/src/state/authority_self_event_unit.rs",
-            "line": 529,
+            "line": 530,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              529
+              530
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
