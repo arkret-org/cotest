@@ -9,7 +9,13 @@ import {
   type Route,
 } from "../../helpers/arkret-test";
 import { readFile } from "node:fs/promises";
-import type { ActorId } from "../../helpers/generated/spec-wire-objects";
+import type {
+  ActorId,
+  AccountId,
+  AgentSidecarExchangeProjection,
+  AgentSidecarView,
+  SidecarEnsureAcceptedOutcome,
+} from "../../helpers/generated/spec-wire-objects";
 import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
 import {
   deliverInviteWithConsentGrant,
@@ -730,22 +736,9 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         await expect(sourceCard.getByTestId("send-chat-button")).toBeEnabled({
           timeout: 30_000,
         });
-        const ensureResponsePromise = inkson.waitForResponse(
-          (response) =>
-            response.request().method() === "POST" &&
-            new URL(response.url()).pathname ===
-              "/_arkret/self/agent-sidecars:ensure",
-          { timeout: 120_000 },
-        );
+        const ensureResponsePromise = waitForSidecarEnsureAcceptance(inkson);
         await sourceCard.getByTestId("send-chat-button").click();
-        const ensureResponse = await ensureResponsePromise;
-        const ensureText = await ensureResponse.text();
-        expect(ensureResponse.status(), ensureText).toBe(200);
-        const ensured = JSON.parse(ensureText) as {
-          sidecar_id: string;
-          access_readiness: string;
-          effective_agent_ids?: string[];
-        };
+        const ensured = await ensureResponsePromise;
         expect(ensured.sidecar_id).toMatch(/^ak:sidecar:/);
         await assertSidecarNonDisclosure(
           request,
@@ -759,6 +752,13 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           "E2EE",
           { timeout: 180_000 },
         );
+        const readySidecar = await readSidecarCurrent(
+          request,
+          jointRealm,
+          ensured.sidecar_id,
+        );
+        expect(readySidecar.access_readiness).toBe("ready");
+        expect(readySidecar.effective_agent_ids).toContain(firstPairing.agentId);
         await expect(sourceCard.getByTestId("send-chat-button")).toBeEnabled({
           timeout: 30_000,
         });
@@ -794,7 +794,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           agent_id: firstPairing.agentId,
           source_realm_id: jointRealm.realmId,
           sidecar_id: ensured.sidecar_id,
-          effective_agent_ids: ensured.effective_agent_ids ?? [],
+          effective_agent_ids: readySidecar.effective_agent_ids,
           request_event_id: await eventIdFromMessage(requestMessage),
           response_event_id: await eventIdFromMessage(sidecarPongMessage),
           response_text: (await sidecarPongBody.innerText()).trim(),
@@ -879,18 +879,18 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           jointRealm.realmId,
           evidence.request_event_id,
         );
-        // The canonical digest is the byte-identity claim; the frontier and the
+        // The canonical digest is the byte-identity claim; the checkpoint and the
         // full entry are compared as well so a digest that somehow matched a
         // different projection still fails.
         expect(device2Fold.projection_digest).toBe(
           device1Fold.projection_digest,
         );
         expect(JSON.stringify(device2Fold)).toBe(JSON.stringify(device1Fold));
-        expect(device2Fold.folded_frontier).toEqual(
-          device1Fold.folded_frontier,
+        expect(device2Fold.projection.folded_checkpoint).toEqual(
+          device1Fold.projection.folded_checkpoint,
         );
-        expect(device1Fold.folded_frontier.event_ids.length).toBeGreaterThan(0);
-        expect(device1Fold.folded_frontier.event_set_digest).toMatch(
+        expect(device1Fold.projection.folded_checkpoint.event_ids.length).toBeGreaterThan(0);
+        expect(device1Fold.projection.folded_checkpoint.event_set_digest).toMatch(
           /^sha256:[0-9a-f]{64}$/,
         );
         expect(device1Fold.projection_digest).toMatch(/^sha256:[0-9a-f]{64}$/);
@@ -986,47 +986,43 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         await expect(privacyCard.getByTestId("send-chat-button")).toBeEnabled({
           timeout: 30_000,
         });
-        const privacyEnsurePromise = inkson.waitForResponse(
-          (response) =>
-            response.request().method() === "POST" &&
-            new URL(response.url()).pathname ===
-              "/_arkret/self/agent-sidecars:ensure",
-          { timeout: 120_000 },
-        );
+        const privacyEnsurePromise = waitForSidecarEnsureAcceptance(inkson);
         await privacyCard.getByTestId("send-chat-button").click();
         const privacyEnsure = await privacyEnsurePromise;
-        const privacyEnsureText = await privacyEnsure.text();
-        expect(privacyEnsure.status(), privacyEnsureText).toBe(200);
-        expect(
-          (
-            privacyEnsure.request().postDataJSON() as {
-              addressed_agent_ids?: string[];
-            }
-          ).addressed_agent_ids,
-        ).toEqual([firstPairing.agentId]);
-        const privacyEnsureBody = JSON.parse(privacyEnsureText) as {
-          effective_agent_ids?: string[];
-        };
-        expect(privacyEnsureBody.effective_agent_ids ?? []).toEqual(
+        expect(privacyEnsure.sidecar_id).toBe(ensured.sidecar_id);
+        await expect(inkson.getByTestId("sidecar-security-state")).toHaveText(
+          "E2EE",
+          { timeout: 180_000 },
+        );
+        const privacySidecar = await readSidecarCurrent(
+          request,
+          jointRealm,
+          privacyEnsure.sidecar_id,
+        );
+        expect(privacySidecar.access_readiness).toBe("ready");
+        expect(privacySidecar.effective_agent_ids).toEqual(
           expect.arrayContaining([
             firstPairing.agentId,
             unaddressedAgent.agentId,
           ]),
         );
-        await expect(inkson.getByTestId("sidecar-security-state")).toHaveText(
-          "E2EE",
-          { timeout: 180_000 },
-        );
         await expect(privacyCard.getByTestId("send-chat-button")).toBeEnabled({
           timeout: 30_000,
         });
         await privacyCard.getByTestId("send-chat-button").click();
-        await expect(
-          privacyCard
-            .getByTestId("chat-message")
-            .filter({ hasText: privacyPrompt })
-            .last(),
-        ).toBeVisible({ timeout: 30_000 });
+        const privacyRequest = privacyCard
+          .getByTestId("chat-message")
+          .filter({ hasText: privacyPrompt })
+          .last();
+        await expect(privacyRequest).toBeVisible({ timeout: 30_000 });
+        const privacyFold = await sidecarFoldProjection(
+          inkson,
+          jointRealm.realmId,
+          await eventIdFromMessage(privacyRequest),
+        );
+        expect(privacyFold.projection.addressed_agent_ids).toEqual([
+          firstPairing.agentId,
+        ]);
         await expect
           .poll(() => receiptCount(addressedReceiptPath), {
             timeout: 180_000,
@@ -1052,7 +1048,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
                 addressed_agent_id: firstPairing.agentId,
                 unaddressed_eligible_agent_id: unaddressedAgent.agentId,
                 effective_agent_ids:
-                  privacyEnsureBody.effective_agent_ids ?? [],
+                  privacySidecar.effective_agent_ids,
                 addressed_model_calls_delta: 1,
                 unaddressed_model_calls_delta: 0,
               },
@@ -1590,30 +1586,15 @@ async function sidecarEchoProjection(
 const SIDECAR_FOLD_EVIDENCE_HOOK = "__inkson_sidecar_fold_evidence_v1";
 const SIDECAR_FOLD_EVIDENCE_SCHEMA = "inkson.test.sidecar_fold_evidence.v1";
 
-type SidecarFoldFrontier = {
-  event_ids: string[];
-  event_set_digest: string;
-  max_hlc: string;
-};
-
 type SidecarFoldEvidenceEntry = {
-  exchange_id: string;
-  private_strand_id: string;
-  status: string;
-  terminal_event_id?: string;
-  folded_frontier: SidecarFoldFrontier;
   /// Canonical digest of `projection` — the byte-identity check.
   projection_digest: string;
-  projection: {
-    private_request_event_id: string;
-    user_facing_response_event_ids: string[];
-    folded_frontier: SidecarFoldFrontier;
-  } & Record<string, unknown>;
+  projection: AgentSidecarExchangeProjection;
 };
 
 type SidecarFoldEvidence = {
   schema: string;
-  controller_account_id: { principal_id: string; station_id: string };
+  controller_account_id: AccountId;
   source_realm_id: string;
   exchanges: SidecarFoldEvidenceEntry[];
 };
@@ -1718,6 +1699,49 @@ async function addAgentToRealm(
       { timeout: 120_000 },
     )
     .toEqual(["true", "true"]);
+}
+
+async function waitForSidecarEnsureAcceptance(
+  page: Page,
+): Promise<SidecarEnsureAcceptedOutcome> {
+  const response = await page.waitForResponse(
+    (candidate) => {
+      const outgoing = candidate.request();
+      if (
+        outgoing.method() !== "POST" ||
+        new URL(candidate.url()).pathname !== "/_arkret/self/agent-sidecars:ensure"
+      ) return false;
+      const phase = outgoing.postDataJSON()?.phase;
+      return phase === "commit" || phase === "attach";
+    },
+    { timeout: 120_000 },
+  );
+  const text = await response.text();
+  expect(response.status(), text).toBe(200);
+  const accepted = JSON.parse(text) as SidecarEnsureAcceptedOutcome;
+  const submitted = response.request().postDataJSON();
+  expect(accepted.status).toBe("accepted");
+  expect(accepted.accepted_phase).toBe(submitted.phase);
+  expect(accepted.operation_id).toBe(submitted.operation_id);
+  return accepted;
+}
+
+async function readSidecarCurrent(
+  request: APIRequestContext,
+  jointRealm: JointRealmFixture,
+  sidecarId: string,
+): Promise<AgentSidecarView> {
+  const url = `${solandBaseUrl().replace(/\/$/, "")}/_arkret/self/agent-sidecars/${encodeURIComponent(sidecarId)}`;
+  const response = await request.get(url, {
+    headers: selfPathHeadersForDpopSession(jointRealm.aliceSession, "GET", url),
+  });
+  const text = await response.text();
+  expect(response.status(), text).toBe(200);
+  const view = JSON.parse(text) as AgentSidecarView;
+  expect(view.sidecar.id).toBe(sidecarId);
+  expect(view.sidecar.realm_id).toBe(jointRealm.realmId);
+  expect(view.sidecar.controller_account_id).toEqual(jointRealm.aliceSession.accountId);
+  return view;
 }
 
 async function composeSourceAgentMention(

@@ -693,6 +693,91 @@ export type AccountId = {
   "station_id": string;
 };
 
+/** `principal-operations.schema.json#/$defs/sidecar_ensure_outcome/oneOf/2` — closed object schema. */
+export type SidecarEnsureAcceptedOutcome = {
+  "status": "accepted";
+  "operation_id": string;
+  "accepted_phase": "commit" | "attach";
+  "sidecar_id": string;
+  "source_context_ref": {
+    "kind": "relation";
+    "relation_id": string;
+  } | {
+    "kind": "strand";
+    "strand_id": string;
+  };
+  "access_readiness": "opening" | "key_material_pending" | "epoch_update_required" | "ready" | "failed";
+  "pending_access_reconciliations": Array<{
+    "agent_id": string;
+    "provisioning_phase": "mls_welcome" | "mls_remove" | "epoch_rotation" | "device_key_material";
+  }>;
+};
+
+/** `agent-operations.schema.json#/$defs/agent_sidecar_view` — closed object schema. */
+export type AgentSidecarView = {
+  "sidecar": {
+    "id": string;
+    "schema": "ak.schema.agent_sidecar.v1";
+    "realm_id": string;
+    "controller_account_id": {
+      "principal_id": string;
+      "station_id": string;
+    };
+    "state": "active" | "suspended" | "tombstoned";
+    "state_changed_at"?: string;
+    "created_at": string;
+    "updated_at"?: string;
+  };
+  "desired_agent_ids": string[];
+  "effective_agent_ids": string[];
+  "mls_context": {
+    "participant_authority_digest": string;
+    "authority_stream_head": string[];
+    "mls_group_id"?: string;
+    "epoch"?: number;
+    "genesis_event_ref"?: string;
+    "current_controller_device_ready": boolean;
+  };
+  "access_readiness": "opening" | "key_material_pending" | "epoch_update_required" | "ready" | "failed";
+  "pending_access_reconciliations": Array<{
+    "agent_id": string;
+    "provisioning_phase": "mls_welcome" | "mls_remove" | "epoch_rotation" | "device_key_material";
+  }>;
+};
+
+/** `agent-sidecar-exchange-projection.schema.json` — closed object schema. */
+export type AgentSidecarExchangeProjection = {
+  "schema": "ak.schema.agent_sidecar_exchange_projection.v1";
+  "controller_account_id": {
+    "principal_id": string;
+    "station_id": string;
+  };
+  "sidecar_id": string;
+  "exchange_id": string;
+  "source_track_ref": {
+    "realm_id": string;
+    "strand_id": string;
+    "track_name": string;
+  };
+  "source_event_id"?: string;
+  "source_hlc": string;
+  "client_order_key": string;
+  "addressed_agent_ids": string[];
+  "coordinator_agent_id": string;
+  "coordinator_assignment_event_id": string;
+  "participating_agent_ids": string[];
+  "private_request_event_id": string;
+  "user_facing_response_event_ids": string[];
+  "status": "delivered" | "responding" | "complete" | "failed";
+  "failure_reason_code"?: string;
+  "terminal_event_id"?: string;
+  "folded_checkpoint": {
+    "event_ids": string[];
+    "event_set_digest": string;
+    "max_hlc": string;
+  };
+};
+
 /** `invite.schema.json` — closed object schema. */
 export type InviteObject = {
   "id": string;
