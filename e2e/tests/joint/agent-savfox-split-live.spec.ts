@@ -7,6 +7,7 @@ import {
   type Page,
   type Request,
   type Route,
+  type TestInfo,
 } from "../../helpers/arkret-test";
 import { readFile } from "node:fs/promises";
 import type {
@@ -736,9 +737,11 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         await expect(sourceCard.getByTestId("send-chat-button")).toBeEnabled({
           timeout: 30_000,
         });
-        const ensureResponsePromise = waitForSidecarEnsureAcceptance(inkson);
-        await sourceCard.getByTestId("send-chat-button").click();
-        const ensured = await ensureResponsePromise;
+        const ensureResponsePromise = waitForSidecarEnsureAcceptance(inkson, testInfo);
+        const [ensured] = await Promise.all([
+          ensureResponsePromise,
+          sourceCard.getByTestId("send-chat-button").click(),
+        ]);
         expect(ensured.sidecar_id).toMatch(/^ak:sidecar:/);
         await assertSidecarNonDisclosure(
           request,
@@ -986,9 +989,11 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         await expect(privacyCard.getByTestId("send-chat-button")).toBeEnabled({
           timeout: 30_000,
         });
-        const privacyEnsurePromise = waitForSidecarEnsureAcceptance(inkson);
-        await privacyCard.getByTestId("send-chat-button").click();
-        const privacyEnsure = await privacyEnsurePromise;
+        const privacyEnsurePromise = waitForSidecarEnsureAcceptance(inkson, testInfo);
+        const [privacyEnsure] = await Promise.all([
+          privacyEnsurePromise,
+          privacyCard.getByTestId("send-chat-button").click(),
+        ]);
         expect(privacyEnsure.sidecar_id).toBe(ensured.sidecar_id);
         await expect(inkson.getByTestId("sidecar-security-state")).toHaveText(
           "E2EE",
@@ -1703,6 +1708,7 @@ async function addAgentToRealm(
 
 async function waitForSidecarEnsureAcceptance(
   page: Page,
+  testInfo: TestInfo,
 ): Promise<SidecarEnsureAcceptedOutcome> {
   const response = await page.waitForResponse(
     (candidate) => {
@@ -1712,14 +1718,31 @@ async function waitForSidecarEnsureAcceptance(
         new URL(candidate.url()).pathname !== "/_arkret/self/agent-sidecars:ensure"
       ) return false;
       const phase = outgoing.postDataJSON()?.phase;
-      return phase === "commit" || phase === "attach";
+      return phase === "commit" || phase === "attach" ||
+        (phase === "prepare" && candidate.status() >= 400);
     },
     { timeout: 120_000 },
   );
   const text = await response.text();
+  const submitted = response.request().postDataJSON();
+  if (response.status() !== 200) {
+    // Keep only the source selection and complete controller identity. Request
+    // headers, credentials, proofs and private signed drafts are excluded.
+    await testInfo.attach("sidecar-ensure-failure", {
+      body: Buffer.from(JSON.stringify({
+        phase: submitted.phase,
+        status: response.status(),
+        ...(submitted.phase === "prepare" ? {
+          source_realm_id: submitted.source_realm_id,
+          controller_account_id: submitted.controller_account_id,
+          context_ref: submitted.context_ref,
+        } : {}),
+      }, null, 2)),
+      contentType: "application/json",
+    });
+  }
   expect(response.status(), text).toBe(200);
   const accepted = JSON.parse(text) as SidecarEnsureAcceptedOutcome;
-  const submitted = response.request().postDataJSON();
   expect(accepted.status).toBe("accepted");
   expect(accepted.accepted_phase).toBe(submitted.phase);
   expect(accepted.operation_id).toBe(submitted.operation_id);
