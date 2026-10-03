@@ -81,12 +81,20 @@ const pendingJoins = new Map<string, PendingJoin>();
 const PKCS8_ED25519_PREFIX = Buffer.from("302e020100300506032b657004220420", "hex");
 const CLAIM_LIFETIME_SECONDS = 240;
 
-function realmKey(server: SolandKey | undefined, realmId: string): string {
-  return `${server ?? "default"}\0${realmId}`;
+function realmKey(
+  server: SolandKey | undefined,
+  realmId: string,
+  scopeRef: Record<string, unknown> = { kind: "realm", realm_id: realmId },
+): string {
+  return `${server ?? "default"}\0${canonicalJson(scopeRef)}`;
 }
 
-function joinKey(realmId: string, member: MlsDevice): string {
-  return `${realmKey(member.server, realmId)}\0${member.id}\0${member.deviceId}`;
+function joinKey(
+  realmId: string,
+  member: MlsDevice,
+  scopeRef?: Record<string, unknown>,
+): string {
+  return `${realmKey(member.server, realmId, scopeRef)}\0${member.id}\0${member.deviceId}`;
 }
 
 function deviceSigner(device: MlsDevice): {
@@ -278,7 +286,7 @@ export async function activateRealmMlsApi(
   request: APIRequestContext,
   owner: MlsDevice,
   realmId: string,
-  opts: { stationId?: string } = {},
+  opts: { stationId?: string; scopeRef?: Record<string, unknown> } = {},
 ): Promise<string> {
   const genesis = cotestWire<{
     cipher_suite: string;
@@ -291,6 +299,7 @@ export async function activateRealmMlsApi(
     endpoint: endpointInput(owner),
     device_authorize_event_id: await deviceAuthorizeEventId(request, owner),
     realm_id: realmId,
+    ...(opts.scopeRef ? { scope_ref: opts.scopeRef } : {}),
   });
   const groupInfoRef = await uploadPublicBlob(
     request,
@@ -311,6 +320,7 @@ export async function activateRealmMlsApi(
     stationId: opts.stationId,
     realmId,
     kind: "ak.mls.genesis",
+    scopeRef: opts.scopeRef,
     createdAt,
     payload: {
       cipher_suite: genesis.cipher_suite,
@@ -328,7 +338,7 @@ export async function activateRealmMlsApi(
   const creatorAuthority = genesis.creator_leaf_authority as {
     authorization_event_ref: string;
   };
-  realmMlsCreators.set(realmKey(owner.server, realmId), {
+  realmMlsCreators.set(realmKey(owner.server, realmId, opts.scopeRef), {
     owner,
     groupState: genesis.group_state,
     members: [
@@ -351,9 +361,9 @@ export async function addRealmMlsMemberApi(
   request: APIRequestContext,
   realmId: string,
   member: MlsDevice,
-  opts: { server?: SolandKey } = {},
+  opts: { server?: SolandKey; scopeRef?: Record<string, unknown> } = {},
 ): Promise<{ commitEventId: string; welcome: Record<string, unknown> }> {
-  const creator = realmMlsCreators.get(realmKey(opts.server, realmId));
+  const creator = realmMlsCreators.get(realmKey(opts.server, realmId, opts.scopeRef));
   if (!creator) {
     throw new Error(`Realm ${realmId} has no MLS group founded by this harness`);
   }
@@ -396,6 +406,7 @@ export async function addRealmMlsMemberApi(
       target_account_id: accountActorId(member.id, member.server).account_id,
       target_device_id: member.deviceId,
       realm_id: realmId,
+      ...(opts.scopeRef ? { scope_ref: opts.scopeRef } : {}),
       source_id: solandServiceId(owner.server),
       destination_id: solandServiceId(member.server),
       claim_request_id: randomBytes(16).toString("base64url"),
@@ -426,7 +437,7 @@ export async function addRealmMlsMemberApi(
     request,
     owner.token,
     realmId,
-    undefined,
+    opts.scopeRef,
     owner.server,
   );
   if (!current) {
@@ -447,6 +458,7 @@ export async function addRealmMlsMemberApi(
     server: owner.server,
     realmId,
     kind: "ak.mls.commit",
+    scopeRef: opts.scopeRef,
     payload: added.commit_payload,
   });
   const welcome = cotestWire<Record<string, unknown>>("mls-welcome-delivery", {
@@ -497,7 +509,7 @@ export async function addRealmMlsMemberApi(
   expect(installed.epoch).toBe(current.epoch + 1);
   creator.groupState = installed.group_state;
   creator.members = members;
-  pendingJoins.set(joinKey(realmId, member), {
+  pendingJoins.set(joinKey(realmId, member, opts.scopeRef), {
     identityState: published.identity_state,
     commitEventId,
     welcomeId: String(welcome.welcome_id),
@@ -514,8 +526,9 @@ export async function joinRealmMlsWelcomeApi(
   request: APIRequestContext,
   realmId: string,
   member: MlsDevice,
+  opts: { scopeRef?: Record<string, unknown> } = {},
 ): Promise<MlsMemberGroup> {
-  const pending = pendingJoins.get(joinKey(realmId, member));
+  const pending = pendingJoins.get(joinKey(realmId, member, opts.scopeRef));
   if (!pending) {
     throw new Error(`no MLS Welcome was admitted for ${member.id} in ${realmId}`);
   }
@@ -578,7 +591,7 @@ export async function joinRealmMlsWelcomeApi(
       `ACK recipient queue of ${member.id}`,
     );
   }
-  pendingJoins.delete(joinKey(realmId, member));
+  pendingJoins.delete(joinKey(realmId, member, opts.scopeRef));
   return {
     realmId,
     groupState: joined.group_state,
@@ -594,9 +607,9 @@ export async function joinRealmMlsWelcomeApi(
 export async function realmMlsCreatorGroupApi(
   request: APIRequestContext,
   realmId: string,
-  opts: { server?: SolandKey } = {},
+  opts: { server?: SolandKey; scopeRef?: Record<string, unknown> } = {},
 ): Promise<MlsMemberGroup> {
-  const creator = realmMlsCreators.get(realmKey(opts.server, realmId));
+  const creator = realmMlsCreators.get(realmKey(opts.server, realmId, opts.scopeRef));
   if (!creator) {
     throw new Error(`Realm ${realmId} has no MLS group founded by this harness`);
   }
@@ -604,7 +617,7 @@ export async function realmMlsCreatorGroupApi(
     request,
     creator.owner.token,
     realmId,
-    { kind: "realm", realm_id: realmId },
+    opts.scopeRef ?? { kind: "realm", realm_id: realmId },
     opts.server,
   );
   if (!current) {

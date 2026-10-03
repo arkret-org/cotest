@@ -120,6 +120,8 @@ struct GenesisInput {
     endpoint: DeviceEndpointInput,
     device_authorize_event_id: EventId,
     realm_id: RealmId,
+    #[serde(default)]
+    scope_ref: Option<ScopeRef>,
 }
 
 /// `mls-genesis`: the creator's epoch-zero Realm group with itself as the
@@ -127,9 +129,14 @@ struct GenesisInput {
 /// `ak.mls.genesis` Event from the returned members.
 pub fn mls_genesis(input: Value) -> Result<Value> {
     let input: GenesisInput = serde_json::from_value(input).context("parse MLS Genesis input")?;
-    let scope = ScopeRef::Realm {
+    let scope = input.scope_ref.unwrap_or_else(|| ScopeRef::Realm {
         realm_id: input.realm_id.clone(),
-    };
+    });
+    ensure!(
+        scope.realm_id_opt() == Some(&input.realm_id)
+            && matches!(scope, ScopeRef::Realm { .. } | ScopeRef::Circle { .. }),
+        "MLS Genesis scope must belong to the requested Realm"
+    );
     let binding = MlsGovernanceBindingPayload::new(scope.clone(), None, 0, 0, 0)?;
     let mut group = input
         .endpoint
@@ -188,6 +195,8 @@ struct ClaimRequestInput {
     target_account_id: AccountId,
     target_device_id: DeviceId,
     realm_id: RealmId,
+    #[serde(default)]
+    scope_ref: Option<ScopeRef>,
     source_id: DidCoreId,
     destination_id: DidCoreId,
     claim_request_id: String,
@@ -204,9 +213,14 @@ pub fn mls_keypackage_claim_request(input: Value) -> Result<Value> {
         input.lifetime_seconds > 0,
         "claim lifetime must be positive"
     );
-    let scope = ScopeRef::Realm {
+    let scope = input.scope_ref.unwrap_or_else(|| ScopeRef::Realm {
         realm_id: input.realm_id.clone(),
-    };
+    });
+    ensure!(
+        scope.realm_id_opt() == Some(&input.realm_id)
+            && matches!(scope, ScopeRef::Realm { .. } | ScopeRef::Circle { .. }),
+        "MLS claim scope must belong to the requested Realm"
+    );
     let signed_at = arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now());
     let requester = &input.requester;
     let mut body: KeyPackagesClaimRequestBody = serde_json::from_value(json!({
@@ -597,4 +611,127 @@ fn fresh_uuid_v7() -> String {
         .next()
         .unwrap_or_default()
         .to_owned()
+}
+
+#[cfg(test)]
+mod scope_tests {
+    use super::*;
+
+    fn realm() -> RealmId {
+        RealmId::new("ak:realm:ASZ1iAvlGxgLC_-P6WHoR9vfijpaxbI5hoSwBx8zWTcT").unwrap()
+    }
+
+    fn circle_scope() -> ScopeRef {
+        ScopeRef::Circle {
+            realm_id: realm(),
+            circle_id: arkret_wire::CircleId::new(
+                "ak:circle:ASZ1iAvlGxgLC_-P6WHoR9vfijpaxbI5hoSwBx8zWTcT",
+            )
+            .unwrap(),
+        }
+    }
+
+    fn endpoint() -> Value {
+        json!({
+            "actor_id": ActorId::account(AccountId::new(
+                DidCoreId::new("ak:did_core:web:alice.example").unwrap(),
+                DidCoreId::new("ak:did_core:web:station.example").unwrap(),
+            )),
+            "device_id": "ak:device:01904100-0000-7000-8000-000000000006",
+            "verification_method": "did:web:alice.example#device",
+            "signing_seed_b64url": encode_b64(&[7; 32]),
+        })
+    }
+
+    #[test]
+    fn circle_genesis_is_real_scope_bound_mls_not_parent_realm_state() {
+        let authorization = EventId::from_digest(arkret_canonical::DigestSuite::Sha256, [3; 32]);
+        let input = json!({
+            "endpoint": endpoint(), "realm_id": realm(), "scope_ref": circle_scope(),
+            "device_authorize_event_id": authorization,
+        });
+        let output = mls_genesis(input.clone()).unwrap();
+        let group = decode_group(output["group_state"].as_str().unwrap()).unwrap();
+        assert_eq!(group.scope(), &circle_scope());
+        assert_eq!(
+            group.group_id(),
+            circle_scope().canonical_mls_group_id().unwrap()
+        );
+        assert_eq!(group.epoch(), 0);
+        assert_eq!(group.verified_leaf_bindings().unwrap().len(), 1);
+        let (info, tree) = group.public_group_state_bytes().unwrap();
+        assert_eq!(
+            decode_b64(output["group_info_b64url"].as_str().unwrap()).unwrap(),
+            info
+        );
+        assert_eq!(
+            decode_b64(output["ratchet_tree_b64url"].as_str().unwrap()).unwrap(),
+            tree
+        );
+
+        let mut parent = input.clone();
+        parent.as_object_mut().unwrap().remove("scope_ref");
+        let parent = mls_genesis(parent).unwrap();
+        let parent = decode_group(parent["group_state"].as_str().unwrap()).unwrap();
+        assert_ne!(parent.group_id(), group.group_id());
+        let mut foreign = input;
+        foreign["realm_id"] =
+            json!(RealmId::new("ak:realm:AdkQ-RmB1a8zyc52yl9GWAsodQ_EUle1WAVZqbO7pc19",).unwrap());
+        assert!(mls_genesis(foreign).is_err());
+    }
+
+    #[test]
+    fn circle_claim_signs_exact_group_and_rejects_foreign_scope() {
+        use ed25519_dalek::Verifier as _;
+
+        let endpoint = endpoint();
+        let authorization = EventId::from_digest(arkret_canonical::DigestSuite::Sha256, [3; 32]);
+        let input = json!({
+            "requester": {
+                "account_id": endpoint["actor_id"]["account_id"],
+                "device_id": endpoint["device_id"],
+                "verification_method": endpoint["verification_method"],
+                "device_authorize_event_id": authorization,
+                "signing_seed_b64url": endpoint["signing_seed_b64url"],
+            },
+            "target_account_id": AccountId::new(
+                DidCoreId::new("ak:did_core:web:bob.example").unwrap(),
+                DidCoreId::new("ak:did_core:web:station.example").unwrap(),
+            ),
+            "target_device_id": "ak:device:01904100-0000-7000-8000-00000000000e",
+            "realm_id": realm(), "scope_ref": circle_scope(),
+            "source_id": "ak:did_core:web:station.example",
+            "destination_id": "ak:did_core:web:station.example",
+            "claim_request_id": encode_b64(&[4; 16]), "lifetime_seconds": 240,
+        });
+        let request: KeyPackagesClaimRequestBody =
+            serde_json::from_value(mls_keypackage_claim_request(input.clone()).unwrap()).unwrap();
+        assert_eq!(
+            request.mls_group_id,
+            circle_scope().canonical_mls_group_id().unwrap()
+        );
+        let bytes = arkret_models_crypto::keypackage_claim_authorization_signing_bytes(
+            &request.unsigned_request(),
+            &request.service_binding,
+            &request.requester_authorization,
+        )
+        .unwrap();
+        let arkret_models_crypto::PeerKeyPackageRequesterAuthorization::Device {
+            signature, ..
+        } = &request.requester_authorization
+        else {
+            panic!("expected signed device claim");
+        };
+        let signature =
+            ed25519_dalek::Signature::from_slice(&decode_b64(signature.sig.as_str()).unwrap())
+                .unwrap();
+        SigningKey::from_bytes(&[7; 32])
+            .verifying_key()
+            .verify(&bytes, &signature)
+            .unwrap();
+        let mut foreign = input;
+        foreign["realm_id"] =
+            json!(RealmId::new("ak:realm:AdkQ-RmB1a8zyc52yl9GWAsodQ_EUle1WAVZqbO7pc19",).unwrap());
+        assert!(mls_keypackage_claim_request(foreign).is_err());
+    }
 }

@@ -39,9 +39,17 @@ import {
   grantCircleMemberAddCapability,
 } from "../../helpers/circle-api";
 import {
+  activateRealmMlsApi,
+  addRealmMlsMemberApi,
+  encryptMlsMessageContent,
+  joinRealmMlsWelcomeApi,
+  realmMlsCreatorGroupApi,
+  readScopeMlsGroupCurrentApi,
+  type MlsMemberGroup,
+} from "../../helpers/soland-api/mls";
+import {
   buildSignalEnvelope,
   captureSubmittedSignalEnvelope,
-  prepareSignalEnvelope,
   signalPlaintext,
 } from "../../helpers/webrtc";
 
@@ -51,6 +59,7 @@ const circleScopeByStrand = new Map<
   string,
   { circleId: string; encryptionProfile: "none" | "mls_rfc9420" }
 >();
+const circleMlsMembers = new Map<string, Map<string, MlsMemberGroup>>();
 
 test.describe("discussion upgrade to Circle-scoped private Strand", () => {
   test("API inline discussion track preserves strand_id and track_name", async ({
@@ -467,9 +476,34 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
     expect(JSON.stringify(eventPayload(publicStrandCreate))).not.toContain(
       "scope_circle_id",
     );
-    expect(eventPayload(circleCreate)).toMatchObject({
-      object: { encryption_profile: "mls_rfc9420" },
+    expect((eventPayload(circleCreate).object as Record<string, unknown>))
+      .not.toHaveProperty("encryption_profile");
+    const scope = { kind: "circle", realm_id: fixture.realmId, circle_id: promoted.circleId };
+    const current = await readScopeMlsGroupCurrentApi(
+      request, fixture.aliceToken, fixture.realmId, scope,
+    );
+    expect(current, "Circle encryption requires an accepted MLS Genesis and Add").toMatchObject({
+      effective_scope: scope, epoch: 1,
     });
+    expect(current!.covered_key_access_revision).toBe(current!.current_key_access_revision);
+    expect(await readScopeMlsGroupCurrentApi(
+      request, fixture.aliceToken, fixture.realmId,
+    ), "the parent Realm has no accepted MLS group").toBeUndefined();
+    const privateMessage = await createDiscussionMessageViaApi(
+      request, fixture.bobToken, fixture.bob, fixture.realmId,
+      promoted.privateStrandId, "actual Circle MLS ciphertext",
+    );
+    const publicMessage = await createDiscussionMessageViaApi(
+      request, fixture.aliceToken, fixture.alice, fixture.realmId,
+      publicStrandId, "parent Realm plaintext",
+    );
+    const written = await listRealmEventsViaApi(request, fixture.aliceToken, fixture.realmId);
+    expect(eventPayload(eventById(written, privateMessage.event_id)))
+      .toHaveProperty("encrypted_content");
+    expect(eventPayload(eventById(written, privateMessage.event_id))).not.toHaveProperty("content");
+    expect(eventPayload(eventById(written, publicMessage.event_id))).toHaveProperty("content");
+    expect(eventPayload(eventById(written, publicMessage.event_id)))
+      .not.toHaveProperty("encrypted_content");
   });
 
   test("unknown scope_circle_id on Strand create is rejected", async ({
@@ -718,6 +752,12 @@ async function createDiscussionCircleViaApi(
     { context: "create discussion circle" },
   );
   const circleId = retypeEventDerivedId(String(envelope.event_id), "circle");
+  const scopeRef = { kind: "circle", realm_id: fixture.realmId, circle_id: circleId };
+  const encrypted = opts.circleEncryptionProfile === "mls_rfc9420";
+  const groups = new Map<string, MlsMemberGroup>();
+  if (encrypted && opts.members[0]?.id !== fixture.alice.id) {
+    throw new Error("MLS discussion Circle must join its creator before adding peers");
+  }
   for (const member of opts.members) {
     const memberToken =
       member.id === fixture.alice.id
@@ -742,6 +782,23 @@ async function createDiscussionCircleViaApi(
       actorId: member.id,
       membership: "join",
     });
+    if (encrypted) {
+      const device = { ...member, token: memberToken };
+      if (member.id === fixture.alice.id) {
+        await activateRealmMlsApi(request, device, fixture.realmId, { scopeRef });
+      } else {
+        await addRealmMlsMemberApi(request, fixture.realmId, device, { scopeRef });
+        groups.set(member.id, await joinRealmMlsWelcomeApi(
+          request, fixture.realmId, device, { scopeRef },
+        ));
+      }
+    }
+  }
+  if (encrypted) {
+    groups.set(fixture.alice.id, await realmMlsCreatorGroupApi(
+      request, fixture.realmId, { scopeRef },
+    ));
+    circleMlsMembers.set(circleId, groups);
   }
   return circleId;
 }
@@ -800,36 +857,12 @@ async function createDiscussionMessageViaApi(
     : undefined;
   let messageContent: Record<string, unknown>;
   if (circleScope?.encryptionProfile === "mls_rfc9420") {
-    const basisProbe = buildSignalEnvelope({
-      actorId: actor.id,
-      deviceId: actor.deviceId,
-      realmId,
-      scopeRef,
-      plaintext: {
-        kind: "ak.typing",
-        payload_sequence: Date.now(),
-        strand_id: strandId,
-        is_typing: false,
-      },
-    });
-    await prepareSignalEnvelope(request, token, basisProbe);
-    const preparedPayload = basisProbe.encrypted_payload as Record<
-      string,
-      unknown
-    >;
-    const preparedKeyRef = preparedPayload.key_ref as Record<string, unknown>;
+    const group = circleMlsMembers.get(circleScope.circleId)?.get(actor.id);
+    if (!group) throw new Error("encrypted discussion author has no joined Circle MLS state");
     messageContent = {
-      encrypted_content: {
-        version: "1.0",
-        content_type: "application/vnd.arkret.message+json",
-        encryption_context: {
-          epoch: Number(preparedPayload.epoch),
-          group_state_ref: String(preparedKeyRef.group_state_ref),
-        },
-        ciphertext: Buffer.from(`${body} ${Date.now()}`, "utf8").toString(
-          "base64url",
-        ),
-      },
+      encrypted_content: encryptMlsMessageContent(group, {
+        kind: "ak.content.text", body: `${body} ${Date.now()}`,
+      }),
     };
   } else {
     messageContent = {
