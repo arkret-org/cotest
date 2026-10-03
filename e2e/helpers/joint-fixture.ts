@@ -82,6 +82,9 @@ async function createJointTwoUsers(
       grantAudience: aliceSession.grantAudience,
       recoveryKey: aliceSession.recoveryKey,
       recoveryMaterialEvidence: aliceSession.recoveryMaterialEvidence,
+      onRecoveryKeyConfigured: (key) => {
+        aliceSession.recoveryKey = key;
+      },
     }),
     openUserPage(browser, bob, {
       grantJwt: bobSession.grantJwt,
@@ -93,6 +96,9 @@ async function createJointTwoUsers(
       grantAudience: bobSession.grantAudience,
       recoveryKey: bobSession.recoveryKey,
       recoveryMaterialEvidence: bobSession.recoveryMaterialEvidence,
+      onRecoveryKeyConfigured: (key) => {
+        bobSession.recoveryKey = key;
+      },
     }),
   ]);
   await Promise.all([alicePage.gotoHome(), bobPage.gotoHome()]);
