@@ -861,6 +861,15 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         await secondController.page.goto(sourceCardUrl, {
           waitUntil: "domcontentloaded",
         });
+        // Pairing authorized this device without transferring the Account
+        // root. Restore that root through the normal recovery UI before the
+        // encrypted card and Sidecar history can be projected here.
+        const controllerRecoveryKey = jointRealm.aliceSession.recoveryKey;
+        expect(
+          Boolean(controllerRecoveryKey?.trim().split(/\s+/).length === 24),
+          "Device 2 needs the controller's confirmed Recovery Key",
+        ).toBe(true);
+        await secondController.unlockMlsAccountSecret(controllerRecoveryKey!);
         const secondCard =
           secondController.page.getByTestId("card-detail-modal");
         await expect(secondCard).toBeVisible({ timeout: 120_000 });
