@@ -1733,13 +1733,14 @@ async function composeSourceAgentMention(
   if (actor.kind !== "account") throw new Error("Agent member must be an Account");
   expect(actor.account_id.principal_id).toBe(agentId);
   await agentRow.getByTestId("card-detail-member-mention-button").click();
-  const composer = card.getByTestId("chat-input");
-  await expect.poll(() => composer.inputValue(), { timeout: 30_000 }).toContain(
-    actor.account_id.station_id,
+  const chip = card.locator(
+    `[data-testid="mention-chip"][data-mention-principal-id="${actor.account_id.principal_id}"][data-mention-station-id="${actor.account_id.station_id}"]`,
   );
-  const mention = (await composer.inputValue()).trim();
+  await expect(chip).toBeVisible({ timeout: 30_000 });
+  const composer = card.getByTestId("chat-input");
+  const mention = (await chip.locator("span").first().innerText()).trim();
   expect(mention).toMatch(/^@/);
-  expect(mention).toContain(actor.account_id.principal_id);
+  await expect(composer).toHaveValue(`${mention} `);
   // Keep the actual picker insertion so the composer retains the structured
   // mention; a controller/slug string is ordinary text under v1.
   await composer.fill(`${mention} ${prompt}`);
