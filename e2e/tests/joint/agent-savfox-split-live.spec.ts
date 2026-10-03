@@ -728,6 +728,12 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         const sidecarPrompt = "请在私有 Sidecar 中只回复 pong";
         const composer = sourceCard.getByTestId("chat-input");
         await composer.fill(`@me/${agentSlug} ${sidecarPrompt}`);
+        // The unknown-current encrypted control becomes the hidden secure
+        // alternate when this source scope resolves to plaintext. Resolve the
+        // enabled Send control before click can retain that old DOM node.
+        await expect(sourceCard.getByTestId("send-chat-button")).toBeEnabled({
+          timeout: 30_000,
+        });
         const ensureResponsePromise = inkson.waitForResponse(
           (response) =>
             response.request().method() === "POST" &&
@@ -988,6 +994,9 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         await privacyCard
           .getByTestId("chat-input")
           .fill(`@me/${agentSlug} ${privacyPrompt}`);
+        await expect(privacyCard.getByTestId("send-chat-button")).toBeEnabled({
+          timeout: 30_000,
+        });
         const privacyEnsurePromise = inkson.waitForResponse(
           (response) =>
             response.request().method() === "POST" &&
