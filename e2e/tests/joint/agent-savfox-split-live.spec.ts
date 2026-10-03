@@ -807,13 +807,17 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         await expect(
           requestMessage.getByTestId("message-private-sidecar-badge"),
         ).toBeVisible();
-        const sidecarPongBody = sourceCard
-          .getByTestId("content-block-text")
-          .filter({ hasText: /^pong(?:\r?\n|$)/ })
-          .last();
         const sidecarPongMessage = sourceCard
           .getByTestId("chat-message")
-          .filter({ has: sidecarPongBody })
+          .filter({
+            has: inkson
+              .getByTestId("content-block-text")
+              .filter({ hasText: /^pong(?:\r?\n|$)/ }),
+          })
+          .last();
+        const sidecarPongBody = sidecarPongMessage
+          .getByTestId("content-block-text")
+          .filter({ hasText: /^pong(?:\r?\n|$)/ })
           .last();
         await expect(sidecarPongMessage).toBeVisible({ timeout: 180_000 });
         await expect(
@@ -873,7 +877,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         const secondPong = secondCard
           .getByTestId("chat-message")
           .filter({
-            has: secondCard
+            has: secondController.page
               .getByTestId("content-block-text")
               .filter({ hasText: /^pong(?:\r?\n|$)/ }),
           })
