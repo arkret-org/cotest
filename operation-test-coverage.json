@@ -7,7 +7,7 @@
     "test_layers": {
       "soland_unit": {
         "source_file_count": 373,
-        "source_sha256": "faa9ac472f6459f27f07b9b81e1baa01e2c3e08fcc38c61e97bfbedb3954caf8",
+        "source_sha256": "5d9b162110ae58ab9768bb547c82fe0157e2c777261ecfca89c3c7954c4fcf58",
         "evidence_count": 283,
         "covered_operation_count": 139
       },
@@ -25,7 +25,7 @@
       },
       "cotest_e2e": {
         "source_file_count": 110,
-        "source_sha256": "1722d93e84665b1d1624c6967a94bf7894e0fc360f9dc137114b2563c4553448",
+        "source_sha256": "e7fd8145a53142bfe05d324b5de31de916be5084fcef799e292316ec2a7484c6",
         "evidence_count": 48,
         "covered_operation_count": 21
       },
@@ -7332,11 +7332,11 @@
         "storage_parity": [
           {
             "file": "soland/crates/storage-postgres/src/snapshot_disclosure_gate.rs",
-            "line": 336,
+            "line": 337,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              336
+              337
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -9947,16 +9947,16 @@
           },
           {
             "file": "soland/crates/storage-postgres/src/sync_cursor/retention.rs",
-            "line": 334,
+            "line": 337,
             "scope": "detail_cursor_without_global_baseline_does_not_pin_revision_zero",
             "scope_kind": "rust_test",
             "occurrence_lines": [
-              355
+              358
             ],
             "protected_oracle": false,
-            "scope_sha256": "51ca6e31cc9659d3d2757a404f6016aa238dcba1983903859848eedd1a6ead2c",
-            "input_sha256": "6200139eb30ce659abf3bd1dc98a319ae12a5b08be61ac064c510454fa8630ba",
-            "assertion_sha256": "2caa09f3076790018f3083a3a85327e9b86c9af3934ff2c77c802ffda2f090ce",
+            "scope_sha256": "67b1bee4e1116081b7c6759305b87b441e38587ec8a7038e6b4f7c2e2ada9f83",
+            "input_sha256": "4209d3441100d05386fbbb77d90abdad58bb545d28b778a0682a5489d5d5d705",
+            "assertion_sha256": "6a3d959b9b36f95a8fbc9a27c5e98d9e09bff0180813e5f6da9f2ac8e3135024",
             "input_preview": [
               "let database = crate::test_database::TestDatabase::lease().await;",
               "let pool = database.pool();",
@@ -9964,16 +9964,18 @@
               "conn.batch_execute("
             ],
             "assertion_preview": [
-              "assert_eq!(cursor_floors(&cursor).unwrap(), Some((5, i64::MAX)));"
+              "assert_eq!(cursor_floors(&cursor).unwrap(), Some((i64::MAX, i64::MAX)));",
+              "assert_eq!(cursor_floors(&detail).unwrap(), Some((5, i64::MAX)));",
+              "assert!(matches!("
             ]
           },
           {
             "file": "soland/crates/storage-postgres/src/sync_cursor/retention.rs",
-            "line": 372,
+            "line": 389,
             "scope": "account_cursor_detail_progress_holds_its_retained_revision",
             "scope_kind": "rust_test",
             "occurrence_lines": [
-              412
+              429
             ],
             "protected_oracle": false,
             "scope_sha256": "addf38e2a780a3bda8409ec2dc115e0964a0422b44d3b0bcbfc40a28a5b6e15d",
@@ -11850,11 +11852,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/identity/agents/sidecar.rs",
-            "line": 1189,
+            "line": 1201,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1189
+              1201
             ],
             "protected_oracle": false,
             "scope_sha256": "5f4759b3b97204d7384e27b94d27a1ef1c308bee2e7dc5ce661a1f1a5c737e39",
