@@ -700,6 +700,11 @@ async function promoteDiscussionToPrivateStrandViaApi(
     publicStrandId,
     circleId,
   );
+  // circle.md sections 1 and 7: bootstrap structure while delivery-only,
+  // then irreversibly activate the scope before authoring encrypted messages.
+  if (opts.circleEncryptionProfile === "mls_rfc9420") {
+    await activateDiscussionCircleMlsViaApi(request, fixture, circleId, opts.members);
+  }
   return { circleId, privateStrandId, relationId };
 }
 
@@ -752,12 +757,6 @@ async function createDiscussionCircleViaApi(
     { context: "create discussion circle" },
   );
   const circleId = retypeEventDerivedId(String(envelope.event_id), "circle");
-  const scopeRef = { kind: "circle", realm_id: fixture.realmId, circle_id: circleId };
-  const encrypted = opts.circleEncryptionProfile === "mls_rfc9420";
-  const groups = new Map<string, MlsMemberGroup>();
-  if (encrypted && opts.members[0]?.id !== fixture.alice.id) {
-    throw new Error("MLS discussion Circle must join its creator before adding peers");
-  }
   for (const member of opts.members) {
     const memberToken =
       member.id === fixture.alice.id
@@ -782,25 +781,39 @@ async function createDiscussionCircleViaApi(
       actorId: member.id,
       membership: "join",
     });
-    if (encrypted) {
-      const device = { ...member, token: memberToken };
-      if (member.id === fixture.alice.id) {
-        await activateRealmMlsApi(request, device, fixture.realmId, { scopeRef });
-      } else {
-        await addRealmMlsMemberApi(request, fixture.realmId, device, { scopeRef });
-        groups.set(member.id, await joinRealmMlsWelcomeApi(
-          request, fixture.realmId, device, { scopeRef },
-        ));
-      }
-    }
-  }
-  if (encrypted) {
-    groups.set(fixture.alice.id, await realmMlsCreatorGroupApi(
-      request, fixture.realmId, { scopeRef },
-    ));
-    circleMlsMembers.set(circleId, groups);
   }
   return circleId;
+}
+
+async function activateDiscussionCircleMlsViaApi(
+  request: APIRequestContext,
+  fixture: DiscussionFixture,
+  circleId: string,
+  members: JointUser[],
+) {
+  if (members[0]?.id !== fixture.alice.id) {
+    throw new Error("MLS discussion Circle must join its creator before adding peers");
+  }
+  const scopeRef = { kind: "circle", realm_id: fixture.realmId, circle_id: circleId };
+  const groups = new Map<string, MlsMemberGroup>();
+  for (const member of members) {
+    const token = member.id === fixture.alice.id ? fixture.aliceToken
+      : member.id === fixture.bob.id ? fixture.bobToken : undefined;
+    if (!token) throw new Error(`Circle member ${member.id} has no session in this fixture`);
+    const device = { ...member, token };
+    if (member.id === fixture.alice.id) {
+      await activateRealmMlsApi(request, device, fixture.realmId, { scopeRef });
+    } else {
+      await addRealmMlsMemberApi(request, fixture.realmId, device, { scopeRef });
+      groups.set(member.id, await joinRealmMlsWelcomeApi(
+        request, fixture.realmId, device, { scopeRef },
+      ));
+    }
+  }
+  groups.set(fixture.alice.id, await realmMlsCreatorGroupApi(
+    request, fixture.realmId, { scopeRef },
+  ));
+  circleMlsMembers.set(circleId, groups);
 }
 
 async function createConfidentialDiscussionRelationViaApi(
