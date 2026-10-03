@@ -7,25 +7,25 @@
     "test_layers": {
       "soland_unit": {
         "source_file_count": 373,
-        "source_sha256": "5d9b162110ae58ab9768bb547c82fe0157e2c777261ecfca89c3c7954c4fcf58",
+        "source_sha256": "762fd70ec5fb1179ee636c6a1153f53b41141d2e1485c9de859c813f9bd80288",
         "evidence_count": 283,
         "covered_operation_count": 139
       },
       "soland_http": {
         "source_file_count": 46,
-        "source_sha256": "89ddfda41ef4cb1c0ad452643bfd662547ebcc37e98874ba7ff7cca69170086d",
+        "source_sha256": "a8228122ab4fdaa6dccf18fca3623fcbc76360551a288cbdaafa13f96afdd236",
         "evidence_count": 31,
         "covered_operation_count": 20
       },
       "cotest_rust": {
-        "source_file_count": 407,
-        "source_sha256": "31c81342b8301311e66d07231ea844e0679ff9b17954ce5f6f81a3aba175124b",
+        "source_file_count": 408,
+        "source_sha256": "881e1ec902d6e37edc23e654e84e41f88c8246fdb60bdc75c8c2beedc4cfdefa",
         "evidence_count": 132,
         "covered_operation_count": 71
       },
       "cotest_e2e": {
         "source_file_count": 110,
-        "source_sha256": "89795d46fc0e8f71defaf8954c8ea9fa7acfac265835a494381e30264029c2f7",
+        "source_sha256": "bbe6a78557fd0ea808392b2ce0308a302f5bb5ebc731f343b34dceea2882d653",
         "evidence_count": 48,
         "covered_operation_count": 21
       },
@@ -20488,11 +20488,11 @@
           },
           {
             "file": "soland/crates/http/src/state/authority_self_event_unit.rs",
-            "line": 528,
+            "line": 529,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              528
+              529
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
