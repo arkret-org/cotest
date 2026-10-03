@@ -3,11 +3,13 @@ import {
   type APIRequestContext,
   type Browser,
   type BrowserContext,
+  type Locator,
   type Page,
   type Request,
   type Route,
 } from "../../helpers/arkret-test";
 import { readFile } from "node:fs/promises";
+import type { ActorId } from "../../helpers/generated/spec-wire-objects";
 import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
 import {
   deliverInviteWithConsentGrant,
@@ -711,23 +713,17 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           `Sidecar source ${Date.now().toString(36)}`,
         );
         await sourceCard.getByTestId("card-detail-sidebar-tab-members").click();
-        const sourceAgent = sourceCard
-          .locator(
-            `[data-testid="card-detail-agent-row"][data-agent-id="${firstPairing.agentId}"]`,
-          )
-          .or(
-            sourceCard
-              .getByTestId("card-detail-agent-row")
-              .filter({ hasText: agentSlug }),
-          )
-          .first();
+        const sourceAgent = sourceCard.locator(
+          `[data-testid="card-detail-agent-row"][data-agent-id="${firstPairing.agentId}"]`,
+        );
         await expect(sourceAgent).toBeVisible({ timeout: 120_000 });
-        await sourceAgent
-          .getByTestId("card-detail-member-mention-button")
-          .click();
         const sidecarPrompt = "请在私有 Sidecar 中只回复 pong";
-        const composer = sourceCard.getByTestId("chat-input");
-        await composer.fill(`@me/${agentSlug} ${sidecarPrompt}`);
+        await composeSourceAgentMention(
+          sourceCard,
+          sourceAgent,
+          firstPairing.agentId,
+          sidecarPrompt,
+        );
         // The unknown-current encrypted control becomes the hidden secure
         // alternate when this source scope resolves to plaintext. Resolve the
         // enabled Send control before click can retain that old DOM node.
@@ -976,24 +972,17 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         await privacyCard
           .getByTestId("card-detail-sidebar-tab-members")
           .click();
-        const addressedAgentRow = privacyCard
-          .locator(
-            `[data-testid="card-detail-agent-row"][data-agent-id="${firstPairing.agentId}"]`,
-          )
-          .or(
-            privacyCard
-              .getByTestId("card-detail-agent-row")
-              .filter({ hasText: agentSlug }),
-          )
-          .first();
+        const addressedAgentRow = privacyCard.locator(
+          `[data-testid="card-detail-agent-row"][data-agent-id="${firstPairing.agentId}"]`,
+        );
         await expect(addressedAgentRow).toBeVisible({ timeout: 120_000 });
-        await addressedAgentRow
-          .getByTestId("card-detail-member-mention-button")
-          .click();
         const privacyPrompt = `only addressed runtime may execute ${Date.now()}`;
-        await privacyCard
-          .getByTestId("chat-input")
-          .fill(`@me/${agentSlug} ${privacyPrompt}`);
+        await composeSourceAgentMention(
+          privacyCard,
+          addressedAgentRow,
+          firstPairing.agentId,
+          privacyPrompt,
+        );
         await expect(privacyCard.getByTestId("send-chat-button")).toBeEnabled({
           timeout: 30_000,
         });
@@ -1729,6 +1718,31 @@ async function addAgentToRealm(
       { timeout: 120_000 },
     )
     .toEqual(["true", "true"]);
+}
+
+async function composeSourceAgentMention(
+  card: Locator,
+  agentRow: Locator,
+  agentId: string,
+  prompt: string,
+): Promise<void> {
+  const memberId = await agentRow.getAttribute("data-member-id");
+  expect(memberId, "the source member supplies its complete ActorId").not.toBeNull();
+  const actor = JSON.parse(memberId!) as ActorId;
+  expect(actor.kind).toBe("account");
+  if (actor.kind !== "account") throw new Error("Agent member must be an Account");
+  expect(actor.account_id.principal_id).toBe(agentId);
+  await agentRow.getByTestId("card-detail-member-mention-button").click();
+  const composer = card.getByTestId("chat-input");
+  await expect.poll(() => composer.inputValue(), { timeout: 30_000 }).toContain(
+    actor.account_id.station_id,
+  );
+  const mention = (await composer.inputValue()).trim();
+  expect(mention).toMatch(/^@/);
+  expect(mention).toContain(actor.account_id.principal_id);
+  // Keep the actual picker insertion so the composer retains the structured
+  // mention; a controller/slug string is ordinary text under v1.
+  await composer.fill(`${mention} ${prompt}`);
 }
 
 async function createSidecarSourceCard(
