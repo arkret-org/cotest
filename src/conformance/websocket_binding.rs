@@ -9,10 +9,10 @@
 //!
 //! The implementation under test here is the SDK: the frame codec, the closed
 //! frame types, the `challenge_dpop_session_v1` builder / verifier, the
-//! connection state machine and the transport-selection table. soland and the
-//! client engine drive those same types, so a green run of this suite is what
-//! gates advertising the profile — it is not a second, parallel model of the
-//! binding.
+//! connection state machine and the transport-selection table. A green SDK
+//! run proves these shared primitives. A deployment must additionally run the
+//! fixture against its real transport, authorization and shared persistence
+//! before advertising the profile.
 
 use anyhow::{Result, anyhow, bail};
 use arkret_models_collaboration::sync_frames::websocket::{

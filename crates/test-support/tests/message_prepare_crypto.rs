@@ -134,6 +134,10 @@ fn authored_message_decrypts_at_the_other_mls_member_without_reencrypting() {
     let base_current = MlsGroupCurrent {
         effective_scope: scope.clone(),
         genesis_event_ref: base_group_state_ref.clone(),
+        cipher_suite: arkret_wire::NonEmptyString::new(
+            "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
+        )
+        .unwrap(),
         current_mls_commit_event_ref: base_group_state_ref,
         epoch: 0,
         current_key_access_revision: 0,

@@ -468,6 +468,7 @@ fn signed_call_signal_envelope(
         authority_commit_id: RealmCommitId::new(
             "ak:realm_commit:Ac08ROpjn3Ilj_UaM-_XLY93u4SUTptG0-Q-_CUDb5aS",
         )?,
+        parent_realm_authority_commit_id: None,
         signal_class,
         sent_at: sent_at(),
         expires_at: sent_at() + Duration::seconds(ttl_seconds),

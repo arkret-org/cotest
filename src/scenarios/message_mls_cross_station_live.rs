@@ -222,6 +222,10 @@ async fn submit_and_open(
 }
 
 pub async fn run() -> Result<()> {
+    run_with_signal(false).await
+}
+
+pub(crate) async fn run_with_signal(include_signal: bool) -> Result<()> {
     let Some(x_database) = database(GROUP)? else {
         return Ok(());
     };
@@ -253,6 +257,20 @@ pub async fn run() -> Result<()> {
             .await?;
     let realm_id = RealmId::new(realm.clone())?;
     let strand = alice.client.default_strand_id(&realm)?;
+    let before_bob_join = alice
+        .client
+        .sdk()
+        .realm_authority_bundle(&arkret_wire::AuthorityBundleRequest {
+            realm_id: realm_id.clone(),
+            nonce: arkret_wire::Base64UrlString::new(format!(
+                "{}{}",
+                fresh_uuid_v7(),
+                fresh_uuid_v7()
+            ))
+            .map_err(anyhow::Error::msg)?,
+        })
+        .await?
+        .realm_stream_head;
     join_through_invite(
         &alice,
         x,
@@ -373,6 +391,10 @@ pub async fn run() -> Result<()> {
     let base = arkret_wire::MlsGroupCurrent {
         effective_scope: scope,
         genesis_event_ref: genesis.event_id.clone(),
+        cipher_suite: arkret_wire::NonEmptyString::new(
+            "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
+        )
+        .unwrap(),
         current_mls_commit_event_ref: genesis.event_id,
         epoch: 0,
         current_key_access_revision: 0,
@@ -393,6 +415,27 @@ pub async fn run() -> Result<()> {
     )?;
     install_bindings(&mut alice_group, &[&alice, &bob]).await?;
     install_bindings(&mut bob_group, &[&alice, &bob]).await?;
+    if include_signal {
+        // Signal uses the accepted device/member/MLS bootstrap directly.
+        // Ordinary Message franking publication belongs to the other scenario
+        // and must not race the negative Signal zero-write observations.
+        return crate::scenarios::signal_live::exercise_two_station_signal(
+            &alice,
+            &bob,
+            &mut alice_group,
+            &mut bob_group,
+            &realm_id,
+            &strand,
+            &commit_event.event_id,
+            &commit.commit_id,
+            &before_bob_join.commit_id,
+            x,
+            y,
+            &x_database.connect_url,
+            &y_database.connect_url,
+        )
+        .await;
+    }
     // The old ciphertext is explicitly refused after the accepted transition;
     // a fresh encryption at the new epoch is allowed only after this answer.
     let before_refusal = alice_group.export_state_record()?.serialized_state;

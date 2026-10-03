@@ -1067,7 +1067,12 @@ impl ArkretServer {
             "{};created={created};expires={};keyid=\"{keyid}\";alg=\"ed25519\"",
             format_signature_input_component_list("sig1", &covered)
                 .map_err(|error| anyhow!("{error}"))?,
-            created + 300,
+            created
+                + if path == "/_arkret/peer/signal" {
+                    5
+                } else {
+                    300
+                },
         );
         let parsed = parse_signature_input(&signature_input).map_err(|error| anyhow!("{error}"))?;
         let base = canonical_message(

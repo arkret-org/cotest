@@ -31,6 +31,7 @@ struct CoauthGrantBinding {
     cnf_jkt: String,
     session_public_key: String,
     revoked: bool,
+    expires_at: chrono::DateTime<chrono::Utc>,
 }
 
 /// The closed holder of one recorded grant: a human device with its accepted
@@ -262,6 +263,9 @@ impl MockCoauthIntrospectionServer {
             cnf_jkt,
             session_public_key,
             revoked: false,
+            expires_at: arkret_canonical::normalize_timestamp_canonical(
+                chrono::Utc::now() + chrono::Duration::minutes(10),
+            ),
         };
         // Each exact credential is its own ledger record, so a second device
         // of the same principal can hold a grant beside the first one.
@@ -281,6 +285,30 @@ impl MockCoauthIntrospectionServer {
 
     pub fn requests(&self) -> Vec<Value> {
         self.requests.lock().expect("mock requests lock").clone()
+    }
+
+    pub fn set_grant_expiry(
+        &self,
+        credential: &str,
+        expires_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<()> {
+        let mut bindings = self.bindings.lock().expect("coauth mock binding lock");
+        let binding = bindings
+            .iter_mut()
+            .find(|binding| binding.grant_jwt == credential)
+            .context("the issuer ledger contains the exact credential")?;
+        binding.expires_at = arkret_canonical::normalize_timestamp_canonical(expires_at);
+        Ok(())
+    }
+
+    pub fn revoke_grant(&self, credential: &str) -> Result<()> {
+        let mut bindings = self.bindings.lock().expect("coauth mock binding lock");
+        let binding = bindings
+            .iter_mut()
+            .find(|binding| binding.grant_jwt == credential)
+            .context("the issuer ledger contains the exact credential")?;
+        binding.revoked = true;
+        Ok(())
     }
 
     /// Every internal call this mock saw, credential and self-reported identity
@@ -599,9 +627,7 @@ async fn coauth_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respo
             arkret_canonical::base64url_encode(token)
         )
     };
-    let expires_at = arkret_canonical::format_timestamp_canonical(
-        chrono::Utc::now() + chrono::Duration::minutes(10),
-    );
+    let expires_at = arkret_canonical::format_timestamp_canonical(binding.expires_at);
     let mut grant = json!({
         "id": grant_id,
         "issuer_id": "ak:did_core:web:coauth.cotest.local",

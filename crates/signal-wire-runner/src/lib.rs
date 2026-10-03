@@ -143,6 +143,7 @@ fn template() -> Result<SignalEnvelope> {
         authority_commit_id: RealmCommitId::new(
             "ak:realm_commit:Ac08ROpjn3Ilj_UaM-_XLY93u4SUTptG0-Q-_CUDb5aS".to_owned(),
         )?,
+        parent_realm_authority_commit_id: None,
         signal_class: SignalClass::Session,
         sent_at,
         expires_at: sent_at + Duration::seconds(30),

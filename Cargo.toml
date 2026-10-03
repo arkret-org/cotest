@@ -296,6 +296,9 @@ soland-storage-postgres = { workspace = true }
 tempfile = { workspace = true }
 testcontainers = { workspace = true, optional = true, features = ["blocking"] }
 tokio = { workspace = true, features = ["macros", "process", "rt-multi-thread", "time"] }
+tokio-tungstenite = { version = "0.30.0", default-features = false, features = ["connect", "handshake", "rustls-tls-webpki-roots"] }
+rustls = { version = "0.23.40", default-features = false, features = ["ring", "std"] }
+futures-util = { version = "0.3.32", features = ["sink"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "json"] }
 unicode-normalization = { workspace = true }

@@ -1,4 +1,4 @@
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Context, Result, anyhow, bail, ensure};
 use arkret_signatures::{PublicKeyMaterial, verify_ed25519_signal_proof};
 use arkret_wire::{
     AccountId, ActorId, DeviceId, Did, DidCoreId, Hash, MAX_SIGNAL_RELAY_CANONICAL_BODY_BYTES,
@@ -38,6 +38,7 @@ pub(super) fn envelope() -> Result<SignalEnvelope> {
         authority_commit_id: RealmCommitId::new(
             "ak:realm_commit:Ac08ROpjn3Ilj_UaM-_XLY93u4SUTptG0-Q-_CUDb5aS",
         )?,
+        parent_realm_authority_commit_id: None,
         signal_class: SignalClass::Session,
         sent_at,
         expires_at: sent_at + Duration::seconds(30),
@@ -251,6 +252,41 @@ pub fn run_signal_federation_fixture_suite() -> Result<()> {
             .or_else(|| case.pointer("/given_state/generator"))
             .ok_or_else(|| anyhow!("Signal federation case missing generator"))?;
         match required_str(generator, "kind")? {
+            "signal_scope_authority_cut_matrix" => {
+                let carrier_cases = generator["carrier_cases"]
+                    .as_array()
+                    .context("Signal source-cut carrier cases")?;
+                for carrier in carrier_cases {
+                    let mut value = serde_json::to_value(&signal)?;
+                    if carrier["scope"] == "circle" {
+                        value["scope_ref"] = serde_json::json!({"kind":"circle","realm_id":signal.realm_id,
+                            "circle_id":"ak:circle:AbyX-ijAQZ4DkcySKE3VusrcCoBFT8DGS4fx8tpo-PNm"});
+                    }
+                    match carrier["parent"].as_str().context("parent cut presence")? {
+                        "present" => {
+                            value["parent_realm_authority_commit_id"] =
+                                serde_json::to_value(RealmCommitId::from_digest([0x44; 32]))?
+                        }
+                        "null" => value["parent_realm_authority_commit_id"] = Value::Null,
+                        "absent" => {}
+                        _ => bail!("unregistered parent cut presence"),
+                    }
+                    let valid = serde_json::from_value::<SignalEnvelope>(value)
+                        .is_ok_and(|envelope| envelope.aead_binding().validate().is_ok());
+                    ensure!(
+                        Some(valid) == carrier["expected_valid"].as_bool(),
+                        "source-cut carrier {}",
+                        carrier["case_id"]
+                    );
+                }
+                // Historical/current authority rows are exercised by the real
+                // PostgreSQL matrix, not by this carrier/schema runner.
+                ensure!(
+                    generator["authority_cases"]
+                        .as_array()
+                        .is_some_and(|cases| cases.len() == 10)
+                );
+            }
             "signal_peer_relay_limit_matrix" => {
                 let dimensions = generator["dimensions"]
                     .as_array()

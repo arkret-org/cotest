@@ -1598,6 +1598,10 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
     let base = arkret_wire::MlsGroupCurrent {
         effective_scope: scope,
         genesis_event_ref: genesis.event_id.clone(),
+        cipher_suite: arkret_wire::NonEmptyString::new(
+            "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
+        )
+        .unwrap(),
         current_mls_commit_event_ref: genesis.event_id.clone(),
         epoch: 0,
         current_key_access_revision: 0,

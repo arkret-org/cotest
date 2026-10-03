@@ -104,7 +104,7 @@ async fn canonical_rows(
     }).await?
 }
 
-async fn wait_for_membership_current(
+pub(crate) async fn wait_for_membership_current(
     database_url: &str,
     commit: &arkret_wire::RealmCommit,
     actor: &ActorId,
@@ -342,7 +342,7 @@ async fn assert_circle_mls_reads(
     Ok(())
 }
 
-async fn grant_circle_actions(
+pub(crate) async fn grant_circle_actions(
     controller: &Member,
     realm: &str,
     circle: &CircleId,

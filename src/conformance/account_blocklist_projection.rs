@@ -3090,6 +3090,7 @@ pub(crate) async fn observe_ordinary_call_invite(
         holder.actor.clone(),
         holder.device.clone(),
         commit.commit_id.clone(),
+        None,
         payload.signal_class(),
         chrono::Utc::now(),
     );
