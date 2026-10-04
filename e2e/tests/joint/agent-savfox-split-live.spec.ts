@@ -1549,10 +1549,10 @@ async function forcePaginatedRealmBackfill(
     const outgoing = route.request();
     const url = new URL(outgoing.url());
     if (
-      outgoing.method() === "QUERY" &&
-      url.pathname === "/_arkret/self/events" &&
-      Array.isArray(outgoing.postDataJSON().realm_ids) &&
-      outgoing.postDataJSON().realm_ids.includes(realmId)
+      outgoing.method() === "POST" &&
+      url.pathname === "/_arkret/self/streams/scan" &&
+      outgoing.postDataJSON().realm_id === realmId &&
+      ["realm", "sidecar"].includes(outgoing.postDataJSON().stream_ref?.kind)
     ) {
       requests += 1;
       const body = { ...outgoing.postDataJSON(), limit: 1 };
