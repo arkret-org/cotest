@@ -11,6 +11,10 @@ use arkret_models_collaboration::governance::agent_participation::{
     ParticipationNextReplaceInput, ParticipationScope, effective_participation, fold_ceiling_chain,
     validate_agent_participation_tightens,
 };
+use arkret_models_collaboration::mention_composer::{
+    AgentMentionComposerScope, AgentMentionLabels, AgentMentionRoute, AgentMentionSendChoice,
+    MentionDraftBinding, agent_mention_route,
+};
 use arkret_models_identity::claim_presentation::AgentSelectorClaimValue;
 use arkret_models_identity::handle::HandleVisibility;
 use arkret_wire::{AccountId, ActorId, ProfileId};
@@ -188,13 +192,94 @@ enum SelectorLabel {
 }
 
 fn verify_selector_label(known: &AccountId, visible: &[AgentSelectorClaimValue]) -> SelectorLabel {
-    let [value] = visible else {
-        return SelectorLabel::Unverified;
-    };
-    if value.subject_account_id != *known {
-        return SelectorLabel::Unverified;
+    if arkret_models_identity::claim_presentation::agent_selector_matches_known_account(
+        known, visible,
+    ) {
+        SelectorLabel::Verified
+    } else {
+        SelectorLabel::Unverified
     }
-    SelectorLabel::Verified
+}
+
+fn run_mention_composer_contract(vector: &Value, known: &AccountId) -> Result<()> {
+    let contract = vector
+        .get("composer_contract")
+        .ok_or_else(|| anyhow!("composer contract missing"))?;
+    let token = required_str(contract, "selected_input")?;
+    let draft = format!("ask {token}");
+    let mut binding =
+        MentionDraftBinding::new(known.clone(), 4, draft.len(), token.to_owned(), &draft)
+            .ok_or_else(|| anyhow!("selected token did not bind"))?;
+    if binding.subject_account_id != *known
+        || required_str(contract, "selected_target_source")? != "known_authorized_agent_account_id"
+    {
+        bail!("selected token retargeted the known AccountId");
+    }
+    let edited = format!("ask {token}-extra then {token}");
+    if binding.rebase(&draft, &edited) || required_u64(contract, "edited_token_binding_count")? != 0
+    {
+        bail!("edited token retained or revived its binding");
+    }
+    let raw =
+        serde_json::json!({"kind":"text", "text": required_str(contract, "unselected_input")?});
+    if !arkret_models_collaboration::events_payloads::mention::collect_mention_nodes(&raw)
+        .map_err(|error| anyhow!("{error:?}"))?
+        .is_empty()
+        || required_u64(contract, "unselected_target_count")? != 0
+    {
+        bail!("unselected input created a mention");
+    }
+    let private_holder = required_str(contract, "private_holder_label")?;
+    let shared_holder = required_str(contract, "shared_holder_label")?;
+    let labels = AgentMentionLabels::new(shared_holder, Some(private_holder), false, "summary");
+    if labels.shared != format!("{shared_holder}/summary") || labels.shared.contains(private_holder)
+    {
+        bail!("private holder label leaked into shared output");
+    }
+    let routes = contract
+        .get("routing_cases")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("routing cases missing"))?;
+    if routes.len() != 10 {
+        bail!("composer routing matrix is incomplete");
+    }
+    for row in routes {
+        let scope = match required_str(row, "scope")? {
+            "realm" => AgentMentionComposerScope::Realm,
+            "circle" => AgentMentionComposerScope::Circle,
+            "direct" => AgentMentionComposerScope::Direct,
+            "sidecar" => AgentMentionComposerScope::Sidecar,
+            other => bail!("unknown composer scope {other}"),
+        };
+        let choice = match required_str(row, "choice")? {
+            "shared" => AgentMentionSendChoice::Shared,
+            "default" => AgentMentionSendChoice::PrivateDefault,
+            other => bail!("unknown composer choice {other}"),
+        };
+        let boolean = |key: &str| {
+            row.get(key)
+                .and_then(Value::as_bool)
+                .ok_or_else(|| anyhow!("routing boolean missing {key}"))
+        };
+        let actual = agent_mention_route(
+            scope,
+            choice,
+            boolean("owned")?,
+            boolean("other")?,
+            boolean("audience")?,
+        );
+        let expected = match required_str(row, "expected")? {
+            "shared" => AgentMentionRoute::Shared,
+            "direct" => AgentMentionRoute::Direct,
+            "sidecar" => AgentMentionRoute::Sidecar,
+            "blocked" => AgentMentionRoute::BlockedMixedPrivateTargets,
+            other => bail!("unknown composer expected route {other}"),
+        };
+        if actual != expected {
+            bail!("composer route mismatch: {row}");
+        }
+    }
+    Ok(())
 }
 
 /// Persist a known-Agent mention. The target is the known AccountId whatever
@@ -372,6 +457,7 @@ pub fn run_agent_selector_label_known_account_vector() -> Result<()> {
     if joined != vec![&roster[0]] {
         bail!("§3.8.2 MemberIdentity join MUST select only the addressed account; got {joined:?}");
     }
+    run_mention_composer_contract(vector, &known)?;
     Ok(())
 }
 
