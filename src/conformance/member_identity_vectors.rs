@@ -30,10 +30,9 @@
 use anyhow::{Result, anyhow, bail};
 use arkret_identifiers::{DidCoreId, EventId, Hash, RealmId};
 use arkret_models_identity::{
-    DisplayProfile, EffectiveIdentityEntry, IdentityPayloadCarrier, MemberIdentity,
-    MemberIdentityProof, MemberIdentityReplacementRef, MemberIdentitySegment,
-    MemberIdentitySignatureAlgorithm, MemberIdentityUpdatePayload, effective_identity_events,
-    member_identity_effective_set_digest,
+    DisplayProfile, IdentityPayloadCarrier, MemberIdentity, MemberIdentityProof,
+    MemberIdentityReplacementRef, MemberIdentitySegment, MemberIdentitySignatureAlgorithm,
+    MemberIdentityUpdatePayload, effective_identity_events, member_identity_effective_set_digest,
 };
 use arkret_wire::{AccountId, ActorId};
 use chrono::{DateTime, TimeZone, Utc};

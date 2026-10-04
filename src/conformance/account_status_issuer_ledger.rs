@@ -28,7 +28,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use anyhow::{Result, anyhow, bail, ensure};
 use arkret_models_collaboration::account_status::{
     AccountStatusReceipt, AccountStatusRecord, UnsignedAccountStatusReceipt,
-    UnsignedAccountStatusRecord,
 };
 use arkret_models_collaboration::objects::account_status::AccountStatus;
 use arkret_wire::{

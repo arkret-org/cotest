@@ -10,9 +10,7 @@ use arkret_models_collaboration::authority_commit::{
     PeerAuthoritySubmitRequest, PeerCommittedReplicationOutcomeRecord,
     PeerCommittedReplicationRequest,
 };
-use arkret_models_collaboration::governance::membership_invite::{
-    MembershipPayload, MembershipPayloadState,
-};
+use arkret_models_collaboration::governance::membership_invite::MembershipPayloadState;
 use arkret_models_collaboration::governance::realm_join_intake::RealmJoinIntent;
 use arkret_models_identity::{
     CurrentSignerKeyQuerySender, SignerKeyQueryResult, SignerKeyQuerySelector,
