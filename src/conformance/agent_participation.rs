@@ -12,8 +12,8 @@ use arkret_models_collaboration::governance::agent_participation::{
     validate_agent_participation_tightens,
 };
 use arkret_models_collaboration::mention_composer::{
-    AgentMentionComposerScope, AgentMentionLabels, AgentMentionRoute, AgentMentionSendChoice,
-    MentionDraftBinding, agent_mention_route,
+    AgentMentionComposerScope, AgentMentionLabels, AgentMentionRoute, MentionDraftBinding,
+    agent_mention_route_with_modes,
 };
 use arkret_models_identity::claim_presentation::AgentSelectorClaimValue;
 use arkret_models_identity::handle::HandleVisibility;
@@ -37,7 +37,10 @@ pub const VECTOR_ID_AGENT_PARTICIPATION_SESSION_OVERLAY: &str =
 pub const VECTOR_ID_AGENT_PARTICIPATION_THIRD_PARTY_MENTION_GATE: &str =
     "ak.vector.agent.participation.third_party_mention_gate.v1";
 
+pub const VECTOR_ID_AGENT_INTERACTION_MODE: &str = "ak.vector.agent.interaction_mode.v1";
+
 pub const ALL_AGENT_PARTICIPATION_VECTOR_IDS: &[&str] = &[
+    VECTOR_ID_AGENT_INTERACTION_MODE,
     VECTOR_ID_AGENT_SELECTOR_LABEL_KNOWN_ACCOUNT,
     VECTOR_ID_AGENT_PARTICIPATION_CEILING_TIGHTEN,
     VECTOR_ID_AGENT_PARTICIPATION_EFFECTIVE_INTERSECTION,
@@ -59,6 +62,7 @@ struct AgentParticipationFixture {
     runner: Value,
     covers_vectors: Vec<String>,
     cases: Vec<Value>,
+    interaction_contract: Value,
 }
 
 fn participation_fixture() -> Result<AgentParticipationFixture> {
@@ -85,6 +89,12 @@ fn validate_agent_participation_fixture_metadata(
     for vector_id in ALL_AGENT_PARTICIPATION_VECTOR_IDS {
         if !covers.iter().any(|entry| entry == vector_id) {
             bail!("agent participation fixture missing covers_vectors entry {vector_id}");
+        }
+        if *vector_id == VECTOR_ID_AGENT_INTERACTION_MODE {
+            if fixture.interaction_contract["vector_id"] != *vector_id {
+                bail!("interaction contract missing");
+            }
+            continue;
         }
         if !cases.iter().any(|case| {
             case.get("vector_id").and_then(Value::as_str) == Some(*vector_id)
@@ -240,7 +250,7 @@ fn run_mention_composer_contract(vector: &Value, known: &AccountId) -> Result<()
         .get("routing_cases")
         .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("routing cases missing"))?;
-    if routes.len() != 10 {
+    if routes.len() != 14 {
         bail!("composer routing matrix is incomplete");
     }
     for row in routes {
@@ -251,23 +261,23 @@ fn run_mention_composer_contract(vector: &Value, known: &AccountId) -> Result<()
             "sidecar" => AgentMentionComposerScope::Sidecar,
             other => bail!("unknown composer scope {other}"),
         };
-        let choice = match required_str(row, "choice")? {
-            "shared" => AgentMentionSendChoice::Shared,
-            "default" => AgentMentionSendChoice::PrivateDefault,
-            other => bail!("unknown composer choice {other}"),
+        let mode = match required_str(row, "interaction_mode")? {
+            "public" => {
+                Some(arkret_models_collaboration::agent_interaction::AgentInteractionMode::Public)
+            }
+            "private" => {
+                Some(arkret_models_collaboration::agent_interaction::AgentInteractionMode::Private)
+            }
+            "unknown" => None,
+            other => bail!("unknown interaction mode {other}"),
         };
         let boolean = |key: &str| {
             row.get(key)
                 .and_then(Value::as_bool)
                 .ok_or_else(|| anyhow!("routing boolean missing {key}"))
         };
-        let actual = agent_mention_route(
-            scope,
-            choice,
-            boolean("owned")?,
-            boolean("other")?,
-            boolean("audience")?,
-        );
+        let actual =
+            agent_mention_route_with_modes(scope, &[mode], boolean("other")?, boolean("audience")?);
         let expected = match required_str(row, "expected")? {
             "shared" => AgentMentionRoute::Shared,
             "direct" => AgentMentionRoute::Direct,
@@ -716,15 +726,98 @@ pub fn run_agent_participation_third_party_mention_gate_vector() -> Result<()> {
     Ok(())
 }
 
+pub fn run_agent_interaction_mode_vector() -> Result<()> {
+    use arkret_models_collaboration::agent_interaction::agent_interaction_from_verified_exact_read;
+    use arkret_models_collaboration::exact_current_results::{
+        ExactCurrentResultSelector, ExactCurrentResultsReadOutcome,
+        ExactCurrentResultsReadRequestBody,
+    };
+    let participation = participation_fixture()?;
+    let contract = &participation.interaction_contract;
+    if required_str(contract, "vector_id")? != "ak.vector.agent.interaction_mode.v1"
+        || !participation
+            .covers_vectors
+            .iter()
+            .any(|id| id == "ak.vector.agent.interaction_mode.v1")
+    {
+        bail!("mode vector metadata missing");
+    }
+    let exact = super::load_fixture_value("exact-current-results-read-fixture.json")?;
+    let cases = exact["schema_validation_cases"]
+        .as_array()
+        .ok_or_else(|| anyhow!("exact cases missing"))?;
+    let instance = |name: &str| -> Result<Value> {
+        Ok(cases
+            .iter()
+            .find(|c| c["name"] == name)
+            .ok_or_else(|| anyhow!("missing {name}"))?["instance"]
+            .clone())
+    };
+    let request: ExactCurrentResultsReadRequestBody =
+        serde_json::from_value(instance("agent_mode_exact_request")?)?;
+    let ExactCurrentResultSelector::AgentInteraction(selector) = &request.selector else {
+        bail!("wrong mode selector");
+    };
+    let base = instance("agent_mode_present")?;
+    let controller: AccountId =
+        serde_json::from_value(base["entry"]["value"]["controller_account_id"].clone())?;
+    let rows = contract["mode_cases"]
+        .as_array()
+        .ok_or_else(|| anyhow!("mode cases missing"))?;
+    if rows.len() != 6 {
+        bail!("incomplete mode cases");
+    }
+    for row in rows {
+        let status = required_str(row, "status")?;
+        let actual = if status == "missing" {
+            "unknown".to_owned()
+        } else {
+            let mut value = if status == "never_written" {
+                instance("agent_mode_never_written")?
+            } else {
+                base.clone()
+            };
+            if status == "present" {
+                value["entry"]["value"]["interaction_mode"] = row["mode"].clone();
+            }
+            let outcome: ExactCurrentResultsReadOutcome = serde_json::from_value(value)?;
+            let owner = if row["binding_valid"] == false {
+                &selector.agent_account_id
+            } else {
+                &controller
+            };
+            match agent_interaction_from_verified_exact_read(
+                &outcome,
+                &request.realm_id,
+                &selector.agent_account_id,
+                owner,
+                if status == "stale" { 5 } else { 4 },
+            ) {
+                Ok((
+                    arkret_models_collaboration::agent_interaction::AgentInteractionMode::Public,
+                    _,
+                )) => "public".to_owned(),
+                Ok(_) => "private".to_owned(),
+                Err(_) => "unknown".to_owned(),
+            }
+        };
+        if actual != required_str(row, "expected")? {
+            bail!("mode observation mismatch: {row}");
+        }
+    }
+    Ok(())
+}
+
 pub fn run_agent_participation_fixture_suite() -> Result<()> {
     validate_agent_participation_fixture_metadata(&participation_fixture()?)?;
-    if ALL_AGENT_PARTICIPATION_VECTOR_IDS.len() != 6 {
+    if ALL_AGENT_PARTICIPATION_VECTOR_IDS.len() != 7 {
         bail!(
-            "expected 6 agent participation vector ids, got {}",
+            "expected 7 agent participation vector ids, got {}",
             ALL_AGENT_PARTICIPATION_VECTOR_IDS.len()
         );
     }
 
+    run_agent_interaction_mode_vector()?;
     run_agent_selector_label_known_account_vector()?;
     run_agent_participation_ceiling_tighten_vector()?;
     run_agent_participation_effective_intersection_vector()?;
