@@ -13,7 +13,7 @@ use arkret_models_identity::{
     CanonicalSessionPublicJwk, InitialSessionGrantIntent, standard_initial_session_grant_scope,
 };
 use arkret_wire::{
-    AccountId, CommitStreamRef, CommittedEventRef, Did, Hash, IssueRecoveryCompletionGrantOutcome,
+    AccountId, CommitStreamRef, CommittedEventRef, Did, IssueRecoveryCompletionGrantOutcome,
     IssueRecoveryCompletionGrantRequest, UnsignedRecoveryCompletionAttestation,
     UnsignedRecoveryCompletionAttestationBody, project_did_to_core_id,
 };

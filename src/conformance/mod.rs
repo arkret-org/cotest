@@ -568,10 +568,9 @@ pub(crate) struct NamedCase {
 // `fixture_dsl` and is re-exported here so suites keep importing it as
 // `super::required_str` and friends.
 pub(crate) use fixture_dsl::{
-    FixtureRunner, expected, expected_bool, expected_str, expected_str_opt, expected_u64,
-    expected_u64_opt, required_array, required_bool, required_field, required_i64, required_object,
-    required_str, required_str_obj, required_u64, string_array_field, string_set, string_set_of,
-    string_vec,
+    FixtureRunner, expected, expected_bool, expected_str, expected_u64, required_array,
+    required_bool, required_field, required_i64, required_object, required_str, required_str_obj,
+    required_u64, string_array_field, string_set, string_set_of, string_vec,
 };
 
 pub fn spec_artifacts_root() -> PathBuf {

@@ -1,14 +1,13 @@
 use std::collections::{BTreeMap, HashMap};
 use std::sync::atomic::Ordering;
 use std::sync::{LazyLock, Mutex};
-use std::time::{Duration, Instant};
 
 use anyhow::{Result, anyhow};
 use arkret::{
     DeviceId, DeviceMessageId, DeviceMessageTarget, DeviceMessagesSendRequestBody, ProtocolKind,
 };
 use arkret_identifiers::{
-    Did, DidCoreId, EventId, Hash, Hlc, MessageId, RealmId, StrandId, project_did_to_core_id,
+    Did, DidCoreId, EventId, Hash, MessageId, RealmId, StrandId, project_did_to_core_id,
 };
 use arkret_models_collaboration::events_payloads::{
     ContentBlock, MessageCreatePayload, MessageRedactPayload, MessageRevisePayload,
@@ -27,10 +26,9 @@ use serde_json::{Value, json};
 
 use super::assertions::expect_json;
 use super::client::TestActorClient;
-use super::proof::refresh_typed_event_proof_with_signing_seed;
 use super::server::ArkretServer;
 use super::{
-    NEXT_EVENT_SEQ, RealmBootstrapDraft, canonical_device_id, member_join_payload, query_method,
+    NEXT_EVENT_SEQ, RealmBootstrapDraft, canonical_device_id, member_join_payload,
     realm_create_payload_for_station,
 };
 

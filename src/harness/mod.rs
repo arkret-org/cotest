@@ -45,13 +45,12 @@ pub use event_builder::{
     submit_event_with_signing_seed_and_verification_method,
 };
 pub(crate) use event_builder::{
-    event_envelope_with_causal_refs_for_device, event_envelope_with_chain,
+    event_envelope_with_causal_refs_for_device,
     event_envelope_with_chain_and_signing_identity_and_causal_refs,
     event_signing_identity_for_device, invite_create_payload, member_join_payload_value,
     member_transition_payload, message_create_text_payload, message_create_text_payload_for_strand,
     message_redact_payload, message_revise_text_payload, ordinary_realm_bootstrap_submission,
-    parse_strand_id, prepare_event_submission_with_signing_identity,
-    realm_bootstrap_event_batch_for_device,
+    parse_strand_id, realm_bootstrap_event_batch_for_device,
 };
 pub use invite_delivery::dispatch_accepted_invite_and_await_delivery;
 pub use principal::ProvisionedTestPrincipal;

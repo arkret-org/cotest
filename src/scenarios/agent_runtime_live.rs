@@ -22,11 +22,11 @@ use std::time::{Duration, Instant};
 use anyhow::{Context as _, Result, bail, ensure};
 use arkret::{ArkretMlsIdentity, ArkretMlsSigner};
 use arkret_models_collaboration::agent_operations::{
-    AgentKeyPairActivationState, AgentKeyPairOutcome, AgentPairingBootstrap,
-    AgentProvisionCommitPhase, AgentProvisionCommitRequestBody, AgentProvisionOutcome,
-    AgentProvisionPreparePhase, AgentProvisionPrepareRequestBody, AgentProvisionRequestBody,
-    AgentRuntimeApprovalOutcome, AgentRuntimeApprovalStatusOutcome,
-    AgentRuntimeApprovalStatusRequestBody, agent_key_pairing_request_binding_digest,
+    AgentKeyPairOutcome, AgentPairingBootstrap, AgentProvisionCommitPhase,
+    AgentProvisionCommitRequestBody, AgentProvisionOutcome, AgentProvisionPreparePhase,
+    AgentProvisionPrepareRequestBody, AgentProvisionRequestBody, AgentRuntimeApprovalOutcome,
+    AgentRuntimeApprovalStatusOutcome, AgentRuntimeApprovalStatusRequestBody,
+    agent_key_pairing_request_binding_digest,
 };
 use arkret_models_collaboration::agent_scope::AgentRequestedScopeDisclosure;
 use arkret_models_collaboration::events_payloads::agent::{

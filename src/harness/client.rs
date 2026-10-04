@@ -31,8 +31,8 @@ use super::event_builder::{
 };
 use super::server::OperationSelectingHttpClient;
 use super::{
-    member_join_payload, member_transition_payload, message_create_text_payload, next_typed_id,
-    query_method, realm_create_payload_for_station, refresh_typed_event_proof_with_signing_seed,
+    member_transition_payload, message_create_text_payload, next_typed_id, query_method,
+    realm_create_payload_for_station, refresh_typed_event_proof_with_signing_seed,
 };
 
 #[derive(Clone)]
