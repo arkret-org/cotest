@@ -1599,10 +1599,15 @@ async function sidecarEchoProjection(
       message.getByTestId("message-private-sidecar-badge"),
     ).toBeVisible();
     const body = (
-      await message.getByTestId("content-block-text").allInnerTexts()
+      await message
+        .locator(
+          '[data-testid="content-block-text"], [data-testid="content-block-markdown"]',
+        )
+        .allInnerTexts()
     )
       .join("\n")
       .trim();
+    expect(body).not.toBe("");
     echoes.push({
       eventId,
       body,
