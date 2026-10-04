@@ -20,6 +20,7 @@
 // its OWN consent cells. S4-fed exercises that real cross-PS path end to end.
 
 import { flatTopicChats } from "../../helpers/direct-structure";
+import type { Page } from "@playwright/test";
 import { expect, test } from "../../helpers/arkret-test";
 import {
   assertServerCountNotRequired,
@@ -53,6 +54,22 @@ import {
 } from "../../helpers/contact-api";
 
 test.describe.configure({ mode: "serial" });
+
+async function sendCrossStationEncrypted(page: Page, message: string) {
+  await page.getByTestId("chat-input").fill(message);
+  const deadline = Date.now() + 30_000;
+  const remaining = () => Math.max(1, deadline - Date.now());
+  const send = page.getByTestId("send-chat-button");
+  // A newly installed Welcome can offer optional history backup after navigation.
+  // Dismiss that offer through the UI; required key restoration remains untouched.
+  await expect.poll(async () => {
+    if (await page.getByTestId("mls-backup-modal").isVisible()) {
+      await page.getByTestId("mls-backup-dismiss").click({ timeout: remaining() });
+    }
+    return send.isEnabled();
+  }, { timeout: remaining(), intervals: [250, 500, 1_000] }).toBe(true);
+  await send.click({ timeout: remaining() });
+}
 
 test.beforeEach(() => {
   if (!hasServerCount(2)) {
@@ -411,15 +428,13 @@ test.describe("contact graph federation (server1/server2)", () => {
       }).toPass({ timeout: 120_000, intervals: [2_000] });
 
       const aliceMessage = `cross-ps alice ${Date.now()}`;
-      await alicePage.page.getByTestId("chat-input").fill(aliceMessage);
-      await alicePage.page.getByTestId("send-chat-button").click();
+      await sendCrossStationEncrypted(alicePage.page, aliceMessage);
       await expect(
         bobPage.page.getByTestId("chat-message").filter({ hasText: aliceMessage }),
       ).toBeVisible({ timeout: 90_000 });
 
       const bobMessage = `cross-ps bob ${Date.now()}`;
-      await bobPage.page.getByTestId("chat-input").fill(bobMessage);
-      await bobPage.page.getByTestId("send-chat-button").click();
+      await sendCrossStationEncrypted(bobPage.page, bobMessage);
       await expect(
         alicePage.page.getByTestId("chat-message").filter({ hasText: bobMessage }),
       ).toBeVisible({ timeout: 90_000 });

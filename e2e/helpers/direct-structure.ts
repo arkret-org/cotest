@@ -103,6 +103,22 @@ export async function agentTopicChats(page: Page, receiptPath: string) {
 }
 
 export async function flatTopicChats(alice: Page, bob: Page, mainMessages: string[], extraDevices: Page[] = []) {
+  const pages = [alice, bob, ...extraDevices];
+  for (const page of pages) {
+    await page.addLocatorHandler(page.getByTestId("mls-backup-modal"), async () => {
+      await page.getByTestId("mls-backup-dismiss").click();
+    });
+  }
+  try {
+    await runFlatTopicChats(alice, bob, mainMessages, extraDevices);
+  } finally {
+    for (const page of pages) {
+      await page.removeLocatorHandler(page.getByTestId("mls-backup-modal"));
+    }
+  }
+}
+
+async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[], extraDevices: Page[]) {
   const mainPath = new URL(alice.url()).pathname;
   const mainId = decodeURIComponent(mainPath.split("/")[3]);
   const suffix = Date.now();
@@ -127,7 +143,7 @@ export async function flatTopicChats(alice: Page, bob: Page, mainMessages: strin
     await choose.selectOption(chatId);
     for (const message of mainMessages) await expect(page.getByTestId("chat-message").filter({ hasText: message })).toHaveCount(0);
   }
-  await bob.getByTestId("watch-level-toggle").click();
+  await bob.getByTestId("watch-level-toggle").click({ timeout: 30_000 });
   await bob.getByTestId("watch-level-menu").locator('[data-watch-level="all"]').click();
   await expect(bob.getByTestId("watch-level-toggle")).toContainText("All", { timeout: 90_000 });
   const classified = await structureWrite(alice, "place", "ak.strand.update", undefined, topicId);
