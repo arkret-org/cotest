@@ -854,6 +854,10 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         // opaque cursor and folding the union. Device 1 had an optimistic
         // request fact plus live response; Device 2 has neither.
         const sourceCardUrl = inkson.url();
+        expect(
+          decodeURIComponent(new URL(sourceCardUrl).pathname).split("/task/")[1],
+          "the accepted source card deep link carries its canonical Strand id",
+        ).toMatch(/^ak:strand:[A-Za-z0-9_-]+$/);
         const paginatedBackfill = await forcePaginatedRealmBackfill(
           secondController.page,
           jointRealm.realmId,
