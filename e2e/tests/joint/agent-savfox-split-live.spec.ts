@@ -738,9 +738,10 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         // The unknown-current encrypted control becomes the hidden secure
         // alternate when this source scope resolves to plaintext. Resolve the
         // enabled Send control before click can retain that old DOM node.
-        await expect(sourceCard.getByTestId("send-chat-button")).toBeEnabled({
-          timeout: 30_000,
-        });
+        await expect.poll(async () => ({
+          enabled: await sourceCard.getByTestId("send-chat-button").isEnabled(),
+          route: await sourceCard.getByTestId("composer-send-scope").getAttribute("data-send-route"),
+        }), { timeout: 30_000 }).toEqual({ enabled: true, route: "Sidecar" });
         let ensureCutFaults = 0;
         let frozenEnsureBody: string | undefined;
         const ensureCutFault = async (route: Route) => {
@@ -798,9 +799,10 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         );
         expect(readySidecar.access_readiness).toBe("ready");
         expect(readySidecar.effective_agent_ids).toContain(firstPairing.agentId);
-        await expect(sourceCard.getByTestId("send-chat-button")).toBeEnabled({
-          timeout: 30_000,
-        });
+        await expect.poll(async () => ({
+          enabled: await sourceCard.getByTestId("send-chat-button").isEnabled(),
+          route: await sourceCard.getByTestId("composer-send-scope").getAttribute("data-send-route"),
+        }), { timeout: 30_000 }).toEqual({ enabled: true, route: "Sidecar" });
         await sourceCard.getByTestId("send-chat-button").click();
 
         const requestMessage = sourceCard
@@ -1351,7 +1353,7 @@ async function pairManagedSavfoxAgent(
   await startSavfoxPairing(savfox, pairing.pairingLink);
   await expect(approvalModal).toBeVisible({ timeout: 120_000 });
   await expect(inkson.getByTestId("agent-runtime-approval-code")).toHaveText(
-    pairing.pairingCode,
+    displayPairingCode(pairing.pairingCode),
   );
   await inkson.getByTestId("agent-runtime-approval-approve").click();
   await expect(approvalModal).toHaveCount(0, { timeout: 180_000 });
