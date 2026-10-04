@@ -1,12 +1,11 @@
 use anyhow::{Context, Result, ensure};
 use chrono::{Duration, Utc};
-use reqwest::StatusCode;
-use serde_json::json;
-
 use cotest::harness::expect_response;
 use cotest::scenarios::identity_test_support::{
     actor_did_for_service_did, spawn_with_harness_account_authority,
 };
+use reqwest::StatusCode;
+use serde_json::json;
 
 const VERIFIER: &str = "ak:did_core:web:verifier.example";
 

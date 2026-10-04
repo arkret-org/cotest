@@ -1,8 +1,8 @@
 //! Live Agent provision → PCR genesis → runtime pairing → Agent session.
 
 #[tokio::test(flavor = "multi_thread")]
-async fn agent_and_service_indefinite_grants_are_admitted_at_every_risk_tier()
--> anyhow::Result<()> {
+async fn agent_and_service_indefinite_grants_are_admitted_at_every_risk_tier() -> anyhow::Result<()>
+{
     cotest::scenarios::agent_runtime_live::run_agent_capability_longevity_live().await
 }
 
