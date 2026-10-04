@@ -858,6 +858,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           decodeURIComponent(new URL(sourceCardUrl).pathname).split("/task/")[1],
           "the accepted source card deep link carries its canonical Strand id",
         ).toMatch(/^ak:strand:[A-Za-z0-9_-]+$/);
+        expect(new URL(sourceCardUrl).searchParams.get("tab")).toBe("discussion");
         const paginatedBackfill = await forcePaginatedRealmBackfill(
           secondController.page,
           jointRealm.realmId,
@@ -877,6 +878,8 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         const secondCard =
           secondController.page.getByTestId("card-detail-modal");
         await expect(secondCard).toBeVisible({ timeout: 120_000 });
+        await expect(secondCard.getByTestId("card-detail-tab-discussion"))
+          .toHaveAttribute("aria-selected", "true", { timeout: 30_000 });
         await expect(
           secondController.page.getByTestId("sidecar-context-strip"),
         ).toBeVisible({ timeout: 180_000 });
