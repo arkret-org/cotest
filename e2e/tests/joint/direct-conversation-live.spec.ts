@@ -1,12 +1,15 @@
+import { openAndPairSecondController } from "../../helpers/paired-controller";
 import { test, expect, type JointUsersFixture } from "../../helpers/joint-fixture";
-import type { APIRequestContext } from "@playwright/test";
+import type { APIRequestContext, Browser, Page, Response } from "@playwright/test";
 import { requestContactArkret, respondContactArkret } from "../../helpers/contact-api";
 import { accountActorId, assertAuthoritySubmitOutcome, canonicalJson } from "../../helpers/soland-api";
 import { decodeEventIngressBody, ingressEvents } from "../../helpers/event-ingress";
 
+import { flatTopicChats } from "../../helpers/direct-structure";
+
 function directConversationCase(mode: "normal" | "interrupted" | "offline") {
-return async ({ jointUsers, request }: { jointUsers: JointUsersFixture; request: APIRequestContext }) => {
-  test.setTimeout(480_000);
+return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture; request: APIRequestContext; browser: Browser }) => {
+  test.setTimeout(mode === "normal" ? 900_000 : 480_000);
   // A Contact pair must establish its own Direct Conversation without any
   // pre-existing shared Realm. Exercise only the two account prerequisites.
   const { alicePage, bobPage, aliceSession, bobSession } = jointUsers;
@@ -52,9 +55,56 @@ return async ({ jointUsers, request }: { jointUsers: JointUsersFixture; request:
     });
   }
   await Promise.all([alice.reload(), bob.reload()]);
+  let founder: Page | undefined;
+  let releaseResolve!: () => void;
+  const resolveDelay = new Promise<void>(resolve => { releaseResolve = resolve; });
+  let acceptFounding!: (response: Response) => void;
+  const foundingAccepted = new Promise<Response>(resolve => { acceptFounding = resolve; });
+  const resolvePath = "**/_arkret/self/direct-conversations/resolve";
+  const pendingResolveRoutes = new Set<Promise<void>>();
+  if (mode === "normal") {
+    for (const page of [alice, bob]) {
+      page.on("request", request => {
+        if (request.method() !== "POST" || new URL(request.url()).pathname !== "/_arkret/self/events") return;
+        if (request.postDataJSON()?.unit_kind === "direct_conversation_founding") founder = page;
+      });
+      page.on("response", response => {
+        if (response.request().method() !== "POST" || new URL(response.url()).pathname !== "/_arkret/self/events") return;
+        if (response.request().postDataJSON()?.unit_kind === "direct_conversation_founding") acceptFounding(response);
+      });
+      await page.route(resolvePath, async route => {
+        const handling = (async () => {
+          if (founder === page) await resolveDelay;
+          await route.continue();
+        })();
+        pendingResolveRoutes.add(handling);
+        try {
+          await handling;
+        } finally {
+          pendingResolveRoutes.delete(handling);
+        }
+      });
+    }
+  }
+  try {
   for (const [page, peer] of [[alice, bobSession.user.id], [bob, aliceSession.user.id]] as const) {
     await page.getByTestId("realm-sidebar-tab-direct").click();
     await page.locator(`[data-testid="direct-conversation-row"][data-peer=${JSON.stringify(canonicalJson(accountActorId(peer)))}]`).click();
+  }
+  if (mode === "normal") {
+    const acceptedResponse = await foundingAccepted;
+    expect(acceptedResponse.ok(), await acceptedResponse.text()).toBeTruthy();
+    const acceptedAt = Date.now();
+    expect(founder).toBeDefined();
+    await expect(founder!).toHaveURL(/\/direct\/ak:realm:.*\/ak:strand:/, { timeout: 15_000 });
+    await expect(founder!.getByTestId("chat-panel")).toBeVisible();
+    await expect(founder!.getByTestId("chat-panel")).toHaveAttribute("data-chat-mode", "direct");
+    test.info().annotations.push({ type: "founding-navigation-ms", description: String(Date.now() - acceptedAt) });
+  }
+  } finally {
+    releaseResolve();
+    await Promise.all([...pendingResolveRoutes]);
+    if (mode === "normal") await Promise.all([alice.unroute(resolvePath), bob.unroute(resolvePath)]);
   }
   // The first click may belong to the non-founder. Once the selected founder
   // creates the pair, opening the same sidebar row must resolve its coordinates.
@@ -176,6 +226,19 @@ return async ({ jointUsers, request }: { jointUsers: JointUsersFixture; request:
   await bob.getByTestId("chat-input").fill(afterReload);
   await bob.getByTestId("send-chat-button").click();
   await expect(alice.getByTestId("chat-message").filter({ hasText: afterReload })).toBeVisible({ timeout: 90_000 });
+  if (mode === "normal") {
+    const paired = await openAndPairSecondController(browser, request, jointUsers);
+    try {
+      await alice.goto(path, { waitUntil: "domcontentloaded" });
+      await paired.page.page.goto(path, { waitUntil: "domcontentloaded" });
+      expect(jointUsers.aliceSession.recoveryKey).toBeTruthy();
+      await paired.page.unlockMlsAccountSecret(jointUsers.aliceSession.recoveryKey!);
+      await expect(paired.page.page.getByTestId("send-chat-button")).toBeEnabled({ timeout: 180_000 });
+      await flatTopicChats(alice, bob, [...messages, afterReload], [paired.page.page]);
+    } finally {
+      await paired.page.close();
+    }
+  }
   for (const [page, peer] of [[alice, bobSession.user.id], [bob, aliceSession.user.id]] as const) {
     const presence = page.locator(`[data-testid="presence-row"][data-actor-id=${JSON.stringify(canonicalJson(accountActorId(peer)))}]`);
     await expect.soft(presence).toHaveAttribute("data-presence-state", "online", { timeout: 90_000 });

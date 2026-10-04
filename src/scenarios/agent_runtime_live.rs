@@ -1624,27 +1624,10 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
     // Exercise the same independently verified complete roster used by native
     // runtimes. Joining OpenMLS alone cannot authenticate the founder's leaf.
     let http = agent.runtime.sdk();
-    let snapshot = http.realm_state_snapshot_head(&joined_realm).await?;
-    let authority_request = arkret::AuthorityBundleRequest {
-        realm_id: joined_realm.clone(),
-        nonce: arkret::Base64UrlString::new(
-            URL_SAFE_NO_PAD.encode(arkret_canonical::sha256_bytes(unique_uuid7().as_bytes())),
-        )
-        .map_err(anyhow::Error::msg)?,
-    };
-    let bundle = http.realm_authority_bundle(&authority_request).await?;
-    let keys = garth::fetch_historical_station_key_directory(&http, &bundle, None, Some(&snapshot))
-        .await?;
-    let freshness =
-        arkret_identity::RealmAuthorityFreshness::new(Utc::now(), authority_request.nonce.clone());
-    let mut replica = garth::RealmReplica::new(joined_realm.clone());
-    replica.install_verified_authority(&authority_request, bundle.clone(), &freshness, &keys)?;
-    replica.install_verified_current_snapshot_heads(&snapshot, &freshness, &keys)?;
-    let roster_request = arkret::MlsRosterAuthorityReadRequestBody {
+    let roster_request = arkret::MlsMemberRosterAuthorityReadRequestBody {
         realm_id: joined_realm.clone(),
         effective_scope: welcome.effective_scope.clone(),
         mls_group_id: welcome.effective_scope.canonical_mls_group_id()?,
-        genesis_event_ref: genesis.event_id.clone(),
         target_commit_event_ref: commit_event.event_id.clone(),
         target_epoch: 1,
         caller_actor_id: ActorId::account(agent.agent_account.clone()),
@@ -1652,22 +1635,22 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
     };
     let page = http.self_mls_roster_authority(&roster_request).await?;
     ensure!(
-        page.next_cursor.is_none() && page.records.len() == 2,
+        page.roster.next_cursor.is_none() && page.roster.records.len() == 2,
         "Agent must receive the complete Genesis and Add roster"
     );
-    let resolution = serde_json::from_value(bundle.current_route_record.clone())?;
+    let peer = arkret::verify_mls_member_roster_authority_pages(
+        std::slice::from_ref(&page),
+        &roster_request,
+    )?;
     let material_request =
-        arkret::mls_roster_genesis_material_request(&roster_request, &page.manifest);
+        arkret::mls_roster_genesis_material_request(&peer, &page.roster.manifest);
     let material = http
         .self_mls_group_state_material(&material_request)
         .await?;
-    arkret::install_verified_mls_roster_bindings(
+    arkret::install_verified_mls_self_roster_bindings(
         &mut agent_group,
         &[page],
         &roster_request,
-        &bundle.current_service_id,
-        &commit_event.event_id,
-        &resolution,
         &material,
     )
     .map_err(anyhow::Error::msg)?;

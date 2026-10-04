@@ -982,7 +982,7 @@ export type SpaceObject = {
   "kind": string;
   "rank"?: string;
   "schema_refs"?: string[];
-  "title": string;
+  "title"?: string;
   "summary"?: string;
   "labels"?: string[];
   "fields"?: {
@@ -991,6 +991,19 @@ export type SpaceObject = {
     [key: string]: unknown;
   };
   "avatar_blob_ref"?: string;
+  "encrypted_metadata"?: {
+    "version": "1.0";
+    "content_type": string;
+    "encryption_context": {
+      "epoch": number;
+      "group_state_ref": string;
+      "routing_context"?: {
+        "target_ref": string;
+        "routing_tag": string;
+      };
+    };
+    "ciphertext": string;
+  };
   "state"?: "active" | "archived" | "tombstoned";
   "state_changed_at"?: string;
   "created_by": {

@@ -19,6 +19,7 @@
 // (`POST /_arkret/peer/invites`): the recipient PS verifies the grant against
 // its OWN consent cells. S4-fed exercises that real cross-PS path end to end.
 
+import { flatTopicChats } from "../../helpers/direct-structure";
 import { expect, test } from "../../helpers/arkret-test";
 import {
   assertServerCountNotRequired,
@@ -430,6 +431,7 @@ test.describe("contact graph federation (server1/server2)", () => {
       await expect(
         bobPage.page.getByTestId("chat-message").filter({ hasText: aliceMessage }),
       ).toBeVisible({ timeout: 90_000 });
+      await flatTopicChats(alicePage.page, bobPage.page, [aliceMessage, bobMessage]);
     } finally {
       await Promise.allSettled([alicePage.close(), bobPage.close()]);
     }
