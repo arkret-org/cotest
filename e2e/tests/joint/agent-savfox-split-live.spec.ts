@@ -1329,8 +1329,18 @@ async function provisionAgent(
     pairing_request_id: string;
     pairing_code: string;
   };
+  const pairingDeadline = Date.now() + 180_000;
+  const remainingPairingBudget = () => Math.max(1, pairingDeadline - Date.now());
+  await expect(
+    inkson.locator(
+      `[data-testid="agent-admin-row"][data-agent-id=${JSON.stringify(body.agent_id)}]`,
+    ),
+  ).toHaveAttribute("aria-pressed", "true", { timeout: remainingPairingBudget() });
+  await expect(inkson.getByTestId("agent-admin-slug-title")).toHaveText(agentSlug, {
+    timeout: remainingPairingBudget(),
+  });
   await expect(inkson.getByTestId("agent-admin-pairing-card")).toBeVisible({
-    timeout: 180_000,
+    timeout: remainingPairingBudget(),
   });
   return {
     agentId: body.agent_id,
@@ -1351,7 +1361,7 @@ async function pairManagedSavfoxAgent(
   await startSavfoxPairing(savfox, pairing.pairingLink);
   await expect(approvalModal).toBeVisible({ timeout: 120_000 });
   await expect(inkson.getByTestId("agent-runtime-approval-code")).toHaveText(
-    pairing.pairingCode,
+    displayPairingCode(pairing.pairingCode),
   );
   await inkson.getByTestId("agent-runtime-approval-approve").click();
   await expect(approvalModal).toHaveCount(0, { timeout: 180_000 });
