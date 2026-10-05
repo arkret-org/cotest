@@ -5,6 +5,7 @@
 /fuzz/target/
 /fuzz/Cargo.lock
 /fuzz/artifacts/
+.test-runs/
 
 # Dependency installs
 node_modules/
