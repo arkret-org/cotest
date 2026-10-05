@@ -19,8 +19,8 @@ try {
     $artifact = Join-Path $testRoot "service.exe"
     Set-Content -LiteralPath $artifact -Value "synthetic artifact" -Encoding UTF8
     $states = @(
-        [pscustomobject]@{ RepositoryRoot = (Join-Path $testRoot "service"); Head = ("a" * 40) },
-        [pscustomobject]@{ RepositoryRoot = (Join-Path $testRoot "sdk"); Head = ("b" * 40) }
+        [pscustomobject]@{ RepositoryRoot = (Join-Path $testRoot "service"); Head = ("a" * 40); SourceSha256 = ("1" * 64) },
+        [pscustomobject]@{ RepositoryRoot = (Join-Path $testRoot "sdk"); Head = ("b" * 40); SourceSha256 = ("2" * 64) }
     )
 
     $missing = Test-ArtifactBuildStamp -ArtifactPath $artifact -RepositoryStates $states
@@ -45,11 +45,38 @@ try {
     # Keep the artifact timestamp unchanged while advancing one repository.
     # This is the fast-forward case that an mtime-only gate cannot detect.
     $advanced = @(
-        [pscustomobject]@{ RepositoryRoot = (Join-Path $testRoot "service"); Head = ("c" * 40) },
-        [pscustomobject]@{ RepositoryRoot = (Join-Path $testRoot "sdk"); Head = ("b" * 40) }
+        [pscustomobject]@{ RepositoryRoot = (Join-Path $testRoot "service"); Head = ("c" * 40); SourceSha256 = ("1" * 64) },
+        [pscustomobject]@{ RepositoryRoot = (Join-Path $testRoot "sdk"); Head = ("b" * 40); SourceSha256 = ("2" * 64) }
     )
     $stale = Test-ArtifactBuildStamp -ArtifactPath $artifact -RepositoryStates $advanced
     Assert-True (-not $stale.Matches) "a changed HEAD must invalidate an unchanged artifact timestamp"
+
+    $edited = @(
+        [pscustomobject]@{ RepositoryRoot = (Join-Path $testRoot "service"); Head = ("a" * 40); SourceSha256 = ("3" * 64) },
+        $states[1]
+    )
+    Assert-True (-not (Test-ArtifactBuildStamp -ArtifactPath $artifact -RepositoryStates $edited).Matches) "changed source bytes at the same HEAD and mtime must invalidate the stamp"
+
+    $repo = Join-Path $testRoot 'source'
+    $null = New-Item -ItemType Directory -Path (Join-Path $repo 'src') -Force
+    $git = (Get-Command git).Source
+    & $git -C $repo init --quiet
+    if ($LASTEXITCODE -ne 0) { throw 'fixture Git initialization failed' }
+    $tracked = Join-Path $repo 'src/lib.rs'
+    $untracked = Join-Path $repo 'src/own_station.rs'
+    Set-Content -LiteralPath $tracked -Value 'pub mod own_station;'
+    & $git -C $repo add -- src/lib.rs
+    if ($LASTEXITCODE -ne 0) { throw 'fixture Git index failed' }
+    $before = Get-RepositoryBuildContent -RepositoryRoot $repo -GitPath $git -InputPaths @('src')
+    Set-Content -LiteralPath $untracked -Value 'pub fn original() {}'
+    $added = Get-RepositoryBuildContent -RepositoryRoot $repo -GitPath $git -InputPaths @('src')
+    Assert-True ($added.Files -contains 'src/own_station.rs') 'untracked imported source must be a build input'
+    Assert-True ($before.SourceSha256 -ne $added.SourceSha256) 'adding untracked source must invalidate content identity'
+    $savedTime = (Get-Item -LiteralPath $untracked).LastWriteTimeUtc
+    Set-Content -LiteralPath $untracked -Value 'pub fn changed() {}'
+    (Get-Item -LiteralPath $untracked).LastWriteTimeUtc = $savedTime
+    $changed = Get-RepositoryBuildContent -RepositoryRoot $repo -GitPath $git -InputPaths @('src')
+    Assert-True ($added.SourceSha256 -ne $changed.SourceSha256) 'editing untracked source at unchanged mtime must invalidate content identity'
 
     # A normal cargo test can replace the conformance binary at the same HEAD.
     # Preserve mtime too: only the artifact bytes prove this is a different build.

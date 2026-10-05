@@ -487,7 +487,6 @@ test.describe("chat advanced", () => {
         plaintext: {
           kind: "ak.typing",
           strand_id: strandId,
-          track_name: "discussion",
           typing: true,
           payload_sequence: Date.now(),
           ttl_ms: 25_000,
@@ -521,9 +520,9 @@ test.describe("chat advanced", () => {
       expect(signalPlaintext(received)).toMatchObject({
         kind: "ak.typing",
         strand_id: strandId,
-        track_name: "discussion",
         typing: true,
       });
+      expect(signalPlaintext(received)).not.toHaveProperty("track_name");
     } finally {
       await aliceFlow.page.close();
     }

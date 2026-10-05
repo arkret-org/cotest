@@ -22,6 +22,8 @@ type CotestWireCommand =
   | "mls-install-commit"
   | "mls-join-welcome"
   | "mls-encrypt-message"
+  | "mls-encrypt-signal"
+  | "mls-open-signals"
   | "principal-control-realm-id"
   | "webvh-placeholder-did"
   | "webvh-genesis"

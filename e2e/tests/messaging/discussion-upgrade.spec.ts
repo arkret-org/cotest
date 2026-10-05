@@ -271,7 +271,6 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
       "private encrypted receipt target",
     );
     const sentAt = new Date();
-    const sentAtIso = sentAt.toISOString();
     const envelope = buildSignalEnvelope({
       actorId: fixture.bob.id,
       deviceId: fixture.bob.deviceId,
@@ -285,9 +284,6 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
       plaintext: {
         kind: "ak.receipt.read",
         payload_sequence: Date.now(),
-        receipt_kind: "read",
-        schema: "ak.schema.read_receipt.v1",
-        realm_id: fixture.realmId,
         actor_id: accountActorId(fixture.bob.id),
         read_scope: {
           kind: "strand",
@@ -295,7 +291,6 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
           track_name: "discussion",
         },
         event_id: privateMessage.event_id,
-        created_at: sentAtIso,
       },
     });
     const { result: receipt, envelopes } = await captureSubmittedSignalEnvelope(
@@ -406,13 +401,24 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
       fixture.aliceToken,
       fixture.realmId,
     );
-    expect(events.map((event) => event.kind)).toEqual(
-      expect.arrayContaining([
-        "ak.circle.create",
-        "ak.strand.create",
-        "ak.relation.create",
-      ]),
+    expect(events.map((event) => event.kind)).toContain("ak.circle.create");
+    const circleStream = {
+      kind: "circle", realm_id: fixture.realmId, circle_id: promoted.circleId,
+    };
+    const privateScan = await scanRealmStreamApi(
+      request, fixture.aliceToken, fixture.realmId, { streamRef: circleStream },
     );
+    const privateEvents = privateScan.events.filter(Boolean);
+    expect(privateEvents.map((event) => event.kind)).toEqual(
+      expect.arrayContaining(["ak.strand.create", "ak.relation.create"]),
+    );
+    expect(privateScan.commits.every((commit) =>
+      canonicalJson(commit.stream_ref) === canonicalJson(circleStream),
+    )).toBe(true);
+    expect(events.some((event) =>
+      event.event_id === promoted.privateStrandId.replace("ak:strand:", "ak:event:") ||
+      event.event_id === promoted.relationId.replace("ak:relation:", "ak:event:"),
+    )).toBe(false);
     expect(
       events.some(
         (event) =>
@@ -421,7 +427,7 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
       ),
     ).toBe(false);
     expect(
-      eventPayload(findStrandCreate(events, promoted.privateStrandId)),
+      eventPayload(findStrandCreate(privateEvents, promoted.privateStrandId)),
     ).toMatchObject({
       object: {
         realm_id: fixture.realmId,
@@ -429,7 +435,7 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
       },
     });
     expect(
-      eventPayload(findRelationCreate(events, promoted.relationId)),
+      eventPayload(findRelationCreate(privateEvents, promoted.relationId)),
     ).toMatchObject({
       relation: {
         relation_kind: "confidential_discussion_of",

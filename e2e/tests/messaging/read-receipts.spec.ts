@@ -44,6 +44,8 @@ import {
   postCallSignalRaw,
   prepareSignalEnvelope,
   signalPlaintext,
+  finalizeSignalEnvelopeProof,
+  postPreparedSignalEnvelopeRaw,
 } from "../../helpers/webrtc";
 
 test.describe.configure({ mode: "serial" });
@@ -142,11 +144,11 @@ test.describe("read receipts + privacy", () => {
     request,
   }) => {
     const fixture = await createReceiptFixture(request, "ttl-too-long");
-    const receipt = await postReceipt(
-      request,
-      fixture.aliceToken,
-      receiptEnvelope(fixture, 30_001),
-    );
+    const envelope = receiptEnvelope(fixture);
+    await prepareSignalEnvelope(request, fixture.aliceToken, envelope);
+    envelope.expires_at = new Date(new Date(String(envelope.sent_at)).getTime() + 30_001).toISOString();
+    finalizeSignalEnvelopeProof(envelope);
+    const receipt = await postPreparedSignalEnvelopeRaw(request, fixture.aliceToken, envelope);
     expect(receipt.status()).toBe(400);
     const body = await receipt.json();
     expect(JSON.stringify(body)).toContain("signal_ttl_out_of_range");
@@ -193,7 +195,7 @@ test.describe("read receipts + privacy", () => {
     await ensureRegistered(request, outsider);
     const outsiderToken = await issueUserSession(request, outsider);
     const envelope = buildReceiptSignal({
-      actor: outsider,
+      actor: fixture.alice,
       realmId: fixture.realmId,
       eventId: fixture.message.event_id,
       payloadSequence: 1,
@@ -201,6 +203,11 @@ test.describe("read receipts + privacy", () => {
     // Resolve a valid current scope basis through a member; the actual send is
     // still authorized as the outsider and must fail membership admission.
     await prepareSignalEnvelope(request, fixture.aliceToken, envelope);
+    envelope.sender_actor_id = accountActorId(outsider.id);
+    envelope.sender_device_id = outsider.deviceId;
+    (envelope.proof as Record<string, unknown>).verification_method =
+      registeredEventVerificationMethod(outsider.id, outsider.deviceId);
+    finalizeSignalEnvelopeProof(envelope);
     const receipt = await request.post(
       `${solandBaseUrl()}/_arkret/self/signal`,
       {
@@ -780,13 +787,9 @@ function buildReceiptSignal(args: {
     plaintext: {
       kind: "ak.receipt.read",
       payload_sequence: args.payloadSequence,
-      receipt_kind: "read",
-      schema: "ak.schema.read_receipt.v1",
-      realm_id: args.realmId,
       actor_id: accountActorId(args.actor.id),
       event_id: args.eventId,
       read_scope: args.readScope ?? { kind: "realm" },
-      created_at: sentAt.toISOString(),
     },
   });
 }

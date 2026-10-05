@@ -13,11 +13,17 @@ import {
   base64urlJsonCanonical,
   canonicalJson,
   canonicalTimestamp,
+  currentActorIdApi,
   readCommitStreamHeadApi,
   registeredEventVerificationMethod,
   signWithRegisteredEventSigner,
 } from "./soland-api";
-import { readScopeMlsGroupCurrentApi } from "./soland-api/mls";
+import { readScopeMlsGroupCurrentApi, scopeMlsMemberGroupApi } from "./soland-api/mls";
+import { cotestWire } from "./soland-api/wire-client";
+
+const signalRecipes = new WeakMap<Record<string, unknown>, Record<string, unknown>>();
+const preparedSignals = new WeakSet<Record<string, unknown>>();
+const openedSignals = new WeakMap<Record<string, unknown>, Record<string, unknown>>();
 
 // Signal proofs must use the exact device key installed by canonical account
 // provisioning. Tests may not mint a second key or seed a verified inventory
@@ -79,7 +85,8 @@ export function buildSignalEnvelope(args: {
       aead_profile: "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
       epoch: 0,
       nonce: base64url(Buffer.alloc(12)),
-      ciphertext: base64url(Buffer.from(canonicalJson(args.plaintext), "utf8")),
+      // An unsent structural placeholder; prepare seals with the actual group.
+      ciphertext: base64url(Buffer.alloc(16)),
     },
     proof: {
       kind: "detached_jws",
@@ -91,11 +98,11 @@ export function buildSignalEnvelope(args: {
       jws: "",
     },
   };
-  finalizeSignalEnvelopeProof(envelope);
+  signalRecipes.set(envelope, args.plaintext);
   return envelope;
 }
 
-function finalizeSignalEnvelopeProof(envelope: Record<string, unknown>): void {
+export function finalizeSignalEnvelopeProof(envelope: Record<string, unknown>): void {
   const proof = envelope.proof as Record<string, unknown>;
   const unsigned = { ...envelope };
   delete unsigned.proof;
@@ -132,14 +139,11 @@ function finalizeSignalEnvelopeProof(envelope: Record<string, unknown>): void {
 export function signalPlaintext(
   envelope: Record<string, unknown>,
 ): Record<string, unknown> {
-  const encryptedPayload = envelope.encrypted_payload as
-    Record<string, unknown> | undefined;
-  if (typeof encryptedPayload?.ciphertext !== "string") {
-    throw new Error("Signal envelope has no encrypted_payload.ciphertext");
+  const plaintext = openedSignals.get(envelope);
+  if (!plaintext) {
+    throw new Error("Signal has not been independently opened by its recipient");
   }
-  return JSON.parse(
-    Buffer.from(encryptedPayload.ciphertext, "base64url").toString("utf8"),
-  ) as Record<string, unknown>;
+  return plaintext;
 }
 
 // ── Signal submit + subscribe read-back (canonical wire) ────────────────────
@@ -153,18 +157,29 @@ export async function prepareSignalEnvelope(
   token: string,
   envelope: Record<string, unknown>,
 ): Promise<void> {
+  if (preparedSignals.has(envelope)) return;
   const realmId = String(envelope.realm_id);
   const actorId = eventPrincipalId({ actor_id: envelope.sender_actor_id });
   const deviceId = String(envelope.sender_device_id);
   requiredEventVerificationMethod(actorId, deviceId);
-  const head = await readCommitStreamHeadApi(request, token, realmId);
+  const scopeRef = envelope.scope_ref as Record<string, unknown>;
+  // Installing a Welcome can ACK accepted material. Complete that work before
+  // observing the cut used by the final AEAD envelope.
+  const group = await scopeMlsMemberGroupApi(request, token, realmId, scopeRef, { actorId, deviceId });
+  const head = await readCommitStreamHeadApi(request, token, realmId, { streamRef: scopeRef });
   if (!head) {
     throw new Error(`Realm ${realmId} has no accepted commit head`);
   }
   envelope.authority_commit_id = head.commit_id;
+  if (scopeRef.kind === "circle") {
+    const parent = await readCommitStreamHeadApi(request, token, realmId);
+    if (!parent) throw new Error("Circle Signal has no accepted parent Realm cut");
+    envelope.parent_realm_authority_commit_id = parent.commit_id;
+  } else {
+    delete envelope.parent_realm_authority_commit_id;
+  }
   // encryption-and-audit.md §2.5: the Signal AEAD binds the scope's accepted
   // current MLS group, read from the caller-visible Realm state snapshot.
-  const scopeRef = envelope.scope_ref as Record<string, unknown>;
   const current = await readScopeMlsGroupCurrentApi(
     request,
     token,
@@ -180,7 +195,16 @@ export async function prepareSignalEnvelope(
   const keyRef = encryptedPayload.key_ref as Record<string, unknown>;
   keyRef.group_state_ref = current.current_mls_commit_event_ref;
   encryptedPayload.epoch = current.epoch;
+  const plaintext = signalRecipes.get(envelope);
+  if (!plaintext) throw new Error("Signal plaintext recipe is unavailable");
+  const sealed = cotestWire<{
+    encrypted_payload: Record<string, unknown>;
+    group_state: string;
+  }>("mls-encrypt-signal", { group_state: group.groupState, envelope, plaintext });
+  group.groupState = sealed.group_state;
+  envelope.encrypted_payload = sealed.encrypted_payload;
   finalizeSignalEnvelopeProof(envelope);
+  preparedSignals.add(envelope);
 }
 
 export async function postCallSignalRaw(
@@ -192,7 +216,7 @@ export async function postCallSignalRaw(
   return await postPreparedSignalEnvelopeRaw(request, token, envelope);
 }
 
-async function postPreparedSignalEnvelopeRaw(
+export async function postPreparedSignalEnvelopeRaw(
   request: APIRequestContext,
   token: string,
   envelope: Record<string, unknown>,
@@ -212,7 +236,11 @@ async function captureSignalEnvelopes<T>(
   token: string,
   realmId: string,
   action: () => Promise<T>,
-): Promise<{ result: T; envelopes: Array<Record<string, unknown>> }> {
+): Promise<{
+  result: T;
+  envelopes: Array<Record<string, unknown>>;
+  frames: Array<Record<string, unknown>>;
+}> {
   const url = new URL(`${solandBaseUrl()}/_arkret/self/signal/subscribe`);
   url.searchParams.set("max_duration_ms", "5000");
   url.searchParams.set("heartbeat_ms", "100");
@@ -252,11 +280,13 @@ async function captureSignalEnvelopes<T>(
       }
     }
     const envelopes: Array<Record<string, unknown>> = [];
+    const frames: Array<Record<string, unknown>> = [];
     function retain(frame: Record<string, unknown>) {
       if (frame.kind !== "signal") return;
       const envelope = frame.envelope as Record<string, unknown>;
       if (envelope.realm_id === realmId && envelope.encrypted_payload !== undefined) {
         envelopes.push(envelope);
+        frames.push(frame);
       }
     }
     // A received heartbeat proves the real authenticated live rail is running.
@@ -277,7 +307,7 @@ async function captureSignalEnvelopes<T>(
         retain(frame);
       }
     })()]);
-    return { result, envelopes };
+    return { result, envelopes, frames };
   } finally {
     controller.abort();
     await reader?.cancel().catch(() => undefined);
@@ -301,10 +331,41 @@ export async function captureSubmittedSignalEnvelope(
   result: APIResponse;
   envelopes: Array<Record<string, unknown>>;
 }> {
+  const scopeRef = envelope.scope_ref as Record<string, unknown>;
+  const receiverGroup = await scopeMlsMemberGroupApi(request, receiverToken, realmId, scopeRef);
   await prepareSignalEnvelope(request, senderToken, envelope);
-  return await captureSignalEnvelopes(receiverToken, realmId, () =>
+  const receiverId = await currentActorIdApi(request, receiverToken);
+  const head = await readCommitStreamHeadApi(request, receiverToken, realmId, { streamRef: scopeRef });
+  const parent = scopeRef.kind === "circle"
+    ? await readCommitStreamHeadApi(request, receiverToken, realmId)
+    : undefined;
+  if (!head || (scopeRef.kind === "circle" && !parent)) {
+    throw new Error("Signal receiver lacks the accepted independent authority cuts");
+  }
+  const captured = await captureSignalEnvelopes(receiverToken, realmId, () =>
     postPreparedSignalEnvelopeRaw(request, senderToken, envelope),
   );
+  for (const candidate of captured.envelopes) {
+    const payload = candidate.encrypted_payload as Record<string, unknown>;
+    const keyRef = payload.key_ref as Record<string, unknown>;
+    expect(keyRef.group_state_ref, "receiver installed the Signal's exact accepted MLS state")
+      .toBe(receiverGroup.groupStateRef);
+    expect(candidate.authority_commit_id, "receiver independently read the Signal's exact scope cut")
+      .toBe(head.commit_id);
+  }
+  const opened = cotestWire<{ plaintexts: Array<Record<string, unknown>> }>("mls-open-signals", {
+    group_state: receiverGroup.groupState,
+    recipient_account_id: accountActorId(receiverId).account_id,
+    group_state_ref: receiverGroup.groupStateRef,
+    authority_commit_id: head.commit_id,
+    parent_realm_authority_commit_id: parent?.commit_id ?? null,
+    frames: captured.frames,
+  });
+  if (opened.plaintexts.length !== captured.envelopes.length) {
+    throw new Error("Signal open omitted captured envelopes");
+  }
+  captured.envelopes.forEach((candidate, index) => openedSignals.set(candidate, opened.plaintexts[index]!));
+  return { result: captured.result, envelopes: captured.envelopes };
 }
 
 export { authHeaders };

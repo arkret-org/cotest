@@ -77,6 +77,8 @@ type PendingJoin = {
 
 const realmMlsCreators = new Map<string, RealmMlsCreator>();
 const pendingJoins = new Map<string, PendingJoin>();
+const memberDevices = new Map<string, MlsDevice>();
+const joinedMembers = new Map<string, MlsMemberGroup>();
 
 const PKCS8_ED25519_PREFIX = Buffer.from("302e020100300506032b657004220420", "hex");
 const CLAIM_LIFETIME_SECONDS = 240;
@@ -516,6 +518,7 @@ export async function addRealmMlsMemberApi(
     members,
     producerPublicKey: ownerSigner.publicKeyB64url,
   });
+  memberDevices.set(joinKey(realmId, member, opts.scopeRef), member);
   return { commitEventId, welcome };
 }
 
@@ -592,12 +595,49 @@ export async function joinRealmMlsWelcomeApi(
     );
   }
   pendingJoins.delete(joinKey(realmId, member, opts.scopeRef));
-  return {
+  const group = {
     realmId,
     groupState: joined.group_state,
     epoch: joined.epoch,
     groupStateRef: pending.commitEventId,
   };
+  joinedMembers.set(joinKey(realmId, member, opts.scopeRef), group);
+  return group;
+}
+
+/// Resolve only an endpoint whose real private group this fixture established.
+/// A receiver is selected by its exact authenticated session, never the sender.
+export async function scopeMlsMemberGroupApi(
+  request: APIRequestContext,
+  token: string,
+  realmId: string,
+  scopeRef: Record<string, unknown>,
+  sender?: { actorId: string; deviceId: string },
+): Promise<MlsMemberGroup> {
+  const scopeKey = realmKey(undefined, realmId, scopeRef);
+  const creator = realmMlsCreators.get(scopeKey);
+  const matches = (device: MlsDevice) => sender
+    ? device.id === sender.actorId && device.deviceId === sender.deviceId
+    : device.token === token;
+  if (creator && matches(creator.owner)) {
+    return realmMlsCreatorGroupApi(request, realmId, { scopeRef });
+  }
+  const candidates = [...memberDevices.entries()].filter(
+    ([key, device]) => key.startsWith(`${scopeKey}\0`) && matches(device),
+  );
+  if (candidates.length !== 1) {
+    throw new Error("Signal endpoint has no unique fixture-owned MLS group");
+  }
+  const [key, device] = candidates[0]!;
+  const group = joinedMembers.get(key) ?? await joinRealmMlsWelcomeApi(
+    request, realmId, device, { scopeRef },
+  );
+  const current = await readScopeMlsGroupCurrentApi(request, token, realmId, scopeRef);
+  if (!current || group.groupStateRef !== current.current_mls_commit_event_ref ||
+      group.epoch !== current.epoch) {
+    throw new Error("Signal endpoint has not installed the accepted current MLS epoch");
+  }
+  return group;
 }
 
 /// The group creator's own endpoint as an encrypting member at the scope's
