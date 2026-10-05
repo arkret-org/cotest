@@ -1226,6 +1226,93 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
   );
 });
 
+jointTest("fresh Agent pairing gates the first send until binding and answers once @fully-implemented", async ({ browser, jointUsers }, testInfo) => {
+  const base = process.env.COTEST_SAVFOX_BASE_URL?.trim();
+  const token = process.env.COTEST_SAVFOX_TOKEN?.trim();
+  jointTest.skip(!base || !token, "PRECONDITION_SAVFOX_UNAVAILABLE: managed Savfox required");
+  const inkson = jointUsers.alicePage.page;
+  const context = await browser.newContext();
+  const savfox = await context.newPage();
+  let releaseBinding!: () => void;
+  const bindingGate = new Promise<void>((resolve) => { releaseBinding = resolve; });
+  let heldBinding: SubmittedEvent | undefined;
+  const messages: SubmittedEvent[] = [];
+  const phases: string[] = [];
+  const observeResolve = async (response: import("@playwright/test").Response) => {
+    if (new URL(response.url()).pathname !== DIRECT_CONVERSATIONS_RESOLVE_PATH || !response.ok()) return;
+    const body = await response.json();
+    phases.push(`${body.state}:${body.peer_mls_admission ?? ""}`);
+  };
+  inkson.on("response", observeResolve);
+  const holdBinding = async (route: Route) => {
+    const submitted = eventSubmissions(route.request().postData());
+    messages.push(...submitted.filter((event) => event.kind === "ak.message.create"));
+    const binding = submitted.find((event) => event.kind === "ak.direct_conversation.bound");
+    if (binding) {
+      heldBinding = binding;
+      await bindingGate;
+    }
+    await route.continue();
+  };
+  try {
+    // Cold account enrollment can open recovery setup asynchronously after a
+    // click. Finish it before provisioning instead of waiting for an HTTP
+    // response while the real setup dialog blocks that operation.
+    await jointUsers.alicePage.completeRecoveryKeySetupIfPrompted(30_000);
+    await openSavfoxArkretChannel(savfox, base!, token!);
+    const slug = `cold-savfox-${Date.now().toString(36)}`;
+    const pairing = await provisionAgent(inkson, slug);
+    await pairManagedSavfoxAgent(inkson, savfox, pairing);
+    // Delay the actual binding submission, never fabricate resolver state.
+    // This exposes the durable-Welcome/unfinished-binding cold-start window.
+    await inkson.route(`**${EVENTS_SUBMIT_PATH}`, holdBinding);
+    await openOwnAgentDirectChat(inkson, slug);
+    await expect.poll(() => Boolean(heldBinding), { timeout: 180_000 }).toBe(true);
+    await expect.poll(() => phases.includes("provisional:durable"), { timeout: 30_000 }).toBe(true);
+    await expect(inkson.getByTestId("chat-panel")).toBeVisible();
+    const send = inkson.getByTestId("send-chat-button");
+    const input = inkson.getByTestId("chat-input");
+    const prompt = "请只回复 pong";
+    await input.fill(prompt);
+    await expect(send).toBeDisabled();
+    expect(messages).toHaveLength(0);
+    releaseBinding();
+    await expect(send).toBeEnabled({ timeout: 180_000 });
+    await expect(input).toHaveValue(prompt);
+    const accepted = inkson.waitForResponse((response) =>
+      new URL(response.url()).pathname === EVENTS_SUBMIT_PATH && response.ok() &&
+      eventSubmissions(response.request().postData()).some((event) => event.kind === "ak.message.create"),
+      { timeout: 120_000 });
+    await send.click();
+    await accepted;
+    expect(messages).toHaveLength(1);
+    expect(messages[0].authorization_ref).toBe("ak.authority.direct_conversation_participant.v1");
+    expect(messages[0].semantic_refs).toContainEqual({
+      id: heldBinding!.event_id,
+      role: "direct_conversation_binding",
+      critical: true,
+    });
+    const pongBody = inkson.getByTestId("content-block-text").filter({ hasText: /^pong(?:\r?\n|$)/ });
+    const pong = inkson.getByTestId("chat-message").filter({ has: pongBody });
+    await expect(pong).toBeVisible({ timeout: 180_000 });
+    await expect(pong).toHaveAttribute("data-crypto-state", "plaintext");
+    await expect(pong.getByTestId("member-badge-agent")).toBeVisible();
+    await expect(pong.getByTestId("crypto-status-needs-verification")).toHaveCount(0);
+    await expect(pong).toHaveCount(1);
+    await expect(send).toBeEnabled();
+    await testInfo.attach("cold-first-send", { body: JSON.stringify({
+      phases, binding: heldBinding!.event_id, firstMessage: messages[0].event_id,
+      reply: await eventIdFromMessage(pong), messageSubmissions: messages.length,
+    }, null, 2), contentType: "application/json" });
+    await testInfo.attach("cold-first-reply", { body: await inkson.screenshot(), contentType: "image/png" });
+  } finally {
+    releaseBinding();
+    inkson.off("response", observeResolve);
+    await inkson.unroute(`**${EVENTS_SUBMIT_PATH}`, holdBinding);
+    await context.close();
+  }
+});
+
 async function openSavfoxArkretChannel(
   savfox: Page,
   savfoxBaseUrl: string,
@@ -1248,12 +1335,11 @@ async function openSavfoxArkretChannel(
     await connect.click();
   }
   await expect(configureHeading).toBeVisible({ timeout: 30_000 });
-  // This scenario asserts ordinary chat replies. Task delivery intentionally
-  // keeps assistant output private until an explicit delivery checkpoint.
+  // Fresh pairing must provide ordinary replies without a test-only mode fix.
+  // Explicit task delivery remains a separate checkpoint workflow.
   const deliveryMode = savfox.locator("select").filter({
     has: savfox.locator('option[value="interactive_chat"]'),
   });
-  await deliveryMode.selectOption("interactive_chat");
   await expect(deliveryMode).toHaveValue("interactive_chat");
 }
 
