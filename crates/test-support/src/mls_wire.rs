@@ -516,6 +516,111 @@ pub fn mls_encrypt_message(input: Value) -> Result<Value> {
     }))
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct EncryptSignalInput {
+    group_state: String,
+    envelope: arkret_wire::SignalEnvelope,
+    plaintext: Value,
+}
+
+/// Seal with the sender's actual MLS exporter and advance its saved nonce.
+pub fn mls_encrypt_signal(input: Value) -> Result<Value> {
+    let input: EncryptSignalInput = serde_json::from_value(input)?;
+    let mut group = decode_group(&input.group_state)?;
+    let bytes = arkret_canonical::canonical_json_bytes(&input.plaintext)?;
+    let plaintext = arkret::open_signal_plaintext(&bytes)?;
+    plaintext.bind_to_envelope(
+        &input.envelope.sender_actor_id,
+        input.envelope.sent_at,
+        input.envelope.expires_at,
+    )?;
+    ensure!(
+        plaintext.signal_class() == input.envelope.signal_class,
+        "Signal class mismatch"
+    );
+    let sealed = group.encrypt_signal_payload(&input.envelope.aead_binding(), &bytes)?;
+    Ok(json!({
+        "encrypted_payload": sealed.encrypted_payload,
+        "group_state": encode_group(&group)?,
+    }))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OpenSignalsInput {
+    group_state: String,
+    recipient_account_id: AccountId,
+    group_state_ref: EventId,
+    authority_commit_id: arkret_wire::RealmCommitId,
+    parent_realm_authority_commit_id: Option<arkret_wire::RealmCommitId>,
+    frames: Vec<arkret_wire::SignalStreamFrame>,
+}
+
+/// Open the captured rail with the recipient's independent group and authority.
+pub fn mls_open_signals(input: Value) -> Result<Value> {
+    let input: OpenSignalsInput = serde_json::from_value(input)?;
+    let group = decode_group(&input.group_state)?;
+    let mut replay = arkret::AeadNonceReplayTracker::new();
+    let mut sequences = std::collections::BTreeMap::<Vec<u8>, u64>::new();
+    let mut payloads = Vec::new();
+    for frame in input.frames {
+        frame.validate()?;
+        let arkret_wire::SignalStreamFrame::Signal {
+            envelope,
+            delivery_authority,
+        } = frame
+        else {
+            bail!("expected a captured Signal frame");
+        };
+        ensure!(
+            delivery_authority.recipient_account_id == input.recipient_account_id,
+            "Signal recipient mismatch"
+        );
+        ensure!(
+            envelope.parent_realm_authority_commit_id == input.parent_realm_authority_commit_id,
+            "Signal parent cut mismatch"
+        );
+        let raw: [u8; 32] = decode_b64(delivery_authority.key.public_key_b64u.as_str())?
+            .try_into()
+            .map_err(|_| anyhow::anyhow!("invalid Signal public key"))?;
+        let public_key = arkret_signatures::PublicKeyMaterial::Ed25519Raw {
+            bytes: raw.to_vec(),
+        };
+        let bytes = group.open_signal_envelope(
+            &envelope,
+            arkret::SignalSenderAuthority::AccountDevice {
+                public_key: &public_key,
+                device_authorize_event_id: &delivery_authority.key.authorization_ref,
+            },
+            input.group_state_ref.as_str(),
+            &input.authority_commit_id,
+            &mut replay,
+        )?;
+        let plaintext = arkret::open_signal_plaintext(&bytes)?;
+        plaintext.bind_to_envelope(
+            &envelope.sender_actor_id,
+            envelope.sent_at,
+            envelope.expires_at,
+        )?;
+        ensure!(
+            plaintext.signal_class() == envelope.signal_class,
+            "Signal class mismatch"
+        );
+        let domain = arkret_canonical::canonical_json_bytes(&json!({
+            "actor": envelope.sender_actor_id,
+            "device": envelope.sender_device_id,
+            "scope": envelope.scope_ref,
+        }))?;
+        let sequence = plaintext.payload_sequence();
+        if let Some(previous) = sequences.insert(domain, sequence) {
+            ensure!(sequence > previous, "stale Signal payload sequence");
+        }
+        payloads.push(serde_json::from_slice::<Value>(&bytes)?);
+    }
+    Ok(json!({ "plaintexts": payloads }))
+}
+
 /// Install the every-and-only binding map of the group's occupied leaves.
 /// Each leaf must carry exactly the device key its accepted authorization
 /// names.
@@ -733,5 +838,88 @@ mod scope_tests {
         foreign["realm_id"] =
             json!(RealmId::new("ak:realm:AdkQ-RmB1a8zyc52yl9GWAsodQ_EUle1WAVZqbO7pc19",).unwrap());
         assert!(mls_keypackage_claim_request(foreign).is_err());
+    }
+
+    #[test]
+    fn circle_signal_uses_real_aead_and_frozen_dual_cuts() {
+        let endpoint = endpoint();
+        let authorization = EventId::from_digest(arkret_canonical::DigestSuite::Sha256, [3; 32]);
+        let genesis = mls_genesis(json!({
+            "endpoint": endpoint, "realm_id": realm(), "scope_ref": circle_scope(),
+            "device_authorize_event_id": authorization,
+        }))
+        .unwrap();
+        let state_ref = EventId::from_digest(arkret_canonical::DigestSuite::Sha256, [4; 32]);
+        let scope_cut = arkret_wire::RealmCommitId::from_digest([5; 32]);
+        let parent_cut = arkret_wire::RealmCommitId::from_digest([6; 32]);
+        let mut envelope: arkret_wire::SignalEnvelope = serde_json::from_value(json!({
+            "realm_id": realm(), "scope_ref": circle_scope(),
+            "sender_actor_id": endpoint["actor_id"], "sender_device_id": endpoint["device_id"],
+            "authority_commit_id": scope_cut, "parent_realm_authority_commit_id": parent_cut,
+            "signal_class": "session", "sent_at": "2026-10-05T00:00:00.000Z",
+            "expires_at": "2026-10-05T00:00:25.000Z",
+            "encrypted_payload": {
+                "scheme": "ak.signal_exporter_aead.v1", "key_ref": {"group_state_ref": state_ref},
+                "purpose": "ak.signal.v1", "aead_profile": genesis["cipher_suite"],
+                "epoch": 0, "nonce": encode_b64(&[0; 12]), "ciphertext": encode_b64(&[0; 16]),
+            },
+            "proof": {"kind": "detached_jws", "verification_method": format!("did:web:alice.example#{}", endpoint["device_id"].as_str().unwrap()),
+                "envelope_digest": format!("sha256:{}", "0".repeat(64)), "jws": ""},
+        })).unwrap();
+        let plaintext = json!({"kind": "ak.receipt.read", "payload_sequence": 1,
+            "actor_id": endpoint["actor_id"], "event_id": state_ref, "read_scope": {"kind": "realm"}});
+        let sealed = mls_encrypt_signal(json!({"group_state": genesis["group_state"],
+            "envelope": envelope, "plaintext": plaintext}))
+        .unwrap();
+        envelope.encrypted_payload =
+            serde_json::from_value(sealed["encrypted_payload"].clone()).unwrap();
+        assert_ne!(
+            decode_b64(&envelope.encrypted_payload.ciphertext).unwrap(),
+            arkret_canonical::canonical_json_bytes(&plaintext).unwrap()
+        );
+        let sign = |envelope: &mut arkret_wire::SignalEnvelope| {
+            envelope.proof.envelope_digest = envelope.envelope_digest().unwrap();
+            let header = encode_b64(br#"{"alg":"Ed25519"}"#);
+            let input = format!(
+                "{header}.{}",
+                encode_b64(&envelope.proof_binding_bytes().unwrap())
+            );
+            let sig = SigningKey::from_bytes(&[7; 32]).sign(input.as_bytes());
+            envelope.proof.jws = format!("{header}..{}", encode_b64(&sig.to_bytes()));
+        };
+        sign(&mut envelope);
+        let recipient: AccountId =
+            serde_json::from_value(endpoint["actor_id"]["account_id"].clone()).unwrap();
+        let frame = |envelope: &arkret_wire::SignalEnvelope| {
+            json!({"kind":"signal", "envelope": envelope,
+            "delivery_authority": {"recipient_account_id": recipient, "key": {
+                "actor": endpoint["actor_id"], "verification_method": envelope.proof.verification_method,
+                "public_key_b64u": encode_b64(SigningKey::from_bytes(&[7;32]).verifying_key().as_bytes()),
+                "authorization_ref": authorization}}})
+        };
+        let mut input = json!({"group_state": genesis["group_state"], "recipient_account_id": recipient,
+            "group_state_ref": state_ref, "authority_commit_id": scope_cut,
+            "parent_realm_authority_commit_id": parent_cut, "frames": [frame(&envelope)]});
+        assert_eq!(
+            mls_open_signals(input.clone()).unwrap()["plaintexts"],
+            json!([plaintext])
+        );
+        input["frames"] = json!([frame(&envelope), frame(&envelope)]);
+        assert!(mls_open_signals(input.clone()).is_err());
+        // A correctly re-signed mutation still fails AEAD, proving the AAD gate.
+        envelope.parent_realm_authority_commit_id =
+            Some(arkret_wire::RealmCommitId::from_digest([9; 32]));
+        sign(&mut envelope);
+        input["parent_realm_authority_commit_id"] =
+            json!(envelope.parent_realm_authority_commit_id);
+        input["frames"] = json!([frame(&envelope)]);
+        assert!(mls_open_signals(input).is_err());
+        let next = mls_encrypt_signal(json!({"group_state": sealed["group_state"],
+            "envelope": envelope, "plaintext": plaintext}))
+        .unwrap();
+        assert_ne!(
+            sealed["encrypted_payload"]["nonce"],
+            next["encrypted_payload"]["nonce"]
+        );
     }
 }

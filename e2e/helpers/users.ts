@@ -58,6 +58,10 @@ import { deviceSuffix, newDeviceId } from "./ids";
 import { base58btcEncode } from "./encoding";
 import { withOperationSelectors } from "./arkret-test";
 
+// One owner fills the recovery confirmation. An explicit helper must not
+// restart a fill after its actionability check invoked the automatic handler.
+const recoverySetupHandlerPages = new WeakSet<Page>();
+
 export type JointUser = {
   name: string;
   /// Stable business identity projected through the active DID method adapter.
@@ -373,10 +377,6 @@ export class JointUserPage {
 
   async gotoSettings() {
     await this.gotoAppPanel("/settings", "settings-panel");
-  }
-
-  async gotoFileTransfer() {
-    await this.gotoAppPanel("/files", "file-transfer-panel");
   }
 
   async gotoNotifications() {
@@ -810,17 +810,17 @@ export class JointUserPage {
         return undefined;
       }
     }
-    // Pages opened via openUserPage register an addLocatorHandler on
-    // recovery-key-setup-generated-key that auto-completes this modal
-    // (fill confirm + save) the moment any auto-waiting call runs while
-    // the generated key is visible. Every auto-waiting step below can
-    // therefore trigger that handler and find the dialog already closed
-    // underneath it. Treat "dialog gone" as handled at each step — the
-    // dialog closing is the real success invariant either way.
     const recoveryKey = (
       await generatedKeyField.inputValue({ timeout: 10_000 }).catch(() => "")
     ).trim();
     const keyReadable = recoveryKey.split(/\s+/).filter(Boolean).length === 24;
+    if (recoverySetupHandlerPages.has(this.page)) {
+      // The assertion invokes the registered handler while the dialog is
+      // visible. Keep its existing publication budget and verify real closure.
+      await expect(dialog).toBeHidden({ timeout: 90_000 });
+      if (keyReadable) this.session.onRecoveryKeyConfigured?.(recoveryKey);
+      return keyReadable ? recoveryKey : undefined;
+    }
     if (
       !keyReadable &&
       !(await dialog.isHidden({ timeout: 100 }).catch(() => false))
@@ -2476,13 +2476,20 @@ export async function openDpopUserPageFromSession(
   // feature route. `prepareMlsDevice: false` skips MLS/recovery preparation;
   // it must not also skip session initialization and race the router's
   // authenticated-login redirect.
-  await page.gotoHome();
-  if (opts.prepareMlsDevice !== false) {
-    const recoveryKey = await page.completeRecoveryKeySetupIfPrompted();
-    if (recoveryKey) session.recoveryKey = recoveryKey;
-    await page.acknowledgeRecommendedEncryptionPromptIfVisible();
+  try {
+    await page.gotoHome();
+    if (opts.prepareMlsDevice !== false) {
+      const recoveryKey = await page.completeRecoveryKeySetupIfPrompted();
+      if (recoveryKey) session.recoveryKey = recoveryKey;
+      await page.acknowledgeRecommendedEncryptionPromptIfVisible();
+    }
+    return { user: session.user, session, page };
+  } catch (error) {
+    // Provisioning can fail before the scenario receives the page. Retain
+    // its existing redacted diagnostics and release the owned context too.
+    await page.close();
+    throw error;
   }
-  return { user: session.user, session, page };
 }
 
 export function selfPathHeadersForDpopSession(
@@ -2710,11 +2717,12 @@ export async function openUser(
         if (recoveryKey.split(/\s+/).filter(Boolean).length !== 24) {
           return;
         }
-        await page
-          .getByTestId("recovery-key-setup-confirm-key")
-          .last()
-          .fill(recoveryKey)
-          .catch(() => undefined);
+        const confirmation = page.getByTestId("recovery-key-setup-confirm-key").last();
+        if (await confirmation.inputValue() !== recoveryKey) {
+          await confirmation.fill(recoveryKey);
+        }
+        // Never put cold-custody words in an assertion's expected/actual log.
+        expect(await confirmation.inputValue() === recoveryKey).toBe(true);
         await page
           .getByTestId("recovery-key-setup-saved")
           .last()
@@ -2741,6 +2749,7 @@ export async function openUser(
       },
       { noWaitAfter: true },
     );
+    recoverySetupHandlerPages.add(page);
   }
   const consoleLines: string[] = [];
   const networkLines: string[] = [];

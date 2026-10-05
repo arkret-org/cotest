@@ -1,5 +1,31 @@
 # Source identity and artifact-byte sidecars for runner-managed builds.
 
+function Get-RepositoryBuildContent {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+        [Parameter(Mandatory = $true)][string]$GitPath,
+        [Parameter(Mandatory = $true)][string[]]$InputPaths
+    )
+    $files = @(& $GitPath -C $RepositoryRoot -c core.quotepath=false ls-files --cached --others --exclude-standard -- @InputPaths)
+    if ($LASTEXITCODE -ne 0) { throw "Unable to enumerate build input contents for $RepositoryRoot" }
+    $extensions = @('.rs', '.toml', '.lock', '.sql', '.proto', '.json', '.html', '.css', '.js', '.ts', '.svg', '.png', '.webp')
+    $material = [System.Text.StringBuilder]::new()
+    $included = @()
+    foreach ($relative in @($files | Sort-Object -Unique)) {
+        $absolute = Join-Path $RepositoryRoot $relative
+        if (!(Test-Path -LiteralPath $absolute -PathType Leaf)) { continue }
+        if ($extensions -notcontains [System.IO.Path]::GetExtension($absolute).ToLowerInvariant()) { continue }
+        $included += $relative
+        $hash = (Get-FileHash -LiteralPath $absolute -Algorithm SHA256).Hash.ToLowerInvariant()
+        [void]$material.Append($relative).Append("`n").Append($hash).Append("`n")
+    }
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($material.ToString())
+    [pscustomobject]@{
+        Files = $included
+        SourceSha256 = [System.Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
+    }
+}
+
 function Get-ArtifactBuildStampPath {
     param([Parameter(Mandatory = $true)][string]$ArtifactPath)
 
@@ -15,6 +41,7 @@ function ConvertTo-BuildStampInputs {
                 [pscustomobject]@{
                     repository_root = [System.IO.Path]::GetFullPath([string]$_.RepositoryRoot)
                     head = ([string]$_.Head).Trim().ToLowerInvariant()
+                    source_sha256 = ([string]$_.SourceSha256).Trim().ToLowerInvariant()
                 }
             } |
             Sort-Object repository_root
@@ -62,17 +89,20 @@ function Test-ArtifactBuildStamp {
             return [pscustomobject]@{ Matches = $false; Detail = "artifact bytes changed after the managed build: $ArtifactPath" }
         }
         $expected = ConvertTo-BuildStampInputs -RepositoryStates $RepositoryStates
+        if (@($stamp.inputs | Where-Object { !$_.PSObject.Properties['source_sha256'] -or $_.source_sha256 -notmatch '^[a-f0-9]{64}$' }).Count -gt 0) {
+            return [pscustomobject]@{ Matches = $false; Detail = "build-input content identity missing: $stampPath" }
+        }
         $actual = ConvertTo-BuildStampInputs -RepositoryStates @(
             $stamp.inputs | ForEach-Object {
-                [pscustomobject]@{ RepositoryRoot = $_.repository_root; Head = $_.head }
+                [pscustomobject]@{ RepositoryRoot = $_.repository_root; Head = $_.head; SourceSha256 = $_.source_sha256 }
             }
         )
         $expectedJson = ConvertTo-Json -InputObject @($expected) -Depth 4 -Compress
         $actualJson = ConvertTo-Json -InputObject @($actual) -Depth 4 -Compress
         if ($actualJson -ne $expectedJson) {
-            return [pscustomobject]@{ Matches = $false; Detail = "build-input commit identity changed: $stampPath" }
+            return [pscustomobject]@{ Matches = $false; Detail = "build-input commit or contents changed: $stampPath" }
         }
-        return [pscustomobject]@{ Matches = $true; Detail = "build-input commits and artifact bytes match: $stampPath" }
+        return [pscustomobject]@{ Matches = $true; Detail = "build-input commits, contents and artifact bytes match: $stampPath" }
     }
     catch {
         return [pscustomobject]@{ Matches = $false; Detail = "build-input stamp unreadable: $stampPath ($($_.Exception.Message))" }

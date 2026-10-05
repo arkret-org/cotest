@@ -473,11 +473,7 @@ function Get-RepositoryBuildInputState {
         [System.Globalization.CultureInfo]::InvariantCulture
     ).UtcDateTime
 
-    $trackedArguments = @("-C", $resolvedRepository, "ls-files", "--") + $buildInputPaths
-    $trackedOutput = @(Invoke-NativeCapture -FilePath $git -Arguments $trackedArguments)
-    if ($LASTEXITCODE -ne 0) {
-        throw "Unable to enumerate build inputs for $resolvedRepository"
-    }
+    $content = Get-RepositoryBuildContent -RepositoryRoot $resolvedRepository -GitPath $git -InputPaths $buildInputPaths
     $dirtyArguments = @("-C", $resolvedRepository, "status", "--porcelain", "--untracked-files=all", "--") + $buildInputPaths
     $dirtyOutput = @(Invoke-NativeCapture -FilePath $git -Arguments $dirtyArguments)
     if ($LASTEXITCODE -ne 0) {
@@ -490,7 +486,7 @@ function Get-RepositoryBuildInputState {
         ".rs", ".toml", ".lock", ".sql", ".proto", ".json", ".html", ".css",
         ".js", ".ts", ".svg", ".png", ".webp"
     )
-    foreach ($relativePath in $trackedOutput) {
+    foreach ($relativePath in $content.Files) {
         if (-not $relativePath) {
             continue
         }
@@ -518,6 +514,7 @@ function Get-RepositoryBuildInputState {
     }
 
     [pscustomobject]@{
+        SourceSha256 = $content.SourceSha256
         RepositoryRoot = $resolvedRepository
         RepositoryName = Split-Path -Leaf $resolvedRepository
         Head = $head
