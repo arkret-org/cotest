@@ -788,7 +788,9 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           jointRealm,
           ensured.sidecar_id,
         );
-        await expect(inkson.getByTestId("sidecar-security-state")).toBeVisible({
+        // Embedded cards hide the chat header; verify its derived crypto state
+        // and the typed readiness below, then require visible private messages.
+        await expect(inkson.getByTestId("sidecar-security-state")).toBeAttached({
           timeout: 120_000,
         });
         await expect(inkson.getByTestId("sidecar-security-state")).toHaveText(
@@ -808,7 +810,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           timeout: 30_000,
         });
         await expect(sourceCard.getByTestId("composer-send-scope"))
-          .toContainText("Group discussion");
+          .toHaveAttribute("data-send-route", "Shared");
 
         const requestMessage = sourceCard
           .getByTestId("chat-message")
@@ -893,7 +895,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           .toHaveAttribute("aria-selected", "true", { timeout: 30_000 });
         await expect(
           secondController.page.getByTestId("sidecar-security-state"),
-        ).toBeVisible({ timeout: 180_000 });
+        ).toBeAttached({ timeout: 180_000 });
         await expect(
           secondController.page.getByTestId("sidecar-security-state"),
         ).toHaveText("E2EE", { timeout: 180_000 });
@@ -1045,7 +1047,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         // This source already has an accepted Sidecar mapping. Reopening it
         // restores that private target and converges its native MLS roster;
         // it does not require another ensure/context-attach action.
-        await expect(inkson.getByTestId("sidecar-security-state")).toBeVisible({
+        await expect(inkson.getByTestId("sidecar-security-state")).toBeAttached({
           timeout: 120_000,
         });
         await expect(inkson.getByTestId("sidecar-security-state")).toHaveText(
@@ -1158,7 +1160,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         await inkson.goto(sourceCardUrl, { waitUntil: "domcontentloaded" });
         const resumedCard = inkson.getByTestId("card-detail-modal");
         await expect(resumedCard).toBeVisible({ timeout: 120_000 });
-        await expect(inkson.getByTestId("sidecar-security-state")).toBeVisible({
+        await expect(inkson.getByTestId("sidecar-security-state")).toBeAttached({
           timeout: 120_000,
         });
         await expect(inkson.getByTestId("sidecar-security-state")).toHaveText(
@@ -1234,7 +1236,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         );
         await publishCard.getByTestId("chat-input").fill(sharedBody);
         await expect(publishCard.getByTestId("composer-send-scope"))
-          .toContainText("Group discussion");
+          .toHaveAttribute("data-send-route", "Shared");
         await expect(inkson.getByTestId("sidecar-security-state")).toHaveCount(0);
         await expect(publishCard.getByTestId("send-chat-button")).toBeEnabled({ timeout: 30_000 });
         const publishRequestPromise = inkson.waitForRequest(
