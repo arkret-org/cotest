@@ -1,4 +1,4 @@
-import { expect } from "./arkret-test";
+import { expect, test } from "./arkret-test";
 import type { Page, Response } from "@playwright/test";
 import { assertAuthoritySubmitOutcome } from "./soland-api";
 import { decodeEventIngressBody, ingressEvents, type IngressEvent } from "./event-ingress";
@@ -46,7 +46,7 @@ export async function structureWrite(page: Page, action: string, kind: string, t
       expect(accepted.ok(), `structure HTTP refusal: ${accepted.status()} ${String(outcome.type)}`).toBeTruthy();
       expect(outcome.status, `structure refusal: ${String(outcome.reason_code)}`).toBe("committed");
       assertAuthoritySubmitOutcome(outcome, event, action);
-      await expect(panel.getByRole("status")).toHaveText("Saved", { timeout: Math.max(1, deadline - Date.now()) });
+      await expect(panel.getByTestId("direct-structure-status")).toHaveText("Saved", { timeout: Math.max(1, deadline - Date.now()) });
       return event;
     }
     throw new Error("structure write did not commit within the original 90 second budget");
@@ -68,9 +68,49 @@ export async function agentTopicChats(page: Page, receiptPath: string) {
     const created = await structureWrite(page, "new_chat", "ak.strand.create", `agent-chat-${name}-${suffix}`);
     const id = created.event_id!.replace("ak:event:", "ak:strand:");
     const choose = panel.getByRole("combobox", { name: "Chat", exact: true });
-    await expect(choose.locator(`option[value=${JSON.stringify(id)}]`)).toContainText(`agent-chat-${name}-${suffix}`);
+    try {
+      await expect(choose.locator(`option[value=${JSON.stringify(id)}]`)).toContainText(`agent-chat-${name}-${suffix}`);
+    } catch (error) {
+      const controls = await panel.evaluate(element => Array.from(element.querySelectorAll("select")).map(select => ({
+        label: select.getAttribute("aria-label"),
+        role: select.getAttribute("role"),
+        hidden: select.hidden,
+        disabled: select.disabled,
+        multiple: select.multiple,
+        size: select.size,
+        value: select.value,
+        display: getComputedStyle(select).display,
+        visibility: getComputedStyle(select).visibility,
+        options: Array.from(select.options).map(option => ({ value: option.value, title: option.text })),
+      })));
+      await test.info().attach("chat-selector-dom", {
+        body: JSON.stringify({ expectedChat: id, controls }),
+        contentType: "application/json",
+      });
+      throw error;
+    }
     await choose.selectOption(id);
     await structureWrite(page, "place", "ak.strand.update", undefined, topicId);
+    const preference = panel.getByTestId("direct-agent-reply-preference");
+    await expect(preference).toBeVisible();
+    const replacing = page.waitForResponse(response => response.request().method() === "PUT"
+      && /^\/_arkret\/self\/agents\/[^/]+\/participation$/.test(new URL(response.url()).pathname)
+      && response.request().postDataJSON()?.target_scope?.strand_id === id);
+    await preference.getByRole("button", { name: "Allow Agent replies in this Chat", exact: true }).click();
+    const replaced = await replacing;
+    expect(replaced.ok(), "selected Chat participation must be accepted").toBeTruthy();
+    const request = replaced.request().postDataJSON();
+    expect(request.target_scope).toEqual({ kind: "strand", realm_id: created.realm_id, strand_id: id });
+    expect(request.expected_version).toBe(0);
+    expect(request.selection).toEqual({
+      reply_message: true, reaction_add: false, reaction_remove: false,
+      accept_third_party_mention: false, act_on_behalf: false,
+    });
+    const outcome = await replaced.json();
+    expect(outcome.participation_entries).toEqual(expect.arrayContaining([
+      expect.objectContaining({ target_scope: request.target_scope, selection: request.selection, version: 1 }),
+    ]));
+    await expect(preference.getByRole("status")).toHaveText("Reply preference saved for this Chat");
     chats.push(id);
   }
   const markerA = `isolated-chat-a-${suffix}`;

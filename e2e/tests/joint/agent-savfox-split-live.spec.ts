@@ -707,7 +707,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           jointRealm.alice.deviceId,
         );
         await expect(
-          secondController.page.getByTestId("sidecar-context-strip"),
+          secondController.page.getByTestId("sidecar-security-state"),
         ).toHaveCount(0);
 
         // ── Phase 9: route a source-card prompt through the private Sidecar ──
@@ -741,7 +741,10 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         await expect.poll(async () => ({
           enabled: await sourceCard.getByTestId("send-chat-button").isEnabled(),
           route: await sourceCard.getByTestId("composer-send-scope").getAttribute("data-send-route"),
-        }), { timeout: 30_000 }).toEqual({ enabled: true, route: "Sidecar" });
+          boundAgent: await sourceCard.locator(
+            `[data-testid="mention-chip"][data-mention-principal-id="${firstPairing.agentId}"]`,
+          ).count(),
+        }), { timeout: 30_000 }).toEqual({ enabled: true, route: "Sidecar", boundAgent: 1 });
         let ensureCutFaults = 0;
         let frozenEnsureBody: string | undefined;
         const ensureCutFault = async (route: Route) => {
@@ -785,7 +788,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           jointRealm,
           ensured.sidecar_id,
         );
-        await expect(inkson.getByTestId("sidecar-context-strip")).toBeVisible({
+        await expect(inkson.getByTestId("sidecar-security-state")).toBeVisible({
           timeout: 120_000,
         });
         await expect(inkson.getByTestId("sidecar-security-state")).toHaveText(
@@ -799,11 +802,13 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         );
         expect(readySidecar.access_readiness).toBe("ready");
         expect(readySidecar.effective_agent_ids).toContain(firstPairing.agentId);
-        await expect.poll(async () => ({
-          enabled: await sourceCard.getByTestId("send-chat-button").isEnabled(),
-          route: await sourceCard.getByTestId("composer-send-scope").getAttribute("data-send-route"),
-        }), { timeout: 30_000 }).toEqual({ enabled: true, route: "Sidecar" });
-        await sourceCard.getByTestId("send-chat-button").click();
+        // Ensure and request submission are one Send action. Accepted private
+        // input clears once; restored private history cannot route a new draft.
+        await expect(sourceCard.getByTestId("chat-input")).toHaveValue("", {
+          timeout: 30_000,
+        });
+        await expect(sourceCard.getByTestId("composer-send-scope"))
+          .toContainText("Group discussion");
 
         const requestMessage = sourceCard
           .getByTestId("chat-message")
@@ -887,7 +892,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         await expect(secondCard.getByTestId("card-detail-tab-discussion"))
           .toHaveAttribute("aria-selected", "true", { timeout: 30_000 });
         await expect(
-          secondController.page.getByTestId("sidecar-context-strip"),
+          secondController.page.getByTestId("sidecar-security-state"),
         ).toBeVisible({ timeout: 180_000 });
         await expect(
           secondController.page.getByTestId("sidecar-security-state"),
@@ -1037,6 +1042,16 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           `[data-testid="card-detail-agent-row"][data-agent-id="${firstPairing.agentId}"]`,
         );
         await expect(addressedAgentRow).toBeVisible({ timeout: 120_000 });
+        // This source already has an accepted Sidecar mapping. Reopening it
+        // restores that private target and converges its native MLS roster;
+        // it does not require another ensure/context-attach action.
+        await expect(inkson.getByTestId("sidecar-security-state")).toBeVisible({
+          timeout: 120_000,
+        });
+        await expect(inkson.getByTestId("sidecar-security-state")).toHaveText(
+          "E2EE",
+          { timeout: 180_000 },
+        );
         const privacyPrompt = `only addressed runtime may execute ${Date.now()}`;
         await composeSourceAgentMention(
           privacyCard,
@@ -1047,20 +1062,10 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         await expect(privacyCard.getByTestId("send-chat-button")).toBeEnabled({
           timeout: 30_000,
         });
-        const privacyEnsurePromise = waitForSidecarEnsureAcceptance(inkson, testInfo);
-        const [privacyEnsure] = await Promise.all([
-          privacyEnsurePromise,
-          privacyCard.getByTestId("send-chat-button").click(),
-        ]);
-        expect(privacyEnsure.sidecar_id).toBe(ensured.sidecar_id);
-        await expect(inkson.getByTestId("sidecar-security-state")).toHaveText(
-          "E2EE",
-          { timeout: 180_000 },
-        );
         const privacySidecar = await readSidecarCurrent(
           request,
           jointRealm,
-          privacyEnsure.sidecar_id,
+          ensured.sidecar_id,
         );
         expect(privacySidecar.access_readiness).toBe("ready");
         expect(privacySidecar.effective_agent_ids).toEqual(
@@ -1072,6 +1077,10 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         await expect(privacyCard.getByTestId("send-chat-button")).toBeEnabled({
           timeout: 30_000,
         });
+        const privacyPongs = privacyCard
+          .getByTestId("content-block-text")
+          .filter({ hasText: /^pong(?:\r?\n|$)/ });
+        const privacyPongsBefore = await privacyPongs.count();
         await privacyCard.getByTestId("send-chat-button").click();
         const privacyRequest = privacyCard
           .getByTestId("chat-message")
@@ -1083,6 +1092,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           jointRealm.realmId,
           await eventIdFromMessage(privacyRequest),
         );
+        expect(privacyFold.projection.sidecar_id).toBe(ensured.sidecar_id);
         expect(privacyFold.projection.addressed_agent_ids).toEqual([
           firstPairing.agentId,
         ]);
@@ -1098,10 +1108,10 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
             intervals: [1_000, 2_000, 3_000],
           })
           .toBe(unaddressedReceiptsBefore);
-        const privacyPong = privacyCard
-          .getByTestId("content-block-text")
-          .filter({ hasText: /^pong(?:\r?\n|$)/ })
-          .last();
+        await expect(privacyPongs).toHaveCount(privacyPongsBefore + 1, {
+          timeout: 180_000,
+        });
+        const privacyPong = privacyPongs.last();
         await expect(privacyPong).toBeVisible({ timeout: 180_000 });
         await testInfo.attach("sidecar-unaddressed-runtime-gate", {
           body: Buffer.from(
@@ -1138,6 +1148,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         await adminRow.click();
         const enabledSwitch = inkson.getByTestId("agent-admin-enabled-switch");
         await expect(enabledSwitch).toBeVisible({ timeout: 30_000 });
+        await expect(enabledSwitch).toBeEnabled({ timeout: 30_000 });
         await enabledSwitch.click();
         await expect(inkson.getByTestId("agent-admin-last-op")).toContainText(
           "Paused",
@@ -1147,13 +1158,21 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         await inkson.goto(sourceCardUrl, { waitUntil: "domcontentloaded" });
         const resumedCard = inkson.getByTestId("card-detail-modal");
         await expect(resumedCard).toBeVisible({ timeout: 120_000 });
-        await expect(inkson.getByTestId("sidecar-context-strip")).toBeVisible({
+        await expect(inkson.getByTestId("sidecar-security-state")).toBeVisible({
           timeout: 120_000,
         });
         await expect(inkson.getByTestId("sidecar-security-state")).toHaveText(
           "E2EE",
           { timeout: 180_000 },
         );
+        const pausedSidecar = await readSidecarCurrent(
+          request,
+          jointRealm,
+          ensured.sidecar_id,
+        );
+        expect(pausedSidecar.access_readiness).toBe("ready");
+        expect(pausedSidecar.desired_agent_ids).not.toContain(firstPairing.agentId);
+        expect(pausedSidecar.effective_agent_ids).not.toContain(firstPairing.agentId);
         const postPauseSubmissions: SubmittedEvent[] = [];
         const capturePostPauseSubmissions = (outgoing: {
           method(): string;
@@ -1169,15 +1188,18 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         };
         inkson.on("request", capturePostPauseSubmissions);
         const blockedPrompt = `paused runtime must not execute ${Date.now()}`;
-        await resumedCard.getByTestId("chat-input").fill(blockedPrompt);
+        await resumedCard.getByTestId("card-detail-sidebar-tab-members").click();
+        const pausedAgentRow = resumedCard.locator(
+          `[data-testid="card-detail-agent-row"][data-agent-id="${firstPairing.agentId}"]`,
+        );
+        await expect(pausedAgentRow).toBeVisible({ timeout: 120_000 });
+        await composeSourceAgentMention(
+          resumedCard,
+          pausedAgentRow,
+          firstPairing.agentId,
+          blockedPrompt,
+        );
         await resumedCard.getByTestId("send-chat-button").click();
-        const blockedMessage = resumedCard
-          .getByTestId("chat-message")
-          .filter({ hasText: blockedPrompt })
-          .last();
-        await expect(blockedMessage).toBeVisible({ timeout: 30_000 });
-        const blockedEventId = await eventIdFromMessage(blockedMessage);
-        expect(blockedEventId).toMatch(/^ak:event:/);
         await expect
           .poll(() => receiptCount(receiptPath), {
             timeout: 15_000,
@@ -1186,34 +1208,54 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           .toBe(receiptsBeforePause);
         await inkson.waitForTimeout(5_000);
         inkson.off("request", capturePostPauseSubmissions);
+        await expect(resumedCard.getByTestId("chat-input")).toHaveValue(
+          new RegExp(blockedPrompt),
+        );
+        await expect(
+          resumedCard.getByTestId("chat-message").filter({ hasText: blockedPrompt }),
+        ).toHaveCount(0);
         expect(
           postPauseSubmissions.filter(
             (event) =>
-              event.kind === "ak.agent.sidecar.exchange.control" &&
-              JSON.stringify(event).includes(blockedEventId),
+              event.kind === "ak.message.create" ||
+              event.kind === "ak.agent.sidecar.exchange.control",
           ),
-          "pause must not implicitly close the blocked exchange",
+          "a paused Agent target must not write a private request or implicit completion",
         ).toEqual([]);
 
-        // Publishing remains an explicit controller action after the runtime
-        // has been paused. It emits one ordinary shared message and nothing
-        // from the private Sidecar coordinate set.
-        const publishOpen = resumedCard.getByTestId("sidecar-publish-open");
-        await expect(publishOpen).toBeVisible();
-        await publishOpen.click();
-        const publishModal = inkson.getByTestId("sidecar-publish-modal");
-        await expect(publishModal).toBeVisible();
+        // The private reading surface has no publish dialog. The controller
+        // explicitly edits and confirms a fresh ordinary message containing
+        // only the chosen text, rather than copying a private Event envelope.
+        const sharedBody = await resumedCard.getByTestId("content-block-text")
+          .filter({ hasText: /^pong(?:\r?\n|$)/ }).last().innerText();
+        expect(sharedBody.trim()).toBe("pong");
+        const publishCard = await createSidecarSourceCard(
+          inkson, jointRealm.realmId, `Shared result ${Date.now().toString(36)}`,
+        );
+        await publishCard.getByTestId("chat-input").fill(sharedBody);
+        await expect(publishCard.getByTestId("composer-send-scope"))
+          .toContainText("Group discussion");
+        await expect(inkson.getByTestId("sidecar-security-state")).toHaveCount(0);
+        await expect(publishCard.getByTestId("send-chat-button")).toBeEnabled({ timeout: 30_000 });
         const publishRequestPromise = inkson.waitForRequest(
-          (outgoing) =>
-            outgoing.method() === "POST" &&
-            new URL(outgoing.url()).pathname === EVENTS_SUBMIT_PATH,
+          (outgoing) => outgoing.method() === "POST"
+            && new URL(outgoing.url()).pathname === EVENTS_SUBMIT_PATH
+            && eventSubmissions(outgoing.postData()).some((event) => event.kind === "ak.message.create"),
           { timeout: 120_000 },
         );
-        await publishModal.getByTestId("sidecar-publish-confirm").click();
+        await publishCard.getByTestId("send-chat-button").click();
         const publishSubmission = eventSubmissions(
           (await publishRequestPromise).postData(),
         ).find((event) => event.kind === "ak.message.create");
         expect(publishSubmission, "explicit shared publish Event").toBeTruthy();
+        expect(publishSubmission?.actor_id).toEqual({
+          kind: "account", account_id: jointRealm.aliceSession.accountId,
+        });
+        expect(publishSubmission?.scope_ref).toMatchObject({
+          kind: "strand", realm_id: jointRealm.realmId,
+        });
+        await expect(publishCard.getByTestId("chat-message")
+          .filter({ hasText: sharedBody })).toBeVisible({ timeout: 120_000 });
         expect(JSON.stringify(publishSubmission)).not.toMatch(
           /sidecar_id|backing_circle|private_relation|exchange_id|private_history|context_locator/,
         );
@@ -1874,10 +1916,17 @@ async function createSidecarSourceCard(
   await page.getByTestId("new-board-toggle").click();
   await page.getByTestId("new-board-title-input").fill(title);
   await page.getByTestId("create-board-space-button").click();
-  await expect(page.getByTestId("add-column-button")).toBeVisible({
-    timeout: 120_000,
-  });
+  // The toolbar is visible while the Board is still a local pending create.
+  // Wait for its accepted canonical route before composing a child List.
+  await expect(page).toHaveURL(
+    (url) =>
+      decodeURIComponent(url.pathname).startsWith(
+        `/kanban/${realmId}/board/ak:space:`,
+      ),
+    { timeout: 120_000 },
+  );
   await page.getByTestId("new-column-input").fill("Work");
+  await expect(page.getByTestId("new-column-input")).toHaveValue("Work");
   await page.getByTestId("add-column-button").click();
   const column = page.getByTestId("kanban-column").filter({ hasText: "Work" });
   await expect(column).toBeVisible({ timeout: 120_000 });

@@ -1154,8 +1154,36 @@ function Invoke-JointE2ePreflight {
 }
 
 $script:AllocatedTcpPorts = [System.Collections.Generic.HashSet[int]]::new()
-$script:NextTcpPortCandidate = 20000 + (Get-Random -Minimum 0 -Maximum 5000)
+$script:TcpPortRange = $null
+$script:NextTcpPortCandidate = $null
 $script:WindowsExcludedTcpPortRanges = $null
+
+function Get-HarnessTcpPortRange {
+    if ($null -ne $script:TcpPortRange) {
+        return $script:TcpPortRange
+    }
+    $start = 20000
+    $end = 29999
+    if ([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
+        [System.Runtime.InteropServices.OSPlatform]::Windows
+    )) {
+        $output = & netsh interface ipv4 show dynamicport tcp 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Unable to query the Windows dynamic TCP port range."
+        }
+        $values = @($output | ForEach-Object {
+            if ($_ -match ':\s*(\d+)\s*$') { [int]$Matches[1] }
+        })
+        if ($values.Count -ne 2 -or $values[0] -le 1024 -or $values[1] -le 0 -or
+            ($values[0] + $values[1]) -gt 65536) {
+            throw "Unable to determine an unprivileged range below the Windows dynamic TCP ports."
+        }
+        $end = [Math]::Min($end, $values[0] - 1)
+        $start = [Math]::Max(1024, $end - 9999)
+    }
+    $script:TcpPortRange = [pscustomobject]@{ Start = $start; End = $end }
+    return $script:TcpPortRange
+}
 
 function Get-WindowsExcludedTcpPortRanges {
     $isWindowsPlatform = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
@@ -1212,11 +1240,15 @@ function Test-TcpPortBindable {
 }
 
 function Get-FreeTcpPort {
-    for ($attempt = 0; $attempt -lt 10000; $attempt++) {
+    $range = Get-HarnessTcpPortRange
+    if ($null -eq $script:NextTcpPortCandidate) {
+        $script:NextTcpPortCandidate = Get-Random -Minimum $range.Start -Maximum ($range.End + 1)
+    }
+    for ($attempt = 0; $attempt -lt ($range.End - $range.Start + 1); $attempt++) {
         $port = $script:NextTcpPortCandidate
         $script:NextTcpPortCandidate++
-        if ($script:NextTcpPortCandidate -gt 29999) {
-            $script:NextTcpPortCandidate = 20000
+        if ($script:NextTcpPortCandidate -gt $range.End) {
+            $script:NextTcpPortCandidate = $range.Start
         }
 
         if ($script:AllocatedTcpPorts.Contains($port)) {
