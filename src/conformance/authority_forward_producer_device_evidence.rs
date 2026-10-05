@@ -1582,6 +1582,7 @@ fn human_without_evidence(world: &World) -> Result<Value> {
         event_submission: EventAdmissionSubmission::new(event),
         mls_genesis_material: None,
         producer_device_evidence: None,
+        producer_agent_evidence: None,
     })?;
     ensure!(body.get(EVIDENCE_MEMBER).is_none());
     judge(world, &body, &world.station_a.service_id, world.setup.now)

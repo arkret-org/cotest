@@ -644,6 +644,7 @@ impl<'a> CaseRun<'a> {
                 ratchet_tree_bytes_b64: tree,
             }),
             producer_device_evidence: Some(evidence.clone()),
+            producer_agent_evidence: None,
         };
         Ok(Some(serde_json::to_value(
             PeerAuthoritySubmitRequest::AuthorityForwardEvent(request),

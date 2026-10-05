@@ -50,6 +50,7 @@
 // clippy's CommonMark-strict lints. The substance is correct; reflowing
 // hundreds of comments would create churn without changing behavior.
 #![allow(clippy::doc_lazy_continuation, clippy::doc_overindented_list_items)]
+#![recursion_limit = "256"]
 
 pub mod conformance;
 pub mod fixtures;
