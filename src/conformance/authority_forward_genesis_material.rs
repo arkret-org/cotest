@@ -34,7 +34,6 @@ use arkret_models_collaboration::events_payloads::{
 use arkret_models_collaboration::mls_group_state_material::{
     MlsGroupStateMaterialOutcome, MlsGroupStateMaterialRequestBody,
 };
-use arkret_models_identity::AccountDeviceSignerEvidence;
 use arkret_wire::{
     ActorId, Base64UrlString, BlobRef, ErrorCode, Event, EventAdmissionSubmission, EventId,
     EventKind, MlsWelcomeRecipientEndpoint, ScopeRef,
@@ -536,9 +535,14 @@ impl<'a> CaseRun<'a> {
         event: &Event,
         state: &GroupState,
     ) -> Result<std::result::Result<Value, Refusal>> {
-        let evidence = self.world.forwarding.fresh_evidence(event)?;
-        if let Some(body) = self.crafted_body(variant, event, state, &evidence)? {
-            return Ok(Ok(body));
+        if let Some(mut request) = self.crafted_body(variant, event, state)? {
+            // Sign the final carried material, including intentionally invalid variants.
+            // The governance Station must still decide their original schema/Blob gates.
+            let evidence = self.world.forwarding.fresh_evidence(event, &request)?;
+            request.producer_device_evidence = Some(evidence);
+            return Ok(Ok(serde_json::to_value(
+                PeerAuthoritySubmitRequest::AuthorityForwardEvent(request),
+            )?));
         }
         let refused = |code| Ok(Err(Refusal::forwarding(code)));
         let material = if event.kind == EventKind::MlsGenesis {
@@ -566,9 +570,20 @@ impl<'a> CaseRun<'a> {
         } else {
             None
         };
+        let unsigned_request = PeerAuthorityForwardEventRequest {
+            branch: AuthorityForwardBranch::AuthorityForward,
+            event_submission: EventAdmissionSubmission::new(event.clone()),
+            mls_genesis_material: material,
+            producer_device_evidence: None,
+            producer_agent_evidence: None,
+        };
+        let evidence = self
+            .world
+            .forwarding
+            .fresh_evidence(event, &unsigned_request)?;
         let request = match PeerAuthorityForwardEventRequest::new(
-            EventAdmissionSubmission::new(event.clone()),
-            material,
+            unsigned_request.event_submission,
+            unsigned_request.mls_genesis_material,
             Some(evidence),
         ) {
             Ok(request) => request,
@@ -588,8 +603,7 @@ impl<'a> CaseRun<'a> {
         variant: &Value,
         event: &Event,
         state: &GroupState,
-        evidence: &AccountDeviceSignerEvidence,
-    ) -> Result<Option<Value>> {
+    ) -> Result<Option<PeerAuthorityForwardEventRequest>> {
         let honest = || {
             (
                 arkret_canonical::base64url_encode(&state.group_info),
@@ -643,12 +657,10 @@ impl<'a> CaseRun<'a> {
                 group_info_bytes_b64: group_info,
                 ratchet_tree_bytes_b64: tree,
             }),
-            producer_device_evidence: Some(evidence.clone()),
+            producer_device_evidence: None,
             producer_agent_evidence: None,
         };
-        Ok(Some(serde_json::to_value(
-            PeerAuthoritySubmitRequest::AuthorityForwardEvent(request),
-        )?))
+        Ok(Some(request))
     }
 
     /// The governance Station, in the order it decides: the request (schema
@@ -692,7 +704,7 @@ impl<'a> CaseRun<'a> {
         }
         self.world
             .forwarding
-            .verify_forwarded_producer(event, request.producer_device_evidence.as_ref())
+            .verify_forwarded_producer(&request)
             .map_err(Refusal::governance)?;
         let material = request
             .mls_genesis_material

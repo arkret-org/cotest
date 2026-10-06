@@ -32,11 +32,12 @@ use arkret_models_collaboration::authority_commit::{
 };
 use arkret_models_collaboration::governance::membership_invite::MembershipPayload;
 use arkret_models_crypto::{
-    DeviceAuthorizationWindow, DeviceProjectionAttestationCore, DeviceStatus,
+    DeviceAuthorizationWindow, DeviceStatus, ForwardDeviceProjectionAttestationCore,
+    HumanEventAuthorization,
 };
 use arkret_models_identity::service_identity::{CanonicalServiceUrl, ServiceRegistrationKey};
-use arkret_models_identity::{AccountDeviceSignerEvidence, AuthenticatedServiceResolution};
-use arkret_signatures::device_projection::sign_device_projection_attestation;
+use arkret_models_identity::{AuthenticatedServiceResolution, ForwardAccountDeviceSignerEvidence};
+use arkret_signatures::device_projection::sign_forward_device_projection_attestation;
 use arkret_signatures::webvh::{
     ServiceRegistrationInceptionInput, prepare_service_registration_inception,
 };
@@ -45,12 +46,11 @@ use arkret_signatures::{
 };
 use arkret_wire::{
     AccountId, ActorId, AuthoredEvent, DeviceId, DeviceRevocationAdmissionDecision, Did, DidCoreId,
-    DidKey, DidUrl, ErrorCode, Event, EventAdmissionSubmission, EventId, EventKind,
+    DidKey, DidUrl, ErrorCode, Event, EventAdmissionSubmission, EventId, EventKind, Hash,
     HumanDeviceProducer, MlsCommitSubmission, NonEmptyString, RealmId, ScopeRef, ServiceKind,
-    SignerEvidenceRef,
 };
 use chrono::{DateTime, Duration, Utc};
-use ed25519_dalek::SigningKey;
+use ed25519_dalek::{Signer as _, SigningKey};
 use rand_chacha::ChaCha20Rng;
 use rand_chacha::rand_core::SeedableRng as _;
 use serde_json::{Value, json};
@@ -68,7 +68,7 @@ pub const VECTOR_ID_AUTHORITY_FORWARD_PRODUCER_DEVICE_EVIDENCE: &str =
 const FIXTURE: &str = "peer-event-submit-semantic-union-fixture.json";
 const CASE_NAME: &str = "authority_forward_producer_device_evidence";
 const EVIDENCE_MEMBER: &str = "producer_device_evidence";
-const EVIDENCE_SCHEMA_REF: &str = "schemas/account-device-signer-evidence.schema.json";
+const EVIDENCE_SCHEMA_REF: &str = "schemas/account-device-signer-evidence.schema.json#/$defs/forward_account_device_signer_evidence";
 const PEER_REQUEST: &str =
     "schemas/authority-commit-operations.schema.json#/$defs/peer_submit_request";
 const LOCAL_PCR_RESOLUTION: &str =
@@ -79,7 +79,6 @@ const AGENT_DID: &str = "did:webvh:z6mkagent:agent.example";
 const AGENT_FRAGMENT: &str = "agent-runtime-1";
 const DEVICE: &str = "ak:device:019a8500-0000-7000-8000-000000000001";
 const OTHER_DEVICE: &str = "ak:device:019a8500-0000-7000-8000-000000000002";
-const DEVICE_AUTHORIZE_EVENT: &str = "ak:event:AfAnsJqSlM9bHVI7P1QBMOEW3p5P1PNQu7BBMpiSnD_e";
 const DEVICE_SEED: [u8; 32] = [0x51; 32];
 const FOREIGN_DEVICE_SEED: [u8; 32] = [0x52; 32];
 const ROGUE_STATION_SEED: [u8; 32] = [0x53; 32];
@@ -200,10 +199,13 @@ pub fn run_authority_forward_producer_device_evidence_vector() -> Result<()> {
     Ok(())
 }
 
-/// The carried member is the complete, closed `account_device_signer_evidence`
-/// root, and the schema confines it to the `authority_forward` branch.
+/// The carried member is the complete, closed forwarding sibling root, and the schema confines it
+/// to the `authority_forward` branch.
 fn assert_evidence_member_is_the_signer_evidence_root() -> Result<()> {
-    let schema = load_artifact_json(EVIDENCE_SCHEMA_REF)?;
+    let schema_document = load_artifact_json("schemas/account-device-signer-evidence.schema.json")?;
+    let schema = schema_document
+        .pointer("/$defs/forward_account_device_signer_evidence")
+        .context("the closed Forward signer evidence definition is missing")?;
     ensure!(
         schema["additionalProperties"] == false
             && schema["required"] == json!(["device_projection_attestation", "service_resolution"]),
@@ -215,8 +217,8 @@ fn assert_evidence_member_is_the_signer_evidence_root() -> Result<()> {
         request
             .pointer("/properties/producer_device_evidence/$ref")
             .and_then(Value::as_str)
-            .is_some_and(
-                |reference| reference.ends_with("account-device-signer-evidence.schema.json")
+            == Some(
+                "./account-device-signer-evidence.schema.json#/$defs/forward_account_device_signer_evidence"
             ),
         "producer_device_evidence is not the account-device signer evidence type"
     );
@@ -472,6 +474,7 @@ struct DeviceRecord {
     signing_key_did: DidKey,
     hpke_key: NonEmptyString,
     authorize_event_id: EventId,
+    original: arkret_wire::CommittedEventFullView,
     generation: u64,
     window: DeviceAuthorizationWindow,
     state: LiveDeviceState,
@@ -489,17 +492,18 @@ impl DeviceRecord {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum ForwardStep {
-    Persisted(SignerEvidenceRef),
-    Sent(Option<SignerEvidenceRef>),
+    Persisted(Hash),
+    Sent(Option<Hash>),
 }
 
 /// Station A: the producer's account Station, forwarding to the governance
 /// Station.
 struct AccountStation<'a> {
     keys: &'a StationKeys,
+    destination: DidCoreId,
     device: DeviceRecord,
     attestation_ttl: Duration,
-    persisted: Vec<(SignerEvidenceRef, AccountDeviceSignerEvidence)>,
+    persisted: Vec<(Hash, ForwardAccountDeviceSignerEvidence)>,
     steps: Vec<ForwardStep>,
 }
 
@@ -507,6 +511,7 @@ impl<'a> AccountStation<'a> {
     fn new(world: &'a World, device: DeviceRecord) -> Self {
         Self {
             keys: &world.station_a,
+            destination: world.station_b.service_id.clone(),
             device,
             attestation_ttl: world.setup.attestation_ttl,
             persisted: Vec::new(),
@@ -530,7 +535,8 @@ impl<'a> AccountStation<'a> {
         &mut self,
         event: &Event,
         attempt_at: DateTime<Utc>,
-    ) -> Result<Option<AccountDeviceSignerEvidence>> {
+        body: &Value,
+    ) -> Result<Option<ForwardAccountDeviceSignerEvidence>> {
         let producer = event.human_device_producer().map_err(|error| {
             rejected(
                 RejectedBy::AccountStation,
@@ -546,8 +552,8 @@ impl<'a> AccountStation<'a> {
             Some(end) => (attempt_at + self.attestation_ttl).min(end),
             None => attempt_at + self.attestation_ttl,
         };
-        let attestation = sign_device_projection_attestation(
-            DeviceProjectionAttestationCore {
+        let attestation = sign_forward_device_projection_attestation(
+            ForwardDeviceProjectionAttestationCore {
                 account_id: self.device.account_id.clone(),
                 device_id: self.device.device_id.clone(),
                 device_signing_key_did: self.device.signing_key_did.clone(),
@@ -558,15 +564,21 @@ impl<'a> AccountStation<'a> {
                 authorization_window: self.device.window.clone(),
                 attested_at: attempt_at,
                 expires_at,
+                event_authorization: original_authorization(
+                    &self.device,
+                    event,
+                    &self.destination,
+                    body,
+                )?,
             },
             self.keys.method.clone(),
             &self.keys.signing_key,
         )?;
-        let evidence = AccountDeviceSignerEvidence {
+        let evidence = ForwardAccountDeviceSignerEvidence {
             device_projection_attestation: attestation,
             service_resolution: self.keys.resolution()?,
         };
-        let reference = evidence.signer_evidence_ref()?;
+        let reference = evidence_digest(&evidence)?;
         self.persisted.push((reference.clone(), evidence.clone()));
         self.steps.push(ForwardStep::Persisted(reference));
         Ok(Some(evidence))
@@ -582,14 +594,15 @@ impl<'a> AccountStation<'a> {
             }
             _ => bail!("the account Station only sends authority_forward"),
         }
-        .map(AccountDeviceSignerEvidence::signer_evidence_ref)
+        .map(evidence_digest)
         .transpose()?;
         self.steps.push(ForwardStep::Sent(reference));
         Ok(serde_json::to_value(request)?)
     }
 
     fn forward_event(&mut self, event: Event, attempt_at: DateTime<Utc>) -> Result<Value> {
-        let evidence = self.fresh_evidence(&event, attempt_at)?;
+        let unsigned = event_forward_body(&event, None)?;
+        let evidence = self.fresh_evidence(&event, attempt_at, &unsigned)?;
         let request = PeerAuthorityForwardEventRequest::new(
             EventAdmissionSubmission::new(event),
             None,
@@ -603,7 +616,8 @@ impl<'a> AccountStation<'a> {
         submission: MlsCommitSubmission,
         attempt_at: DateTime<Utc>,
     ) -> Result<Value> {
-        let evidence = self.fresh_evidence(&submission.commit_event, attempt_at)?;
+        let unsigned = json!({"branch":"authority_forward", "mls_submission": &submission});
+        let evidence = self.fresh_evidence(&submission.commit_event, attempt_at, &unsigned)?;
         let request = PeerAuthorityForwardMlsRequest::new(submission, evidence)?;
         self.send(PeerAuthoritySubmitRequest::AuthorityForwardMls(request))
     }
@@ -628,7 +642,7 @@ impl ResolutionSource {
 struct AcceptanceTransaction {
     event_id: EventId,
     resolution: ResolutionSource,
-    retained_evidence: Option<(SignerEvidenceRef, AccountDeviceSignerEvidence)>,
+    retained_evidence: Option<(Hash, ForwardAccountDeviceSignerEvidence)>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -738,7 +752,17 @@ impl GovernanceStation {
         }
         let evidence =
             evidence.context("the governance model admits human-device producers only")?;
-        match verify_forwarded_human_producer(evidence, event, source, DigestSuite::Sha256, now) {
+        let body_digest =
+            arkret_models_collaboration::authority_commit::authority_forward_body_digest(body)?;
+        match verify_forwarded_human_producer(
+            evidence,
+            event,
+            source,
+            &self.station_id,
+            &body_digest,
+            DigestSuite::Sha256,
+            now,
+        ) {
             Ok(producer) => ensure!(
                 producer == event.human_device_producer()?.context("human producer")?,
                 "verified producer differs from the Event's actual signer"
@@ -750,8 +774,8 @@ impl GovernanceStation {
                 return Err(rejected(RejectedBy::GovernanceStation, code));
             }
         }
-        let reference = evidence.signer_evidence_ref()?;
-        ensure!(evidence.matches_ref(&reference)?);
+        let reference = evidence_digest(&evidence)?;
+        ensure!(evidence_digest(evidence)? == reference);
         self.transactions.push(AcceptanceTransaction {
             event_id: event.event_id.clone(),
             resolution: ResolutionSource::ForwardedEvidence,
@@ -848,10 +872,101 @@ impl World {
         })
     }
 
+    /// An independently signed original PCR authorization for this transport
+    /// model. It is not a PG registration/admission or live PCR permission test.
+    fn original_device_authorization(
+        &self,
+        public: &[u8; 32],
+    ) -> Result<arkret_wire::CommittedEventFullView> {
+        let genesis_ref = EventId::from_digest(DigestSuite::Sha256, [0x61; 32]);
+        let pcr = RealmId::from_event_id(&genesis_ref);
+        ensure!(pcr != self.realm_id);
+        let at = self.station_a.registered_at + Duration::seconds(30);
+        let mut payload: arkret_models_collaboration::events_payloads::DeviceAuthorizePayload =
+            serde_json::from_value(json!({
+                "device_id": DEVICE,
+                "device_public_key_did": format!("did:key:{}", arkret_canonical::ed25519_pubkey_to_did_key_multibase(public)),
+                "hpke_key": "hpke-forward-fixture",
+                "algorithms": ["Ed25519", "HPKE-X25519-HKDF-SHA256-AES128GCM"],
+                "device_key_algorithm": "Ed25519",
+                "authorized_by": self.account.principal_id,
+                "not_before": arkret_canonical::format_timestamp_canonical(self.setup.window.not_before),
+                "expires_at": self.setup.window.expires_at.map(arkret_canonical::format_timestamp_canonical),
+                "authorization_binding_kind": "registration_anchor",
+                "authorized_generation_ref": 1,
+                "device_signature": "c2lnbmF0dXJl"
+            }))?;
+        let possession = SigningKey::from_bytes(&DEVICE_SEED)
+            .sign(&payload.device_possession_signature_input(&self.account)?);
+        payload.device_signature = serde_json::from_value(json!(
+            arkret_canonical::base64url_encode(possession.to_bytes())
+        ))?;
+        arkret_signatures::verify_device_authorize_possession(&payload, &self.account)?;
+        let event = sign(
+            arkret_wire::test_support::raw_event_for_actor_at(
+                EventKind::DeviceAuthorize.as_str(),
+                ScopeRef::Realm {
+                    realm_id: pcr.clone(),
+                },
+                ActorId::account(self.account.clone()),
+                serde_json::to_value(payload)?,
+                at,
+            )?,
+            &format!("{PRINCIPAL_DID}#{DEVICE}"),
+            DEVICE_SEED,
+            at,
+        )?;
+        verify_producer_proof(
+            &event,
+            &DidKey::new(format!(
+                "did:key:{}",
+                arkret_canonical::ed25519_pubkey_to_did_key_multibase(public)
+            ))
+            .map_err(|error| anyhow!("{error}"))?,
+        )?;
+        let body = json!({
+            "realm_id": pcr, "stream_ref": arkret_wire::CommitStreamRef::Realm { realm_id: pcr.clone() },
+            "stream_position": 1, "previous_commit_ref": arkret_wire::RealmCommitId::from_digest([0x62; 32]),
+            "event_ref": event.event_id, "governance_generation": 0,
+            "authority_ref": genesis_ref, "committed_at": arkret_canonical::format_timestamp_canonical(at + Duration::seconds(1)),
+        });
+        let commit_id = arkret_wire::RealmCommitId::from_digest(arkret_canonical::sha256_bytes(
+            &arkret_canonical::canonical_json_bytes(&body)?,
+        ));
+        let mut body = body;
+        body["commit_id"] = json!(commit_id);
+        let signature = arkret_signatures::detached_object::sign_detached_object(
+            &body,
+            arkret_wire::DetachedSignatureContext::RealmCommit,
+            self.station_a.method.clone(),
+            at + Duration::seconds(1),
+            &self.station_a.signing_key,
+        )?;
+        arkret_signatures::detached_object::verify_detached_object_signature(
+            &signature,
+            &body,
+            arkret_wire::DetachedSignatureContext::RealmCommit,
+            &PublicKeyMaterial::Ed25519Raw {
+                bytes: self
+                    .station_a
+                    .signing_key
+                    .verifying_key()
+                    .to_bytes()
+                    .to_vec(),
+            },
+        )?;
+        let mut value = body;
+        value["signature"] = serde_json::to_value(signature)?;
+        let commit: arkret_wire::RealmCommit = serde_json::from_value(value)?;
+        commit.validate_content_address()?;
+        Ok(arkret_wire::CommittedEventFullView { event, commit })
+    }
+
     fn device_record(&self, state: LiveDeviceState) -> Result<DeviceRecord> {
         let public = SigningKey::from_bytes(&DEVICE_SEED)
             .verifying_key()
             .to_bytes();
+        let original = self.original_device_authorization(&public)?;
         Ok(DeviceRecord {
             account_id: self.account.clone(),
             device_id: DeviceId::new(DEVICE)?,
@@ -861,7 +976,8 @@ impl World {
             ))
             .map_err(|error| anyhow!("{error}"))?,
             hpke_key: NonEmptyString::new("hpke-forward-fixture").map_err(anyhow::Error::msg)?,
-            authorize_event_id: EventId::new(DEVICE_AUTHORIZE_EVENT)?,
+            authorize_event_id: original.event.event_id.clone(),
+            original,
             generation: 1,
             window: self.setup.window.clone(),
             state,
@@ -1044,7 +1160,63 @@ fn timestamp(value: &Value) -> Result<DateTime<Utc>> {
         .to_utc())
 }
 
-fn body_evidence(body: &Value) -> Result<AccountDeviceSignerEvidence> {
+fn event_forward_body(
+    event: &Event,
+    material: Option<arkret_models_collaboration::authority_commit::MlsGenesisMaterial>,
+) -> Result<Value> {
+    Ok(serde_json::to_value(PeerAuthorityForwardEventRequest {
+        branch: AuthorityForwardBranch::AuthorityForward,
+        event_submission: EventAdmissionSubmission::new(event.clone()),
+        mls_genesis_material: material,
+        producer_device_evidence: None,
+        producer_agent_evidence: None,
+    })?)
+}
+
+fn evidence_digest(evidence: &ForwardAccountDeviceSignerEvidence) -> arkret_wire::Result<Hash> {
+    Ok(Hash::new(arkret_canonical::canonical_sha256(evidence)?)?)
+}
+
+fn original_authorization(
+    device: &DeviceRecord,
+    event: &Event,
+    destination: &DidCoreId,
+    body: &Value,
+) -> Result<HumanEventAuthorization> {
+    let original = &device.original;
+    ensure!(original.event.event_id == device.authorize_event_id);
+    ensure!(original.event.actual_signer() == &ActorId::account(device.account_id.clone()));
+    ensure!(
+        original.commit.stream_ref
+            != arkret_wire::CommitStreamRef::from_scope(&event.scope_ref, None)?
+    );
+    Ok(HumanEventAuthorization {
+        event_id: event.event_id.clone(),
+        verification_method: event
+            .producer_proof
+            .as_ref()
+            .context("human proof")?
+            .verification_method
+            .clone(),
+        destination_service_id: destination.clone(),
+        forward_body_digest:
+            arkret_models_collaboration::authority_commit::authority_forward_body_digest(body)?,
+        authorization_ref: arkret_wire::CommittedEventRef {
+            event_id: original.event.event_id.clone(),
+            commit_id: original.commit.commit_id.clone(),
+            stream_ref: original.commit.stream_ref.clone(),
+            stream_position: original.commit.stream_position,
+        },
+        revision: arkret_wire::CurrentRevision {
+            commit_id: original.commit.commit_id.clone(),
+            stream_position: original.commit.stream_position,
+        },
+        governance_generation: original.commit.governance_generation,
+        accepted_at: original.commit.committed_at,
+    })
+}
+
+fn body_evidence(body: &Value) -> Result<ForwardAccountDeviceSignerEvidence> {
     Ok(serde_json::from_value(
         body.get(EVIDENCE_MEMBER)
             .cloned()
@@ -1173,7 +1345,7 @@ fn cross_station_accepted(world: &World, variant: &Value) -> Result<Value> {
     };
 
     let evidence = body_evidence(&body)?;
-    let reference = evidence.signer_evidence_ref()?;
+    let reference = evidence_digest(&evidence)?;
     let fresh = evidence
         .device_projection_attestation
         .attestation
@@ -1314,7 +1486,7 @@ fn new_attempt_for_committed_event(world: &World) -> Result<Value> {
             .attestation
             .attested_at
             == second_attempt_at
-            && second_evidence.signer_evidence_ref()? != first_evidence.signer_evidence_ref()?
+            && evidence_digest(&second_evidence)? != evidence_digest(&first_evidence)?
             && account.persisted.len() == 2,
         "a new forwarding attempt reused cached evidence"
     );
@@ -1463,7 +1635,7 @@ fn foreign_attestation_signer(world: &World) -> Result<Value> {
     // A key A never published, under A's own method.
     let mut rogue_key = body.clone();
     rogue_key[EVIDENCE_MEMBER]["device_projection_attestation"] =
-        serde_json::to_value(sign_device_projection_attestation(
+        serde_json::to_value(sign_forward_device_projection_attestation(
             core.clone(),
             world.station_a.method.clone(),
             &SigningKey::from_bytes(&ROGUE_STATION_SEED),
@@ -1471,7 +1643,7 @@ fn foreign_attestation_signer(world: &World) -> Result<Value> {
     // Another Station's genuinely registered key and method.
     let mut other_station = body;
     other_station[EVIDENCE_MEMBER]["device_projection_attestation"] =
-        serde_json::to_value(sign_device_projection_attestation(
+        serde_json::to_value(sign_forward_device_projection_attestation(
             core,
             world.station_c.method.clone(),
             &world.station_c.signing_key,
@@ -1504,8 +1676,8 @@ fn history_lacks_method(world: &World) -> Result<Value> {
         let event = world.human_event(EventKind::MemberState.as_str(), created_at)?;
         let device = world.device_record(LiveDeviceState::Active)?;
         ensure!(device.covers(created_at) && device.covers(now));
-        let attestation = sign_device_projection_attestation(
-            DeviceProjectionAttestationCore {
+        let attestation = sign_forward_device_projection_attestation(
+            ForwardDeviceProjectionAttestationCore {
                 account_id: device.account_id.clone(),
                 device_id: device.device_id.clone(),
                 device_signing_key_did: device.signing_key_did.clone(),
@@ -1516,6 +1688,12 @@ fn history_lacks_method(world: &World) -> Result<Value> {
                 authorization_window: device.window.clone(),
                 attested_at,
                 expires_at: attested_at + world.setup.attestation_ttl,
+                event_authorization: original_authorization(
+                    &device,
+                    &event,
+                    &world.station_b.service_id,
+                    &event_forward_body(&event, None)?,
+                )?,
             },
             world.station_a.method.clone(),
             &world.station_a.signing_key,
@@ -1523,7 +1701,7 @@ fn history_lacks_method(world: &World) -> Result<Value> {
         let request = PeerAuthorityForwardEventRequest::new(
             EventAdmissionSubmission::new(event),
             None,
-            Some(AccountDeviceSignerEvidence {
+            Some(ForwardAccountDeviceSignerEvidence {
                 device_projection_attestation: attestation,
                 service_resolution: world.station_a.resolution()?,
             }),
@@ -1550,12 +1728,27 @@ fn history_lacks_method(world: &World) -> Result<Value> {
 /// A non-human producer's Event forwarded with a human device's evidence.
 fn non_human_carries_evidence(world: &World, event: Event) -> Result<Value> {
     ensure!(event.human_device_producer()?.is_none());
-    // Positive control: without evidence the forward is well formed.
-    PeerAuthorityForwardEventRequest::new(
+    // A Service has no Human evidence. An Agent additionally requires its
+    // independent Agent carrier, so absence is not a valid Agent forward.
+    let without_human = PeerAuthorityForwardEventRequest::new(
         EventAdmissionSubmission::new(event.clone()),
         None,
         None,
-    )?;
+    );
+    if event.actual_signer().as_account_id().is_some() {
+        let missing_agent = without_human
+            .err()
+            .context("an Agent forward validated without its required Agent carrier")?;
+        ensure!(missing_agent.error_code() == Some(ErrorCode::SchemaViolation));
+    } else {
+        without_human?;
+    }
+    ensure!(
+        arkret_models_collaboration::authority_commit::validate_producer_device_evidence_presence(
+            &event, None,
+        )?
+        .is_none()
+    );
     let mut account = world.account_station(LiveDeviceState::Active)?;
     let honest = account.forward_event(
         world.human_event(
@@ -1564,6 +1757,17 @@ fn non_human_carries_evidence(world: &World, event: Event) -> Result<Value> {
         )?,
         world.setup.attested_at,
     )?;
+    // Check the Human sibling's forbidden presence directly, independently of
+    // the separate missing-Agent-carrier gate, before the actual zero-write refusal.
+    let evidence = body_evidence(&honest)?;
+    let wrong_human =
+        arkret_models_collaboration::authority_commit::validate_producer_device_evidence_presence(
+            &event,
+            Some(&evidence),
+        )
+        .err()
+        .context("a non-Human producer accepted the Human sibling")?;
+    ensure!(wrong_human.error_code() == Some(ErrorCode::SchemaViolation));
     let body = json!({
         "branch": "authority_forward",
         "event_submission": EventAdmissionSubmission::new(event),
@@ -1690,10 +1894,19 @@ impl ForwardingWorld {
 
     /// Evidence the forwarding Station signs fresh for one attempt from its
     /// live device gate.
-    pub(super) fn fresh_evidence(&self, event: &Event) -> Result<AccountDeviceSignerEvidence> {
+    pub(super) fn fresh_evidence(
+        &self,
+        event: &Event,
+        request: &PeerAuthorityForwardEventRequest,
+    ) -> Result<ForwardAccountDeviceSignerEvidence> {
+        ensure!(request.event_submission.event == *event);
         let mut station = self.0.account_station(LiveDeviceState::Active)?;
         station
-            .fresh_evidence(event, self.0.setup.attested_at)?
+            .fresh_evidence(
+                event,
+                self.0.setup.attested_at,
+                &serde_json::to_value(request)?,
+            )?
             .context("the forwarded Event has a human-device producer")
     }
 
@@ -1701,14 +1914,21 @@ impl ForwardingWorld {
     /// step between request validation and the Event's own admission.
     pub(super) fn verify_forwarded_producer(
         &self,
-        event: &Event,
-        evidence: Option<&AccountDeviceSignerEvidence>,
+        request: &PeerAuthorityForwardEventRequest,
     ) -> std::result::Result<(), ErrorCode> {
-        let evidence = evidence.ok_or(ErrorCode::SchemaViolation)?;
+        let event = &request.event_submission.event;
+        let evidence = request
+            .producer_device_evidence
+            .as_ref()
+            .ok_or(ErrorCode::SchemaViolation)?;
+        let body = serde_json::to_value(request).map_err(|_| ErrorCode::SchemaViolation)?;
         let producer = verify_forwarded_human_producer(
             evidence,
             event,
             &self.0.station_a.service_id,
+            &self.0.station_b.service_id,
+            &arkret_models_collaboration::authority_commit::authority_forward_body_digest(&body)
+                .map_err(|_| ErrorCode::SchemaViolation)?,
             DigestSuite::Sha256,
             self.0.setup.now,
         )

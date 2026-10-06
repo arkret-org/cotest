@@ -19,7 +19,7 @@
       },
       "cotest_rust": {
         "source_file_count": 424,
-        "source_sha256": "87e75d8f250717b9fdc71c449f18a309ef7f7be3fd1aa915c0154b88d622320c",
+        "source_sha256": "5d6e652258f490d8b93aa34e0e3dca52aa4cd5cf061d63394ec64cdd542b50af",
         "evidence_count": 132,
         "covered_operation_count": 71
       },
@@ -7090,11 +7090,11 @@
         "protocol_kat": [
           {
             "file": "cotest/src/conformance/authority_forward_genesis_material.rs",
-            "line": 378,
+            "line": 377,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              378
+              377
             ],
             "protected_oracle": false,
             "scope_sha256": "9d3960e2596bb88eebf9eaa874edcabf04c2af09cd2fec6c1e658e39bddd079e",
@@ -7107,11 +7107,11 @@
           },
           {
             "file": "cotest/src/conformance/authority_forward_genesis_material.rs",
-            "line": 756,
+            "line": 768,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              756
+              768
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -17400,11 +17400,11 @@
           },
           {
             "file": "cotest/src/conformance/authority_forward_genesis_material.rs",
-            "line": 379,
+            "line": 378,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              379
+              378
             ],
             "protected_oracle": false,
             "scope_sha256": "0038c66d59999e7015f4bbd82a9c9151e727e399d190ef0242fd7c6db9f02e23",
