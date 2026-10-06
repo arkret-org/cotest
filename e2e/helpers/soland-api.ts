@@ -2770,7 +2770,7 @@ export async function rawPushFederationEvents(
 ) {
   return await rawPushCommittedReplication(
     request,
-    await committedReplicationRows(request, events, opts.acceptedSource),
+    await committedReplicationRows(request, events, opts, opts.acceptedSource),
     opts,
   );
 }
@@ -2784,7 +2784,7 @@ export async function pushCommittedRowsApi(
 ): Promise<PeerCommittedReplicationOutcome> {
   const response = await rawPushCommittedReplication(
     request,
-    rows.map((row) => ({ event_submission: { event: row.event }, source_commit: row.commit })),
+    rows.map(committedRowForReplication),
     opts,
   );
   const outcome = await expectJsonOk<PeerCommittedReplicationOutcome>(
@@ -2941,11 +2941,15 @@ export async function rawSubmitPeerInviteDeliveryApi(
 type CommittedEventSubmission = {
   event_submission: { event: Record<string, unknown> };
   source_commit: Record<string, unknown>;
+  producer_signer_fact?: Record<string, unknown>;
+  genesis_event_ref?: string;
+  welcomes?: Array<Record<string, unknown>>;
 };
 
 async function committedReplicationRows(
   request: APIRequestContext,
   events: Array<Record<string, unknown>>,
+  opts: PeerPushOpts,
   acceptedSource?: { token: string; server?: SolandKey },
 ): Promise<CommittedEventSubmission[]> {
   return Promise.all(events.map(async (event) => {
@@ -2972,7 +2976,30 @@ async function committedReplicationRows(
     if (!view.event || view.event.event_id !== eventId || !view.commit) {
       throw new Error(`source Station did not disclose the accepted Event ${eventId}`);
     }
-    return { event_submission: { event: view.event }, source_commit: view.commit };
+    const original = { event: view.event, commit: view.commit };
+    if (view.commit.producer_signer_fact_digest !== undefined) {
+      // Self Full deliberately has no peer-only facts. Read only the existing
+      // destination-authorized peer scan, at this exact Realm-stream position.
+      const stream = view.commit.stream_ref as Record<string, unknown> | undefined;
+      const position = view.commit.stream_position;
+      if (stream?.kind !== "realm" || stream.realm_id !== opts.realmId ||
+          !Number.isSafeInteger(position) || Number(position) < 0) {
+        throw new Error("replication source lacks an authorized original signer fact carrier");
+      }
+      const page = await scanPeerRealmStreamApi(request, {
+        server: source.server ?? "server1",
+        sourceServiceId: opts.destination ?? solandServiceId(opts.server),
+        realmId: opts.realmId,
+        afterPosition: Number(position) === 0 ? null : Number(position) - 1,
+        limit: 1,
+      });
+      const rows = fullCommittedRows(page);
+      if (rows.length !== 1 || canonicalJson(rows[0]) !== canonicalJson(original)) {
+        throw new Error("authorized peer source does not disclose the exact original Event and Commit");
+      }
+      return committedRowForReplication(rows[0]);
+    }
+    return committedRowForReplication(original);
   }));
 }
 
@@ -3032,10 +3059,75 @@ export async function scanPeerRealmStreamApi(
 
 /// The full rows of a scan page, in stream order. A withheld row carries no
 /// Event bytes and can never be replicated as one.
+// Local association only: Full remains the official closed {event, commit}.
+// Peer-only facts belong to the registered page sibling, never to self Full.
+const originalPeerRowMaterials = new WeakMap<CommittedEventFullView, {
+  originalFull: string;
+  producerSignerFact?: Record<string, unknown>;
+}>();
+
+function committedRowForReplication(row: CommittedEventFullView): CommittedEventSubmission {
+  const material = originalPeerRowMaterials.get(row);
+  if (material && material.originalFull !== canonicalJson(row)) {
+    throw new Error("replication original changed after its authorized peer scan");
+  }
+  if (row.event.event_id !== row.commit.event_ref) {
+    throw new Error("replication requires the exact original Event and covering Commit");
+  }
+  // These two registered readers do not carry governance-frozen MLS Genesis
+  // or destination Welcome inventory. Never infer either from a base/current.
+  if (row.event.kind === "ak.mls.commit") {
+    throw new Error("replicated MLS Commit requires original genesis_event_ref provenance");
+  }
+  const digest = row.commit.producer_signer_fact_digest;
+  const fact = material?.producerSignerFact;
+  if ((digest !== undefined) !== (fact !== undefined) || digest === null ||
+      (digest !== undefined && (typeof digest !== "string" ||
+        digest !== `sha256:${sha256CanonicalJson(fact)}`))) {
+    throw new Error("replication signer fact and original Commit digest must match");
+  }
+  return {
+    event_submission: { event: row.event }, source_commit: row.commit,
+    ...(fact === undefined ? {} : { producer_signer_fact: fact }),
+  };
+}
+
 export function fullCommittedRows(page: StreamScanOutcome): CommittedEventFullView[] {
-  return page.committed_events.filter(
+  // Match the SDK PeerStreamScanOutcome ordered exact-target association.
+  const facts = (page as unknown as Record<string, unknown>).producer_signer_facts;
+  if (!Array.isArray(facts)) {
+    throw new Error("authorized peer scan lacks its registered original signer fact inventory");
+  }
+  const rows = page.committed_events.filter(
     (row): row is CommittedEventFullView => "event" in row,
   );
+  let next = 0;
+  for (const row of rows) {
+    let fact: Record<string, unknown> | undefined;
+    if (row.commit.producer_signer_fact_digest !== undefined) {
+      const entry = facts[next++] as { target?: unknown; producer_signer_fact?: unknown } | undefined;
+      const target = {
+        event_id: row.event.event_id, commit_id: row.commit.commit_id,
+        stream_ref: row.commit.stream_ref, stream_position: row.commit.stream_position,
+      };
+      if (!entry || canonicalJson(entry.target) !== canonicalJson(target) ||
+          !entry.producer_signer_fact || typeof entry.producer_signer_fact !== "object" ||
+          Array.isArray(entry.producer_signer_fact)) {
+        throw new Error("peer Full row lacks its exact ordered original signer fact");
+      }
+      fact = entry.producer_signer_fact as Record<string, unknown>;
+      if (row.commit.producer_signer_fact_digest !== `sha256:${sha256CanonicalJson(fact)}`) {
+        throw new Error("peer original signer fact differs from its original Commit digest");
+      }
+    }
+    originalPeerRowMaterials.set(row, {
+      originalFull: canonicalJson(row), producerSignerFact: fact,
+    });
+  }
+  if (next !== facts.length) {
+    throw new Error("peer scan contains extra or unordered original signer facts");
+  }
+  return rows;
 }
 
 /// Every full row of the Realm stream that `sourceServiceId` may read from
