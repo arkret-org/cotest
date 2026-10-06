@@ -443,7 +443,7 @@ fn run_authority_chain_case(
             let first_chain = signed_chain()?;
             let mut conflicting_chain = signed_chain()?;
             let transition = &mut conflicting_chain.bundle.authority_transitions[0];
-            transition.handoff.snapshot_digest = hash('c')?;
+            transition.handoff.snapshot_ref = RealmSnapshotId::from_digest([0x55; 32]);
             transition.handoff = seal_handoff(
                 transition.handoff.clone(),
                 &signing_key(0xA1),
@@ -646,6 +646,7 @@ fn commit(
             governance_generation: generation,
             authority_ref,
             committed_at: issued_at(),
+            producer_signer_fact_digest: None,
             signature: placeholder_signature(DetachedSignatureContext::RealmCommit)?,
         },
         did,
@@ -760,7 +761,9 @@ fn signed_chain() -> Result<SignedChain> {
             to_service_id: core_id(STATION_B)?,
             final_stream_heads_digest: hash('a')?,
             snapshot_ref: RealmSnapshotId::from_digest([0x44; 32]),
-            snapshot_digest: hash('b')?,
+            historical_signer_facts_digest: Some(
+                arkret_models_collaboration::authority_commit::historical_signer_facts_digest(&[])?,
+            ),
             change_event_ref: change_event.event_id.clone(),
             change_commit_id: change_commit.commit_id.clone(),
             old_authority_signature: placeholder_signature(

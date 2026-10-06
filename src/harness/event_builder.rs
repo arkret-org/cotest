@@ -81,10 +81,7 @@ fn event_station_id(actor: &str) -> DidCoreId {
         })
 }
 
-pub(crate) fn event_signing_identity_for_device(
-    actor: &str,
-    device_id: &str,
-) -> ([u8; 32], DidUrl) {
+pub fn event_signing_identity_for_device(actor: &str, device_id: &str) -> ([u8; 32], DidUrl) {
     let verification_method = DidUrl::new(format!("{actor}#{}", canonical_device_id(device_id)))
         .expect("cotest client Event signer verification method is a DID URL");
     REGISTERED_EVENT_SIGNERS
@@ -1034,7 +1031,7 @@ pub(crate) fn member_transition_payload(
     )
 }
 
-pub(crate) fn invite_create_payload(
+pub fn invite_create_payload(
     invitee: &str,
     account_station_id: &str,
     introduction_evidence_digest: impl Into<String>,

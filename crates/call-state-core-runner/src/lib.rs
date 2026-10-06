@@ -258,6 +258,7 @@ fn committed_transition(from: &str, to: &str) -> CommittedEventFullView {
                 [0x43; 32],
             )),
             committed_at: Utc.timestamp_opt(1_800_000_001, 0).unwrap(),
+            producer_signer_fact_digest: None,
             signature: DetachedObjectSignature {
                 context: DetachedSignatureContext::RealmCommit,
                 signature_algorithm: DetachedSignatureAlgorithm::Ed25519,

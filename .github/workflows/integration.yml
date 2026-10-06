@@ -26,6 +26,20 @@ jobs:
     name: bringup soland + coauth + floria + cotest
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: cotest
+          POSTGRES_PASSWORD: cotest-ci
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cotest -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
     env:
       SOLAND_BIN: ${{ github.workspace }}/soland/target/release/soland
       COAUTH_BIN: ${{ github.workspace }}/coauth/target/release/coauth
@@ -34,6 +48,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           path: cotest
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/arkret-spec
+          path: arkret-spec
+          ref: ${{ env.SIBLING_REF }}
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/arkret-rust-sdk
@@ -147,7 +166,19 @@ jobs:
       - name: run cotest harness
         working-directory: cotest
         # Default tests must pass before any live opt-in gates run.
+        # Includes every existing runner crate plus the mandatory cotest-inkson-client-tests member.
+        # The combined 54-runner audit lives in that client package; root services-live remains separate.
         run: cargo test --workspace --locked
+      - name: mandatory production Inkson client lane
+        working-directory: cotest
+        shell: pwsh
+        env:
+          COTEST_SOLAND_DATABASE_URL: postgresql://cotest:cotest-ci@127.0.0.1:5432/postgres
+          COTEST_REQUIRE_LIVE_SERVICES: "1"
+        # The exact 31 selections use the original live fixtures. The planner
+        # rejects missing prerequisites, missing targets and empty selections;
+        # the root services-live six-test profile remains independently intact.
+        run: ./scripts/run-server-conformance.ps1 -Profile inkson-client-live -Runtime process
       - name: production placeholder-proof rejection sentinel
         working-directory: cotest
         # This is the only reverse guard for "production soland rejects the

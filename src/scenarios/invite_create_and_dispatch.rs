@@ -35,14 +35,14 @@ use crate::scenarios::security_rotation_live::rotation_station_env;
 /// One Station whose Account Authority and session-grant introspection is a
 /// mock Coauth, so an Account can hold the standard session grant that
 /// `ak.self.events.command.submit.v1` requires of every producer.
-pub(crate) struct InviteStation {
-    pub(crate) server: ArkretServer,
+pub struct InviteStation {
+    pub server: ArkretServer,
     coauth: MockCoauthIntrospectionServer,
     _database: EphemeralPg,
 }
 
 impl InviteStation {
-    pub(crate) async fn spawn(name: &str) -> Result<Self> {
+    pub async fn spawn(name: &str) -> Result<Self> {
         let database = spawn_ephemeral_postgres_for("COTEST_SOLAND_DATABASE_URL")?.context(
             "the invite scenarios need PostgreSQL; set COTEST_SOLAND_DATABASE_URL or make Docker available",
         )?;
@@ -66,11 +66,7 @@ impl InviteStation {
 
     /// Provision `label`'s principal with `device` as its founding device and
     /// return a client presenting that device's standard session grant.
-    pub(crate) async fn grant_bearing_client(
-        &self,
-        label: &str,
-        device: &str,
-    ) -> Result<TestActorClient> {
+    pub async fn grant_bearing_client(&self, label: &str, device: &str) -> Result<TestActorClient> {
         let actor = actor_did_for_service_did(self.server.service_did(), label)?;
         let provisioned = self.server.demo_client(&actor, device).await?;
         let principal = provisioned

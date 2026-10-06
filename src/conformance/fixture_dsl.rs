@@ -36,48 +36,48 @@ use serde_json::{Map, Value};
 ///
 /// Note this reads through `Value::get`, so a non-object `value` is reported
 /// as a missing field rather than panicking.
-pub(crate) fn required_field<'a>(value: &'a Value, field: &str) -> Result<&'a Value> {
+pub fn required_field<'a>(value: &'a Value, field: &str) -> Result<&'a Value> {
     value
         .get(field)
         .ok_or_else(|| anyhow!("missing object field {field}"))
 }
 
-pub(crate) fn required_str<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
+pub fn required_str<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
     value
         .get(field)
         .and_then(Value::as_str)
         .ok_or_else(|| anyhow!("missing string field {field}"))
 }
 
-pub(crate) fn required_u64(value: &Value, field: &str) -> Result<u64> {
+pub fn required_u64(value: &Value, field: &str) -> Result<u64> {
     value
         .get(field)
         .and_then(Value::as_u64)
         .ok_or_else(|| anyhow!("missing u64 field {field}"))
 }
 
-pub(crate) fn required_i64(value: &Value, field: &str) -> Result<i64> {
+pub fn required_i64(value: &Value, field: &str) -> Result<i64> {
     value
         .get(field)
         .and_then(Value::as_i64)
         .ok_or_else(|| anyhow!("missing i64 field {field}"))
 }
 
-pub(crate) fn required_bool(value: &Value, field: &str) -> Result<bool> {
+pub fn required_bool(value: &Value, field: &str) -> Result<bool> {
     value
         .get(field)
         .and_then(Value::as_bool)
         .ok_or_else(|| anyhow!("missing bool field {field}"))
 }
 
-pub(crate) fn required_object<'a>(value: &'a Value, field: &str) -> Result<&'a Map<String, Value>> {
+pub fn required_object<'a>(value: &'a Value, field: &str) -> Result<&'a Map<String, Value>> {
     value
         .get(field)
         .and_then(Value::as_object)
         .ok_or_else(|| anyhow!("missing object field {field}"))
 }
 
-pub(crate) fn required_array<'a>(value: &'a Value, field: &str) -> Result<&'a [Value]> {
+pub fn required_array<'a>(value: &'a Value, field: &str) -> Result<&'a [Value]> {
     value
         .get(field)
         .and_then(Value::as_array)
@@ -87,7 +87,7 @@ pub(crate) fn required_array<'a>(value: &'a Value, field: &str) -> Result<&'a [V
 
 // ── Field access on an already-destructured object ──────────────────────────
 
-pub(crate) fn required_str_obj<'a>(value: &'a Map<String, Value>, field: &str) -> Result<&'a str> {
+pub fn required_str_obj<'a>(value: &'a Map<String, Value>, field: &str) -> Result<&'a str> {
     value
         .get(field)
         .and_then(Value::as_str)
@@ -97,27 +97,27 @@ pub(crate) fn required_str_obj<'a>(value: &'a Map<String, Value>, field: &str) -
 // ── The `expected` block ────────────────────────────────────────────────────
 
 /// Borrow a case's `expected` block.
-pub(crate) fn expected(value: &Value) -> Result<&Value> {
+pub fn expected(value: &Value) -> Result<&Value> {
     value
         .get("expected")
         .ok_or_else(|| anyhow!("missing expected object"))
 }
 
-pub(crate) fn expected_str<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
+pub fn expected_str<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
     value
         .pointer(&format!("/expected/{field}"))
         .and_then(Value::as_str)
         .ok_or_else(|| anyhow!("case missing expected.{field}"))
 }
 
-pub(crate) fn expected_bool(value: &Value, field: &str) -> Result<bool> {
+pub fn expected_bool(value: &Value, field: &str) -> Result<bool> {
     value
         .pointer(&format!("/expected/{field}"))
         .and_then(Value::as_bool)
         .ok_or_else(|| anyhow!("case missing bool expected.{field}"))
 }
 
-pub(crate) fn expected_u64(value: &Value, field: &str) -> Result<u64> {
+pub fn expected_u64(value: &Value, field: &str) -> Result<u64> {
     value
         .pointer(&format!("/expected/{field}"))
         .and_then(Value::as_u64)
@@ -127,7 +127,7 @@ pub(crate) fn expected_u64(value: &Value, field: &str) -> Result<u64> {
 /// Optional variants: an absent `expected.<field>` is `None`, but a present
 /// field of the wrong type is still an error. Fixtures use this where the
 /// expectation only applies to some cases.
-pub(crate) fn expected_str_opt<'a>(value: &'a Value, field: &str) -> Result<Option<&'a str>> {
+pub fn expected_str_opt<'a>(value: &'a Value, field: &str) -> Result<Option<&'a str>> {
     match value.pointer(&format!("/expected/{field}")) {
         Some(Value::String(text)) => Ok(Some(text)),
         Some(_) => bail!("expected.{field} must be a string"),
@@ -135,7 +135,7 @@ pub(crate) fn expected_str_opt<'a>(value: &'a Value, field: &str) -> Result<Opti
     }
 }
 
-pub(crate) fn expected_u64_opt(value: &Value, field: &str) -> Result<Option<u64>> {
+pub fn expected_u64_opt(value: &Value, field: &str) -> Result<Option<u64>> {
     match value.pointer(&format!("/expected/{field}")) {
         Some(Value::Number(number)) => number
             .as_u64()
@@ -149,7 +149,7 @@ pub(crate) fn expected_u64_opt(value: &Value, field: &str) -> Result<Option<u64>
 // ── String collections ──────────────────────────────────────────────────────
 
 /// Borrowed string set from a required array field.
-pub(crate) fn string_set<'a>(value: &'a Value, field: &str) -> Result<BTreeSet<&'a str>> {
+pub fn string_set<'a>(value: &'a Value, field: &str) -> Result<BTreeSet<&'a str>> {
     required_array(value, field)?
         .iter()
         .map(|entry| {
@@ -161,7 +161,7 @@ pub(crate) fn string_set<'a>(value: &'a Value, field: &str) -> Result<BTreeSet<&
 }
 
 /// Owned string set where `value` *is* the array (no field indirection).
-pub(crate) fn string_set_of(value: &Value) -> Result<BTreeSet<String>> {
+pub fn string_set_of(value: &Value) -> Result<BTreeSet<String>> {
     value
         .as_array()
         .ok_or_else(|| anyhow!("expected string array"))?
@@ -175,7 +175,7 @@ pub(crate) fn string_set_of(value: &Value) -> Result<BTreeSet<String>> {
 }
 
 /// Owned string vector from a required array field.
-pub(crate) fn string_vec(value: &Value, field: &str) -> Result<Vec<String>> {
+pub fn string_vec(value: &Value, field: &str) -> Result<Vec<String>> {
     required_array(value, field)?
         .iter()
         .map(|entry| {
@@ -190,7 +190,7 @@ pub(crate) fn string_vec(value: &Value, field: &str) -> Result<Vec<String>> {
 /// Borrowed string vector from an *optional* array field: an absent field
 /// yields an empty vector. Retained separately from [`string_vec`] because a
 /// handful of suites treat "field absent" and "field empty" alike.
-pub(crate) fn string_array_field<'a>(value: &'a Value, field: &str) -> Result<Vec<&'a str>> {
+pub fn string_array_field<'a>(value: &'a Value, field: &str) -> Result<Vec<&'a str>> {
     value
         .get(field)
         .and_then(Value::as_array)
@@ -211,7 +211,7 @@ pub(crate) fn string_array_field<'a>(value: &'a Value, field: &str) -> Result<Ve
 /// that intentionally read `runner` as a free-form `Value` keep doing so.
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct FixtureRunner {
-    pub(crate) kind: String,
-    pub(crate) entrypoint: String,
+pub struct FixtureRunner {
+    pub kind: String,
+    pub entrypoint: String,
 }

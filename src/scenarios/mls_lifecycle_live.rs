@@ -68,24 +68,24 @@ use crate::scenarios::identity_test_support::HARNESS_INTERNAL_AUTHORITY_SECRET;
 const GROUP: &str = "mls-keypackage-lifecycle";
 const ALICE_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002201";
 const BOB_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002202";
-pub(crate) const ACTIVE_SUITE: &str = "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519";
+pub const ACTIVE_SUITE: &str = "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519";
 const RESERVED_SUITE: &str = "MLS_128_DHKEMX25519_CHACHA20POLY1305_SHA256_Ed25519";
-pub(crate) const CONTENT_CAPABILITY: &str = "ak.content.v1";
+pub const CONTENT_CAPABILITY: &str = "ak.content.v1";
 
 /// One Account with its standard-grant client and the founding device key
 /// every signature of this scenario is made with.
-pub(crate) struct Member {
-    pub(crate) client: TestActorClient,
-    pub(crate) account: AccountId,
-    pub(crate) actor: ActorId,
-    pub(crate) device: DeviceId,
-    pub(crate) method: DidUrl,
-    pub(crate) key: SigningKey,
-    pub(crate) authorize_event_id: EventId,
+pub struct Member {
+    pub client: TestActorClient,
+    pub account: AccountId,
+    pub actor: ActorId,
+    pub device: DeviceId,
+    pub method: DidUrl,
+    pub key: SigningKey,
+    pub authorize_event_id: EventId,
 }
 
 impl Member {
-    pub(crate) async fn provision(
+    pub async fn provision(
         station: &ArkretServer,
         coauth: &MockCoauthIntrospectionServer,
         label: &str,
@@ -115,7 +115,7 @@ impl Member {
 
     /// The MLS endpoint of the founding device: its LeafNode key is the
     /// authorized device key and its BasicCredential the complete ActorId.
-    pub(crate) fn mls_identity(&self) -> Result<ArkretMlsIdentity> {
+    pub fn mls_identity(&self) -> Result<ArkretMlsIdentity> {
         Ok(ArkretMlsIdentity::new_human_device(
             self.actor.clone(),
             self.device.clone(),
@@ -124,21 +124,33 @@ impl Member {
     }
 }
 
+/// Optional client observation over the actual server lifecycle; the harness never depends on its
+/// UI consumer.
+#[async_trait::async_trait(?Send)]
+pub trait MlsClientObserver {
+    async fn observe_ordinary_call_invite(
+        &self,
+        sender: &Member,
+        holder: &Member,
+        station: &crate::harness::ArkretServer,
+        realm: &arkret_wire::RealmId,
+        accepted_group: &arkret_wire::EventId,
+        sender_group: &mut arkret::ArkretMlsGroup,
+        holder_group: &arkret::ArkretMlsGroup,
+        observe_receipt: bool,
+    ) -> Result<()>;
+}
+
 pub async fn run_same_station_mls_keypackage_lifecycle_live() -> Result<()> {
-    run_with_blocklist_observer(false, false).await
+    run_with_blocklist_observer(None, false).await
 }
 
-pub async fn run_blocklist_call_invite_live() -> Result<()> {
-    run_with_blocklist_observer(true, false).await
-}
-
-pub async fn run_blocklist_automatic_receipt_live() -> Result<()> {
-    run_with_blocklist_observer(true, true).await
-}
-
-async fn run_with_blocklist_observer(observe_blocklist: bool, observe_receipt: bool) -> Result<()> {
+pub async fn run_with_blocklist_observer(
+    observer: Option<&dyn MlsClientObserver>,
+    observe_receipt: bool,
+) -> Result<()> {
     let Some(database) = database(GROUP)? else {
-        if observe_blocklist {
+        if observer.is_some() {
             bail!("blocklist Call evidence requires an isolated PostgreSQL database");
         }
         return Ok(());
@@ -153,7 +165,7 @@ async fn run_with_blocklist_observer(observe_blocklist: bool, observe_receipt: b
     )
     .await?
     else {
-        if observe_blocklist {
+        if observer.is_some() {
             bail!("blocklist Call evidence requires a prebuilt real Soland binary");
         }
         return skip_or_fail(GROUP, "prebuilt Soland unavailable");
@@ -645,18 +657,19 @@ async fn run_with_blocklist_observer(observe_blocklist: bool, observe_receipt: b
         "Bob could not decrypt Alice's message at the accepted epoch"
     );
 
-    if observe_blocklist {
-        crate::conformance::account_blocklist_projection::observe_ordinary_call_invite(
-            &alice,
-            &bob,
-            station,
-            &realm_id,
-            &commit_event.event_id,
-            &mut alice_group,
-            &bob_group,
-            observe_receipt,
-        )
-        .await?;
+    if let Some(observer) = observer {
+        observer
+            .observe_ordinary_call_invite(
+                &alice,
+                &bob,
+                station,
+                &realm_id,
+                &commit_event.event_id,
+                &mut alice_group,
+                &bob_group,
+                observe_receipt,
+            )
+            .await?;
     }
 
     // Restart: the claim ledger replays byte-identically and the ACKed
@@ -702,7 +715,7 @@ fn claim_request(
 /// A self claim at the requester's `source` Station for one of `target`'s
 /// device KeyPackages held by `destination`, the target's own Station.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn claim_request_between(
+pub fn claim_request_between(
     requester: &Member,
     source: &ArkretServer,
     destination: &ArkretServer,
@@ -727,7 +740,7 @@ pub(crate) fn claim_request_between(
 /// [`claim_request_between`] for an exact `(AccountId, device)` target that
 /// need not be a provisioned member.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn claim_request_to(
+pub fn claim_request_to(
     requester: &Member,
     source: &ArkretServer,
     destination: &ArkretServer,
@@ -787,7 +800,7 @@ pub(crate) fn claim_request_to(
 
 /// POST one claim with `Idempotency-Key = claim_request_id` and return the
 /// raw response body.
-pub(crate) async fn post_claim(
+pub async fn post_claim(
     client: &TestActorClient,
     body: &KeyPackagesClaimRequestBody,
 ) -> Result<(StatusCode, Vec<u8>)> {
@@ -802,7 +815,7 @@ pub(crate) async fn post_claim(
     Ok((status, response.bytes().await?.to_vec()))
 }
 
-pub(crate) async fn post_bytes_at(
+pub async fn post_bytes_at(
     client: &TestActorClient,
     path: &str,
     body: &impl serde::Serialize,
@@ -1036,14 +1049,14 @@ async fn verify_circle_activation_independence(
     Ok(())
 }
 
-pub(crate) async fn post_json(
+pub async fn post_json(
     client: &TestActorClient,
     body: &impl serde::Serialize,
 ) -> Result<(StatusCode, Value)> {
     post_json_at(client, "/_arkret/self/events", body).await
 }
 
-pub(crate) async fn post_json_at(
+pub async fn post_json_at(
     client: &TestActorClient,
     path: &str,
     body: &impl serde::Serialize,
@@ -1063,7 +1076,7 @@ pub(crate) async fn post_json_at(
     ))
 }
 
-pub(crate) fn problem_type(bytes: &[u8]) -> Result<String> {
+pub fn problem_type(bytes: &[u8]) -> Result<String> {
     let body: Value = serde_json::from_slice(bytes)?;
     Ok(body["type"]
         .as_str()
@@ -1072,11 +1085,11 @@ pub(crate) fn problem_type(bytes: &[u8]) -> Result<String> {
         .to_owned())
 }
 
-pub(crate) fn json_equal(left: &[u8], right: &[u8]) -> Result<bool> {
+pub fn json_equal(left: &[u8], right: &[u8]) -> Result<bool> {
     Ok(serde_json::from_slice::<Value>(left)? == serde_json::from_slice::<Value>(right)?)
 }
 
-pub(crate) fn canonical(value: Value) -> Result<Value> {
+pub fn canonical(value: Value) -> Result<Value> {
     Ok(serde_json::from_slice(
         &arkret_canonical::canonical_json_bytes(&value)?,
     )?)
@@ -1085,7 +1098,7 @@ pub(crate) fn canonical(value: Value) -> Result<Value> {
 /// Upload one public MLS state Blob, bound to `realm_id` through the
 /// `blob_upload_request_body` form member, and return its content-addressed
 /// ref.
-pub(crate) async fn upload_public_blob(
+pub async fn upload_public_blob(
     client: &TestActorClient,
     realm_id: &RealmId,
     bytes: &[u8],
@@ -1105,7 +1118,7 @@ pub(crate) async fn upload_public_blob(
 }
 
 /// The claimed KeyPackage as the adder installs it from the claim record.
-pub(crate) fn claimed_keypackage_record(
+pub fn claimed_keypackage_record(
     claim: &arkret_models_crypto::KeyPackageClaimRecord,
     owner: &Member,
 ) -> Result<MlsKeyPackageRecord> {
@@ -1129,7 +1142,7 @@ pub(crate) fn claimed_keypackage_record(
 }
 
 /// Seal the Welcome for `recipient` under the method that signed the Commit.
-pub(crate) fn signed_welcome(
+pub fn signed_welcome(
     producer: &Member,
     commit_event: &Event,
     recipient: &Member,
@@ -1182,7 +1195,7 @@ pub(crate) fn signed_welcome(
 }
 
 /// The accepted Commit Event with its RealmCommit, as the Station serves it.
-pub(crate) async fn accepted_full_view(
+pub async fn accepted_full_view(
     client: &TestActorClient,
     event_id: &EventId,
 ) -> Result<CommittedEventFullView> {
@@ -1206,7 +1219,7 @@ pub(crate) async fn accepted_full_view(
 
 /// Every Welcome in the caller's recipient queue and the ACK token of the
 /// page.
-pub(crate) async fn recipient_welcomes(
+pub async fn recipient_welcomes(
     client: &TestActorClient,
 ) -> Result<(Vec<MlsWelcomeDelivery>, String)> {
     let polled = expect_json(client.get("/_arkret/self/device_messages"), StatusCode::OK).await?;
@@ -1233,7 +1246,7 @@ fn now_ms() -> u64 {
 }
 
 /// A fresh RFC 9562 UUIDv7 in its hyphenated text form.
-pub(crate) fn fresh_uuid_v7() -> String {
+pub fn fresh_uuid_v7() -> String {
     arkret_wire::MlsWelcomeDeliveryId::new_v7_at(now_ms())
         .as_str()
         .rsplit(':')

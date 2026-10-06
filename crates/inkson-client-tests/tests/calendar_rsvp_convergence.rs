@@ -8,7 +8,7 @@
 #[tokio::test(flavor = "multi_thread")]
 #[serial_test::serial]
 async fn calendar_rsvp_converges_across_concurrent_responses() {
-    cotest::scenarios::calendar_rsvp_convergence::calendar_rsvp_converges_across_concurrent_responses()
+    cotest_inkson_client_tests::scenarios::calendar_rsvp_convergence::calendar_rsvp_converges_across_concurrent_responses()
         .await
         .unwrap();
 }
@@ -16,7 +16,7 @@ async fn calendar_rsvp_converges_across_concurrent_responses() {
 #[tokio::test(flavor = "multi_thread")]
 #[serial_test::serial]
 async fn calendar_rsvp_malformed_basis_is_rejected() {
-    cotest::scenarios::calendar_rsvp_convergence::calendar_rsvp_malformed_basis_is_rejected()
+    cotest_inkson_client_tests::scenarios::calendar_rsvp_convergence::calendar_rsvp_malformed_basis_is_rejected()
         .await
         .unwrap();
 }
@@ -24,7 +24,7 @@ async fn calendar_rsvp_malformed_basis_is_rejected() {
 #[tokio::test(flavor = "multi_thread")]
 #[serial_test::serial]
 async fn calendar_rsvp_persists_across_restart_and_replay() {
-    cotest::scenarios::calendar_rsvp_convergence::calendar_rsvp_persists_across_restart_and_replay(
+    cotest_inkson_client_tests::scenarios::calendar_rsvp_convergence::calendar_rsvp_persists_across_restart_and_replay(
     )
     .await
     .unwrap();

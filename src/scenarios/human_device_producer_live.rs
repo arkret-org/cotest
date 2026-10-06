@@ -70,7 +70,7 @@ const EVIDENCE_MEMBER: &str = "producer_device_evidence";
 
 /// A self-submitting client on `server` whose session is a standard DPoP
 /// SessionGrant for its founding device, and the complete Account it acts as.
-pub(crate) async fn standard_client(
+pub async fn standard_client(
     server: &ArkretServer,
     coauth: &MockCoauthIntrospectionServer,
     label: &str,
@@ -101,7 +101,7 @@ pub(crate) async fn standard_client(
     ))
 }
 
-pub(crate) fn station_env(
+pub fn station_env(
     database_url: &str,
     coauth: &MockCoauthIntrospectionServer,
 ) -> Vec<(String, String)> {
@@ -429,7 +429,7 @@ async fn create_public_realm(
 
 /// A Realm created by `creator` under `join_rule`, whose plaintext Message
 /// bodies every Station in `plaintext_stations` may hold.
-pub(crate) async fn create_realm_with_join_rule(
+pub async fn create_realm_with_join_rule(
     creator: &TestActorClient,
     title: &str,
     join_rule: &str,
@@ -455,7 +455,7 @@ pub(crate) async fn create_realm_with_join_rule(
 
 /// `ak.self.realm_join.command.prepare.v1` on the applicant's own Station,
 /// naming the governance Station only as an untrusted locator.
-pub(crate) async fn prepare_join(
+pub async fn prepare_join(
     client: &TestActorClient,
     realm_id: &str,
     governance: &ArkretServer,
@@ -496,7 +496,7 @@ pub(crate) async fn prepare_join(
 }
 
 /// The Realm controller grants `member` the Realm-wide Message action.
-pub(crate) async fn grant_message_create(
+pub async fn grant_message_create(
     controller: &TestActorClient,
     controller_station: &ArkretServer,
     realm_id: &str,
@@ -515,7 +515,7 @@ pub(crate) async fn grant_message_create(
 
 /// The Realm controller grants `member` the Realm-wide `actions`; returns the
 /// grant's Commit.
-pub(crate) async fn grant_realm_actions(
+pub async fn grant_realm_actions(
     controller: &TestActorClient,
     controller_station: &ArkretServer,
     realm_id: &str,
@@ -596,7 +596,7 @@ fn ciphertext_message_payload(strand_id: &str, group_state_ref: &EventId) -> Res
     )?)
 }
 
-pub(crate) fn database(scenario: &str) -> Result<Option<EphemeralPg>> {
+pub fn database(scenario: &str) -> Result<Option<EphemeralPg>> {
     let database = spawn_ephemeral_postgres_for("COTEST_SOLAND_DATABASE_URL")?;
     if database.is_none() {
         skip_or_fail(scenario, "PostgreSQL unavailable")?;
@@ -604,7 +604,7 @@ pub(crate) fn database(scenario: &str) -> Result<Option<EphemeralPg>> {
     Ok(database)
 }
 
-pub(crate) fn membership_payload(
+pub fn membership_payload(
     realm_id: &str,
     member: AccountId,
     membership: MembershipPayloadState,
@@ -638,7 +638,7 @@ fn ensure_human_producer(event: &Event, account: &AccountId, device: &str) -> Re
 /// Submit through the self surface and require the committed outcome. The
 /// self submission is the bare Event: it never carries device evidence, whether
 /// the Realm is governed here or forwarded elsewhere.
-pub(crate) async fn submit_and_expect_commit(
+pub async fn submit_and_expect_commit(
     client: &TestActorClient,
     account: &AccountId,
     device: &str,
@@ -813,10 +813,7 @@ async fn submit_frozen_message_with_lost_response_and_native_reopen(
 }
 
 /// The RealmCommit is the governance Station's own signature.
-pub(crate) fn ensure_commit_signed_by(
-    commit: &RealmCommit,
-    governance: &ArkretServer,
-) -> Result<()> {
+pub fn ensure_commit_signed_by(commit: &RealmCommit, governance: &ArkretServer) -> Result<()> {
     let signer = commit
         .signature
         .verification_method
@@ -832,10 +829,7 @@ pub(crate) fn ensure_commit_signed_by(
     Ok(())
 }
 
-pub(crate) fn ensure_same_commit(
-    submitted: &RealmCommit,
-    observed: &CommittedEventView,
-) -> Result<()> {
+pub fn ensure_same_commit(submitted: &RealmCommit, observed: &CommittedEventView) -> Result<()> {
     ensure!(
         observed.commit() == submitted,
         "the governance Station holds a different RealmCommit for {}",
@@ -844,7 +838,7 @@ pub(crate) fn ensure_same_commit(
     Ok(())
 }
 
-pub(crate) async fn wait_for_committed(
+pub async fn wait_for_committed(
     client: &TestActorClient,
     event_id: &EventId,
 ) -> Result<CommittedEventView> {
@@ -862,7 +856,7 @@ pub(crate) async fn wait_for_committed(
     }
 }
 
-pub(crate) async fn ensure_never_committed(
+pub async fn ensure_never_committed(
     client: &TestActorClient,
     event_id: &EventId,
     window: Duration,
@@ -1524,4 +1518,93 @@ pub async fn run_plaintext_poll_revision_live() -> Result<()> {
     );
     ensure!(current.selections == ["a".to_owned()].into_iter().collect());
     Ok(())
+}
+
+/// Read only the original target's historical source, never current admission.
+pub async fn original_human_signer_fact(
+    client: &TestActorClient,
+    event: &Event,
+    commit: &RealmCommit,
+) -> Result<arkret_models_collaboration::authority_commit::HumanHistoricalSignerFact> {
+    use arkret_models_collaboration::authority_commit::HumanHistoricalSignerFact;
+    use arkret_models_identity::{
+        HistoricalSignerKeyQuerySender, SignerKeyQueryResult, SignerKeyQuerySelector,
+        SignerKeysQueryRequestBody,
+    };
+    ensure!(
+        commit.producer_signer_fact_digest.is_some(),
+        "new ordinary Human acceptance must bind its original signer fact"
+    );
+    let producer = event
+        .human_device_producer()?
+        .context("original Human producer")?;
+    let proof = event
+        .producer_proof
+        .as_ref()
+        .context("original producer proof")?;
+    let request = SignerKeysQueryRequestBody {
+        request_id: RequestId::new(format!(
+            "ak:request:{}",
+            crate::scenarios::mls_lifecycle_live::fresh_uuid_v7()
+        ))?,
+        realm_id: event.realm_id.clone(),
+        recipient_account_id: producer.account_id.clone(),
+        queries: vec![SignerKeyQuerySelector::HistoricalEvent {
+            sender: HistoricalSignerKeyQuerySender::AccountDevice {
+                actor: event.actual_signer().clone(),
+                device_id: producer.device_id.clone(),
+                verification_method: proof.verification_method.clone(),
+                committed_event_ref: arkret_wire::CommittedEventRef {
+                    event_id: event.event_id.clone(),
+                    commit_id: commit.commit_id.clone(),
+                    stream_ref: commit.stream_ref.clone(),
+                    stream_position: commit.stream_position,
+                },
+            },
+        }],
+    };
+    let outcome = client.sdk().signer_keys_query(&request).await?;
+    outcome.validate_for_request(&request)?;
+    let [
+        SignerKeyQueryResult::HistoricalResolved {
+            selector,
+            key,
+            accepted_at,
+        },
+    ] = outcome.results.as_slice()
+    else {
+        bail!("original target's historical Human signer fact is unavailable");
+    };
+    ensure!(
+        selector == &request.queries[0],
+        "historical selector changed"
+    );
+    let fact = HumanHistoricalSignerFact {
+        event_id: event.event_id.clone(),
+        actor: event.actual_signer().clone(),
+        device_id: producer.device_id,
+        verification_method: proof.verification_method.clone(),
+        key: key.clone(),
+        accepted_at: *accepted_at,
+    };
+    let suite = event.event_id.digest_suite_code().digest_suite();
+    fact.validate_commit_binding(
+        &arkret_wire::CommittedEventFullView {
+            event: event.clone(),
+            commit: commit.clone(),
+        },
+        suite,
+    )?;
+    let bytes = arkret_signatures::EventProofBuilder::new().envelope_bytes(event)?;
+    let public_key = arkret_signatures::PublicKeyMaterial::Ed25519Raw {
+        bytes: arkret_canonical::base64url_decode(fact.key.public_key_b64u.as_str())?,
+    };
+    arkret_signatures::verify_ed25519_detached_jws_proof_with_digest_suite(
+        proof,
+        &bytes,
+        &event.actor_id,
+        &public_key,
+        suite,
+    )?;
+    Ok(fact)
 }

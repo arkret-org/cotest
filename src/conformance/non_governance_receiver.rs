@@ -388,6 +388,7 @@ impl World {
                     genesis_event.event_id.clone(),
                 ),
                 committed_at: start,
+                producer_signer_fact_digest: None,
                 signature: placeholder_signature(DetachedSignatureContext::RealmCommit)?,
             },
             STATION_A,
@@ -415,6 +416,7 @@ impl World {
                     genesis_event.event_id.clone(),
                 ),
                 committed_at: start + Duration::seconds(1),
+                producer_signer_fact_digest: None,
                 signature: placeholder_signature(DetachedSignatureContext::RealmCommit)?,
             },
             STATION_A,
@@ -430,7 +432,11 @@ impl World {
                 to_service_id: core_id(STATION_B)?,
                 final_stream_heads_digest: hash('a')?,
                 snapshot_ref: RealmSnapshotId::from_digest([0x44; 32]),
-                snapshot_digest: hash('b')?,
+                historical_signer_facts_digest: Some(
+                    arkret_models_collaboration::authority_commit::historical_signer_facts_digest(
+                        &[],
+                    )?,
+                ),
                 change_event_ref: change_event.event_id.clone(),
                 change_commit_id: change_commit.commit_id.clone(),
                 old_authority_signature: placeholder_signature(
@@ -623,6 +629,7 @@ impl World {
                 governance_generation: 1,
                 authority_ref: RealmCommitAuthorityRef::Handoff(self.handoff_id.clone()),
                 committed_at: self.start + Duration::seconds(11),
+                producer_signer_fact_digest: None,
                 signature: placeholder_signature(DetachedSignatureContext::RealmCommit)?,
             },
             station,

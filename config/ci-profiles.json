@@ -26,31 +26,38 @@
       "cargo_tests": [
         {
           "target": "service_surface",
-          "filter": "server_exposes_core_service_surface"
+          "filter": "server_exposes_core_service_surface",
+          "package": "cotest"
         },
         {
           "target": "api_contracts_auth",
-          "filter": "framework_errors_and_invalid_json_use_arkret_envelopes"
+          "filter": "framework_errors_and_invalid_json_use_arkret_envelopes",
+          "package": "cotest"
         },
         {
           "target": "api_contracts_auth",
-          "filter": "account_auth_and_session_edges_are_enforced"
+          "filter": "account_auth_and_session_edges_are_enforced",
+          "package": "cotest"
         },
         {
           "target": "conformance_fixtures",
-          "filter": "event_envelope_fixture_suite_matches_reference_semantics"
+          "filter": "event_envelope_fixture_suite_matches_reference_semantics",
+          "package": "cotest"
         },
         {
           "target": "conformance_fixtures",
-          "filter": "encoding_fixture_suite_matches_reference_semantics"
+          "filter": "encoding_fixture_suite_matches_reference_semantics",
+          "package": "cotest"
         },
         {
           "target": "conformance_fixtures",
-          "filter": "privacy_security_fixture_suite_matches_reference_semantics"
+          "filter": "privacy_security_fixture_suite_matches_reference_semantics",
+          "package": "cotest"
         },
         {
           "target": "push_rule_core_consistency",
-          "filter": "push_rule_core_consistency_vectors_match_all_implementations"
+          "filter": "push_rule_core_consistency_vectors_match_all_implementations",
+          "package": "cotest"
         }
       ],
       "excluded_quarantine_labels": [
@@ -69,23 +76,28 @@
       "cargo_tests": [
         {
           "target": "bridge_contracts",
-          "filter": "principal_bridge_contracts_are_discoverable"
+          "filter": "principal_bridge_contracts_are_discoverable",
+          "package": "cotest"
         },
         {
           "target": "directory_service",
-          "filter": "teabay_directory_service_profile_is_discoverable"
+          "filter": "teabay_directory_service_profile_is_discoverable",
+          "package": "cotest"
         },
         {
           "target": "bridge_contracts",
-          "filter": "session_grant_presentation_uses_configured_coauth_introspection"
+          "filter": "session_grant_presentation_uses_configured_coauth_introspection",
+          "package": "cotest"
         },
         {
           "target": "bridge_contracts",
-          "filter": "external_webvh_provider_is_discoverable"
+          "filter": "external_webvh_provider_is_discoverable",
+          "package": "cotest"
         },
         {
           "target": "profile_claim_gate",
-          "filter": "live_describe_profile_claim_gate_from_env"
+          "filter": "live_describe_profile_claim_gate_from_env",
+          "package": "cotest"
         }
       ],
       "excluded_quarantine_labels": [],
@@ -102,95 +114,118 @@
       "cargo_tests": [
         {
           "target": "conformance_fixtures",
-          "filter": "event_envelope_fixture_suite_matches_reference_semantics"
+          "filter": "event_envelope_fixture_suite_matches_reference_semantics",
+          "package": "cotest"
         },
         {
           "target": "conformance_fixtures",
-          "filter": "capability_fixture_suite_matches_reference_semantics"
+          "filter": "capability_fixture_suite_matches_reference_semantics",
+          "package": "cotest"
         },
         {
           "target": "conformance_fixtures",
-          "filter": "state_resolution_fixture_suite_matches_reference_semantics"
+          "filter": "state_resolution_fixture_suite_matches_reference_semantics",
+          "package": "cotest"
         },
         {
           "target": "conformance_fixtures",
-          "filter": "cbs_lattice_fixture_suite_matches_reference_semantics"
+          "filter": "cbs_lattice_fixture_suite_matches_reference_semantics",
+          "package": "cotest"
         },
         {
           "target": "conformance_fixtures",
-          "filter": "state_model_round_trip_suite_matches_reference_semantics"
+          "filter": "state_model_round_trip_suite_matches_reference_semantics",
+          "package": "cotest"
         },
         {
           "target": "conformance_fixtures",
-          "filter": "mls_security_frontier_fixture_suite_matches_reference_semantics"
+          "filter": "mls_security_frontier_fixture_suite_matches_reference_semantics",
+          "package": "cotest"
         },
         {
           "target": "conformance_fixtures",
-          "filter": "discovery_profile_fixture_suite_matches_reference_semantics"
+          "filter": "discovery_profile_fixture_suite_matches_reference_semantics",
+          "package": "cotest"
         },
         {
           "target": "conformance_fixtures",
-          "filter": "sync_fixture_suite_matches_reference_semantics"
+          "filter": "sync_fixture_suite_matches_reference_semantics",
+          "package": "cotest"
         },
         {
           "target": "conformance_fixtures",
-          "filter": "privacy_security_fixture_suite_matches_reference_semantics"
+          "filter": "privacy_security_fixture_suite_matches_reference_semantics",
+          "package": "cotest"
         },
         {
           "target": "push_rule_core_consistency",
-          "filter": "push_rule_core_consistency_vectors_match_all_implementations"
+          "filter": "push_rule_core_consistency_vectors_match_all_implementations",
+          "package": "cotest"
         },
         {
           "target": "conformance_fixtures",
-          "filter": "inkson_client_profile_manifest_suite_matches_reference_semantics"
+          "filter": "inkson_client_profile_manifest_suite_matches_reference_semantics",
+          "package": "cotest"
         },
         {
           "target": "conformance_fixtures",
-          "filter": "coauth_account_lifecycle_fixture_suite_matches_reference_semantics"
+          "filter": "coauth_account_lifecycle_fixture_suite_matches_reference_semantics",
+          "package": "cotest"
         },
         {
           "target": "conformance_fixtures",
-          "filter": "live_describe_profile_gate_suite_matches_reference_semantics"
+          "filter": "live_describe_profile_gate_suite_matches_reference_semantics",
+          "package": "cotest"
         },
         {
           "target": "conformance_fixtures",
-          "filter": "composite_state_subject_fixture_suite_matches_reference_semantics"
+          "filter": "composite_state_subject_fixture_suite_matches_reference_semantics",
+          "package": "cotest"
         },
         {
           "target": "conformance_fixtures",
-          "filter": "mimi_components_fixture_suite_matches_reference_semantics"
+          "filter": "mimi_components_fixture_suite_matches_reference_semantics",
+          "package": "cotest"
         },
         {
           "target": "protocol_payloads",
-          "filter": "events_keys_device_blob_push_and_moderation_surfaces_work"
+          "filter": "events_keys_device_blob_push_and_moderation_surfaces_work",
+          "package": "cotest"
         },
         {
           "target": "delivery_media",
-          "filter": "push_and_moderation_edges_are_enforced"
+          "filter": "push_and_moderation_edges_are_enforced",
+          "package": "cotest"
         },
         {
           "target": "api_contracts_auth",
-          "filter": "account_auth_and_session_edges_are_enforced"
+          "filter": "account_auth_and_session_edges_are_enforced",
+          "package": "cotest"
         },
         {
           "target": "directory_service",
-          "filter": "teabay_directory_service_profile_is_discoverable"
+          "filter": "teabay_directory_service_profile_is_discoverable",
+          "package": "cotest"
         },
         {
           "target": "bridge_contracts",
-          "filter": "session_grant_presentation_uses_configured_coauth_introspection"
+          "filter": "session_grant_presentation_uses_configured_coauth_introspection",
+          "package": "cotest"
         },
         {
           "target": "bridge_contracts",
-          "filter": "external_webvh_provider_is_discoverable"
+          "filter": "external_webvh_provider_is_discoverable",
+          "package": "cotest"
         },
         {
           "target": "invite_frozen_prestate_live",
-          "filter": "invite_frozen_prestate_is_enforced_before_acceptance"
+          "filter": "invite_frozen_prestate_is_enforced_before_acceptance",
+          "package": "cotest-inkson-client-tests"
         },
         {
           "target": "durable_effect_live_spotcheck",
-          "filter": "declared_durable_effects_match_live_producers"
+          "filter": "declared_durable_effects_match_live_producers",
+          "package": "cotest"
         }
       ],
       "excluded_quarantine_labels": [],
@@ -211,32 +246,38 @@
         {
           "target": "_bootstrap_smoke",
           "filter": "ephemeral_postgres_starts_and_stops",
-          "include_ignored": true
+          "include_ignored": true,
+          "package": "cotest"
         },
         {
           "target": "_bootstrap_smoke",
           "filter": "coauth_can_be_spawned_with_ephemeral_postgres",
-          "include_ignored": true
+          "include_ignored": true,
+          "package": "cotest"
         },
         {
           "target": "_bootstrap_smoke",
           "filter": "joint_service_smoke",
-          "include_ignored": true
+          "include_ignored": true,
+          "package": "cotest"
         },
         {
           "target": "coauth_session_grant_response_loss",
           "filter": "committed_issue_response_loss_restarts_and_replays_exactly",
-          "include_ignored": true
+          "include_ignored": true,
+          "package": "cotest"
         },
         {
           "target": "production_rejects_placeholder_proof_e2e",
           "filter": "production_rejects_placeholder_proof_e2e",
-          "include_ignored": true
+          "include_ignored": true,
+          "package": "cotest"
         },
         {
           "target": "chaos_kill_midwrite",
           "filter": "chaos_kill_midwrite_then_restart_recovery",
-          "include_ignored": true
+          "include_ignored": true,
+          "package": "cotest"
         }
       ],
       "excluded_quarantine_labels": [],
@@ -244,6 +285,172 @@
         "ak.profile.station.v1",
         "ak.profile.directory_service.v1",
         "ak.profile.identity_registry.v1"
+      ]
+    },
+    {
+      "profile_id": "inkson-client-live",
+      "description": "Mandatory production Inkson client coverage; shares the real server harness and retains the full 54 named-runner audit. Canonical host initialization remains a separately tracked production integration boundary.",
+      "include_all_tests": false,
+      "cargo_tests": [
+        {
+          "package": "cotest-inkson-client-tests",
+          "target": "account_blocklist_production_live",
+          "filter": "blocklist_whole_value_cas_runs_through_http_and_postgres"
+        },
+        {
+          "package": "cotest-inkson-client-tests",
+          "target": "account_blocklist_production_live",
+          "filter": "blocklist_full_suite_runs_all_production_case_executors"
+        },
+        {
+          "package": "cotest-inkson-client-tests",
+          "target": "account_blocklist_production_live",
+          "filter": "blocklist_real_call_invite_uses_accepted_ordinary_call_and_sealed_delivery"
+        },
+        {
+          "package": "cotest-inkson-client-tests",
+          "target": "account_blocklist_production_live",
+          "filter": "blocklist_case4_shared_realm_automatic_receipt_production_slice"
+        },
+        {
+          "package": "cotest-inkson-client-tests",
+          "target": "account_blocklist_production_live",
+          "filter": "blocklist_case4_combined_shared_history_and_receipt_slice"
+        },
+        {
+          "package": "cotest-inkson-client-tests",
+          "target": "account_blocklist_production_live",
+          "filter": "blocklist_case4_federated_ingress_keeps_private_value_at_holder"
+        },
+        {
+          "package": "cotest-inkson-client-tests",
+          "target": "account_blocklist_production_live",
+          "filter": "blocklist_case4_full_fixture_runs_production_executor"
+        },
+        {
+          "package": "cotest-inkson-client-tests",
+          "target": "account_blocklist_production_live",
+          "filter": "blocklist_case5_full_fixture_runs_production_executor"
+        },
+        {
+          "package": "cotest-inkson-client-tests",
+          "target": "account_blocklist_production_live",
+          "filter": "blocklist_case6_contact_call_and_federation_combined_slice"
+        },
+        {
+          "package": "cotest-inkson-client-tests",
+          "target": "account_blocklist_production_live",
+          "filter": "blocklist_case6_full_fixture_runs_production_executor"
+        },
+        {
+          "package": "cotest-inkson-client-tests",
+          "target": "account_blocklist_production_live",
+          "filter": "blocklist_case6_cross_station_contact_first_dm_private_boundary_slice"
+        },
+        {
+          "package": "cotest-inkson-client-tests",
+          "target": "account_blocklist_production_live",
+          "filter": "blocklist_dm_binding_signed_snapshot_is_participant_only"
+        },
+        {
+          "package": "cotest-inkson-client-tests",
+          "target": "account_blocklist_production_live",
+          "filter": "blocklist_dm_retained_message_automatic_receipt_production_slice"
+        },
+        {
+          "package": "cotest-inkson-client-tests",
+          "target": "account_blocklist_production_live",
+          "filter": "blocklist_case5_dm_history_restores_but_contact_terminal_does_not_backfill"
+        },
+        {
+          "package": "cotest-inkson-client-tests",
+          "target": "account_blocklist_production_live",
+          "filter": "blocklist_contact_first_dm_pending_request_is_delivered_then_filtered_locally"
+        },
+        {
+          "package": "cotest-inkson-client-tests",
+          "target": "calendar_rsvp_convergence",
+          "filter": "calendar_rsvp_converges_across_concurrent_responses"
+        },
+        {
+          "package": "cotest-inkson-client-tests",
+          "target": "calendar_rsvp_convergence",
+          "filter": "calendar_rsvp_malformed_basis_is_rejected"
+        },
+        {
+          "package": "cotest-inkson-client-tests",
+          "target": "calendar_rsvp_convergence",
+          "filter": "calendar_rsvp_persists_across_restart_and_replay"
+        },
+        {
+          "package": "cotest-inkson-client-tests",
+          "target": "conformance_vectors",
+          "filter": "webrtc_media_plaintext_named_suite_returns_one_result_per_case"
+        },
+        {
+          "package": "cotest-inkson-client-tests",
+          "target": "conformance_vectors",
+          "filter": "named_suite_audit_executes_registered_runners_and_exposes_every_gap"
+        },
+        {
+          "package": "cotest-inkson-client-tests",
+          "target": "conformance_vectors",
+          "filter": "account_blocklist_projection_vector_executes_complete_production_suite"
+        },
+        {
+          "package": "cotest-inkson-client-tests",
+          "target": "invite_frozen_prestate_live",
+          "filter": "invite_frozen_prestate_is_enforced_before_acceptance"
+        },
+        {
+          "package": "cotest-inkson-client-tests",
+          "target": "kanban_identity_boundary",
+          "filter": "kanban_creates_keep_one_identity_across_receipt_backfill_and_retry"
+        },
+        {
+          "package": "cotest-inkson-client-tests",
+          "target": "productivity_contracts",
+          "filter": "scheduled_send_plan_plaintext_matches_spec_schema"
+        },
+        {
+          "package": "cotest-inkson-client-tests",
+          "target": "productivity_contracts",
+          "filter": "scheduled_send_cas_conflict_retry_decrypts_merges_and_reseals"
+        },
+        {
+          "package": "cotest-inkson-client-tests",
+          "target": "snapshot_head_disclosure",
+          "filter": "preview_account_window_backfills_without_failing_its_sibling_realm"
+        },
+        {
+          "package": "cotest-inkson-client-tests",
+          "target": "snapshot_head_disclosure",
+          "filter": "limited_window_strand_tail_verifies_with_same_cut_current_through_inkson"
+        },
+        {
+          "package": "cotest-inkson-client-tests",
+          "target": "snapshot_head_disclosure",
+          "filter": "message_tail_window_beyond_twenty_commits_verifies_through_inkson"
+        },
+        {
+          "package": "cotest-inkson-client-tests",
+          "target": "snapshot_head_disclosure",
+          "filter": "restricted_join_policy_floor_verifies_through_inkson"
+        },
+        {
+          "package": "cotest-inkson-client-tests",
+          "target": "websocket_live",
+          "filter": "actual_inkson_http_and_websocket_idle_tail_and_reload"
+        },
+        {
+          "package": "cotest-inkson-client-tests",
+          "target": "websocket_live",
+          "filter": "actual_websocket_lifetime_drains_and_closes_with_registered_code"
+        }
+      ],
+      "excluded_quarantine_labels": [],
+      "required_coverage_profiles": [
+        "ak.profile.e2ee_client.v1"
       ]
     },
     {

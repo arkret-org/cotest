@@ -529,9 +529,7 @@ pub(crate) struct RotationFixture {
 
 /// The environment a Station needs so that `rotation_fixture` can run on it:
 /// `coauth` is its Account Authority and session-grant introspection.
-pub(crate) fn rotation_station_env(
-    coauth: &MockCoauthIntrospectionServer,
-) -> Vec<(String, String)> {
+pub fn rotation_station_env(coauth: &MockCoauthIntrospectionServer) -> Vec<(String, String)> {
     vec![
         ("SOLAND_ACCOUNT_AUTHORITY_URL".to_owned(), coauth.origin()),
         (

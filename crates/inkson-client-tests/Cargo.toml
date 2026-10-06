@@ -1,0 +1,43 @@
+[package]
+name = "cotest-inkson-client-tests"
+version = "0.3.0"
+edition = "2024"
+rust-version = "1.98"
+publish = false
+
+[dependencies]
+cotest = { path = "../.." }
+anyhow = { workspace = true }
+arkret = { workspace = true }
+arkret-canonical = { workspace = true }
+arkret-crypto = { workspace = true, features = ["backup", "blob-aead", "secret-share"] }
+arkret-hlc = { workspace = true }
+arkret-http-client = { workspace = true }
+arkret-identifiers = { workspace = true }
+arkret-identity = { workspace = true }
+arkret-models-collaboration = { workspace = true }
+arkret-models-crypto = { workspace = true }
+arkret-models-identity = { workspace = true }
+arkret-signatures = { workspace = true }
+arkret-wire = { workspace = true, features = ["test-support"] }
+async-trait = { workspace = true }
+base64 = { workspace = true }
+chrono = { workspace = true }
+ed25519-dalek = { workspace = true, default-features = false, features = ["alloc"] }
+futures-util = { version = "0.3.32", features = ["sink"] }
+garth = { workspace = true }
+inkson = { workspace = true }
+jsonschema = { workspace = true, default-features = false, features = ["resolve-file"] }
+postgres = { workspace = true }
+reqwest = { workspace = true, features = ["json", "multipart", "rustls"] }
+rustls = { version = "0.23.40", default-features = false, features = ["ring", "std"] }
+serde_json = { workspace = true }
+serial_test = { workspace = true }
+sha2 = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["macros", "process", "rt-multi-thread", "time"] }
+tokio-tungstenite = { version = "0.30.0", default-features = false, features = ["connect", "handshake", "rustls-tls-webpki-roots"] }
+zeroize = { workspace = true }
+
+[lints]
+workspace = true

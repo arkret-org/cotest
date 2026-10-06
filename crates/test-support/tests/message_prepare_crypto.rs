@@ -122,6 +122,7 @@ fn authored_message_decrypts_at_the_other_mls_member_without_reencrypting() {
             governance_generation: 0,
             authority_ref: RealmCommitAuthorityRef::GenesisOrChangeEvent(commit_event_id.clone()),
             committed_at: "2026-09-12T00:00:00.000Z".parse().unwrap(),
+            producer_signer_fact_digest: None,
             signature: detached(DetachedSignatureContext::RealmCommit),
         },
         event: mls_commit_event(&realm, &scope, &commit_event_id, &commit_payload),

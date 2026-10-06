@@ -32,9 +32,9 @@ WINDOW=12
 # `#[ignore`. We use `git ls-files` when available so submodule / target
 # directories never sneak in; otherwise fall back to a `find` filter.
 if command -v git >/dev/null 2>&1 && [ -d ".git" ]; then
-  FILES=$(git ls-files 'tests/*.rs' 'src/**/*.rs' 'src/*.rs' 2>/dev/null || true)
+  FILES=$({ git ls-files 'tests/*.rs' 'src/**/*.rs' 'src/*.rs'; find crates/inkson-client-tests/src crates/inkson-client-tests/tests -type f -name '*.rs'; } 2>/dev/null | sort -u || true)
 else
-  FILES=$(find tests src -type f -name '*.rs' -not -path '*/target/*' 2>/dev/null || true)
+  FILES=$(find tests src crates/inkson-client-tests/src crates/inkson-client-tests/tests -type f -name '*.rs' -not -path '*/target/*' 2>/dev/null || true)
 fi
 
 if [ -z "${FILES:-}" ]; then

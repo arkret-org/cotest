@@ -154,5 +154,21 @@
         { "name": "local search boundary", "status": "implemented", "sources": ["conformance_privacy_security"], "tests": ["privacy_security_fixture_suite_matches_reference_semantics"] }
       ]
     }
-  ]
+  ],
+  "production_client_package": {
+    "package": "cotest-inkson-client-tests",
+    "required_lane": "inkson-client-live",
+    "required_targets": [
+      "account_blocklist_production_live",
+      "calendar_rsvp_convergence",
+      "conformance_vectors",
+      "invite_frozen_prestate_live",
+      "kanban_identity_boundary",
+      "productivity_contracts",
+      "snapshot_head_disclosure",
+      "websocket_live"
+    ],
+    "combined_named_suite_runner_count": 54,
+    "canonical_host_initialization": "pending production host API integration; extraction does not certify canonical authentication"
+  }
 }

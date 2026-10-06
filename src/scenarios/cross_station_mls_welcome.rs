@@ -79,7 +79,7 @@ const EVE_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002608";
 const CLAIM_QUERY: &str = "/_arkret/self/keys/keypackages/claims/query";
 const PEER_ATTEST_ADD: &str = "/_arkret/peer/mls/add-authority-attestations";
 
-pub(crate) fn genesis_creator_leaf_authority(
+pub fn genesis_creator_leaf_authority(
     group: &mut ArkretMlsGroup,
     creator: &Member,
 ) -> Result<MlsGenesisCreatorLeafAuthority> {
@@ -113,7 +113,7 @@ pub(crate) fn genesis_creator_leaf_authority(
 }
 
 /// `member` on Y accepts Alice's directed Invite through its own Station.
-pub(crate) async fn join_through_invite(
+pub async fn join_through_invite(
     alice: &Member,
     governance: &ArkretServer,
     member: &Member,

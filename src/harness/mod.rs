@@ -38,16 +38,15 @@ pub use event_builder::{
     add_member, create_realm, create_realm_with_signing_seed, default_event_verification_method,
     dev_login, device_message_send_request, encrypted_envelope, event_envelope,
     event_envelope_at_frontier_with_signing_seed, event_envelope_with_signing_seed,
-    event_envelope_with_signing_seed_and_verification_method, moderation_report_request,
-    realm_bootstrap_event_batch, realm_bootstrap_event_batch_with_signing_seed,
-    register_account_via_dev_login, register_account_with_localpart_via_dev_login,
-    register_event_signing_identity, send_message, submit_event,
-    submit_event_with_signing_seed_and_verification_method,
+    event_envelope_with_signing_seed_and_verification_method, event_signing_identity_for_device,
+    invite_create_payload, moderation_report_request, realm_bootstrap_event_batch,
+    realm_bootstrap_event_batch_with_signing_seed, register_account_via_dev_login,
+    register_account_with_localpart_via_dev_login, register_event_signing_identity, send_message,
+    submit_event, submit_event_with_signing_seed_and_verification_method,
 };
 pub(crate) use event_builder::{
     event_envelope_with_causal_refs_for_device,
-    event_envelope_with_chain_and_signing_identity_and_causal_refs,
-    event_signing_identity_for_device, invite_create_payload, member_join_payload_value,
+    event_envelope_with_chain_and_signing_identity_and_causal_refs, member_join_payload_value,
     member_transition_payload, message_create_text_payload, message_create_text_payload_for_strand,
     message_redact_payload, message_revise_text_payload, ordinary_realm_bootstrap_submission,
     parse_strand_id, realm_bootstrap_event_batch_for_device,
@@ -149,7 +148,7 @@ pub(crate) fn member_join_payload(realm_id: &str, actor_id: &str) -> Value {
     member_join_payload_value(realm_id, actor_id).expect("valid cotest member.join payload")
 }
 
-pub(crate) fn next_typed_id(kind: &str) -> String {
+pub fn next_typed_id(kind: &str) -> String {
     let seq = NEXT_EVENT_SEQ.fetch_add(1, Ordering::Relaxed);
     format!("ak:{kind}:01999999-0000-7000-8000-{seq:012x}")
 }

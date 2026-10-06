@@ -167,11 +167,11 @@ jobs:
         run: npm run check:fixme
 
   package-graph:
-    name: light build edge (package graph)
+    name: server/client/light package boundaries
     runs-on: ubuntu-latest
     # `cotest-provision` / `cotest-wire` exist so the browserless lane builds
     # without Inkson's wasm and the Soland implementation crates. That property
-    # was only ever checked by hand. `cargo metadata` resolves the graph without
+    # is now checked for root/client as well as the light edge. `cargo metadata` resolves the graph without
     # compiling anything, so this job needs every path-dependency sibling
     # checked out but no build cache.
     steps:

@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -62,6 +64,57 @@ class OperationTestCoverageTests(unittest.TestCase):
         path = self.root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(content.encode("utf-8"))
+
+    def test_source_walk_prunes_ignored_and_directory_symlinks_without_losing_sources(self) -> None:
+        sources = self.root / "source-walk"
+        for relative in ("nested/kept.rs", "nested/deeper/kept.ts", "plain.rs", ".rs", "not-source.txt"):
+            self.write("source-walk/" + relative, "#[test] fn source() {}")
+        for ignored in inventory.IGNORED_DIRS:
+            self.write(f"source-walk/{ignored}/deep/test.rs", "#[test] fn excluded() {}")
+            self.write(f"source-walk/nested/{ignored}/test.ts", "test('excluded', () => {});")
+        outside = self.root / "outside-sources"
+        outside.mkdir()
+        (outside / "outside.rs").write_text("#[test] fn external() {}", encoding="utf-8")
+        (sources / "linked-directory").symlink_to(outside, target_is_directory=True)
+        (sources / "linked-file.rs").symlink_to(outside / "outside.rs")
+        (sources / "dangling.rs").symlink_to(outside / "missing.rs")
+
+        visited = []
+        walk = os.walk
+        def observed_walk(*args, **kwargs):
+            self.assertFalse(kwargs["followlinks"])
+            for entry in walk(*args, **kwargs):
+                visited.append(Path(entry[0]))
+                yield entry
+        with mock.patch.object(inventory.os, "walk", side_effect=observed_walk):
+            actual = {suffix: set(inventory.source_paths(sources, suffix)) for suffix in (".rs", ".ts")}
+        for suffix in (".rs", ".ts"):
+            previous = {path for path in sources.rglob("*" + suffix) if inventory.source_file(path)}
+            self.assertEqual(actual[suffix], previous)
+        self.assertIn(sources / "linked-file.rs", actual[".rs"])
+        self.assertIn(sources / "nested/deeper/kept.ts", actual[".ts"])
+        self.assertNotIn(sources / "dangling.rs", actual[".rs"])
+        self.assertTrue(visited)
+        self.assertTrue(all(not any(part in inventory.IGNORED_DIRS for part in path.parts) for path in visited))
+        self.assertNotIn(sources / "linked-directory", visited)
+
+    def test_source_walk_starting_directory_symlink_matches_previous_rglob(self) -> None:
+        self.write("actual-source/nested/kept.rs", "#[test] fn kept() {}")
+        self.write("actual-source/nested/uppercase.RS", "#[test] fn uppercase() {}")
+        self.write("actual-source/target/ignored.rs", "#[test] fn excluded() {}")
+        root_link = self.root / "root-source-link"
+        root_link.symlink_to(self.root / "actual-source", target_is_directory=True)
+        expected = {path for path in root_link.rglob("*.rs") if inventory.source_file(path)}
+        actual = set(inventory.source_paths(root_link, ".rs"))
+        self.assertEqual(actual, expected)
+        self.assertIn(root_link / "nested/kept.rs", actual)
+        self.assertEqual(root_link / "nested/uppercase.RS" in actual, (root_link / "nested/uppercase.RS").match("*.rs"))
+
+    def test_client_scenario_helpers_without_test_attribute_are_collected(self) -> None:
+        self.write("cotest/crates/inkson-client-tests/src/scenarios/actual_client.rs", 'async fn live_observer() { let op = "' + OP_TWO + '"; assert!(result.is_ok()); }')
+        layers = inventory.discover_layer_sources(self.root)
+        cotest = next(layer for layer in layers if layer.name == "cotest_rust")
+        self.assertIn(self.root / "cotest/crates/inkson-client-tests/src/scenarios/actual_client.rs", cotest.files)
 
     def test_generates_full_matrix_and_exact_duplicate_oracle(self) -> None:
         result = inventory.generate(self.root)

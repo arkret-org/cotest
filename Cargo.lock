@@ -2877,7 +2877,6 @@ dependencies = [
  "hpke-rs",
  "hpke-rs-crypto",
  "hpke-rs-rust-crypto",
- "inkson",
  "jsonschema",
  "p256 0.14.0",
  "postgres",
@@ -3055,6 +3054,44 @@ dependencies = [
  "arkret-signatures",
  "arkret-wire",
  "serde_json",
+]
+
+[[package]]
+name = "cotest-inkson-client-tests"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "arkret",
+ "arkret-canonical",
+ "arkret-crypto",
+ "arkret-hlc",
+ "arkret-http-client",
+ "arkret-identifiers",
+ "arkret-identity",
+ "arkret-models-collaboration",
+ "arkret-models-crypto",
+ "arkret-models-identity",
+ "arkret-signatures",
+ "arkret-wire",
+ "async-trait",
+ "base64 0.23.1",
+ "chrono",
+ "cotest",
+ "ed25519-dalek 3.0.0",
+ "futures-util",
+ "garth",
+ "inkson",
+ "jsonschema",
+ "postgres",
+ "reqwest 0.13.4",
+ "rustls",
+ "serde_json",
+ "serial_test",
+ "sha2 0.11.0",
+ "tempfile",
+ "tokio",
+ "tokio-tungstenite",
+ "zeroize",
 ]
 
 [[package]]

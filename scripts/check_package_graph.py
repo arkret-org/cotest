@@ -19,10 +19,7 @@ Edge kinds: from the light-edge package itself the walk follows normal, build
 normal one. Past that package only normal and build edges are followed, which
 is what `cargo tree --edges normal,build` does and what actually gets compiled.
 
-The gate also refuses to pass vacuously: the forbidden packages must still be
-reachable from the root `cotest` package. If they are not, either the workspace
-changed shape or the metadata is not what this gate thinks it is, and a green
-result would mean nothing.
+The root harness must not reach Inkson or Dioxus through normal, build or direct dev edges. The separate client package must exist with real integration targets and reach both the harness and Inkson. A missing client package is not a successful extraction.
 
 Usage:
 
@@ -51,6 +48,8 @@ LIGHT_EDGE_BINARIES = ("cotest-provision", "cotest-wire")
 
 # The root package, used for the non-vacuity check below.
 ROOT_PACKAGE = "cotest"
+CLIENT_PACKAGE = "cotest-inkson-client-tests"
+CLIENT_TEST_TARGETS = ('account_blocklist_production_live', 'calendar_rsvp_convergence', 'conformance_vectors', 'invite_frozen_prestate_live', 'kanban_identity_boundary', 'productivity_contracts', 'snapshot_head_disclosure', 'websocket_live')
 
 # Exact package names the light edge must not reach.
 FORBIDDEN_EXACT = frozenset({"cotest", "inkson"})
@@ -164,6 +163,7 @@ def evaluate(metadata: dict) -> dict:
 
     light_id = package_id(packages, LIGHT_EDGE_PACKAGE)
     root_id = package_id(packages, ROOT_PACKAGE)
+    client_id = package_id(packages, CLIENT_PACKAGE)
 
     light_targets = {
         target["name"]
@@ -174,6 +174,10 @@ def evaluate(metadata: dict) -> dict:
 
     light_paths = reachable(nodes, packages, light_id)
     root_paths = reachable(nodes, packages, root_id)
+    client_paths = reachable(nodes, packages, client_id)
+    client_targets = [target for target in packages[client_id].get("targets", []) if "test" in target.get("kind", [])]
+
+    missing_client_targets = sorted(set(CLIENT_TEST_TARGETS) - {target["name"] for target in client_targets})
 
     violations = sorted(
         (
@@ -184,13 +188,9 @@ def evaluate(metadata: dict) -> dict:
         key=lambda entry: entry["package"],
     )
 
-    # Non-vacuity: the forbidden shape must still exist somewhere in this
-    # workspace, otherwise "the light edge cannot reach it" is trivially true.
-    root_forbidden = sorted(
-        packages[pid]["name"]
-        for pid in root_paths
-        if is_forbidden(packages[pid]["name"]) and packages[pid]["name"] != ROOT_PACKAGE
-    )
+    root_forbidden = sorted(packages[pid]["name"] for pid in root_paths if packages[pid]["name"] == "inkson" or packages[pid]["name"].startswith("dioxus"))
+    client_names = {packages[pid]["name"] for pid in client_paths}
+    missing_client_dependencies = sorted({"cotest", "inkson"} - client_names)
 
     return {
         "light_edge_package": LIGHT_EDGE_PACKAGE,
@@ -200,7 +200,11 @@ def evaluate(metadata: dict) -> dict:
         "violations": violations,
         "missing_binaries": missing_binaries,
         "root_forbidden": root_forbidden,
-        "vacuous": not root_forbidden,
+        "client_package": CLIENT_PACKAGE,
+        "missing_client_targets": missing_client_targets,
+        "client_crates": len(client_paths),
+        "missing_client_dependencies": missing_client_dependencies,
+        "vacuous": bool(missing_client_targets) or bool(missing_client_dependencies),
     }
 
 
@@ -219,10 +223,11 @@ def render(verdict: dict) -> list[str]:
             f"MISSING BINARY: {binary} is no longer a bin target of "
             f"{verdict['light_edge_package']}"
         )
+    for package in verdict["root_forbidden"]:
+        lines.append(f"ROOT UI DEPENDENCY: {package}")
     if verdict["vacuous"]:
         lines.append(
-            "VACUOUS: none of the forbidden packages are reachable from "
-            f"{verdict['root_package']} either, so this gate proves nothing"
+            "VACUOUS: the required client package has no real test targets or does not depend on both cotest and Inkson"
         )
     return lines
 
@@ -249,7 +254,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     failed = bool(
-        verdict["violations"] or verdict["missing_binaries"] or verdict["vacuous"]
+        verdict["violations"] or verdict["missing_binaries"] or verdict["root_forbidden"] or verdict["vacuous"]
     )
     if args.json:
         print(json.dumps({**verdict, "status": "failed" if failed else "passed"}, indent=2))

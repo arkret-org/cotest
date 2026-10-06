@@ -433,99 +433,6 @@ function Invoke-NativeCapture {
     }
 }
 
-function Get-RepositoryBuildInputState {
-    param(
-        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
-        [Parameter(Mandatory = $true)][string]$BinaryPath
-    )
-
-    $resolvedRepository = (Resolve-Path $RepositoryRoot).Path
-    $resolvedBinary = (Resolve-Path $BinaryPath).Path
-    $git = Find-CommandPath @("git.exe", "git")
-    if (-not $git) {
-        throw "git is required to validate binary freshness"
-    }
-
-    $headOutput = @(Invoke-NativeCapture -FilePath $git -Arguments @(
-            "-C", $resolvedRepository, "rev-parse", "HEAD"
-        ))
-    if ($LASTEXITCODE -ne 0) {
-        throw "Unable to resolve repository HEAD for ${resolvedRepository}: $($headOutput -join ' ')"
-    }
-    $head = ($headOutput -join "").Trim()
-
-    $buildInputPaths = @(
-        "Cargo.toml", "Cargo.lock", "build.rs", "Dioxus.toml", "crates", "src",
-        "migrations", "assets", "public",
-        ":(exclude)crates/**/tests/**", ":(exclude)tests/**",
-        ":(exclude)crates/**/benches/**", ":(exclude)benches/**",
-        ":(exclude)crates/**/examples/**", ":(exclude)examples/**"
-    )
-    $commitArguments = @(
-        "-C", $resolvedRepository, "log", "-1", "--format=%cI", "--"
-    ) + $buildInputPaths
-    $commitTimeOutput = @(Invoke-NativeCapture -FilePath $git -Arguments $commitArguments)
-    if ($LASTEXITCODE -ne 0 -or $commitTimeOutput.Count -eq 0) {
-        throw "Unable to resolve build-input commit time for $resolvedRepository"
-    }
-    $commitTime = [DateTimeOffset]::Parse(
-        ($commitTimeOutput -join "").Trim(),
-        [System.Globalization.CultureInfo]::InvariantCulture
-    ).UtcDateTime
-
-    $content = Get-RepositoryBuildContent -RepositoryRoot $resolvedRepository -GitPath $git -InputPaths $buildInputPaths
-    $dirtyArguments = @("-C", $resolvedRepository, "status", "--porcelain", "--untracked-files=all", "--") + $buildInputPaths
-    $dirtyOutput = @(Invoke-NativeCapture -FilePath $git -Arguments $dirtyArguments)
-    if ($LASTEXITCODE -ne 0) {
-        throw "Unable to inspect build input changes for $resolvedRepository"
-    }
-
-    $latestInputTime = [DateTime]::MinValue
-    $latestInputPath = $null
-    $buildExtensions = @(
-        ".rs", ".toml", ".lock", ".sql", ".proto", ".json", ".html", ".css",
-        ".js", ".ts", ".svg", ".png", ".webp"
-    )
-    foreach ($relativePath in $content.Files) {
-        if (-not $relativePath) {
-            continue
-        }
-        $fullPath = Join-Path $resolvedRepository ([string]$relativePath)
-        if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) {
-            continue
-        }
-        $extension = [System.IO.Path]::GetExtension($fullPath).ToLowerInvariant()
-        if ($buildExtensions -notcontains $extension -and
-            [System.IO.Path]::GetFileName($fullPath) -ne "build.rs") {
-            continue
-        }
-        $writeTime = (Get-Item -LiteralPath $fullPath).LastWriteTimeUtc
-        if ($writeTime -gt $latestInputTime) {
-            $latestInputTime = $writeTime
-            $latestInputPath = [string]$relativePath
-        }
-    }
-
-    $requiredTime = $commitTime
-    $requiredBy = "HEAD build-input commit"
-    if ($latestInputTime -gt $requiredTime) {
-        $requiredTime = $latestInputTime
-        $requiredBy = $latestInputPath
-    }
-
-    [pscustomobject]@{
-        SourceSha256 = $content.SourceSha256
-        RepositoryRoot = $resolvedRepository
-        RepositoryName = Split-Path -Leaf $resolvedRepository
-        Head = $head
-        BuildInputsDirty = $dirtyOutput.Count -gt 0
-        RequiredTimeUtc = $requiredTime
-        RequiredBy = $requiredBy
-        BinaryPath = $resolvedBinary
-        BinaryTimeUtc = (Get-Item -LiteralPath $resolvedBinary).LastWriteTimeUtc
-    }
-}
-
 function Add-BinaryFreshnessPreflight {
     param(
         [Parameter(Mandatory = $true)]$Results,
@@ -537,7 +444,7 @@ function Add-BinaryFreshnessPreflight {
 
     try {
         $states = @(
-            foreach ($repositoryRoot in $RepositoryRoots) {
+            foreach ($repositoryRoot in (Resolve-RepositoryBuildInputRoots -RepositoryRoots $RepositoryRoots)) {
                 Get-RepositoryBuildInputState `
                     -RepositoryRoot $repositoryRoot `
                     -BinaryPath $BinaryPath
@@ -567,7 +474,9 @@ function Add-BinaryFreshnessPreflight {
 function Get-ArtifactFreshness {
     param(
         [Parameter(Mandatory = $true)][string]$ArtifactPath,
-        [Parameter(Mandatory = $true)][string[]]$RepositoryRoots
+        [Parameter(Mandatory = $true)][string[]]$RepositoryRoots,
+        [string]$ArtifactRoot,
+        [string[]]$RequiredArtifactPaths = @()
     )
 
     if (-not (Test-Path -LiteralPath $ArtifactPath -PathType Leaf)) {
@@ -575,12 +484,12 @@ function Get-ArtifactFreshness {
     }
     try {
         $states = @(
-            foreach ($repositoryRoot in $RepositoryRoots) {
-                Get-RepositoryBuildInputState -RepositoryRoot $repositoryRoot -BinaryPath $ArtifactPath
+            foreach ($repositoryRoot in (Resolve-RepositoryBuildInputRoots -RepositoryRoots $RepositoryRoots)) {
+                Get-RepositoryBuildInputState -RepositoryRoot $repositoryRoot -BinaryPath $ArtifactPath -ArtifactRoot $ArtifactRoot
             }
         )
         $newest = $states | Sort-Object RequiredTimeUtc -Descending | Select-Object -First 1
-        $stamp = Test-ArtifactBuildStamp -ArtifactPath $ArtifactPath -RepositoryStates $states
+        $stamp = Test-ArtifactBuildStamp -ArtifactPath $ArtifactPath -RepositoryStates $states -ArtifactRoot $ArtifactRoot -RequiredArtifactPaths $RequiredArtifactPaths
         $fresh = Test-ArtifactSourceFreshness `
             -ArtifactTimeUtc $newest.BinaryTimeUtc `
             -RepositoryStates $states `
@@ -1005,6 +914,8 @@ function Invoke-JointE2ePreflight {
             Add-PreflightResult $results "inkson web bundle" "pass" $InksonStaticIndex
             $inksonFreshness = Get-ArtifactFreshness `
                 -ArtifactPath $InksonStaticIndex `
+                -ArtifactRoot (Split-Path -Parent $InksonStaticIndex) `
+                -RequiredArtifactPaths @("index.html", "wasm/inkson_bg.wasm", "wasm/inkson.js") `
                 -RepositoryRoots @(
                     $InksonRoot,
                     (Join-Path $WorkspaceRoot "arkret-rust-sdk"),
@@ -1742,7 +1653,7 @@ function Get-CargoTargetDirectory {
     finally {
         Pop-Location
     }
-    $metadata = ($metadataOutput -join [Environment]::NewLine) | ConvertFrom-Json
+    $metadata = ($metadataOutput -join [Environment]::NewLine) | ConvertFrom-Json -AsHashtable -ErrorAction Stop
     $targetDirectory = [string]$metadata.target_directory
     if ([string]::IsNullOrWhiteSpace($targetDirectory)) {
         throw "cargo metadata did not return a target directory for $RepositoryRoot"
@@ -2876,11 +2787,7 @@ function Invoke-RunnerSelfTest {
         }
 
         (Get-Item -LiteralPath $binaryPath).LastWriteTimeUtc = [DateTime]::UtcNow.AddDays(1)
-        $freshRepositoryStates = @(
-            Get-RepositoryBuildInputState `
-                -RepositoryRoot $repositoryRoot `
-                -BinaryPath $binaryPath
-        )
+        $freshRepositoryStates = @(Get-ArtifactBuildRepositoryStates -ArtifactPath $binaryPath -RepositoryRoots @($repositoryRoot))
         Write-ArtifactBuildStamp `
             -ArtifactPath $binaryPath `
             -RepositoryStates $freshRepositoryStates | Out-Null
@@ -3636,12 +3543,13 @@ try {
             # earlier placement dispatched `Start-ManagedCommand -Name` alone
             # and every stale-binary run died on "missing mandatory parameters:
             # Command WorkingDirectory LogDirectory" instead of rebuilding.
+            $preBuildStates = @(Get-ArtifactBuildRepositoryStates -ArtifactPath $defaultSolandBinary -RepositoryRoots @((Join-Path $workspaceRoot "soland"), (Join-Path $workspaceRoot "arkret-rust-sdk")))
             $service = Start-ManagedCommand `
                 -Name "prepare-soland" `
                 -Command ("cargo build --manifest-path {0} -p soland --bin soland --features conformance-harness" -f (Quote-PsLiteral $SutManifest)) `
                 -WorkingDirectory (Split-Path -Parent $SutManifest) `
                 -LogDirectory $serviceLogDir
-            $preparationTasks.Add([pscustomobject]@{ Name = "soland"; Service = $service; Started = $started; Artifact = $defaultSolandBinary; AllowUnchangedArtifact = $true; RepositoryRoots = @((Join-Path $workspaceRoot "soland"), (Join-Path $workspaceRoot "arkret-rust-sdk")) })
+            $preparationTasks.Add([pscustomobject]@{ Name = "soland"; BuildInputsBefore = $preBuildStates; Service = $service; Started = $started; Artifact = $defaultSolandBinary; AllowUnchangedArtifact = $true; RepositoryRoots = @((Join-Path $workspaceRoot "soland"), (Join-Path $workspaceRoot "arkret-rust-sdk")) })
         } else {
             $preparationTimings.Add([pscustomobject]@{ name = "soland"; status = "cache-hit"; duration_seconds = 0; detail = $freshness.Detail })
         }
@@ -3685,16 +3593,18 @@ try {
             # manifest without `-p` would resolve the bin through the root
             # package again and rebuild all of it.
             $cotestManifest = Join-Path $repoRoot "Cargo.toml"
+            $preBuildStates = @(Get-ArtifactBuildRepositoryStates -ArtifactPath $cotestWireBinary -RepositoryRoots $buildInputRoots)
+            $provisionPreBuildStates = @(Get-ArtifactBuildRepositoryStates -ArtifactPath $cotestProvisionBinary -RepositoryRoots $buildInputRoots)
             $service = Start-ManagedCommand `
                 -Name "prepare-cotest-wire" `
                 -Command ("cargo build --manifest-path {0} -p cotest-test-support --bin cotest-wire --bin cotest-provision" -f (Quote-PsLiteral $cotestManifest)) `
                 -WorkingDirectory $repoRoot `
                 -LogDirectory $serviceLogDir
-            $preparationTasks.Add([pscustomobject]@{ Name = "cotest-wire"; Service = $service; Started = $started; Artifact = $cotestWireBinary; AllowUnchangedArtifact = $true; RepositoryRoots = @($repoRoot, (Join-Path $workspaceRoot "arkret-rust-sdk")) })
+            $preparationTasks.Add([pscustomobject]@{ Name = "cotest-wire"; BuildInputsBefore = $preBuildStates; Service = $service; Started = $started; Artifact = $cotestWireBinary; AllowUnchangedArtifact = $true; RepositoryRoots = @($repoRoot, (Join-Path $workspaceRoot "arkret-rust-sdk")) })
             # Both executables come from this one successful Cargo command.
             # Validate and stamp each output so provisioning does not force a
             # fresh build on every run merely because its stamp is absent.
-            $preparationTasks.Add([pscustomobject]@{ Name = "cotest-provision"; Service = $service; Started = $started; Artifact = $cotestProvisionBinary; AllowUnchangedArtifact = $true; RepositoryRoots = @($repoRoot, (Join-Path $workspaceRoot "arkret-rust-sdk")) })
+            $preparationTasks.Add([pscustomobject]@{ Name = "cotest-provision"; BuildInputsBefore = $provisionPreBuildStates; Service = $service; Started = $started; Artifact = $cotestProvisionBinary; AllowUnchangedArtifact = $true; RepositoryRoots = @($repoRoot, (Join-Path $workspaceRoot "arkret-rust-sdk")) })
         } else {
             $preparationTimings.Add([pscustomobject]@{ name = "cotest-wire"; status = "cache-hit"; duration_seconds = 0; detail = $wireFreshness.Detail })
         }
@@ -3717,12 +3627,13 @@ try {
         if (-not $coauthFrontendFreshness.Fresh) {
             Write-Host "Preparing coauth frontend: $($coauthFrontendFreshness.Detail)"
             $started = Get-Date
+            $preBuildStates = @(Get-ArtifactBuildRepositoryStates -ArtifactPath $coauthFrontendArtifact -RepositoryRoots @($coauthRoot, (Join-Path $workspaceRoot "arkret-rust-sdk")))
             $service = Start-ManagedCommand `
                 -Name "prepare-coauth-frontend" `
                 -Command "just frontend-assets" `
                 -WorkingDirectory $coauthRoot `
                 -LogDirectory $serviceLogDir
-            $preparationTasks.Add([pscustomobject]@{ Name = "coauth-frontend"; Service = $service; Started = $started; Artifact = $coauthFrontendArtifact; AllowUnchangedArtifact = $true; RepositoryRoots = @($coauthRoot, (Join-Path $workspaceRoot "arkret-rust-sdk")) })
+            $preparationTasks.Add([pscustomobject]@{ Name = "coauth-frontend"; BuildInputsBefore = $preBuildStates; Service = $service; Started = $started; Artifact = $coauthFrontendArtifact; AllowUnchangedArtifact = $true; RepositoryRoots = @($coauthRoot, (Join-Path $workspaceRoot "arkret-rust-sdk")) })
         } else {
             $preparationTimings.Add([pscustomobject]@{ name = "coauth-frontend"; status = "cache-hit"; duration_seconds = 0; detail = $coauthFrontendFreshness.Detail })
         }
@@ -3738,12 +3649,13 @@ try {
             Write-Host "Preparing coauth binary: $($coauthFreshness.Detail)"
             $started = Get-Date
             $coauthManifest = Join-Path $coauthRoot "Cargo.toml"
+            $preBuildStates = @(Get-ArtifactBuildRepositoryStates -ArtifactPath $defaultCoauthBinary -RepositoryRoots @($coauthRoot, (Join-Path $workspaceRoot "arkret-rust-sdk")))
             $service = Start-ManagedCommand `
                 -Name "prepare-coauth" `
                 -Command ("cargo build --manifest-path {0} --bin coauth" -f (Quote-PsLiteral $coauthManifest)) `
                 -WorkingDirectory (Split-Path -Parent $coauthManifest) `
                 -LogDirectory $serviceLogDir
-            $preparationTasks.Add([pscustomobject]@{ Name = "coauth"; Service = $service; Started = $started; Artifact = $defaultCoauthBinary; AllowUnchangedArtifact = $true; RepositoryRoots = @((Join-Path $workspaceRoot "coauth"), (Join-Path $workspaceRoot "arkret-rust-sdk")) })
+            $preparationTasks.Add([pscustomobject]@{ Name = "coauth"; BuildInputsBefore = $preBuildStates; Service = $service; Started = $started; Artifact = $defaultCoauthBinary; AllowUnchangedArtifact = $true; RepositoryRoots = @((Join-Path $workspaceRoot "coauth"), (Join-Path $workspaceRoot "arkret-rust-sdk")) })
         } else {
             $preparationTimings.Add([pscustomobject]@{ name = "coauth"; status = "cache-hit"; duration_seconds = 0; detail = $coauthFreshness.Detail })
         }
@@ -3770,18 +3682,21 @@ try {
             (Quote-PsLiteral $savfoxPowerShell),
             (Quote-PsLiteral $savfoxWebBuild),
             (Quote-PsLiteral $savfoxManifest)
+        $preBuildStates = @(Get-ArtifactBuildRepositoryStates -ArtifactPath $defaultSavfoxBinary -RepositoryRoots @($SavfoxRoot, (Join-Path $workspaceRoot "arkret-rust-sdk")))
         $service = Start-ManagedCommand `
             -Name "prepare-savfox" `
             -Command $buildCommand `
             -WorkingDirectory $SavfoxRoot `
             -LogDirectory $serviceLogDir
-        $preparationTasks.Add([pscustomobject]@{ Name = "savfox"; Service = $service; Started = $started; Artifact = $defaultSavfoxBinary; AllowUnchangedArtifact = $true; RepositoryRoots = @($SavfoxRoot, (Join-Path $workspaceRoot "arkret-rust-sdk")) })
+        $preparationTasks.Add([pscustomobject]@{ Name = "savfox"; BuildInputsBefore = $preBuildStates; Service = $service; Started = $started; Artifact = $defaultSavfoxBinary; AllowUnchangedArtifact = $true; RepositoryRoots = @($SavfoxRoot, (Join-Path $workspaceRoot "arkret-rust-sdk")) })
     }
 
     if (-not $SkipBuild -and $willStartDefaultInkson) {
         $inksonWasm = Join-Path $inksonStaticRoot "wasm\inkson_bg.wasm"
         $inksonFreshness = Get-ArtifactFreshness `
             -ArtifactPath $inksonStaticIndex `
+            -ArtifactRoot $inksonStaticRoot `
+            -RequiredArtifactPaths @("index.html", "wasm/inkson_bg.wasm", "wasm/inkson.js") `
             -RepositoryRoots @(
                 $InksonRoot,
                 (Join-Path $workspaceRoot "arkret-rust-sdk"),
@@ -3810,12 +3725,13 @@ try {
             $inksonWasmOutputDir = Join-Path $inksonStaticRoot "wasm"
             $finalizeInksonWasm = Join-Path $repoRoot "scripts\finalize-inkson-joint-e2e-wasm.ps1"
             $buildCommand = "$buildCommand; if (`$LASTEXITCODE -ne 0) { exit `$LASTEXITCODE }; & $(Quote-PsLiteral $finalizeInksonWasm) -SourceWasm $(Quote-PsLiteral $jointE2eWasm) -OutputDirectory $(Quote-PsLiteral $inksonWasmOutputDir)"
+            $preBuildStates = @(Get-ArtifactBuildRepositoryStates -ArtifactPath $inksonStaticIndex -RepositoryRoots @($InksonRoot, (Join-Path $workspaceRoot "arkret-rust-sdk"), (Join-Path $workspaceRoot "garth"), (Join-Path $workspaceRoot "chime")) -ArtifactRoot $inksonStaticRoot)
             $service = Start-ManagedCommand `
                 -Name "prepare-inkson" `
                 -Command $buildCommand `
                 -WorkingDirectory $InksonRoot `
                 -LogDirectory $serviceLogDir
-            $preparationTasks.Add([pscustomobject]@{ Name = "inkson"; Service = $service; Started = $started; Artifact = $inksonStaticIndex; AllowUnchangedArtifact = $false; RepositoryRoots = @($InksonRoot, (Join-Path $workspaceRoot "arkret-rust-sdk"), (Join-Path $workspaceRoot "garth"), (Join-Path $workspaceRoot "chime")) })
+            $preparationTasks.Add([pscustomobject]@{ Name = "inkson"; BuildInputsBefore = $preBuildStates; RequiredArtifactPaths = @("index.html", "wasm/inkson_bg.wasm", "wasm/inkson.js"); ArtifactRoot = $inksonStaticRoot; Service = $service; Started = $started; Artifact = $inksonStaticIndex; AllowUnchangedArtifact = $false; RepositoryRoots = @($InksonRoot, (Join-Path $workspaceRoot "arkret-rust-sdk"), (Join-Path $workspaceRoot "garth"), (Join-Path $workspaceRoot "chime")) })
         } else {
             $preparationTimings.Add([pscustomobject]@{ name = "inkson"; status = "cache-hit"; duration_seconds = 0; detail = $inksonFreshness.Detail })
         }
@@ -3830,7 +3746,7 @@ try {
         $exitCode = $task.Service.Process.ExitCode
         $artifactExists = Test-Path -LiteralPath $task.Artifact -PathType Leaf
         $artifactUpdated = $artifactExists -and `
-            (Get-Item -LiteralPath $task.Artifact).LastWriteTimeUtc -ge $task.Started.ToUniversalTime().AddSeconds(-2)
+            (Get-Item -LiteralPath $task.Artifact -Force).LastWriteTimeUtc -ge $task.Started.ToUniversalTime().AddSeconds(-2)
         if (($null -ne $exitCode -and $exitCode -ne 0) -or -not $artifactExists) {
             throw "preparing $($task.Name) failed (exit=$exitCode, artifact_updated=$artifactUpdated); see $($task.Service.Stdout) and $($task.Service.Stderr)"
         }
@@ -3843,15 +3759,18 @@ try {
             # executable and exit successfully without relinking it. Refresh the
             # filesystem timestamp only after that successful build so the HEAD
             # freshness gate records this explicit verification.
-            (Get-Item -LiteralPath $task.Artifact).LastWriteTimeUtc = [DateTime]::UtcNow
+            (Get-Item -LiteralPath $task.Artifact -Force).LastWriteTimeUtc = [DateTime]::UtcNow
             $status = "verified-cargo-cache-hit"
         }
+        $artifactRoot = if ($task.PSObject.Properties["ArtifactRoot"]) { $task.ArtifactRoot } else { $null }
         $repositoryStates = @(
-            foreach ($repositoryRoot in $task.RepositoryRoots) {
-                Get-RepositoryBuildInputState -RepositoryRoot $repositoryRoot -BinaryPath $task.Artifact
+            foreach ($repositoryRoot in (Resolve-RepositoryBuildInputRoots -RepositoryRoots $task.RepositoryRoots)) {
+                Get-RepositoryBuildInputState -RepositoryRoot $repositoryRoot -BinaryPath $task.Artifact -ArtifactRoot $artifactRoot
             }
         )
-        Write-ArtifactBuildStamp -ArtifactPath $task.Artifact -RepositoryStates $repositoryStates | Out-Null
+        Assert-BuildInputStatesUnchanged -Before $task.BuildInputsBefore -After $repositoryStates
+        $requiredArtifactPaths = if ($task.PSObject.Properties["RequiredArtifactPaths"]) { $task.RequiredArtifactPaths } else { @() }
+        Write-ArtifactBuildStamp -ArtifactPath $task.Artifact -RepositoryStates $repositoryStates -ArtifactRoot $artifactRoot -RequiredArtifactPaths $requiredArtifactPaths | Out-Null
         $preparationTimings.Add([pscustomobject]@{ name = $task.Name; status = $status; duration_seconds = $duration; detail = $task.Artifact })
     }
     if ($willStartDefaultInkson) {
@@ -3910,7 +3829,16 @@ try {
     if ($willStartDefaultInkson) {
         $inksonRuntimeRoot = Join-Path $jointDir "inkson-web"
         New-Item -ItemType Directory -Path $inksonRuntimeRoot -Force | Out-Null
+        $verifiedBundle = Get-ArtifactContentIdentity -ArtifactPath $inksonStaticIndex -ArtifactRoot $inksonStaticRoot -RequiredArtifactPaths @("index.html", "wasm/inkson_bg.wasm", "wasm/inkson.js")
+        $verifiedStamp = Get-Content -Raw -LiteralPath (Get-ArtifactBuildStampPath -ArtifactPath $inksonStaticIndex) | ConvertFrom-Json
+        if ($verifiedBundle.Sha256 -cne $verifiedStamp.artifact_content_sha256 -or $verifiedBundle.Count -ne $verifiedStamp.artifact_file_count) {
+            throw "The Inkson bundle changed after its verified build stamp"
+        }
         Copy-Item -Path (Join-Path $inksonStaticRoot "*") -Destination $inksonRuntimeRoot -Recurse -Force
+        $servedBundle = Get-ArtifactContentIdentity -ArtifactPath (Join-Path $inksonRuntimeRoot "index.html") -ArtifactRoot $inksonRuntimeRoot -RequiredArtifactPaths @("index.html", "wasm/inkson_bg.wasm", "wasm/inkson.js")
+        if ($servedBundle.Sha256 -cne $verifiedBundle.Sha256 -or $servedBundle.Count -ne $verifiedBundle.Count) {
+            throw "The served Inkson bundle differs from the verified build contents"
+        }
         $runtimeWasm = Join-Path $inksonRuntimeRoot "wasm\inkson_bg.wasm"
         if (-not (Test-BinaryContainsAsciiMarker -Path $runtimeWasm -Marker "inkson.test.session_injection.v1")) {
             throw "run-scoped inkson bundle lacks the wasm-localstorage-secrets-test marker: $runtimeWasm"

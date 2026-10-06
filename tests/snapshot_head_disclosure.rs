@@ -21,31 +21,3 @@ async fn limited_account_window_names_issued_basis_or_is_preview_only() -> Resul
     cotest::scenarios::protocol_payloads::limited_account_window_names_issued_basis_or_is_preview_only()
         .await
 }
-
-#[tokio::test]
-#[serial]
-async fn preview_account_window_backfills_without_failing_its_sibling_realm() -> Result<()> {
-    cotest::scenarios::protocol_payloads::preview_account_window_backfills_without_failing_its_sibling_realm()
-        .await
-}
-
-#[tokio::test]
-#[serial]
-async fn limited_window_strand_tail_verifies_with_same_cut_current_through_inkson() -> Result<()> {
-    cotest::scenarios::protocol_payloads::limited_window_strand_tail_verifies_with_same_cut_current_through_inkson()
-        .await
-}
-
-#[tokio::test]
-#[serial]
-async fn message_tail_window_beyond_twenty_commits_verifies_through_inkson() -> Result<()> {
-    cotest::scenarios::protocol_payloads::message_tail_window_beyond_twenty_commits_verifies_through_inkson()
-        .await
-}
-
-#[tokio::test]
-#[serial]
-async fn restricted_join_policy_floor_verifies_through_inkson() -> Result<()> {
-    cotest::scenarios::protocol_payloads::restricted_join_policy_floor_verifies_through_inkson()
-        .await
-}

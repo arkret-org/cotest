@@ -23,14 +23,14 @@ use cotest::conformance::{
     run_handle_claim_rejection_vector_suite, run_key_backup_hardening_suite,
     run_keypackage_lifecycle_suite, run_keypackage_write_transcripts_suite,
     run_media_binding_suite, run_member_identity_vector_suite, run_member_roster_vector_suite,
-    run_mention_rendering_vector_suite, run_mls_governance_binding_suite, run_named_suite_audit,
+    run_mention_rendering_vector_suite, run_mls_governance_binding_suite,
     run_object_addressing_vector_suite, run_object_identity_collision_suite,
     run_poll_reducer_fixture_suite, run_presence_signal_vector_suite,
     run_primary_handle_vector_suite, run_private_view_inbox_suite, run_producer_identity_suite,
     run_protocol_time_tolerance_suite, run_protocol_version_suite, run_push_rule_core_suite,
     run_realm_join_candidate_suite, run_relation_structural_realm_suite, run_sdk_precheck_suite,
     run_sidecar_vector_suite, run_strand_watch_current_suite, run_string_profile_suite,
-    run_test_material_rejection_suite_with_coverage, run_webrtc_media_plaintext_suite,
+    run_test_material_rejection_suite_with_coverage,
 };
 use serde_json::{Value, json};
 
@@ -117,13 +117,6 @@ fn object_identity_collision_named_suite_executes_all_current_cases() -> Result<
 fn protocol_time_tolerance_named_suite_returns_one_result_per_case() -> Result<()> {
     let execution = run_protocol_time_tolerance_suite()?;
     assert_eq!(execution.cases.len(), 10);
-    Ok(())
-}
-
-#[test]
-fn webrtc_media_plaintext_named_suite_returns_one_result_per_case() -> Result<()> {
-    let execution = run_webrtc_media_plaintext_suite()?;
-    assert_eq!(execution.cases.len(), 5);
     Ok(())
 }
 
@@ -305,51 +298,6 @@ fn expected_state_digest_known_answers_recompute_every_fold() -> Result<()> {
         cotest::conformance::run_expected_state_digest_known_answers()?,
         5
     );
-    Ok(())
-}
-
-#[test]
-fn named_suite_audit_executes_registered_runners_and_exposes_every_gap() -> Result<()> {
-    let report = run_named_suite_audit()?;
-    assert_eq!(report.fixture_count, 83);
-    assert_eq!(report.executed_entrypoints.len(), 53);
-    assert!(
-        report
-            .executed_entrypoints
-            .iter()
-            .any(|entrypoint| entrypoint == "ak.suite.pin.admission_and_scope.v1")
-    );
-    assert_eq!(report.unwired_entrypoints.len(), 30);
-    for required_gap in [
-        "ak.suite.call.force_mute_v1_boundary.v1",
-        "ak.suite.current.cas_failure_read_boundary.v1",
-        "ak.suite.consent.cache_invalidation.v1",
-        "ak.suite.direct_conversation.admission_producers.v1",
-        "ak.suite.direct_conversation.signal_admission.v1",
-        "ak.suite.federation.idempotency_after_key_revoke.v1",
-        "ak.suite.reaction.authority_order.v1",
-        "ak.suite.invite.claim_security.v1",
-        "ak.suite.peer.event_submit.semantic_union.v1",
-        "ak.suite.signer_key.historical_commit_coordinate.v1",
-    ] {
-        assert!(
-            report
-                .unwired_entrypoints
-                .iter()
-                .any(|entrypoint| entrypoint == required_gap),
-            "audit must keep the unimplemented priority suite visible: {required_gap}"
-        );
-    }
-    Ok(())
-}
-
-#[test]
-fn account_blocklist_projection_vector_executes_complete_production_suite() -> Result<()> {
-    assert_eq!(
-        cotest::conformance::VECTOR_ID_ACCOUNT_BLOCKLIST_PROJECTION,
-        "ak.vector.account.blocklist_projection.v1"
-    );
-    cotest::conformance::run_account_blocklist_projection_vector()?;
     Ok(())
 }
 

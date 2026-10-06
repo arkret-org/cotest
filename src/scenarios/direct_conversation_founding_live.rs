@@ -485,33 +485,55 @@ async fn assert_no_peer_founding_writes(connect_url: &str, realm_id: &RealmId) -
     Ok(())
 }
 
+/// Client retention oracles are supplied explicitly; founding/admission remains in the server
+/// harness.
+#[async_trait::async_trait(?Send)]
+pub trait DirectClientObserver {
+    async fn block_direct_peer(&self, holder: &Member, peer: &Member) -> Result<()>;
+    async fn unblock_direct_peer(&self, holder: &Member) -> Result<()>;
+    async fn observe_dm_retained_receipt(
+        &self,
+        sender: &Member,
+        holder: &Member,
+        realm: &arkret_wire::RealmId,
+        strand: &str,
+        accepted_group: &arkret_wire::EventId,
+        sender_group: &arkret::ArkretMlsGroup,
+        holder_group: &arkret::ArkretMlsGroup,
+        message_id: &arkret_wire::EventId,
+        latest_cursor: &arkret_wire::EventId,
+    ) -> Result<()>;
+}
+
+pub async fn run_with_client_observer(
+    observer: &dyn DirectClientObserver,
+    observe_case5_contact_terminal: bool,
+) -> Result<()> {
+    run(
+        false,
+        false,
+        false,
+        true,
+        observe_case5_contact_terminal,
+        Some(observer),
+    )
+    .await
+}
+
 pub async fn contact_round_founds_direct_conversation() -> Result<()> {
-    run(false, false, false, false, false).await
+    run(false, false, false, false, false, None).await
 }
 
 pub async fn cross_station_contact_round_founds_direct_conversation() -> Result<()> {
-    run(true, false, false, false, false).await
+    run(true, false, false, false, false, None).await
 }
 
 pub async fn cross_station_missing_contact_dependency_is_atomic() -> Result<()> {
-    run(true, true, false, false, false).await
+    run(true, true, false, false, false, None).await
 }
 
 pub async fn blocklist_dm_binding_snapshot_live() -> Result<()> {
-    run(false, false, true, false, false).await
-}
-
-pub async fn blocklist_dm_retained_receipt_live() -> Result<()> {
-    run(false, false, false, true, false).await
-}
-
-pub async fn blocklist_case5_dm_history_and_contact_terminal_live() -> Result<()> {
-    run(false, false, false, true, true).await
-}
-
-pub async fn blocklist_contact_first_dm_pending_request_live() -> Result<()> {
-    crate::conformance::account_blocklist_projection::contact_and_first_dm_pending_request_live()
-        .await
+    run(false, false, true, false, false, None).await
 }
 
 fn founding_unit_for(
@@ -975,6 +997,7 @@ async fn run(
     observe_binding_snapshot: bool,
     observe_dm_receipt: bool,
     observe_case5_contact_terminal: bool,
+    observer: Option<&dyn DirectClientObserver>,
 ) -> Result<()> {
     let Some(governance_database) = database(GROUP)? else {
         return Ok(());
@@ -1164,6 +1187,17 @@ async fn run(
         );
     }
     if let Some(founding_authority_evidence) = founding_evidence {
+        let mut original_facts = Vec::with_capacity(4);
+        for (submission, commit) in unit.events.iter().zip(&founded.commits) {
+            original_facts.push(
+                crate::scenarios::human_device_producer_live::original_human_signer_fact(
+                    &alice.client,
+                    &submission.event,
+                    commit,
+                )
+                .await?,
+            );
+        }
         let request =
             PeerAuthoritySubmitRequest::RegisteredAtomicUnit(PeerRegisteredAtomicUnitRequest {
                 branch: RegisteredAtomicUnitBranch::RegisteredAtomicUnit,
@@ -1173,6 +1207,7 @@ async fn run(
                         committed_events: std::array::from_fn(|index| CommittedEventSubmission {
                             event_submission: unit.events[index].clone(),
                             source_commit: founded.commits[index].clone(),
+                            producer_signer_fact: Some(original_facts[index].clone()),
                             genesis_event_ref: None,
                             welcomes: None,
                         }),
@@ -1742,7 +1777,10 @@ async fn run(
 
     // Found: both participants send under the binding and read each other.
     if observe_dm_receipt {
-        crate::conformance::account_blocklist_projection::block_direct_peer(&alice, &bob).await?;
+        observer
+            .context("client observation requires an explicit observer")?
+            .block_direct_peer(&alice, &bob)
+            .await?;
     }
     let bob_plaintext = b"hello, Alice".to_vec();
     let bob_message = authored(
@@ -1754,13 +1792,12 @@ async fn run(
         Cites::Participant(&bob_endorsement.event_id),
     )?;
     let blocked_dm_sender = if observe_dm_receipt {
-        let observation =
-            crate::conformance::account_blocklist_projection::observed_authored_shared_message(
-                &bob.client,
-                bob_message.clone(),
-            )
-            .await
-            .context("blocked DM paired Message HTTP submission")?;
+        let observation = crate::conformance::shared_submission::observed_authored_shared_message(
+            &bob.client,
+            bob_message.clone(),
+        )
+        .await
+        .context("blocked DM paired Message HTTP submission")?;
         expect_committed(&observation.outcome, &bob_message)?;
         Some(observation)
     } else {
@@ -1768,18 +1805,20 @@ async fn run(
         None
     };
     if observe_dm_receipt {
-        crate::conformance::account_blocklist_projection::observe_dm_retained_receipt(
-            &bob,
-            &alice,
-            &realm_id,
-            strand_id.as_str(),
-            &add_ref,
-            &bob_group,
-            &alice_group,
-            &bob_message.event_id,
-            &provisional.event_id,
-        )
-        .await?;
+        observer
+            .context("client observation requires an explicit observer")?
+            .observe_dm_retained_receipt(
+                &bob,
+                &alice,
+                &realm_id,
+                strand_id.as_str(),
+                &add_ref,
+                &bob_group,
+                &alice_group,
+                &bob_message.event_id,
+                &provisional.event_id,
+            )
+            .await?;
         let unblocked_dm_message = authored(
             &bob,
             arkret_wire::event_kind_str::MESSAGE_CREATE,
@@ -1795,14 +1834,14 @@ async fn run(
             Cites::Participant(&bob_endorsement.event_id),
         )?;
         let unblocked_dm_sender =
-            crate::conformance::account_blocklist_projection::observed_authored_shared_message(
+            crate::conformance::shared_submission::observed_authored_shared_message(
                 &bob.client,
                 unblocked_dm_message.clone(),
             )
             .await
             .context("unblocked DM paired Message HTTP submission")?;
         expect_committed(&unblocked_dm_sender.outcome, &unblocked_dm_message)?;
-        crate::conformance::account_blocklist_projection::compare_shared_sender_observations(
+        crate::conformance::shared_submission::compare_shared_sender_observations(
             blocked_dm_sender
                 .as_ref()
                 .context("DM paired transport omitted the blocked submission")?,
@@ -1812,7 +1851,9 @@ async fn run(
             // A second private block is paired with a real Contact terminal
             // command. Removing the private entry cannot recreate a Message
             // that the durable Contact authority never accepted.
-            crate::conformance::account_blocklist_projection::block_direct_peer(&alice, &bob)
+            observer
+                .context("client observation requires an explicit observer")?
+                .block_direct_peer(&alice, &bob)
                 .await?;
             let contact = alice
                 .client
@@ -1866,7 +1907,10 @@ async fn run(
                 Cites::Participant(&bob_endorsement.event_id),
             )?;
             expect_rejected(&bob, &refused, PARTICIPANT_DENIED).await?;
-            crate::conformance::account_blocklist_projection::unblock_direct_peer(&alice).await?;
+            observer
+                .context("client observation requires an explicit observer")?
+                .unblock_direct_peer(&alice)
+                .await?;
             ensure!(
                 alice
                     .client

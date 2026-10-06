@@ -592,6 +592,7 @@ fn commit_for(
         governance_generation: 0,
         authority_ref: RealmCommitAuthorityRef::GenesisOrChangeEvent(event.event_id.clone()),
         committed_at: fixed_time(1),
+        producer_signer_fact_digest: None,
         signature: authority_signature()?,
     })
 }

@@ -349,6 +349,7 @@ fn commit_for(
         governance_generation: generation,
         authority_ref: RealmCommitAuthorityRef::GenesisOrChangeEvent(event.event_id.clone()),
         committed_at: fixed_time(1),
+        producer_signer_fact_digest: None,
         signature: authority_signature(DetachedSignatureContext::RealmCommit, authority_did)?,
     })
 }
@@ -668,6 +669,7 @@ fn commit_member_names() -> Result<Vec<String>> {
             [0x44; 32],
         )),
         committed_at: fixed_time(0),
+        producer_signer_fact_digest: None,
         signature: authority_signature(DetachedSignatureContext::RealmCommit, OLD_AUTHORITY_DID)?,
     };
     Ok(serde_json::to_value(commit)?
@@ -832,6 +834,7 @@ fn build_authority_fixture(declared: &[DeclaredStream]) -> Result<AuthorityFixtu
             genesis_event.event_id.clone(),
         ),
         committed_at: fixed_time(1),
+        producer_signer_fact_digest: None,
         signature: authority_signature(DetachedSignatureContext::RealmCommit, OLD_AUTHORITY_DID)?,
     };
 
@@ -854,6 +857,7 @@ fn build_authority_fixture(declared: &[DeclaredStream]) -> Result<AuthorityFixtu
         governance_generation: 0,
         authority_ref: RealmCommitAuthorityRef::GenesisOrChangeEvent(change_event.event_id.clone()),
         committed_at: fixed_time(11),
+        producer_signer_fact_digest: None,
         signature: authority_signature(DetachedSignatureContext::RealmCommit, OLD_AUTHORITY_DID)?,
     };
 
@@ -885,7 +889,7 @@ fn build_authority_fixture(declared: &[DeclaredStream]) -> Result<AuthorityFixtu
 
     let snapshot_signature =
         authority_signature(DetachedSignatureContext::RealmSnapshot, OLD_AUTHORITY_DID)?;
-    let snapshot = RealmStateSnapshot {
+    let mut snapshot = RealmStateSnapshot {
         snapshot_id: RealmSnapshotId::from_digest(Sha256::digest(b"cotest-snapshot").into()),
         realm_id: realm_id.clone(),
         governance_generation: 0,
@@ -899,6 +903,13 @@ fn build_authority_fixture(declared: &[DeclaredStream]) -> Result<AuthorityFixtu
         signature: snapshot_signature.clone(),
     };
 
+    snapshot.snapshot_id = RealmSnapshotId::from_digest(arkret_canonical::sha256_bytes(
+        &arkret_canonical::canonical_json_bytes(&arkret_canonical::unsigned_value(
+            &snapshot,
+            &["snapshot_id", "signature"],
+        )?)?,
+    ));
+
     let handoff = RealmAuthorityHandoff {
         handoff_id: RealmAuthorityHandoffId::from_digest(Sha256::digest(b"cotest-handoff").into()),
         realm_id: realm_id.clone(),
@@ -910,7 +921,9 @@ fn build_authority_fixture(declared: &[DeclaredStream]) -> Result<AuthorityFixtu
             &final_stream_heads,
         )?)?,
         snapshot_ref: snapshot.snapshot_id.clone(),
-        snapshot_digest: snapshot_signature.signed_digest.clone(),
+        historical_signer_facts_digest: Some(
+            arkret_models_collaboration::authority_commit::historical_signer_facts_digest(&[])?,
+        ),
         change_event_ref: change_event.event_id.clone(),
         change_commit_id: change_commit.commit_id.clone(),
         old_authority_signature: authority_signature(
@@ -1126,11 +1139,12 @@ fn verify_handoff(fixture: &Value) -> Result<()> {
         "the private manifest must carry exactly the declared head count"
     );
 
-    let request = arkret_wire::AuthorityHandoffRequest {
+    let request = arkret_models_collaboration::authority_commit::AuthorityHandoffRequest {
         handoff: authority.handoff.clone(),
         final_stream_heads: authority.final_stream_heads.clone(),
         snapshot: authority.snapshot.clone(),
         authority_bundle: authority.bundle.clone(),
+        historical_signer_facts: Some(Vec::new()),
     };
     request
         .validate_shape()
@@ -1191,6 +1205,7 @@ fn verify_old_authority_writes_are_rejected(authority: &AuthorityFixture) -> Res
         governance_generation: authority.handoff.from_generation,
         authority_ref: RealmCommitAuthorityRef::Handoff(authority.handoff.handoff_id.clone()),
         committed_at: fixed_time(60),
+        producer_signer_fact_digest: None,
         signature: authority_signature(DetachedSignatureContext::RealmCommit, OLD_AUTHORITY_DID)?,
     };
 
@@ -1264,6 +1279,7 @@ fn verify_new_generation_continues_imported_heads(authority: &AuthorityFixture) 
             governance_generation: authority.bundle.current_generation,
             authority_ref: RealmCommitAuthorityRef::Handoff(authority.handoff.handoff_id.clone()),
             committed_at: fixed_time(70),
+            producer_signer_fact_digest: None,
             signature: authority_signature(
                 DetachedSignatureContext::RealmCommit,
                 NEW_AUTHORITY_DID,
@@ -1465,6 +1481,7 @@ fn submit_mls_commit(
             submission.commit_event.event_id.clone(),
         ),
         committed_at: fixed_time(81),
+        producer_signer_fact_digest: None,
         signature: authority_signature(DetachedSignatureContext::RealmCommit, OLD_AUTHORITY_DID)?,
     };
     let outcome = AuthoritySubmitOutcome::Accepted {

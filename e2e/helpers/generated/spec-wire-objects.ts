@@ -1257,6 +1257,15 @@ export type CapabilityGrantObject = {
     "realm_id": string;
     "authority_event_ref": string;
     "authority_generation": number;
+  } | {
+    "kind": "owned_agent";
+    "realm_id": string;
+    "controller_account_id": {
+      "principal_id": string;
+      "station_id": string;
+    };
+    "controller_join_event_id": string;
+    "agent_join_event_id": string;
   }>;
   "authority_depth": number;
   "authority_root_refs": Array<{
@@ -1264,6 +1273,15 @@ export type CapabilityGrantObject = {
     "realm_id": string;
     "authority_event_ref": string;
     "authority_generation": number;
+  } | {
+    "kind": "owned_agent";
+    "realm_id": string;
+    "controller_account_id": {
+      "principal_id": string;
+      "station_id": string;
+    };
+    "controller_join_event_id": string;
+    "agent_join_event_id": string;
   }>;
 };
 
@@ -1471,6 +1489,15 @@ export type CapabilityGrantPayload = {
       "realm_id": string;
       "authority_event_ref": string;
       "authority_generation": number;
+    } | {
+      "kind": "owned_agent";
+      "realm_id": string;
+      "controller_account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+      "controller_join_event_id": string;
+      "agent_join_event_id": string;
     }>;
   };
 };
@@ -1573,6 +1600,7 @@ export type InviteDeliveryRequestBody = {
     "governance_generation": number;
     "authority_ref": string;
     "committed_at": string;
+    "producer_signer_fact_digest"?: string;
     "signature": {
       "context": "ak.realm_commit_signature.v1";
       "signature_algorithm": "Ed25519";
@@ -1581,6 +1609,44 @@ export type InviteDeliveryRequestBody = {
       "created_at": string;
       "sig": string;
     };
+  };
+  "producer_signer_fact"?: {
+    "event_id": string;
+    "actor": {
+      "kind": "account";
+      "account_id": {
+        "principal_id": string;
+        "station_id": string;
+      };
+    };
+    "device_id": string;
+    "verification_method": string;
+    "key": {
+      "public_key_b64u": string;
+      "authorization_ref": {
+        "event_id": string;
+        "commit_id": string;
+        "stream_ref": {
+          "kind": "realm";
+          "realm_id": string;
+        } | {
+          "kind": "circle";
+          "realm_id": string;
+          "circle_id": string;
+        } | {
+          "kind": "sidecar";
+          "realm_id": string;
+          "sidecar_id": string;
+        };
+        "stream_position": number;
+      };
+      "revision": {
+        "commit_id": string;
+        "stream_position": number;
+      };
+      "governance_generation": number;
+    };
+    "accepted_at": string;
   };
   "authority_locator_hints": Array<{
     "service_kind": "station";

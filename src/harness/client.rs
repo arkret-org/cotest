@@ -291,7 +291,7 @@ impl TestActorClient {
         }
     }
 
-    pub(crate) fn sign_prepared_contact_event(
+    pub fn sign_prepared_contact_event(
         &self,
         draft: &PreparedEventDraft,
         expected_kind: &str,
@@ -427,7 +427,7 @@ impl TestActorClient {
     }
 
     /// Wait for exact signed commit inclusion of one Event in this Realm.
-    pub(crate) async fn await_event_seal_coverage(
+    pub async fn await_event_seal_coverage(
         &self,
         realm_id: &str,
         event_id: &EventId,

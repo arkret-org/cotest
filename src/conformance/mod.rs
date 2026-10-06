@@ -1,4 +1,3 @@
-pub(crate) mod account_blocklist_projection;
 mod account_data_cas_convergence;
 mod account_status_issuer_ledger;
 mod actor_private_events_submit;
@@ -14,6 +13,7 @@ mod agent_runtime_scope;
 mod agent_vectors;
 mod applet_install;
 mod applet_self_actor;
+pub mod shared_submission;
 pub use applet_self_actor::{APPLET_SELF_ACTOR_ENTRYPOINT, run_applet_self_actor_suite};
 mod arkret_private_kdf_and_durability;
 mod auth_session_proof;
@@ -123,7 +123,6 @@ mod test_material_rejection;
 mod vector_registry_gate;
 mod view_write_contract;
 mod visibility_policy;
-mod webrtc_media_plaintext;
 mod websocket_binding;
 mod wire;
 
@@ -140,15 +139,6 @@ const ARTIFACT_FIXTURES_DIR: &str = "fixtures";
 
 // ── Public suite re-exports ─────────────────────────────────────────────────
 
-pub use account_blocklist_projection::{
-    ACCOUNT_BLOCKLIST_PROJECTION_ENTRYPOINT, VECTOR_ID_ACCOUNT_BLOCKLIST_PROJECTION,
-    contact_first_dm_cross_station_private_boundary_live,
-    run_account_blocklist_case4_combined_slice,
-    run_account_blocklist_case4_federated_boundary_slice, run_account_blocklist_case4_production,
-    run_account_blocklist_case5_production, run_account_blocklist_case6_combined_slice,
-    run_account_blocklist_case6_production, run_account_blocklist_production_cases,
-    run_account_blocklist_projection_suite, run_account_blocklist_projection_vector,
-};
 pub use account_data_cas_convergence::{
     ACCOUNT_DATA_CAS_CONVERGENCE_ENTRYPOINT, run_account_data_cas_convergence_suite,
 };
@@ -379,7 +369,10 @@ pub use mls_cross_station_welcome_replication::{
 pub use mls_governance_binding::{
     MLS_GOVERNANCE_BINDING_ENTRYPOINT, run_mls_governance_binding_suite,
 };
-pub use named_suite_audit::{NamedSuiteAuditReport, run_named_suite_audit};
+pub use named_suite_audit::{
+    ClientNamedSuiteRunner, NamedSuiteAuditReport, run_named_suite_audit,
+    run_named_suite_audit_with_clients,
+};
 pub use non_governance_receiver::{
     VECTOR_ID_NON_GOVERNANCE_RECEIVER_TRUSTS_GOVERNANCE_COMMIT,
     run_non_governance_receiver_trusts_governance_commit_vector,
@@ -511,9 +504,6 @@ pub use vector_registry_gate::{
 };
 pub use view_write_contract::{VIEW_WRITE_CONTRACT_ENTRYPOINT, run_view_write_contract_suite};
 pub use visibility_policy::run_visibility_policy_fixture_suite;
-pub use webrtc_media_plaintext::{
-    WEBRTC_MEDIA_PLAINTEXT_ENTRYPOINT, run_webrtc_media_plaintext_suite,
-};
 pub use websocket_binding::run_websocket_binding_suite;
 pub use wire::{
     run_composite_state_key_encoding_fixture_suite, run_composite_state_subject_fixture_suite,
@@ -567,7 +557,7 @@ pub(crate) struct NamedCase {
 // The fixture accessor layer (`required_*`, `expected_*`, `string_*`) lives in
 // `fixture_dsl` and is re-exported here so suites keep importing it as
 // `super::required_str` and friends.
-pub(crate) use fixture_dsl::{
+pub use fixture_dsl::{
     FixtureRunner, expected, expected_bool, expected_str, expected_u64, required_array,
     required_bool, required_field, required_i64, required_object, required_str, required_str_obj,
     required_u64, string_array_field, string_set, string_set_of, string_vec,
@@ -637,21 +627,21 @@ fn spec_artifact_candidates(root: &Path) -> Vec<PathBuf> {
     ]
 }
 
-pub(crate) fn load_fixture<T>(file_name: &str) -> Result<T>
+pub fn load_fixture<T>(file_name: &str) -> Result<T>
 where
     T: for<'de> Deserialize<'de>,
 {
     parse_fixture_value(file_name, load_fixture_value(file_name)?)
 }
 
-pub(crate) fn load_fixture_value(file_name: &str) -> Result<Value> {
+pub fn load_fixture_value(file_name: &str) -> Result<Value> {
     let path = fixture_path(file_name);
     let raw = fs::read_to_string(&path)?;
     serde_json::from_str(&raw)
         .map_err(|error| anyhow!("failed to parse fixture {}: {error}", path.display()))
 }
 
-pub(crate) fn parse_fixture_value<T>(file_name: &str, value: Value) -> Result<T>
+pub fn parse_fixture_value<T>(file_name: &str, value: Value) -> Result<T>
 where
     T: for<'de> Deserialize<'de>,
 {
@@ -737,14 +727,14 @@ pub(crate) fn verify_security_evidence(
     Ok(())
 }
 
-pub(crate) fn load_artifact_json(relative_path: &str) -> Result<Value> {
+pub fn load_artifact_json(relative_path: &str) -> Result<Value> {
     let path = spec_artifacts_root().join(relative_path);
     let raw = fs::read_to_string(&path)?;
     serde_json::from_str(&raw)
         .map_err(|error| anyhow!("failed to parse artifact {}: {error}", path.display()))
 }
 
-pub(crate) fn validate_profile(value: &Value, expected: &str) -> Result<()> {
+pub fn validate_profile(value: &Value, expected: &str) -> Result<()> {
     let profile = value
         .get("profile")
         .and_then(Value::as_str)
@@ -755,7 +745,7 @@ pub(crate) fn validate_profile(value: &Value, expected: &str) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn fixture_runner_entrypoint(value: &Value) -> Result<&str> {
+pub fn fixture_runner_entrypoint(value: &Value) -> Result<&str> {
     value
         .get("runner")
         .and_then(Value::as_object)
@@ -764,31 +754,31 @@ pub(crate) fn fixture_runner_entrypoint(value: &Value) -> Result<&str> {
         .ok_or_else(|| anyhow!("fixture runner must be an object with string entrypoint"))
 }
 
-pub(crate) fn value_array<'a>(value: &'a Value, context: &str) -> Result<&'a Vec<Value>> {
+pub fn value_array<'a>(value: &'a Value, context: &str) -> Result<&'a Vec<Value>> {
     value
         .as_array()
         .ok_or_else(|| anyhow!("{context} must be an array"))
 }
 
-pub(crate) fn value_field_str<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
+pub fn value_field_str<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
     required_field(value, field)?
         .as_str()
         .ok_or_else(|| anyhow!("object field {field} must be a string"))
 }
 
-pub(crate) fn value_field_u64(value: &Value, field: &str) -> Result<u64> {
+pub fn value_field_u64(value: &Value, field: &str) -> Result<u64> {
     required_field(value, field)?
         .as_u64()
         .ok_or_else(|| anyhow!("object field {field} must be an unsigned integer"))
 }
 
-pub(crate) fn value_field_actor(value: &Value, field: &str) -> Result<arkret_wire::ActorId> {
+pub fn value_field_actor(value: &Value, field: &str) -> Result<arkret_wire::ActorId> {
     Ok(serde_json::from_value(
         required_field(value, field)?.clone(),
     )?)
 }
 
-pub(crate) fn canonical_json(value: &Value) -> Result<String> {
+pub fn canonical_json(value: &Value) -> Result<String> {
     // Delegate to the SDK's canonical encoder so every Arkret implementation
     // sorts keys / encodes numbers identically. `canonical_json_bytes` is the
     // single normative source of canonical bytes (spec encoding.md §9.5); the
@@ -798,7 +788,7 @@ pub(crate) fn canonical_json(value: &Value) -> Result<String> {
     String::from_utf8(bytes).map_err(|err| anyhow!("canonical JSON produced invalid UTF-8: {err}"))
 }
 
-pub(crate) fn sha256_prefixed(bytes: &[u8]) -> String {
+pub fn sha256_prefixed(bytes: &[u8]) -> String {
     use std::fmt::Write as _;
     let digest = Sha256::digest(bytes);
     let mut out = String::with_capacity("sha256:".len() + digest.len() * 2);
@@ -809,7 +799,7 @@ pub(crate) fn sha256_prefixed(bytes: &[u8]) -> String {
     out
 }
 
-pub(crate) fn looks_like_sha256_digest(value: &str) -> bool {
+pub fn looks_like_sha256_digest(value: &str) -> bool {
     value.starts_with("sha256:")
         && value.len() == "sha256:".len() + 64
         && value["sha256:".len()..]

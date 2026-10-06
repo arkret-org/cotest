@@ -774,6 +774,7 @@ fn governance_submit(world: &World, variant: &Value) -> Result<Value> {
                 replications: vec![CommittedEventSubmission {
                     event_submission: EventAdmissionSubmission::new(event.clone()),
                     source_commit: source_commit.clone(),
+                    producer_signer_fact: None,
                     genesis_event_ref: Some(world.genesis_event_ref()),
                     welcomes: carried.clone(),
                 }],
@@ -966,6 +967,7 @@ impl MemberStation {
         let item = CommittedEventSubmission {
             event_submission: EventAdmissionSubmission::new(event.clone()),
             source_commit: world.source_commit(&event)?,
+            producer_signer_fact: None,
             genesis_event_ref: if event.kind == EventKind::MlsCommit {
                 Some(match variant.get("genesis_event_ref") {
                     Some(value) => world

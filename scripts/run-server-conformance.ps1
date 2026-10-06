@@ -5,9 +5,10 @@ param(
     [string]$SutManifest,
     [string]$SutImage = "cotest-soland:latest",
     [string]$OutputRoot,
+    [string]$CargoTestPackage,
     [string]$CargoTestTarget,
     [string]$CargoTestFilter,
-    [ValidateSet("all", "fast-smoke", "compose", "release-gate", "services-live", "full-nightly", "joint", "multi-server")]
+    [ValidateSet("all", "fast-smoke", "compose", "release-gate", "services-live", "full-nightly", "inkson-client-live", "joint", "multi-server")]
     [string]$Profile = "all",
     [string]$ProfileConfigPath,
     [switch]$PlanOnly,
@@ -35,6 +36,11 @@ Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot "lib\artifacts.ps1")
 
 function Repair-ProcessPathEnvironment {
+    # PATH is case-sensitive on Unix. Only Windows child-process setup needs
+    # duplicate PATH/Path normalization; renaming it on Unix hides cargo.
+    if (-not $IsWindows) {
+        return
+    }
     $pathValue = [Environment]::GetEnvironmentVariable("Path", "Process")
     if (-not $pathValue) {
         $pathValue = [Environment]::GetEnvironmentVariable("PATH", "Process")
@@ -356,26 +362,28 @@ function Get-ProfileCargoTests {
 
 function Get-CargoMetadataTestTargets {
     param([Parameter(Mandatory = $true)][string]$RepoRoot)
-
     Push-Location $RepoRoot
     try {
-        $metadataOutput = & cargo metadata --no-deps --format-version 1
-        if ($LASTEXITCODE -ne 0) {
-            throw "cargo metadata failed with exit code $LASTEXITCODE"
+        $metadataOutput = & cargo metadata --locked --no-deps --format-version 1
+        if ($LASTEXITCODE -ne 0) { throw "cargo metadata failed with exit code $LASTEXITCODE" }
+    } finally { Pop-Location }
+    $metadata = ($metadataOutput -join [Environment]::NewLine) | ConvertFrom-Json
+    $targets = @(
+        foreach ($package in @($metadata.packages | Where-Object { $_.name -in @("cotest", "cotest-inkson-client-tests") })) {
+            foreach ($target in @($package.targets | Where-Object { $_.kind -contains "test" })) {
+                [pscustomobject]@{ package = [string]$package.name; target = [string]$target.name }
+            }
+        }
+    )
+    foreach ($required in @("cotest", "cotest-inkson-client-tests")) {
+        if (@($targets | Where-Object { $_.package -eq $required }).Count -eq 0) {
+            throw "Required test package '$required' is absent or has no integration targets"
         }
     }
-    finally {
-        Pop-Location
+    foreach ($expected in @("account_blocklist_production_live", "calendar_rsvp_convergence", "conformance_vectors", "invite_frozen_prestate_live", "kanban_identity_boundary", "productivity_contracts", "snapshot_head_disclosure", "websocket_live")) {
+        if (@($targets | Where-Object { $_.package -eq "cotest-inkson-client-tests" -and $_.target -eq $expected }).Count -ne 1) { throw "Required client test target missing: $expected" }
     }
-
-    $metadata = ($metadataOutput -join [Environment]::NewLine) | ConvertFrom-Json
-    return @(
-        $metadata.packages |
-            ForEach-Object { $_.targets } |
-            Where-Object { $_.kind -contains "test" } |
-            ForEach-Object { $_.name } |
-            Sort-Object -Unique
-    )
+    return @($targets | Sort-Object package, target -Unique)
 }
 
 # Cargo discovers `.cargo/config.toml` by walking up from the *current*
@@ -389,7 +397,7 @@ function Get-CargoTargetDirectory {
     $manifestDirectory = Split-Path -Parent ([System.IO.Path]::GetFullPath($ManifestPath))
     Push-Location -LiteralPath $manifestDirectory
     try {
-        $metadataOutput = & cargo metadata --no-deps --format-version 1 --manifest-path $ManifestPath
+        $metadataOutput = & cargo metadata --locked --no-deps --format-version 1 --manifest-path $ManifestPath
         $metadataExitCode = $LASTEXITCODE
     }
     finally {
@@ -408,12 +416,12 @@ function Get-CargoTargetDirectory {
 function Assert-CargoTestConfiguration {
     param(
         [Parameter(Mandatory = $true)]$Config,
-        [Parameter(Mandatory = $true)][string[]]$KnownTargets
+        [Parameter(Mandatory = $true)][object[]]$KnownTargets
     )
 
     $knownTargetSet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
     foreach ($target in $KnownTargets) {
-        $null = $knownTargetSet.Add($target)
+        $null = $knownTargetSet.Add("$($target.package)`0$($target.target)")
     }
 
     $profileIds = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
@@ -438,15 +446,16 @@ function Assert-CargoTestConfiguration {
 
         $selectionKeys = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
         foreach ($test in $tests) {
+            $package = if ($test.PSObject.Properties.Name -contains "package") { [string]$test.package } else { "cotest" }
             $target = [string]$test.target
             $filter = [string]$test.filter
             if ([string]::IsNullOrWhiteSpace($target) -or [string]::IsNullOrWhiteSpace($filter)) {
                 throw "CI profile '$($profile.profile_id)' cargo_tests entries require non-empty target and filter"
             }
-            if (-not $knownTargetSet.Contains($target)) {
+            if (-not $knownTargetSet.Contains("$package`0$target")) {
                 throw "CI profile '$($profile.profile_id)' references unknown cargo test target '$target'"
             }
-            $key = "$target`0$filter"
+            $key = "$package`0$target`0$filter"
             if (-not $selectionKeys.Add($key)) {
                 throw "CI profile '$($profile.profile_id)' contains duplicate cargo test selection '$target::$filter'"
             }
@@ -455,15 +464,16 @@ function Assert-CargoTestConfiguration {
 
     $quarantineKeys = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
     foreach ($entry in @($Config.quarantined_tests)) {
+        $package = if ($entry.PSObject.Properties.Name -contains "package") { [string]$entry.package } else { "cotest" }
         $target = [string]$entry.test_target
         $filter = [string]$entry.test_filter
         if ([string]::IsNullOrWhiteSpace($target) -or [string]::IsNullOrWhiteSpace($filter)) {
             throw "Quarantined tests require non-empty test_target and test_filter"
         }
-        if (-not $knownTargetSet.Contains($target)) {
+        if (-not $knownTargetSet.Contains("$package`0$target")) {
             throw "Quarantined test references unknown cargo test target '$target'"
         }
-        $key = "$target`0$filter"
+        $key = "$package`0$target`0$filter"
         if (-not $quarantineKeys.Add($key)) {
             throw "Duplicate quarantined test selection '$target::$filter'"
         }
@@ -474,69 +484,55 @@ function Get-CargoTestInvocations {
     param(
         [Parameter(Mandatory = $true)]$Profile,
         [Parameter(Mandatory = $true)]$QuarantineEntries,
+        [Parameter(Mandatory = $true)][object[]]$KnownTargets,
+        [AllowNull()][string]$CargoTestPackage,
         [AllowNull()][string]$CargoTestTarget,
         [AllowNull()][string]$CargoTestFilter
     )
-
-    if ($CargoTestTarget -or $CargoTestFilter) {
-        $selectionMode = if ($CargoTestTarget -and $CargoTestFilter) {
-            "target-filter"
-        } elseif ($CargoTestTarget) {
-            "target-all"
-        } else {
-            "broad-scan"
+    $packages = @("cotest", "cotest-inkson-client-tests")
+    if ($CargoTestPackage -and $CargoTestPackage -notin $packages) { throw "Unknown cargo test package '$CargoTestPackage'" }
+    if ($CargoTestTarget) {
+        $matches = @($KnownTargets | Where-Object { $_.target -eq $CargoTestTarget -and (-not $CargoTestPackage -or $_.package -eq $CargoTestPackage) })
+        if ($matches.Count -ne 1) { throw "Cargo test target '$CargoTestTarget' has $($matches.Count) package matches; select -CargoTestPackage explicitly" }
+        $CargoTestPackage = $matches[0].package
+    }
+    if ($CargoTestPackage) { $packages = @($CargoTestPackage) }
+    $invocations = New-Object System.Collections.Generic.List[object]
+    if ($CargoTestPackage -or $CargoTestTarget -or $CargoTestFilter -or $Profile.include_all_tests) {
+        foreach ($package in $packages) {
+            $mode = if ($CargoTestTarget -and $CargoTestFilter) { "target-filter" } elseif ($CargoTestTarget) { "target-all" } elseif ($CargoTestFilter) { "broad-scan" } else { "all-tests" }
+            $skips = @($QuarantineEntries | Where-Object { -not ($_.PSObject.Properties.Name -contains "package") -and $package -eq "cotest" -or ($_.PSObject.Properties.Name -contains "package") -and $_.package -eq $package } | ForEach-Object { $_.test_filter })
+            $invocations.Add([pscustomobject]@{
+                package = $package; label = "$package/$mode/$CargoTestTarget/$CargoTestFilter";
+                target = if ($CargoTestTarget) { $CargoTestTarget } else { $null };
+                filter = if ($CargoTestFilter) { $CargoTestFilter } else { $null };
+                skips = $skips; include_ignored = $false; selection_mode = $mode
+            })
         }
-        return @([pscustomobject]@{
-                label          = if ($CargoTestTarget) { "target:$CargoTestTarget" } else { "filter:$CargoTestFilter" }
-                target         = if ($CargoTestTarget) { $CargoTestTarget } else { $null }
-                filter         = if ($CargoTestFilter) { $CargoTestFilter } else { $null }
-                skips          = @()
-                include_ignored = $false
-                selection_mode = $selectionMode
-            })
+        return $invocations.ToArray()
     }
-
-    $quarantinedFilters = @($QuarantineEntries | ForEach-Object { $_.test_filter })
-    if ($Profile.include_all_tests) {
-        return @([pscustomobject]@{
-                label           = $Profile.profile_id
-                target          = $null
-                filter          = $null
-                skips           = $quarantinedFilters
-                include_ignored = $false
-                selection_mode  = "all-tests"
-            })
-    }
-
     $quarantinedKeys = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
     foreach ($entry in $QuarantineEntries) {
-        $null = $quarantinedKeys.Add("$($entry.test_target)`0$($entry.test_filter)")
+        $package = if ($entry.PSObject.Properties.Name -contains "package") { [string]$entry.package } else { "cotest" }
+        $null = $quarantinedKeys.Add("$package`0$($entry.test_target)`0$($entry.test_filter)")
     }
-
-    $invocations = New-Object System.Collections.Generic.List[object]
     foreach ($test in @(Get-ProfileCargoTests -Profile $Profile)) {
-        $target = [string]$test.target
-        $filter = [string]$test.filter
-        if ($quarantinedKeys.Contains("$target`0$filter")) {
-            continue
-        }
+        $package = if ($test.PSObject.Properties.Name -contains "package") { [string]$test.package } else { "cotest" }
+        $target = [string]$test.target; $filter = [string]$test.filter
+        if ($quarantinedKeys.Contains("$package`0$target`0$filter")) { continue }
         $invocations.Add([pscustomobject]@{
-                label           = "$target::$filter"
-                target          = $target
-                filter          = $filter
-                skips           = @()
-                include_ignored = if ($test.PSObject.Properties.Name -contains "include_ignored") { [bool]$test.include_ignored } else { $false }
-                selection_mode  = "target-filter"
-            })
+            package = $package; label = "${package}/${target}::$filter"; target = $target; filter = $filter;
+            skips = @(); include_ignored = if ($test.PSObject.Properties.Name -contains "include_ignored") { [bool]$test.include_ignored } else { $false };
+            selection_mode = "target-filter"
+        })
     }
-    if ($invocations.Count -eq 0) {
-        throw "CI profile '$($Profile.profile_id)' did not produce any cargo test invocations"
-    }
-    return $invocations
+    if ($invocations.Count -eq 0) { throw "CI profile '$($Profile.profile_id)' did not produce any cargo test invocations" }
+    return $invocations.ToArray()
 }
 
 function New-CargoTestArgs {
     param(
+        [Parameter(Mandatory = $true)][string]$Package,
         [Parameter(Mandatory = $true)][string]$SelectionMode,
         [AllowNull()][string]$Target,
         [AllowNull()][string]$Filter,
@@ -544,7 +540,7 @@ function New-CargoTestArgs {
         [switch]$IncludeIgnored
     )
 
-    $args = @("test")
+    $args = @("test", "--locked", "-p", $Package)
     switch ($SelectionMode) {
         "all-tests" { $args += "--tests" }
         "broad-scan" { $args += "--tests" }
@@ -577,6 +573,7 @@ function Add-CargoTestArgsToInvocations {
     foreach ($invocation in @($Invocations)) {
         $cargoArgs = @(
             New-CargoTestArgs `
+                -Package $invocation.package `
                 -SelectionMode $invocation.selection_mode `
                 -Target $invocation.target `
                 -Filter $invocation.filter `
@@ -605,11 +602,12 @@ function Test-CargoProfileSelection {
 
     $validatedTests = 0
     $validatedTargets = New-Object System.Collections.Generic.List[string]
-    foreach ($targetGroup in @($targetFilters | Group-Object target)) {
-        $target = [string]$targetGroup.Name
+    foreach ($targetGroup in @($targetFilters | Group-Object package, target)) {
+        $package = [string]$targetGroup.Group[0].package
+        $target = [string]$targetGroup.Group[0].target
         Push-Location $RepoRoot
         try {
-            $listOutput = @(& cargo test --test $target -- --list 2>&1)
+            $listOutput = @(& cargo test --locked -p $package --test $target -- --list 2>&1)
             $listExitCode = $LASTEXITCODE
         }
         finally {
@@ -632,7 +630,7 @@ function Test-CargoProfileSelection {
             }
             $validatedTests++
         }
-        $validatedTargets.Add($target)
+        $validatedTargets.Add("$package/$target")
     }
 
     return [pscustomobject]@{
@@ -660,7 +658,8 @@ function Invoke-CargoTestInvocation {
     param(
         [Parameter(Mandatory = $true)][string[]]$CargoArgs,
         [Parameter(Mandatory = $true)][string]$RawLog,
-        [Parameter(Mandatory = $true)][string]$Label
+        [Parameter(Mandatory = $true)][string]$Label,
+        [switch]$AllowEmpty
     )
 
     $header = "=== cotest invocation: $Label ==="
@@ -711,6 +710,11 @@ function Invoke-CargoTestInvocation {
                 Write-Host $line
             }
         }
+        if ($invocationExitCode -eq 0 -and -not $AllowEmpty) {
+            $executed = 0
+            foreach ($match in [regex]::Matches($stdout, 'test result:.*? (\d+) passed; (\d+) failed;')) { $executed += [int]$match.Groups[1].Value + [int]$match.Groups[2].Value }
+            if ($executed -eq 0) { Add-RawLogLine -Path $RawLog -Value "EMPTY SELECTION: $Label executed no tests"; return 1 }
+        }
         return [int]$invocationExitCode
     }
     finally {
@@ -741,8 +745,15 @@ function Parse-CotestLog {
     $tests = New-Object System.Collections.Generic.List[object]
     $footers = New-Object System.Collections.Generic.List[object]
     $invocation = "unknown"
+    $package = "unknown"
+    $selection = "unknown"
 
     foreach ($line in Get-Content $LogPath) {
+        if ($line -match '^=== cotest invocation: (?<selection>(?<package>cotest(?:-inkson-client-tests)?)/.+) ===$') {
+            $package = $Matches.package
+            $selection = $Matches.selection
+            continue
+        }
         if ($line -match '^\s*Running (?<target>.+)$') {
             $invocation = $Matches.target.Trim()
             continue
@@ -762,12 +773,16 @@ function Parse-CotestLog {
                     status     = $status
                     reason     = if ($Matches.ContainsKey("reason") -and $Matches.reason) { $Matches.reason } else { $null }
                     invocation = $invocation
+                    package = $package
+                    selection = $selection
                 })
             continue
         }
         if ($line -match '^test result: \w+\. (?<passed>\d+) passed; (?<failed>\d+) failed; (?<ignored>\d+) ignored') {
             $footers.Add([pscustomobject]@{
                     invocation = $invocation
+                    package = $package
+                    selection = $selection
                     passed     = [int]$Matches.passed
                     failed     = [int]$Matches.failed
                     ignored    = [int]$Matches.ignored
@@ -1167,7 +1182,7 @@ function New-CoverageMarkdown {
     $lines.Add("# coverage matrix")
     $lines.Add("")
     $lines.Add("| Profile | Status | Implemented | Partial | Pending | Skipped | Failed |")
-    $lines.Add("| --- | --- | --- | --- | --- | --- | --- |")
+    $lines.Add("| --- | --- | --- | --- | --- | --- | --- | --- |")
     foreach ($profile in $Coverage.profiles) {
         $lines.Add("| $($profile.profile_id) | $($profile.summary_status) | $($profile.implemented) | $($profile.partial) | $($profile.pending) | $($profile.skipped) | $($profile.failed) |")
     }
@@ -1597,18 +1612,19 @@ function New-CiProfileMarkdown {
     $lines.Add("# CI profile")
     $lines.Add("")
     $lines.Add("- profile: $($ProfileReport.profile_id)")
+    $lines.Add("- cargo_test_package: $($ProfileReport.cargo_test_package)")
     $lines.Add("- cargo_test_target: $($ProfileReport.cargo_test_target)")
     $lines.Add("- cargo_test_filter: $($ProfileReport.cargo_test_filter)")
     $lines.Add("- invocations: $($ProfileReport.invocations.Count)")
     $lines.Add("")
-    $lines.Add("| Label | Mode | Target | Filter | Cargo args | Skips |")
+    $lines.Add("| Package | Label | Mode | Target | Filter | Cargo args | Skips |")
     $lines.Add("| --- | --- | --- | --- | --- | --- |")
     foreach ($invocation in $ProfileReport.invocations) {
         $skips = if ($invocation.skips.Count -gt 0) { $invocation.skips -join ", " } else { "-" }
         $target = if ($invocation.target) { $invocation.target } else { "-" }
         $filter = if ($invocation.filter) { $invocation.filter } else { "-" }
         $cargoArgs = @($invocation.cargo_args) -join " "
-        $lines.Add("| $($invocation.label) | $($invocation.selection_mode) | $target | $filter | ``$cargoArgs`` | $skips |")
+        $lines.Add("| $($invocation.package) | $($invocation.label) | $($invocation.selection_mode) | $target | $filter | ``$cargoArgs`` | $skips |")
     }
     if ($ProfileReport.quarantined_tests.Count -gt 0) {
         $lines.Add("")
@@ -2071,7 +2087,7 @@ if (-not $delegatedProfile) {
     Assert-CargoTestConfiguration -Config $ciConfig -KnownTargets $knownCargoTestTargets
     $ciProfile = Get-CiProfile -Config $ciConfig -ProfileId $Profile
 
-    if ($CargoTestTarget -and $knownCargoTestTargets -notcontains $CargoTestTarget) {
+    if ($CargoTestTarget -and @($knownCargoTestTargets | Where-Object { $_.target -eq $CargoTestTarget }).Count -eq 0) {
         throw "Unknown cargo test target '$CargoTestTarget'"
     }
 
@@ -2080,6 +2096,8 @@ if (-not $delegatedProfile) {
         Get-CargoTestInvocations `
             -Profile $ciProfile `
             -QuarantineEntries $quarantineEntries `
+            -KnownTargets $knownCargoTestTargets `
+            -CargoTestPackage $CargoTestPackage `
             -CargoTestTarget $CargoTestTarget `
             -CargoTestFilter $CargoTestFilter
     )
@@ -2101,6 +2119,7 @@ if (-not $delegatedProfile) {
         }
         [pscustomobject]@{
             profile_id          = $Profile
+            cargo_test_package  = if ($CargoTestPackage) { $CargoTestPackage } else { $null }
             cargo_test_target   = if ($CargoTestTarget) { $CargoTestTarget } else { $null }
             cargo_test_filter   = if ($CargoTestFilter) { $CargoTestFilter } else { $null }
             known_target_count  = $knownCargoTestTargets.Count
@@ -2113,7 +2132,7 @@ if (-not $delegatedProfile) {
 
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $cotestRunLabel = $Profile
-if ($CargoTestTarget -or $CargoTestFilter) {
+if ($CargoTestPackage -or $CargoTestTarget -or $CargoTestFilter) {
     $cotestRunLabel += "-selection"
 }
 $runDir = New-ArtifactRunDirectory `
@@ -2314,6 +2333,7 @@ if ($Runtime -eq "process" -and -not $env:SOLAND_BIN) {
 # snapshot and then rejects envelopes the current cotest authors. An explicit
 # COAUTH_BIN / TEABAY_BIN stays an intentional immutable-binary override.
 $servicesLiveProfile = $Profile -eq "services-live"
+$clientLiveProfile = $Profile -eq "inkson-client-live"
 $servicesLiveBinaries = @{}
 if ($servicesLiveProfile -and -not $delegatedProfile -and -not $PlanOnly -and -not $ValidateProfile) {
     $workspaceRoot = (Resolve-Path (Join-Path $repoRoot "..")).Path
@@ -2372,6 +2392,7 @@ $startedAt = Get-Date
 $effectiveRequiredCoverageProfiles = @(Get-EffectiveRequiredCoverageProfiles -Profile $ciProfile -Overrides $RequiredCoverageProfiles)
 $profileReport = [pscustomobject]@{
     profile_id                 = $Profile
+    cargo_test_package         = if ($CargoTestPackage) { $CargoTestPackage } else { $null }
     cargo_test_target          = if ($CargoTestTarget) { $CargoTestTarget } else { $null }
     cargo_test_filter          = if ($CargoTestFilter) { $CargoTestFilter } else { $null }
     required_coverage_profiles = $effectiveRequiredCoverageProfiles
@@ -2397,13 +2418,17 @@ try {
         }
     }
 
-    if ($Profile -in @("all", "full-nightly", "services-live") -and -not $env:COTEST_SOLAND_DATABASE_URL) {
+    if ($Profile -in @("all", "full-nightly", "services-live", "inkson-client-live") -and -not $env:COTEST_SOLAND_DATABASE_URL) {
         Add-RawLogLine -Path $rawLog -Value "=== prepare conformance test PostgreSQL ==="
         $testPostgres = Start-CotestTestPostgres
         $env:COTEST_SOLAND_DATABASE_URL = $testPostgres.Url
         Add-RawLogLine -Path $rawLog -Value "conformance test PostgreSQL: $($testPostgres.ContainerName)"
     }
 
+    if ($clientLiveProfile) {
+        $env:COTEST_REQUIRE_LIVE_SERVICES = "1"
+        Add-RawLogLine -Path $rawLog -Value "inkson-client-live: original production client prerequisites required (fail-closed)"
+    }
     if ($servicesLiveProfile) {
         foreach ($binEnv in $servicesLiveBinaries.Keys) {
             [Environment]::SetEnvironmentVariable($binEnv, $servicesLiveBinaries[$binEnv])
@@ -2438,7 +2463,7 @@ try {
 
     $exitCode = 0
     foreach ($invocation in $invocations) {
-        $invocationExitCode = Invoke-CargoTestInvocation -CargoArgs @($invocation.cargo_args) -RawLog $rawLog -Label $invocation.label
+        $invocationExitCode = Invoke-CargoTestInvocation -CargoArgs @($invocation.cargo_args) -RawLog $rawLog -Label $invocation.label -AllowEmpty:($invocation.selection_mode -eq "broad-scan")
         if ($invocationExitCode -ne 0 -and $exitCode -eq 0) {
             $exitCode = $invocationExitCode
         }
@@ -2468,6 +2493,7 @@ $passed = $parsedLog.footer_totals.passed
 $failed = $parsedLog.footer_totals.failed
 $ignored = $parsedLog.footer_totals.ignored
 $reportIntegrity = $parsedLog.integrity
+if ($passed + $failed -eq 0) { $exitCode = 1; Write-Host "EMPTY SELECTION: no selected tests executed" }
 if ($reportIntegrity -ne "passed") {
     Write-Host "report_integrity=failed: per-test lines ($($parsedLog.per_test.passed)/$($parsedLog.per_test.failed)/$($parsedLog.per_test.ignored)) disagree with Cargo footers ($passed/$failed/$ignored)"
     $exitCode = 1
@@ -2718,6 +2744,7 @@ $isFullServerConformanceRun = Test-IsCompleteServerConformanceRun `
     -ProfileIncludesAllTests ([bool]$ciProfile.include_all_tests) `
     -CargoTestTarget $CargoTestTarget `
     -CargoTestFilter $CargoTestFilter
+$isFullServerConformanceRun = $isFullServerConformanceRun -and -not $CargoTestPackage
 if ($isFullServerConformanceRun) {
     Publish-ArtifactMirror -SourceDirectory $runDir -OutputRoot $OutputRoot -Channel "server-conformance"
 }

@@ -103,6 +103,7 @@ fn accepted(
             [0x71; 32],
         )),
         committed_at: chrono::Utc::now(),
+        producer_signer_fact_digest: None,
         signature: signature(DetachedSignatureContext::RealmCommit),
     };
     CommittedEventFullView { commit, event }

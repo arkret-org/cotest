@@ -7,16 +7,14 @@ siblings the real workspace resolves against.
 
 import unittest
 
-from scripts.check_package_graph import GateError, evaluate
+from scripts.check_package_graph import CLIENT_TEST_TARGETS, GateError, evaluate
 
 
 def package(name, binaries=()):
     return {
         "id": f"{name} 0.0.0",
         "name": name,
-        "targets": [
-            {"name": binary, "kind": ["bin"]} for binary in binaries
-        ],
+        "targets": ([{"name": target, "kind": ["test"]} for target in CLIENT_TEST_TARGETS] if name == "cotest-inkson-client-tests" else [{"name": binary, "kind": ["bin"]} for binary in binaries]),
     }
 
 
@@ -59,10 +57,10 @@ def clean_workspace(**overrides):
     nodes = {
         "cotest": [
             ("cotest-test-support", None),
-            ("inkson", None),
             ("soland-services", None),
         ],
         "cotest-test-support": [("arkret", None), ("garth", None)],
+        "cotest-inkson-client-tests": [("cotest", None), ("inkson", None)],
         "inkson": [("dioxus", None)],
         "soland-services": [],
         "dioxus": [],
@@ -154,7 +152,8 @@ class PackageGraphGateTests(unittest.TestCase):
     def test_missing_binary_target_fails(self):
         document = metadata(
             {
-                "cotest": [("cotest-test-support", None), ("inkson", None)],
+                "cotest": [("cotest-test-support", None)],
+                "cotest-inkson-client-tests": [("cotest", None), ("inkson", None)],
                 "cotest-test-support": [],
                 "inkson": [],
             },
@@ -165,7 +164,7 @@ class PackageGraphGateTests(unittest.TestCase):
 
     def test_workspace_without_the_forbidden_shape_is_vacuous(self):
         document = metadata(
-            {"cotest": [("cotest-test-support", None)], "cotest-test-support": []},
+            {"cotest": [("cotest-test-support", None)], "cotest-test-support": [], "cotest-inkson-client-tests": []},
             packages={
                 "cotest-test-support": ("cotest-provision", "cotest-wire"),
             },
@@ -173,6 +172,16 @@ class PackageGraphGateTests(unittest.TestCase):
         verdict = evaluate(document)
         self.assertTrue(verdict["vacuous"])
         self.assertEqual(verdict["violations"], [])
+
+    def test_root_dev_ui_dependency_is_rejected(self):
+        verdict = evaluate(clean_workspace(**{"cotest": [("cotest-test-support", None), ("inkson", "dev")]}))
+        self.assertEqual(verdict["root_forbidden"], ["dioxus", "inkson"])
+
+    def test_missing_client_package_is_rejected(self):
+        document = clean_workspace()
+        document["packages"] = [p for p in document["packages"] if p["name"] != "cotest-inkson-client-tests"]
+        with self.assertRaises(GateError):
+            evaluate(document)
 
     def test_metadata_without_a_resolved_graph_is_refused(self):
         with self.assertRaises(GateError):

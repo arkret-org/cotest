@@ -46,7 +46,7 @@ use crate::harness::{
 /// Establish Human kind from an accepted, holder-authored PCR ProfileCreate.
 /// Account registration and a Standard SessionGrant do not create this
 /// create-locked profile current result.
-pub(crate) async fn create_human_actor_profile(
+pub async fn create_human_actor_profile(
     client: &TestActorClient,
     display_name: &str,
 ) -> Result<()> {
@@ -87,11 +87,10 @@ pub(crate) async fn create_human_actor_profile(
     Ok(())
 }
 
-pub(crate) const HARNESS_ACCOUNT_AUTHORITY_KEY_SEED: [u8; 32] = [0xac; 32];
-pub(crate) const HARNESS_ACCOUNT_AUTHORITY_ORIGIN: &str = "https://account-authority.cotest.local";
-pub(crate) const HARNESS_INTERNAL_AUTHORITY_SECRET: &str =
-    "cotest-principal-genesis-private-channel";
-pub(crate) fn harness_account_authority_public_key_multibase() -> String {
+pub const HARNESS_ACCOUNT_AUTHORITY_KEY_SEED: [u8; 32] = [0xac; 32];
+pub const HARNESS_ACCOUNT_AUTHORITY_ORIGIN: &str = "https://account-authority.cotest.local";
+pub const HARNESS_INTERNAL_AUTHORITY_SECRET: &str = "cotest-principal-genesis-private-channel";
+pub fn harness_account_authority_public_key_multibase() -> String {
     ed25519_pubkey_to_did_key_multibase(
         &SigningKey::from_bytes(&HARNESS_ACCOUNT_AUTHORITY_KEY_SEED)
             .verifying_key()
@@ -263,7 +262,7 @@ fn test_principal_coordinates(actor: &str) -> Result<(String, String)> {
     Ok((host, local_id.to_owned()))
 }
 
-pub(crate) fn test_principal_root_signing_authority(
+pub fn test_principal_root_signing_authority(
     actor: &str,
 ) -> Result<(arkret_wire::DidUrl, [u8; 32])> {
     let prepared = prepared_test_principal_inception(actor)?;
@@ -630,7 +629,7 @@ pub async fn seal_principal_control_frontier_with_pending_events(
         .map(|item| item.commit().commit_id.clone())
         .context("PCR has no accepted RealmCommit")
 }
-pub(crate) fn signed_keys_upload_body(
+pub fn signed_keys_upload_body(
     actor: &str,
     device_id: &str,
     signing_key: &SigningKey,

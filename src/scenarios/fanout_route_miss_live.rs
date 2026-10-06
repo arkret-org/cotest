@@ -150,7 +150,7 @@ pub async fn run_federation_current_origin_replay_live() -> Result<()> {
         &commit,
         &wait_held(&fixture.bob, &event.event_id, HELD_WINDOW).await?,
     )?;
-    let replay = replication_body(&event, &commit)?;
+    let replay = replication_body(&fixture.alice, &event, &commit).await?;
     assert_held_commit_current_origin(
         &fixture.group,
         &fixture.bob,
@@ -184,7 +184,7 @@ pub async fn run_federation_revoked_service_key_replay_live() -> Result<()> {
         &commit,
         &wait_held(&fixture.bob, &event.event_id, HELD_WINDOW).await?,
     )?;
-    let body = replication_body(&event, &commit)?;
+    let body = replication_body(&fixture.alice, &event, &commit).await?;
     let request = fixture
         .group
         .server(1)
@@ -270,7 +270,7 @@ pub async fn run_federation_revoked_service_key_replay_live() -> Result<()> {
     let successor_outcomes = replicate(
         fixture.group.server(1),
         fixture.group.server(0),
-        &replication_body(&fresh_event, &fresh_commit)?,
+        &replication_body(&fixture.alice, &fresh_event, &fresh_commit).await?,
     )
     .await?;
     ensure!(
@@ -288,7 +288,7 @@ pub async fn run_federation_revoked_service_key_replay_live() -> Result<()> {
     let successor_replay = replicate(
         fixture.group.server(1),
         fixture.group.server(0),
-        &replication_body(&fresh_event, &fresh_commit)?,
+        &replication_body(&fixture.alice, &fresh_event, &fresh_commit).await?,
     )
     .await?;
     ensure!(
@@ -469,7 +469,7 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
     )?;
 
     // (3) Byte-exact replay of the source body.
-    let replay = replication_body(&missed.0, &missed.1)?;
+    let replay = replication_body(&alice, &missed.0, &missed.1).await?;
     for _ in 0..2 {
         let outcomes = replicate(group.server(1), group.server(0), &replay).await?;
         ensure!(
@@ -540,7 +540,7 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
         let outcomes = replicate(
             group.server(1),
             group.server(0),
-            &replication_body(event, commit)?,
+            &replication_body(&alice, event, commit).await?,
         )
         .await?;
         ensure!(
@@ -552,7 +552,7 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
             event.event_id
         );
     }
-    let after_body = replication_body(&after.0, &after.1)?;
+    let after_body = replication_body(&alice, &after.0, &after.1).await?;
     // A Station that does not govern the Realm cannot be its source.
     ensure_not_stored(group.server(1), group.server(1), &after_body).await?;
     let outcomes = replicate(group.server(1), group.server(0), &after_body).await?;
@@ -630,7 +630,7 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
     let forged = replicate(
         group.server(1),
         group.server(0),
-        &replication_body(&plaintext.0, &plaintext.1)?,
+        &replication_body(&alice, &plaintext.0, &plaintext.1).await?,
     )
     .await?;
     ensure!(
@@ -819,13 +819,22 @@ async fn alice_message(
 }
 
 /// The exact `committed_replication` body X's outbox sends for one Event.
-fn replication_body(event: &Event, commit: &RealmCommit) -> Result<Vec<u8>> {
+async fn replication_body(
+    client: &TestActorClient,
+    event: &Event,
+    commit: &RealmCommit,
+) -> Result<Vec<u8>> {
+    let fact = crate::scenarios::human_device_producer_live::original_human_signer_fact(
+        client, event, commit,
+    )
+    .await?;
     let request =
         PeerAuthoritySubmitRequest::CommittedReplication(PeerCommittedReplicationRequest {
             branch: CommittedReplicationBranch::CommittedReplication,
             replications: vec![CommittedEventSubmission {
                 event_submission: EventAdmissionSubmission::new(event.clone()),
                 source_commit: commit.clone(),
+                producer_signer_fact: Some(fact),
                 genesis_event_ref: None,
                 welcomes: None,
             }],

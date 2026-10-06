@@ -12,10 +12,10 @@ use anyhow::{Result, anyhow, ensure};
 use serde_json::Value;
 
 use super::{
-    ACCOUNT_BLOCKLIST_PROJECTION_ENTRYPOINT, ACCOUNT_DATA_CAS_CONVERGENCE_ENTRYPOINT,
-    ACTOR_PRIVATE_EVENTS_SUBMIT_ENTRYPOINT, AEAD_NONCE_REPLAY_ENTRYPOINT,
-    AGENT_MLS_KEYPACKAGE_AUTHORIZATION_ENTRYPOINT, AUTHORITY_FORWARD_GENESIS_MATERIAL_ENTRYPOINT,
-    BLOB_STREAM_AEAD_ENTRYPOINT, CALL_MEDIA_LIFECYCLE_ENTRYPOINT, CALL_STATE_CORE_ENTRYPOINT,
+    ACCOUNT_DATA_CAS_CONVERGENCE_ENTRYPOINT, ACTOR_PRIVATE_EVENTS_SUBMIT_ENTRYPOINT,
+    AEAD_NONCE_REPLAY_ENTRYPOINT, AGENT_MLS_KEYPACKAGE_AUTHORIZATION_ENTRYPOINT,
+    AUTHORITY_FORWARD_GENESIS_MATERIAL_ENTRYPOINT, BLOB_STREAM_AEAD_ENTRYPOINT,
+    CALL_MEDIA_LIFECYCLE_ENTRYPOINT, CALL_STATE_CORE_ENTRYPOINT,
     CAPABILITY_RELINQUISH_AUTHORING_ENTRYPOINT, CRYPTO_HPKE_ENTRYPOINT, CURSOR_NEGATIVE_ENTRYPOINT,
     DETACHED_OBJECT_SIGNATURE_ENTRYPOINT, FRANKING_PROOF_ENTRYPOINT,
     KEY_BACKUP_HARDENING_ENTRYPOINT, KEYPACKAGE_LIFECYCLE_ENTRYPOINT,
@@ -27,12 +27,12 @@ use super::{
     REALM_JOIN_CANDIDATE_ENTRYPOINT, RELATION_STRUCTURAL_REALM_ENTRYPOINT, SDK_PRECHECK_ENTRYPOINT,
     STRAND_WATCH_CURRENT_ENTRYPOINT, STRING_PROFILE_ENTRYPOINT, SuiteExecutionResult,
     TEST_MATERIAL_REJECTION_ENTRYPOINT, VIEW_WRITE_CONTRACT_ENTRYPOINT,
-    run_account_blocklist_projection_suite, run_account_data_cas_convergence_suite,
-    run_account_status_issuer_ledger_vector, run_actor_private_events_submit_suite,
-    run_aead_nonce_replay_suite, run_agent_membership_cascade_suite,
-    run_agent_mls_keypackage_authorization_suite, run_applet_registration_epoch_kat_suite,
-    run_authority_commit_suite, run_authority_forward_genesis_material_suite,
-    run_blob_stream_aead_suite, run_call_media_lifecycle_suite, run_call_state_core_suite,
+    run_account_data_cas_convergence_suite, run_account_status_issuer_ledger_vector,
+    run_actor_private_events_submit_suite, run_aead_nonce_replay_suite,
+    run_agent_membership_cascade_suite, run_agent_mls_keypackage_authorization_suite,
+    run_applet_registration_epoch_kat_suite, run_authority_commit_suite,
+    run_authority_forward_genesis_material_suite, run_blob_stream_aead_suite,
+    run_call_media_lifecycle_suite, run_call_state_core_suite,
     run_capability_relinquish_authoring_suite, run_crypto_hpke_suite, run_cursor_negative_suite,
     run_detached_object_signature_suite, run_encoding_fixture_suite,
     run_event_envelope_fixture_suite, run_fanout_route_miss_suite,
@@ -49,7 +49,7 @@ use super::{
     run_security_transaction_resilience_joint_gate, run_session_grant_issuer_ledger_suite,
     run_signal_sequence_high_water_suite, run_strand_watch_current_suite, run_string_profile_suite,
     run_sync_fixture_suite, run_test_material_rejection_suite, run_view_write_contract_suite,
-    run_webrtc_media_plaintext_suite, run_websocket_binding_suite, spec_artifacts_root,
+    run_websocket_binding_suite, spec_artifacts_root,
 };
 
 const ACCOUNT_STATUS_ENTRYPOINT: &str = "ak.suite.account_status.issuer_ledger.v1";
@@ -57,20 +57,23 @@ const ACCOUNT_STATUS_ENTRYPOINT: &str = "ak.suite.account_status.issuer_ledger.v
 /// Exact acknowledged gap ledger. This is deliberately closed: adding or
 /// renaming a canonical named suite cannot remain invisible merely because the
 /// total number of unwired suites happened to stay constant.
-const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 30] = [
+const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 34] = [
     "ak.suite.agent.draft_pending_intent.v1",
     "ak.suite.agent.participation.v1",
     "ak.suite.agent.vectors.v1",
     "ak.suite.applet.managed_actor_authority.v1",
     "ak.suite.applet.revoke_saga.v1",
     "ak.suite.auth.session_proof.v1",
+    "ak.suite.authority_commit_projection.result_consumption_roles.v1",
     "ak.suite.authz.approval_signature.v1",
     "ak.suite.call.force_mute_v1_boundary.v1",
+    "ak.suite.circle.parent_membership.v1",
     "ak.suite.conformance.final_closure.v1",
     "ak.suite.consent.cache_invalidation.v1",
     "ak.suite.contact.bilateral_continuity_checkpoint.v1",
     "ak.suite.current.cas_failure_read_boundary.v1",
     "ak.suite.direct_conversation.admission_producers.v1",
+    "ak.suite.direct_conversation.chat_topic_structure.v1",
     "ak.suite.direct_conversation.signal_admission.v1",
     "ak.suite.encoding.content_bound_event_id.v1",
     "ak.suite.events.redaction.v1",
@@ -80,6 +83,7 @@ const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 30] = [
     "ak.suite.invite.claim_security.v1",
     "ak.suite.mls.rfc9420_kat.v1",
     "ak.suite.mls.roster_authority.v1",
+    "ak.suite.mls.roster_client_roles.v1",
     "ak.suite.peer.event_submit.semantic_union.v1",
     "ak.suite.privacy.security.v1",
     "ak.suite.protocol.edge_cases.v1",
@@ -90,6 +94,7 @@ const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 30] = [
     "ak.suite.visibility.policy.v1",
 ];
 
+#[derive(Clone, Copy)]
 enum Runner {
     Cases(fn() -> Result<SuiteExecutionResult>),
     CasesAt {
@@ -103,7 +108,7 @@ enum Runner {
     EvidenceMapped(fn() -> Result<()>),
 }
 
-const RUNNERS: [(&str, Runner); 54] = [
+const RUNNERS: [(&str, Runner); 52] = [
     (
         super::APPLET_SELF_ACTOR_ENTRYPOINT,
         Runner::Cases(super::run_applet_self_actor_suite),
@@ -119,10 +124,6 @@ const RUNNERS: [(&str, Runner); 54] = [
     (
         "ak.suite.mimi.room_binding_migration.v1",
         Runner::Cases(run_mimi_room_binding_migration_suite),
-    ),
-    (
-        ACCOUNT_BLOCKLIST_PROJECTION_ENTRYPOINT,
-        Runner::Cases(run_account_blocklist_projection_suite),
     ),
     (
         AUTHORITY_FORWARD_GENESIS_MATERIAL_ENTRYPOINT,
@@ -336,10 +337,6 @@ const RUNNERS: [(&str, Runner); 54] = [
         VIEW_WRITE_CONTRACT_ENTRYPOINT,
         Runner::Cases(run_view_write_contract_suite),
     ),
-    (
-        "ak.suite.webrtc.media_plaintext_downgrade.v1",
-        Runner::Cases(run_webrtc_media_plaintext_suite),
-    ),
 ];
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -347,11 +344,35 @@ pub struct NamedSuiteAuditReport {
     pub fixture_count: usize,
     pub executed_entrypoints: Vec<String>,
     pub unwired_entrypoints: Vec<String>,
+    pub deferred_client_entrypoints: Vec<String>,
 }
 
+/// Execute the SDK/server registry. UI callers must supply both explicit client runners.
 pub fn run_named_suite_audit() -> Result<NamedSuiteAuditReport> {
+    run_named_suite_audit_with_clients(&[])
+}
+
+pub type ClientNamedSuiteRunner = (&'static str, fn() -> Result<SuiteExecutionResult>);
+
+pub fn run_named_suite_audit_with_clients(
+    client_runners: &[ClientNamedSuiteRunner],
+) -> Result<NamedSuiteAuditReport> {
+    const CLIENT_ENTRYPOINTS: [&str; 2] = [
+        "ak.suite.account.blocklist_projection.v1",
+        "ak.suite.webrtc.media_plaintext_downgrade.v1",
+    ];
+    let declared_clients = client_runners
+        .iter()
+        .map(|(name, _)| *name)
+        .collect::<BTreeSet<_>>();
+    ensure!(
+        client_runners.is_empty()
+            || (client_runners.len() == 2
+                && declared_clients == CLIENT_ENTRYPOINTS.into_iter().collect()),
+        "full audit requires both exact client runners"
+    );
     let fixture_dir = spec_artifacts_root().join("fixtures");
-    let mut fixtures = BTreeMap::new();
+    let mut fixtures: BTreeMap<String, Vec<(String, Value)>> = BTreeMap::new();
     for entry in fs::read_dir(&fixture_dir)? {
         let path = entry?.path();
         if path.extension().and_then(|value| value.to_str()) != Some("json") {
@@ -366,34 +387,60 @@ pub fn run_named_suite_audit() -> Result<NamedSuiteAuditReport> {
             .and_then(Value::as_str)
             .ok_or_else(|| anyhow!("{} has no runner entrypoint", path.display()))?
             .to_owned();
-        ensure!(
-            fixtures.insert(entrypoint.clone(), value).is_none(),
-            "duplicate named-suite entrypoint {entrypoint}"
-        );
+        fixtures.entry(entrypoint).or_default().push((
+            path.file_name().unwrap().to_string_lossy().into_owned(),
+            value,
+        ));
     }
-
+    for (entrypoint, originals) in &fixtures {
+        if originals.len() > 1 {
+            let names = originals
+                .iter()
+                .map(|(name, _)| name.as_str())
+                .collect::<BTreeSet<_>>();
+            ensure!(
+                entrypoint == "ak.suite.direct_conversation.admission_producers.v1"
+                    && names
+                        == [
+                            "direct-conversation-admission-fixture.json",
+                            "direct-conversation-runtime-endpoint-repair-fixture.json"
+                        ]
+                        .into_iter()
+                        .collect(),
+                "unregistered duplicate named-suite fixture family {entrypoint}"
+            );
+        }
+    }
     let registered = RUNNERS
         .iter()
         .map(|(entrypoint, _)| *entrypoint)
+        .chain(client_runners.iter().map(|(name, _)| *name))
         .collect::<BTreeSet<_>>();
     ensure!(
-        registered.len() == RUNNERS.len(),
+        registered.len() == RUNNERS.len() + client_runners.len(),
         "explicit named-suite registry contains a duplicate"
     );
-
     let mut executed = Vec::new();
-    for (entrypoint, runner) in RUNNERS {
-        let fixture = fixtures
+    for (entrypoint, runner) in RUNNERS.iter().copied().chain(
+        client_runners
+            .iter()
+            .map(|(name, run)| (*name, Runner::Cases(*run))),
+    ) {
+        for (_, fixture) in fixtures
             .get(entrypoint)
-            .ok_or_else(|| anyhow!("registered runner {entrypoint} has no canonical fixture"))?;
-        execute_runner(entrypoint, runner, fixture)?;
+            .ok_or_else(|| anyhow!("registered runner {entrypoint} has no canonical fixture"))?
+        {
+            execute_runner(entrypoint, runner, fixture)?;
+        }
         executed.push(entrypoint.to_owned());
     }
     executed.sort();
-
-    let unwired = fixtures
+    let unwired: Vec<_> = fixtures
         .keys()
-        .filter(|entrypoint| !registered.contains(entrypoint.as_str()))
+        .filter(|entrypoint| {
+            !registered.contains(entrypoint.as_str())
+                && !CLIENT_ENTRYPOINTS.contains(&entrypoint.as_str())
+        })
         .cloned()
         .collect();
     let expected_unwired = KNOWN_UNWIRED_ENTRYPOINTS
@@ -405,9 +452,14 @@ pub fn run_named_suite_audit() -> Result<NamedSuiteAuditReport> {
         "named-suite gap ledger drifted: expected {expected_unwired:?}, got {unwired:?}"
     );
     Ok(NamedSuiteAuditReport {
-        fixture_count: fixtures.len(),
+        fixture_count: fixtures.values().map(Vec::len).sum(),
         executed_entrypoints: executed,
         unwired_entrypoints: unwired,
+        deferred_client_entrypoints: if client_runners.is_empty() {
+            CLIENT_ENTRYPOINTS.iter().map(|x| (*x).to_owned()).collect()
+        } else {
+            Vec::new()
+        },
     })
 }
 

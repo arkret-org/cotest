@@ -31,6 +31,7 @@ resolver = "3"
 # Inkson, Dioxus, a `soland-*` crate or the root package, by a normal, build or
 # (from the light edge itself) dev edge.
 members = [
+    "crates/inkson-client-tests",
     "crates/applet-self-actor-runner",
     "crates/account-data-cas-convergence-runner",
     "crates/aead-nonce-replay-runner",
@@ -277,7 +278,6 @@ hmac = { workspace = true }
 hpke-rs = { workspace = true }
 hpke-rs-crypto = { workspace = true }
 hpke-rs-rust-crypto = { workspace = true }
-inkson = { workspace = true }
 jsonschema = { workspace = true, default-features = false, features = ["resolve-file"] }
 p256 = { workspace = true }
 postgres = { workspace = true }

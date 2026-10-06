@@ -226,6 +226,7 @@ fn accepted_commit(
         governance_generation: 0,
         authority_ref: arkret_wire::RealmCommitAuthorityRef::GenesisOrChangeEvent(base.clone()),
         committed_at: arkret_canonical::parse_timestamp_canonical("2026-09-26T00:00:01.000Z")?,
+        producer_signer_fact_digest: None,
         signature: fixed_signature(arkret_wire::DetachedSignatureContext::RealmCommit, seed)?,
     };
     Ok(arkret_wire::CommittedEventFullView { commit, event })

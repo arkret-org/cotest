@@ -149,6 +149,23 @@ def source_file(path: Path) -> bool:
     return path.is_file() and not any(part in IGNORED_DIRS for part in path.parts)
 
 
+def source_paths(root: Path, suffix: str) -> Iterable[Path]:
+    """Walk source files while pruning the existing ignored directories."""
+    if not root.is_dir() or any(part in IGNORED_DIRS for part in root.parts):
+        return
+    for directory, directories, files in os.walk(root, followlinks=False):
+        parent = Path(directory)
+        directories[:] = sorted(
+            name for name in directories
+            if name not in IGNORED_DIRS and not (parent / name).is_symlink()
+        )
+        for name in sorted(files):
+            path = parent / name
+            # is_file deliberately retains the original file-symlink behavior.
+            if path.match("*" + suffix) and source_file(path):
+                yield path
+
+
 def rust_test_like(path: Path, text: str) -> bool:
     return (
         "tests" in path.parts
@@ -169,13 +186,13 @@ def discover_layer_sources(workspace_root: Path = WORKSPACE_ROOT) -> tuple[Layer
             soland / "crates" / "server" / "tests",
         )
         if root.is_dir()
-        for path in root.rglob("*.rs")
+        for path in source_paths(root, ".rs")
         if source_file(path)
     }
     soland_unit: set[Path] = set()
     crates = soland / "crates"
     if crates.is_dir():
-        for path in crates.rglob("*.rs"):
+        for path in source_paths(crates, ".rs"):
             if not source_file(path) or path in soland_http:
                 continue
             text = path.read_text(encoding="utf-8", errors="replace")
@@ -188,26 +205,28 @@ def discover_layer_sources(workspace_root: Path = WORKSPACE_ROOT) -> tuple[Layer
             cotest / "tests",
             cotest / "src" / "conformance",
             cotest / "src" / "scenarios",
+            cotest / "crates" / "inkson-client-tests" / "src",
+            cotest / "crates" / "inkson-client-tests" / "tests",
         )
         if root.is_dir()
-        for path in root.rglob("*.rs")
+        for path in source_paths(root, ".rs")
         if source_file(path)
     }
     cotest_crates = cotest / "crates"
     if cotest_crates.is_dir():
         cotest_rust.update(
-            path for path in cotest_crates.rglob("*.rs")
+            path for path in source_paths(cotest_crates, ".rs")
             if source_file(path)
             and rust_test_like(path, path.read_text(encoding="utf-8", errors="replace"))
         )
     cotest_e2e = {
         path
-        for path in (cotest / "e2e").rglob("*.ts")
+        for path in source_paths(cotest / "e2e", ".ts")
         if source_file(path)
     } if (cotest / "e2e").is_dir() else set()
     inkson_e2e = {
         path
-        for path in (inkson / "tests" / "e2e").rglob("*.ts")
+        for path in source_paths(inkson / "tests" / "e2e", ".ts")
         if source_file(path)
     } if (inkson / "tests" / "e2e").is_dir() else set()
 
@@ -479,7 +498,7 @@ def broader_test_sources(workspace_root: Path = WORKSPACE_ROOT) -> set[Path]:
         repo = workspace_root / repo_name
         if not repo.is_dir():
             continue
-        for path in repo.rglob("*.rs"):
+        for path in source_paths(repo, ".rs"):
             if not source_file(path):
                 continue
             text = path.read_text(encoding="utf-8", errors="replace")
@@ -490,7 +509,7 @@ def broader_test_sources(workspace_root: Path = WORKSPACE_ROOT) -> set[Path]:
         workspace_root / "inkson" / "tests" / "e2e",
     ):
         if root.is_dir():
-            sources.update(path for path in root.rglob("*.ts") if source_file(path))
+            sources.update(path for path in source_paths(root, ".ts") if source_file(path))
     return sources
 
 
