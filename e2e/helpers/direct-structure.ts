@@ -232,10 +232,35 @@ export async function agentTopicChats(page: Page, receiptPath: string) {
   const markerB = `isolated-chat-b-${suffix}`;
   const receipts = async (): Promise<Array<{ request: unknown }>> => (await readFile(receiptPath, "utf8"))
     .trim().split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line));
+  const replyIds = async (): Promise<Set<string>> => {
+    const feed = page.getByTestId("message-list").last();
+    const ids = new Set<string>();
+    let top = 0;
+    // Count the actual rendered history across every virtual window. A viewport
+    // count can decrease when an older reply leaves the mounted slice.
+    for (let step = 0; step < 500; step++) {
+      const window = await feed.evaluate(async (element, offset) => {
+        element.scrollTop = offset;
+        await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+        const rows = Array.from(element.querySelectorAll<HTMLElement>('[data-message-id][data-virtual-index]'));
+        return {
+          top: element.scrollTop, height: element.clientHeight, total: element.scrollHeight,
+          replies: rows.filter(row => Array.from(row.querySelectorAll('[data-testid="content-block-text"]'))
+            .some(block => /^pong(?:\r?\n|$)/.test(block.textContent ?? "")))
+            .map(row => row.dataset.messageId!),
+        };
+      }, top);
+      for (const id of window.replies) ids.add(id);
+      if (window.top + window.height >= window.total - 1) return ids;
+      expect(window.height, "message timeline must have a scrollable viewport").toBeGreaterThan(0);
+      top = window.top + window.height;
+    }
+    throw new Error("message history scan did not reach the final virtual window");
+  };
   const send = async (id: string, marker: string, prior?: string, excluded?: string) => {
     await panel.getByRole("combobox", { name: "Chat", exact: true }).selectOption(id);
     const before = (await receipts()).length;
-    const repliesBefore = await page.getByTestId("chat-message").filter({ has: page.getByTestId("content-block-text").filter({ hasText: /^pong(?:\r?\n|$)/ }) }).count();
+    const repliesBefore = await replyIds();
     await expect(page.getByTestId("send-chat-button")).toBeEnabled({ timeout: 180_000 });
     await page.getByTestId("chat-input").fill(marker);
     const observed = await observeSelectedHumanSend(page, id);
@@ -256,7 +281,11 @@ export async function agentTopicChats(page: Page, receiptPath: string) {
     expect(input, "live runtime must forward the selected Chat message").toBeDefined();
     if (prior) expect(input).toContain(prior);
     if (excluded) expect(input).not.toContain(excluded);
-    await expect(page.getByTestId("chat-message").filter({ has: page.getByTestId("content-block-text").filter({ hasText: /^pong(?:\r?\n|$)/ }) })).toHaveCount(repliesBefore + 1, { timeout: 180_000 }).catch(async (error: unknown) => {
+    await expect.poll(async () => {
+      const replies = await replyIds();
+      return { total: replies.size, added: [...replies].filter(id => !repliesBefore.has(id)).length,
+        retained: [...repliesBefore].every(id => replies.has(id)) };
+    }, { timeout: 180_000 }).toEqual({ total: repliesBefore.size + 1, added: 1, retained: true }).catch(async (error: unknown) => {
       const geometry = await page.getByTestId("message-list").last().evaluate(feed => ({
         height: feed.getBoundingClientRect().height,
         viewport: feed.clientHeight,
@@ -265,6 +294,11 @@ export async function agentTopicChats(page: Page, receiptPath: string) {
         mountedRows: feed.querySelectorAll('[data-testid="chat-message"]').length,
         indexes: Array.from(feed.querySelectorAll('[data-virtual-index]')).map(row =>
           Number((row as HTMLElement).dataset.virtualIndex)),
+        rows: Array.from(feed.querySelectorAll<HTMLElement>('[data-virtual-index]')).map(row => ({
+          index: Number(row.dataset.virtualIndex), crypto: row.dataset.cryptoState,
+          pong: Array.from(row.querySelectorAll('[data-testid="content-block-text"]'))
+            .some(block => /^pong(?:\r?\n|$)/.test(block.textContent ?? "")),
+        })),
       })).catch(() => null);
       await test.info().attach("direct-reply-timeline-geometry", {
         body: Buffer.from(JSON.stringify(geometry)), contentType: "application/json",
