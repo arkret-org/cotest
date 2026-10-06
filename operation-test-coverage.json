@@ -24,8 +24,8 @@
         "covered_operation_count": 71
       },
       "cotest_e2e": {
-        "source_file_count": 111,
-        "source_sha256": "4bde0ace614aabb284bcd5931558a4a9169dde1d785703d8707379a6963720e7",
+        "source_file_count": 112,
+        "source_sha256": "be9e1312a61b67269aca0ab2840a168468a7b0af08eb938caca6356761c53190",
         "evidence_count": 50,
         "covered_operation_count": 21
       },
@@ -9491,11 +9491,11 @@
         "product_flow": [
           {
             "file": "cotest/e2e/helpers/users.ts",
-            "line": 1878,
+            "line": 1862,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1878
+              1862
             ],
             "protected_oracle": false,
             "scope_sha256": "7bc8e550bf2b5d638557096f7f54d8426af60f20d53a5e4bfaa690c96eaf9e9e",
@@ -12819,11 +12819,11 @@
         "product_flow": [
           {
             "file": "cotest/e2e/helpers/users.ts",
-            "line": 634,
+            "line": 618,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              634
+              618
             ],
             "protected_oracle": false,
             "scope_sha256": "20358a78ab304f13d29748034b4769703c7268542adcaca6d8b03705be2a2fa9",
@@ -13014,11 +13014,11 @@
           },
           {
             "file": "cotest/e2e/helpers/users.ts",
-            "line": 1329,
+            "line": 1313,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1329
+              1313
             ],
             "protected_oracle": false,
             "scope_sha256": "2373fff14a20d85da0146a37b391dee3849e61eeb485e77de39e962b32d2c539",
@@ -14752,11 +14752,11 @@
           },
           {
             "file": "cotest/e2e/helpers/users.ts",
-            "line": 1879,
+            "line": 1863,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1879
+              1863
             ],
             "protected_oracle": false,
             "scope_sha256": "7c1edd881c90220c5ec6cf29be16f46e907e823dd6305f49bcbc5f8ae5d35a8c",
@@ -23419,11 +23419,11 @@
         "product_flow": [
           {
             "file": "cotest/e2e/helpers/users.ts",
-            "line": 1213,
+            "line": 1197,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1213
+              1197
             ],
             "protected_oracle": false,
             "scope_sha256": "406ae34ca80eb063c081a8492c23c11d38410ad57224a0a732498aa3f02f5ef9",
