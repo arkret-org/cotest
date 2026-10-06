@@ -11,6 +11,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+. (Join-Path $PSScriptRoot 'lib\process-ownership.ps1')
 $TopologyPath = [System.IO.Path]::GetFullPath($TopologyPath)
 $topology = Get-Content -Raw -LiteralPath $TopologyPath | ConvertFrom-Json
 $server = @($topology.servers | Where-Object { $_.name -eq $ServerName }) | Select-Object -First 1
@@ -34,38 +35,6 @@ function Write-ControlState {
 function Read-ControlState {
     if (-not (Test-Path -LiteralPath $statePath)) { return $null }
     return Get-Content -Raw -LiteralPath $statePath | ConvertFrom-Json
-}
-
-function Get-DescendantProcessIds {
-    param([int]$RootId)
-    $all = if ($IsWindows) {
-        @(Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId)
-    } else {
-        @(& ps -eo pid=,ppid= | ForEach-Object {
-            $parts = ($_ -split '\s+' | Where-Object { $_ })
-            if ($parts.Count -ge 2) { [pscustomobject]@{ ProcessId = [int]$parts[0]; ParentProcessId = [int]$parts[1] } }
-        })
-    }
-    $result = [System.Collections.Generic.List[int]]::new()
-    $queue = [System.Collections.Generic.Queue[int]]::new()
-    $queue.Enqueue($RootId)
-    while ($queue.Count -gt 0) {
-        $parent = $queue.Dequeue()
-        foreach ($child in @($all | Where-Object { [int]$_.ParentProcessId -eq $parent })) {
-            $id = [int]$child.ProcessId
-            $result.Add($id)
-            $queue.Enqueue($id)
-        }
-    }
-    return @($result)
-}
-
-function Stop-ExactProcessTree {
-    param([int]$RootId)
-    $ids = @(Get-DescendantProcessIds -RootId $RootId)
-    [array]::Reverse($ids)
-    foreach ($id in @($ids) + @($RootId)) { Stop-Process -Id $id -Force -ErrorAction SilentlyContinue }
-    try { Wait-Process -Id $RootId -Timeout 20 -ErrorAction SilentlyContinue } catch {}
 }
 
 if ($IsWindows -and -not ('CotestNativeProcessControl' -as [type])) {
@@ -92,29 +61,36 @@ public static class CotestUnixProcessControl {
 }
 
 function Set-ProcessSuspended {
-    param([int[]]$ProcessIds, [bool]$Suspended)
-    foreach ($id in $ProcessIds) {
-        if ($IsWindows) {
-            $process = Get-Process -Id $id -ErrorAction SilentlyContinue
-            if (-not $process) { continue }
-            if ($Suspended) { [CotestNativeProcessControl]::Suspend($process.Handle) }
-            else { [CotestNativeProcessControl]::Resume($process.Handle) }
-        } else {
-            # Native-command completion can wait for descendants holding the
-            # service's output pipes after SIGSTOP. Signal directly instead.
-            $signal = if ($IsMacOS) { if ($Suspended) { 17 } else { 19 } } else { if ($Suspended) { 19 } else { 18 } }
-            if ([CotestUnixProcessControl]::Kill($id, $signal) -ne 0) {
-                $errorNumber = [Runtime.InteropServices.Marshal]::GetLastPInvokeError()
-                if ($errorNumber -ne 3) { throw "signal $signal failed for PID $id (errno=$errorNumber)" }
+    param([object[]]$ProcessIdentities, [bool]$Suspended)
+    foreach ($identity in $ProcessIdentities) {
+        $process = Get-CotestIdentityProcess -Identity $identity
+        if (-not $process) { continue }
+        $id = [int]$identity.process_id
+        try {
+            if ($IsWindows) {
+                if ($Suspended) { [CotestNativeProcessControl]::Suspend($process.Handle) }
+                else { [CotestNativeProcessControl]::Resume($process.Handle) }
+            } else {
+                # Native-command completion can wait for descendants holding the
+                # service's output pipes after SIGSTOP. Signal directly instead.
+                $signal = if ($IsMacOS) { if ($Suspended) { 17 } else { 19 } } else { if ($Suspended) { 19 } else { 18 } }
+                if ([CotestUnixProcessControl]::Kill($id, $signal) -ne 0) {
+                    $errorNumber = [Runtime.InteropServices.Marshal]::GetLastPInvokeError()
+                    if ($errorNumber -ne 3) { throw "signal $signal failed for PID $id (errno=$errorNumber)" }
+                }
             }
+        } finally {
+            $process.Dispose()
         }
     }
 }
 
-function Resolve-CurrentProcessId {
+function Resolve-CurrentProcessIdentity {
     $state = Read-ControlState
-    if ($state -and $state.current_process_id) { return [int]$state.current_process_id }
-    return [int]$server.soland.process_id
+    if ($state -and $state.current_process_id) {
+        return [pscustomobject]@{ process_id = [int]$state.current_process_id; started_at = $state.current_process_started_at }
+    }
+    return [pscustomobject]@{ process_id = [int]$server.soland.process_id; started_at = $server.soland.process_started_at }
 }
 
 $kind = [string]$control.kind
@@ -131,37 +107,44 @@ if ($kind -eq 'docker') {
 }
 
 if ($kind -ne 'process') { throw "Unsupported control kind '$kind'" }
-$rootId = Resolve-CurrentProcessId
+$rootIdentity = Resolve-CurrentProcessIdentity
+$rootId = [int]$rootIdentity.process_id
 switch ($Action) {
     'isolate' {
-        $ids = @(Get-DescendantProcessIds -RootId $rootId) + @($rootId)
-        if ($ids.Count -lt 2) { throw "$ServerName process tree has no service child" }
+        $identities = @(Get-CotestOwnedProcessTree -RootIdentity $rootIdentity)
+        if ($identities.Count -lt 2) { throw "$ServerName owned process tree has no service child" }
+        $suspended = [System.Collections.Generic.List[object]]::new()
         try {
-            Set-ProcessSuspended -ProcessIds $ids -Suspended $true
-            Write-ControlState @{ kind = $kind; status = 'isolated'; original_process_id = [int]$server.soland.process_id; current_process_id = $rootId; suspended_process_ids = $ids }
+            foreach ($identity in $identities) {
+                Set-ProcessSuspended -ProcessIdentities @($identity) -Suspended $true
+                $suspended.Add($identity)
+            }
+            Write-ControlState @{ kind = $kind; status = 'isolated'; original_process_id = [int]$server.soland.process_id; current_process_id = $rootId; current_process_started_at = $rootIdentity.started_at; suspended_process_ids = @($suspended | ForEach-Object { $_.process_id }); suspended_processes = @($suspended) }
         } catch {
-            $resumeIds = @($ids)
-            [array]::Reverse($resumeIds)
-            Set-ProcessSuspended -ProcessIds $resumeIds -Suspended $false
-            throw
+            $failure = $_
+            $resumeIdentities = @($suspended)
+            [array]::Reverse($resumeIdentities)
+            try { Set-ProcessSuspended -ProcessIdentities $resumeIdentities -Suspended $false }
+            catch { Write-Warning "Isolation rollback failed: $($_.Exception.Message)" }
+            throw $failure
         }
     }
     'restore' {
         $state = Read-ControlState
         if (-not $state -or $state.status -ne 'isolated') { throw "$ServerName is not recorded as isolated" }
-        $ids = @($state.suspended_process_ids | ForEach-Object { [int]$_ })
-        [array]::Reverse($ids)
-        Set-ProcessSuspended -ProcessIds $ids -Suspended $false
-        Write-ControlState @{ kind = $kind; status = 'running'; original_process_id = [int]$server.soland.process_id; current_process_id = [int]$state.current_process_id }
+        $identities = @($state.suspended_processes)
+        [array]::Reverse($identities)
+        Set-ProcessSuspended -ProcessIdentities $identities -Suspended $false
+        Write-ControlState @{ kind = $kind; status = 'running'; original_process_id = [int]$server.soland.process_id; current_process_id = $rootId; current_process_started_at = $rootIdentity.started_at }
     }
     'restart' {
         $state = Read-ControlState
         if ($state -and $state.status -eq 'isolated') {
-            $ids = @($state.suspended_process_ids | ForEach-Object { [int]$_ })
-            [array]::Reverse($ids)
-            Set-ProcessSuspended -ProcessIds $ids -Suspended $false
+            $identities = @($state.suspended_processes)
+            [array]::Reverse($identities)
+            Set-ProcessSuspended -ProcessIdentities $identities -Suspended $false
         }
-        Stop-ExactProcessTree -RootId $rootId
+        Stop-CotestOwnedProcessTree -RootIdentity $rootIdentity
         $command = Get-Content -Raw -LiteralPath ([string]$control.command_log)
         $wrapped = "$command; `$ok = `$?; `$native = `$LASTEXITCODE; if (-not `$ok) { if (`$null -ne `$native -and `$native -ne 0) { exit `$native }; exit 1 }; exit 0"
         $stamp = Get-Date -Format 'yyyyMMdd-HHmmssfff'
@@ -177,15 +160,16 @@ switch ($Action) {
         }
         if ($IsWindows) { $startArguments.WindowStyle = 'Hidden' }
         $process = Start-Process @startArguments
+        $replacementIdentity = Get-CotestProcessIdentity -Process $process
         try {
-            Write-ControlState @{ kind = $kind; status = 'running'; original_process_id = [int]$server.soland.process_id; current_process_id = $process.Id; restarted = $true; stdout = $stdout; stderr = $stderr }
+            Write-ControlState @{ kind = $kind; status = 'running'; original_process_id = [int]$server.soland.process_id; current_process_id = $process.Id; current_process_started_at = $replacementIdentity.started_at; restarted = $true; stdout = $stdout; stderr = $stderr }
         } catch {
-            Stop-ExactProcessTree -RootId $process.Id
+            Stop-CotestOwnedProcessTree -RootIdentity $replacementIdentity
             throw
         }
     }
     'status' {
         $state = Read-ControlState
-        if ($state) { $state | ConvertTo-Json -Depth 8 } else { [pscustomobject]@{ kind = $kind; status = 'running'; current_process_id = $rootId } | ConvertTo-Json }
+        if ($state) { $state | ConvertTo-Json -Depth 8 } else { [pscustomobject]@{ kind = $kind; status = 'running'; current_process_id = $rootId; current_process_started_at = $rootIdentity.started_at } | ConvertTo-Json }
     }
 }
