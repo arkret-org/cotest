@@ -122,6 +122,57 @@ for (const scenario of ["fresh browser", "handoff response loss", "stale busy ch
       expect(await page.evaluate(() =>
         JSON.parse(localStorage.getItem("inkson.local_state.v1") ?? "{}").pending_login?.device_id,
       )).toBe(firstDevice);
+      if (scenario === "fresh browser") {
+        // Reach the actual Human PCR successor and durable completion. The
+        // identity chooser alone cannot detect a failed first backup pointer.
+        await page.getByTestId("choose-new-identity").click();
+        const words = page.getByTestId("onboarding-recovery-key-display").locator("li");
+        await expect(words).toHaveCount(24);
+        const recoveryKey = (await words.allTextContents()).map((word) => word.trim()).join(" ");
+        await page.getByTestId("onboarding-recovery-key-confirm").fill(recoveryKey);
+        let pointerEventId: string | undefined;
+        const pointerAcceptance = page.waitForResponse((response) => {
+          if (!new URL(response.url()).pathname.endsWith("/_arkret/self/events")) return false;
+          const event = response.request().postDataJSON()?.event;
+          if (event?.kind !== "ak.key_backup.active_series") return false;
+          pointerEventId = event.event_id;
+          return true;
+        });
+        const historicalLookup = page.waitForRequest((request) => {
+          if (!new URL(request.url()).pathname.endsWith("/_arkret/self/signer-keys/query")) return false;
+          return request.postDataJSON()?.queries?.some((selector: Record<string, unknown>) =>
+            selector.verification_mode === "historical_event" && selector.sender_kind === "account_device"
+            && pointerEventId !== undefined
+            && (selector.committed_event_ref as { event_id?: string } | undefined)?.event_id === pointerEventId,
+          ) === true;
+        });
+        await page.getByTestId("onboarding-bind-identity").click();
+        const accepted = await pointerAcceptance;
+        expect(accepted.ok()).toBe(true);
+        const event = accepted.request().postDataJSON().event;
+        const outcome = await accepted.json();
+        expect(outcome.commit.event_ref).toBe(event.event_id);
+        expect(outcome.commit).not.toHaveProperty("producer_signer_fact_digest");
+        const lookup = (await historicalLookup).postDataJSON();
+        expect(lookup.recipient_account_id).toEqual(event.actor_id.account_id);
+        expect(lookup.queries).toContainEqual({
+          verification_mode: "historical_event", sender_kind: "account_device",
+          actor: event.actor_id, device_id: firstDevice,
+          verification_method: event.producer_proof.verification_method,
+          committed_event_ref: {
+            event_id: event.event_id, commit_id: outcome.commit.commit_id,
+            stream_ref: outcome.commit.stream_ref, stream_position: outcome.commit.stream_position,
+          },
+        });
+        await expect(page.getByTestId("onboarding-complete")).toContainText("Identity ready", {
+          timeout: 90_000,
+        });
+        await page.getByTestId("onboarding-complete").getByRole("link", { name: "Continue" }).click();
+        await expect(page.getByTestId("client-shell")).toBeVisible();
+        await page.reload();
+        await expect(page.getByTestId("client-shell")).toBeVisible();
+        await expect(page.getByTestId("retry-onboarding-resume")).toHaveCount(0);
+      }
     } catch (error) {
       console.error("Registration continuation failed at", new URL(page.url()).pathname,
         await page.locator("h1,h2").allTextContents());
