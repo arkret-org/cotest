@@ -916,6 +916,8 @@ export class JointUserPage {
   }
 
   async unlockMlsAccountSecret(recoveryKey: string): Promise<void> {
+    // Recovery is an interaction on this device's foreground page.
+    await this.page.bringToFront();
     const unlockPrompt = this.page
       .locator(
         '[data-testid="mls-unlock-modal"], [data-testid="mls-unlock-banner"]',
