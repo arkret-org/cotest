@@ -2986,8 +2986,20 @@ async function committedReplicationRows(
           !Number.isSafeInteger(position) || Number(position) < 0) {
         throw new Error("replication source lacks an authorized original signer fact carrier");
       }
+      // The publication Account may be hosted by a member Station. It only
+      // authorizes the self GET above; it is not the governing peer endpoint.
+      // `origin` is the existing caller-selected governance source of this
+      // committed replication, resolved solely through runner-owned config.
+      // The registered peer scan itself must authorize this destination;
+      // exact Event/Commit/fact checks below never fall back to a member scan.
+      const governors = configuredServerKeys().filter(
+        (server) => solandServiceId(server) === opts.origin,
+      );
+      if (governors.length !== 1) {
+        throw new Error("replication governance source has no unique configured Station");
+      }
       const page = await scanPeerRealmStreamApi(request, {
-        server: source.server ?? "server1",
+        server: governors[0],
         sourceServiceId: opts.destination ?? solandServiceId(opts.server),
         realmId: opts.realmId,
         afterPosition: Number(position) === 0 ? null : Number(position) - 1,

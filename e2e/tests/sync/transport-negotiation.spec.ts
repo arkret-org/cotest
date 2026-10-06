@@ -40,6 +40,8 @@ import { expect, test } from "../../helpers/arkret-test";
 import { hasServerCount, solandBaseUrl, solandServiceId } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
+  acceptPreparedInviteApi,
+  waitForInviteDeliveryApi,
   createRealmApi,
   makeFederationEvent,
   rawPushFederationEvents,
@@ -48,6 +50,7 @@ import {
   wireErrCode,
 } from "../../helpers/soland-api";
 import {
+  allowExplicitInviteNotifications,
   ensureRegistered,
   issueUserSession,
   uniqueUser,
@@ -131,6 +134,10 @@ test.describe("transport negotiation", () => {
     const user = uniqueUser("e81-federation", "server1");
     await ensureRegistered(request, user, { server: "server1" });
     const token = await issueUserSession(request, user, { server: "server1" });
+    const recipient = uniqueUser("e81-federation-recipient", "server2");
+    await ensureRegistered(request, recipient, { server: "server2" });
+    const recipientToken = await issueUserSession(request, recipient, { server: "server2" });
+    await allowExplicitInviteNotifications(request, recipientToken, "server2");
     const realmId = await createRealmApi(
       request,
       token,
@@ -138,6 +145,9 @@ test.describe("transport negotiation", () => {
         title: "E8.1 federation signature fixture",
         ownerId: user.id,
         creator_id: solandServiceId("server1"),
+        invitees: [recipient.id],
+        invitee_ids: { [recipient.id]: solandServiceId("server2") },
+        plaintext_visible_services: [solandServiceId("server1"), solandServiceId("server2")],
       },
       { server: "server1" },
     );
@@ -146,6 +156,8 @@ test.describe("transport negotiation", () => {
     const strandId = await resolveDefaultStrandId(request, token, realmId, {
       server: "server1",
     });
+    const invitation = await waitForInviteDeliveryApi(request, recipientToken, recipient.id, realmId, "server2");
+    await acceptPreparedInviteApi(request, recipientToken, recipient.id, realmId, invitation.id, { server: "server2" });
     const buildEvent = (tag: string) =>
       makeFederationEvent({
         realmId,
