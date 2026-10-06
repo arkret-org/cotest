@@ -1,9 +1,124 @@
-import { expect, test } from "./arkret-test";
-import type { Page, Response } from "@playwright/test";
-import { assertAuthoritySubmitOutcome } from "./soland-api";
+import { expect, test, operationSelector } from "./arkret-test";
+import type { Page, Response, Request } from "@playwright/test";
+import { assertAuthoritySubmitOutcome, canonicalJson, sdkEventDerivedIds, sha256CanonicalJson } from "./soland-api";
 import { decodeEventIngressBody, ingressEvents, type IngressEvent } from "./event-ingress";
 import { readFile } from "node:fs/promises";
 import { isDeepStrictEqual } from "node:util";
+
+// Diagnostic pairing of one real self submit; not an independent authority/Ed verifier.
+async function observeSelectedHumanSend(page: Page, strandId: string) {
+  const source = await page.evaluate(() => {
+    const config = JSON.parse(localStorage.getItem("inkson.config.v1") ?? "{}");
+    const active = config.active_account;
+    if (!active?.authority?.principal_id || !active?.authority?.station_id || !active?.device_id || !active?.server_url) {
+      throw new Error("send diagnostic active Account source unavailable");
+    }
+    return { account: active.authority, device: active.device_id, station: active.server_url };
+  });
+  const realm = decodeURIComponent(new URL(page.url()).pathname.split("/")[2] ?? "");
+  let requestCount = 0;
+  let responseCount = 0;
+  let raw: string | undefined;
+  let original: IngressEvent | undefined;
+  let originalCommit: unknown;
+  let accepted = false;
+  let paired = false;
+  let unchanged = true;
+  let failed: string | undefined;
+  let status = 0;
+  const log = (stage: "observing" | "request" | "response" | "transport_failed" | "model_progress" | "finished") => {
+    console.info("Direct Chat send diagnostic", JSON.stringify({
+      stage, route: "ak.self.events.command.submit.v1", http_status: status,
+      matching_request_count: requestCount, matching_response_count: responseCount,
+      frozen_request_unchanged: unchanged, typed_pair_ok: paired, accepted,
+      gate_failed: failed !== undefined, reason: failed ?? "none",
+    }));
+  };
+  const require = (ok: boolean, reason: string) => { if (!ok) throw new Error(reason); };
+  const select = (request: Request): IngressEvent | undefined => {
+    const url = new URL(request.url());
+    if (request.method() !== "POST" || url.pathname !== "/_arkret/self/events" || url.origin !== new URL(source.station).origin) return;
+    const body = request.postDataJSON();
+    const rows = decodeEventIngressBody(body, { context: "Direct Chat send diagnostic" });
+    const selected = rows.map(row => row.event).filter(event => event.kind === "ak.message.create" && event.realm_id === realm && event.payload?.strand_id === strandId);
+    if (!selected.length) return;
+    require(selected.length === 1 && rows.length === 1 && body.event && !body.unit_kind && !body.commit_event,
+      "message_submission_branch_mismatch");
+    const event = selected[0];
+    require(canonicalJson(event.actor_id) === canonicalJson({ kind: "account", account_id: source.account }), "message_account_mismatch");
+    require(typeof (event.producer_proof as Record<string, unknown>)?.verification_method === "string" && String((event.producer_proof as Record<string, unknown>).verification_method).split("#")[1] === source.device && source.device.startsWith("ak:device:"), "message_not_human_device");
+    require(operationSelector("POST", request.url()) === "ak.self.events.command.submit.v1", "unregistered_submit_route");
+    return event;
+  };
+  const onRequest = (request: Request) => {
+    try {
+      const event = select(request);
+      if (!event) return;
+      requestCount += 1;
+      const bytes = request.postData()!;
+      if (raw === undefined) { raw = bytes; original = event; }
+      else {
+        unchanged = unchanged && raw === bytes && isDeepStrictEqual(original, event);
+        require(unchanged, "frozen_request_changed");
+      }
+      log("request");
+    } catch (error) {
+      const reasons = ["message_submission_branch_mismatch", "message_account_mismatch", "message_not_human_device", "unregistered_submit_route", "frozen_request_changed"];
+      failed = error instanceof Error && reasons.includes(error.message) ? error.message : "request_pairing_failed";
+      log("request");
+    }
+  };
+  const onResponse = async (response: Response) => {
+    try {
+      const event = select(response.request());
+      if (!event) return;
+      responseCount += 1;
+      status = response.status();
+      require(original !== undefined && raw === response.request().postData() && isDeepStrictEqual(original, event), "response_request_mismatch");
+      const outcome = await response.json() as Record<string, unknown>;
+      // Keep the existing registered temporary operation result nonterminal.
+      if (status === 503 && outcome.type === "https://arkret.org/problems/temporarily_unavailable" && outcome.status === 503) { log("response"); return; }
+      require(response.ok() && (outcome.status === "committed" || outcome.status === "duplicate"), "submit_not_accepted");
+      require(Object.keys(outcome).every(key => key === "status" || key === "commit"), "ordinary_outcome_branch_mismatch");
+      try { assertAuthoritySubmitOutcome(outcome, event, "Direct Chat send diagnostic"); }
+      catch { throw new Error("accepted_coordinate_pairing_failed"); }
+      const commit = outcome.commit as Record<string, unknown>;
+      const keys = ["commit_id", "realm_id", "stream_ref", "stream_position", "previous_commit_ref", "event_ref", "governance_generation", "authority_ref", "committed_at", "signature"];
+      require(keys.every(key => key in commit) && Object.keys(commit).every(key => keys.includes(key) || key === "producer_signer_fact_digest"), "commit_closed_shape_mismatch");
+      require(commit.realm_id === realm && commit.event_ref === event.event_id && canonicalJson(commit.stream_ref) === canonicalJson({ kind: "realm", realm_id: realm }), "accepted_scope_pairing_failed");
+      require(typeof commit.stream_position === "number" && Number.isSafeInteger(commit.stream_position) && commit.stream_position >= 0 && typeof commit.governance_generation === "number" && Number.isSafeInteger(commit.governance_generation) && commit.governance_generation >= 0, "accepted_integer_pairing_failed");
+      require(sdkEventDerivedIds(event).event_id === event.event_id, "event_content_id_mismatch");
+      const { commit_id, signature, ...unsigned } = commit;
+      const expectedId = "ak:realm_commit:" + Buffer.concat([Buffer.from([1]), Buffer.from(sha256CanonicalJson(unsigned), "hex")]).toString("base64url");
+      require(commit_id === expectedId, "commit_content_id_mismatch");
+      const proof = signature as Record<string, unknown>;
+      require(proof.context === "ak.realm_commit_signature.v1" && proof.signature_algorithm === "Ed25519" && proof.signed_digest === "sha256:" + sha256CanonicalJson({ commit_id, ...unsigned }), "commit_signature_binding_mismatch");
+      if (originalCommit !== undefined) require(isDeepStrictEqual(originalCommit, commit), "accepted_original_changed");
+      originalCommit = commit;
+      paired = true;
+      accepted = true;
+      log("response");
+    } catch (error) {
+      const reasons = ["response_request_mismatch", "submit_not_accepted", "ordinary_outcome_branch_mismatch", "accepted_coordinate_pairing_failed", "commit_closed_shape_mismatch", "accepted_scope_pairing_failed", "accepted_integer_pairing_failed", "event_content_id_mismatch", "commit_content_id_mismatch", "commit_signature_binding_mismatch", "accepted_original_changed"];
+      failed = error instanceof Error && reasons.includes(error.message) ? error.message : "response_pairing_failed";
+      log("response");
+    }
+  };
+  const onFailed = (request: Request) => {
+    try { if (select(request)) { status = -1; log("transport_failed"); } }
+    catch { failed = "request_pairing_failed"; log("transport_failed"); }
+  };
+  page.on("request", onRequest);
+  page.on("response", onResponse);
+  page.on("requestfailed", onFailed);
+  log("observing");
+  return {
+    check: () => { if (failed) throw new Error(`Direct Chat send diagnostic: ${failed}`); },
+    paired: () => accepted && paired,
+    modelProgress: () => log("model_progress"),
+    dispose: () => { page.off("request", onRequest); page.off("response", onResponse); page.off("requestfailed", onFailed); log("finished"); },
+  };
+}
 
 export async function structureWrite(page: Page, action: string, kind: string, title?: string, topic?: string): Promise<IngressEvent> {
   const panel = page.getByTestId("direct-structure");
@@ -123,8 +238,19 @@ export async function agentTopicChats(page: Page, receiptPath: string) {
     const repliesBefore = await page.getByTestId("chat-message").filter({ has: page.getByTestId("content-block-text").filter({ hasText: /^pong(?:\r?\n|$)/ }) }).count();
     await expect(page.getByTestId("send-chat-button")).toBeEnabled({ timeout: 180_000 });
     await page.getByTestId("chat-input").fill(marker);
-    await page.getByTestId("send-chat-button").click();
-    await expect.poll(async () => (await receipts()).length, { timeout: 180_000 }).toBeGreaterThan(before);
+    const observed = await observeSelectedHumanSend(page, id);
+    try {
+      await page.getByTestId("send-chat-button").click();
+      // One original 180s window covers both pairing and model receipt progress.
+      await expect.poll(async () => {
+        observed.check();
+        const count = (await receipts()).length;
+        return observed.paired() ? count : before;
+      }, { timeout: 180_000 }).toBeGreaterThan(before);
+      observed.modelProgress();
+    } finally {
+      observed.dispose();
+    }
     const inputs = (await receipts()).slice(before).map(row => JSON.stringify(row.request));
     const input = inputs.find(value => value.includes(marker));
     expect(input, "live runtime must forward the selected Chat message").toBeDefined();
