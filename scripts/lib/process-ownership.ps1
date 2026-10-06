@@ -13,6 +13,8 @@ function Get-CotestIdentityProcess {
     $process = Get-Process -Id ([int]$Identity.process_id) -ErrorAction SilentlyContinue
     if (-not $process) { return $null }
     try {
+        # Keep the same Windows process handle through validation and control.
+        if ($IsWindows) { $null = $process.Handle }
         if ($process.StartTime.ToUniversalTime() -ne ([datetime]$Identity.started_at).ToUniversalTime()) {
             $process.Dispose()
             return $null
