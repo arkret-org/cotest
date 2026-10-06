@@ -1868,6 +1868,35 @@ export async function currentActorIdApi(
 
 type AccountCoordinate = { principal_id: string; station_id: string };
 
+// Resolve the immutable Human signing fact for the exact accepted Event/Commit.
+// Both the historical selector and the fact's binding/signature checks belong
+// to the SDK bridge; current device keys cannot substitute for this evidence.
+export async function originalHumanSignerFactApi(
+  request: APIRequestContext,
+  token: string,
+  event: InviteDeliveryRequestBody["invite_event"],
+  commit: InviteDeliveryRequestBody["invite_commit"],
+  opts: { server?: SolandKey } = {},
+): Promise<NonNullable<InviteDeliveryRequestBody["producer_signer_fact"]>> {
+  const query = cotestWire<Record<string, unknown>>("historical-human-signer-query", {
+    event,
+    commit,
+    recipient_account_id: {
+      principal_id: await currentActorIdApi(request, token, opts),
+      station_id: solandServiceId(opts.server),
+    },
+  });
+  const url = `${solandBaseUrl(opts.server)}/_arkret/self/signer-keys/query`;
+  const response = await request.post(url, {
+    data: canonicalJson(query),
+    headers: { ...authHeaders(token, "POST", url), "content-type": "application/json" },
+  });
+  const outcome = await expectJsonOk<Record<string, unknown>>(response, "read original Human signer fact");
+  return cotestWire<NonNullable<InviteDeliveryRequestBody["producer_signer_fact"]>>(
+    "historical-human-signer-fact", { event, commit, query, outcome },
+  );
+}
+
 function requireSignerEvidenceRef(value: unknown, context: string): string {
   if (
     typeof value !== "string" ||

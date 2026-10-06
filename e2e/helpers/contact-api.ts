@@ -19,6 +19,7 @@ import {
   canonicalServiceResolution,
   canonicalTimestamp,
   currentActorIdApi,
+  originalHumanSignerFactApi,
   dispatchSelfInviteApi,
   selfInviteDispatchBody,
   expectJsonOk,
@@ -778,6 +779,11 @@ async function deliverInvite(
     // itself, so the covering RealmCommit and the locator hints that reach the
     // inviter's Station travel with the request.
     invite_commit: inviteCommit,
+    producer_signer_fact: await originalHumanSignerFactApi(
+      request, args.inviterToken,
+      event as InviteDeliveryRequestBodyBodyBody["invite_event"], inviteCommit,
+      { server: args.originServer },
+    ),
     authority_locator_hints: [
       {
         service_kind: "station",

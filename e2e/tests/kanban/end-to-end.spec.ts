@@ -741,6 +741,7 @@ test.describe("kanban end-to-end", () => {
         title: `Kanban Order ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
+        mlsActivated: false,
       });
       await alicePage.page.goto(`/kanban/${realmId}`, { waitUntil: "domcontentloaded" });
       await expect(alicePage.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });

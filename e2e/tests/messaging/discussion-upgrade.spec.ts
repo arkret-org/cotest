@@ -503,10 +503,17 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
       request, fixture.aliceToken, fixture.alice, fixture.realmId,
       publicStrandId, "parent Realm plaintext",
     );
+    // Circle messages belong to their independent Commit stream, even when
+    // both that Circle and the parent Realm are readable by the same Account.
+    const privateWritten = await scanRealmStreamApi(
+      request, fixture.aliceToken, fixture.realmId,
+      { streamRef: { kind: "circle", realm_id: fixture.realmId, circle_id: promoted.circleId } },
+    );
     const written = await listRealmEventsViaApi(request, fixture.aliceToken, fixture.realmId);
-    expect(eventPayload(eventById(written, privateMessage.event_id)))
+    expect(eventPayload(eventById(privateWritten.events, privateMessage.event_id)))
       .toHaveProperty("encrypted_content");
-    expect(eventPayload(eventById(written, privateMessage.event_id))).not.toHaveProperty("content");
+    expect(eventPayload(eventById(privateWritten.events, privateMessage.event_id))).not.toHaveProperty("content");
+    expect(written.map((event) => event.event_id)).not.toContain(privateMessage.event_id);
     expect(eventPayload(eventById(written, publicMessage.event_id))).toHaveProperty("content");
     expect(eventPayload(eventById(written, publicMessage.event_id)))
       .not.toHaveProperty("encrypted_content");
@@ -523,6 +530,7 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
       realmId: fixture.realmId,
       kind: "ak.strand.create",
       createdAt,
+      scopeRef: { kind: "circle", realm_id: fixture.realmId, circle_id: orphanCircleId },
       payload: {
         object: strandObject(
           fixture.realmId,
@@ -539,10 +547,11 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
       envelope,
     );
     const body = await response.text();
-    expect(response.status(), body).not.toBe(200);
-    expect(body).toMatch(
-      /circle_unknown|circle_not_found|circle_realm_mismatch/,
-    );
+    expect(response.status(), body).toBe(409);
+    expect(JSON.parse(body)).toMatchObject({
+      type: "https://arkret.org/problems/failed_precondition",
+      detail: "circle_not_active",
+    });
   });
 
   test("scope_circle_id rebind on an existing Strand is rejected", async ({

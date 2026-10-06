@@ -297,14 +297,19 @@ function pushDiagnosticLine(lines: string[], line: string) {
       : line;
   if (lines.length < MAX_SESSION_DIAGNOSTIC_LINES) {
     lines.push(value);
-  } else if (lines.length === MAX_SESSION_DIAGNOSTIC_LINES) {
-    lines.push(
-      JSON.stringify({
+  } else {
+    // Keep the initial setup and the recent failure boundary within the same
+    // bounded budget. A busy render must not discard every later error.
+    const middle = Math.floor(MAX_SESSION_DIAGNOSTIC_LINES / 2);
+    if (lines.length === MAX_SESSION_DIAGNOSTIC_LINES) {
+      lines.splice(middle, 1, JSON.stringify({
         ts: new Date().toISOString(),
         type: "diagnostic_truncated",
         retained_lines: MAX_SESSION_DIAGNOSTIC_LINES,
-      }),
-    );
+      }));
+    }
+    lines.splice(middle + 1, 1);
+    lines.push(value);
   }
 }
 
@@ -612,7 +617,7 @@ export class JointUserPage {
     await this.page.getByTestId("cap-grant-subject-input").fill(canonicalJson(subjectAccount));
     await this.page.getByTestId("cap-grant-submit-button").click();
     const status = this.page.getByTestId("realm-admin-status");
-    await expect(status).toContainText("ak.capability.grant event", {
+    await expect(status).toContainText("Permission granted. Grant ID:", {
       timeout: 120_000,
     });
     expect(await status.innerText()).not.toContain("failed");

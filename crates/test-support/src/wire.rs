@@ -41,6 +41,127 @@ struct CanonicalInput {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct HistoricalHumanQueryInput {
+    event: Event,
+    commit: arkret_wire::RealmCommit,
+    recipient_account_id: AccountId,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct HistoricalHumanFactInput {
+    event: Event,
+    commit: arkret_wire::RealmCommit,
+    query: arkret_models_identity::SignerKeysQueryRequestBody,
+    outcome: arkret_models_identity::SignerKeysQueryOutcome,
+}
+
+fn historical_human_selector(
+    event: &Event,
+    commit: &arkret_wire::RealmCommit,
+) -> Result<arkret_models_identity::SignerKeyQuerySelector> {
+    use arkret_models_identity::{HistoricalSignerKeyQuerySender, SignerKeyQuerySelector};
+    arkret_wire::CommittedEventFullView {
+        event: event.clone(),
+        commit: commit.clone(),
+    }
+    .validate_shape()?;
+    let producer = event
+        .verify_producer_proof_self_consistency(event.realm_id.digest_suite_code().digest_suite())?
+        .context("historical target has no Human device producer")?;
+    let proof = event
+        .producer_proof
+        .as_ref()
+        .context("historical target proof absent")?;
+    Ok(SignerKeyQuerySelector::HistoricalEvent {
+        sender: HistoricalSignerKeyQuerySender::AccountDevice {
+            actor: arkret_wire::ActorId::account(producer.account_id),
+            device_id: producer.device_id,
+            verification_method: proof.verification_method.clone(),
+            committed_event_ref: arkret_wire::CommittedEventRef {
+                event_id: event.event_id.clone(),
+                commit_id: commit.commit_id.clone(),
+                stream_ref: commit.stream_ref.clone(),
+                stream_position: commit.stream_position,
+            },
+        },
+    })
+}
+
+/// The browser fixture uses the same closed historical selector as Rust live
+/// scenarios. This does not grant the destination Station Realm history.
+pub fn historical_human_signer_query(input: Value) -> Result<Value> {
+    let input: HistoricalHumanQueryInput = serde_json::from_value(input)?;
+    ensure!(
+        input.commit.producer_signer_fact_digest.is_some(),
+        "original Human Commit lacks signer fact digest"
+    );
+    let query = arkret_models_identity::SignerKeysQueryRequestBody {
+        request_id: arkret_wire::RequestId::new_v7_at(Utc::now().timestamp_millis() as u64),
+        realm_id: input.event.realm_id.clone(),
+        recipient_account_id: input.recipient_account_id,
+        queries: vec![historical_human_selector(&input.event, &input.commit)?],
+    };
+    query.validate()?;
+    Ok(serde_json::to_value(query)?)
+}
+
+/// Reconstruct only the original immutable fact and independently check its
+/// exact Commit binding and producer signature. Never use current admission.
+pub fn historical_human_signer_fact(input: Value) -> Result<Value> {
+    use arkret_models_collaboration::authority_commit::HumanHistoricalSignerFact;
+    use arkret_models_identity::SignerKeyQueryResult;
+    let input: HistoricalHumanFactInput = serde_json::from_value(input)?;
+    let selector = historical_human_selector(&input.event, &input.commit)?;
+    ensure!(
+        input.query.realm_id == input.event.realm_id && input.query.queries == [selector],
+        "historical query names another target"
+    );
+    input.outcome.validate_for_request(&input.query)?;
+    let [
+        SignerKeyQueryResult::HistoricalResolved {
+            key, accepted_at, ..
+        },
+    ] = input.outcome.results.as_slice()
+    else {
+        bail!("original Human historical signer source is unavailable");
+    };
+    let producer = input
+        .event
+        .human_device_producer()?
+        .context("Human producer absent")?;
+    let fact = HumanHistoricalSignerFact {
+        event_id: input.event.event_id.clone(),
+        actor: input.event.actual_signer().clone(),
+        device_id: producer.device_id,
+        verification_method: input
+            .event
+            .producer_proof
+            .as_ref()
+            .context("proof absent")?
+            .verification_method
+            .clone(),
+        key: key.clone(),
+        accepted_at: *accepted_at,
+    };
+    let suite = input.event.realm_id.digest_suite_code().digest_suite();
+    fact.validate_commit_binding(
+        &arkret_wire::CommittedEventFullView {
+            event: input.event.clone(),
+            commit: input.commit,
+        },
+        suite,
+    )?;
+    arkret_identity::account_device_signer_evidence::verify_historical_human_event_signature(
+        &input.event,
+        &fact,
+        suite,
+    )?;
+    Ok(serde_json::to_value(fact)?)
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct SnapshotVerificationInput {
     snapshot: arkret_wire::RealmStateSnapshot,
     expected_snapshot_id: arkret_wire::RealmSnapshotId,

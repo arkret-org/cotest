@@ -137,9 +137,15 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
       scheduledText,
     ).toBeLessThan(400);
     expect(scheduleWire).toContain("ak.schema.calendar_event.v1");
-    expect(scheduleWire).toContain(timezone);
+    expect(scheduleWire).not.toContain(timezone);
+    expect(scheduleWire).not.toContain(start);
+    expect(scheduleWire).not.toContain(end);
     expect(scheduleWire).not.toContain(location);
-    expect(scheduleWire).toContain('"content_type":"application/vnd.arkret.strand.patch-value+json"');
+    const scheduleEvent = JSON.parse(scheduleWire).event;
+    const metadataEnvelope = scheduleEvent?.payload?.patch?.encrypted_metadata?.value;
+    expect(metadataEnvelope?.content_type).toBe("application/json");
+    expect(metadataEnvelope?.ciphertext).toBeTruthy();
+    expect(scheduleEvent?.payload?.patch?.metadata).toBeUndefined();
     await expect(editor).toBeHidden({ timeout: 45_000 });
 
     await expect(calendar).toContainText(timezone, { timeout: 60_000 });

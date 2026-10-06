@@ -18,6 +18,8 @@ fn main() -> Result<()> {
         "did-document-digest" => wire::did_document_digest(input)?,
         "event-envelope-proof" => wire::event_proof(input, EventDigestMode::RawCanonicalJson)?,
         "event-derived-id" => wire::event_derived_id(input)?,
+        "historical-human-signer-query" => wire::historical_human_signer_query(input)?,
+        "historical-human-signer-fact" => wire::historical_human_signer_fact(input)?,
         "event-envelope-parse" => wire::event_envelope_parse(input)?,
         "verify-realm-state-snapshot" => wire::verify_realm_state_snapshot(input)?,
         "mimi-consent-proof" => wire::mimi_consent_proof(input)?,

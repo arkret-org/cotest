@@ -329,12 +329,12 @@ if ($platform.os -eq "windows") {
     }
 }
 
-$npm = Get-Command npm -ErrorAction SilentlyContinue
+$npm = Get-Command $(if ($IsWindows) { "npm.cmd" } else { "npm" }) -ErrorAction SilentlyContinue
 $packagePath = Join-Path $e2eRoot "node_modules\@playwright\test\package.json"
 if ($npm -and -not (Test-Path -LiteralPath $packagePath)) {
     $null = Invoke-CotestPackageCommand -Name "e2e npm dependencies" -FilePath $npm.Source -Arguments @("--prefix", $e2eRoot, "ci")
 }
-$npx = Get-Command npx -ErrorAction SilentlyContinue
+$npx = Get-Command $(if ($IsWindows) { "npx.cmd" } else { "npx" }) -ErrorAction SilentlyContinue
 if ($RequireBrowser -and $npx -and (Test-Path -LiteralPath $packagePath) -and -not (Test-CotestPlaywrightChromium)) {
     $null = Invoke-CotestPackageCommand -Name "Playwright Chromium" -FilePath $npx.Source -Arguments @("--prefix", $e2eRoot, "playwright", "install", "chromium")
 }
@@ -373,7 +373,9 @@ function Find-CotestTool {
     $source = if ($Resolver) {
         & $Resolver
     } else {
-        (Get-Command $Name -ErrorAction SilentlyContinue).Source
+        # Node's PowerShell shims reparse variable invocations as literal args.
+        $commandName = if ($IsWindows -and $Name -in @("npm", "npx")) { "$Name.cmd" } else { $Name }
+        (Get-Command $commandName -ErrorAction SilentlyContinue).Source
     }
     if ([string]::IsNullOrWhiteSpace($source)) {
         Add-Check $Name $(if ($Required) { "fail" } else { "warn" }) "not found on PATH" $Repair

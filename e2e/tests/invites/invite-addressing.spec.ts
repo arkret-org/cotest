@@ -19,6 +19,7 @@ import {
   canonicalServiceResolution,
   canonicalJson,
   canonicalTimestamp,
+  originalHumanSignerFactApi,
   authHeaders,
   createRealmApi,
   dispatchSelfInviteApi,
@@ -90,6 +91,7 @@ type AcceptedInviteFixture = {
   // rather than rebuild them.
   inviteEvent: Record<string, unknown>;
   inviteCommit: InviteDeliveryRequestBodyBodyBody["invite_commit"];
+  producerSignerFact: NonNullable<InviteDeliveryRequestBodyBodyBody["producer_signer_fact"]>;
   evidence: InviteDeliveryRequestBodyBodyBody["introduction_evidence"];
   inviteAddress: InviteDeliveryRequestBodyBodyBody["invite_address"];
 };
@@ -155,6 +157,13 @@ async function acceptedInviteFixture(
     context: `persist ${slug} invite create`,
   });
 
+  const inviteEvent = await readAcceptedInvite(request, inviterToken, String(event.event_id));
+  const inviteCommit = (submitOutcome as Record<string, unknown>)
+    .commit as InviteDeliveryRequestBodyBodyBody["invite_commit"];
+  const producerSignerFact = await originalHumanSignerFactApi(
+    request, inviterToken,
+    inviteEvent as InviteDeliveryRequestBodyBodyBody["invite_event"], inviteCommit,
+  );
   return {
     inviter,
     inviterToken,
@@ -162,9 +171,9 @@ async function acceptedInviteFixture(
     inviteeToken,
     realmId,
     acceptedEventId: String(event.event_id),
-    inviteEvent: await readAcceptedInvite(request, inviterToken, String(event.event_id)),
-    inviteCommit: (submitOutcome as Record<string, unknown>)
-      .commit as InviteDeliveryRequestBodyBodyBody["invite_commit"],
+    inviteEvent,
+    inviteCommit,
+    producerSignerFact,
     evidence,
     inviteAddress,
   };
@@ -222,6 +231,7 @@ function peerDeliveryBody(
     invite_event:
       inviteEvent as InviteDeliveryRequestBodyBodyBody["invite_event"],
     invite_commit: inviteCommit,
+    producer_signer_fact: fixture.producerSignerFact,
     authority_locator_hints: [
       { service_kind: "station", service_id: solandServiceId(), source: "invite" },
     ],

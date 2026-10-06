@@ -8,6 +8,8 @@ type CotestWireCommand =
   | "did-document-digest"
   | "event-envelope-proof"
   | "event-derived-id"
+  | "historical-human-signer-query"
+  | "historical-human-signer-fact"
   | "verify-realm-state-snapshot"
   | "invite-subject-proof"
   | "key-backup-auth-signature"

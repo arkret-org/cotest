@@ -824,7 +824,8 @@ test.describe("cross-server federation", () => {
     const firstOutcome = await first.json();
     expect(firstOutcome.branch).toBe("committed_replication");
     expect(firstOutcome.replication_outcomes).toHaveLength(1);
-    expect(["stored", "duplicate"]).toContain(firstOutcome.replication_outcomes[0].status);
+    expect(["stored", "duplicate"], JSON.stringify(firstOutcome.replication_outcomes))
+      .toContain(firstOutcome.replication_outcomes[0].status);
     const replay = await rawPushFederationEvents(request, [{ event_id: sent.event_id }], options);
     expect(replay.status()).toBe(200);
     expect((await replay.json()).replication_outcomes).toEqual([{ status: "duplicate" }]);
