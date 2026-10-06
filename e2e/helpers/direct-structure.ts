@@ -130,7 +130,21 @@ export async function agentTopicChats(page: Page, receiptPath: string) {
     expect(input, "live runtime must forward the selected Chat message").toBeDefined();
     if (prior) expect(input).toContain(prior);
     if (excluded) expect(input).not.toContain(excluded);
-    await expect(page.getByTestId("chat-message").filter({ has: page.getByTestId("content-block-text").filter({ hasText: /^pong(?:\r?\n|$)/ }) })).toHaveCount(repliesBefore + 1, { timeout: 180_000 });
+    await expect(page.getByTestId("chat-message").filter({ has: page.getByTestId("content-block-text").filter({ hasText: /^pong(?:\r?\n|$)/ }) })).toHaveCount(repliesBefore + 1, { timeout: 180_000 }).catch(async (error: unknown) => {
+      const geometry = await page.getByTestId("message-list").last().evaluate(feed => ({
+        height: feed.getBoundingClientRect().height,
+        viewport: feed.clientHeight,
+        scrollHeight: feed.scrollHeight,
+        scrollTop: feed.scrollTop,
+        mountedRows: feed.querySelectorAll('[data-testid="chat-message"]').length,
+        indexes: Array.from(feed.querySelectorAll('[data-virtual-index]')).map(row =>
+          Number((row as HTMLElement).dataset.virtualIndex)),
+      })).catch(() => null);
+      await test.info().attach("direct-reply-timeline-geometry", {
+        body: Buffer.from(JSON.stringify(geometry)), contentType: "application/json",
+      });
+      throw error;
+    });
   };
   await send(chats[0], markerA, undefined, markerB);
   await send(chats[1], markerB, undefined, markerA);
