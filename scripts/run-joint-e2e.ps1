@@ -239,6 +239,7 @@ $multiServer = $ServerCount -ge 2
 . (Join-Path $PSScriptRoot "lib\failure-fingerprint.ps1")
 . (Join-Path $PSScriptRoot "lib\selection-gate.ps1")
 . (Join-Path $PSScriptRoot "lib\joint-e2e-environment.ps1")
+. (Join-Path $PSScriptRoot "lib\process-ownership.ps1")
 
 $SolandServiceId = $null
 $SolandServiceDid = $null
@@ -1360,7 +1361,7 @@ function Sync-JointControlledServices {
         }
         if ($control.kind -eq "process" -and $state.current_process_id -and [int]$state.current_process_id -ne [int]$server.soland.process_id) {
             $managed = @($ManagedServices | Where-Object { $_.Kind -eq "process" -and $_.Name -eq "soland-$($server.name)" }) | Select-Object -Last 1
-            $replacement = Get-Process -Id ([int]$state.current_process_id) -ErrorAction SilentlyContinue
+            $replacement = Get-CotestIdentityProcess -Identity ([pscustomobject]@{ process_id = [int]$state.current_process_id; started_at = $state.current_process_started_at })
             if (-not $managed -or -not $replacement) {
                 $failures.Add("replacement process for $($server.name) is unavailable")
                 continue
@@ -2479,7 +2480,7 @@ function Stop-ManagedCommand {
     }
 
     if (-not $Service.Process.HasExited) {
-        Stop-ProcessTree -ProcessId $Service.Process.Id
+        Stop-CotestOwnedProcessTree -RootIdentity (Get-CotestProcessIdentity -Process $Service.Process)
         $Service.Process.WaitForExit()
     }
 }
@@ -2670,26 +2671,6 @@ function Write-ManagedServiceFailureReport {
         }
     }
     $lines | Set-Content -Path $MarkdownPath -Encoding UTF8
-}
-
-function Stop-ProcessTree {
-    param([Parameter(Mandatory = $true)][int]$ProcessId)
-
-    $children = if ($IsWindows) {
-        @(Get-CimInstance Win32_Process -Filter "ParentProcessId = $ProcessId" -ErrorAction SilentlyContinue)
-    } else {
-        @(& ps -eo pid=,ppid= | ForEach-Object {
-            $parts = ($_ -split '\s+' | Where-Object { $_ })
-            if ($parts.Count -ge 2 -and [int]$parts[1] -eq $ProcessId) {
-                [pscustomobject]@{ ProcessId = [int]$parts[0] }
-            }
-        })
-    }
-    foreach ($child in $children) {
-        Stop-ProcessTree -ProcessId $child.ProcessId
-    }
-    Stop-Process -Id $ProcessId -Force -ErrorAction SilentlyContinue
-    try { Wait-Process -Id $ProcessId -Timeout 20 -ErrorAction SilentlyContinue } catch {}
 }
 
 function Open-ExclusiveRunnerLock {
@@ -4915,6 +4896,7 @@ try {
                 }
                 log_directory = $serverServiceLogDirs[$server.Name]
                 process_id = if ($solandManaged -and $solandManaged.Kind -eq "process") { $solandManaged.Process.Id } else { $null }
+                process_started_at = if ($solandManaged -and $solandManaged.Kind -eq "process") { $solandManaged.Process.StartTime.ToUniversalTime().ToString('o') } else { $null }
                 container_id = if ($solandManaged -and $solandManaged.Kind -eq "docker") { $solandManaged.ContainerName } else { $null }
                 control = if ($solandManaged) { [pscustomobject]@{
                     kind = $solandManaged.Kind

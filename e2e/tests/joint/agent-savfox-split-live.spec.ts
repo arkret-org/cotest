@@ -742,13 +742,24 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         // The unknown-current encrypted control becomes the hidden secure
         // alternate when this source scope resolves to plaintext. Resolve the
         // enabled Send control before click can retain that old DOM node.
-        await expect.poll(async () => ({
-          enabled: await sourceCard.getByTestId("send-chat-button").isEnabled(),
-          route: await sourceCard.getByTestId("composer-send-scope").getAttribute("data-send-route"),
-          boundAgent: await sourceCard.locator(
-            `[data-testid="mention-chip"][data-mention-principal-id="${firstPairing.agentId}"]`,
-          ).count(),
-        }), { timeout: 30_000 }).toEqual({ enabled: true, route: "Sidecar", boundAgent: 1 });
+        try {
+          await expect.poll(async () => ({
+            enabled: await sourceCard.getByTestId("send-chat-button").isEnabled(),
+            route: await sourceCard.getByTestId("composer-send-scope").getAttribute("data-send-route"),
+            boundAgent: await sourceCard.locator(
+              `[data-testid="mention-chip"][data-mention-principal-id="${firstPairing.agentId}"]`,
+            ).count(),
+          }), { timeout: 30_000 }).toEqual({ enabled: true, route: "Sidecar", boundAgent: 1 });
+        } catch (error) {
+          await testInfo.attach("source-card-send-blockers", {
+            body: Buffer.from(JSON.stringify({
+              blockers: await sourceCard.getByTestId("send-chat-button")
+                .getAttribute("data-send-blockers").catch(() => null),
+            })),
+            contentType: "application/json",
+          });
+          throw error;
+        }
         let ensureCutFaults = 0;
         let frozenEnsureBody: string | undefined;
         const ensureCutFault = async (route: Route) => {
@@ -1644,6 +1655,8 @@ async function sidecarEchoProjection(
     placement: "hosted_source_card";
   }>;
 }> {
+  // Inspect the foreground surface a controller sees when switching devices.
+  await card.page().bringToFront();
   const messages = card.getByTestId("chat-message");
   const echoes: Array<{
     eventId: string;

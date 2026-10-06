@@ -57,6 +57,7 @@ import {
 import { deviceSuffix, newDeviceId } from "./ids";
 import { base58btcEncode } from "./encoding";
 import { withOperationSelectors } from "./arkret-test";
+import { SessionDiagnostics } from "./session-diagnostics";
 
 const recoverySetupCompletions = new WeakMap<Page, Promise<string>>();
 const completedRecoverySetups = new WeakMap<Page, string>();
@@ -157,8 +158,8 @@ type UserSession = {
   context: BrowserContext;
   page: Page;
   diagnosticsDir: string;
-  consoleLines: string[];
-  networkLines: string[];
+  consoleLines: SessionDiagnostics;
+  networkLines: SessionDiagnostics;
   serverUrl: string;
   keepDeviceAuthorizationModal: boolean;
   /// The credential presented on `/_arkret/self/*`. Under the ②(A+②) model this
@@ -287,30 +288,8 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-const MAX_SESSION_DIAGNOSTIC_LINES = 5000;
-const MAX_SESSION_DIAGNOSTIC_LINE_CHARS = 4000;
-
-function pushDiagnosticLine(lines: string[], line: string) {
-  const value =
-    line.length > MAX_SESSION_DIAGNOSTIC_LINE_CHARS
-      ? `${line.slice(0, MAX_SESSION_DIAGNOSTIC_LINE_CHARS)}... [truncated]`
-      : line;
-  if (lines.length < MAX_SESSION_DIAGNOSTIC_LINES) {
-    lines.push(value);
-  } else {
-    // Keep the initial setup and the recent failure boundary within the same
-    // bounded budget. A busy render must not discard every later error.
-    const middle = Math.floor(MAX_SESSION_DIAGNOSTIC_LINES / 2);
-    if (lines.length === MAX_SESSION_DIAGNOSTIC_LINES) {
-      lines.splice(middle, 1, JSON.stringify({
-        ts: new Date().toISOString(),
-        type: "diagnostic_truncated",
-        retained_lines: MAX_SESSION_DIAGNOSTIC_LINES,
-      }));
-    }
-    lines.splice(middle + 1, 1);
-    lines.push(value);
-  }
+function pushDiagnosticLine(lines: SessionDiagnostics, line: string) {
+  lines.push(line);
 }
 
 function objectRecord(value: unknown): Record<string, unknown> | undefined {
@@ -921,6 +900,8 @@ export class JointUserPage {
   }
 
   async unlockMlsAccountSecret(recoveryKey: string): Promise<void> {
+    // Recovery is an interaction on this device's foreground page.
+    await this.page.bringToFront();
     const unlockPrompt = this.page
       .locator(
         '[data-testid="mls-unlock-modal"], [data-testid="mls-unlock-banner"]',
@@ -2803,8 +2784,8 @@ export async function openUser(
       { noWaitAfter: true },
     );
   }
-  const consoleLines: string[] = [];
-  const networkLines: string[] = [];
+  const consoleLines = new SessionDiagnostics();
+  const networkLines = new SessionDiagnostics();
   page.on("console", (message) => {
     pushDiagnosticLine(
       consoleLines,
