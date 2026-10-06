@@ -57,6 +57,7 @@ import {
 import { deviceSuffix, newDeviceId } from "./ids";
 import { base58btcEncode } from "./encoding";
 import { withOperationSelectors } from "./arkret-test";
+import { SessionDiagnostics } from "./session-diagnostics";
 
 const recoverySetupCompletions = new WeakMap<Page, Promise<string>>();
 const completedRecoverySetups = new WeakMap<Page, string>();
@@ -157,8 +158,8 @@ type UserSession = {
   context: BrowserContext;
   page: Page;
   diagnosticsDir: string;
-  consoleLines: string[];
-  networkLines: string[];
+  consoleLines: SessionDiagnostics;
+  networkLines: SessionDiagnostics;
   serverUrl: string;
   keepDeviceAuthorizationModal: boolean;
   /// The credential presented on `/_arkret/self/*`. Under the ②(A+②) model this
@@ -287,25 +288,8 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-const MAX_SESSION_DIAGNOSTIC_LINES = 5000;
-const MAX_SESSION_DIAGNOSTIC_LINE_CHARS = 4000;
-
-function pushDiagnosticLine(lines: string[], line: string) {
-  const value =
-    line.length > MAX_SESSION_DIAGNOSTIC_LINE_CHARS
-      ? `${line.slice(0, MAX_SESSION_DIAGNOSTIC_LINE_CHARS)}... [truncated]`
-      : line;
-  if (lines.length < MAX_SESSION_DIAGNOSTIC_LINES) {
-    lines.push(value);
-  } else if (lines.length === MAX_SESSION_DIAGNOSTIC_LINES) {
-    lines.push(
-      JSON.stringify({
-        ts: new Date().toISOString(),
-        type: "diagnostic_truncated",
-        retained_lines: MAX_SESSION_DIAGNOSTIC_LINES,
-      }),
-    );
-  }
+function pushDiagnosticLine(lines: SessionDiagnostics, line: string) {
+  lines.push(line);
 }
 
 function objectRecord(value: unknown): Record<string, unknown> | undefined {
@@ -2798,8 +2782,8 @@ export async function openUser(
       { noWaitAfter: true },
     );
   }
-  const consoleLines: string[] = [];
-  const networkLines: string[] = [];
+  const consoleLines = new SessionDiagnostics();
+  const networkLines = new SessionDiagnostics();
   page.on("console", (message) => {
     pushDiagnosticLine(
       consoleLines,
