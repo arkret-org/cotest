@@ -58,7 +58,6 @@ import { deviceSuffix, newDeviceId } from "./ids";
 import { base58btcEncode } from "./encoding";
 import { withOperationSelectors } from "./arkret-test";
 
-const recoverySetupHandlerPages = new WeakSet<Page>();
 const recoverySetupCompletions = new WeakMap<Page, Promise<string>>();
 const completedRecoverySetups = new WeakMap<Page, string>();
 const failedRecoverySetups = new WeakMap<Page, unknown>();
@@ -113,7 +112,17 @@ function completeRecoverySetup(
       }
       // The product re-enables Save after a retry-safe pending publication.
       // Retry inside this sole writer without refilling or racing a handler.
-      if (await saved.isEnabled()) {
+      const canRetry = await saved.isEnabled({
+        timeout: Math.max(1, Math.min(1_000, deadline - Date.now())),
+      }).catch(async (error: unknown) => {
+        // Publication may remove Save after the hidden probe timed out.
+        // Only actual dialog closure makes that detached-button race benign.
+        if (error instanceof Error && error.name === "TimeoutError" && await dialog.isHidden()) {
+          return false;
+        }
+        throw error;
+      });
+      if (canRetry) {
         expect(
           await confirmMatches(),
           "recovery-key confirmation must remain unchanged before publication retry",
@@ -886,13 +895,6 @@ export class JointUserPage {
       await generatedKeyField.inputValue({ timeout: 10_000 }).catch(() => "")
     ).trim();
     const keyReadable = recoveryKey.split(/\s+/).filter(Boolean).length === 24;
-    if (recoverySetupHandlerPages.has(this.page)) {
-      // The assertion invokes the registered handler while the dialog is
-      // visible. Keep its existing publication budget and verify real closure.
-      await expect(dialog).toBeHidden({ timeout: 90_000 });
-      if (keyReadable) this.session.onRecoveryKeyConfigured?.(recoveryKey);
-      return keyReadable ? recoveryKey : undefined;
-    }
     if (
       !keyReadable &&
       !(await dialog.isHidden({ timeout: 100 }).catch(() => false))
@@ -2795,7 +2797,6 @@ export async function openUser(
       },
       { noWaitAfter: true },
     );
-    recoverySetupHandlerPages.add(page);
   }
   const consoleLines: string[] = [];
   const networkLines: string[] = [];

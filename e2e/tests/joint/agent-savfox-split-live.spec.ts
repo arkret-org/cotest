@@ -586,7 +586,11 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         // Realm receive and its durable signer evidence must survive a reload
         // without an Account notification carrying the Agent reply again.
         const acceptedReplyId = await eventIdFromMessage(pongMessage);
-        const accountOutage = await dropAccountSubscribeStream(inkson);
+        // Reload terminates the existing stream itself. Install the cut first
+        // and prove the new request was blocked after that real reload.
+        const accountOutage = await dropAccountSubscribeStream(inkson, {
+          disconnectExisting: false,
+        });
         try {
           await inkson.reload();
           await expect.poll(accountOutage.blockedCount, { timeout: 30_000 }).toBeGreaterThan(0);
@@ -2100,7 +2104,10 @@ async function failAgentListQuery(page: Page): Promise<{
 
 /// Drop the account stream that carries notification deltas, simulating a lost
 /// wakeup while every ordinary request path stays healthy.
-async function dropAccountSubscribeStream(page: Page): Promise<{
+async function dropAccountSubscribeStream(
+  page: Page,
+  options: { disconnectExisting?: boolean } = {},
+): Promise<{
   blockedCount: () => number;
   restore: () => Promise<void>;
 }> {
@@ -2112,9 +2119,11 @@ async function dropAccountSubscribeStream(page: Page): Promise<{
   await page.route(isAccountSubscribe, handler);
   // Routing only affects new requests. Terminate the already-open stream,
   // restore ordinary transport, and prove its reconnect reached the cut.
-  await page.context().setOffline(true);
-  await page.context().setOffline(false);
-  await expect.poll(() => blocked, { timeout: 60_000 }).toBeGreaterThan(0);
+  if (options.disconnectExisting !== false) {
+    await page.context().setOffline(true);
+    await page.context().setOffline(false);
+    await expect.poll(() => blocked, { timeout: 60_000 }).toBeGreaterThan(0);
+  }
   return {
     blockedCount: () => blocked,
     restore: async () => {
