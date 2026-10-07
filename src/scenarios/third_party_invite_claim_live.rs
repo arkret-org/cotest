@@ -19,7 +19,8 @@ use crate::scenarios::human_device_producer_live::{
     submit_and_expect_commit, wait_for_committed,
 };
 use crate::scenarios::identity_test_support::{
-    HARNESS_INTERNAL_AUTHORITY_SECRET, test_principal_root_signing_authority,
+    HARNESS_INTERNAL_AUTHORITY_SECRET, prepared_test_principal_inception,
+    test_principal_next_root_seed, test_principal_root_signing_authority,
 };
 
 const GROUP: &str = "third-party-invite-claim";
@@ -218,7 +219,7 @@ pub async fn third_party_invite_claim_run() -> Result<()> {
         subject_body.transcript_digest()?,
         URL_SAFE_NO_PAD.encode(root.sign(&subject_body.canonical_bytes()?).to_bytes()),
     );
-    let payload = InviteClaimPayload {
+    let mut payload = InviteClaimPayload {
         invite_id: invite_id.clone(),
         subject_account_id: account.clone(),
         token_commitment: token,
@@ -277,6 +278,83 @@ pub async fn third_party_invite_claim_run() -> Result<()> {
             "invalid {case} wrote canonical/current state"
         );
     }
+    let inception = prepared_test_principal_inception(&bob.actor)?;
+    let next_root_seed = test_principal_next_root_seed(&bob.actor)?;
+    let next_root = SigningKey::from_bytes(&next_root_seed);
+    let third_root_seed = [0x73; 32];
+    let third_root = SigningKey::from_bytes(&third_root_seed);
+    let third_root_key = arkret_canonical::ed25519_pubkey_to_did_key_multibase(
+        third_root.verifying_key().as_bytes(),
+    );
+    let rotation = arkret_signatures::webvh::prepare_principal_rotation(
+        &arkret_signatures::webvh::PrincipalRotationInput {
+            did: &bob.actor,
+            local_id: &inception.local_id,
+            previous_entries: std::slice::from_ref(&inception.log_entry),
+            version_time: chrono::Utc::now(),
+            current_root_seed: &next_root_seed,
+            next_root_public_key_multibase: &third_root_key,
+            state: &inception.log_entry["state"],
+        },
+    )?;
+    let rotated = crate::harness::expect_json(
+        group
+            .server(1)
+            .http()
+            .post(
+                group
+                    .server(1)
+                    .url("/_arkret/root/identity/submit-did-operation"),
+            )
+            .canonical_json(&rotation.submit_body)?,
+        reqwest::StatusCode::OK,
+    )
+    .await?;
+    ensure!(
+        rotated["status"] == "accepted",
+        "root rotation was not accepted: {rotated}"
+    );
+    let future_proof = InviteSubjectProof::new(
+        arkret_wire::DidUrl::new(format!("did:key:{third_root_key}#{third_root_key}"))
+            .map_err(|error| anyhow::anyhow!(error))?,
+        subject_body.transcript_digest()?,
+        URL_SAFE_NO_PAD.encode(third_root.sign(&subject_body.canonical_bytes()?).to_bytes()),
+    );
+    for (case, proof) in [
+        ("rotated_out_root", payload.subject_proof.clone()),
+        ("not_yet_active_root", future_proof),
+    ] {
+        let mut bad = payload.clone();
+        bad.subject_proof = proof;
+        let rejected = bob
+            .author_event(
+                realm,
+                EventKind::InviteClaim.as_str(),
+                serde_json::to_value(bad)?,
+            )
+            .await?;
+        let (status, body) = submit_raw(&bob, &rejected).await?;
+        let shape = (
+            status,
+            body["type"].clone(),
+            body["detail"].clone(),
+            body["reason_code"].clone(),
+        );
+        ensure!(
+            Some(&shape) == rejection_shape.as_ref(),
+            "{case} disclosed a distinct refusal: {status} {body}"
+        );
+        ensure!(
+            observation(&governance_db.connect_url, realm).await? == before,
+            "{case} wrote canonical/current state"
+        );
+    }
+    payload.subject_proof = InviteSubjectProof::new(
+        arkret_wire::DidUrl::new(rotation.current_root_verification_method.clone())
+            .map_err(|error| anyhow::anyhow!(error))?,
+        subject_body.transcript_digest()?,
+        URL_SAFE_NO_PAD.encode(next_root.sign(&subject_body.canonical_bytes()?).to_bytes()),
+    );
     let claim = bob
         .author_event(
             realm,
@@ -327,6 +405,43 @@ pub async fn third_party_invite_claim_run() -> Result<()> {
             .await
             .is_err(),
         "claim must not grant a member stream scan"
+    );
+    eprintln!(
+        "2162 third-party claim verified and committed: {}",
+        claim_commit.event_ref
+    );
+    let fourth_root_key = arkret_canonical::ed25519_pubkey_to_did_key_multibase(
+        SigningKey::from_bytes(&[0x74; 32])
+            .verifying_key()
+            .as_bytes(),
+    );
+    let after_claim = arkret_signatures::webvh::prepare_principal_rotation(
+        &arkret_signatures::webvh::PrincipalRotationInput {
+            did: &bob.actor,
+            local_id: &inception.local_id,
+            previous_entries: &[inception.log_entry, rotation.log_entry],
+            version_time: chrono::Utc::now(),
+            current_root_seed: &third_root_seed,
+            next_root_public_key_multibase: &fourth_root_key,
+            state: &inception.submit_body.operation["state"],
+        },
+    )?;
+    let rotated_again = crate::harness::expect_json(
+        group
+            .server(1)
+            .http()
+            .post(
+                group
+                    .server(1)
+                    .url("/_arkret/root/identity/submit-did-operation"),
+            )
+            .canonical_json(&after_claim.submit_body)?,
+        reqwest::StatusCode::OK,
+    )
+    .await?;
+    ensure!(
+        rotated_again["status"] == "accepted",
+        "post-claim root rotation was not accepted: {rotated_again}"
     );
     group.server_mut(1).restart_external_process().await?;
     for fault in ["missing", "signature"] {
