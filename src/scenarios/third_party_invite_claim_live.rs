@@ -55,6 +55,51 @@ async fn replica_observation(url: &str, realm: &str) -> Result<(i64, i64, i64, i
     }).await?
 }
 
+async fn fault_origin_source(
+    url: &str,
+    event: &arkret_wire::Event,
+    fault: &str,
+) -> Result<(String, String, String)> {
+    let url = url.to_owned();
+    let event_id = event.event_id.to_string();
+    let fault = fault.to_owned();
+    tokio::task::spawn_blocking(move || -> Result<_> {
+        let mut db = postgres::Client::connect(&url, postgres::NoTls)?;
+        let roots = db.query(
+            "SELECT evidence_ref,evidence_json::text FROM account_device_signer_evidence \
+             WHERE evidence_json #>> '{device_projection_attestation,attestation,event_authorization,event_id}'=$1",
+            &[&event_id],
+        )?;
+        ensure!(roots.len() == 1, "Claim fixture must have exactly one original root");
+        let original_ref: String = roots[0].get(0);
+        let original_body: String = roots[0].get(1);
+        let mut body: Value = serde_json::from_str(&original_body)?;
+        match fault.as_str() {
+            "missing" => body["device_projection_attestation"]["attestation"]["event_authorization"]["event_id"] = json!("unavailable"),
+            "signature" => {
+                let jws = body["device_projection_attestation"]["proof"]["jws"].as_str().context("original JWS")?;
+                let header = jws.split('.').next().context("original JWS header")?;
+                body["device_projection_attestation"]["proof"]["jws"] = json!(format!("{header}..{}", URL_SAFE_NO_PAD.encode([0u8;64])));
+            }
+            _ => anyhow::bail!("unknown origin source fault"),
+        }
+        // Recompute the archive address: the signature fault must be rejected
+        // by real proof verification, not merely by a stale content address.
+        let altered_ref = format!("ak:signer_evidence:sha256:{}",arkret_canonical::sha256_hex(arkret_canonical::canonical_json_bytes(&body)?));
+        ensure!(db.execute("UPDATE account_device_signer_evidence SET evidence_ref=$2,evidence_json=CAST($3 AS text)::jsonb WHERE evidence_ref=$1",&[&original_ref,&altered_ref,&body.to_string()])? == 1);
+        Ok((altered_ref,original_ref,original_body))
+    }).await?
+}
+
+async fn restore_origin_source(url: &str, root: (String, String, String)) -> Result<()> {
+    let url = url.to_owned();
+    tokio::task::spawn_blocking(move || -> Result<_> {
+        let mut db = postgres::Client::connect(&url, postgres::NoTls)?;
+        ensure!(db.execute("UPDATE account_device_signer_evidence SET evidence_ref=$2,evidence_json=CAST($3 AS text)::jsonb WHERE evidence_ref=$1",&[&root.0,&root.1,&root.2])? == 1);
+        Ok(())
+    }).await?
+}
+
 pub async fn third_party_invite_claim_run() -> Result<()> {
     let Some(governance_db) = database(GROUP)? else {
         return Ok(());
@@ -70,7 +115,7 @@ pub async fn third_party_invite_claim_run() -> Result<()> {
         HARNESS_INTERNAL_AUTHORITY_SECRET,
     )
     .await?;
-    let Some(group) = TestServerGroup::try_multi_external_with_node_envs(
+    let Some(mut group) = TestServerGroup::try_multi_external_with_node_envs(
         GROUP,
         &[
             station_env(&governance_db.connect_url, &coauth),
@@ -239,7 +284,7 @@ pub async fn third_party_invite_claim_run() -> Result<()> {
             serde_json::to_value(payload)?,
         )
         .await?;
-    let subject_before = replica_observation(&subject_db.connect_url, realm).await?;
+    let before_replica = replica_observation(&subject_db.connect_url, realm).await?;
     let claim_result = submit_and_expect_commit(&bob, &account, &bob.device_id, &claim).await;
     if claim_result.is_err() {
         match observation(&governance_db.connect_url, realm).await {
@@ -255,16 +300,20 @@ pub async fn third_party_invite_claim_run() -> Result<()> {
         claimed.2 == before.2 + 1 && claimed.3 == before.3,
         "claim must establish the exact proposal without joining its subject"
     );
+    eprintln!(
+        "2162 third-party claim verified and committed: {}",
+        claim_commit.event_ref
+    );
     ensure!(
-        replica_observation(&subject_db.connect_url, realm).await? == subject_before,
-        "bound claim result must not install canonical/current replica state"
+        replica_observation(&subject_db.connect_url, realm).await? == before_replica,
+        "bound Claim result installed a replica, stream anchor, or committed local Event"
     );
     ensure!(
         bob.sdk()
             .committed_event_get(&claim.event_id)
             .await
             .is_err(),
-        "claim must not grant ordinary committed Event reads"
+        "bound Claim result must not grant a member read before InviteAccept"
     );
     let realm_id = RealmId::new(realm.to_owned())?;
     ensure!(
@@ -279,10 +328,25 @@ pub async fn third_party_invite_claim_run() -> Result<()> {
             .is_err(),
         "claim must not grant a member stream scan"
     );
-    eprintln!(
-        "2162 third-party claim verified and committed: {}",
-        claim_commit.event_ref
-    );
+    group.server_mut(1).restart_external_process().await?;
+    for fault in ["missing", "signature"] {
+        let root = fault_origin_source(&subject_db.connect_url, &claim, fault).await?;
+        let response = submit_raw(&bob, &claim).await;
+        restore_origin_source(&subject_db.connect_url, root).await?;
+        let (status, body) = response?;
+        ensure!(
+            status == reqwest::StatusCode::SERVICE_UNAVAILABLE
+                && body["type"]
+                    .as_str()
+                    .is_some_and(|value| value.ends_with("/temporarily_unavailable")),
+            "{fault} original proof returned an unverified Claim result: {status} {body}"
+        );
+        ensure!(
+            observation(&governance_db.connect_url, realm).await? == claimed
+                && replica_observation(&subject_db.connect_url, realm).await? == before_replica,
+            "{fault} original proof changed governance state or installed a replica"
+        );
+    }
     let (replay_status, replay_body) = submit_raw(&bob, &claim).await?;
     ensure!(
         replay_status == reqwest::StatusCode::OK,
@@ -300,8 +364,27 @@ pub async fn third_party_invite_claim_run() -> Result<()> {
         "exact claim replay changed canonical/current state"
     );
     ensure!(
-        replica_observation(&subject_db.connect_url, realm).await? == subject_before,
-        "exact claim replay installed a member replica"
+        replica_observation(&subject_db.connect_url, realm).await? == before_replica,
+        "exact Claim replay opened a member stream"
+    );
+    let (first, second) = tokio::try_join!(submit_raw(&bob, &claim), submit_raw(&bob, &claim))?;
+    for (status, body) in [first, second] {
+        ensure!(
+            status == reqwest::StatusCode::OK,
+            "concurrent exact Claim replay refused: {status} {body}"
+        );
+        let outcome: arkret_wire::AuthoritySubmitOutcome = serde_json::from_value(body)?;
+        ensure!(
+            matches!(outcome, arkret_wire::AuthoritySubmitOutcome::Accepted {
+            status: arkret_wire::AuthorityCommitStatus::Duplicate, commit
+        } if commit == claim_commit),
+            "concurrent Claim replay changed its original Commit"
+        );
+    }
+    ensure!(
+        observation(&governance_db.connect_url, realm).await? == claimed
+            && replica_observation(&subject_db.connect_url, realm).await? == before_replica,
+        "concurrent Claim replay changed canonical/current state or installed a replica"
     );
     let accept = bob
         .author_event(
@@ -326,6 +409,21 @@ pub async fn third_party_invite_claim_run() -> Result<()> {
         listed.membership
             == arkret_models_collaboration::sync_frames::demand_sync::RealmListMembership::Join,
         "accepted claimant was not listed as joined"
+    );
+    let accepted_state = observation(&governance_db.connect_url, realm).await?;
+    let (status, body) = submit_raw(&bob, &claim).await?;
+    let outcome: arkret_wire::AuthoritySubmitOutcome = serde_json::from_value(body)?;
+    ensure!(
+        status == reqwest::StatusCode::OK
+            && matches!(outcome,
+        arkret_wire::AuthoritySubmitOutcome::Accepted {
+            status: arkret_wire::AuthorityCommitStatus::Duplicate, commit
+        } if commit == claim_commit),
+        "post-accept Claim replay lost its original outcome"
+    );
+    ensure!(
+        observation(&governance_db.connect_url, realm).await? == accepted_state,
+        "post-accept Claim replay changed the final lifecycle or membership"
     );
     Ok(())
 }
