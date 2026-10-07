@@ -12790,6 +12790,7 @@ dependencies = [
  "soland-domain",
  "soland-storage",
  "tokio",
+ "tokio-postgres",
  "tracing",
  "uuid",
 ]
