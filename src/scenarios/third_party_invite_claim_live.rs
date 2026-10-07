@@ -193,11 +193,14 @@ pub async fn third_party_invite_claim_run() -> Result<()> {
             .author_event(realm, EventKind::InviteClaim.as_str(), bad)
             .await?;
         let (status, body) = submit_raw(&bob, &event).await?;
-        ensure!(!status.is_success(), "invalid {case} was accepted: {body}");
+        ensure!(
+            status == reqwest::StatusCode::NOT_FOUND,
+            "invalid {case} did not use the private refusal: {status} {body}"
+        );
         ensure!(
             body["type"]
                 .as_str()
-                .is_some_and(|value| value.ends_with("/capability_denied")),
+                .is_some_and(|value| value.ends_with("/not_found")),
             "invalid {case} returned unrelated failure: {body}"
         );
         let shape = (
@@ -226,7 +229,16 @@ pub async fn third_party_invite_claim_run() -> Result<()> {
             serde_json::to_value(payload)?,
         )
         .await?;
-    let claim_commit = submit_and_expect_commit(&bob, &account, &bob.device_id, &claim).await?;
+    let claim_result = submit_and_expect_commit(&bob, &account, &bob.device_id, &claim).await;
+    if claim_result.is_err() {
+        match observation(&governance_db.connect_url, realm).await {
+            Ok(after) => eprintln!(
+                "2162 failed claim submission: governance (events, commits, claimed, joined) before={before:?} after={after:?}"
+            ),
+            Err(error) => eprintln!("2162 failed claim observation: {error:#}"),
+        }
+    }
+    let claim_commit = claim_result?;
     let claimed = observation(&governance_db.connect_url, realm).await?;
     ensure!(
         claimed.2 == before.2 + 1 && claimed.3 == before.3,
