@@ -245,7 +245,7 @@ async fn install_test_principal_control_document(
     Ok(prepared)
 }
 
-fn prepared_test_principal_inception(actor: &str) -> Result<PreparedPrincipalInception> {
+pub(crate) fn prepared_test_principal_inception(actor: &str) -> Result<PreparedPrincipalInception> {
     let (host, local_id) = test_principal_coordinates(actor)?;
     test_principal_inception(&host, &local_id)
 }
@@ -269,6 +269,11 @@ pub fn test_principal_root_signing_authority(
     let verification_method = arkret_wire::DidUrl::new(prepared.root_verification_method)
         .map_err(|error| anyhow::anyhow!("test principal root verification method: {error}"))?;
     Ok((verification_method, test_principal_root_key_seed(actor)?))
+}
+
+pub(crate) fn test_principal_next_root_seed(actor: &str) -> Result<[u8; 32]> {
+    let (host, local_id) = test_principal_coordinates(actor)?;
+    Ok(Sha256::digest(format!("cotest:webvh:next-root:{host}:{local_id}").as_bytes()).into())
 }
 
 fn test_principal_root_key_seed(actor: &str) -> Result<[u8; 32]> {
