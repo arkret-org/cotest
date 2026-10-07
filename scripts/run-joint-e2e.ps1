@@ -530,6 +530,7 @@ function New-ManagedSavfoxProbe {
     $probeHome = Join-Path $JointDirectory "$Name-home"
     New-Item -ItemType Directory -Path $probeHome -Force | Out-Null
     $receiptPath = Join-Path $JointDirectory "$Name-model-receipts.jsonl"
+    # The deterministic provider's reply bytes are the fixture payload.
     $config = @"
 approval_policy = "never"
 sandbox_mode = "read-only"
@@ -541,6 +542,9 @@ provider = "joint_mock"
 
 [features]
 remote_models = false
+
+[gateway.response_footer]
+enabled = false
 
 [model_providers.joint_mock]
 name = "Cotest deterministic Savfox model"
