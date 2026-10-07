@@ -2468,10 +2468,34 @@ export async function readCommitStreamHeadApi(
   realmId: string,
   opts: { server?: SolandKey; streamRef?: Record<string, unknown> } = {},
 ): Promise<CommitStreamHead | undefined> {
+  return readCommitStreamCut(request, token, realmId, opts);
+}
+
+/// Resolve a named accepted cut through the receiver's own authenticated
+/// stream scan, retaining coverage through the observed head. A later head
+/// does not replace the Signal's signed historical authority binding.
+export async function readCommitStreamCutApi(
+  request: APIRequestContext,
+  token: string,
+  realmId: string,
+  commitId: string,
+  opts: { server?: SolandKey; streamRef?: Record<string, unknown> } = {},
+): Promise<CommitStreamHead | undefined> {
+  return readCommitStreamCut(request, token, realmId, opts, commitId);
+}
+
+async function readCommitStreamCut(
+  request: APIRequestContext,
+  token: string,
+  realmId: string,
+  opts: { server?: SolandKey; streamRef?: Record<string, unknown> },
+  commitId?: string,
+): Promise<CommitStreamHead | undefined> {
   const streamRef = opts.streamRef ?? { kind: "realm", realm_id: realmId };
   const url = `${solandBaseUrl(opts.server)}/_arkret/self/streams/scan`;
   let afterPosition: number | null = null;
   let head: CommitStreamHead | undefined;
+  let exact: CommitStreamHead | undefined;
   for (;;) {
     const response = await request.post(url, {
       headers: {
@@ -2491,14 +2515,25 @@ export async function readCommitStreamHeadApi(
     }>(response, `scan commit stream for ${realmId}`);
     const commits = body.committed_events;
     expect(Array.isArray(commits), "stream scan must return committed_events").toBeTruthy();
-    if (commits.length === 0) return head;
+    for (const { commit } of commits) {
+      expect(canonicalJson(commit.stream_ref), "accepted cut belongs to the requested stream")
+        .toBe(canonicalJson(streamRef));
+      if (commit.commit_id === commitId) {
+        exact = {
+          stream_ref: commit.stream_ref,
+          stream_position: commit.stream_position,
+          commit_id: commit.commit_id,
+        };
+      }
+    }
+    if (commits.length === 0) return commitId === undefined ? head : exact;
     const last = commits[commits.length - 1]!.commit;
     head = {
       stream_ref: streamRef as CommitStreamHead["stream_ref"],
       stream_position: last.stream_position,
       commit_id: last.commit_id,
     };
-    if (!body.truncated) return head;
+    if (!body.truncated) return commitId === undefined ? head : exact;
     afterPosition = last.stream_position;
   }
 }

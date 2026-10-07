@@ -14,6 +14,7 @@ import {
   canonicalJson,
   canonicalTimestamp,
   currentActorIdApi,
+  readCommitStreamCutApi,
   readCommitStreamHeadApi,
   registeredEventVerificationMethod,
   signWithRegisteredEventSigner,
@@ -335,9 +336,13 @@ export async function captureSubmittedSignalEnvelope(
   const receiverGroup = await scopeMlsMemberGroupApi(request, receiverToken, realmId, scopeRef);
   await prepareSignalEnvelope(request, senderToken, envelope);
   const receiverId = await currentActorIdApi(request, receiverToken);
-  const head = await readCommitStreamHeadApi(request, receiverToken, realmId, { streamRef: scopeRef });
+  const head = await readCommitStreamCutApi(
+    request, receiverToken, realmId, String(envelope.authority_commit_id), { streamRef: scopeRef },
+  );
   const parent = scopeRef.kind === "circle"
-    ? await readCommitStreamHeadApi(request, receiverToken, realmId)
+    ? await readCommitStreamCutApi(
+      request, receiverToken, realmId, String(envelope.parent_realm_authority_commit_id),
+    )
     : undefined;
   if (!head || (scopeRef.kind === "circle" && !parent)) {
     throw new Error("Signal receiver lacks the accepted independent authority cuts");

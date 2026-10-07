@@ -22,9 +22,13 @@ import {
   accountActorId,
   canonicalJson,
   registeredEventVerificationMethod,
+  readCommitStreamCutApi,
+  readCommitStreamHeadApi,
+  retypeEventDerivedId,
   resolveDefaultStrandId,
   signedEventEnvelope,
   submitSignedEventApi,
+  typedId,
   } from "../../helpers/soland-api";
 import {
   encryptMlsMessageContent,
@@ -350,6 +354,19 @@ test.describe("read receipts + privacy", () => {
       eventId: freshMessage.event_id,
       payloadSequence: 2,
     });
+    await prepareSignalEnvelope(request, fixture.aliceToken, receipt);
+    const signedCut = String(receipt.authority_commit_id);
+    // A later accepted message advances authority without changing the epoch
+    // or granting visibility to the disabled-window receipt.
+    await sendEncryptedReceiptMessage(
+      request, fixture.bobToken, fixture.bob, fixture.realmId, "head after signed receipt",
+    );
+    const laterHead = await readCommitStreamHeadApi(request, fixture.bobToken, fixture.realmId);
+    expect(laterHead?.commit_id, "the receiver head really advanced after Signal signing")
+      .not.toBe(signedCut);
+    expect(await readCommitStreamCutApi(
+      request, fixture.bobToken, fixture.realmId, retypeEventDerivedId(typedId("event"), "realm_commit"),
+    ), "an absent cut cannot fall back to the latest head").toBeUndefined();
     const freshCapture = await captureSubmittedSignalEnvelope(
       request,
       fixture.aliceToken,
