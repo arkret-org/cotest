@@ -454,7 +454,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
           content: { kind: "ak.content.text", body: `${body} drift` },
         },
       });
-      // Deliberately reuse the accepted request identity with different content.
+      // Reuse the inner Event ID, not the full-body submission identity.
       // Ordinary signing helpers derive a new id; this negative request must not.
       drift.event_id = eventId;
       const conflict = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
@@ -462,7 +462,9 @@ test.describe("service surface contract — error envelope, pagination, idempote
         data: canonicalJson({ event: drift }),
       });
       expect(conflict.status(), "changed Event preimage must fail before duplicate lookup").toBe(422);
-      expect(wireErrCode(await conflict.json())).toBe("schema_violation");
+      const identityProblem = await conflict.json();
+      expect(wireErrCode(identityProblem)).toBe("schema_violation");
+      expect(identityProblem.reason_code).toBe("event_id_digest_mismatch");
 
       const eventsAfterConflict = await listRealmEventsViaApi(request, token, realmId);
       expect(eventsAfterConflict.filter((event) => event.event_id === eventId)).toHaveLength(1);
