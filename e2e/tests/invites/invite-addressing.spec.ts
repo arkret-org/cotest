@@ -272,20 +272,7 @@ test.describe("invite addressing", () => {
 
     const outcome = await submitPeerInviteDeliveryApi(
       request,
-      {
-        schema: "ak.schema.invite_delivery_request.v1",
-        // `signedEventEnvelope` still returns an untyped record — wiring the
-        // Event envelope itself to the generated type is the remaining B3 item.
-        invite_event:
-          fixture.inviteEvent as InviteDeliveryRequestBodyBodyBody["invite_event"],
-        invite_commit: fixture.inviteCommit,
-        authority_locator_hints: [
-          { service_kind: "station", service_id: solandServiceId(), source: "invite" },
-        ],
-        invite_address: fixture.inviteAddress,
-        introduction_evidence: fixture.evidence,
-        idempotency_key: `cotest-peer-invite-${Date.now()}`,
-      },
+      peerDeliveryBody(fixture, "explicit"),
       {
         origin: recipientServiceId,
         destination: recipientServiceId,
@@ -296,6 +283,8 @@ test.describe("invite addressing", () => {
     expect(outcome.received_at).toMatch(
       /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
     );
+    expect(outcome.disclosed_outcome).toBeUndefined();
+    await assertNoHolderPrivateWrite(request, fixture, "low-trust delivery is not a notification");
   });
 
   test("invite locator lifecycle uses opaque body-only secrets", async ({

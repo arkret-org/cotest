@@ -32,7 +32,9 @@ import {
   authHeaders,
   createRealmApi,
   accountActorId,
+  acceptPreparedInviteApi,
   canonicalJson,
+  waitForInviteDeliveryApi,
 } from "../../helpers/soland-api";
 import {
   ensureRegistered,
@@ -42,11 +44,9 @@ import {
   uniqueUser,
 } from "../../helpers/users";
 import {
-  acceptInviteArkret,
   contactRow,
   deliverInviteWithConsentGrant,
   grantInviteConsentArkret,
-  listAuthzInvitesArkret,
   requestContactArkret,
   resolvePrincipalLocator,
   respondContactArkret,
@@ -475,7 +475,10 @@ test.describe("contact graph federation (server1/server2)", () => {
       requestId: outcome.request_event_ref, requesterId: alice.id, action: "accept",
       grantedScopes: ["invite"], server: "server2", requesterServiceId: solandServiceId("server1"),
     });
-    const consent = await grantInviteConsentArkret(request, bobTokenServer2, bob, alice.id, { server: "server2" });
+    const consent = await grantInviteConsentArkret(request, bobTokenServer2, bob, alice.id, {
+      server: "server2",
+      peerStationId: solandServiceId("server1"),
+    });
     const grantRef = consent.eventRef;
 
     // On server1: alice creates the realm she wants to pull bob into.
@@ -510,22 +513,22 @@ test.describe("contact graph federation (server1/server2)", () => {
     expect(delivery.status).toBe("accepted");
     expect(delivery.disclosed_outcome).toBe("delivered");
 
-    // bob@server2 lists the pending invite and accepts -> becomes a member on server2.
-    const invites = await listAuthzInvitesArkret(request, bobTokenServer2, {
-      server: "server2",
-    });
-    const invite = invites.find(
-      (i) => i.realm_id === realmId && i.invitee_account_id?.principal_id === bob.id && i.invitee_account_id.station_id === solandServiceId("server2"),
+    // Notification is holder-private account data, not a replicated Realm.
+    const invite = await waitForInviteDeliveryApi(
+      request, bobTokenServer2, bob.id, realmId, "server2",
     );
-    expect(invite, "bob@server2 pending invite for the server1 realm").toBeTruthy();
-    expect(invite!.id).toBe(inviteId);
-
-    await acceptInviteArkret(request, bobTokenServer2, {
-      accepterId: bob.id,
-      realmId,
-      inviteId: invite!.id,
-      server: "server2",
+    expect(invite.id).toBe(inviteId);
+    const realmUrl = `${solandBaseUrl("server2")}/_arkret/self/realms/${encodeURIComponent(realmId)}`;
+    const beforeJoin = await request.get(realmUrl, {
+      headers: authHeaders(bobTokenServer2, "GET", realmUrl),
     });
+    expect(beforeJoin.status(), "notification grants no Realm read authority").toBe(404);
+
+    // Prepare verifies the delivered locator hints; acceptance and exact retry
+    // are committed by server1 through Bob's authenticated own Station.
+    await acceptPreparedInviteApi(
+      request, bobTokenServer2, bob.id, realmId, invite.id, { server: "server2" },
+    );
     await expect
       .poll(
         async () => {
