@@ -124,7 +124,7 @@ async function revokeAppletRuntime(
   appletId: string,
   realmId: string,
   idempotencyKey: string,
-  onCommit?: () => void,
+  onCommit?: () => Promise<APIResponse>,
 ): Promise<Record<string, unknown>> {
   const effectiveScope = { kind: "realm" as const, realm_id: realmId };
   const reasonCode = "requested_by_admin";
@@ -208,25 +208,58 @@ async function revokeAppletRuntime(
     membershipEvents,
     { context: `prepare Applet membership removal ${appletId}` },
   );
-  onCommit?.();
-  const response = await request.post(base, {
-    headers: {
-      ...authHeaders(token, "POST", base),
-      "content-type": "application/json",
-      "Idempotency-Key": idempotencyKey,
-    },
-    data: canonicalJson({
-      revoke_plan_digest: revokePlanDigest,
-      effective_scope: effectiveScope,
-      reason_code: reasonCode,
-      revoke_mode: revokeMode,
-      capability_revoke_events: capabilityRevokeEvents,
-      membership_state_events: membershipStateEvents,
-    }),
+  const body = canonicalJson({
+    revoke_plan_digest: revokePlanDigest,
+    effective_scope: effectiveScope,
+    reason_code: reasonCode,
+    revoke_mode: revokeMode,
+    capability_revoke_events: capabilityRevokeEvents,
+    membership_state_events: membershipStateEvents,
   });
-  const responseText = await response.text();
-  expect(response.status(), responseText).toBe(200);
-  return JSON.parse(responseText) as Record<string, unknown>;
+  const submit = async (): Promise<Record<string, unknown>> => {
+    const response = await request.post(base, {
+      headers: {
+        ...authHeaders(token, "POST", base),
+        "content-type": "application/json",
+        "Idempotency-Key": idempotencyKey,
+      },
+      data: body,
+    });
+    const responseText = await response.text();
+    expect(response.status(), responseText).toBe(200);
+    return JSON.parse(responseText) as Record<string, unknown>;
+  };
+  const concurrentDelivery = onCommit?.();
+  const outcome = await submit();
+  if (!concurrentDelivery || outcome.status !== "partially_completed") return outcome;
+
+  // A competing stream Commit can make the candidate unavailable. Resume the
+  // durable saga with the exact request after the competing delivery settles.
+  const rejections = outcome.rejections as Array<{ reason_code: string }>;
+  expect(rejections.length).toBeGreaterThan(0);
+  for (const rejection of rejections) {
+    expect(rejection.reason_code).toBe("temporarily_unavailable");
+  }
+  await concurrentDelivery;
+  const resumed = await submit();
+  expect(resumed.operation_id).toBe(outcome.operation_id);
+  expect(resumed.revoke_plan_digest).toBe(outcome.revoke_plan_digest);
+  const previousSteps = outcome.steps as Array<Record<string, unknown>>;
+  const resumedSteps = resumed.steps as Array<Record<string, unknown>>;
+  expect(resumedSteps).toHaveLength(previousSteps.length);
+  for (const [index, previous] of previousSteps.entries()) {
+    if (previous.submitted_event_id !== undefined) {
+      expect(previous).not.toHaveProperty("committed_event_ref");
+      expect(resumedSteps[index].committed_event_ref).toMatchObject({
+        event_id: previous.submitted_event_id,
+      });
+    } else if (previous.committed_event_ref !== undefined) {
+      expect(resumedSteps[index].committed_event_ref).toEqual(previous.committed_event_ref);
+    } else {
+      expect(resumedSteps[index].effect_ref).toBe(previous.effect_ref);
+    }
+  }
+  return resumed;
 }
 
 function capabilityGrantRefForAction(
@@ -1796,6 +1829,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
     let racingDelivery: ReturnType<typeof deliver> | undefined;
     const revoked = await revokeAppletRuntime(request, token, alice.id, registration.applet_id, realmId, `inbound-revoke-${stamp}`, () => {
       racingDelivery = deliver({ ...body, events: [next] }, `inbound-revoke-race-${stamp}`);
+      return racingDelivery;
     });
     expect(revoked.status).toBe("complete");
     expect(racingDelivery).toBeDefined();
