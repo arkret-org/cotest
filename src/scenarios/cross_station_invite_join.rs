@@ -2,7 +2,7 @@
 //! Invite, and then writes into it (`zh/sync/federation.md` §3–§4.1.1,
 //! `zh/sync/authority-commit-log.md` §4, `zh/authz/offline-publication.md` §3).
 //!
-//! Against two live Solands with separate PostgreSQL databases:
+//! Against three live Solands with separate PostgreSQL databases:
 //!
 //! 1. Alice on X creates an invite-only Realm and invites Bob, whose Account lives on Y; Bob's
 //!    realm list on Y does not name the Realm.
@@ -23,10 +23,16 @@
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail, ensure};
+use arkret_models_collaboration::events_payloads::preview::{
+    PreviewPolicyPayload, PreviewPolicyPayloadValue,
+};
 use arkret_models_collaboration::governance::membership_invite::{
     InviteAcceptPayload, InvitePreviousState,
 };
-use arkret_models_collaboration::governance::realm_join_intake::RealmJoinIntent;
+use arkret_models_collaboration::governance::realm_join_intake::{
+    AuthorityLocatorSource, RealmJoinCandidate, RealmJoinCandidateServiceKind, RealmJoinIntent,
+    RealmJoinTarget, SelfRealmJoinPreviewRequestBody,
+};
 use arkret_models_collaboration::sync_frames::demand_sync::RealmListMembership;
 use arkret_wire::{
     ActorId, CommitStreamRef, EventKind, InviteId, ReadableFloorReason, RealmId,
@@ -53,6 +59,7 @@ use crate::scenarios::protocol_payloads::account_summary::{account_frames, liste
 const GROUP: &str = "cross-station-invite-join";
 const ALICE_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002401";
 const BOB_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002402";
+const CAROL_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002404";
 const TITLE: &str = "Cross-Station invite";
 
 /// Submit `event` through Bob's own Station and return the raw answer.
@@ -189,9 +196,14 @@ pub async fn cross_station_invite_join_run() -> Result<()> {
     let Some(member_database) = database(GROUP)? else {
         return Ok(());
     };
+    let Some(third_database) = database(GROUP)? else {
+        return Ok(());
+    };
     ensure!(
-        governance_database.connect_url != member_database.connect_url,
-        "the governance and member Stations must use separate databases"
+        governance_database.connect_url != member_database.connect_url
+            && governance_database.connect_url != third_database.connect_url
+            && member_database.connect_url != third_database.connect_url,
+        "the three Stations must use separate databases"
     );
     let coauth = MockCoauthIntrospectionServer::spawn_with_internal_secret(
         HARNESS_INTERNAL_AUTHORITY_SECRET,
@@ -202,6 +214,7 @@ pub async fn cross_station_invite_join_run() -> Result<()> {
         &[
             station_env(&governance_database.connect_url, &coauth),
             station_env(&member_database.connect_url, &coauth),
+            station_env(&third_database.connect_url, &coauth),
         ],
     )
     .await?
@@ -214,9 +227,15 @@ pub async fn cross_station_invite_join_run() -> Result<()> {
         standard_client(group.server(0), &coauth, "xinvite-alice", ALICE_DEVICE).await?;
     let (bob, bob_account) =
         standard_client(group.server(1), &coauth, "xinvite-bob", BOB_DEVICE).await?;
-    let realm =
-        create_realm_with_join_rule(&alice, TITLE, "invite", &[group.server(0), group.server(1)])
-            .await?;
+    let (carol, carol_account) =
+        standard_client(group.server(2), &coauth, "xinvite-carol", CAROL_DEVICE).await?;
+    let realm = create_realm_with_join_rule(
+        &alice,
+        TITLE,
+        "invite",
+        &[group.server(0), group.server(1), group.server(2)],
+    )
+    .await?;
     let realm_id = RealmId::new(realm.clone())?;
     let strand_id = alice.default_strand_id(&realm)?;
     let created = alice
@@ -233,6 +252,101 @@ pub async fn cross_station_invite_join_run() -> Result<()> {
         .await
         .context("commit the directed Invite to Bob's Station Y Account")?;
     let invite_id = InviteId::from_event_id(&submitted_event_id(&created)?);
+    alice
+        .submit_event(
+            &realm,
+            EventKind::RealmPreviewPolicy.as_str(),
+            serde_json::to_value(PreviewPolicyPayload {
+                value: PreviewPolicyPayloadValue {
+                    mode: "directory_card".to_owned(),
+                    audiences: vec!["invited".to_owned(), "realm_member".to_owned()],
+                    fields: vec![
+                        "title".to_owned(),
+                        "join_rule".to_owned(),
+                        "history_access".to_owned(),
+                    ],
+                    history: None,
+                    token: None,
+                },
+                reason: None,
+            })?,
+        )
+        .await?;
+    let preview_request = SelfRealmJoinPreviewRequestBody {
+        request_id: arkret_wire::RequestId::new(
+            "ak:request:019b0000-0000-7000-8000-000000002406".to_owned(),
+        )?,
+        target: RealmJoinTarget {
+            realm_id: realm_id.clone(),
+            invite_id: Some(invite_id.clone()),
+            authority_locator_hints: vec![RealmJoinCandidate {
+                service_kind: RealmJoinCandidateServiceKind::Station,
+                service_id: group.server(0).service_id().clone(),
+                endpoint_url: None,
+                source: AuthorityLocatorSource::Directory,
+            }],
+        },
+    };
+    let mut local_preview_request = preview_request.clone();
+    local_preview_request.target.invite_id = None;
+    let local_started = Instant::now();
+    let local_preview = alice
+        .sdk()
+        .self_realm_join_preview(&local_preview_request)
+        .await?;
+    ensure!(
+        local_preview.preview.display_name.as_deref() == Some(TITLE)
+            && local_preview.authority_bundle.current_service_id == *group.server(0).service_id(),
+        "the local equivalent preview did not use the governing Station's current"
+    );
+    ensure!(
+        local_started.elapsed() >= Duration::from_millis(150),
+        "the local equivalent preview bypassed the non-enumerating timing floor"
+    );
+    let preview = bob.sdk().self_realm_join_preview(&preview_request).await?;
+    ensure!(
+        preview.authority_bundle.current_service_id == *group.server(0).service_id()
+            && preview.preview.display_name.as_deref() == Some(TITLE)
+            && preview.preview.join_rule == arkret_wire::JoinRule::Invite
+            && preview.preview.history_access == arkret_wire::HistoryAccess::SinceJoin,
+        "Bob's own Station did not return the governance Station's admitted preview"
+    );
+    let repeated = bob.sdk().self_realm_join_preview(&preview_request).await?;
+    ensure!(
+        preview.authority_bundle.current_assertion.nonce
+            != repeated.authority_bundle.current_assertion.nonce,
+        "a repeated preview reused a client-chosen or cached authority nonce"
+    );
+    let hidden = carol
+        .post("/_arkret/self/realm-joins/preview")
+        .canonical_json(&preview_request)?
+        .send()
+        .await?;
+    let hidden_status = hidden.status();
+    let hidden_body = hidden.json::<Value>().await?;
+    ensure!(
+        hidden_status == StatusCode::NOT_FOUND && problem_is(&hidden_body, "not_found"),
+        "a third-Station non-invitee could reuse Bob's Invite: {hidden_status} {hidden_body}"
+    );
+    let mut false_locator = preview_request.clone();
+    false_locator.target.authority_locator_hints[0].service_id =
+        group.server(2).service_id().clone();
+    let false_started = Instant::now();
+    let false_source = bob
+        .post("/_arkret/self/realm-joins/preview")
+        .canonical_json(&false_locator)?
+        .send()
+        .await?;
+    let false_status = false_source.status();
+    let false_body = false_source.json::<Value>().await?;
+    ensure!(
+        false_status == StatusCode::NOT_FOUND && problem_is(&false_body, "not_found"),
+        "a non-governing Station was accepted as the preview source: {false_status} {false_body}"
+    );
+    ensure!(
+        false_started.elapsed() >= Duration::from_millis(150),
+        "a locator refusal bypassed the non-enumerating preview timing floor"
+    );
     ensure!(
         listed_row(&account_frames(&bob, None).await?, &realm).is_err(),
         "an invited Account is not listed as a member on its own Station"
@@ -263,6 +377,18 @@ pub async fn cross_station_invite_join_run() -> Result<()> {
 
     // (3) Without X, Y has no RealmCommit to report.
     group.server_mut(0).stop_external_process().await?;
+    let offline_preview = bob
+        .post("/_arkret/self/realm-joins/preview")
+        .canonical_json(&preview_request)?
+        .send()
+        .await?;
+    let offline_status = offline_preview.status();
+    let offline_body: serde_json::Value = offline_preview.json().await?;
+    ensure!(
+        offline_status == StatusCode::SERVICE_UNAVAILABLE
+            && problem_is(&offline_body, "temporarily_unavailable"),
+        "unreachable governance preview was not retryable: {offline_status} {offline_body}"
+    );
     let (status, body) = submit_raw(&bob, &accept).await?;
     ensure!(
         !status.is_success() && problem_is(&body, "temporarily_unavailable"),
@@ -310,6 +436,24 @@ pub async fn cross_station_invite_join_run() -> Result<()> {
         &accept_commit,
         &wait_for_committed(&bob, &accept.event_id).await?,
     )?;
+    let (replay_status, replay_body) = submit_raw(&bob, &accept).await?;
+    ensure!(
+        replay_status == StatusCode::OK,
+        "exact join replay failed: {replay_status} {replay_body}"
+    );
+    let replayed: arkret_wire::AuthoritySubmitOutcome = serde_json::from_value(replay_body)?;
+    let arkret_wire::AuthoritySubmitOutcome::Accepted {
+        status: arkret_wire::AuthorityCommitStatus::Duplicate,
+        commit: replayed_accept,
+    } = replayed
+    else {
+        bail!("exact join replay did not return the original duplicate outcome: {replayed:?}");
+    };
+    ensure!(
+        arkret_canonical::canonical_json_bytes(&accept_commit)?
+            == arkret_canonical::canonical_json_bytes(&replayed_accept)?,
+        "exact join replay changed the original authority-signed Commit bytes"
+    );
     let committed = local_event_row(&member_database.connect_url, accept.event_id.as_str()).await?;
     ensure!(
         committed.0 == queued.0
@@ -413,6 +557,89 @@ pub async fn cross_station_invite_join_run() -> Result<()> {
         &message_commit,
         &wait_for_committed(&bob, &message.event_id).await?,
     )?;
+
+    // The third Station joins through its own authenticated self face. While
+    // it is offline, a new accepted Event must survive in the governing
+    // Station's delivery queue and arrive with the original Commit on restart.
+    let invited = alice
+        .submit_event(
+            &realm,
+            EventKind::InviteCreate.as_str(),
+            invite_create_payload(
+                &carol.actor,
+                carol.service_id(),
+                format!("sha256:{}", "c".repeat(64)),
+                Utc::now() + ChronoDuration::days(7),
+            )?,
+        )
+        .await?;
+    let carol_invite = InviteId::from_event_id(&submitted_event_id(&invited)?);
+    prepare_join(
+        &carol,
+        &realm,
+        group.server(0),
+        "ak:request:019b0000-0000-7000-8000-000000002405",
+        RealmJoinIntent::InviteAccept {
+            invite_id: carol_invite.clone(),
+        },
+    )
+    .await?;
+    let carol_accept = carol
+        .author_event(
+            &realm,
+            EventKind::InviteAccept.as_str(),
+            serde_json::to_value(InviteAcceptPayload::directed(
+                carol_invite,
+                carol_account.clone(),
+                InvitePreviousState::Pending,
+            ))?,
+        )
+        .await?;
+    let carol_commit =
+        submit_and_expect_commit(&carol, &carol_account, CAROL_DEVICE, &carol_accept).await?;
+    ensure_commit_signed_by(&carol_commit, group.server(0))?;
+    wait_for_joined_row(&carol, &realm).await?;
+    let carol_page = wait_for_member_scan(&carol, &realm_id).await?;
+    ensure!(
+        carol_page
+            .readable_floor
+            .as_ref()
+            .is_some_and(|floor| floor.floor_commit_id == carol_commit.commit_id
+                && floor.oldest_position == carol_commit.stream_position),
+        "the third Station did not anchor its own membership floor"
+    );
+    group.server_mut(2).stop_external_process().await?;
+    let offline_message = bob
+        .author_event(
+            &realm,
+            EventKind::MessageCreate.as_str(),
+            message_create_text_payload(&strand_id, "accepted while Station Z was offline")?,
+        )
+        .await?;
+    let offline_commit =
+        submit_and_expect_commit(&bob, &bob_account, BOB_DEVICE, &offline_message).await?;
+    ensure_commit_signed_by(&offline_commit, group.server(0))?;
+    group.server_mut(2).start_external_process().await?;
+    ensure_same_commit(
+        &offline_commit,
+        &wait_for_committed(&carol, &offline_message.event_id).await?,
+    )?;
+    let recovered = carol
+        .sdk()
+        .scan_commit_stream_to_head(
+            realm_id.clone(),
+            CommitStreamRef::Realm { realm_id },
+            Some(carol_commit.stream_position),
+            1,
+        )
+        .await?;
+    ensure!(
+        recovered
+            .committed_events
+            .iter()
+            .any(|item| item.reducer_input() == Some(&offline_message)),
+        "the restarted third Station did not backfill the exact producer-signed Event"
+    );
     drop(coauth);
     Ok(())
 }
