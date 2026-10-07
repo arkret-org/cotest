@@ -43,7 +43,7 @@
 1. alice 建**空** Realm，随后接受 MLS Genesis；history policy 为 `since_join`。
 2. bob 先授权 invite consent 并通过标准接口签发 locator；alice 使用该 locator 在界面中邀请 bob。此时 Bob 尚未开启浏览器／发布 KeyPackage，邀请事实必须持久化，状态不得伪称 `MLS Welcome queued`。裸地址在缺省策略下进入 quarantine，不能用放宽默认策略替代引介证据。
 3. bob 开启浏览器完成恢复策略与首个加密备份（其 PCR 已有 consent 前驱），发布真实 KeyPackage 后 accept **加入**并收到有效 Welcome。此后内容才是 bob 可合法见+可解密的加入后内容。
-4. alice **加入后**建 board + list + card(title 明文)，等待卡片脱离草稿态、取得已确认的 Strand 身份后，再给 card 加**加密 description**(私有 `body`);断言 `ak.strand.update` 被接受且 description **不以明文出现在 wire**。
+4. alice **加入后**建 board + list + card（title 使用加密 metadata），等待卡片脱离草稿态、取得已确认的 Strand 身份后，再给 card 加**加密 description**(私有 `body`);断言 `ak.strand.update` 被接受且 description **不以明文出现在 wire**。
 5. **跨成员投递闸门**:以 bob 身份使用 `POST /_arkret/self/streams/scan` 查询 Realm stream，结果必含 board space id(隔离 soland 投递 vs inkson 投影)。
 6. bob 深链进 `/kanban/{realm}/board/{boardId}`;bootstrap **backfill realm 事件并 ingest 进 raw_operations**→board Space 投影进 switcher→路由/auto-select 选中→列表卡片渲染。
 7. **核心断言**:bob 打开卡片,`card-description-panel` 含 alice 的明文 description,且 `card-detail-body-locked` 计数为 0(真解密,非锁态)。
@@ -82,7 +82,7 @@
 
 `retries the whole accepted artifact install after durable write failure` 与 `publishes ready and its send-gate index atomically after durable write failure` 在真实浏览器 SubtleCrypto 加密 vault 写入时分别阻断 `artifacts_converged` 和 `ready`。前者必须保持 `genesis_accepted`、无 artifact；后者必须保持 `artifacts_converged`、无 ready receipt／索引。两者都保留原 epoch-zero unit、签名和 exact acceptance；销毁页面 runtime 后仅重试原完整安装及发布，不能再生成或再提交 Genesis。creator 成功场景在实际加密写入、解密及 reload 后核对 `ready` receipt、winning artifact 与同 vault send-gate index 完全一致，ready commit position 不超过持久 vault position。故障注入和 session setup 属于 fixture-only，不扩大为完整 UI 注册登录或跨设备证明。
 
-`stops the losing queue after a distinct accepted Genesis wins` 在原浏览器正式进入 `genesis_queued` 后，让独立 fixture client 生成另一份真实 RFC 9420 group／签名 Genesis，并赢得真实 Station 的唯一接受位置；它不把私有材料安装到原浏览器。原浏览器必须从独立认证的 exact query 原子进入 `superseded` 并移除 loser queue，保留原 intent、epoch-zero unit、原签 Event／digest 和 winner，不发布 ready receipt／索引。看板及 List 元数据仍可操作，但 Add Card 必须禁用；刷新后终态及材料不变，不重新作者。此例仍为 fixture-only，不作为完整 UI 注册或 Welcome／迁移／恢复的成功证明。完整创建流程在目标 Genesis 故障注入前若遇到真实 unavailable snapshot，可通过页面已有 Open Realm 入口重进原接受 Realm，继续同一持久记录。
+`stops the losing queue after a distinct accepted Genesis wins` 在原浏览器正式进入 `genesis_queued` 后，让独立 fixture client 生成另一份真实 RFC 9420 group／签名 Genesis，并赢得真实 Station 的唯一接受位置；它不把私有材料安装到原浏览器。原浏览器必须从独立认证的 exact query 原子进入 `superseded` 并移除 loser queue，保留原 intent、epoch-zero unit、原签 Event／digest 和 winner，不发布 ready receipt／索引。按正式 realm-and-space §3.2.1，激活后的 Board/List 用户 metadata 同样必须加密；没有合法 winner 私有材料时 Create Board 必须禁用，不允许沿旧组加密或回退明文。刷新后创建入口仍禁用、终态及材料不变、不重新作者，并核前后完整 Realm Event/Commit 历史相等。此例仍为 fixture-only，不作为完整 UI 注册或 Welcome／迁移／恢复的成功证明。完整创建流程在目标 Genesis 故障注入前若遇到真实 unavailable snapshot，可通过页面已有 Open Realm 入口重进原接受 Realm，继续同一持久记录。
 
 `retains a terminal rejection and explicitly opens a new verified attempt` 注入普通 Event 准入形式的 HTTP 403 Problem；生产队列保存原 Problem，并与 `rejected` 诊断在同一次 vault CAS 停止原签 Genesis。刷新后保持原 EventId／digest／reason／stage／last verified cut；点击产品重试入口时若 exact stream 查询不可用，终态与停止队列不变。恢复查询并再次明确重试后，独立认证 fresh absence 使同逻辑记录原子关闭旧尝试、保留 tombstone、移除旧队列并继承原 intent；新 epoch-zero／Genesis 可实际加密写卡片，刷新后 tombstone 仍在。拒绝结果为 fixture-only 注入，不能声称 Station 实际拒绝该 Event。
 

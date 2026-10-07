@@ -25,9 +25,9 @@ import { readCreatorRecords } from "../../helpers/creator-bootstrap";
 // pre-join history, accepted MLS epoch drift. This test is the missing main chain.
 //
 // FALSE-GREEN PROOFS (this test is written to be un-cheatable)
-//   1. Card TITLE is plaintext container metadata, so bob seeing the title only
-//      proves cross-member PROJECTION/SYNC, not decryption. Decryption is proven
-//      separately: bob must read the private DESCRIPTION body, and
+//   1. Card title and DESCRIPTION use distinct encrypted metadata/body carriers.
+//      Seeing the title does not prove private body decryption: bob must read
+//      the private DESCRIPTION body, and
 //      `card-detail-body-locked` must NOT be present.
 //   2. `kanban-card-redacted` (the withdrawn-content placeholder) must be absent
 //      for the target card — a card that failed to decrypt/hydrate must not pass.
@@ -43,7 +43,7 @@ import {
   type Page,
 } from "../../helpers/arkret-test";
 import { solandBaseUrl } from "../../helpers/env";
-import { assertAuthoritySubmitOutcome, canonicalJson, grantCapabilityEventApi } from "../../helpers/soland-api";
+import { assertAuthoritySubmitOutcome, canonicalJson, grantCapabilityEventApi, queryRealmEventsApi } from "../../helpers/soland-api";
 import { grantInviteConsentArkret } from "../../helpers/contact-api";
 import { stepShot } from "../../helpers/screenshots";
 import { selfPathGrantHeaders } from "../../helpers/session-grant-dpop";
@@ -1030,17 +1030,24 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           const current = await readScopeMlsGroupCurrentApi(request, creatorSession.grantJwt, cutRealmId!);
           expect(current!.genesis_event_ref).toBe(competingWinnerId);
           expect(current!.public_tree_ref).toBe(terminal.winner.accepted.event.payload.ratchet_tree_ref);
-          const boardId = await buildEncryptedBoardListCard(creator.page, cutRealmId!, boardTitle, listTitle, cardTitle, false);
-          const column = creator.page.getByTestId("kanban-column").filter({ hasText: listTitle }).first();
-          await expect(column.getByTestId("add-card-button")).toBeDisabled();
+          const historyBefore = await queryRealmEventsApi(request, creatorSession.grantJwt, cutRealmId!);
+          // Space titles are encrypted metadata too. A losing private group
+          // cannot author even a Board until lawful winner material is acquired.
+          const assertBoardCreateBlocked = async () => {
+            await expect(creator.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 60_000 });
+            await creator.page.getByTestId("new-board-toggle").click();
+            await creator.page.getByTestId("new-board-title-input").fill(boardTitle);
+            await expect(creator.page.getByTestId("create-board-space-button")).toBeDisabled();
+          };
+          await creator.page.goto(`/kanban/${cutRealmId!}`, { waitUntil: "domcontentloaded" });
+          await assertBoardCreateBlocked();
           const afterNavigation = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId)!;
           expect(afterNavigation.state).toBe("superseded");
           expect(afterNavigation.winner).toEqual(terminal.winner);
           expect(afterNavigation.loser_record).toEqual(terminal.loser_record);
           expect(submittedGenesisIds.size).toBe(1);
           await creator.page.reload({ waitUntil: "domcontentloaded" });
-          await expect(creator.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 60_000 });
-          await expect(creator.page.getByTestId("kanban-column").filter({ hasText: listTitle }).first().getByTestId("add-card-button")).toBeDisabled();
+          await assertBoardCreateBlocked();
           const afterReload = (await readCreatorRecords(creator.page)).find((value) => value.intent.effective_scope.realm_id === cutRealmId)!;
           expect(afterReload.state).toBe("superseded");
           expect(afterReload.winner).toEqual(terminal.winner);
@@ -1049,7 +1056,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           expect(afterReload.ready_index).toHaveLength(0);
           expect(submittedGenesisIds.size).toBe(1);
           expect(submittedCreateIds.size).toBe(1);
-          expect(boardId).toMatch(/^ak:space:/);
+          expect(await queryRealmEventsApi(request, creatorSession.grantJwt, cutRealmId!)).toEqual(historyBefore);
           await stepShot(creator.page, testInfo, "A-superseded-loser-stays-unwritable-after-reload");
           return;
         }
@@ -1161,8 +1168,18 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           expect(retried.closed_attempts).toEqual([closedRejection]);
           expect(retried.queue_items.some((item: Record<string, any>) => item.submission.event_id === closedRejection!.event_id)).toBe(false);
           expect(retried.queued_genesis.outbound_queue_item_id).not.toBe(closedRejection!.event_id);
-          expect(retried.governance_evidence.accepted_create.authority_root.current_assertion.nonce)
-            .not.toBe(closedRejection!.last_verified.accepted_create.authority_root.current_assertion.nonce);
+          const freshCut = retried.governance_evidence.accepted_create.authority_root;
+          const rejectedCut = closedRejection!.last_verified.accepted_create.authority_root;
+          for (const basis of [freshCut, rejectedCut]) {
+            expect(basis.account_id).toEqual(creatorSession.accountId);
+            expect(basis.session_grant_id).toBe(creatorSession.grantId);
+            expect(basis.snapshot.realm_id).toBe(cutRealmId);
+            expect(Number.isSafeInteger(basis.request_sequence)).toBe(true);
+          }
+          expect(freshCut.session_epoch).toBe(rejectedCut.session_epoch);
+          // The sequence is consumer-local, not a cross-client clock.
+          // SDK same_read compares this exact holder/session/read binding.
+          expect(freshCut.request_sequence).not.toBe(rejectedCut.request_sequence);
           expect(submittedGenesisIds.size).toBe(2);
           epochUnitAtCut = undefined;
           signedGenesisAtCut = undefined;
