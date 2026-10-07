@@ -45,6 +45,16 @@ async fn observation(url: &str, realm: &str) -> Result<(i64, i64, i64, i64)> {
     }).await?
 }
 
+async fn replica_observation(url: &str, realm: &str) -> Result<(i64, i64, i64, i64, i64, i64)> {
+    let url = url.to_owned();
+    let realm = realm.to_owned();
+    tokio::task::spawn_blocking(move || -> Result<_> {
+        let mut db = postgres::Client::connect(&url, postgres::NoTls)?;
+        let row = db.query_one("SELECT (SELECT COUNT(*) FROM canonical_events WHERE realm_id=$1 AND state='accepted'),(SELECT COUNT(*) FROM realm_commits WHERE realm_id=$1),(SELECT COUNT(*) FROM invite_lifecycle_current_results WHERE realm_id=$1 AND value='\"claimed\"'::jsonb),(SELECT COUNT(*) FROM member_state_current_results WHERE realm_id=$1 AND membership='join'),(SELECT COUNT(*) FROM replica_stream_anchors WHERE realm_id=$1),(SELECT COUNT(*) FROM replica_authorization_cuts WHERE realm_id=$1)", &[&realm])?;
+        Ok((row.get(0), row.get(1), row.get(2), row.get(3), row.get(4), row.get(5)))
+    }).await?
+}
+
 pub async fn third_party_invite_claim_run() -> Result<()> {
     let Some(governance_db) = database(GROUP)? else {
         return Ok(());
@@ -229,6 +239,7 @@ pub async fn third_party_invite_claim_run() -> Result<()> {
             serde_json::to_value(payload)?,
         )
         .await?;
+    let subject_before = replica_observation(&subject_db.connect_url, realm).await?;
     let claim_result = submit_and_expect_commit(&bob, &account, &bob.device_id, &claim).await;
     if claim_result.is_err() {
         match observation(&governance_db.connect_url, realm).await {
@@ -243,6 +254,30 @@ pub async fn third_party_invite_claim_run() -> Result<()> {
     ensure!(
         claimed.2 == before.2 + 1 && claimed.3 == before.3,
         "claim must establish the exact proposal without joining its subject"
+    );
+    ensure!(
+        replica_observation(&subject_db.connect_url, realm).await? == subject_before,
+        "bound claim result must not install canonical/current replica state"
+    );
+    ensure!(
+        bob.sdk()
+            .committed_event_get(&claim.event_id)
+            .await
+            .is_err(),
+        "claim must not grant ordinary committed Event reads"
+    );
+    let realm_id = RealmId::new(realm.to_owned())?;
+    ensure!(
+        bob.sdk()
+            .scan_commit_stream_to_head(
+                realm_id.clone(),
+                arkret_wire::CommitStreamRef::Realm { realm_id },
+                None,
+                1000,
+            )
+            .await
+            .is_err(),
+        "claim must not grant a member stream scan"
     );
     eprintln!(
         "2162 third-party claim verified and committed: {}",
@@ -263,6 +298,10 @@ pub async fn third_party_invite_claim_run() -> Result<()> {
     ensure!(
         observation(&governance_db.connect_url, realm).await? == claimed,
         "exact claim replay changed canonical/current state"
+    );
+    ensure!(
+        replica_observation(&subject_db.connect_url, realm).await? == subject_before,
+        "exact claim replay installed a member replica"
     );
     let accept = bob
         .author_event(
