@@ -834,7 +834,7 @@ async fn replication_body(
             replications: vec![CommittedEventSubmission {
                 event_submission: EventAdmissionSubmission::new(event.clone()),
                 source_commit: commit.clone(),
-                producer_signer_fact: Some(fact),
+                producer_signer_fact: Some(fact.into()),
                 genesis_event_ref: None,
                 welcomes: None,
             }],

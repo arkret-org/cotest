@@ -1207,7 +1207,7 @@ async fn run(
                         committed_events: std::array::from_fn(|index| CommittedEventSubmission {
                             event_submission: unit.events[index].clone(),
                             source_commit: founded.commits[index].clone(),
-                            producer_signer_fact: Some(original_facts[index].clone()),
+                            producer_signer_fact: Some(original_facts[index].clone().into()),
                             genesis_event_ref: None,
                             welcomes: None,
                         }),
