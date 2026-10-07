@@ -32,7 +32,12 @@ import {
   test as jointTest,
   type JointRealmFixture,
 } from "../../helpers/joint-fixture";
-import { canonicalJson, expectJsonOk, wireErrCode } from "../../helpers/soland-api";
+import {
+  assertAuthoritySubmitOutcome,
+  canonicalJson,
+  expectJsonOk,
+  wireErrCode,
+} from "../../helpers/soland-api";
 import {
   serverLoginViaCoauth,
   submitCoauthPasswordCredentials,
@@ -1252,28 +1257,43 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         const publishDiscussion = publishCard.getByTestId("card-detail-tab-discussion");
         await publishDiscussion.click();
         await expect(publishDiscussion).toHaveAttribute("aria-selected", "true");
+        const publishUrl = new URL(inkson.url());
+        const publishStrandId = decodeURIComponent(publishUrl.pathname).split("/task/")[1];
+        expect(publishStrandId).toMatch(/^ak:strand:[A-Za-z0-9_-]+$/);
+        expect(publishUrl.searchParams.get("tab")).toBe("discussion");
         await publishCard.getByTestId("chat-input").fill(sharedBody);
         await expect(publishCard.getByTestId("composer-send-scope"))
           .toHaveAttribute("data-send-route", "Shared");
         await expect(inkson.getByTestId("sidecar-security-state")).toHaveCount(0);
         await expect(publishCard.getByTestId("send-chat-button")).toBeEnabled({ timeout: 30_000 });
-        const publishRequestPromise = inkson.waitForRequest(
-          (outgoing) => outgoing.method() === "POST"
-            && new URL(outgoing.url()).pathname === EVENTS_SUBMIT_PATH
-            && eventSubmissions(outgoing.postData()).some((event) => event.kind === "ak.message.create"),
+        const publishResponsePromise = inkson.waitForResponse(
+          (response) => response.request().method() === "POST"
+            && new URL(response.url()).pathname === EVENTS_SUBMIT_PATH
+            && eventSubmissions(response.request().postData()).some((event) =>
+              event.kind === "ak.message.create" && event.payload?.strand_id === publishStrandId),
           { timeout: 120_000 },
         );
         await publishCard.getByTestId("send-chat-button").click();
+        const publishResponse = await publishResponsePromise;
         const publishSubmission = eventSubmissions(
-          (await publishRequestPromise).postData(),
-        ).find((event) => event.kind === "ak.message.create");
+          publishResponse.request().postData(),
+        ).find((event) => event.kind === "ak.message.create"
+          && event.payload?.strand_id === publishStrandId);
         expect(publishSubmission, "explicit shared publish Event").toBeTruthy();
+        if (!publishSubmission) throw new Error("explicit shared publish Event is missing");
+        expect(publishResponse.ok(), "explicit shared publish accepted response").toBe(true);
+        assertAuthoritySubmitOutcome(
+          await publishResponse.json() as Record<string, unknown>,
+          publishSubmission,
+          "explicit shared publish",
+        );
         expect(publishSubmission?.actor_id).toEqual({
           kind: "account", account_id: jointRealm.aliceSession.accountId,
         });
-        expect(publishSubmission?.scope_ref).toMatchObject({
-          kind: "strand", realm_id: jointRealm.realmId,
+        expect(publishSubmission.scope_ref).toEqual({
+          kind: "realm", realm_id: jointRealm.realmId,
         });
+        expect(publishSubmission.payload?.strand_id).toBe(publishStrandId);
         await expect(publishCard.getByTestId("chat-message")
           .filter({ hasText: sharedBody })).toBeVisible({ timeout: 120_000 });
         expect(JSON.stringify(publishSubmission)).not.toMatch(
