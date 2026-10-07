@@ -1335,12 +1335,15 @@ test.describe("applet bridge", () => {
     // `package_digest` and the controller proof now cover a different byte
     // sequence than what is submitted. soland recomputes the digest over the
     // bare body and MUST reject the mismatch.
+    // The distribution ID is covered by the package seal, but is not part of
+    // registration epoch or grant approval. Keep those independent gates valid
+    // so this mutation reaches the package-digest check.
     const tampered = tamperSignedPackage(signed, (pkg) => {
-      pkg.requested_scopes = [
-        ...pkg.requested_scopes,
-        "ak.applet.smuggled.scope",
-      ];
+      pkg.package_id = `${String(pkg.package_id)}:tampered`;
     });
+    expect(tampered.applet_package.package_digest).toBe(signed.applet_package.package_digest);
+    expect(tampered.applet_package.proof).toEqual(signed.applet_package.proof);
+    const historyBefore = await queryRealmEventsApi(request, aliceToken, realmId);
 
     const { response: denied } = await rawInstallApplet(
       request,
@@ -1351,6 +1354,7 @@ test.describe("applet bridge", () => {
     );
     expect(denied.status()).toBe(422);
     expect(wireErrCode(await denied.json())).toBe("schema_violation");
+    expect(await queryRealmEventsApi(request, aliceToken, realmId)).toEqual(historyBefore);
   });
 
   test("E4.6 tampered proof: proof that no longer covers the package body is rejected with proof_invalid", async ({
