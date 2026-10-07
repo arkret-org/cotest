@@ -101,7 +101,7 @@ EventId 必须保持唯一且等于断点前原 ID，完整提交字节必须逐
 ## 私有安装 readiness
 
 `private-state-blocked` 延迟 Bob 的只读 KeyPackage claim 查询，保留正式 Account current、Commit、Welcome 和所有签名输入。
-已有 accepted List 仍可见时，Add Card 必须禁用，初始同步仍为 pending；恢复查询后必须完成私有安装、解密、双向编辑与 reload。
+已有唯一 accepted List 的结构仍可见时，不能按尚未解密的 title 查找；Board/List 标题与卡片明文必须不披露，Add Card 必须禁用，初始同步仍为 pending。恢复查询后必须完成私有安装、解密、双向编辑与 reload。
 该断点用于区分公共详情 baseline 与密码学可写状态，不用伪造成功响应或修改 current 值。
 
 ## 非终局 authority outcome 与重启

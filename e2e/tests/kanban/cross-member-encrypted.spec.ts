@@ -1584,9 +1584,15 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         await openReaderBoard(bobPage, realmId, boardId);
         if (holdPrivateState) {
           await expect.poll(() => privateReadCuts, { timeout: 90_000 }).toBeGreaterThan(0);
-          const committedList = bobPage.page.getByTestId("kanban-column").filter({ hasText: listTitle }).first();
+          // The List structure is accepted, but its title is encrypted metadata
+          // and must remain undisclosed while the private Welcome state is cut.
+          const committedList = bobPage.page.getByTestId("kanban-column");
+          await expect(committedList).toHaveCount(1, { timeout: 90_000 });
           await expect(committedList).toBeVisible({ timeout: 90_000 });
           await expect(committedList).toHaveAttribute("data-column-draft", "false");
+          await expect(committedList).not.toContainText(listTitle);
+          await expect(bobPage.page.getByTestId("kanban-panel")).not.toContainText(boardTitle);
+          await expect(bobPage.page.getByTestId("kanban-panel")).not.toContainText(aliceCard);
           await expect(committedList.getByTestId("add-card-button")).toBeDisabled();
           await openPendingTimeline(bobPage, realmId);
           await expect(bobPage.page.getByTestId("chat-panel")).toHaveAttribute("data-initial-sync", "pending");
