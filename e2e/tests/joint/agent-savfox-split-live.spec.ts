@@ -1987,6 +1987,7 @@ async function createSidecarSourceCard(
   await column.getByTestId("save-card-button").click();
   const card = page.getByTestId("kanban-card").filter({ hasText: title });
   await expect(card).toBeVisible({ timeout: 120_000 });
+  await expect(card).toHaveAttribute("data-card-draft", "false", { timeout: 120_000 });
   await card.click();
   const detail = page.getByTestId("card-detail-modal");
   await expect(detail).toBeVisible({ timeout: 30_000 });
