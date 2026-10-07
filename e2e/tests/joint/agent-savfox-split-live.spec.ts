@@ -1249,6 +1249,9 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         const publishCard = await createSidecarSourceCard(
           inkson, jointRealm.realmId, `Shared result ${Date.now().toString(36)}`,
         );
+        const publishDiscussion = publishCard.getByTestId("card-detail-tab-discussion");
+        await publishDiscussion.click();
+        await expect(publishDiscussion).toHaveAttribute("aria-selected", "true");
         await publishCard.getByTestId("chat-input").fill(sharedBody);
         await expect(publishCard.getByTestId("composer-send-scope"))
           .toHaveAttribute("data-send-route", "Shared");
