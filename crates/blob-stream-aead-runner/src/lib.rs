@@ -200,6 +200,8 @@ fn digest_key_ref() -> EncryptedAttachmentKeyRef {
 fn params(key_ref: EncryptedAttachmentKeyRef) -> StreamEncryptParams {
     StreamEncryptParams {
         key_ref,
+        content_key_salt: arkret_models_crypto::AttachmentContentKeySalt::from_bytes([7; 32]),
+        digest_suite: arkret_canonical::canonical::DigestSuite::Sha256,
         media_type: "video/mp4".to_owned(),
         segment_bytes: MIN_SEGMENT_SIZE,
     }

@@ -57,7 +57,9 @@ const ACCOUNT_STATUS_ENTRYPOINT: &str = "ak.suite.account_status.issuer_ledger.v
 /// Exact acknowledged gap ledger. This is deliberately closed: adding or
 /// renaming a canonical named suite cannot remain invisible merely because the
 /// total number of unwired suites happened to stay constant.
-const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 34] = [
+// Content-key KATs run in arkret-mls; complete authorized-checkpoint and
+// terminal live scenarios remain owned by work tasks 0805 and 1939.
+const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 36] = [
     "ak.suite.agent.draft_pending_intent.v1",
     "ak.suite.agent.participation.v1",
     "ak.suite.agent.vectors.v1",
@@ -66,6 +68,7 @@ const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 34] = [
     "ak.suite.auth.session_proof.v1",
     "ak.suite.authority_commit_projection.result_consumption_roles.v1",
     "ak.suite.authz.approval_signature.v1",
+    "ak.suite.blob.content_key.v1",
     "ak.suite.call.force_mute_v1_boundary.v1",
     "ak.suite.circle.parent_membership.v1",
     "ak.suite.conformance.final_closure.v1",
@@ -78,6 +81,7 @@ const KNOWN_UNWIRED_ENTRYPOINTS: [&str; 34] = [
     "ak.suite.encoding.content_bound_event_id.v1",
     "ak.suite.events.redaction.v1",
     "ak.suite.federation.idempotency_after_key_revoke.v1",
+    "ak.suite.federation.terminal_replication_authority.v1",
     "ak.suite.identity.independent_admission.v1",
     "ak.suite.identity.pcr_genesis.v1",
     "ak.suite.invite.claim_security.v1",
@@ -420,21 +424,8 @@ pub fn run_named_suite_audit_with_clients(
         registered.len() == RUNNERS.len() + client_runners.len(),
         "explicit named-suite registry contains a duplicate"
     );
-    let mut executed = Vec::new();
-    for (entrypoint, runner) in RUNNERS.iter().copied().chain(
-        client_runners
-            .iter()
-            .map(|(name, run)| (*name, Runner::Cases(*run))),
-    ) {
-        for (_, fixture) in fixtures
-            .get(entrypoint)
-            .ok_or_else(|| anyhow!("registered runner {entrypoint} has no canonical fixture"))?
-        {
-            execute_runner(entrypoint, runner, fixture)?;
-        }
-        executed.push(entrypoint.to_owned());
-    }
-    executed.sort();
+    // Validate the closed inventory before executing any case. A failing
+    // earlier runner must not hide drift in newly declared semantic suites.
     let unwired: Vec<_> = fixtures
         .keys()
         .filter(|entrypoint| {
@@ -451,6 +442,21 @@ pub fn run_named_suite_audit_with_clients(
         unwired == expected_unwired,
         "named-suite gap ledger drifted: expected {expected_unwired:?}, got {unwired:?}"
     );
+    let mut executed = Vec::new();
+    for (entrypoint, runner) in RUNNERS.iter().copied().chain(
+        client_runners
+            .iter()
+            .map(|(name, run)| (*name, Runner::Cases(*run))),
+    ) {
+        for (_, fixture) in fixtures
+            .get(entrypoint)
+            .ok_or_else(|| anyhow!("registered runner {entrypoint} has no canonical fixture"))?
+        {
+            execute_runner(entrypoint, runner, fixture)?;
+        }
+        executed.push(entrypoint.to_owned());
+    }
+    executed.sort();
     Ok(NamedSuiteAuditReport {
         fixture_count: fixtures.values().map(Vec::len).sum(),
         executed_entrypoints: executed,

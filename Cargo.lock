@@ -2959,6 +2959,7 @@ name = "cotest-blob-stream-aead-runner"
 version = "0.3.0"
 dependencies = [
  "anyhow",
+ "arkret-canonical",
  "arkret-crypto",
  "arkret-models-crypto",
  "arkret-schema",

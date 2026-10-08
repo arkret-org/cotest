@@ -6,6 +6,7 @@ rust-version = "1.98"
 publish = false
 
 [dependencies]
+arkret-canonical = { workspace = true }
 anyhow = { workspace = true }
 arkret-crypto = { workspace = true, features = ["blob-aead"] }
 arkret-models-crypto = { workspace = true }
