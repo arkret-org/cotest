@@ -15,7 +15,7 @@
 //     projection derived from query → contains → strand)
 //
 // Phase B uses the ordinary data Event's explicit position CAS. Phase C
-// remains fixme until the live-dependent lifecycle path is verified.
+// verifies independent Space lifecycles and the live-dependent refusal.
 
 import { type APIRequestContext, expect, test } from "../../helpers/arkret-test";
 import { solandBaseUrl } from "../../helpers/env";
@@ -376,15 +376,7 @@ test.describe("core object invariants", () => {
   });
 
   // ── Phase C — Cascade / archive / delete.
-  // Non-cascading archive/restore is covered by project-simulation and the
-  // domain lifecycle regressions. `ak.space.tombstone` still lacks a
-  // `space_has_live_dependents` precondition (apply_space_container.rs only
-  // checks the source lifecycle state → `space_already_terminal`), so the
-  // live-dependents refusal is not yet wired. This remains an implementation
-  // gap against realm-and-space section 3.4, not a product exception.
-  test.fixme(// @blocking-on: soland#space-lifecycle-spec-convergence
-  // @user-promise: e2e/scenarios/models/core-object-invariants.md (Phase C)
-  // @expected-live-by: 2026Q3
+  test(
   "Phase C — ak.space.archive does NOT cascade; tombstone with live dependents fails; post-tombstone writes are rejected", async ({
     request,
   }) => {
@@ -396,66 +388,76 @@ test.describe("core object invariants", () => {
       title: `core-invariants C ${stamp}`,
       ownerId: alice.id,
     });
-    const createdAt = canonicalTimestamp();
-    // `ak.space.create` derives `ak:space:` from the create Event, so the
-    // object carries no `id` and the caller retypes the finished envelope.
-    const parentSpaceEnvelope = signedEventEnvelope({
-      actorId: alice.id,
-      realmId,
-      kind: "ak.space.create",
-      createdAt,
-      payload: {
-        object: {
-          schema: "ak.schema.space.v1",
-          realm_id: realmId,
-          kind: "board",
-          metadata: { title: `core-invariants parent ${stamp}` },
-          created_by: accountActorId(alice.id),
-          created_at: createdAt,
-        },
-      },
-    });
-    await submitSignedEventApi(request, aliceToken, parentSpaceEnvelope, {
-      context: "create parent board space",
-    });
-    const parentSpaceId = retypeEventDerivedId(
-      String(parentSpaceEnvelope.event_id),
-      "space",
-    );
+    const accepted: Record<string, unknown>[] = [];
+    const rejected: Record<string, unknown>[] = [];
+    const submit = async (kind: string, payload: Record<string, unknown>, createdAt?: string) => {
+      const event = signedEventEnvelope({ actorId: alice.id, realmId, kind, payload, createdAt });
+      await submitSignedEventApi(request, aliceToken, event);
+      accepted.push(event);
+      return event;
+    };
+    const createSpace = async (kind: "board" | "list", title: string, parentSpaceId?: string) => {
+      const createdAt = canonicalTimestamp();
+      const event = await submit("ak.space.create", { object: {
+        schema: "ak.schema.space.v1",
+        realm_id: realmId,
+        kind,
+        title,
+        ...(parentSpaceId ? { parent_space_id: parentSpaceId, rank: "m" } : {}),
+        created_by: accountActorId(alice.id),
+        created_at: createdAt,
+      } }, createdAt);
+      return retypeEventDerivedId(String(event.event_id), "space");
+    };
+    const parentSpaceId = await createSpace("board", `lifecycle parent ${stamp}`);
+    const childSpaceId = await createSpace("list", `lifecycle child ${stamp}`, parentSpaceId);
+    const readStates = async () => {
+      const url = `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/spaces?include_terminal=true`;
+      const response = await request.get(url, { headers: authHeaders(aliceToken, "GET", url) });
+      expect(response.ok(), await response.text()).toBeTruthy();
+      const body = await response.json() as { spaces: Array<{ space_id: string; state: string }> };
+      return [parentSpaceId, childSpaceId].map(id => body.spaces.find(row => row.space_id === id)?.state);
+    };
+    const refuse = async (kind: string, spaceId: string, reason: string, extra: Record<string, unknown> = {}) => {
+      const head = await fetchRealmCommitHead(request, aliceToken, realmId);
+      const event = signedEventEnvelope({ actorId: alice.id, realmId, kind,
+        payload: { space_id: spaceId, ...extra } });
+      const response = await rawSubmitSignedEventApi(request, aliceToken, event);
+      expect(response.status(), await response.text()).toBe(409);
+      const problem = await response.json();
+      expect(wireErrCode(problem)).toBe("failed_precondition");
+      expect(problem.reason_code).toBe(reason);
+      expect(await fetchRealmCommitHead(request, aliceToken, realmId)).toEqual(head);
+      rejected.push(event);
+    };
 
-    // Archiving the parent leaves independently owned child lifecycle intact.
-    const archiveRes = await request.post(
-      `${solandBaseUrl()}/_arkret/self/events`,
-      {
-        headers: authHeaders(aliceToken, "POST", `${solandBaseUrl()}/_arkret/self/events`),
-        data: { event: signedEventEnvelope({
-          actorId: alice.id,
-          realmId,
-          kind: "ak.space.archive",
-          payload: { space_id: parentSpaceId },
-        }) },
-      },
-    );
-    expect(archiveRes.ok()).toBeTruthy();
+    expect(await readStates()).toEqual(["active", "active"]);
+    await submit("ak.space.archive", { space_id: parentSpaceId });
+    expect(await readStates()).toEqual(["archived", "active"]);
+    await refuse("ak.space.tombstone", parentSpaceId, "space_has_live_dependents");
 
-    // Tombstone with a live dependent MUST fail with space_has_live_dependents
-    // (not yet enforced by soland).
-    const tombFail = await request.post(
-      `${solandBaseUrl()}/_arkret/self/events`,
-      {
-        headers: authHeaders(aliceToken, "POST", `${solandBaseUrl()}/_arkret/self/events`),
-        data: { event: signedEventEnvelope({
-          actorId: alice.id,
-          realmId,
-          kind: "ak.space.tombstone",
-          payload: { space_id: parentSpaceId },
-        }) },
-      },
-    );
-    expect(tombFail.status()).toBeGreaterThanOrEqual(400);
-    expect(wireErrCode(await tombFail.json())).toBe(
-      "space_has_live_dependents",
-    );
+    // An archived child remains a dependency; restoring its parent neither
+    // restores that child nor makes the dependency disappear.
+    await submit("ak.space.archive", { space_id: childSpaceId });
+    expect(await readStates()).toEqual(["archived", "archived"]);
+    await refuse("ak.space.tombstone", parentSpaceId, "space_has_live_dependents");
+    await submit("ak.space.restore", { space_id: parentSpaceId });
+    expect(await readStates()).toEqual(["active", "archived"]);
+    await refuse("ak.space.tombstone", parentSpaceId, "space_has_live_dependents");
+
+    await submit("ak.space.tombstone", { space_id: childSpaceId });
+    expect(await readStates()).toEqual(["active", "tombstoned"]);
+    await submit("ak.space.tombstone", { space_id: parentSpaceId });
+    expect(await readStates()).toEqual(["tombstoned", "tombstoned"]);
+    await refuse("ak.space.update", parentSpaceId, "space_not_active", { patch: { title: "must not revive" } });
+    await refuse("ak.space.restore", parentSpaceId, "space_already_terminal");
+    await refuse("ak.space.tombstone", parentSpaceId, "space_already_terminal");
+    expect(await readStates()).toEqual(["tombstoned", "tombstoned"]);
+
+    const scan = await scanRealmStreamApi(request, aliceToken, realmId);
+    const history = scan.events.filter(event => String(event.kind).startsWith("ak.space."));
+    expect(history.map(event => event.event_id)).toEqual(accepted.map(event => event.event_id));
+    expect(scan.events.some(event => rejected.some(refusedEvent => refusedEvent.event_id === event.event_id))).toBe(false);
   });
 
   // ── Phase D — Relation primary conflict domain CAS (relation.md section 6).

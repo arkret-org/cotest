@@ -77,15 +77,13 @@
 8. 提交 `expected_position={list_space_id:L_stale,rank:"m"}` 的 move 到 `L2`：断言 HTTP409、`failed_precondition`，原 Realm stream head 不变。
 9. 使用完整正确前像 `{list_space_id:L1,rank:"m"}` 提交 move 到 `L2`、rank `z`，验证提交成功和 head 推进。再次以旧前像尝试返回 `L1`，断言失败且 head 不变；以新前像 `{list_space_id:L2,rank:"z"}` 返回 `L1` 则成功。独立认证 stream scan 必须恰有这三条 accepted move，且没有两条 rejected Event，证明拒绝零写入与成功位置耐久更新。
 
-### Phase C — Cascade / archive / delete（fixme，需要 soland lifecycle reducer）
+### Phase C — 独立 Space lifecycle 与活依赖删除屏障（live）
 
-10. **alice** 在 `spaceId` 下再建一个 child Space `S_child`（如果当前 soland 不支持嵌套 Space 拓扑，则改成在 `spaceId` 内创建一个 Strand `F_child` 作为 "live dependent" 的代理）。
-11. **alice** 提交 `ak.space.archive` 指向 `spaceId`，断言 HTTP 200。再调 `GET /_soland/self/spaces/${spaceId}`：
-    - 断言：`spaceId` 的 lifecycle 状态翻到 `archived`（wire 上当前是 `deleted=false` + 额外的 `state="archived"` 字段，或 soland 后续在 `SpaceLifecycleResponse` 中补充 `lifecycle_state`）
-    - 断言：child `S_child` / `F_child` **没有**自动跟随翻成 `archived`（spec §3.4 — `ak.space.archive` 不自动 archive child）
-12. **alice** 在 child 仍 live 的情况下提交 `ak.space.tombstone` 指向 `spaceId`：断言 HTTP 4xx + `error_code = "failed_precondition"` + `reason = "space_has_live_dependents"`（spec §3.4 错误码表）。
-13. **alice** 先 tombstone 掉所有 child，再 `ak.space.tombstone` 指向 `spaceId`：断言 HTTP 200 + state 翻到 `tombstoned`。
-14. 断言：tombstoned 之后再提交任何普通 write event（`ak.message.create` / `ak.strand.update`）MUST 返回 `realm_terminal_state` 或 `space_already_terminal`，且 audit log 中 tombstone event 自身仍然可读（hash chain stub 保留——spec §2.5.2）。
+10. **alice** 真实创建 parent Board 和以它为 parent 的 child List，ID 从 accepted create Event 派生；使用当前 Space schema 的顶层 title，不提交旧 metadata 镜像。
+11. 归档 parent 后，通过认证 `GET /_arkret/self/realms/{realm_id}/spaces?include_terminal=true` 验证 parent archived、child active。parent tombstone 必须 HTTP409 `failed_precondition`，`reason_code=space_has_live_dependents`，stream head 不变。
+12. 单独归档 child，验证两个对象均 archived；parent tombstone 仍拒绝且零写入。恢复 parent 后验证 parent active、child 仍 archived，再次确认归档的 child 仍阻止 parent tombstone。
+13. 显式 tombstone child，确认 parent 仍 active、child tombstoned；之后 parent tombstone 成功，两个对象均 tombstoned。历史 child parent 引用不能把已终结 child 当成活依赖。
+14. 对已 tombstoned parent 的普通 `ak.space.update` 必须 HTTP409 `failed_precondition / space_not_active`；restore 和新 tombstone 必须 HTTP409 `failed_precondition / space_already_terminal`。三次拒绝均不推进 head、不改变对象状态。独立认证 stream scan 必须包含全部 accepted Space Event（含两个 tombstone），没有任何 rejected Event；不把 Space 终态误当成 Realm 或无关 Strand 终态。
 
 ### Phase D — Relation cardinality（live）
 
@@ -103,9 +101,7 @@
 - Phase A 步骤 3：`/_soland/self/spaces/${spaceId}` 返回 `space_id` / `owner` / `members` / `deleted` 四字段齐全
 - Phase A 步骤 4：`/_arkret/self/events?realms=${realmId}` 返回的 Space event item 含 `event_id` / `created_at` / `sender` / `event_kind` 四字段，且 `payload.space_id == spaceId`
 - Phase B 步骤 8-9：陈旧完整 position CAS 返回 HTTP409 `failed_precondition`、stream head 不变；正确前像成功，独立 scan 仅有三条 accepted move，无 rejected Event。
-- Phase C 步骤 11：archive 不级联子 Space
-- Phase C 步骤 12：存在 live 子结构时 tombstone MUST `space_has_live_dependents`
-- Phase C 步骤 14：tombstone 后普通 write 返回 `realm_terminal_state` / `space_already_terminal`
+- Phase C 步骤 11-14：parent archive/restore 不级联，active/archived child 都阻止删除；显式终结 child 后 parent 可删除。精确拒绝码、零 head 推进、最终两对象终态及完整 accepted 历史必须一致，不接受 generic conflict 或状态镜像推断。
 - Phase D 步骤 17：`has_default_view` 第二条 edge 不与第一条同时 active
 - Phase D 步骤 18：完全重复的 Relation create 幂等
 - Phase D 步骤 19：跨 Realm `contains` 被 reducer 拒绝
@@ -127,7 +123,7 @@
   conformance `realm-basis` 只建立独立 fixture basis，不会把待处理 Move 纳入
   `control_event_set_root`。因此测试保留完整可执行断言并等待 sealing path，
   不能把读取到的旧 Seal 或无关 fixture Seal 当作 accepted state。
-- **soland gap**：Phase C cascade 规则在 soland 当前 lifecycle 实现里部分落地（archive / delete 路径存在），但 `space_has_live_dependents` 错误码与 child cascade locked projection 尚未在 wire 上稳定。整 phase 标 fixme，sketch API。
+- **Phase C**：使用真实 parent/child 与已登记 Space 列表及认证 stream scan。活依赖规则拒绝、独立归档/恢复、显式终结和终态写入屏障均为精确断言；静态 live 标记不是运行通过证据。
 - **已落地**：Phase D 覆盖 `ak.relation.create` reducer、`has_default_view` many-to-one、duplicate idempotency 与 cross-Realm structural relation reject。
 - **不需要新 helper**：Phase A 复用 `JointUserPage.createRealm()` 和现有 New Space 表单 helper、`ensureRegistered`、`issueUserSession`、`openUserPage`。Phase B–D 只用 Playwright `request` fixture 直打 soland，并为真实 Standard grant 生成逐请求 DPoP，不需要 browser context。
 - **测试侧 wire-shape 容忍度**：spec 用中文写公共字段语义（"创建主体" / "最近一次 state 转换时间"），但 soland wire 上的字段名是 snake_case（`owner` / `deleted` / `created_at` / `sender`）。本 scenario 的断言**绑定到 wire field 名**，spec 锚点用 §号 引用语义。如果 soland 将来改名（如把 `deleted` 改成 `state`），断言要相应更新，但本 scenario 仍是 spec §3 公共字段的 e2e guard。
