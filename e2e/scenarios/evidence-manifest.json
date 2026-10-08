@@ -1293,6 +1293,31 @@
       ]
     },
     {
+      "scenario_key": "messaging/timeline-history",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "inkson"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "inkson_product_client"
+      ],
+      "declared_test_bypasses": [
+        "prepare_mls_device_false",
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "mls_device_and_keypackage_readiness",
+        "registration_login_authorization"
+      ]
+    },
+    {
       "scenario_key": "messaging/triad-collaboration",
       "suite_kind": "joint-e2e",
       "realism_level": "fixture-only",
