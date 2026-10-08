@@ -81,6 +81,7 @@ const TERMINAL_ACKS: [&str; 2] = ["accepted", "duplicate"];
 /// timeline, so no commit, stream, position or retired coverage carrier belongs
 /// in it.
 const FORBIDDEN_RECORD_MEMBERS: &[&str] = &[
+    "effective_at",
     "commit_id",
     "commit_ref",
     "previous_commit_ref",
