@@ -57,7 +57,7 @@ import {
 import { deviceSuffix, newDeviceId } from "./ids";
 import { base58btcEncode } from "./encoding";
 import { withOperationSelectors } from "./arkret-test";
-import { SessionDiagnostics } from "./session-diagnostics";
+import { SessionDiagnostics, accountViewerHandleDiagnostic } from "./session-diagnostics";
 import { revealTimelineEvent } from "./timeline-visibility";
 import { completeRecoverySetup, installRecoverySetupHandler } from "./recovery-setup";
 
@@ -2716,6 +2716,21 @@ export async function openUser(
     );
   });
   page.on("response", (response) => {
+    if (response.status() === 200 &&
+        new URL(response.url()).pathname === "/_arkret/self/account/viewer") {
+      const observedAt = Date.now();
+      void response.json().then((viewer) => {
+        networkLines.push(JSON.stringify({
+          ts: new Date(observedAt).toISOString(),
+          ...accountViewerHandleDiagnostic(viewer, user.id, observedAt),
+        }), "critical");
+      }).catch(() => {
+        networkLines.push(JSON.stringify({
+          ts: new Date(observedAt).toISOString(),
+          type: "account-viewer-handle-unreadable",
+        }), "critical");
+      });
+    }
     if (response.status() >= 400) {
       void response
         .text()

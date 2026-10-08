@@ -1,6 +1,41 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { SessionDiagnostics, sessionDiagnosticPriority } from "../helpers/session-diagnostics.ts";
+import { SessionDiagnostics, sessionDiagnosticPriority, accountViewerHandleDiagnostic } from "../helpers/session-diagnostics.ts";
+
+test("viewer handle diagnostics keep only allowlisted public identity and predicate results", () => {
+  const viewer = {
+    principal_id: "alice", session_credential: "secret-session", devices: [{ secret: "device-secret" }],
+    primary_handle_claim: {
+      claim: { handle: "alice:example.org", subject_account_id: { principal_id: "alice" },
+        expires_at: "2026-10-09T00:00:00Z", proofs: ["secret-proof"] },
+      status: "verified", revocation: null, fresh_until: "2026-10-08T00:05:00Z",
+    },
+  };
+  const at = Date.parse("2026-10-08T00:00:00Z");
+  assert.deepEqual(accountViewerHandleDiagnostic(viewer, "alice", at), {
+    type: "account-viewer-handle", claim_present: true, viewer_principal_matches: true,
+    claim_principal_matches: true, handle: "alice:example.org", verified: true,
+    revoked: false, fresh: true, unexpired: true,
+  });
+  assert.ok(!JSON.stringify(accountViewerHandleDiagnostic(viewer, "alice", at)).includes("secret"));
+  viewer.primary_handle_claim.revocation = {};
+  const later = accountViewerHandleDiagnostic(viewer, "bob", Date.parse("2026-10-09T00:00:00Z"));
+  assert.equal(later.viewer_principal_matches, false);
+  assert.equal(later.fresh, false);
+  assert.equal(later.unexpired, false);
+  assert.equal(later.revoked, true);
+});
+
+test("viewer handle diagnostics tolerate absent and malformed evidence without copying it", () => {
+  for (const value of [null, [], {}, { primary_handle_claim: "secret" }]) {
+    const row = accountViewerHandleDiagnostic(value, "alice", Date.now());
+    assert.equal(row.handle, null);
+    assert.equal(row.verified, false);
+    assert.equal(row.claim_principal_matches, false);
+    assert.equal(row.fresh, false);
+    assert.ok(!JSON.stringify(row).includes("secret"));
+  }
+});
 
 test("small diagnostics retain all lines in arrival order", () => {
   const log = new SessionDiagnostics();

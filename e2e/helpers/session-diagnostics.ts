@@ -1,6 +1,29 @@
 type DiagnosticRow = { sequence: number; value: string };
 type DiagnosticPriority = "normal" | "critical" | "phase";
 
+export function accountViewerHandleDiagnostic(value: unknown, principal: string, at: number) {
+  const record = (item: unknown): Record<string, unknown> =>
+    item !== null && typeof item === "object" && !Array.isArray(item)
+      ? item as Record<string, unknown> : {};
+  const viewer = record(value);
+  const claim = record(viewer.primary_handle_claim);
+  const core = record(claim.claim);
+  const subject = record(core.subject_account_id);
+  return {
+    type: "account-viewer-handle",
+    claim_present: viewer.primary_handle_claim != null,
+    viewer_principal_matches: viewer.principal_id === principal,
+    claim_principal_matches: typeof subject.principal_id === "string" &&
+      subject.principal_id === viewer.principal_id,
+    handle: typeof core.handle === "string" ? core.handle : null,
+    verified: claim.status === "verified",
+    revoked: claim.revocation != null,
+    fresh: typeof claim.fresh_until === "string" && Date.parse(claim.fresh_until) > at,
+    unexpired: core.expires_at == null ||
+      (typeof core.expires_at === "string" && Date.parse(core.expires_at) > at),
+  };
+}
+
 class DiagnosticRing {
   private readonly rows: DiagnosticRow[] = [];
   private cursor = 0;
