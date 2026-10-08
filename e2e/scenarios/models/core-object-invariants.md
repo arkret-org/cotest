@@ -84,6 +84,13 @@
 12. 单独归档 child，验证两个对象均 archived；parent tombstone 仍拒绝且零写入。恢复 parent 后验证 parent active、child 仍 archived，再次确认归档的 child 仍阻止 parent tombstone。
 13. 显式 tombstone child，确认 parent 仍 active、child tombstoned；之后 parent tombstone 成功，两个对象均 tombstoned。历史 child parent 引用不能把已终结 child 当成活依赖。
 14. 对已 tombstoned parent 的普通 `ak.space.update` 必须 HTTP409 `failed_precondition / space_not_active`；restore 和新 tombstone 必须 HTTP409 `failed_precondition / space_already_terminal`。三次拒绝均不推进 head、不改变对象状态。独立认证 stream scan 必须包含全部 accepted Space Event（含两个 tombstone），没有任何 rejected Event；不把 Space 终态误当成 Realm 或无关 Strand 终态。
+### Phase C2 — Space lifecycle 与显式清理依赖（正常 live 测试，当前批次待实跑）
+
+10. **alice** 创建同 Realm 的 Project parent → Board → 两个 List，以及一个真实 Strand，再用 `ak.strand.move` 建立源 List 的 position。Space 使用顶层 `title` 和 event-derived id；Strand 不使用虚构代理依赖。
+11. **alice** archive Project parent，通过正式 `/_arkret/self/realm-state-snapshot/head` 读取 typed current：parent archived；Board、List、Strand、position 的值与 revision 原件不变，证明不级联。
+12. **alice** 分别 tombstone archived parent 与仍有卡片的源 List：都必须 HTTP409、`code=failed_precondition`、`reason_code=space_has_live_dependents`，且 stream head 与全部 current entries 不变。
+13. restore parent；同 Board 内以完整 position CAS 把卡片显式移到 sibling List，卡片仍 active、position 精确换值并指向新 Commit。tombstone 原空 List；用 `ak.space.parent{expected_parent_space_id:parent,parent_space_id:null}` 显式解除 Board 父边，再 tombstone 空 parent。position 的 Board key 不变，不用跨 Board move 冒充清除旧 position。
+14. 对 archive、restore、move、parent detach 和两个 tombstone 做 exact retry：原 Commit 相等，stream head 与全部 current entries 不变。fresh restore terminal parent 返回 `space_already_terminal`；fresh update terminal parent、move 到 terminal List 返回 `space_not_active`；都必须 failed_precondition 和对应 reason。独立 stream scan 保留每个 accepted Event/Commit 原件且恰一次，全部 rejected Event 不出现。
 
 ### Phase D — Relation cardinality（live）
 
@@ -102,6 +109,9 @@
 - Phase A 步骤 4：`/_arkret/self/events?realms=${realmId}` 返回的 Space event item 含 `event_id` / `created_at` / `sender` / `event_kind` 四字段，且 `payload.space_id == spaceId`
 - Phase B 步骤 8-9：陈旧完整 position CAS 返回 HTTP409 `failed_precondition`、stream head 不变；正确前像成功，独立 scan 仅有三条 accepted move，无 rejected Event。
 - Phase C 步骤 11-14：parent archive/restore 不级联，active/archived child 都阻止删除；显式终结 child 后 parent 可删除。精确拒绝码、零 head 推进、最终两对象终态及完整 accepted 历史必须一致，不接受 generic conflict 或状态镜像推断。
+- Phase C2 步骤 11：archive 不级联 Board/List/Card，typed current value/revision 原件不变
+- Phase C2 步骤 12：nonterminal child 与真实 card position 分别触发 registered live-dependent reason，拒绝不推进 head/current
+- Phase C2 步骤 14：terminal parent restore/update、terminal List move 精确拒绝；exact retry 保留原 Commit/head/current；独立 scan 保留 accepted 原件且排除拒绝 Event
 - Phase D 步骤 17：`has_default_view` 第二条 edge 不与第一条同时 active
 - Phase D 步骤 18：完全重复的 Relation create 幂等
 - Phase D 步骤 19：跨 Realm `contains` 被 reducer 拒绝
@@ -124,6 +134,7 @@
   `control_event_set_root`。因此测试保留完整可执行断言并等待 sealing path，
   不能把读取到的旧 Seal 或无关 fixture Seal 当作 accepted state。
 - **Phase C**：使用真实 parent/child 与已登记 Space 列表及认证 stream scan。活依赖规则拒绝、独立归档/恢复、显式终结和终态写入屏障均为精确断言；静态 live 标记不是运行通过证据。
+- **Phase C2 当前验证边界**：生产 Space tombstone 已接同 cut child/position/topic live-dependent gate。该具名正常测试已替换旧 fixme sketch，使用正式 wire code/reason 与 snapshot/scan；本轮实际 live 结果由统一冻结验收记录，源码存在和 typecheck 通过不代表 live 通过。
 - **已落地**：Phase D 覆盖 `ak.relation.create` reducer、`has_default_view` many-to-one、duplicate idempotency 与 cross-Realm structural relation reject。
 - **不需要新 helper**：Phase A 复用 `JointUserPage.createRealm()` 和现有 New Space 表单 helper、`ensureRegistered`、`issueUserSession`、`openUserPage`。Phase B–D 只用 Playwright `request` fixture 直打 soland，并为真实 Standard grant 生成逐请求 DPoP，不需要 browser context。
 - **测试侧 wire-shape 容忍度**：spec 用中文写公共字段语义（"创建主体" / "最近一次 state 转换时间"），但 soland wire 上的字段名是 snake_case（`owner` / `deleted` / `created_at` / `sender`）。本 scenario 的断言**绑定到 wire field 名**，spec 锚点用 §号 引用语义。如果 soland 将来改名（如把 `deleted` 改成 `state`），断言要相应更新，但本 scenario 仍是 spec §3 公共字段的 e2e guard。

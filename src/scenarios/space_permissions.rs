@@ -164,6 +164,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
     )
     .await?;
 
+    let before_destroy = alice.realm_seal_frontier(&realm_id).await?;
     let destroy = alice
         .author_event(
             &realm_id,
@@ -171,7 +172,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
             json!({"reason": "owner_requested"}),
         )
         .await?;
-    expect_api_error(
+    let problem = expect_api_error(
         alice
             .authorize(server.http().post(server.url("/_arkret/self/events")))
             .json(&crate::publication::initial_submission(destroy, "")?),
@@ -179,6 +180,19 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
         "failed_precondition",
     )
     .await?;
+    assert_ne!(
+        problem
+            .extensions
+            .get("reason_code")
+            .and_then(serde_json::Value::as_str),
+        Some("realm_terminal_state"),
+        "reserved terminal reason_code: {problem:?}"
+    );
+    assert_eq!(
+        alice.realm_seal_frontier(&realm_id).await?,
+        before_destroy,
+        "forbidden destroy changed the accepted Event/Commit stream"
+    );
     let successor = alice.create_realm("Successor Space").await?;
     // A prepared member write cannot cross the accepted terminal fence.
     let after_tombstone = bob
@@ -188,6 +202,16 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
             message_create_text_payload(&strand_id, "after delete")?,
         )
         .await?;
+    let duplicate_terminal = alice
+        .author_event(
+            &realm_id,
+            "ak.realm.tombstone",
+            json!({"reason":"repeat", "successor_realm_id": successor}),
+        )
+        .await?;
+    let restore_terminal = alice
+        .author_event(&realm_id, "ak.realm.restore", json!({}))
+        .await?;
     alice
         .submit_event(
             &realm_id,
@@ -195,7 +219,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
             json!({"reason": "migrated", "successor_realm_id": successor}),
         )
         .await?;
-    expect_api_error(
+    let problem = expect_api_error(
         bob.authorize(server.http().post(server.url("/_arkret/self/events")))
             .json(&crate::publication::initial_submission(
                 after_tombstone,
@@ -205,6 +229,66 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
         "failed_precondition",
     )
     .await?;
+    assert_ne!(
+        problem
+            .extensions
+            .get("reason_code")
+            .and_then(serde_json::Value::as_str),
+        Some("realm_terminal_state"),
+        "reserved terminal reason_code: {problem:?}"
+    );
+
+    let after_terminal = alice.realm_seal_frontier(&realm_id).await?;
+    let before_events = before_destroy["committed_events"]
+        .as_array()
+        .ok_or_else(|| anyhow!("pre-terminal stream missing committed_events"))?;
+    let after_events = after_terminal["committed_events"]
+        .as_array()
+        .ok_or_else(|| anyhow!("post-terminal history missing committed_events"))?;
+    assert_eq!(
+        after_events.len(),
+        before_events.len() + 1,
+        "tombstone must admit exactly one Event and covering Commit"
+    );
+    assert_eq!(
+        &after_events[..before_events.len()],
+        before_events.as_slice(),
+        "authorized retained history changed after terminal admission"
+    );
+    assert_eq!(
+        after_events.last().unwrap()["event"]["kind"],
+        "ak.realm.tombstone"
+    );
+    assert_eq!(
+        after_events.last().unwrap()["event"]["payload"]["successor_realm_id"],
+        successor
+    );
+    // Both members retain their authorized historical interval. The refused
+    // pre-signed member write cannot install any Event or advance its head.
+    assert_eq!(bob.realm_seal_frontier(&realm_id).await?, after_terminal);
+    for event in [duplicate_terminal, restore_terminal] {
+        let problem = expect_api_error(
+            alice
+                .authorize(server.http().post(server.url("/_arkret/self/events")))
+                .json(&crate::publication::initial_submission(event, "")?),
+            StatusCode::CONFLICT,
+            "failed_precondition",
+        )
+        .await?;
+        assert_ne!(
+            problem
+                .extensions
+                .get("reason_code")
+                .and_then(serde_json::Value::as_str),
+            Some("realm_terminal_state"),
+            "reserved terminal reason_code: {problem:?}"
+        );
+        assert_eq!(
+            alice.realm_seal_frontier(&realm_id).await?,
+            after_terminal,
+            "terminal refusal changed the retained Event/Commit stream"
+        );
+    }
 
     Ok(())
 }

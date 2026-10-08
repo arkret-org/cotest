@@ -854,6 +854,36 @@
       ]
     },
     {
+      "scenario_key": "joint/blob-storage-classification",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "inkson",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "inkson_product_client",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "create_realm_passive_prompt_dismissal",
+        "raw_http_fixture_or_oracle",
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "mls_backup_unlock_and_missing_recovery_prompt_behavior",
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
       "scenario_key": "joint/build-identity",
       "suite_kind": "joint-e2e",
       "realism_level": "fixture-only",
