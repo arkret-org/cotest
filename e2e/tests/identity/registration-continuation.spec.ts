@@ -1,23 +1,31 @@
-import { expect, test } from "../../helpers/arkret-test";
+import { expect, test, type Page } from "../../helpers/arkret-test";
 import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
 import { registrationEmailCode } from "../../helpers/coauth-register";
 import { submitCoauthPasswordCredentials } from "../../helpers/real-oidc-login";
 import { openUserPage, uniqueUser } from "../../helpers/users";
+import { assertAuthoritySubmitOutcome } from "../../helpers/soland-api";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
-for (const scenario of ["fresh browser", "handoff response loss", "stale busy checkpoint"]) {
+for (const scenario of ["fresh browser", "handoff response loss", "stale busy checkpoint", "active-series response loss"]) {
   const loseHandoffResponse = scenario === "handoff response loss";
   const staleBusy = scenario === "stale busy checkpoint";
+  const losePointerResponse = scenario === "active-series response loss";
   test(`direct registration with ${scenario} preserves setup through reload and same-device sign-in @fully-implemented @onboarding-resume-gate`, async ({ browser, request }) => {
     test.setTimeout(180_000);
     test.skip(!coauthBaseUrl(), "Coauth is required for the registration continuation");
     const user = uniqueUser("registration-continuation");
     const account = { handle: user.name, password: "1amTester!" };
     const email = `${user.name}@example.test`;
-    const jointPage = await openUserPage(browser, user, {
+    const profile = losePointerResponse
+      ? fs.mkdtempSync(path.join(os.tmpdir(), "arkret-pcr-replay-")) : undefined;
+    let jointPage = await openUserPage(browser, user, {
+      persistentUserDataDir: profile,
       neutralLoginConfig: true,
       autoCompleteRecoveryKeySetup: false,
     });
-    const page = jointPage.page;
+    let page = jointPage.page;
     let lostResponse = false;
     const leaseIds: string[] = [];
     const holderPublicKeys: string[] = [];
@@ -122,7 +130,7 @@ for (const scenario of ["fresh browser", "handoff response loss", "stale busy ch
       expect(await page.evaluate(() =>
         JSON.parse(localStorage.getItem("inkson.local_state.v1") ?? "{}").pending_login?.device_id,
       )).toBe(firstDevice);
-      if (scenario === "fresh browser") {
+      if (scenario === "fresh browser" || losePointerResponse) {
         // Reach the actual Human PCR successor and durable completion. The
         // identity chooser alone cannot detect a failed first backup pointer.
         await page.getByTestId("choose-new-identity").click();
@@ -131,6 +139,51 @@ for (const scenario of ["fresh browser", "handoff response loss", "stale busy ch
         const recoveryKey = (await words.allTextContents()).map((word) => word.trim()).join(" ");
         await page.getByTestId("onboarding-recovery-key-confirm").fill(recoveryKey);
         let pointerEventId: string | undefined;
+        let originalPointer: Record<string, unknown> | undefined;
+        let originalOutcome: Record<string, unknown> | undefined;
+        let pointerResponseLost = false;
+        const pointerRequests: string[] = [];
+        const foundingUnits: unknown[] = [];
+        const observeSubmissions = (target: Page) => target.on("request", (request) => {
+          if (request.method() !== "POST" || !request.postData()) return;
+          let body: Record<string, unknown>;
+          try { body = request.postDataJSON(); } catch { return; }
+          const creation = body.identity_creation as Record<string, unknown> | undefined;
+          if (creation?.pcr_genesis_unit) foundingUnits.push(creation.pcr_genesis_unit);
+          if (!new URL(request.url()).pathname.endsWith("/_arkret/self/events")) return;
+          const event = body.event as Record<string, unknown> | undefined;
+          if (event?.kind === "ak.key_backup.active_series") pointerRequests.push(request.postData()!);
+        });
+        observeSubmissions(page);
+        if (losePointerResponse) {
+          await page.route(/\/_arkret\/self\/events(?:\?.*)?$/, async (route) => {
+            const event = route.request().postDataJSON()?.event;
+            if (event?.kind !== "ak.key_backup.active_series") { await route.continue(); return; }
+            if (!pointerResponseLost) {
+              const accepted = await route.fetch();
+              expect(accepted.ok(), "active-series must be committed before losing its response").toBe(true);
+              originalOutcome = await accepted.json();
+              assertAuthoritySubmitOutcome(originalOutcome!, event, "original PCR successor");
+              originalPointer = event;
+              pointerEventId = event.event_id;
+              pointerResponseLost = true;
+            }
+            await route.abort("connectionfailed");
+          });
+          await page.getByTestId("onboarding-bind-identity").click();
+          await expect.poll(() => pointerResponseLost, { timeout: 90_000 }).toBe(true);
+          expect(originalPointer).toBeDefined();
+          await expect(page.getByTestId("onboarding-complete")).toHaveCount(0);
+          await jointPage.close();
+          jointPage = await openUserPage(browser, user, {
+            persistentUserDataDir: profile,
+            resumePersistentProfile: true,
+            neutralLoginConfig: true,
+            autoCompleteRecoveryKeySetup: false,
+          });
+          page = jointPage.page;
+          observeSubmissions(page);
+        }
         const pointerAcceptance = page.waitForResponse((response) => {
           if (!new URL(response.url()).pathname.endsWith("/_arkret/self/events")) return false;
           const event = response.request().postDataJSON()?.event;
@@ -146,13 +199,51 @@ for (const scenario of ["fresh browser", "handoff response loss", "stale busy ch
             && (selector.committed_event_ref as { event_id?: string } | undefined)?.event_id === pointerEventId,
           ) === true;
         });
-        await page.getByTestId("onboarding-bind-identity").click();
+        if (losePointerResponse) {
+          await page.goto("/onboarding");
+          // Restart may restore custody and ask for the same explicit confirmation.
+          const confirm = page.getByTestId("onboarding-recovery-key-confirm");
+          await expect(page.getByTestId("onboarding-complete").or(confirm)).toBeVisible({ timeout: 90_000 });
+          if (await confirm.isVisible()) {
+            const restoredWords = await page.getByTestId("onboarding-recovery-key-display").locator("li").allTextContents();
+            expect(restoredWords.map(word => word.trim()).join(" ") === recoveryKey,
+              "restart must retain the original recovery authority").toBe(true);
+            await confirm.fill(recoveryKey);
+            await page.getByTestId("onboarding-bind-identity").click();
+          }
+          // The durable outbound drain starts with the connected client, not
+          // while the completion page still owns the handoff continuation.
+          await expect(page.getByTestId("onboarding-complete")).toContainText("Identity ready", {
+            timeout: 90_000,
+          });
+          await page.getByTestId("onboarding-complete").getByRole("link", { name: "Continue" }).click();
+          await expect(page.getByTestId("client-shell")).toBeVisible();
+        } else {
+          await page.getByTestId("onboarding-bind-identity").click();
+        }
         const accepted = await pointerAcceptance;
         expect(accepted.ok()).toBe(true);
         const event = accepted.request().postDataJSON().event;
         const outcome = await accepted.json();
+        if (losePointerResponse) {
+          expect(outcome.status).toBe("duplicate");
+          expect(event).toEqual(originalPointer);
+          expect(outcome.commit).toEqual(originalOutcome!.commit);
+          expect(pointerRequests.length, "restart must replay the frozen original submission").toBeGreaterThan(1);
+          expect(new Set(pointerRequests).size, "no new active-series Event or signature on resume").toBe(1);
+          expect(foundingUnits.length, "the real register must carry the original PCR founding unit").toBeGreaterThan(0);
+          expect(new Set(foundingUnits.map(unit => JSON.stringify(unit))).size,
+            "resume must not create a second PCR founding unit").toBe(1);
+        }
         expect(outcome.commit.event_ref).toBe(event.event_id);
         expect(outcome.commit).not.toHaveProperty("producer_signer_fact_digest");
+        if (!losePointerResponse) {
+          await expect(page.getByTestId("onboarding-complete")).toContainText("Identity ready", {
+            timeout: 90_000,
+          });
+          await page.getByTestId("onboarding-complete").getByRole("link", { name: "Continue" }).click();
+          await expect(page.getByTestId("client-shell")).toBeVisible();
+        }
         const lookup = (await historicalLookup).postDataJSON();
         expect(lookup.recipient_account_id).toEqual(event.actor_id.account_id);
         expect(lookup.queries).toContainEqual({
@@ -164,11 +255,15 @@ for (const scenario of ["fresh browser", "handoff response loss", "stale busy ch
             stream_ref: outcome.commit.stream_ref, stream_position: outcome.commit.stream_position,
           },
         });
-        await expect(page.getByTestId("onboarding-complete")).toContainText("Identity ready", {
-          timeout: 90_000,
-        });
-        await page.getByTestId("onboarding-complete").getByRole("link", { name: "Continue" }).click();
-        await expect(page.getByTestId("client-shell")).toBeVisible();
+        if (losePointerResponse) {
+          const active = await page.evaluate(() => {
+            const account = JSON.parse(localStorage.getItem("inkson.config.v1") ?? "{}").active_account;
+            return { authority: account?.authority, device: account?.device_id, pcr: account?.principal_control_realm_id };
+          });
+          expect(active.authority).toEqual((originalPointer!.actor_id as { account_id: unknown }).account_id);
+          expect(active.device).toBe(firstDevice);
+          expect(active.pcr).toBe(originalPointer!.realm_id);
+        }
         await page.reload();
         await expect(page.getByTestId("client-shell")).toBeVisible();
         await expect(page.getByTestId("retry-onboarding-resume")).toHaveCount(0);
@@ -179,6 +274,13 @@ for (const scenario of ["fresh browser", "handoff response loss", "stale busy ch
       throw error;
     } finally {
       await jointPage.close();
+      if (profile) {
+        const actual = fs.realpathSync(profile);
+        if (path.dirname(actual) !== fs.realpathSync(os.tmpdir()) || !path.basename(actual).startsWith("arkret-pcr-replay-")) {
+          throw new Error("PCR replay profile escaped the test temp root");
+        }
+        fs.rmSync(actual, { recursive: true, force: true });
+      }
     }
   });
 }
