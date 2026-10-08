@@ -59,7 +59,12 @@ import { base58btcEncode } from "./encoding";
 import { withOperationSelectors } from "./arkret-test";
 import { SessionDiagnostics, accountViewerHandleDiagnostic } from "./session-diagnostics";
 import { revealTimelineEvent } from "./timeline-visibility";
-import { completeRecoverySetup, installRecoverySetupHandler } from "./recovery-setup";
+import {
+  completeRecoverySetup,
+  finishRecoverySetupBeforeClose,
+  installRecoverySetupHandler,
+} from "./recovery-setup";
+import { matchesRealmChatRoute } from "./navigation";
 
 
 export type JointUser = {
@@ -482,7 +487,7 @@ export class JointUserPage {
       waitUntil: "domcontentloaded",
     });
     await expect(this.page).toHaveURL(
-      (url) => url.pathname === `/chat/${realmId}`,
+      (url) => matchesRealmChatRoute(url, realmId),
       { timeout: 60_000 },
     );
     await expect(this.page.getByTestId("chat-panel")).toBeVisible({
@@ -2797,15 +2802,19 @@ export async function openUserPage(
   return userPage;
 }
 async function closeUser(session: UserSession) {
-  flushUserDiagnostics(session);
   try {
-    await session.context.close();
-  } catch (error) {
-    if (
-      !(error instanceof Error) ||
-      !/Target page, context or browser has been closed/.test(error.message)
-    ) {
-      throw error;
+    await finishRecoverySetupBeforeClose(session.page);
+  } finally {
+    flushUserDiagnostics(session);
+    try {
+      await session.context.close();
+    } catch (error) {
+      if (
+        !(error instanceof Error) ||
+        !/Target page, context or browser has been closed/.test(error.message)
+      ) {
+        throw error;
+      }
     }
   }
 }

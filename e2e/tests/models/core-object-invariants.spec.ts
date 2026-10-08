@@ -271,7 +271,6 @@ test.describe("core object invariants", () => {
       aliceToken,
       realmId,
     );
-    const initialPosition = { list_space_id: sourceListId, rank: "m" };
     const initialMove = signedEventEnvelope({
       actorId: alice.id,
       realmId,
@@ -308,7 +307,7 @@ test.describe("core object invariants", () => {
       payload: {
         board_space_id: boardSpaceId,
         strand_id: strandId,
-        from_space_id: staleExpectedListId,
+        from_space_id: sourceListId,
         target_space_id: targetListId,
         rank: "z",
         expected_position: { list_space_id: staleExpectedListId, rank: "m" },
@@ -359,7 +358,7 @@ test.describe("core object invariants", () => {
           expected_position: expectedPosition,
         },
       });
-    const staleReturn = returnMove(initialPosition);
+    const staleReturn = returnMove({ list_space_id: sourceListId, rank: "m" });
     const rejectedReturn = await rawSubmitSignedEventApi(request, aliceToken, staleReturn);
     expect(rejectedReturn.status(), await rejectedReturn.text()).toBe(409);
     expect(wireErrCode(await rejectedReturn.json())).toBe("failed_precondition");

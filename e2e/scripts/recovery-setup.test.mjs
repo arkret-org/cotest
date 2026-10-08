@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { chromium } from "@playwright/test";
-import { completeRecoverySetup, installRecoverySetupHandler } from "../helpers/recovery-setup.ts";
+import { completeRecoverySetup, finishRecoverySetupBeforeClose, installRecoverySetupHandler } from "../helpers/recovery-setup.ts";
 
 let browser;
 before(async () => { browser = await chromium.launch(); });
@@ -9,7 +9,7 @@ after(async () => { await browser?.close(); });
 
 const key = Array(24).fill("fixture").join(" ");
 
-async function prompt(page, retryFirst = false) {
+async function prompt(page, retryFirst = false, publicationDelayMs = 0) {
   page.setDefaultTimeout(10_000);
   await page.setContent(`
     <div data-testid="recovery-key-setup-banner">
@@ -31,7 +31,11 @@ async function prompt(page, retryFirst = false) {
         if (${retryFirst} && window.saves === 1) {
           setTimeout(() => { save.disabled = false; }, 20);
         } else {
-          banner.style.display = 'none';
+          if (${publicationDelayMs} > 0) {
+            setTimeout(() => { banner.style.display = 'none'; }, ${publicationDelayMs});
+          } else {
+            banner.style.display = 'none';
+          }
         }
       };
       })();
@@ -106,6 +110,38 @@ test("invalid confirmation source stays failed and cannot publish a replacement 
     try { await completeRecoverySetup(page, invalid); } catch (error) { failure = error; }
     assert.ok(failure);
     await assert.rejects(completeRecoverySetup(page, key), (error) => error === failure);
+    assert.equal(await page.evaluate(() => window.saves), 0);
+  } finally { await page.close(); }
+});
+
+test("cleanup drains delayed publication before closing and prevents handler re-arming", async () => {
+  const page = await browser.newPage();
+  try {
+    await prompt(page, false, 8_000);
+    let configured = 0;
+    let registrations = 0;
+    const add = page.addLocatorHandler.bind(page);
+    page.addLocatorHandler = async (...args) => { registrations++; return add(...args); };
+    await installRecoverySetupHandler(page, () => { configured++; });
+    await page.getByTestId("outside").click({ timeout: 20_000 });
+    assert.equal(configured, 0, "the short action returns while publication is still active");
+    await finishRecoverySetupBeforeClose(page);
+    assert.equal(page.isClosed(), false);
+    assert.equal(configured, 1);
+    assert.equal(await page.getByTestId("recovery-key-setup-banner").isHidden(), true);
+    assert.equal(registrations, 1, "cleanup must not install another automatic writer");
+  } finally { await page.close(); }
+});
+
+test("cleanup preserves a latched recovery failure instead of hiding it", async () => {
+  const page = await browser.newPage();
+  try {
+    await prompt(page);
+    const invalid = Array(23).fill("fixture").join(" ");
+    let failure;
+    try { await completeRecoverySetup(page, invalid); } catch (error) { failure = error; }
+    assert.ok(failure);
+    await assert.rejects(finishRecoverySetupBeforeClose(page), (error) => error === failure);
     assert.equal(await page.evaluate(() => window.saves), 0);
   } finally { await page.close(); }
 });

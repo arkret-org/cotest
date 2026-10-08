@@ -478,12 +478,10 @@ test.describe("chat advanced", () => {
         token: bobToken,
       });
       const strandId = await resolveDefaultStrandId(request, aliceToken, realmId);
-      const sentAt = new Date();
       const envelope = buildSignalEnvelope({
         actorId: aliceFlow.user.id,
         deviceId: aliceFlow.user.deviceId,
         realmId,
-        sentAt,
         plaintext: {
           kind: "ak.typing",
           strand_id: strandId,

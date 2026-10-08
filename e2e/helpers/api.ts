@@ -1,9 +1,11 @@
-import { expect, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "@playwright/test";
 import { solandBaseUrl, solandServiceId, type SolandKey } from "./env";
 import {
   accountActorId,
   authHeaders,
   acceptInviteApi,
+  acceptPreparedInviteApi,
+  waitForInviteDeliveryApi,
   canonicalJson,
   createRealmApi,
   grantCapabilityEventApi,
@@ -150,8 +152,14 @@ export async function createSharedRealmViaApi(
   // A normal Realm has no implicit discussion Strand. This fixture promises a
   // shared messaging Realm, so establish the explicit Strand + default pointer
   // while the root controller is still the author.
-  await resolveDefaultStrandId(request, ownerToken, realmId);
-  await acceptInviteViaApi(request, memberToken, member.id, realmId, { server: opts.server });
+  await test.step("shared Realm: establish explicit default Strand", () =>
+    resolveDefaultStrandId(request, ownerToken, realmId));
+  // The applicant consumes its private delivery and prepares through its own
+  // Station before authoring the exact join, including on a colocated Station.
+  const invitation = await test.step("shared Realm: own invitation delivery", () =>
+    waitForInviteDeliveryApi(request, memberToken, member.id, realmId, opts.server ?? "server1"));
+  await test.step("shared Realm: prepared invite accept and exact replay", () =>
+    acceptPreparedInviteApi(request, memberToken, member.id, realmId, invitation.id, { server: opts.server }));
   if (opts.mlsActivated) {
     // The join advanced the scope's key-access revision; ciphertext is
     // admitted again only once an Add Commit covers it

@@ -3,6 +3,16 @@ import { expect, type Page } from "@playwright/test";
 const recoverySetupCompletions = new WeakMap<Page, Promise<string>>();
 const completedRecoverySetups = new WeakMap<Page, string>();
 const failedRecoverySetups = new WeakMap<Page, unknown>();
+const closingRecoveryPages = new WeakSet<Page>();
+
+// Cleanup owns the already-started publication too. Stop re-arming before
+// awaiting that writer, and propagate its real failure before closing Page.
+export async function finishRecoverySetupBeforeClose(page: Page): Promise<void> {
+  closingRecoveryPages.add(page);
+  const active = recoverySetupCompletions.get(page);
+  if (active) await active;
+  if (failedRecoverySetups.has(page)) throw failedRecoverySetups.get(page);
+}
 
 // Publish only one completion per page. Locator handlers must not await an
 // existing operation: it may be the action whose auto-wait invoked them.
@@ -15,6 +25,9 @@ export function completeRecoverySetup(
   }
   const active = recoverySetupCompletions.get(page);
   if (active) return active;
+  if (closingRecoveryPages.has(page)) {
+    return Promise.reject(new Error("recovery setup cannot start during Page cleanup"));
+  }
   const operation = Promise.resolve().then(async () => {
     expect(
       recoveryKey.trim().split(/\s+/).filter(Boolean).length,
@@ -95,10 +108,11 @@ export async function installRecoverySetupHandler(
     });
   };
   const arm = async () => {
-    if (page.isClosed()) return;
+    if (closingRecoveryPages.has(page) || page.isClosed()) return;
     await page.addLocatorHandler(
       page.getByTestId("recovery-key-setup-generated-key"),
       async (generated) => {
+        if (closingRecoveryPages.has(page)) return;
         if (failedRecoverySetups.has(page)) throw failedRecoverySetups.get(page);
         const active = recoverySetupCompletions.get(page);
         if (active) {

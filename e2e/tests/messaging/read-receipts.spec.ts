@@ -768,19 +768,19 @@ async function sendEncryptedReceiptMessage(
 function receiptEnvelope(
   fixture: ReceiptFixture,
   ttlMs = 25_000,
-  sentAt = new Date(),
+  sentAt?: Date,
 ) {
   const envelope = buildReceiptSignal({
     actor: fixture.alice,
     realmId: fixture.realmId,
     eventId: fixture.message.event_id,
-    payloadSequence: sentAt.getTime(),
+    payloadSequence: (sentAt ?? new Date()).getTime(),
     lifetimeMs: ttlMs,
     sentAt,
   });
   // Preserve the requested wire TTL for negative admission vectors; the
   // shared builder normally clamps callers to the class ceiling.
-  envelope.expires_at = new Date(sentAt.getTime() + ttlMs).toISOString();
+  envelope.expires_at = new Date(Date.parse(String(envelope.sent_at)) + ttlMs).toISOString();
   return envelope;
 }
 
@@ -793,13 +793,12 @@ function buildReceiptSignal(args: {
   sentAt?: Date;
   readScope?: Record<string, unknown>;
 }) {
-  const sentAt = args.sentAt ?? new Date();
   return buildSignalEnvelope({
     actorId: args.actor.id,
     deviceId: args.actor.deviceId,
     realmId: args.realmId,
     signalClass: "session",
-    sentAt,
+    sentAt: args.sentAt,
     lifetimeMs: args.lifetimeMs,
     plaintext: {
       kind: "ak.receipt.read",

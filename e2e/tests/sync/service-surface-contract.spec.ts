@@ -400,14 +400,14 @@ test.describe("service surface contract — error envelope, pagination, idempote
       // section 2 proof verification before that id may enter duplicate lookup.
       const stamp = Date.now();
       const alice = uniqueUser(`ssc-event-id-alice-${stamp}`);
-      await ensureRegistered(request, alice);
-      const token = await issueUserSession(request, alice);
-      const realmId = await createRealmViaApi(request, token, {
+      await test.step("protocol stage: ensureRegistered", () => ensureRegistered(request, alice), { box: true });
+      const token = await test.step("protocol stage: token", () => issueUserSession(request, alice), { box: true });
+      const realmId = await test.step("protocol stage: realmId", () => createRealmViaApi(request, token, {
         title: `ssc event idempotency ${stamp}`,
         historyAccess: "all_history_for_current_members",
         ownerId: alice.id,
-      });
-      const strandId = await resolveDefaultStrandId(request, token, realmId);
+      }), { box: true });
+      const strandId = await test.step("protocol stage: strandId", () => resolveDefaultStrandId(request, token, realmId), { box: true });
       const body = `event id replay ${stamp}`;
       const envelope = signedEventEnvelope({
         actorId: alice.id,
@@ -422,25 +422,25 @@ test.describe("service surface contract — error envelope, pagination, idempote
       const eventId = String(envelope.event_id);
       const submitUrl = `${solandBaseUrl()}/_arkret/self/events`;
 
-      const first = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
+      const first = await test.step("protocol stage: first", () => request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: { ...authHeaders(token, "POST", submitUrl), "content-type": "application/json" },
         data: canonicalJson({ event: envelope }),
-      });
+      }), { box: true });
       expect([200, 201], `first submit returned ${first.status()}`).toContain(first.status());
-      const firstBody = await first.json();
+      const firstBody = await test.step("protocol stage: firstBody", () => first.json(), { box: true });
       expect(submittedEventId(firstBody)).toBe(eventId);
       expect(submittedEventOutcome(firstBody, eventId)).toBe("accepted");
 
-      const duplicate = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
+      const duplicate = await test.step("protocol stage: duplicate", () => request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: { ...authHeaders(token, "POST", submitUrl), "content-type": "application/json" },
         data: canonicalJson({ event: envelope }),
-      });
+      }), { box: true });
       expect(duplicate.status(), `duplicate submit status`).toBe(200);
-      const duplicateBody = await duplicate.json();
+      const duplicateBody = await test.step("protocol stage: duplicateBody", () => duplicate.json(), { box: true });
       expect(submittedEventId(duplicateBody)).toBe(eventId);
       expect(submittedEventOutcome(duplicateBody, eventId)).toBe("duplicate");
 
-      const eventsAfterDuplicate = await listRealmEventsViaApi(request, token, realmId);
+      const eventsAfterDuplicate = await test.step("protocol stage: eventsAfterDuplicate", () => listRealmEventsViaApi(request, token, realmId), { box: true });
       expect(eventsAfterDuplicate.filter((event) => event.event_id === eventId)).toHaveLength(1);
 
       const drift = signedEventEnvelope({
@@ -457,16 +457,16 @@ test.describe("service surface contract — error envelope, pagination, idempote
       // Reuse the inner Event ID, not the full-body submission identity.
       // Ordinary signing helpers derive a new id; this negative request must not.
       drift.event_id = eventId;
-      const conflict = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
+      const conflict = await test.step("protocol stage: conflict", () => request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: { ...authHeaders(token, "POST", submitUrl), "content-type": "application/json" },
         data: canonicalJson({ event: drift }),
-      });
-      expect(conflict.status(), "changed Event preimage must fail before duplicate lookup").toBe(422);
-      const identityProblem = await conflict.json();
-      expect(wireErrCode(identityProblem)).toBe("schema_violation");
-      expect(identityProblem.reason_code).toBe("event_id_digest_mismatch");
+      }), { box: true });
+      expect(conflict.status(), `changed Event preimage must fail before duplicate lookup: ${await conflict.text()}`).toBe(422);
+      const identityRefusal = await conflict.json();
+      expect(wireErrCode(identityRefusal)).toBe("schema_violation");
+      expect(identityRefusal.reason_code).toBe("event_id_digest_mismatch");
 
-      const eventsAfterConflict = await listRealmEventsViaApi(request, token, realmId);
+      const eventsAfterConflict = await test.step("protocol stage: eventsAfterConflict", () => listRealmEventsViaApi(request, token, realmId), { box: true });
       expect(eventsAfterConflict.filter((event) => event.event_id === eventId)).toHaveLength(1);
       expect(JSON.stringify(eventsAfterConflict)).toContain(body);
       expect(JSON.stringify(eventsAfterConflict)).not.toContain(`${body} drift`);

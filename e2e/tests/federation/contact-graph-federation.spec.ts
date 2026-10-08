@@ -33,6 +33,7 @@ import {
   createRealmApi,
   accountActorId,
   acceptPreparedInviteApi,
+  resolveDefaultStrandId,
   canonicalJson,
   waitForInviteDeliveryApi,
 } from "../../helpers/soland-api";
@@ -496,6 +497,7 @@ test.describe("contact graph federation (server1/server2)", () => {
       },
       { server: "server1" },
     );
+    await resolveDefaultStrandId(request, aliceTokenServer1, realmId, { server: "server1" });
     // Cross-PS private delivery: server1 signs, server2 receives + verifies the grant
     // against ITS consent cells (subject=bob gave inviter=alice invite).
     const { outcome: delivery, inviteId } = await deliverInviteWithConsentGrant(

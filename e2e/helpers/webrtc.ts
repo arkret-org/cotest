@@ -14,8 +14,8 @@ import {
   canonicalJson,
   canonicalTimestamp,
   currentActorIdApi,
-  readCommitStreamCutApi,
   readCommitStreamHeadApi,
+  scanRealmStreamApi,
   registeredEventVerificationMethod,
   signWithRegisteredEventSigner,
 } from "./soland-api";
@@ -23,6 +23,11 @@ import { readScopeMlsGroupCurrentApi, scopeMlsMemberGroupApi } from "./soland-ap
 import { cotestWire } from "./soland-api/wire-client";
 
 const signalRecipes = new WeakMap<Record<string, unknown>, Record<string, unknown>>();
+const automaticSignalTimes = new WeakMap<Record<string, unknown>, {
+  sentAt: unknown;
+  expiresAt: unknown;
+  lifetimeMs: number;
+}>();
 const preparedSignals = new WeakSet<Record<string, unknown>>();
 const openedSignals = new WeakMap<Record<string, unknown>, Record<string, unknown>>();
 
@@ -100,6 +105,13 @@ export function buildSignalEnvelope(args: {
     },
   };
   signalRecipes.set(envelope, args.plaintext);
+  if (args.sentAt === undefined) {
+    automaticSignalTimes.set(envelope, {
+      sentAt: envelope.sent_at,
+      expiresAt: envelope.expires_at,
+      lifetimeMs: expiresAt.getTime() - sentAt.getTime(),
+    });
+  }
   return envelope;
 }
 
@@ -198,6 +210,16 @@ export async function prepareSignalEnvelope(
   encryptedPayload.epoch = current.epoch;
   const plaintext = signalRecipes.get(envelope);
   if (!plaintext) throw new Error("Signal plaintext recipe is unavailable");
+  // Welcome installation and authority reads may accept new material. For a
+  // normal unsent recipe, choose send time only after those cuts exist (§3.0).
+  // Explicit historical times and caller-mutated negative vectors stay exact.
+  const automaticTimes = automaticSignalTimes.get(envelope);
+  if (automaticTimes && envelope.sent_at === automaticTimes.sentAt
+    && envelope.expires_at === automaticTimes.expiresAt) {
+    const sentAt = new Date();
+    envelope.sent_at = canonicalTimestamp(sentAt);
+    envelope.expires_at = canonicalTimestamp(new Date(sentAt.getTime() + automaticTimes.lifetimeMs));
+  }
   const sealed = cotestWire<{
     encrypted_payload: Record<string, unknown>;
     group_state: string;
@@ -316,6 +338,33 @@ async function captureSignalEnvelopes<T>(
   }
 }
 
+// A Signal selects an exact historical accepted cut. A receiver's later
+// visible head may include additional commits and must not replace the AAD.
+async function readSignalCut(
+  request: APIRequestContext,
+  token: string,
+  realmId: string,
+  streamRef: Record<string, unknown>,
+  commitId: unknown,
+  sentAt: unknown,
+): Promise<Record<string, unknown>> {
+  let afterPosition: number | undefined;
+  for (;;) {
+    const page = await scanRealmStreamApi(request, token, realmId, { streamRef, afterPosition });
+    const cut = page.commits.find(commit => commit.commit_id === commitId);
+    if (cut) {
+      expect(cut.stream_ref, "receiver independently reads the declared Signal stream").toEqual(streamRef);
+      const committedAt = Date.parse(String(cut.committed_at));
+      expect(Number.isFinite(committedAt), "Signal cut has an accepted timestamp").toBe(true);
+      expect(committedAt, "Signal cut predates its signed send time").toBeLessThanOrEqual(Date.parse(String(sentAt)));
+      return cut;
+    }
+    if (!page.truncated) throw new Error("Signal receiver cannot read the declared exact accepted cut");
+    const next = page.commits.at(-1)?.stream_position;
+    if (typeof next !== "number" || next === afterPosition) throw new Error("Signal cut scan made no progress");
+    afterPosition = next;
+  }
+}
 /**
  * Prepare a Signal envelope before opening the receiver's live-only rail,
  * then submit it while that rail is active. Preparation reads the current
@@ -336,13 +385,11 @@ export async function captureSubmittedSignalEnvelope(
   const receiverGroup = await scopeMlsMemberGroupApi(request, receiverToken, realmId, scopeRef);
   await prepareSignalEnvelope(request, senderToken, envelope);
   const receiverId = await currentActorIdApi(request, receiverToken);
-  const head = await readCommitStreamCutApi(
-    request, receiverToken, realmId, String(envelope.authority_commit_id), { streamRef: scopeRef },
-  );
+  const head = await readSignalCut(request, receiverToken, realmId, scopeRef,
+    envelope.authority_commit_id, envelope.sent_at);
   const parent = scopeRef.kind === "circle"
-    ? await readCommitStreamCutApi(
-      request, receiverToken, realmId, String(envelope.parent_realm_authority_commit_id),
-    )
+    ? await readSignalCut(request, receiverToken, realmId, { kind: "realm", realm_id: realmId },
+      envelope.parent_realm_authority_commit_id, envelope.sent_at)
     : undefined;
   if (!head || (scopeRef.kind === "circle" && !parent)) {
     throw new Error("Signal receiver lacks the accepted independent authority cuts");
