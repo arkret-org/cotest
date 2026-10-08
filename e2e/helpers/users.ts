@@ -58,6 +58,7 @@ import { deviceSuffix, newDeviceId } from "./ids";
 import { base58btcEncode } from "./encoding";
 import { withOperationSelectors } from "./arkret-test";
 import { SessionDiagnostics } from "./session-diagnostics";
+import { revealTimelineEvent } from "./timeline-visibility";
 import { completeRecoverySetup, installRecoverySetupHandler } from "./recovery-setup";
 
 
@@ -1420,7 +1421,7 @@ export class JointUserPage {
   private async clickTimelineAction(body: string, testId: string) {
     const event = this.timelineEvent(body);
     await this.dismissPassiveBlockingPrompts();
-    await expect(event).toBeVisible({ timeout: 30_000 });
+    await revealTimelineEvent(this.page, event);
     await this.withPassivePromptRetry(async () => {
       await event.scrollIntoViewIfNeeded({ timeout: 5_000 });
       await event.hover({ timeout: 5_000 });
