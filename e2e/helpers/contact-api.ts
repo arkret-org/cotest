@@ -37,6 +37,7 @@ import {
   type InviteDeliveryOutcomeView,
   type InviteDeliveryRequestBodyBodyBody,
   uuidV7,
+  wireErrCode,
 } from "./soland-api";
 import type { JointUser } from "./users";
 import type { ContactPeer, InviteObject } from "./generated/spec-wire-objects";
@@ -188,6 +189,58 @@ export async function grantInviteConsentArkret(
 
 // ── Contact request / respond / list / tombstone. ──
 
+// contact-and-direct-conversation.md §2: a temporary admission failure is
+// not a durable outcome. Replay the same commit, including its signed Event
+// and reservation; only the HTTP authentication proof is refreshed.
+const contactCommitRetries = new Map<string, number[]>();
+
+async function submitContactCommit(
+  request: APIRequestContext,
+  token: string,
+  url: string,
+  body: Record<string, unknown>,
+): Promise<APIResponse> {
+  const submission = canonicalJson(body);
+  const event = body.signed_event as Record<string, unknown>;
+  const retryScope = canonicalJson({ actor_id: event.actor_id, endpoint: url });
+  const deadline = Date.now() + 30_000;
+  for (;;) {
+    const response = await request.post(url, {
+      headers: {
+        ...authHeaders(token, "POST", url),
+        "content-type": "application/json",
+      },
+      data: submission,
+      timeout: Math.max(1, deadline - Date.now()),
+    });
+    if (response.status() !== 503) return response;
+    const problem: unknown = await response.json().catch(() => undefined);
+    if (wireErrCode(problem) !== "temporarily_unavailable") return response;
+    const now = Date.now();
+    const retries = (contactCommitRetries.get(retryScope) ?? [])
+      .filter((sentAt) => sentAt > now - 300_000);
+    contactCommitRetries.set(retryScope, retries);
+    if (retries.length >= 5) return response;
+    const retryAfter = response.headers()["retry-after"];
+    const bodyHint = (problem as Record<string, unknown>).retry_after_ms;
+    const hint = retryAfter
+      ? /^\d+$/.test(retryAfter)
+        ? Number(retryAfter) * 1_000
+        : Math.max(0, Date.parse(retryAfter) - Date.now())
+      : typeof bodyHint === "number" && bodyHint > 0 ? bodyHint : 0;
+    const backoff = Math.min(60_000, 1_000 * 2 ** retries.length);
+    const retryDelay = Math.max(
+      Number.isFinite(hint) ? hint : 0,
+      backoff * (1 + Math.random() * 0.2),
+    );
+    if (Date.now() + retryDelay >= deadline) return response;
+    // Reserve the shared attempt before yielding, including concurrent calls.
+    retries.push(now + retryDelay);
+    await response.dispose();
+    await new Promise((resolve) => setTimeout(resolve, retryDelay));
+  }
+}
+
 export async function requestContactArkret(
   request: APIRequestContext,
   token: string,
@@ -241,18 +294,12 @@ export async function requestContactArkret(
     ).toString("utf8"),
   ) as Record<string, unknown>;
   refreshEventEnvelopeProof(signedEvent);
-  const response = await request.post(url, {
-    headers: {
-      ...authHeaders(token, "POST", url),
-      "content-type": "application/json",
-    },
-    data: canonicalJson({
-      phase: "commit",
-      operation_id: operationId,
-      idempotency_key: idempotencyKey,
-      reservation_handle: prepared.reservation_handle,
-      signed_event: signedEvent,
-    }),
+  const response = await submitContactCommit(request, token, url, {
+    phase: "commit",
+    operation_id: operationId,
+    idempotency_key: idempotencyKey,
+    reservation_handle: prepared.reservation_handle,
+    signed_event: signedEvent,
   });
   const accepted = await expectJsonOk<{
     status: "accepted" | "failed";
@@ -390,18 +437,12 @@ export async function respondContactArkret(
     ).toString("utf8"),
   ) as Record<string, unknown>;
   refreshEventEnvelopeProof(signedEvent);
-  const response = await request.post(url, {
-    headers: {
-      ...authHeaders(token, "POST", url),
-      "content-type": "application/json",
-    },
-    data: canonicalJson({
-      phase: "commit",
-      operation_id: operationId,
-      idempotency_key: nonce,
-      reservation_handle: prepared.reservation_handle,
-      signed_event: signedEvent,
-    }),
+  const response = await submitContactCommit(request, token, url, {
+    phase: "commit",
+    operation_id: operationId,
+    idempotency_key: nonce,
+    reservation_handle: prepared.reservation_handle,
+    signed_event: signedEvent,
   });
   const accepted = await expectJsonOk<Record<string, unknown>>(
     response,
@@ -534,21 +575,13 @@ export async function tombstoneContactArkret(
     ),
   ) as Record<string, unknown>;
   refreshEventEnvelopeProof(signedEvent);
-  const response = await request.post(url, {
-    headers: {
-      ...authHeaders(token, "POST", url),
-      "content-type": "application/json",
-    },
-    data: canonicalJson({
-      phase: "commit",
-      operation_id: operationId,
-      idempotency_key: nonce,
-      reservation_handle: prepare.reservation_handle,
-      signed_event: signedEvent,
-    }),
+  const response = await submitContactCommit(request, token, url, {
+    phase: "commit",
+    operation_id: operationId,
+    idempotency_key: nonce,
+    reservation_handle: prepare.reservation_handle,
+    signed_event: signedEvent,
   });
-  if (response.ok()) {
-  }
   const accepted = await expectJsonOk<ContactTombstoneOutcome>(
     response,
     `tombstone contact ${contact}`,
