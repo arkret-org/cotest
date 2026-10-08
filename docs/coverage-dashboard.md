@@ -7,7 +7,7 @@ This static inventory does not claim runtime verification; use an Arkret Joint P
 |---|---:|---:|---:|---:|
 | UJ-A - First login and multi-device recovery | 33 | 33 | 100.0% | 0 |
 | UJ-B - Workspace creation, invites, and archive visibility | 17 | 17 | 100.0% | 0 |
-| UJ-C - Daily messaging, edits, reactions, receipts, and mentions | 41 | 41 | 100.0% | 0 |
+| UJ-C - Daily messaging, edits, reactions, receipts, and mentions | 42 | 42 | 100.0% | 0 |
 | UJ-D - Encrypted realm lifecycle and cross-device decrypt | 6 | 6 | 100.0% | 0 |
 | UJ-E - Federation and cross-domain collaboration | 20 | 20 | 100.0% | 0 |
 | UJ-F - Kanban collaboration and concurrent work | 45 | 45 | 100.0% | 0 |
@@ -49,6 +49,7 @@ This static inventory does not claim runtime verification; use an Arkret Joint P
 | messaging/chat-advanced | domain-fallback | 11 | 11 | 0 |
 | messaging/discussion-upgrade | domain-fallback | 9 | 9 | 0 |
 | messaging/read-receipts | domain-fallback | 13 | 13 | 0 |
+| messaging/timeline-history | domain-fallback | 1 | 1 | 0 |
 | messaging/triad-collaboration | domain-fallback | 6 | 6 | 0 |
 
 ## UJ-D - Encrypted realm lifecycle and cross-device decrypt
