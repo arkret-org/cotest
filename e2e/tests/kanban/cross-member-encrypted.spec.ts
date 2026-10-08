@@ -1405,13 +1405,26 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         const boardUrl = `/kanban/${realmId}/board/${boardId}`;
         if (cut === "quarantine_write_failure") {
           await creator.page.addInitScript(() => {
+            (window as any).__creatorQuarantineWriteCut = {
+              installed: false,
+              queryPresent: new URL(location.href).searchParams.has("creator-vault-write-cut"),
+              encryptCalls: 0,
+              vaultCalls: 0,
+              quarantineCalls: 0,
+            };
             if (!new URL(location.href).searchParams.has("creator-vault-write-cut")) return;
+            (window as any).__creatorQuarantineWriteCut.installed = true;
             const original = SubtleCrypto.prototype.encrypt;
             SubtleCrypto.prototype.encrypt = async function(algorithm, key, data) {
+              (window as any).__creatorQuarantineWriteCut.encryptCalls += 1;
               const bytes = ArrayBuffer.isView(data) ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength) : new Uint8Array(data);
               let value: Record<string, any> | undefined;
               try { value = JSON.parse(new TextDecoder().decode(bytes)); } catch { /* unrelated encryption */ }
+              if (Array.isArray(value?.creator_bootstrap_records)) {
+                (window as any).__creatorQuarantineWriteCut.vaultCalls += 1;
+              }
               if (value?.creator_bootstrap_records?.some((record: Record<string, any>) => record.state === "quarantined")) {
+                (window as any).__creatorQuarantineWriteCut.quarantineCalls += 1;
                 (window as any).__creatorQuarantineWriteFailed = true;
                 throw new DOMException("creator quarantine durable write cut", "OperationError");
               }
@@ -1465,7 +1478,11 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
       const safeStatus = retryStatus.filter((text) =>
         !/bearer |recovery_key|mnemonic|access_token|dpop:|eyJ[A-Za-z0-9_-]+\./i.test(text));
       await testInfo.attach("safe-creator-failure-coordinates", { contentType: "application/json",
-        body: JSON.stringify({ cut, retryStatus: safeStatus, records: records.map((record) => ({
+        body: JSON.stringify({ cut, retryStatus: safeStatus,
+          quarantineWriteCut: cut === "quarantine_write_failure"
+            ? await creator.page.evaluate(() => (window as any).__creatorQuarantineWriteCut ?? null).catch(() => null)
+            : undefined,
+          records: records.map((record) => ({
           scope: record.intent.effective_scope, state: record.state,
           rejectionReason: record.rejection?.reason_code,
           quarantineReason: record.diagnostic?.reason_code,
