@@ -8,6 +8,7 @@
 // skipped every profile and petname assertion with it.
 
 import { expect, test } from "../../helpers/arkret-test";
+import type { APIRequestContext, APIResponse } from "@playwright/test";
 import {
   contactRow,
   requestContactArkret,
@@ -36,6 +37,69 @@ import {
 function preparedEventId(submission: Record<string, unknown>): string {
   const event = submission.event as Record<string, unknown>;
   return String(event.event_id);
+}
+
+// Lose the caller's first successful commit response after the real Station
+// has persisted it. Exact replay must recover its original durable outcome.
+function loseFirstContactCommitResponse(request: APIRequestContext) {
+  let originalOutcome: string | undefined;
+  let lostAt: number | undefined;
+  let replayAt: number | undefined;
+  const commitBytes: string[] = [];
+  const replayingRequest = new Proxy(request, {
+    get(target, property) {
+      if (property !== "post") {
+        const value = Reflect.get(target, property);
+        return typeof value === "function" ? value.bind(target) : value;
+      }
+      return async (...args: Parameters<APIRequestContext["post"]>) => {
+        const [url, options] = args;
+        const isCommit = url.endsWith("/_arkret/self/contacts/request") &&
+          typeof options?.data === "string" &&
+          JSON.parse(options.data).phase === "commit";
+        if (isCommit) {
+          commitBytes.push(options!.data as string);
+          if (lostAt !== undefined && replayAt === undefined) replayAt = Date.now();
+        }
+        const response = await target.post(...args);
+        if (!isCommit || !response.ok() || originalOutcome !== undefined) {
+          return response;
+        }
+        originalOutcome = await response.text();
+        lostAt = Date.now();
+        const problem = {
+          type: "https://arkret.org/problems/temporarily_unavailable",
+          title: "Temporary contact response loss",
+          status: 503,
+          detail: "The committed Contact outcome is temporarily unavailable to this caller.",
+        };
+        return new Proxy(response, {
+          get(saved, member) {
+            if (member === "status") return () => 503;
+            if (member === "ok") return () => false;
+            if (member === "json") return async () => problem;
+            if (member === "text") return async () => JSON.stringify(problem);
+            if (member === "headers") return () => ({
+              "content-type": "application/problem+json",
+              "retry-after": "0",
+            });
+            const value = Reflect.get(saved, member);
+            return typeof value === "function" ? value.bind(saved) : value;
+          },
+        });
+      };
+    },
+  });
+  return {
+    request: replayingRequest,
+    async assertExactRecovery(response: APIResponse) {
+      expect(originalOutcome !== undefined, "a real Contact commit was accepted before response loss").toBe(true);
+      expect(commitBytes.length, "the lost response causes an exact commit replay").toBeGreaterThanOrEqual(2);
+      expect(new Set(commitBytes).size, "all commit retries preserve the complete signed request bytes").toBe(1);
+      expect(replayAt! - lostAt!, "Retry-After zero does not shorten the first one-second backoff").toBeGreaterThanOrEqual(1_000);
+      expect(await response.text() === originalOutcome, "replay returns the original durable outcome bytes").toBe(true);
+    },
+  };
 }
 
 test.describe("contact confirmed display name", () => {
@@ -71,12 +135,14 @@ test.describe("contact confirmed display name", () => {
       // not create one: only the pair's founder authors the Direct
       // Conversation founding unit, and in the normal branch that founder is
       // the responder (contact-and-direct-conversation.md §5.2 / §5.5).
-      const { outcome } = await requestContactArkret(
-        request,
+      const lostContactResponse = loseFirstContactCommitResponse(request);
+      const { outcome, response: contactResponse } = await requestContactArkret(
+        lostContactResponse.request,
         aliceToken,
         bob.id,
         { requestedScopes: ["direct_message"] },
       );
+      await lostContactResponse.assertExactRecovery(contactResponse);
       await respondContactArkret(request, bobToken, {
         requestId: outcome.request_event_ref,
         requesterId: alice.id,
