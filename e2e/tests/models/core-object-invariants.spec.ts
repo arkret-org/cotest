@@ -14,9 +14,8 @@
 //   - models/views.md §2.2 (kind is response family), §6 / §6.3 (Board
 //     projection derived from query → contains → strand)
 //
-// Phases A and D are live. Phases B, C, and E are test.fixme: each pins a
-// registered spec contract, but still needs the corresponding sealing path,
-// reducer, or projection before promotion.
+// Phase B uses the ordinary data Event's explicit position CAS. Phase C
+// remains fixme until the live-dependent lifecycle path is verified.
 
 import { type APIRequestContext, expect, test } from "../../helpers/arkret-test";
 import { solandBaseUrl } from "../../helpers/env";
@@ -31,6 +30,7 @@ import {
   canonicalJson,
   canonicalTimestamp,
   createRealmApi,
+  rawSubmitSignedEventApi,
   retypeEventDerivedId,
   signedEventEnvelope,
   submitSignedEventApi,
@@ -219,17 +219,9 @@ test.describe("core object invariants", () => {
     }
   });
 
-  // ── Phase B — registered Control Move CAS.
-  // `ak.strand.update` is a data-plane Event in the event-kind registry and
-  // MUST NOT carry preconditions[] or seal_basis. The registered v1 CAS surface
-  // for this invariant is `ak.strand.move`: it writes the default-control-plane
-  // `ak.component.strand.position.v1:<board_space_id>:<strand_id>` sequenced state.
-  // A stale head_eq MUST reject the whole Move; a subsequent fresh Move from
-  // the same accepted position proves that the rejected effect did not land.
-  test.fixme(// @blocking-on: soland#accepted-control-move-seal-finalization
-  // @user-promise: e2e/scenarios/models/core-object-invariants.md (Phase B)
-  // @expected-live-by: 2026Q3
-  "Phase B — stale ak.strand.move head_eq rejects atomically; the same seal basis admits a fresh position CAS", async ({
+  // realm-and-space section 3.6: ordinary moves have an optional complete
+  // expected_position; they carry neither head_eq nor a sealing basis.
+  test("Phase B — stale ak.strand.move expected_position rejects with zero writes; fresh position CAS succeeds", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -248,11 +240,30 @@ test.describe("core object invariants", () => {
       realmId,
       `core-invariants strand ${stamp}`,
     );
-    const boardSpaceId = typedId("space");
-    const sourceListId = typedId("space");
-    const staleExpectedListId = typedId("space");
-    const targetListId = typedId("space");
-    const positionCell = `ak:cell:ak.component.strand.position.v1:${boardSpaceId}:${strandId}`;
+    const createSpace = async (kind: "board" | "list", title: string, parentSpaceId?: string) => {
+      const createdAt = canonicalTimestamp();
+      const event = signedEventEnvelope({
+        actorId: alice.id,
+        realmId,
+        kind: "ak.space.create",
+        createdAt,
+        payload: { object: {
+          schema: "ak.schema.space.v1",
+          realm_id: realmId,
+          kind,
+          title,
+          ...(parentSpaceId ? { parent_space_id: parentSpaceId, rank: "m" } : {}),
+          created_by: accountActorId(alice.id),
+          created_at: createdAt,
+        } },
+      });
+      await submitSignedEventApi(request, aliceToken, event, { context: `create CAS ${kind}` });
+      return retypeEventDerivedId(String(event.event_id), "space");
+    };
+    const boardSpaceId = await createSpace("board", `CAS board ${stamp}`);
+    const sourceListId = await createSpace("list", `CAS source ${stamp}`, boardSpaceId);
+    const staleExpectedListId = await createSpace("list", `CAS wrong preimage ${stamp}`, boardSpaceId);
+    const targetListId = await createSpace("list", `CAS target ${stamp}`, boardSpaceId);
 
     const initialHead = await fetchRealmCommitHead(
       request,
@@ -271,6 +282,8 @@ test.describe("core object invariants", () => {
         rank: "m",
       },
     });
+    expect(initialMove.preconditions).toBeUndefined();
+    expect(initialMove.seal_basis).toBeUndefined();
     await submitSignedEventApi(request, aliceToken, initialMove, {
       context: "establish initial Strand position",
     });
@@ -300,14 +313,8 @@ test.describe("core object invariants", () => {
         expected_position: { list_space_id: staleExpectedListId, rank: "m" },
       },
     });
-    const staleMove = await request.post(
-      `${solandBaseUrl()}/_arkret/self/events`,
-      {
-        headers: authHeaders(aliceToken, "POST", `${solandBaseUrl()}/_arkret/self/events`),
-        data: { event: staleMoveEnvelope },
-      },
-    );
-    expect(staleMove.status()).toBe(409);
+    const staleMove = await rawSubmitSignedEventApi(request, aliceToken, staleMoveEnvelope);
+    expect(staleMove.status(), await staleMove.text()).toBe(409);
     expect(wireErrCode(await staleMove.json())).toBe("failed_precondition");
 
     const headAfterReject = await fetchRealmCommitHead(
@@ -332,6 +339,40 @@ test.describe("core object invariants", () => {
     await submitSignedEventApi(request, aliceToken, freshMove, {
       context: "fresh Strand position CAS after stale rejection",
     });
+    const headAfterFresh = await fetchRealmCommitHead(request, aliceToken, realmId);
+    expect(headAfterFresh).not.toEqual(acceptedHead);
+
+    // The accepted fresh move really replaced the durable position. A stale
+    // old preimage still refuses without advancing the stream; the new full
+    // preimage admits a return move, not just a receipt-only happy path.
+    const returnMove = (expectedPosition: { list_space_id: string; rank: string }) =>
+      signedEventEnvelope({
+        actorId: alice.id,
+        realmId,
+        kind: "ak.strand.move",
+        payload: {
+          board_space_id: boardSpaceId,
+          strand_id: strandId,
+          target_space_id: sourceListId,
+          rank: "n",
+          expected_position: expectedPosition,
+        },
+      });
+    const staleReturn = returnMove(initialPosition);
+    const rejectedReturn = await rawSubmitSignedEventApi(request, aliceToken, staleReturn);
+    expect(rejectedReturn.status(), await rejectedReturn.text()).toBe(409);
+    expect(wireErrCode(await rejectedReturn.json())).toBe("failed_precondition");
+    expect(await fetchRealmCommitHead(request, aliceToken, realmId)).toEqual(headAfterFresh);
+    const freshReturn = returnMove({ list_space_id: targetListId, rank: "z" });
+    await submitSignedEventApi(request, aliceToken, freshReturn, {
+      context: "current position CAS returns to the source List",
+    });
+    const scan = await scanRealmStreamApi(request, aliceToken, realmId);
+    const acceptedMoves = scan.events.filter(event => event.kind === "ak.strand.move");
+    expect(acceptedMoves.map(event => event.event_id)).toEqual([
+      initialMove.event_id, freshMove.event_id, freshReturn.event_id,
+    ]);
+    expect(scan.events.some(event => [staleMoveEnvelope.event_id, staleReturn.event_id].includes(event.event_id))).toBe(false);
   });
 
   // ── Phase C — Cascade / archive / delete.

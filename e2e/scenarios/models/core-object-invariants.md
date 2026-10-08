@@ -5,7 +5,7 @@
 验证 Arkret 协作图 **所有 canonical object** 在线必须维持的五条核心不变量：
 
 1. **公共字段完整性** — 任何 durable Event 与 Materialized Object 在 wire 上 MUST 携带 `common-fields.md` §3 列出的公共字段（`id` / typed prefix、`created_at`、actor 主体引用、`lifecycle_state` 等价物），不允许在 happy-path serializer 上"省略"以节省字节。
-2. **Patch precondition (CAS)** — 任何携带 `preconditions[].head_eq` 的 Move/patch 在 pre-state 与 actor 声明值不一致时 MUST `failed_precondition`，并且 **不得** 对目标 cell 执行 `effects[]`（不能"先写后报错"）。
+2. **位置前像 CAS** — `ak.strand.move` 是普通数据 Event；可选 `expected_position` 必须完整匹配当前 `{list_space_id, rank}`，不匹配时 MUST `failed_precondition` 且零写入，不推进 stream head。不得附加 `head_eq`、`seal_basis` 或 producer-authored effects。
 3. **Cascade / archive / delete** — Realm/Space lifecycle event 在 archive / tombstone / destroy 时 MUST 按 `realm-and-space.md` §2.5.1 / §3.4 的级联规则处理 child resource：`ak.space.archive` 不自动级联子 Space，`ak.space.tombstone` 在 live 子结构存在时 MUST `failed_precondition`，`ak.realm.destroy` 后 child Space 进入 `realm_destroyed_orphan` locked projection。
 4. **Relation 基数** — 在已注册了 `max_to_per_from=1` 等基数约束的 `relation_kind`（典型：`has_default_view`、单负责人 `assigned_to`）上写入第二条同源 active edge 时，reducer MUST 关闭旧 edge 或返回 `failed_precondition`；同 `(realm_id, relation_kind, from_ref, to_ref)` 重复写入 MUST 幂等去重。
 5. **View projection fallback** — 请求一个 Space / Board 未显式声明的 View 时，server MUST 按 `views.md` §6 的派生规则返回**默认 view projection**（`kind="collection" + renderer="board"` 等响应族默认），而不是 404 — 让一个全新的 Space 在没有 user-defined View 时也能渲染。
@@ -67,29 +67,15 @@
    - `event_kind` — kind 字符串，标识 lifecycle 转换的来源
 5. 这一步是 spec §3 "所有 durable canonical object SHOULD 使用以下公共字段" 的最低 wire-level guard——若 soland serializer 把任何一项静默 drop，本步立刻 fail。
 
-### Phase B — 注册的 Control Move CAS fail（fixme，需要 accepted Move 的后续 Seal）
+### Phase B — 普通位置 Event 的显式 CAS（live）
 
-`ak.strand.update` 在 event-kind registry 中是 data-plane Event，不能携带
-`preconditions[]` 或 `seal_basis`。本 Phase 使用已注册的 control-plane
-`ak.strand.move` 写入 `ak.component.strand.position.v1` 的 `sequenced_state`。
+按 `realm-and-space.md` §3.6，position family 是 `strand_position:<board_space_id>:<strand_id>`，
+执行类别为 data，前像保护使用 payload 的可选完整 `expected_position`。
 
-6. **alice** 创建 Strand `F`，并准备 Board Space `B`、源 List `L1`、错误前像 List
-   `L_stale` 与目标 List `L2`。
-7. 查询 `QUERY /_arkret/self/seals/frontier`，以闭合 JSON body `{realm_id}` 取得当前 Realm Seal
-   view；提交完整 Control Move，把 position cell 从 `null` 写为
-   `{list_space_id:L1, rank:"m"}`：
-   - 顶层 `seal_basis={leaves}`；Seal 根仅存在于被引用的 Seal 上，由接收方解析叶子后重算；
-   - 顶层 `preconditions[].head_eq=null`；
-   - payload 为注册的 `ak.strand.move` closed shape；cell target/value 由 registry
-     从 `kind + payload` 推导，wire 不携带 producer-authored `effects[]`。
-8. 以新的 accepted Seal view 提交 stale Move：payload
-   `expected_position={space_id:L_stale,rank:"m"}`，顶层 `head_eq` 对应
-   `{list_space_id:L_stale,rank:"m"}`，effect 尝试写入
-   `{list_space_id:L2,rank:"z"}`。
-9. 断言 stale Move 返回 HTTP 412 +
-   `error_code="failed_precondition"`，Realm Seal frontier 未推进；随后使用同一 Seal basis
-   提交 fresh Move，其 `head_eq` 与 `{list_space_id:L1,rank:"m"}` 相等，并写入相同目标值。
-   断言 fresh Move 成功，同时证明 stale Move 没有局部应用 effect。
+6. **alice** 真实创建 Strand `F`、Board `B`、三个以 `B` 为 parent 的 List：源 `L1`、错误前像 `L_stale` 和目标 `L2`。所有 ID 从各自 accepted create Event 派生，不使用未创建的随机对象。
+7. 初次 `ak.strand.move` 省略 `from_space_id` 与 `expected_position`，把位置从 null 写为 `{list_space_id:L1,rank:"m"}`，验证 stream head 推进。Event 不携带 `preconditions` 或 `seal_basis`。
+8. 提交 `expected_position={list_space_id:L_stale,rank:"m"}` 的 move 到 `L2`：断言 HTTP409、`failed_precondition`，原 Realm stream head 不变。
+9. 使用完整正确前像 `{list_space_id:L1,rank:"m"}` 提交 move 到 `L2`、rank `z`，验证提交成功和 head 推进。再次以旧前像尝试返回 `L1`，断言失败且 head 不变；以新前像 `{list_space_id:L2,rank:"z"}` 返回 `L1` 则成功。独立认证 stream scan 必须恰有这三条 accepted move，且没有两条 rejected Event，证明拒绝零写入与成功位置耐久更新。
 
 ### Phase C — Cascade / archive / delete（fixme，需要 soland lifecycle reducer）
 
@@ -116,8 +102,7 @@
 
 - Phase A 步骤 3：`/_soland/self/spaces/${spaceId}` 返回 `space_id` / `owner` / `members` / `deleted` 四字段齐全
 - Phase A 步骤 4：`/_arkret/self/events?realms=${realmId}` 返回的 Space event item 含 `event_id` / `created_at` / `sender` / `event_kind` 四字段，且 `payload.space_id == spaceId`
-- Phase B 步骤 8-9：陈旧 position CAS 返回 `failed_precondition`、Seal frontier 不变，
-  随后的 fresh CAS 成功
+- Phase B 步骤 8-9：陈旧完整 position CAS 返回 HTTP409 `failed_precondition`、stream head 不变；正确前像成功，独立 scan 仅有三条 accepted move，无 rejected Event。
 - Phase C 步骤 11：archive 不级联子 Space
 - Phase C 步骤 12：存在 live 子结构时 tombstone MUST `space_has_live_dependents`
 - Phase C 步骤 14：tombstone 后普通 write 返回 `realm_terminal_state` / `space_already_terminal`
