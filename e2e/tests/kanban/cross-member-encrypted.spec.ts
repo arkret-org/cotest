@@ -1277,8 +1277,13 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
             expect(basis.session_grant_id).toBe(creatorSession.grantId);
             expect(basis.snapshot.realm_id).toBe(cutRealmId);
             expect(Number.isSafeInteger(basis.request_sequence)).toBe(true);
+            expect(basis.request_sequence).toBeGreaterThan(0);
           }
           expect(freshCut.session_epoch).toBe(rejectedCut.session_epoch);
+          expect(freshCut).not.toHaveProperty("current_assertion");
+          expect(freshCut.realm_genesis).toEqual(rejectedCut.realm_genesis);
+          expect(Date.parse(freshCut.snapshot.created_at))
+            .toBeGreaterThanOrEqual(Date.parse(rejectedCut.snapshot.created_at));
           // The sequence is consumer-local, not a cross-client clock.
           // SDK same_read compares this exact holder/session/read binding.
           expect(freshCut.request_sequence).not.toBe(rejectedCut.request_sequence);

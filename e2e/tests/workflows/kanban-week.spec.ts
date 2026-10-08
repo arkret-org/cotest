@@ -54,7 +54,7 @@ async function addCardThroughColumn(column: Locator, title: string): Promise<voi
     const saveButton = column.getByTestId("save-card-button").last();
     if (await saveButton.isEnabled({ timeout: 2_000 }).catch(() => false)) {
       try {
-        await saveButton.evaluate((button: HTMLButtonElement) => button.click());
+        await saveButton.click({ timeout: 30_000 });
         return;
       } catch (error) {
         if (await column.getByText(title, { exact: true }).isVisible({ timeout: 500 }).catch(() => false)) {

@@ -1582,14 +1582,14 @@ test.describe("applet inbound transaction push — per-delivery source signature
     const registryBase = requireMockAppletRegistry();
     const stamp = Date.now();
     const alice = uniqueUser(`applet-inbound-ok-${stamp}`);
-    await ensureRegistered(request, alice);
-    const token = await issueUserSession(request, alice);
-    const realmId = await createAppletInstallRealm(request, token, {
+    await test.step("inbound preparation: ensureRegistered", () => ensureRegistered(request, alice), { box: true });
+    const token = await test.step("inbound preparation: token", () => issueUserSession(request, alice), { box: true });
+    const realmId = await test.step("inbound preparation: realmId", () => createAppletInstallRealm(request, token, {
       title: `applet inbound signed ${stamp}`,
       discoverability: "listed",
       history_access: "since_join",
-    });
-    const signed = await signPackage(request, registryBase, {
+    }), { box: true });
+    const signed = await test.step("inbound preparation: signed", () => signPackage(request, registryBase, {
       package_id: `package:bridge:inbound-${stamp}`,
       namespace: `bridge.inbound.${stamp}`,
       capabilities: ["ak.message.create", "ak.applet.bridge_error"],
@@ -1597,24 +1597,24 @@ test.describe("applet inbound transaction push — per-delivery source signature
         kind: "http_message_signature",
         accepted_signature_algorithms: ["ed25519"],
       },
-    });
+    }), { box: true });
     const sourceServiceId = signed.applet_package.service_id;
-    const registration = await installApplet(
+    const registration = await test.step("inbound preparation: registration", () => installApplet(
       request,
       token,
       signed,
       realmId,
       `inbound-install-${stamp}`,
-    );
-    const botGrantRef = await grantManagedActorActions(
+    ), { box: true });
+    const botGrantRef = await test.step("inbound preparation: botGrantRef", () => grantManagedActorActions(
       request,
       token,
       signed,
       realmId,
       registration.bot_actor_id,
       ["ak.message.create"],
-    );
-    await admitManagedActorByInvite({
+    ), { box: true });
+    await test.step("inbound preparation: admitManagedActorByInvite", () => admitManagedActorByInvite({
       request,
       token,
       signed,
@@ -1622,8 +1622,8 @@ test.describe("applet inbound transaction push — per-delivery source signature
       actorId: registration.bot_actor_id,
       authorizationRef: botGrantRef,
       idempotencyKey: `inbound-bot-join-${stamp}`,
-    });
-    const strandId = await resolveDefaultStrandId(request, token, realmId);
+    }), { box: true });
+    const strandId = await test.step("inbound preparation: strandId", () => resolveDefaultStrandId(request, token, realmId), { box: true });
     // Freeze the ordinary Event basis only after installation grants, membership,
     // and the target Strand have reached accepted control finality.
 
@@ -1643,7 +1643,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
     });
     const targetUri = `${solandBaseUrl()}${TRANSACTIONS_PATH}`;
     const deliveryCreated = Math.floor(Date.now() / 1000);
-    const resp = await request.post(targetUri, {
+    const resp = await test.step("inbound preparation: resp", () => request.post(targetUri, {
       headers: {
         ...authHeaders(token, "POST", targetUri),
         ...signedAppletTransactionHeaders({
@@ -1661,8 +1661,8 @@ test.describe("applet inbound transaction push — per-delivery source signature
         }),
       },
       data: canonicalJson(body),
-    });
-    const responseText = await resp.text();
+    }), { box: true });
+    const responseText = await test.step("inbound preparation: responseText", () => resp.text(), { box: true });
     expect(resp.status(), responseText).toBe(200);
     const outcome = JSON.parse(responseText) as {
       status: "accepted" | "partial" | "rejected";
@@ -1676,7 +1676,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
     expect(outcome.committed_event_refs?.map((ref) => ref.event_id)).toEqual([
       body.events[0].event_id,
     ]);
-    const timeline = await queryRealmEventsApi(request, token, realmId);
+    const timeline = await test.step("inbound preparation: timeline", () => queryRealmEventsApi(request, token, realmId), { box: true });
     const accepted = (timeline.events as Array<Record<string, unknown>>).find(
       (event) => event.event_id === body.events[0].event_id,
     );
@@ -1701,10 +1701,10 @@ test.describe("applet inbound transaction push — per-delivery source signature
       }),
       data: canonicalJson(payload),
     });
-    const retry = await deliver(body, `inbound-event-retry-${stamp}`);
+    const retry = await test.step("inbound preparation: retry", () => deliver(body, `inbound-event-retry-${stamp}`), { box: true });
     expect(retry.status(), await retry.text()).toBe(200);
     expect((await retry.json()).status).toBe("accepted");
-    const transactionRetry = await deliver(body, idempotencyKey);
+    const transactionRetry = await test.step("inbound preparation: transactionRetry", () => deliver(body, idempotencyKey), { box: true });
     expect(transactionRetry.status(), await transactionRetry.text()).toBe(200);
     expect(await transactionRetry.json()).toEqual(JSON.parse(responseText));
     // Only an exact retry preserves the verified producer proof. The same
@@ -1739,11 +1739,11 @@ test.describe("applet inbound transaction push — per-delivery source signature
       ...body,
       events: [{ ...previousUnsigned, proofs: [originalProducer] }],
     };
-    const legacy = await deliver(legacyCarrier, `inbound-legacy-proofs-${stamp}`);
-    const legacyText = await legacy.text();
+    const legacy = await test.step("inbound preparation: legacy", () => deliver(legacyCarrier, `inbound-legacy-proofs-${stamp}`), { box: true });
+    const legacyText = await test.step("inbound preparation: legacyText", () => legacy.text(), { box: true });
     expect(legacy.status(), legacyText).toBe(422);
     expect(wireErrCode(JSON.parse(legacyText))).toBe("schema_violation");
-    const after = await queryRealmEventsApi(request, token, realmId);
+    const after = await test.step("inbound preparation: after", () => queryRealmEventsApi(request, token, realmId), { box: true });
     const retained = (after.events as Array<Record<string, unknown>>).filter((event) => event.event_id === body.events[0].event_id);
     expect(retained).toHaveLength(1);
     expect(retained[0].producer_proof).toEqual(originalProducer);
@@ -1799,11 +1799,11 @@ test.describe("applet inbound transaction push — per-delivery source signature
         signed.service_signing_private_key,
       ),
     };
-    const serviceResponse = await deliver({ ...body, events: [serviceEvent] }, `inbound-service-self-${stamp}`);
-    const serviceResponseText = await serviceResponse.text();
+    const serviceResponse = await test.step("inbound preparation: serviceResponse", () => deliver({ ...body, events: [serviceEvent] }, `inbound-service-self-${stamp}`), { box: true });
+    const serviceResponseText = await test.step("inbound preparation: serviceResponseText", () => serviceResponse.text(), { box: true });
     expect(serviceResponse.status(), serviceResponseText).toBe(200);
     expect(JSON.parse(serviceResponseText).status, serviceResponseText).toBe("accepted");
-    const serviceHistory = await queryRealmEventsApi(request, token, realmId);
+    const serviceHistory = await test.step("inbound preparation: serviceHistory", () => queryRealmEventsApi(request, token, realmId), { box: true });
     const acceptedService = (serviceHistory.events as Array<Record<string, unknown>>).find((event) => event.event_id === serviceEvent.event_id);
     expect(acceptedService?.actor_id).toEqual(serviceActorId(sourceServiceId));
     expect(acceptedService?.executed_by).toBeUndefined();
@@ -1827,16 +1827,16 @@ test.describe("applet inbound transaction push — per-delivery source signature
       ),
     };
     let racingDelivery: ReturnType<typeof deliver> | undefined;
-    const revoked = await revokeAppletRuntime(request, token, alice.id, registration.applet_id, realmId, `inbound-revoke-${stamp}`, () => {
+    const revoked = await test.step("inbound preparation: revoked", () => revokeAppletRuntime(request, token, alice.id, registration.applet_id, realmId, `inbound-revoke-${stamp}`, () => {
       racingDelivery = deliver({ ...body, events: [next] }, `inbound-revoke-race-${stamp}`);
       return racingDelivery;
-    });
+    }), { box: true });
     expect(revoked.status).toBe("complete");
     expect(racingDelivery).toBeDefined();
-    const raceResponse = await racingDelivery!;
-    const raceText = await raceResponse.text();
+    const raceResponse = await test.step("inbound preparation: raceResponse", () => racingDelivery!, { box: true });
+    const raceText = await test.step("inbound preparation: raceText", () => raceResponse.text(), { box: true });
     const raceOutcome = JSON.parse(raceText);
-    const racedHistory = await queryRealmEventsApi(request, token, realmId);
+    const racedHistory = await test.step("inbound preparation: racedHistory", () => queryRealmEventsApi(request, token, realmId), { box: true });
     const racedEvents = racedHistory.events as Array<Record<string, unknown>>;
     const racedEvent = racedEvents.find((event) => event.event_id === next.event_id);
     if (raceResponse.status() === 200 && raceOutcome.status === "accepted") {
@@ -1871,8 +1871,8 @@ test.describe("applet inbound transaction push — per-delivery source signature
     };
     // After the revoke commits there is no active effective install: the
     // inbound delivery fails closed before Event admission (§7.3.1).
-    const afterRevoke = await deliver({ ...body, events: [fenced] }, `inbound-after-revoke-${stamp}`);
-    const afterRevokeText = await afterRevoke.text();
+    const afterRevoke = await test.step("inbound preparation: afterRevoke", () => deliver({ ...body, events: [fenced] }, `inbound-after-revoke-${stamp}`), { box: true });
+    const afterRevokeText = await test.step("inbound preparation: afterRevokeText", () => afterRevoke.text(), { box: true });
     expect(afterRevoke.status(), afterRevokeText).toBe(403);
     expect(wireErrCode(JSON.parse(afterRevokeText)), afterRevokeText).toBe(
       "applet_registration_unauthorized",
@@ -1883,11 +1883,11 @@ test.describe("applet inbound transaction push — per-delivery source signature
       ...fencedServiceUnsigned,
       producer_proof: appletEventProof(String(originalProducer.verification_method), fencedServiceUnsigned, signed.service_signing_private_key),
     };
-    const serviceAfterRevoke = await deliver({ ...body, events: [fencedService] }, `inbound-service-after-revoke-${stamp}`);
-    const serviceAfterRevokeText = await serviceAfterRevoke.text();
+    const serviceAfterRevoke = await test.step("inbound preparation: serviceAfterRevoke", () => deliver({ ...body, events: [fencedService] }, `inbound-service-after-revoke-${stamp}`), { box: true });
+    const serviceAfterRevokeText = await test.step("inbound preparation: serviceAfterRevokeText", () => serviceAfterRevoke.text(), { box: true });
     expect(serviceAfterRevoke.status(), serviceAfterRevokeText).toBe(403);
     expect(wireErrCode(JSON.parse(serviceAfterRevokeText)), serviceAfterRevokeText).toBe("applet_registration_unauthorized");
-    const historical = await queryRealmEventsApi(request, token, realmId);
+    const historical = await test.step("inbound preparation: historical", () => queryRealmEventsApi(request, token, realmId), { box: true });
     const historicalEvents = historical.events as Array<Record<string, unknown>>;
     expect(historicalEvents.find((event) => event.event_id === previousUnsigned.event_id)?.producer_proof).toEqual(originalProducer);
     expect(historicalEvents.some((event) => event.event_id === fenced.event_id)).toBe(false);

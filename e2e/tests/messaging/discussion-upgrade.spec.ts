@@ -183,33 +183,33 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
       ensureRegistered(request, alice),
       ensureRegistered(request, carol),
     ]);
-    const [aliceToken, carolToken] = await Promise.all([
+    const [aliceToken, carolToken] = await test.step("protocol stage: [aliceToken, carolToken]", () => Promise.all([
       issueUserSession(request, alice),
       issueUserSession(request, carol),
-    ]);
-    const realmId = await createSharedRealmViaApi(
+    ]), { box: true });
+    const realmId = await test.step("protocol stage: realmId", () => createSharedRealmViaApi(
       request,
       alice,
       aliceToken,
       carol,
       { title: `circle visibility ${stamp}`, historyAccess: "all_history_for_current_members" },
-    );
-    const publicStrandId = await createStrandViaApi(
+    ), { box: true });
+    const publicStrandId = await test.step("protocol stage: publicStrandId", () => createStrandViaApi(
       request,
       aliceToken,
       alice,
       realmId,
       "public visible F1",
-    );
-    const publicMessage = await createDiscussionMessageViaApi(
+    ), { box: true });
+    const publicMessage = await test.step("protocol stage: publicMessage", () => createDiscussionMessageViaApi(
       request,
       aliceToken,
       alice,
       realmId,
       publicStrandId,
       "realm-visible message",
-    );
-    const promoted = await promoteDiscussionToPrivateStrandViaApi(
+    ), { box: true });
+    const promoted = await test.step("protocol stage: promoted", () => promoteDiscussionToPrivateStrandViaApi(
       request,
       {
         alice,
@@ -220,21 +220,21 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
       },
       publicStrandId,
       { members: [alice] },
-    );
-    const privateMessage = await createDiscussionMessageViaApi(
+    ), { box: true });
+    const privateMessage = await test.step("protocol stage: privateMessage", () => createDiscussionMessageViaApi(
       request,
       aliceToken,
       alice,
       realmId,
       promoted.privateStrandId,
       "circle-private message",
-    );
+    ), { box: true });
 
-    const carolEvents = await listRealmEventsViaApi(
+    const carolEvents = await test.step("protocol stage: carolEvents", () => listRealmEventsViaApi(
       request,
       carolToken,
       realmId,
-    );
+    ), { box: true });
     const carolIds = carolEvents.map((event) => event.event_id);
     expect(carolIds).toContain(publicMessage.event_id);
     expect(carolIds).not.toContain(privateMessage.event_id);
@@ -270,7 +270,6 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
       promoted.privateStrandId,
       "private encrypted receipt target",
     );
-    const sentAt = new Date();
     const envelope = buildSignalEnvelope({
       actorId: fixture.bob.id,
       deviceId: fixture.bob.deviceId,
@@ -280,7 +279,6 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
         realm_id: fixture.realmId,
         circle_id: promoted.circleId,
       },
-      sentAt,
       plaintext: {
         kind: "ak.receipt.read",
         payload_sequence: Date.now(),

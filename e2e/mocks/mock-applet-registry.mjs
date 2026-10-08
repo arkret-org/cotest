@@ -1254,6 +1254,10 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
   res.end(JSON.stringify({ error: "not_found" }));
 }));
 
+// The runner owns this loopback server's lifetime. Avoid racing a reused
+// Playwright connection against Node's idle keep-alive expiry during the suite.
+// Request and header deadlines remain enforced by the HTTP server.
+server.keepAliveTimeout = 0;
 server.listen(port, "127.0.0.1", () => {
   const actual = server.address();
   console.error(
