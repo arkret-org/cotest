@@ -2165,6 +2165,9 @@ async function signPackage(
       ? (data.webhook_auth as Record<string, unknown>)
       : {};
   const response = await request.post(`${registryBase}/sign-package`, {
+    // Only this durable, keyed fixture operation can safely retry a reset.
+    headers: { "Idempotency-Key": typedId("operation") },
+    maxRetries: 1,
     data: {
       ...data,
       actor_namespace_pattern:

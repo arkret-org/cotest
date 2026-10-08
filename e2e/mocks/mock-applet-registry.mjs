@@ -199,6 +199,7 @@ const packagesByApplet = new Map(
 const managedActorAuthoringOutcomes = new Map(
   durableState.managedActorAuthoringOutcomes ?? [],
 );
+const signedPackageOutcomes = new Map(durableState.signedPackageOutcomes ?? []);
 let currentStationVerificationMethod = `${stationDid()}#notary-key`;
 const provisionedGhosts = new Map();
 
@@ -227,6 +228,7 @@ function persistDurableAuthoringState() {
     registryPrivateJwk: privateKey.export({ format: "jwk" }),
     packages,
     managedActorAuthoringOutcomes: [...managedActorAuthoringOutcomes],
+    signedPackageOutcomes: [...signedPackageOutcomes],
   };
   const temporary = `${durableStateFile}.${process.pid}.tmp`;
   writeFileSync(
@@ -264,6 +266,10 @@ function reloadDurableAuthoringState() {
   managedActorAuthoringOutcomes.clear();
   for (const [subject, outcome] of state.managedActorAuthoringOutcomes ?? []) {
     managedActorAuthoringOutcomes.set(subject, outcome);
+  }
+  signedPackageOutcomes.clear();
+  for (const [key, outcome] of state.signedPackageOutcomes ?? []) {
+    signedPackageOutcomes.set(key, outcome);
   }
 }
 
@@ -691,7 +697,7 @@ function serverBaseUrl() {
   return "http://127.0.0.1";
 }
 
-function signedPackage(body) {
+function prepareSignedPackage(body) {
   const namespace = body.namespace ?? body.metadata?.namespace ?? "bridge.demo";
   const safe = safeToken(namespace);
   const appletId =
@@ -856,7 +862,7 @@ function signedPackage(body) {
       jws,
     },
   };
-  packagesByApplet.set(appletId, {
+  const packageInfo = {
     appletId,
     appletPackage,
     botActorId: packageBase.bot_actor_id,
@@ -885,16 +891,18 @@ function signedPackage(body) {
           format: "jwk",
         })
       : developmentAppletPrivateKey(webhookAuth.key_ref),
-  });
-  persistDurableAuthoringState();
+  };
   // The caller derives epoch evidence from its formal DID operation and puts
   // it only in the signed registration Event. This response intentionally has
   // no evidence sibling or helper projection.
   return {
-    applet_package: appletPackage,
-    package_digest: packageDigest,
-    signing_did: registryDid,
-    service_id_document: serviceIdDocument,
+    packageInfo,
+    response: {
+      applet_package: appletPackage,
+      package_digest: packageDigest,
+      signing_did: registryDid,
+      service_id_document: serviceIdDocument,
+    },
   };
 }
 
@@ -959,7 +967,43 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
       res.end(JSON.stringify({ error: "missing_bot_actor_id" }));
       return;
     }
-    res.end(JSON.stringify(signedPackage(body)));
+    const key = req.headers["idempotency-key"];
+    if (key !== undefined && (typeof key !== "string" || key.length === 0)) {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: "invalid_idempotency_key" }));
+      return;
+    }
+    const requestDigest = canonicalHash(body);
+    const original = key ? signedPackageOutcomes.get(key) : undefined;
+    if (original) {
+      if (original.requestDigest !== requestDigest) {
+        res.statusCode = 409;
+        res.end(JSON.stringify({ error: "sign_package_idempotency_conflict" }));
+        return;
+      }
+      res.end(canonicalJson(original.response));
+      return;
+    }
+    const prepared = prepareSignedPackage(body);
+    const appletId = prepared.packageInfo.appletId;
+    const previous = packagesByApplet.get(appletId);
+    packagesByApplet.set(appletId, prepared.packageInfo);
+    if (key) signedPackageOutcomes.set(key, { requestDigest, response: prepared.response });
+    try {
+      // Package state and its exact replay result share one durable replacement.
+      persistDurableAuthoringState();
+    } catch (error) {
+      if (previous) packagesByApplet.set(appletId, previous);
+      else packagesByApplet.delete(appletId);
+      if (key) signedPackageOutcomes.delete(key);
+      throw error;
+    }
+    if (key && req.headers["x-cotest-drop-sign-package-response"] === "1") {
+      console.error("[mock-applet-registry] sign-package durable response deliberately lost");
+      res.destroy();
+      return;
+    }
+    res.end(canonicalJson(prepared.response));
     return;
   }
 
