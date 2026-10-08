@@ -298,6 +298,96 @@ async function assertE2eeStorageIsHardened(
   expect(persisted.encryptedSecureEntryCount).toBe(1);
 }
 
+type CreatorRecoveryProof = {
+  request: APIRequestContext;
+  session: DpopUserSession;
+  originalIntent: Record<string, any>;
+  submittedCreateIds: ReadonlySet<string>;
+  submittedGenesisIds: ReadonlySet<string>;
+};
+
+// Re-entering Kanban must finish the same durable creator recovery, not a new
+// attempt. Return only safe progress coordinates from the polling oracle.
+async function waitForOriginalCreatorReady(
+  page: Page,
+  realmId: string,
+  proof: CreatorRecoveryProof,
+  remaining: () => number,
+): Promise<void> {
+  await expect.poll(async () => {
+    const records = (await readCreatorRecords(page)).filter(record =>
+      record.intent.effective_scope.kind === "realm" && record.intent.effective_scope.realm_id === realmId);
+    expect(records.length, "one original creator record for the recovered Realm").toBe(1);
+    const record = records[0];
+    expect(canonicalJson(record.intent) === canonicalJson(proof.originalIntent),
+      "recovery must retain the complete original intent").toBe(true);
+    expect(proof.submittedCreateIds.size, "recovery must retain one original create identity").toBe(1);
+    expect(proof.submittedCreateIds.has(record.intent.scope_create_event_id)).toBe(true);
+    expect(["rejected", "superseded", "quarantined"].includes(record.state),
+      "successful response-loss recovery must not become terminal").toBe(false);
+    if (record.state !== "ready") return `creator:${String(record.state)}`;
+    const accepted = record.accepted_genesis;
+    const queued = record.queued_genesis;
+    const receipt = record.ready_receipt;
+    expect(Boolean(accepted && queued && receipt && record.governance_evidence && record.artifacts),
+      "ready must carry the complete committed recovery unit").toBe(true);
+    const genesis = accepted.accepted.event;
+    expect(genesis.kind).toBe("ak.mls.genesis");
+    expect(genesis.realm_id === realmId).toBe(true);
+    expect(canonicalJson(genesis) === canonicalJson(queued.signed_genesis.event)).toBe(true);
+    expect(canonicalJson(accepted.canonical_accepted_bytes) === canonicalJson(queued.canonical_signed_bytes)).toBe(true);
+    expect(accepted.accepted_bytes_digest === queued.canonical_bytes_digest).toBe(true);
+    expect(proof.submittedGenesisIds.size, "one original Genesis must reach authority submission").toBe(1);
+    expect(proof.submittedGenesisIds.has(genesis.event_id)).toBe(true);
+    expect(receipt.accepted_genesis_event_id === genesis.event_id).toBe(true);
+    expect(receipt.accepted_genesis_digest === accepted.accepted_bytes_digest).toBe(true);
+    expect(canonicalJson(receipt.immutable_genesis_binding) === canonicalJson(record.governance_evidence.governance_binding)).toBe(true);
+    expect(receipt.accepted_artifact_ref === genesis.event_id).toBe(true);
+    expect(record.artifacts.accepted_artifact_ref === genesis.event_id).toBe(true);
+    expect(receipt.ready_commit_position > 0 && receipt.ready_commit_position <= record.vault_commit_position).toBe(true);
+    const readyIndex = record.ready_index.filter((entry: Record<string, any>) => entry.effective_scope.realm_id === realmId);
+    expect(readyIndex.length).toBe(1);
+    expect(canonicalJson(readyIndex[0]) === canonicalJson(receipt)).toBe(true);
+    const winners = record.queue_items.filter((item: Record<string, any>) =>
+      item.submission.request.event?.kind === "ak.mls.genesis" && item.submission.request.event.realm_id === realmId);
+    expect(winners.length, "one original Genesis queue winner").toBe(1);
+    expect(winners[0].submission.event_id === genesis.event_id).toBe(true);
+    expect(winners[0].status).toBe("committed");
+    expect(canonicalJson(winners[0].submission.state.commit) === canonicalJson(accepted.accepted.commit)).toBe(true);
+    expect(Boolean(winners[0].settled_at)).toBe(true);
+
+    // Use the registered caller-visible snapshot, with each request bounded by
+    // the same readiness deadline instead of a nested independent retry budget.
+    const url = new URL(`${solandBaseUrl()}/_arkret/self/realm-state-snapshot/head`);
+    url.searchParams.set("realm_id", realmId);
+    const response = await proof.request.get(url.toString(), {
+      timeout: remaining(),
+      headers: selfPathGrantHeaders({ deviceKey: proof.session.deviceKey,
+        grantJwt: proof.session.grantJwt, method: "GET", url: url.toString() }),
+    });
+    if (response.status() === 503) {
+      const problem = await response.json();
+      expect(problem.type === "https://arkret.org/problems/realm_state_snapshot_unavailable",
+        "only the registered incomplete snapshot is retryable").toBe(true);
+      return "current:snapshot_pending";
+    }
+    expect(response.status(), "formal MLS current read must succeed").toBe(200);
+    const snapshot = await response.json();
+    const scope = { kind: "realm", realm_id: realmId };
+    const entries = (snapshot.current_state_entries ?? []).filter((entry: Record<string, any>) =>
+      entry.selector?.kind === "mls_group" && canonicalJson(entry.selector.scope_ref) === canonicalJson(scope));
+    expect(entries.length <= 1).toBe(true);
+    if (!entries.length) return "current:genesis_pending";
+    const current = entries[0].value;
+    expect(canonicalJson(current.effective_scope) === canonicalJson(scope)).toBe(true);
+    expect(current.epoch).toBe(0);
+    expect(current.genesis_event_ref === genesis.event_id).toBe(true);
+    expect(current.current_mls_commit_event_ref === genesis.event_id).toBe(true);
+    return "ready";
+  }, { timeout: remaining(), intervals: [250, 500, 1_000],
+    message: "original creator recovery and accepted Genesis must converge on the Kanban route" }).toBe("ready");
+}
+
 // Build an encrypted board + one list + one card (title only) and return the
 // board's ak:space: id so the invitee can deep-link straight to it. Mirrors the
 // proven flow in kanban/end-to-end.spec.ts and mls-group.spec.ts.
@@ -308,13 +398,25 @@ async function buildEncryptedBoardListCard(
   listTitle: string,
   cardTitle: string,
   createCard = true,
+  creatorRecoveryProof?: CreatorRecoveryProof,
 ): Promise<string> {
   await page.goto(`/kanban/${realmId}`, { waitUntil: "domcontentloaded" });
-  await expect(page.getByTestId("kanban-panel")).toBeVisible({
-    timeout: 120_000,
-  });
-  await page.getByTestId("new-board-toggle").click();
-  await page.getByTestId("new-board-title-input").fill(boardTitle);
+  const readinessDeadline = Date.now() + 120_000;
+  const remaining = () => {
+    const milliseconds = readinessDeadline - Date.now();
+    expect(milliseconds > 0, "the original Kanban readiness deadline expired").toBe(true);
+    return milliseconds;
+  };
+  await expect(page.getByTestId("kanban-panel")).toBeVisible({ timeout: remaining() });
+  if (creatorRecoveryProof) {
+    await waitForOriginalCreatorReady(page, realmId, creatorRecoveryProof, remaining);
+    await page.getByTestId("new-board-toggle").click({ timeout: remaining() });
+    await page.getByTestId("new-board-title-input").fill(boardTitle, { timeout: remaining() });
+    await expect(page.getByTestId("create-board-space-button")).toBeEnabled({ timeout: remaining() });
+  } else {
+    await page.getByTestId("new-board-toggle").click();
+    await page.getByTestId("new-board-title-input").fill(boardTitle);
+  }
   await page.getByTestId("create-board-space-button").click();
   await expect(page.getByTestId("kanban-empty-board")).toContainText(
     /No lists yet/,
@@ -1227,6 +1329,9 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         boardTitle,
         listTitle,
         cardTitle,
+        true,
+        loseCreateResponse ? { request, session: creatorSession, originalIntent: intentAtCut!,
+          submittedCreateIds, submittedGenesisIds } : undefined,
       );
       await addEncryptedDescription(
         creator.page,

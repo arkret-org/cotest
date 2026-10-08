@@ -22,6 +22,7 @@ import { solandBaseUrl } from "../../helpers/env";
 import type {
   ActorId,
   CommitStreamHead,
+  SpaceObject,
 } from "../../helpers/generated/spec-wire-objects";
 import { stepShot } from "../../helpers/screenshots";
 import {
@@ -458,6 +459,162 @@ test.describe("core object invariants", () => {
     const history = scan.events.filter(event => String(event.kind).startsWith("ak.space."));
     expect(history.map(event => event.event_id)).toEqual(accepted.map(event => event.event_id));
     expect(scan.events.some(event => rejected.some(refusedEvent => refusedEvent.event_id === event.event_id))).toBe(false);
+  });
+
+  // Space lifecycle preserves independently owned child/card state and history.
+  test("Phase C2 — archive preserves children; live dependencies block tombstone; explicit removal closes the parent", async ({ request }) => {
+    const stamp = Date.now();
+    const alice = uniqueUser(`s-coinv-c-${stamp}`);
+    await ensureRegistered(request, alice);
+    const token = await issueUserSession(request, alice);
+    const realmId = await createRealmApi(request, token, {
+      title: `core-invariants C ${stamp}`, ownerId: alice.id,
+    });
+    const envelope = (kind: string, payload: Record<string, unknown>) => signedEventEnvelope({
+      actorId: alice.id, realmId, kind, payload,
+    });
+    const submit = async (event: Record<string, unknown>, context: string) =>
+      await submitSignedEventApi(request, token, event, { context });
+    const createSpace = async (kind: "project" | "board" | "list", title: string, parent?: string) => {
+      const createdAt = canonicalTimestamp();
+      const object = {
+        schema: "ak.schema.space.v1", realm_id: realmId, kind, title,
+        ...(parent ? { parent_space_id: parent, rank: "m" } : {}),
+        created_by: accountActorId(alice.id), created_at: createdAt,
+      } satisfies SpaceObject;
+      const event = signedEventEnvelope({ actorId: alice.id, realmId,
+        kind: "ak.space.create", createdAt, payload: { object } });
+      await submit(event, `create lifecycle ${kind}`);
+      return retypeEventDerivedId(String(event.event_id), "space");
+    };
+    const parent = await createSpace("project", `Lifecycle parent ${stamp}`);
+    const board = await createSpace("board", `Lifecycle board ${stamp}`, parent);
+    const list = await createSpace("list", `Lifecycle source list ${stamp}`, board);
+    const otherList = await createSpace("list", `Lifecycle destination list ${stamp}`, board);
+    const strand = await createStrandApi(request, token, alice.id, realmId, `Lifecycle card ${stamp}`);
+    const move = envelope("ak.strand.move", {
+      board_space_id: board, strand_id: strand, target_space_id: list, rank: "m",
+    });
+    await submit(move, "establish live Strand placement");
+    const snapshotEntries = async () => {
+      const url = new URL(`${solandBaseUrl()}/_arkret/self/realm-state-snapshot/head`);
+      url.searchParams.set("realm_id", realmId);
+      const response = await request.get(url.toString(), {
+        headers: authHeaders(token, "GET", url.toString()),
+      });
+      expect(response.status(), await response.text()).toBe(200);
+      const body = await response.json() as Record<string, unknown>;
+      expect(Array.isArray(body.current_state_entries)).toBe(true);
+      return body.current_state_entries as Array<Record<string, unknown>>;
+    };
+    const entry = (entries: Array<Record<string, unknown>>, selector: Record<string, unknown>) => {
+      const matches = entries.filter(row => canonicalJson(row.selector) === canonicalJson(selector));
+      expect(matches).toHaveLength(1);
+      return matches[0];
+    };
+    const space = (id: string) => ({ kind: "space", space_id: id });
+    const card = { kind: "strand", strand_id: strand };
+    const position = { kind: "strand_position", board_space_id: board, strand_id: strand };
+    const beforeArchive = await snapshotEntries();
+    const originalBoard = entry(beforeArchive, space(board));
+    const originalList = entry(beforeArchive, space(list));
+    const originalCard = entry(beforeArchive, card);
+    const originalPlacement = entry(beforeArchive, position);
+    expect(originalPlacement.value).toEqual({ list_space_id: list, rank: "m" });
+    expect((originalCard.value as Record<string, unknown>).state).toBe("active");
+    const retry = async (event: Record<string, unknown>, accepted: Record<string, unknown>) => {
+      const beforeHead = await fetchRealmCommitHead(request, token, realmId);
+      const beforeRows = await snapshotEntries();
+      const outcome = await submit(event, `exact replay ${String(event.kind)}`);
+      expect(outcome.status).toBe("duplicate");
+      expect(outcome.commit).toEqual(accepted.commit);
+      expect(await fetchRealmCommitHead(request, token, realmId)).toEqual(beforeHead);
+      expect(await snapshotEntries()).toEqual(beforeRows);
+    };
+    const refuse = async (event: Record<string, unknown>, reason: string) => {
+      const beforeHead = await fetchRealmCommitHead(request, token, realmId);
+      const beforeRows = await snapshotEntries();
+      const result = await rawSubmitSignedEventApi(request, token, event);
+      expect(result.status(), await result.text()).toBe(409);
+      const problem = await result.json() as Record<string, unknown>;
+      expect(wireErrCode(problem)).toBe("failed_precondition");
+      expect(problem.reason_code).toBe(reason);
+      expect(await fetchRealmCommitHead(request, token, realmId)).toEqual(beforeHead);
+      expect(await snapshotEntries()).toEqual(beforeRows);
+      return String(event.event_id);
+    };
+    const archive = envelope("ak.space.archive", { space_id: parent });
+    const archiveOutcome = await submit(archive, "archive parent without cascade");
+    const archived = await snapshotEntries();
+    expect((entry(archived, space(parent)).value as Record<string, unknown>).state).toBe("archived");
+    expect(entry(archived, space(board))).toEqual(originalBoard);
+    expect(entry(archived, space(list))).toEqual(originalList);
+    expect(entry(archived, card)).toEqual(originalCard);
+    expect(entry(archived, position)).toEqual(originalPlacement);
+    await retry(archive, archiveOutcome);
+    const rejected = [await refuse(envelope("ak.space.tombstone", {
+      space_id: parent, reason: "nonterminal child Board",
+    }), "space_has_live_dependents")];
+    rejected.push(await refuse(envelope("ak.space.tombstone", {
+      space_id: list, reason: "live card placement",
+    }), "space_has_live_dependents"));
+    const restore = envelope("ak.space.restore", { space_id: parent });
+    const restoreOutcome = await submit(restore, "restore parent before explicit structural changes");
+    await retry(restore, restoreOutcome);
+    const moved = envelope("ak.strand.move", {
+      board_space_id: board, strand_id: strand, from_space_id: list,
+      target_space_id: otherList, rank: "n",
+      expected_position: { list_space_id: list, rank: "m" },
+    });
+    const moveOutcome = await submit(moved, "explicitly move card off the original List");
+    const afterMove = await snapshotEntries();
+    expect(entry(afterMove, card)).toEqual(originalCard);
+    const movedPlacement = entry(afterMove, position);
+    expect(movedPlacement.value).toEqual({ list_space_id: otherList, rank: "n" });
+    expect(movedPlacement.revision).not.toEqual(originalPlacement.revision);
+    expect((movedPlacement.revision as Record<string, unknown>).commit_id)
+      .toBe((moveOutcome.commit as Record<string, unknown>).commit_id);
+    await retry(moved, moveOutcome);
+    const childTerminal = envelope("ak.space.tombstone", { space_id: list });
+    const childOutcome = await submit(childTerminal, "tombstone the original empty List");
+    await retry(childTerminal, childOutcome);
+    const detached = envelope("ak.space.parent", {
+      space_id: board, parent_space_id: null, expected_parent_space_id: parent,
+    });
+    const detachOutcome = await submit(detached, "explicitly detach the live Board from its parent");
+    await retry(detached, detachOutcome);
+    const detachedRows = await snapshotEntries();
+    expect(entry(detachedRows, { kind: "space_parent", space_id: board }).value)
+      .toEqual({ parent_space_id: null });
+    expect(entry(detachedRows, position)).toEqual(movedPlacement);
+    expect(entry(detachedRows, card)).toEqual(originalCard);
+    const parentTerminal = envelope("ak.space.tombstone", { space_id: parent });
+    const parentOutcome = await submit(parentTerminal, "tombstone the explicitly emptied parent");
+    await retry(parentTerminal, parentOutcome);
+    const terminalRows = await snapshotEntries();
+    expect((entry(terminalRows, space(parent)).value as Record<string, unknown>).state).toBe("tombstoned");
+    expect((entry(terminalRows, space(list)).value as Record<string, unknown>).state).toBe("tombstoned");
+    expect(entry(terminalRows, position)).toEqual(movedPlacement);
+    expect(entry(terminalRows, card)).toEqual(originalCard);
+    rejected.push(await refuse(envelope("ak.space.restore", {
+      space_id: parent, reason: "fresh terminal restore",
+    }), "space_already_terminal"));
+    rejected.push(await refuse(envelope("ak.space.update", {
+      space_id: parent, patch: { title: { "$op": "set", value: "Cannot revive" } },
+    }), "space_not_active"));
+    rejected.push(await refuse(envelope("ak.strand.move", {
+      board_space_id: board, strand_id: strand, from_space_id: otherList,
+      target_space_id: list, rank: "z", expected_position: movedPlacement.value,
+    }), "space_not_active"));
+    const history = await scanRealmStreamApi(request, token, realmId);
+    expect(history.truncated).toBe(false);
+    expect(history.events.some(event => rejected.includes(String(event.event_id)))).toBe(false);
+    for (const [event, accepted] of [[archive, archiveOutcome], [restore, restoreOutcome],
+      [moved, moveOutcome], [detached, detachOutcome], [childTerminal, childOutcome],
+      [parentTerminal, parentOutcome]] as const) {
+      expect(history.events.filter(row => row.event_id === event.event_id)).toHaveLength(1);
+      expect(history.commits.filter(row => row.event_ref === event.event_id)).toEqual([accepted.commit]);
+    }
   });
 
   // ── Phase D — Relation primary conflict domain CAS (relation.md section 6).
