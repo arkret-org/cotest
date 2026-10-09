@@ -171,6 +171,7 @@ pub async fn run_account_blocklist_production_cases() -> Result<super::SuiteExec
         &[],
     )
     .await?;
+    server.assert_tls_trust_boundaries().await?;
     let did = actor_did_for_service_did(server.service_did(), "blocklist-holder")?;
     let holder = server
         .standard_client(&did, "ak:device:01904100-0000-7000-8000-0000000000a1")
@@ -411,6 +412,7 @@ pub async fn run_account_blocklist_production_cases() -> Result<super::SuiteExec
         "other Station mutated the first account"
     );
 
+    let _session = native_account_session(&holder).await?;
     private_account_catchup(&holder, &owner).await?;
     retained_shared_history(&server, &holder, &owner).await?;
 
@@ -654,6 +656,85 @@ pub async fn run_account_blocklist_case6_production() -> Result<super::CaseExecu
         .await
         .context("case 6 Contact, first-DM, CallInvite and peer response production legs")?;
     fixture_case_result(case)
+}
+
+async fn native_account_session(
+    client: &TestActorClient,
+) -> Result<inkson::conformance::NativeAccountSession> {
+    use arkret_models_collaboration::session_grants::{
+        SessionGrantValidationByJwt, SessionGrantValidationInput, SessionGrantValidationOutcome,
+    };
+    use base64::Engine as _;
+    let crate::harness::ClientSession::Canonical { grant, signing_key } = client.session() else {
+        bail!("native Account evidence requires an issuer-backed DPoP grant");
+    };
+    let description = client.sdk().describe().await?;
+    let authority = description
+        .auth_metadata
+        .account_authority
+        .context("fixture Account Authority")?;
+    let request = SessionGrantValidationInput::ByJwt(SessionGrantValidationByJwt {
+        grant_jwt: grant.clone(),
+        audience_id: Some(description.service_id.clone()),
+        proof: None,
+    });
+    // This is the deployment-private harness issuer, never a client-facing
+    // authentication route or a grant reconstructed from unverified JWT claims.
+    let result: SessionGrantValidationOutcome = reqwest::Client::new()
+        .post(format!(
+            "{}/_coauth/internal/session-grants/introspect",
+            authority.origin.as_str().trim_end_matches('/')
+        ))
+        .bearer_auth(crate::scenarios::identity_test_support::HARNESS_INTERNAL_AUTHORITY_SECRET)
+        .json(&request)
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    result.validate()?;
+    ensure!(
+        result.active && !result.proof_required && !result.one_time_use_consumed,
+        "fixture issuer did not confirm an active grant"
+    );
+    let metadata = result.grant.context("active fixture grant metadata")?;
+    let device = arkret_wire::DeviceId::new(client.device_id.clone())?;
+    ensure!(
+        metadata.account_id.principal_id.as_str() == actor_core_id(&client.actor)?
+            && metadata.account_id.station_id == description.service_id
+            && metadata.device_id.as_ref() == Some(&device),
+        "issuer grant differs from the actual native endpoint"
+    );
+    let seed = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(signing_key.to_bytes());
+    let jwk =
+        arkret_signatures::JsonWebKey::from_ed25519_verifying_key(&signing_key.verifying_key());
+    ensure!(
+        metadata.cnf_jkt == arkret_signatures::dpop::dpop_jwk_thumbprint(&jwk)?,
+        "issuer grant is bound to another DPoP holder"
+    );
+    let outcome = arkret_models_collaboration::session_grants::SessionGrantOutcome {
+        session_grant: grant.clone(),
+        session_grant_id: metadata.id,
+        session_public_key: metadata.session_public_key,
+        audience_id: metadata.audience_id,
+        granted_scope: metadata.scopes,
+        account_id: metadata.account_id,
+        device_id: Some(device),
+        expires_at: metadata.expires_at,
+        previous_session_grant_id: None,
+    };
+    let principal = client
+        .principal
+        .as_ref()
+        .context("native fixture lacks its accepted Device identity")?;
+    inkson::conformance::restore_native_account_session(
+        &outcome,
+        client.sdk().base_url().as_str(),
+        &seed,
+        &principal.did,
+        &principal.device_signing_key.to_bytes(),
+    )
+    .await
 }
 
 /// Exercise the ordinary Inkson Account projector and Garth subscription,

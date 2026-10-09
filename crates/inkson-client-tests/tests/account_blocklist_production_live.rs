@@ -3,6 +3,7 @@
 use anyhow::Result;
 
 #[test]
+#[serial_test::serial]
 fn blocklist_whole_value_cas_runs_through_http_and_postgres() -> Result<()> {
     const STACK_SIZE: usize = 32 * 1024 * 1024;
     std::thread::Builder::new()
@@ -42,6 +43,7 @@ async fn verify_blocklist_whole_value_cas() -> Result<()> {
 }
 
 #[test]
+#[serial_test::serial]
 fn blocklist_full_suite_runs_all_production_case_executors() -> Result<()> {
     let result = cotest_inkson_client_tests::conformance::run_account_blocklist_projection_suite()?;
     assert_eq!(result.cases.len(), 8);
@@ -50,6 +52,7 @@ fn blocklist_full_suite_runs_all_production_case_executors() -> Result<()> {
 }
 
 #[test]
+#[serial_test::serial]
 fn blocklist_real_call_invite_uses_accepted_ordinary_call_and_sealed_delivery() -> Result<()> {
     const STACK_SIZE: usize = 32 * 1024 * 1024;
     std::thread::Builder::new()
@@ -67,6 +70,7 @@ fn blocklist_real_call_invite_uses_accepted_ordinary_call_and_sealed_delivery() 
 }
 
 #[test]
+#[serial_test::serial]
 fn blocklist_case4_shared_realm_automatic_receipt_production_slice() -> Result<()> {
     const STACK_SIZE: usize = 32 * 1024 * 1024;
     std::thread::Builder::new()
@@ -86,6 +90,7 @@ fn blocklist_case4_shared_realm_automatic_receipt_production_slice() -> Result<(
 }
 
 #[test]
+#[serial_test::serial]
 fn blocklist_case4_combined_shared_history_and_receipt_slice() -> Result<()> {
     const STACK_SIZE: usize = 32 * 1024 * 1024;
     std::thread::Builder::new()
@@ -103,6 +108,7 @@ fn blocklist_case4_combined_shared_history_and_receipt_slice() -> Result<()> {
 }
 
 #[test]
+#[serial_test::serial]
 fn blocklist_case4_federated_ingress_keeps_private_value_at_holder() -> Result<()> {
     const STACK_SIZE: usize = 32 * 1024 * 1024;
     std::thread::Builder::new()
@@ -122,6 +128,7 @@ fn blocklist_case4_federated_ingress_keeps_private_value_at_holder() -> Result<(
 }
 
 #[test]
+#[serial_test::serial]
 fn blocklist_case4_full_fixture_runs_production_executor() -> Result<()> {
     const STACK_SIZE: usize = 32 * 1024 * 1024;
     std::thread::Builder::new()
@@ -148,6 +155,7 @@ fn blocklist_case4_full_fixture_runs_production_executor() -> Result<()> {
 }
 
 #[test]
+#[serial_test::serial]
 fn blocklist_case5_full_fixture_runs_production_executor() -> Result<()> {
     const STACK_SIZE: usize = 32 * 1024 * 1024;
     std::thread::Builder::new()
@@ -174,6 +182,7 @@ fn blocklist_case5_full_fixture_runs_production_executor() -> Result<()> {
 }
 
 #[test]
+#[serial_test::serial]
 fn blocklist_case6_contact_call_and_federation_combined_slice() -> Result<()> {
     const STACK_SIZE: usize = 32 * 1024 * 1024;
     std::thread::Builder::new()
@@ -191,6 +200,7 @@ fn blocklist_case6_contact_call_and_federation_combined_slice() -> Result<()> {
 }
 
 #[test]
+#[serial_test::serial]
 fn blocklist_case6_full_fixture_runs_production_executor() -> Result<()> {
     const STACK_SIZE: usize = 32 * 1024 * 1024;
     std::thread::Builder::new()
@@ -217,6 +227,7 @@ fn blocklist_case6_full_fixture_runs_production_executor() -> Result<()> {
 }
 
 #[test]
+#[serial_test::serial]
 fn blocklist_case6_cross_station_contact_first_dm_private_boundary_slice() -> Result<()> {
     const STACK_SIZE: usize = 32 * 1024 * 1024;
     std::thread::Builder::new()
@@ -236,6 +247,7 @@ fn blocklist_case6_cross_station_contact_first_dm_private_boundary_slice() -> Re
 }
 
 #[test]
+#[serial_test::serial]
 fn blocklist_dm_binding_signed_snapshot_is_participant_only() -> Result<()> {
     const STACK_SIZE: usize = 32 * 1024 * 1024;
     std::thread::Builder::new()
@@ -255,6 +267,7 @@ fn blocklist_dm_binding_signed_snapshot_is_participant_only() -> Result<()> {
 }
 
 #[test]
+#[serial_test::serial]
 fn blocklist_dm_retained_message_automatic_receipt_production_slice() -> Result<()> {
     const STACK_SIZE: usize = 32 * 1024 * 1024;
     std::thread::Builder::new()
@@ -274,6 +287,7 @@ fn blocklist_dm_retained_message_automatic_receipt_production_slice() -> Result<
 }
 
 #[test]
+#[serial_test::serial]
 fn blocklist_case5_dm_history_restores_but_contact_terminal_does_not_backfill() -> Result<()> {
     const STACK_SIZE: usize = 32 * 1024 * 1024;
     std::thread::Builder::new()
@@ -293,6 +307,7 @@ fn blocklist_case5_dm_history_restores_but_contact_terminal_does_not_backfill() 
 }
 
 #[test]
+#[serial_test::serial]
 fn blocklist_contact_first_dm_pending_request_is_delivered_then_filtered_locally() -> Result<()> {
     const STACK_SIZE: usize = 32 * 1024 * 1024;
     std::thread::Builder::new()
