@@ -1,4 +1,4 @@
-import { expect, type APIRequestContext, type Browser } from "./arkret-test";
+import { expect, test, type APIRequestContext, type Browser } from "./arkret-test";
 import type { JointUsersFixture } from "./joint-fixture";
 import { coauthBaseUrl, solandBaseUrl } from "./env";
 import { serverLoginViaCoauth, submitCoauthPasswordCredentials } from "./real-oidc-login";
@@ -89,8 +89,36 @@ export async function openAndPairSecondController(
     await device.acknowledgeRecommendedEncryptionPromptIfVisible(30_000);
     return { page: device, ...identity };
   } catch (error) {
+    // Capture public browser coordination state without tokens or page content.
+    try {
+      const locks = await device.page.evaluate(async () => {
+        const snapshot = await navigator.locks.query();
+        const writerLocks = (entries: LockInfo[] | undefined) =>
+          (entries ?? []).filter(({ name }) => name === "inkson:web-writer:v1")
+            .map(({ name, mode, clientId }) => ({ name, mode, clientId }));
+        return {
+          held: writerLocks(snapshot.held),
+          pending: writerLocks(snapshot.pending),
+          follower: document.querySelector('[data-testid="web-leader-follower"]') !== null,
+          navigationType: (performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined)?.type,
+        };
+      });
+      const pages = device.page.context().pages().map((page) => {
+        const url = new URL(page.url());
+        return {
+          origin: url.origin,
+          route: ["/", "/login", "/auth/callback"].includes(url.pathname)
+            ? url.pathname : "[other]",
+        };
+      });
+      await test.info().attach("paired-controller-browser-coordination", {
+        body: JSON.stringify({ locks, pages }, null, 2),
+        contentType: "application/json",
+      });
+    } catch {
+      // A closed document must not replace the original pairing failure.
+    }
     await device.close();
     throw error;
   }
 }
-
