@@ -1842,7 +1842,7 @@ fn event_digest(event: &Value, _mode: EventDigestMode) -> Result<String> {
 }
 
 fn development_event_signing_key(verification_method: &str) -> SigningKey {
-    arkret_signatures::development_signing_key(verification_method)
+    arkret_test_kit::development_signing_key(verification_method)
 }
 
 #[cfg(test)]

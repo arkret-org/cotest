@@ -288,7 +288,7 @@ fn test_principal_root_key_seed(actor: &str) -> Result<[u8; 32]> {
 /// name the same key.
 pub fn founding_device_signing_key(actor: &str, device_id: &str) -> SigningKey {
     let method = crate::fixture_did_url(format!("{actor}#{device_id}"));
-    SigningKey::from_bytes(&arkret::signatures::development_signing_key_seed(&method))
+    SigningKey::from_bytes(&arkret_test_kit::development_signing_key_seed(&method))
 }
 
 /// How the canonical actor bootstrap opens its first session.

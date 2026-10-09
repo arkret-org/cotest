@@ -36,6 +36,7 @@ arkret-models-crypto = { workspace = true }
 arkret-models-identity = { workspace = true }
 arkret-schema = { workspace = true }
 arkret-signatures = { workspace = true }
+arkret-test-kit = { workspace = true }
 arkret-wire = { workspace = true, features = ["test-support"] }
 base64 = { workspace = true }
 bip39 = { workspace = true }

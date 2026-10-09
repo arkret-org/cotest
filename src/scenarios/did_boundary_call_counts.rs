@@ -327,7 +327,7 @@ pub async fn unknown_issuer_fails_closed_run() -> Result<()> {
         &realm_id,
         "ak.message.create",
         crate::harness::message_create_text_payload(&strand_id, "from an unknown issuer")?,
-        arkret::signatures::development_signing_key_seed(&foreign_method),
+        arkret_test_kit::development_signing_key_seed(&foreign_method),
         &foreign_method,
     );
 
