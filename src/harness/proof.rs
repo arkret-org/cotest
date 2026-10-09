@@ -102,7 +102,7 @@ pub fn refresh_typed_event_proof(event: &mut arkret_wire::Event) -> Result<()> {
     let signing_seed =
         super::event_builder::registered_event_signing_seed(signer, &verification_method)
             .unwrap_or_else(|| {
-                arkret::signatures::development_signing_key_seed(&verification_method)
+                arkret_test_kit::keys::development_signing_key_seed(&verification_method)
             });
     refresh_typed_event_proof_with_signing_seed(event, signing_seed)
 }

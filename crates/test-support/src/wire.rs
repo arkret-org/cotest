@@ -1842,7 +1842,7 @@ fn event_digest(event: &Value, _mode: EventDigestMode) -> Result<String> {
 }
 
 fn development_event_signing_key(verification_method: &str) -> SigningKey {
-    arkret_signatures::development_signing_key(verification_method)
+    arkret_test_kit::keys::development_signing_key(verification_method)
 }
 
 #[cfg(test)]
@@ -2095,11 +2095,11 @@ mod tests {
 
         assert_eq!(
             development_event_signing_key(method).verifying_key(),
-            arkret_signatures::development_verifying_key(method)
+            arkret_test_kit::keys::development_verifying_key(method)
         );
         assert_ne!(
             development_event_signing_key(method).verifying_key(),
-            arkret_signatures::development_verifying_key(
+            arkret_test_kit::keys::development_verifying_key(
                 "did:webvh:z6mkfixture:alice.example#other-device"
             )
         );
