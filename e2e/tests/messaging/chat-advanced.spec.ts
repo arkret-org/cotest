@@ -76,6 +76,54 @@ async function sendChat(page: JointUserPage, realmId: string, body: string) {
   ).toBeVisible({ timeout: 30_000 });
 }
 
+// Local holder diagnostics only; never substitute these for authority proof.
+async function reactionProjectionDiagnostic(page: JointUserPage, realmId: string) {
+  return page.page.evaluate(async realm => {
+    const result = <T>(request: IDBRequest<T>): Promise<T> => new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const db = await result(indexedDB.open("inkson.secret.inkson", 1));
+    try {
+      const tx = db.transaction(["entries", "wrapping_keys"], "readonly");
+      const [key, names, encrypted] = await Promise.all([
+        result(tx.objectStore("wrapping_keys").get("primary")) as Promise<CryptoKey>,
+        result(tx.objectStore("entries").getAllKeys()),
+        result(tx.objectStore("entries").getAll()),
+      ]);
+      if (!key || key.extractable) throw new Error("non-extractable wrapping key unavailable");
+      const diagnostics = [];
+      for (let index = 0; index < names.length; index += 1) {
+        if (!String(names[index]).startsWith("inkson.local_state.v1.account.")) continue;
+        const entry = encrypted[index] as { iv: Uint8Array; ct: Uint8Array };
+        const plaintext = await crypto.subtle.decrypt(
+          { name: "AES-GCM", iv: Uint8Array.from(entry.iv).buffer }, key, Uint8Array.from(entry.ct).buffer,
+        );
+        const state = JSON.parse(new TextDecoder().decode(plaintext));
+        const matches = (ref: Record<string, unknown>) => ref?.realm_id === realm;
+        const messages = (state.verified_message_commits ?? []).filter(
+          (row: Record<string, any>) => matches(row.accepted_ref?.stream_ref),
+        ).map((row: Record<string, any>) => ({
+          accepted_ref: row.accepted_ref, scope_ref: row.scope_ref,
+        }));
+        const reactions = (state.verified_reaction_assertions ?? []).filter(
+          (row: Record<string, any>) => row.event?.realm_id === realm,
+        ).map((row: Record<string, any>) => ({
+          accepted_ref: row.accepted_ref, kind: row.event.kind,
+          target_ref: row.event.payload?.target_ref, scope_ref: row.event.scope_ref,
+        }));
+        const prefixes = Object.values(state.verified_poll_prefixes ?? {}).filter(
+          (row: any) => matches(row.head?.stream_ref),
+        );
+        diagnostics.push({ messages, reactions, prefixes });
+      }
+      return diagnostics;
+    } finally {
+      db.close();
+    }
+  }, realmId);
+}
+
 async function accountSubscribeTimelineEvents(
   request: APIRequestContext,
   token: string,
@@ -594,6 +642,7 @@ test.describe("chat advanced", () => {
 
     const m1 = `S14 ship it ${stamp}`;
     const m2 = `S14 yes ship ${stamp}`;
+    let diagnosticRealmId: string | undefined;
 
     try {
       const realmId = await alicePage.createRealm({
@@ -603,6 +652,7 @@ test.describe("chat advanced", () => {
         mlsActivated: false,
         seedMembers: [bob.id, carol.id],
       });
+      diagnosticRealmId = realmId;
       await bobPage.acceptInvite(realmId);
       await carolPage.acceptInvite(realmId);
       for (const member of [bobFlow, carolFlow]) {
@@ -687,6 +737,20 @@ test.describe("chat advanced", () => {
       await expect(bobOnM2.getByTestId("chat-reply-indicator")).toBeVisible();
       await stepShot(bobPage.page, testInfo, "reply-chain");
     } finally {
+      if (diagnosticRealmId) {
+        for (const [name, page] of [["alice", alicePage], ["bob", bobPage], ["carol", carolPage]] as const) {
+          try {
+            const diagnostic = await reactionProjectionDiagnostic(page, diagnosticRealmId);
+            await testInfo.attach(`safe-reaction-projection-${name}`, {
+              contentType: "application/json", body: JSON.stringify(diagnostic),
+            });
+          } catch {
+            await testInfo.attach(`safe-reaction-projection-${name}`, {
+              contentType: "application/json", body: JSON.stringify({ unavailable: true }),
+            });
+          }
+        }
+      }
       await Promise.allSettled([
         carolPage.close(),
         bobPage.close(),
