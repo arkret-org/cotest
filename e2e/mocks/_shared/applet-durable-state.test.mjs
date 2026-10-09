@@ -9,7 +9,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { request } from "@playwright/test";
 
-test("Applet package without optional Bot evidence persists encrypted and reloads", { timeout: 30_000 }, async () => {
+test("Service-only Applet package persists encrypted and reloads without a Bot", { timeout: 30_000 }, async () => {
   const directory = mkdtempSync(path.join(tmpdir(), "cotest-applet-durability-"));
   const keyPath = path.join(directory, "state.key");
   const statePath = path.join(directory, "state.json");
@@ -27,17 +27,12 @@ test("Applet package without optional Bot evidence persists encrypted and reload
       const response = await post("/sign-package", {
         namespace,
         base_url: "https://applet.fixture.localhost",
-        bot_actor_id: {
-          kind: "account",
-          account_id: {
-            principal_id: "ak:did_core:web:bot.joint-e2e.local",
-            station_id: "ak:did_core:web:station.joint-e2e.local",
-          },
-        },
       });
       assert.equal(response.status, 200, registry.logs);
       const signed = await response.json();
       assert.match(signed.package_digest, /^sha256:[0-9a-f]{64}$/);
+      assert.equal(Object.hasOwn(signed.applet_package, "bot_actor_id"), false);
+      assert.equal(Object.hasOwn(signed.applet_package, "applet_actor_id"), false);
       const envelope = JSON.parse(readFileSync(statePath, "utf8"));
       assert.equal(envelope.algorithm, "A256GCM");
       assert.equal(envelope.packages, undefined);
@@ -76,13 +71,6 @@ test("a lost durable sign-package response replays exactly after process restart
     const data = {
       namespace: "durable-replay",
       base_url: "https://applet.fixture.localhost",
-      bot_actor_id: {
-        kind: "account",
-        account_id: {
-          principal_id: "ak:did_core:web:bot.joint-e2e.local",
-          station_id: "ak:did_core:web:station.joint-e2e.local",
-        },
-      },
     };
     const headers = {
       "Idempotency-Key": "lost-sign-package",
@@ -97,6 +85,7 @@ test("a lost durable sign-package response replays exactly after process restart
     assert.equal(reset, true, registry.logs);
     const state = readState();
     assert.equal(state.packages.length, 1);
+    assert.equal(Object.hasOwn(state.packages[0][1], "botActorId"), false);
     assert.equal(state.signedPackageOutcomes.length, 1);
     const original = state.signedPackageOutcomes[0][1].response;
     const durableBytes = readFileSync(statePath);

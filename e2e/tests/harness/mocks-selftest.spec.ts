@@ -8,7 +8,7 @@
 // the default `joint-smoke` profile. If the corresponding mock is not
 // started for a given run, the test is skipped (rather than fail).
 
-import { createHash } from "node:crypto";
+import { createHash, createPublicKey, verify } from "node:crypto";
 import { expect, test } from "../../helpers/arkret-test";
 import {
   mockAppletRegistryBaseUrl,
@@ -21,7 +21,7 @@ import {
 } from "../../helpers/env";
 import { createDidHostClient } from "../../helpers/did-host";
 import { createMimiFacadeClient } from "../../helpers/mimi-facade";
-import { accountActorId, projectDidToCoreId } from "../../helpers/soland-api";
+import { canonicalJson, projectDidToCoreId, sha256CanonicalJson } from "../../helpers/soland-api";
 
 function b64url(buf: Buffer): string {
   return buf.toString("base64url");
@@ -317,11 +317,9 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     test.skip(!baseUrl, "mock-applet-registry not started for this run");
 
     const namespace = `selftest-${Date.now()}`;
-    const botActorId = accountActorId(`ak:did_core:web:bot-${namespace}.invalid`);
     const signed = await request.post(`${baseUrl}/sign-package`, {
       data: {
         namespace,
-        bot_actor_id: botActorId,
         requested_scopes: ["ak.message.create", "ak.applet.ghost.provision"],
       },
     });
@@ -329,7 +327,13 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     const body = await signed.json();
     expect(body.package_digest).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(body.applet_package.schema).toBe("ak.schema.applet_package.v1");
-    expect(body.applet_package.bot_actor_id).toEqual(botActorId);
+    expect(Object.keys(body).sort()).toEqual([
+      "applet_package", "package_digest", "service_id_document", "signing_did",
+    ]);
+    expect(body.applet_package).not.toHaveProperty("bot_actor_id");
+    expect(body.applet_package).not.toHaveProperty("applet_actor_id");
+    expect(body.applet_package.claimed_profiles).toContain("ak.profile.applet_service.v1");
+    expect(body.applet_package.service_id).not.toBe(body.applet_package.controller_principal_id);
     expect(body.applet_package.requested_scopes).toContain("ak.message.create");
     expect(Array.isArray(body.applet_package.endpoint_policy?.endpoints)).toBe(true);
     expect(body.applet_package.endpoint_policy.endpoints).toContainEqual({
@@ -356,6 +360,28 @@ test.describe("harness mocks selftest @fully-implemented", () => {
 
     const identity = await (await request.get(`${baseUrl}/identity`)).json();
     expect(typeof identity.did).toBe("string");
+    expect(body.signing_did).toBe(identity.did);
+    expect(body.applet_package.controller_principal_id).toBe(projectDidToCoreId(identity.did));
+    const { proof, ...sealedPackage } = body.applet_package;
+    const { package_digest, ...packageBody } = sealedPackage;
+    expect(package_digest).toBe(body.package_digest);
+    expect(package_digest).toBe(`sha256:${sha256CanonicalJson(packageBody)}`);
+    expect(proof.payload_digest).toBe(`sha256:${sha256CanonicalJson(sealedPackage)}`);
+    expect(proof.kind).toBe("detached_jws");
+    expect(proof.verification_method.split("#")[0]).toBe(identity.did);
+    const [header, payload, signature] = proof.jws.split(".");
+    expect(payload).toBe("");
+    expect(JSON.parse(Buffer.from(header, "base64url").toString("utf8"))).toEqual({ alg: "Ed25519" });
+    const publicKey = createPublicKey({ key: identity.public_jwk, format: "jwk" });
+    const signedBytes = (value: unknown) => Buffer.from(
+      `${header}.${Buffer.from(canonicalJson(value), "utf8").toString("base64url")}`,
+      "utf8",
+    );
+    expect(verify(null, signedBytes(sealedPackage), publicKey, Buffer.from(signature, "base64url"))).toBe(true);
+    expect(verify(null, signedBytes({
+      ...sealedPackage,
+      requested_scopes: [...sealedPackage.requested_scopes, "ak.realm.admin"],
+    }), publicKey, Buffer.from(signature, "base64url"))).toBe(false);
   });
   test("mock-mimi-facade: bob_mimi join, fallback/deferred, content quarantine", async ({
     request,

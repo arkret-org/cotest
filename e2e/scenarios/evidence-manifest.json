@@ -411,6 +411,7 @@
         "fixture_or_not_applicable"
       ],
       "protocol_object_producers": [
+        "cotest_wire_oracle",
         "raw_http_fixture"
       ],
       "declared_test_bypasses": [

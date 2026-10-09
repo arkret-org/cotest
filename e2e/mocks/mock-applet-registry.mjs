@@ -874,7 +874,6 @@ function prepareSignedPackage(body) {
   const packageInfo = {
     appletId,
     appletPackage,
-    botActorId: body.bot_actor_id,
     namespace,
     safe,
     serviceId,
