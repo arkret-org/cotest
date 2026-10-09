@@ -411,8 +411,8 @@ fn mimi_families() -> Result<Vec<FamilyUnderTest>> {
         "device_id": "ak:device:01904100-0000-7000-8000-000000000001"
     }))?;
     // The signed request names both identities in full; the proof issuer is
-    // the complete Actor and holder_account_id is a binding field. Ruling
-    // `tasks/spec-done/2026-09-05-1240-mimi-consent-correlation-cannot-carry-the-consent-peer.md`.
+    // the complete Actor and holder_account_id is a binding field. Contract:
+    // `arkret-spec/spec/v1/zh/extensions/mimi-interop.md` (consent proof binding).
     let request_consent: MimiRequestConsentRequestBody = serde_json::from_value(json!({
         "requester_actor_id": {
             "kind": "account",

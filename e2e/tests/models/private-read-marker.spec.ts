@@ -488,7 +488,7 @@ async function postReadCursor(
   // read-receipts.md §6.1: the cursor is never updated in place, so the payload
   // carries no `updated_at`; the update time IS this envelope `created_at`, and
   // the derived `read_marker_outcome` takes it from there. A payload restating
-  // it is a closed-shape violation (tasks/spec-done/2026-09-04-2130-read-cursor-advance-updated-at-envelope-equality.md).
+  // it is a closed-shape violation (arkret-spec/spec/v1/zh/discovery/read-receipts.md §6.1).
   const updatedAt = new Date().toISOString();
   // The producer proof is the writing device's own: a sibling device signs
   // with its accepted key, never with the founding device's.
