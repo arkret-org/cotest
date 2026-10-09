@@ -188,7 +188,7 @@ pub async fn run() -> Result<()> {
             .iter()
             .any(|entry| matches!(
                 entry,
-                arkret_wire::TypedCurrentResult::Value {
+                arkret_wire::TypedCurrentRow::Value {
                     selector: arkret_wire::CurrentSelector::Sidecar { .. }
                         | arkret_wire::CurrentSelector::SidecarContext { .. },
                     ..

@@ -13,7 +13,7 @@ use arkret_models_collaboration::authority_commit::{
 use arkret_models_collaboration::governance::membership_invite::MembershipPayloadState;
 use arkret_models_collaboration::governance::realm_join_intake::RealmJoinIntent;
 use arkret_models_identity::{
-    CurrentSignerKeyQuerySender, SignerKeyQueryResult, SignerKeyQuerySelector,
+    CurrentSignerKeyQuerySender, SignerKeyQueryOutcome, SignerKeyQuerySelector,
     SignerKeysQueryRequestBody,
 };
 use arkret_wire::{
@@ -976,7 +976,7 @@ pub async fn run_signer_keys_query_live() -> Result<()> {
     request.validate()?;
     let outcome = bob.sdk().signer_keys_query(&request).await?;
     outcome.validate_for_request(&request)?;
-    let [SignerKeyQueryResult::CurrentDeviceResolved { selector, key }] =
+    let [SignerKeyQueryOutcome::CurrentDeviceResolved { selector, key }] =
         outcome.results.as_slice()
     else {
         bail!("recipient Station did not resolve the current admitted sender");
@@ -1027,7 +1027,7 @@ pub async fn run_signer_keys_query_live() -> Result<()> {
         unavailable.validate_for_request(&changed)?;
         ensure!(matches!(
             unavailable.results.as_slice(),
-            [SignerKeyQueryResult::Unavailable { .. }]
+            [SignerKeyQueryOutcome::Unavailable { .. }]
         ));
     }
     let mut wrong_station = request.clone();
@@ -1046,10 +1046,10 @@ pub async fn run_signer_keys_query_live() -> Result<()> {
     wrong.validate_for_request(&wrong_station)?;
     ensure!(matches!(
         wrong.results.as_slice(),
-        [SignerKeyQueryResult::Unavailable { .. }]
+        [SignerKeyQueryOutcome::Unavailable { .. }]
     ));
     let mut misbound = outcome;
-    let SignerKeyQueryResult::CurrentDeviceResolved {
+    let SignerKeyQueryOutcome::CurrentDeviceResolved {
         selector:
             SignerKeyQuerySelector::CurrentAdmission {
                 sender: CurrentSignerKeyQuerySender::AccountDevice { actor, .. },

@@ -26,7 +26,7 @@ use arkret_models_crypto::{
     KeyBackupDomainSeparation, KeyBackupEncryption, KeyBackupRecipientMethod,
     KeyBackupSignatureAlgorithm, KeysBackupsList, PreparedEventBatchRequest, PreparedEventUnit,
     SecretStorageContentIndex, SecretStorageItemKind, SecurityRotationLocalCommit,
-    SecurityRotationRevokeCommandResult, SecurityRotationTransactionCreateRequest,
+    SecurityRotationRevokeCommandDecision, SecurityRotationTransactionCreateRequest,
     SecurityTransaction, SecurityTransactionContinueRequest, SecurityTransactionCreateRequest,
     SecurityTransactionStep, SecurityTransactionTerminalOutcome,
 };
@@ -795,7 +795,7 @@ pub async fn security_rotation_runs_worker_steps_to_local_commit() -> Result<()>
     ensure!(
         stopped.accepted_steps.len() == 1
             && stopped.revoke_command_outcome.as_ref().is_some_and(
-                |outcome| outcome.result == SecurityRotationRevokeCommandResult::Accepted
+                |outcome| outcome.result == SecurityRotationRevokeCommandDecision::Accepted
             )
             && aborted_with(&stopped, "proof_invalid"),
         "a forged replacement was not refused after the accepted revoke: {stopped:?}"
@@ -865,7 +865,7 @@ pub async fn security_rotation_runs_worker_steps_to_local_commit() -> Result<()>
         .clone()
         .context("the worker did not decide the revoke proposal")?;
     ensure!(
-        outcome.result == SecurityRotationRevokeCommandResult::Accepted
+        outcome.result == SecurityRotationRevokeCommandDecision::Accepted
             && erased.accepted_steps.len() == 4
             && erased.terminal_outcome.is_none(),
         "the worker did not reach the local commit: {erased:?}"
@@ -1115,7 +1115,7 @@ pub async fn security_rotation_rejected_revoke_restores_the_target_device() -> R
                 .revoke_command_outcome
                 .as_ref()
                 .is_some_and(|outcome| outcome.result
-                    == SecurityRotationRevokeCommandResult::Rejected
+                    == SecurityRotationRevokeCommandDecision::Rejected
                     && Some(&outcome.proposal_event_id)
                         == pending
                             .revoke_proposal

@@ -110,7 +110,7 @@ pub fn historical_human_signer_query(input: Value) -> Result<Value> {
 /// exact Commit binding and producer signature. Never use current admission.
 pub fn historical_human_signer_fact(input: Value) -> Result<Value> {
     use arkret_models_collaboration::authority_commit::HumanHistoricalSignerFact;
-    use arkret_models_identity::SignerKeyQueryResult;
+    use arkret_models_identity::SignerKeyQueryOutcome;
     let input: HistoricalHumanFactInput = serde_json::from_value(input)?;
     let selector = historical_human_selector(&input.event, &input.commit)?;
     ensure!(
@@ -119,7 +119,7 @@ pub fn historical_human_signer_fact(input: Value) -> Result<Value> {
     );
     input.outcome.validate_for_request(&input.query)?;
     let [
-        SignerKeyQueryResult::HistoricalResolved {
+        SignerKeyQueryOutcome::HistoricalResolved {
             key, accepted_at, ..
         },
     ] = input.outcome.results.as_slice()

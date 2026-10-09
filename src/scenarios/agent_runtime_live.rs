@@ -1863,7 +1863,7 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
     };
     let evidence = controller.sdk().signer_keys_query(&query).await?;
     evidence.validate_for_request(&query)?;
-    let [arkret::SignerKeyQueryResult::HistoricalResolved { key, .. }] =
+    let [arkret::SignerKeyQueryOutcome::HistoricalResolved { key, .. }] =
         evidence.results.as_slice()
     else {
         bail!(
@@ -1930,7 +1930,7 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
     ensure!(
         matches!(
             unavailable.results.as_slice(),
-            [arkret::SignerKeyQueryResult::Unavailable { .. }]
+            [arkret::SignerKeyQueryOutcome::Unavailable { .. }]
         ),
         "historical Agent lookup accepted a substituted target coordinate"
     );
@@ -1939,7 +1939,7 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
         .await?;
     let historical = controller.sdk().signer_keys_query(&query).await?;
     historical.validate_for_request(&query)?;
-    let [arkret::SignerKeyQueryResult::HistoricalResolved { key, .. }] =
+    let [arkret::SignerKeyQueryOutcome::HistoricalResolved { key, .. }] =
         historical.results.as_slice()
     else {
         bail!("pausing a runtime erased its accepted historical proof");

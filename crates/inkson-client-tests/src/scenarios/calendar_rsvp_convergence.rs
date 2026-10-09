@@ -236,7 +236,7 @@ async fn signed_strand_value(
         .current_state_entries
         .iter()
         .find_map(|row| match row {
-            arkret_wire::TypedCurrentResult::Value {
+            arkret_wire::TypedCurrentRow::Value {
                 selector:
                     arkret_wire::CurrentSelector::Strand {
                         strand_id: selected,
@@ -268,7 +268,7 @@ async fn assert_signed_snapshot_rsvp(
         .current_state_entries
         .iter()
         .find(|row| {
-            matches!(row, arkret_wire::TypedCurrentResult::Value {
+            matches!(row, arkret_wire::TypedCurrentRow::Value {
                 selector: arkret_wire::CurrentSelector::Rsvp {
                     event_ref,
                     occurrence: None,
@@ -278,7 +278,7 @@ async fn assert_signed_snapshot_rsvp(
             } if event_ref == strand && responder_actor_id == actor)
         })
         .ok_or_else(|| anyhow!("signed Snapshot omits the exact RSVP current"))?;
-    let arkret_wire::TypedCurrentResult::Value {
+    let arkret_wire::TypedCurrentRow::Value {
         source_stream_ref,
         revision,
         value,

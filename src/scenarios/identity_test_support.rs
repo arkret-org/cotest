@@ -953,7 +953,7 @@ async fn bootstrap_test_device_authorization(
 async fn submit_harness_pcr_genesis(
     server: &ArkretServer,
     request: &arkret_models_collaboration::principal_operations::PcrGenesisAdmissionInput,
-) -> Result<arkret_models_collaboration::principal_operations::PcrGenesisAdmissionResult> {
+) -> Result<arkret_models_collaboration::principal_operations::PcrGenesisAdmissionOutcome> {
     request.validate()?;
     let value = expect_json(
         server

@@ -297,7 +297,7 @@ pub async fn run_strand_watch_current_live() -> Result<()> {
     current(read(&alice, &request).await?, &first, first_value)?;
     let first_snapshot = signed_snapshot(&alice, &request.realm_id).await?;
     ensure!(first_snapshot.current_state_entries.iter().any(|entry| matches!(entry,
-        arkret_wire::TypedCurrentResult::Value { selector: arkret_wire::CurrentSelector::StrandWatch { strand_id, watcher_actor_id }, source_stream_ref, revision, value }
+        arkret_wire::TypedCurrentRow::Value { selector: arkret_wire::CurrentSelector::StrandWatch { strand_id, watcher_actor_id }, source_stream_ref, revision, value }
         if strand_id == &request.strand_id && watcher_actor_id == &request.watcher_actor_id
             && source_stream_ref == &first.stream_ref && revision.commit_id == first.commit_id
             && revision.stream_position == first.stream_position && value == &serde_json::json!({"level":"all","level_public":true})
@@ -402,7 +402,7 @@ pub async fn run_strand_watch_current_live() -> Result<()> {
     );
     let private_snapshot = signed_snapshot(&bob, &request.realm_id).await?;
     ensure!(!private_snapshot.current_state_entries.iter().any(|entry| matches!(entry,
-        arkret_wire::TypedCurrentResult::Value { selector: arkret_wire::CurrentSelector::StrandWatch { strand_id, watcher_actor_id }, .. }
+        arkret_wire::TypedCurrentRow::Value { selector: arkret_wire::CurrentSelector::StrandWatch { strand_id, watcher_actor_id }, .. }
         if strand_id == &request.strand_id && watcher_actor_id == &request.watcher_actor_id
     )), "ordinary member signed snapshot disclosed Alice's private muted watch cell");
 
@@ -438,7 +438,7 @@ pub async fn run_strand_watch_current_live() -> Result<()> {
     );
     let public_snapshot = signed_snapshot(&bob, &request.realm_id).await?;
     ensure!(public_snapshot.current_state_entries.iter().any(|entry| matches!(entry,
-        arkret_wire::TypedCurrentResult::Value { selector: arkret_wire::CurrentSelector::StrandWatch { strand_id, watcher_actor_id }, value, .. }
+        arkret_wire::TypedCurrentRow::Value { selector: arkret_wire::CurrentSelector::StrandWatch { strand_id, watcher_actor_id }, value, .. }
         if strand_id == &request.strand_id && watcher_actor_id == &request.watcher_actor_id
             && value == &serde_json::json!({"level":"all","level_public":true})
     )), "explicit public opt-in was absent from the member snapshot");

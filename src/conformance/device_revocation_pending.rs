@@ -3,8 +3,8 @@
 use anyhow::{Result, bail};
 use arkret_wire::{
     AccountId, DeviceId, DeviceRevocationAdmissionDecision, DeviceRevocationAdmissionInput,
-    DeviceRevocationAdmissionRecord, DeviceRevocationAdmissionResult, DeviceRevocationDeniedAction,
-    DidCoreId, EventId, Hash, RealmCommitId, SessionGrantAdmission,
+    DeviceRevocationAdmissionOutcome, DeviceRevocationAdmissionRecord,
+    DeviceRevocationDeniedAction, DidCoreId, EventId, Hash, RealmCommitId, SessionGrantAdmission,
     SessionGrantAdmissionBlockReason,
 };
 use chrono::{DateTime, Duration, TimeZone as _, Utc};
@@ -107,10 +107,10 @@ fn request() -> Result<DeviceRevocationAdmissionInput> {
 fn result(
     request: &DeviceRevocationAdmissionInput,
     decision: DeviceRevocationAdmissionDecision,
-) -> Result<DeviceRevocationAdmissionResult> {
+) -> Result<DeviceRevocationAdmissionOutcome> {
     let allowed = decision == DeviceRevocationAdmissionDecision::Allow;
     let revoked = decision == DeviceRevocationAdmissionDecision::Revoked;
-    Ok(DeviceRevocationAdmissionResult {
+    Ok(DeviceRevocationAdmissionOutcome {
         admission_record: DeviceRevocationAdmissionRecord {
             account_id: request.account_id.clone(),
             device_id: request.device_id.clone(),

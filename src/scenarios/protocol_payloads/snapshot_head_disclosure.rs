@@ -211,7 +211,7 @@ pub async fn narrow_snapshot_head_discloses_only_complete_creator_cut() -> Resul
             && facet_typed.current_state_entries.len() == 11
             && facet_typed.current_state_entries.iter().any(|row| matches!(
                 row,
-                arkret_wire::TypedCurrentResult::Value {
+                arkret_wire::TypedCurrentRow::Value {
                     selector: arkret_wire::CurrentSelector::RealmPlaintextVisibleServices,
                     ..
                 }
@@ -244,7 +244,7 @@ pub async fn narrow_snapshot_head_discloses_only_complete_creator_cut() -> Resul
                 .iter()
                 .any(|row| matches!(
                     row,
-                    arkret_wire::TypedCurrentResult::Value {
+                    arkret_wire::TypedCurrentRow::Value {
                         selector: arkret_wire::CurrentSelector::MessageRevision { .. },
                         revision,
                         ..

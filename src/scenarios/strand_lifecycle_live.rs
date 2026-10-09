@@ -8,7 +8,7 @@ use arkret_models_collaboration::governance::membership_invite::MembershipPayloa
 use arkret_models_collaboration::governance::realm_lifecycle::ObjectLifecyclePayload;
 use arkret_wire::{
     AccountId, ActorId, AuthorityCommitStatus, AuthoritySubmitOutcome, CurrentSelector, Event,
-    EventKind, RealmCommit, RealmId, StrandId, TypedCurrentResult,
+    EventKind, RealmCommit, RealmId, StrandId, TypedCurrentRow,
 };
 use reqwest::StatusCode;
 use serde_json::{Value, json};
@@ -37,7 +37,7 @@ async fn value(
 ) -> Result<Value> {
     let snapshot = signed_snapshot(client, realm).await?;
     for entry in snapshot.current_state_entries {
-        if let TypedCurrentResult::Value {
+        if let TypedCurrentRow::Value {
             selector: CurrentSelector::Strand { strand_id },
             source_stream_ref,
             revision,

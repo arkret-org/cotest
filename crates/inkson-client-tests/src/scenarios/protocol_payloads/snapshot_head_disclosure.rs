@@ -305,14 +305,14 @@ pub async fn limited_window_strand_tail_verifies_with_same_cut_current_through_i
     ensure!(
         folded.iter().any(|row| matches!(
             row,
-            arkret_wire::TypedCurrentResult::Value {
+            arkret_wire::TypedCurrentRow::Value {
                 selector: arkret_wire::CurrentSelector::RealmSetDefaultStrand,
                 value,
                 ..
             } if value == &json!({"default_strand_id": strand})
         )) && folded.iter().any(|row| matches!(
             row,
-            arkret_wire::TypedCurrentResult::Value {
+            arkret_wire::TypedCurrentRow::Value {
                 selector: arkret_wire::CurrentSelector::Strand { strand_id },
                 ..
             } if strand_id == &strand
@@ -351,7 +351,7 @@ pub async fn limited_window_strand_tail_verifies_with_same_cut_current_through_i
         .and_then(|entry| entry.current.as_mut())
         .context("forged current")?
         .entries;
-    if let Some(arkret_wire::TypedCurrentResult::Value {
+    if let Some(arkret_wire::TypedCurrentRow::Value {
         source_stream_ref, ..
     }) = forged_entries.first_mut()
     {
@@ -441,7 +441,7 @@ pub async fn message_tail_window_beyond_twenty_commits_verifies_through_inkson()
                 .iter()
                 .filter(|row| matches!(
                     row,
-                    arkret_wire::TypedCurrentResult::Value {
+                    arkret_wire::TypedCurrentRow::Value {
                         selector: arkret_wire::CurrentSelector::MessageRevision { .. },
                         ..
                     }
@@ -574,7 +574,7 @@ pub async fn restricted_join_policy_floor_verifies_through_inkson() -> Result<()
         issued.visible_stream_heads[0].stream_position == 6
             && issued.current_state_entries.iter().any(|row| matches!(
                 row,
-                arkret_wire::TypedCurrentResult::Value {
+                arkret_wire::TypedCurrentRow::Value {
                     selector: arkret_wire::CurrentSelector::RealmPolicyBundle,
                     value,
                     ..
@@ -582,7 +582,7 @@ pub async fn restricted_join_policy_floor_verifies_through_inkson() -> Result<()
             ))
             && issued.current_state_entries.iter().any(|row| matches!(
                 row,
-                arkret_wire::TypedCurrentResult::Value {
+                arkret_wire::TypedCurrentRow::Value {
                     selector: arkret_wire::CurrentSelector::RealmJoinRule,
                     value,
                     ..

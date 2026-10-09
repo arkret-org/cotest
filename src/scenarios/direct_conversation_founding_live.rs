@@ -2041,7 +2041,7 @@ async fn run(
                 .current_state_entries
                 .iter()
                 .find_map(|entry| match entry {
-                    arkret_wire::TypedCurrentResult::Value {
+                    arkret_wire::TypedCurrentRow::Value {
                         selector:
                             arkret_wire::CurrentSelector::DirectConversationBinding {
                                 pair_key: subject,

@@ -33,7 +33,7 @@ use arkret_models_collaboration::governance::realm_join_intake::{
     RealmJoinTarget, SelfRealmJoinPrepareOutcome, SelfRealmJoinPrepareRequestBody,
 };
 use arkret_models_crypto::{
-    EncryptedEnvelope, EncryptedEnvelopeEncryptionContext, SecurityRotationRevokeCommandResult,
+    EncryptedEnvelope, EncryptedEnvelopeEncryptionContext, SecurityRotationRevokeCommandDecision,
     SecurityTransaction,
 };
 use arkret_wire::{
@@ -910,7 +910,7 @@ async fn wait_for_accepted_revoke(
     loop {
         if let Some(outcome) = &current.revoke_command_outcome {
             ensure!(
-                outcome.result == SecurityRotationRevokeCommandResult::Accepted,
+                outcome.result == SecurityRotationRevokeCommandDecision::Accepted,
                 "the device revoke was not accepted: {current:?}"
             );
             return Ok(());
@@ -1528,7 +1528,7 @@ pub async fn original_human_signer_fact(
 ) -> Result<arkret_models_collaboration::authority_commit::HumanHistoricalSignerFact> {
     use arkret_models_collaboration::authority_commit::HumanHistoricalSignerFact;
     use arkret_models_identity::{
-        HistoricalSignerKeyQuerySender, SignerKeyQueryResult, SignerKeyQuerySelector,
+        HistoricalSignerKeyQuerySender, SignerKeyQueryOutcome, SignerKeyQuerySelector,
         SignerKeysQueryRequestBody,
     };
     ensure!(
@@ -1566,7 +1566,7 @@ pub async fn original_human_signer_fact(
     let outcome = client.sdk().signer_keys_query(&request).await?;
     outcome.validate_for_request(&request)?;
     let [
-        SignerKeyQueryResult::HistoricalResolved {
+        SignerKeyQueryOutcome::HistoricalResolved {
             selector,
             key,
             accepted_at,
