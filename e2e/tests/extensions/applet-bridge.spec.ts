@@ -2121,7 +2121,7 @@ async function signPackage(
     data.webhook_auth && typeof data.webhook_auth === "object"
       ? (data.webhook_auth as Record<string, unknown>)
       : {};
-  const response = await request.post(`${registryBase}/sign-package`, {
+  const requestOptions = {
     // Only this durable, keyed fixture operation can safely retry a reset.
     headers: {
       "Idempotency-Key": typedId("operation"),
@@ -2164,7 +2164,13 @@ async function signPackage(
         key_ref: `${built.did}#applet-service-key`,
       },
     },
-  });
+  };
+  let response = await request.post(`${registryBase}/sign-package`, requestOptions);
+  // The HTTPS proxy converts this deliberate upstream response loss to 502.
+  // Replay the same durable request, including its identity and idempotency key.
+  if (options.dropResponseAfterPersistence && response.status() === 502) {
+    response = await request.post(`${registryBase}/sign-package`, requestOptions);
+  }
   expect(response.status()).toBe(200);
   return {
     ...((await response.json()) as SignedPackage),
@@ -2331,7 +2337,7 @@ async function rawInstallApplet(
 async function provisionAppletBot(request: APIRequestContext,signed: SignedPackage,realmId:string,idempotencyKey:string,options:{exerciseAuthoringKats?:boolean; botOperation?: BuiltWebvhGenesis}): Promise<Record<string,unknown>> {
     const previewUrl=`${solandBaseUrl()}/_arkret/self/applets/${encodeURIComponent(signed.applet_package.applet_id)}/bots/provision/preview`;
     const previewBody={effective_scope:{kind:"realm",realm_id:realmId},request_id:`${idempotencyKey}-bot`,display_name:"Applet Bot"};
-    const serviceHeaders=(body:Record<string,unknown>,targetUri:string,key:string)=>signedAppletTransactionHeaders({body,targetUri,sourceServiceId:signed.applet_package.service_id,destinationServiceId:solandServiceId(),idempotencyKey:key,keyId:`${signed.signing_did}#applet-service-key`,signingKey:signed.service_signing_private_key});
+    const serviceHeaders=(body:Record<string,unknown>,targetUri:string,key:string)=>signedAppletTransactionHeaders({body,targetUri,sourceServiceId:signed.applet_package.service_id,destinationServiceId:solandServiceId(),idempotencyKey:key,keyId:appletProducerKeyRef(signed),signingKey:signed.service_signing_private_key});
     const preview=await request.post(previewUrl,{headers:serviceHeaders(previewBody,previewUrl,`${idempotencyKey}-bot-preview`),data:canonicalJson(previewBody)});
     expect(preview.status(),await preview.text()).toBe(200);
     const previewOutcome=await preview.json() as Record<string,unknown>;
