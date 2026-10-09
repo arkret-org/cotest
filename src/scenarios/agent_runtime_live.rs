@@ -2074,13 +2074,19 @@ impl AgentRuntimeSession {
                 )
                 .await?,
             )?;
+        let committed = controller
+            .sdk()
+            .committed_event_get(&event.event_id)
+            .await?;
+        committed.validate_shape()?;
         ensure!(
-            outcome.lifecycle_ref.event_id == event.event_id
-                && outcome.lifecycle_ref.stream_ref
+            committed.commit().event_ref == event.event_id
+                && committed.commit().stream_ref
                     == (arkret_wire::CommitStreamRef::Realm {
                         realm_id: self.agent_pcr.clone(),
-                    }),
-            "the lifecycle outcome does not name its Agent PCR Commit"
+                    })
+                && committed.reducer_input() == Some(&event),
+            "the controller must resolve the exact lifecycle Event and its Agent PCR Commit"
         );
         Ok(outcome.status)
     }
