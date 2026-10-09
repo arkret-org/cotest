@@ -1221,7 +1221,8 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           firstPairing.agentId,
           blockedPrompt,
         );
-        await resumedCard.getByTestId("send-chat-button").click();
+        await expect(resumedCard.getByTestId("send-chat-button")).toBeDisabled();
+        await resumedCard.getByTestId("chat-input").press("Enter");
         await expect
           .poll(() => receiptCount(receiptPath), {
             timeout: 15_000,
