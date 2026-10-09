@@ -5117,18 +5117,17 @@ try {
         Write-Host ""
         Write-Host "=== Rust provisioning check (live Coauth + Soland) ==="
         $provisioningLog = Join-Path $jointDir "rust-provisioning-check.log"
-        $provisioningArgs = @(
-            "test", "--manifest-path", (Join-Path $repoRoot "Cargo.toml"),
-            "-p", "cotest-test-support", "--test", "provisioning_live",
-            "--", "--ignored", "--nocapture"
-        )
-        $provisioningOutput = & cargo @provisioningArgs 2>&1
-        $provisioningExit = $LASTEXITCODE
+        # Keep both native output streams draining independently, as for builds.
+        # Capturing merged Cargo output can fill child pipes before Cargo exits.
+        $provisioningCommand = "cargo test --manifest-path {0} -p cotest-test-support --test provisioning_live -- --ignored --nocapture" -f (Quote-PsLiteral (Join-Path $repoRoot "Cargo.toml"))
+        $provisioningService = Start-ManagedCommand `
+            -Name "prepare-provisioning-check" `
+            -Command $provisioningCommand `
+            -WorkingDirectory $repoRoot `
+            -LogDirectory $serviceLogDir
+        $provisioningOutput = @(Get-Content -LiteralPath $provisioningService.Stdout) + @(Get-Content -LiteralPath $provisioningService.Stderr)
         $provisioningOutput | Set-Content -LiteralPath $provisioningLog -Encoding UTF8
         foreach ($line in $provisioningOutput) { Write-Host $line }
-        if ($provisioningExit -ne 0) {
-            throw "Rust provisioning check failed (exit=$provisioningExit); see $provisioningLog"
-        }
 
         # The same deployment, one layer up: `ArkretServer::canonical_client`
         # building a `TestActorClient` on a canonical session.
