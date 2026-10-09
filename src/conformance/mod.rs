@@ -370,8 +370,8 @@ pub use mls_governance_binding::{
     MLS_GOVERNANCE_BINDING_ENTRYPOINT, run_mls_governance_binding_suite,
 };
 pub use named_suite_audit::{
-    ClientNamedSuiteRunner, NamedSuiteAuditReport, run_named_suite_audit,
-    run_named_suite_audit_with_clients,
+    ClientNamedSuiteRunner, NamedSuiteAuditReport, inspect_named_suite_execution_with_clients,
+    run_named_suite_audit, run_named_suite_audit_with_clients,
 };
 pub use non_governance_receiver::{
     VECTOR_ID_NON_GOVERNANCE_RECEIVER_TRUSTS_GOVERNANCE_COMMIT,
@@ -459,7 +459,9 @@ pub use schema_validation_fixture::{
     run_event_payload_value_closure_fixture, run_schema_definition_validator_kat,
     run_schema_validation_fixture_file, run_schema_validation_fixture_suite,
 };
-pub use sdk_precheck::{SDK_PRECHECK_ENTRYPOINT, run_sdk_precheck_suite};
+pub use sdk_precheck::{
+    SDK_PRECHECK_ENTRYPOINT, run_sdk_precheck_suite, run_sdk_precheck_suite_diagnostic,
+};
 pub use security_negative::run_security_negative_profile_suite;
 pub use security_transaction_resilience::run_security_transaction_resilience_joint_gate;
 pub use session_grant_issuer_ledger::{

@@ -1,0 +1,13 @@
+[package]
+name = "cotest-suite-evidence"
+version = "0.3.0"
+edition = "2024"
+rust-version = "1.98"
+publish = false
+
+[dependencies]
+anyhow = { workspace = true }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

@@ -348,7 +348,15 @@ fn assert_expected_issue(case_id: &str, issue: &SchemaValidationIssue) -> Result
     }
 }
 
+/// The modeled effect ports do not establish production reducer/storage evidence.
 pub fn run_sdk_precheck_suite() -> Result<SdkPrecheckExecution> {
+    bail!(
+        "SDK precheck production Event consumer is unproved; schema/effect-port execution is diagnostic evidence"
+    )
+}
+
+/// Execute the production schema validator with isolated, modeled effect ports.
+pub fn run_sdk_precheck_suite_diagnostic() -> Result<SdkPrecheckExecution> {
     let (fixture, base_event) = load_fixture_and_base_event()?;
     let consumer = EventAdmissionConsumer::from_spec_artifacts()?;
 
@@ -485,8 +493,18 @@ mod tests {
     use super::*;
 
     #[test]
+    fn modeled_effect_ports_cannot_claim_production_consumption() {
+        let error = run_sdk_precheck_suite().unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("production Event consumer is unproved")
+        );
+    }
+
+    #[test]
     fn complete_event_precheck_executes_all_current_cases() -> Result<()> {
-        let execution = run_sdk_precheck_suite()?;
+        let execution = run_sdk_precheck_suite_diagnostic()?;
         assert_eq!(execution.entrypoint, SDK_PRECHECK_ENTRYPOINT);
         assert_eq!(execution.cases.len(), 10);
         assert!(execution.positive_control_assertions > 0);
@@ -497,7 +515,7 @@ mod tests {
 
     #[test]
     fn kind_selected_payload_fails_inside_the_complete_event_schema() -> Result<()> {
-        let execution = run_sdk_precheck_suite()?;
+        let execution = run_sdk_precheck_suite_diagnostic()?;
         let payload = execution
             .cases
             .iter()
@@ -512,7 +530,7 @@ mod tests {
 
     #[test]
     fn rejected_event_stays_rejected_on_retry_reconnect_and_backfill() -> Result<()> {
-        let execution = run_sdk_precheck_suite()?;
+        let execution = run_sdk_precheck_suite_diagnostic()?;
         let replay = execution
             .cases
             .iter()

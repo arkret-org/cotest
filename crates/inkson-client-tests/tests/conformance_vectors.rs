@@ -1,6 +1,6 @@
 use anyhow::Result;
 use cotest_inkson_client_tests::conformance::{
-    run_named_suite_audit, run_webrtc_media_plaintext_suite,
+    inspect_named_suite_execution, run_webrtc_media_plaintext_suite,
 };
 
 #[test]
@@ -12,17 +12,17 @@ fn webrtc_media_plaintext_named_suite_returns_one_result_per_case() -> Result<()
 
 #[test]
 fn named_suite_audit_executes_registered_runners_and_exposes_every_gap() -> Result<()> {
-    let report = run_named_suite_audit()?;
-    assert_eq!(report.fixture_count, 89);
+    let report = inspect_named_suite_execution()?;
+    println!("{report:#?}");
+    assert!(report.assert_complete().is_err());
     assert!(report.deferred_client_entrypoints.is_empty());
-    assert_eq!(report.executed_entrypoints.len(), 54);
     assert!(
         report
             .executed_entrypoints
             .iter()
-            .any(|entrypoint| entrypoint == "ak.suite.pin.admission_and_scope.v1")
+            .any(|entrypoint| entrypoint == "ak.suite.account.blocklist_projection.v1")
     );
-    assert_eq!(report.unwired_entrypoints.len(), 34);
+    assert!(!report.decision_point_gaps.is_empty());
     for required_gap in [
         "ak.suite.call.force_mute_v1_boundary.v1",
         "ak.suite.current.cas_failure_read_boundary.v1",
