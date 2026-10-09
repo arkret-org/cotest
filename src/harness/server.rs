@@ -206,6 +206,33 @@ impl HarnessTls {
     }
 
     fn new() -> Result<Self> {
+        // Native consumers construct their own production transports. Supply
+        // the same explicit run PKI to those transports before starting any
+        // test threads, rather than mutating process trust during a scenario.
+        let cert = std::env::var_os("SOLAND_TLS_CERT_PATH");
+        let key = std::env::var_os("SOLAND_TLS_KEY_PATH");
+        if cert.is_some() || key.is_some() {
+            let cert = PathBuf::from(cert.context("native TLS override lacks certificate")?);
+            let key = PathBuf::from(key.context("native TLS override lacks private key")?);
+            let ca = PathBuf::from(
+                std::env::var_os("COTEST_RUN_SCOPED_CA_PEM")
+                    .context("native TLS override lacks run-scoped CA")?,
+            );
+            let roots = PathBuf::from(
+                std::env::var_os("SSL_CERT_FILE")
+                    .context("native TLS override lacks production transport roots")?,
+            );
+            anyhow::ensure!(
+                fs::canonicalize(&ca)? == fs::canonicalize(&roots)?,
+                "native TLS override and production transports use different roots"
+            );
+            fs::read(&cert).context("read native TLS override certificate")?;
+            fs::read(&key).context("read native TLS override private key")?;
+            let mut tls = Self::attached(&ca)?;
+            tls.cert_path = cert;
+            tls.key_path = key;
+            return Ok(tls);
+        }
         use rcgen::{
             BasicConstraints, CertificateParams, ExtendedKeyUsagePurpose, IsCa, Issuer, KeyPair,
             KeyUsagePurpose,

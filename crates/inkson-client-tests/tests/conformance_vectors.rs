@@ -11,6 +11,7 @@ fn webrtc_media_plaintext_named_suite_returns_one_result_per_case() -> Result<()
 }
 
 #[test]
+#[serial_test::serial]
 fn named_suite_audit_executes_registered_runners_and_exposes_every_gap() -> Result<()> {
     let report = inspect_named_suite_execution()?;
     println!("{report:#?}");
@@ -47,6 +48,7 @@ fn named_suite_audit_executes_registered_runners_and_exposes_every_gap() -> Resu
 }
 
 #[test]
+#[serial_test::serial]
 fn account_blocklist_projection_vector_executes_complete_production_suite() -> Result<()> {
     assert_eq!(
         cotest_inkson_client_tests::conformance::VECTOR_ID_ACCOUNT_BLOCKLIST_PROJECTION,
