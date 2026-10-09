@@ -4,6 +4,7 @@ import { createSharedRealmViaApi, sendPlaintextMessageViaApi } from "../../helpe
 import { resolveDefaultStrandId } from "../../helpers/soland-api";
 import { ensureRegistered, issueUserSession, openDpopUserPage, uniqueUser } from "../../helpers/users";
 import { stepShot } from "../../helpers/screenshots";
+import { sampleAndAdvanceTimeline } from "../../helpers/timeline-visibility";
 
 test("AV-UI-BOUND real WASM cold history keeps 256 variable-height messages reachable", async ({
   browser, request,
@@ -29,14 +30,43 @@ test("AV-UI-BOUND real WASM cold history keeps 256 variable-height messages reac
 
     const page = flow.page.page;
     await page.addInitScript(() => {
-      const evidence = { longTasks: [] as number[], inputFrames: [] as number[], peakRows: 0 };
+      const evidence = {
+        longTasks: [] as number[], inputFrames: [] as number[], peakRows: 0,
+        renderedRows: [] as number[],
+        installedWindows: [] as Array<{ top: number; rows: number[] }>,
+        omittedWindowRecords: 0,
+      };
+      const rendered = new Set<number>();
+      let previousWindow = "";
       Object.assign(window, { timelineHistoryEvidence: evidence });
       new PerformanceObserver(list => {
         for (const entry of list.getEntries()) evidence.longTasks.push(entry.duration);
       }).observe({ type: "longtask", buffered: true });
       new MutationObserver(() => {
-        evidence.peakRows = Math.max(evidence.peakRows,
-          document.querySelectorAll('[data-testid="message-list"] [data-virtual-index]').length);
+        const feed = document.querySelector<HTMLElement>('[data-testid="message-list"]');
+        const mounted = feed?.querySelectorAll('[data-virtual-index]') ?? [];
+        evidence.peakRows = Math.max(evidence.peakRows, mounted.length);
+        const indices = Array.from(mounted).flatMap(row => {
+          const match = /history-row-(\d{3})/.exec(row.textContent ?? "");
+          return match ? [Number(match[1])] : [];
+        });
+        for (const index of indices) {
+          if (!rendered.has(index)) {
+            rendered.add(index);
+            evidence.renderedRows.push(index);
+          }
+        }
+        const signature = indices.join(",");
+        if (signature !== previousWindow) {
+          previousWindow = signature;
+          // Passive DOM evidence distinguishes installed rows from a later
+          // Playwright sample. It supplies no history or authority state.
+          if (evidence.installedWindows.length < 1024) {
+            evidence.installedWindows.push({ top: feed?.scrollTop ?? 0, rows: indices });
+          } else {
+            evidence.omittedWindowRecords++;
+          }
+        }
       }).observe(document, { childList: true, subtree: true });
       document.addEventListener("input", event => {
         if (!(event.target instanceof HTMLElement) || event.target.dataset.testid !== "chat-input") return;
@@ -47,32 +77,32 @@ test("AV-UI-BOUND real WASM cold history keeps 256 variable-height messages reac
     const started = Date.now();
     await flow.page.gotoTimelineRealm(realmId);
     const feed = page.getByTestId("message-list");
-    const rows = feed.locator("[data-virtual-index]");
     await expect(feed.getByText("history-row-255", { exact: false })).toBeVisible({ timeout: 120_000 });
     const coldVisibleMs = Date.now() - started;
     const seen = new Set<number>();
     await feed.evaluate(element => { element.scrollTop = 0; });
     await expect(feed.getByText("history-row-000", { exact: false })).toBeVisible({ timeout: 30_000 });
     for (let step = 0; step < count * 4 && seen.size < count; step++) {
-      const sample = await rows.allTextContents();
+      const sample = await sampleAndAdvanceTimeline(feed);
       expect(sample.length, "mounted history window").toBeLessThanOrEqual(120);
       for (const text of sample) {
         const match = /history-row-(\d{3})/.exec(text);
         if (match) seen.add(Number(match[1]));
       }
       if (seen.size === count) break;
-      await feed.evaluate(element => {
-        const mounted = element.querySelectorAll("[data-virtual-index]");
-        const tail = mounted.item(mounted.length - 1);
-        const next = tail ? tail.getBoundingClientRect().bottom - element.getBoundingClientRect().top
-          + element.scrollTop - element.clientHeight * 0.5 : 0;
-        element.scrollTop = Math.max(element.scrollTop + Math.max(1, element.clientHeight * 0.65), next);
-      });
       // Allow the actual eval channel and Dioxus render to install each window.
       await page.waitForTimeout(75);
     }
     await testInfo.attach("real-wasm-history-traversal", {
-      body: JSON.stringify({ seen: [...seen].sort((a, b) => a - b), geometry: await feed.evaluate(element => ({
+      body: JSON.stringify({ seen: [...seen].sort((a, b) => a - b),
+        installed: await page.evaluate(() => {
+          const record = (window as unknown as { timelineHistoryEvidence: {
+            renderedRows: number[]; installedWindows: Array<{ top: number; rows: number[] }>;
+            omittedWindowRecords: number;
+          } }).timelineHistoryEvidence;
+          return { renderedRows: record.renderedRows.slice().sort((a, b) => a - b),
+            windows: record.installedWindows, omittedWindowRecords: record.omittedWindowRecords };
+        }), geometry: await feed.evaluate(element => ({
         top: element.scrollTop, height: element.scrollHeight, viewport: element.clientHeight,
         mounted: Array.from(element.querySelectorAll<HTMLElement>("[data-virtual-index]"))
           .map(row => Number(row.dataset.virtualIndex)),
