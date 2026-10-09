@@ -2846,7 +2846,6 @@ dependencies = [
  "cotest-account-data-cas-convergence-runner",
  "cotest-aead-nonce-replay-runner",
  "cotest-agent-mls-keypackage-authorization-runner",
- "cotest-applet-self-actor-runner",
  "cotest-blob-stream-aead-runner",
  "cotest-call-state-core-runner",
  "cotest-capability-relinquish-authoring-runner",
@@ -2854,6 +2853,7 @@ dependencies = [
  "cotest-cursor-negative-runner",
  "cotest-detached-object-signature-runner",
  "cotest-franking-proof-runner",
+ "cotest-managed-governance-runner",
  "cotest-mls-governance-binding-runner",
  "cotest-private-view-inbox-runner",
  "cotest-producer-identity-runner",
@@ -2938,20 +2938,6 @@ dependencies = [
  "arkret-wire",
  "ed25519-dalek 3.0.0",
  "serde",
- "serde_json",
-]
-
-[[package]]
-name = "cotest-applet-self-actor-runner"
-version = "0.3.0"
-dependencies = [
- "anyhow",
- "arkret-canonical",
- "arkret-mls",
- "arkret-models-crypto",
- "arkret-signatures",
- "arkret-wire",
- "chrono",
  "serde_json",
 ]
 
@@ -3111,6 +3097,21 @@ dependencies = [
  "hex",
  "serde_json",
  "sha2 0.11.0",
+]
+
+[[package]]
+name = "cotest-managed-governance-runner"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "arkret-canonical",
+ "arkret-mls",
+ "arkret-models-crypto",
+ "arkret-models-integration",
+ "arkret-signatures",
+ "arkret-wire",
+ "chrono",
+ "serde_json",
 ]
 
 [[package]]

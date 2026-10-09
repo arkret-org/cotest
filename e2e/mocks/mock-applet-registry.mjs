@@ -32,7 +32,7 @@
 //   - This is a harness shim; real registries enforce package publication,
 //     namespace governance, and controller key rotation. The mock fakes enough
 //     of the contract for joint-e2e to assert "signed package → soland install
-//     → bot actor minted → ghost transaction with accountability".
+//     → independent Bot provision → Ghost transaction with accountability".
 
 import { createServer } from "node:http";
 import { spawnSync } from "node:child_process";
@@ -330,7 +330,6 @@ function registrationEpochHash(packageBase, evidence) {
       service_id: packageBase.service_id,
       controller_principal_id: packageBase.controller_principal_id,
       base_url: packageBase.base_url,
-      bot_actor_id: packageBase.bot_actor_id,
       protocols: [...packageBase.protocols].sort(),
       namespaces: sortedNamespaces,
       receive_events: packageBase.receive_events,
@@ -690,6 +689,14 @@ function requestedScopesFromBody(body) {
 }
 
 function serverBaseUrl() {
+  const publicBase = process.env.MOCK_APPLET_REGISTRY_PUBLIC_BASE_URL;
+  if (publicBase) {
+    const parsed = new URL(publicBase);
+    if (parsed.protocol !== "https:") {
+      throw new Error("Applet management public base must use HTTPS");
+    }
+    return publicBase.replace(/\/$/, "");
+  }
   const actual = server.address();
   if (actual && typeof actual === "object") {
     return `http://127.0.0.1:${actual.port}`;
@@ -745,7 +752,7 @@ function prepareSignedPackage(body) {
             unversioned_refetch: false,
           }
         : {
-            method: `did:${String(serviceId).split(":")[1]}`,
+            method: serviceDid.split(":").slice(0, 2).join(":"),
             unversioned_refetch: true,
           }),
     accepted_signing_keys: [
@@ -762,7 +769,6 @@ function prepareSignedPackage(body) {
     service_id: serviceId,
     controller_principal_id: body.controller_principal_id ?? registryId,
     base_url: body.base_url ?? serverBaseUrl(),
-    bot_actor_id: body.bot_actor_id,
     claimed_profiles: [
       "ak.profile.applet_bridge.v1",
       "ak.profile.applet_service.v1",
@@ -773,7 +779,7 @@ function prepareSignedPackage(body) {
         {
           exclusive: true,
           pattern:
-            body.actor_namespace_pattern ?? `did:webvh:*:*:ghost-${safe}:*`,
+            body.actor_namespace_pattern ?? `did:webvh:*:${serviceDid.split(":")[3]}:ghost-${safe}:*`,
         },
       ],
       realms: [{ exclusive: true, pattern: `bridge:${safe}:*` }],
@@ -826,6 +832,9 @@ function prepareSignedPackage(body) {
     },
     created_at: createdAt,
   };
+  if (new URL(packageBase.base_url).protocol !== "https:") {
+    throw new Error("A signed Applet Package requires an HTTPS management base_url");
+  }
   if (body.widget) {
     packageBase.widget = body.widget;
   }
@@ -865,7 +874,7 @@ function prepareSignedPackage(body) {
   const packageInfo = {
     appletId,
     appletPackage,
-    botActorId: packageBase.bot_actor_id,
+    botActorId: body.bot_actor_id,
     namespace,
     safe,
     serviceId,
@@ -945,7 +954,7 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
     if (handled) return;
   }
 
-  if (url.pathname === "/healthz") {
+  if (url.pathname === "/healthz" || url.pathname === "/health") {
     res.end(JSON.stringify({ ok: true, service: "mock-applet-registry" }));
     return;
   }
@@ -960,11 +969,6 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
     if (!body) {
       res.statusCode = 400;
       res.end(JSON.stringify({ error: "invalid_json" }));
-      return;
-    }
-    if (!body.bot_actor_id) {
-      res.statusCode = 400;
-      res.end(JSON.stringify({ error: "missing_bot_actor_id" }));
       return;
     }
     const key = req.headers["idempotency-key"];
@@ -984,7 +988,13 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
       res.end(canonicalJson(original.response));
       return;
     }
-    const prepared = prepareSignedPackage(body);
+    let prepared;
+    try {
+      prepared = prepareSignedPackage(body);
+    } catch (error) {
+      console.error(`[mock-applet-registry] package preparation: ${error.name}: ${error.message}`);
+      throw error;
+    }
     const appletId = prepared.packageInfo.appletId;
     const previous = packagesByApplet.get(appletId);
     packagesByApplet.set(appletId, prepared.packageInfo);
@@ -1004,6 +1014,28 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
       return;
     }
     res.end(canonicalJson(prepared.response));
+    return;
+  }
+
+  if (url.pathname === "/inspect/bot-authoring-material" && req.method === "POST") {
+    const body = await readJson(req);
+    const packageInfo = packagesByApplet.get(body?.applet_id);
+    if (!packageInfo || !body.request_id || !body.effective_scope || !body.material) {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: "invalid_bot_authoring_material" }));
+      return;
+    }
+    const key = canonicalJson([body.effective_scope, body.request_id]);
+    packageInfo.botAuthoringMaterials ??= {};
+    const existing = packageInfo.botAuthoringMaterials[key];
+    if (existing && canonicalJson(existing) !== canonicalJson(body.material)) {
+      res.statusCode = 409;
+      res.end(JSON.stringify({ error: "bot_authoring_material_conflict" }));
+      return;
+    }
+    packageInfo.botAuthoringMaterials[key] = body.material;
+    persistDurableAuthoringState();
+    res.end(JSON.stringify({ status: "stored" }));
     return;
   }
 
@@ -1051,6 +1083,8 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
       authoringRequest?.purpose,
       authoringRequest?.basis?.applet_id,
       authoringRequest?.basis?.target_station_id,
+      canonicalJson(authoringRequest?.basis?.effective_scope ?? null),
+      authoringRequest?.basis?.request_id ?? "",
       canonicalJson(authoringRequest?.basis?.external_ref ?? null),
     ].join("\n");
     const existing = managedActorAuthoringOutcomes.get(subject);
@@ -1060,12 +1094,8 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
         return;
       }
     }
-    const material = authoringRequest?.purpose === "install_bot"
-      ? {
-          actor_id: packageInfo.botActorId,
-          initial_resolution: packageInfo.botInitialResolution,
-          method_history_evidence: packageInfo.botMethodHistoryEvidence,
-        }
+    const material = authoringRequest?.purpose === "provision_bot"
+      ? packageInfo.botAuthoringMaterials?.[canonicalJson([authoringRequest?.basis?.effective_scope, authoringRequest?.basis?.request_id])]
       : packageInfo.ghostAuthoringMaterials?.[canonicalJson(authoringRequest?.basis?.external_ref ?? null)];
     if (!material?.actor_id || !material.initial_resolution || !material.method_history_evidence) {
       res.statusCode = 409;
@@ -1078,8 +1108,8 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
       res.end(JSON.stringify({ error: "applet_service_key_unavailable" }));
       return;
     }
-    const registrationRef = authoringRequest?.purpose === "install_bot"
-      ? authoringRequest?.basis?.registration_event?.event_id
+    const registrationRef = authoringRequest?.purpose === "provision_bot"
+      ? authoringRequest?.basis?.registration_event_ref
       : material.registration_ref;
     if (typeof registrationRef !== "string") {
       res.statusCode = 409;
@@ -1226,9 +1256,9 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
       res.end(JSON.stringify({ error: "missing_strand_id" }));
       return;
     }
-    // The provisioning grant echoed by the provision outcome never authorizes
-    // later Ghost writes (applet-integration.md §9.1); the caller names the
-    // Ghost's own message grant.
+    // Deliberately invalid proxy fixture. The terminal child names the Ghost,
+    // while this mock signs as Service; live admission must reject the Event.
+    // This endpoint is not a managed Account/Device authoring runtime.
     if (typeof body.authorization_ref !== "string" || !body.authorization_ref.startsWith("ak:grant:")) {
       res.statusCode = 400;
       res.end(JSON.stringify({ error: "missing_authorization_ref" }));

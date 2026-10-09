@@ -26,6 +26,7 @@ test("Applet package without optional Bot evidence persists encrypted and reload
     for (const namespace of ["before-reload", "after-reload"]) {
       const response = await post("/sign-package", {
         namespace,
+        base_url: "https://applet.fixture.localhost",
         bot_actor_id: {
           kind: "account",
           account_id: {
@@ -34,7 +35,7 @@ test("Applet package without optional Bot evidence persists encrypted and reload
           },
         },
       });
-      assert.equal(response.status, 200);
+      assert.equal(response.status, 200, registry.logs);
       const signed = await response.json();
       assert.match(signed.package_digest, /^sha256:[0-9a-f]{64}$/);
       const envelope = JSON.parse(readFileSync(statePath, "utf8"));
@@ -74,6 +75,7 @@ test("a lost durable sign-package response replays exactly after process restart
     registry = await startRegistry(keyPath, statePath);
     const data = {
       namespace: "durable-replay",
+      base_url: "https://applet.fixture.localhost",
       bot_actor_id: {
         kind: "account",
         account_id: {
@@ -92,7 +94,7 @@ test("a lost durable sign-package response replays exactly after process restart
     } catch (error) {
       reset = /ECONNRESET|socket hang up/.test(error.message);
     }
-    assert.equal(reset, true);
+    assert.equal(reset, true, registry.logs);
     const state = readState();
     assert.equal(state.packages.length, 1);
     assert.equal(state.signedPackageOutcomes.length, 1);
@@ -141,6 +143,7 @@ test("a lost durable sign-package response replays exactly after process restart
 });
 
 async function startRegistry(keyPath, statePath) {
+  let stderr = "";
   const child = spawn(process.execPath, [fileURLToPath(new URL("../mock-applet-registry.mjs", import.meta.url))], {
     windowsHide: true,
     stdio: ["ignore", "ignore", "pipe"],
@@ -161,7 +164,6 @@ async function startRegistry(keyPath, statePath) {
   };
   try {
     const base = await new Promise((resolve, reject) => {
-      let stderr = "";
       child.stderr.on("data", (chunk) => {
         stderr += chunk.toString();
         const match = stderr.match(/listening on (http:\/\/127\.0\.0\.1:\d+)/);
@@ -170,7 +172,7 @@ async function startRegistry(keyPath, statePath) {
       child.once("error", reject);
       child.once("exit", () => reject(new Error("Applet mock exited before readiness")));
     });
-    return { child, base, stop };
+    return { child, base, stop, get logs() { return stderr; } };
   } catch (error) {
     await stop();
     throw error;

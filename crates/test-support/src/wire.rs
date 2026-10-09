@@ -466,6 +466,16 @@ pub fn invite_subject_proof(input: Value) -> Result<Value> {
     serde_json::to_value(proof).context("serialize invite subject proof")
 }
 
+pub fn validate_applet_authority_material(input: Value) -> Result<Value> {
+    let material: arkret_models_collaboration::applet_installation_authority::AppletAuthorityMaterialOutcome =
+        serde_json::from_value(input).context("parse Applet authority material")?;
+    material.validate_structural()?;
+    for view in std::iter::once(&material.registration).chain(&material.grant_events) {
+        view.validate_shape()?;
+    }
+    Ok(json!({"valid": true}))
+}
+
 pub fn managed_actor_author(input: Value) -> Result<Value> {
     let input: ManagedActorAuthorInput =
         serde_json::from_value(input).context("parse managed-actor author input")?;
@@ -484,7 +494,7 @@ pub fn managed_actor_author(input: Value) -> Result<Value> {
     let package_digest = basis
         .and_then(|value| value.get("package_digest"))
         .and_then(Value::as_str);
-    if !matches!(purpose, Some("install_bot" | "provision_ghost"))
+    if !matches!(purpose, Some("provision_bot" | "provision_ghost"))
         || target != Some(input.station_id.as_str())
         || applet_id != Some(input.applet_package.applet_id.as_str())
         || service_id != Some(input.applet_package.service_id.as_str())
@@ -577,8 +587,6 @@ pub fn managed_actor_author(input: Value) -> Result<Value> {
 
     let actor_account = input.actor_id.as_account_id();
     if actor_account.is_none_or(|account| account.station_id != input.station_id)
-        || (request.basis.install().is_some()
-            && input.actor_id != input.applet_package.bot_actor_id)
         || input.service_verification_method != input.applet_package.webhook_auth.key_ref
     {
         return Ok(author_rejection(
@@ -587,36 +595,13 @@ pub fn managed_actor_author(input: Value) -> Result<Value> {
             "package managed-actor material does not match the signed request",
         ));
     }
-    let registration_evidence = if let Some(install) = request.basis.install() {
-        let evidence: arkret::AppletRegistrationEpochEvidence = install
-            .registration_event
-            .payload
-            .get("manifest")
-            .and_then(Value::as_object)
-            .and_then(|manifest| manifest.get("registration_epoch_evidence"))
-            .cloned()
-            .context("registration Event omits registration epoch evidence")
-            .and_then(|value| {
-                serde_json::from_value(value).context("parse registration epoch evidence")
-            })?;
-        let expected = input.applet_package.to_registration(&evidence)?;
-        if serde_json::to_value(&install.registration_event.payload)?
-            != serde_json::to_value(expected)?
-        {
-            return Ok(author_rejection(
-                "authoring_request_event_binding_invalid",
-                400,
-                "registration Event does not bind the signed package",
-            ));
+    let registration_evidence = match &request.basis {
+        arkret::AppletManagedActorAuthoringBasis::ProvisionBot(basis) => {
+            basis.registration_epoch_evidence.clone()
         }
-        evidence
-    } else {
-        request
-            .basis
-            .ghost()
-            .context("validated request has no Ghost basis")?
-            .registration_epoch_evidence
-            .clone()
+        arkret::AppletManagedActorAuthoringBasis::ProvisionGhost(basis) => {
+            basis.registration_epoch_evidence.clone()
+        }
     };
     if !registration_evidence.contains_signing_key(input.service_verification_method.as_str()) {
         return Ok(author_rejection(

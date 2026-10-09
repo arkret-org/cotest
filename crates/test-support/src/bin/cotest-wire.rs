@@ -49,6 +49,7 @@ fn main() -> Result<()> {
         "device-pairing-approval" => wire::device_pairing_approval(input)?,
         "human-session-grant-request" => wire::human_session_grant_request(input)?,
         "managed-actor-author" => wire::managed_actor_author(input)?,
+        "validate-applet-authority-material" => wire::validate_applet_authority_material(input)?,
         _ => bail!("unknown cotest-wire command {command:?}"),
     };
 

@@ -3403,9 +3403,14 @@ if ($StartMockPushGateway) {
 }
 $mockAppletRegistryPort = $null
 $mockAppletRegistryBaseUrl = $null
+$mockAppletRegistryPublicHost = $null
 if ($StartMockAppletRegistry) {
+    if (-not $jointTlsEnabled) {
+        throw "The Applet mock requires the runner-owned HTTPS topology for its formal management base_url"
+    }
     $mockAppletRegistryPort = Get-FreeTcpPort
-    $mockAppletRegistryBaseUrl = "http://127.0.0.1:$mockAppletRegistryPort"
+    $mockAppletRegistryPublicHost = "mock-applet-registry.$DnsSuffix"
+    $mockAppletRegistryBaseUrl = "https://${mockAppletRegistryPublicHost}:$jointTlsPort"
 }
 $mockMimiFacadePort = $null
 $mockMimiFacadeBaseUrl = $null
@@ -3843,7 +3848,7 @@ try {
     if ($jointTlsEnabled) {
         $jointTlsDir = Join-Path $jointDir "tls"
         $jointTlsHostNames = @(
-            @($solandPublicHost, $solandServer2PublicHost, $coauthPublicHost, $coauthServer2PublicHost) +
+            @($solandPublicHost, $solandServer2PublicHost, $coauthPublicHost, $coauthServer2PublicHost, $mockAppletRegistryPublicHost) +
             @($additionalServers | ForEach-Object { @($_.SolandHost, $_.CoauthHost) })
         ) | ForEach-Object { $_ } | Where-Object { $_ }
         $jointTlsAssets = New-JointTlsAssets `
@@ -3858,6 +3863,9 @@ try {
         $env:COTEST_TLS_SPKI_SHA256 = $jointTlsAssets.ServerSpkiSha256
 
         $jointTlsRoutes = @()
+        if ($mockAppletRegistryPublicHost) {
+            $jointTlsRoutes += [pscustomobject]@{ Host = $mockAppletRegistryPublicHost; BackendPort = $mockAppletRegistryPort }
+        }
         if ($solandPublicHost) {
             $jointTlsRoutes += [pscustomobject]@{ Host = $solandPublicHost; BackendPort = $solandPort }
         }
@@ -4767,36 +4775,6 @@ try {
         }
     }
 
-    # 0530-C: prove the HTTPS identity topology before any business test runs.
-    # A failure here is a topology defect, not a product regression, so it must
-    # not be allowed to masquerade as 94 misleading testcase failures.
-    if ($jointTlsEnabled) {
-        if (-not $env:COTEST_WIRE_BIN) {
-            throw "joint TLS topology verification requires the cotest-wire binary; rerun without -SkipBuild or set COTEST_WIRE_BIN"
-        }
-        $jointTlsServices = @()
-        if ($solandPublicHost -and $SolandServiceDid) {
-            $jointTlsServices += [pscustomobject]@{ Name = "soland-server1"; ServiceDid = $SolandServiceDid }
-        }
-        if ($solandServer2PublicHost -and $SolandServer2ServiceDid) {
-            $jointTlsServices += [pscustomobject]@{ Name = "soland-server2"; ServiceDid = $SolandServer2ServiceDid }
-        }
-        foreach ($server in $additionalServers) {
-            if ($server.SolandHost -and $server.SolandServiceDid) {
-                $jointTlsServices += [pscustomobject]@{ Name = $server.SolandName; ServiceDid = $server.SolandServiceDid }
-            }
-        }
-        Assert-JointTlsTopology `
-            -TlsPort $jointTlsPort `
-            -TrustedHosts $jointTlsHostNames `
-            -UnregisteredProbeHost $jointTlsUnregisteredProbeHost `
-            -CaPemPath $jointTlsAssets.CaPemPath `
-            -ServerPemPath $jointTlsAssets.ServerPemPath `
-            -CotestWireBin $env:COTEST_WIRE_BIN `
-            -EvidenceDir (Join-Path $jointDir "tls-preflight") `
-            -Services $jointTlsServices
-    }
-
     $env:COTEST_JOINT_RUN_DIR = $jointDir
     if ($requiresInkson) {
         $env:COTEST_INKSON_ROOT = $InksonRoot
@@ -4842,6 +4820,7 @@ try {
             [System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32)
         )
         $envExpr = "`$env:MOCK_APPLET_REGISTRY_PORT='$mockAppletRegistryPort'; `$env:MOCK_APPLET_REGISTRY_STATE_FILE=" + (Quote-PsLiteral $mockAppletRegistryStateFile) + "; `$env:MOCK_APPLET_REGISTRY_STATE_KEY_FILE=" + (Quote-PsLiteral $mockAppletRegistryStateKeyFile)
+        $envExpr += "; `$env:MOCK_APPLET_REGISTRY_PUBLIC_BASE_URL=" + (Quote-PsLiteral $mockAppletRegistryBaseUrl)
         if ($MockAppletRegistryDid) {
             $envExpr = "$envExpr; `$env:MOCK_APPLET_REGISTRY_DID=" + (Quote-PsLiteral $MockAppletRegistryDid)
         }
@@ -4849,6 +4828,36 @@ try {
         $managedServices.Add((Start-ManagedCommand -Name "mock-applet-registry" -Command $mockAppletRegistryCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
         Wait-HttpReady -Url "$mockAppletRegistryBaseUrl/identity" -TimeoutSeconds 30
     }
+    # 0530-C: prove the HTTPS identity topology before any business test runs.
+    # A failure here is a topology defect, not a product regression, so it must
+    # not be allowed to masquerade as 94 misleading testcase failures.
+    if ($jointTlsEnabled) {
+        if (-not $env:COTEST_WIRE_BIN) {
+            throw "joint TLS topology verification requires the cotest-wire binary; rerun without -SkipBuild or set COTEST_WIRE_BIN"
+        }
+        $jointTlsServices = @()
+        if ($solandPublicHost -and $SolandServiceDid) {
+            $jointTlsServices += [pscustomobject]@{ Name = "soland-server1"; ServiceDid = $SolandServiceDid }
+        }
+        if ($solandServer2PublicHost -and $SolandServer2ServiceDid) {
+            $jointTlsServices += [pscustomobject]@{ Name = "soland-server2"; ServiceDid = $SolandServer2ServiceDid }
+        }
+        foreach ($server in $additionalServers) {
+            if ($server.SolandHost -and $server.SolandServiceDid) {
+                $jointTlsServices += [pscustomobject]@{ Name = $server.SolandName; ServiceDid = $server.SolandServiceDid }
+            }
+        }
+        Assert-JointTlsTopology `
+            -TlsPort $jointTlsPort `
+            -TrustedHosts $jointTlsHostNames `
+            -UnregisteredProbeHost $jointTlsUnregisteredProbeHost `
+            -CaPemPath $jointTlsAssets.CaPemPath `
+            -ServerPemPath $jointTlsAssets.ServerPemPath `
+            -CotestWireBin $env:COTEST_WIRE_BIN `
+            -EvidenceDir (Join-Path $jointDir "tls-preflight") `
+            -Services $jointTlsServices
+    }
+
     if ($InksonBaseUrl) {
         $env:COTEST_INKSON_BASE_URL = $InksonBaseUrl
     } else {
@@ -5108,18 +5117,17 @@ try {
         Write-Host ""
         Write-Host "=== Rust provisioning check (live Coauth + Soland) ==="
         $provisioningLog = Join-Path $jointDir "rust-provisioning-check.log"
-        $provisioningArgs = @(
-            "test", "--manifest-path", (Join-Path $repoRoot "Cargo.toml"),
-            "-p", "cotest-test-support", "--test", "provisioning_live",
-            "--", "--ignored", "--nocapture"
-        )
-        $provisioningOutput = & cargo @provisioningArgs 2>&1
-        $provisioningExit = $LASTEXITCODE
+        # Keep both native output streams draining independently, as for builds.
+        # Capturing merged Cargo output can fill child pipes before Cargo exits.
+        $provisioningCommand = "cargo test --manifest-path {0} -p cotest-test-support --test provisioning_live -- --ignored --nocapture" -f (Quote-PsLiteral (Join-Path $repoRoot "Cargo.toml"))
+        $provisioningService = Start-ManagedCommand `
+            -Name "prepare-provisioning-check" `
+            -Command $provisioningCommand `
+            -WorkingDirectory $repoRoot `
+            -LogDirectory $serviceLogDir
+        $provisioningOutput = @(Get-Content -LiteralPath $provisioningService.Stdout) + @(Get-Content -LiteralPath $provisioningService.Stderr)
         $provisioningOutput | Set-Content -LiteralPath $provisioningLog -Encoding UTF8
         foreach ($line in $provisioningOutput) { Write-Host $line }
-        if ($provisioningExit -ne 0) {
-            throw "Rust provisioning check failed (exit=$provisioningExit); see $provisioningLog"
-        }
 
         # The same deployment, one layer up: `ArkretServer::canonical_client`
         # building a `TestActorClient` on a canonical session.

@@ -1,5 +1,5 @@
 [package]
-name = "cotest-applet-self-actor-runner"
+name = "cotest-managed-governance-runner"
 version = "0.3.0"
 edition = "2024"
 rust-version = "1.98"
@@ -9,6 +9,7 @@ publish = false
 anyhow = { workspace = true }
 arkret-canonical = { workspace = true }
 arkret-mls = { workspace = true, features = ["test-utils"] }
+arkret-models-integration = { workspace = true }
 arkret-models-crypto = { workspace = true }
 arkret-signatures = { workspace = true }
 arkret-wire = { workspace = true }
