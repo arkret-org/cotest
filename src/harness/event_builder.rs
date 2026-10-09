@@ -64,7 +64,7 @@ pub(crate) fn event_signing_identity(actor: &str) -> ([u8; 32], DidUrl) {
         .unwrap_or_else(|| {
             let verification_method = default_event_verification_method(actor);
             let signing_seed =
-                arkret::signatures::development_signing_key_seed(&verification_method);
+                arkret_test_kit::keys::development_signing_key_seed(&verification_method);
             (signing_seed, verification_method)
         })
 }
@@ -97,7 +97,7 @@ pub fn event_signing_identity_for_device(actor: &str, device_id: &str) -> ([u8; 
         .map(|(seed, method, _)| (seed, method))
         .unwrap_or_else(|| {
             let signing_seed =
-                arkret::signatures::development_signing_key_seed(&verification_method);
+                arkret_test_kit::keys::development_signing_key_seed(&verification_method);
             (signing_seed, verification_method)
         })
 }
@@ -225,7 +225,7 @@ pub async fn dev_login(server: &ArkretServer, actor: &str, device_id: &str) -> R
     let verification_method = default_event_verification_method(actor);
     register_event_signing_identity(
         actor,
-        arkret::signatures::development_signing_key_seed(&verification_method),
+        arkret_test_kit::keys::development_signing_key_seed(&verification_method),
         verification_method.as_str().to_owned(),
         server.service_id().clone(),
     );
