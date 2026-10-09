@@ -21,6 +21,17 @@ Assert-True $duplicateRejected "duplicate marker insertion must fail closed"
 $foreignRejected = $false
 try { Add-CotestHostsBlock -Content $original -Hosts @("example.com") -Marker $marker | Out-Null } catch { $foreignRejected = $true }
 Assert-True $foreignRejected "foreign host insertion must fail closed"
+foreach ($newline in @("`r`n", "`n")) {
+    $content = "127.0.0.1 localhost${newline}10.0.0.8 user-owned.example${newline}"
+    $mockBlock = Add-CotestHostsBlock -Content $content -Hosts (@($hosts) + @(" Mock-Applet-Registry.Local.Host ", "mock-applet-registry.local.host")) -Marker $marker
+    Assert-Equal 1 ([regex]::Matches($mockBlock, '(?m)^127\.0\.0\.1\tmock-applet-registry\.local\.host\r?$').Count) "the exact HTTPS Applet mock must have one normalized loopback entry"
+    Assert-Equal $content (Remove-CotestHostsBlocks -Content $mockBlock -Marker $marker) "mock hosts cleanup must preserve user content and newline style"
+}
+foreach ($foreignMock in @("mock-applet-registry.example.com", "mock-applet-registry.local.host.example.com", "other-mock.local.host", "mock-applet-registry2.local.host", "mock-applet-registry.local.host`n192.0.2.1 example.com")) {
+    $rejected = $false
+    try { Add-CotestHostsBlock -Content $original -Hosts @("mock-applet-registry.local.host", $foreignMock) -Marker $marker | Out-Null } catch { $rejected = $true }
+    Assert-True $rejected "a foreign or injected mock host must fail closed: $foreignMock"
+}
 $stale = Add-CotestHostsBlock -Content $withBlock -Hosts @("soland-server1.local.host") -Marker (New-CotestHostsMarker -RunId "unit-stale")
 Assert-Equal $original (Remove-CotestHostsBlocks -Content $stale) "stale cleanup must remove every cotest block and preserve foreign content"
 # Blocks written before `b6ab807b` separated the prefix from the stamp with a

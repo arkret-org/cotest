@@ -87,7 +87,8 @@ function Add-CotestHostsBlock {
     $normalizedHosts = @($Hosts | ForEach-Object { $_.Trim().ToLowerInvariant() } | Where-Object { $_ } | Sort-Object -Unique)
     if ($normalizedHosts.Count -eq 0) { throw "At least one hosts name is required" }
     foreach ($hostName in $normalizedHosts) {
-        if ($hostName -notmatch '^(?:soland|coauth)-server[1-9][0-9]*\.local\.host$' -and $hostName -ne "unregistered.local.host") {
+        if ($hostName -notmatch '^(?:soland|coauth)-server[1-9][0-9]*\.local\.host$' -and
+            $hostName -notin @("unregistered.local.host", "mock-applet-registry.local.host")) {
             throw "Refusing host outside the cotest joint namespace: $hostName"
         }
     }
