@@ -108,7 +108,7 @@ arkret-canonical = { path = "../arkret-rust-sdk/crates/canonical" }
 arkret-crypto = { path = "../arkret-rust-sdk/crates/crypto" }
 arkret-event-draft = { path = "../arkret-rust-sdk/crates/event-draft" }
 arkret-hlc = { path = "../arkret-rust-sdk/crates/hlc" }
-arkret-http-client = { path = "../arkret-rust-sdk/crates/http-client" }
+arkret-http-client = { path = "../arkret-rust-sdk/crates/http-client", features = ["tls-rustls"] }
 arkret-identifiers = { path = "../arkret-rust-sdk/crates/identifiers" }
 arkret-identity = { path = "../arkret-rust-sdk/crates/identity" }
 arkret-mls = { path = "../arkret-rust-sdk/crates/mls" }

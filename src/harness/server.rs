@@ -521,10 +521,38 @@ impl ArkretServer {
             .map(|issuer| issuer.origin())
     }
 
+    /// Bind an externally configured fixture issuer to the native host through
+    /// credential-free discovery and the issuer's exact live record.
+    pub async fn bind_native_host_session(
+        &self,
+        client: TestActorClient,
+        issuer: &MockCoauthIntrospectionServer,
+    ) -> Result<TestActorClient> {
+        super::native_session::bind_standard_host(
+            client,
+            issuer,
+            &self.service_id,
+            &self.trust_domain,
+            self._tls.as_ref().map(|tls| tls.ca_pem.as_slice()),
+        )
+        .await
+    }
+
     /// [`Self::demo_client`] presenting its founding device's Standard grant.
     pub async fn standard_client(&self, actor: &str, device_id: &str) -> Result<TestActorClient> {
         let client = self.demo_client(actor, device_id).await?;
-        self.standard_grant_client(&client)
+        let client = self.standard_grant_client(&client)?;
+        super::native_session::bind_standard_host(
+            client,
+            self.session_grant_issuer
+                .as_ref()
+                .context("missing harness issuer")?
+                .as_ref(),
+            &self.service_id,
+            &self.trust_domain,
+            self._tls.as_ref().map(|tls| tls.ca_pem.as_slice()),
+        )
+        .await
     }
 
     /// [`Self::register_client`] presenting its founding device's Standard grant.
@@ -535,7 +563,18 @@ impl ArkretServer {
         device_id: &str,
     ) -> Result<TestActorClient> {
         let client = self.register_client(did, handle, device_id).await?;
-        self.standard_grant_client(&client)
+        let client = self.standard_grant_client(&client)?;
+        super::native_session::bind_standard_host(
+            client,
+            self.session_grant_issuer
+                .as_ref()
+                .context("missing harness issuer")?
+                .as_ref(),
+            &self.service_id,
+            &self.trust_domain,
+            self._tls.as_ref().map(|tls| tls.ca_pem.as_slice()),
+        )
+        .await
     }
 
     /// [`Self::register_client_with_localpart`] presenting its founding
@@ -550,7 +589,18 @@ impl ArkretServer {
         let client = self
             .register_client_with_localpart(did, display_handle, localpart, device_id)
             .await?;
-        self.standard_grant_client(&client)
+        let client = self.standard_grant_client(&client)?;
+        super::native_session::bind_standard_host(
+            client,
+            self.session_grant_issuer
+                .as_ref()
+                .context("missing harness issuer")?
+                .as_ref(),
+            &self.service_id,
+            &self.trust_domain,
+            self._tls.as_ref().map(|tls| tls.ca_pem.as_slice()),
+        )
+        .await
     }
 
     async fn spawn_with_network_and_env(

@@ -95,6 +95,65 @@ pub struct MockCoauthIntrospectionServer {
     _server: super::mock_http::MockServer,
 }
 
+#[derive(Clone)]
+pub(crate) struct MockCoauthGrantLedger {
+    bindings: Arc<Mutex<Vec<CoauthGrantBinding>>>,
+}
+
+impl MockCoauthGrantLedger {
+    /// Host state from the same exact issuer record consumed by the SUT.
+    /// This fixture does not claim to exercise Coauth issuance.
+    pub(crate) fn own_station_session_state(
+        &self,
+        credential: &str,
+        station: &arkret_wire::DidCoreId,
+    ) -> Result<garth::SessionGrantState> {
+        let bindings = self.bindings.lock().expect("coauth mock binding lock");
+        let (index, binding) = bindings
+            .iter()
+            .enumerate()
+            .find(|(_, binding)| binding.grant_jwt == credential)
+            .context("own Station credential has no issuer record")?;
+        anyhow::ensure!(
+            !binding.revoked && binding.expires_at > chrono::Utc::now(),
+            "own Station issuer record is revoked or expired"
+        );
+        use base64::Engine as _;
+        let payload = credential
+            .split('.')
+            .nth(1)
+            .context("issuer credential has no payload")?;
+        let claims: Value = serde_json::from_slice(
+            &base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(payload)?,
+        )?;
+        anyhow::ensure!(
+            claims["aud"].as_str() == Some(station.as_str())
+                && claims["sub"].as_str() == Some(binding.subject.as_str()),
+            "issuer credential belongs to another Station or principal"
+        );
+        let CoauthGrantHolder::HumanDevice { device_id, .. } = &binding.holder else {
+            anyhow::bail!("native Account host requires the exact human device grant");
+        };
+        Ok(garth::SessionGrantState {
+            account_id: arkret_wire::AccountId::new(
+                arkret_wire::DidCoreId::new(binding.subject.clone())?,
+                station.clone(),
+            ),
+            device_id: Some(arkret_wire::DeviceId::new(device_id.clone())?),
+            grant_id: arkret_wire::SessionGrantId::new(recorded_grant_id(index, credential))?,
+            grant_jwt: binding.grant_jwt.clone(),
+            expires_at: binding.expires_at,
+            audience_id: station.clone(),
+            granted_scope: standard_human_grant_scopes()
+                .into_iter()
+                .map(str::to_owned)
+                .collect(),
+            session_public_key: Some(binding.session_public_key.clone()),
+            dpop_jkt: Some(binding.cnf_jkt.clone()),
+        })
+    }
+}
+
 impl MockCoauthIntrospectionServer {
     /// Spawn the mock before the SUT exists so its URL can be wired into the
     /// SUT environment; bind the provisioned principal afterwards through
@@ -281,6 +340,21 @@ impl MockCoauthIntrospectionServer {
 
     pub fn origin(&self) -> String {
         self.origin.clone()
+    }
+
+    pub(crate) fn grant_ledger(&self) -> MockCoauthGrantLedger {
+        MockCoauthGrantLedger {
+            bindings: self.bindings.clone(),
+        }
+    }
+
+    pub(crate) fn own_station_session_state(
+        &self,
+        credential: &str,
+        station: &arkret_wire::DidCoreId,
+    ) -> Result<garth::SessionGrantState> {
+        self.grant_ledger()
+            .own_station_session_state(credential, station)
     }
 
     pub fn requests(&self) -> Vec<Value> {
@@ -514,16 +588,7 @@ async fn coauth_revoke(req: &mut Request, depot: &mut Depot, res: &mut Response)
         return;
     }
     binding.revoked = true;
-    let grant_id = if index == 0 {
-        "ak:session_grant:AREUYrj1_BH7OOg12-uDdXYf2SrPpdqagciUGa9tJ-nD".to_owned()
-    } else {
-        let mut digest = vec![0x01];
-        digest.extend(arkret_canonical::sha256_bytes(token.as_bytes()));
-        format!(
-            "ak:session_grant:{}",
-            arkret_canonical::base64url_encode(digest)
-        )
-    };
+    let grant_id = recorded_grant_id(index, &token);
     res.render(Json(json!({
         "revoked_count": 1,
         "revoked_session_grant_ids": [grant_id]
@@ -617,16 +682,7 @@ async fn coauth_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respo
         .unwrap_or_default();
     // The first recorded grant keeps its historical id; later grants get an
     // id derived from their exact credential so records stay distinct.
-    let grant_id = if index == 0 {
-        "ak:session_grant:AREUYrj1_BH7OOg12-uDdXYf2SrPpdqagciUGa9tJ-nD".to_owned()
-    } else {
-        let mut token = vec![0x01];
-        token.extend(arkret_canonical::sha256_bytes(binding.grant_jwt.as_bytes()));
-        format!(
-            "ak:session_grant:{}",
-            arkret_canonical::base64url_encode(token)
-        )
-    };
+    let grant_id = recorded_grant_id(index, &binding.grant_jwt);
     let expires_at = arkret_canonical::format_timestamp_canonical(binding.expires_at);
     let mut grant = json!({
         "id": grant_id,
@@ -649,11 +705,7 @@ async fn coauth_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respo
             authorization_event_id,
         } => {
             grant["device_id"] = json!(device_id);
-            grant["scopes"] = json!([
-                "ak.self.account.read.describe.v1",
-                "ak.self.committed_event.read.scan.v1",
-                "ak.root.identity.recovery_policy.resource.get.v1"
-            ]);
+            grant["scopes"] = json!(standard_human_grant_scopes());
             grant["holder_binding"] = json!({
                 "kind": "human_device",
                 "device_binding": device_id
@@ -700,4 +752,25 @@ async fn coauth_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respo
         "one_time_use_consumed": false,
         "grant": grant
     })));
+}
+
+fn recorded_grant_id(index: usize, credential: &str) -> String {
+    if index == 0 {
+        "ak:session_grant:AREUYrj1_BH7OOg12-uDdXYf2SrPpdqagciUGa9tJ-nD".to_owned()
+    } else {
+        let mut token = vec![0x01];
+        token.extend(arkret_canonical::sha256_bytes(credential.as_bytes()));
+        format!(
+            "ak:session_grant:{}",
+            arkret_canonical::base64url_encode(token)
+        )
+    }
+}
+
+fn standard_human_grant_scopes() -> [&'static str; 3] {
+    [
+        "ak.self.account.read.describe.v1",
+        "ak.self.committed_event.read.scan.v1",
+        "ak.root.identity.recovery_policy.resource.get.v1",
+    ]
 }
