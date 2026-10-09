@@ -954,7 +954,7 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
     if (handled) return;
   }
 
-  if (url.pathname === "/healthz") {
+  if (url.pathname === "/healthz" || url.pathname === "/health") {
     res.end(JSON.stringify({ ok: true, service: "mock-applet-registry" }));
     return;
   }

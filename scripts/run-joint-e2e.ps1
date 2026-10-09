@@ -4775,36 +4775,6 @@ try {
         }
     }
 
-    # 0530-C: prove the HTTPS identity topology before any business test runs.
-    # A failure here is a topology defect, not a product regression, so it must
-    # not be allowed to masquerade as 94 misleading testcase failures.
-    if ($jointTlsEnabled) {
-        if (-not $env:COTEST_WIRE_BIN) {
-            throw "joint TLS topology verification requires the cotest-wire binary; rerun without -SkipBuild or set COTEST_WIRE_BIN"
-        }
-        $jointTlsServices = @()
-        if ($solandPublicHost -and $SolandServiceDid) {
-            $jointTlsServices += [pscustomobject]@{ Name = "soland-server1"; ServiceDid = $SolandServiceDid }
-        }
-        if ($solandServer2PublicHost -and $SolandServer2ServiceDid) {
-            $jointTlsServices += [pscustomobject]@{ Name = "soland-server2"; ServiceDid = $SolandServer2ServiceDid }
-        }
-        foreach ($server in $additionalServers) {
-            if ($server.SolandHost -and $server.SolandServiceDid) {
-                $jointTlsServices += [pscustomobject]@{ Name = $server.SolandName; ServiceDid = $server.SolandServiceDid }
-            }
-        }
-        Assert-JointTlsTopology `
-            -TlsPort $jointTlsPort `
-            -TrustedHosts $jointTlsHostNames `
-            -UnregisteredProbeHost $jointTlsUnregisteredProbeHost `
-            -CaPemPath $jointTlsAssets.CaPemPath `
-            -ServerPemPath $jointTlsAssets.ServerPemPath `
-            -CotestWireBin $env:COTEST_WIRE_BIN `
-            -EvidenceDir (Join-Path $jointDir "tls-preflight") `
-            -Services $jointTlsServices
-    }
-
     $env:COTEST_JOINT_RUN_DIR = $jointDir
     if ($requiresInkson) {
         $env:COTEST_INKSON_ROOT = $InksonRoot
@@ -4858,6 +4828,36 @@ try {
         $managedServices.Add((Start-ManagedCommand -Name "mock-applet-registry" -Command $mockAppletRegistryCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
         Wait-HttpReady -Url "$mockAppletRegistryBaseUrl/identity" -TimeoutSeconds 30
     }
+    # 0530-C: prove the HTTPS identity topology before any business test runs.
+    # A failure here is a topology defect, not a product regression, so it must
+    # not be allowed to masquerade as 94 misleading testcase failures.
+    if ($jointTlsEnabled) {
+        if (-not $env:COTEST_WIRE_BIN) {
+            throw "joint TLS topology verification requires the cotest-wire binary; rerun without -SkipBuild or set COTEST_WIRE_BIN"
+        }
+        $jointTlsServices = @()
+        if ($solandPublicHost -and $SolandServiceDid) {
+            $jointTlsServices += [pscustomobject]@{ Name = "soland-server1"; ServiceDid = $SolandServiceDid }
+        }
+        if ($solandServer2PublicHost -and $SolandServer2ServiceDid) {
+            $jointTlsServices += [pscustomobject]@{ Name = "soland-server2"; ServiceDid = $SolandServer2ServiceDid }
+        }
+        foreach ($server in $additionalServers) {
+            if ($server.SolandHost -and $server.SolandServiceDid) {
+                $jointTlsServices += [pscustomobject]@{ Name = $server.SolandName; ServiceDid = $server.SolandServiceDid }
+            }
+        }
+        Assert-JointTlsTopology `
+            -TlsPort $jointTlsPort `
+            -TrustedHosts $jointTlsHostNames `
+            -UnregisteredProbeHost $jointTlsUnregisteredProbeHost `
+            -CaPemPath $jointTlsAssets.CaPemPath `
+            -ServerPemPath $jointTlsAssets.ServerPemPath `
+            -CotestWireBin $env:COTEST_WIRE_BIN `
+            -EvidenceDir (Join-Path $jointDir "tls-preflight") `
+            -Services $jointTlsServices
+    }
+
     if ($InksonBaseUrl) {
         $env:COTEST_INKSON_BASE_URL = $InksonBaseUrl
     } else {
