@@ -132,7 +132,8 @@ fn test_material_rejection_named_suite_executes_all_cases_and_exposes_service_ga
 #[test]
 fn sdk_precheck_diagnostic_executes_cases_and_refuses_production_claim() -> Result<()> {
     let execution = run_sdk_precheck_suite_diagnostic()?;
-    execution.assert_complete_against(&load_local_fixture_value(execution.fixture)?)?;
+    execution
+        .assert_complete_against(&cotest::conformance::load_fixture_value(execution.fixture)?)?;
     assert!(run_sdk_precheck_suite().is_err());
     Ok(())
 }
