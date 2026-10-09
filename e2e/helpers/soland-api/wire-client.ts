@@ -11,6 +11,7 @@ type CotestWireCommand =
   | "historical-human-signer-query"
   | "historical-human-signer-fact"
   | "verify-realm-state-snapshot"
+  | "validate-applet-authority-material"
   | "invite-subject-proof"
   | "key-backup-auth-signature"
   | "mimi-consent-proof"

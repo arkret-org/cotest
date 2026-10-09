@@ -49,6 +49,15 @@ export const OUTPUT_PATH = resolve(
  * CLI-command DTOs, the local signer bookkeeping) stay hand-written.
  */
 const TARGETS = [
+  { file: "applet-package.schema.json", typeName: "AppletPackage" },
+  { file: "applet-install-operations.schema.json", pointer: "#/$defs/applet_install_request_body", typeName: "AppletInstallRequestBody" },
+  { file: "applet-install-operations.schema.json", pointer: "#/$defs/applet_install_outcome", typeName: "AppletInstallOutcome" },
+  { file: "applet-bot-operations.schema.json", pointer: "#/$defs/bot_preview_request_body", typeName: "AppletBotPreviewRequestBody" },
+  { file: "applet-bot-operations.schema.json", pointer: "#/$defs/bot_actor_provision_request_body", typeName: "AppletBotProvisionRequestBody" },
+  { file: "applet-bot-operations.schema.json", pointer: "#/$defs/bot_actor_provision_outcome", typeName: "AppletBotProvisionOutcome" },
+  { file: "applet-authority-material.schema.json", pointer: "#/$defs/request", typeName: "AppletAuthorityMaterialRequestBody" },
+  { file: "applet-authority-material.schema.json", pointer: "#/$defs/outcome", typeName: "AppletAuthorityMaterialOutcome" },
+  { file: "applet-device-authentication.schema.json", typeName: "AppletManagedDeviceMetadata" },
   { file: "realm-join-intake.schema.json", pointer: "#/$defs/self_prepare_request_body", typeName: "RealmJoinPrepareRequestBody" },
   { file: "message-authoring.schema.json", pointer: "#/$defs/message_prepare_request_body", typeName: "MessagePrepareRequestBody" },
   { file: "identity-resolution.schema.json", pointer: "#/$defs/public_principal_resolution", typeName: "PublicPrincipalResolution" },

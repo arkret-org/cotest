@@ -114,8 +114,8 @@ enum Runner {
 
 const RUNNERS: [(&str, Runner); 52] = [
     (
-        super::APPLET_SELF_ACTOR_ENTRYPOINT,
-        Runner::Cases(super::run_applet_self_actor_suite),
+        super::MANAGED_GOVERNANCE_ENTRYPOINT,
+        Runner::EvidenceMapped(super::run_managed_governance_suite),
     ),
     (
         "ak.suite.pin.admission_and_scope.v1",

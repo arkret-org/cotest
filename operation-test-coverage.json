@@ -3,29 +3,29 @@
   "source_of_truth": false,
   "generated_from": {
     "operation_registry": "arkret-spec/spec/v1/artifacts/registry/operation-registry.json",
-    "operation_registry_sha256": "376243e62db2cd1b7388b1117c155025a9447c70efed16dc4e5a596754d57f40",
+    "operation_registry_sha256": "2a6b47c092274aa780e480d463e1eb78f348e382ce5b3237561540565c948509",
     "test_layers": {
       "soland_unit": {
         "source_file_count": 409,
-        "source_sha256": "e4c17f9ccb48754526f628d5bb0ace82ec807f4493f1721894d0098a1fb0bc80",
+        "source_sha256": "34e8f7b50a7f6dd48d838839f35fb599cdb6165a2ec33c9d8dfb85fed6020370",
         "evidence_count": 285,
         "covered_operation_count": 141
       },
       "soland_http": {
         "source_file_count": 46,
-        "source_sha256": "2309612212c4d6e9a90d03ffdc321e0ea8cb591d892b2e9b14e0fa103932d5c8",
+        "source_sha256": "478bfa5226b9cdf3024dc40a10e1cadb94d3df17b747d6df9d40f6cb6dce1f00",
         "evidence_count": 31,
         "covered_operation_count": 20
       },
       "cotest_rust": {
         "source_file_count": 424,
-        "source_sha256": "776e412b62927a0c42f646c11b9fce4b5df1b6be10d049324bff8a06f20c3847",
+        "source_sha256": "e5cc4c5cd6cc44b7845ff1844151b479ff3d64a0a741ec154a55967dac8f18d4",
         "evidence_count": 132,
         "covered_operation_count": 71
       },
       "cotest_e2e": {
         "source_file_count": 117,
-        "source_sha256": "09c9024236ab5be90cc4d532da5b74ef0649e20c476efb098fa023fe163b93c1",
+        "source_sha256": "7ed9776e484c3346e409f2b059579bd099deb0e4ce1bbe97f6eda6f17b396474",
         "evidence_count": 51,
         "covered_operation_count": 22
       },
@@ -38,7 +38,7 @@
     }
   },
   "dimensions": {
-    "operation_count": 211,
+    "operation_count": 215,
     "test_layers": [
       "soland_unit",
       "soland_http",
@@ -54,12 +54,11 @@
       "fault_recovery",
       "security_negative"
     ],
-    "matrix_cell_count": 1055
+    "matrix_cell_count": 1075
   },
   "closure": {
     "covered_operation_count": 160,
     "uncovered_operation_ids": [
-      "ak.edge.applet.client.command.exchange.v1",
       "ak.edge.applet.managed_actor.command.author.v1",
       "ak.edge.push.command.apply_registration.v1",
       "ak.gate.account.command.abandon_identity_creation.v1",
@@ -92,7 +91,9 @@
       "ak.self.agent.participation.resource.replace.v1",
       "ak.self.agent.sidecar.read.list.v1",
       "ak.self.agent.sidecar.resource.get.v1",
-      "ak.self.applet.install.command.cancel.v1",
+      "ak.self.applet.authority.read.material.v1",
+      "ak.self.applet.bot.command.preview.v1",
+      "ak.self.applet.bot.command.provision.v1",
       "ak.self.blob.resource.get.v1",
       "ak.self.blob.resource.head.v1",
       "ak.self.contact.command.reject.v1",
@@ -107,6 +108,9 @@
       "ak.self.invite_locator.command.rotate.v1",
       "ak.self.invite_receive_policy.resource.get.v1",
       "ak.self.invite_receive_policy.resource.replace.v1",
+      "ak.self.management_review.command.decide.v1",
+      "ak.self.management_review.command.request.v1",
+      "ak.self.management_review.read.status.v1",
       "ak.self.mls.read.roster_authority.v1",
       "ak.self.realm_link.read.list.v1",
       "ak.self.third_party_invite.read.acceptance_attestation.v1"
@@ -173,11 +177,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/extensions/applet_bridge/endpoints.rs",
-            "line": 2286,
+            "line": 2200,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2286
+              2200
             ],
             "protected_oracle": false,
             "scope_sha256": "08d47a5443c3a8cae53d5647cf5084a6439a0f1db82630541eaf3147a7eb3c3f",
@@ -249,71 +253,6 @@
       }
     },
     {
-      "operation_id": "ak.edge.applet.client.command.exchange.v1",
-      "http": "POST /_arkret/edge/applet/client/exchange",
-      "test_layer": "soland_unit",
-      "responsibilities": {
-        "protocol_kat": [],
-        "storage_parity": [],
-        "http_binding": [],
-        "product_flow": [],
-        "fault_recovery": [],
-        "security_negative": []
-      }
-    },
-    {
-      "operation_id": "ak.edge.applet.client.command.exchange.v1",
-      "http": "POST /_arkret/edge/applet/client/exchange",
-      "test_layer": "soland_http",
-      "responsibilities": {
-        "protocol_kat": [],
-        "storage_parity": [],
-        "http_binding": [],
-        "product_flow": [],
-        "fault_recovery": [],
-        "security_negative": []
-      }
-    },
-    {
-      "operation_id": "ak.edge.applet.client.command.exchange.v1",
-      "http": "POST /_arkret/edge/applet/client/exchange",
-      "test_layer": "cotest_rust",
-      "responsibilities": {
-        "protocol_kat": [],
-        "storage_parity": [],
-        "http_binding": [],
-        "product_flow": [],
-        "fault_recovery": [],
-        "security_negative": []
-      }
-    },
-    {
-      "operation_id": "ak.edge.applet.client.command.exchange.v1",
-      "http": "POST /_arkret/edge/applet/client/exchange",
-      "test_layer": "cotest_e2e",
-      "responsibilities": {
-        "protocol_kat": [],
-        "storage_parity": [],
-        "http_binding": [],
-        "product_flow": [],
-        "fault_recovery": [],
-        "security_negative": []
-      }
-    },
-    {
-      "operation_id": "ak.edge.applet.client.command.exchange.v1",
-      "http": "POST /_arkret/edge/applet/client/exchange",
-      "test_layer": "inkson_e2e",
-      "responsibilities": {
-        "protocol_kat": [],
-        "storage_parity": [],
-        "http_binding": [],
-        "product_flow": [],
-        "fault_recovery": [],
-        "security_negative": []
-      }
-    },
-    {
       "operation_id": "ak.edge.applet.command.transaction.v1",
       "http": "POST /_arkret/edge/applet/transactions",
       "test_layer": "soland_unit",
@@ -338,11 +277,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/extensions/applet_bridge/endpoints.rs",
-            "line": 2247,
+            "line": 2161,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2247
+              2161
             ],
             "protected_oracle": false,
             "scope_sha256": "8a395f97b2edc5743d1c7f47cc6cc38ced4f6334256a37131e87e2c87ce706e8",
@@ -382,11 +321,11 @@
         "storage_parity": [
           {
             "file": "soland/crates/storage-postgres/src/applets.rs",
-            "line": 622,
+            "line": 647,
             "scope": "transaction_replay_retains_verified_delivery_record",
             "scope_kind": "rust_test",
             "occurrence_lines": [
-              634
+              659
             ],
             "protected_oracle": false,
             "scope_sha256": "afb63d3e5bbc5b1eab58208f8be3c003711a01f093a60d9fe9e3541cc1bfe27f",
@@ -579,11 +518,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/extensions/applet_bridge/endpoints.rs",
-            "line": 132,
+            "line": 142,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              132
+              142
             ],
             "protected_oracle": false,
             "scope_sha256": "599473435f0562d9cc69ecfa3862e33949c04726ea1ad8e8adcf33f0d40ef377",
@@ -706,11 +645,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/extensions/applet_bridge/endpoints.rs",
-            "line": 115,
+            "line": 125,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              115
+              125
             ],
             "protected_oracle": false,
             "scope_sha256": "8980d3b8deb5bf09041fc3f51089ec49c41a06ff22b5c2f9de5797dc1ba6cfd9",
@@ -833,11 +772,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/extensions/applet_bridge/endpoints.rs",
-            "line": 2383,
+            "line": 2301,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2383
+              2301
             ],
             "protected_oracle": false,
             "scope_sha256": "00112bef03a48bb543e9c284696607b1dadf27c949ab85b637f84b73b5ffdd2a",
@@ -916,11 +855,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/extensions/applet_bridge/endpoints.rs",
-            "line": 2331,
+            "line": 2249,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2331
+              2249
             ],
             "protected_oracle": false,
             "scope_sha256": "f0ef2dc57392822bed1a860cd185201a922d2368f8a6417e47e20fb63f68cd24",
@@ -999,11 +938,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/extensions/applet_bridge/endpoints.rs",
-            "line": 2493,
+            "line": 2411,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2493
+              2411
             ],
             "protected_oracle": false,
             "scope_sha256": "98b383a3bbb3e93a8852b0c6bd4ebb7c63b5f076c99675faa7033b4befddf3ed",
@@ -1082,11 +1021,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/extensions/applet_bridge/endpoints.rs",
-            "line": 2444,
+            "line": 2362,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2444
+              2362
             ],
             "protected_oracle": false,
             "scope_sha256": "1f3cf32f89f01fd4b438c795b5c382e5950fd371a21df1fbec89de90780d457d",
@@ -5526,11 +5465,11 @@
           },
           {
             "file": "soland/crates/storage/src/authority_commit.rs",
-            "line": 2334,
+            "line": 2350,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2334
+              2350
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -7046,11 +6985,11 @@
           },
           {
             "file": "soland/crates/storage/src/authority_commit.rs",
-            "line": 846,
+            "line": 862,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              846
+              862
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -12074,6 +12013,201 @@
       }
     },
     {
+      "operation_id": "ak.self.applet.authority.read.material.v1",
+      "http": "POST /_arkret/self/applets/{applet_id}/authority/material",
+      "test_layer": "soland_unit",
+      "responsibilities": {
+        "protocol_kat": [],
+        "storage_parity": [],
+        "http_binding": [],
+        "product_flow": [],
+        "fault_recovery": [],
+        "security_negative": []
+      }
+    },
+    {
+      "operation_id": "ak.self.applet.authority.read.material.v1",
+      "http": "POST /_arkret/self/applets/{applet_id}/authority/material",
+      "test_layer": "soland_http",
+      "responsibilities": {
+        "protocol_kat": [],
+        "storage_parity": [],
+        "http_binding": [],
+        "product_flow": [],
+        "fault_recovery": [],
+        "security_negative": []
+      }
+    },
+    {
+      "operation_id": "ak.self.applet.authority.read.material.v1",
+      "http": "POST /_arkret/self/applets/{applet_id}/authority/material",
+      "test_layer": "cotest_rust",
+      "responsibilities": {
+        "protocol_kat": [],
+        "storage_parity": [],
+        "http_binding": [],
+        "product_flow": [],
+        "fault_recovery": [],
+        "security_negative": []
+      }
+    },
+    {
+      "operation_id": "ak.self.applet.authority.read.material.v1",
+      "http": "POST /_arkret/self/applets/{applet_id}/authority/material",
+      "test_layer": "cotest_e2e",
+      "responsibilities": {
+        "protocol_kat": [],
+        "storage_parity": [],
+        "http_binding": [],
+        "product_flow": [],
+        "fault_recovery": [],
+        "security_negative": []
+      }
+    },
+    {
+      "operation_id": "ak.self.applet.authority.read.material.v1",
+      "http": "POST /_arkret/self/applets/{applet_id}/authority/material",
+      "test_layer": "inkson_e2e",
+      "responsibilities": {
+        "protocol_kat": [],
+        "storage_parity": [],
+        "http_binding": [],
+        "product_flow": [],
+        "fault_recovery": [],
+        "security_negative": []
+      }
+    },
+    {
+      "operation_id": "ak.self.applet.bot.command.preview.v1",
+      "http": "POST /_arkret/self/applets/{applet_id}/bots/provision/preview",
+      "test_layer": "soland_unit",
+      "responsibilities": {
+        "protocol_kat": [],
+        "storage_parity": [],
+        "http_binding": [],
+        "product_flow": [],
+        "fault_recovery": [],
+        "security_negative": []
+      }
+    },
+    {
+      "operation_id": "ak.self.applet.bot.command.preview.v1",
+      "http": "POST /_arkret/self/applets/{applet_id}/bots/provision/preview",
+      "test_layer": "soland_http",
+      "responsibilities": {
+        "protocol_kat": [],
+        "storage_parity": [],
+        "http_binding": [],
+        "product_flow": [],
+        "fault_recovery": [],
+        "security_negative": []
+      }
+    },
+    {
+      "operation_id": "ak.self.applet.bot.command.preview.v1",
+      "http": "POST /_arkret/self/applets/{applet_id}/bots/provision/preview",
+      "test_layer": "cotest_rust",
+      "responsibilities": {
+        "protocol_kat": [],
+        "storage_parity": [],
+        "http_binding": [],
+        "product_flow": [],
+        "fault_recovery": [],
+        "security_negative": []
+      }
+    },
+    {
+      "operation_id": "ak.self.applet.bot.command.preview.v1",
+      "http": "POST /_arkret/self/applets/{applet_id}/bots/provision/preview",
+      "test_layer": "cotest_e2e",
+      "responsibilities": {
+        "protocol_kat": [],
+        "storage_parity": [],
+        "http_binding": [],
+        "product_flow": [],
+        "fault_recovery": [],
+        "security_negative": []
+      }
+    },
+    {
+      "operation_id": "ak.self.applet.bot.command.preview.v1",
+      "http": "POST /_arkret/self/applets/{applet_id}/bots/provision/preview",
+      "test_layer": "inkson_e2e",
+      "responsibilities": {
+        "protocol_kat": [],
+        "storage_parity": [],
+        "http_binding": [],
+        "product_flow": [],
+        "fault_recovery": [],
+        "security_negative": []
+      }
+    },
+    {
+      "operation_id": "ak.self.applet.bot.command.provision.v1",
+      "http": "POST /_arkret/self/applets/{applet_id}/bots/provision",
+      "test_layer": "soland_unit",
+      "responsibilities": {
+        "protocol_kat": [],
+        "storage_parity": [],
+        "http_binding": [],
+        "product_flow": [],
+        "fault_recovery": [],
+        "security_negative": []
+      }
+    },
+    {
+      "operation_id": "ak.self.applet.bot.command.provision.v1",
+      "http": "POST /_arkret/self/applets/{applet_id}/bots/provision",
+      "test_layer": "soland_http",
+      "responsibilities": {
+        "protocol_kat": [],
+        "storage_parity": [],
+        "http_binding": [],
+        "product_flow": [],
+        "fault_recovery": [],
+        "security_negative": []
+      }
+    },
+    {
+      "operation_id": "ak.self.applet.bot.command.provision.v1",
+      "http": "POST /_arkret/self/applets/{applet_id}/bots/provision",
+      "test_layer": "cotest_rust",
+      "responsibilities": {
+        "protocol_kat": [],
+        "storage_parity": [],
+        "http_binding": [],
+        "product_flow": [],
+        "fault_recovery": [],
+        "security_negative": []
+      }
+    },
+    {
+      "operation_id": "ak.self.applet.bot.command.provision.v1",
+      "http": "POST /_arkret/self/applets/{applet_id}/bots/provision",
+      "test_layer": "cotest_e2e",
+      "responsibilities": {
+        "protocol_kat": [],
+        "storage_parity": [],
+        "http_binding": [],
+        "product_flow": [],
+        "fault_recovery": [],
+        "security_negative": []
+      }
+    },
+    {
+      "operation_id": "ak.self.applet.bot.command.provision.v1",
+      "http": "POST /_arkret/self/applets/{applet_id}/bots/provision",
+      "test_layer": "inkson_e2e",
+      "responsibilities": {
+        "protocol_kat": [],
+        "storage_parity": [],
+        "http_binding": [],
+        "product_flow": [],
+        "fault_recovery": [],
+        "security_negative": []
+      }
+    },
+    {
       "operation_id": "ak.self.applet.command.install.v1",
       "http": "POST /_arkret/self/applets/install",
       "test_layer": "soland_unit",
@@ -12081,11 +12215,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/extensions/applet_bridge/endpoints.rs",
-            "line": 221,
+            "line": 208,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              221
+              208
             ],
             "protected_oracle": false,
             "scope_sha256": "c061179edcd69a016c7595108e4cb4bcde9286e71f10b6491496648e827368bc",
@@ -12182,11 +12316,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/extensions/applet_bridge/endpoints.rs",
-            "line": 593,
+            "line": 503,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              593
+              503
             ],
             "protected_oracle": false,
             "scope_sha256": "2ace5a826932da5e774c0e6c3ccd6a47435d871be6f3f9aed8bd6ce5daaa8988",
@@ -12283,11 +12417,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/extensions/applet_bridge/endpoints.rs",
-            "line": 1751,
+            "line": 1665,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1751
+              1665
             ],
             "protected_oracle": false,
             "scope_sha256": "ad47ebeda44d9fc861e6058c6a2ecedc5869a683b72cac336eb7843dc9d0e3f5",
@@ -12366,11 +12500,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/extensions/applet_bridge/endpoints.rs",
-            "line": 1852,
+            "line": 1774,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1852
+              1774
             ],
             "protected_oracle": false,
             "scope_sha256": "2fa87864ab5e7e9c94c7275b68d893c2613ffe74df4b8f1b3a3c9597a62c10c9",
@@ -12460,71 +12594,6 @@
       }
     },
     {
-      "operation_id": "ak.self.applet.install.command.cancel.v1",
-      "http": "POST /_arkret/self/applets/install/cancel",
-      "test_layer": "soland_unit",
-      "responsibilities": {
-        "protocol_kat": [],
-        "storage_parity": [],
-        "http_binding": [],
-        "product_flow": [],
-        "fault_recovery": [],
-        "security_negative": []
-      }
-    },
-    {
-      "operation_id": "ak.self.applet.install.command.cancel.v1",
-      "http": "POST /_arkret/self/applets/install/cancel",
-      "test_layer": "soland_http",
-      "responsibilities": {
-        "protocol_kat": [],
-        "storage_parity": [],
-        "http_binding": [],
-        "product_flow": [],
-        "fault_recovery": [],
-        "security_negative": []
-      }
-    },
-    {
-      "operation_id": "ak.self.applet.install.command.cancel.v1",
-      "http": "POST /_arkret/self/applets/install/cancel",
-      "test_layer": "cotest_rust",
-      "responsibilities": {
-        "protocol_kat": [],
-        "storage_parity": [],
-        "http_binding": [],
-        "product_flow": [],
-        "fault_recovery": [],
-        "security_negative": []
-      }
-    },
-    {
-      "operation_id": "ak.self.applet.install.command.cancel.v1",
-      "http": "POST /_arkret/self/applets/install/cancel",
-      "test_layer": "cotest_e2e",
-      "responsibilities": {
-        "protocol_kat": [],
-        "storage_parity": [],
-        "http_binding": [],
-        "product_flow": [],
-        "fault_recovery": [],
-        "security_negative": []
-      }
-    },
-    {
-      "operation_id": "ak.self.applet.install.command.cancel.v1",
-      "http": "POST /_arkret/self/applets/install/cancel",
-      "test_layer": "inkson_e2e",
-      "responsibilities": {
-        "protocol_kat": [],
-        "storage_parity": [],
-        "http_binding": [],
-        "product_flow": [],
-        "fault_recovery": [],
-        "security_negative": []
-      }
-    },
-    {
       "operation_id": "ak.self.applet.install.command.preview.v1",
       "http": "POST /_arkret/self/applets/install/preview",
       "test_layer": "soland_unit",
@@ -12532,11 +12601,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/extensions/applet_bridge/endpoints.rs",
-            "line": 144,
+            "line": 154,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              144
+              154
             ],
             "protected_oracle": false,
             "scope_sha256": "c9e2c024c02538aaa16f4b1a3d91edf8fabb8945f31f10cc3063c5d16b792995",
@@ -12633,11 +12702,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/extensions/applet_bridge/endpoints.rs",
-            "line": 573,
+            "line": 483,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              573
+              483
             ],
             "protected_oracle": false,
             "scope_sha256": "66dcd488e7f60c089932034620e6e3d9ddc0b8a6263bab9ef86ead2b43620976",
@@ -14589,11 +14658,11 @@
           },
           {
             "file": "soland/crates/storage/src/authority_commit.rs",
-            "line": 2320,
+            "line": 2336,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2320
+              2336
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -14960,11 +15029,11 @@
           },
           {
             "file": "soland/crates/storage/src/authority_commit.rs",
-            "line": 2361,
+            "line": 2377,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2361
+              2377
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -15549,11 +15618,11 @@
           },
           {
             "file": "soland/crates/services/src/persistence.rs",
-            "line": 1276,
+            "line": 1291,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1276
+              1291
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -16645,11 +16714,11 @@
           },
           {
             "file": "soland/crates/storage/src/authority_commit.rs",
-            "line": 2401,
+            "line": 2417,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2401
+              2417
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -20014,6 +20083,201 @@
       }
     },
     {
+      "operation_id": "ak.self.management_review.command.decide.v1",
+      "http": "POST /_arkret/self/management-reviews/decisions",
+      "test_layer": "soland_unit",
+      "responsibilities": {
+        "protocol_kat": [],
+        "storage_parity": [],
+        "http_binding": [],
+        "product_flow": [],
+        "fault_recovery": [],
+        "security_negative": []
+      }
+    },
+    {
+      "operation_id": "ak.self.management_review.command.decide.v1",
+      "http": "POST /_arkret/self/management-reviews/decisions",
+      "test_layer": "soland_http",
+      "responsibilities": {
+        "protocol_kat": [],
+        "storage_parity": [],
+        "http_binding": [],
+        "product_flow": [],
+        "fault_recovery": [],
+        "security_negative": []
+      }
+    },
+    {
+      "operation_id": "ak.self.management_review.command.decide.v1",
+      "http": "POST /_arkret/self/management-reviews/decisions",
+      "test_layer": "cotest_rust",
+      "responsibilities": {
+        "protocol_kat": [],
+        "storage_parity": [],
+        "http_binding": [],
+        "product_flow": [],
+        "fault_recovery": [],
+        "security_negative": []
+      }
+    },
+    {
+      "operation_id": "ak.self.management_review.command.decide.v1",
+      "http": "POST /_arkret/self/management-reviews/decisions",
+      "test_layer": "cotest_e2e",
+      "responsibilities": {
+        "protocol_kat": [],
+        "storage_parity": [],
+        "http_binding": [],
+        "product_flow": [],
+        "fault_recovery": [],
+        "security_negative": []
+      }
+    },
+    {
+      "operation_id": "ak.self.management_review.command.decide.v1",
+      "http": "POST /_arkret/self/management-reviews/decisions",
+      "test_layer": "inkson_e2e",
+      "responsibilities": {
+        "protocol_kat": [],
+        "storage_parity": [],
+        "http_binding": [],
+        "product_flow": [],
+        "fault_recovery": [],
+        "security_negative": []
+      }
+    },
+    {
+      "operation_id": "ak.self.management_review.command.request.v1",
+      "http": "POST /_arkret/self/management-reviews/requests",
+      "test_layer": "soland_unit",
+      "responsibilities": {
+        "protocol_kat": [],
+        "storage_parity": [],
+        "http_binding": [],
+        "product_flow": [],
+        "fault_recovery": [],
+        "security_negative": []
+      }
+    },
+    {
+      "operation_id": "ak.self.management_review.command.request.v1",
+      "http": "POST /_arkret/self/management-reviews/requests",
+      "test_layer": "soland_http",
+      "responsibilities": {
+        "protocol_kat": [],
+        "storage_parity": [],
+        "http_binding": [],
+        "product_flow": [],
+        "fault_recovery": [],
+        "security_negative": []
+      }
+    },
+    {
+      "operation_id": "ak.self.management_review.command.request.v1",
+      "http": "POST /_arkret/self/management-reviews/requests",
+      "test_layer": "cotest_rust",
+      "responsibilities": {
+        "protocol_kat": [],
+        "storage_parity": [],
+        "http_binding": [],
+        "product_flow": [],
+        "fault_recovery": [],
+        "security_negative": []
+      }
+    },
+    {
+      "operation_id": "ak.self.management_review.command.request.v1",
+      "http": "POST /_arkret/self/management-reviews/requests",
+      "test_layer": "cotest_e2e",
+      "responsibilities": {
+        "protocol_kat": [],
+        "storage_parity": [],
+        "http_binding": [],
+        "product_flow": [],
+        "fault_recovery": [],
+        "security_negative": []
+      }
+    },
+    {
+      "operation_id": "ak.self.management_review.command.request.v1",
+      "http": "POST /_arkret/self/management-reviews/requests",
+      "test_layer": "inkson_e2e",
+      "responsibilities": {
+        "protocol_kat": [],
+        "storage_parity": [],
+        "http_binding": [],
+        "product_flow": [],
+        "fault_recovery": [],
+        "security_negative": []
+      }
+    },
+    {
+      "operation_id": "ak.self.management_review.read.status.v1",
+      "http": "POST /_arkret/self/management-reviews/status",
+      "test_layer": "soland_unit",
+      "responsibilities": {
+        "protocol_kat": [],
+        "storage_parity": [],
+        "http_binding": [],
+        "product_flow": [],
+        "fault_recovery": [],
+        "security_negative": []
+      }
+    },
+    {
+      "operation_id": "ak.self.management_review.read.status.v1",
+      "http": "POST /_arkret/self/management-reviews/status",
+      "test_layer": "soland_http",
+      "responsibilities": {
+        "protocol_kat": [],
+        "storage_parity": [],
+        "http_binding": [],
+        "product_flow": [],
+        "fault_recovery": [],
+        "security_negative": []
+      }
+    },
+    {
+      "operation_id": "ak.self.management_review.read.status.v1",
+      "http": "POST /_arkret/self/management-reviews/status",
+      "test_layer": "cotest_rust",
+      "responsibilities": {
+        "protocol_kat": [],
+        "storage_parity": [],
+        "http_binding": [],
+        "product_flow": [],
+        "fault_recovery": [],
+        "security_negative": []
+      }
+    },
+    {
+      "operation_id": "ak.self.management_review.read.status.v1",
+      "http": "POST /_arkret/self/management-reviews/status",
+      "test_layer": "cotest_e2e",
+      "responsibilities": {
+        "protocol_kat": [],
+        "storage_parity": [],
+        "http_binding": [],
+        "product_flow": [],
+        "fault_recovery": [],
+        "security_negative": []
+      }
+    },
+    {
+      "operation_id": "ak.self.management_review.read.status.v1",
+      "http": "POST /_arkret/self/management-reviews/status",
+      "test_layer": "inkson_e2e",
+      "responsibilities": {
+        "protocol_kat": [],
+        "storage_parity": [],
+        "http_binding": [],
+        "product_flow": [],
+        "fault_recovery": [],
+        "security_negative": []
+      }
+    },
+    {
       "operation_id": "ak.self.media.read.ice_config.v1",
       "http": "POST /_arkret/self/rtc/ice-config",
       "test_layer": "soland_unit",
@@ -20156,11 +20420,11 @@
           },
           {
             "file": "soland/crates/storage/src/authority_commit.rs",
-            "line": 2429,
+            "line": 2445,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2429
+              2445
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -21272,11 +21536,11 @@
           },
           {
             "file": "soland/crates/storage/src/authority_commit.rs",
-            "line": 2376,
+            "line": 2392,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2376
+              2392
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -22911,11 +23175,11 @@
           },
           {
             "file": "soland/crates/storage/src/authority_commit.rs",
-            "line": 2415,
+            "line": 2431,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2415
+              2431
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",

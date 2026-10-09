@@ -32,7 +32,7 @@ resolver = "3"
 # (from the light edge itself) dev edge.
 members = [
     "crates/inkson-client-tests",
-    "crates/applet-self-actor-runner",
+    "crates/managed-governance-runner",
     "crates/account-data-cas-convergence-runner",
     "crates/aead-nonce-replay-runner",
     "crates/agent-mls-keypackage-authorization-runner",
@@ -72,7 +72,7 @@ todo = "deny"
 unimplemented = "deny"
 
 [workspace.dependencies]
-cotest-applet-self-actor-runner = { path = "crates/applet-self-actor-runner" }
+cotest-managed-governance-runner = { path = "crates/managed-governance-runner" }
 aes-gcm = "0.11.1"
 cotest-account-data-cas-convergence-runner = { path = "crates/account-data-cas-convergence-runner" }
 cotest-aead-nonce-replay-runner = { path = "crates/aead-nonce-replay-runner" }
@@ -181,7 +181,7 @@ zeroize = "1.9.0"
 test-with-containers = ["dep:testcontainers"]
 
 [dependencies]
-cotest-applet-self-actor-runner = { workspace = true }
+cotest-managed-governance-runner = { workspace = true }
 # The light build edge. See the workspace comment above for why the arrow
 # points this way: the canonical provisioning chain lives there because both
 # this harness and the TypeScript suite consume it, and it must stay buildable

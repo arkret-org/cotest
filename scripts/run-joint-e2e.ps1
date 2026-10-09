@@ -3403,9 +3403,14 @@ if ($StartMockPushGateway) {
 }
 $mockAppletRegistryPort = $null
 $mockAppletRegistryBaseUrl = $null
+$mockAppletRegistryPublicHost = $null
 if ($StartMockAppletRegistry) {
+    if (-not $jointTlsEnabled) {
+        throw "The Applet mock requires the runner-owned HTTPS topology for its formal management base_url"
+    }
     $mockAppletRegistryPort = Get-FreeTcpPort
-    $mockAppletRegistryBaseUrl = "http://127.0.0.1:$mockAppletRegistryPort"
+    $mockAppletRegistryPublicHost = "mock-applet-registry.$DnsSuffix"
+    $mockAppletRegistryBaseUrl = "https://${mockAppletRegistryPublicHost}:$jointTlsPort"
 }
 $mockMimiFacadePort = $null
 $mockMimiFacadeBaseUrl = $null
@@ -3843,7 +3848,7 @@ try {
     if ($jointTlsEnabled) {
         $jointTlsDir = Join-Path $jointDir "tls"
         $jointTlsHostNames = @(
-            @($solandPublicHost, $solandServer2PublicHost, $coauthPublicHost, $coauthServer2PublicHost) +
+            @($solandPublicHost, $solandServer2PublicHost, $coauthPublicHost, $coauthServer2PublicHost, $mockAppletRegistryPublicHost) +
             @($additionalServers | ForEach-Object { @($_.SolandHost, $_.CoauthHost) })
         ) | ForEach-Object { $_ } | Where-Object { $_ }
         $jointTlsAssets = New-JointTlsAssets `
@@ -3858,6 +3863,9 @@ try {
         $env:COTEST_TLS_SPKI_SHA256 = $jointTlsAssets.ServerSpkiSha256
 
         $jointTlsRoutes = @()
+        if ($mockAppletRegistryPublicHost) {
+            $jointTlsRoutes += [pscustomobject]@{ Host = $mockAppletRegistryPublicHost; BackendPort = $mockAppletRegistryPort }
+        }
         if ($solandPublicHost) {
             $jointTlsRoutes += [pscustomobject]@{ Host = $solandPublicHost; BackendPort = $solandPort }
         }
@@ -4842,6 +4850,7 @@ try {
             [System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32)
         )
         $envExpr = "`$env:MOCK_APPLET_REGISTRY_PORT='$mockAppletRegistryPort'; `$env:MOCK_APPLET_REGISTRY_STATE_FILE=" + (Quote-PsLiteral $mockAppletRegistryStateFile) + "; `$env:MOCK_APPLET_REGISTRY_STATE_KEY_FILE=" + (Quote-PsLiteral $mockAppletRegistryStateKeyFile)
+        $envExpr += "; `$env:MOCK_APPLET_REGISTRY_PUBLIC_BASE_URL=" + (Quote-PsLiteral $mockAppletRegistryBaseUrl)
         if ($MockAppletRegistryDid) {
             $envExpr = "$envExpr; `$env:MOCK_APPLET_REGISTRY_DID=" + (Quote-PsLiteral $MockAppletRegistryDid)
         }
