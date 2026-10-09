@@ -17,6 +17,7 @@ mod assertions;
 mod client;
 mod event_builder;
 mod invite_delivery;
+mod native_session;
 mod principal;
 mod proof;
 mod server;

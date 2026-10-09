@@ -206,6 +206,33 @@ impl HarnessTls {
     }
 
     fn new() -> Result<Self> {
+        // Native consumers construct their own production transports. Supply
+        // the same explicit run PKI to those transports before starting any
+        // test threads, rather than mutating process trust during a scenario.
+        let cert = std::env::var_os("SOLAND_TLS_CERT_PATH");
+        let key = std::env::var_os("SOLAND_TLS_KEY_PATH");
+        if cert.is_some() || key.is_some() {
+            let cert = PathBuf::from(cert.context("native TLS override lacks certificate")?);
+            let key = PathBuf::from(key.context("native TLS override lacks private key")?);
+            let ca = PathBuf::from(
+                std::env::var_os("COTEST_RUN_SCOPED_CA_PEM")
+                    .context("native TLS override lacks run-scoped CA")?,
+            );
+            let roots = PathBuf::from(
+                std::env::var_os("SSL_CERT_FILE")
+                    .context("native TLS override lacks production transport roots")?,
+            );
+            anyhow::ensure!(
+                fs::canonicalize(&ca)? == fs::canonicalize(&roots)?,
+                "native TLS override and production transports use different roots"
+            );
+            fs::read(&cert).context("read native TLS override certificate")?;
+            fs::read(&key).context("read native TLS override private key")?;
+            let mut tls = Self::attached(&ca)?;
+            tls.cert_path = cert;
+            tls.key_path = key;
+            return Ok(tls);
+        }
         use rcgen::{
             BasicConstraints, CertificateParams, ExtendedKeyUsagePurpose, IsCa, Issuer, KeyPair,
             KeyUsagePurpose,
@@ -521,10 +548,38 @@ impl ArkretServer {
             .map(|issuer| issuer.origin())
     }
 
+    /// Bind an externally configured fixture issuer to the native host through
+    /// credential-free discovery and the issuer's exact live record.
+    pub async fn bind_native_host_session(
+        &self,
+        client: TestActorClient,
+        issuer: &MockCoauthIntrospectionServer,
+    ) -> Result<TestActorClient> {
+        super::native_session::bind_standard_host(
+            client,
+            issuer,
+            &self.service_id,
+            &self.trust_domain,
+            self._tls.as_ref().map(|tls| tls.ca_pem.as_slice()),
+        )
+        .await
+    }
+
     /// [`Self::demo_client`] presenting its founding device's Standard grant.
     pub async fn standard_client(&self, actor: &str, device_id: &str) -> Result<TestActorClient> {
         let client = self.demo_client(actor, device_id).await?;
-        self.standard_grant_client(&client)
+        let client = self.standard_grant_client(&client)?;
+        super::native_session::bind_standard_host(
+            client,
+            self.session_grant_issuer
+                .as_ref()
+                .context("missing harness issuer")?
+                .as_ref(),
+            &self.service_id,
+            &self.trust_domain,
+            self._tls.as_ref().map(|tls| tls.ca_pem.as_slice()),
+        )
+        .await
     }
 
     /// [`Self::register_client`] presenting its founding device's Standard grant.
@@ -535,7 +590,18 @@ impl ArkretServer {
         device_id: &str,
     ) -> Result<TestActorClient> {
         let client = self.register_client(did, handle, device_id).await?;
-        self.standard_grant_client(&client)
+        let client = self.standard_grant_client(&client)?;
+        super::native_session::bind_standard_host(
+            client,
+            self.session_grant_issuer
+                .as_ref()
+                .context("missing harness issuer")?
+                .as_ref(),
+            &self.service_id,
+            &self.trust_domain,
+            self._tls.as_ref().map(|tls| tls.ca_pem.as_slice()),
+        )
+        .await
     }
 
     /// [`Self::register_client_with_localpart`] presenting its founding
@@ -550,7 +616,18 @@ impl ArkretServer {
         let client = self
             .register_client_with_localpart(did, display_handle, localpart, device_id)
             .await?;
-        self.standard_grant_client(&client)
+        let client = self.standard_grant_client(&client)?;
+        super::native_session::bind_standard_host(
+            client,
+            self.session_grant_issuer
+                .as_ref()
+                .context("missing harness issuer")?
+                .as_ref(),
+            &self.service_id,
+            &self.trust_domain,
+            self._tls.as_ref().map(|tls| tls.ca_pem.as_slice()),
+        )
+        .await
     }
 
     async fn spawn_with_network_and_env(

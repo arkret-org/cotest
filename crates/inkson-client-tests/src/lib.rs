@@ -8,7 +8,7 @@ pub mod conformance {
     pub use account_blocklist_projection::*;
     pub use webrtc_media_plaintext::*;
     pub mod named_suite_audit;
-    pub use named_suite_audit::run_named_suite_audit;
+    pub use named_suite_audit::{inspect_named_suite_execution, run_named_suite_audit};
 }
 pub mod scenarios {
     pub use cotest::scenarios::{

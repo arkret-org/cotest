@@ -9,8 +9,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 
 use anyhow::{Result, anyhow, ensure};
+use cotest_suite_evidence::{CaseRef, DecisionPointGap, audit_decision_points};
 use serde_json::Value;
 
+use super::test_material_rejection::run_test_material_rejection_suite_diagnostic;
 use super::{
     ACCOUNT_DATA_CAS_CONVERGENCE_ENTRYPOINT, ACTOR_PRIVATE_EVENTS_SUBMIT_ENTRYPOINT,
     AEAD_NONCE_REPLAY_ENTRYPOINT, AGENT_MLS_KEYPACKAGE_AUTHORIZATION_ENTRYPOINT,
@@ -45,11 +47,11 @@ use super::{
     run_mls_governance_binding_suite, run_object_identity_collision_suite,
     run_private_view_inbox_suite, run_producer_identity_suite, run_protocol_time_tolerance_suite,
     run_protocol_version_suite, run_push_rule_core_suite, run_realm_join_candidate_suite,
-    run_relation_structural_realm_suite, run_sdk_precheck_suite,
+    run_relation_structural_realm_suite, run_sdk_precheck_suite_diagnostic,
     run_security_transaction_resilience_joint_gate, run_session_grant_issuer_ledger_suite,
     run_signal_sequence_high_water_suite, run_strand_watch_current_suite, run_string_profile_suite,
-    run_sync_fixture_suite, run_test_material_rejection_suite, run_view_write_contract_suite,
-    run_websocket_binding_suite, spec_artifacts_root,
+    run_sync_fixture_suite, run_view_write_contract_suite, run_websocket_binding_suite,
+    spec_artifacts_root,
 };
 
 const ACCOUNT_STATUS_ENTRYPOINT: &str = "ak.suite.account_status.issuer_ledger.v1";
@@ -320,7 +322,7 @@ const RUNNERS: [(&str, Runner); 52] = [
     ),
     (
         SDK_PRECHECK_ENTRYPOINT,
-        Runner::Cases(run_sdk_precheck_suite),
+        Runner::Cases(run_sdk_precheck_suite_diagnostic),
     ),
     (
         STRAND_WATCH_CURRENT_ENTRYPOINT,
@@ -335,7 +337,7 @@ const RUNNERS: [(&str, Runner); 52] = [
     ),
     (
         TEST_MATERIAL_REJECTION_ENTRYPOINT,
-        Runner::Cases(run_test_material_rejection_suite),
+        Runner::Cases(run_test_material_rejection_suite_diagnostic),
     ),
     (
         VIEW_WRITE_CONTRACT_ENTRYPOINT,
@@ -349,6 +351,41 @@ pub struct NamedSuiteAuditReport {
     pub executed_entrypoints: Vec<String>,
     pub unwired_entrypoints: Vec<String>,
     pub deferred_client_entrypoints: Vec<String>,
+    pub unproved_entrypoints: Vec<String>,
+    pub failed_executions: Vec<(String, String, String)>,
+    pub decision_point_gaps: Vec<DecisionPointGap>,
+}
+
+impl NamedSuiteAuditReport {
+    /// A diagnostic audit may finish while evidence is missing. A full claim may not.
+    pub fn assert_complete(&self) -> Result<()> {
+        ensure!(
+            self.failed_executions.is_empty(),
+            "named-suite executions failed: {:?}",
+            self.failed_executions
+        );
+        ensure!(
+            self.unwired_entrypoints.is_empty(),
+            "unwired named suites: {:?}",
+            self.unwired_entrypoints
+        );
+        ensure!(
+            self.deferred_client_entrypoints.is_empty(),
+            "client evidence is deferred: {:?}",
+            self.deferred_client_entrypoints
+        );
+        ensure!(
+            self.unproved_entrypoints.is_empty(),
+            "production consumption is unproved: {:?}",
+            self.unproved_entrypoints
+        );
+        ensure!(
+            self.decision_point_gaps.is_empty(),
+            "SDK decision-point execution gaps: {:?}",
+            self.decision_point_gaps
+        );
+        Ok(())
+    }
 }
 
 /// Execute the SDK/server registry. UI callers must supply both explicit client runners.
@@ -359,6 +396,16 @@ pub fn run_named_suite_audit() -> Result<NamedSuiteAuditReport> {
 pub type ClientNamedSuiteRunner = (&'static str, fn() -> Result<SuiteExecutionResult>);
 
 pub fn run_named_suite_audit_with_clients(
+    client_runners: &[ClientNamedSuiteRunner],
+) -> Result<NamedSuiteAuditReport> {
+    let report = inspect_named_suite_execution_with_clients(client_runners)?;
+    report.assert_complete()?;
+    Ok(report)
+}
+
+/// Diagnostic execution retains gaps; unlike the claim gate, its success is
+/// not a conformance claim. Consumers must report every gap in the result.
+pub fn inspect_named_suite_execution_with_clients(
     client_runners: &[ClientNamedSuiteRunner],
 ) -> Result<NamedSuiteAuditReport> {
     const CLIENT_ENTRYPOINTS: [&str; 2] = [
@@ -376,6 +423,7 @@ pub fn run_named_suite_audit_with_clients(
         "full audit requires both exact client runners"
     );
     let fixture_dir = spec_artifacts_root().join("fixtures");
+    let mut all_fixtures = BTreeMap::new();
     let mut fixtures: BTreeMap<String, Vec<(String, Value)>> = BTreeMap::new();
     for entry in fs::read_dir(&fixture_dir)? {
         let path = entry?.path();
@@ -383,6 +431,10 @@ pub fn run_named_suite_audit_with_clients(
             continue;
         }
         let value: Value = serde_json::from_slice(&fs::read(&path)?)?;
+        all_fixtures.insert(
+            format!("fixtures/{}", path.file_name().unwrap().to_string_lossy()),
+            value.clone(),
+        );
         if value.pointer("/runner/kind").and_then(Value::as_str) != Some("named_suite") {
             continue;
         }
@@ -443,23 +495,75 @@ pub fn run_named_suite_audit_with_clients(
         "named-suite gap ledger drifted: expected {expected_unwired:?}, got {unwired:?}"
     );
     let mut executed = Vec::new();
+    let mut executed_cases = BTreeSet::new();
+    let mut unproved = Vec::new();
+    let mut failed_executions = Vec::new();
     for (entrypoint, runner) in RUNNERS.iter().copied().chain(
         client_runners
             .iter()
             .map(|(name, run)| (*name, Runner::Cases(*run))),
     ) {
-        for (_, fixture) in fixtures
+        // Per-case results establish execution, not the semantic strength of
+        // its consumer. In particular, several Cases runners own modeled
+        // Station/ledger ports. Only explicitly supplied native client runners
+        // have completed production-consumer review here. Server/SDK runners
+        // remain diagnostic until their entire case obligations are reviewed.
+        let production_proved = client_runners.iter().any(|(name, _)| *name == entrypoint);
+        if !production_proved {
+            unproved.push(entrypoint.to_owned());
+        }
+        let mut runner_passed = true;
+        for (file_name, fixture) in fixtures
             .get(entrypoint)
             .ok_or_else(|| anyhow!("registered runner {entrypoint} has no canonical fixture"))?
         {
-            execute_runner(entrypoint, runner, fixture)?;
+            let result = execute_runner(entrypoint, runner, fixture).and_then(|result| {
+                if let Some(result) = &result {
+                    ensure!(
+                        result.fixture == file_name.as_str(),
+                        "{entrypoint}: runner fixture {} differs from canonical {file_name}",
+                        result.fixture
+                    );
+                }
+                Ok(result)
+            });
+            let result = match result {
+                Ok(result) => result,
+                Err(error) => {
+                    runner_passed = false;
+                    failed_executions.push((
+                        entrypoint.to_owned(),
+                        file_name.clone(),
+                        format!("{error:#}"),
+                    ));
+                    continue;
+                }
+            };
+            if let Some(result) = result {
+                if production_proved {
+                    executed_cases.extend(result.cases.into_iter().map(|case| CaseRef {
+                        fixture_ref: format!("fixtures/{file_name}"),
+                        case_id: case.case_id,
+                    }));
+                }
+            }
         }
-        executed.push(entrypoint.to_owned());
+        if runner_passed {
+            executed.push(entrypoint.to_owned());
+        }
     }
     executed.sort();
+    unproved.sort();
+    let profiles: Value = serde_json::from_slice(&fs::read(
+        spec_artifacts_root().join("profiles/conformance-profiles.json"),
+    )?)?;
+    let decision_point_gaps = audit_decision_points(&profiles, &all_fixtures, &executed_cases)?;
     Ok(NamedSuiteAuditReport {
         fixture_count: fixtures.values().map(Vec::len).sum(),
         executed_entrypoints: executed,
+        unproved_entrypoints: unproved,
+        failed_executions,
+        decision_point_gaps,
         unwired_entrypoints: unwired,
         deferred_client_entrypoints: if client_runners.is_empty() {
             CLIENT_ENTRYPOINTS.iter().map(|x| (*x).to_owned()).collect()
@@ -469,7 +573,11 @@ pub fn run_named_suite_audit_with_clients(
     })
 }
 
-fn execute_runner(entrypoint: &str, runner: Runner, fixture: &Value) -> Result<()> {
+fn execute_runner(
+    entrypoint: &str,
+    runner: Runner,
+    fixture: &Value,
+) -> Result<Option<SuiteExecutionResult>> {
     match runner {
         Runner::Cases(run) => {
             let result = run()?;
@@ -477,7 +585,8 @@ fn execute_runner(entrypoint: &str, runner: Runner, fixture: &Value) -> Result<(
                 result.entrypoint == entrypoint,
                 "runner returned the wrong entrypoint"
             );
-            result.assert_complete_against(fixture)
+            result.assert_complete_against(fixture)?;
+            Ok(Some(result))
         }
         Runner::CasesAt { run, pointer } => {
             let result = run()?;
@@ -489,7 +598,8 @@ fn execute_runner(entrypoint: &str, runner: Runner, fixture: &Value) -> Result<(
                 .pointer(pointer)
                 .and_then(Value::as_array)
                 .ok_or_else(|| anyhow!("{} has no cases at {pointer}", result.fixture))?;
-            result.assert_complete_against_cases(cases)
+            result.assert_complete_against_cases(cases)?;
+            Ok(Some(result))
         }
         Runner::CasesAcross { run, pointers } => {
             let result = run()?;
@@ -506,7 +616,8 @@ fn execute_runner(entrypoint: &str, runner: Runner, fixture: &Value) -> Result<(
                         .ok_or_else(|| anyhow!("{} has no cases at {pointer}", result.fixture))?,
                 );
             }
-            result.assert_complete_against_cases(&cases)
+            result.assert_complete_against_cases(&cases)?;
+            Ok(Some(result))
         }
         Runner::EvidenceMapped(run) => {
             ensure!(
@@ -516,7 +627,8 @@ fn execute_runner(entrypoint: &str, runner: Runner, fixture: &Value) -> Result<(
                     .is_none_or(Vec::is_empty),
                 "{entrypoint} declares cases[] but its registered runner returns no per-case execution results"
             );
-            run()
+            run()?;
+            Ok(None)
         }
     }
 }

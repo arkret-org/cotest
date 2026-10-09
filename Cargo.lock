@@ -2866,6 +2866,7 @@ dependencies = [
  "cotest-sdk-precheck-runner",
  "cotest-strand-watch-current-runner",
  "cotest-string-profile-runner",
+ "cotest-suite-evidence",
  "cotest-test-material-runner",
  "cotest-test-support",
  "cotest-view-write-contract-runner",
@@ -3262,6 +3263,14 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "arkret-schema",
+ "serde_json",
+]
+
+[[package]]
+name = "cotest-suite-evidence"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
  "serde_json",
 ]
 
@@ -7060,6 +7069,7 @@ dependencies = [
  "arkret-policy",
  "arkret-retry",
  "arkret-schema",
+ "arkret-schema-conformance",
  "arkret-signatures",
  "arkret-state",
  "arkret-wire",

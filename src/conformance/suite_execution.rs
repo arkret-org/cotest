@@ -39,6 +39,7 @@ impl SuiteExecutionResult {
                 self.cases.len()
             );
         }
+        let mut ids = std::collections::BTreeSet::new();
         for (index, (case, result)) in declared.iter().zip(&self.cases).enumerate() {
             let declared_id = case
                 .get("case_id")
@@ -49,6 +50,9 @@ impl SuiteExecutionResult {
                 .and_then(Value::as_str)
                 .or_else(|| case.as_str())
                 .ok_or_else(|| anyhow::anyhow!("{} cases[{index}] has no id", self.fixture))?;
+            if !ids.insert(declared_id) {
+                bail!("{} declares duplicate case id {declared_id}", self.fixture);
+            }
             if declared_id != result.case_id {
                 bail!(
                     "{} cases[{index}] is {declared_id}, runner returned {}",
@@ -174,6 +178,23 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn duplicate_case_ids_cannot_claim_complete_execution() {
+        let fixture = json!({"cases": [{"name": "first"}, {"name": "first"}]});
+        let result = SuiteExecutionResult {
+            entrypoint: "ak.suite.test.v1",
+            fixture: "test.json",
+            cases: vec![
+                CaseExecutionResult {
+                    case_id: "first".into(),
+                    assertions: 1
+                };
+                2
+            ],
+        };
+        assert!(result.assert_complete_against(&fixture).is_err());
+    }
 
     #[test]
     fn missing_or_assertion_free_case_result_is_rejected() {

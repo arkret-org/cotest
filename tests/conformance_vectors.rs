@@ -29,8 +29,8 @@ use cotest::conformance::{
     run_primary_handle_vector_suite, run_private_view_inbox_suite, run_producer_identity_suite,
     run_protocol_time_tolerance_suite, run_protocol_version_suite, run_push_rule_core_suite,
     run_realm_join_candidate_suite, run_relation_structural_realm_suite, run_sdk_precheck_suite,
-    run_sidecar_vector_suite, run_strand_watch_current_suite, run_string_profile_suite,
-    run_test_material_rejection_suite_with_coverage,
+    run_sdk_precheck_suite_diagnostic, run_sidecar_vector_suite, run_strand_watch_current_suite,
+    run_string_profile_suite, run_test_material_rejection_suite_with_coverage,
 };
 use serde_json::{Value, json};
 
@@ -130,9 +130,11 @@ fn test_material_rejection_named_suite_executes_all_cases_and_exposes_service_ga
 }
 
 #[test]
-fn sdk_precheck_named_suite_executes_all_current_cases() -> Result<()> {
-    let execution = run_sdk_precheck_suite()?;
-    assert_eq!(execution.cases.len(), 10);
+fn sdk_precheck_diagnostic_executes_cases_and_refuses_production_claim() -> Result<()> {
+    let execution = run_sdk_precheck_suite_diagnostic()?;
+    execution
+        .assert_complete_against(&cotest::conformance::load_fixture_value(execution.fixture)?)?;
+    assert!(run_sdk_precheck_suite().is_err());
     Ok(())
 }
 

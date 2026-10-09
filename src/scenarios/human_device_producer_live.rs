@@ -96,7 +96,12 @@ pub async fn standard_client(
     )?;
     let account = AccountId::new(principal.core_id.clone(), server.service_id().clone());
     Ok((
-        server.client_with_founding_device_grant(principal, grant)?,
+        server
+            .bind_native_host_session(
+                server.client_with_founding_device_grant(principal, grant)?,
+                coauth,
+            )
+            .await?,
         account,
     ))
 }

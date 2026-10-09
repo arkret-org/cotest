@@ -24,6 +24,23 @@ pub const TEST_MATERIAL_REJECTION_ENTRYPOINT: &str = "ak.suite.identity.test_mat
 const FIXTURE: &str = "test-material-rejection-fixture.json";
 const ARTIFACT_FIXTURES_DIR: &str = "fixtures";
 
+const EXECUTED_CASES: &[&str] = &[
+    "a_published_fixture_key_is_refused_although_its_signature_verifies",
+    "the_same_key_under_a_different_kid_and_did_is_refused",
+    "the_same_key_re_encoded_is_refused",
+    "published_p256_and_mldsa_material_are_refused_under_their_own_encodings",
+    "the_rfc8032_test_key_is_refused_on_the_possession_path",
+    "unlisted_material_is_still_verified_normally",
+    "a_refusal_leaves_no_cached_state_and_no_weaker_fallback",
+    "an_isolated_harness_may_execute_the_material_and_the_formal_api_exposes_no_switch",
+    "a_reserved_did_scid_is_refused_by_the_did_rule_alone",
+    "a_reserved_key_id_under_a_deployment_did_is_refused_by_the_key_id_rule_alone",
+    "a_reserved_trust_domain_is_refused_at_trust_admission",
+    "a_deployment_domain_that_merely_shares_a_tail_is_not_refused",
+    "the_word_fixture_alone_reserves_nothing",
+    "matching_one_rule_does_not_imply_the_others",
+];
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CaseExecutionResult {
     pub case_id: String,
@@ -542,6 +559,22 @@ fn coauth_trust_domain_admission(
     trust_domain: &str,
     accept: bool,
 ) -> Result<()> {
+    coauth_identifier_admission(
+        public_key,
+        "did:web:cotest-domain.production",
+        "runtime-1",
+        trust_domain,
+        accept,
+    )
+}
+
+fn coauth_identifier_admission(
+    public_key: &[u8],
+    did: &str,
+    fragment: &str,
+    trust_domain: &str,
+    accept: bool,
+) -> Result<()> {
     use arkret_identifiers::{Did, Hash, TrustDomainId};
     use arkret_identity::{DidBindingPurpose, VerifiedDidBindingKey};
     use coauth_backend::handlers::arkret::{DidDocument, VerificationMethod};
@@ -551,7 +584,6 @@ fn coauth_trust_domain_admission(
     };
     use coauth_backend::services::did_resolver::{DidResolution, DidResolutionSource};
 
-    let did = "did:web:cotest-domain.production";
     let domain = TrustDomainId::new(trust_domain.to_owned())?;
     let policy_digest = Hash::new(format!("sha256:{}", "b".repeat(64)))?;
     let now = chrono::DateTime::from_timestamp(1_800_000_000, 0).context("fixed instant")?;
@@ -560,7 +592,7 @@ fn coauth_trust_domain_admission(
             id: did.to_owned(),
             also_known_as: Vec::new(),
             verification_method: vec![VerificationMethod {
-                id: format!("{did}#runtime-1"),
+                id: format!("{did}#{fragment}"),
                 kind: "JsonWebKey2020".to_owned(),
                 controller: did.to_owned(),
                 public_key_jwk: Some(serde_json::from_value(serde_json::json!({
@@ -645,9 +677,16 @@ pub fn run_test_material_rejection_suite_with_coverage() -> Result<TestMaterialR
 
     let mut results = Vec::new();
     let mut record = |index: usize, assertions: usize| -> Result<()> {
-        let id = fixture["cases"][index]["name"]
+        let id = *EXECUTED_CASES
+            .get(index)
+            .context("unregistered test-material case")?;
+        let declared_id = fixture["cases"][index]["name"]
             .as_str()
             .with_context(|| format!("case {index} has no name"))?;
+        ensure!(
+            id == declared_id,
+            "case {index} drifted from executed script: {declared_id}"
+        );
         results.push(CaseExecutionResult {
             case_id: id.to_owned(),
             assertions,
@@ -782,10 +821,28 @@ pub fn run_test_material_rejection_suite_with_coverage() -> Result<TestMaterialR
     )?;
     let did_only = reserved_identifier_matches(Some(&did_example), Some(&ordinary_kid), None);
     ensure!(did_only.did && !did_only.key_id && !did_only.trust_domain);
-    record(8, 3)?;
+    coauth_identifier_admission(
+        unlisted.verifying_key().as_bytes(),
+        did_example.as_str(),
+        "runtime-1",
+        "ak:trust_domain:cotest.production",
+        false,
+    )?;
+    record(8, 5)?;
     let key_only = reserved_identifier_matches(Some(&ordinary_did), Some(&key_example), None);
     ensure!(!key_only.did && key_only.key_id && !key_only.trust_domain);
-    record(9, 3)?;
+    let (_, fragment) = key_example
+        .as_str()
+        .split_once('#')
+        .context("reserved key fragment")?;
+    coauth_identifier_admission(
+        unlisted.verifying_key().as_bytes(),
+        ordinary_did.as_str(),
+        fragment,
+        "ak:trust_domain:cotest.production",
+        false,
+    )?;
+    record(9, 5)?;
     let domain_only = reserved_identifier_matches(None, None, Some(&domain_example));
     ensure!(!domain_only.did && !domain_only.key_id && domain_only.trust_domain);
     ensure!(
@@ -874,8 +931,68 @@ pub fn run_test_material_rejection_suite_with_coverage() -> Result<TestMaterialR
     })
 }
 
+/// Dispatch the actual Coauth HTTP/PG route tests. No opt-out or skip is accepted.
+/// The database must be an independently migrated scratch database.
+pub fn run_test_material_rejection_suite_with_pg_coverage() -> Result<TestMaterialRejectionCoverage>
+{
+    ensure!(
+        std::env::var("DATABASE_URL").is_ok_and(|url| !url.trim().is_empty()),
+        "DATABASE_URL must name a migrated scratch database for Coauth route evidence"
+    );
+    let coverage = run_test_material_rejection_suite_with_coverage()?;
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../coauth/Cargo.toml");
+    for name in [
+        "reserved_did_and_key_id_roll_back_real_admin_binding_transaction",
+        "reserved_trust_domain_rolls_back_real_admin_binding_transaction",
+    ] {
+        let test = format!("handlers::admin::v1::account_dids::tests::{name}");
+        let output = std::process::Command::new("cargo")
+            .args(["test", "--locked", "--manifest-path"])
+            .arg(&manifest)
+            .args([
+                "-p",
+                "coauth-backend",
+                "--features",
+                "cedar",
+                "--lib",
+                &test,
+                "--",
+                "--exact",
+                "--nocapture",
+            ])
+            .env_remove("COAUTH_SKIP_POSTGRES_TESTS")
+            .env_remove("CARGO_MAKEFLAGS")
+            .env_remove("MAKEFLAGS")
+            .env_remove("MFLAGS")
+            .output()
+            .context("execute Coauth PG route evidence")?;
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        ensure!(
+            output.status.success(),
+            "Coauth PG route {test} failed:\n{stdout}\n{stderr}"
+        );
+        ensure!(
+            !stdout.contains("SKIP(") && !stderr.contains("SKIP("),
+            "Coauth PG route {test} skipped"
+        );
+        ensure!(
+            stdout.contains(&format!("test {test} ... ok"))
+                && stdout.contains("1 passed; 0 failed; 0 ignored;"),
+            "Coauth PG route {test} did not execute exactly one passing test: {stdout}"
+        );
+    }
+    Ok(coverage)
+}
+
 pub fn run_test_material_rejection_suite() -> Result<TestMaterialRejectionExecution> {
-    Ok(run_test_material_rejection_suite_with_coverage()?.execution)
+    let coverage = run_test_material_rejection_suite_with_pg_coverage()?;
+    ensure!(
+        coverage.service_e2e_status == "complete" && coverage.service_e2e_gaps.is_empty(),
+        "cannot claim complete test-material suite: {:?}",
+        coverage.service_e2e_gaps
+    );
+    Ok(coverage.execution)
 }
 
 #[cfg(test)]
