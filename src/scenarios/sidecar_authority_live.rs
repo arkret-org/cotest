@@ -23,19 +23,33 @@ use crate::scenarios::mls_lifecycle_live::{ACTIVE_SUITE, Member, canonical, uplo
 const GROUP: &str = "sidecar-authority-live";
 
 pub async fn run() -> Result<()> {
+    run_with_genesis_observer(None).await
+}
+
+pub async fn run_with_genesis_observer(
+    observer: Option<&dyn crate::scenarios::mls_lifecycle_live::MlsGenesisObserver>,
+) -> Result<()> {
     let Some(database) = database(GROUP)? else {
+        ensure!(
+            observer.is_none(),
+            "timestamp evidence requires isolated PostgreSQL"
+        );
         return Ok(());
     };
     let coauth = MockCoauthIntrospectionServer::spawn_with_internal_secret(
         HARNESS_INTERNAL_AUTHORITY_SECRET,
     )
     .await?;
-    let Some(servers) = TestServerGroup::try_multi_external_with_node_envs(
+    let Some(mut servers) = TestServerGroup::try_multi_external_with_node_envs(
         GROUP,
         &[station_env(&database.connect_url, &coauth)],
     )
     .await?
     else {
+        ensure!(
+            observer.is_none(),
+            "timestamp evidence requires a real Soland binary"
+        );
         return skip_or_fail(GROUP, "prebuilt Soland unavailable");
     };
     let station = servers.server(0);
@@ -302,6 +316,11 @@ pub async fn run() -> Result<()> {
     }))?).await?;
     genesis.scope_ref = scope.clone();
     crate::harness::refresh_typed_event_proof(&mut genesis)?;
+    if let Some(probe) = observer {
+        probe
+            .before(&controller, &mut genesis, &database.connect_url)
+            .await?;
+    }
     let accepted_genesis = submit_and_expect_commit(
         &controller.client,
         &controller.account,
@@ -309,6 +328,13 @@ pub async fn run() -> Result<()> {
         &genesis,
     )
     .await?;
+    if let Some(probe) = observer {
+        probe
+            .after(&controller, &genesis, &database.connect_url)
+            .await?;
+        servers.server_mut(0).restart_external_process().await?;
+        probe.after_restart(&controller).await?;
+    }
     ensure!(
         accepted_genesis.stream_ref == stream && accepted_genesis.stream_position == 1,
         "Sidecar MLS Genesis reused parent coordinates"
@@ -341,12 +367,11 @@ pub async fn run() -> Result<()> {
         "native Sidecar material changed accepted bytes"
     );
     let roster =
-        arkret_models_collaboration::mls_roster_authority::MlsRosterAuthorityReadRequestBody {
+        arkret_models_collaboration::mls_roster_authority::MlsMemberRosterAuthorityReadRequestBody {
             realm_id: realm,
             effective_scope: scope,
             mls_group_id: material.mls_group_id,
-            genesis_event_ref: genesis.event_id.clone(),
-            target_commit_event_ref: genesis.event_id,
+            target_commit_event_ref: genesis.event_id.clone(),
             target_epoch: 0,
             caller_actor_id: controller.actor,
             cursor: None,
@@ -359,8 +384,15 @@ pub async fn run() -> Result<()> {
         reqwest::StatusCode::OK,
     )
     .await?;
-    let roster_response:arkret_models_collaboration::mls_roster_authority::MlsRosterAuthorityReadOutcome=serde_json::from_value(roster_response)?;
-    roster_response.manifest.validate_for_request(&roster)?;
+    let roster_response: arkret_models_collaboration::mls_roster_authority::MlsSelfRosterAuthorityReadOutcome = serde_json::from_value(roster_response)?;
+    let roster_response = roster_response.roster;
+    roster_response
+        .manifest
+        .validate_for_member_request(&roster)?;
+    ensure!(
+        roster_response.manifest.genesis_event_ref == genesis.event_id,
+        "member roster selected another accepted Genesis"
+    );
     ensure!(
         roster_response.records.len() == 1 && roster_response.manifest.total_records == 1,
         "native Sidecar Genesis roster is partial"

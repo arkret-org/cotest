@@ -46,6 +46,7 @@ pub mod local_invite_accept_join;
 pub mod message_edit_and_retract;
 pub mod message_mls_cross_station_live;
 pub mod minimal_metadata_pairwise_keypackage_live;
+pub mod mls_genesis_timestamp;
 pub mod mls_lifecycle_live;
 pub mod owner_authority_restart;
 pub mod production_rejects_placeholder_proof_e2e;

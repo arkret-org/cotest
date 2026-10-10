@@ -864,7 +864,19 @@ fn event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
     // `prev_refs` and the server rejects it with
     // `created_at_before_causal_predecessor`. Anchor on the process clock and
     // step once per built Event so successors are strictly later.
-    let created_at = harness_event_created_at();
+    // Genesis freezes one creation timestamp in its payload and envelope.
+    // Malformed payloads still reach the service's schema rejection path.
+    let created_at = if kind == "ak.mls.genesis" {
+        payload
+            .get("created_at")
+            .and_then(Value::as_str)
+            .filter(|value| arkret_canonical::validate_timestamp_canonical(value).is_ok())
+            .and_then(|value| DateTime::parse_from_rfc3339(value).ok())
+            .map(|value| value.with_timezone(&Utc))
+            .unwrap_or_else(harness_event_created_at)
+    } else {
+        harness_event_created_at()
+    };
     let actor_did = Did::new(actor.to_owned()).expect("cotest actor DID");
     let actor_id = arkret_identifiers::project_did_to_core_id(&actor_did)
         .expect("cotest actor DID projects to a core id");

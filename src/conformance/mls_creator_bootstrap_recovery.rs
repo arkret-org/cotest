@@ -38,13 +38,14 @@ const VECTOR_ID: &str = "ak.vector.mls.creator_bootstrap_recovery.v1";
 /// `from_state`; the fixture spells it `absent`.
 const ABSENT: &str = "absent";
 
-const GLOBAL_ASSERTIONS: [&str; 6] = [
+const GLOBAL_ASSERTIONS: [&str; 7] = [
     "deleting every current and UI projection before the recoverer runs does not change any outcome",
     "no run amends the closed creation intent at or after realm_accepted, and no run opens a second record for the same logical key when the selector changes at genesis_intent_persisted",
     "no run reaches write-ready from an HTTP success, a duplicate code, a queue item, an emitted flag or a page projection",
     "no run writes this record or any of its fields onto a Realm Event, a current projection, an Account Data key, a sync surface or a federation surface",
     "the accepted Genesis bytes are byte-identical to the bytes frozen in the outbound queue item",
     "the server ends every positive run with exactly one accepted ak.mls.genesis for the effective scope",
+    "timestamp_gate_cases recompute only the signed Event timestamp admission predicate, not signature, authority, RFC, CAS or complete acceptance. Equality passes this gate without proving acceptance; either direction of a one-millisecond mismatch rejects before all accepted effects and is ineligible as an accepted winner. The later proof and commit clocks remain independent. Real Station zero-write and winner/reload execution belongs to implementation conformance.",
 ];
 
 /// Scenario outcomes that are not the label of any arrow's crash recovery.
@@ -98,12 +99,16 @@ pub fn run_mls_creator_bootstrap_recovery_suite() -> Result<()> {
 
     let recovery_actions = run_crash_cases(&fixture, &arrows)?;
     run_scenario_cases(&fixture, &recovery_actions)?;
+    let timestamps = crate::scenarios::mls_genesis_timestamp::run_live(
+        value_array(&fixture["timestamp_gate_cases"], "timestamp_gate_cases")?.clone(),
+    )?;
 
     record_vector_event(
         "mls.creator_bootstrap_recovery.named_suite",
         &json!({"entrypoint": ENTRYPOINT, "vector_id": VECTOR_ID}),
-        &json!({"arrows": arrows.len(), "recovery_actions": recovery_actions.len()}),
-        &json!({"executor": "run_crash_cases + run_scenario_cases"}),
+        &json!({"arrows": arrows.len(), "recovery_actions": recovery_actions.len(),
+            "live_timestamp_cases": timestamps.iter().map(|case| json!({"case_id": case.case_id, "assertions": case.assertions})).collect::<Vec<_>>()}),
+        &json!({"executor": "run_crash_cases + run_scenario_cases + live HTTP/PG timestamp admission and restart"}),
     );
     Ok(())
 }

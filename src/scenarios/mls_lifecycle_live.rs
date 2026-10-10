@@ -141,6 +141,17 @@ pub trait MlsClientObserver {
     ) -> Result<()>;
 }
 
+#[async_trait::async_trait(?Send)]
+pub trait MlsGenesisObserver {
+    async fn before(&self, member: &Member, event: &mut Event, database_url: &str) -> Result<()>;
+    async fn after(&self, member: &Member, event: &Event, database_url: &str) -> Result<()>;
+    async fn after_restart(&self, member: &Member) -> Result<()>;
+}
+
+pub async fn run_with_genesis_observer(observer: &dyn MlsGenesisObserver) -> Result<()> {
+    run_lifecycle(None, false, Some(observer)).await
+}
+
 pub async fn run_same_station_mls_keypackage_lifecycle_live() -> Result<()> {
     run_with_blocklist_observer(None, false).await
 }
@@ -149,9 +160,17 @@ pub async fn run_with_blocklist_observer(
     observer: Option<&dyn MlsClientObserver>,
     observe_receipt: bool,
 ) -> Result<()> {
+    run_lifecycle(observer, observe_receipt, None).await
+}
+
+async fn run_lifecycle(
+    observer: Option<&dyn MlsClientObserver>,
+    observe_receipt: bool,
+    genesis_observer: Option<&dyn MlsGenesisObserver>,
+) -> Result<()> {
     let Some(database) = database(GROUP)? else {
-        if observer.is_some() {
-            bail!("blocklist Call evidence requires an isolated PostgreSQL database");
+        if observer.is_some() || genesis_observer.is_some() {
+            bail!("live MLS evidence requires an isolated PostgreSQL database");
         }
         return Ok(());
     };
@@ -165,8 +184,8 @@ pub async fn run_with_blocklist_observer(
     )
     .await?
     else {
-        if observer.is_some() {
-            bail!("blocklist Call evidence requires a prebuilt real Soland binary");
+        if observer.is_some() || genesis_observer.is_some() {
+            bail!("live MLS evidence requires a prebuilt real Soland binary");
         }
         return skip_or_fail(GROUP, "prebuilt Soland unavailable");
     };
@@ -406,7 +425,7 @@ pub async fn run_with_blocklist_observer(
     let (group_info, tree) = alice_group.public_group_state_bytes()?;
     let group_info_ref = upload_public_blob(&alice.client, &realm_id, &group_info).await?;
     let tree_ref = upload_public_blob(&alice.client, &realm_id, &tree).await?;
-    let genesis = alice
+    let mut genesis = alice
         .client
         .author_event(
             realm_id.as_str(),
@@ -421,7 +440,15 @@ pub async fn run_with_blocklist_observer(
             }))?,
         )
         .await?;
+    if let Some(probe) = genesis_observer {
+        probe
+            .before(&alice, &mut genesis, &database.connect_url)
+            .await?;
+    }
     submit_and_expect_commit(&alice.client, &alice.account, ALICE_DEVICE, &genesis).await?;
+    if let Some(probe) = genesis_observer {
+        probe.after(&alice, &genesis, &database.connect_url).await?;
+    }
     crate::scenarios::message_mls_cross_station_live::install_bindings(&mut alice_group, &[&alice])
         .await?;
 
@@ -451,7 +478,13 @@ pub async fn run_with_blocklist_observer(
         "plaintext after Realm Genesis changed accepted durable state"
     );
     assert_second_genesis_refused(&alice, &genesis, &database.connect_url).await?;
-    verify_circle_activation_independence(&alice, &realm_id, &database.connect_url).await?;
+    verify_circle_activation_independence(
+        &alice,
+        &realm_id,
+        &database.connect_url,
+        genesis_observer,
+    )
+    .await?;
 
     // Add Bob: one inline Add Commit carrying the Welcome that names the claim.
     let add_binding =
@@ -675,6 +708,9 @@ pub async fn run_with_blocklist_observer(
     // Restart: the claim ledger replays byte-identically and the ACKed
     // Welcome is gone.
     group.server_mut(0).restart_external_process().await?;
+    if let Some(probe) = genesis_observer {
+        probe.after_restart(&alice).await?;
+    }
     let (status, restarted_replay) = post_claim(&alice.client, &first_request).await?;
     ensure!(
         status == StatusCode::OK && json_equal(&restarted_replay, &first_bytes)?,
@@ -855,12 +891,16 @@ async fn assert_second_genesis_refused(
     database_url: &str,
 ) -> Result<()> {
     let before = activation_durable_cut(database_url, &genesis.realm_id).await?;
+    let mut payload = serde_json::to_value(&genesis.payload)?;
+    payload["created_at"] = json!(arkret_canonical::format_timestamp_canonical(
+        arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now())
+    ));
     let mut repeated = member
         .client
         .author_event(
             genesis.realm_id.as_str(),
             EventKind::MlsGenesis.as_str(),
-            canonical(serde_json::to_value(&genesis.payload)?)?,
+            canonical(payload)?,
         )
         .await?;
     repeated.scope_ref = genesis.scope_ref.clone();
@@ -890,6 +930,7 @@ async fn verify_circle_activation_independence(
     member: &Member,
     realm: &RealmId,
     database_url: &str,
+    observer: Option<&dyn MlsGenesisObserver>,
 ) -> Result<()> {
     use crate::scenarios::circle_poll_scope_live::{circle_create, circle_event, join_circle};
     let circle = circle_create(
@@ -956,7 +997,7 @@ async fn verify_circle_activation_independence(
     let (info, tree) = private_group.public_group_state_bytes()?;
     let info_ref = upload_public_blob(&member.client, realm, &info).await?;
     let tree_ref = upload_public_blob(&member.client, realm, &tree).await?;
-    let genesis = circle_event(
+    let mut genesis = circle_event(
         &member.client,
         realm.as_str(),
         &circle,
@@ -966,6 +1007,9 @@ async fn verify_circle_activation_independence(
             "created_at":arkret_canonical::format_timestamp_canonical(chrono::Utc::now())}),
     )
     .await?;
+    if let Some(probe) = observer {
+        probe.before(member, &mut genesis, database_url).await?;
+    }
     submit_and_expect_commit(
         &member.client,
         &member.account,
@@ -973,6 +1017,9 @@ async fn verify_circle_activation_independence(
         &genesis,
     )
     .await?;
+    if let Some(probe) = observer {
+        probe.after(member, &genesis, database_url).await?;
+    }
     let after = activation_durable_cut(database_url, realm).await?;
     let groups = after["groups"]
         .as_array()
