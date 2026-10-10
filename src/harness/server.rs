@@ -8,6 +8,10 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, SystemTime};
 use std::{fs, mem};
 
+#[path = "scan_gap_relay.rs"]
+mod scan_gap_relay;
+pub use scan_gap_relay::{ScanGapControl, ScanGapRelay};
+
 use anyhow::{Context, Result, anyhow};
 use arkret::{Did, DidCoreId, TrustDomainId};
 use arkret_http_client::{Auth, Client as SdkClient};

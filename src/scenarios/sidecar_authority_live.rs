@@ -34,6 +34,10 @@ pub async fn run_with_genesis_observer(
 
 #[async_trait::async_trait(?Send)]
 pub trait SidecarSyncObserver {
+    async fn before_station(&self, _station: &mut crate::harness::ArkretServer) -> Result<()> {
+        Ok(())
+    }
+
     fn recipient_queue_capacity(&self) -> Option<usize> {
         None
     }
@@ -92,6 +96,9 @@ async fn run_with_observers(
         );
         return skip_or_fail(GROUP, "prebuilt Soland unavailable");
     };
+    if let Some(probe) = sync_observer {
+        probe.before_station(servers.server_mut(0)).await?;
+    }
     let station = servers.server(0);
     let controller = Member::provision(
         station,

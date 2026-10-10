@@ -44,7 +44,7 @@ pub const PRODUCTION_CASE_COUNT: usize = CASES.len()
     + STREAM_AND_DELIVERY_CASES.len()
     + ACK_CASES.len()
     + QUEUE_CASES.len()
-    + 2;
+    + 3;
 
 const QUEUE_WRITE_EVIDENCE: &str = "SELECT jsonb_build_object(\
     'queue',(SELECT COALESCE(jsonb_agg(to_jsonb(t) ORDER BY id),'[]') FROM device_messages t),\
@@ -118,6 +118,7 @@ pub fn run_sync_client_production_suite() -> Result<super::SuiteExecutionResult>
 }
 
 struct Probe {
+    scan_relay: RefCell<Option<cotest::harness::ScanGapRelay>>,
     directory: tempfile::TempDir,
     reader: std::path::PathBuf,
     host: RefCell<Option<NativeAccountHost>>,
@@ -205,6 +206,7 @@ struct RecoveryRail {
 }
 
 struct StreamGapRail {
+    row_fault: Option<cotest::harness::ScanGapControl>,
     http: arkret_http_client::Client,
     database_url: String,
     path: std::path::PathBuf,
@@ -267,6 +269,25 @@ impl AccountSubscribeTransport for StreamGapRail {
                     "stream recovery reset the issued recipient ACK"
                 );
             }
+            if visit == 2 && self.row_fault.is_some() {
+                let after = serde_json::to_value(
+                    inkson::LocalStateStore::with_path(self.path.clone()).load(),
+                )?;
+                let healthy_key = serde_json::to_string(&self.healthy_stream)?;
+                for (key, head) in self.before["verified_commit_stream_cursors"]
+                    .as_object()
+                    .context("row gap prior complete stream map")?
+                {
+                    if key != &healthy_key {
+                        ensure!(
+                            after["verified_commit_stream_cursors"][key] == *head
+                                && after["verified_commit_stream_anchors"][key]
+                                    == self.before["verified_commit_stream_anchors"][key],
+                            "readable row gap changed an unrelated durable stream"
+                        );
+                    }
+                }
+            }
             ensure!(
                 visit <= 2,
                 "the repaired stream did not recover within one retry"
@@ -274,6 +295,11 @@ impl AccountSubscribeTransport for StreamGapRail {
             Ok(())
         };
         check().map_err(|error| garth::Error::Protocol(error.to_string()))?;
+        if visit == 2 {
+            if let Some(fault) = &self.row_fault {
+                fault.clear();
+            }
+        }
         let mut batch = self.http.account_subscribe_batch(request).await?;
         if visit == 1 {
             let healthy = batch
@@ -293,7 +319,8 @@ impl AccountSubscribeTransport for StreamGapRail {
                 if let Some(realms) = &mut frame.realms {
                     for entry in realms.entries.values_mut() {
                         for window in entry.streams.iter_mut().flatten() {
-                            if window.stream_ref == self.affected_stream {
+                            if self.row_fault.is_none() && window.stream_ref == self.affected_stream
+                            {
                                 window.next_position =
                                     window.next_position.checked_add(1).ok_or_else(|| {
                                         garth::Error::Protocol("gap window overflow".into())
@@ -304,7 +331,7 @@ impl AccountSubscribeTransport for StreamGapRail {
                     }
                 }
             }
-            if faults != 1 {
+            if self.row_fault.is_none() && faults != 1 {
                 return Err(garth::Error::Protocol(
                     "gap fixture lacks one independent Circle window".into(),
                 ));
@@ -959,6 +986,11 @@ impl Probe {
 
 #[async_trait::async_trait(?Send)]
 impl SidecarSyncObserver for Probe {
+    async fn before_station(&self, station: &mut cotest::harness::ArkretServer) -> Result<()> {
+        *self.scan_relay.borrow_mut() = Some(station.install_scan_gap_relay().await?);
+        Ok(())
+    }
+
     fn recipient_queue_capacity(&self) -> Option<usize> {
         Some(2)
     }
@@ -1466,6 +1498,241 @@ impl Probe {
 }
 
 impl Probe {
+    async fn readable_row_gap(
+        &self,
+        controller: &Member,
+        realm: &arkret_wire::RealmId,
+        database_url: &str,
+    ) -> Result<()> {
+        use cotest::scenarios::circle_poll_scope_live::{circle_create, circle_event, join_circle};
+        use cotest::scenarios::human_device_producer_live::submit_and_expect_commit;
+        let circle = circle_create(
+            &controller.client,
+            realm.as_str(),
+            &controller.actor,
+            "Readable row gap",
+            "Row gap",
+        )
+        .await?;
+        join_circle(
+            &controller.client,
+            realm.as_str(),
+            &circle,
+            &controller.actor,
+        )
+        .await?;
+        let stream = arkret_wire::CommitStreamRef::Circle {
+            realm_id: realm.clone(),
+            circle_id: circle.clone(),
+        };
+        let path = self.directory.path().join("readable-row-gap-state.json");
+        let host = NativeAccountHost::new_for_realm(
+            controller.client.sdk(),
+            controller.account.clone(),
+            controller.device.clone(),
+            inkson::LocalStateStore::with_path(path.clone()),
+            realm.clone(),
+        )
+        .await?;
+        let baseline = ObservedRail {
+            http: controller.client.sdk(),
+            missing: None,
+            observed: Default::default(),
+        };
+        host.catch_up_with_conformance_transport(&baseline).await?;
+        let before = state(&host)?;
+        let cursor = host
+            .state_store()
+            .sync_cursor()
+            .context("row gap prior cursor")?;
+        let key = serde_json::to_string(&stream)?;
+        ensure!(
+            before["verified_commit_stream_cursors"][&key]["stream_position"] == 0,
+            "row gap did not start at a durable signed genesis"
+        );
+        let mut commits = Vec::new();
+        for title in ["Missing original one", "Visible original two"] {
+            let event = circle_event(&controller.client, realm.as_str(), &circle,
+                arkret_wire::EventKind::StrandCreate,
+                serde_json::json!({"object":{"schema":"ak.schema.strand.v1", "realm_id":realm,
+                    "scope_circle_id":circle, "tracks":{"discussion":{"is_primary":true,"profile":"discussion"}},
+                    "metadata":{"title":title}, "state":"active", "created_by":controller.actor}})).await?;
+            commits.push(
+                submit_and_expect_commit(
+                    &controller.client,
+                    &controller.account,
+                    controller.device.as_str(),
+                    &event,
+                )
+                .await?,
+            );
+        }
+        ensure!(
+            commits[0].stream_position == 1
+                && commits[1].stream_position == 2
+                && commits[1].previous_commit_ref.as_ref() == Some(&commits[0].commit_id),
+            "row gap setup has no genuine accepted continuous originals"
+        );
+        let request = arkret_wire::StreamScanRequest {
+            realm_id: realm.clone(),
+            stream_ref: stream.clone(),
+            direction: arkret_wire::StreamScanDirection::After(None),
+            limit: 32,
+        };
+        let original = controller.client.sdk().scan_commit_stream(&request).await?;
+        ensure!(
+            original.committed_events.len() == 3,
+            "row gap original prefix is not zero/one/two"
+        );
+        circle_create(
+            &controller.client,
+            realm.as_str(),
+            &controller.actor,
+            "Row gap healthy sibling",
+            "Row sibling",
+        )
+        .await?;
+        let http = controller.client.sdk();
+        // Earlier capacity cases deliberately retain this real unacknowledged
+        // delivery. Reuse it rather than weakening the endpoint's quota.
+        let delivery = http.receive_device_messages(None, None).await?;
+        ensure!(delivery.deliveries.iter().any(|row| matches!(row,
+            arkret_models_collaboration::device_messages::RecipientDelivery::DeviceMessage { device_message }
+            if device_message.device_message_id.as_str() == "ak:device_message:01964137-2000-7000-8000-000000000028")),
+            "row gap lacks its real nonempty delivery");
+        let ack_token = delivery.ack_token.context("row gap issued ACK")?;
+        let ack_before = read_database_evidence(
+            database_url,
+            "SELECT row_to_json(t)::text FROM device_message_ack_tokens t WHERE ack_token=$1",
+            &[&ack_token],
+        )?;
+        let fault = self
+            .scan_relay
+            .borrow()
+            .as_ref()
+            .context("real HTTP scan relay")?
+            .control();
+        fault.omit_position_one(stream.clone());
+        let skipped: arkret_wire::StreamScanOutcome = serde_json::from_value(
+            cotest::harness::expect_json(
+                controller
+                    .client
+                    .post("/_arkret/self/streams/scan")
+                    .json(&request),
+                reqwest::StatusCode::OK,
+            )
+            .await?,
+        )?;
+        ensure!(
+            skipped.committed_events
+                == vec![
+                    original.committed_events[0].clone(),
+                    original.committed_events[2].clone()
+                ]
+                && skipped.readable_floor == original.readable_floor,
+            "HTTP fault rewrote signed originals or their readable floor"
+        );
+        ensure!(
+            matches!(skipped.validate_for_request(&request),
+            Err(arkret_wire::WireError::StreamPositionGap { ref stream_ref, expected: 1, actual: 2 }) if *stream_ref == stream),
+            "actual HTTP zero/two scan did not identify its exact readable gap"
+        );
+        let rail = StreamGapRail {
+            row_fault: Some(fault.clone()),
+            http: http.clone(),
+            database_url: database_url.into(),
+            path: path.clone(),
+            before: before.clone(),
+            cursor,
+            affected_stream: stream.clone(),
+            healthy_stream: arkret_wire::CommitStreamRef::Realm {
+                realm_id: realm.clone(),
+            },
+            healthy_commit: Default::default(),
+            ack_token,
+            ack_before,
+            requests: Default::default(),
+        };
+        host.catch_up_with_conformance_transport(&rail).await?;
+        ensure!(
+            rail.requests.lock().unwrap().len() == 2 && fault.observations().len() >= 2,
+            "ordinary driver did not encounter and recover the actual HTTP row gap"
+        );
+        ensure!(
+            read_database_evidence(
+                database_url,
+                "SELECT row_to_json(t)::text FROM device_message_ack_tokens t WHERE ack_token=$1",
+                &[&rail.ack_token]
+            )? == rail.ack_before,
+            "repaired row gap reset the issued ACK"
+        );
+        let recovered_state = state(&host)?;
+        let healthy_key = serde_json::to_string(&rail.healthy_stream)?;
+        for (sibling, head) in before["verified_commit_stream_cursors"]
+            .as_object()
+            .context("row gap complete prior map")?
+        {
+            if sibling != &key && sibling != &healthy_key {
+                ensure!(
+                    recovered_state["verified_commit_stream_cursors"][sibling] == *head
+                        && recovered_state["verified_commit_stream_anchors"][sibling]
+                            == before["verified_commit_stream_anchors"][sibling],
+                    "row gap recovery reset an unrelated stream"
+                );
+            }
+        }
+        let repaired = http.scan_commit_stream(&request).await?;
+        ensure!(
+            repaired == original,
+            "row recovery changed an accepted original"
+        );
+        let after = state(&host)?;
+        ensure!(
+            after["verified_commit_stream_cursors"][&key]["stream_position"] == 2
+                && after["verified_commit_stream_anchors"][&key]
+                    == serde_json::to_value(&commits[1])?,
+            "row gap recovered without its authentic position-two anchor"
+        );
+        let cut = inkson::conformance::retained_realm_current(
+            &host.state_store(),
+            &controller.account,
+            realm,
+        )
+        .await?;
+        let cursor = host
+            .state_store()
+            .sync_cursor()
+            .context("row gap repaired cursor")?;
+        ensure!(
+            cursor != rail.cursor,
+            "row gap recovery advanced no Account cut"
+        );
+        let evidence = self.directory.path().join("expected-readable-row-gap.json");
+        std::fs::write(
+            &evidence,
+            serde_json::to_vec(&serde_json::json!({
+            "account":controller.account, "realm":realm, "cut":cut, "cursor":cursor,
+            "stream_key":key, "head":after["verified_commit_stream_cursors"][&key],
+            "anchor":commits[1], "stream_heads":after["verified_commit_stream_cursors"],
+            "stream_anchors":after["verified_commit_stream_anchors"] }))?,
+        )?;
+        drop(host);
+        let output = std::process::Command::new(&self.reader)
+            .arg(path)
+            .arg(evidence)
+            .output()?;
+        ensure!(
+            output.status.success(),
+            "row gap fresh-process readback failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        self.results.borrow_mut().push(super::CaseExecutionResult {
+            case_id: STREAM_GAP_CASE.into(),
+            assertions: 12,
+        });
+        Ok(())
+    }
+
     async fn circle_tail(
         &self,
         controller: &Member,
@@ -1674,6 +1941,8 @@ impl Probe {
         .await?;
         self.circle_gap_recovery(controller, realm, &circle, &stream, &path)
             .await?;
+        self.readable_row_gap(controller, realm, database_url)
+            .await?;
         Ok(())
     }
 
@@ -1765,6 +2034,7 @@ impl Probe {
             &[&ack_token],
         )?;
         let rail = StreamGapRail {
+            row_fault: None,
             http: controller.client.sdk(),
             database_url: database_url.into(),
             path: path.clone(),
@@ -2319,6 +2589,7 @@ pub async fn run_sync_production_cases(
         }
     }
     let probe = Probe {
+        scan_relay: Default::default(),
         directory: tempfile::tempdir()?,
         reader: reader.to_owned(),
         host: Default::default(),
@@ -2336,6 +2607,7 @@ pub async fn run_sync_production_cases(
         .chain(QUEUE_CASES)
         .chain(std::iter::once(BASELINE_CASE))
         .chain(std::iter::once(CIRCLE_TAIL_CASE))
+        .chain(std::iter::once(STREAM_GAP_CASE))
         .collect::<std::collections::BTreeSet<_>>();
     ensure!(
         results.len() == PRODUCTION_CASE_COUNT

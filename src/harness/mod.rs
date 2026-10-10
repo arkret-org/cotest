@@ -58,7 +58,7 @@ pub use proof::{
     attach_signal_proof, attach_signal_proof_value, refresh_typed_event_proof,
     refresh_typed_event_proof_with_signing_seed,
 };
-pub use server::{ArkretServer, CanonicalClientRequest, TestServerGroup};
+pub use server::{ArkretServer, CanonicalClientRequest, ScanGapControl, ScanGapRelay, TestServerGroup};
 pub(crate) use server::{ReservedPort, reserve_port, test_service_signing_key};
 pub use wire_body::{CanonicalJsonBody, NonProtocolTestBody};
 

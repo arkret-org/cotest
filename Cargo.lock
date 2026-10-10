@@ -11709,6 +11709,7 @@ version = "0.96.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4340704901e2af677533df4d8b1b3e5bd9a737f6709d5cd2a0b553232ff94265"
 dependencies = [
+ "arc-swap",
  "async-trait",
  "base64 0.23.1",
  "brotli",
@@ -11746,6 +11747,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.20",
  "tokio",
+ "tokio-rustls",
  "tokio-util",
  "tracing",
  "url",

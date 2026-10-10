@@ -286,7 +286,7 @@ postgres = { workspace = true }
 rand_chacha = { workspace = true }
 rcgen = { workspace = true }
 reqwest = { workspace = true, features = ["json", "multipart", "rustls"] }
-salvo = { workspace = true, features = ["fix-http1-request-uri", "server", "server-handle", "http1", "rfc9457", "affix-state"] }
+salvo = { workspace = true, features = ["fix-http1-request-uri", "server", "server-handle", "http1", "rfc9457", "affix-state", "rustls"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 serde_yaml_ng = { workspace = true }
