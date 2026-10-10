@@ -30,8 +30,43 @@ const ACK_CASES: [&str; 2] = [
     "explicit_ack_after_durable_processing_removes_the_delivery",
     "cursor_expiry_does_not_invalidate_an_issued_ack_token",
 ];
-pub const PRODUCTION_CASE_COUNT: usize =
-    CASES.len() + RECOVERY_CASES.len() + STREAM_AND_DELIVERY_CASES.len() + ACK_CASES.len();
+const QUEUE_CASES: [&str; 3] = [
+    "backfill_path_shares_one_queue_and_ack_token",
+    "expired_content_without_ack_remains_in_queue",
+    "full_endpoint_rejects_new_delivery_without_eviction",
+];
+pub const PRODUCTION_CASE_COUNT: usize = CASES.len()
+    + RECOVERY_CASES.len()
+    + STREAM_AND_DELIVERY_CASES.len()
+    + ACK_CASES.len()
+    + QUEUE_CASES.len();
+
+const QUEUE_WRITE_EVIDENCE: &str = "SELECT jsonb_build_object(\
+    'queue',(SELECT COALESCE(jsonb_agg(to_jsonb(t) ORDER BY id),'[]') FROM device_messages t),\
+    'requests',(SELECT COALESCE(jsonb_agg(to_jsonb(t) ORDER BY key),'[]') FROM device_message_txns t),\
+    'messages',(SELECT COALESCE(jsonb_agg(to_jsonb(t) ORDER BY message_key),'[]') FROM device_message_idempotency t)\
+    )::text";
+
+fn queue_request(
+    recipient: &Member,
+    id: &str,
+    expires_at: chrono::DateTime<chrono::Utc>,
+) -> Result<arkret_models_collaboration::device_messages::DeviceMessagesSendRequestBody> {
+    cotest::harness::device_message_send_request(
+        recipient
+            .client
+            .principal
+            .as_ref()
+            .context("queue recipient principal")?
+            .did
+            .as_str(),
+        recipient.device.as_str(),
+        id,
+        "ak.mls.application",
+        cotest::harness::encrypted_envelope("ak.mls.application", "b3BhcXVl"),
+        expires_at,
+    )
+}
 
 pub fn run_sync_client_production_suite() -> Result<super::SuiteExecutionResult> {
     std::thread::Builder::new()
@@ -243,6 +278,231 @@ impl AccountSubscribeTransport for RecoveryRail {
 }
 
 impl Probe {
+    async fn queue_cases(
+        &self,
+        controller: &Member,
+        other_recipient: &Member,
+        host: &NativeAccountHost,
+        database_url: &str,
+    ) -> Result<()> {
+        use arkret_models_collaboration::device_messages::DeviceMessagesAckRequestBody;
+        let http = controller.client.sdk();
+        ensure!(
+            http.receive_device_messages(None, None)
+                .await?
+                .deliveries
+                .is_empty(),
+            "queue cases require a clean acknowledged prefix"
+        );
+        let expires_at = chrono::Utc::now() + chrono::Duration::seconds(5);
+        http.send_device_messages(
+            "sync-content-expiry",
+            &queue_request(
+                controller,
+                "ak:device_message:01964137-2000-7000-8000-000000000025",
+                expires_at,
+            )?,
+        )
+        .await?;
+        let before = http.receive_device_messages(None, None).await?;
+        ensure!(
+            before.deliveries.len() == 1 && chrono::Utc::now() < expires_at,
+            "expiry probe did not observe the original live queued delivery"
+        );
+        let write_before = read_database_evidence(database_url, QUEUE_WRITE_EVIDENCE, &[])?;
+        let remaining = (expires_at - chrono::Utc::now())
+            .to_std()
+            .unwrap_or_default();
+        tokio::time::sleep(remaining + std::time::Duration::from_millis(10)).await;
+        ensure!(
+            chrono::Utc::now() > expires_at,
+            "content expiry was not crossed"
+        );
+        let expired = http.receive_device_messages(None, None).await?;
+        ensure!(
+            serde_json::to_value(&expired.deliveries)? == serde_json::to_value(&before.deliveries)?
+                && expired.lost != Some(true),
+            "content expiry removed or marked an unacknowledged delivery lost"
+        );
+        ensure!(
+            read_database_evidence(database_url, QUEUE_WRITE_EVIDENCE, &[])? == write_before,
+            "content expiry changed queue or sender idempotency records"
+        );
+        self.results.borrow_mut().push(super::CaseExecutionResult {
+            case_id: QUEUE_CASES[1].into(),
+            assertions: 5,
+        });
+
+        let fresh_expiry = chrono::Utc::now() + chrono::Duration::minutes(10);
+        http.send_device_messages(
+            "sync-backfill-prefix",
+            &queue_request(
+                controller,
+                "ak:device_message:01964137-2000-7000-8000-000000000024",
+                fresh_expiry,
+            )?,
+        )
+        .await?;
+        let full = http.receive_device_messages(None, None).await?;
+        ensure!(
+            full.deliveries.len() == 2,
+            "configured endpoint was not exactly full"
+        );
+        let writes = read_database_evidence(database_url, QUEUE_WRITE_EVIDENCE, &[])?;
+        let account_request = SyncRequestBody {
+            catchup: Some(true),
+            filter: Some(garth::AccountFilter {
+                realm_ids: Some(vec![]),
+                window_limit: Some(20),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let main = http.account_subscribe_batch(&account_request).await?;
+        let delivered = main
+            .frames
+            .iter()
+            .filter_map(|frame| frame.to_device.as_ref())
+            .flat_map(|queue| queue.deliveries.iter().cloned())
+            .collect::<Vec<_>>();
+        ensure!(
+            serde_json::to_value(&delivered)? == serde_json::to_value(&full.deliveries)?,
+            "Account stream and list did not read the same original recipient queue"
+        );
+        let main_token = main
+            .frames
+            .iter()
+            .filter_map(|frame| frame.to_device.as_ref())
+            .filter(|queue| !queue.deliveries.is_empty())
+            .last()
+            .and_then(|queue| queue.ack_token.as_deref())
+            .context("Account delivery ACK")?;
+        let first = http.receive_device_messages(None, Some(1)).await?;
+        ensure!(
+            first.deliveries.len() == 1 && first.has_more,
+            "backfill did not paginate the shared queue"
+        );
+        let last = http
+            .receive_device_messages(
+                Some(first.next_cursor.as_deref().context("backfill cursor")?),
+                Some(1),
+            )
+            .await?;
+        let backfill = first
+            .deliveries
+            .into_iter()
+            .chain(last.deliveries)
+            .collect::<Vec<_>>();
+        ensure!(
+            !last.has_more && serde_json::to_value(&backfill)? == serde_json::to_value(&delivered)?,
+            "backfill changed ordering or created another delivery copy"
+        );
+        ensure!(
+            read_database_evidence(database_url, QUEUE_WRITE_EVIDENCE, &[])? == writes,
+            "Account or paginated reads wrote queue or sender idempotency state"
+        );
+
+        let mut rejected = queue_request(
+            controller,
+            "ak:device_message:01964137-2000-7000-8000-000000000026",
+            fresh_expiry,
+        )?;
+        rejected.messages.extend(
+            queue_request(
+                other_recipient,
+                "ak:device_message:01964137-2000-7000-8000-000000000027",
+                fresh_expiry,
+            )?
+            .messages,
+        );
+        let failure: garth::Error = http
+            .send_device_messages("sync-full-endpoint", &rejected)
+            .await
+            .expect_err("a full endpoint accepted a new delivery")
+            .into();
+        ensure!(
+            matches!(&failure, garth::Error::Api { error, .. } if error.code() == "quota_exceeded"),
+            "full endpoint returned a different error: {failure}"
+        );
+        ensure!(
+            read_database_evidence(database_url, QUEUE_WRITE_EVIDENCE, &[])? == writes,
+            "full endpoint refusal committed queue or sender idempotency state"
+        );
+        let retained = http.receive_device_messages(None, None).await?;
+        ensure!(
+            serde_json::to_value(&retained.deliveries)? == serde_json::to_value(&full.deliveries)?,
+            "full endpoint evicted an old delivery"
+        );
+
+        self.durable_ack(
+            controller,
+            host,
+            &backfill,
+            last.ack_token.as_deref().context("backfill prefix ACK")?,
+            database_url,
+            QUEUE_CASES[0],
+        )
+        .await?;
+        let old_ack = http
+            .ack_device_messages(&DeviceMessagesAckRequestBody {
+                ack_token: main_token.into(),
+            })
+            .await?;
+        ensure!(
+            old_ack.pruned_count == 0,
+            "main-path ACK did not share backfill's cumulative confirmation"
+        );
+        let after_ack = http
+            .account_subscribe_batch(&SyncRequestBody {
+                after: Some(main.cursor),
+                catchup: Some(false),
+                ..account_request
+            })
+            .await?;
+        ensure!(
+            after_ack
+                .frames
+                .iter()
+                .filter_map(|frame| frame.to_device.as_ref())
+                .all(|queue| queue.deliveries.is_empty()),
+            "backfill ACK left another copy on the Account stream"
+        );
+        let replay = http
+            .send_device_messages("sync-full-endpoint", &rejected)
+            .await?;
+        ensure!(
+            replay
+                .delivered
+                .values()
+                .map(|devices| devices.len())
+                .sum::<usize>()
+                == 2
+                && replay.unknown_devices.is_empty(),
+            "refused batch idempotency prevented exact retry after capacity returned"
+        );
+        ensure!(
+            http.receive_device_messages(None, None)
+                .await?
+                .deliveries
+                .len()
+                == 1
+                && other_recipient
+                    .client
+                    .sdk()
+                    .receive_device_messages(None, None)
+                    .await?
+                    .deliveries
+                    .len()
+                    == 1,
+            "exact retry did not atomically deliver the previously refused batch"
+        );
+        self.results.borrow_mut().push(super::CaseExecutionResult {
+            case_id: QUEUE_CASES[2].into(),
+            assertions: 6,
+        });
+        Ok(())
+    }
+
     async fn durable_ack(
         &self,
         controller: &Member,
@@ -333,6 +593,7 @@ impl Probe {
     async fn reconnect_cases(
         &self,
         controller: &Member,
+        other_recipient: &Member,
         genesis: &Event,
         creator_group: &arkret::ArkretMlsGroup,
         database_url: &str,
@@ -560,12 +821,17 @@ impl Probe {
             ACK_CASES[0],
         )
         .await?;
-        Ok(())
+        self.queue_cases(controller, other_recipient, &host, database_url)
+            .await
     }
 }
 
 #[async_trait::async_trait(?Send)]
 impl SidecarSyncObserver for Probe {
+    fn recipient_queue_capacity(&self) -> Option<usize> {
+        Some(2)
+    }
+
     async fn before_genesis(&self, controller: &Member, scope: &ScopeRef) -> Result<()> {
         let host = NativeAccountHost::new_for_realm(
             controller.client.sdk(),
@@ -614,6 +880,7 @@ impl SidecarSyncObserver for Probe {
     async fn after_genesis(
         &self,
         controller: &Member,
+        other_recipient: &Member,
         genesis: &Event,
         creator_group: &arkret::ArkretMlsGroup,
         database_url: &str,
@@ -763,8 +1030,14 @@ impl SidecarSyncObserver for Probe {
             case_id: CASES[0].into(),
             assertions: 8,
         });
-        self.reconnect_cases(controller, genesis, creator_group, database_url)
-            .await?;
+        self.reconnect_cases(
+            controller,
+            other_recipient,
+            genesis,
+            creator_group,
+            database_url,
+        )
+        .await?;
         Ok(())
     }
 }
@@ -899,6 +1172,44 @@ pub async fn run_sync_production_cases(
             "{name}: durable explicit ACK expectations drifted"
         );
     }
+    for (index, name) in QUEUE_CASES.into_iter().enumerate() {
+        let cases = fixture["delivery_cancellation"]
+            .as_array()
+            .context("queue cases")?;
+        let matches = cases
+            .iter()
+            .filter(|case| case["name"] == name)
+            .collect::<Vec<_>>();
+        ensure!(
+            matches.len() == 1
+                && matches[0]["durably_processed"] == (index == 0)
+                && matches[0]["action"]
+                    == [
+                        "ack_from_backfill_path",
+                        "advance_time_past_content_expiry_without_ack",
+                        "enqueue_new_delivery_at_full_capacity"
+                    ][index]
+                && matches[0]["expected"]
+                    == [
+                        "removed_from_recipient_queue",
+                        "still_queued",
+                        "rejected_quota_exceeded_with_old_delivery_still_queued"
+                    ][index],
+            "{name}: queue expectations drifted"
+        );
+        if index == 0 {
+            ensure!(
+                matches[0]["second_copy_created"] == false,
+                "backfill cannot create a second queue"
+            );
+        }
+        if index == 2 {
+            ensure!(
+                matches[0]["request_idempotency_written"] == false,
+                "quota refusal cannot consume idempotency"
+            );
+        }
+    }
     let probe = Probe {
         directory: tempfile::tempdir()?,
         reader: reader.to_owned(),
@@ -914,6 +1225,7 @@ pub async fn run_sync_production_cases(
         .chain(RECOVERY_CASES)
         .chain(STREAM_AND_DELIVERY_CASES)
         .chain(ACK_CASES)
+        .chain(QUEUE_CASES)
         .collect::<std::collections::BTreeSet<_>>();
     ensure!(
         results.len() == PRODUCTION_CASE_COUNT
@@ -933,6 +1245,8 @@ pub async fn run_sync_production_cases(
                 "AccountSubscription + InksonAccountProjector + native shard + fresh-process readback"
             } else if ACK_CASES.contains(&case.case_id.as_str()) {
                 "Station/PG recipient queue + Inkson durable journal + exact disk readback + explicit SDK ACK"
+            } else if QUEUE_CASES.contains(&case.case_id.as_str()) {
+                "Station/PG Account delivery + paginated shared queue + real content expiry + quota rejection + durable SDK ACK"
             } else { "AccountSubscription + InksonAccountProjector + Station/PG + private MLS checkpoint + unacknowledged queue" }, "complete_suite_claim":false}),
         );
     }
