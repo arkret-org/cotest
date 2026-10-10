@@ -26,8 +26,12 @@ const STREAM_AND_DELIVERY_CASES: [&str; 2] = [
     "sidecar_stream_tail_is_independent",
     "cursor_advance_alone_does_not_cancel_a_delivery",
 ];
+const ACK_CASES: [&str; 2] = [
+    "explicit_ack_after_durable_processing_removes_the_delivery",
+    "cursor_expiry_does_not_invalidate_an_issued_ack_token",
+];
 pub const PRODUCTION_CASE_COUNT: usize =
-    CASES.len() + RECOVERY_CASES.len() + STREAM_AND_DELIVERY_CASES.len();
+    CASES.len() + RECOVERY_CASES.len() + STREAM_AND_DELIVERY_CASES.len() + ACK_CASES.len();
 
 pub fn run_sync_client_production_suite() -> Result<super::SuiteExecutionResult> {
     std::thread::Builder::new()
@@ -239,6 +243,93 @@ impl AccountSubscribeTransport for RecoveryRail {
 }
 
 impl Probe {
+    async fn durable_ack(
+        &self,
+        controller: &Member,
+        host: &NativeAccountHost,
+        deliveries: &[arkret_models_collaboration::device_messages::RecipientDelivery],
+        token: &str,
+        database_url: &str,
+        case_id: &str,
+    ) -> Result<()> {
+        use arkret_models_collaboration::device_messages::{
+            DeviceMessagesAckRequestBody, RecipientDelivery,
+        };
+        ensure!(
+            !deliveries.is_empty(),
+            "ACK evidence requires a nonempty queue"
+        );
+        host.state_store_handle().write(|store| -> Result<()> {
+            store
+                .ingest_recipient_deliveries(deliveries)
+                .map_err(anyhow::Error::msg)?;
+            store.flush()?;
+            Ok(())
+        })?;
+        // Reopen the exact active shard before the destructive service call.
+        let path = host.state_store().conformance_account_state_path();
+        let disk: Value = serde_json::from_slice(&std::fs::read(&path)?)?;
+        let journal = disk["to_device_inbox"]
+            .as_array()
+            .context("durable recipient journal")?;
+        for delivery in deliveries {
+            let RecipientDelivery::DeviceMessage { device_message } = delivery else {
+                anyhow::bail!("ACK fixture unexpectedly contains an MLS Welcome");
+            };
+            ensure!(
+                journal.contains(&serde_json::to_value(device_message)?),
+                "recipient original bytes were not durable before ACK"
+            );
+        }
+        let queued = controller
+            .client
+            .sdk()
+            .receive_device_messages(None, None)
+            .await?;
+        ensure!(
+            serde_json::to_value(&queued.deliveries)? == serde_json::to_value(deliveries)?,
+            "local processing removed or changed the remote queue without ACK"
+        );
+        let ack = controller
+            .client
+            .sdk()
+            .ack_device_messages(&DeviceMessagesAckRequestBody {
+                ack_token: token.to_owned(),
+            })
+            .await?;
+        ensure!(
+            ack.pruned_count == deliveries.len() as u64,
+            "explicit ACK did not remove exactly the durable recipient prefix"
+        );
+        ensure!(
+            controller
+                .client
+                .sdk()
+                .receive_device_messages(None, None)
+                .await?
+                .deliveries
+                .is_empty(),
+            "acknowledged delivery remained in its recipient queue"
+        );
+        ensure!(
+            read_database_evidence(
+                database_url,
+                "SELECT (consumed_at IS NOT NULL)::text FROM device_message_ack_tokens WHERE ack_token=$1",
+                &[&token]
+            )? == "true",
+            "service did not consume the issued ACK token"
+        );
+        ensure!(
+            serde_json::from_slice::<Value>(&std::fs::read(path)?)? == disk,
+            "remote ACK deleted the durable local recipient original"
+        );
+        self.results.borrow_mut().push(super::CaseExecutionResult {
+            case_id: case_id.into(),
+            assertions: 6,
+        });
+        Ok(())
+    }
+
     async fn reconnect_cases(
         &self,
         controller: &Member,
@@ -424,6 +515,51 @@ impl Probe {
                 assertions: 10,
             });
         }
+        self.durable_ack(
+            controller,
+            &host,
+            &queue.deliveries,
+            &token,
+            database_url,
+            ACK_CASES[1],
+        )
+        .await?;
+        let request = cotest::harness::device_message_send_request(
+            controller
+                .client
+                .principal
+                .as_ref()
+                .context("ACK controller principal")?
+                .did
+                .as_str(),
+            controller.device.as_str(),
+            "ak:device_message:01964137-2000-7000-8000-000000000021",
+            "ak.mls.application",
+            cotest::harness::encrypted_envelope("ak.mls.application", "b3BhcXVl"),
+            chrono::Utc::now() + chrono::Duration::minutes(10),
+        )?;
+        controller
+            .client
+            .sdk()
+            .send_device_messages("sync-explicit-durable-ack", &request)
+            .await?;
+        let fresh = controller
+            .client
+            .sdk()
+            .receive_device_messages(None, None)
+            .await?;
+        self.durable_ack(
+            controller,
+            &host,
+            &fresh.deliveries,
+            fresh
+                .ack_token
+                .as_deref()
+                .context("fresh delivery ACK token")?,
+            database_url,
+            ACK_CASES[0],
+        )
+        .await?;
         Ok(())
     }
 }
@@ -747,6 +883,22 @@ pub async fn run_sync_production_cases(
             && delivery[0]["expected"] == "still_queued",
         "Account checkpoint cannot acknowledge an unprocessed delivery"
     );
+    for (index, name) in ACK_CASES.into_iter().enumerate() {
+        let cases = fixture["delivery_cancellation"]
+            .as_array()
+            .context("ACK cases")?;
+        let matches = cases
+            .iter()
+            .filter(|case| case["name"] == name)
+            .collect::<Vec<_>>();
+        ensure!(
+            matches.len() == 1
+                && matches[0]["durably_processed"] == true
+                && matches[0]["action"] == ["ack", "ack_with_token_after_cursor_expired"][index]
+                && matches[0]["expected"] == "removed_from_recipient_queue",
+            "{name}: durable explicit ACK expectations drifted"
+        );
+    }
     let probe = Probe {
         directory: tempfile::tempdir()?,
         reader: reader.to_owned(),
@@ -761,6 +913,7 @@ pub async fn run_sync_production_cases(
         .into_iter()
         .chain(RECOVERY_CASES)
         .chain(STREAM_AND_DELIVERY_CASES)
+        .chain(ACK_CASES)
         .collect::<std::collections::BTreeSet<_>>();
     ensure!(
         results.len() == PRODUCTION_CASE_COUNT
@@ -778,6 +931,8 @@ pub async fn run_sync_production_cases(
             &serde_json::json!({"assertions":case.assertions, "production_sync_boundary":true}),
             &serde_json::json!({"executor":if CASES.contains(&case.case_id.as_str()) {
                 "AccountSubscription + InksonAccountProjector + native shard + fresh-process readback"
+            } else if ACK_CASES.contains(&case.case_id.as_str()) {
+                "Station/PG recipient queue + Inkson durable journal + exact disk readback + explicit SDK ACK"
             } else { "AccountSubscription + InksonAccountProjector + Station/PG + private MLS checkpoint + unacknowledged queue" }, "complete_suite_claim":false}),
         );
     }

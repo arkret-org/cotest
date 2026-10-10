@@ -17,7 +17,7 @@ fn sidecar_checkpoint_cases_use_the_actual_account_driver() -> Result<()> {
     let missing = cotest::conformance::missing_sync_production_cases(&execution, &fixture)?;
     assert!(
         !missing.is_empty(),
-        "three checkpoint cases cannot close the whole Sync suite"
+        "a production subset cannot close the whole Sync suite"
     );
     assert!(
         missing
