@@ -34,12 +34,23 @@ pub async fn run_with_genesis_observer(
 
 #[async_trait::async_trait(?Send)]
 pub trait SidecarSyncObserver {
+    fn recipient_queue_capacity(&self) -> Option<usize> {
+        None
+    }
+
     async fn before_genesis(
         &self,
         controller: &Member,
         scope: &arkret_wire::ScopeRef,
     ) -> Result<()>;
-    async fn after_genesis(&self, controller: &Member, genesis: &arkret_wire::Event) -> Result<()>;
+    async fn after_genesis(
+        &self,
+        controller: &Member,
+        other_recipient: &Member,
+        genesis: &arkret_wire::Event,
+        creator_group: &arkret::ArkretMlsGroup,
+        database_url: &str,
+    ) -> Result<()>;
 }
 
 pub async fn run_with_sync_observer(observer: &dyn SidecarSyncObserver) -> Result<()> {
@@ -61,11 +72,19 @@ async fn run_with_observers(
         HARNESS_INTERNAL_AUTHORITY_SECRET,
     )
     .await?;
-    let Some(mut servers) = TestServerGroup::try_multi_external_with_node_envs(
-        GROUP,
-        &[station_env(&database.connect_url, &coauth)],
-    )
-    .await?
+    let mut node_env = station_env(&database.connect_url, &coauth);
+    if let Some(capacity) = sync_observer.and_then(|observer| observer.recipient_queue_capacity()) {
+        ensure!(
+            capacity > 0,
+            "recipient queue fixture capacity must be nonzero"
+        );
+        node_env.push((
+            "SOLAND_TO_DEVICE_QUEUE_CAPACITY".into(),
+            capacity.to_string(),
+        ));
+    }
+    let Some(mut servers) =
+        TestServerGroup::try_multi_external_with_node_envs(GROUP, &[node_env]).await?
     else {
         ensure!(
             observer.is_none() && sync_observer.is_none(),
@@ -353,7 +372,15 @@ async fn run_with_observers(
     )
     .await?;
     if let Some(probe) = sync_observer {
-        probe.after_genesis(&controller, &genesis).await?;
+        probe
+            .after_genesis(
+                &controller,
+                &outsider,
+                &genesis,
+                &group,
+                &database.connect_url,
+            )
+            .await?;
     }
     if let Some(probe) = observer {
         probe

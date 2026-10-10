@@ -8,13 +8,16 @@ fn sidecar_checkpoint_cases_use_the_actual_account_driver() -> Result<()> {
     );
     let execution =
         cotest_inkson_client_tests::conformance::client_sync::run_sync_client_production_suite()?;
-    assert_eq!(execution.cases.len(), 3);
+    assert_eq!(
+        execution.cases.len(),
+        cotest_inkson_client_tests::conformance::client_sync::PRODUCTION_CASE_COUNT
+    );
     assert!(execution.cases.iter().all(|case| case.assertions > 0));
     let fixture = cotest::conformance::load_fixture_value("client-sync-fixture.json")?;
     let missing = cotest::conformance::missing_sync_production_cases(&execution, &fixture)?;
     assert!(
         !missing.is_empty(),
-        "three checkpoint cases cannot close the whole Sync suite"
+        "a production subset cannot close the whole Sync suite"
     );
     assert!(
         missing
