@@ -303,7 +303,7 @@ export function teabayMetricsUrl(): string | undefined {
   return optionalEnv("COTEST_TEABAY_METRICS_URL")?.replace(/\/$/, "");
 }
 
-// teabay's public REST base URL (the directory face), when the run includes it.
+// flagon's public REST base URL (the directory face), when the run includes it.
 export function teabayBaseUrl(): string | undefined {
   return optionalEnv("COTEST_TEABAY_BASE_URL")?.replace(/\/$/, "");
 }

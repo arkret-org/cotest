@@ -5,7 +5,7 @@
 //! 1. [`DidHostClient`] — an HTTP client for `e2e/mocks/mock-did-host.mjs`. Rust scenarios read the
 //!    *same* counters the TypeScript specs read (`e2e/helpers/did-host.ts`), so a cross-process
 //!    claim like "this operation made zero additional authority network calls" means the same thing
-//!    on both sides. cotest has no Cargo dependency on soland / teabay / coauth / floria (they are
+//!    on both sides. cotest has no Cargo dependency on soland / flagon / coauth / floria (they are
 //!    pre-built sibling binaries driven over HTTP — see [`super::external_binary`]), so the wire is
 //!    the only place their DID fetches are observable.
 //!

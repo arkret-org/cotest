@@ -337,7 +337,7 @@ fn default_gate_paths() -> OperationRegistryGatePaths {
             OperationSourceRoot::new("coauth", workspace_root.join("coauth"))
                 .with_dir("crates/backend/src")
                 .with_dir("crates/frontend/src/api"),
-            OperationSourceRoot::new("teabay", workspace_root.join("teabay"))
+            OperationSourceRoot::new("flagon", workspace_root.join("flagon"))
                 .with_dir("crates/server/src")
                 .with_dir("crates/admin/src"),
             OperationSourceRoot::new("inkson", workspace_root.join("inkson"))

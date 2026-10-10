@@ -3,7 +3,7 @@
 //! # Why metrics rather than a resolver spy
 //!
 //! The task's original shape was an in-process `DidResolver` spy. cotest has no
-//! Cargo dependency on soland / teabay / coauth / floria — they are
+//! Cargo dependency on soland / flagon / coauth / floria — they are
 //! pre-built sibling binaries driven over HTTP ([`super::external_binary`]) —
 //! so a Rust trait spy cannot be injected. The network-layer alternative (the
 //! counting DID host in [`super::did_host`]) is implemented and self-tested but
@@ -13,7 +13,7 @@
 //! dev-only base-URL override in the SSRF defence would put a test requirement
 //! inside a production security boundary.
 //!
-//! soland and teabay therefore export two counters each, and this module turns
+//! soland and flagon therefore export two counters each, and this module turns
 //! them into the two numbers the joint contract is written in:
 //!
 //! | number | series |
@@ -28,7 +28,7 @@
 //!
 //! # Coverage boundary
 //!
-//! Only **soland** and **teabay** expose these counters. coauth, inkson and
+//! Only **soland** and **flagon** expose these counters. coauth, inkson and
 //! bridges have no metrics endpoint, so a scenario about them cannot be
 //! expressed here; see the DID-P1-C02 notes in the task file rather than
 //! substituting a weaker assertion.
@@ -44,7 +44,7 @@ use anyhow::{Context, Result, bail};
 /// Env var carrying soland's `/metrics` base URL (exported by
 /// `scripts/run-joint-e2e.ps1`).
 pub const SOLAND_METRICS_URL_ENV: &str = "COTEST_SOLAND_METRICS_URL";
-/// Env var carrying teabay's `/metrics` base URL.
+/// Env var carrying flagon's `/metrics` base URL.
 pub const TEABAY_METRICS_URL_ENV: &str = "COTEST_TEABAY_METRICS_URL";
 
 /// `soland_did_resolve_total` / `teabay_did_resolve_total` metric names.
@@ -259,7 +259,7 @@ impl MeteredService {
     pub fn name(self) -> &'static str {
         match self {
             Self::Soland => "soland",
-            Self::Teabay => "teabay",
+            Self::Teabay => "flagon",
         }
     }
 

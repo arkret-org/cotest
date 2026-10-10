@@ -4,7 +4,7 @@
 // ----------------------------------------------------
 // The task DID-P1-C01 asks for a resolver spy that is resettable and can be
 // counted per DID / purpose. cotest has **no Cargo dependency** on soland /
-// teabay / coauth / floria — they are launched as pre-built sibling
+// flagon / coauth / floria — they are launched as pre-built sibling
 // binaries and driven over HTTP (see
 // `src/scenarios/_helpers/external_binary.rs`). A Rust trait spy therefore
 // cannot be injected into those processes. The only place a cross-process

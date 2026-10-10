@@ -705,7 +705,7 @@
       "coverage": [
         {
           "kind": "ordinary",
-          "path": "../teabay/crates/server/tests/it/read_only.rs",
+          "path": "../flagon/crates/server/tests/it/read_only.rs",
           "markers": [
             "ak.operation_bundle.directory_service.public_read.v1",
             "ServiceOperationId::FindDirectoryReadSearchRealmsV1",

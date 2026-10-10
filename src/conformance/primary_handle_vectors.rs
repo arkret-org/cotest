@@ -6,7 +6,7 @@
 //! These vectors drive the SDK's deterministic selection algorithm
 //! ([`arkret::identity::select_primary_handle`]) and the canonical claim
 //! digest ([`arkret::identity::claim_digest`]) directly, so every
-//! implementation (inkson / sodmin / soland / teabay) agrees byte-for-byte.
+//! implementation (inkson / sodmin / soland / flagon) agrees byte-for-byte.
 //!
 //! The §3.2.1 algorithm is a pure function of a six-tuple:
 //! `(subject_id, context, claim_set_snapshot, policy_snapshot,

@@ -228,7 +228,7 @@ target and fails zero-match or ambiguous filter entries.
 ### Prove the server side without a browser
 
 `services-live` is the headless lane. It builds the sibling soland, coauth and
-teabay binaries, provisions PostgreSQL, and runs the live Rust scenarios that
+flagon binaries, provisions PostgreSQL, and runs the live Rust scenarios that
 spawn those processes for real:
 
 ```powershell
@@ -252,7 +252,7 @@ For the full product topology, keep Inkson and coauth enabled:
   -RunProfile joint-smoke
 ```
 
-When soland runs in Docker and coauth/teabay/mocks run on the host, the
+When soland runs in Docker and coauth/flagon/mocks run on the host, the
 runner rewrites soland's outbound localhost URLs to `host.docker.internal`
 inside the container. Public URLs exposed to Playwright stay as
 `http://127.0.0.1:<port>` so browser behavior remains identical to process

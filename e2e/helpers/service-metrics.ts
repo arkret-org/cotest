@@ -2,12 +2,12 @@
 // (DID-P1-C01/C02) — the TypeScript twin of
 // src/scenarios/_helpers/service_metrics.rs.
 //
-// Why metrics rather than a resolver spy: cotest drives soland / teabay as
+// Why metrics rather than a resolver spy: cotest drives soland / flagon as
 // pre-built binaries over HTTP, so no in-process spy can be injected, and the
 // network-layer counting DID host (mock-did-host.mjs, e2e/helpers/did-host.ts)
 // cannot be wired to them because DID→URL derivation hard-codes `https` and the
 // SSRF gate rejects loopback hosts while the URL is still being built. soland
-// and teabay therefore export two counters each, and this module turns them
+// and flagon therefore export two counters each, and this module turns them
 // into the two numbers the joint contract is written in:
 //
 //   authority_network_call_count  → *_did_resolve_total{source="network"}
@@ -18,14 +18,14 @@
 // local_snapshot / sdk_cache / did_key hits — which are exactly what "reused the
 // accepted binding" means — never inflate it.
 //
-// Coverage boundary: only soland and teabay expose these counters. coauth,
+// Coverage boundary: only soland and flagon expose these counters. coauth,
 // inkson and bridges have no metrics endpoint, so a scenario about them cannot
 // be expressed here.
 
 import { expect, type APIRequestContext } from "@playwright/test";
 import { solandMetricsUrl, teabayMetricsUrl } from "./env";
 
-export type MeteredService = "soland" | "teabay";
+export type MeteredService = "soland" | "flagon";
 
 /// A single Prometheus sample line.
 export type MetricSample = {
@@ -50,7 +50,7 @@ const METRIC_NAMES: Record<MeteredService, { didResolve: string; signatureVerify
     didResolve: "soland_did_resolve_total",
     signatureVerify: "soland_signature_verify_total",
   },
-  teabay: {
+  flagon: {
     didResolve: "teabay_did_resolve_total",
     signatureVerify: "teabay_signature_verify_total",
   },

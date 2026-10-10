@@ -1,4 +1,4 @@
-//! CT-6 — joint service bootstrap (soland + coauth + teabay).
+//! CT-6 — joint service bootstrap (soland + coauth + flagon).
 //!
 //! Provides a single [`JointServiceStack`] entry point that:
 //!   1. Spawns `soland` (via the existing [`ArkretServer::spawn_with_env`] machinery, which honours
@@ -6,7 +6,7 @@
 //!   2. Optionally spawns `coauth` via [`coauth_bootstrap::spawn_coauth_with_db`] (docker-postgres
 //!      + generated config). Wires soland -> coauth session-grant introspection via
 //!      `SOLAND_SESSION_GRANT_INTROSPECTION_URL`.
-//!   3. Optionally spawns `teabay` via [`external_binary::TEABAY_SPEC`] — requires `DATABASE_URL`
+//!   3. Optionally spawns `flagon` via [`external_binary::TEABAY_SPEC`] — requires `DATABASE_URL`
 //!      in the caller's env (see `TEABAY_SPEC.required_env_vars`).
 //!
 //! `try_bootstrap` is fail-soft: services that can't start (missing binary,
@@ -15,7 +15,7 @@
 //! checks into a hard error so `#[ignore]` tests opted in via `--ignored`
 //! get a descriptive bail.
 //!
-//! Drop order is LIFO (teabay → coauth → soland), so each service gets a
+//! Drop order is LIFO (flagon → coauth → soland), so each service gets a
 //! chance to flush before its upstream goes away. Postgres for coauth is
 //! reaped by `EphemeralPg::Drop` after the coauth handle drops.
 
@@ -70,9 +70,9 @@ impl JointServiceConfig {
 /// bottom, so upstream dependants are declared before `soland`; soland is the
 /// final process to be torn down.
 pub struct JointServiceStack {
-    /// teabay (directory) — `Some` if sibling binary + `DATABASE_URL` were
+    /// flagon (directory) — `Some` if sibling binary + `DATABASE_URL` were
     /// available.
-    pub teabay: Option<SpawnedExternalProcess>,
+    pub flagon: Option<SpawnedExternalProcess>,
     /// coauth (auth/account) — `Some` if docker + sibling binary were
     /// available; `None` if the bootstrap couldn't bring it up.
     pub coauth: Option<SpawnedCoauth>,
@@ -92,9 +92,9 @@ impl JointServiceStack {
         self.coauth.as_ref().map(SpawnedCoauth::base_url)
     }
 
-    /// Public REST base URL for teabay (when spawned).
+    /// Public REST base URL for flagon (when spawned).
     pub fn teabay_base_url(&self) -> Option<&str> {
-        self.teabay.as_ref().map(|p| p.base_url.as_str())
+        self.flagon.as_ref().map(|p| p.base_url.as_str())
     }
 
     /// Run `/health` against every spawned service. Returns `Err` if any
@@ -125,7 +125,7 @@ impl JointServiceStack {
         if let Some(url) = self.teabay_base_url() {
             probe(
                 &client,
-                "teabay",
+                "flagon",
                 &format!("{}/health", url.trim_end_matches('/')),
             )
             .await?;
@@ -161,8 +161,8 @@ pub async fn try_bootstrap(config: JointServiceConfig) -> Result<JointServiceSta
             None
         };
 
-    // 2. teabay — requires DATABASE_URL. Soft-skip otherwise.
-    let teabay = match skip_reason(&TEABAY_SPEC) {
+    // 2. flagon — requires DATABASE_URL. Soft-skip otherwise.
+    let flagon = match skip_reason(&TEABAY_SPEC) {
         Some(_) => None,
         None => try_spawn(&TEABAY_SPEC).await?,
     };
@@ -244,7 +244,7 @@ pub async fn try_bootstrap(config: JointServiceConfig) -> Result<JointServiceSta
     };
 
     Ok(JointServiceStack {
-        teabay,
+        flagon,
         coauth,
         soland,
     })
@@ -260,8 +260,8 @@ pub async fn bootstrap_required(config: JointServiceConfig) -> Result<JointServi
     if stack.coauth.is_none() {
         missing.push("coauth (need docker + COAUTH_BIN or sibling checkout)");
     }
-    if stack.teabay.is_none() {
-        missing.push("teabay (need TEABAY_BIN or sibling checkout + DATABASE_URL)");
+    if stack.flagon.is_none() {
+        missing.push("flagon (need TEABAY_BIN or sibling checkout + DATABASE_URL)");
     }
     if !missing.is_empty() {
         return Err(anyhow!(

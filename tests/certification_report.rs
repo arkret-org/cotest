@@ -8,7 +8,7 @@ fn offline_live_stack_report_marks_unconfigured_services_explicitly() -> Result<
         .iter()
         .map(|entry| entry.service.as_str())
         .collect::<std::collections::BTreeSet<_>>();
-    for service in ["soland", "floria", "teabay", "coauth"] {
+    for service in ["soland", "floria", "flagon", "coauth"] {
         assert!(services.contains(service), "missing {service}");
     }
     assert!(

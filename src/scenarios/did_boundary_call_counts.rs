@@ -371,7 +371,7 @@ pub async fn unknown_issuer_fails_closed_run() -> Result<()> {
 /// authority calls.
 ///
 /// Row 3 names federation / applet / directory requests. bridges (applet) and
-/// teabay (directory) own two of those three surfaces and only teabay exports
+/// flagon (directory) own two of those three surfaces and only flagon exports
 /// counters, so what is provable *here* is the shape of the claim on soland's
 /// own request face: N ordinary signed requests → N verifications, 0 authority
 /// calls, no matter how many.

@@ -40,14 +40,14 @@ $executableFunction = $ast.FindAll({
 }, $true)
 if ($executableFunction.Count -ne 1) { throw "Expected one native executable naming function" }
 Invoke-Expression $executableFunction[0].Extent.Text
-foreach ($name in @("soland", "coauth", "teabay", "savfox", "cotest-wire", "cotest-provision")) {
+foreach ($name in @("soland", "coauth", "flagon", "savfox", "cotest-wire", "cotest-provision")) {
     $expectedName = if ($IsWindows) { "$name.exe" } else { $name }
     if ((Get-NativeExecutableName -Name $name) -ne $expectedName) {
         throw "Incorrect native executable name for $name"
     }
 }
 $runnerSource = Get-Content -LiteralPath $runnerPath -Raw
-if ($runnerSource -match '"(?:debug|release)\\(?:soland|coauth|teabay|savfox|cotest-wire|cotest-provision)\.exe"') {
+if ($runnerSource -match '"(?:debug|release)\\(?:soland|coauth|flagon|savfox|cotest-wire|cotest-provision)\.exe"') {
     throw "Cargo executable paths must use platform-native executable names"
 }
 

@@ -40,7 +40,7 @@ pub async fn teabay_directory_service_profile_is_discoverable() -> Result<()> {
 
     let Some(directory) = directory_target().await? else {
         eprintln!(
-            "skipping teabay Directory cotest: set TEABAY_BASE_URL or build teabay and set DATABASE_URL"
+            "skipping flagon Directory cotest: set TEABAY_BASE_URL or build flagon and set DATABASE_URL"
         );
         return Ok(());
     };
@@ -65,7 +65,7 @@ pub async fn teabay_directory_service_profile_is_discoverable() -> Result<()> {
     if directory.is_spawned() {
         assert_eq!(
             describe["service_id"],
-            "ak:did_core:web:teabay.cotest.local"
+            "ak:did_core:web:flagon.cotest.local"
         );
     }
     assert_array_exact(

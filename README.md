@@ -92,14 +92,14 @@ Recommended entrypoints:
   keeps its own `target/`. Never hard-code either layout: ask
   `cargo metadata --format-version 1 --no-deps` for `target_directory`.
 - `.\scripts\run-compose.ps1` runs the process-mode `compose` profile and can
-  attach live `coauth`, `floria`, `sodmin`, `inkson`, or `teabay` services
+  attach live `coauth`, `floria`, `sodmin`, `inkson`, or `flagon` services
   through base URLs or managed service commands.
 - `docker` mode is the Complement-style path and spawns the SUT with
   `docker run` while Rust tests stay host-side.
 - Joint Playwright e2e can also run soland from the built image with
   `run-joint-e2e.ps1 -SolandRuntime docker`.
 - `-Profile services-live` is the headless service lane: it builds the sibling
-  soland, coauth and teabay binaries, provisions PostgreSQL, and runs the Rust
+  soland, coauth and flagon binaries, provisions PostgreSQL, and runs the Rust
   scenarios that spawn those processes for real. No browser and no Inkson. It
   exports `COTEST_REQUIRE_LIVE_SERVICES=1`, so a missing binary, database or
   Docker daemon fails the run instead of soft-skipping into a green report in
@@ -308,9 +308,9 @@ cargo test --tests -- --nocapture
 If `COTEST_SUT_MANIFEST` is not set, the harness falls back to the bundled
 default `soland` checkout.
 
-The teabay Directory Service bridge is optional in normal runs. Set
+The flagon Directory Service bridge is optional in normal runs. Set
 `TEABAY_BASE_URL=http://127.0.0.1:7781` to attach an already running Directory,
-or build `../teabay` and provide `DATABASE_URL` so cotest can spawn it through
+or build `../flagon` and provide `DATABASE_URL` so cotest can spawn it through
 the `TEABAY_BIN`/sibling-binary convention.
 
 ## Event proof mode (Playwright harness)
@@ -465,7 +465,7 @@ every fetch per DID and purpose, so a scenario can assert
 `src/scenarios/_helpers/did_host.rs`. Witness *signing* stays in
 `mock-witness.mjs`; the DID host only relays to it via `POST /control/attest`.
 Note that the services under test cannot currently be pointed at this host by
-environment alone — soland/teabay/the SDK derive the DID-document URL from the
+environment alone — soland/flagon/the SDK derive the DID-document URL from the
 DID string itself (hardcoded `https://` plus an SSRF guard that rejects
 loopback), with no resolver-base-URL override.
 
@@ -490,7 +490,7 @@ inflate it. Helpers: `e2e/helpers/service-metrics.ts` and
 `expectNoAdditionalAuthorityCalls` / `expect_no_additional_authority_calls`.
 Scenarios: `e2e/tests/joint/did-boundary-call-counts.spec.ts` and
 `src/scenarios/did_boundary_call_counts.rs` (the latter also documents which
-matrix rows are deliberately uncovered). Only soland and teabay export these
+matrix rows are deliberately uncovered). Only soland and flagon export these
 counters; coauth, inkson and bridges have no metrics endpoint, so rows that
 belong to them are reported as uncovered rather than approximated.
 `-FailOnCoverageRegression` compares required coverage profiles against

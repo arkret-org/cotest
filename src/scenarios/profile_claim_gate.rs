@@ -171,7 +171,7 @@ fn configured_targets() -> Result<Vec<DescribeTarget>> {
             "/_arkret/describe",
         ),
         (
-            "teabay",
+            "flagon",
             "COTEST_TEABAY_DESCRIBE_URL",
             "COTEST_TEABAY_BASE_URL",
             "/_arkret/find/directory/describe",

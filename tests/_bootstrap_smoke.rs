@@ -132,11 +132,11 @@ async fn floria_can_be_spawned_with_rendered_config() -> Result<()> {
     Ok(())
 }
 
-/// CT-6 — joint service bootstrap smoke (soland + coauth + teabay).
+/// CT-6 — joint service bootstrap smoke (soland + coauth + flagon).
 ///
 /// Marked `#[ignore]` because the full stack needs docker (for coauth's
-/// ephemeral postgres), sibling `coauth.exe` / `teabay.exe` binaries, AND a
-/// `DATABASE_URL` for teabay. Run with:
+/// ephemeral postgres), sibling `coauth.exe` / `flagon.exe` binaries, AND a
+/// `DATABASE_URL` for flagon. Run with:
 ///
 ///   cargo test --test _bootstrap_smoke joint_service_smoke -- --ignored
 ///
@@ -144,7 +144,7 @@ async fn floria_can_be_spawned_with_rendered_config() -> Result<()> {
 /// service answers /health with 2xx; when any piece is missing it bails with
 /// a descriptive message naming the missing dependency.
 /// Gating: needs Docker (coauth ephemeral Postgres) plus sibling
-/// coauth/teabay binaries and a `DATABASE_URL` for teabay.
+/// coauth/flagon binaries and a `DATABASE_URL` for flagon.
 /// Issue: CT-6 (joint service bootstrap smoke)
 /// Tier: live
 #[tokio::test(flavor = "multi_thread")]

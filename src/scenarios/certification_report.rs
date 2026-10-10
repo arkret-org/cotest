@@ -28,7 +28,7 @@ pub struct ServiceCertificationEntry {
 }
 
 /// Services the report enumerates, in stable order.
-const SERVICE_NAMES: &[&str] = &["soland", "floria", "teabay", "coauth"];
+const SERVICE_NAMES: &[&str] = &["soland", "floria", "flagon", "coauth"];
 
 pub fn offline_live_stack_certification_report() -> StackCertificationReport {
     report_with_services(

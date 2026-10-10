@@ -293,7 +293,7 @@ conformance_test!(
 
 conformance_test!(
     /// C42.6 — live describe profile-claim gate fixtures for soland,
-    /// floria, teabay, and coauth. Full profile claims with
+    /// floria, flagon, and coauth. Full profile claims with
     /// limitation/scaffold/501 blockers hard-fail.
     live_describe_profile_gate_suite_matches_reference_semantics,
     "live_describe_profile_gate",

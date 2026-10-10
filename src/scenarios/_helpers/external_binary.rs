@@ -1,5 +1,5 @@
 //! C32.8 + C33.4 — shared spawn helper for sibling-checkout binaries
-//! (`soland`, `coauth`, `teabay`, `floria`, ...) used by black-box scenarios.
+//! (`soland`, `coauth`, `flagon`, `floria`, ...) used by black-box scenarios.
 //!
 //! The helper:
 //!   1. Resolves the binary path from an explicit env var override (e.g. `SOLAND_BIN`) **first**,
@@ -412,18 +412,18 @@ pub const SOLAND_SPEC: ExternalBinarySpec = ExternalBinarySpec {
     health_timeout: Duration::from_secs(20),
 };
 
-/// `teabay` (Directory Service) spec — env-driven bind plus a caller-supplied
+/// `flagon` (Directory Service) spec — env-driven bind plus a caller-supplied
 /// Postgres DSN. `try_spawn` returns `Ok(None)` until `DATABASE_URL` is set,
 /// so normal cotest runs do not need a database just to load the suite.
 pub const TEABAY_SPEC: ExternalBinarySpec = ExternalBinarySpec {
-    service: "teabay",
+    service: "flagon",
     bin_env: "TEABAY_BIN",
-    sibling_path: &["teabay", "target", "debug"],
+    sibling_path: &["flagon", "target", "debug"],
     bind_env: "TEABAY_BIND",
     bind_arg: None,
     extra_env: &[
-        ("TEABAY_PUBLIC_BASE_URL", "http://teabay.cotest.local"),
-        ("TEABAY_SERVICE_DID", "did:web:teabay.cotest.local"),
+        ("TEABAY_PUBLIC_BASE_URL", "http://flagon.cotest.local"),
+        ("TEABAY_SERVICE_DID", "did:web:flagon.cotest.local"),
         (
             "TEABAY_SERVICE_METHOD_HISTORY_HEAD",
             "cotest-directory-history-head",

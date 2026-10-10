@@ -164,11 +164,11 @@
       "reason": "Placeholder method/path in an http-client unit test that only exercises request-option header application (Method::PUT chosen arbitrarily); /_arkret/self/events is registered under GET/POST, not PUT."
     },
     {
-      "source": "teabay",
+      "source": "flagon",
       "method": "POST",
       "path": "/_arkret/find/directory",
       "classification": "product-private",
-      "reason": "Router prefix container in teabay routing.rs (Router::with_path(\"_arkret/find/directory\")) that mounts the real announce/withdraw/takedown/push operations; the bare prefix is not itself an operation."
+      "reason": "Router prefix container in flagon routing.rs (Router::with_path(\"_arkret/find/directory\")) that mounts the real announce/withdraw/takedown/push operations; the bare prefix is not itself an operation."
     },
     {
       "source": "inkson",

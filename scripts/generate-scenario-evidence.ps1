@@ -48,7 +48,7 @@ foreach ($file in Get-ChildItem -LiteralPath $testsRoot -Recurse -File -Filter "
     if ($usesProductUi) { $services.Add("inkson") }
     if ($source -match 'solandBaseUrl|/_arkret/|\brequest\.') { $services.Add("soland") }
     if ($source -match 'coauthBaseUrl|serverLoginViaCoauth|Coauth') { $services.Add("coauth") }
-    foreach ($service in @("teabay", "floria", "savfox", "sodmin")) {
+    foreach ($service in @("flagon", "floria", "savfox", "sodmin")) {
         if ($source -match $service) { $services.Add($service) }
     }
     # This classifier reads one file, so a spec that reaches its services

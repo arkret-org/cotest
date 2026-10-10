@@ -10,7 +10,7 @@
 //! deterministic suite.
 //!
 //! It was previously `#[ignore]`d and documented as best-effort driving "the
-//! live four-binary stack (coauth + soland + teabay + floria)" when every
+//! live four-binary stack (coauth + soland + flagon + floria)" when every
 //! `*_BIN` env var was present. No such leg exists — the scenario has no HTTP
 //! client and no process spawn — so the gate excluded a pure contract test from
 //! every profile while claiming live coverage it never had. The real

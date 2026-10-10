@@ -91,7 +91,7 @@ param(
     [string]$TeabayBin,
     [string]$TeabayBaseUrl,
     [string]$TeabayDatabaseUrl,
-    [string]$TeabayServiceId = "did:webvh:z6mkfixture:teabay.joint-e2e.local",
+    [string]$TeabayServiceId = "did:webvh:z6mkfixture:flagon.joint-e2e.local",
     [switch]$StartSavfox,
     [string]$SavfoxRoot,
     [string]$SavfoxBin,
@@ -946,24 +946,24 @@ function Invoke-JointE2ePreflight {
     if ($StartTeabay) {
         try {
             $teabayBinary = Resolve-TeabayBinary -ExplicitPath $TeabayBin -WorkspaceRoot $WorkspaceRoot
-            Add-PreflightResult $results "teabay binary" "pass" $teabayBinary
+            Add-PreflightResult $results "flagon binary" "pass" $teabayBinary
             Add-BinaryFreshnessPreflight `
                 -Results $results `
-                -Name "teabay binary freshness" `
+                -Name "flagon binary freshness" `
                 -BinaryPath $teabayBinary `
                     -RepositoryRoots @(
-                        (Join-Path $WorkspaceRoot "teabay"),
+                        (Join-Path $WorkspaceRoot "flagon"),
                         (Join-Path $WorkspaceRoot "arkret-rust-sdk")
                     ) `
                     -RequireBuildStamp $false
         } catch {
-            Add-PreflightResult $results "teabay binary" "fail" $_.Exception.Message
+            Add-PreflightResult $results "flagon binary" "fail" $_.Exception.Message
         }
         if (-not $TeabayDatabaseUrl -and -not $env:DATABASE_URL) {
-            Add-PreflightResult $results "teabay database url" "fail" "-StartTeabay requires -TeabayDatabaseUrl or DATABASE_URL in env"
+            Add-PreflightResult $results "flagon database url" "fail" "-StartTeabay requires -TeabayDatabaseUrl or DATABASE_URL in env"
         } else {
             $dbUrl = if ($TeabayDatabaseUrl) { $TeabayDatabaseUrl } else { $env:DATABASE_URL }
-            Add-PreflightResult $results "teabay database url" "pass" $dbUrl
+            Add-PreflightResult $results "flagon database url" "pass" $dbUrl
         }
     }
 
@@ -1729,16 +1729,16 @@ function Resolve-TeabayBinary {
     $candidates = @()
     if ($ExplicitPath) { $candidates += $ExplicitPath }
     if ($env:TEABAY_BIN) { $candidates += $env:TEABAY_BIN }
-    $targetDirectory = Get-CargoTargetDirectory -RepositoryRoot (Join-Path $WorkspaceRoot "teabay")
-    $candidates += (Join-Path $targetDirectory ("debug/" + (Get-NativeExecutableName -Name "teabay")))
-    $candidates += (Join-Path $targetDirectory ("release/" + (Get-NativeExecutableName -Name "teabay")))
+    $targetDirectory = Get-CargoTargetDirectory -RepositoryRoot (Join-Path $WorkspaceRoot "flagon")
+    $candidates += (Join-Path $targetDirectory ("debug/" + (Get-NativeExecutableName -Name "flagon")))
+    $candidates += (Join-Path $targetDirectory ("release/" + (Get-NativeExecutableName -Name "flagon")))
 
     foreach ($candidate in $candidates) {
         if ($candidate -and (Test-Path $candidate)) {
             return (Resolve-Path $candidate).Path
         }
     }
-    throw "Unable to find teabay binary. Build teabay first or pass -TeabayBin."
+    throw "Unable to find flagon binary. Build flagon first or pass -TeabayBin."
 }
 
 function Start-EphemeralPostgres {
@@ -3293,7 +3293,7 @@ if ($DualCoauth) {
     $coauthSecondaryBaseUrl = "http://127.0.0.1:$coauthSecondaryPort"
 }
 
-# CT-6: teabay joint participant. Mirrors the -StartCoauth port allocation
+# CT-6: flagon joint participant. Mirrors the -StartCoauth port allocation
 # pattern. Teabay additionally needs a DATABASE_URL because the binary will
 # refuse to boot without one (per TEABAY_SPEC.required_env_vars in the cotest
 # helper).
@@ -4152,7 +4152,7 @@ try {
         }
     }
 
-    # CT-6: teabay (directory) - needs a Postgres DSN. The validation block
+    # CT-6: flagon (directory) - needs a Postgres DSN. The validation block
     # above already guaranteed $TeabayDatabaseUrl is set when -StartTeabay
     # is passed.
     if ($StartTeabay) {
@@ -4162,8 +4162,8 @@ try {
         }
         $teabayBinary = Resolve-TeabayBinary -ExplicitPath $TeabayBin -WorkspaceRoot $workspaceRoot
         $teabayDb = if ($TeabayDatabaseUrl) { $TeabayDatabaseUrl } else { $env:DATABASE_URL }
-        $teabayConfigPath = Join-Path $jointDir "teabay.env"
-        # DID-P1-C02 — teabay is launched with --no-env-overrides, so the
+        $teabayConfigPath = Join-Path $jointDir "flagon.env"
+        # DID-P1-C02 — flagon is launched with --no-env-overrides, so the
         # metrics bind has to travel in the config file rather than the ambient
         # environment. Without an explicit port it would fall back to the fixed
         # 127.0.0.1:9095 and collide with a developer's running dev stack.
@@ -4180,7 +4180,7 @@ try {
             (Quote-PsLiteral $teabayBinary),
             (Quote-PsLiteral $teabayConfigPath),
             $teabayPort
-        $managedServices.Add((Start-ManagedCommand -Name "teabay" -Command $teabayCmd -WorkingDirectory (Split-Path -Parent $teabayBinary) -LogDirectory $serviceLogDir))
+        $managedServices.Add((Start-ManagedCommand -Name "flagon" -Command $teabayCmd -WorkingDirectory (Split-Path -Parent $teabayBinary) -LogDirectory $serviceLogDir))
         Wait-HttpReady -Url "$($TeabayBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds
     }
 
@@ -5086,7 +5086,7 @@ try {
     # DID-P1-C01. NOTE: these are consumed by cotest's own harness
     # (e2e/helpers/did-host.ts, src/scenarios/_helpers/did_host.rs) only. The
     # services under test cannot currently be pointed at this host — soland /
-    # teabay / the SDK derive the DID-document URL from the DID string itself
+    # flagon / the SDK derive the DID-document URL from the DID string itself
     # and judge egress per request against configured trust anchors (0530-C:
     # joint services resolve through the TLS-fronted `<service>.local.host`
     # names, not this mock), with no resolver-base-URL or host-override env.
@@ -6366,7 +6366,7 @@ if ($solandMetricsBaseUrl) {
     Write-Host "  soland-server1 metrics: $solandMetricsBaseUrl/metrics"
 }
 if ($teabayMetricsBaseUrl) {
-    Write-Host "  teabay metrics: $teabayMetricsBaseUrl/metrics"
+    Write-Host "  flagon metrics: $teabayMetricsBaseUrl/metrics"
 }
 if ($mockMimiFacadeBaseUrl) {
     Write-Host "  mock-mimi-facade: $mockMimiFacadeBaseUrl ($MockMimiFacadeDid)"
@@ -6384,7 +6384,7 @@ if ($coauthSecondaryBaseUrl) {
     Write-Host "  coauth-server1-replica : $coauthSecondaryBaseUrl"
 }
 if ($TeabayBaseUrl) {
-    Write-Host "  teabay      : $TeabayBaseUrl"
+    Write-Host "  flagon      : $TeabayBaseUrl"
 }
 Write-Host "  screenshots : $screenshotDir"
 Write-Host "  visual base : $visualBaselineDir"

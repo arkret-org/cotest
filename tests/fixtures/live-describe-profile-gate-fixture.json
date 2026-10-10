@@ -80,8 +80,8 @@
         "path": "/_arkret/find/directory/describe"
       },
       "describe": {
-        "service": "teabay",
-        "service_id": "ak:did_core:web:teabay.example",
+        "service": "flagon",
+        "service_id": "ak:did_core:web:flagon.example",
         "supported_profiles": [],
         "limitations": []
       }

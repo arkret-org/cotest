@@ -179,7 +179,7 @@ belongs in a Rust lane, not in a Playwright one.
 
 `services-live` is the only Cargo lane where coauth is a real process rather
 than `MockCoauthIntrospectionServer`. It selects the live scenarios that spawn
-soland, coauth and teabay, builds those sibling binaries first so none of them
+soland, coauth and flagon, builds those sibling binaries first so none of them
 embeds a stale SDK snapshot, and exports `COTEST_REQUIRE_LIVE_SERVICES=1`.
 That variable is what makes the lane trustworthy: without it the selected
 scenarios soft-skip on a missing binary, database or Docker daemon and the run

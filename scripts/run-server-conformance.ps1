@@ -2327,7 +2327,7 @@ if ($Runtime -eq "process" -and -not $env:SOLAND_BIN) {
     Add-RawLogLine -Path $rawLog -Value "process SUT binary: $processSolandBin"
 }
 
-# The services-live lane spawns real coauth and teabay processes alongside
+# The services-live lane spawns real coauth and flagon processes alongside
 # soland, so their binaries must be built from the current checkouts for the
 # same reason the SUT is: a stale sibling binary embeds an older SDK/spec
 # snapshot and then rejects envelopes the current cotest authors. An explicit
@@ -2338,16 +2338,16 @@ $servicesLiveBinaries = @{}
 if ($servicesLiveProfile -and -not $delegatedProfile -and -not $PlanOnly -and -not $ValidateProfile) {
     $workspaceRoot = (Resolve-Path (Join-Path $repoRoot "..")).Path
     # `BinTarget` is the Cargo bin target, which is not always the service name:
-    # teabay's server crate is `server`, so it builds and installs as
+    # flagon's server crate is `server`, so it builds and installs as
     # `server.exe`. The Rust helper looks up `TEABAY_BIN` before falling back to
-    # `teabay.exe` in the Cargo target directory, a file a normal build never
+    # `flagon.exe` in the Cargo target directory, a file a normal build never
     # produces, so exporting the real path here is what makes the sibling
     # checkout usable. Resolve that directory through `cargo metadata` rather
     # than assuming `<repo>/target`: the workspace `.cargo/config.toml` may
     # point `build.target-dir` at one shared tree.
     foreach ($sibling in @(
             [pscustomobject]@{ Service = "coauth"; BinEnv = "COAUTH_BIN"; BinTarget = "coauth" },
-            [pscustomobject]@{ Service = "teabay"; BinEnv = "TEABAY_BIN"; BinTarget = "server" }
+            [pscustomobject]@{ Service = "flagon"; BinEnv = "TEABAY_BIN"; BinTarget = "server" }
         )) {
         if ([Environment]::GetEnvironmentVariable($sibling.BinEnv)) {
             Add-RawLogLine -Path $rawLog -Value "$($sibling.Service) binary: $($sibling.BinEnv) override"

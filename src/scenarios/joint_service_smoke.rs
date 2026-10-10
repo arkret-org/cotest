@@ -1,12 +1,12 @@
 //! CT-6 — Joint service smoke scenario.
 //!
 //! Verifies the [`JointServiceStack`] bootstrap can spin up soland + coauth +
-//! teabay together and each service answers `/health` with 2xx.
+//! flagon together and each service answers `/health` with 2xx.
 //!
 //! Marked `#[ignore]` at the test-entrypoint level because the full stack
 //! needs: docker (for coauth's ephemeral postgres), sibling `coauth.exe`,
-//! sibling `teabay.exe`, AND a `DATABASE_URL` pointing at a reachable
-//! Postgres for teabay. Operators who have all of those in place can run:
+//! sibling `flagon.exe`, AND a `DATABASE_URL` pointing at a reachable
+//! Postgres for flagon. Operators who have all of those in place can run:
 //!
 //!   cargo test --test _bootstrap_smoke joint_service_smoke -- --ignored
 //!

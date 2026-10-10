@@ -11,7 +11,7 @@ use crate::scenarios::_helpers::external_binary::{TEABAY_SPEC, spawn_required};
 pub async fn teabay_resolve_realm_unknown_is_blinded_run() -> Result<()> {
     let proc = spawn_required(&TEABAY_SPEC)
         .await
-        .context("spawn teabay binary for resolve-realm test")?;
+        .context("spawn flagon binary for resolve-realm test")?;
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(5))
         .build()?;

@@ -64,14 +64,14 @@ cotest **不再**用 `_soland/self/organizations`(本地部署面,非标准协�
 11. sponsor-org 仅签发 `relationship=sponsor` 的 active 声明。
 12. 断言 sponsor-org 不成为 Realm authority；它的 policy 不因 relationship 自动传播，official badge 不因 sponsor 关系点亮。
 
-## Verified organization badge(COT-ORG-04,directory / teabay)
+## Verified organization badge(COT-ORG-04,directory / flagon)
 
-cotest 还守护 directory / teabay 的 verified badge 与上面**同一**已验证关系语义:
+cotest 还守护 directory / flagon 的 verified badge 与上面**同一**已验证关系语义:
 
 - **declared-only**:Realm 只在 `owning_organization_ids` 声明 acme-org,无 active 声明 → directory **不**显示 verified organization badge。
 - **active owner / directory_certifier**:存在 active `ak.realm.organization`(`relationship` ∈ {`owner`, `directory_certifier`} 且 scope 覆盖 `directory_listing` / `official_badge`)→ 显示对应 badge。
 - **revoked / expired / stale**:关系被 revoke / 过期 / 陈旧后 → badge 消失。
-- 验收:inkson / teabay UI 与 API 读取的是**同一** verified relationship 语义,而非各自的本地镜像。
+- 验收:inkson / flagon UI 与 API 读取的是**同一** verified relationship 语义,而非各自的本地镜像。
 
 ## coauth organization bootstrap / delegation(COT-ORG-05)
 
@@ -91,7 +91,7 @@ cotest 还守护 directory / teabay 的 verified badge 与上面**同一**已验
     不恢复已删除的 effective-policy operation、inheritance mode 或 merge DTO。
   - SOL-ORG-06 / TBY-ORG-*:directory verified badge 读同一关系语义。
   - COA-ORG-02/03/04:coauth organization bootstrap / delegation 签发面。
-- 在上述 soland / coauth / teabay 端点落地前,对应 e2e 以 `test.fixme` + `@blocking-on` 标注(见 `e2e/tests/governance/organization-policy.spec.ts`)。scenario 文档(本文件)与 `ak.realm.organization` 的 payload/向量回归(`tests/fixtures/event-kind-payload-coverage-fixture.json`、`tests/fixtures/realm_organization_statement_negative_vectors.json`、`tests/realm_organization_statement_negative.rs`)已经实做并由 SDK validator 消费。
+- 在上述 soland / coauth / flagon 端点落地前,对应 e2e 以 `test.fixme` + `@blocking-on` 标注(见 `e2e/tests/governance/organization-policy.spec.ts`)。scenario 文档(本文件)与 `ak.realm.organization` 的 payload/向量回归(`tests/fixtures/event-kind-payload-coverage-fixture.json`、`tests/fixtures/realm_organization_statement_negative_vectors.json`、`tests/realm_organization_statement_negative.rs`)已经实做并由 SDK validator 消费。
 
 ## 总耗时预估
 
