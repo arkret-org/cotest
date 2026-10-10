@@ -5,7 +5,7 @@
 //! bring-up + tear-down round-trip independent of the larger bridge matrix
 //! scenario, which is useful during local Docker debugging.
 
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use cotest::scenarios::_helpers::coauth_bootstrap::{
     spawn_coauth_with_db, spawn_ephemeral_postgres,
 };
@@ -45,8 +45,32 @@ async fn ephemeral_postgres_starts_and_stops() -> Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 #[ignore]
 async fn coauth_can_be_spawned_with_ephemeral_postgres() -> Result<()> {
+    async fn public_jwks(client: &reqwest::Client, url: &str) -> Result<serde_json::Value> {
+        let mut jwks: serde_json::Value = client
+            .get(url)
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+        let keys = jwks
+            .get_mut("keys")
+            .and_then(serde_json::Value::as_array_mut)
+            .context("Coauth public JWKS omitted its key set")?;
+        anyhow::ensure!(!keys.is_empty(), "Coauth public JWKS is empty");
+        // JWKS key order has no meaning. Keep every key and every field,
+        // including multiplicity, while comparing the complete response.
+        let mut canonical_keys = keys
+            .drain(..)
+            .map(|key| Ok((arkret_canonical::canonical_json_bytes(&key)?, key)))
+            .collect::<Result<Vec<_>>>()?;
+        canonical_keys.sort_by(|left, right| left.0.cmp(&right.0));
+        *keys = canonical_keys.into_iter().map(|(_, key)| key).collect();
+        Ok(jwks)
+    }
+
     match spawn_coauth_with_db().await? {
-        Some(handle) => {
+        Some(mut handle) => {
             eprintln!(
                 "ok: coauth up at {} (health at {})",
                 handle.base_url(),
@@ -56,6 +80,20 @@ async fn coauth_can_be_spawned_with_ephemeral_postgres() -> Result<()> {
             // on the SEPARATE internal listener — see SpawnedCoauth docs.
             let resp = reqwest::get(handle.health_url()).await?;
             assert!(resp.status().is_success(), "health: {}", resp.status());
+            let client = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(3))
+                .build()?;
+            let jwks_url = format!("{}/oauth/keys.json", handle.base_url());
+            let provisioned_keys = public_jwks(&client, &jwks_url).await?;
+            handle.kill_immediately()?;
+            handle.restart_same_config().await?;
+            let resp = reqwest::get(handle.health_url()).await?;
+            assert!(resp.status().is_success(), "health: {}", resp.status());
+            let restored_keys = public_jwks(&client, &jwks_url).await?;
+            assert_eq!(
+                provisioned_keys, restored_keys,
+                "same-config restart replaced the durable public key set"
+            );
         }
         None => {
             // The bootstrap returns None from any of half a dozen stages, and
