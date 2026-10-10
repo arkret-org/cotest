@@ -3,7 +3,53 @@ use cotest::scenarios::protocol_payloads::snapshot_head_disclosure::*;
 use reqwest::StatusCode;
 use serde_json::json;
 
+use crate::conformance::account_blocklist_projection::native_account_session;
 use crate::harness::expect_json;
+
+fn ensure_paired_calendar_source(entries: &[arkret_wire::TypedCurrentRow]) -> Result<()> {
+    use arkret_wire::{CurrentSelector, TypedCurrentRow};
+    let strands = entries
+        .iter()
+        .filter_map(|row| match row {
+            TypedCurrentRow::Value {
+                selector: CurrentSelector::Strand { strand_id },
+                source_stream_ref,
+                revision,
+                ..
+            } => Some((strand_id, source_stream_ref, revision)),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    let sources = entries
+        .iter()
+        .filter_map(|row| match row {
+            TypedCurrentRow::Value {
+                selector: CurrentSelector::CalendarScheduleSource { strand_id },
+                source_stream_ref,
+                revision,
+                value,
+            } => Some((strand_id, source_stream_ref, revision, value)),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    ensure!(
+        strands.len() == 1 && sources.len() == 1,
+        "the founder Strand must have exactly one paired calendar source"
+    );
+    let (strand, stream, revision) = strands[0];
+    let (source_strand, source_stream, source_revision, value) = sources[0];
+    ensure!(
+        source_strand == strand && source_stream == stream && source_revision == revision,
+        "calendar source differs from its paired Strand cut"
+    );
+    let source: arkret_wire::CalendarScheduleSourceValue = serde_json::from_value(value.clone())?;
+    source.validate_for_current(stream.realm_id(), stream, revision)?;
+    ensure!(
+        source.source.is_none() && source.metadata_context.is_none(),
+        "discussion Strand calendar source must retain its empty schedule intent"
+    );
+    Ok(())
+}
 
 async fn account_detail_frames(
     client: &crate::harness::TestActorClient,
@@ -47,6 +93,7 @@ pub async fn preview_account_window_backfills_without_failing_its_sibling_realm(
         server: _server,
         author,
     } = snapshot_author("account-window-preview-backfill", "window-frank").await?;
+    let native = native_account_session(&author).await?;
     let bootstrap = |title: &str| {
         json!({
             "title": title,
@@ -129,7 +176,7 @@ pub async fn preview_account_window_backfills_without_failing_its_sibling_realm(
         "the seven-Commit sibling fits its window: {sibling_window:?}"
     );
 
-    let http = author.sdk();
+    let http = native.client();
     // Inkson verifies every frame of the batch before projecting any; a
     // preview frame must not reject the batch.
     let mut verified = Vec::new();
@@ -161,19 +208,23 @@ pub async fn preview_account_window_backfills_without_failing_its_sibling_realm(
                 == &std::collections::BTreeSet::from([preview_stream.clone()]),
         "the creator's genesis replay settles the preview stream as exact"
     );
-    let positions = |stream: &arkret_wire::CommitStreamRef| {
-        verified
-            .pages()
+    let positions = |stream: &arkret_wire::CommitStreamRef| -> Result<Vec<u64>> {
+        Ok(inkson::conformance::own_station_account_pages(verified)?
             .iter()
-            .chain(sibling_proof.pages())
-            .flat_map(|page| page.rows())
+            .chain(inkson::conformance::own_station_account_pages(
+                sibling_proof,
+            )?)
+            .map(|page| page.rows())
+            .collect::<garth::Result<Vec<_>>>()?
+            .into_iter()
+            .flatten()
             .filter(|row| &row.commit().stream_ref == stream)
             .map(|row| row.commit().stream_position)
-            .collect::<Vec<_>>()
+            .collect::<Vec<_>>())
     };
     ensure!(
-        positions(&preview_stream) == (0..=8).collect::<Vec<_>>()
-            && positions(&sibling_stream) == (0..=6).collect::<Vec<_>>(),
+        positions(&preview_stream)? == (0..=8).collect::<Vec<_>>()
+            && positions(&sibling_stream)? == (0..=6).collect::<Vec<_>>(),
         "both streams are verified from genesis through their window heads"
     );
     ensure!(
@@ -221,6 +272,7 @@ pub async fn limited_window_strand_tail_verifies_with_same_cut_current_through_i
         server: _server,
         author,
     } = snapshot_author("account-window-strand-tail", "window-grace").await?;
+    let native = native_account_session(&author).await?;
     let bootstrap = author
         .create_realm_bootstrap_with(json!({
             "title": "Strand tail",
@@ -266,7 +318,7 @@ pub async fn limited_window_strand_tail_verifies_with_same_cut_current_through_i
     );
     let current = entry.current.as_ref().context("same-cut current")?;
 
-    let http = author.sdk();
+    let http = native.client();
     let verified = inkson::realm_events_engine::verify_account_frame_commits(&http, &frame)
         .await
         .context("a StrandCreate/default-Strand tail must verify, not fail the frame")?;
@@ -279,10 +331,12 @@ pub async fn limited_window_strand_tail_verifies_with_same_cut_current_through_i
         "the snapshot window settles as exact"
     );
     ensure!(
-        verified
-            .pages()
+        inkson::conformance::own_station_account_pages(&verified)?
             .iter()
-            .flat_map(|page| page.rows())
+            .map(|page| page.rows())
+            .collect::<garth::Result<Vec<_>>>()?
+            .into_iter()
+            .flatten()
             .filter(|row| row.commit().stream_ref == stream)
             .map(|row| row.commit().stream_position)
             .collect::<Vec<_>>()
@@ -298,9 +352,10 @@ pub async fn limited_window_strand_tail_verifies_with_same_cut_current_through_i
         .entries
         .as_slice();
     ensure!(
-        folded.len() == 10 && folded == current.entries.as_slice(),
+        folded.len() == 11 && folded == current.entries.as_slice(),
         "the installed current must be the Station's same-cut current: {folded:?}"
     );
+    ensure_paired_calendar_source(folded)?;
     let strand = arkret_wire::StrandId::new(strand_id)?;
     ensure!(
         folded.iter().any(|row| matches!(
@@ -371,7 +426,7 @@ pub async fn limited_window_strand_tail_verifies_with_same_cut_current_through_i
     ensure!(
         error
             .to_string()
-            .contains("Account current cut differs from signed floor snapshot"),
+            .contains("Account current row differs from its exact own Station snapshot"),
         "forged current failed for another reason: {error}"
     );
     Ok(())
@@ -383,6 +438,7 @@ pub async fn message_tail_window_beyond_twenty_commits_verifies_through_inkson()
         server,
         author,
     } = snapshot_author("account-window-message-tail", "window-heidi").await?;
+    let native = native_account_session(&author).await?;
     // Plain-text messages need this Station in the plaintext-services facet;
     // the helper also creates the default Strand (positions 8 and 9).
     let created = author
@@ -395,7 +451,18 @@ pub async fn message_tail_window_beyond_twenty_commits_verifies_through_inkson()
         .await?;
     let realm_id = created["realm_id"].as_str().context("realm_id")?.to_owned();
     let strand_id = author.default_strand_id(&realm_id)?;
-    author.send_message(&realm_id, &strand_id, "anchor").await?;
+    let anchor: arkret_models_collaboration::authority_commit::SelfAuthoritySubmitOutcome =
+        serde_json::from_value(author.send_message(&realm_id, &strand_id, "anchor").await?)?;
+    anchor.validate()?;
+    let arkret_models_collaboration::authority_commit::SelfAuthoritySubmitOutcome::Ordinary(
+        arkret_wire::AuthoritySubmitOutcome::Accepted {
+            commit: anchor_commit,
+            ..
+        },
+    ) = anchor
+    else {
+        anyhow::bail!("the anchor message must be an accepted ordinary Event");
+    };
     let issued: arkret_wire::RealmStateSnapshot = serde_json::from_value(
         expect_json(
             author
@@ -408,9 +475,12 @@ pub async fn message_tail_window_beyond_twenty_commits_verifies_through_inkson()
     .context("issued head must be a closed signed snapshot")?;
     ensure!(
         issued.visible_stream_heads[0].stream_position == 10
-            && issued.current_state_entries.len() == 12,
+            && issued.visible_stream_heads[0].stream_position == anchor_commit.stream_position
+            && issued.visible_stream_heads[0].commit_id == anchor_commit.commit_id
+            && issued.current_state_entries.len() == 13,
         "the anchor snapshot is the message cut at position 10: {issued:?}"
     );
+    ensure_paired_calendar_source(&issued.current_state_entries)?;
     for index in 0..20 {
         author
             .send_message(&realm_id, &strand_id, &format!("tail {index}"))
@@ -435,7 +505,7 @@ pub async fn message_tail_window_beyond_twenty_commits_verifies_through_inkson()
     );
     let current = entry.current.as_ref().context("same-cut current")?;
     ensure!(
-        current.entries.len() == 32
+        current.entries.len() == 33
             && current
                 .entries
                 .iter()
@@ -450,8 +520,9 @@ pub async fn message_tail_window_beyond_twenty_commits_verifies_through_inkson()
                 == 21,
         "the same-cut current carries every message revision: {current:?}"
     );
+    ensure_paired_calendar_source(&current.entries)?;
 
-    let http = author.sdk();
+    let http = native.client();
     let verified = inkson::realm_events_engine::verify_account_frame_commits(&http, &frame)
         .await
         .context("a message tail on a message-bearing floor must verify")?;
@@ -539,6 +610,7 @@ pub async fn restricted_join_policy_floor_verifies_through_inkson() -> Result<()
         server,
         author,
     } = snapshot_author("snapshot-join-policy", "join-policy-ivy").await?;
+    let native = native_account_session(&author).await?;
     let issuer = server.service_id().to_string();
     let bootstrap = author
         .create_realm_bootstrap_with(json!({
@@ -605,9 +677,10 @@ pub async fn restricted_join_policy_floor_verifies_through_inkson() -> Result<()
             && window_positions(&entry) == vec![7, 8],
         "the window must name the restricted cut as its basis: {window:?}"
     );
-    let verified = inkson::realm_events_engine::verify_account_frame_commits(&author.sdk(), &frame)
-        .await
-        .context("a signed join policy floor must verify")?;
+    let verified =
+        inkson::realm_events_engine::verify_account_frame_commits(&native.client(), &frame)
+            .await
+            .context("a signed join policy floor must verify")?;
     ensure!(
         verified.preview_streams().is_empty(),
         "the restricted floor window settles as exact"

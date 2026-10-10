@@ -658,7 +658,7 @@ pub async fn run_account_blocklist_case6_production() -> Result<super::CaseExecu
     fixture_case_result(case)
 }
 
-async fn native_account_session(
+pub(crate) async fn native_account_session(
     client: &TestActorClient,
 ) -> Result<inkson::conformance::NativeAccountSession> {
     use arkret_models_collaboration::session_grants::{

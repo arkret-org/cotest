@@ -395,6 +395,8 @@ pub async fn run_follower_idle_and_reload() -> Result<()> {
         "ak:device:01904100-0000-7000-8000-000000002803",
     )
     .await?;
+    let _native =
+        crate::conformance::account_blocklist_projection::native_account_session(&alice).await?;
     let principal = alice
         .principal
         .as_ref()

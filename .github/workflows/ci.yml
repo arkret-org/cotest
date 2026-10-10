@@ -169,6 +169,12 @@ jobs:
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: actions/checkout@v4
         with:
+          repository: ${{ github.repository_owner }}/arkret-rust-sdk
+          path: arkret-rust-sdk
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
           repository: ${{ github.repository_owner }}/soland
           path: soland
           ref: ${{ env.SIBLING_REF }}
@@ -395,8 +401,7 @@ jobs:
         with:
           manifest-path: cotest/Cargo.toml
           command: check
-          arguments: --all-features
-          command-arguments: --config cotest/deny.toml
+          arguments: --all-features --locked --config cotest/deny.toml
 
   audit:
     name: cargo audit
