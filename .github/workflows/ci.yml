@@ -480,8 +480,9 @@ jobs:
     name: fuzz (envelope / realm snapshot, 60s each)
     runs-on: ubuntu-latest
     # P5.1 — wire-envelope fuzz harnesses get a per-target 60s libFuzzer
-    # budget. The job also includes cargo-fuzz installation and a cold build.
-    timeout-minutes: 30
+    # budget. The instrumented sibling graph's cold build exceeds 30 minutes;
+    # installation and compilation do not consume the per-target fuzz budget.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
         with:
