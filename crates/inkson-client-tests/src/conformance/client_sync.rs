@@ -37,12 +37,13 @@ const QUEUE_CASES: [&str; 3] = [
     "full_endpoint_rejects_new_delivery_without_eviction",
 ];
 const BASELINE_CASE: &str = "incremental_before_baseline_complete_merges_by_position";
+const CIRCLE_TAIL_CASE: &str = "circle_stream_tail_is_independent";
 pub const PRODUCTION_CASE_COUNT: usize = CASES.len()
     + RECOVERY_CASES.len()
     + STREAM_AND_DELIVERY_CASES.len()
     + ACK_CASES.len()
     + QUEUE_CASES.len()
-    + 1;
+    + 2;
 
 const QUEUE_WRITE_EVIDENCE: &str = "SELECT jsonb_build_object(\
     'queue',(SELECT COALESCE(jsonb_agg(to_jsonb(t) ORDER BY id),'[]') FROM device_messages t),\
@@ -1342,6 +1343,202 @@ impl Probe {
             case_id: STREAM_AND_DELIVERY_CASES[2].into(),
             assertions: 7,
         });
+        self.circle_tail(controller, &realm).await?;
+        Ok(())
+    }
+}
+
+impl Probe {
+    async fn circle_tail(&self, controller: &Member, realm: &arkret_wire::RealmId) -> Result<()> {
+        use cotest::scenarios::circle_poll_scope_live::{circle_create, circle_event, join_circle};
+        use cotest::scenarios::human_device_producer_live::submit_and_expect_commit;
+        let circle = circle_create(
+            &controller.client,
+            realm.as_str(),
+            &controller.actor,
+            "Independent Sync tail",
+            "Sync tail",
+        )
+        .await?;
+        join_circle(
+            &controller.client,
+            realm.as_str(),
+            &circle,
+            &controller.actor,
+        )
+        .await?;
+        let stream = arkret_wire::CommitStreamRef::Circle {
+            realm_id: realm.clone(),
+            circle_id: circle.clone(),
+        };
+        let key = serde_json::to_string(&stream)?;
+        let parent_key = serde_json::to_string(&arkret_wire::CommitStreamRef::Realm {
+            realm_id: realm.clone(),
+        })?;
+        let path = self.directory.path().join("circle-state.json");
+        let host = NativeAccountHost::new_for_realm(
+            controller.client.sdk(),
+            controller.account.clone(),
+            controller.device.clone(),
+            inkson::LocalStateStore::with_path(path.clone()),
+            realm.clone(),
+        )
+        .await?;
+        let initial = ObservedRail {
+            http: controller.client.sdk(),
+            missing: None,
+            observed: Default::default(),
+        };
+        host.catch_up_with_conformance_transport(&initial).await?;
+        let batches = initial.observed.lock().unwrap();
+        let rows = batches
+            .iter()
+            .flat_map(|batch| &batch.frames)
+            .flat_map(|frame| frame.realms.iter())
+            .flat_map(|realms| realms.entries.values())
+            .flat_map(|entry| entry.committed_events.iter().flatten())
+            .filter(|row| row.commit().stream_ref == stream)
+            .collect::<Vec<_>>();
+        ensure!(
+            rows.len() == 1
+                && rows[0].commit().stream_position == 0
+                && rows[0].commit().previous_commit_ref.is_none(),
+            "fresh Circle baseline did not carry its independent position-zero Commit"
+        );
+        let first = rows[0].commit().clone();
+        let before = state(&host)?;
+        let first_head = serde_json::to_value(arkret_wire::CommitStreamHead {
+            stream_ref: stream.clone(),
+            stream_position: 0,
+            commit_id: first.commit_id.clone(),
+        })?;
+        ensure!(
+            before["verified_commit_stream_cursors"][&key] == first_head
+                && before["verified_commit_stream_anchors"][&key] == serde_json::to_value(&first)?,
+            "Circle baseline was not verified and durably anchored by the Account driver"
+        );
+        let parent = before["verified_commit_stream_cursors"][&parent_key].clone();
+        ensure!(
+            parent["stream_position"]
+                .as_u64()
+                .is_some_and(|position| position > 1),
+            "Circle independence requires a distinct already advanced Realm head"
+        );
+        let old_cursor = host
+            .state_store()
+            .sync_cursor()
+            .context("Circle baseline checkpoint")?;
+        drop(batches);
+        let strand = circle_event(&controller.client, realm.as_str(), &circle,
+            arkret_wire::EventKind::StrandCreate,
+            serde_json::json!({"object":{"schema":"ak.schema.strand.v1", "realm_id":realm,
+                "scope_circle_id":circle, "tracks":{"discussion":{"is_primary":true,"profile":"discussion"}},
+                "metadata":{"title":"Independent Circle tail"}, "state":"active", "created_by":controller.actor}})).await?;
+        let commit = submit_and_expect_commit(
+            &controller.client,
+            &controller.account,
+            controller.device.as_str(),
+            &strand,
+        )
+        .await?;
+        ensure!(
+            commit.stream_ref == stream
+                && commit.stream_position == 1
+                && commit.previous_commit_ref.as_ref() == Some(&first.commit_id),
+            "accepted Circle successor borrowed a sibling stream predecessor or position"
+        );
+        let rail = ObservedRail {
+            http: controller.client.sdk(),
+            missing: None,
+            observed: Default::default(),
+        };
+        host.catch_up_with_conformance_transport(&rail).await?;
+        let batches = rail.observed.lock().unwrap();
+        ensure!(
+            batches
+                .iter()
+                .flat_map(|batch| &batch.frames)
+                .flat_map(|frame| frame.realms.iter())
+                .flat_map(|realms| realms.entries.values())
+                .flat_map(|entry| entry.committed_events.iter().flatten())
+                .any(|row| row.commit() == &commit && row.reducer_input() == Some(&strand)),
+            "actual Account incremental omitted the exact accepted Circle original"
+        );
+        drop(batches);
+        let head = serde_json::to_value(arkret_wire::CommitStreamHead {
+            stream_ref: stream,
+            stream_position: 1,
+            commit_id: commit.commit_id.clone(),
+        })?;
+        let anchor = serde_json::to_value(&commit)?;
+        let after = state(&host)?;
+        ensure!(
+            after["verified_commit_stream_cursors"][&key] == head
+                && after["verified_commit_stream_anchors"][&key] == anchor,
+            "Circle delta advanced without its exact verified head and signed original"
+        );
+        ensure!(
+            after["verified_commit_stream_cursors"][&parent_key] == parent
+                && after["verified_commit_stream_anchors"][&parent_key]
+                    == before["verified_commit_stream_anchors"][&parent_key],
+            "Circle-only advancement reset or advanced the parent Realm stream"
+        );
+        let cut = inkson::conformance::retained_realm_current(
+            &host.state_store(),
+            &controller.account,
+            realm,
+        )
+        .await?;
+        ensure!(
+            cut["entries"]
+                .as_array()
+                .context("Circle current rows")?
+                .iter()
+                .any(|row| row["revision"]["commit_id"] == commit.commit_id.as_str()),
+            "durable typed current omitted the accepted Circle successor"
+        );
+        let cursor = host
+            .state_store()
+            .sync_cursor()
+            .context("Circle successor checkpoint")?;
+        ensure!(
+            cursor != old_cursor,
+            "Circle successor advanced no durable Account cursor"
+        );
+        drop(host);
+        let reopened = inkson::LocalStateStore::with_path(path.clone());
+        ensure!(
+            reopened.sync_cursor().as_deref() == Some(cursor.as_str())
+                && inkson::conformance::retained_realm_current(
+                    &reopened,
+                    &controller.account,
+                    realm
+                )
+                .await?
+                    == cut,
+            "Circle current and Account checkpoint changed across reopen"
+        );
+        let evidence = self.directory.path().join("expected-circle-cut.json");
+        std::fs::write(
+            &evidence,
+            serde_json::to_vec(&serde_json::json!({
+                "account":controller.account, "realm":realm, "cut":cut, "cursor":cursor,
+                "stream_key":key, "head":head, "anchor":anchor
+            }))?,
+        )?;
+        let output = std::process::Command::new(&self.reader)
+            .arg(path)
+            .arg(evidence)
+            .output()?;
+        ensure!(
+            output.status.success(),
+            "fresh-process Circle cut readback failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        self.results.borrow_mut().push(super::CaseExecutionResult {
+            case_id: CIRCLE_TAIL_CASE.into(),
+            assertions: 10,
+        });
         Ok(())
     }
 }
@@ -1353,6 +1550,29 @@ pub async fn run_sync_production_cases(
 ) -> Result<Vec<super::CaseExecutionResult>> {
     super::run_sync_fixture_suite()?;
     let fixture = cotest::conformance::load_fixture_value("client-sync-fixture.json")?;
+    let circle_cases = fixture["stream_tails"]
+        .as_array()
+        .context("Circle tail fixture")?
+        .iter()
+        .filter(|case| case["name"] == CIRCLE_TAIL_CASE)
+        .collect::<Vec<_>>();
+    ensure!(
+        circle_cases.len() == 1
+            && circle_cases[0]["expected"] == "accepted"
+            && circle_cases[0]["stream_ref"]["kind"] == "circle",
+        "Circle independent-tail fixture identity or verdict drifted"
+    );
+    let commits = circle_cases[0]["commits"]
+        .as_array()
+        .context("Circle fixture commits")?;
+    ensure!(
+        commits.len() == 2
+            && commits[0]["stream_position"] == 0
+            && commits[0]["previous_commit_ref"].is_null()
+            && commits[1]["stream_position"] == 1
+            && commits[1]["previous_commit_ref"] == commits[0]["commit_id"],
+        "Circle fixture no longer declares the independent continuous zero/one tail"
+    );
     let ordering = fixture["checkpoint_ordering"]
         .as_array()
         .context("ordering cases")?
@@ -1568,6 +1788,7 @@ pub async fn run_sync_production_cases(
         .chain(ACK_CASES)
         .chain(QUEUE_CASES)
         .chain(std::iter::once(BASELINE_CASE))
+        .chain(std::iter::once(CIRCLE_TAIL_CASE))
         .collect::<std::collections::BTreeSet<_>>();
     ensure!(
         results.len() == PRODUCTION_CASE_COUNT
