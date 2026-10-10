@@ -776,12 +776,20 @@ fn verify_checkpoint_never_outruns_projection(fixture: &Value) -> Result<()> {
         if let Some(install) = action_at("install_typed_current_result") {
             if !required_bool(&steps[install], "durable")? {
                 ensure!(
-                    expected == "rejected" && action_at("advance_durable_cursor").is_none(),
+                    action_at("advance_durable_cursor").is_none() && expected == "rejected",
                     "{name}: an undurable candidate must preserve the old checkpoint"
                 );
+                let delivered = action_at("deliver_incremental")
+                    .ok_or_else(|| anyhow!("{name}: failed install has no delivered candidate"))?;
+                let (stream, _) =
+                    parse_stream_ref(required_field(&steps[delivered], "stream_ref")?)?;
                 ensure!(
-                    required_str(case, "reason")?.len() > 0,
-                    "{name}: missing refusal reason"
+                    matches!(stream, CommitStreamRef::Sidecar { .. }),
+                    "{name}: the failed candidate must name a Sidecar stream"
+                );
+                ensure!(
+                    install > delivered && !required_str(case, "reason")?.is_empty(),
+                    "{name}: failed installation must follow delivery and state its reason"
                 );
                 undurable_cases.insert(name);
                 continue;
@@ -1036,7 +1044,7 @@ fn verify_reconnect_resets_only_the_failed_surface(fixture: &Value) -> Result<()
 /// as a real `CommitStreamRef` so the recovery names a stream that exists.
 fn verify_single_tail_recovery(name: &str, case: &Value) -> Result<()> {
     let affected = required_field(case, "affected_stream_ref")?;
-    let (stream_ref, _) = parse_stream_ref(affected)?;
+    parse_stream_ref(affected)?;
     let affected_kind = required_str(affected, "kind")?;
     let recovered = value_array(
         required_field(case, "recovered_streams")?,

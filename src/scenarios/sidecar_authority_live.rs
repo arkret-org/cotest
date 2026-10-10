@@ -376,25 +376,24 @@ pub async fn run_with_genesis_observer(
             caller_actor_id: controller.actor,
             cursor: None,
         };
-    let roster_response = expect_json(
-        controller
-            .client
-            .post(arkret_wire::PATH_SELF_MLS_ROSTER_AUTHORITY)
-            .canonical_json(&roster)?,
-        reqwest::StatusCode::OK,
-    )
-    .await?;
-    let roster_response: arkret_models_collaboration::mls_roster_authority::MlsSelfRosterAuthorityReadOutcome = serde_json::from_value(roster_response)?;
+    let roster_response = controller
+        .client
+        .sdk()
+        .self_mls_roster_authority(&roster)
+        .await?;
+    let selected = arkret::verify_mls_member_roster_authority_pages(
+        std::slice::from_ref(&roster_response),
+        &roster,
+    )?;
     let roster_response = roster_response.roster;
-    roster_response
-        .manifest
-        .validate_for_member_request(&roster)?;
     ensure!(
-        roster_response.manifest.genesis_event_ref == genesis.event_id,
+        selected.genesis_event_ref == genesis.event_id,
         "member roster selected another accepted Genesis"
     );
     ensure!(
-        roster_response.records.len() == 1 && roster_response.manifest.total_records == 1,
+        roster_response.records.len() == 1
+            && roster_response.manifest.total_records == 1
+            && roster_response.next_cursor.is_none(),
         "native Sidecar Genesis roster is partial"
     );
     Ok(())
