@@ -597,12 +597,22 @@ pub fn managed_actor_author(input: Value) -> Result<Value> {
     }
     let registration_evidence = match &request.basis {
         arkret::AppletManagedActorAuthoringBasis::ProvisionBot(basis) => {
-            basis.registration_epoch_evidence.clone()
+            &basis.registration_epoch_evidence
         }
         arkret::AppletManagedActorAuthoringBasis::ProvisionGhost(basis) => {
-            basis.registration_epoch_evidence.clone()
+            &basis.registration_epoch_evidence
         }
     };
+    if let Err(error) = input
+        .applet_package
+        .validate_with_epoch_evidence(registration_evidence)
+    {
+        return Ok(author_rejection(
+            "authoring_request_event_binding_invalid",
+            400,
+            &format!("signed basis does not bind the package epoch: {error}"),
+        ));
+    }
     if !registration_evidence.contains_signing_key(input.service_verification_method.as_str()) {
         return Ok(author_rejection(
             "authoring_request_event_binding_invalid",
