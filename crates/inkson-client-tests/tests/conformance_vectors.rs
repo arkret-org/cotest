@@ -37,7 +37,7 @@ fn named_suite_audit_executes_registered_runners_and_exposes_every_gap() -> Resu
             .iter()
             .filter(|case| case.fixture_ref == "fixtures/client-sync-fixture.json")
             .count(),
-        declared - 3
+        declared - cotest_inkson_client_tests::conformance::client_sync::PRODUCTION_CASE_COUNT
     );
     assert!(
         report

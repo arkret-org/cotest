@@ -39,7 +39,13 @@ pub trait SidecarSyncObserver {
         controller: &Member,
         scope: &arkret_wire::ScopeRef,
     ) -> Result<()>;
-    async fn after_genesis(&self, controller: &Member, genesis: &arkret_wire::Event) -> Result<()>;
+    async fn after_genesis(
+        &self,
+        controller: &Member,
+        genesis: &arkret_wire::Event,
+        creator_group: &arkret::ArkretMlsGroup,
+        database_url: &str,
+    ) -> Result<()>;
 }
 
 pub async fn run_with_sync_observer(observer: &dyn SidecarSyncObserver) -> Result<()> {
@@ -353,7 +359,9 @@ async fn run_with_observers(
     )
     .await?;
     if let Some(probe) = sync_observer {
-        probe.after_genesis(&controller, &genesis).await?;
+        probe
+            .after_genesis(&controller, &genesis, &group, &database.connect_url)
+            .await?;
     }
     if let Some(probe) = observer {
         probe
