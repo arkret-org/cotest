@@ -71,7 +71,8 @@ function Get-ScenarioStems {
 function Get-Ratio {
     param([int]$Verified, [int]$Promised)
     if ($Promised -eq 0) { return '100.0%' }
-    return ('{0:P1}' -f ($Verified / $Promised))
+    $percentage = 100.0 * $Verified / $Promised
+    return ($percentage.ToString('F1', [Globalization.CultureInfo]::InvariantCulture) + '%')
 }
 
 function Add-Catalog {
