@@ -1044,7 +1044,7 @@ fn verify_reconnect_resets_only_the_failed_surface(fixture: &Value) -> Result<()
 /// as a real `CommitStreamRef` so the recovery names a stream that exists.
 fn verify_single_tail_recovery(name: &str, case: &Value) -> Result<()> {
     let affected = required_field(case, "affected_stream_ref")?;
-    parse_stream_ref(affected)?;
+    let (stream_ref, _) = parse_stream_ref(affected)?;
     let affected_kind = required_str(affected, "kind")?;
     let recovered = value_array(
         required_field(case, "recovered_streams")?,
