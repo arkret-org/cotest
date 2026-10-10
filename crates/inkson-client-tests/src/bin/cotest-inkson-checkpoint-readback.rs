@@ -32,6 +32,14 @@ fn main() -> Result<()> {
                 "fresh process lost the exact verified Realm stream checkpoint or signed anchor"
             );
         }
+        if evidence.get("stream_heads").is_some() {
+            let state = serde_json::to_value(store.load())?;
+            ensure!(
+                state["verified_commit_stream_cursors"] == evidence["stream_heads"]
+                    && state["verified_commit_stream_anchors"] == evidence["stream_anchors"],
+                "fresh process changed the independent stream checkpoints or original anchors"
+            );
+        }
         return Ok(());
     }
     let (scope, snapshot, history, cursor): (

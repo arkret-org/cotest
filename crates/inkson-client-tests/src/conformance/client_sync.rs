@@ -1523,7 +1523,9 @@ impl Probe {
             &evidence,
             serde_json::to_vec(&serde_json::json!({
                 "account":controller.account, "realm":realm, "cut":cut, "cursor":cursor,
-                "stream_key":key, "head":head, "anchor":anchor
+                "stream_key":key, "head":head, "anchor":anchor,
+                "stream_heads":after["verified_commit_stream_cursors"],
+                "stream_anchors":after["verified_commit_stream_anchors"]
             }))?,
         )?;
         let output = std::process::Command::new(&self.reader)

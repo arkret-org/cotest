@@ -342,7 +342,7 @@ async fn assert_circle_mls_reads(
     Ok(())
 }
 
-pub(crate) async fn grant_circle_actions(
+pub async fn grant_circle_actions(
     controller: &Member,
     realm: &str,
     circle: &CircleId,
