@@ -423,7 +423,8 @@ async fn assert_circle_stream_scan(
     realm: &str,
     circle: &CircleId,
 ) -> Result<()> {
-    use arkret_wire::{CommitStreamRef, StreamScanDirection, StreamScanOutcome, StreamScanRequest};
+    use arkret_models_collaboration::authority_commit::PeerStreamScanOutcome;
+    use arkret_wire::{CommitStreamRef, StreamScanDirection, StreamScanRequest};
     let realm_id = arkret_wire::RealmId::new(realm)?;
     let stream = CommitStreamRef::Circle {
         realm_id: realm_id.clone(),
@@ -460,7 +461,7 @@ async fn assert_circle_stream_scan(
             "Circle peer scan failed: {}",
             String::from_utf8_lossy(&bytes)
         );
-        let peer: StreamScanOutcome = serde_json::from_slice(&bytes)?;
+        let peer: PeerStreamScanOutcome = serde_json::from_slice(&bytes)?;
         peer.validate_for_request(&request)?;
         let expected_positions = peer
             .committed_events

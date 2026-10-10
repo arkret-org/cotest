@@ -6,8 +6,8 @@
     "operation_registry_sha256": "2a6b47c092274aa780e480d463e1eb78f348e382ce5b3237561540565c948509",
     "test_layers": {
       "soland_unit": {
-        "source_file_count": 414,
-        "source_sha256": "76e5c61ce45697fd8725cdd024b21bb2d9ae5c918fdb1783a23731eb2c3b8b82",
+        "source_file_count": 415,
+        "source_sha256": "ff070bee0a08aadef29adce97dc4a6a5c302f8b7fe70d517d8c2bdb6b2952f71",
         "evidence_count": 287,
         "covered_operation_count": 141
       },
@@ -19,7 +19,7 @@
       },
       "cotest_rust": {
         "source_file_count": 430,
-        "source_sha256": "d40022f9fcd0cbf5fe139196b9c1b88087806bb9286a0f6b96adfae85ad764b0",
+        "source_sha256": "3dbf386f581db727cc2cefb0bb23a70a427d40539d4a322997f18542d7996d6b",
         "evidence_count": 133,
         "covered_operation_count": 71
       },
@@ -5465,11 +5465,11 @@
           },
           {
             "file": "soland/crates/storage/src/authority_commit.rs",
-            "line": 2385,
+            "line": 2374,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2385
+              2374
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -6985,11 +6985,11 @@
           },
           {
             "file": "soland/crates/storage/src/authority_commit.rs",
-            "line": 870,
+            "line": 866,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              870
+              866
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -10503,11 +10503,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/storage/src/lib.rs",
-            "line": 766,
+            "line": 768,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              766
+              768
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -14709,11 +14709,11 @@
           },
           {
             "file": "soland/crates/storage/src/authority_commit.rs",
-            "line": 2371,
+            "line": 2360,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2371
+              2360
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -15080,11 +15080,11 @@
           },
           {
             "file": "soland/crates/storage/src/authority_commit.rs",
-            "line": 2412,
+            "line": 2401,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2412
+              2401
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -16765,11 +16765,11 @@
           },
           {
             "file": "soland/crates/storage/src/authority_commit.rs",
-            "line": 2452,
+            "line": 2441,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2452
+              2441
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -20471,11 +20471,11 @@
           },
           {
             "file": "soland/crates/storage/src/authority_commit.rs",
-            "line": 2480,
+            "line": 2469,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2480
+              2469
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -21587,11 +21587,11 @@
           },
           {
             "file": "soland/crates/storage/src/authority_commit.rs",
-            "line": 2427,
+            "line": 2416,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2427
+              2416
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -23244,11 +23244,11 @@
           },
           {
             "file": "soland/crates/storage/src/authority_commit.rs",
-            "line": 2466,
+            "line": 2455,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2466
+              2455
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",

@@ -162,8 +162,6 @@ jobs:
           -Grep '@returning-login-gate|@returning-device-key-gate|@onboarding-recovery-gate'
           -RequireScenario 'identity/oidc-login-flow.spec.ts,identity/device-key-lifecycle.spec.ts'
           -ForbidSkippedTests
-          -SkipNpmInstall
-          -SkipBrowserInstall
           -StartupTimeoutSeconds 900
       - name: Migrate isolated Coauth route-evidence database
         run: |

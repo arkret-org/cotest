@@ -655,8 +655,6 @@ jobs:
           -SolandRuntime docker
           -SolandImage cotest-soland:pr-${{ github.run_id }}
           -StartCoauth
-          -SkipNpmInstall
-          -SkipBrowserInstall
           -RunProfile joint-smoke
           -PlaywrightProject joint-inkson
           -Grep "@returning-login-gate|@onboarding-recovery-gate"
