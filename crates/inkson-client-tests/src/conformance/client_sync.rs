@@ -35,11 +35,13 @@ const QUEUE_CASES: [&str; 3] = [
     "expired_content_without_ack_remains_in_queue",
     "full_endpoint_rejects_new_delivery_without_eviction",
 ];
+const BASELINE_CASE: &str = "incremental_before_baseline_complete_merges_by_position";
 pub const PRODUCTION_CASE_COUNT: usize = CASES.len()
     + RECOVERY_CASES.len()
     + STREAM_AND_DELIVERY_CASES.len()
     + ACK_CASES.len()
-    + QUEUE_CASES.len();
+    + QUEUE_CASES.len()
+    + 1;
 
 const QUEUE_WRITE_EVIDENCE: &str = "SELECT jsonb_build_object(\
     'queue',(SELECT COALESCE(jsonb_agg(to_jsonb(t) ORDER BY id),'[]') FROM device_messages t),\
@@ -124,6 +126,22 @@ struct ObservedRail {
     http: arkret_http_client::Client,
     missing: Option<arkret_wire::EventId>,
     observed: Mutex<Vec<AccountSubscribeBatch>>,
+}
+
+struct HeldBatch(Mutex<Option<AccountSubscribeBatch>>);
+
+impl AccountSubscribeTransport for HeldBatch {
+    async fn subscribe(
+        &self,
+        _request: &SyncRequestBody,
+    ) -> garth::Result<AccountSubscribeSnapshotResult> {
+        self.0
+            .lock()
+            .unwrap()
+            .take()
+            .map(AccountSubscribeSnapshotResult::Batch)
+            .ok_or_else(|| garth::Error::Protocol("held Account window consumed twice".into()))
+    }
 }
 
 impl AccountSubscribeTransport for ObservedRail {
@@ -1038,6 +1056,231 @@ impl SidecarSyncObserver for Probe {
             database_url,
         )
         .await?;
+        self.baseline_ordering(controller, other_recipient).await?;
+        Ok(())
+    }
+}
+
+impl Probe {
+    async fn baseline_ordering(&self, controller: &Member, member: &Member) -> Result<()> {
+        use cotest::scenarios::human_device_producer_live::{
+            membership_payload, submit_and_expect_commit,
+        };
+        let created = controller
+            .client
+            .create_realm_with(serde_json::json!({
+                "title":"Sync baseline ordering", "summary":"Sync baseline ordering",
+                "public":false, "join_rule":"public",
+                "plaintext_visible_services":[controller.account.station_id.to_string()]
+            }))
+            .await?;
+        let realm =
+            arkret_wire::RealmId::new(created["realm_id"].as_str().context("ordering Realm")?)?;
+        let path = self.directory.path().join("ordering-state.json");
+        let host = NativeAccountHost::new_for_realm(
+            controller.client.sdk(),
+            controller.account.clone(),
+            controller.device.clone(),
+            inkson::LocalStateStore::with_path(path.clone()),
+            realm.clone(),
+        )
+        .await?;
+        let request = SyncRequestBody {
+            catchup: Some(true),
+            filter: Some(garth::AccountFilter {
+                realm_ids: Some(vec![realm.clone()]),
+                window_limit: Some(20),
+                lazy_load_members: Some(true),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let old = controller
+            .client
+            .sdk()
+            .account_subscribe_batch(&request)
+            .await?;
+        let mut partial = old.clone();
+        let mut segments = 0;
+        for frame in &mut partial.frames {
+            if let Some(entry) = frame
+                .realms
+                .as_mut()
+                .and_then(|r| r.entries.get_mut(realm.as_str()))
+            {
+                if let Some(baseline) = &mut entry.baseline {
+                    ensure!(baseline.complete, "source baseline is not complete");
+                    baseline.complete = false;
+                    segments += 1;
+                }
+            }
+        }
+        ensure!(
+            segments == 1,
+            "ordering requires one authentic Realm baseline segment"
+        );
+        host.catch_up_with_conformance_transport(&HeldBatch(Mutex::new(Some(partial))))
+            .await?;
+        let before = inkson::conformance::retained_realm_current(
+            &host.state_store(),
+            &controller.account,
+            &realm,
+        )
+        .await?;
+        let join = member.client.author_event(
+            realm.as_str(), arkret_wire::EventKind::MemberState.as_str(),
+            membership_payload(realm.as_str(), member.account.clone(),
+                arkret_models_collaboration::governance::membership_invite::MembershipPayloadState::Join,
+                "Incremental must survive the held old baseline")?,
+        ).await?;
+        let commit = submit_and_expect_commit(
+            &member.client,
+            &member.account,
+            member.device.as_str(),
+            &join,
+        )
+        .await?;
+        let prior_head = old
+            .frames
+            .iter()
+            .filter_map(|frame| frame.realms.as_ref())
+            .filter_map(|realms| realms.entries.get(realm.as_str()))
+            .filter_map(|entry| entry.current.as_ref())
+            .flat_map(|current| &current.stream_heads)
+            .find(|head| head.stream_ref == commit.stream_ref)
+            .context("baseline has no original Realm head")?;
+        ensure!(
+            commit.stream_position == prior_head.stream_position + 1
+                && commit.previous_commit_ref.as_ref() == Some(&prior_head.commit_id),
+            "membership delta is not the immediate authentic successor of the held baseline"
+        );
+        let incremental = controller
+            .client
+            .sdk()
+            .account_subscribe_batch(&SyncRequestBody {
+                after: Some(old.cursor.clone()),
+                catchup: Some(false),
+                ..request
+            })
+            .await?;
+        ensure!(
+            incremental
+                .frames
+                .iter()
+                .filter_map(|f| f.realms.as_ref())
+                .filter_map(|r| r.entries.get(realm.as_str()))
+                .flat_map(|e| e.committed_events.iter().flatten())
+                .any(|row| row.commit().commit_id == commit.commit_id
+                    && row.commit().event_ref == join.event_id),
+            "actual Account incremental omitted the accepted Realm join"
+        );
+        let cursor = incremental.cursor.clone();
+        host.catch_up_with_conformance_transport(&HeldBatch(Mutex::new(Some(incremental))))
+            .await?;
+        let newer = inkson::conformance::retained_realm_current(
+            &host.state_store(),
+            &controller.account,
+            &realm,
+        )
+        .await?;
+        ensure!(
+            newer["entries"] != before["entries"],
+            "Realm delta changed no durable current row"
+        );
+        ensure!(
+            newer["entries"]
+                .as_array()
+                .context("typed Realm current rows")?
+                .iter()
+                .any(|row| row["revision"]["commit_id"] == commit.commit_id.as_str()),
+            "durable current omitted the exact accepted Realm membership revision"
+        );
+        let mut completion = old;
+        completion.frames.retain(|frame| {
+            frame.realms.as_ref().is_some_and(|realms| {
+                realms
+                    .entries
+                    .get(realm.as_str())
+                    .is_some_and(|entry| entry.baseline.is_some())
+            })
+        });
+        for frame in &mut completion.frames {
+            let realms = frame
+                .realms
+                .as_mut()
+                .context("held baseline Realm container")?;
+            realms.entries.retain(|id, _| id == realm.as_str());
+            for entry in realms.entries.values_mut() {
+                // Deliver only the held baseline section, not its already
+                // installed history window or a regressive stream checkpoint.
+                *entry =
+                    arkret_models_collaboration::sync_frames::account_subscribe::RealmSyncEntry {
+                        current: entry.current.clone(),
+                        baseline: entry.baseline.clone(),
+                        ..Default::default()
+                    };
+            }
+            frame.validate()?;
+        }
+        completion.cursor = completion
+            .frames
+            .last()
+            .and_then(|frame| frame.cursor.clone())
+            .context("held baseline source cursor")?;
+        host.catch_up_with_conformance_transport(&HeldBatch(Mutex::new(Some(completion))))
+            .await?;
+        let completed = inkson::conformance::retained_realm_current(
+            &host.state_store(),
+            &controller.account,
+            &realm,
+        )
+        .await?;
+        ensure!(
+            completed["entries"] == newer["entries"],
+            "older baseline overwrote the accepted incremental"
+        );
+        // The replayed old opaque cursor is not ordered against the newer one.
+        // Verify only the cursor the ordinary driver actually made durable.
+        let durable_cursor = host
+            .state_store()
+            .sync_cursor()
+            .context("ordering checkpoint")?;
+        ensure!(
+            !cursor.is_empty() && !durable_cursor.is_empty(),
+            "ordering lost its durable cursor"
+        );
+        drop(host);
+        let reopened = inkson::LocalStateStore::with_path(path.clone());
+        ensure!(
+            reopened.sync_cursor().as_deref() == Some(durable_cursor.as_str()),
+            "ordering checkpoint was not durable"
+        );
+        ensure!(
+            inkson::conformance::retained_realm_current(&reopened, &controller.account, &realm)
+                .await?
+                == completed,
+            "reopen changed the ordered current cut"
+        );
+        let evidence = self.directory.path().join("expected-ordering-cut.json");
+        std::fs::write(
+            &evidence,
+            serde_json::to_vec(&serde_json::json!({
+                "account":controller.account, "realm":realm, "cut":completed, "cursor":durable_cursor
+            }))?,
+        )?;
+        let output = std::process::Command::new(&self.reader)
+            .arg(path)
+            .arg(evidence)
+            .output()?;
+        ensure!(
+            output.status.success(),
+            "fresh-process Realm current readback failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        self.results.borrow_mut().push(super::CaseExecutionResult {
+            case_id: BASELINE_CASE.into(),
+            assertions: 9,
+        });
         Ok(())
     }
 }
@@ -1048,6 +1291,21 @@ pub async fn run_sync_production_cases(
     reader: &std::path::Path,
 ) -> Result<Vec<super::CaseExecutionResult>> {
     super::run_sync_fixture_suite()?;
+    let fixture = cotest::conformance::load_fixture_value("client-sync-fixture.json")?;
+    let ordering = fixture["checkpoint_ordering"]
+        .as_array()
+        .context("ordering cases")?
+        .iter()
+        .find(|case| case["name"] == BASELINE_CASE)
+        .context("ordering fixture")?;
+    ensure!(
+        ordering["expected"] == "accepted"
+            && ordering["steps"][0]["action"] == "deliver_incremental"
+            && ordering["steps"][1]["action"] == "deliver_baseline_section_complete"
+            && ordering["steps"][0]["stream_position"].as_u64()
+                > ordering["steps"][1]["as_of_stream_position"].as_u64(),
+        "baseline ordering fixture drifted"
+    );
     let fixture = super::load_fixture_value("client-sync-fixture.json")?;
     let cases = fixture["checkpoint_ordering"]
         .as_array()
@@ -1226,6 +1484,7 @@ pub async fn run_sync_production_cases(
         .chain(STREAM_AND_DELIVERY_CASES)
         .chain(ACK_CASES)
         .chain(QUEUE_CASES)
+        .chain(std::iter::once(BASELINE_CASE))
         .collect::<std::collections::BTreeSet<_>>();
     ensure!(
         results.len() == PRODUCTION_CASE_COUNT

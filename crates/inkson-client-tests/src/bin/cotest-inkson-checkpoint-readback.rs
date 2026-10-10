@@ -7,6 +7,25 @@ fn main() -> Result<()> {
     let state_path = args.next().context("missing state path")?;
     let evidence_path = args.next().context("missing expected cut path")?;
     ensure!(args.next().is_none(), "unexpected readback argument");
+    let evidence: serde_json::Value = serde_json::from_slice(&std::fs::read(&evidence_path)?)?;
+    if evidence.is_object() {
+        let account = serde_json::from_value(evidence["account"].clone())?;
+        let realm = serde_json::from_value(evidence["realm"].clone())?;
+        let store = inkson::LocalStateStore::with_path(std::path::PathBuf::from(state_path));
+        ensure!(
+            store.sync_cursor().as_deref() == evidence["cursor"].as_str(),
+            "fresh process lost the ordering checkpoint"
+        );
+        let runtime = tokio::runtime::Runtime::new()?;
+        let cut = runtime.block_on(inkson::conformance::retained_realm_current(
+            &store, &account, &realm,
+        ))?;
+        ensure!(
+            cut == evidence["cut"],
+            "fresh process changed the ordered Realm current cut"
+        );
+        return Ok(());
+    }
     let (scope, snapshot, history, cursor): (
         arkret_wire::ScopeRef,
         arkret_wire::RealmStateSnapshot,
