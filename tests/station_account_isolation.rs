@@ -131,6 +131,7 @@ async fn seed(
             handle: cursor.clone(),
             binding_subject: Some(account.principal_id.to_string()),
             device_id: Some(DEVICE.into()),
+            session_id: None,
             service_id: account.station_id.clone(),
             filter_digest: Some("filter".into()),
             purpose: "stream".into(),

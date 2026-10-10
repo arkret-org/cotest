@@ -91,7 +91,7 @@ impl CursorAdmissionConsumer {
             }
             Err(error) => {
                 let diagnostic = error.to_string();
-                let reason = if diagnostic.contains("cursor has expired") {
+                let reason = if error.error_code() == Some(arkret_wire::ErrorCode::CursorExpired) {
                     "cursor_expired"
                 } else {
                     "invalid_cursor"
@@ -200,13 +200,11 @@ fn expected_diagnostic_fragment(case_id: &str) -> Result<&'static str> {
     match case_id {
         "oversized_token" => Ok("cursor token too large"),
         "invalid_base64url" => Ok("invalid Base64URL encoding"),
-        "malformed_json"
-        | "duplicate_json_key"
-        | "non_nfc_string"
-        | "inline_positions_rejected"
+        "malformed_json" | "duplicate_json_key" | "non_nfc_string" => Ok("invalid cursor JSON"),
+        "inline_positions_rejected"
         | "unknown_public_field_rejected"
         | "non_canonical_timestamp"
-        | "missing_millisecond_fraction" => Ok("invalid cursor JSON"),
+        | "missing_millisecond_fraction" => Ok("invalid cursor core"),
         "unsupported_version" => Ok("unsupported cursor version"),
         "handle_too_short" => Ok("invalid cursor handle"),
         "negative_ttl" => Ok("issued_at` is after `expires_at"),

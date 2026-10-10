@@ -9,6 +9,7 @@ publish = false
 anyhow = { workspace = true }
 arkret-canonical = { workspace = true }
 arkret-hlc = { workspace = true }
+arkret-wire = { workspace = true }
 serde_json = { workspace = true }
 
 [lints]
