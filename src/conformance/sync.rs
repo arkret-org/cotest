@@ -638,6 +638,7 @@ fn derived_commit_id(label: &str, position: u64) -> RealmCommitId {
 fn verify_checkpoint_never_outruns_projection(fixture: &Value) -> Result<()> {
     let mut ordering_cases = 0_u32;
     let mut merge_cases = 0_u32;
+    let mut undurable_cases = BTreeSet::new();
 
     for case in value_array(
         required_field(fixture, "checkpoint_ordering")?,
@@ -658,6 +659,29 @@ fn verify_checkpoint_never_outruns_projection(fixture: &Value) -> Result<()> {
                 .iter()
                 .position(|step| step.get("action").and_then(Value::as_str) == Some(action))
         };
+
+        if let Some(install) = action_at("install_typed_current_result") {
+            if !required_bool(&steps[install], "durable")? {
+                ensure!(
+                    action_at("advance_durable_cursor").is_none() && expected == "rejected",
+                    "{name}: an undurable candidate must preserve the old checkpoint"
+                );
+                let delivered = action_at("deliver_incremental")
+                    .ok_or_else(|| anyhow!("{name}: failed install has no delivered candidate"))?;
+                let (stream, _) =
+                    parse_stream_ref(required_field(&steps[delivered], "stream_ref")?)?;
+                ensure!(
+                    matches!(stream, CommitStreamRef::Sidecar { .. }),
+                    "{name}: the failed candidate must name a Sidecar stream"
+                );
+                ensure!(
+                    install > delivered && case.get("reason").and_then(Value::as_str).is_some(),
+                    "{name}: failed installation must follow delivery and state its reason"
+                );
+                undurable_cases.insert(name.to_owned());
+                continue;
+            }
+        }
 
         if let (Some(install), Some(advance)) = (
             action_at("install_typed_current_result"),
@@ -724,6 +748,15 @@ fn verify_checkpoint_never_outruns_projection(fixture: &Value) -> Result<()> {
         ordering_cases >= 2 && merge_cases >= 1,
         "both the checkpoint ordering rule and the merge rule must stay covered"
     );
+    for name in [
+        "sidecar_missing_tail_does_not_install_newer_current_or_checkpoint",
+        "sidecar_projection_transaction_failure_preserves_prior_cut",
+    ] {
+        ensure!(
+            undurable_cases.contains(name),
+            "missing undurable checkpoint case {name}"
+        );
+    }
     Ok(())
 }
 
@@ -747,6 +780,10 @@ fn replay_loses_delta_on_crash(steps: &[Value]) -> Result<bool> {
                 .ok_or_else(|| anyhow!("every checkpoint step declares an action"))?
             {
                 "deliver_commit" => {}
+                "deliver_incremental" => {
+                    parse_stream_ref(required_field(step, "stream_ref")?)?;
+                    required_u64(step, "stream_position")?;
+                }
                 "install_typed_current_result" => {
                     ensure!(
                         required_bool(step, "durable")?,
@@ -891,7 +928,7 @@ fn verify_reconnect_resets_only_the_failed_surface(fixture: &Value) -> Result<()
 /// as a real `CommitStreamRef` so the recovery names a stream that exists.
 fn verify_single_tail_recovery(name: &str, case: &Value) -> Result<()> {
     let affected = required_field(case, "affected_stream_ref")?;
-    let (stream_ref, _) = parse_stream_ref(affected)?;
+    parse_stream_ref(affected)?;
     let affected_kind = required_str(affected, "kind")?;
     let recovered = value_array(
         required_field(case, "recovered_streams")?,
@@ -908,10 +945,6 @@ fn verify_single_tail_recovery(name: &str, case: &Value) -> Result<()> {
     ensure!(
         recovered == [affected_kind],
         "{name}: only the missing tail is recovered, got {recovered:?}"
-    );
-    ensure!(
-        matches!(stream_ref, CommitStreamRef::Circle { .. }),
-        "{name}: the fixture recovers a Circle tail while the Realm tail keeps its cursor"
     );
     Ok(())
 }
