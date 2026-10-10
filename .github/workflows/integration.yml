@@ -147,6 +147,7 @@ jobs:
       - name: install dioxus cli
         run: cargo install dioxus-cli --version 0.7.10 --locked
       - name: Prepare Linux joint prerequisites
+        id: joint_prerequisites
         run: bash cotest/scripts/prepare-linux-joint-e2e.sh setup
 
       - name: real OIDC returning-login and device-key non-skip lane
@@ -162,7 +163,7 @@ jobs:
           -ForbidSkippedTests
           -StartupTimeoutSeconds 900
       - name: Restore Linux hosts permissions
-        if: always()
+        if: always() && steps.joint_prerequisites.outcome != 'skipped' && steps.joint_prerequisites.outcome != ''
         run: bash cotest/scripts/prepare-linux-joint-e2e.sh restore
 
       - name: Migrate isolated Coauth route-evidence database
