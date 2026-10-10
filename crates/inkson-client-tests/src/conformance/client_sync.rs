@@ -38,6 +38,7 @@ const QUEUE_CASES: [&str; 3] = [
 ];
 const BASELINE_CASE: &str = "incremental_before_baseline_complete_merges_by_position";
 const CIRCLE_TAIL_CASE: &str = "circle_stream_tail_is_independent";
+const STREAM_GAP_CASE: &str = "unexplained_position_jump_stops_only_that_stream";
 pub const PRODUCTION_CASE_COUNT: usize = CASES.len()
     + RECOVERY_CASES.len()
     + STREAM_AND_DELIVERY_CASES.len()
@@ -201,6 +202,116 @@ struct RecoveryRail {
     before: Value,
     requests: Mutex<Vec<SyncRequestBody>>,
     refusals: Mutex<Vec<String>>,
+}
+
+struct StreamGapRail {
+    http: arkret_http_client::Client,
+    database_url: String,
+    path: std::path::PathBuf,
+    before: Value,
+    cursor: String,
+    affected_stream: arkret_wire::CommitStreamRef,
+    healthy_stream: arkret_wire::CommitStreamRef,
+    healthy_commit: Mutex<Option<arkret_wire::RealmCommit>>,
+    ack_token: String,
+    ack_before: String,
+    requests: Mutex<Vec<SyncRequestBody>>,
+}
+
+impl AccountSubscribeTransport for StreamGapRail {
+    async fn subscribe(
+        &self,
+        request: &SyncRequestBody,
+    ) -> garth::Result<AccountSubscribeSnapshotResult> {
+        let visit = {
+            let mut requests = self.requests.lock().unwrap();
+            requests.push(request.clone());
+            requests.len()
+        };
+        let check = || -> Result<()> {
+            ensure!(
+                request.after.as_deref() == Some(self.cursor.as_str())
+                    && request.catchup != Some(true),
+                "stream gap discarded the durable cursor or redid baseline"
+            );
+            if visit == 2 {
+                let store = inkson::LocalStateStore::with_path(self.path.clone());
+                let after = serde_json::to_value(store.load())?;
+                let affected_key = serde_json::to_string(&self.affected_stream)?;
+                let healthy_key = serde_json::to_string(&self.healthy_stream)?;
+                let healthy = self
+                    .healthy_commit
+                    .lock()
+                    .unwrap()
+                    .clone()
+                    .context("observed healthy original")?;
+                ensure!(
+                    store.sync_cursor().as_deref() == Some(self.cursor.as_str())
+                        && after["current_generation"] == self.before["current_generation"]
+                        && after["verified_commit_stream_cursors"][&affected_key]
+                            == self.before["verified_commit_stream_cursors"][&affected_key]
+                        && after["verified_commit_stream_anchors"][&affected_key]
+                            == self.before["verified_commit_stream_anchors"][&affected_key],
+                    "incomplete stream advanced current, Account cursor or its own durable anchor"
+                );
+                ensure!(after["verified_commit_stream_cursors"][&healthy_key]["stream_position"] == healthy.stream_position
+                    && after["verified_commit_stream_anchors"][&healthy_key] == serde_json::to_value(&healthy)?
+                    && healthy.stream_position > self.before["verified_commit_stream_cursors"][&healthy_key]["stream_position"].as_u64().context("prior healthy position")?,
+                    "incomplete Circle blocked its healthy Realm sibling");
+                ensure!(
+                    read_database_evidence(
+                        &self.database_url,
+                        "SELECT row_to_json(t)::text FROM device_message_ack_tokens t WHERE ack_token=$1",
+                        &[&self.ack_token]
+                    )? == self.ack_before,
+                    "stream recovery reset the issued recipient ACK"
+                );
+            }
+            ensure!(
+                visit <= 2,
+                "the repaired stream did not recover within one retry"
+            );
+            Ok(())
+        };
+        check().map_err(|error| garth::Error::Protocol(error.to_string()))?;
+        let mut batch = self.http.account_subscribe_batch(request).await?;
+        if visit == 1 {
+            let healthy = batch
+                .frames
+                .iter()
+                .flat_map(|f| &f.realms)
+                .flat_map(|r| r.entries.values())
+                .flat_map(|e| e.committed_events.iter().flatten())
+                .filter(|row| row.commit().stream_ref == self.healthy_stream)
+                .max_by_key(|row| row.commit().stream_position)
+                .ok_or_else(|| {
+                    garth::Error::Protocol("gap batch lacks a healthy Realm original".into())
+                })?;
+            *self.healthy_commit.lock().unwrap() = Some(healthy.commit().clone());
+            let mut faults = 0;
+            for frame in &mut batch.frames {
+                if let Some(realms) = &mut frame.realms {
+                    for entry in realms.entries.values_mut() {
+                        for window in entry.streams.iter_mut().flatten() {
+                            if window.stream_ref == self.affected_stream {
+                                window.next_position =
+                                    window.next_position.checked_add(1).ok_or_else(|| {
+                                        garth::Error::Protocol("gap window overflow".into())
+                                    })?;
+                                faults += 1;
+                            }
+                        }
+                    }
+                }
+            }
+            if faults != 1 {
+                return Err(garth::Error::Protocol(
+                    "gap fixture lacks one independent Circle window".into(),
+                ));
+            }
+        }
+        Ok(AccountSubscribeSnapshotResult::Batch(batch))
+    }
 }
 
 fn read_database_evidence(
@@ -927,8 +1038,8 @@ impl SidecarSyncObserver for Probe {
             "an incomplete Sidecar frame advanced the driver"
         );
         ensure!(
-            missing.observed.lock().unwrap().len() == 1,
-            "missing-tail case did not reach the subscription driver"
+            missing.observed.lock().unwrap().len() == 4,
+            "persistent missing tail did not perform exactly four bounded driver attempts"
         );
         ensure!(
             state(&host)? == before
@@ -1058,13 +1169,19 @@ impl SidecarSyncObserver for Probe {
             database_url,
         )
         .await?;
-        self.baseline_ordering(controller, other_recipient).await?;
+        self.baseline_ordering(controller, other_recipient, database_url)
+            .await?;
         Ok(())
     }
 }
 
 impl Probe {
-    async fn baseline_ordering(&self, controller: &Member, member: &Member) -> Result<()> {
+    async fn baseline_ordering(
+        &self,
+        controller: &Member,
+        member: &Member,
+        database_url: &str,
+    ) -> Result<()> {
         use cotest::scenarios::human_device_producer_live::{
             membership_payload, submit_and_expect_commit,
         };
@@ -1343,13 +1460,18 @@ impl Probe {
             case_id: STREAM_AND_DELIVERY_CASES[2].into(),
             assertions: 7,
         });
-        self.circle_tail(controller, &realm).await?;
+        self.circle_tail(controller, &realm, database_url).await?;
         Ok(())
     }
 }
 
 impl Probe {
-    async fn circle_tail(&self, controller: &Member, realm: &arkret_wire::RealmId) -> Result<()> {
+    async fn circle_tail(
+        &self,
+        controller: &Member,
+        realm: &arkret_wire::RealmId,
+        database_url: &str,
+    ) -> Result<()> {
         use cotest::scenarios::circle_poll_scope_live::{circle_create, circle_event, join_circle};
         use cotest::scenarios::human_device_producer_live::submit_and_expect_commit;
         let circle = circle_create(
@@ -1466,7 +1588,7 @@ impl Probe {
         );
         drop(batches);
         let head = serde_json::to_value(arkret_wire::CommitStreamHead {
-            stream_ref: stream,
+            stream_ref: stream.clone(),
             stream_position: 1,
             commit_id: commit.commit_id.clone(),
         })?;
@@ -1529,7 +1651,7 @@ impl Probe {
             }))?,
         )?;
         let output = std::process::Command::new(&self.reader)
-            .arg(path)
+            .arg(&path)
             .arg(evidence)
             .output()?;
         ensure!(
@@ -1541,6 +1663,196 @@ impl Probe {
             case_id: CIRCLE_TAIL_CASE.into(),
             assertions: 10,
         });
+        self.circle_gap(controller, realm, &circle, &stream, path, database_url)
+            .await?;
+        Ok(())
+    }
+
+    async fn circle_gap(
+        &self,
+        controller: &Member,
+        realm: &arkret_wire::RealmId,
+        circle: &arkret_wire::CircleId,
+        stream: &arkret_wire::CommitStreamRef,
+        path: std::path::PathBuf,
+        database_url: &str,
+    ) -> Result<()> {
+        use cotest::scenarios::circle_poll_scope_live::circle_event;
+        use cotest::scenarios::human_device_producer_live::submit_and_expect_commit;
+        let host = NativeAccountHost::new_for_realm(
+            controller.client.sdk(),
+            controller.account.clone(),
+            controller.device.clone(),
+            inkson::LocalStateStore::with_path(path.clone()),
+            realm.clone(),
+        )
+        .await?;
+        let before = state(&host)?;
+        let cursor = host
+            .state_store()
+            .sync_cursor()
+            .context("gap prior cursor")?;
+        let mut commits = Vec::new();
+        for title in ["Gap predecessor", "Gap successor"] {
+            let event = circle_event(&controller.client, realm.as_str(), circle,
+                arkret_wire::EventKind::StrandCreate,
+                serde_json::json!({"object":{"schema":"ak.schema.strand.v1", "realm_id":realm,
+                    "scope_circle_id":circle, "tracks":{"discussion":{"is_primary":true,"profile":"discussion"}},
+                    "metadata":{"title":title}, "state":"active", "created_by":controller.actor}})).await?;
+            commits.push(
+                submit_and_expect_commit(
+                    &controller.client,
+                    &controller.account,
+                    controller.device.as_str(),
+                    &event,
+                )
+                .await?,
+            );
+        }
+        ensure!(
+            commits[0].stream_ref == *stream
+                && commits[0].stream_position == 2
+                && commits[1].stream_ref == *stream
+                && commits[1].stream_position == 3
+                && commits[1].previous_commit_ref.as_ref() == Some(&commits[0].commit_id),
+            "gap setup lacks an authentic accepted continuous successor pair"
+        );
+        cotest::scenarios::circle_poll_scope_live::circle_create(
+            &controller.client,
+            realm.as_str(),
+            &controller.actor,
+            "Healthy sibling",
+            "Sibling",
+        )
+        .await?;
+        let http = controller.client.sdk();
+        http.send_device_messages(
+            "sync-gap-retained-ack",
+            &queue_request(
+                controller,
+                "ak:device_message:01964137-2000-7000-8000-000000000028",
+                chrono::Utc::now() + chrono::Duration::hours(1),
+            )?,
+        )
+        .await?;
+        let delivery = http.receive_device_messages(None, None).await?;
+        ensure!(
+            delivery
+                .deliveries
+                .iter()
+                .filter(|row| matches!(row,
+                    arkret_models_collaboration::device_messages::RecipientDelivery::DeviceMessage { device_message }
+                    if device_message.device_message_id.as_str() == "ak:device_message:01964137-2000-7000-8000-000000000028"))
+                .count()
+                == 1,
+            "gap setup lacks its exact newly accepted recipient delivery"
+        );
+        let ack_token = delivery
+            .ack_token
+            .context("nonempty issued recipient ACK")?;
+        let ack_before = read_database_evidence(
+            database_url,
+            "SELECT row_to_json(t)::text FROM device_message_ack_tokens t WHERE ack_token=$1",
+            &[&ack_token],
+        )?;
+        let rail = StreamGapRail {
+            http: controller.client.sdk(),
+            database_url: database_url.into(),
+            path: path.clone(),
+            before: before.clone(),
+            cursor,
+            affected_stream: stream.clone(),
+            healthy_stream: arkret_wire::CommitStreamRef::Realm {
+                realm_id: realm.clone(),
+            },
+            healthy_commit: Default::default(),
+            ack_token,
+            ack_before,
+            requests: Default::default(),
+        };
+        // Alter only the untrusted window's declared end. Original signed
+        // Events, Commits, Snapshot and PostgreSQL rows remain unchanged.
+        // The retry must be requested by the ordinary production driver.
+        let recovered = host.catch_up_with_conformance_transport(&rail).await;
+        recovered?;
+        ensure!(
+            rail.requests.lock().unwrap().len() == 2,
+            "actual driver never stopped and retried the affected stream"
+        );
+        let after = state(&host)?;
+        let key = serde_json::to_string(stream)?;
+        let head = serde_json::to_value(arkret_wire::CommitStreamHead {
+            stream_ref: stream.clone(),
+            stream_position: 3,
+            commit_id: commits[1].commit_id.clone(),
+        })?;
+        let anchor = serde_json::to_value(&commits[1])?;
+        ensure!(
+            after["verified_commit_stream_cursors"][&key] == head
+                && after["verified_commit_stream_anchors"][&key] == anchor,
+            "recovery failed to install the authentic repaired Circle tail"
+        );
+        for (sibling, old) in before["verified_commit_stream_cursors"]
+            .as_object()
+            .context("prior streams")?
+        {
+            if sibling != &key && sibling != &serde_json::to_string(&rail.healthy_stream)? {
+                ensure!(
+                    after["verified_commit_stream_cursors"][sibling] == *old
+                        && after["verified_commit_stream_anchors"][sibling]
+                            == before["verified_commit_stream_anchors"][sibling],
+                    "gap recovery reset or advanced an unrelated stream"
+                );
+            }
+        }
+        let cursor = host
+            .state_store()
+            .sync_cursor()
+            .context("repaired cursor")?;
+        ensure!(
+            cursor != rail.cursor,
+            "repaired tail made no durable progress"
+        );
+        let cut = inkson::conformance::retained_realm_current(
+            &host.state_store(),
+            &controller.account,
+            realm,
+        )
+        .await?;
+        ensure!(
+            cut["entries"]
+                .as_array()
+                .context("repaired current")?
+                .iter()
+                .any(|row| row["revision"]["commit_id"] == commits[1].commit_id.as_str()),
+            "repaired current omits the exact accepted successor"
+        );
+        drop(host);
+        let expected = self.directory.path().join("expected-gap-cut.json");
+        std::fs::write(
+            &expected,
+            serde_json::to_vec(&serde_json::json!({
+            "account":controller.account, "realm":realm, "cut":cut, "cursor":cursor,
+            "stream_key":key, "head":head, "anchor":anchor,
+            "stream_heads":after["verified_commit_stream_cursors"],
+            "stream_anchors":after["verified_commit_stream_anchors"] }))?,
+        )?;
+        let output = std::process::Command::new(&self.reader)
+            .arg(path)
+            .arg(expected)
+            .output()?;
+        ensure!(
+            output.status.success(),
+            "fresh-process recovered tail differs: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        cotest::transcripts::record_vector_event(
+            "sync.stream_tail_incomplete.isolated_resume",
+            &serde_json::json!({"stream_ref":stream}),
+            &serde_json::json!({"assertions":12,"actual_driver_retry":true}),
+            &serde_json::json!({"canonical_case_credit":false,"complete_suite_claim":false,
+                "missing_boundary":"signed readable rows at positions zero and two with position one absent"}),
+        );
         Ok(())
     }
 }
@@ -1552,6 +1864,22 @@ pub async fn run_sync_production_cases(
 ) -> Result<Vec<super::CaseExecutionResult>> {
     super::run_sync_fixture_suite()?;
     let fixture = cotest::conformance::load_fixture_value("client-sync-fixture.json")?;
+    let gap_cases = fixture["stream_tails"]
+        .as_array()
+        .context("gap fixture")?
+        .iter()
+        .filter(|case| case["name"] == STREAM_GAP_CASE)
+        .collect::<Vec<_>>();
+    ensure!(
+        gap_cases.len() == 1
+            && gap_cases[0]["expected"] == "rejected"
+            && gap_cases[0]["expected_client_action"] == "stop_this_stream_and_refetch_snapshot"
+            && gap_cases[0]["other_streams_reset"] == false
+            && gap_cases[0]["to_device_acks_reset"] == false
+            && gap_cases[0]["commits"][0]["stream_position"] == 0
+            && gap_cases[0]["commits"][1]["stream_position"] == 2,
+        "canonical unexplained stream gap or recovery expectations drifted"
+    );
     let circle_cases = fixture["stream_tails"]
         .as_array()
         .context("Circle tail fixture")?
