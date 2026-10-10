@@ -17,10 +17,11 @@ const CASES: [&str; 3] = [
     "sidecar_missing_tail_does_not_install_newer_current_or_checkpoint",
     "sidecar_projection_transaction_failure_preserves_prior_cut",
 ];
-const RECOVERY_CASES: [&str; 3] = [
+const RECOVERY_CASES: [&str; 4] = [
     "resume_from_the_last_durable_account_cursor",
     "cursor_expired_redoes_only_that_surface_baseline",
     "cursor_integrity_invalid_redoes_only_that_surface_baseline",
+    "foreign_station_cursor_redoes_only_that_surface_baseline",
 ];
 const STREAM_AND_DELIVERY_CASES: [&str; 3] = [
     "sidecar_stream_tail_is_independent",
@@ -873,13 +874,7 @@ impl Probe {
             "SELECT row_to_json(t)::text FROM device_message_ack_tokens t WHERE ack_token=$1 AND consumed_at IS NULL AND expires_at>now()",
             &[&token],
         )?;
-        for (index, name) in RECOVERY_CASES
-            .into_iter()
-            .chain(std::iter::once(
-                "foreign_station_cursor_recovery_diagnostic",
-            ))
-            .enumerate()
-        {
+        for (index, name) in RECOVERY_CASES.into_iter().enumerate() {
             let cursor = host
                 .state_store()
                 .sync_cursor()
@@ -989,7 +984,7 @@ impl Probe {
                     assertions: 5,
                 });
             }
-            if index == 3 {
+            if index >= 2 {
                 let (snapshot, history) = inkson::conformance::retained_sidecar_cut(
                     &host.state_store(),
                     &genesis.scope_ref,
@@ -997,11 +992,11 @@ impl Probe {
                 let cursor = host
                     .state_store()
                     .sync_cursor()
-                    .context("foreign recovery checkpoint")?;
+                    .context("cursor recovery checkpoint")?;
                 let evidence = self
                     .directory
                     .path()
-                    .join("expected-foreign-cursor-cut.json");
+                    .join(format!("expected-recovery-{index}-cursor-cut.json"));
                 std::fs::write(
                     &evidence,
                     serde_json::to_vec(&(&genesis.scope_ref, snapshot, history, cursor))?,
@@ -1012,23 +1007,24 @@ impl Probe {
                     .output()?;
                 ensure!(
                     output.status.success(),
-                    "foreign cursor fresh-process readback failed: {}",
+                    "{name}: cursor fresh-process readback failed: {}",
                     String::from_utf8_lossy(&output.stderr)
                 );
+            }
+            if index == 3 {
                 cotest::transcripts::record_vector_event(
-                    "sync.foreign_station_cursor.diagnostic",
+                    "sync.foreign_station_cursor.production",
                     &serde_json::json!({"fixture":"client-sync-fixture.json", "foreign_station_issued":true}),
-                    &serde_json::json!({"canonical_case":"cursor_unrecognized_redoes_only_that_surface_baseline", "registry_outcome":"cursor_unrecognized"}),
+                    &serde_json::json!({"canonical_case":name, "registry_outcome":"cursor_integrity_invalid"}),
                     &serde_json::json!({"station_outcome":"cursor_integrity_invalid", "baseline_rebuilt":true,
                         "private_cut_retained":true, "issued_ack_retained":true, "fresh_process_readback":true,
-                        "canonical_case_credit":false, "complete_suite_claim":false}),
+                        "canonical_case_credit":true, "complete_suite_claim":false}),
                 );
-            } else {
-                self.results.borrow_mut().push(super::CaseExecutionResult {
-                    case_id: name.into(),
-                    assertions: 10,
-                });
             }
+            self.results.borrow_mut().push(super::CaseExecutionResult {
+                case_id: name.into(),
+                assertions: if index == 3 { 13 } else { 10 },
+            });
         }
         self.durable_ack(
             controller,
@@ -2777,7 +2773,12 @@ pub async fn run_sync_production_cases(
             case["expected"] == if index == 0 { "resume" } else { "reset" }
                 && case["baseline_redone"] == (index != 0)
                 && case["server_outcome"]
-                    == ["accepted", "cursor_expired", "cursor_integrity_invalid"][index],
+                    == [
+                        "accepted",
+                        "cursor_expired",
+                        "cursor_integrity_invalid",
+                        "cursor_integrity_invalid"
+                    ][index],
             "{name}: reconnect expectations drifted from production execution"
         );
         if index != 0 {
@@ -2786,23 +2787,35 @@ pub async fn run_sync_production_cases(
                 "{name}: refused cursor must be discarded"
             );
         }
-        if index <= 1 {
-            ensure!(
-                case["delivery_acks_invalidated"] == false,
-                "{name}: recovery must preserve delivery ACKs"
-            );
-        }
-        if index == 1 {
+        ensure!(
+            case["delivery_acks_invalidated"] == false,
+            "{name}: recovery must preserve delivery ACKs"
+        );
+        if index >= 1 {
             ensure!(
                 case["local_verified_commits_deleted"] == false
                     && case["mls_private_state_deleted"] == false,
                 "{name}: recovery must preserve verified commits and private MLS state"
             );
         }
-        if index == 2 {
+        if index >= 2 {
             ensure!(
                 case["server_state_advanced"] == false,
                 "{name}: a refused cursor must have zero server advancement"
+            );
+        }
+        if index == 3 {
+            ensure!(
+                case["cursor_origin"] == "distinct_station_valid_issued_binding"
+                    && case["fresh_process_readback"] == true,
+                "{name}: foreign issuance and durable recovery proof must remain independent"
+            );
+        }
+        if index == 2 {
+            ensure!(
+                case["cursor_origin"] == "local_unknown_tampered_handle"
+                    && case["fresh_process_readback"] == true,
+                "{name}: local tamper must retain independent durable recovery proof"
             );
         }
     }

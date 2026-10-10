@@ -943,9 +943,7 @@ fn reconnect_verdict(server_outcome: &str) -> Result<&'static str> {
         anyhow!("reconnect outcome {server_outcome} is not a registered wire error code")
     })?;
     Ok(match code {
-        ErrorCode::CursorExpired
-        | ErrorCode::CursorIntegrityInvalid
-        | ErrorCode::CursorUnrecognized => "reset",
+        ErrorCode::CursorExpired | ErrorCode::CursorIntegrityInvalid => "reset",
         _ => "resume",
     })
 }
