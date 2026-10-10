@@ -29,9 +29,30 @@ pub async fn run() -> Result<()> {
 pub async fn run_with_genesis_observer(
     observer: Option<&dyn crate::scenarios::mls_lifecycle_live::MlsGenesisObserver>,
 ) -> Result<()> {
+    run_with_observers(observer, None).await
+}
+
+#[async_trait::async_trait(?Send)]
+pub trait SidecarSyncObserver {
+    async fn before_genesis(
+        &self,
+        controller: &Member,
+        scope: &arkret_wire::ScopeRef,
+    ) -> Result<()>;
+    async fn after_genesis(&self, controller: &Member, genesis: &arkret_wire::Event) -> Result<()>;
+}
+
+pub async fn run_with_sync_observer(observer: &dyn SidecarSyncObserver) -> Result<()> {
+    run_with_observers(None, Some(observer)).await
+}
+
+async fn run_with_observers(
+    observer: Option<&dyn crate::scenarios::mls_lifecycle_live::MlsGenesisObserver>,
+    sync_observer: Option<&dyn SidecarSyncObserver>,
+) -> Result<()> {
     let Some(database) = database(GROUP)? else {
         ensure!(
-            observer.is_none(),
+            observer.is_none() && sync_observer.is_none(),
             "timestamp evidence requires isolated PostgreSQL"
         );
         return Ok(());
@@ -47,7 +68,7 @@ pub async fn run_with_genesis_observer(
     .await?
     else {
         ensure!(
-            observer.is_none(),
+            observer.is_none() && sync_observer.is_none(),
             "timestamp evidence requires a real Soland binary"
         );
         return skip_or_fail(GROUP, "prebuilt Soland unavailable");
@@ -321,6 +342,9 @@ pub async fn run_with_genesis_observer(
             .before(&controller, &mut genesis, &database.connect_url)
             .await?;
     }
+    if let Some(probe) = sync_observer {
+        probe.before_genesis(&controller, &scope).await?;
+    }
     let accepted_genesis = submit_and_expect_commit(
         &controller.client,
         &controller.account,
@@ -328,6 +352,9 @@ pub async fn run_with_genesis_observer(
         &genesis,
     )
     .await?;
+    if let Some(probe) = sync_observer {
+        probe.after_genesis(&controller, &genesis).await?;
+    }
     if let Some(probe) = observer {
         probe
             .after(&controller, &genesis, &database.connect_url)
