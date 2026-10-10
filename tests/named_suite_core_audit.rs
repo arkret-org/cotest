@@ -27,7 +27,8 @@ fn core_named_suite_audit_keeps_client_runners_explicitly_deferred() -> Result<(
         report.deferred_client_entrypoints,
         [
             "ak.suite.account.blocklist_projection.v1",
-            "ak.suite.webrtc.media_plaintext_downgrade.v1"
+            "ak.suite.webrtc.media_plaintext_downgrade.v1",
+            "ak.suite.sync.client_account_stream.v1"
         ]
     );
     Ok(())

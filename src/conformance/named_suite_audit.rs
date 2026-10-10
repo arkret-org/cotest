@@ -50,11 +50,44 @@ use super::{
     run_relation_structural_realm_suite, run_sdk_precheck_suite_diagnostic,
     run_security_transaction_resilience_joint_gate, run_session_grant_issuer_ledger_suite,
     run_signal_sequence_high_water_suite, run_strand_watch_current_suite, run_string_profile_suite,
-    run_sync_fixture_suite, run_view_write_contract_suite, run_websocket_binding_suite,
-    spec_artifacts_root,
+    run_view_write_contract_suite, run_websocket_binding_suite, spec_artifacts_root,
 };
 
 const ACCOUNT_STATUS_ENTRYPOINT: &str = "ak.suite.account_status.issuer_ledger.v1";
+pub const SYNC_CLIENT_ENTRYPOINT: &str = "ak.suite.sync.client_account_stream.v1";
+
+/// Sync's canonical cases live in four semantic sections rather than cases[].
+/// Partial native execution is visible evidence, never a complete-suite claim.
+pub fn missing_sync_production_cases(
+    execution: &SuiteExecutionResult,
+    fixture: &Value,
+) -> Result<Vec<String>> {
+    ensure!(
+        execution.entrypoint == SYNC_CLIENT_ENTRYPOINT
+            && execution.fixture == "client-sync-fixture.json"
+            && fixture
+                .pointer("/runner/entrypoint")
+                .and_then(Value::as_str)
+                == Some(SYNC_CLIENT_ENTRYPOINT),
+        "Sync execution does not name its canonical suite and fixture"
+    );
+    let mut cases = Vec::new();
+    for section in [
+        "stream_tails",
+        "checkpoint_ordering",
+        "reconnect",
+        "delivery_cancellation",
+    ] {
+        cases.extend_from_slice(
+            fixture
+                .get(section)
+                .and_then(Value::as_array)
+                .filter(|cases| !cases.is_empty())
+                .ok_or_else(|| anyhow!("Sync fixture has no {section} cases"))?,
+        );
+    }
+    execution.missing_against_cases(&cases)
+}
 
 /// Exact acknowledged gap ledger. This is deliberately closed: adding or
 /// renaming a canonical named suite cannot remain invisible merely because the
@@ -114,7 +147,7 @@ enum Runner {
     EvidenceMapped(fn() -> Result<()>),
 }
 
-const RUNNERS: [(&str, Runner); 52] = [
+const RUNNERS: [(&str, Runner); 51] = [
     (
         super::MANAGED_GOVERNANCE_ENTRYPOINT,
         Runner::EvidenceMapped(super::run_managed_governance_suite),
@@ -239,10 +272,6 @@ const RUNNERS: [(&str, Runner); 52] = [
         Runner::EvidenceMapped(run_signal_sequence_high_water_suite),
     ),
     (
-        "ak.suite.sync.client_account_stream.v1",
-        Runner::EvidenceMapped(run_sync_fixture_suite),
-    ),
-    (
         ACCOUNT_STATUS_ENTRYPOINT,
         Runner::EvidenceMapped(run_account_status_issuer_ledger_vector),
     ),
@@ -354,11 +383,17 @@ pub struct NamedSuiteAuditReport {
     pub unproved_entrypoints: Vec<String>,
     pub failed_executions: Vec<(String, String, String)>,
     pub decision_point_gaps: Vec<DecisionPointGap>,
+    pub missing_production_cases: Vec<CaseRef>,
 }
 
 impl NamedSuiteAuditReport {
     /// A diagnostic audit may finish while evidence is missing. A full claim may not.
     pub fn assert_complete(&self) -> Result<()> {
+        ensure!(
+            self.missing_production_cases.is_empty(),
+            "production cases were not executed: {:?}",
+            self.missing_production_cases
+        );
         ensure!(
             self.failed_executions.is_empty(),
             "named-suite executions failed: {:?}",
@@ -388,7 +423,7 @@ impl NamedSuiteAuditReport {
     }
 }
 
-/// Execute the SDK/server registry. UI callers must supply both explicit client runners.
+/// Execute the SDK/server registry. Native callers supply explicit client runners.
 pub fn run_named_suite_audit() -> Result<NamedSuiteAuditReport> {
     run_named_suite_audit_with_clients(&[])
 }
@@ -408,9 +443,10 @@ pub fn run_named_suite_audit_with_clients(
 pub fn inspect_named_suite_execution_with_clients(
     client_runners: &[ClientNamedSuiteRunner],
 ) -> Result<NamedSuiteAuditReport> {
-    const CLIENT_ENTRYPOINTS: [&str; 2] = [
+    const CLIENT_ENTRYPOINTS: [&str; 3] = [
         "ak.suite.account.blocklist_projection.v1",
         "ak.suite.webrtc.media_plaintext_downgrade.v1",
+        SYNC_CLIENT_ENTRYPOINT,
     ];
     let declared_clients = client_runners
         .iter()
@@ -418,9 +454,14 @@ pub fn inspect_named_suite_execution_with_clients(
         .collect::<BTreeSet<_>>();
     ensure!(
         client_runners.is_empty()
-            || (client_runners.len() == 2
-                && declared_clients == CLIENT_ENTRYPOINTS.into_iter().collect()),
-        "full audit requires both exact client runners"
+            || ((client_runners.len() == 2 || client_runners.len() == 3)
+                && declared_clients.len() == client_runners.len()
+                && declared_clients.contains(CLIENT_ENTRYPOINTS[0])
+                && declared_clients.contains(CLIENT_ENTRYPOINTS[1])
+                && declared_clients
+                    .iter()
+                    .all(|name| CLIENT_ENTRYPOINTS.contains(name))),
+        "audit requires the exact client runners, with optional Sync production evidence"
     );
     let fixture_dir = spec_artifacts_root().join("fixtures");
     let mut all_fixtures = BTreeMap::new();
@@ -498,6 +539,7 @@ pub fn inspect_named_suite_execution_with_clients(
     let mut executed_cases = BTreeSet::new();
     let mut unproved = Vec::new();
     let mut failed_executions = Vec::new();
+    let mut missing_production_cases = Vec::new();
     for (entrypoint, runner) in RUNNERS.iter().copied().chain(
         client_runners
             .iter()
@@ -517,7 +559,27 @@ pub fn inspect_named_suite_execution_with_clients(
             .get(entrypoint)
             .ok_or_else(|| anyhow!("registered runner {entrypoint} has no canonical fixture"))?
         {
-            let result = execute_runner(entrypoint, runner, fixture).and_then(|result| {
+            let result = (if entrypoint == SYNC_CLIENT_ENTRYPOINT {
+                match runner {
+                    Runner::Cases(run) => run().and_then(|execution| {
+                        let missing = missing_sync_production_cases(&execution, fixture)?;
+                        if !missing.is_empty() {
+                            unproved.push(entrypoint.to_owned());
+                            missing_production_cases.extend(missing.into_iter().map(|case_id| {
+                                CaseRef {
+                                    fixture_ref: format!("fixtures/{file_name}"),
+                                    case_id,
+                                }
+                            }));
+                        }
+                        Ok(Some(execution))
+                    }),
+                    _ => Err(anyhow!("Sync requires a production case runner")),
+                }
+            } else {
+                execute_runner(entrypoint, runner, fixture)
+            })
+            .and_then(|result| {
                 if let Some(result) = &result {
                     ensure!(
                         result.fixture == file_name.as_str(),
@@ -564,12 +626,13 @@ pub fn inspect_named_suite_execution_with_clients(
         unproved_entrypoints: unproved,
         failed_executions,
         decision_point_gaps,
+        missing_production_cases,
         unwired_entrypoints: unwired,
-        deferred_client_entrypoints: if client_runners.is_empty() {
-            CLIENT_ENTRYPOINTS.iter().map(|x| (*x).to_owned()).collect()
-        } else {
-            Vec::new()
-        },
+        deferred_client_entrypoints: CLIENT_ENTRYPOINTS
+            .iter()
+            .filter(|name| !declared_clients.contains(**name))
+            .map(|name| (*name).to_owned())
+            .collect(),
     })
 }
 
@@ -638,6 +701,43 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn sync_partial_production_results_keep_every_other_case_open() -> Result<()> {
+        let fixture = super::super::load_fixture_value("client-sync-fixture.json")?;
+        let id = "sidecar_history_current_projection_same_cut_before_checkpoint";
+        let mut execution = SuiteExecutionResult {
+            entrypoint: SYNC_CLIENT_ENTRYPOINT,
+            fixture: "client-sync-fixture.json",
+            cases: vec![super::super::CaseExecutionResult {
+                case_id: id.into(),
+                assertions: 1,
+            }],
+        };
+        let missing = missing_sync_production_cases(&execution, &fixture)?;
+        let declared = [
+            "stream_tails",
+            "checkpoint_ordering",
+            "reconnect",
+            "delivery_cancellation",
+        ]
+        .into_iter()
+        .map(|section| fixture[section].as_array().unwrap().len())
+        .sum::<usize>();
+        assert_eq!(missing.len(), declared - 1);
+        assert!(!missing.iter().any(|name| name == id));
+        execution.cases.push(execution.cases[0].clone());
+        assert!(missing_sync_production_cases(&execution, &fixture).is_err());
+        execution.cases.pop();
+        execution.cases[0].assertions = 0;
+        assert!(missing_sync_production_cases(&execution, &fixture).is_err());
+        execution.cases[0].assertions = 1;
+        execution.cases[0].case_id = "not_in_the_canonical_fixture".into();
+        assert!(missing_sync_production_cases(&execution, &fixture).is_err());
+        execution.fixture = "unrelated.json";
+        assert!(missing_sync_production_cases(&execution, &fixture).is_err());
+        Ok(())
+    }
 
     fn passing_evidence_runner() -> Result<()> {
         Ok(())

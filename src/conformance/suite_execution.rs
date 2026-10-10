@@ -22,6 +22,45 @@ pub struct SuiteExecutionResult {
 }
 
 impl SuiteExecutionResult {
+    /// Validate partial production evidence without promoting absent cases to
+    /// executed ones. The returned ids remain obligations of the full suite.
+    pub fn missing_against_cases(&self, declared: &[Value]) -> Result<Vec<String>> {
+        let mut ids = std::collections::BTreeSet::new();
+        let mut ordered = Vec::new();
+        for case in declared {
+            let id = case
+                .get("name")
+                .and_then(Value::as_str)
+                .ok_or_else(|| anyhow::anyhow!("{} has an unnamed case", self.fixture))?;
+            if !ids.insert(id) {
+                bail!("{} declares duplicate case id {id}", self.fixture);
+            }
+            ordered.push(id);
+        }
+        let mut executed = std::collections::BTreeSet::new();
+        for case in &self.cases {
+            if !ids.contains(case.case_id.as_str()) || !executed.insert(case.case_id.as_str()) {
+                bail!(
+                    "{} has an unknown or duplicate execution {}",
+                    self.entrypoint,
+                    case.case_id
+                );
+            }
+            if case.assertions == 0 {
+                bail!(
+                    "{} case {} returned no executed assertions",
+                    self.entrypoint,
+                    case.case_id
+                );
+            }
+        }
+        Ok(ordered
+            .into_iter()
+            .filter(|id| !executed.contains(id))
+            .map(str::to_owned)
+            .collect())
+    }
+
     pub fn assert_complete_against(&self, fixture: &Value) -> Result<()> {
         let declared = fixture
             .get("cases")

@@ -18,6 +18,50 @@ const CASES: [&str; 3] = [
     "sidecar_projection_transaction_failure_preserves_prior_cut",
 ];
 
+pub fn run_sync_client_production_suite() -> Result<super::SuiteExecutionResult> {
+    std::thread::Builder::new()
+        .stack_size(32 * 1024 * 1024)
+        .spawn(|| -> Result<super::SuiteExecutionResult> {
+            let executable = std::env::current_exe()?;
+            let parent = executable
+                .parent()
+                .context("native runner has no directory")?;
+            let directory = if parent.file_name().is_some_and(|name| name == "deps") {
+                parent
+                    .parent()
+                    .context("test runner has no Cargo binary directory")?
+            } else {
+                parent
+            };
+            let reader = directory.join(format!(
+                "cotest-inkson-checkpoint-readback{}",
+                std::env::consts::EXE_SUFFIX
+            ));
+            ensure!(
+                reader.is_file(),
+                "Sync fresh-process readback executable is missing: {}",
+                reader.display()
+            );
+            let _transcript = cotest::transcripts::init_transcript_writer(
+                "sidecar-checkpoint-production",
+                Some(&directory.join("conformance-transcripts")),
+            )?;
+            let runtime = tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(2)
+                .thread_stack_size(32 * 1024 * 1024)
+                .enable_all()
+                .build()?;
+            let cases = runtime.block_on(run_sidecar_checkpoint_production_cases(&reader))?;
+            Ok(super::SuiteExecutionResult {
+                entrypoint: cotest::conformance::SYNC_CLIENT_ENTRYPOINT,
+                fixture: "client-sync-fixture.json",
+                cases,
+            })
+        })?
+        .join()
+        .map_err(|_| anyhow::anyhow!("Sync production evidence worker panicked"))?
+}
+
 struct Probe {
     directory: tempfile::TempDir,
     reader: std::path::PathBuf,
