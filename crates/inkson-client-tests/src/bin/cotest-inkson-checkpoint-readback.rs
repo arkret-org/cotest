@@ -1,4 +1,4 @@
-//! Fresh-process readback of an already admitted native private cut.
+//! Fresh-process readback of an already admitted native current and stream cut.
 
 use anyhow::{Context, Result, ensure};
 
@@ -24,6 +24,14 @@ fn main() -> Result<()> {
             cut == evidence["cut"],
             "fresh process changed the ordered Realm current cut"
         );
+        if let Some(key) = evidence["stream_key"].as_str() {
+            let state = serde_json::to_value(store.load())?;
+            ensure!(
+                state["verified_commit_stream_cursors"][key] == evidence["head"]
+                    && state["verified_commit_stream_anchors"][key] == evidence["anchor"],
+                "fresh process lost the exact verified Realm stream checkpoint or signed anchor"
+            );
+        }
         return Ok(());
     }
     let (scope, snapshot, history, cursor): (

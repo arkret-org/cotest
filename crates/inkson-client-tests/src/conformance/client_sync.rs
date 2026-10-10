@@ -22,9 +22,10 @@ const RECOVERY_CASES: [&str; 3] = [
     "cursor_expired_redoes_only_that_surface_baseline",
     "cursor_integrity_invalid_redoes_only_that_surface_baseline",
 ];
-const STREAM_AND_DELIVERY_CASES: [&str; 2] = [
+const STREAM_AND_DELIVERY_CASES: [&str; 3] = [
     "sidecar_stream_tail_is_independent",
     "cursor_advance_alone_does_not_cancel_a_delivery",
+    "realm_stream_tail_is_continuous",
 ];
 const ACK_CASES: [&str; 2] = [
     "explicit_ack_after_durable_processing_removes_the_delivery",
@@ -1154,6 +1155,49 @@ impl Probe {
                 && commit.previous_commit_ref.as_ref() == Some(&prior_head.commit_id),
             "membership delta is not the immediate authentic successor of the held baseline"
         );
+        let mut prefix = old
+            .frames
+            .iter()
+            .filter_map(|frame| frame.realms.as_ref())
+            .filter_map(|realms| realms.entries.get(realm.as_str()))
+            .flat_map(|entry| entry.committed_events.iter().flatten())
+            .map(|row| row.commit())
+            .filter(|row| row.stream_ref == commit.stream_ref)
+            .collect::<Vec<_>>();
+        prefix.sort_by_key(|row| row.stream_position);
+        ensure!(
+            prefix.len() as u64 == prior_head.stream_position + 1
+                && prefix.first().is_some_and(
+                    |row| row.stream_position == 0 && row.previous_commit_ref.is_none()
+                ),
+            "Realm baseline is not a complete original prefix from position zero"
+        );
+        ensure!(
+            prefix.windows(2).all(
+                |pair| pair[1].stream_position == pair[0].stream_position + 1
+                    && pair[1].previous_commit_ref.as_ref() == Some(&pair[0].commit_id)
+            ),
+            "Realm baseline has an unexplained position or predecessor gap"
+        );
+        ensure!(
+            old.frames
+                .iter()
+                .filter_map(|frame| frame.realms.as_ref())
+                .filter_map(|realms| realms.entries.get(realm.as_str()))
+                .flat_map(|entry| entry.streams.iter().flatten())
+                .any(|window| window.stream_ref == commit.stream_ref
+                    && window.preview_only != Some(true)),
+            "Realm prefix was delivered only as an unverified preview"
+        );
+        let stream_key = serde_json::to_string(&commit.stream_ref)?;
+        let before_state = state(&host)?;
+        ensure!(
+            before_state["verified_commit_stream_cursors"][&stream_key]
+                == serde_json::to_value(prior_head)?
+                && before_state["verified_commit_stream_anchors"][&stream_key]
+                    == serde_json::to_value(prefix.last().context("Realm original anchor")?)?,
+            "ordinary Account driver did not install the exact verified Realm prefix checkpoint"
+        );
         let incremental = controller
             .client
             .sdk()
@@ -1183,6 +1227,18 @@ impl Probe {
             &realm,
         )
         .await?;
+        let head = serde_json::to_value(arkret_wire::CommitStreamHead {
+            stream_ref: commit.stream_ref.clone(),
+            stream_position: commit.stream_position,
+            commit_id: commit.commit_id.clone(),
+        })?;
+        let anchor = serde_json::to_value(&commit)?;
+        let after_state = state(&host)?;
+        ensure!(
+            after_state["verified_commit_stream_cursors"][&stream_key] == head
+                && after_state["verified_commit_stream_anchors"][&stream_key] == anchor,
+            "authentic Realm delta did not advance the verified checkpoint and signed original together"
+        );
         ensure!(
             newer["entries"] != before["entries"],
             "Realm delta changed no durable current row"
@@ -1265,7 +1321,8 @@ impl Probe {
         std::fs::write(
             &evidence,
             serde_json::to_vec(&serde_json::json!({
-                "account":controller.account, "realm":realm, "cut":completed, "cursor":durable_cursor
+                "account":controller.account, "realm":realm, "cut":completed, "cursor":durable_cursor,
+                "stream_key":stream_key, "head":head, "anchor":anchor
             }))?,
         )?;
         let output = std::process::Command::new(&self.reader)
@@ -1280,6 +1337,10 @@ impl Probe {
         self.results.borrow_mut().push(super::CaseExecutionResult {
             case_id: BASELINE_CASE.into(),
             assertions: 9,
+        });
+        self.results.borrow_mut().push(super::CaseExecutionResult {
+            case_id: STREAM_AND_DELIVERY_CASES[2].into(),
+            assertions: 7,
         });
         Ok(())
     }
@@ -1401,6 +1462,28 @@ pub async fn run_sync_production_cases(
                     && commits[0]["previous_commit_ref"].is_null()),
         "independent Sidecar tail case drifted from its actual authenticated context unit"
     );
+    let realm_tail = fixture["stream_tails"]
+        .as_array()
+        .context("Realm tail fixtures")?
+        .iter()
+        .find(|case| case["name"] == STREAM_AND_DELIVERY_CASES[2])
+        .context("Realm continuous tail fixture")?;
+    let commits = realm_tail["commits"]
+        .as_array()
+        .context("Realm fixture prefix")?;
+    ensure!(
+        realm_tail["stream_ref"]["kind"] == "realm"
+            && realm_tail["expected"] == "accepted"
+            && commits.len() >= 2
+            && commits[0]["stream_position"] == 0
+            && commits[0]["previous_commit_ref"].is_null()
+            && commits.windows(2).all(|pair| pair[0]["stream_position"]
+                .as_u64()
+                .and_then(|position| position.checked_add(1))
+                == pair[1]["stream_position"].as_u64()
+                && pair[1]["previous_commit_ref"] == pair[0]["commit_id"]),
+        "Realm continuous tail fixture drifted"
+    );
     let delivery = fixture["delivery_cancellation"]
         .as_array()
         .context("delivery cases")?
@@ -1506,6 +1589,10 @@ pub async fn run_sync_production_cases(
                 "Station/PG recipient queue + Inkson durable journal + exact disk readback + explicit SDK ACK"
             } else if QUEUE_CASES.contains(&case.case_id.as_str()) {
                 "Station/PG Account delivery + paginated shared queue + real content expiry + quota rejection + durable SDK ACK"
+            } else if case.case_id == STREAM_AND_DELIVERY_CASES[2] {
+                "Station/PG original Realm prefix + actual Account driver + exact verified stream checkpoint and signed anchor + fresh-process readback"
+            } else if case.case_id == BASELINE_CASE {
+                "Station/PG Realm join + held baseline completion + durable current merge + fresh-process readback"
             } else { "AccountSubscription + InksonAccountProjector + Station/PG + private MLS checkpoint + unacknowledged queue" }, "complete_suite_claim":false}),
         );
     }
