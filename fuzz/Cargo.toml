@@ -7,8 +7,10 @@ rust-version.workspace = true
 
 # P5.1 — cargo-fuzz crate that hosts the two CI fuzz targets
 # (envelope_fuzz / realm_state_snapshot_fuzz). Each target wraps the
-# matching entry point in `cotest::fuzz::*` so the host crate keeps the
-# arbitrary-derived input types and validator wiring.
+# matching shared module in `../src/fuzz/` so the arbitrary-derived input
+# types and SDK validator wiring stay identical to the native smoke tests.
+# The fuzz targets depend only on their SDK validators, without compiling
+# unrelated live-service implementations under sanitizer instrumentation.
 #
 # This sub-crate is intentionally NOT part of the cotest workspace
 # (`cargo check --workspace` skips it) — cargo-fuzz manages its own
@@ -39,6 +41,10 @@ doc = false
 bench = false
 
 [dependencies]
-cotest = { path = ".." }
+arbitrary = { version = "1.4", features = ["derive"] }
+arkret-schema = { path = "../../arkret-rust-sdk/crates/schema", default-features = false }
+arkret-schema-conformance = { path = "../../arkret-rust-sdk/crates/schema-conformance", default-features = false }
+arkret-wire = { path = "../../arkret-rust-sdk/crates/wire", features = ["test-support"] }
 libfuzzer-sys = "0.4"
+serde_json = "1.0.151"
 # Standalone crate; cargo-fuzz convention.

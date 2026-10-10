@@ -1,12 +1,15 @@
 //! P5.1 — libFuzzer target for the wire-envelope harness.
 //!
-//! Rotates through the envelope shapes in `cotest::fuzz::envelope_fuzz` using
+//! Rotates through the same envelope harness as the native smoke tests using
 //! the first byte of the input as a discriminator so libFuzzer's coverage
 //! feedback drives each branch. Any panic / unwrap / overflow that escapes the
 //! validator is a finding — `libfuzzer-sys` will abort and record the input.
 #![no_main]
 
-use cotest::fuzz::envelope_fuzz::{fuzz_event_envelope, fuzz_signal_envelope};
+#[path = "../../src/fuzz/mod.rs"]
+pub mod fuzz;
+
+use fuzz::envelope_fuzz::{fuzz_event_envelope, fuzz_signal_envelope};
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &[u8]| {
@@ -15,11 +18,12 @@ fuzz_target!(|data: &[u8]| {
     }
     let (selector, payload) = data.split_first().expect("non-empty checked above");
     // Discriminate so libFuzzer can credit branch coverage per envelope shape;
-    // the validators all return `Result<(), String>` on panic — surfacing
-    // means the inner `catch_unwind` already converted a panic into Err.
-    let _ = if selector % 2 == 0 {
+    // Ordinary validation rejection returns Ok; Err is a caught panic and
+    // must escape so libFuzzer records a finding and its reproducing input.
+    let result = if selector % 2 == 0 {
         fuzz_event_envelope(payload)
     } else {
         fuzz_signal_envelope(payload)
     };
+    result.expect("envelope validator panicked");
 });
