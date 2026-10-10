@@ -22,10 +22,11 @@ const RECOVERY_CASES: [&str; 3] = [
     "cursor_expired_redoes_only_that_surface_baseline",
     "cursor_integrity_invalid_redoes_only_that_surface_baseline",
 ];
-const STREAM_AND_DELIVERY_CASES: [&str; 3] = [
+const STREAM_AND_DELIVERY_CASES: [&str; 4] = [
     "sidecar_stream_tail_is_independent",
     "cursor_advance_alone_does_not_cancel_a_delivery",
     "realm_stream_tail_is_continuous",
+    "circle_stream_tail_is_independent",
 ];
 const ACK_CASES: [&str; 2] = [
     "explicit_ack_after_durable_processing_removes_the_delivery",
@@ -1326,7 +1327,7 @@ impl Probe {
             }))?,
         )?;
         let output = std::process::Command::new(&self.reader)
-            .arg(path)
+            .arg(&path)
             .arg(evidence)
             .output()?;
         ensure!(
@@ -1341,6 +1342,179 @@ impl Probe {
         self.results.borrow_mut().push(super::CaseExecutionResult {
             case_id: STREAM_AND_DELIVERY_CASES[2].into(),
             assertions: 7,
+        });
+        self.circle_tail(controller, member, &realm, &path).await?;
+        Ok(())
+    }
+
+    async fn circle_tail(
+        &self,
+        controller: &Member,
+        member: &Member,
+        realm: &arkret_wire::RealmId,
+        path: &std::path::Path,
+    ) -> Result<()> {
+        use arkret_models_collaboration::governance::circle::CircleCreateRequestBody;
+        use arkret_wire::{CircleId, CommitStreamRef, EventAdmissionSubmission, EventKind};
+        let mut create = controller.client.author_event(realm.as_str(), EventKind::CircleCreate.as_str(),
+            serde_json::json!({"object":{
+                "schema":"ak.schema.circle.v1", "realm_id":realm, "title":"Sync independent Circle",
+                "summary":"Independent stream checkpoint",
+                "display":{"short_name":"Sync Circle", "color_token":"blue", "symbol":{"glyph":"lock"}},
+                "directory_visibility":"realm_members", "join_rule":"public", "history_access":"since_join",
+                "state":"active", "created_by":controller.actor
+            }})).await?;
+        create
+            .payload
+            .get_mut("object")
+            .context("Circle create object")?["created_at"] = serde_json::json!(
+            arkret_canonical::format_timestamp_canonical(create.created_at)
+        );
+        cotest::harness::refresh_typed_event_proof(&mut create)?;
+        let circle = CircleId::from_event_id(&create.event_id);
+        let view = controller
+            .client
+            .sdk()
+            .circle_create(&CircleCreateRequestBody {
+                create_event: EventAdmissionSubmission::new(create),
+            })
+            .await?;
+        ensure!(
+            view.circle_id == circle,
+            "Circle create changed its Event-derived identity"
+        );
+        cotest::scenarios::circle_parent_membership_live::grant_circle_actions(
+            controller,
+            realm.as_str(),
+            &circle,
+            member,
+        )
+        .await?;
+        let host = NativeAccountHost::new_for_realm(
+            controller.client.sdk(),
+            controller.account.clone(),
+            controller.device.clone(),
+            inkson::LocalStateStore::with_path(path),
+            realm.clone(),
+        )
+        .await?;
+        host.catch_up_selected_realm_until_complete(realm).await?;
+        let parent_key = serde_json::to_string(&CommitStreamRef::Realm {
+            realm_id: realm.clone(),
+        })?;
+        let prior = state(&host)?;
+        let parent_head = prior["verified_commit_stream_cursors"][&parent_key].clone();
+        let parent_anchor = prior["verified_commit_stream_anchors"][&parent_key].clone();
+        ensure!(
+            parent_head.is_object() && parent_anchor.is_object(),
+            "parent Realm has no verified checkpoint before Circle joining"
+        );
+        let scope = ScopeRef::Circle {
+            realm_id: realm.clone(),
+            circle_id: circle.clone(),
+        };
+        let circle_key = serde_json::to_string(&CommitStreamRef::Circle {
+            realm_id: realm.clone(),
+            circle_id: circle.clone(),
+        })?;
+        let mut preceding: Option<arkret_wire::RealmCommit> = None;
+        for (position, subject) in [controller, member].into_iter().enumerate() {
+            let parent = controller
+                .client
+                .parent_membership_revision(realm.as_str(), &subject.actor)
+                .await?;
+            let mut join = subject.client.author_event(realm.as_str(), EventKind::CircleMemberState.as_str(),
+                serde_json::json!({"circle_id":circle, "member_id":subject.actor, "membership":"join",
+                    "parent_membership_revision":parent, "expected_membership":null})).await?;
+            join.scope_ref = scope.clone();
+            cotest::harness::refresh_typed_event_proof(&mut join)?;
+            let commit = cotest::scenarios::human_device_producer_live::submit_and_expect_commit(
+                &subject.client,
+                &subject.account,
+                subject.device.as_str(),
+                &join,
+            )
+            .await?;
+            ensure!(
+                commit.stream_ref
+                    == CommitStreamRef::Circle {
+                        realm_id: realm.clone(),
+                        circle_id: circle.clone()
+                    }
+                    && commit.stream_position == position as u64
+                    && commit.previous_commit_ref.as_ref()
+                        == preceding.as_ref().map(|prior| &prior.commit_id),
+                "Circle Commit did not use its independent position-zero chain"
+            );
+            let rail = ObservedRail {
+                http: controller.client.sdk(),
+                missing: None,
+                observed: Default::default(),
+            };
+            host.catch_up_with_conformance_transport(&rail).await?;
+            ensure!(
+                rail.observed
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .flat_map(|batch| &batch.frames)
+                    .filter_map(|frame| frame.realms.as_ref())
+                    .filter_map(|realms| realms.entries.get(realm.as_str()))
+                    .flat_map(|entry| entry.committed_events.iter().flatten())
+                    .any(|row| row.commit().commit_id == commit.commit_id
+                        && row.commit().event_ref == join.event_id),
+                "actual Account driver did not receive the exact Circle Commit"
+            );
+            let installed = state(&host)?;
+            ensure!(
+                installed["verified_commit_stream_cursors"][&parent_key] == parent_head
+                    && installed["verified_commit_stream_anchors"][&parent_key] == parent_anchor,
+                "Circle join advanced or replaced the parent Realm checkpoint"
+            );
+            ensure!(
+                installed["verified_commit_stream_cursors"][&circle_key]["commit_id"]
+                    == commit.commit_id.as_str()
+                    && installed["verified_commit_stream_cursors"][&circle_key]["stream_position"]
+                        == position as u64
+                    && installed["verified_commit_stream_anchors"][&circle_key]
+                        == serde_json::to_value(&commit)?,
+                "ordinary Account projection did not durably install the independent Circle checkpoint and signed anchor"
+            );
+            preceding = Some(commit);
+        }
+        let cut = inkson::conformance::retained_realm_current(
+            &host.state_store(),
+            &controller.account,
+            realm,
+        )
+        .await?;
+        let installed = state(&host)?;
+        let cursor = host
+            .state_store()
+            .sync_cursor()
+            .context("Circle durable Account cursor")?;
+        let evidence = self.directory.path().join("expected-circle-cut.json");
+        std::fs::write(
+            &evidence,
+            serde_json::to_vec(&serde_json::json!({
+                "account":controller.account, "realm":realm, "cut":cut, "cursor":cursor,
+                "stream_heads":installed["verified_commit_stream_cursors"],
+                "stream_anchors":installed["verified_commit_stream_anchors"]
+            }))?,
+        )?;
+        drop(host);
+        let output = std::process::Command::new(&self.reader)
+            .arg(path)
+            .arg(evidence)
+            .output()?;
+        ensure!(
+            output.status.success(),
+            "fresh-process independent Circle readback failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        self.results.borrow_mut().push(super::CaseExecutionResult {
+            case_id: STREAM_AND_DELIVERY_CASES[3].into(),
+            assertions: 10,
         });
         Ok(())
     }
@@ -1484,6 +1658,25 @@ pub async fn run_sync_production_cases(
                 && pair[1]["previous_commit_ref"] == pair[0]["commit_id"]),
         "Realm continuous tail fixture drifted"
     );
+    let circle_tail = fixture["stream_tails"]
+        .as_array()
+        .context("Circle tail fixtures")?
+        .iter()
+        .find(|case| case["name"] == STREAM_AND_DELIVERY_CASES[3])
+        .context("Circle independent tail fixture")?;
+    let commits = circle_tail["commits"]
+        .as_array()
+        .context("Circle fixture prefix")?;
+    ensure!(
+        circle_tail["stream_ref"]["kind"] == "circle"
+            && circle_tail["expected"] == "accepted"
+            && commits.len() == 2
+            && commits[0]["stream_position"] == 0
+            && commits[0]["previous_commit_ref"].is_null()
+            && commits[1]["stream_position"] == 1
+            && commits[1]["previous_commit_ref"] == commits[0]["commit_id"],
+        "independent Circle tail fixture drifted"
+    );
     let delivery = fixture["delivery_cancellation"]
         .as_array()
         .context("delivery cases")?
@@ -1593,6 +1786,8 @@ pub async fn run_sync_production_cases(
                 "Station/PG original Realm prefix + actual Account driver + exact verified stream checkpoint and signed anchor + fresh-process readback"
             } else if case.case_id == BASELINE_CASE {
                 "Station/PG Realm join + held baseline completion + durable current merge + fresh-process readback"
+            } else if case.case_id == STREAM_AND_DELIVERY_CASES[3] {
+                "Station/PG Circle position-zero chain + actual Account driver + independent Circle and unchanged Realm checkpoints + fresh-process readback"
             } else { "AccountSubscription + InksonAccountProjector + Station/PG + private MLS checkpoint + unacknowledged queue" }, "complete_suite_claim":false}),
         );
     }
