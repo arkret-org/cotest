@@ -17,6 +17,28 @@ fn named_suite_audit_executes_registered_runners_and_exposes_every_gap() -> Resu
     println!("{report:#?}");
     assert!(report.assert_complete().is_err());
     assert!(report.deferred_client_entrypoints.is_empty());
+    let sync = cotest::conformance::SYNC_CLIENT_ENTRYPOINT;
+    assert!(report.executed_entrypoints.iter().any(|id| id == sync));
+    assert!(report.unproved_entrypoints.iter().any(|id| id == sync));
+    assert!(!report.failed_executions.iter().any(|(id, ..)| id == sync));
+    let fixture = cotest::conformance::load_fixture_value("client-sync-fixture.json")?;
+    let declared = [
+        "stream_tails",
+        "checkpoint_ordering",
+        "reconnect",
+        "delivery_cancellation",
+    ]
+    .into_iter()
+    .map(|section| fixture[section].as_array().unwrap().len())
+    .sum::<usize>();
+    assert_eq!(
+        report
+            .missing_production_cases
+            .iter()
+            .filter(|case| case.fixture_ref == "fixtures/client-sync-fixture.json")
+            .count(),
+        declared - 3
+    );
     assert!(
         report
             .executed_entrypoints

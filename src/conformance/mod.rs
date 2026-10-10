@@ -370,7 +370,8 @@ pub use mls_governance_binding::{
     MLS_GOVERNANCE_BINDING_ENTRYPOINT, run_mls_governance_binding_suite,
 };
 pub use named_suite_audit::{
-    ClientNamedSuiteRunner, NamedSuiteAuditReport, inspect_named_suite_execution_with_clients,
+    ClientNamedSuiteRunner, NamedSuiteAuditReport, SYNC_CLIENT_ENTRYPOINT,
+    inspect_named_suite_execution_with_clients, missing_sync_production_cases,
     run_named_suite_audit, run_named_suite_audit_with_clients,
 };
 pub use non_governance_receiver::{
