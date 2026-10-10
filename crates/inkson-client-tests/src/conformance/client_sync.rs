@@ -1034,7 +1034,7 @@ impl SidecarSyncObserver for Probe {
         };
         let refused = host.catch_up_with_conformance_transport(&missing).await;
         ensure!(
-            refused.is_err(),
+            matches!(&refused, Err(garth::Error::StreamTailIncomplete { .. })),
             "an incomplete Sidecar frame advanced the driver"
         );
         ensure!(
@@ -1663,7 +1663,16 @@ impl Probe {
             case_id: CIRCLE_TAIL_CASE.into(),
             assertions: 10,
         });
-        self.circle_gap(controller, realm, &circle, &stream, path, database_url)
+        self.circle_gap(
+            controller,
+            realm,
+            &circle,
+            &stream,
+            path.clone(),
+            database_url,
+        )
+        .await?;
+        self.circle_gap_recovery(controller, realm, &circle, &stream, &path)
             .await?;
         Ok(())
     }
@@ -1852,6 +1861,214 @@ impl Probe {
             &serde_json::json!({"assertions":12,"actual_driver_retry":true}),
             &serde_json::json!({"canonical_case_credit":false,"complete_suite_claim":false,
                 "missing_boundary":"signed readable rows at positions zero and two with position one absent"}),
+        );
+        Ok(())
+    }
+    async fn circle_gap_recovery(
+        &self,
+        controller: &Member,
+        realm: &arkret_wire::RealmId,
+        circle: &arkret_wire::CircleId,
+        stream: &arkret_wire::CommitStreamRef,
+        path: &std::path::Path,
+    ) -> Result<()> {
+        use cotest::scenarios::circle_poll_scope_live::{circle_create, circle_event};
+        use cotest::scenarios::human_device_producer_live::submit_and_expect_commit;
+        let host = NativeAccountHost::new_for_realm(
+            controller.client.sdk(),
+            controller.account.clone(),
+            controller.device.clone(),
+            inkson::LocalStateStore::with_path(path),
+            realm.clone(),
+        )
+        .await?;
+        let before = state(&host)?;
+        let cut = inkson::conformance::retained_realm_current(
+            &host.state_store(),
+            &controller.account,
+            realm,
+        )
+        .await?;
+        let cursor = host.state_store().sync_cursor().context("pre-gap cursor")?;
+        let key = serde_json::to_string(stream)?;
+        let parent_stream = arkret_wire::CommitStreamRef::Realm {
+            realm_id: realm.clone(),
+        };
+        let parent_key = serde_json::to_string(&parent_stream)?;
+        let strand = circle_event(&controller.client, realm.as_str(), circle,
+            arkret_wire::EventKind::StrandCreate,
+            serde_json::json!({"object":{"schema":"ak.schema.strand.v1", "realm_id":realm,
+                "scope_circle_id":circle, "tracks":{"discussion":{"is_primary":true,"profile":"discussion"}},
+                "metadata":{"title":"Circle gap recovery"}, "state":"active", "created_by":controller.actor}})).await?;
+        let commit = submit_and_expect_commit(
+            &controller.client,
+            &controller.account,
+            controller.device.as_str(),
+            &strand,
+        )
+        .await?;
+        // This accepted Circle creation advances only its parent Realm stream.
+        circle_create(
+            &controller.client,
+            realm.as_str(),
+            &controller.actor,
+            "Healthy sibling during gap",
+            "Healthy sibling",
+        )
+        .await?;
+        let missing = ObservedRail {
+            http: controller.client.sdk(),
+            missing: Some(strand.event_id.clone()),
+            observed: Default::default(),
+        };
+        let refused = host.catch_up_with_conformance_transport(&missing).await;
+        ensure!(
+            matches!(&refused, Err(garth::Error::StreamTailIncomplete { stream_ref })
+                if stream_ref == stream),
+            "a missing Circle window crossed the Account checkpoint"
+        );
+        let batches = missing.observed.lock().unwrap();
+        ensure!(batches.len() == 4, "Circle gap retries were not bounded");
+        let parent_commit = batches
+            .iter()
+            .flat_map(|batch| &batch.frames)
+            .flat_map(|frame| frame.realms.iter())
+            .flat_map(|realms| realms.entries.values())
+            .flat_map(|entry| entry.committed_events.iter().flatten())
+            .map(|row| row.commit())
+            .filter(|commit| commit.stream_ref == parent_stream)
+            .max_by_key(|commit| commit.stream_position)
+            .context("healthy Realm sibling Commit")?
+            .clone();
+        let mut forged = batches.first().context("gap Account batch")?.clone();
+        drop(batches);
+        let partial = state(&host)?;
+        ensure!(
+            parent_commit.stream_position
+                > before["verified_commit_stream_cursors"][&parent_key]["stream_position"]
+                    .as_u64()
+                    .context("old Realm position")?,
+            "gap regression had no advancing healthy sibling"
+        );
+        ensure!(
+            partial["verified_commit_stream_anchors"][&parent_key]
+                == serde_json::to_value(&parent_commit)?,
+            "missing Circle window blocked its healthy Realm sibling: {refused:?}"
+        );
+        ensure!(
+            partial["verified_commit_stream_cursors"][&key]
+                == before["verified_commit_stream_cursors"][&key]
+                && partial["verified_commit_stream_anchors"][&key]
+                    == before["verified_commit_stream_anchors"][&key]
+                && host.state_store().sync_cursor().as_deref() == Some(cursor.as_str())
+                && inkson::conformance::retained_realm_current(
+                    &host.state_store(),
+                    &controller.account,
+                    realm
+                )
+                .await?
+                    == cut,
+            "incomplete Circle changed its head, current cut or Account cursor"
+        );
+        let mut forged_windows = 0;
+        for window in forged
+            .frames
+            .iter_mut()
+            .flat_map(|frame| frame.realms.iter_mut())
+            .flat_map(|realms| realms.entries.values_mut())
+            .flat_map(|entry| entry.streams.iter_mut().flatten())
+            .filter(|window| &window.stream_ref == stream)
+        {
+            window.head_commit_ref = arkret_wire::RealmCommitId::from_digest([199; 32]);
+            forged_windows += 1;
+        }
+        ensure!(
+            forged_windows == 1,
+            "fork regression changed more than the missing stream"
+        );
+        let fork = HeldBatch(Mutex::new(Some(forged)));
+        ensure!(
+            matches!(
+                host.catch_up_with_conformance_transport(&fork).await,
+                Err(garth::Error::Protocol(message))
+                    if message == "Account window differs from own Station continuous stream"
+            ) && state(&host)? == partial,
+            "a forked head entered gap recovery or changed the durable state"
+        );
+        let evidence = self
+            .directory
+            .path()
+            .join("expected-circle-gap-held-cut.json");
+        std::fs::write(
+            &evidence,
+            serde_json::to_vec(&serde_json::json!({
+                "account":controller.account, "realm":realm, "cut":cut, "cursor":cursor,
+                "stream_key":key, "head":before["verified_commit_stream_cursors"][&key],
+                "anchor":before["verified_commit_stream_anchors"][&key],
+                "stream_heads":partial["verified_commit_stream_cursors"],
+                "stream_anchors":partial["verified_commit_stream_anchors"]
+            }))?,
+        )?;
+        let output = std::process::Command::new(&self.reader)
+            .arg(path)
+            .arg(&evidence)
+            .output()?;
+        ensure!(
+            output.status.success(),
+            "partial stream progress was not durable across a new process: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let repaired = ObservedRail {
+            http: controller.client.sdk(),
+            missing: None,
+            observed: Default::default(),
+        };
+        host.catch_up_with_conformance_transport(&repaired).await?;
+        let after = state(&host)?;
+        let recovered_cut = inkson::conformance::retained_realm_current(
+            &host.state_store(),
+            &controller.account,
+            realm,
+        )
+        .await?;
+        let recovered_cursor = host
+            .state_store()
+            .sync_cursor()
+            .context("recovered cursor")?;
+        ensure!(
+            after["verified_commit_stream_anchors"][&key] == serde_json::to_value(&commit)?
+                && recovered_cursor != cursor
+                && recovered_cut["entries"]
+                    .as_array()
+                    .context("recovered current rows")?
+                    .iter()
+                    .any(|row| row["revision"]["commit_id"] == commit.commit_id.as_str()),
+            "fresh snapshot and tail did not recover the held Circle cut"
+        );
+        drop(host);
+        std::fs::write(
+            &evidence,
+            serde_json::to_vec(&serde_json::json!({
+                "account":controller.account, "realm":realm, "cut":recovered_cut, "cursor":recovered_cursor,
+                "stream_key":key, "head":after["verified_commit_stream_cursors"][&key],
+                "anchor":after["verified_commit_stream_anchors"][&key],
+                "stream_heads":after["verified_commit_stream_cursors"],
+                "stream_anchors":after["verified_commit_stream_anchors"]
+            }))?,
+        )?;
+        let output = std::process::Command::new(&self.reader)
+            .arg(path)
+            .arg(&evidence)
+            .output()?;
+        ensure!(
+            output.status.success(),
+            "recovered Circle cut failed new-process readback: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        // A malformed window regression is not the canonical position-row jump.
+        // Keep the existing sixteen-case claim until that distinct input is run.
+        println!(
+            "CIRCLE_GAP_RECOVERY: healthy history durable; incomplete cut held; repaired cut durable"
         );
         Ok(())
     }
