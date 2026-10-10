@@ -81,6 +81,7 @@ pub fn run_unlock_proof_crypto_kat() -> Result<()> {
         key.len() == 32 && nonce.len() == 12,
         "AEAD key/nonce size drifted"
     );
+    let nonce = Nonce::try_from(nonce.as_slice()).context("AEAD nonce size drifted")?;
     let ciphertext = decode(transcript, "ciphertext_b64u")?;
     let tag = decode(transcript, "tag_b64u")?;
     ensure!(tag.len() == 16 && transcript["tag_length_bytes"] == 16);
@@ -96,7 +97,7 @@ pub fn run_unlock_proof_crypto_kat() -> Result<()> {
     let cipher = ChaCha20Poly1305::new_from_slice(&key).map_err(|_| anyhow!("invalid AEAD key"))?;
     let opened = cipher
         .decrypt(
-            Nonce::from_slice(&nonce),
+            &nonce,
             Payload {
                 msg: &combined,
                 aad,
@@ -111,7 +112,7 @@ pub fn run_unlock_proof_crypto_kat() -> Result<()> {
     *bad_tag.last_mut().context("empty AEAD ciphertext")? ^= 1;
     ensure!(
         cipher
-            .decrypt(Nonce::from_slice(&nonce), Payload { msg: &bad_tag, aad })
+            .decrypt(&nonce, Payload { msg: &bad_tag, aad })
             .is_err(),
         "mutated AEAD tag opened"
     );

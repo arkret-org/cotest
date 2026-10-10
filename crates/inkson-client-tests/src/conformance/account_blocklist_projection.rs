@@ -1241,7 +1241,7 @@ pub async fn contact_and_first_dm_pending_request_live() -> Result<()> {
         alice.client.sdk(),
         alice.account.clone(),
         alice.device.clone(),
-        inkson::LocalStateStore::with_path(&directory.path().join("contact-holder.json")),
+        inkson::LocalStateStore::with_path(directory.path().join("contact-holder.json")),
     )
     .await?;
     holder_host.catch_up().await?;
@@ -1568,7 +1568,7 @@ pub async fn contact_first_dm_cross_station_private_boundary_live() -> Result<()
         holder.client.sdk(),
         holder.account.clone(),
         holder.device.clone(),
-        inkson::LocalStateStore::with_path(&directory.path().join("holder.json")),
+        inkson::LocalStateStore::with_path(directory.path().join("holder.json")),
     )
     .await?;
     holder_host.catch_up().await?;
@@ -1849,6 +1849,10 @@ pub async fn contact_first_dm_cross_station_private_boundary_live() -> Result<()
 
 /// Observe a retained, accepted DM Message through the real Native receipt rail.
 /// The holder's private block revision is installed before `message_id` commits.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Receipt observation binds both MLS endpoints and the accepted message context"
+)]
 pub(crate) async fn observe_dm_retained_receipt(
     sender: &crate::scenarios::mls_lifecycle_live::Member,
     holder: &crate::scenarios::mls_lifecycle_live::Member,
@@ -2330,7 +2334,7 @@ fn verify_security_evidence_mapping(fixture: &Value) -> Result<()> {
         required_field(evidence, "decision_points")?,
         "decision_points",
     )? {
-        let id = required_str(&point, "id")?;
+        let id = required_str(point, "id")?;
         ensure!(observed.insert(id), "duplicate decision point {id}");
         let expected_pointers = expected
             .get(id)
@@ -2558,6 +2562,10 @@ async fn authored_encrypted_blocklist_message(
         .await
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Call observation binds both MLS endpoints and the accepted call context"
+)]
 pub(crate) async fn observe_ordinary_call_invite(
     sender: &crate::scenarios::mls_lifecycle_live::Member,
     holder: &crate::scenarios::mls_lifecycle_live::Member,
@@ -2675,7 +2683,7 @@ pub(crate) async fn observe_ordinary_call_invite(
             inkson::conformance::retained_blocklist_receipt_candidate(
                 &holder_host.state_store(),
                 realm.as_str(),
-                &strand,
+                strand,
             )
             .is_none(),
             "blocked encrypted Message became an automatic receipt candidate"
@@ -2685,7 +2693,7 @@ pub(crate) async fn observe_ordinary_call_invite(
                 &holder_host,
                 holder.client.sdk(),
                 realm.as_str(),
-                &strand,
+                strand,
                 "",
             )
             .await?
@@ -2724,7 +2732,7 @@ pub(crate) async fn observe_ordinary_call_invite(
                     inkson::conformance::retained_blocklist_receipt_candidate(
                         &holder_host.state_store(),
                         realm.as_str(),
-                        &strand,
+                        strand,
                     )
                     .as_deref()
                         == Some(message_id.as_str()),
@@ -2769,7 +2777,7 @@ pub(crate) async fn observe_ordinary_call_invite(
                     &holder_host,
                     holder.client.sdk(),
                     realm.as_str(),
-                    &strand,
+                    strand,
                     "",
                 )
                 .await

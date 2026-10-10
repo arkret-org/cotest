@@ -1,0 +1,42 @@
+{
+  "baseline_date": "2026-10-10",
+  "project": "chrome",
+  "selector": "@fully-implemented",
+  "minimum_tests": 90,
+  "required_files": [
+    "../setup/inkson-build-id.setup.ts",
+    "conformance/realm-state-snapshot-query-scalability.spec.ts",
+    "conformance/registry-drift.spec.ts",
+    "encryption/key-backup.spec.ts",
+    "events/realm-genesis-commit-stream.spec.ts",
+    "harness/garth-client.spec.ts",
+    "harness/mocks-selftest.spec.ts",
+    "harness/provisioning-bridge.spec.ts",
+    "harness/provisioning-dual-run.spec.ts",
+    "harness/test-client-parity.spec.ts",
+    "identity/account-profile-ui.spec.ts",
+    "identity/device-key-lifecycle.spec.ts",
+    "identity/multi-device.spec.ts",
+    "identity/oidc-login-flow.spec.ts",
+    "identity/onboarding.spec.ts",
+    "identity/passkey-login-flow.spec.ts",
+    "identity/recovery-key-to-encrypted-realm.spec.ts",
+    "identity/registration-continuation.spec.ts",
+    "joint/agent-savfox-split-live.spec.ts",
+    "joint/build-identity.spec.ts",
+    "joint/circle-sidecar-boundary.spec.ts",
+    "joint/contact-agent-sidebar.spec.ts",
+    "joint/joint-inkson-smoke.spec.ts",
+    "joint/multi-profile-same-server.spec.ts",
+    "kanban/calendar.spec.ts",
+    "kanban/cross-member-encrypted.spec.ts",
+    "spaces/realm-profile.spec.ts",
+    "sync/service-surface-contract.spec.ts"
+  ],
+  "scope": "Currently supported UI smoke suite; principal-private file-transfer UI remains uncovered.",
+  "file_transfer_owner": "arkret-work/tasks/impl-active/2026-09-30-0805-blob-upload-encryption-classification.md",
+  "retirements": {
+    "47264e61": "batch-realm-bootstrap replaced by realm-genesis-commit-stream",
+    "8b533088": "unsupported file-transfer UI test and scenario removed; no protocol coverage claimed"
+  }
+}

@@ -126,6 +126,10 @@ impl Member {
 
 /// Optional client observation over the actual server lifecycle; the harness never depends on its
 /// UI consumer.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Client observation binds the complete accepted MLS and receipt context"
+)]
 #[async_trait::async_trait(?Send)]
 pub trait MlsClientObserver {
     async fn observe_ordinary_call_invite(

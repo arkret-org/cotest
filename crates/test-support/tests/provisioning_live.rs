@@ -67,6 +67,8 @@ fn endpoints() -> DeploymentEndpoints {
     }
 }
 
+/// Gating: Requires a running Coauth and Soland with the configured provisioning endpoints.
+/// Tier: live
 #[tokio::test]
 #[ignore = "requires a running Coauth and Soland; see the module docs"]
 async fn station_description_supplies_the_audience_a_grant_binds_to() {
@@ -89,6 +91,8 @@ async fn station_description_supplies_the_audience_a_grant_binds_to() {
     );
 }
 
+/// Gating: Requires a running Coauth and Soland with the configured provisioning endpoints.
+/// Tier: live
 #[tokio::test]
 #[ignore = "requires a running Coauth and Soland; see the module docs"]
 async fn an_unbound_account_registers_and_authenticates() {
@@ -122,6 +126,8 @@ async fn an_unbound_account_registers_and_authenticates() {
     );
 }
 
+/// Gating: Requires a running Coauth and Soland with the configured provisioning endpoints.
+/// Tier: live
 #[tokio::test]
 #[ignore = "requires a running Coauth and Soland; see the module docs"]
 async fn an_authenticated_account_completes_the_authorization_code_flow() {
@@ -166,6 +172,8 @@ async fn an_authenticated_account_completes_the_authorization_code_flow() {
     );
 }
 
+/// Gating: Requires a running Coauth and Soland with the configured provisioning endpoints.
+/// Tier: live
 #[tokio::test]
 #[ignore = "requires a running Coauth and Soland; see the module docs"]
 async fn a_fresh_account_receives_an_identity_creation_lease() {
@@ -223,6 +231,8 @@ async fn a_fresh_account_receives_an_identity_creation_lease() {
     );
 }
 
+/// Gating: Requires a running Coauth and Soland with the configured provisioning endpoints.
+/// Tier: live
 #[tokio::test]
 #[ignore = "requires a running Coauth and Soland; see the module docs"]
 async fn the_canonical_chain_founds_a_principal_end_to_end() {
@@ -405,6 +415,8 @@ async fn the_canonical_chain_founds_a_principal_end_to_end() {
 /// `cotest::harness::TestActorClient` and `ArkretServer::canonical_client` are
 /// built on, so verifying it here covers them without building the server
 /// harness.
+/// Gating: Requires a running Coauth and Soland with the configured provisioning endpoints.
+/// Tier: live
 #[tokio::test]
 #[ignore = "requires a running Coauth and Soland; see the module docs"]
 async fn a_canonical_session_authorizes_a_caller_built_request() {
@@ -534,6 +546,8 @@ async fn a_canonical_session_authorizes_a_caller_built_request() {
 /// last part is the whole reason the bridge is a long-lived process: Coauth's
 /// account session lives in a cookie jar, and a fresh process per call would
 /// lose it.
+/// Gating: Requires a running Coauth and Soland with the configured provisioning endpoints.
+/// Tier: live
 #[tokio::test]
 #[ignore = "requires a running Coauth and Soland; see the module docs"]
 async fn the_stdio_bridge_keeps_one_session_across_requests() {

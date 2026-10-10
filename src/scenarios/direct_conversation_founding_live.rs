@@ -487,6 +487,10 @@ async fn assert_no_peer_founding_writes(connect_url: &str, realm_id: &RealmId) -
 
 /// Client retention oracles are supplied explicitly; founding/admission remains in the server
 /// harness.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Client observation binds the complete accepted MLS and receipt context"
+)]
 #[async_trait::async_trait(?Send)]
 pub trait DirectClientObserver {
     async fn block_direct_peer(&self, holder: &Member, peer: &Member) -> Result<()>;
@@ -741,7 +745,7 @@ pub async fn cross_station_two_authorized_devices_race_founding() -> Result<()> 
         founder_server,
         &bob.account,
         &round,
-        winner_unit.idempotency_key.clone(),
+        winner_unit.idempotency_key,
     )?;
     let (conflict_status, conflict_body) = post_bytes_at(
         &winner_member.client,

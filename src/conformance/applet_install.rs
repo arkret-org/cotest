@@ -23,7 +23,7 @@ const MANAGED_ACTOR_FIXTURE: &str = "applet-managed-actor-fixture.json";
 const REGISTRATION_EPOCH_FIXTURE: &str = "applet-registration-epoch-fixture.json";
 const MANAGED_ACTOR_ENTRYPOINT: &str = "ak.suite.applet.managed_actor_authority.v1";
 const MANAGED_ACTOR_CASES: [&str; 36] = [
-    "applet_exact_pair_and_initial_resolution",
+    "bot_exact_pair_and_initial_resolution",
     "ghost_namespace_matches_verified_did",
     "ghost_namespace_pattern_pins_service_scid",
     "ghost_host_segment_differs_from_service_host",
@@ -33,8 +33,8 @@ const MANAGED_ACTOR_CASES: [&str; 36] = [
     "ghost_external_tuple_rejects_extra_mirrors",
     "ghost_provision_requires_registration_service_signature",
     "remote_station_claim",
-    "ghost_reuses_service_or_controller",
-    "applet_does_not_equal_registration_actor",
+    "actor_reuses_service_or_controller",
+    "bot_differs_from_signed_creation_candidate",
     "ghost_core_used_for_did_namespace",
     "invalid_method_history_or_witness",
     "non_webvh_method_evidence_is_not_a_managed_authority",
@@ -58,7 +58,7 @@ const MANAGED_ACTOR_CASES: [&str; 36] = [
     "delegated_device_authorize_resolves_signer_only_from_accepted_resolution",
     "delegated_device_authorize_authorized_by_must_self_anchor",
     "delegated_device_authorize_requires_bounded_delegation",
-    "delegated_device_follows_install_revoke_fence",
+    "delegated_device_follows_target_scope_install_fence",
 ];
 
 pub fn run_applet_managed_actor_authority_suite() -> Result<()> {
@@ -145,7 +145,7 @@ fn consume_managed_actor_case(
                 bail!("Ghost external tuple accepted an extra mirror");
             }
         }
-        "rotation_keeps_creation_anchor" | "applet_exact_pair_and_initial_resolution" => {
+        "rotation_keeps_creation_anchor" | "bot_exact_pair_and_initial_resolution" => {
             if !applet_grant_binding_matches(
                 constraint,
                 resource,
@@ -202,7 +202,7 @@ fn consume_managed_actor_case(
                 bail!("mismatched managed authority pair was admitted");
             }
         }
-        "ghost_reuses_service_or_controller" => {
+        "actor_reuses_service_or_controller" => {
             let actor = service_id.as_str();
             let distinct =
                 actor != service_id.as_str() && actor != "ak:did_core:web:controller.example";
@@ -210,7 +210,7 @@ fn consume_managed_actor_case(
                 bail!("service identity reuse was not detected");
             }
         }
-        "applet_does_not_equal_registration_actor" => {
+        "bot_differs_from_signed_creation_candidate" => {
             if "ak:did_core:web:bot-a.example" == "ak:did_core:web:bot-b.example" {
                 bail!("Bot mismatch model is invalid");
             }
@@ -331,7 +331,7 @@ fn consume_managed_actor_case(
         | "delegated_device_authorize_resolves_signer_only_from_accepted_resolution"
         | "delegated_device_authorize_authorized_by_must_self_anchor"
         | "delegated_device_authorize_requires_bounded_delegation"
-        | "delegated_device_follows_install_revoke_fence" => {
+        | "delegated_device_follows_target_scope_install_fence" => {
             let expected = case["expect"]
                 .as_str()
                 .context("delegated device case expectation")?;
@@ -434,7 +434,7 @@ fn delegated_device_mutations(name: &str) -> Result<Vec<DelegatedDeviceMutation>
             DelegatedDeviceMutation::CarriesRecoverySessionId,
             DelegatedDeviceMutation::CarriesPairingChallengeTranscriptDigest,
         ],
-        "delegated_device_follows_install_revoke_fence" => {
+        "delegated_device_follows_target_scope_install_fence" => {
             vec![DelegatedDeviceMutation::InstallRevoked]
         }
         other => bail!("no delegated device admission model for {other}"),

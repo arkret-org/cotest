@@ -1885,7 +1885,7 @@ mod tests {
                 "audience": "arkret.invite.claim",
                 "claim_nonce": "native-control-claim-nonce",
                 "expires_at": "2026-10-02T12:00:00.000Z",
-                "signature": canonical::base64url_encode(&[19; 64])
+                "signature": canonical::base64url_encode([19; 64])
             },
             "verification_method": root_method,
             "subject_did": did,
@@ -1928,7 +1928,7 @@ mod tests {
         wrong_key["root_public_key_multibase"] = json!("unaccepted-key");
         assert!(invite_subject_proof(wrong_key).is_err());
         let mut retired_seed = input;
-        retired_seed["signing_seed_b64url"] = json!(canonical::base64url_encode(&[37; 32]));
+        retired_seed["signing_seed_b64url"] = json!(canonical::base64url_encode([37; 32]));
         assert!(invite_subject_proof(retired_seed).is_err());
     }
 
@@ -1981,7 +1981,7 @@ mod tests {
             "created_at":"2026-09-07T00:00:00.000Z",
             "domain":"ak:trust_domain:station.example",
             "audience":"ak:did_core:web:station.example",
-            "signing_seed_b64url":canonical::base64url_encode(&[27;32])
+            "signing_seed_b64url":canonical::base64url_encode([27;32])
         });
         let proof: PayloadProof =
             serde_json::from_value(mimi_request_consent_proof(input).unwrap()).unwrap();

@@ -23,6 +23,13 @@ if (-not $DockerfilePath) {
 $requiredPaths = @(
     (Join-Path $WorkspaceRoot "soland"),
     (Join-Path $WorkspaceRoot "arkret-rust-sdk"),
+    (Join-Path $WorkspaceRoot "arkret-spec"),
+    (Join-Path $WorkspaceRoot "garth"),
+    (Join-Path $WorkspaceRoot "chime"),
+    (Join-Path $WorkspaceRoot "inkson"),
+    (Join-Path $WorkspaceRoot "floria"),
+    (Join-Path $WorkspaceRoot "coauth"),
+    (Join-Path $WorkspaceRoot "cotest"),
     $DockerfilePath
 )
 

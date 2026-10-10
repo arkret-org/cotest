@@ -3,7 +3,9 @@
 //! Covers known-Agent picker label verification and AKP-0010 participation
 //! policy semantics by exercising the SDK wire DTOs and reducer-pure helpers.
 
-use anyhow::{Result, anyhow, bail};
+use std::collections::{BTreeMap, BTreeSet};
+
+use anyhow::{Result, anyhow, bail, ensure};
 use arkret_identifiers::{DidCoreId, RealmId};
 use arkret_models_collaboration::events_payloads::mention::{Mention, MentionNode, MentionTarget};
 use arkret_models_collaboration::governance::agent_participation::{
@@ -63,6 +65,9 @@ struct AgentParticipationFixture {
     covers_vectors: Vec<String>,
     cases: Vec<Value>,
     interaction_contract: Value,
+    runtime_access_cases: Vec<Value>,
+    reply_configuration_contract: Value,
+    owned_agent_authority_contract: Value,
 }
 
 fn participation_fixture() -> Result<AgentParticipationFixture> {
@@ -107,6 +112,353 @@ fn validate_agent_participation_fixture_metadata(
         }
     }
 
+    Ok(())
+}
+
+fn fixture_all(row: &Value, keys: &[&str]) -> bool {
+    keys.iter().all(|key| row[*key] == true)
+}
+
+// These are reference fixture decisions, matching the normative artifact-lint
+// models. They do not establish a live Station's authorization or reply readiness.
+fn reply_configuration_decision(table: &str, row: &Value) -> Value {
+    let all = |keys: &[&str]| fixture_all(row, keys);
+    let result = match table {
+        "authorization_cases" => {
+            return serde_json::json!(
+                all(&[
+                    "exact_account_scope_binding",
+                    "joined",
+                    "other_action_gates"
+                ]) && (row["actor_root_authority"] == true
+                    || row["effective_message_grant"] == true)
+            );
+        }
+        "setup_cases" => match row["intent"].as_str() {
+            Some("preference_only" | "mode_only") => "no_grant",
+            Some("shared_reply") => {
+                if !all(&["exact_account_scope_binding", "global_scope_allows"]) {
+                    "blocked"
+                } else {
+                    match row["grant_state"].as_str() {
+                        Some("unknown") => "pending",
+                        Some("accepted") => "reuse_grant",
+                        Some("refused") => "refused",
+                        Some("missing") => {
+                            if row["confirmation_is_explicit"] != true {
+                                "needs_confirmation"
+                            } else if row["verified_owned_source"] == true {
+                                if all(&["current_controller_authority", "management_allows"]) {
+                                    "publish_grant"
+                                } else {
+                                    "blocked"
+                                }
+                            } else if row["issuer_can_grant"] == true {
+                                "publish_grant"
+                            } else {
+                                "requires_issuer"
+                            }
+                        }
+                        _ => "invalid",
+                    }
+                }
+            }
+            _ => "invalid",
+        },
+        "readiness_cases" => {
+            let gates = [
+                "actor_binding",
+                "public_mode",
+                "message_authority",
+                "content_service_scope",
+                "membership_lifecycle",
+                "participation_ceiling",
+                "runtime_session_key",
+                "scope_mls",
+            ];
+            if row["configuration_accepted"] != true {
+                if row["configuration_accepted"].is_null() {
+                    "pending"
+                } else {
+                    "not_configured"
+                }
+            } else if gates.iter().any(|key| row[*key] == false) {
+                "blocked"
+            } else if !all(&gates) {
+                "pending"
+            } else {
+                "ready"
+            }
+        }
+        "recovery_cases" => match row["kind"].as_str() {
+            Some("unknown_submission") => "retain_exact_pending_submission",
+            Some("refused_submission") => "new_request_after_authority_repair",
+            kind => {
+                if kind == Some("reset")
+                    || !all(&["same_account_scope_binding", "active_message_grant"])
+                {
+                    "needs_new_confirmation"
+                } else {
+                    match kind {
+                        Some("restart") => "reuse_grant",
+                        Some("endpoint_replacement") => "reuse_grant_restore_endpoint",
+                        _ => "invalid",
+                    }
+                }
+            }
+        },
+        _ => "invalid",
+    };
+    serde_json::json!(result)
+}
+
+fn owned_agent_reference_decision<'a>(row: &'a Value, registry: &Value) -> Result<&'a str> {
+    if row["accepted_identity"] == true {
+        return Ok("reuse_accepted");
+    }
+    if !fixture_all(row, &["signing_eligible", "exact_account_binding"]) {
+        return Ok("deny");
+    }
+    let operation = required_str(row, "operation")?;
+    if operation == "revoke" {
+        return Ok(
+            if fixture_all(
+                row,
+                &[
+                    "owned_source",
+                    "original_issuer",
+                    "target_present",
+                    "exact_revision",
+                ],
+            ) {
+                "allow"
+            } else {
+                "deny"
+            },
+        );
+    }
+    if !fixture_all(row, &["current_evidence", "management_evidence"]) {
+        return Ok("pending");
+    }
+    if operation == "authorize"
+        && (!registry["supported_actions"]
+            .as_array()
+            .is_some_and(|actions| actions.contains(&row["action"]))
+            || !fixture_all(row, &["explicit_confirmation", "terminal_source"])
+            || row["controller_is_agent"] == true)
+    {
+        return Ok("deny");
+    }
+    let rules = row["management_rules"]
+        .as_array()
+        .ok_or_else(|| anyhow!("management rule cases missing"))?;
+    let mut effects = BTreeSet::new();
+    for rule in rules {
+        if !rule["operations"]
+            .as_array()
+            .is_some_and(|operations| operations.contains(&row["operation"]))
+        {
+            continue;
+        }
+        let target = &rule["target"];
+        if (target["kind"] == "controller" && target["account_id"] != row["controller_account_id"])
+            || (target["kind"] == "agent" && target["account_id"] != row["agent_account_id"])
+            || rule["actions"]
+                .as_array()
+                .is_some_and(|actions| !actions.is_empty() && !actions.contains(&row["action"]))
+        {
+            continue;
+        }
+        effects.insert(required_str(rule, "effect")?);
+    }
+    for effect in ["deny", "quarantine", "require_review"] {
+        if effects.contains(effect) {
+            return Ok(effect);
+        }
+    }
+    if operation == "join" {
+        return Ok(
+            if fixture_all(
+                row,
+                &[
+                    "controller_join_active",
+                    "agent_binding_valid",
+                    "agent_action_gates",
+                ],
+            ) {
+                "allow"
+            } else {
+                "deny"
+            },
+        );
+    }
+    Ok(
+        if fixture_all(
+            row,
+            &[
+                "controller_join_active",
+                "agent_binding_valid",
+                "controller_permission",
+                "whole_allow_path",
+                "identity_conditions_preserved",
+                "scope_within_confirmation",
+                "global_key_ceiling",
+                "agent_action_gates",
+                "parent_quota_available",
+            ],
+        ) && row["matched_global_deny"] != true
+            && row["grant_terminal"] != true
+        {
+            "allow"
+        } else {
+            "deny"
+        },
+    )
+}
+
+fn validate_case_names(rows: &[Value], count: usize) -> Result<BTreeSet<&str>> {
+    let names = rows
+        .iter()
+        .map(|row| required_str(row, "name"))
+        .collect::<Result<BTreeSet<_>>>()?;
+    ensure!(
+        rows.len() == count && names.len() == count,
+        "case ledger omitted or duplicated a boundary"
+    );
+    Ok(names)
+}
+
+fn validate_extended_contracts(fixture: &AgentParticipationFixture) -> Result<()> {
+    validate_case_names(&fixture.runtime_access_cases, 11)?;
+    for row in &fixture.runtime_access_cases {
+        let allow = row["role"] == "target"
+            && row["selection_source"] == "authenticated_owner_current"
+            && fixture_all(
+                row,
+                &[
+                    "same_station",
+                    "current_selection",
+                    "complete_governance_cut",
+                    "exact_binding",
+                    "selection_bit",
+                    "ceiling_bit",
+                ],
+            );
+        ensure!(
+            row["expected"] == if allow { "allow" } else { "deny" },
+            "runtime participation case {} drifted",
+            row["name"]
+        );
+    }
+    let reply = &fixture.reply_configuration_contract;
+    ensure!(
+        reply["registry_ref"]
+            == "registry/contract-registry.json#/did_evidence_boundary_registry/agent_participation_runtime_contract/product_configuration"
+            && reply["vector_id"] == VECTOR_ID_AGENT_INTERACTION_MODE,
+        "reply configuration contract binding drifted"
+    );
+    for (table, count) in [
+        ("authorization_cases", 9),
+        ("setup_cases", 12),
+        ("readiness_cases", 19),
+        ("recovery_cases", 7),
+    ] {
+        let rows = reply[table]
+            .as_array()
+            .ok_or_else(|| anyhow!("reply {table} missing"))?;
+        validate_case_names(rows, count)?;
+        for row in rows {
+            ensure!(
+                row["expected"] == reply_configuration_decision(table, row),
+                "reply {table} case {} drifted",
+                row["name"]
+            );
+        }
+    }
+    let owned = &fixture.owned_agent_authority_contract;
+    ensure!(
+        owned["registry_ref"] == "registry/owned-agent-authority-registry.json"
+            && owned["vector_id"] == VECTOR_ID_AGENT_INTERACTION_MODE,
+        "owned Agent registry binding drifted"
+    );
+    let registry = super::load_artifact_json("registry/owned-agent-authority-registry.json")?;
+    ensure!(
+        registry["fixture_ref"]
+            == "fixtures/agent-participation-fixture.json#/owned_agent_authority_contract"
+    );
+    let rows = owned["cases"]
+        .as_array()
+        .ok_or_else(|| anyhow!("owned Agent cases missing"))?;
+    let names = validate_case_names(rows, 63)?;
+    let required = owned["required_case_names"]
+        .as_array()
+        .ok_or_else(|| anyhow!("owned Agent required cases missing"))?;
+    let required = required
+        .iter()
+        .map(|name| {
+            name.as_str()
+                .ok_or_else(|| anyhow!("invalid required case name"))
+        })
+        .collect::<Result<BTreeSet<_>>>()?;
+    ensure!(
+        names == required,
+        "owned Agent required case ledger drifted"
+    );
+    for row in rows {
+        ensure!(
+            row["expected"] == owned_agent_reference_decision(row, &registry)?,
+            "owned Agent case {} drifted",
+            row["name"]
+        );
+    }
+    let schema_env = SchemaEnv::load()?;
+    let schema_cases = owned["schema_cases"]
+        .as_array()
+        .ok_or_else(|| anyhow!("owned Agent schema cases missing"))?;
+    validate_case_names(schema_cases, 19)?;
+    for row in schema_cases {
+        let schema_ref = format!(
+            "{}{}",
+            required_str(row, "schema_file")?,
+            required_str(row, "fragment")?
+        );
+        let instance: Value = serde_json::from_str(required_str(row, "canonical_json")?)?;
+        ensure!(
+            Some(schema_env.compile(&schema_ref)?.is_valid(&instance)) == row["valid"].as_bool(),
+            "owned Agent schema case {} drifted",
+            row["name"]
+        );
+    }
+    let quota = &owned["quota_sequence"];
+    let limit = required_u64(quota, "limit")?;
+    let mut counts = BTreeMap::<(String, String, u64), u64>::new();
+    let mut identities = BTreeSet::new();
+    let mut verdicts = Vec::new();
+    for request in quota["requests"]
+        .as_array()
+        .ok_or_else(|| anyhow!("quota requests missing"))?
+    {
+        let key = (
+            required_str(request, "parent_grant")?.to_owned(),
+            required_str(request, "controller_account")?.to_owned(),
+            required_u64(request, "window")?,
+        );
+        let identity = required_str(request, "event_id")?;
+        let count = counts.entry(key).or_default();
+        verdicts.push(if identities.contains(identity) {
+            "reuse_accepted"
+        } else if *count >= limit {
+            "deny"
+        } else {
+            identities.insert(identity);
+            *count += 1;
+            "allow"
+        });
+    }
+    ensure!(
+        counts.len() == 1 && serde_json::to_value(verdicts)? == quota["expected"],
+        "parent quota sharing or accepted retry identity drifted"
+    );
     Ok(())
 }
 
@@ -250,9 +602,7 @@ fn run_mention_composer_contract(vector: &Value, known: &AccountId) -> Result<()
         .get("routing_cases")
         .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("routing cases missing"))?;
-    if routes.len() != 14 {
-        bail!("composer routing matrix is incomplete");
-    }
+    validate_case_names(routes, 15)?;
     for row in routes {
         let scope = match required_str(row, "scope")? {
             "realm" => AgentMentionComposerScope::Realm,
@@ -276,8 +626,15 @@ fn run_mention_composer_contract(vector: &Value, known: &AccountId) -> Result<()
                 .and_then(Value::as_bool)
                 .ok_or_else(|| anyhow!("routing boolean missing {key}"))
         };
+        // Only a currently bound owned token supplies an Agent mode. Previous
+        // sidecar sessions and restored history cannot supply a removed token.
+        let modes = if boolean("owned")? && row["token_bound"] != false {
+            vec![mode]
+        } else {
+            Vec::new()
+        };
         let actual =
-            agent_mention_route_with_modes(scope, &[mode], boolean("other")?, boolean("audience")?);
+            agent_mention_route_with_modes(scope, &modes, boolean("other")?, boolean("audience")?);
         let expected = match required_str(row, "expected")? {
             "shared" => AgentMentionRoute::Shared,
             "direct" => AgentMentionRoute::Direct,
@@ -809,7 +1166,7 @@ pub fn run_agent_interaction_mode_vector() -> Result<()> {
 }
 
 pub fn run_agent_participation_fixture_suite() -> Result<()> {
-    validate_agent_participation_fixture_metadata(&participation_fixture()?)?;
+    validate_extended_contracts(&participation_fixture()?)?;
     if ALL_AGENT_PARTICIPATION_VECTOR_IDS.len() != 7 {
         bail!(
             "expected 7 agent participation vector ids, got {}",
@@ -834,6 +1191,31 @@ mod tests {
     #[test]
     fn agent_participation_vectors_run_clean() {
         run_agent_participation_fixture_suite().unwrap();
+    }
+
+    #[test]
+    fn extended_contracts_reject_changed_verdicts_and_schema_expectations() {
+        for pointer in [
+            "/runtime_access_cases/0/expected",
+            "/reply_configuration_contract/authorization_cases/0/expected",
+            "/reply_configuration_contract/readiness_cases/0/expected",
+            "/owned_agent_authority_contract/cases/0/expected",
+            "/owned_agent_authority_contract/schema_cases/0/valid",
+            "/owned_agent_authority_contract/quota_sequence/expected/0",
+        ] {
+            let mut value =
+                super::super::load_fixture_value(AGENT_PARTICIPATION_FIXTURE_FILE).unwrap();
+            let expected = value.pointer_mut(pointer).unwrap();
+            *expected = match expected.as_bool() {
+                Some(value) => Value::Bool(!value),
+                None => Value::String("incorrect_verdict".to_owned()),
+            };
+            let fixture: AgentParticipationFixture = serde_json::from_value(value).unwrap();
+            assert!(
+                validate_extended_contracts(&fixture).is_err(),
+                "ignored {pointer}"
+            );
+        }
     }
 
     #[test]

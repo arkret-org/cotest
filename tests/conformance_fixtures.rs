@@ -29,18 +29,6 @@ macro_rules! conformance_test {
     };
 }
 
-macro_rules! conformance_async_test {
-    ($(#[$attr:meta])* $name:ident, $scenario:literal, $suite:path $(,)?) => {
-        $(#[$attr])*
-        #[tokio::test]
-        #[serial(conformance_fixtures)]
-        async fn $name() -> Result<()> {
-            let _guard = enter_scenario($scenario);
-            $suite().await
-        }
-    };
-}
-
 fn run_call_state_core_current_suite() -> Result<()> {
     cotest::conformance::run_call_state_core_suite().map(|_| ())
 }

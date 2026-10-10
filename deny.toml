@@ -9,11 +9,27 @@ feature-depth = 1
 ignore = [
     # Tracked release exception inherited through hpke-rs-libcrux.
     "RUSTSEC-2026-0124",
+    # OpenMLS -> hpke-rs -> libcrux -> hax: maintenance notice only.
+    # Remove once the upstream graph replaces proc-macro-error2.
+    "RUSTSEC-2026-0173",
+    # Same inherited maintenance notices as Inkson, with no compatible
+    # replacements in the pinned Dioxus GTK3 backend and image dependencies.
+    "RUSTSEC-2024-0370",
+    "RUSTSEC-2024-0436",
+    # Inherited Coauth signing-only RSA exception. PKCS#1 v1.5 decryption is
+    # not used; re-evaluate immediately if introduced or a patched release lands.
+    # Coauth security review deadline remains 2026-10-14.
+    "RUSTSEC-2023-0071",
 ]
 
 [licenses]
 allow = [
     "0BSD",
+    "AGPL-3.0-only",
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",
+    "ISC",
+    "PostgreSQL",
     "Apache-2.0",
     "Apache-2.0 WITH LLVM-exception",
     "BSD-2-Clause",

@@ -3,304 +3,139 @@
 use anyhow::{Result, anyhow, bail};
 use serde_json::{Value, json};
 
-use super::{emit_vector, load_local_fixture};
-use crate::conformance::{required_str, validate_profile};
+use super::emit_vector;
+use crate::conformance::required_str;
 
-/// Discovery profile (`ak.profile.discovery.v1`) black-box
-/// vectors covering surface-class filtering and post-C16 surface naming.
-///
-/// Spec authority: `registry/operation-registry.json` `surface_groups[]` and
-/// `surface_classes`. The fixture asserts:
-///   * core surfaces are implied by claiming `ak.profile.arkret_v1.core` — events_sync /
-///     identity_registry / service_discovery MUST appear and the discovery client MAY call ops in
-///     those surfaces;
-///   * extension surfaces (post-C16 split: blob_storage, realtime_media, moderation_reports) MUST
-///     be advertised explicitly — a core-only SUT MUST NOT auto-imply them, and discovery clients
-///     MUST gate extension calls on the advertised set;
-///   * `interop_bridge` surface-class entries (applet, mimi_interop) MUST be advertised only when
-///     the external protocol is supported, and bridge advertisement is INDEPENDENT of
-///     core/extension advertisement (no implication via `bridges_to`).
+/// Execute the current profile-discovery fixture through the SDK claim and
+/// semantic coverage validators, including inherited requirements and refusals.
 pub fn run_discovery_profile_fixture_suite() -> Result<()> {
     use std::collections::BTreeSet;
 
-    let fixture = load_local_fixture("discovery-profile-fixture.json")?;
-    validate_profile(&fixture, "ak.profile.discovery_vectors.v1")?;
+    use arkret_policy::{
+        ProfileClaim, ProfileSemanticSurface, ProfileValidator,
+        collect_profile_semantic_requirements, validate_profile_semantic_coverage,
+    };
+    use arkret_wire::generated::profile_requirements::PROFILE_REQUIREMENTS;
 
-    // Cross-check the fixture's surface_catalog against the LIVE operation
-    // registry's surface_groups so any spec-side rename is caught here
-    // rather than silently passing.
-    let op_registry = crate::conformance::load_artifact_json("registry/operation-registry.json")?;
-    let mut live_core: BTreeSet<String> = BTreeSet::new();
-    let mut live_ext: BTreeSet<String> = BTreeSet::new();
-    let mut live_bridge: BTreeSet<String> = BTreeSet::new();
-    let mut surface_to_ops: std::collections::BTreeMap<String, BTreeSet<String>> =
-        Default::default();
-    for group in op_registry
-        .get("surface_groups")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("operation-registry.surface_groups missing"))?
+    let fixture = crate::conformance::load_fixture_value("discovery-profile-fixture.json")?;
+    if fixture["suite"] != "discovery_profile_fixture"
+        || fixture["runner"]["kind"] != "profile_discovery_coverage"
     {
-        let surface = required_str(group, "surface")?;
-        let surface_class = required_str(group, "surface_class")?;
-        let mut ops: BTreeSet<String> = BTreeSet::new();
-        for op in group
-            .get("operations")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-        {
-            if let Some(s) = op.as_str() {
-                ops.insert(s.to_owned());
-            }
-        }
-        match surface_class {
-            "core" => {
-                live_core.insert(surface.to_owned());
-            }
-            "extension" => {
-                live_ext.insert(surface.to_owned());
-            }
-            "interop_bridge" => {
-                live_bridge.insert(surface.to_owned());
-            }
-            "deployment_local" => {}
-            other => {
-                bail!("operation-registry surface {surface} has unknown surface_class {other}")
-            }
-        }
-        surface_to_ops.insert(surface.to_owned(), ops);
+        bail!("discovery profile fixture identity drifted");
+    }
+    let cases = fixture["cases"]
+        .as_array()
+        .ok_or_else(|| anyhow!("discovery cases missing"))?;
+    let names = cases
+        .iter()
+        .map(|case| required_str(case, "name"))
+        .collect::<Result<BTreeSet<_>>>()?;
+    if cases.len() != 4
+        || names
+            != BTreeSet::from([
+                "advertised_profile_closure",
+                "surface_tier_does_not_overclaim",
+                "unknown_required_profile_fails_closed",
+                "optional_unknown_feature_is_not_claimed",
+            ])
+    {
+        bail!("discovery profile fixture case set drifted");
     }
 
-    let catalog = fixture
-        .get("surface_catalog")
-        .ok_or_else(|| anyhow!("discovery fixture missing surface_catalog"))?;
-    for (key, expected) in [
-        ("core", &live_core),
-        ("extension", &live_ext),
-        ("interop_bridge", &live_bridge),
+    let mut checked_profiles = 0;
+    for profile in PROFILE_REQUIREMENTS.keys() {
+        let requirements = collect_profile_semantic_requirements(&[profile])?;
+        let surface = ProfileSemanticSurface {
+            operation_requirements: requirements.operation_requirements.clone(),
+            event_kinds: requirements.required_event_kinds.clone(),
+            schemas: requirements.required_schemas.clone(),
+            fixtures: requirements.required_fixtures.clone(),
+            capability_actions: requirements.required_capability_actions.clone(),
+            features: requirements.required_features.clone(),
+            constraint_kinds: requirements.required_constraint_kinds.clone(),
+        };
+        validate_profile_semantic_coverage(&[profile], &surface)?;
+        // Every required family is independently removed from the inherited
+        // closure. A validator that stops checking any family must fail here.
+        for family in 0..7 {
+            let mut incomplete = surface.clone();
+            let removed = match family {
+                0 => incomplete.operation_requirements.pop().is_some(),
+                1 => incomplete.event_kinds.pop().is_some(),
+                2 => incomplete.schemas.pop().is_some(),
+                3 => incomplete.fixtures.pop().is_some(),
+                4 => incomplete.capability_actions.pop().is_some(),
+                5 => incomplete.features.pop().is_some(),
+                _ => incomplete.constraint_kinds.pop().is_some(),
+            };
+            if removed && validate_profile_semantic_coverage(&[profile], &incomplete).is_ok() {
+                bail!("profile {profile} accepted missing requirement family {family}");
+            }
+        }
+        for rejected in requirements.rejected_event_kinds {
+            let mut overclaimed = surface.clone();
+            overclaimed.event_kinds.push(rejected);
+            if validate_profile_semantic_coverage(&[profile], &overclaimed).is_ok() {
+                bail!("profile {profile} accepted an excluded Event kind");
+            }
+        }
+        checked_profiles += 1;
+    }
+    if checked_profiles == 0 {
+        bail!("discovery did not exercise any claimable profile requirements");
+    }
+
+    let unknown_case = cases
+        .iter()
+        .find(|case| case["name"] == "unknown_required_profile_fails_closed")
+        .ok_or_else(|| anyhow!("unknown required profile case missing"))?;
+    let unknown = required_str(&unknown_case["input"], "required_profile")?;
+    if collect_profile_semantic_requirements(&[unknown]).is_ok()
+        || ProfileValidator::for_client()
+            .validate(&[ProfileClaim::self_claimed(unknown)])
+            .is_ok()
+    {
+        bail!("unknown required profile was advertised as supported");
+    }
+    let optional_case = cases
+        .iter()
+        .find(|case| case["name"] == "optional_unknown_feature_is_not_claimed")
+        .ok_or_else(|| anyhow!("unknown optional feature case missing"))?;
+    let optional = required_str(&optional_case["input"], "optional_feature")?;
+    for profile in PROFILE_REQUIREMENTS.keys() {
+        if collect_profile_semantic_requirements(&[profile])?
+            .required_features
+            .iter()
+            .any(|feature| feature == optional)
+        {
+            bail!("unknown optional feature was advertised by {profile}");
+        }
+    }
+    // Co-located Station and push-gateway roles cannot borrow each other's
+    // operation claims. Validate the real generated role policy in both directions.
+    for (kind, forbidden) in [
+        (
+            arkret_wire::ServiceKind::PushGateway,
+            "ak.profile.station.v1",
+        ),
+        (
+            arkret_wire::ServiceKind::Station,
+            "ak.profile.push_gateway.v1",
+        ),
     ] {
-        let declared: BTreeSet<String> = catalog
-            .get(key)
-            .and_then(Value::as_array)
-            .ok_or_else(|| anyhow!("surface_catalog.{key} missing"))?
-            .iter()
-            .filter_map(|v| v.as_str().map(str::to_owned))
-            .collect();
-        if &declared != expected {
-            bail!(
-                "discovery fixture surface_catalog.{key} drift vs operation-registry: declared {declared:?} live {expected:?}"
-            );
-        }
-    }
-    // Post-C16 surfaces MUST be present under their canonical names.
-    for required in ["blob_storage", "realtime_media", "moderation_reports"] {
-        if !live_ext.contains(required) {
-            bail!("operation-registry surface_groups missing post-C16 surface {required}");
-        }
-    }
-
-    let vectors = fixture
-        .get("vectors")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("discovery fixture missing vectors[]"))?;
-
-    let mut covered_core_only = false;
-    let mut covered_ext_blob = false;
-    let mut covered_ext_realtime = false;
-    let mut covered_ext_moderation = false;
-    let mut covered_bridge_mimi = false;
-    let mut covered_bridge_applet = false;
-
-    for vector in vectors {
-        let name = required_str(vector, "name")?;
-        let surfaces: BTreeSet<String> = vector
-            .get("advertised_surfaces")
-            .and_then(Value::as_array)
-            .ok_or_else(|| anyhow!("vector {name} missing advertised_surfaces[]"))?
-            .iter()
-            .filter_map(|v| v.as_str().map(str::to_owned))
-            .collect();
-        // Every advertised surface MUST be a known live surface.
-        for s in &surfaces {
-            if !live_core.contains(s) && !live_ext.contains(s) && !live_bridge.contains(s) {
-                bail!(
-                    "vector {name} advertises unknown surface {s} (not in operation-registry surface_groups)"
-                );
-            }
-        }
-        let expected = vector
-            .get("expected")
-            .ok_or_else(|| anyhow!("vector {name} missing expected"))?;
-        let core_present = expected
-            .get("core_present")
-            .and_then(Value::as_bool)
-            .ok_or_else(|| anyhow!("vector {name} expected.core_present missing"))?;
-        let ext_present = expected
-            .get("extension_present")
-            .and_then(Value::as_bool)
-            .ok_or_else(|| anyhow!("vector {name} expected.extension_present missing"))?;
-        let bridge_present = expected
-            .get("interop_bridge_present")
-            .and_then(Value::as_bool)
-            .ok_or_else(|| anyhow!("vector {name} expected.interop_bridge_present missing"))?;
-
-        let actual_core = surfaces.iter().any(|s| live_core.contains(s));
-        let actual_ext = surfaces.iter().any(|s| live_ext.contains(s));
-        let actual_bridge = surfaces.iter().any(|s| live_bridge.contains(s));
-        if actual_core != core_present {
-            bail!("vector {name} core_present drift: expected {core_present} got {actual_core}");
-        }
-        if actual_ext != ext_present {
-            bail!("vector {name} extension_present drift: expected {ext_present} got {actual_ext}");
-        }
-        if actual_bridge != bridge_present {
-            bail!(
-                "vector {name} interop_bridge_present drift: expected {bridge_present} got {actual_bridge}"
-            );
-        }
-
-        // Each `client_can_call` op MUST belong to one of the advertised
-        // surfaces. Each `client_must_not_call` op MUST NOT belong to any.
-        let allowed_ops: BTreeSet<String> = surfaces
-            .iter()
-            .flat_map(|s| surface_to_ops.get(s).cloned().unwrap_or_default())
-            .collect();
-        for op in expected
-            .get("client_can_call")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .filter_map(|v| v.as_str())
+        if ProfileValidator::new(kind)
+            .validate(&[ProfileClaim::self_claimed(forbidden)])
+            .is_ok()
         {
-            if !allowed_ops.contains(op) {
-                bail!(
-                    "vector {name} expects client_can_call {op} but op not in any advertised surface"
-                );
-            }
-        }
-        for op in expected
-            .get("client_must_not_call")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .filter_map(|v| v.as_str())
-        {
-            if allowed_ops.contains(op) {
-                bail!(
-                    "vector {name} expects client_must_not_call {op} but op IS in advertised surface set"
-                );
-            }
-        }
-
-        // interop_bridge: when surface is mimi_interop / applet the
-        // external_protocol_supported field MUST be set.
-        if bridge_present {
-            let ext = vector
-                .get("external_protocol_supported")
-                .and_then(Value::as_str)
-                .ok_or_else(|| {
-                    anyhow!(
-                        "vector {name} advertises interop_bridge surfaces; external_protocol_supported MUST be a non-null string"
-                    )
-                })?;
-            if ext.is_empty() {
-                bail!(
-                    "vector {name} external_protocol_supported MUST identify the external protocol"
-                );
-            }
-        }
-
-        match name {
-            "core_only_sut_advertises_core_implies_no_extension_or_bridge" => {
-                covered_core_only = true
-            }
-            "extension_advertised_blob_storage_post_c16_split" => covered_ext_blob = true,
-            "extension_advertised_realtime_media_alone_does_not_imply_blob" => {
-                covered_ext_realtime = true
-            }
-            "extension_advertised_moderation_reports_post_c16_split" => {
-                covered_ext_moderation = true
-            }
-            "interop_bridge_mimi_advertised_when_supported" => covered_bridge_mimi = true,
-            "interop_bridge_applet_advertised_when_third_party_host_supported" => {
-                covered_bridge_applet = true
-            }
-            other => bail!("discovery fixture unexpected positive vector {other}"),
-        }
-        emit_vector(
-            "discovery_profile.advertise",
-            vector,
-            json!({
-                "name": name,
-                "advertised_surfaces": surfaces,
-                "core_present": actual_core,
-                "extension_present": actual_ext,
-                "interop_bridge_present": actual_bridge,
-            }),
-        );
-    }
-    if !(covered_core_only
-        && covered_ext_blob
-        && covered_ext_realtime
-        && covered_ext_moderation
-        && covered_bridge_mimi
-        && covered_bridge_applet)
-    {
-        bail!(
-            "discovery fixture must cover (a) core-only, (b) blob_storage / realtime_media / moderation_reports extension advertisement, and (c) mimi_interop + applet bridge advertisement"
-        );
-    }
-
-    let negatives = fixture
-        .get("negative_vectors")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("discovery fixture missing negative_vectors[]"))?;
-    let mut neg_bridge_unsupported = false;
-    let mut neg_ext_blocked = false;
-    let mut neg_bridge_no_implication = false;
-    for vector in negatives {
-        let name = required_str(vector, "name")?;
-        let expected = vector
-            .get("expected")
-            .ok_or_else(|| anyhow!("negative vector {name} missing expected"))?;
-        let outcome = required_str(expected, "outcome")?;
-        if outcome != "reject_call" && outcome != "reject_advertisement" {
-            bail!(
-                "negative vector {name} outcome must be reject_call or reject_advertisement, got {outcome}"
-            );
-        }
-        match name {
-            "interop_bridge_mimi_not_advertised_when_external_protocol_unsupported" => {
-                if required_str(expected, "rejection_reason")?
-                    != "interop_bridge_surface_not_advertised"
-                {
-                    bail!(
-                        "negative vector {name} rejection_reason must be interop_bridge_surface_not_advertised"
-                    );
-                }
-                neg_bridge_unsupported = true;
-            }
-            "extension_call_blocked_when_surface_not_advertised" => {
-                if required_str(expected, "rejection_reason")? != "extension_surface_not_advertised"
-                {
-                    bail!(
-                        "negative vector {name} rejection_reason must be extension_surface_not_advertised"
-                    );
-                }
-                neg_ext_blocked = true;
-            }
-            "interop_bridge_advertised_does_not_imply_in_spec_bridges_to" => {
-                neg_bridge_no_implication = true;
-            }
-            other => bail!("discovery fixture unexpected negative vector {other}"),
+            bail!("service role accepted excluded profile {forbidden}");
         }
     }
-    if !(neg_bridge_unsupported && neg_ext_blocked && neg_bridge_no_implication) {
-        bail!(
-            "discovery fixture must cover (a) bridge-when-unsupported, (b) extension-not-advertised, and (c) bridge-no-implication"
-        );
-    }
-
+    emit_vector(
+        "discovery_profile.requirements",
+        &fixture,
+        json!({"checked_profiles": checked_profiles, "case_count": cases.len(),
+            "executor": "SDK profile claim and semantic coverage validators"}),
+    );
     Ok(())
 }
 

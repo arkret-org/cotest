@@ -1,11 +1,8 @@
 //! Pre-activation checks for the current native Sidecar wire contract.
 //!
-//! The vector registry owns the 17 Sidecar vector identities, all `reserved`:
-//! no spec fixture carries them yet, so they are non-gating and this suite
-//! claims none of them. These checks exercise the closed current DTOs and the
-//! signed MLS binding so the SDK surface stays executable until a fixture
-//! returns a row to `active`; that change must move the row to fixture-backed
-//! execution, which is why an active row fails `validate_registry`.
+//! Seventeen runtime vectors remain reserved and these local checks do not
+//! claim their live acceptance. The active view-state vector is separately
+//! fixture-backed and establishes only JSON Schema and SDK carrier closure.
 
 use std::collections::BTreeSet;
 
@@ -173,7 +170,8 @@ fn view_state() -> Value {
             "realm_id": realm_id(),
             "strand_id": arkret::StrandId::from_event_id(&event_id(3))
         },
-        "display_mode": "context_merged",
+        "pinned": true,
+        "collapsed": false,
         "updated_hlc": "0198ff000000-0001-0a0b0c0d",
         "origin_device_id": "ak:device:0198ff00-0000-7000-8000-00000000000a"
     })
@@ -193,7 +191,7 @@ fn validate_registry() -> Result<()> {
         })
         .collect::<Vec<_>>();
     ensure!(
-        registered.len() == ALL_SIDECAR_VECTOR_IDS.len() && ALL_SIDECAR_VECTOR_IDS.len() == 17,
+        registered.len() == ALL_SIDECAR_VECTOR_IDS.len() + 1 && ALL_SIDECAR_VECTOR_IDS.len() == 17,
         "Sidecar vector set drifted"
     );
     for id in ALL_SIDECAR_VECTOR_IDS {
@@ -204,6 +202,38 @@ fn validate_registry() -> Result<()> {
                     .as_str()
                     .is_some_and(|description| description.contains("Activation:"))),
             "Sidecar vector {id} is not a reserved row with an activation condition"
+        );
+    }
+    ensure!(
+        registered.iter().any(|entry| {
+            entry["vector_id"] == "ak.vector.sidecar.view_state_closed.v1"
+                && entry["status"] == "active"
+                && entry["applies_to_fixtures"] == json!(["sidecar-view-state-schema-fixture.json"])
+        }),
+        "active Sidecar view-state vector lost its schema fixture"
+    );
+    Ok(())
+}
+
+fn run_sidecar_view_state_fixture() -> Result<()> {
+    let fixture = super::load_fixture_value("sidecar-view-state-schema-fixture.json")?;
+    ensure!(fixture["fixture_kind"] == "schema_only");
+    ensure!(fixture["covers_vectors"] == json!(["ak.vector.sidecar.view_state_closed.v1"]));
+    let cases = fixture["schema_validation_cases"]
+        .as_array()
+        .ok_or_else(|| anyhow!("Sidecar view-state fixture cases missing"))?;
+    ensure!(cases.len() == 3, "Sidecar view-state case ledger drifted");
+    for case in cases {
+        let schema_ref = super::required_str(case, "schema_ref")?;
+        let accepted = super::schema_validation_fixture::schema_validator(schema_ref)?
+            .is_valid(&case["instance"]);
+        let sdk_accepted =
+            serde_json::from_value::<AgentSidecarViewState>(case["instance"].clone())
+                .is_ok_and(|view| view.validate_shape().is_ok());
+        ensure!(
+            Some(accepted) == case["expect_valid"].as_bool() && sdk_accepted == accepted,
+            "Sidecar view-state case {} drifted",
+            case["name"]
         );
     }
     Ok(())
@@ -574,6 +604,7 @@ pub fn run_sidecar_accepted_request_identity_vector() -> Result<()> {
 /// Executes the pre-activation check of each reserved Sidecar vector once.
 pub fn run_sidecar_vector_suite() -> Result<()> {
     validate_registry()?;
+    run_sidecar_view_state_fixture()?;
     for (name, run) in [
         (
             VECTOR_ID_SIDECAR_MLS_BOOTSTRAP_BINDING,

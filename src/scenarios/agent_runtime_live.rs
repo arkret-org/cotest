@@ -778,15 +778,48 @@ pub async fn run_agent_capability_longevity_live() -> Result<()> {
     let station = group.server(0);
     let (controller, controller_account) =
         standard_client(station, &coauth, CONTROLLER_LABEL, CONTROLLER_DEVICE).await?;
-    let agent = AgentRuntimeSession::establish(
+    let mut operations = runtime_operations().to_vec();
+    operations.extend(["ak.event.read", "ak.message.create", "ak.realm.admin"]);
+    let agent = AgentRuntimeSession::establish_with_operations(
         station,
         &coauth,
         &controller,
         &controller_account,
         "longevity-agent",
+        &operations,
     )
     .await?;
-    let realm = RealmId::new(controller.create_realm("Grant Longevity Realm").await?)?;
+    let created = controller.create_realm_with(json!({
+        "title": "Grant Longevity Realm", "summary": "Indefinite grants at every risk tier",
+        "public": false, "join_rule": "public", "plaintext_visible_services": [station.service_id()]
+    })).await?;
+    let realm = RealmId::new(
+        created["realm_id"]
+            .as_str()
+            .context("longevity Realm id")?
+            .to_owned(),
+    )?;
+    let controller_generation = EventId::new(
+        created["event_response"]["commits"]
+            .as_array()
+            .and_then(|commits| commits.last())
+            .and_then(|commit| commit["event_ref"].as_str())
+            .context("longevity creator membership generation")?
+            .to_owned(),
+    )?;
+    let mut joined = MembershipPayload::join(
+        realm.clone(),
+        ActorId::account(agent.agent_account.clone()),
+        "controller joins its Agent for grant admission",
+    );
+    joined.agent_controller_binding = Some(AgentControllerMembershipBinding {
+        controller_account_id: controller_account.clone(),
+        controller_membership_generation_ref: controller_generation,
+        controller_terminal_event_ref: None,
+    });
+    controller
+        .submit_event(realm.as_str(), "ak.member.state", joined.to_value()?)
+        .await?;
     let subjects = [
         ("Agent", ActorId::account(agent.agent_account)),
         ("Service", ActorId::service(station.service_id().clone())),
@@ -1047,6 +1080,7 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
         ServiceOperationId::SELF_KEYS_KEYPACKAGES_COMMAND_CONSUME_V1,
         ServiceOperationId::SELF_DEVICE_MESSAGES_READ_LIST_V1,
         ServiceOperationId::SELF_DEVICE_MESSAGES_COMMAND_ACK_V1,
+        "ak.message.create",
     ];
     let completed_operations =
         arkret_schema::agent_runtime_scope::complete_agent_runtime_scope(operations)?;
@@ -1808,6 +1842,47 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
         &agent.verification_method,
         agent.runtime_key.to_bytes(),
     )?;
+    // Resolve the controller's current selection before isolating missing
+    // message authority. A session overlay is not this action-time selection.
+    let selection = arkret::ParticipationReplaceRequestBody {
+        target_scope: arkret::ParticipationScope::Realm {
+            realm_id: joined_realm.clone(),
+        },
+        selection: arkret::ParticipationBits {
+            reply_message: true,
+            ..arkret::ParticipationBits::NONE
+        },
+        expected_version: 0,
+    };
+    let selected = controller
+        .sdk()
+        .agent_participation_replace(agent.agent_account.principal_id.as_str(), &selection)
+        .await?;
+    ensure!(
+        selected
+            .agent_participation_entries
+            .iter()
+            .any(|entry| entry.scope == selection.target_scope
+                && entry.selection == selection.selection
+                && entry.version == 1),
+        "controller current reply selection was not installed"
+    );
+    // Shared replies require the controller's accepted Public mode as well as
+    // current participation. The initial Private mode does not grant sharing.
+    let public_mode = arkret_models_collaboration::agent_interaction::AgentInteractionSetPayload {
+        agent_account_id: agent.agent_account.clone(),
+        controller_account_id: controller_account.clone(),
+        interaction_mode:
+            arkret_models_collaboration::agent_interaction::AgentInteractionMode::Public,
+        expected_revision: None,
+    };
+    controller
+        .submit_event(
+            joined_realm.as_str(),
+            arkret_wire::EventKind::AgentInteractionSet.as_str(),
+            serde_json::to_value(public_mode)?,
+        )
+        .await?;
     let (status, result) = crate::scenarios::mls_lifecycle_live::post_json_at(
         &agent.runtime,
         "/_arkret/self/events",
@@ -1818,6 +1893,18 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
         status == StatusCode::FORBIDDEN
             && result["type"] == "https://arkret.org/problems/capability_denied",
         "membership alone authorized an ordinary Agent reply: {status} {result}"
+    );
+    let absent = expect_json(
+        controller.get(&format!(
+            "/_arkret/self/committed-events/{}",
+            reply.event_id
+        )),
+        StatusCode::NOT_FOUND,
+    )
+    .await?;
+    ensure!(
+        absent["type"] == "https://arkret.org/problems/not_found",
+        "a refused Agent reply must leave no accepted Commit: {absent}"
     );
     controller
         .grant_realm_actions_to(
@@ -2267,7 +2354,7 @@ pub async fn run_agent_actor_private_events_live() -> Result<()> {
                         "recipient_hpke_key_digest": recipient_digest,
                         "enc": URL_SAFE_NO_PAD.encode([7u8; 32]),
                         "ciphertext": URL_SAFE_NO_PAD.encode([9u8; 48]),
-                        "ciphertext_digest": arkret_canonical::sha256_digest(&[9u8; 48])
+                        "ciphertext_digest": arkret_canonical::sha256_digest([9u8; 48])
                     }]
                 },
                 "expires_at": stamp(now + chrono::Duration::hours(1)),

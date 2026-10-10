@@ -773,27 +773,26 @@ fn verify_checkpoint_never_outruns_projection(fixture: &Value) -> Result<()> {
                 .position(|step| step.get("action").and_then(Value::as_str) == Some(action))
         };
 
-        if let Some(install) = action_at("install_typed_current_result") {
-            if !required_bool(&steps[install], "durable")? {
-                ensure!(
-                    action_at("advance_durable_cursor").is_none() && expected == "rejected",
-                    "{name}: an undurable candidate must preserve the old checkpoint"
-                );
-                let delivered = action_at("deliver_incremental")
-                    .ok_or_else(|| anyhow!("{name}: failed install has no delivered candidate"))?;
-                let (stream, _) =
-                    parse_stream_ref(required_field(&steps[delivered], "stream_ref")?)?;
-                ensure!(
-                    matches!(stream, CommitStreamRef::Sidecar { .. }),
-                    "{name}: the failed candidate must name a Sidecar stream"
-                );
-                ensure!(
-                    install > delivered && !required_str(case, "reason")?.is_empty(),
-                    "{name}: failed installation must follow delivery and state its reason"
-                );
-                undurable_cases.insert(name);
-                continue;
-            }
+        if let Some(install) = action_at("install_typed_current_result")
+            && !required_bool(&steps[install], "durable")?
+        {
+            ensure!(
+                action_at("advance_durable_cursor").is_none() && expected == "rejected",
+                "{name}: an undurable candidate must preserve the old checkpoint"
+            );
+            let delivered = action_at("deliver_incremental")
+                .ok_or_else(|| anyhow!("{name}: failed install has no delivered candidate"))?;
+            let (stream, _) = parse_stream_ref(required_field(&steps[delivered], "stream_ref")?)?;
+            ensure!(
+                matches!(stream, CommitStreamRef::Sidecar { .. }),
+                "{name}: the failed candidate must name a Sidecar stream"
+            );
+            ensure!(
+                install > delivered && !required_str(case, "reason")?.is_empty(),
+                "{name}: failed installation must follow delivery and state its reason"
+            );
+            undurable_cases.insert(name);
+            continue;
         }
 
         if let (Some(install), Some(advance)) = (

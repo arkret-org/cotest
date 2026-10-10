@@ -10,8 +10,6 @@ use std::{fs, mem};
 
 #[path = "scan_gap_relay.rs"]
 mod scan_gap_relay;
-pub use scan_gap_relay::{ScanGapControl, ScanGapRelay};
-
 use anyhow::{Context, Result, anyhow};
 use arkret::{Did, DidCoreId, TrustDomainId};
 use arkret_http_client::{Auth, Client as SdkClient};
@@ -19,6 +17,7 @@ use base64::Engine as _;
 use base64::engine::general_purpose::{STANDARD as BASE64_STANDARD, URL_SAFE_NO_PAD};
 use chrono::Utc;
 use reqwest::{Client as HttpClient, IntoUrl, Method, RequestBuilder, StatusCode};
+pub use scan_gap_relay::{ScanGapControl, ScanGapRelay};
 use serde_json::Value;
 use sha2::{Digest as _, Sha256};
 use url::Url;

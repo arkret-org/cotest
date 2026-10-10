@@ -16,6 +16,10 @@ pub async fn run() -> Result<()> {
     crate::scenarios::message_mls_cross_station_live::run_with_signal(true).await
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Signal fixture binds the complete authenticated sender and recipient scope"
+)]
 fn envelope(
     sender: &Member,
     group: &mut ArkretMlsGroup,
@@ -42,7 +46,10 @@ fn envelope(
     )
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Signal fixture binds the complete authenticated sender and recipient scope"
+)]
 fn scoped_envelope(
     sender: &Member,
     group: &mut ArkretMlsGroup,
@@ -565,10 +572,10 @@ async fn deliver(
                 .context("recipient authenticated live rail before sending")?,
         )
     };
-    let mut websocket = if websocket_server.is_some() {
+    let mut websocket = if let Some(websocket_server) = websocket_server {
         Some(
             super::websocket_live::LiveSignalReader::connect(
-                websocket_server.unwrap(),
+                websocket_server,
                 &receiver.client,
                 realm.as_str(),
             )

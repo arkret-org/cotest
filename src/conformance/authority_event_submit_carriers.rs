@@ -158,9 +158,19 @@ fn assert_endpoint_unions_and_approval(approved: &Value) -> Result<usize> {
     let peer = json!({"branch": "authority_forward", "event_submission": approved});
     schema_valid(PEER_REQUEST, &peer)?;
     assert_roundtrip::<PeerAuthoritySubmitRequest>(&peer)?;
-    // The approval fixture is signed by a principal method, not a human
-    // device, so its forward carries no producer_device_evidence.
-    serde_json::from_value::<PeerAuthoritySubmitRequest>(peer.clone())?.validate()?;
+    // This KAT has an Account principal method rather than a human device.
+    // Carrier roundtrip is valid, but formal forwarding independently requires
+    // the Agent evidence sibling; the approval signature cannot replace it.
+    let missing_agent = serde_json::from_value::<PeerAuthoritySubmitRequest>(peer.clone())?
+        .validate()
+        .err()
+        .ok_or_else(|| anyhow!("Account principal forward must require Agent evidence"))?;
+    ensure!(missing_agent.error_code() == Some(arkret_wire::ErrorCode::SchemaViolation));
+    ensure!(
+        missing_agent
+            .to_string()
+            .contains("producer_agent_evidence")
+    );
 
     let mut mixed = peer;
     mixed["mls_submission"] = json!({});

@@ -25,7 +25,7 @@ jobs:
   joint-bringup:
     name: bringup soland + coauth + floria + cotest
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 180
     services:
       postgres:
         image: postgres:17
@@ -44,6 +44,8 @@ jobs:
       SOLAND_BIN: ${{ github.workspace }}/soland/target/release/soland
       COAUTH_BIN: ${{ github.workspace }}/coauth/target/release/coauth
       FLORIA_BIN: ${{ github.workspace }}/floria/target/release/floria
+      DATABASE_URL: postgresql://cotest:cotest-ci@127.0.0.1:5432/cotest_coauth_evidence
+      CARGO_BUILD_JOBS: "2"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -68,13 +70,6 @@ jobs:
           repository: ${{ github.repository_owner }}/chime
           path: chime
           ref: ${{ env.SIBLING_REF }}
-      # `yoface` is no longer checked out as a sibling: inkson pulls it from
-      # github.com/arkret-org/yoface (branch `main`) as a cargo git dependency.
-      # The repo is private, so cargo needs a credential rewrite; it fetches
-      # through the git CLI because inkson/.cargo/config.toml sets
-      # `net.git-fetch-with-cli`.
-      - name: Authenticate cargo for the private yoface git dependency
-        run: git config --global url."https://x-access-token:${{ secrets.CI_REPO_TOKEN || github.token }}@github.com/".insteadOf "https://github.com/"
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/inkson
@@ -98,9 +93,14 @@ jobs:
           repository: ${{ github.repository_owner }}/floria
           path: floria
           ref: ${{ env.SIBLING_REF }}
+      - name: Install Linux desktop dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev dbus-x11 gnome-keyring libsecret-tools openssl
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.98"
+          targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
@@ -110,7 +110,7 @@ jobs:
             floria
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
       # Runs before the ~40 minutes of builds and live tests below: a retired
       # protocol literal is a fixture bug the compiler cannot see, and finding
       # it after the bringup wastes the whole job. The scanner proves itself
@@ -136,7 +136,9 @@ jobs:
             # handler is #[cfg]-ed out and always answers
             # password_login_session_grants_disabled.
             features=""
-            if [ "$svc" = "coauth" ]; then
+            if [ "$svc" = "soland" ]; then
+              features="--features conformance-harness"
+            elif [ "$svc" = "coauth" ]; then
               features="--features cedar,password-bootstrap"
             fi
             (cd "$svc" && cargo build --release --locked $features)
@@ -145,10 +147,10 @@ jobs:
       - name: install playwright
         working-directory: cotest/e2e
         run: |
-          npm ci || npm install
+          npm ci
           npx playwright install --with-deps chromium
       - name: install dioxus cli
-        run: cargo install dioxus-cli --version 0.7.9 --locked
+        run: cargo install dioxus-cli --version 0.7.10 --locked
       - name: real OIDC returning-login and device-key non-skip lane
         working-directory: cotest
         shell: pwsh
@@ -163,12 +165,18 @@ jobs:
           -SkipNpmInstall
           -SkipBrowserInstall
           -StartupTimeoutSeconds 900
+      - name: Migrate isolated Coauth route-evidence database
+        run: |
+          createdb -h 127.0.0.1 -U cotest cotest_coauth_evidence
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f coauth/crates/storage-postgres/migrations/00000000000000_initial/up.sql
+        env:
+          PGPASSWORD: cotest-ci
       - name: run cotest harness
         working-directory: cotest
         # Default tests must pass before any live opt-in gates run.
         # Includes every existing runner crate plus the mandatory cotest-inkson-client-tests member.
         # The combined 54-runner audit lives in that client package; root services-live remains separate.
-        run: cargo test --workspace --locked
+        run: bash ../inkson/scripts/with-native-keystore.sh python scripts/run-native-rust-tests.py cargo test --workspace --locked
       - name: mandatory production Inkson client lane
         working-directory: cotest
         shell: pwsh

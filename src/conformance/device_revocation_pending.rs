@@ -140,8 +140,7 @@ fn hash(byte: char) -> Result<Hash> {
 }
 
 fn at(seconds: i64) -> Result<DateTime<Utc>> {
-    Ok(Utc
-        .timestamp_opt(1_776_000_000 + seconds, 0)
+    Utc.timestamp_opt(1_776_000_000 + seconds, 0)
         .single()
-        .ok_or_else(|| anyhow::anyhow!("invalid timestamp"))?)
+        .ok_or_else(|| anyhow::anyhow!("invalid timestamp"))
 }

@@ -911,54 +911,6 @@ fn event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
         .expect_verifiable()
 }
 
-pub(crate) fn event_envelope_with_chain(
-    actor: &str,
-    realm_id: &str,
-    kind: &str,
-    payload: Value,
-    actor_seq: u64,
-    prev_event_id: Option<&str>,
-) -> Event {
-    let (signing_seed, verification_method) = event_signing_identity(actor);
-    event_envelope_with_chain_and_signing_identity(
-        actor,
-        realm_id,
-        kind,
-        payload,
-        Some(actor_seq),
-        prev_event_id
-            .map(|value| EventId::new(value.to_owned()).expect("accepted actor frontier Event id"))
-            .into_iter()
-            .collect(),
-        signing_seed,
-        &verification_method,
-        None,
-    )
-}
-
-pub(crate) fn event_envelope_with_chain_for_device(
-    actor: &str,
-    device_id: &str,
-    station_id: &DidCoreId,
-    realm_id: &str,
-    kind: &str,
-    payload: Value,
-    actor_seq: u64,
-) -> Event {
-    let (signing_seed, verification_method) = event_signing_identity_for_device(actor, device_id);
-    event_envelope_with_chain_and_signing_identity(
-        actor,
-        realm_id,
-        kind,
-        payload,
-        Some(actor_seq),
-        Vec::new(),
-        signing_seed,
-        &verification_method,
-        Some(station_id),
-    )
-}
-
 pub(crate) fn message_create_text_payload(strand_id: &str, body: &str) -> Result<Value> {
     message_create_text_payload_for_strand(parse_strand_id(strand_id)?, body)
 }

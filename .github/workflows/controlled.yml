@@ -45,7 +45,7 @@ jobs:
     name: ${{ inputs.lane }}
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
-    timeout-minutes: 90
+    timeout-minutes: 120
     env:
       COTEST_SERVICE_VERSIONS: ${{ inputs.service_versions }}
       COTEST_MLS_HARNESS_VERSION: ${{ inputs.mls_harness_version }}
@@ -54,6 +54,7 @@ jobs:
       COTEST_SOLAND_BASE_URL: ${{ secrets.COTEST_SOLAND_BASE_URL }}
       COTEST_INKSON_BASE_URL: ${{ secrets.COTEST_INKSON_BASE_URL }}
       COTEST_COAUTH_BASE_URL: ${{ secrets.COTEST_COAUTH_BASE_URL }}
+      COTEST_REQUIRE_JOINT_STACK: "1"
       COTEST_PLATFORM_LIVE_TOKEN: ${{ secrets.COTEST_PLATFORM_LIVE_TOKEN }}
       COTEST_PLATFORM_LIVE_BASE_URL: ${{ secrets.COTEST_PLATFORM_LIVE_BASE_URL }}
       COTEST_PLATFORM_WEBHOOK_PATH: ${{ secrets.COTEST_PLATFORM_WEBHOOK_PATH }}
@@ -82,20 +83,43 @@ jobs:
           repository: ${{ github.repository_owner }}/chime
           path: chime
           ref: ${{ inputs.sibling_ref }}
-      # `yoface` is a private cargo git dependency of inkson rather than a
-      # sibling checkout — see .github/workflows/integration.yml.
-      - name: Authenticate cargo for the private yoface git dependency
-        if: inputs.lane == 'mls-data-plane'
-        run: git config --global url."https://x-access-token:${{ secrets.CI_REPO_TOKEN || github.token }}@github.com/".insteadOf "https://github.com/"
       - uses: actions/checkout@v4
         if: inputs.lane == 'mls-data-plane'
         with:
           repository: ${{ github.repository_owner }}/inkson
           path: inkson
           ref: ${{ inputs.sibling_ref }}
+      - uses: actions/checkout@v4
+        if: inputs.lane == 'mls-data-plane'
+        with:
+          repository: ${{ github.repository_owner }}/arkret-spec
+          path: arkret-spec
+          ref: ${{ inputs.sibling_ref }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        if: inputs.lane == 'mls-data-plane'
+        with:
+          repository: ${{ github.repository_owner }}/soland
+          path: soland
+          ref: ${{ inputs.sibling_ref }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        if: inputs.lane == 'mls-data-plane'
+        with:
+          repository: ${{ github.repository_owner }}/coauth
+          path: coauth
+          ref: ${{ inputs.sibling_ref }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        if: inputs.lane == 'mls-data-plane'
+        with:
+          repository: ${{ github.repository_owner }}/floria
+          path: floria
+          ref: ${{ inputs.sibling_ref }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
       - uses: dtolnay/rust-toolchain@master
         if: inputs.lane == 'mls-data-plane'
         with:
@@ -107,7 +131,7 @@ jobs:
       - name: Install Playwright
         working-directory: cotest/e2e
         run: |
-          npm ci || npm install
+          npm ci
           npx playwright install --with-deps chromium
       - name: Install wasm-bindgen test runner
         if: inputs.lane == 'mls-data-plane'
@@ -122,16 +146,28 @@ jobs:
         working-directory: inkson
         env:
           CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER: wasm-bindgen-test-runner
-        run: cargo test --target wasm32-unknown-unknown --test mls_data_plane_wasm -- --nocapture
-      - name: Run paired device-revoke control-plane sentinel
+        run: cargo test --locked --target wasm32-unknown-unknown --test mls_data_plane_wasm -- --nocapture
+      - name: Run accepted-device pairing and recovery generation invalidation
         if: inputs.lane == 'mls-data-plane'
         working-directory: cotest/e2e
-        run: >
-          npx playwright test
-          --config playwright.config.ts
-          --project=chromium
-          tests/identity/multi-device.spec.ts
-          --grep 'Device 1 revokes Device 2 via'
+        shell: bash
+        run: |
+          npx playwright test --config playwright.config.ts --project=chromium tests/identity/multi-device.spec.ts
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          cases = list(ET.parse(Path(os.environ['COTEST_JOINT_RUN_DIR']) / 'junit.xml').iter('testcase'))
+          required = (
+              'a second-device login stays unauthorized until the first device explicitly approves it',
+              'a fresh browser can use the 24-word Recovery Key instead of first-device approval',
+          )
+          for title in required:
+              matched = [case for case in cases if case.get('name', '').endswith(title)]
+              if len(matched) != 1 or any(matched[0].find(tag) is not None for tag in ('skipped', 'failure', 'error')):
+                  raise SystemExit(f'controlled device scenario did not pass exactly once: {title}')
+          print('accepted-device pairing and recovery generation invalidation both passed without skips')
+          PY
       - name: Run platform live tier
         if: inputs.lane == 'platform-live'
         working-directory: cotest/e2e

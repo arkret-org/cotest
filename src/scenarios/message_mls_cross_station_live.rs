@@ -85,6 +85,10 @@ pub async fn install_bindings(group: &mut ArkretMlsGroup, members: &[&Member]) -
     Ok(())
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Cross-station fixture binds sender, recipient and signed routing context"
+)]
 async fn submit_and_open(
     sender: &Member,
     receiver: &Member,

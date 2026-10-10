@@ -3,7 +3,7 @@
 # be preceded by a `/// Issue:` or `/// Gating:` doc comment so reviewers can
 # trace why the test is skipped and what unblocks it.
 #
-# ARC-0002 (重构计划 2026-07-10): additionally, every `#[ignore]` must carry a
+# ARC-0002 (refactoring plan 2026-07-10): additionally, every `#[ignore]` must carry a
 # machine-readable `/// Tier:` line declaring its test layer:
 #   contract       — deterministic cross-project contract check (PR lane)
 #   live           — needs real service binaries / Docker / live stack (nightly lane)
@@ -31,15 +31,15 @@ WINDOW=12
 # Files to scan: any `.rs` file under tests/ or src/ that mentions
 # `#[ignore`. We use `git ls-files` when available so submodule / target
 # directories never sneak in; otherwise fall back to a `find` filter.
-if command -v git >/dev/null 2>&1 && [ -d ".git" ]; then
-  FILES=$({ git ls-files 'tests/*.rs' 'src/**/*.rs' 'src/*.rs'; find crates/inkson-client-tests/src crates/inkson-client-tests/tests -type f -name '*.rs'; } 2>/dev/null | sort -u || true)
+if command -v git >/dev/null 2>&1 && FILES=$(git ls-files -- '*.rs'); then
+  :
 else
-  FILES=$(find tests src crates/inkson-client-tests/src crates/inkson-client-tests/tests -type f -name '*.rs' -not -path '*/target/*' 2>/dev/null || true)
+  FILES=$(find tests src crates -type f -name '*.rs' -not -path '*/target/*')
 fi
 
 if [ -z "${FILES:-}" ]; then
   echo "check_ignore_comments: no Rust files found under tests/ or src/" >&2
-  exit 0
+  exit 1
 fi
 
 missing=0
@@ -80,8 +80,8 @@ done
 if [ "$missing" -gt 0 ]; then
   echo >&2
   echo "FAIL: ${missing} of ${total} #[ignore] attribute(s) lack tracking doc comments." >&2
-  echo "Add `/// Issue: <ticket>` or `/// Gating: <reason>` plus" >&2
-  echo "`/// Tier: contract|live|mls-data-plane` immediately above each one." >&2
+  printf '%s\n' 'Add `/// Issue: <ticket>` or `/// Gating: <reason>` plus' >&2
+  printf '%s\n' '`/// Tier: contract|live|mls-data-plane` immediately above each one.' >&2
   exit 1
 fi
 

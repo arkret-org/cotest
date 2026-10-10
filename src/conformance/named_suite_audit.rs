@@ -601,13 +601,13 @@ pub fn inspect_named_suite_execution_with_clients(
                     continue;
                 }
             };
-            if let Some(result) = result {
-                if production_proved {
-                    executed_cases.extend(result.cases.into_iter().map(|case| CaseRef {
-                        fixture_ref: format!("fixtures/{file_name}"),
-                        case_id: case.case_id,
-                    }));
-                }
+            if let Some(result) = result
+                && production_proved
+            {
+                executed_cases.extend(result.cases.into_iter().map(|case| CaseRef {
+                    fixture_ref: format!("fixtures/{file_name}"),
+                    case_id: case.case_id,
+                }));
             }
         }
         if runner_passed {

@@ -389,43 +389,6 @@ impl TestActorClient {
         Ok(grant_id)
     }
 
-    /// Wait for one exact Event to appear in the signed RealmCommit stream.
-    /// Legacy callers must pass an EventId and a previous CommitId; the old
-    /// proposal digest and Seal identity have no current protocol meaning.
-    pub(crate) async fn await_control_proposal_settled(
-        &self,
-        realm_id: &str,
-        event_id: &str,
-        previous_commit_id: &str,
-    ) -> Result<String> {
-        let event_id = EventId::new(event_id.to_owned())?;
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
-        loop {
-            let realm = RealmId::new(realm_id.to_owned())?;
-            let outcome = self
-                .sdk
-                .scan_commit_stream_to_head(
-                    realm.clone(),
-                    arkret_wire::CommitStreamRef::Realm { realm_id: realm },
-                    None,
-                    1000,
-                )
-                .await?;
-            if let Some(item) = outcome.committed_events.iter().find(|item| {
-                item.commit().event_ref == event_id
-                    && item.commit().commit_id.as_str() != previous_commit_id
-            }) {
-                return Ok(item.commit().commit_id.to_string());
-            }
-            if std::time::Instant::now() >= deadline {
-                return Err(anyhow!(
-                    "Event {event_id} did not appear after Commit {previous_commit_id} in Realm {realm_id}"
-                ));
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-        }
-    }
-
     /// Wait for exact signed commit inclusion of one Event in this Realm.
     pub async fn await_event_seal_coverage(
         &self,
@@ -1145,37 +1108,4 @@ fn self_grant_action_for_kind(kind: &str) -> Option<&'static str> {
         })
         .min_by_key(|descriptor| descriptor.target_event_kinds.len())
         .map(|descriptor| descriptor.action.as_str())
-}
-
-fn payload_patch_touches_calendar(payload: &Value) -> bool {
-    payload
-        .get("patch")
-        .and_then(Value::as_object)
-        .is_some_and(|patch| {
-            patch.iter().any(|(path, value)| {
-                if path == "metadata.fields.calendar"
-                    || path.starts_with("metadata.fields.calendar.")
-                {
-                    return true;
-                }
-                if path == "metadata.fields" {
-                    return value
-                        .get("value")
-                        .or_else(|| value.get("$value"))
-                        .or_else(|| value.get("fields"))
-                        .or(Some(value))
-                        .and_then(Value::as_object)
-                        .is_some_and(|fields| fields.contains_key("calendar"));
-                }
-                if path == "metadata" {
-                    return value
-                        .get("value")
-                        .or_else(|| value.get("$value"))
-                        .and_then(|metadata| metadata.get("fields"))
-                        .and_then(Value::as_object)
-                        .is_some_and(|fields| fields.contains_key("calendar"));
-                }
-                false
-            })
-        })
 }

@@ -655,6 +655,8 @@ mod tests {
     fn fixture_mapping_is_closed() {
         validate_push_registration_handoff_fixture().unwrap();
     }
+    /// Gating: Requires real PostgreSQL through COTEST_FLORIA_HANDOFF_DATABASE_URL.
+    /// Tier: live
     #[test]
     #[ignore = "requires real PostgreSQL via COTEST_FLORIA_HANDOFF_DATABASE_URL"]
     fn executes_real_lifecycle() {

@@ -147,6 +147,10 @@ fn rotation_create_request(
     ))
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Rotation fixture binds all atomic key and identity inputs"
+)]
 fn rotation_plan(
     principal: &Did,
     station_id: &str,

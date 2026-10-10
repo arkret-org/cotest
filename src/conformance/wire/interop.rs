@@ -59,7 +59,8 @@ pub fn run_interop_downgrade_fixture_suite() -> Result<()> {
         );
     }
 
-    for protocol in ["mimi"] {
+    {
+        let protocol = "mimi";
         if !covered_protocols.contains(protocol) {
             bail!("interop downgrade fixture must cover protocol {protocol}");
         }

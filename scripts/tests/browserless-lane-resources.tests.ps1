@@ -13,7 +13,9 @@
 #    2026-09-15, not equalities: adding specs is the normal case and must not
 #    fail a gate, while a lane that quietly collects fewer tests than it used to
 #    is exactly the regression the light-edge and api-only work can cause. Raise
-#    a floor deliberately when a lane grows; never lower one to make this pass.
+#    a floor deliberately when a lane grows. Explicit suite migrations require
+#    a documented new baseline and named required files so unrelated growth
+#    cannot hide a missing scenario.
 #
 # Requires only `e2e/node_modules` -- no services, no browsers, no sibling
 # repositories.
@@ -134,11 +136,15 @@ foreach ($project in $browserProjects) {
 
 # --- 3. Selection floors ----------------------------------------------------
 
-# Captured 2026-09-15 from this checkout. Floors, not equalities.
+# Most floors retain their 2026-09-15 baseline. The supported UI smoke suite
+# was re-baselined on 2026-10-10 after the recorded bootstrap replacement and
+# unsupported file-transfer UI removal. Its fixture records the still-open
+# file-transfer owner; this selection is not a full protocol coverage claim.
+$uiSmokeBaseline = Get-Content -LiteralPath (Join-Path $PSScriptRoot "fixtures/ui-smoke-selection.json") -Raw | ConvertFrom-Json
 $floors = @(
     @{ project = "chrome"; grep = $null; tests = 279; files = 67; label = "joint-full default lane" },
     @{ project = "chromium"; grep = $null; tests = 279; files = 67; label = "chromium lane" },
-    @{ project = "chrome"; grep = "@fully-implemented"; tests = 69; files = 29; label = "joint-smoke PR gate" },
+    @{ project = "chrome"; grep = "@fully-implemented"; tests = $uiSmokeBaseline.minimum_tests; files = $uiSmokeBaseline.required_files.Count; label = "supported UI smoke gate" },
     @{ project = "joint-inkson"; grep = $null; tests = 38; files = 17; label = "joint-inkson identity lane" },
     @{ project = "joint-api"; grep = $null; tests = 71; files = 16; label = "joint-api browserless lane" }
 )
@@ -153,6 +159,13 @@ foreach ($floor in $floors) {
         "$($floor.label) shrank: project '$($floor.project)'" +
         $(if ($floor.grep) { " --grep $($floor.grep)" } else { "" }) +
         " collects $($listing.files) files, floor is $($floor.files).")
+    if ($floor.project -eq $uiSmokeBaseline.project -and $floor.grep -eq $uiSmokeBaseline.selector) {
+        $normalizedListing = $listing.text.Replace('\', '/')
+        foreach ($requiredFile in $uiSmokeBaseline.required_files) {
+            Assert-True ($normalizedListing.Contains(" › ${requiredFile}:")) (
+                "supported UI smoke gate lost required scenario file '$requiredFile'")
+        }
+    }
     Write-Host ("  {0,-22} {1,-18} {2,3} tests / {3,2} files (floor {4}/{5})" -f
         $floor.project, ($floor.grep ?? "-"), $listing.tests, $listing.files, $floor.tests, $floor.files)
 }

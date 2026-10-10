@@ -74,6 +74,8 @@ fn unique_suffix() -> u128 {
         .as_nanos()
 }
 
+/// Gating: Requires a running Coauth and Soland with the configured durable-store test endpoints.
+/// Tier: live
 #[tokio::test]
 #[ignore = "requires a running Coauth and Soland; see the module docs"]
 async fn garth_syncs_an_account_over_its_own_durable_store() -> Result<()> {
@@ -277,7 +279,7 @@ async fn garth_syncs_an_account_over_its_own_durable_store() -> Result<()> {
         "the real Station never exercised its cursor refusal gate"
     );
     assert_eq!(recovered_projector.resets.load(Ordering::SeqCst), 1);
-    let requests = transport.requests.lock().unwrap();
+    let requests = transport.requests.lock().unwrap().clone();
     assert_eq!(requests[0].after.as_deref(), Some(rejected_cursor.as_str()));
     assert!(requests.len() >= 2);
     assert_eq!(requests[1].after, None);

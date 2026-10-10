@@ -29,8 +29,10 @@ case "$lane" in
   mls-data-plane)
     require_env COTEST_SERVICE_VERSIONS
     require_env COTEST_SOLAND_BASE_URL
+    require_env COTEST_COAUTH_BASE_URL
     require_env COTEST_INKSON_BASE_URL
     require_env COTEST_MLS_HARNESS_VERSION
+    require_version coauth
     require_version soland
     require_version inkson
     ;;

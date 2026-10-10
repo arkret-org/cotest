@@ -35,7 +35,7 @@ pub mod scenarios {
     }
     pub mod protocol_payloads {
         pub use cotest::scenarios::protocol_payloads::*;
-        mod snapshot_head_disclosure;
+        pub mod snapshot_head_disclosure;
         pub use snapshot_head_disclosure::*;
     }
     pub mod calendar_rsvp_convergence;

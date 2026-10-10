@@ -1,6 +1,8 @@
 use anyhow::Result;
 use serial_test::serial;
 
+/// Gating: Requires a Station advertising the security-transaction operation bundle.
+/// Tier: live
 #[tokio::test]
 #[serial]
 #[ignore = "security-transaction operations are not in an advertised station bundle"]

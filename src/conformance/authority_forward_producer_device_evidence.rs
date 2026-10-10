@@ -774,7 +774,7 @@ impl GovernanceStation {
                 return Err(rejected(RejectedBy::GovernanceStation, code));
             }
         }
-        let reference = evidence_digest(&evidence)?;
+        let reference = evidence_digest(evidence)?;
         ensure!(evidence_digest(evidence)? == reference);
         self.transactions.push(AcceptanceTransaction {
             event_id: event.event_id.clone(),

@@ -12,6 +12,37 @@ use crate::scenarios::identity_test_support::{
     spawn_with_harness_account_authority,
 };
 
+fn ensure_paired_calendar_source(snapshot: &serde_json::Value) -> Result<()> {
+    let entries = snapshot["current_state_entries"]
+        .as_array()
+        .context("snapshot current entries")?;
+    let strands = entries
+        .iter()
+        .filter(|row| row["selector"]["kind"] == "strand")
+        .collect::<Vec<_>>();
+    let sources = entries
+        .iter()
+        .filter(|row| row["selector"]["kind"] == "calendar_schedule_source")
+        .collect::<Vec<_>>();
+    ensure!(
+        strands.len() == 1 && sources.len() == 1,
+        "the founder Strand must have exactly one paired calendar source"
+    );
+    let strand = strands[0];
+    let source = sources[0];
+    ensure!(
+        source["selector"]["strand_id"] == strand["selector"]["strand_id"]
+            && source["revision"] == strand["revision"]
+            && source["value"]["strand_revision"] == strand["revision"]
+            && source["source_stream_ref"] == strand["source_stream_ref"]
+            && source["value"]["effective_scope"] == strand["source_stream_ref"]
+            && source["value"]["source"].is_null()
+            && source["value"]["metadata_context"].is_null(),
+        "discussion Strand calendar source must preserve its exact revision and empty intent"
+    );
+    Ok(())
+}
+
 /// A Station behind the harness Coauth plus one founding-device author whose
 /// standard DPoP session grant is bound at that Coauth.
 pub struct SnapshotAuthor {
@@ -122,9 +153,10 @@ pub async fn narrow_snapshot_head_discloses_only_complete_creator_cut() -> Resul
         "creator cut must include bootstrap, Strand create, and default-Strand Commit: {snapshot}"
     );
     ensure!(
-        typed.current_state_entries.len() == 10,
-        "creator cut must disclose all ten typed current results: {snapshot}"
+        typed.current_state_entries.len() == 11,
+        "creator cut must disclose all eleven typed current results: {snapshot}"
     );
+    ensure_paired_calendar_source(&snapshot)?;
     ensure!(
         snapshot["visible_stream_heads"]
             .as_array()
@@ -208,7 +240,7 @@ pub async fn narrow_snapshot_head_discloses_only_complete_creator_cut() -> Resul
     ensure!(
         facet_typed.visible_stream_heads.len() == 1
             && facet_typed.visible_stream_heads[0].stream_position == 9
-            && facet_typed.current_state_entries.len() == 11
+            && facet_typed.current_state_entries.len() == 12
             && facet_typed.current_state_entries.iter().any(|row| matches!(
                 row,
                 arkret_wire::TypedCurrentRow::Value {
@@ -218,6 +250,7 @@ pub async fn narrow_snapshot_head_discloses_only_complete_creator_cut() -> Resul
             )),
         "facet cut must disclose the plaintext-services row: {facet_snapshot}"
     );
+    ensure_paired_calendar_source(&facet_snapshot)?;
     verify_test_notary_snapshot(&facet_typed)?;
     // A plain-text message (the facet admits this Station for message
     // content) is part of the same founder cut: the next head carries its
@@ -238,7 +271,7 @@ pub async fn narrow_snapshot_head_discloses_only_complete_creator_cut() -> Resul
     .context("head after a message must be a signed wire snapshot")?;
     ensure!(
         with_message.visible_stream_heads[0].stream_position == 10
-            && with_message.current_state_entries.len() == 12
+            && with_message.current_state_entries.len() == 13
             && with_message
                 .current_state_entries
                 .iter()
@@ -252,6 +285,7 @@ pub async fn narrow_snapshot_head_discloses_only_complete_creator_cut() -> Resul
                 )),
         "head after a message must disclose its message_revision: {with_message:?}"
     );
+    ensure_paired_calendar_source(&serde_json::to_value(&with_message)?)?;
     verify_test_notary_snapshot(&with_message)?;
     ensure_same_object(
         &with_message,
@@ -701,47 +735,7 @@ pub async fn limited_account_window_names_issued_basis_or_is_preview_only() -> R
     Ok(())
 }
 
-/// Every frame of one bounded Account subscribe, each past the SDK's closed
-/// frame contract.
-
-/// Fresh Soland + real PostgreSQL, one Account batch over two Realms with a
-/// limited `window_limit`: a Realm with more Commits than the window and no
-/// issued anchor snapshot arrives `preview_only`, beside a Realm whose whole
-/// history fits. Inkson's Account frame verifier must not reject the batch:
-/// it backfills the preview stream with a verified replay from genesis over
-/// the live scan and authority bundle and only then treats that stream as
-/// exact, while the sibling Realm verifies as ordinary full history. A forged
-/// preview row still fails closed. `window_limit` 8 keeps the Realm short;
-/// the product's 20-row window over a longer message tail is exercised by
-/// `message_tail_window_beyond_twenty_commits_verifies_through_inkson`.
-
-/// Fresh Soland + real PostgreSQL, the live floor-tail shape: `/head` signs
-/// the seven-Commit creator bootstrap, the creator then adds a default
-/// Strand (StrandCreate + `ak.realm.set_default_strand`), and a
-/// `window_limit` 2 Account window names that issued snapshot as the basis
-/// for its committed prefix. Inkson's Account frame verifier reads the
-/// basis by reference through Garth, verifies the two-Commit tail and keeps
-/// the Station's same-cut current (equal to the signed `/head` at the window
-/// head) without failing the frame; the client never folds typed current
-/// itself. A current row sourced outside the verified cut fails closed.
-
-/// Fresh Soland + real PostgreSQL, a founder Realm longer than the product's
-/// default 20-row Account window: the plaintext-facet bootstrap, a default
-/// Strand and one message, a `/head` issued at that message Commit (position
-/// 10), then twenty more messages. The default window delivers positions
-/// 11..=30 and names the
-/// issued snapshot, which already carries a `message_revision` row, as the
-/// basis for its committed prefix. Inkson verifies the signed floor rows, the
-/// twenty-Commit message tail and the same-cut current without failing the
-/// frame, and the fresh signed head at the window head equals that current.
-
-/// Fresh Soland + real PostgreSQL, a `restricted` founder Realm whose join
-/// policy declares an automatic claim gate: `/head` signs the complete cut
-/// (the policy bundle carries the join policy the Station evaluated at
-/// admission), and after a default Strand a `window_limit` 2 Account window
-/// names that snapshot as its basis. Inkson installs the signed join policy
-/// and restricted join rule without evaluating the gate itself.
-
+/// Request a signed snapshot by its exact identity within the selected Realm.
 pub fn by_ref_request(
     client: &crate::harness::TestActorClient,
     snapshot_id: &arkret_wire::RealmSnapshotId,

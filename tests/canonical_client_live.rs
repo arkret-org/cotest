@@ -69,6 +69,8 @@ fn slug(prefix: &str) -> String {
     )
 }
 
+/// Gating: Requires a running Coauth and Soland with canonical provisioning credentials.
+/// Tier: live
 #[tokio::test]
 #[ignore = "requires a running Coauth and Soland; see the module docs"]
 async fn the_harness_builds_a_client_from_the_canonical_chain() -> Result<()> {

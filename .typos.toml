@@ -1,9 +1,19 @@
 [default]
 extend-ignore-re = [
+    # Content-addressed IDs and exact opaque known-answer vectors.
+    "ak:[a-z_]+:[A-Za-z0-9_-]{43,}",
+    "AZk4PXzJ6MpkxXnYTUmgXzeIYNd0Wfnz3N0hwLHNV6Xq",
+    "Y29ubmVjdGlvbi0wMTIzNDU2Nzg5YWJjZGVm",
     # DID key multibase strings are opaque test vectors, not prose.
     "z6Mk[0-9A-Za-z]+",
 ]
+[default.extend-identifiers]
+# Canonical PostgreSQL table name.
+account_datas = "account_datas"
+
 [default.extend-words]
+# Upstream formal-verification tool used by OpenMLS.
+hax = "hax"
 # Don't correct the surname "Teh"
 teh = "teh"
 consts = "consts"

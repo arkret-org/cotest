@@ -742,16 +742,15 @@ fn validate_recovery_terminal_commit_case(case: &Value, name: &str) -> Result<()
                 );
             }
         }
-        "raw_recovery_commit_without_a_completed_transaction" => {
-            if members(case, "attempted_paths")
+        "raw_recovery_commit_without_a_completed_transaction"
+            if (members(case, "attempted_paths")
                 != ["ordinary_commit_submit", "federation", "history_replay"]
-                || case.get("expected_finality").and_then(Value::as_str) != Some("none")
-            {
-                return Err(
+                || case.get("expected_finality").and_then(Value::as_str) != Some("none")) =>
+        {
+            return Err(
                     "a raw recovery commit must reach no finality through submit, federation or history replay"
                         .to_owned(),
                 );
-            }
         }
         _ => {}
     }

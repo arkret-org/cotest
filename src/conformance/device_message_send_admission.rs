@@ -299,7 +299,7 @@ fn mixed_batch(variant: &Value, max_ttl: Duration, sent_at: DateTime<Utc>) -> Re
     let mut control = station_with(&[&valid], max_ttl);
     ensure!(
         matches!(
-            control.send(&[valid.clone()], sent_at)?,
+            control.send(std::slice::from_ref(&valid), sent_at)?,
             SendResult::Outcome(_)
         ) && control.queue.len() == 1,
         "the valid target must enqueue on its own"
@@ -353,7 +353,8 @@ fn exact_retry(variant: &Value, max_ttl: Duration, sent_at: DateTime<Utc>) -> Re
     let expires_at = sent_at + Duration::minutes(10);
     let target = raw_target(&delivered[0], Some(expires_at))?;
     let mut station = station_with(&[&target], max_ttl);
-    let SendResult::Outcome(original) = station.send(&[target.clone()], sent_at)? else {
+    let SendResult::Outcome(original) = station.send(std::slice::from_ref(&target), sent_at)?
+    else {
         bail!("the original send must enqueue");
     };
     let typed: DeviceMessagesSendOutcome = serde_json::from_value(original.clone())?;
@@ -370,7 +371,7 @@ fn exact_retry(variant: &Value, max_ttl: Duration, sent_at: DateTime<Utc>) -> Re
     let queued = station.queue.len();
 
     let retry_clock = expires_at + Duration::minutes(1);
-    let retry = station.send(&[target.clone()], retry_clock)?;
+    let retry = station.send(std::slice::from_ref(&target), retry_clock)?;
     // The same target without an idempotency record would fail at this clock,
     // so returning the original result proves the check order.
     let mut fresh = station_with(&[&target], max_ttl);

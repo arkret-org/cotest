@@ -161,7 +161,7 @@ fn encrypt(
         "ak.message.create",
         group.epoch(),
         EventId::from_digest(arkret_canonical::DigestSuite::Sha256, [seed; 32]),
-        &group.local_content_sender_domain().unwrap(),
+        group.local_content_sender_domain().unwrap(),
         arkret_models_crypto::EventContentRoutingContext::None,
     )
     .unwrap();

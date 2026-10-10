@@ -8,7 +8,8 @@ use arkret_models_collaboration::mls_group_state_material::{
     MlsGroupStateMaterialOutcome, MlsMemberGroupStateMaterialReadRequestBody,
 };
 use arkret_models_collaboration::mls_roster_authority::{
-    MlsRosterAuthorityReadOutcome, MlsRosterAuthorityReadRequestBody, MlsRosterRecord,
+    MlsMemberRosterAuthorityReadRequestBody, MlsRosterAuthorityReadOutcome, MlsRosterRecord,
+    MlsSelfRosterAuthorityReadOutcome,
 };
 use arkret_wire::{ActorId, CircleId, EventAdmissionSubmission, EventKind, ScopeRef};
 use reqwest::StatusCode;
@@ -153,7 +154,7 @@ const PEER_MATERIAL: &str = "/_arkret/peer/mls/group-state-material";
 
 struct CircleMlsMaterial {
     material: MlsMemberGroupStateMaterialReadRequestBody,
-    roster: MlsRosterAuthorityReadRequestBody,
+    roster: MlsMemberRosterAuthorityReadRequestBody,
     group_info: Vec<u8>,
     tree: Vec<u8>,
 }
@@ -211,11 +212,10 @@ async fn activate_circle(
         ratchet_tree_ref: arkret_wire::BlobRef::new(tree_ref)?,
         max_response_bytes: None,
     };
-    let roster = MlsRosterAuthorityReadRequestBody {
+    let roster = MlsMemberRosterAuthorityReadRequestBody {
         realm_id,
         effective_scope: scope,
         mls_group_id: material.mls_group_id.clone(),
-        genesis_event_ref: event.event_id.clone(),
         target_commit_event_ref: event.event_id,
         target_epoch: 0,
         caller_actor_id: creator.actor.clone(),
@@ -255,6 +255,25 @@ async fn assert_circle_mls_reads(
         expected,
     )
     .await?;
+    let self_result = authorized
+        .then(|| serde_json::from_value::<MlsSelfRosterAuthorityReadOutcome>(self_roster.clone()))
+        .transpose()?;
+    let peer_request = if let Some(result) = &self_result {
+        arkret::verify_mls_member_roster_authority_pages(
+            std::slice::from_ref(result),
+            &material.roster,
+        )?
+    } else {
+        // Keep the original accepted Genesis locator to probe historical-cut
+        // denial after leave; an unauthorized self response supplies no keys.
+        material
+            .roster
+            .with_accepted_genesis(material.material.group_state_event_id.clone())
+    };
+    ensure!(
+        peer_request.genesis_event_ref == material.material.group_state_event_id,
+        "the own Station derived a different accepted Circle Genesis"
+    );
     let (status, peer_material) = governance
         .signed_peer_post(
             account_station,
@@ -272,7 +291,7 @@ async fn assert_circle_mls_reads(
         .signed_peer_post(
             account_station,
             arkret_wire::PATH_PEER_MLS_ROSTER_AUTHORITY,
-            &arkret_canonical::canonical_json_bytes(&material.roster)?,
+            &arkret_canonical::canonical_json_bytes(&peer_request)?,
             governance.service_id(),
         )
         .await?;
@@ -302,13 +321,15 @@ async fn assert_circle_mls_reads(
             "Circle material did not preserve accepted Genesis bytes"
         );
     }
-    let self_page: MlsRosterAuthorityReadOutcome = serde_json::from_value(self_roster)?;
+    let self_page = self_result
+        .context("authorized roster supplies verified own-Station keys")?
+        .roster;
     let peer_page: MlsRosterAuthorityReadOutcome = serde_json::from_slice(&peer_roster)?;
     let (_, seed) = crate::harness::test_service_signing_key(&format!("{GROUP}-0"));
     let key = ed25519_dalek::SigningKey::from_bytes(&seed);
     let method = format!("{}#notary-key", governance.service_did());
     for page in [&self_page, &peer_page] {
-        page.manifest.validate_for_request(&material.roster)?;
+        page.manifest.validate_for_request(&peer_request)?;
         arkret_signatures::keypackages::verify_keypackage_signing_input(
             &key.verifying_key().to_bytes(),
             &method,
@@ -330,7 +351,7 @@ async fn assert_circle_mls_reads(
         );
         ensure!(
             matches!(&page.records[0],MlsRosterRecord::Genesis{genesis_event_ref,actor_id,..}
-            if genesis_event_ref==&material.roster.genesis_event_ref && actor_id==&material.roster.caller_actor_id),
+            if genesis_event_ref==&peer_request.genesis_event_ref && actor_id==&peer_request.caller_actor_id),
             "Circle roster did not bind the actual accepted creator"
         );
     }
@@ -449,16 +470,15 @@ async fn assert_circle_stream_scan(
         let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(60);
         let page = loop {
             let result = member.sdk().scan_commit_stream(&request).await;
-            if let Ok(page) = &result {
-                if page
+            if let Ok(page) = &result
+                && page
                     .committed_events
                     .iter()
                     .map(|row| row.commit().stream_position)
                     .collect::<Vec<_>>()
                     == expected_positions
-                {
-                    break result?;
-                }
+            {
+                break result?;
             }
             ensure!(
                 tokio::time::Instant::now() < deadline,

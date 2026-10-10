@@ -14,6 +14,8 @@
 //! All three use the same panic-catch pattern as `envelope_fuzz`, so a finding
 //! surfaces as `Err(message)` rather than aborting the harness.
 
+use std::sync::OnceLock;
+
 use arbitrary::{Arbitrary, Unstructured};
 use arkret_wire::SchemaId;
 use serde_json::{Value, json};
@@ -21,11 +23,14 @@ use serde_json::{Value, json};
 use super::envelope_fuzz::ArbValue;
 use super::panic_guard::catch;
 
-fn registry() -> arkret_schema::ProtocolSchemaRegistry {
-    arkret_schema_conformance::schema_registry_from_default_spec_artifacts()
-        .ok()
-        .flatten()
-        .unwrap_or_default()
+fn registry() -> &'static arkret_schema::ProtocolSchemaRegistry {
+    static REGISTRY: OnceLock<arkret_schema::ProtocolSchemaRegistry> = OnceLock::new();
+    REGISTRY.get_or_init(|| {
+        arkret_schema_conformance::schema_registry_from_default_spec_artifacts()
+            .ok()
+            .flatten()
+            .unwrap_or_default()
+    })
 }
 
 /// `arbitrary`-derived input shaped to the signed typed snapshot.

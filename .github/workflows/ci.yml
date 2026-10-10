@@ -17,6 +17,24 @@ jobs:
   rust:
     name: rust (${{ matrix.toolchain }} / clippy / test)
     runs-on: ubuntu-latest
+    timeout-minutes: 180
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_DB: cotest_coauth_evidence
+          POSTGRES_USER: cotest
+          POSTGRES_PASSWORD: cotest-ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cotest -d cotest_coauth_evidence"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgresql://cotest:cotest-ci@127.0.0.1:5432/cotest_coauth_evidence
+      CARGO_BUILD_JOBS: "2"
     strategy:
       fail-fast: false
       matrix:
@@ -31,16 +49,61 @@ jobs:
       # `cargo check` resolves crates/* under ../arkret-rust-sdk.
       - uses: actions/checkout@v4
         with:
+          repository: ${{ github.repository_owner }}/arkret-spec
+          path: arkret-spec
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/inkson
+          path: inkson
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/soland
+          path: soland
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/coauth
+          path: coauth
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/floria
+          path: floria
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/chime
+          path: chime
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
           repository: ${{ github.repository_owner }}/arkret-rust-sdk
           path: arkret-rust-sdk
           ref: ${{ env.SIBLING_REF }}
-          token: ${{ secrets.CI_REPO_TOKEN }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/garth
           path: garth
           ref: ${{ env.SIBLING_REF }}
-          token: ${{ secrets.CI_REPO_TOKEN }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - name: Install Linux desktop dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev dbus-x11 gnome-keyring libsecret-tools openssl
+
+      - name: Install nightly rustfmt
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.toolchain }}
@@ -48,9 +111,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: cotest
+      - name: Migrate isolated Coauth route-evidence database
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f coauth/crates/storage-postgres/migrations/00000000000000_initial/up.sql
       - name: fmt
         working-directory: cotest
-        run: cargo fmt --all -- --check
+        run: cargo +nightly fmt --all -- --check
       - name: clippy
         working-directory: cotest
         # cotest carries TODO scaffolding for in-flight coverage; treat
@@ -62,11 +127,27 @@ jobs:
       - name: build (no-default-features)
         working-directory: cotest
         run: cargo build --workspace --no-default-features --locked
+      - name: Build fresh process-mode test services
+        shell: bash
+        run: |
+          set -euo pipefail
+          for svc in soland coauth floria; do
+            features=""
+            if [ "$svc" = "soland" ]; then
+              features="--features conformance-harness"
+            elif [ "$svc" = "coauth" ]; then
+              features="--features cedar,password-bootstrap"
+            fi
+            cargo build --manifest-path "$svc/Cargo.toml" --locked --bin "$svc" $features
+            target=$(cargo metadata --manifest-path "$svc/Cargo.toml" --locked --format-version 1 --no-deps | jq -er '.target_directory')
+            key=$(printf '%s_BIN' "$svc" | tr '[:lower:]' '[:upper:]')
+            echo "$key=$target/debug/$svc" >> "$GITHUB_ENV"
+          done
       - name: test
         working-directory: cotest
-        # Skip live-server scenarios — they are gated by `#[ignore]` and
-        # bootstrapped by the integration.yml workflow.
-        run: cargo test --workspace --locked
+        # Mandatory process scenarios use the freshly built sibling services.
+        # Explicit opt-in ignored probes remain in integration.yml.
+        run: bash ../inkson/scripts/with-native-keystore.sh python scripts/run-native-rust-tests.py cargo test --workspace --locked
       - name: check_ignore_comments hygiene
         working-directory: cotest
         # Every `#[ignore]` attribute must carry a `/// Issue:` or
@@ -85,19 +166,19 @@ jobs:
           repository: ${{ github.repository_owner }}/arkret-spec
           path: arkret-spec
           ref: ${{ env.SIBLING_REF }}
-          token: ${{ secrets.CI_REPO_TOKEN }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/soland
           path: soland
           ref: ${{ env.SIBLING_REF }}
-          token: ${{ secrets.CI_REPO_TOKEN }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/inkson
           path: inkson
           ref: ${{ env.SIBLING_REF }}
-          token: ${{ secrets.CI_REPO_TOKEN }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
@@ -120,19 +201,30 @@ jobs:
     # gate that catches wire-body field typos, signature drift, and null misuse
     # before they reach an (expensive, docker-bound) live run. Self-contained:
     # only the e2e npm deps are required.
+    defaults:
+      run:
+        working-directory: cotest
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: cotest
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/arkret-spec
+          path: arkret-spec
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
       - name: Install e2e deps
-        working-directory: e2e
-        run: npm ci || npm install
+        working-directory: cotest/e2e
+        run: npm ci
       - name: typecheck
-        working-directory: e2e
+        working-directory: cotest/e2e
         run: npm run typecheck
       - name: provisioning cache isolation
-        working-directory: e2e
+        working-directory: cotest/e2e
         # The memo behind `ensureRegistered` is load-bearing: the Coauth handle
         # it registers is a fresh uuid, so nothing server-side deduplicates a
         # second founding. Its isolation rules are kept Playwright-free so they
@@ -152,14 +244,13 @@ jobs:
         # runtime skips, so static discovery cannot become a false green.
         run: ./scripts/tests/identity-ci-selection.tests.ps1
       - name: spec wire-type drift
-        working-directory: e2e
+        working-directory: cotest/e2e
         # Regenerates the committed mirrors of the closed arkret-spec object
-        # schemas and fails when they are stale. Reports SKIP when the sibling
-        # arkret-spec checkout is absent (this job checks out cotest only), so
-        # the hard gate lives in `scripts/run-hygiene.ps1` and the joint runner.
+        # schemas and fails when they are stale. The normative spec is checked
+        # out as a sibling so this job executes the complete drift check.
         run: npm run check:wire-types
       - name: fixme quality gate
-        working-directory: e2e
+        working-directory: cotest/e2e
         # Enforces docs/fixme-promotion-checklist.md: no empty `test.fixme`
         # bodies, and every fixme carries @blocking-on / @user-promise /
         # @expected-live-by. It previously existed only as an npm alias with no
@@ -180,28 +271,52 @@ jobs:
           path: cotest
       - uses: actions/checkout@v4
         with:
+          repository: ${{ github.repository_owner }}/arkret-spec
+          path: arkret-spec
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/coauth
+          path: coauth
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/floria
+          path: floria
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/chime
+          path: chime
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
           repository: ${{ github.repository_owner }}/arkret-rust-sdk
           path: arkret-rust-sdk
           ref: ${{ env.SIBLING_REF }}
-          token: ${{ secrets.CI_REPO_TOKEN }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/garth
           path: garth
           ref: ${{ env.SIBLING_REF }}
-          token: ${{ secrets.CI_REPO_TOKEN }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/inkson
           path: inkson
           ref: ${{ env.SIBLING_REF }}
-          token: ${{ secrets.CI_REPO_TOKEN }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/soland
           path: soland
           ref: ${{ env.SIBLING_REF }}
-          token: ${{ secrets.CI_REPO_TOKEN }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.98"
@@ -230,21 +345,58 @@ jobs:
           path: cotest
       - uses: actions/checkout@v4
         with:
+          repository: ${{ github.repository_owner }}/arkret-spec
+          path: arkret-spec
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/inkson
+          path: inkson
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/soland
+          path: soland
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/coauth
+          path: coauth
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/floria
+          path: floria
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/chime
+          path: chime
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
           repository: ${{ github.repository_owner }}/arkret-rust-sdk
           path: arkret-rust-sdk
           ref: ${{ env.SIBLING_REF }}
-          token: ${{ secrets.CI_REPO_TOKEN }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/garth
           path: garth
           ref: ${{ env.SIBLING_REF }}
-          token: ${{ secrets.CI_REPO_TOKEN }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           manifest-path: cotest/Cargo.toml
           command: check
-          arguments: --config deny.toml
+          arguments: --all-features
+          command-arguments: --config cotest/deny.toml
 
   audit:
     name: cargo audit
@@ -258,13 +410,49 @@ jobs:
           repository: ${{ github.repository_owner }}/arkret-rust-sdk
           path: arkret-rust-sdk
           ref: ${{ env.SIBLING_REF }}
-          token: ${{ secrets.CI_REPO_TOKEN }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/garth
           path: garth
           ref: ${{ env.SIBLING_REF }}
-          token: ${{ secrets.CI_REPO_TOKEN }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/arkret-spec
+          path: arkret-spec
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/inkson
+          path: inkson
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/soland
+          path: soland
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/coauth
+          path: coauth
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/floria
+          path: floria
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/chime
+          path: chime
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
@@ -273,40 +461,74 @@ jobs:
           workspaces: cotest
       - name: Install cargo-audit
         run: cargo install cargo-audit --locked
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Test dependency selection policy
+        working-directory: cotest
+        run: python -m unittest scripts.tests.test_audit_compiled_dependencies
       - name: Run cargo audit
         working-directory: cotest
-        shell: bash
-        run: |
-          set -euo pipefail
-          mapfile -t ignores < <(grep -oE 'RUSTSEC-[0-9]{4}-[0-9]{4}' deny.toml | sort -u)
-          args=()
-          for advisory in "${ignores[@]}"; do
-            args+=(--ignore "$advisory")
-          done
-          cargo audit --deny warnings "${args[@]}"
+        run: python scripts/audit_compiled_dependencies.py
 
   fuzz:
-    name: fuzz (envelope / snapshot / seal, 60s each)
+    name: fuzz (envelope / realm snapshot, 60s each)
     runs-on: ubuntu-latest
     # P5.1 — wire-envelope fuzz harnesses get a per-target 60s libFuzzer
-    # budget. Total wall-clock is capped at 5 min so PR latency stays bounded.
-    timeout-minutes: 5
+    # budget. The job also includes cargo-fuzz installation and a cold build.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
           path: cotest
       - uses: actions/checkout@v4
         with:
+          repository: ${{ github.repository_owner }}/arkret-spec
+          path: arkret-spec
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/inkson
+          path: inkson
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/soland
+          path: soland
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/coauth
+          path: coauth
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/floria
+          path: floria
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/chime
+          path: chime
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
           repository: ${{ github.repository_owner }}/arkret-rust-sdk
           path: arkret-rust-sdk
           ref: ${{ env.SIBLING_REF }}
-          token: ${{ secrets.CI_REPO_TOKEN }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/garth
           path: garth
           ref: ${{ env.SIBLING_REF }}
-          token: ${{ secrets.CI_REPO_TOKEN }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: dtolnay/rust-toolchain@master
         with:
           # cargo-fuzz needs nightly for the libFuzzer integration.
@@ -321,16 +543,14 @@ jobs:
       - name: envelope_fuzz (60s)
         working-directory: cotest
         run: cargo fuzz run envelope_fuzz -- -max_total_time=60
-      - name: snapshot_fuzz (60s)
+      - name: realm_state_snapshot_fuzz (60s)
         working-directory: cotest
-        run: cargo fuzz run snapshot_fuzz -- -max_total_time=60
-      - name: seal_fuzz (60s)
-        working-directory: cotest
-        run: cargo fuzz run seal_fuzz -- -max_total_time=60
+        run: cargo fuzz run realm_state_snapshot_fuzz -- -max_total_time=60
 
   e2e:
     name: e2e (playwright / ${{ matrix.project }})
     runs-on: ubuntu-latest
+    timeout-minutes: 180
     # PR gate: run a real Playwright probe against a live soland instead of
     # list-only discovery. Broader cross-service Playwright runs stay in
     # integration.yml where the nightly budget can absorb them.
@@ -345,57 +565,73 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
+          repository: ${{ github.repository_owner }}/floria
+          path: floria
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
           repository: ${{ github.repository_owner }}/arkret-rust-sdk
           path: arkret-rust-sdk
           ref: ${{ env.SIBLING_REF }}
-          token: ${{ secrets.CI_REPO_TOKEN }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/garth
           path: garth
           ref: ${{ env.SIBLING_REF }}
-          token: ${{ secrets.CI_REPO_TOKEN }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
 
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/arkret-spec
           path: arkret-spec
           ref: ${{ env.SIBLING_REF }}
-          token: ${{ secrets.CI_REPO_TOKEN }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/chime
+          path: chime
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
 
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/inkson
           path: inkson
           ref: ${{ env.SIBLING_REF }}
-          token: ${{ secrets.CI_REPO_TOKEN }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
 
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/coauth
           path: coauth
           ref: ${{ env.SIBLING_REF }}
-          token: ${{ secrets.CI_REPO_TOKEN }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
 
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/soland
           path: soland
           ref: ${{ env.SIBLING_REF }}
-          token: ${{ secrets.CI_REPO_TOKEN }}
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.98"
+          targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
             cotest
             soland
             coauth
+      - name: Install Dioxus CLI
+        run: cargo install dioxus-cli --version 0.7.10 --locked
       - name: Build soland Docker image
         working-directory: cotest
         shell: pwsh
@@ -403,7 +639,7 @@ jobs:
       - name: Install playwright
         working-directory: cotest/e2e
         run: |
-          npm ci || npm install
+          npm ci
           npx playwright install --with-deps ${{ matrix.project }}
       - name: Run real OIDC returning-login merge gate
         working-directory: cotest

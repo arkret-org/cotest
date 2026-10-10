@@ -323,8 +323,8 @@ pub async fn local_invite_accept_join_run() -> Result<()> {
     let selectors = head_snapshot
         .current_state_entries
         .iter()
-        .filter_map(|entry| match entry {
-            arkret_wire::TypedCurrentRow::Value { selector, .. } => Some(selector.clone()),
+        .map(|entry| match entry {
+            arkret_wire::TypedCurrentRow::Value { selector, .. } => selector.clone(),
         })
         .collect::<Vec<_>>();
     ensure!(

@@ -1153,6 +1153,47 @@
       ]
     },
     {
+      "id": "controller_management_review",
+      "title": "Controller management review request, decision and status; live Station acceptance pending",
+      "status": "partially_implemented",
+      "surfaces": ["management_review"],
+      "operation_spine": [
+        {
+          "operation_id": "ak.self.management_review.command.request.v1",
+          "surfaces": ["management_review"]
+        },
+        {
+          "operation_id": "ak.self.management_review.command.decide.v1",
+          "surfaces": ["management_review"]
+        },
+        {
+          "operation_id": "ak.self.management_review.read.status.v1",
+          "surfaces": ["management_review"]
+        }
+      ],
+      "coverage": [
+        {
+          "kind": "ordinary",
+          "path": "../arkret-rust-sdk/crates/http-client/src/endpoints/applet.rs",
+          "markers": [
+            "pub async fn management_review_request",
+            "pub async fn management_review_decide",
+            "pub async fn management_review_status"
+          ]
+        },
+        {
+          "kind": "conformance_fixture",
+          "path": "src/conformance/managed_governance.rs",
+          "markers": ["pub fn run_managed_governance_suite"]
+        },
+        {
+          "kind": "gap_guard",
+          "path": "src/conformance/managed_governance.rs",
+          "markers": ["Live management review and managed Device delivery remain separate acceptance."]
+        }
+      ]
+    },
+    {
       "id": "actor_private_event_submit",
       "title": "Caller-signed actor-private Events: push route, Agent action request/reject and draft proposal",
       "status": "implemented",

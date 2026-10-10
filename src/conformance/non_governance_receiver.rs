@@ -771,7 +771,7 @@ fn replicate(world: &World, event: &Event, commit: &RealmCommit) -> Result<Value
             let [source] = sources.as_slice() else {
                 bail!("one replication item produced {} outcomes", sources.len());
             };
-            ensure!(receiver.replicas == [event.event_id.clone()]);
+            ensure!(receiver.replicas.as_slice() == std::slice::from_ref(&event.event_id));
             let mut rendered = json!({
                 "decision": "store",
                 "device_key_resolved": *source == KeySource::LocalPcr,
@@ -806,7 +806,7 @@ fn flip_first_char(value: &Base64UrlString) -> Result<Base64UrlString> {
     let text = value.as_str();
     let first = text.chars().next().context("empty signature")?;
     let replacement = if first == 'A' { 'B' } else { 'A' };
-    Ok(b64u(format!("{replacement}{}", &text[1..]))?)
+    b64u(format!("{replacement}{}", &text[1..]))
 }
 
 // ---------------------------------------------------------------------------

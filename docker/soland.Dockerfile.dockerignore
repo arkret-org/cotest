@@ -1,19 +1,24 @@
-# Dockerfile-specific context for the joint E2E Soland image.
-# The umbrella workspace .dockerignore intentionally excludes Soland, while
-# this Dockerfile copies exactly Soland and its sibling Rust SDK path dependency.
 *
 !arkret-rust-sdk/
 !arkret-rust-sdk/**
 !arkret-spec/
 !arkret-spec/**
+!garth/
+!garth/**
+!chime/
+!chime/**
+!inkson/
+!inkson/**
+!floria/
+!floria/**
+!coauth/
+!coauth/**
+!cotest/
+!cotest/**
 !soland/
 !soland/**
-
-**/target/
-**/.git/
-**/.claude/
-**/.github/
-**/.gitea/
-**/.devcontainer/
-**/.codex-*.log
-**/*.log
+**/.git
+**/target
+**/node_modules
+**/artifacts/runs
+**/artifacts/latest

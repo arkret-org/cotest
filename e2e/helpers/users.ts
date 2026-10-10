@@ -859,7 +859,8 @@ export class JointUserPage {
     await expect(submit).toBeEnabled({ timeout: 30_000 });
     const accepted = this.page.waitForResponse((response) =>
       response.request().method() === "PUT"
-      && /\/_arkret\/self\/keys\/backups\/ak:backup:/.test(decodeURIComponent(new URL(response.url()).pathname))
+      && /^\/_arkret\/self\/keys\/backups\/[^/]+$/.test(decodeURIComponent(new URL(response.url()).pathname))
+      && decodeURIComponent(new URL(response.url()).pathname).split("/").at(-1)?.startsWith("ak:backup:") === true
       && response.status() === 200
       && /"item_kind"\s*:\s*"mls_account_secret"/.test(response.request().postData() ?? ""),
     { timeout: 120_000 });

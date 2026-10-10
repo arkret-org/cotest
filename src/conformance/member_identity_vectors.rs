@@ -161,8 +161,7 @@ pub fn run_member_identity_update_initial_vector() -> Result<()> {
         .carrier_sha256()
         .map_err(|e| anyhow!("carrier_sha256: {e}"))?;
 
-    let payload_digest_hash =
-        Hash::new(carrier_digest.clone()).map_err(|e| anyhow!("carrier digest as Hash: {e}"))?;
+    Hash::new(carrier_digest.clone()).map_err(|e| anyhow!("carrier digest as Hash: {e}"))?;
 
     let payload = MemberIdentityUpdatePayload {
         realm_id: fake_realm()?,

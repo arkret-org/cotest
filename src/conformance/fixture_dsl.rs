@@ -27,7 +27,7 @@
 
 use std::collections::BTreeSet;
 
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Result, anyhow};
 use serde_json::{Map, Value};
 
 // ── Raw field access ────────────────────────────────────────────────────────
@@ -122,28 +122,6 @@ pub fn expected_u64(value: &Value, field: &str) -> Result<u64> {
         .pointer(&format!("/expected/{field}"))
         .and_then(Value::as_u64)
         .ok_or_else(|| anyhow!("case missing u64 expected.{field}"))
-}
-
-/// Optional variants: an absent `expected.<field>` is `None`, but a present
-/// field of the wrong type is still an error. Fixtures use this where the
-/// expectation only applies to some cases.
-pub fn expected_str_opt<'a>(value: &'a Value, field: &str) -> Result<Option<&'a str>> {
-    match value.pointer(&format!("/expected/{field}")) {
-        Some(Value::String(text)) => Ok(Some(text)),
-        Some(_) => bail!("expected.{field} must be a string"),
-        None => Ok(None),
-    }
-}
-
-pub fn expected_u64_opt(value: &Value, field: &str) -> Result<Option<u64>> {
-    match value.pointer(&format!("/expected/{field}")) {
-        Some(Value::Number(number)) => number
-            .as_u64()
-            .map(Some)
-            .ok_or_else(|| anyhow!("expected.{field} must be u64")),
-        Some(_) => bail!("expected.{field} must be u64"),
-        None => Ok(None),
-    }
 }
 
 // ── String collections ──────────────────────────────────────────────────────

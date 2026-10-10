@@ -4,7 +4,7 @@
 
 use std::time::{Duration, Instant};
 
-use anyhow::{Context as _, Result, anyhow, bail, ensure};
+use anyhow::{Context as _, Result, bail, ensure};
 use arkret_models_collaboration::authority_commit::{
     CommittedEventSubmission, CommittedReplicationBranch, PeerAuthoritySubmitOutcome,
     PeerAuthoritySubmitRequest, PeerCommittedReplicationOutcomeRecord,
@@ -347,8 +347,7 @@ async fn current_federation_key(server: &ArkretServer) -> Result<String> {
     let head: Value = serde_json::from_str(
         history
             .lines()
-            .filter(|line| !line.trim().is_empty())
-            .last()
+            .rfind(|line| !line.trim().is_empty())
             .context("service WebVH history is empty")?,
     )?;
     let method_id = format!("{}#federation-fanout-key", server.service_did());
@@ -986,7 +985,7 @@ pub async fn run_signer_keys_query_live() -> Result<()> {
     ensure!(
         key.public_key_b64u.as_str()
             == arkret_canonical::base64url_encode(
-                &alice_principal
+                alice_principal
                     .device_signing_key
                     .verifying_key()
                     .to_bytes()

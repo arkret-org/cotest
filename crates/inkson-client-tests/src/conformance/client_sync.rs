@@ -301,10 +301,10 @@ impl AccountSubscribeTransport for StreamGapRail {
             Ok(())
         };
         check().map_err(|error| garth::Error::Protocol(error.to_string()))?;
-        if visit == 2 {
-            if let Some(fault) = &self.row_fault {
-                fault.clear();
-            }
+        if visit == 2
+            && let Some(fault) = &self.row_fault
+        {
+            fault.clear();
         }
         let mut batch = self.http.account_subscribe_batch(request).await?;
         if visit == 1 {
@@ -537,8 +537,7 @@ impl Probe {
             .frames
             .iter()
             .filter_map(|frame| frame.to_device.as_ref())
-            .filter(|queue| !queue.deliveries.is_empty())
-            .last()
+            .rfind(|queue| !queue.deliveries.is_empty())
             .and_then(|queue| queue.ack_token.as_deref())
             .context("Account delivery ACK")?;
         let first = http.receive_device_messages(None, Some(1)).await?;
@@ -1350,12 +1349,11 @@ impl Probe {
                 .realms
                 .as_mut()
                 .and_then(|r| r.entries.get_mut(realm.as_str()))
+                && let Some(baseline) = &mut entry.baseline
             {
-                if let Some(baseline) = &mut entry.baseline {
-                    ensure!(baseline.complete, "source baseline is not complete");
-                    baseline.complete = false;
-                    segments += 1;
-                }
+                ensure!(baseline.complete, "source baseline is not complete");
+                baseline.complete = false;
+                segments += 1;
             }
         }
         ensure!(
@@ -2099,7 +2097,7 @@ impl Probe {
             observed: Default::default(),
         };
         host.catch_up_with_conformance_transport(&initial).await?;
-        let batches = initial.observed.lock().unwrap();
+        let batches = initial.observed.lock().unwrap().clone();
         let rows = batches
             .iter()
             .flat_map(|batch| &batch.frames)
@@ -2162,7 +2160,7 @@ impl Probe {
             observed: Default::default(),
         };
         host.catch_up_with_conformance_transport(&rail).await?;
-        let batches = rail.observed.lock().unwrap();
+        let batches = rail.observed.lock().unwrap().clone();
         ensure!(
             batches
                 .iter()
@@ -2517,7 +2515,7 @@ impl Probe {
                 if stream_ref == stream),
             "a missing Circle window crossed the Account checkpoint"
         );
-        let batches = missing.observed.lock().unwrap();
+        let batches = missing.observed.lock().unwrap().clone();
         ensure!(batches.len() == 4, "Circle gap retries were not bounded");
         let parent_commit = batches
             .iter()

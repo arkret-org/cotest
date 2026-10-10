@@ -11,7 +11,6 @@ use arkret_crypto::account_data_crypto::{
 };
 use arkret_models_collaboration::events_payloads::{ContentBlock, MessageCreatePayload};
 use arkret_wire::{Did, DidCoreId, StrandId, project_did_to_core_id};
-use chrono::{TimeZone as _, Utc};
 
 const SCHEDULED_SEND_ID: &str = "ak:scheduled_send:01904100-0000-7000-8000-000000000003";
 

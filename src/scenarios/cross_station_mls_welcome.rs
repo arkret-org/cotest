@@ -35,7 +35,8 @@ use arkret_models_collaboration::governance::membership_invite::{
 use arkret_models_collaboration::governance::realm_join_intake::RealmJoinIntent;
 use arkret_models_collaboration::mls_roster_authority::{
     MlsAddAuthorityAttestation, MlsAttestAddOutcome, MlsAttestAddRequestBody, MlsAttestAddStatus,
-    MlsRosterAuthorityReadOutcome, MlsRosterAuthorityReadRequestBody, MlsRosterRecord,
+    MlsMemberRosterAuthorityReadRequestBody, MlsRosterAuthorityReadOutcome, MlsRosterRecord,
+    MlsSelfRosterAuthorityReadOutcome,
 };
 use arkret_models_collaboration::sync_frames::demand_sync::RealmListMembership;
 use arkret_models_crypto::{
@@ -764,14 +765,13 @@ async fn roster_authority_http_round_trip(
     commit_event: &arkret_wire::Event,
     recipient: &Member,
 ) -> Result<()> {
-    let request = MlsRosterAuthorityReadRequestBody {
+    let request = MlsMemberRosterAuthorityReadRequestBody {
         realm_id: scope
             .realm_id_opt()
             .context("roster scope has a Realm")?
             .clone(),
         effective_scope: scope.clone(),
         mls_group_id: scope.canonical_mls_group_id()?,
-        genesis_event_ref: genesis_ref.clone(),
         target_commit_event_ref: commit_event.event_id.clone(),
         target_epoch: 1,
         caller_actor_id: recipient.actor.clone(),
@@ -787,12 +787,21 @@ async fn roster_authority_http_round_trip(
         status == StatusCode::OK,
         "member roster self read failed: {status} {body}"
     );
-    let self_page: MlsRosterAuthorityReadOutcome = serde_json::from_value(body)?;
+    let self_result: MlsSelfRosterAuthorityReadOutcome = serde_json::from_value(body)?;
+    let peer_request = arkret::verify_mls_member_roster_authority_pages(
+        std::slice::from_ref(&self_result),
+        &request,
+    )?;
+    ensure!(
+        &peer_request.genesis_event_ref == genesis_ref,
+        "own Station derived a different accepted roster Genesis"
+    );
+    let self_page = self_result.roster;
     let (status, bytes) = governance
         .signed_peer_post(
             recipient_station,
             arkret_wire::PATH_PEER_MLS_ROSTER_AUTHORITY,
-            &arkret_canonical::canonical_json_bytes(&request)?,
+            &arkret_canonical::canonical_json_bytes(&peer_request)?,
             governance.service_id(),
         )
         .await?;
@@ -830,7 +839,7 @@ async fn roster_authority_http_round_trip(
     let governance_key = ed25519_dalek::SigningKey::from_bytes(&governance_seed);
     let method = format!("{}#notary-key", governance.service_did());
     for page in [&self_page, &peer_page] {
-        page.manifest.validate_for_request(&request)?;
+        page.manifest.validate_for_request(&peer_request)?;
         arkret_signatures::keypackages::verify_keypackage_signing_input(
             &governance_key.verifying_key().to_bytes(),
             &method,
@@ -876,7 +885,7 @@ async fn roster_authority_http_round_trip(
         .signed_peer_post(
             governance,
             arkret_wire::PATH_PEER_MLS_ROSTER_AUTHORITY,
-            &arkret_canonical::canonical_json_bytes(&request)?,
+            &arkret_canonical::canonical_json_bytes(&peer_request)?,
             governance.service_id(),
         )
         .await?;

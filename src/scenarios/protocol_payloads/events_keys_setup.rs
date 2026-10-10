@@ -73,7 +73,7 @@ async fn submit_adapter_event(
         .await?;
     assert_eq!(submit["status"], "committed");
     let event_id = crate::harness::submitted_event_id(&submit)?;
-    advance_read_cursor_to(server, &actor, &realm_id, &event_id.to_string()).await?;
+    advance_read_cursor_to(server, &actor, &realm_id, event_id.as_ref()).await?;
     account_data_round_trip(server, &actor).await?;
     actor_private_push_route_round_trip(server, &actor).await?;
     Ok((actor, realm_id, event_id.to_string()))

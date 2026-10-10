@@ -1,8 +1,6 @@
 //! A native host session backed by the exact harness issuer record.
 //! The ledger is an auth fixture, not evidence of Coauth grant issuance.
 
-use std::sync::Arc;
-
 use anyhow::{Context, Result, ensure};
 use garth::{
     AuthenticatedTransportFactory, SessionEngine, SessionGrantState, SessionTransportProvider,
@@ -118,6 +116,8 @@ pub(super) async fn bind_standard_host(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::*;
 
     #[tokio::test]

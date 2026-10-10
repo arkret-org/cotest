@@ -7,6 +7,8 @@
 use anyhow::Result;
 use serial_test::serial;
 
+/// Gating: Requires a pre-built Soland process for real pairwise MLS KeyPackages.
+/// Tier: live
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "spawns a pre-built Soland process and exercises real RFC 9420 pairwise KeyPackages"]
 #[serial]
