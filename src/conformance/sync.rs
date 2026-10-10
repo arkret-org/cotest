@@ -26,7 +26,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use anyhow::{Result, anyhow, bail, ensure};
+use anyhow::{Context as _, Result, anyhow, bail, ensure};
 use arkret_hlc::Cursor;
 use arkret_identifiers::{CircleId, RealmCommitId, RealmId, SidecarId};
 use arkret_state::{
@@ -74,9 +74,122 @@ pub fn run_sync_fixture_suite() -> Result<()> {
     verify_broken_tail_stops_only_its_own_stream(&tails)?;
 
     verify_checkpoint_never_outruns_projection(&fixture)?;
+    run_sidecar_checkpoint_consumers(&fixture)?;
     verify_reconnect_resets_only_the_failed_surface(&fixture)?;
     verify_only_an_explicit_ack_cancels_a_delivery(&fixture)?;
     verify_stored_cursors_are_opaque(&fixture)?;
+    Ok(())
+}
+
+/// Own-crate tests exercise the ordinary signed-cut verifier and actual file
+/// transaction/reload implementation. An exact match and per-case receipts
+/// are required; a skipped or merely compiled test is not execution.
+fn run_sidecar_checkpoint_consumers(fixture: &Value) -> Result<()> {
+    let cases = value_array(
+        required_field(fixture, "checkpoint_ordering")?,
+        "checkpoint_ordering",
+    )?
+    .iter()
+    .filter(|case| {
+        case["name"]
+            .as_str()
+            .is_some_and(|name| name.starts_with("sidecar_"))
+    })
+    .collect::<Vec<_>>();
+    let expected = cases
+        .iter()
+        .map(|case| required_str(case, "name").map(str::to_owned))
+        .collect::<Result<BTreeSet<_>>>()?;
+    ensure!(
+        expected.len() == cases.len() && !expected.is_empty(),
+        "empty or duplicated Sidecar checkpoint cases"
+    );
+    let owner = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../inkson");
+    let test = "realm_events_engine::tests::verified_native_sidecar_prefix_survives_restart_and_requires_the_signed_head";
+    let output = std::process::Command::new("cargo")
+        .current_dir(owner)
+        .args([
+            "test",
+            "--locked",
+            "--lib",
+            "--no-default-features",
+            "--features",
+            "spec-conformance",
+            "--jobs",
+            "1",
+            test,
+            "--",
+            "--exact",
+            "--nocapture",
+        ])
+        .env_remove("CARGO_TARGET_DIR")
+        .env_remove("CARGO_MAKEFLAGS")
+        .env_remove("MAKEFLAGS")
+        .env_remove("MFLAGS")
+        .output()
+        .context("execute owning Inkson Sidecar checkpoint consumer")?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    ensure!(
+        output.status.success(),
+        "Sidecar checkpoint consumer failed:\n{stdout}\n{stderr}"
+    );
+    ensure!(
+        !stdout.contains("SKIP(") && !stderr.contains("SKIP("),
+        "Sidecar checkpoint consumer skipped"
+    );
+    ensure!(
+        stdout.contains(&format!("test {test} ... ok"))
+            && stdout.contains("1 passed; 0 failed; 0 ignored;"),
+        "Sidecar checkpoint consumer did not execute exactly one passing test: {stdout}"
+    );
+    let mut receipts = BTreeMap::new();
+    for line in stdout
+        .lines()
+        .filter_map(|line| line.strip_prefix("SYNC_CHECKPOINT_CASE "))
+    {
+        let value: Value = serde_json::from_str(line)?;
+        let id = required_str(&value, "case_id")?.to_owned();
+        let assertions = required_u64(&value, "assertions")?;
+        let case = cases
+            .iter()
+            .find(|case| case["name"] == id)
+            .context("unexpected Sidecar checkpoint receipt")?;
+        let steps = value_array(required_field(case, "steps")?, "steps")?;
+        let delivery = steps
+            .iter()
+            .find(|step| step["action"] == "deliver_incremental")
+            .context("missing incremental")?;
+        let install = steps
+            .iter()
+            .find(|step| step["action"] == "install_typed_current_result")
+            .context("missing installation")?;
+        ensure!(
+            required_u64(&value, "candidate_position")?
+                == required_u64(delivery, "stream_position")?
+                && value["stream_kind"] == delivery["stream_ref"]["kind"]
+                && value["durable"] == install["durable"]
+                && required_bool(&value, "checkpoint_advanced")?
+                    == (case["expected"] == "accepted")
+                && required_u64(&value, "prior_position")?
+                    < required_u64(&value, "candidate_position")?,
+            "Sidecar consumer observations do not execute the published cut: {id} {value}"
+        );
+        ensure!(
+            assertions > 0 && receipts.insert(id.clone(), value).is_none(),
+            "Sidecar checkpoint case was empty or repeated: {id}"
+        );
+    }
+    ensure!(
+        receipts.keys().cloned().collect::<BTreeSet<_>>() == expected,
+        "Sidecar checkpoint execution differs from the canonical fixture: {receipts:?}"
+    );
+    crate::transcripts::record_vector_event(
+        "sync.sidecar_checkpoint_consumers",
+        &json!({"fixture": FIXTURE}),
+        &json!({"cases": expected}),
+        &json!({"executor": test, "observations": receipts}),
+    );
     Ok(())
 }
 
@@ -638,6 +751,7 @@ fn derived_commit_id(label: &str, position: u64) -> RealmCommitId {
 fn verify_checkpoint_never_outruns_projection(fixture: &Value) -> Result<()> {
     let mut ordering_cases = 0_u32;
     let mut merge_cases = 0_u32;
+    let mut undurable_cases = BTreeSet::new();
 
     for case in value_array(
         required_field(fixture, "checkpoint_ordering")?,
@@ -658,6 +772,21 @@ fn verify_checkpoint_never_outruns_projection(fixture: &Value) -> Result<()> {
                 .iter()
                 .position(|step| step.get("action").and_then(Value::as_str) == Some(action))
         };
+
+        if let Some(install) = action_at("install_typed_current_result") {
+            if !required_bool(&steps[install], "durable")? {
+                ensure!(
+                    expected == "rejected" && action_at("advance_durable_cursor").is_none(),
+                    "{name}: an undurable candidate must preserve the old checkpoint"
+                );
+                ensure!(
+                    required_str(case, "reason")?.len() > 0,
+                    "{name}: missing refusal reason"
+                );
+                undurable_cases.insert(name);
+                continue;
+            }
+        }
 
         if let (Some(install), Some(advance)) = (
             action_at("install_typed_current_result"),
@@ -724,6 +853,14 @@ fn verify_checkpoint_never_outruns_projection(fixture: &Value) -> Result<()> {
         ordering_cases >= 2 && merge_cases >= 1,
         "both the checkpoint ordering rule and the merge rule must stay covered"
     );
+    ensure!(
+        undurable_cases
+            == BTreeSet::from([
+                "sidecar_missing_tail_does_not_install_newer_current_or_checkpoint",
+                "sidecar_projection_transaction_failure_preserves_prior_cut",
+            ]),
+        "undurable checkpoint obligations changed"
+    );
     Ok(())
 }
 
@@ -747,6 +884,14 @@ fn replay_loses_delta_on_crash(steps: &[Value]) -> Result<bool> {
                 .ok_or_else(|| anyhow!("every checkpoint step declares an action"))?
             {
                 "deliver_commit" => {}
+                "deliver_incremental" => {
+                    let (stream, _) = parse_stream_ref(required_field(step, "stream_ref")?)?;
+                    ensure!(
+                        matches!(stream, CommitStreamRef::Sidecar { .. }),
+                        "checkpointed incremental must name the native Sidecar stream"
+                    );
+                    required_u64(step, "stream_position")?;
+                }
                 "install_typed_current_result" => {
                     ensure!(
                         required_bool(step, "durable")?,
@@ -910,8 +1055,13 @@ fn verify_single_tail_recovery(name: &str, case: &Value) -> Result<()> {
         "{name}: only the missing tail is recovered, got {recovered:?}"
     );
     ensure!(
-        matches!(stream_ref, CommitStreamRef::Circle { .. }),
-        "{name}: the fixture recovers a Circle tail while the Realm tail keeps its cursor"
+        match stream_ref {
+            CommitStreamRef::Realm { .. } => affected_kind == "realm",
+            CommitStreamRef::Circle { .. } => affected_kind == "circle",
+            CommitStreamRef::Sidecar { .. } => affected_kind == "sidecar",
+            _ => false,
+        },
+        "{name}: the recovered kind differs from the affected native stream"
     );
     Ok(())
 }
