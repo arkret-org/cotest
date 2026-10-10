@@ -753,6 +753,53 @@ impl Probe {
         Ok(())
     }
 
+    async fn foreign_station_cursor(&self, controller: &Member) -> Result<String> {
+        use cotest::scenarios::human_device_producer_live::{database, station_env};
+        let label = "sync-foreign-station-cursor";
+        let database = database(label)?.context("foreign cursor requires isolated PostgreSQL")?;
+        let coauth = cotest::scenarios::_helpers::bridge::MockCoauthIntrospectionServer::spawn_with_internal_secret(
+            cotest::scenarios::identity_test_support::HARNESS_INTERNAL_AUTHORITY_SECRET,
+        ).await?;
+        let group = cotest::harness::TestServerGroup::try_multi_external_with_node_envs(
+            label,
+            &[station_env(&database.connect_url, &coauth)],
+        )
+        .await?
+        .context("foreign cursor requires a real second Station")?;
+        let foreign = Member::provision(
+            group.server(0),
+            &coauth,
+            "foreign-cursor-holder",
+            "foreign-cursor-device",
+        )
+        .await?;
+        ensure!(
+            foreign.account.station_id != controller.account.station_id,
+            "foreign cursor issuer is not a distinct real Station"
+        );
+        let batch = foreign
+            .client
+            .sdk()
+            .account_subscribe_batch(&SyncRequestBody {
+                catchup: Some(true),
+                ..Default::default()
+            })
+            .await?;
+        let token = arkret::Cursor::decode(&batch.cursor)?;
+        let issued = read_database_evidence(
+            &database.connect_url,
+            "SELECT row_to_json(t)::text FROM sync_cursor_handles t WHERE id=$1",
+            &[&token.h],
+        )?;
+        let issued: Value = serde_json::from_str(&issued)?;
+        ensure!(
+            issued["service_id"] == foreign.account.station_id.as_str()
+                && issued["purpose"] == "ak.self.account.stream.subscribe.v1",
+            "foreign token lacks its actual issuer's durable Account binding"
+        );
+        Ok(batch.cursor)
+    }
+
     async fn reconnect_cases(
         &self,
         controller: &Member,
@@ -761,6 +808,7 @@ impl Probe {
         creator_group: &arkret::ArkretMlsGroup,
         database_url: &str,
     ) -> Result<()> {
+        let foreign_cursor = self.foreign_station_cursor(controller).await?;
         let path = self.directory.path().join("state.json");
         let host = NativeAccountHost::new_for_realm(
             controller.client.sdk(),
@@ -825,7 +873,13 @@ impl Probe {
             "SELECT row_to_json(t)::text FROM device_message_ack_tokens t WHERE ack_token=$1 AND consumed_at IS NULL AND expires_at>now()",
             &[&token],
         )?;
-        for (index, name) in RECOVERY_CASES.into_iter().enumerate() {
+        for (index, name) in RECOVERY_CASES
+            .into_iter()
+            .chain(std::iter::once(
+                "foreign_station_cursor_recovery_diagnostic",
+            ))
+            .enumerate()
+        {
             let cursor = host
                 .state_store()
                 .sync_cursor()
@@ -843,7 +897,7 @@ impl Probe {
                         .context("expired deadline")?;
                     (expired.encode()?, Some("cursor_expired"))
                 }
-                _ => {
+                2 => {
                     let mut tampered = arkret::Cursor::decode(&cursor)?;
                     let replacement = if tampered.h.starts_with('A') {
                         "B"
@@ -853,6 +907,7 @@ impl Probe {
                     tampered.h.replace_range(..1, replacement);
                     (tampered.encode()?, Some("cursor_integrity_invalid"))
                 }
+                _ => (foreign_cursor.clone(), Some("cursor_integrity_invalid")),
             };
             host.state_store_handle().write(|store| -> Result<()> {
                 store.save_sync_cursor(candidate.clone());
@@ -934,10 +989,46 @@ impl Probe {
                     assertions: 5,
                 });
             }
-            self.results.borrow_mut().push(super::CaseExecutionResult {
-                case_id: name.into(),
-                assertions: 10,
-            });
+            if index == 3 {
+                let (snapshot, history) = inkson::conformance::retained_sidecar_cut(
+                    &host.state_store(),
+                    &genesis.scope_ref,
+                )?;
+                let cursor = host
+                    .state_store()
+                    .sync_cursor()
+                    .context("foreign recovery checkpoint")?;
+                let evidence = self
+                    .directory
+                    .path()
+                    .join("expected-foreign-cursor-cut.json");
+                std::fs::write(
+                    &evidence,
+                    serde_json::to_vec(&(&genesis.scope_ref, snapshot, history, cursor))?,
+                )?;
+                let output = std::process::Command::new(&self.reader)
+                    .arg(&path)
+                    .arg(evidence)
+                    .output()?;
+                ensure!(
+                    output.status.success(),
+                    "foreign cursor fresh-process readback failed: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                );
+                cotest::transcripts::record_vector_event(
+                    "sync.foreign_station_cursor.diagnostic",
+                    &serde_json::json!({"fixture":"client-sync-fixture.json", "foreign_station_issued":true}),
+                    &serde_json::json!({"canonical_case":"cursor_unrecognized_redoes_only_that_surface_baseline", "registry_outcome":"cursor_unrecognized"}),
+                    &serde_json::json!({"station_outcome":"cursor_integrity_invalid", "baseline_rebuilt":true,
+                        "private_cut_retained":true, "issued_ack_retained":true, "fresh_process_readback":true,
+                        "canonical_case_credit":false, "complete_suite_claim":false}),
+                );
+            } else {
+                self.results.borrow_mut().push(super::CaseExecutionResult {
+                    case_id: name.into(),
+                    assertions: 10,
+                });
+            }
         }
         self.durable_ack(
             controller,
