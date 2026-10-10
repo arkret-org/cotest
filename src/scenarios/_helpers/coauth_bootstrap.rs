@@ -44,6 +44,7 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
+use base64::Engine as _;
 use tempfile::NamedTempFile;
 
 use crate::harness::{ReservedPort, reserve_port};
@@ -146,6 +147,9 @@ pub struct SpawnedCoauth {
     pub internal_base_url: String,
     /// Held so the file isn't deleted while coauth is running.
     pub config: NamedTempFile,
+    /// Own the private encrypted KeyStore, master key and media until the
+    /// process (including same-config restarts) has stopped.
+    _custody: tempfile::TempDir,
     _internal_port_reservation: ReservedPort,
     pub pg: EphemeralPg,
     restart_with_test_endpoints: bool,
@@ -281,6 +285,7 @@ impl PreparedCoauth {
             server,
             internal_base_url,
             config: bundle.file,
+            _custody: bundle.custody,
             _internal_port_reservation: bundle.internal_port_reservation,
             pg,
             restart_with_test_endpoints: true,
@@ -488,6 +493,7 @@ fn provision_external_database(admin_url: &str) -> Result<(String, ExternalDatab
 /// surface in coauth's default layout).
 pub struct CoauthConfigBundle {
     pub file: NamedTempFile,
+    custody: tempfile::TempDir,
     /// `127.0.0.1:<port>` — listener that exposes the `health` resource.
     pub internal_addr: String,
     internal_port_reservation: ReservedPort,
@@ -496,7 +502,7 @@ pub struct CoauthConfigBundle {
 /// Generate a fresh coauth config YAML and patch it for the supplied
 /// `pg_url` / `bind_addr`. Returns a [`CoauthConfigBundle`] whose `file`
 /// path the caller can pass to `coprivate authentication process --config`. The caller MUST
-/// keep the `NamedTempFile` alive for the lifetime of the spawned server
+/// keep the complete bundle alive for the lifetime of the spawned server
 /// (otherwise the file is unlinked on Windows and coauth will fail any
 /// future re-read).
 ///
@@ -661,19 +667,85 @@ pub fn bootstrap_coauth_config(
         patched.push_str("/\n");
     }
 
+    let custody = tempfile::Builder::new()
+        .prefix("cotest-coauth-custody-")
+        .tempdir()
+        .context("create isolated Coauth custody directory")?;
+    let patched = isolated_custody_config(&patched, custody.path())?;
     let mut tmp = tempfile::Builder::new()
         .prefix("cotest-coauth-")
         .suffix(".yaml")
-        .tempfile()
+        .tempfile_in(custody.path())
         .context("failed to create temp file for coauth config")?;
     tmp.write_all(patched.as_bytes())
         .context("failed to write patched coauth config")?;
     tmp.flush().ok();
     Ok(CoauthConfigBundle {
         file: tmp,
+        custody,
         internal_addr: format!("127.0.0.1:{}", internal_port.port()),
         internal_port_reservation: internal_port,
     })
+}
+
+/// Repoint generated custody without a development posture or platform
+/// keychain dependency. The caller owns the directory throughout restarts.
+fn isolated_custody_config(raw: &str, directory: &Path) -> Result<String> {
+    let mut config: serde_yaml_ng::Value =
+        serde_yaml_ng::from_str(raw).context("decode generated Coauth configuration")?;
+    let root = config
+        .as_mapping_mut()
+        .context("generated Coauth configuration must be a mapping")?;
+    anyhow::ensure!(
+        root.get("secrets")
+            .is_some_and(serde_yaml_ng::Value::is_mapping),
+        "generated Coauth configuration lacks the secrets section"
+    );
+    // RootConfig omits default filesystem storage. An absent section is
+    // valid; an explicitly emitted section must still have the known shape.
+    anyhow::ensure!(
+        root.get("storage")
+            .is_none_or(serde_yaml_ng::Value::is_mapping),
+        "generated Coauth storage section must be a mapping"
+    );
+    let key_store = directory.join("keystore");
+    let media = directory.join("media");
+    std::fs::create_dir(&key_store).context("create isolated Coauth KeyStore directory")?;
+    std::fs::create_dir(&media).context("create isolated Coauth media directory")?;
+    let master_key_file = directory.join("master-key");
+    let mut master_key = zeroize::Zeroizing::new([0_u8; 32]);
+    rustls::crypto::ring::default_provider()
+        .secure_random
+        .fill(&mut *master_key)
+        .map_err(|error| anyhow::anyhow!("generate isolated Coauth master key: {error:?}"))?;
+    let encoded_master_key = zeroize::Zeroizing::new(
+        base64::engine::general_purpose::STANDARD.encode(master_key.as_slice()),
+    );
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt as _;
+        options.mode(0o600);
+    }
+    options
+        .open(&master_key_file)
+        .context("create isolated Coauth master key file")?
+        .write_all(encoded_master_key.as_bytes())
+        .context("write isolated Coauth master key")?;
+    root.insert(
+        "secrets".into(),
+        serde_yaml_ng::to_value(serde_json::json!({
+            "backend": "encrypted_file",
+            "path": key_store.join("coauth.v1"),
+            "master_key_file": master_key_file,
+        }))?,
+    );
+    root.insert(
+        "storage".into(),
+        serde_yaml_ng::to_value(serde_json::json!({"backend": "fs", "root": media}))?,
+    );
+    serde_yaml_ng::to_string(&config).context("encode isolated Coauth configuration")
 }
 
 /// Find the coauth repo root — the directory holding `policies/cedar` and
@@ -904,6 +976,7 @@ async fn spawn_coauth_with_db_options(
         server,
         internal_base_url,
         config: config_file,
+        _custody: bundle.custody,
         _internal_port_reservation: internal_port_reservation,
         pg,
         restart_with_test_endpoints: chaos.is_some(),
@@ -1046,4 +1119,81 @@ pub fn spawn_ephemeral_postgres_testcontainers() -> Result<Option<EphemeralPg>> 
         return Ok(None);
     }
     Ok(Some(pg))
+}
+
+#[cfg(test)]
+mod tests {
+    use base64::Engine as _;
+
+    use super::isolated_custody_config;
+
+    #[test]
+    fn native_custody_uses_distinct_private_master_keys_and_preserves_other_settings() {
+        let raw = "secrets:\n  backend: platform\npasswords:\n  enabled: false\nhttp:\n  public_base_url: https://auth.example/\n";
+        let first = tempfile::tempdir().unwrap();
+        let second = tempfile::tempdir().unwrap();
+        let first_config: serde_yaml_ng::Value =
+            serde_yaml_ng::from_str(&isolated_custody_config(raw, first.path()).unwrap()).unwrap();
+        let second_config: serde_yaml_ng::Value =
+            serde_yaml_ng::from_str(&isolated_custody_config(raw, second.path()).unwrap()).unwrap();
+        let mut masters = Vec::new();
+        for (config, directory) in [(&first_config, &first), (&second_config, &second)] {
+            assert_eq!(config["secrets"]["backend"], "encrypted_file");
+            assert!(config["secrets"].get("master_key").is_none());
+            assert_eq!(config["passwords"]["enabled"], false);
+            assert_eq!(config["http"]["public_base_url"], "https://auth.example/");
+            assert!(config.get("development_mode").is_none());
+            let master =
+                std::path::Path::new(config["secrets"]["master_key_file"].as_str().unwrap());
+            assert!(master.starts_with(directory.path()));
+            let bytes = std::fs::read(master).unwrap();
+            assert_eq!(
+                base64::engine::general_purpose::STANDARD
+                    .decode(&bytes)
+                    .unwrap()
+                    .len(),
+                32
+            );
+            masters.push(bytes);
+            let store = std::path::Path::new(config["secrets"]["path"].as_str().unwrap());
+            assert!(store.starts_with(directory.path()));
+            assert!(store.parent().unwrap().is_dir());
+            assert!(
+                !store.exists(),
+                "only --first-provisioning may create the runtime bundle"
+            );
+            let media = std::path::Path::new(config["storage"]["root"].as_str().unwrap());
+            assert!(media.starts_with(directory.path()));
+            assert!(media.is_dir());
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt as _;
+                assert_eq!(
+                    std::fs::metadata(master).unwrap().permissions().mode() & 0o777,
+                    0o600
+                );
+            }
+        }
+        assert_ne!(masters[0], masters[1]);
+        let master =
+            std::path::PathBuf::from(first_config["secrets"]["master_key_file"].as_str().unwrap());
+        drop(first);
+        assert!(
+            !master.exists(),
+            "custody is removed after its owning handle drops"
+        );
+    }
+
+    #[test]
+    fn native_custody_rejects_missing_or_malformed_generated_sections() {
+        for raw in [
+            "http: {}\n",
+            "secrets: null\n",
+            "secrets: {backend: platform}\nstorage: false\n",
+        ] {
+            let directory = tempfile::tempdir().unwrap();
+            assert!(isolated_custody_config(raw, directory.path()).is_err());
+            assert!(!directory.path().join("master-key").exists());
+        }
+    }
 }

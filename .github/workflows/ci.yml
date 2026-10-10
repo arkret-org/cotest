@@ -34,7 +34,12 @@ jobs:
           --health-retries 12
     env:
       DATABASE_URL: postgresql://cotest:cotest-ci@127.0.0.1:5432/cotest_coauth_evidence
-      CARGO_BUILD_JOBS: "2"
+      # The workspace links many complete process-test executables. Keep
+      # assertions enabled while avoiding parallel linker and debug-data pressure.
+      CARGO_BUILD_JOBS: "1"
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
     strategy:
       fail-fast: false
       matrix:
@@ -153,6 +158,11 @@ jobs:
         # Every `#[ignore]` attribute must carry a `/// Issue:` or
         # `/// Gating:` justification and a valid `/// Tier:` declaration.
         run: bash scripts/check_ignore_comments.sh
+      - name: Record native runner resources
+        if: always()
+        run: |
+          df -h .
+          free -h
 
   operation-coverage:
     name: operation test coverage inventory
@@ -648,6 +658,7 @@ jobs:
           npm ci
           npx playwright install --with-deps ${{ matrix.project }}
       - name: Prepare Linux joint prerequisites
+        id: joint_prerequisites
         run: bash cotest/scripts/prepare-linux-joint-e2e.sh setup
 
       - name: Run real OIDC returning-login merge gate
@@ -665,7 +676,7 @@ jobs:
           -ForbidSkippedTests
 
       - name: Restore Linux hosts permissions
-        if: always()
+        if: always() && steps.joint_prerequisites.outcome != 'skipped' && steps.joint_prerequisites.outcome != ''
         run: bash cotest/scripts/prepare-linux-joint-e2e.sh restore
 
       # PR is the contract/deterministic lane. Tests tagged @mls-data-plane or

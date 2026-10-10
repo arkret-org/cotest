@@ -2627,6 +2627,7 @@ dependencies = [
  "anyhow",
  "arkret-canonical",
  "arkret-hlc",
+ "arkret-wire",
  "serde_json",
 ]
 

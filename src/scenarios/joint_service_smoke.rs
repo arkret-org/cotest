@@ -28,38 +28,62 @@ pub async fn joint_service_smoke_run() -> Result<()> {
     let config = JointServiceConfig::new("ct6-smoke");
     let stack = bootstrap_required(config).await?;
     stack.assert_healthy().await?;
-    let coauth_base = stack
-        .coauth_base_url()
-        .ok_or_else(|| anyhow!("joint service stack omitted coauth"))?;
-    let coauth_health = stack
+    let coauth = stack
         .coauth
         .as_ref()
-        .ok_or_else(|| anyhow!("joint service stack omitted coauth"))?
-        .health_url();
-    wait_for_coauth_service_identity(coauth_base, &coauth_health).await?;
+        .ok_or_else(|| anyhow!("joint service stack omitted coauth"))?;
+
+    // Account Authority is an internal Station responsibility, without a
+    // separate Service DID (service-surface §2.7). Its owning Station exposes
+    // the protocol Describe; the component exposes its real readiness state.
+    let description: arkret::ServiceDescribe = stack
+        .soland
+        .http()
+        .get(stack.soland.base_url().join("/_arkret/describe")?)
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    description.validate()?;
+    anyhow::ensure!(
+        description.service_id == *stack.soland.service_id()
+            && arkret::project_did_to_core_id(&description.service_resolution.did)?
+                == description.service_id,
+        "owning Station Describe returned a different service identity"
+    );
+    // This is the exact name installed by PreparedCoauth::spawn_for_station;
+    // the name is a deployment label, not an independently claimed DID.
+    wait_for_account_authority_ready(
+        &format!("{}/readyz", coauth.internal_base_url),
+        &coauth.health_url(),
+        "cotest-soland",
+    )
+    .await?;
     Ok(())
 }
 
-async fn wait_for_coauth_service_identity(base_url: &str, health_url: &str) -> Result<()> {
-    let client = reqwest::Client::new();
+async fn wait_for_account_authority_ready(
+    ready_url: &str,
+    health_url: &str,
+    owning_station: &str,
+) -> Result<()> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(3))
+        .build()?;
     let deadline = Instant::now() + Duration::from_secs(30);
     loop {
-        let response = client
-            .get(format!(
-                "{}/_arkret/describe",
-                base_url.trim_end_matches('/')
-            ))
-            .send()
-            .await?;
+        let response = client.get(ready_url).send().await?;
         if response.status().is_success() {
             let body: serde_json::Value = response.json().await?;
-            let service_id = body
-                .get("service_id")
-                .and_then(serde_json::Value::as_str)
-                .filter(|value| !value.trim().is_empty())
-                .ok_or_else(|| anyhow!("coauth describe omitted service_id"))?;
-            arkret_identifiers::DidCoreId::new(service_id.to_owned())
-                .map_err(|error| anyhow!("coauth service_id is invalid: {error}"))?;
+            anyhow::ensure!(
+                body["ok"] == true
+                    && body["service"] == "coauth"
+                    && body["component_role"] == "station_account_authority"
+                    && body["owning_station"] == owning_station
+                    && body["station_trust"] == "ready",
+                "Coauth readiness did not confirm the configured owning Station: {body}"
+            );
             return Ok(());
         }
         let status = response.status();
@@ -67,7 +91,7 @@ async fn wait_for_coauth_service_identity(base_url: &str, health_url: &str) -> R
         if Instant::now() >= deadline {
             let health = client.get(health_url).send().await?.text().await?;
             return Err(anyhow!(
-                "coauth service identity did not become ready within 30 seconds; last response: {status}: {body}; health: {health}"
+                "Coauth Account Authority did not become ready within 30 seconds; last response: {status}: {body}; health: {health}"
             ));
         }
         tokio::time::sleep(Duration::from_millis(200)).await;
