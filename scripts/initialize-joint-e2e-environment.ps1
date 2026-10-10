@@ -451,7 +451,13 @@ if ($DnsSuffix -eq 'localhost') {
 if ($DnsSuffix -eq 'localhost') {
     Add-Check "hosts setup adapter" "pass" "localhost topology requires no hosts mutation; DNS was verified above"
 } elseif ($platform.os -ne "windows") {
-    Add-Check "hosts setup adapter" "unsupported" "read-only detection is supported; privileged initialization is currently implemented only for Windows"
+    if ($platform.os -eq "linux" -and $env:GITHUB_ACTIONS -eq "true" -and
+        $env:COTEST_LINUX_HOSTS_ACL_BACKUP -and
+        (Test-Path -LiteralPath $env:COTEST_LINUX_HOSTS_ACL_BACKUP -PathType Leaf)) {
+        Add-Check "hosts setup adapter" "pass" "CI provisioned run-scoped hosts access; the workflow restores the original ACL"
+    } else {
+        Add-Check "hosts setup adapter" "unsupported" "privileged setup requires the Windows adapter or the Linux CI prerequisite adapter"
+    }
 } else {
     Add-Check "hosts setup adapter" "pass" "Windows ACL backup/grant/restore adapter available"
 }

@@ -136,7 +136,7 @@ jobs:
             if [ "$svc" = "soland" ]; then
               features="--features conformance-harness"
             elif [ "$svc" = "coauth" ]; then
-              features="--features cedar,password-bootstrap"
+              features="--features cedar"
             fi
             cargo build --manifest-path "$svc/Cargo.toml" --locked --bin "$svc" $features
             target=$(cargo metadata --manifest-path "$svc/Cargo.toml" --locked --format-version 1 --no-deps | jq -er '.target_directory')
@@ -647,6 +647,9 @@ jobs:
         run: |
           npm ci
           npx playwright install --with-deps ${{ matrix.project }}
+      - name: Prepare Linux joint prerequisites
+        run: bash cotest/scripts/prepare-linux-joint-e2e.sh setup
+
       - name: Run real OIDC returning-login merge gate
         working-directory: cotest
         shell: pwsh
@@ -660,6 +663,10 @@ jobs:
           -Grep "@returning-login-gate|@onboarding-recovery-gate"
           -RequireScenario "identity/oidc-login-flow.spec.ts"
           -ForbidSkippedTests
+
+      - name: Restore Linux hosts permissions
+        if: always()
+        run: bash cotest/scripts/prepare-linux-joint-e2e.sh restore
 
       # PR is the contract/deterministic lane. Tests tagged @mls-data-plane or
       # @platform-live are reserved for controlled.yml and must not be added to

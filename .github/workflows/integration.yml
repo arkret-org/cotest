@@ -130,16 +130,11 @@ jobs:
           set -euo pipefail
           for svc in soland coauth floria; do
             echo "::group::cargo build $svc"
-            # coauth: password-bootstrap compiles in the password-login
-            # session-grant path (runtime stays triple-gated by config flag +
-            # COAUTH_ALLOW_INSECURE_PASSWORD_BOOTSTRAP); without it the
-            # handler is #[cfg]-ed out and always answers
-            # password_login_session_grants_disabled.
             features=""
             if [ "$svc" = "soland" ]; then
               features="--features conformance-harness"
             elif [ "$svc" = "coauth" ]; then
-              features="--features cedar,password-bootstrap"
+              features="--features cedar"
             fi
             (cd "$svc" && cargo build --release --locked $features)
             echo "::endgroup::"
@@ -151,6 +146,9 @@ jobs:
           npx playwright install --with-deps chromium
       - name: install dioxus cli
         run: cargo install dioxus-cli --version 0.7.10 --locked
+      - name: Prepare Linux joint prerequisites
+        run: bash cotest/scripts/prepare-linux-joint-e2e.sh setup
+
       - name: real OIDC returning-login and device-key non-skip lane
         working-directory: cotest
         shell: pwsh
@@ -163,6 +161,10 @@ jobs:
           -RequireScenario 'identity/oidc-login-flow.spec.ts,identity/device-key-lifecycle.spec.ts'
           -ForbidSkippedTests
           -StartupTimeoutSeconds 900
+      - name: Restore Linux hosts permissions
+        if: always()
+        run: bash cotest/scripts/prepare-linux-joint-e2e.sh restore
+
       - name: Migrate isolated Coauth route-evidence database
         run: |
           createdb -h 127.0.0.1 -U cotest cotest_coauth_evidence
