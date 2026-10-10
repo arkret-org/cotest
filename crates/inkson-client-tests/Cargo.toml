@@ -30,6 +30,7 @@ inkson = { workspace = true, features = ["spec-conformance"] }
 jsonschema = { workspace = true, default-features = false, features = ["resolve-file"] }
 postgres = { workspace = true }
 reqwest = { workspace = true, features = ["json", "multipart", "rustls"] }
+rusqlite = { version = "0.40.2", features = ["bundled"] }
 rustls = { version = "0.23.40", default-features = false, features = ["ring", "std"] }
 serde_json = { workspace = true }
 serial_test = { workspace = true }

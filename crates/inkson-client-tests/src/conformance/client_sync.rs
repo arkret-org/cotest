@@ -37,6 +37,10 @@ const QUEUE_CASES: [&str; 3] = [
     "full_endpoint_rejects_new_delivery_without_eviction",
 ];
 const BASELINE_CASE: &str = "incremental_before_baseline_complete_merges_by_position";
+const ORDERING_CASES: [&str; 2] = [
+    "projection_is_installed_before_the_checkpoint_advances",
+    "checkpoint_before_projection_is_rejected",
+];
 const CIRCLE_TAIL_CASE: &str = "circle_stream_tail_is_independent";
 const STREAM_GAP_CASE: &str = "unexplained_position_jump_stops_only_that_stream";
 pub const PRODUCTION_CASE_COUNT: usize = CASES.len()
@@ -44,7 +48,8 @@ pub const PRODUCTION_CASE_COUNT: usize = CASES.len()
     + STREAM_AND_DELIVERY_CASES.len()
     + ACK_CASES.len()
     + QUEUE_CASES.len()
-    + 3;
+    + 3
+    + ORDERING_CASES.len();
 
 const QUEUE_WRITE_EVIDENCE: &str = "SELECT jsonb_build_object(\
     'queue',(SELECT COALESCE(jsonb_agg(to_jsonb(t) ORDER BY id),'[]') FROM device_messages t),\
@@ -1492,12 +1497,240 @@ impl Probe {
             case_id: STREAM_AND_DELIVERY_CASES[2].into(),
             assertions: 7,
         });
+        self.projection_checkpoint_ordering(controller, &realm)
+            .await?;
         self.circle_tail(controller, &realm, database_url).await?;
         Ok(())
     }
 }
 
 impl Probe {
+    async fn projection_checkpoint_ordering(
+        &self,
+        controller: &Member,
+        realm: &arkret_wire::RealmId,
+    ) -> Result<()> {
+        let path = self.directory.path().join("checkpoint-ordering-state.json");
+        let host = NativeAccountHost::new_for_realm(
+            controller.client.sdk(),
+            controller.account.clone(),
+            controller.device.clone(),
+            inkson::LocalStateStore::with_path(path.clone()),
+            realm.clone(),
+        )
+        .await?;
+        host.catch_up().await?;
+        let before = state(&host)?;
+        let before_cut = inkson::conformance::retained_realm_current(
+            &host.state_store(),
+            &controller.account,
+            realm,
+        )
+        .await?;
+        let old_cursor = host
+            .state_store()
+            .sync_cursor()
+            .context("ordering prior cursor")?;
+        let account_path = host.state_store().conformance_account_state_path();
+        let account_bytes = std::fs::read(&account_path)?;
+        let index_path = path.with_extension("current.sqlite");
+        ensure!(
+            index_path.is_file(),
+            "ordering has no actual native current index"
+        );
+        let database = rusqlite::Connection::open(&index_path)?;
+        let rows = |connection: &rusqlite::Connection| -> Result<Vec<(String, String)>> {
+            let mut query =
+                connection.prepare("SELECT key,value FROM current_entries ORDER BY key")?;
+            let rows = query
+                .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            Ok(rows)
+        };
+        let encrypted_before = rows(&database)?;
+        let circle = cotest::scenarios::circle_poll_scope_live::circle_create(
+            &controller.client,
+            realm.as_str(),
+            &controller.actor,
+            "Checkpoint ordering",
+            "Ordering",
+        )
+        .await?;
+        cotest::scenarios::circle_poll_scope_live::join_circle(
+            &controller.client,
+            realm.as_str(),
+            &circle,
+            &controller.actor,
+        )
+        .await?;
+        let stream = arkret_wire::CommitStreamRef::Realm {
+            realm_id: realm.clone(),
+        };
+        let key = serde_json::to_string(&stream)?;
+        let old_position = before["verified_commit_stream_cursors"][&key]["stream_position"]
+            .as_u64()
+            .context("ordering prior signed head")?;
+        let scan = controller
+            .client
+            .sdk()
+            .scan_commit_stream(&arkret_wire::StreamScanRequest {
+                realm_id: realm.clone(),
+                stream_ref: stream.clone(),
+                direction: arkret_wire::StreamScanDirection::After(Some(old_position)),
+                limit: 32,
+            })
+            .await?;
+        ensure!(
+            scan.committed_events.len() == 1,
+            "ordering setup lacks one real accepted successor"
+        );
+        let commit = scan.committed_events[0].commit().clone();
+        ensure!(
+            commit.stream_position == old_position + 1
+                && serde_json::to_value(&commit.previous_commit_ref)?
+                    == before["verified_commit_stream_cursors"][&key]["commit_id"],
+            "ordering setup lacks its exact accepted predecessor"
+        );
+
+        // Only the current backend refuses writes. The Account checkpoint
+        // remains writable, so checkpoint-first regressions remain observable.
+        database.execute_batch("CREATE TRIGGER cotest_projection_write_barrier BEFORE INSERT ON current_entries BEGIN SELECT RAISE(ABORT,'cotest projection write barrier'); END;")?;
+        let rail = ObservedRail {
+            http: controller.client.sdk(),
+            missing: None,
+            observed: Default::default(),
+        };
+        let failed = host.catch_up_with_conformance_transport(&rail).await;
+        database.execute_batch("DROP TRIGGER cotest_projection_write_barrier;")?;
+        ensure!(
+            matches!(&failed, Err(garth::Error::Protocol(message)) if message.contains("cotest projection write barrier")),
+            "ordering did not fail at the actual current storage barrier: {failed:?}"
+        );
+        ensure!(
+            std::fs::read(&account_path)? == account_bytes
+                && rows(&database)? == encrypted_before
+                && state(&host)? == before
+                && host.state_store().sync_cursor().as_deref() == Some(old_cursor.as_str()),
+            "current failure allowed a premature durable checkpoint or projection"
+        );
+        ensure!(
+            inkson::conformance::retained_realm_current(
+                &host.state_store(),
+                &controller.account,
+                realm
+            )
+            .await?
+                == before_cut,
+            "current failure changed the installed product cut"
+        );
+        let batches = rail.observed.lock().unwrap().clone();
+        ensure!(
+            batches.len() == 1
+                && batches[0].cursor != old_cursor
+                && batches[0]
+                    .frames
+                    .iter()
+                    .flat_map(|frame| frame.realms.iter())
+                    .flat_map(|realms| realms.entries.values())
+                    .flat_map(|entry| entry.committed_events.iter().flatten())
+                    .any(|row| row.commit() == &commit),
+            "ordering rejection did not receive the actual signed successor and next cursor"
+        );
+        let pending = batches[0].clone();
+        let failed_evidence = self.directory.path().join("expected-ordering-failure.json");
+        std::fs::write(
+            &failed_evidence,
+            serde_json::to_vec(&serde_json::json!({
+                "account":controller.account, "realm":realm, "cut":before_cut, "cursor":old_cursor,
+                "stream_key":key, "head":before["verified_commit_stream_cursors"][&key],
+                "anchor":before["verified_commit_stream_anchors"][&key],
+                "stream_heads":before["verified_commit_stream_cursors"],
+                "stream_anchors":before["verified_commit_stream_anchors"]
+            }))?,
+        )?;
+        let output = std::process::Command::new(&self.reader)
+            .arg(&path)
+            .arg(failed_evidence)
+            .output()?;
+        ensure!(
+            output.status.success(),
+            "failed projection fresh-process readback failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        self.results.borrow_mut().push(super::CaseExecutionResult {
+            case_id: ORDERING_CASES[1].into(),
+            assertions: 8,
+        });
+
+        let held = HeldBatch(Mutex::new(Some(pending.clone())));
+        host.catch_up_with_conformance_transport(&held).await?;
+        let after = state(&host)?;
+        let head = serde_json::to_value(arkret_wire::CommitStreamHead {
+            stream_ref: stream,
+            stream_position: commit.stream_position,
+            commit_id: commit.commit_id.clone(),
+        })?;
+        let anchor = serde_json::to_value(&commit)?;
+        let cut = inkson::conformance::retained_realm_current(
+            &host.state_store(),
+            &controller.account,
+            realm,
+        )
+        .await?;
+        ensure!(
+            host.state_store().sync_cursor().as_deref() == Some(pending.cursor.as_str()),
+            "ordering replay did not durably save its received Account cursor"
+        );
+        ensure!(
+            after["current_generation"].as_u64() > before["current_generation"].as_u64(),
+            "ordering replay installed no newer durable current generation"
+        );
+        ensure!(
+            after["verified_commit_stream_cursors"][&key] == head,
+            "ordering replay lost the exact verified successor head"
+        );
+        ensure!(
+            after["verified_commit_stream_anchors"][&key] == anchor,
+            "ordering replay lost the exact original signed successor anchor"
+        );
+        ensure!(
+            cut["entries"]
+                .as_array()
+                .context("ordering installed current")?
+                .iter()
+                .any(|row| row["revision"]["commit_id"] == commit.commit_id.as_str()),
+            "ordering checkpoint advanced without the authentic installed current result"
+        );
+        let evidence = self
+            .directory
+            .path()
+            .join("expected-checkpoint-ordering.json");
+        std::fs::write(
+            &evidence,
+            serde_json::to_vec(&serde_json::json!({
+                "account":controller.account, "realm":realm, "cut":cut, "cursor":pending.cursor,
+                "stream_key":key, "head":head, "anchor":anchor,
+                "stream_heads":after["verified_commit_stream_cursors"], "stream_anchors":after["verified_commit_stream_anchors"]
+            }))?,
+        )?;
+        drop(host);
+        drop(database);
+        let output = std::process::Command::new(&self.reader)
+            .arg(path)
+            .arg(evidence)
+            .output()?;
+        ensure!(
+            output.status.success(),
+            "ordering fresh-process readback failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        self.results.borrow_mut().push(super::CaseExecutionResult {
+            case_id: ORDERING_CASES[0].into(),
+            assertions: 6,
+        });
+        Ok(())
+    }
+
     async fn readable_row_gap(
         &self,
         controller: &Member,
@@ -2608,6 +2841,7 @@ pub async fn run_sync_production_cases(
         .chain(std::iter::once(BASELINE_CASE))
         .chain(std::iter::once(CIRCLE_TAIL_CASE))
         .chain(std::iter::once(STREAM_GAP_CASE))
+        .chain(ORDERING_CASES)
         .collect::<std::collections::BTreeSet<_>>();
     ensure!(
         results.len() == PRODUCTION_CASE_COUNT

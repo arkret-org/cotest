@@ -3074,6 +3074,7 @@ dependencies = [
  "jsonschema",
  "postgres",
  "reqwest 0.13.4",
+ "rusqlite",
  "rustls",
  "serde_json",
  "serial_test",
