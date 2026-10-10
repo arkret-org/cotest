@@ -24,6 +24,19 @@ esac
 
 : "${GITHUB_PATH:?GITHUB_PATH is required}"
 : "${GITHUB_ENV:?GITHUB_ENV is required}"
+
+# Freshness inventories use complete offline Cargo metadata for each local
+# dependency root. Host builds and Docker builds do not populate all of those
+# workspace and platform dependencies on a cold runner.
+script_directory=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+workspace_root=$(dirname -- "$(dirname -- "$script_directory")")
+for repository in arkret-rust-sdk floria soland coauth garth chime inkson cotest; do
+  (
+    cd -- "$workspace_root/$repository"
+    cargo fetch --locked --manifest-path Cargo.toml
+  )
+done
+
 case $(uname -m) in
   x86_64)
     architecture=amd64
