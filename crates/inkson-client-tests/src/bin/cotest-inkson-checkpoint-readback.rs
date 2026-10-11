@@ -40,6 +40,32 @@ fn main() -> Result<()> {
                 "fresh process changed the independent stream checkpoints or original anchors"
             );
         }
+        if let Some(private) = evidence
+            .get("private_state")
+            .filter(|value| !value.is_null())
+        {
+            let state = serde_json::to_value(store.load())?;
+            for (key, expected) in private
+                .as_object()
+                .context("private readback is not an object")?
+            {
+                ensure!(
+                    state[key] == *expected,
+                    "fresh process changed private state {key}"
+                );
+            }
+        }
+        if let Some(scope) = evidence
+            .get("private_sidecar_scope")
+            .filter(|value| !value.is_null())
+        {
+            let scope: arkret_wire::ScopeRef = serde_json::from_value(scope.clone())?;
+            ensure!(
+                serde_json::to_value(inkson::conformance::retained_sidecar_cut(&store, &scope)?)?
+                    == evidence["private_sidecar_cut"],
+                "fresh process changed the original private signed Sidecar cut"
+            );
+        }
         return Ok(());
     }
     let (scope, snapshot, history, cursor): (

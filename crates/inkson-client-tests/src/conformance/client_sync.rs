@@ -12,6 +12,8 @@ use garth::{AccountSubscribeBatch, AccountSubscribeTransport, SyncRequestBody};
 use inkson::sync_engine::NativeAccountHost;
 use serde_json::Value;
 
+mod recovery;
+
 const CASES: [&str; 3] = [
     "sidecar_history_current_projection_same_cut_before_checkpoint",
     "sidecar_missing_tail_does_not_install_newer_current_or_checkpoint",
@@ -44,12 +46,14 @@ const ORDERING_CASES: [&str; 2] = [
 ];
 const CIRCLE_TAIL_CASE: &str = "circle_stream_tail_is_independent";
 const STREAM_GAP_CASE: &str = "unexplained_position_jump_stops_only_that_stream";
+const MISSING_CIRCLE_CASE: &str = "one_missing_stream_tail_recovers_only_that_stream";
+const REVISION_STALE_CASE: &str = "revision_stale_keeps_the_cursor_and_continues_backfill";
 pub const PRODUCTION_CASE_COUNT: usize = CASES.len()
     + RECOVERY_CASES.len()
     + STREAM_AND_DELIVERY_CASES.len()
     + ACK_CASES.len()
     + QUEUE_CASES.len()
-    + 3
+    + 5
     + ORDERING_CASES.len();
 
 const QUEUE_WRITE_EVIDENCE: &str = "SELECT jsonb_build_object(\
@@ -224,6 +228,7 @@ struct StreamGapRail {
     ack_token: String,
     ack_before: String,
     requests: Mutex<Vec<SyncRequestBody>>,
+    retry_before: Mutex<Option<Value>>,
 }
 
 impl AccountSubscribeTransport for StreamGapRail {
@@ -245,6 +250,7 @@ impl AccountSubscribeTransport for StreamGapRail {
             if visit == 2 {
                 let store = inkson::LocalStateStore::with_path(self.path.clone());
                 let after = serde_json::to_value(store.load())?;
+                *self.retry_before.lock().unwrap() = Some(after.clone());
                 let affected_key = serde_json::to_string(&self.affected_stream)?;
                 let healthy_key = serde_json::to_string(&self.healthy_stream)?;
                 let healthy = self
@@ -273,6 +279,19 @@ impl AccountSubscribeTransport for StreamGapRail {
                         &[&self.ack_token]
                     )? == self.ack_before,
                     "stream recovery reset the issued recipient ACK"
+                );
+            }
+            if visit == 2
+                && self.before["mls_snapshots"]
+                    .as_object()
+                    .is_some_and(|m| !m.is_empty())
+            {
+                let after = serde_json::to_value(
+                    inkson::LocalStateStore::with_path(self.path.clone()).load(),
+                )?;
+                ensure!(
+                    recovery::private_state(&after) == recovery::private_state(&self.before),
+                    "incomplete Circle tail changed private history or MLS before retry"
                 );
             }
             if visit == 2 && self.row_fault.is_some() {
@@ -304,6 +323,13 @@ impl AccountSubscribeTransport for StreamGapRail {
         if visit == 2
             && let Some(fault) = &self.row_fault
         {
+            cotest::transcripts::record_vector_event(
+                "sync.client_account_stream.recovery_scan_boundary",
+                &serde_json::json!({"affected_stream":self.affected_stream}),
+                &serde_json::json!({"healthy_history_already_durable":true}),
+                &serde_json::json!({"initial_scan_requests":fault.scan_requests(),"complete_suite_claim":false}),
+            );
+            fault.clear_scan_requests();
             fault.clear();
         }
         let mut batch = self.http.account_subscribe_batch(request).await?;
@@ -1077,6 +1103,41 @@ impl Probe {
 
 #[async_trait::async_trait(?Send)]
 impl SidecarSyncObserver for Probe {
+    fn requires_recovery_peer(&self) -> bool {
+        true
+    }
+
+    async fn after_station_checks(
+        &self,
+        controller: &Member,
+        genesis: &Event,
+        coauth: &cotest::scenarios::_helpers::bridge::MockCoauthIntrospectionServer,
+        database_url: &str,
+        recovery_database_url: Option<&str>,
+        servers: &mut cotest::harness::TestServerGroup,
+    ) -> Result<()> {
+        self.revision_stale(
+            controller,
+            genesis,
+            coauth,
+            database_url,
+            recovery_database_url.context("Sync recovery peer database is absent")?,
+            servers,
+        )
+        .await?;
+        let realm = arkret_wire::RealmId::new(
+            cotest::scenarios::human_device_producer_live::create_realm_with_join_rule(
+                &controller.client,
+                "Independent Circle recovery",
+                "public",
+                &[servers.server(0)],
+            )
+            .await?,
+        )?;
+        self.readable_row_gap(controller, &realm, database_url, Some(&genesis.scope_ref))
+            .await
+    }
+
     async fn before_station(&self, station: &mut cotest::harness::ArkretServer) -> Result<()> {
         *self.scan_relay.borrow_mut() = Some(station.install_scan_gap_relay().await?);
         Ok(())
@@ -1821,13 +1882,15 @@ impl Probe {
         controller: &Member,
         realm: &arkret_wire::RealmId,
         database_url: &str,
+        private_scope: Option<&ScopeRef>,
     ) -> Result<()> {
         use cotest::scenarios::circle_poll_scope_live::{circle_create, circle_event, join_circle};
         use cotest::scenarios::human_device_producer_live::submit_and_expect_commit;
+        let producer = controller;
         let circle = circle_create(
-            &controller.client,
+            &producer.client,
             realm.as_str(),
-            &controller.actor,
+            &producer.actor,
             "Readable row gap",
             "Row gap",
         )
@@ -1843,7 +1906,16 @@ impl Probe {
             realm_id: realm.clone(),
             circle_id: circle.clone(),
         };
-        let path = self.directory.path().join("readable-row-gap-state.json");
+        let case_id = if private_scope.is_some() {
+            MISSING_CIRCLE_CASE
+        } else {
+            STREAM_GAP_CASE
+        };
+        let path = self.directory.path().join(if private_scope.is_some() {
+            "state.json"
+        } else {
+            "readable-row-gap-state.json"
+        });
         let host = NativeAccountHost::new_for_realm(
             controller.client.sdk(),
             controller.account.clone(),
@@ -1859,6 +1931,20 @@ impl Probe {
         };
         host.catch_up_with_conformance_transport(&baseline).await?;
         let before = state(&host)?;
+        let private_cut = private_scope
+            .map(|scope| inkson::conformance::retained_sidecar_cut(&host.state_store(), scope))
+            .transpose()?;
+        if private_scope.is_some() {
+            ensure!(
+                before["mls_snapshots"]
+                    .as_object()
+                    .is_some_and(|m| !m.is_empty())
+                    && before["verified_sidecar_history"]
+                        .as_object()
+                        .is_some_and(|m| !m.is_empty()),
+                "Circle recovery needs the original nonempty private state"
+            );
+        }
         let cursor = host
             .state_store()
             .sync_cursor()
@@ -1870,16 +1956,16 @@ impl Probe {
         );
         let mut commits = Vec::new();
         for title in ["Missing original one", "Visible original two"] {
-            let event = circle_event(&controller.client, realm.as_str(), &circle,
+            let event = circle_event(&producer.client, realm.as_str(), &circle,
                 arkret_wire::EventKind::StrandCreate,
                 serde_json::json!({"object":{"schema":"ak.schema.strand.v1", "realm_id":realm,
                     "scope_circle_id":circle, "tracks":{"discussion":{"is_primary":true,"profile":"discussion"}},
-                    "metadata":{"title":title}, "state":"active", "created_by":controller.actor}})).await?;
+                    "metadata":{"title":title}, "state":"active", "created_by":producer.actor}})).await?;
             commits.push(
                 submit_and_expect_commit(
-                    &controller.client,
-                    &controller.account,
-                    controller.device.as_str(),
+                    &producer.client,
+                    &producer.account,
+                    producer.device.as_str(),
                     &event,
                 )
                 .await?,
@@ -1902,14 +1988,42 @@ impl Probe {
             original.committed_events.len() == 3,
             "row gap original prefix is not zero/one/two"
         );
-        circle_create(
-            &controller.client,
-            realm.as_str(),
-            &controller.actor,
-            "Row gap healthy sibling",
-            "Row sibling",
-        )
-        .await?;
+        if private_scope.is_some() {
+            let event = producer
+                .client
+                .author_event(
+                    realm.as_str(),
+                    arkret_wire::EventKind::MessageCreate.as_str(),
+                    cotest::harness::message_create_text_payload_for_strand(
+                        arkret_wire::StrandId::new(
+                            producer.client.default_strand_id(realm.as_str())?,
+                        )?,
+                        "Healthy Realm progress during Circle recovery",
+                    )?,
+                )
+                .await?;
+            submit_and_expect_commit(
+                &producer.client,
+                &producer.account,
+                producer.device.as_str(),
+                &event,
+            )
+            .await?;
+            cotest::scenarios::human_device_producer_live::wait_for_committed(
+                &controller.client,
+                &event.event_id,
+            )
+            .await?;
+        } else {
+            circle_create(
+                &controller.client,
+                realm.as_str(),
+                &controller.actor,
+                "Row gap healthy sibling",
+                "Row sibling",
+            )
+            .await?;
+        }
         let http = controller.client.sdk();
         // Earlier capacity cases deliberately retain this real unacknowledged
         // delivery. Reuse it rather than weakening the endpoint's quota.
@@ -1955,6 +2069,7 @@ impl Probe {
             Err(arkret_wire::WireError::StreamPositionGap { ref stream_ref, expected: 1, actual: 2 }) if *stream_ref == stream),
             "actual HTTP zero/two scan did not identify its exact readable gap"
         );
+        fault.clear_scan_requests();
         let rail = StreamGapRail {
             row_fault: Some(fault.clone()),
             http: http.clone(),
@@ -1970,6 +2085,7 @@ impl Probe {
             ack_token,
             ack_before,
             requests: Default::default(),
+            retry_before: Default::default(),
         };
         host.catch_up_with_conformance_transport(&rail).await?;
         ensure!(
@@ -1984,7 +2100,63 @@ impl Probe {
             )? == rail.ack_before,
             "repaired row gap reset the issued ACK"
         );
+        if private_scope.is_some() {
+            let scans = fault.scan_requests();
+            ensure!(
+                scans.iter().all(|scan| scan.stream_ref == stream),
+                "Circle recovery rescanned an unrelated stream: {scans:?}"
+            );
+            let retry_before = rail
+                .retry_before
+                .lock()
+                .unwrap()
+                .clone()
+                .context("Circle recovery lacks a verified retry boundary")?;
+            let after = state(&host)?;
+            let prior = retry_before["verified_commit_stream_cursors"]
+                .as_object()
+                .context("retry stream heads")?;
+            let recovered = after["verified_commit_stream_cursors"]
+                .as_object()
+                .context("recovered stream heads")?;
+            ensure!(
+                prior.keys().eq(recovered.keys()),
+                "Circle recovery replaced the stream inventory"
+            );
+            let changed = prior
+                .iter()
+                .filter(|(stream_key, head)| {
+                    recovered[*stream_key] != **head
+                        || after["verified_commit_stream_anchors"][*stream_key]
+                            != retry_before["verified_commit_stream_anchors"][*stream_key]
+                })
+                .map(|(stream_key, _)| stream_key.as_str())
+                .collect::<std::collections::BTreeSet<_>>();
+            ensure!(
+                changed == [key.as_str()].into_iter().collect(),
+                "Circle recovery changed unrelated durable stream progress: {changed:?}"
+            );
+            cotest::transcripts::record_vector_event(
+                "sync.client_account_stream.circle_recovery_scans",
+                &serde_json::json!({"case_id":case_id,"affected_stream":stream}),
+                &serde_json::json!({"recovered_streams":[stream.clone()]}),
+                &serde_json::json!({"retry_scan_requests":scans,"installed_recovered_streams":[stream.clone()],"complete_suite_claim":false}),
+            );
+        }
         let recovered_state = state(&host)?;
+        if let Some(scope) = private_scope {
+            ensure!(
+                recovery::private_state(&recovered_state) == recovery::private_state(&before),
+                "Circle recovery changed the original private history or MLS"
+            );
+            ensure!(
+                Some(inkson::conformance::retained_sidecar_cut(
+                    &host.state_store(),
+                    scope
+                )?) == private_cut,
+                "Circle recovery changed the original private signed cut"
+            );
+        }
         let healthy_key = serde_json::to_string(&rail.healthy_stream)?;
         for (sibling, head) in before["verified_commit_stream_cursors"]
             .as_object()
@@ -2025,14 +2197,19 @@ impl Probe {
             cursor != rail.cursor,
             "row gap recovery advanced no Account cut"
         );
-        let evidence = self.directory.path().join("expected-readable-row-gap.json");
+        let evidence = self
+            .directory
+            .path()
+            .join(format!("expected-{case_id}.json"));
         std::fs::write(
             &evidence,
             serde_json::to_vec(&serde_json::json!({
             "account":controller.account, "realm":realm, "cut":cut, "cursor":cursor,
             "stream_key":key, "head":after["verified_commit_stream_cursors"][&key],
             "anchor":commits[1], "stream_heads":after["verified_commit_stream_cursors"],
-            "stream_anchors":after["verified_commit_stream_anchors"] }))?,
+            "stream_anchors":after["verified_commit_stream_anchors"],
+            "private_state":private_scope.map(|_| recovery::private_state(&after)),
+            "private_sidecar_scope":private_scope, "private_sidecar_cut":private_cut }))?,
         )?;
         drop(host);
         let output = std::process::Command::new(&self.reader)
@@ -2045,8 +2222,8 @@ impl Probe {
             String::from_utf8_lossy(&output.stderr)
         );
         self.results.borrow_mut().push(super::CaseExecutionResult {
-            case_id: STREAM_GAP_CASE.into(),
-            assertions: 12,
+            case_id: case_id.into(),
+            assertions: if private_scope.is_some() { 20 } else { 12 },
         });
         Ok(())
     }
@@ -2259,7 +2436,7 @@ impl Probe {
         .await?;
         self.circle_gap_recovery(controller, realm, &circle, &stream, &path)
             .await?;
-        self.readable_row_gap(controller, realm, database_url)
+        self.readable_row_gap(controller, realm, database_url, None)
             .await?;
         Ok(())
     }
@@ -2366,6 +2543,7 @@ impl Probe {
             ack_token,
             ack_before,
             requests: Default::default(),
+            retry_before: Default::default(),
         };
         // Alter only the untrusted window's declared end. Original signed
         // Events, Commits, Snapshot and PostgreSQL rows remain unchanged.
@@ -2923,6 +3101,21 @@ pub async fn run_sync_production_cases(
             );
         }
     }
+    let missing_circle = fixture["reconnect"]
+        .as_array()
+        .context("reconnect cases")?
+        .iter()
+        .filter(|case| case["name"] == MISSING_CIRCLE_CASE)
+        .collect::<Vec<_>>();
+    ensure!(
+        missing_circle.len() == 1
+            && missing_circle[0]["expected"] == "resume"
+            && missing_circle[0]["affected_stream_ref"]["kind"] == "circle"
+            && missing_circle[0]["recovered_streams"] == serde_json::json!(["circle"])
+            && missing_circle[0]["other_streams_reset"] == false
+            && missing_circle[0]["to_device_acks_reset"] == false,
+        "canonical Circle recovery contract drifted"
+    );
     let probe = Probe {
         scan_relay: Default::default(),
         directory: tempfile::tempdir()?,
@@ -2943,6 +3136,8 @@ pub async fn run_sync_production_cases(
         .chain(std::iter::once(BASELINE_CASE))
         .chain(std::iter::once(CIRCLE_TAIL_CASE))
         .chain(std::iter::once(STREAM_GAP_CASE))
+        .chain(std::iter::once(REVISION_STALE_CASE))
+        .chain(std::iter::once(MISSING_CIRCLE_CASE))
         .chain(ORDERING_CASES)
         .collect::<std::collections::BTreeSet<_>>();
     ensure!(

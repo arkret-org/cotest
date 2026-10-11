@@ -820,7 +820,7 @@ async fn alice_message(
 }
 
 /// The exact `committed_replication` body X's outbox sends for one Event.
-async fn replication_body(
+pub async fn replication_body(
     client: &TestActorClient,
     event: &Event,
     commit: &RealmCommit,

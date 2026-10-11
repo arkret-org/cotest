@@ -46,6 +46,22 @@ pub trait SidecarSyncObserver {
         None
     }
 
+    fn requires_recovery_peer(&self) -> bool {
+        false
+    }
+
+    async fn after_station_checks(
+        &self,
+        _controller: &Member,
+        _genesis: &arkret_wire::Event,
+        _coauth: &MockCoauthIntrospectionServer,
+        _database_url: &str,
+        _recovery_database_url: Option<&str>,
+        _servers: &mut TestServerGroup,
+    ) -> Result<()> {
+        Ok(())
+    }
+
     async fn before_genesis(
         &self,
         controller: &Member,
@@ -99,8 +115,20 @@ async fn run_with_options(
             capacity.to_string(),
         ));
     }
+    let recovery_database = if sync_observer.is_some_and(|probe| probe.requires_recovery_peer()) {
+        Some(
+            crate::scenarios::human_device_producer_live::database(GROUP)?
+                .context("Sync recovery requires a distinct governance database")?,
+        )
+    } else {
+        None
+    };
+    let mut node_envs = vec![node_env];
+    if let Some(peer_database) = &recovery_database {
+        node_envs.push(station_env(&peer_database.connect_url, &coauth));
+    }
     let Some(mut servers) =
-        TestServerGroup::try_multi_external_with_node_envs(GROUP, &[node_env]).await?
+        TestServerGroup::try_multi_external_with_node_envs(GROUP, &node_envs).await?
     else {
         ensure!(
             observer.is_none() && sync_observer.is_none(),
@@ -551,12 +579,12 @@ async fn run_with_options(
     );
     let roster =
         arkret_models_collaboration::mls_roster_authority::MlsMemberRosterAuthorityReadRequestBody {
-            realm_id: realm,
-            effective_scope: scope,
+            realm_id: realm.clone(),
+            effective_scope: scope.clone(),
             mls_group_id: material.mls_group_id,
             target_commit_event_ref: genesis.event_id.clone(),
             target_epoch: 0,
-            caller_actor_id: controller.actor,
+            caller_actor_id: controller.actor.clone(),
             cursor: None,
         };
     let roster_response = controller
@@ -579,6 +607,20 @@ async fn run_with_options(
             && roster_response.next_cursor.is_none(),
         "native Sidecar Genesis roster is partial"
     );
+    if let Some(probe) = sync_observer {
+        probe
+            .after_station_checks(
+                &controller,
+                &genesis,
+                &coauth,
+                &database.connect_url,
+                recovery_database
+                    .as_ref()
+                    .map(|database| database.connect_url.as_str()),
+                &mut servers,
+            )
+            .await?;
+    }
     Ok(())
 }
 

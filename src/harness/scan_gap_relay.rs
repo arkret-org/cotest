@@ -15,6 +15,7 @@ pub struct ScanGapControl(Arc<Mutex<GapState>>);
 struct GapState {
     stream: Option<CommitStreamRef>,
     observations: Vec<StreamScanOutcome>,
+    scan_requests: Vec<StreamScanRequest>,
 }
 
 impl ScanGapControl {
@@ -30,6 +31,14 @@ impl ScanGapControl {
 
     pub fn observations(&self) -> Vec<StreamScanOutcome> {
         self.0.lock().unwrap().observations.clone()
+    }
+
+    pub fn clear_scan_requests(&self) {
+        self.0.lock().unwrap().scan_requests.clear();
+    }
+
+    pub fn scan_requests(&self) -> Vec<StreamScanRequest> {
+        self.0.lock().unwrap().scan_requests.clone()
     }
 }
 
@@ -67,6 +76,21 @@ impl Relay {
         let target = self.upstream.join(path)?;
         let body = req.payload().await?.to_vec();
         let mut headers = req.headers().clone();
+        // Record the actual ingress authority for the production gateway
+        // reconstruction path. The private HTTP/2 hop has another URI
+        // authority, and a caller-supplied forwarded host is not that ingress.
+        let authority = req
+            .uri()
+            .authority()
+            .map(|authority| authority.as_str())
+            .or_else(|| {
+                req.headers()
+                    .get("host")
+                    .and_then(|value| value.to_str().ok())
+            })
+            .context("relay request authority")?;
+        headers.insert("host", authority.parse()?);
+        headers.insert("x-forwarded-host", authority.parse()?);
         headers.remove("connection");
         headers.remove("transfer-encoding");
         let response = self
@@ -87,6 +111,7 @@ impl Relay {
         {
             let request: StreamScanRequest = serde_json::from_slice(&body)?;
             let mut state = self.control.0.lock().unwrap();
+            state.scan_requests.push(request.clone());
             if state.stream.as_ref() == Some(&request.stream_ref) {
                 let mut outcome: StreamScanOutcome = serde_json::from_slice(&bytes)?;
                 outcome.validate_for_request(&request)?;

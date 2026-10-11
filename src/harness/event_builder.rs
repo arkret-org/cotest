@@ -915,10 +915,7 @@ pub(crate) fn message_create_text_payload(strand_id: &str, body: &str) -> Result
     message_create_text_payload_for_strand(parse_strand_id(strand_id)?, body)
 }
 
-pub(crate) fn message_create_text_payload_for_strand(
-    strand_id: StrandId,
-    body: &str,
-) -> Result<Value> {
+pub fn message_create_text_payload_for_strand(strand_id: StrandId, body: &str) -> Result<Value> {
     let content = ContentBlock::text(body);
     MessageCreatePayload::with_content(strand_id, "discussion", content)
         .to_value()
