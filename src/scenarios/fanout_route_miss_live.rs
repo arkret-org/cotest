@@ -42,6 +42,7 @@ const ALICE_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002002";
 const BOB_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002003";
 const CAROL_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002004";
 
+pub mod frozen_authority_live;
 pub mod terminal_restart_live;
 
 struct CurrentOriginFixture {
