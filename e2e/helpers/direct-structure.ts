@@ -534,15 +534,17 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
   };
   await refusedTopic("active");
   const archived = await structureWrite(alice, "archive_chat", "ak.strand.archive");
-  expect(archived.payload?.strand_id).toBe(chatId);
-  expect(archived.payload?.strand_id).not.toBe(mainId);
+  // The registered object lifecycle payload single-sources its target_ref.
+  expect(archived.payload?.target_ref).toBe(chatId);
+  expect(archived.payload?.target_ref).not.toBe(mainId);
   for (const page of [alice, bob, ...extraDevices]) {
     await expect(page.getByTestId("direct-structure").getByRole("combobox", { name: "Chat", exact: true })
       .locator(`option[value=${JSON.stringify(chatId)}]`)).toContainText("(archived)", { timeout: 90_000 });
   }
   await refusedTopic("archived");
   const restored = await structureWrite(alice, "restore_chat", "ak.strand.restore");
-  expect(restored.payload?.strand_id).toBe(chatId);
+  expect(restored.payload?.target_ref).toBe(chatId);
+  expect(restored.payload?.target_ref).not.toBe(mainId);
   for (const page of [alice, bob, ...extraDevices]) {
     const option = page.getByTestId("direct-structure").getByRole("combobox", { name: "Chat", exact: true })
       .locator(`option[value=${JSON.stringify(chatId)}]`);
