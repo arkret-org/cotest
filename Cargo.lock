@@ -452,7 +452,6 @@ dependencies = [
  "sha2 0.11.0",
  "thiserror 2.0.20",
  "windows",
- "zbus",
  "zeroize",
 ]
 
@@ -2009,15 +2008,16 @@ dependencies = [
 name = "coauth-keyring"
 version = "0.3.0"
 dependencies = [
- "aead 0.6.1",
+ "aead 0.5.2",
  "base64ct",
- "chacha20poly1305 0.11.0",
+ "chacha20poly1305 0.10.1",
  "coauth-iana",
  "coauth-jose",
  "const-oid 0.9.6",
  "der 0.7.10",
  "ed25519-dalek 2.2.0",
  "elliptic-curve 0.13.8",
+ "generic-array",
  "k256",
  "p256 0.13.2",
  "p384",
