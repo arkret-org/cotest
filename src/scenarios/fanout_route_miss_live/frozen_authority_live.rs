@@ -8,7 +8,7 @@ use super::terminal_restart_live::{
 use super::*;
 use crate::scenarios::_helpers::acceptance_footprint::acceptance_rows;
 
-async fn hold_schedule(url: &str, messages_only: bool) -> Result<()> {
+pub(super) async fn hold_schedule(url: &str, messages_only: bool) -> Result<()> {
     let condition = if messages_only {
         "IF NEW.payload_json::jsonb->'replications'->0->'event_submission'->'event'->>'kind' <> 'ak.message.create' THEN RETURN NEW; END IF;"
     } else {
@@ -17,7 +17,7 @@ async fn hold_schedule(url: &str, messages_only: bool) -> Result<()> {
     sql(url, &format!("CREATE FUNCTION hold_frozen_schedule() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN {condition} NEW.next_attempt_at := (extract(epoch FROM clock_timestamp()) * 1000)::bigint + 600000; RETURN NEW; END $$; CREATE TRIGGER hold_frozen_schedule BEFORE INSERT ON federation_outbox FOR EACH ROW EXECUTE FUNCTION hold_frozen_schedule()")).await
 }
 
-async fn release(url: &str, row: &Value) -> Result<()> {
+pub(super) async fn release(url: &str, row: &Value) -> Result<()> {
     let url = url.to_owned();
     let id = row["id"].as_str().context("intent id")?.to_owned();
     tokio::task::spawn_blocking(move || -> Result<()> {
@@ -27,7 +27,7 @@ async fn release(url: &str, row: &Value) -> Result<()> {
     }).await?
 }
 
-async fn settled(url: &str, commit: &RealmCommit, state: &str) -> Result<Value> {
+pub(super) async fn settled(url: &str, commit: &RealmCommit, state: &str) -> Result<Value> {
     let deadline = Instant::now() + ROUTE_MISS_WINDOW;
     loop {
         let rows = fanout(url, commit).await?;

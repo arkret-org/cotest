@@ -46,7 +46,7 @@ pub(super) async fn tombstone(fixture: &CurrentOriginFixture) -> Result<(Event, 
     Ok((event, commit))
 }
 
-fn ensure_ordinary_refusal_rows(
+pub(super) fn ensure_ordinary_refusal_rows(
     before: &Value,
     mut after: Value,
     client: &TestActorClient,

@@ -43,6 +43,7 @@ const BOB_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002003";
 const CAROL_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002004";
 
 pub mod frozen_authority_live;
+pub mod terminal_gap_live;
 pub mod terminal_restart_live;
 
 struct CurrentOriginFixture {
@@ -57,6 +58,13 @@ struct CurrentOriginFixture {
 }
 
 async fn current_origin_fixture(name: &str) -> Result<Option<CurrentOriginFixture>> {
+    current_origin_fixture_with_plaintext(name, true).await
+}
+
+async fn current_origin_fixture_with_plaintext(
+    name: &str,
+    member_plaintext: bool,
+) -> Result<Option<CurrentOriginFixture>> {
     let Some(governance_database) = database(name)? else {
         return Ok(None);
     };
@@ -87,11 +95,16 @@ async fn current_origin_fixture(name: &str) -> Result<Option<CurrentOriginFixtur
         standard_client(group.server(0), &coauth, "origin-alice", ALICE_DEVICE).await?;
     let (bob, bob_account) =
         standard_client(group.server(1), &coauth, "origin-bob", BOB_DEVICE).await?;
+    let plaintext_services = if member_plaintext {
+        vec![group.server(0), group.server(1)]
+    } else {
+        vec![group.server(0)]
+    };
     let realm = create_realm_with_join_rule(
         &alice,
         "Federation current origin replay",
         "public",
-        &[group.server(0), group.server(1)],
+        &plaintext_services,
     )
     .await?;
     let (_, join_commit) = join_from_member_station(
