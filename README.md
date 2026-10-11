@@ -25,6 +25,19 @@ adapt to your local toolchain.
 The current default server under test is the sibling
 `../coland/Cargo.toml` checkout.
 
+## Operation coverage inventory
+
+`operation-test-coverage.json` records a coordinated source snapshot. Ordinary
+CI checks the current sibling checkouts by generating a temporary inventory,
+validating operation closure and API-only boundaries, and checking deterministic
+regeneration. Independent sibling `main` updates need not rewrite Cotest's
+committed source hashes. To refresh or verify a coordinated snapshot locally:
+
+```sh
+python scripts/check_operation_test_coverage.py
+python scripts/check_operation_test_coverage.py --check
+```
+
 ## Realm vs Space
 
 - **Realm:** security boundary — membership, capability, E2EE, federation.

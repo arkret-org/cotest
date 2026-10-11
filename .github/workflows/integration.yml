@@ -130,13 +130,13 @@ jobs:
           set -euo pipefail
           for svc in coland coauth floria; do
             echo "::group::cargo build $svc"
-            features=""
+            features=()
             if [ "$svc" = "coland" ]; then
-              features="--features conformance-harness"
+              features=(--features conformance-harness)
             elif [ "$svc" = "coauth" ]; then
-              features="--features cedar"
+              features=(--features cedar)
             fi
-            (cd "$svc" && cargo build --release --locked $features)
+            (cd "$svc" && cargo build --release --locked "${features[@]}")
             echo "::endgroup::"
           done
       - name: install playwright
@@ -146,6 +146,10 @@ jobs:
           npx playwright install --with-deps chromium
       - name: install dioxus cli
         run: cargo install dioxus-cli --version 0.7.10 --locked
+      - name: Install frontend task runner
+        uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+        with:
+          just-version: "1.46.0"
       - name: Prepare Linux joint prerequisites
         id: joint_prerequisites
         run: bash cotest/scripts/prepare-linux-joint-e2e.sh setup

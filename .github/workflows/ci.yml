@@ -34,6 +34,12 @@ jobs:
           --health-retries 12
     env:
       DATABASE_URL: postgresql://cotest:cotest-ci@127.0.0.1:5432/cotest_coauth_evidence
+      # Process scenarios create independent database leases from this real
+      # PostgreSQL service. Missing live prerequisites must fail this lane.
+      COTEST_COLAND_DATABASE_URL: postgresql://cotest:cotest-ci@127.0.0.1:5432/cotest_coauth_evidence
+      COLAND_TEST_DATABASE_URL: postgresql://cotest:cotest-ci@127.0.0.1:5432/cotest_coauth_evidence
+      COTEST_COAUTH_DATABASE_URL: postgresql://cotest:cotest-ci@127.0.0.1:5432/cotest_coauth_evidence
+      COTEST_REQUIRE_LIVE_SERVICES: "1"
       # The workspace links many complete process-test executables. Keep
       # assertions enabled while avoiding parallel linker and debug-data pressure.
       CARGO_BUILD_JOBS: "1"
@@ -137,13 +143,13 @@ jobs:
         run: |
           set -euo pipefail
           for svc in coland coauth floria; do
-            features=""
+            features=()
             if [ "$svc" = "coland" ]; then
-              features="--features conformance-harness"
+              features=(--features conformance-harness)
             elif [ "$svc" = "coauth" ]; then
-              features="--features cedar"
+              features=(--features cedar)
             fi
-            cargo build --manifest-path "$svc/Cargo.toml" --locked --bin "$svc" $features
+            cargo build --manifest-path "$svc/Cargo.toml" --locked --bin "$svc" "${features[@]}"
             target=$(cargo metadata --manifest-path "$svc/Cargo.toml" --locked --format-version 1 --no-deps | jq -er '.target_directory')
             key=$(printf '%s_BIN' "$svc" | tr '[:lower:]' '[:upper:]')
             echo "$key=$target/debug/$svc" >> "$GITHUB_ENV"
@@ -205,9 +211,15 @@ jobs:
           scripts.tests.test_operation_test_coverage
           scripts.tests.test_api_only_migration
           scripts.tests.test_package_graph
-      - name: reject stale or manually edited inventory
+      - name: validate current cross-repository inventory
         working-directory: cotest
-        run: python scripts/check_operation_test_coverage.py --check
+        # Sibling main branches move independently. Validate current source,
+        # closure and deterministic generation instead of comparing their
+        # hashes with a snapshot committed in a different repository.
+        run: |
+          inventory="$RUNNER_TEMP/operation-test-coverage.json"
+          python scripts/check_operation_test_coverage.py --output "$inventory"
+          python scripts/check_operation_test_coverage.py --check --output "$inventory"
 
   typecheck:
     name: typecheck (tsc --noEmit)
@@ -239,6 +251,11 @@ jobs:
       - name: typecheck
         working-directory: cotest/e2e
         run: npm run typecheck
+      - name: Check joint scenario manifests before service builds
+        shell: pwsh
+        run: |
+          ./scripts/generate-e2e-coverage.ps1 -Check
+          ./scripts/generate-scenario-evidence.ps1 -Check
       - name: provisioning cache isolation
         working-directory: cotest/e2e
         # The memo behind `ensureRegistered` is load-bearing: the Coauth handle
@@ -565,6 +582,7 @@ jobs:
 
   e2e:
     name: e2e (playwright / ${{ matrix.project }})
+    needs: typecheck
     runs-on: ubuntu-latest
     timeout-minutes: 180
     # PR gate: run a real Playwright probe against a live coland instead of
@@ -648,6 +666,10 @@ jobs:
             coauth
       - name: Install Dioxus CLI
         run: cargo install dioxus-cli --version 0.7.10 --locked
+      - name: Install frontend task runner
+        uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+        with:
+          just-version: "1.46.0"
       - name: Build coland Docker image
         working-directory: cotest
         shell: pwsh
@@ -678,6 +700,19 @@ jobs:
       - name: Restore Linux hosts permissions
         if: always() && steps.joint_prerequisites.outcome != 'skipped' && steps.joint_prerequisites.outcome != ''
         run: bash cotest/scripts/prepare-linux-joint-e2e.sh restore
+
+      - name: Preserve joint failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: joint-failure-${{ github.run_id }}-${{ matrix.project }}
+          path: |
+            cotest/artifacts/runs/joint-e2e/**/services/prepare-*.log
+            cotest/artifacts/runs/joint-e2e/**/runner-error.log
+            cotest/artifacts/runs/joint-e2e/**/summary.md
+            cotest/e2e/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
 
       # PR is the contract/deterministic lane. Tests tagged @mls-data-plane or
       # @platform-live are reserved for controlled.yml and must not be added to

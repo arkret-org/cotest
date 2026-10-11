@@ -11,7 +11,6 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Result, anyhow};
 use arkret_models_collaboration::governance::invite_addressing::IntroductionEvidence;
-use base64::Engine as _;
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
@@ -134,11 +133,6 @@ pub async fn account_subscribe_omits_quiet_realm_at_unchanged_cursor() -> Result
         .ok_or_else(|| {
             anyhow!("quiet incremental response missing completion: {quiet_frames:?}")
         })?;
-    assert_eq!(
-        cursor_frontier_handle(quiet_cursor)?,
-        cursor_frontier_handle(&cursor)?,
-        "an empty incremental response MUST preserve the cursor frontier: {quiet_frames:?}"
-    );
     assert!(
         quiet_frames.iter().all(|frame| {
             frame["realms"][&realm_id].is_null()
@@ -149,19 +143,40 @@ pub async fn account_subscribe_omits_quiet_realm_at_unchanged_cursor() -> Result
         "quiet continuation MUST omit the unchanged Realm: {quiet_frames:?}"
     );
 
-    Ok(())
-}
+    // Resume tokens are opaque issuance instances, not comparable frontiers
+    // (client-sync.md section 12). Both the original and refreshed token must
+    // retain the quiet cut and deliver the next accepted Event.
+    let accepted = send_message_now(&alice, &realm_id, &strand_id, "after quiet poll").await?;
+    let event_id = submitted_event_id(&accepted)
+        .ok_or_else(|| anyhow!("post-poll send response missing event_id: {accepted}"))?
+        .to_owned();
+    for (label, after) in [
+        ("quiet checkpoint", quiet_cursor),
+        ("original cut", cursor.as_str()),
+    ] {
+        eventually(
+            label,
+            Duration::from_secs(5),
+            Duration::from_millis(100),
+            || async {
+                let frames = fetch_account_subscribe_frames(
+                    &alice,
+                    &format!("catchup=true&after={after}&{filter}"),
+                )
+                .await?;
+                if committed_event_ids(&frames, &realm_id).contains(&event_id) {
+                    Ok(())
+                } else {
+                    Err(anyhow!(
+                        "{label} lost accepted Event {event_id}: {frames:?}"
+                    ))
+                }
+            },
+        )
+        .await?;
+    }
 
-fn cursor_frontier_handle(cursor: &str) -> Result<String> {
-    let encoded = cursor
-        .strip_prefix("ak:cursor:")
-        .ok_or_else(|| anyhow!("account subscribe cursor has the wrong prefix"))?;
-    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(encoded)?;
-    let payload: Value = serde_json::from_slice(&bytes)?;
-    payload["h"]
-        .as_str()
-        .map(ToOwned::to_owned)
-        .ok_or_else(|| anyhow!("account subscribe cursor missing frontier handle: {payload}"))
+    Ok(())
 }
 
 fn completed_cursor(frames: &[Value]) -> Result<String> {

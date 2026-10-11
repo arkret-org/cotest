@@ -28,7 +28,7 @@ use std::collections::HashMap;
 use std::io::{BufRead, Write};
 
 use anyhow::{Context, Result, bail};
-use cotest_test_support::garth_client::GarthClientHandle;
+use cotest_test_support::garth_client::{GarthClientConfig, GarthClientHandle};
 use cotest_test_support::provisioning::{
     AccountHandoff, DeploymentEndpoints, FoundPrincipalRequest, FoundedPrincipal,
     FoundingDeviceKey, MockEmailInbox, UnboundAccount, authorize_with_current_account,
@@ -463,18 +463,18 @@ impl Session {
                 let store_root = self
                     .store_root
                     .join(sanitize_path_component(&body.handoff_id));
-                let client = GarthClientHandle::new(
-                    self.http.clone(),
-                    &body.coland_base_url,
-                    principal.session_grant().session_grant.clone(),
-                    session_key.signing_key(),
-                    body.account_id,
-                    &body.device_id,
-                    &store_root,
-                    ed25519_dalek::SigningKey::from_bytes(&seed),
-                    &principal.event_verification_method,
-                    &identity.trust_domain,
-                )?;
+                let client = GarthClientHandle::new(GarthClientConfig {
+                    http: self.http.clone(),
+                    station_base_url: &body.coland_base_url,
+                    session_grant: principal.session_grant().session_grant.clone(),
+                    signing_key: session_key.signing_key(),
+                    account_id: body.account_id,
+                    device_id: &body.device_id,
+                    store_root: &store_root,
+                    event_signing_key: ed25519_dalek::SigningKey::from_bytes(&seed),
+                    event_verification_method: &principal.event_verification_method,
+                    trust_domain: &identity.trust_domain,
+                })?;
                 self.garth_clients.insert(body.handoff_id.clone(), client);
                 Ok(json!({ "store_root": store_root.to_string_lossy(),
                     "identity_snapshot_path":self.identity_path(&body.handoff_id).to_string_lossy(),

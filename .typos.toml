@@ -10,6 +10,8 @@ extend-ignore-re = [
 [default.extend-identifiers]
 # Canonical PostgreSQL table name.
 account_datas = "account_datas"
+# PowerShell's case-sensitive collection membership operator.
+ccontains = "ccontains"
 
 [default.extend-words]
 # Upstream formal-verification tool used by OpenMLS.

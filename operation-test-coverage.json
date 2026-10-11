@@ -3,37 +3,37 @@
   "source_of_truth": false,
   "generated_from": {
     "operation_registry": "arkret-spec/spec/v1/artifacts/registry/operation-registry.json",
-    "operation_registry_sha256": "dd16446ca78997482e36b1e6ba91e2ef355fb38a0524867f84a53e048338555b",
+    "operation_registry_sha256": "46562db33f3e78e22d0d071afec936013c509dc0996eed4194d8a49fda49b51a",
     "test_layers": {
       "coland_unit": {
-        "source_file_count": 416,
-        "source_sha256": "96b7fd2f3cf2123128a9e483e2c43e1e623204672e06730dbceb9cb20b042201",
-        "evidence_count": 292,
-        "covered_operation_count": 144
+        "source_file_count": 423,
+        "source_sha256": "811202055c20f22f232a0709b5ec62ea2db0fc8d85c7d5e6696827ec02a0caec",
+        "evidence_count": 293,
+        "covered_operation_count": 145
       },
       "coland_http": {
-        "source_file_count": 47,
-        "source_sha256": "fcfd97f6e6ccf318c67bce95f5bf46839d22d275dd6a98958aa509ea4b2db041",
+        "source_file_count": 48,
+        "source_sha256": "b7f04094b71f95fa43a564069fd044b659db938ea4629bbf9efb75900c9b5dc3",
         "evidence_count": 31,
         "covered_operation_count": 20
       },
       "cotest_rust": {
-        "source_file_count": 430,
-        "source_sha256": "1b796df028c73175cdcb63f292e6223fee1b1da92af18d999877647bbf3ea379",
+        "source_file_count": 439,
+        "source_sha256": "3695a2a0dfdf9d5b145d9a5e13c04838d60e6c87f313409c227c67d2c54d91a6",
         "evidence_count": 133,
         "covered_operation_count": 71
       },
       "cotest_e2e": {
         "source_file_count": 117,
-        "source_sha256": "4e2a4cd0ff986eee1439fcbc522b013838d26901885cbe10174dd9b59a714563",
+        "source_sha256": "b9aa06a2ca8f2a09c3352ab92d0b14cd4f84e48e31ef3f4741efa88c4818d766",
         "evidence_count": 51,
         "covered_operation_count": 22
       },
       "inkson_e2e": {
-        "source_file_count": 27,
-        "source_sha256": "5da0915d0b6c215cc39bc56e9a6a7bf634f8288e4adac33e3ad02445467510d4",
-        "evidence_count": 19,
-        "covered_operation_count": 13
+        "source_file_count": 29,
+        "source_sha256": "af727480400288fefb09547ea471baa826206658fa34c136938e58eebb168842",
+        "evidence_count": 20,
+        "covered_operation_count": 14
       }
     }
   },
@@ -57,7 +57,7 @@
     "matrix_cell_count": 1075
   },
   "closure": {
-    "covered_operation_count": 162,
+    "covered_operation_count": 163,
     "uncovered_operation_ids": [
       "ak.edge.applet.managed_actor.command.author.v1",
       "ak.edge.push.command.apply_registration.v1",
@@ -110,13 +110,19 @@
       "ak.self.management_review.command.request.v1",
       "ak.self.management_review.read.status.v1",
       "ak.self.mls.read.roster_authority.v1",
-      "ak.self.realm_link.read.list.v1",
-      "ak.self.third_party_invite.read.acceptance_attestation.v1"
+      "ak.self.realm_link.read.list.v1"
     ],
     "unknown_test_files": [],
     "unknown_operation_literals": [],
     "unassigned_responsibilities": [],
     "classified_non_registry_literals": [
+      {
+        "literal": "ak.self.events.read.future_unregistered.v1",
+        "file": "coland/crates/http/src/routing/identity/agents/common.rs",
+        "line": 421,
+        "scope": "unknown_scope_action_fails_closed_before_admission",
+        "classification": "security_negative_selector"
+      },
       {
         "literal": "ak.server.read.unknown.v1",
         "file": "cotest/tests/operation_registry_gate.rs",
@@ -143,13 +149,6 @@
         "file": "cotest/tests/realm_link_clean_break.rs",
         "line": 46,
         "scope": "rejects_automatic_realm_inheritance_without_current_v1_carrier",
-        "classification": "security_negative_selector"
-      },
-      {
-        "literal": "ak.self.events.read.future_unregistered.v1",
-        "file": "coland/crates/http/src/routing/identity/agents/common.rs",
-        "line": 421,
-        "scope": "unknown_scope_action_fails_closed_before_admission",
         "classification": "security_negative_selector"
       }
     ]
@@ -366,8 +365,8 @@
               74
             ],
             "protected_oracle": false,
-            "scope_sha256": "9e6099fff980daf2c5c0e82b8592a13dfede3f0f2f12c67833059739530c0065",
-            "input_sha256": "8f1d51c1f9c81a94290de4e28818771788919b390443c64b56b692f6f3fea258",
+            "scope_sha256": "d0a7aaedfb0dcff8de4bd66da1e2b4418093d69e324dfa1663c2213ad3e714e8",
+            "input_sha256": "6114fd11e34d79dbe7e0e41a589a35a5977c208a751f2fda55dfcc76c205f61c",
             "assertion_sha256": "8d7a3131acb65bb93f4281563a8e0c1f3840775c7c2e117d5ef29e88ffd9433d",
             "input_preview": [
               "let state = coland_test_support::app_state(test_config());",
@@ -556,8 +555,8 @@
               38
             ],
             "protected_oracle": false,
-            "scope_sha256": "febbe198e1305ac0adda51ba8d65f18e4391fddaf58d0c728d378845b0e44b53",
-            "input_sha256": "d020bb48951f79792de77f3c305b8511abb7e965189a1f919c0f53f2e591f353",
+            "scope_sha256": "3858ef9cfac300e16f7e36cdce8b6c2a0e11e5c86e5029fb3ea759192e972d22",
+            "input_sha256": "ad9c293c62ddd3449dfa3df2544ad0f88cf1174744973c32aebf1235976c7f73",
             "assertion_sha256": "6a0748ddbacb7b9d5ed8e52b07ebee8bca53573c3128845207e84146ce1da249",
             "input_preview": [
               "let state = coland_test_support::app_state(test_config());",
@@ -683,8 +682,8 @@
               28
             ],
             "protected_oracle": false,
-            "scope_sha256": "febbe198e1305ac0adda51ba8d65f18e4391fddaf58d0c728d378845b0e44b53",
-            "input_sha256": "d020bb48951f79792de77f3c305b8511abb7e965189a1f919c0f53f2e591f353",
+            "scope_sha256": "3858ef9cfac300e16f7e36cdce8b6c2a0e11e5c86e5029fb3ea759192e972d22",
+            "input_sha256": "ad9c293c62ddd3449dfa3df2544ad0f88cf1174744973c32aebf1235976c7f73",
             "assertion_sha256": "6a0748ddbacb7b9d5ed8e52b07ebee8bca53573c3128845207e84146ce1da249",
             "input_preview": [
               "let state = coland_test_support::app_state(test_config());",
@@ -1549,11 +1548,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 4081,
+            "line": 4130,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4081
+              4130
             ],
             "protected_oracle": false,
             "scope_sha256": "0d902215a82c1afa6ace39d1ae2490a854c2fce2ae31527d45267ed2971f6342",
@@ -1650,11 +1649,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 4076,
+            "line": 4125,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4076
+              4125
             ],
             "protected_oracle": false,
             "scope_sha256": "289c7d2d3ee6c0b2e5b712e781db2e9157556c8c3a1f2ba3a28c52c8e1af93e1",
@@ -3737,11 +3736,11 @@
         "protocol_kat": [
           {
             "file": "coland/crates/http/src/routing/invites.rs",
-            "line": 1119,
+            "line": 1195,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1119
+              1195
             ],
             "protected_oracle": false,
             "scope_sha256": "53a3b30ea46adce499ce599ed3cab460a5489d7405d914d33873f1689fc69fe1",
@@ -4710,11 +4709,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 4071,
+            "line": 4120,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4071
+              4120
             ],
             "protected_oracle": false,
             "scope_sha256": "dfa117ced15fa63b40362435ed19e8545f4cdf47b8ad9d9608fec60ed6850fbc",
@@ -5187,8 +5186,8 @@
               1789
             ],
             "protected_oracle": false,
-            "scope_sha256": "633b2f58bc21058502794303c97b41d69bd4134aafcc427a25765a987f8e7866",
-            "input_sha256": "4ee21ec364397667415fffc80bc27a0542bf4f20a9273b10583969a17f946030",
+            "scope_sha256": "97fdf64dea7c089a358fdf8aacc8f7d6fa223e52cb3ea1f11cb87a9b0a66d823",
+            "input_sha256": "4ecd0b32c1a0a50289c4ed2c0392e9696e48b9bda04bc94f6062cefba79fbc14",
             "assertion_sha256": "394e3f3c71caf1704ddf57caae62b1c84606535dfe3618aadc16d4058b0dfed5",
             "input_preview": [
               "let now = Utc::now();",
@@ -5429,11 +5428,11 @@
           },
           {
             "file": "coland/crates/services/src/authority_commit.rs",
-            "line": 1968,
+            "line": 2000,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1968
+              2000
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -5446,11 +5445,11 @@
           },
           {
             "file": "coland/crates/services/src/authority_commit.rs",
-            "line": 2705,
+            "line": 2724,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2705
+              2724
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -5463,11 +5462,11 @@
           },
           {
             "file": "coland/crates/storage/src/authority_commit.rs",
-            "line": 2370,
+            "line": 2400,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2370
+              2400
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -5599,8 +5598,8 @@
               202
             ],
             "protected_oracle": false,
-            "scope_sha256": "e56d5ca3158d8c3290357803f2d070b492ee26ae89229d947b1ee19b0cdfdce2",
-            "input_sha256": "3dc767cd7465ec707aea242ae4d8360526e9c7fccc75b879344ee7f0b193a914",
+            "scope_sha256": "3133dd7bc2eda10757cdfbfbe5a2d32abe88c06e7c95c644f1a24f31de9bebf5",
+            "input_sha256": "ca30198a6afcea72e5e78f77e518a9d9a314a1224691269611740c703c810d50",
             "assertion_sha256": "f77ca8c34e1a6cd17eaa1e8a9e005d864aae4de1c8c6a989411e1c5ab072bc45",
             "input_preview": [
               "test(\"both coland instances expose the peer Event submit and peer stream scan endpoints\", async ({",
@@ -5623,8 +5622,8 @@
               454
             ],
             "protected_oracle": false,
-            "scope_sha256": "c12232a342f413c8cccdefc832dc65165ef898fa101af31b2bdddead3e8dde9d",
-            "input_sha256": "c7b1871cbd298cff4eb8e9eb5d519b3bbdcc1c438a2f6d7f97fbacc1c7c374b8",
+            "scope_sha256": "aa7d524d181d02a59b329fc2cdd99dca0fa2ba3afaf3258df3d92ba2478253f5",
+            "input_sha256": "6173c07fa8855b14b11658209d03a8081757c08b4eea7056327e555fd6449e61",
             "assertion_sha256": "b7e327fb9cc1db1f0e87fcdf97c84d40294f9c8b0386ee1e0b224eb85e978577",
             "input_preview": [
               "test(\"P0.3 a lagging server recovers through the authorized peer stream scan without duplicate materialization\", async ({ request }, testInfo) => {",
@@ -5648,8 +5647,8 @@
               206
             ],
             "protected_oracle": false,
-            "scope_sha256": "d93817092be8938f1d1aba4661eb366978ce81a4500141b056fb43a6fb7a4a98",
-            "input_sha256": "952f5bc752ee74a9f6e86545c230a1560b478945882631c21bb1d46655c48acd",
+            "scope_sha256": "aa906697cad5a09f87e1edd82e361c4cfe8842e9898eb9eba5d33951338cfacd",
+            "input_sha256": "b569b4212bdc7b00523c9927255fda6313d03d86544c67f02d712ff92b34db6e",
             "assertion_sha256": "726be1403d1ca9a6838dc3202020081a98e04f01d88d5d884c2691b3cb9de41c",
             "input_preview": [
               "test(\"long offline → on reconnect, the authorized peer stream scan backfills missing Commits; bob's timeline catches up to head\", async ({",
@@ -5675,8 +5674,8 @@
               520
             ],
             "protected_oracle": false,
-            "scope_sha256": "48e8671e9c89814f483966cc31d4d032238234a4494347d5266744193fa41b4d",
-            "input_sha256": "4c9bcfb170cc07f33add3843fb73b8cfee73a8308b43b1e9468d0d8671a42d95",
+            "scope_sha256": "ad66fb48f68bc13b10733537b53e5bef34ad69f46ad86c08b0874f900bb9a3b4",
+            "input_sha256": "6dc473b03baff3a4b3d663b0768b10a6dc060f2e71b869a2532d57df68c53877",
             "assertion_sha256": "565c0e119883e40567b5ca8731b32b4eed39efc56163caf60e9d5bfbbb92f5ed",
             "input_preview": [
               "test(\"peer stream scan recovery: server2 reads a committed message from server1 through ak.peer.committed_event.read.scan.v1 and holds it exactly once\", async ({",
@@ -6256,8 +6255,8 @@
               202
             ],
             "protected_oracle": false,
-            "scope_sha256": "e56d5ca3158d8c3290357803f2d070b492ee26ae89229d947b1ee19b0cdfdce2",
-            "input_sha256": "3dc767cd7465ec707aea242ae4d8360526e9c7fccc75b879344ee7f0b193a914",
+            "scope_sha256": "3133dd7bc2eda10757cdfbfbe5a2d32abe88c06e7c95c644f1a24f31de9bebf5",
+            "input_sha256": "ca30198a6afcea72e5e78f77e518a9d9a314a1224691269611740c703c810d50",
             "assertion_sha256": "f77ca8c34e1a6cd17eaa1e8a9e005d864aae4de1c8c6a989411e1c5ab072bc45",
             "input_preview": [
               "test(\"both coland instances expose the peer Event submit and peer stream scan endpoints\", async ({",
@@ -6297,11 +6296,11 @@
         "protocol_kat": [
           {
             "file": "coland/crates/http/src/routing/invites.rs",
-            "line": 63,
+            "line": 67,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              63
+              67
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -6314,11 +6313,11 @@
           },
           {
             "file": "coland/crates/http/src/routing/invites.rs",
-            "line": 239,
+            "line": 315,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              239
+              315
             ],
             "protected_oracle": false,
             "scope_sha256": "90bc295434c124ca8ec1d0e4dbd9abc48ccca1c72064463cdce995d070442064",
@@ -6331,11 +6330,11 @@
           },
           {
             "file": "coland/crates/http/src/routing/invites.rs",
-            "line": 260,
+            "line": 336,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              260
+              336
             ],
             "protected_oracle": false,
             "scope_sha256": "bdf8c9d3415cee1d7eb23f6d429845ebf97be9bf54739948a70b358117402484",
@@ -6348,11 +6347,11 @@
           },
           {
             "file": "coland/crates/http/src/routing/invites.rs",
-            "line": 264,
+            "line": 340,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              264
+              340
             ],
             "protected_oracle": false,
             "scope_sha256": "97c3568b6723eb1873e899a10803db3dfc4c84b87d03602d2e8a97e3208ff35f",
@@ -6365,11 +6364,11 @@
           },
           {
             "file": "coland/crates/http/src/routing/invites.rs",
-            "line": 764,
+            "line": 840,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              764
+              840
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -6476,12 +6475,12 @@
         "http_binding": [],
         "product_flow": [
           {
-            "file": "cotest/e2e/helpers/contact-api.ts",
-            "line": 735,
+            "file": "cotest/e2e/helpers/coland-api.ts",
+            "line": 2958,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              735
+              2958
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -6493,12 +6492,12 @@
             "assertion_preview": []
           },
           {
-            "file": "cotest/e2e/helpers/coland-api.ts",
-            "line": 2958,
+            "file": "cotest/e2e/helpers/contact-api.ts",
+            "line": 735,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2958
+              735
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -6552,11 +6551,11 @@
         "protocol_kat": [
           {
             "file": "coland/crates/http/src/routing/mls.rs",
-            "line": 1092,
+            "line": 1015,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1092
+              1015
             ],
             "protected_oracle": false,
             "scope_sha256": "07e0c58ea55c0228359d1f8441b92018e0d00d1ed1e97652e684d15c0e3fbcab",
@@ -6635,11 +6634,11 @@
         "protocol_kat": [
           {
             "file": "coland/crates/http/src/routing/mls.rs",
-            "line": 1425,
+            "line": 1323,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1425
+              1323
             ],
             "protected_oracle": false,
             "scope_sha256": "81e5606cf3afc6226044ba6f9b8bf139fbaf95b989d84ef0743f1ed4ae906ce8",
@@ -6853,15 +6852,15 @@
         "protocol_kat": [
           {
             "file": "coland/crates/http/src/routing/mls.rs",
-            "line": 358,
+            "line": 319,
             "scope": "peer_mls_attest_add",
             "scope_kind": "rust_test",
             "occurrence_lines": [
-              364
+              325
             ],
             "protected_oracle": false,
-            "scope_sha256": "21df9c48884f78d7a3d67aaaebaa18a216f7c26d75c138f5ff1ae1602d643abb",
-            "input_sha256": "361200f3a461d605c94ab2f5b48c1fd39414308ec549497ae80ce8657a04a6c8",
+            "scope_sha256": "fd1fc562a60623d1ebc7eea1350ae85e264ea0f2db89bbc2b47489209f6053b3",
+            "input_sha256": "a99c351545818a6b3b07414d468f2b8bfa56ac3efd1cd72becac297c127f16ba",
             "assertion_sha256": "2c858efa8577a772f8d50f953719727f8b240e67efe552ea621c5fbc4ba13120",
             "input_preview": [
               "operation_id = \"ak.peer.mls.command.attest_add\",",
@@ -6966,11 +6965,11 @@
           },
           {
             "file": "coland/crates/http/src/routing/mls.rs",
-            "line": 525,
+            "line": 486,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              525
+              486
             ],
             "protected_oracle": false,
             "scope_sha256": "82db57664990e5983de09291bed09e61ab668b21ec7b1ba78650143195a91bc4",
@@ -8248,11 +8247,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 4091,
+            "line": 4140,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4091
+              4140
             ],
             "protected_oracle": false,
             "scope_sha256": "e791abbdd61c9daf8ef38b51a13620dae92b40ad2a374ccd5d3dbb524a3b60c2",
@@ -8409,8 +8408,8 @@
               172
             ],
             "protected_oracle": false,
-            "scope_sha256": "5a6ef04f50c43fc4f3d410dfb0085bc2b640a39250ccc523b8dc7d6b723b643c",
-            "input_sha256": "b2ae54a1ee93ea0184c8e242a7bffbd8757dc38f7b65cb73906cd00fa6206453",
+            "scope_sha256": "92b585eb7769387654cdef933b3d4efd23c13e77946b7491f05c6b30350843e6",
+            "input_sha256": "8fea84ad8a04a5b888bee98a57ee038901e3c7d5cc1df66795f96802a2f91e39",
             "assertion_sha256": "e858a986dc524b7649909f2a799f6db88580f1f8b9fc3037241a2dcebbec1d26",
             "input_preview": [
               "test(`unbound account completes Recovery Key onboarding through the real UI ${injectChallengeRateLimit ? \"@identity-challenge-rate-limit\" : \"@identity-challenge-direct\"} @onboarding-recovery-gate @onboarding-resume-gate`, async ({",
@@ -8434,8 +8433,8 @@
               624
             ],
             "protected_oracle": false,
-            "scope_sha256": "c927f525acabee4d2e10b71d3e0607f0a10e212ac6680c46f44ecfdbadb47c03",
-            "input_sha256": "4649fad54cb000eb8c24e94a82cb9832f825aa43e48e24e04d73789ea747f9df",
+            "scope_sha256": "970a7a64958ffe9f82d130bb398685fa81e1d744ea1c8d4871fb69e536579f4e",
+            "input_sha256": "5df1c78edc6752728d9cc0d83abfce6289ff62f2d464a5f9ada70676d78f34f0",
             "assertion_sha256": "e5a379a6f5737b074b6481d87641a1aaf1b349d4264d58e4fa78e31d11545d2a",
             "input_preview": [
               "test(\"fresh browser registration creates, writes, and reloads plaintext and encrypted Realms; \" + cut, async ({",
@@ -8880,11 +8879,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 4086,
+            "line": 4135,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4086
+              4135
             ],
             "protected_oracle": false,
             "scope_sha256": "de2f906f6a0ed8887a7ac00f9ef1e6a081552297e4681ccfcb5c0f3c3923ada5",
@@ -9493,11 +9492,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 2038,
+            "line": 2049,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2038
+              2049
             ],
             "protected_oracle": false,
             "scope_sha256": "7bc8e550bf2b5d638557096f7f54d8426af60f20d53a5e4bfaa690c96eaf9e9e",
@@ -9510,11 +9509,11 @@
           },
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 4096,
+            "line": 4145,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4096
+              4145
             ],
             "protected_oracle": false,
             "scope_sha256": "43e41ea2dcba1bf5ffc01365ea7b25bd575260e8ed6599c21bbd64595acbb106",
@@ -9702,8 +9701,8 @@
               529
             ],
             "protected_oracle": false,
-            "scope_sha256": "92dfd66e2f69fd89d754addb9d1a11cdaac9d06ffc9c2024bbd3e768daaa326c",
-            "input_sha256": "c29356e813bfee25f1d035d1c3e82da28c88f0f6cd00936fcb43deaa7d443075",
+            "scope_sha256": "4ad3c68b93cc0e3e478620b24581a1fadc5347a327444e04a4f397cde4e30e91",
+            "input_sha256": "67f49a25b7eeaf6354e162b21bf59b7d2731807a991b308e79347e2ce0b8b56b",
             "assertion_sha256": "63fced12fb5b755fd7a26bcc7af5b2231f19040ba0fa08192f74abc8a3e8c867",
             "input_preview": [
               "let http = http_client();",
@@ -9947,8 +9946,8 @@
               432
             ],
             "protected_oracle": false,
-            "scope_sha256": "a743e647addf46405c7cc131cf9ff4cb9d1345e70a0cfd6e272c7b977aef9c5a",
-            "input_sha256": "b0e2e3eaa45c04689b5487e09b94efbf957e7d5c1ad7e5e9fd5fd1c704468d4b",
+            "scope_sha256": "ecb8ffd7a066573f3170594cced161d69e27a7557fe266605a7a697a4bcfe18a",
+            "input_sha256": "900cf2b90ec1a795d1b04547a684afedaa8e5e1b5adc4bd15a47d89103f79dc8",
             "assertion_sha256": "e90cc8f0d86b6c9382ae6f86651180ad4ed7a49864be33e99f23d1348f73c030",
             "input_preview": [
               "let database = crate::test_database::TestDatabase::lease().await;",
@@ -9981,8 +9980,8 @@
               99
             ],
             "protected_oracle": false,
-            "scope_sha256": "fd7d9311c998255b3364388a4cf10593e98e44a897e815b93b7cc0d5d1f955d7",
-            "input_sha256": "671da85d9d67b96f14082281f27f6ced4bc9294708801629407498051ce4de9c",
+            "scope_sha256": "a7b2cdb08b62cc0bfe657da41aee766a11e94c8663b0cf9b8adca421fb1a95b2",
+            "input_sha256": "4731ea19ad3757e2710bbdc9c50e322b72dcf38bf9675209207f42e35c3467d6",
             "assertion_sha256": "a436a6751d415f76e4172744ea08512bf89de03a4da6316fa6bbab02e54c7c0c",
             "input_preview": [
               "use salvo::test::{ResponseExt, TestClient};",
@@ -10718,8 +10717,8 @@
               207
             ],
             "protected_oracle": false,
-            "scope_sha256": "4c2d203761670cc59a3f8ce27bb7608d3c854269cdfba6038a4ebbe2ab9937ff",
-            "input_sha256": "79e3834d89a3406fefa84c74ff3ae695188596624c94d00134b6e7df134a0ce1",
+            "scope_sha256": "f8592672bda77364d1f8bb51a8b784b97fff438404150070a529966e2fa75c69",
+            "input_sha256": "4865554864037d8fffcb4805a000a4eb12ccf279eb50a0114f79e57e06e0c3f6",
             "assertion_sha256": "8816c81ca76e0d1a724317269d05433b874bbe96c2ffb87e2031fc4c5b74ac14",
             "input_preview": [
               "let schema: Value = serde_json::from_str(&read(",
@@ -12881,16 +12880,16 @@
           },
           {
             "file": "coland/crates/http/src/wire.rs",
-            "line": 989,
+            "line": 992,
             "scope": "service_describe_advertises_bundles_and_transport_roots",
             "scope_kind": "rust_test",
             "occurrence_lines": [
-              1178
+              1185
             ],
             "protected_oracle": false,
-            "scope_sha256": "b18e312a2d883ae23c906e22d1bd5d5c889ef5a6b269c5348f93306628135be2",
-            "input_sha256": "55d1ce53a03adcea12e44ccf85fcf1c20f0835c0f7c1651f8b15a982159637c3",
-            "assertion_sha256": "a8fce80228e526a9746130d76d15d4c7195f9364c998c4cb4bf1130128663bc8",
+            "scope_sha256": "99e24c1b361fea2359ae82f0d975ace36ce75f2a97dd7d493780379dc8e45caf",
+            "input_sha256": "bbf16b03c22d5aff3e5c3ac0a5cb355cdb55337112c831c5346ba192b124bd79",
+            "assertion_sha256": "f42ca7c46e7e7ed2fbd7613ad7f1c5cfa784d004f905fb32aa00ea6c7b613fd2",
             "input_preview": [
               "let description = describe(",
               "&fixture_service_resolution(),",
@@ -13025,16 +13024,16 @@
           },
           {
             "file": "coland/crates/http/src/wire.rs",
-            "line": 989,
+            "line": 992,
             "scope": "service_describe_advertises_bundles_and_transport_roots",
             "scope_kind": "rust_test",
             "occurrence_lines": [
-              1179
+              1186
             ],
             "protected_oracle": false,
-            "scope_sha256": "b18e312a2d883ae23c906e22d1bd5d5c889ef5a6b269c5348f93306628135be2",
-            "input_sha256": "55d1ce53a03adcea12e44ccf85fcf1c20f0835c0f7c1651f8b15a982159637c3",
-            "assertion_sha256": "a8fce80228e526a9746130d76d15d4c7195f9364c998c4cb4bf1130128663bc8",
+            "scope_sha256": "99e24c1b361fea2359ae82f0d975ace36ce75f2a97dd7d493780379dc8e45caf",
+            "input_sha256": "bbf16b03c22d5aff3e5c3ac0a5cb355cdb55337112c831c5346ba192b124bd79",
+            "assertion_sha256": "f42ca7c46e7e7ed2fbd7613ad7f1c5cfa784d004f905fb32aa00ea6c7b613fd2",
             "input_preview": [
               "let description = describe(",
               "&fixture_service_resolution(),",
@@ -13127,12 +13126,12 @@
             "assertion_preview": []
           },
           {
-            "file": "cotest/e2e/helpers/contact-api.ts",
-            "line": 887,
+            "file": "cotest/e2e/helpers/coland-api.ts",
+            "line": 1388,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              887
+              1388
             ],
             "protected_oracle": false,
             "scope_sha256": "2373fff14a20d85da0146a37b391dee3849e61eeb485e77de39e962b32d2c539",
@@ -13144,12 +13143,12 @@
             "assertion_preview": []
           },
           {
-            "file": "cotest/e2e/helpers/coland-api.ts",
-            "line": 1388,
+            "file": "cotest/e2e/helpers/contact-api.ts",
+            "line": 887,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1388
+              887
             ],
             "protected_oracle": false,
             "scope_sha256": "2373fff14a20d85da0146a37b391dee3849e61eeb485e77de39e962b32d2c539",
@@ -13186,8 +13185,8 @@
               546
             ],
             "protected_oracle": false,
-            "scope_sha256": "1cc46deba3e09445b9705fc527ede718de67b6b9a1cecbb7e98fe2be8f5455b0",
-            "input_sha256": "6e501fdf4bbe8cbbe4ee302dd41b4cccaa43311ab2f8c06f7e9aa72c991996f9",
+            "scope_sha256": "bc43084f00fefbb4e0e921fbc81ef1984c0b0603f34f9aad445853adbf4838a6",
+            "input_sha256": "bef1ab0254fb942f45bd09bfd367c980ceedfbccc33a910f606311f924f5d9b5",
             "assertion_sha256": "d8ddccf146294937cf6c3e1f8d857364d675d968d51d7daaf06b00ace30f78e5",
             "input_preview": [
               "test(\"bob submits ak.invite.claim with binding_proof + subject_proof; reducer accepts and records claimed lifecycle\", async ({",
@@ -13270,16 +13269,16 @@
           },
           {
             "file": "coland/crates/http/src/wire.rs",
-            "line": 989,
+            "line": 992,
             "scope": "service_describe_advertises_bundles_and_transport_roots",
             "scope_kind": "rust_test",
             "occurrence_lines": [
-              1177
+              1184
             ],
             "protected_oracle": false,
-            "scope_sha256": "b18e312a2d883ae23c906e22d1bd5d5c889ef5a6b269c5348f93306628135be2",
-            "input_sha256": "55d1ce53a03adcea12e44ccf85fcf1c20f0835c0f7c1651f8b15a982159637c3",
-            "assertion_sha256": "a8fce80228e526a9746130d76d15d4c7195f9364c998c4cb4bf1130128663bc8",
+            "scope_sha256": "99e24c1b361fea2359ae82f0d975ace36ce75f2a97dd7d493780379dc8e45caf",
+            "input_sha256": "bbf16b03c22d5aff3e5c3ac0a5cb355cdb55337112c831c5346ba192b124bd79",
+            "assertion_sha256": "f42ca7c46e7e7ed2fbd7613ad7f1c5cfa784d004f905fb32aa00ea6c7b613fd2",
             "input_preview": [
               "let description = describe(",
               "&fixture_service_resolution(),",
@@ -13509,8 +13508,8 @@
               53
             ],
             "protected_oracle": false,
-            "scope_sha256": "fd7d9311c998255b3364388a4cf10593e98e44a897e815b93b7cc0d5d1f955d7",
-            "input_sha256": "671da85d9d67b96f14082281f27f6ced4bc9294708801629407498051ce4de9c",
+            "scope_sha256": "a7b2cdb08b62cc0bfe657da41aee766a11e94c8663b0cf9b8adca421fb1a95b2",
+            "input_sha256": "4731ea19ad3757e2710bbdc9c50e322b72dcf38bf9675209207f42e35c3467d6",
             "assertion_sha256": "a436a6751d415f76e4172744ea08512bf89de03a4da6316fa6bbab02e54c7c0c",
             "input_preview": [
               "use salvo::test::{ResponseExt, TestClient};",
@@ -13600,8 +13599,8 @@
               54
             ],
             "protected_oracle": false,
-            "scope_sha256": "fd7d9311c998255b3364388a4cf10593e98e44a897e815b93b7cc0d5d1f955d7",
-            "input_sha256": "671da85d9d67b96f14082281f27f6ced4bc9294708801629407498051ce4de9c",
+            "scope_sha256": "a7b2cdb08b62cc0bfe657da41aee766a11e94c8663b0cf9b8adca421fb1a95b2",
+            "input_sha256": "4731ea19ad3757e2710bbdc9c50e322b72dcf38bf9675209207f42e35c3467d6",
             "assertion_sha256": "a436a6751d415f76e4172744ea08512bf89de03a4da6316fa6bbab02e54c7c0c",
             "input_preview": [
               "use salvo::test::{ResponseExt, TestClient};",
@@ -13817,8 +13816,8 @@
               187
             ],
             "protected_oracle": false,
-            "scope_sha256": "3a399e705a5dee00cf93e66e45e84dc95d549217815a590cd454bb73dba21687",
-            "input_sha256": "cf82dbbcb9697e094fe1f9116b92c094f1aed93b6d3ed108d06ed241eb2f79ed",
+            "scope_sha256": "d7c0d7221807bc304aa453ea77358aa53eba23b5c8d307c78b8e188827384a78",
+            "input_sha256": "96bd0c7093e1b7b6d69b3349f26e0644cbfd8f91ea796762df8b708732d8fcd1",
             "assertion_sha256": "d16fc82e6fe53001feafaba1bfd8b8cb39ce593b2b4925f84a3adf9ac7b97c23",
             "input_preview": [
               "test(\"Blob storage classification survives multipart, tus and a real Station restart\", async ({ request }, testInfo) => {",
@@ -14755,11 +14754,11 @@
           },
           {
             "file": "coland/crates/services/src/authority_commit.rs",
-            "line": 1944,
+            "line": 1976,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1944
+              1976
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -14772,11 +14771,11 @@
           },
           {
             "file": "coland/crates/services/src/authority_commit.rs",
-            "line": 2698,
+            "line": 2717,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2698
+              2717
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -14789,11 +14788,11 @@
           },
           {
             "file": "coland/crates/storage/src/authority_commit.rs",
-            "line": 2356,
+            "line": 2386,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2356
+              2386
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -14814,8 +14813,8 @@
               74
             ],
             "protected_oracle": false,
-            "scope_sha256": "e956faf05aa3e175e579b9d3104281e85b0b6b60be86ae626c311d79de091cb4",
-            "input_sha256": "7f835c1e50dd1f02445eb9859c12b4e2c1806c496e3fee280d8a9b5fffab3256",
+            "scope_sha256": "2724d883aa220bc758a7045568f8aee9b1303d188d70d5d020ad12641c4096cf",
+            "input_sha256": "8277e9991da3c35b664ee26f9c69c59331ae9dffe4307b1801fbceb519311711",
             "assertion_sha256": "a30805c0ac6ae678652f0480c02b69e39f907588b8caf29458051deeaabaa36b",
             "input_preview": [
               "let record = SessionRecord {",
@@ -15047,11 +15046,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 227,
+            "line": 228,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              227
+              228
             ],
             "protected_oracle": false,
             "scope_sha256": "4b39f13a6a7d6f88a495149587b26326113fcdd4f7ed0806f5c9b28ead97eb86",
@@ -15064,11 +15063,11 @@
           },
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 1068,
+            "line": 1079,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1068
+              1079
             ],
             "protected_oracle": false,
             "scope_sha256": "7c1edd881c90220c5ec6cf29be16f46e907e823dd6305f49bcbc5f8ae5d35a8c",
@@ -15081,11 +15080,11 @@
           },
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 2039,
+            "line": 2050,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2039
+              2050
             ],
             "protected_oracle": false,
             "scope_sha256": "7c1edd881c90220c5ec6cf29be16f46e907e823dd6305f49bcbc5f8ae5d35a8c",
@@ -15098,11 +15097,11 @@
           },
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 2472,
+            "line": 2492,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2472
+              2492
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -15126,11 +15125,11 @@
         "protocol_kat": [
           {
             "file": "coland/crates/services/src/authority_commit.rs",
-            "line": 2050,
+            "line": 2082,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2050
+              2082
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -15160,11 +15159,11 @@
           },
           {
             "file": "coland/crates/storage/src/authority_commit.rs",
-            "line": 2397,
+            "line": 2427,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2397
+              2427
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -15179,11 +15178,11 @@
         "storage_parity": [
           {
             "file": "coland/crates/storage-postgres/tests/realm_membership_fanout.rs",
-            "line": 2330,
+            "line": 2332,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2330
+              2332
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -15248,7 +15247,25 @@
         "protocol_kat": [],
         "storage_parity": [],
         "http_binding": [],
-        "product_flow": [],
+        "product_flow": [
+          {
+            "file": "inkson/tests/e2e/mockArkretApi.ts",
+            "line": 231,
+            "scope": "<module_helper>",
+            "scope_kind": "module_helper",
+            "occurrence_lines": [
+              231
+            ],
+            "protected_oracle": false,
+            "scope_sha256": "902bf51e084b13319d27f93d4a53f8c35c68999ac591c49b8c6677c2f80c6329",
+            "input_sha256": "902bf51e084b13319d27f93d4a53f8c35c68999ac591c49b8c6677c2f80c6329",
+            "assertion_sha256": null,
+            "input_preview": [
+              "const operationId = \"ak.self.committed_event.resource.get.v1\";"
+            ],
+            "assertion_preview": []
+          }
+        ],
         "fault_recovery": [],
         "security_negative": []
       }
@@ -15435,8 +15452,8 @@
               73
             ],
             "protected_oracle": false,
-            "scope_sha256": "e956faf05aa3e175e579b9d3104281e85b0b6b60be86ae626c311d79de091cb4",
-            "input_sha256": "7f835c1e50dd1f02445eb9859c12b4e2c1806c496e3fee280d8a9b5fffab3256",
+            "scope_sha256": "2724d883aa220bc758a7045568f8aee9b1303d188d70d5d020ad12641c4096cf",
+            "input_sha256": "8277e9991da3c35b664ee26f9c69c59331ae9dffe4307b1801fbceb519311711",
             "assertion_sha256": "a30805c0ac6ae678652f0480c02b69e39f907588b8caf29458051deeaabaa36b",
             "input_preview": [
               "let record = SessionRecord {",
@@ -15587,11 +15604,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 1067,
+            "line": 1078,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1067
+              1078
             ],
             "protected_oracle": false,
             "scope_sha256": "b3fd7f441260b97a91b25096e04ab6416d325ac7ca75d2bd1cb30a9048e62af6",
@@ -15604,11 +15621,11 @@
           },
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 1074,
+            "line": 1085,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1074
+              1085
             ],
             "protected_oracle": false,
             "scope_sha256": "8e3f776dda16f75f311fa1a1c80dd8129b2d3fbf7ae7be6f71a4223cd85f9fca",
@@ -15732,11 +15749,11 @@
           },
           {
             "file": "coland/crates/http/src/routing/invites.rs",
-            "line": 1465,
+            "line": 1541,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1465
+              1541
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -15749,11 +15766,11 @@
           },
           {
             "file": "coland/crates/services/src/persistence.rs",
-            "line": 1295,
+            "line": 1321,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1295
+              1321
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -16044,8 +16061,8 @@
               335
             ],
             "protected_oracle": false,
-            "scope_sha256": "7f05144175de7b6a92a44e6864ce086d174058ad269c61ea8ea4ca02b4f19582",
-            "input_sha256": "0010b943e75d01b9f4a4bb0d6965bb5d29641226aeb758044696fa89e8426d66",
+            "scope_sha256": "22de9f762b3c4e8f8e13100b53378ce7d9c12a55d9181c952e0e907a153215cb",
+            "input_sha256": "22ec2650de57ed1ca065d3c0ab0a0526a7fc2eba12fb5a326a8dba406c8091cb",
             "assertion_sha256": "c026f01e2f740a7d8fcbeda5ce41e72ff47dd5ec4f2b1bf61b9df1426ec11aeb",
             "input_preview": [
               "let state = coland_test_support::app_state(test_config());",
@@ -16154,8 +16171,8 @@
               297
             ],
             "protected_oracle": false,
-            "scope_sha256": "7f05144175de7b6a92a44e6864ce086d174058ad269c61ea8ea4ca02b4f19582",
-            "input_sha256": "0010b943e75d01b9f4a4bb0d6965bb5d29641226aeb758044696fa89e8426d66",
+            "scope_sha256": "22de9f762b3c4e8f8e13100b53378ce7d9c12a55d9181c952e0e907a153215cb",
+            "input_sha256": "22ec2650de57ed1ca065d3c0ab0a0526a7fc2eba12fb5a326a8dba406c8091cb",
             "assertion_sha256": "c026f01e2f740a7d8fcbeda5ce41e72ff47dd5ec4f2b1bf61b9df1426ec11aeb",
             "input_preview": [
               "let state = coland_test_support::app_state(test_config());",
@@ -16811,11 +16828,11 @@
         "protocol_kat": [
           {
             "file": "coland/crates/services/src/authority_commit.rs",
-            "line": 2146,
+            "line": 2165,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2146
+              2165
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -16845,11 +16862,11 @@
           },
           {
             "file": "coland/crates/storage/src/authority_commit.rs",
-            "line": 2437,
+            "line": 2467,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2437
+              2467
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -17477,11 +17494,11 @@
           },
           {
             "file": "coland/crates/storage-postgres/tests/support/grant_approval_cases.rs",
-            "line": 51,
+            "line": 67,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              51
+              67
             ],
             "protected_oracle": false,
             "scope_sha256": "684bf2ae6c5e93dba1ea6b0ad4157b1e4ab0349f12a691361f385d0acc6a7561",
@@ -17506,8 +17523,8 @@
               47
             ],
             "protected_oracle": false,
-            "scope_sha256": "fd7d9311c998255b3364388a4cf10593e98e44a897e815b93b7cc0d5d1f955d7",
-            "input_sha256": "671da85d9d67b96f14082281f27f6ced4bc9294708801629407498051ce4de9c",
+            "scope_sha256": "a7b2cdb08b62cc0bfe657da41aee766a11e94c8663b0cf9b8adca421fb1a95b2",
+            "input_sha256": "4731ea19ad3757e2710bbdc9c50e322b72dcf38bf9675209207f42e35c3467d6",
             "assertion_sha256": "a436a6751d415f76e4172744ea08512bf89de03a4da6316fa6bbab02e54c7c0c",
             "input_preview": [
               "use salvo::test::{ResponseExt, TestClient};",
@@ -17532,8 +17549,8 @@
               372
             ],
             "protected_oracle": false,
-            "scope_sha256": "d06c3757c4202294eeba3f6d5558869639c4db827331f30a9acf840011c3500a",
-            "input_sha256": "0bd0e41fc946d186fdb3d1e0b588f94491a8de563ddd78bc5c37a36a8309ee62",
+            "scope_sha256": "83cfb8cea3f06c0222275f2bc2cbb1e79279d8c20f3449bc9cbf2333d3b0932b",
+            "input_sha256": "310c22b6fa02837a6522f4f78a50d51ee8e5f9a777ca1993e85dd9ac44be2a83",
             "assertion_sha256": "02ea579196b01a460b5d1f075ac7747207c0ed0eb559d59ab4ff3f93aacefdf9",
             "input_preview": [
               "let mut f = Fixture::new().await;",
@@ -17829,40 +17846,6 @@
         "http_binding": [],
         "product_flow": [
           {
-            "file": "cotest/e2e/helpers/direct-structure.ts",
-            "line": 31,
-            "scope": "<module_helper>",
-            "scope_kind": "module_helper",
-            "occurrence_lines": [
-              31
-            ],
-            "protected_oracle": false,
-            "scope_sha256": "2b20b33f52b34ccb272cd134abbddeb67de7018545d8c8298d049d1de54531b9",
-            "input_sha256": "2b20b33f52b34ccb272cd134abbddeb67de7018545d8c8298d049d1de54531b9",
-            "assertion_sha256": null,
-            "input_preview": [
-              "stage, route: \"ak.self.events.command.submit.v1\", http_status: status,"
-            ],
-            "assertion_preview": []
-          },
-          {
-            "file": "cotest/e2e/helpers/direct-structure.ts",
-            "line": 50,
-            "scope": "<module_helper>",
-            "scope_kind": "module_helper",
-            "occurrence_lines": [
-              50
-            ],
-            "protected_oracle": false,
-            "scope_sha256": "57abd0f292761d21ae088ae0cbd21a448c1b56999c8d5090aa7bf6feaa31a0d2",
-            "input_sha256": "57abd0f292761d21ae088ae0cbd21a448c1b56999c8d5090aa7bf6feaa31a0d2",
-            "assertion_sha256": null,
-            "input_preview": [
-              "require(operationSelector(\"POST\", request.url()) === \"ak.self.events.command.submit.v1\", \"unregistered_submit_route\");"
-            ],
-            "assertion_preview": []
-          },
-          {
             "file": "cotest/e2e/helpers/coland-api.ts",
             "line": 2456,
             "scope": "<module_helper>",
@@ -17878,6 +17861,40 @@
               "ak.self.events.command.submit.v1"
             ],
             "assertion_preview": []
+          },
+          {
+            "file": "cotest/e2e/helpers/direct-structure.ts",
+            "line": 33,
+            "scope": "<module_helper>",
+            "scope_kind": "module_helper",
+            "occurrence_lines": [
+              33
+            ],
+            "protected_oracle": false,
+            "scope_sha256": "2b20b33f52b34ccb272cd134abbddeb67de7018545d8c8298d049d1de54531b9",
+            "input_sha256": "2b20b33f52b34ccb272cd134abbddeb67de7018545d8c8298d049d1de54531b9",
+            "assertion_sha256": null,
+            "input_preview": [
+              "stage, route: \"ak.self.events.command.submit.v1\", http_status: status,"
+            ],
+            "assertion_preview": []
+          },
+          {
+            "file": "cotest/e2e/helpers/direct-structure.ts",
+            "line": 52,
+            "scope": "<module_helper>",
+            "scope_kind": "module_helper",
+            "occurrence_lines": [
+              52
+            ],
+            "protected_oracle": false,
+            "scope_sha256": "57abd0f292761d21ae088ae0cbd21a448c1b56999c8d5090aa7bf6feaa31a0d2",
+            "input_sha256": "57abd0f292761d21ae088ae0cbd21a448c1b56999c8d5090aa7bf6feaa31a0d2",
+            "assertion_sha256": null,
+            "input_preview": [
+              "require(operationSelector(\"POST\", request.url()) === \"ak.self.events.command.submit.v1\", \"unregistered_submit_route\");"
+            ],
+            "assertion_preview": []
           }
         ],
         "fault_recovery": [],
@@ -17891,8 +17908,8 @@
               173
             ],
             "protected_oracle": false,
-            "scope_sha256": "4f4045d4aca13e9f8e2be8baaf0ccc45cc71862a8ae565e376bec8edde10522c",
-            "input_sha256": "81e5654ef24c5ab57bed83e2ff724a7e58711d2dc161584ee562f8c82cabe3f7",
+            "scope_sha256": "dace7a62e397e4a2d50a83185cf96411a78d7c571ea5ed19b6fd96cfb1c9cf89",
+            "input_sha256": "7ca98a5739f73a74d3ad0e28da89e4698efbc43f28d514e25b1082cc3dba021b",
             "assertion_sha256": "743ea7b399552f6808e5b142973f88d17e7fb7aafbb811293effb6c82d1ac752",
             "input_preview": [
               "test(\"report -> ak.member.state ban -> post-ban writes rejected -> redaction filters public timeline\", async ({",
@@ -17916,8 +17933,8 @@
               395
             ],
             "protected_oracle": false,
-            "scope_sha256": "1384e8000dd98f856e4124b208d12851880a8abe6503fdc7f903640562fa45c5",
-            "input_sha256": "f93dbc6f453e9878c32e22b6870978e5d94594a865f8de20afd007ef84377016",
+            "scope_sha256": "22fc7f9cd2f3aca49fc9fad20c906482926f2c440f53dc94225287ea2d260006",
+            "input_sha256": "2ceb3a161a802be8dfa0271f6d34dee9d34166117e6cfd2f6274a668f5373fd6",
             "assertion_sha256": "7b50cbd84407bb2fadbeb43d9f901e82d3e126dadcb6b556c9331205614bcd6e",
             "input_preview": [
               "test(",
@@ -17941,8 +17958,8 @@
               598
             ],
             "protected_oracle": false,
-            "scope_sha256": "0ffbc7df95b9bc670766cafe75c8fe3a2cb36be2f5c28ee1a82ad77cf3a8caed",
-            "input_sha256": "134cf2de4ffaeabb6642ac7f27d69720987fe3cd5e9fb86d732af720019e3902",
+            "scope_sha256": "c8686ab5ca7cbd51eea045f724460217623c60c621b4cee2699dbff3fabe0f0b",
+            "input_sha256": "c20de6a46271956b839338bf65dee8ded3608af38ae8c01a49265ee35d820b9c",
             "assertion_sha256": "d5ba6247b8f46ab283f9d871d9b7579862f95c831cba0d53324c1b6b3cc46488",
             "input_preview": [
               "test(",
@@ -17971,11 +17988,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 1069,
+            "line": 1080,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1069
+              1080
             ],
             "protected_oracle": false,
             "scope_sha256": "a49aa403833e455f456910b66763a0177dd1ba3c23a71ccea9018a091007b008",
@@ -18472,11 +18489,11 @@
         "protocol_kat": [
           {
             "file": "coland/crates/http/src/routing/invites.rs",
-            "line": 335,
+            "line": 411,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              335
+              411
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -18489,11 +18506,11 @@
           },
           {
             "file": "coland/crates/http/src/routing/invites.rs",
-            "line": 568,
+            "line": 644,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              568
+              644
             ],
             "protected_oracle": false,
             "scope_sha256": "4a9496b9e5a02f6fa7ccce6ecdd789d96b88312d8d571b73bca0fc731b833c16",
@@ -18506,45 +18523,45 @@
           },
           {
             "file": "coland/crates/http/src/routing/invites.rs",
-            "line": 580,
-            "scope": "<module_helper>",
-            "scope_kind": "module_helper",
-            "occurrence_lines": [
-              580
-            ],
-            "protected_oracle": false,
-            "scope_sha256": "dcaaa7c776676b648b19d645f248d3e3394ce0741b3e6d6b31a11c68cf95dac4",
-            "input_sha256": "dcaaa7c776676b648b19d645f248d3e3394ce0741b3e6d6b31a11c68cf95dac4",
-            "assertion_sha256": null,
-            "input_preview": [
-              "AppError::json_invalid(\"invalid ak.self.invites.command.dispatch.v1 request body\")"
-            ],
-            "assertion_preview": []
-          },
-          {
-            "file": "coland/crates/http/src/routing/invites.rs",
-            "line": 584,
-            "scope": "<module_helper>",
-            "scope_kind": "module_helper",
-            "occurrence_lines": [
-              584
-            ],
-            "protected_oracle": false,
-            "scope_sha256": "dcaaa7c776676b648b19d645f248d3e3394ce0741b3e6d6b31a11c68cf95dac4",
-            "input_sha256": "dcaaa7c776676b648b19d645f248d3e3394ce0741b3e6d6b31a11c68cf95dac4",
-            "assertion_sha256": null,
-            "input_preview": [
-              "AppError::json_invalid(\"invalid ak.self.invites.command.dispatch.v1 request body\")"
-            ],
-            "assertion_preview": []
-          },
-          {
-            "file": "coland/crates/http/src/routing/invites.rs",
             "line": 656,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
               656
+            ],
+            "protected_oracle": false,
+            "scope_sha256": "dcaaa7c776676b648b19d645f248d3e3394ce0741b3e6d6b31a11c68cf95dac4",
+            "input_sha256": "dcaaa7c776676b648b19d645f248d3e3394ce0741b3e6d6b31a11c68cf95dac4",
+            "assertion_sha256": null,
+            "input_preview": [
+              "AppError::json_invalid(\"invalid ak.self.invites.command.dispatch.v1 request body\")"
+            ],
+            "assertion_preview": []
+          },
+          {
+            "file": "coland/crates/http/src/routing/invites.rs",
+            "line": 660,
+            "scope": "<module_helper>",
+            "scope_kind": "module_helper",
+            "occurrence_lines": [
+              660
+            ],
+            "protected_oracle": false,
+            "scope_sha256": "dcaaa7c776676b648b19d645f248d3e3394ce0741b3e6d6b31a11c68cf95dac4",
+            "input_sha256": "dcaaa7c776676b648b19d645f248d3e3394ce0741b3e6d6b31a11c68cf95dac4",
+            "assertion_sha256": null,
+            "input_preview": [
+              "AppError::json_invalid(\"invalid ak.self.invites.command.dispatch.v1 request body\")"
+            ],
+            "assertion_preview": []
+          },
+          {
+            "file": "coland/crates/http/src/routing/invites.rs",
+            "line": 732,
+            "scope": "<module_helper>",
+            "scope_kind": "module_helper",
+            "occurrence_lines": [
+              732
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -18557,11 +18574,11 @@
           },
           {
             "file": "coland/crates/http/src/routing/invites.rs",
-            "line": 799,
+            "line": 875,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              799
+              875
             ],
             "protected_oracle": false,
             "scope_sha256": "0fc0ffc485b976e93453cfddecdc549a12c0e10142c9aee1aecaa1f392e99bfd",
@@ -18634,23 +18651,6 @@
         "http_binding": [],
         "product_flow": [
           {
-            "file": "cotest/e2e/helpers/contact-api.ts",
-            "line": 734,
-            "scope": "<module_helper>",
-            "scope_kind": "module_helper",
-            "occurrence_lines": [
-              734
-            ],
-            "protected_oracle": false,
-            "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-            "input_sha256": "6e64fa5d7dd4595bdc265168e46e678868e989df0368588eda865a162e7d5d8d",
-            "assertion_sha256": null,
-            "input_preview": [
-              "ak.self.invites.command.dispatch.v1"
-            ],
-            "assertion_preview": []
-          },
-          {
             "file": "cotest/e2e/helpers/coland-api.ts",
             "line": 620,
             "scope": "<module_helper>",
@@ -18664,6 +18664,23 @@
             "assertion_sha256": null,
             "input_preview": [
               "* and submits it through `ak.self.invites.command.dispatch.v1`. The"
+            ],
+            "assertion_preview": []
+          },
+          {
+            "file": "cotest/e2e/helpers/contact-api.ts",
+            "line": 734,
+            "scope": "<module_helper>",
+            "scope_kind": "module_helper",
+            "occurrence_lines": [
+              734
+            ],
+            "protected_oracle": false,
+            "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "input_sha256": "6e64fa5d7dd4595bdc265168e46e678868e989df0368588eda865a162e7d5d8d",
+            "assertion_sha256": null,
+            "input_preview": [
+              "ak.self.invites.command.dispatch.v1"
             ],
             "assertion_preview": []
           },
@@ -18693,9 +18710,9 @@
               453
             ],
             "protected_oracle": false,
-            "scope_sha256": "d06f28b7a9eb3bc4eeb052da096fdfa18b645eafa5aefe55ca678508390cb483",
-            "input_sha256": "8505db6c2789858deaa694b517d283238e9fad668691b8ae68db95d9db9f2cc6",
-            "assertion_sha256": "2db41ccfaf928463be786f76183aab30d465050eadab864234b6151ebaae6c70",
+            "scope_sha256": "03e4221c35b979cadefad7bb79c297788923e57794e8f2412930adfa8d9c3d0c",
+            "input_sha256": "85723fa8d6c0c791b2c4d13ecc7d55c6cd1907fe929406d643ddc55dae1b0abd",
+            "assertion_sha256": "2dfe453460442931960bd0cef4ef46372fc2896ee7ceee12fdaf4047a6a14e1c",
             "input_preview": [
               "test(\"invite locator lifecycle uses opaque body-only secrets\", async ({",
               "request,",
@@ -18725,11 +18742,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 2503,
+            "line": 2538,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2503
+              2538
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -19499,11 +19516,11 @@
           },
           {
             "file": "coland/crates/http/src/routing/mls.rs",
-            "line": 2318,
+            "line": 2158,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2318
+              2158
             ],
             "protected_oracle": false,
             "scope_sha256": "ad0042cdc244b5fdc2a0ccc8644c1d1fc0fbbd65bcef57e666a23fa521f1dd61",
@@ -19582,11 +19599,11 @@
         "protocol_kat": [
           {
             "file": "coland/crates/http/src/routing/mls.rs",
-            "line": 3022,
+            "line": 2851,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              3022
+              2851
             ],
             "protected_oracle": false,
             "scope_sha256": "377117755cddea7fdddf4e4b6dee77887bcb77d47cc4a506f01051fb633d9575",
@@ -19683,11 +19700,11 @@
         "protocol_kat": [
           {
             "file": "coland/crates/http/src/routing/mls.rs",
-            "line": 3602,
+            "line": 3354,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              3602
+              3354
             ],
             "protected_oracle": false,
             "scope_sha256": "9cdb944d176b65d02f025bdef189747f5437641ba16287edde0dd4dbf7df6419",
@@ -19792,11 +19809,11 @@
         "protocol_kat": [
           {
             "file": "coland/crates/http/src/routing/mls.rs",
-            "line": 2578,
+            "line": 2407,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2578
+              2407
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -19809,11 +19826,11 @@
           },
           {
             "file": "coland/crates/http/src/routing/mls.rs",
-            "line": 2586,
+            "line": 2415,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2586
+              2415
             ],
             "protected_oracle": false,
             "scope_sha256": "8cde49d12d68ac5c03eaa1ee2ce1c1c3fb6bec3073431877d76898c342a2e499",
@@ -19853,11 +19870,11 @@
         "protocol_kat": [
           {
             "file": "cotest/src/conformance/keypackage_recipient_claim_read.rs",
-            "line": 538,
+            "line": 536,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              538
+              536
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -19870,11 +19887,11 @@
           },
           {
             "file": "cotest/src/conformance/keypackage_recipient_claim_read.rs",
-            "line": 585,
+            "line": 583,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              585
+              583
             ],
             "protected_oracle": false,
             "scope_sha256": "a553c00ef4eedeb1662240152d9ebc1697e04cfbaa03f3c6a7569cfa154ab40f",
@@ -19961,11 +19978,11 @@
           },
           {
             "file": "coland/crates/http/src/routing/mls.rs",
-            "line": 748,
+            "line": 709,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              748
+              709
             ],
             "protected_oracle": false,
             "scope_sha256": "c3f30ba200857ae8a1ed5455a6e1c342fa33462252f764029e7439693a6b5070",
@@ -20560,11 +20577,11 @@
         "protocol_kat": [
           {
             "file": "coland/crates/services/src/authority_commit.rs",
-            "line": 2206,
+            "line": 2225,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2206
+              2225
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -20594,11 +20611,11 @@
           },
           {
             "file": "coland/crates/storage/src/authority_commit.rs",
-            "line": 2465,
+            "line": 2495,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2465
+              2495
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -20777,11 +20794,11 @@
         "protocol_kat": [
           {
             "file": "coland/crates/http/src/routing/mls.rs",
-            "line": 425,
+            "line": 386,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              425
+              386
             ],
             "protected_oracle": false,
             "scope_sha256": "20d425e37bee80ab88ed38185e814bf332c7545645fa85035f51393ff78689c6",
@@ -21365,8 +21382,8 @@
               693
             ],
             "protected_oracle": false,
-            "scope_sha256": "e58d2e87273b4ff86b46a20146d7d98daead9324b266a5567b7aa801c7905284",
-            "input_sha256": "c2d45c776a925d42f0bf000dd1897ee1cfd875a00b7312ddc85fe5f0b078a535",
+            "scope_sha256": "d85288c7d1089a4f00474a2cb0d91dcba7fda7a48b2263bf63c7efae28de9b22",
+            "input_sha256": "2aeffa02c46df82569e240b5f690bd354a0739b170f1e9637a3b8973d480637d",
             "assertion_sha256": "2c96038e0d12b55f2e62f6da54cf884820807441b6daefca4e9cfa17c9e1b0dc",
             "input_preview": [
               "let service_did = coland_test_support::fixture_service_identity(&test_config())",
@@ -21527,8 +21544,8 @@
               703
             ],
             "protected_oracle": false,
-            "scope_sha256": "e58d2e87273b4ff86b46a20146d7d98daead9324b266a5567b7aa801c7905284",
-            "input_sha256": "c2d45c776a925d42f0bf000dd1897ee1cfd875a00b7312ddc85fe5f0b078a535",
+            "scope_sha256": "d85288c7d1089a4f00474a2cb0d91dcba7fda7a48b2263bf63c7efae28de9b22",
+            "input_sha256": "2aeffa02c46df82569e240b5f690bd354a0739b170f1e9637a3b8973d480637d",
             "assertion_sha256": "2c96038e0d12b55f2e62f6da54cf884820807441b6daefca4e9cfa17c9e1b0dc",
             "input_preview": [
               "let service_did = coland_test_support::fixture_service_identity(&test_config())",
@@ -21676,11 +21693,11 @@
         "protocol_kat": [
           {
             "file": "coland/crates/services/src/authority_commit.rs",
-            "line": 2086,
+            "line": 2118,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2086
+              2118
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -21710,11 +21727,11 @@
           },
           {
             "file": "coland/crates/storage/src/authority_commit.rs",
-            "line": 2412,
+            "line": 2442,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2412
+              2442
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -22305,11 +22322,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 192,
+            "line": 193,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              192
+              193
             ],
             "protected_oracle": false,
             "scope_sha256": "5f1de3bb3ad59eac29c567fa3a352b633d97f2ee9f0aed61a867c014dbb43b44",
@@ -22357,8 +22374,8 @@
               321
             ],
             "protected_oracle": false,
-            "scope_sha256": "82235a9c258549cc074405538be1a8a1c30d6dc1959b4d6ded3fe91b6741eeb0",
-            "input_sha256": "82235a9c258549cc074405538be1a8a1c30d6dc1959b4d6ded3fe91b6741eeb0",
+            "scope_sha256": "8dc0b1ce65a0001c4fec00300b93d869094da69b47567abf63494df8e1821129",
+            "input_sha256": "8dc0b1ce65a0001c4fec00300b93d869094da69b47567abf63494df8e1821129",
             "assertion_sha256": null,
             "input_preview": [
               "\"reason\": \"ak.self.realm_state_snapshot.read.manifest_head.v1 returns a signed ak.schema.realm_state_snapshot.v1 manifest; the /_coland dev bundle is development-only diagnostics\""
@@ -22441,11 +22458,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 191,
+            "line": 192,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              191
+              192
             ],
             "protected_oracle": false,
             "scope_sha256": "4584c0d8f0c7ef3b5a3227163c42de370ed03222fa1152be4ecde80db750f1a4",
@@ -22770,11 +22787,11 @@
           },
           {
             "file": "coland/crates/http/src/routing/events/sync/signal.rs",
-            "line": 45,
+            "line": 48,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              45
+              48
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -22787,11 +22804,11 @@
           },
           {
             "file": "coland/crates/http/src/routing/events/sync/signal.rs",
-            "line": 49,
+            "line": 52,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              49
+              52
             ],
             "protected_oracle": false,
             "scope_sha256": "3a5a66f0505cc8a185fca1c379e3401e538d5f9b4e6106370b5cfb59c5b77dbf",
@@ -22922,11 +22939,11 @@
           },
           {
             "file": "coland/crates/http/src/routing/events/sync/signal.rs",
-            "line": 821,
+            "line": 824,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              821
+              824
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -22939,11 +22956,11 @@
           },
           {
             "file": "coland/crates/http/src/routing/events/sync/signal.rs",
-            "line": 830,
+            "line": 833,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              830
+              833
             ],
             "protected_oracle": false,
             "scope_sha256": "599a07b180c80e028cf2475206d252e60cb34839219a084dfb6319d956d7faa7",
@@ -23084,11 +23101,11 @@
         "protocol_kat": [
           {
             "file": "cotest/src/scenarios/fanout_route_miss_live.rs",
-            "line": 932,
+            "line": 935,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              932
+              935
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -23208,8 +23225,8 @@
               787
             ],
             "protected_oracle": false,
-            "scope_sha256": "39d67c5a04c262ba9c74ec1204ad3fc9e987a31ac6e2d584f1f65f0ea75d2fce",
-            "input_sha256": "536e8444dc2ba7fb1d38789adac3c32ccde6520d2c4a0ee15c39815da0a72e1f",
+            "scope_sha256": "2636b07ec1455a07d80492c23c7c6218513983e38af9ee574c3b2d03cd308c2f",
+            "input_sha256": "aefb2bd101520023d7f9e88b0969924b0d137f0ef245b5bca3a586627b7195f7",
             "assertion_sha256": "b0a6290079f510a7d2f496655b6530f4c8d5e6aabacb8b6952c42c5a3efe5710",
             "input_preview": [
               "test(\"reordering lists persists canonical Space ranks\", async ({",
@@ -23333,11 +23350,11 @@
         "protocol_kat": [
           {
             "file": "coland/crates/services/src/authority_commit.rs",
-            "line": 2186,
+            "line": 2205,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2186
+              2205
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -23367,11 +23384,11 @@
           },
           {
             "file": "coland/crates/storage/src/authority_commit.rs",
-            "line": 2451,
+            "line": 2481,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2451
+              2481
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -23447,7 +23464,30 @@
       "http": "POST /_arkret/self/third-party-invites/acceptance-attestation",
       "test_layer": "coland_unit",
       "responsibilities": {
-        "protocol_kat": [],
+        "protocol_kat": [
+          {
+            "file": "coland/crates/http/src/routing/invites.rs",
+            "line": 95,
+            "scope": "third_party_invite_acceptance_attestation",
+            "scope_kind": "rust_test",
+            "occurrence_lines": [
+              100
+            ],
+            "protected_oracle": false,
+            "scope_sha256": "b846eccc12900a53f2f297d69eaa37ab12892f34593da4410216b5d118c2a0b8",
+            "input_sha256": "2023edf400a5ebfb031d49eb9a2db5a1322d3f272edbb4e7f88415591142e481",
+            "assertion_sha256": "2c858efa8577a772f8d50f953719727f8b240e67efe552ea621c5fbc4ba13120",
+            "input_preview": [
+              "skip_all,",
+              "fields(op = \"ak.self.third_party_invite.read.acceptance_attestation.v1\")",
+              ")]",
+              "aa: AuthArgs,"
+            ],
+            "assertion_preview": [
+              "let state = depot.get_typed::<AppState>().expect(\"state injected\");"
+            ]
+          }
+        ],
         "storage_parity": [],
         "http_binding": [],
         "product_flow": [],
@@ -23638,8 +23678,8 @@
               199
             ],
             "protected_oracle": false,
-            "scope_sha256": "3906ed8e475a8d8706eeaa7075122cbecc439c33bcfb30ff1b69abed6758086c",
-            "input_sha256": "6d48071c0044b38f0711776003f6e7b3b1395d39200a0156bea69c88ebb3cb15",
+            "scope_sha256": "2a3a53faf584fd33ea549f2d51c055a94bcb4b30f9766d7390633a0dc0b95a50",
+            "input_sha256": "59be9f9f10c0ec9a71d31ecc26efd5a0c7663bb01ccfed00f28a3983c63b68e5",
             "assertion_sha256": "716e7216a9a135bf0bd34db9856a4a3366493ebcdde4e7e41f19ccfb768a408f",
             "input_preview": [
               "run(|| async {",
@@ -23819,8 +23859,8 @@
               120
             ],
             "protected_oracle": false,
-            "scope_sha256": "a10879e2c9784f740907836e808f917242c47d5e32124b489b64d07dd390a80e",
-            "input_sha256": "c4a36de6be190364e0e99f41db2ba2641aa60a42997ee45ac9c7dff1030f8831",
+            "scope_sha256": "9f44c6ceba050e42fb07ec2273f65dee4c1901dcf01117184f3ee7e83984c1c8",
+            "input_sha256": "5e7f130b1c19d6a06ada948668e2b86a32a6833ea5d4435e5e3824b26388f17f",
             "assertion_sha256": "b207256f33749f5bb9d08e3e9d17b48fb7f21909220e323cdd3d1b125d7fb07d",
             "input_preview": [
               "let temp = tempfile::tempdir()?;",
@@ -23868,8 +23908,8 @@
               229
             ],
             "protected_oracle": false,
-            "scope_sha256": "5b5f2160646425810a397bdf5f5a23c8e5999c7d6484b603b8f45c91d50c0fe4",
-            "input_sha256": "5365f0a07f31cd8491b4bd3fbe2a5f444d2dd9f24f09dfc7c4391fda7f5c9acb",
+            "scope_sha256": "130a65ab24ce25af8b5ec8a47c9e7b7546382b0d0834027e5ef06ce2932474b9",
+            "input_sha256": "8232950aeafcf110d64bd4780ae89e450d5093eedd263edcba3a3bab8a1b910b",
             "assertion_sha256": "1b076d080961de1620a2e95f0545c414b5cc28b3ea65e4eee34a70e4594388e6",
             "input_preview": [
               "let temp = tempfile::tempdir()?;",
@@ -23932,11 +23972,11 @@
         "product_flow": [
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 4061,
+            "line": 4110,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4061
+              4110
             ],
             "protected_oracle": false,
             "scope_sha256": "bff91b0dd11264a51db00878778fe137a8879146a8ff78e3d6e2252bf7f48fe8",
@@ -23949,11 +23989,11 @@
           },
           {
             "file": "inkson/tests/e2e/mockArkretApi.ts",
-            "line": 4066,
+            "line": 4115,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4066
+              4115
             ],
             "protected_oracle": false,
             "scope_sha256": "bff91b0dd11264a51db00878778fe137a8879146a8ff78e3d6e2252bf7f48fe8",

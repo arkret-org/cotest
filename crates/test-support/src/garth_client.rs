@@ -43,6 +43,20 @@ pub struct GarthClientHandle {
     device_id: DeviceId,
 }
 
+/// Transport, identity and durable storage for one founded Garth client.
+pub struct GarthClientConfig<'a> {
+    pub http: reqwest::Client,
+    pub station_base_url: &'a str,
+    pub session_grant: String,
+    pub signing_key: SigningKey,
+    pub account_id: AccountId,
+    pub device_id: &'a str,
+    pub store_root: &'a Path,
+    pub event_signing_key: SigningKey,
+    pub event_verification_method: &'a str,
+    pub trust_domain: &'a str,
+}
+
 /// What one account-sync round did.
 #[derive(Debug)]
 pub struct SyncOutcome {
@@ -72,18 +86,19 @@ impl GarthClientHandle {
     /// Garth's loop treats a transport error as retryable, so it backed off and
     /// retried until the bridge's call timeout, which reads as a hang rather
     /// than as "this client cannot connect".
-    pub fn new(
-        http: reqwest::Client,
-        station_base_url: &str,
-        session_grant: String,
-        signing_key: SigningKey,
-        account_id: AccountId,
-        device_id: &str,
-        store_root: &Path,
-        event_signing_key: SigningKey,
-        event_verification_method: &str,
-        trust_domain: &str,
-    ) -> Result<Self> {
+    pub fn new(config: GarthClientConfig<'_>) -> Result<Self> {
+        let GarthClientConfig {
+            http,
+            station_base_url,
+            session_grant,
+            signing_key,
+            account_id,
+            device_id,
+            store_root,
+            event_signing_key,
+            event_verification_method,
+            trust_domain,
+        } = config;
         let signing_key = Arc::new(signing_key);
         let auth = Auth::Dpop(DpopAuth::with_dpop_token(session_grant, move |request| {
             garth::session::dpop::build_http_dpop_proof(request, &signing_key).map_err(|error| {
@@ -448,10 +463,10 @@ impl GarthClientHandle {
                     .await?;
             let verified = replica.apply_verified_scan(&scan, page, &freshness, &keys)?;
             for row in verified.into_rows() {
-                if let arkret_wire::CommittedEventView::Full(full) = row {
-                    if full.event.kind == arkret_wire::EventKind::MessageCreate {
-                        messages.push(full);
-                    }
+                if let arkret_wire::CommittedEventView::Full(full) = row
+                    && full.event.kind == arkret_wire::EventKind::MessageCreate
+                {
+                    messages.push(full);
                 }
             }
             let next = replica
