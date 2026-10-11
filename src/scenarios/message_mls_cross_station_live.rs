@@ -227,6 +227,17 @@ pub async fn run() -> Result<()> {
 }
 
 pub(crate) async fn run_with_signal(include_signal: bool) -> Result<()> {
+    run_with_signal_boundary(
+        include_signal,
+        super::signal_live::emission::Boundary::Leave,
+    )
+    .await
+}
+
+pub(crate) async fn run_with_signal_boundary(
+    include_signal: bool,
+    boundary: super::signal_live::emission::Boundary,
+) -> Result<()> {
     let Some(x_database) = database(GROUP)? else {
         return Ok(());
     };
@@ -238,12 +249,18 @@ pub(crate) async fn run_with_signal(include_signal: bool) -> Result<()> {
         HARNESS_INTERNAL_AUTHORITY_SECRET,
     )
     .await?;
+    let emission_probe = tempfile::tempdir()?;
+    let pause_file = emission_probe.path().join("signal-emission.pause");
+    let mut recipient_env = station_env(&y_database.connect_url, &coauth);
+    if include_signal {
+        recipient_env.push((
+            "COLAND_CONFORMANCE_SIGNAL_EMISSION_PAUSE_FILE".to_owned(),
+            pause_file.to_string_lossy().into_owned(),
+        ));
+    }
     let Some(group) = TestServerGroup::try_multi_external_with_node_envs(
         GROUP,
-        &[
-            station_env(&x_database.connect_url, &coauth),
-            station_env(&y_database.connect_url, &coauth),
-        ],
+        &[station_env(&x_database.connect_url, &coauth), recipient_env],
     )
     .await?
     else {
@@ -434,6 +451,8 @@ pub(crate) async fn run_with_signal(include_signal: bool) -> Result<()> {
             y,
             &x_database.connect_url,
             &y_database.connect_url,
+            &pause_file,
+            boundary,
         )
         .await;
     }

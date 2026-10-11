@@ -3,6 +3,7 @@
 //! Anything used by a single scenario stays inline in that scenario; this
 //! module exists so the scenario submodules stay single-responsibility.
 
+pub(crate) mod acceptance_footprint;
 pub mod bridge;
 pub mod coauth_bootstrap;
 pub mod did_host;

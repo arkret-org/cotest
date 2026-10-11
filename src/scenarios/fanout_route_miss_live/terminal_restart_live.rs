@@ -3,6 +3,7 @@
 use arkret_models_collaboration::governance::realm_lifecycle::RealmTombstonePayload;
 
 use super::*;
+use crate::scenarios::_helpers::acceptance_footprint::acceptance_rows;
 
 async fn sql(url: &str, statement: &str) -> Result<()> {
     let url = url.to_owned();
@@ -23,28 +24,6 @@ async fn fanout(url: &str, commit: &RealmCommit) -> Result<Vec<Value>> {
             "SELECT to_jsonb(r) FROM federation_outbox r WHERE realm_fanout->'source_event_ids' ? $1 ORDER BY id",
             &[&event],
         )?.into_iter().map(|row| row.get(0)).collect())
-    }).await?
-}
-
-/// Capture accepting effects and the independent general signer-query cache.
-async fn acceptance_rows(url: &str) -> Result<Value> {
-    let url = url.to_owned();
-    tokio::task::spawn_blocking(move || -> Result<_> {
-        let mut connection = postgres::Client::connect(&url, postgres::NoTls)?;
-        let mut transaction = connection.build_transaction().isolation_level(postgres::IsolationLevel::RepeatableRead).start()?;
-        let tables = transaction.query("SELECT tablename::text FROM pg_tables WHERE schemaname='public' AND (tablename LIKE '%current_results' OR tablename IN ('canonical_events','realm_commits','realm_authorities','federation_outbox','event_federation_outbox','replica_stream_anchors','replica_authorization_rows','replica_authorization_cuts','account_summary_current','account_summary_versions','account_summary_clock','current_result_heads','current_result_versions','direct_conversation_founding_slots','agent_producer_signer_keys','account_device_signer_evidence','account_device_committed_evidence','forwarded_producer_device_evidence','forwarded_producer_agent_evidence','governance_unscoped_signer_evidence')) ORDER BY tablename", &[])?;
-        let mut snapshot = serde_json::Map::new();
-        for table in tables {
-            let name: String = table.get(0);
-            ensure!(name.bytes().all(|byte| byte.is_ascii_lowercase() || byte == b'_'));
-            let statement = format!("SELECT coalesce(jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text),'[]'::jsonb) FROM public.{name} r");
-            snapshot.insert(name, transaction.query_one(&statement, &[])?.get(0));
-        }
-        for name in ["canonical_events", "realm_commits", "realm_authorities", "federation_outbox", "event_federation_outbox", "replica_stream_anchors", "replica_authorization_cuts", "member_state_current_results", "account_summary_current"] {
-            ensure!(snapshot.contains_key(name), "acceptance footprint lacks {name}");
-        }
-        transaction.commit()?;
-        Ok(Value::Object(snapshot))
     }).await?
 }
 

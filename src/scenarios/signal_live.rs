@@ -12,8 +12,23 @@ use chrono::{Duration, Utc};
 
 use crate::scenarios::mls_lifecycle_live::{ACTIVE_SUITE, Member};
 
+pub(crate) mod emission;
+
 pub async fn run() -> Result<()> {
     crate::scenarios::message_mls_cross_station_live::run_with_signal(true).await
+}
+
+pub async fn run_ban() -> Result<()> {
+    super::message_mls_cross_station_live::run_with_signal_boundary(true, emission::Boundary::Ban)
+        .await
+}
+
+pub async fn run_terminal() -> Result<()> {
+    super::message_mls_cross_station_live::run_with_signal_boundary(
+        true,
+        emission::Boundary::Tombstone,
+    )
+    .await
 }
 
 #[expect(
@@ -696,6 +711,8 @@ pub(crate) async fn exercise_two_station_signal(
     y: &crate::harness::ArkretServer,
     x_url: &str,
     y_url: &str,
+    pause_file: &std::path::Path,
+    boundary: emission::Boundary,
 ) -> Result<()> {
     let bootstrap = super::mls_lifecycle_live::accepted_full_view(&bob.client, state).await?;
     ensure!(bootstrap.commit.commit_id == *head);
@@ -839,44 +856,28 @@ pub(crate) async fn exercise_two_station_signal(
         SignalClass::Session,
         7,
     )?;
-    let removal = alice
-        .client
-        .remove_member(realm.as_str(), &bob.client)
-        .await?;
-    let removal: arkret_wire::AuthoritySubmitOutcome = serde_json::from_value(removal)?;
-    let arkret_wire::AuthoritySubmitOutcome::Accepted { commit, .. } = removal else {
-        anyhow::bail!("membership removal must have an accepted Commit");
-    };
-    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(20);
-    loop {
-        let url = y_url.to_owned();
-        let expected = serde_json::to_value(&commit)?;
-        let id = commit.commit_id.to_string();
-        let held = tokio::task::spawn_blocking(move || -> Result<bool> {
-            let mut conn = postgres::Client::connect(&url, postgres::NoTls)?;
-            Ok(conn
-                .query_opt(
-                    "SELECT commit_json FROM realm_commits WHERE commit_id=$1",
-                    &[&id],
-                )?
-                .is_some_and(|row| row.get::<_, serde_json::Value>(0) == expected))
-        })
-        .await??;
-        if held {
-            break;
-        }
-        ensure!(
-            tokio::time::Instant::now() < deadline,
-            "recipient Station holds exact accepted leave Commit"
-        );
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-    }
+    emission::exercise(
+        alice,
+        bob,
+        alice_group,
+        bob_group,
+        realm,
+        strand,
+        state,
+        head,
+        x,
+        y,
+        &[x_url, y_url],
+        pause_file,
+        boundary,
+    )
+    .await?;
 
     deny(bob, &fresh, realm, &[x_url, y_url])
         .await
-        .context("current revoke denies an older otherwise valid cut")?;
+        .context("current membership or terminal fence denies an older otherwise valid cut")?;
     eprintln!(
-        "[signal-live] actual TLS Stations=2 directions=2 realm_session_deliveries=2 circle_session_deliveries=2 granted_moderation_deliveries=1 recipient_proof_mls_aead_plaintext=5 old_cut_denied=1 moderation_denied=1 current_membership_revoke_denied=1 denied_relay_event_commit_writes=0"
+        "[signal-live] actual TLS Stations=2 directions=2 realm_session_deliveries=2 circle_session_deliveries=2 granted_moderation_deliveries=1 recipient_proof_mls_aead_plaintext=5 old_cut_denied=1 moderation_denied=1 current_membership_or_terminal_denied=1 denied_relay_event_commit_writes=0"
     );
     Ok(())
 }
