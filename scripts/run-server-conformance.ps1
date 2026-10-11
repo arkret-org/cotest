@@ -3,7 +3,7 @@ param(
     [ValidateSet("process", "docker")]
     [string]$Runtime = "process",
     [string]$SutManifest,
-    [string]$SutImage = "cotest-soland:latest",
+    [string]$SutImage = "cotest-coland:latest",
     [string]$OutputRoot,
     [string]$CargoTestPackage,
     [string]$CargoTestTarget,
@@ -99,8 +99,8 @@ function Get-FreeTcpPort {
     }
 }
 
-# soland's `TestDatabase::lease()` reads `SOLAND_TEST_DATABASE_URL`, then
-# `DATABASE_URL`. It never reads `COTEST_SOLAND_DATABASE_URL`, which only names
+# coland's `TestDatabase::lease()` reads `COLAND_TEST_DATABASE_URL`, then
+# `DATABASE_URL`. It never reads `COTEST_COLAND_DATABASE_URL`, which only names
 # the store the harness hands to a spawned SUT. Tests that link the storage
 # adapter in-process therefore saw no database at all and panicked with
 # "no test database is configured", so a clean shell could not reach a green
@@ -112,14 +112,14 @@ function Get-FreeTcpPort {
 #
 # Returns the value to publish, or $null when the caller already aimed the
 # suite somewhere and that choice must win.
-function Resolve-SolandTestDatabaseUrl {
+function Resolve-ColandTestDatabaseUrl {
     param(
         [AllowNull()][string]$ConformanceDatabaseUrl,
-        [AllowNull()][string]$ExistingSolandTestDatabaseUrl,
+        [AllowNull()][string]$ExistingColandTestDatabaseUrl,
         [AllowNull()][string]$ExistingDatabaseUrl
     )
 
-    if (-not [string]::IsNullOrWhiteSpace($ExistingSolandTestDatabaseUrl)) {
+    if (-not [string]::IsNullOrWhiteSpace($ExistingColandTestDatabaseUrl)) {
         return $null
     }
     if (-not [string]::IsNullOrWhiteSpace($ExistingDatabaseUrl)) {
@@ -204,9 +204,9 @@ function Invoke-JointSmokeGate {
         [ValidateRange(1, 32)][int]$ServerCount = 1,
         [bool]$StartMocks = $false,
         [string]$Grep,
-        [ValidateSet("process", "docker")][string]$SolandRuntime = "process",
-        [string]$SolandImage = "cotest-soland:latest",
-        [bool]$BuildSolandImage = $false,
+        [ValidateSet("process", "docker")][string]$ColandRuntime = "process",
+        [string]$ColandImage = "cotest-coland:latest",
+        [bool]$BuildColandImage = $false,
         [string[]]$DockerCacheFrom = @(),
         [string]$DockerCacheTo,
         [bool]$DockerPull = $false,
@@ -230,10 +230,10 @@ function Invoke-JointSmokeGate {
     if ($StartMocks) {
         $args += "-StartMocks"
     }
-    if ($SolandRuntime -eq "docker") {
-        $args += @("-SolandRuntime", "docker", "-SolandImage", $SolandImage)
-        if ($BuildSolandImage) {
-            $args += "-BuildSolandImage"
+    if ($ColandRuntime -eq "docker") {
+        $args += @("-ColandRuntime", "docker", "-ColandImage", $ColandImage)
+        if ($BuildColandImage) {
+            $args += "-BuildColandImage"
         }
         if ($DockerCacheFrom.Count -gt 0) {
             $args += "-DockerCacheFrom"
@@ -1119,13 +1119,13 @@ function Get-SutMetadata {
         $imageId = (& docker image inspect $SutImage --format "{{.Id}}" 2>$null).Trim()
     }
     $workspaceRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
-    $localSolandRoot = Join-Path $workspaceRoot "soland"
+    $localColandRoot = Join-Path $workspaceRoot "coland"
     return [pscustomobject]@{
         runtime           = "docker"
         image             = $SutImage
         image_id          = $imageId
-        local_repo_root   = $localSolandRoot
-        local_git_revision = Get-RepoGitRevision -RepoPath $localSolandRoot
+        local_repo_root   = $localColandRoot
+        local_git_revision = Get-RepoGitRevision -RepoPath $localColandRoot
     }
 }
 
@@ -1496,7 +1496,7 @@ function New-ReleaseGate {
                 -RequiredTests @("federation_replay_snapshot_and_redaction_contracts_work")))
     $checks.Add((New-ReleaseGateCheck `
                 -Id "session_grant_bridge" `
-                -Description "coauth-style introspection backs soland session grant presentation and push registration." `
+                -Description "coauth-style introspection backs coland session grant presentation and push registration." `
                 -Tests $Tests `
                 -RequiredTests @("session_grant_presentation_uses_configured_coauth_introspection")))
     $checks.Add((New-ReleaseGateCheck `
@@ -1509,7 +1509,7 @@ function New-ReleaseGate {
     $jointSmokeStatus = if ($JointSmokeGate) { $JointSmokeGate.status } else { "skipped" }
     $checks.Add((New-ReleaseGateCheck `
                 -Id "joint_smoke" `
-                -Description "Live soland + inkson + coauth browser smoke completes before release." `
+                -Description "Live coland + inkson + coauth browser smoke completes before release." `
                 -Tests $Tests `
                 -RequiredTests @() `
                 -AdditionalGatePassed ($jointSmokeStatus -eq "passed" -or $jointSmokeStatus -eq "skipped") `
@@ -2070,7 +2070,7 @@ function New-SpecSyncGateMarkdown {
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 if (-not $SutManifest) {
-    $SutManifest = Join-Path ((Resolve-Path (Join-Path $repoRoot "..")).Path) "soland\Cargo.toml"
+    $SutManifest = Join-Path ((Resolve-Path (Join-Path $repoRoot "..")).Path) "coland\Cargo.toml"
 }
 if (-not $OutputRoot) {
     $OutputRoot = Join-Path $repoRoot "artifacts"
@@ -2177,9 +2177,9 @@ if ($Profile -eq "joint") {
         -RunProfile "joint-smoke" `
         -PlaywrightProject "joint-inkson" `
         -StartCoauth $true `
-        -SolandRuntime $Runtime `
-        -SolandImage $SutImage `
-        -BuildSolandImage ([bool]$BuildImage) `
+        -ColandRuntime $Runtime `
+        -ColandImage $SutImage `
+        -BuildColandImage ([bool]$BuildImage) `
         -DockerCacheFrom $DockerCacheFrom `
         -DockerCacheTo $DockerCacheTo `
         -DockerPull ([bool]$DockerPull) `
@@ -2234,9 +2234,9 @@ if ($Profile -eq "multi-server") {
         -ServerCount $profileServerCount `
         -StartMocks $false `
         -Grep "@three-server-p0" `
-        -SolandRuntime $Runtime `
-        -SolandImage $SutImage `
-        -BuildSolandImage ([bool]$BuildImage) `
+        -ColandRuntime $Runtime `
+        -ColandImage $SutImage `
+        -BuildColandImage ([bool]$BuildImage) `
         -DockerCacheFrom $DockerCacheFrom `
         -DockerCacheTo $DockerCacheTo `
         -DockerPull ([bool]$DockerPull) `
@@ -2288,7 +2288,7 @@ if ($Runtime -eq "docker" -and ($BuildImage -or -not (Test-DockerImagePresent -I
     if ($DockerNoCache) {
         $buildParams.NoCache = $true
     }
-    & (Join-Path $PSScriptRoot "build-soland-image.ps1") @buildParams
+    & (Join-Path $PSScriptRoot "build-coland-image.ps1") @buildParams
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to build Docker image $SutImage"
     }
@@ -2300,14 +2300,14 @@ if ($Runtime -eq "docker" -and ($BuildImage -or -not (Test-DockerImagePresent -I
 # it may embed an older SDK/spec snapshot and then reject envelopes authored
 # by the current cotest build.  Build the selected SUT once, before starting
 # any Cargo test invocation, so both sides are compiled from the same checkout.
-# An explicit SOLAND_BIN remains an intentional immutable-binary override.
-$processSolandBin = $null
-if ($Runtime -eq "process" -and -not $env:SOLAND_BIN) {
+# An explicit COLAND_BIN remains an intentional immutable-binary override.
+$processColandBin = $null
+if ($Runtime -eq "process" -and -not $env:COLAND_BIN) {
     Add-RawLogLine -Path $rawLog -Value "=== prepare process SUT ==="
     $buildOutput = @(
-        # `conformance-harness` is off in soland's default (production) build;
+        # `conformance-harness` is off in coland's default (production) build;
         # this suite drives `/_arkret/_conformance/*`, so ask for it explicitly.
-        & cargo build --manifest-path $SutManifest -p soland --bin soland --features conformance-harness 2>&1
+        & cargo build --manifest-path $SutManifest -p coland --bin coland --features conformance-harness 2>&1
     )
     $buildExitCode = $LASTEXITCODE
     foreach ($line in $buildOutput) {
@@ -2318,20 +2318,20 @@ if ($Runtime -eq "process" -and -not $env:SOLAND_BIN) {
     if ($buildExitCode -ne 0) {
         throw "Failed to build process SUT from $SutManifest (exit code $buildExitCode)"
     }
-    $solandTargetDirectory = Get-CargoTargetDirectory -ManifestPath $SutManifest
-    $solandBinaryName = if ($IsWindows) { "soland.exe" } else { "soland" }
-    $processSolandBin = Join-Path $solandTargetDirectory "debug\$solandBinaryName"
-    if (-not (Test-Path $processSolandBin)) {
-        throw "Process SUT build succeeded but the Cargo target binary is missing: $processSolandBin"
+    $colandTargetDirectory = Get-CargoTargetDirectory -ManifestPath $SutManifest
+    $colandBinaryName = if ($IsWindows) { "coland.exe" } else { "coland" }
+    $processColandBin = Join-Path $colandTargetDirectory "debug\$colandBinaryName"
+    if (-not (Test-Path $processColandBin)) {
+        throw "Process SUT build succeeded but the Cargo target binary is missing: $processColandBin"
     }
-    Add-RawLogLine -Path $rawLog -Value "process SUT binary: $processSolandBin"
+    Add-RawLogLine -Path $rawLog -Value "process SUT binary: $processColandBin"
 }
 
 # The services-live lane spawns real coauth and flagon processes alongside
-# soland, so their binaries must be built from the current checkouts for the
+# coland, so their binaries must be built from the current checkouts for the
 # same reason the SUT is: a stale sibling binary embeds an older SDK/spec
 # snapshot and then rejects envelopes the current cotest authors. An explicit
-# COAUTH_BIN / TEABAY_BIN stays an intentional immutable-binary override.
+# COAUTH_BIN / FLAGON_BIN stays an intentional immutable-binary override.
 $servicesLiveProfile = $Profile -eq "services-live"
 $clientLiveProfile = $Profile -eq "inkson-client-live"
 $servicesLiveBinaries = @{}
@@ -2339,7 +2339,7 @@ if ($servicesLiveProfile -and -not $delegatedProfile -and -not $PlanOnly -and -n
     $workspaceRoot = (Resolve-Path (Join-Path $repoRoot "..")).Path
     # `BinTarget` is the Cargo bin target, which is not always the service name:
     # flagon's server crate is `server`, so it builds and installs as
-    # `server.exe`. The Rust helper looks up `TEABAY_BIN` before falling back to
+    # `server.exe`. The Rust helper looks up `FLAGON_BIN` before falling back to
     # `flagon.exe` in the Cargo target directory, a file a normal build never
     # produces, so exporting the real path here is what makes the sibling
     # checkout usable. Resolve that directory through `cargo metadata` rather
@@ -2347,7 +2347,7 @@ if ($servicesLiveProfile -and -not $delegatedProfile -and -not $PlanOnly -and -n
     # point `build.target-dir` at one shared tree.
     foreach ($sibling in @(
             [pscustomobject]@{ Service = "coauth"; BinEnv = "COAUTH_BIN"; BinTarget = "coauth" },
-            [pscustomobject]@{ Service = "flagon"; BinEnv = "TEABAY_BIN"; BinTarget = "server" }
+            [pscustomobject]@{ Service = "flagon"; BinEnv = "FLAGON_BIN"; BinTarget = "server" }
         )) {
         if ([Environment]::GetEnvironmentVariable($sibling.BinEnv)) {
             Add-RawLogLine -Path $rawLog -Value "$($sibling.Service) binary: $($sibling.BinEnv) override"
@@ -2380,7 +2380,7 @@ if ($servicesLiveProfile -and -not $delegatedProfile -and -not $PlanOnly -and -n
 }
 
 $originalEnv = @()
-foreach ($name in "COTEST_SUT_MODE", "COTEST_SUT_MANIFEST", "COTEST_SUT_IMAGE", "COTEST_ARTIFACT_DIR", "COTEST_SERVICE_LOG_DIR", "COTEST_TRANSCRIPT_PATH", "SOLAND_BIN", "COAUTH_BIN", "TEABAY_BIN", "COTEST_SOLAND_DATABASE_URL", "COTEST_COAUTH_DATABASE_URL", "DATABASE_URL", "COTEST_REQUIRE_LIVE_SERVICES", "SOLAND_TEST_DATABASE_URL") {
+foreach ($name in "COTEST_SUT_MODE", "COTEST_SUT_MANIFEST", "COTEST_SUT_IMAGE", "COTEST_ARTIFACT_DIR", "COTEST_SERVICE_LOG_DIR", "COTEST_TRANSCRIPT_PATH", "COLAND_BIN", "COAUTH_BIN", "FLAGON_BIN", "COTEST_COLAND_DATABASE_URL", "COTEST_COAUTH_DATABASE_URL", "DATABASE_URL", "COTEST_REQUIRE_LIVE_SERVICES", "COLAND_TEST_DATABASE_URL") {
     $originalEnv += [pscustomobject]@{
         Name   = $name
         Exists = Test-Path "Env:$name"
@@ -2413,15 +2413,15 @@ try {
     } else {
         $env:COTEST_SUT_MANIFEST = $SutManifest
         Remove-Item Env:COTEST_SUT_IMAGE -ErrorAction SilentlyContinue
-        if ($processSolandBin) {
-            $env:SOLAND_BIN = $processSolandBin
+        if ($processColandBin) {
+            $env:COLAND_BIN = $processColandBin
         }
     }
 
-    if ($Profile -in @("all", "full-nightly", "services-live", "inkson-client-live") -and -not $env:COTEST_SOLAND_DATABASE_URL) {
+    if ($Profile -in @("all", "full-nightly", "services-live", "inkson-client-live") -and -not $env:COTEST_COLAND_DATABASE_URL) {
         Add-RawLogLine -Path $rawLog -Value "=== prepare conformance test PostgreSQL ==="
         $testPostgres = Start-CotestTestPostgres
-        $env:COTEST_SOLAND_DATABASE_URL = $testPostgres.Url
+        $env:COTEST_COLAND_DATABASE_URL = $testPostgres.Url
         Add-RawLogLine -Path $rawLog -Value "conformance test PostgreSQL: $($testPostgres.ContainerName)"
     }
 
@@ -2434,14 +2434,14 @@ try {
             [Environment]::SetEnvironmentVariable($binEnv, $servicesLiveBinaries[$binEnv])
         }
         # Every COTEST_*_DATABASE_URL is consumed as an ADMIN url: the Rust
-        # bootstrap creates one freshly named database per spawn, so soland and
-        # coauth pointing at the same server still get isolated stores. Teabay
+        # bootstrap creates one freshly named database per spawn, so coland and
+        # coauth pointing at the same server still get isolated stores. Flagon
         # reads DATABASE_URL directly, matching the joint bootstrap's contract.
-        if (-not $env:COTEST_COAUTH_DATABASE_URL -and $env:COTEST_SOLAND_DATABASE_URL) {
-            $env:COTEST_COAUTH_DATABASE_URL = $env:COTEST_SOLAND_DATABASE_URL
+        if (-not $env:COTEST_COAUTH_DATABASE_URL -and $env:COTEST_COLAND_DATABASE_URL) {
+            $env:COTEST_COAUTH_DATABASE_URL = $env:COTEST_COLAND_DATABASE_URL
         }
-        if (-not $env:DATABASE_URL -and $env:COTEST_SOLAND_DATABASE_URL) {
-            $env:DATABASE_URL = $env:COTEST_SOLAND_DATABASE_URL
+        if (-not $env:DATABASE_URL -and $env:COTEST_COLAND_DATABASE_URL) {
+            $env:DATABASE_URL = $env:COTEST_COLAND_DATABASE_URL
         }
         # Declare the live stack present. Without this the selected scenarios
         # soft-skip on a missing binary, database or Docker daemon and the lane
@@ -2450,14 +2450,14 @@ try {
         Add-RawLogLine -Path $rawLog -Value "services-live: live prerequisites declared present (fail-closed)"
     }
 
-    $solandTestDatabaseUrl = Resolve-SolandTestDatabaseUrl `
-        -ConformanceDatabaseUrl $env:COTEST_SOLAND_DATABASE_URL `
-        -ExistingSolandTestDatabaseUrl $env:SOLAND_TEST_DATABASE_URL `
+    $colandTestDatabaseUrl = Resolve-ColandTestDatabaseUrl `
+        -ConformanceDatabaseUrl $env:COTEST_COLAND_DATABASE_URL `
+        -ExistingColandTestDatabaseUrl $env:COLAND_TEST_DATABASE_URL `
         -ExistingDatabaseUrl $env:DATABASE_URL
-    if ($solandTestDatabaseUrl) {
+    if ($colandTestDatabaseUrl) {
         # The URL carries credentials; the raw log is scanned for those, so
         # record only that in-process leases were pointed at the same store.
-        $env:SOLAND_TEST_DATABASE_URL = $solandTestDatabaseUrl
+        $env:COLAND_TEST_DATABASE_URL = $colandTestDatabaseUrl
         Add-RawLogLine -Path $rawLog -Value "in-process storage leases: conformance PostgreSQL"
     }
 
@@ -2575,9 +2575,9 @@ if ($Profile -eq "release-gate" -and -not $SkipJointSmokeGate) {
         -RepoRoot $repoRoot `
         -RunDir $runDir `
         -RawLog $rawLog `
-        -SolandRuntime $Runtime `
-        -SolandImage $SutImage `
-        -BuildSolandImage $false `
+        -ColandRuntime $Runtime `
+        -ColandImage $SutImage `
+        -BuildColandImage $false `
         -DockerCacheFrom $DockerCacheFrom `
         -DockerCacheTo $DockerCacheTo `
         -DockerPull ([bool]$DockerPull) `

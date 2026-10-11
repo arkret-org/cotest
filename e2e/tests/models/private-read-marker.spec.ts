@@ -8,7 +8,7 @@
 
 import { createHash } from "node:crypto";
 import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
-import { solandBaseUrl } from "../../helpers/env";
+import { colandBaseUrl } from "../../helpers/env";
 import {
   createSharedRealmViaApi,
   sendPlaintextMessageViaApi,
@@ -18,7 +18,7 @@ import {
   joinRealmMlsWelcomeApi,
   type MlsDevice,
   type MlsMemberGroup,
-} from "../../helpers/soland-api/mls";
+} from "../../helpers/coland-api/mls";
 import {
   accountSubscribeDeltaApi,
   authHeaders,
@@ -30,7 +30,7 @@ import {
   signedEventEnvelope,
   submitSignedEventApi,
   typedId,
-} from "../../helpers/soland-api";
+} from "../../helpers/coland-api";
 import {
   assertJointStackNotRequired,
   createDpopUserSession,
@@ -42,7 +42,7 @@ import {
 
 test.describe.configure({ mode: "serial" });
 
-// soland fans the actor-private read-cursor update out to the *other* devices
+// coland fans the actor-private read-cursor update out to the *other* devices
 // of the same actor through the to-device queue. A device polls
 // `account/subscribe` and observes the update as a `ak.read_cursor.update`
 // to-device envelope. Bounded sync window per scenarios/models §E10.1 (30s);
@@ -62,8 +62,8 @@ test.describe("private read marker", () => {
     );
 
     const before = await request.get(
-      `${solandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`,
-      { headers: authHeaders(aliceToken, "GET", `${solandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`) },
+      `${colandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`,
+      { headers: authHeaders(aliceToken, "GET", `${colandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`) },
     );
     expect(before.status()).toBe(200);
     const beforeBody = await before.json();
@@ -89,8 +89,8 @@ test.describe("private read marker", () => {
     );
 
     const after = await request.get(
-      `${solandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`,
-      { headers: authHeaders(aliceToken, "GET", `${solandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`) },
+      `${colandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`,
+      { headers: authHeaders(aliceToken, "GET", `${colandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`) },
     );
     expect(after.status()).toBe(200);
     const afterBody = await after.json();
@@ -119,8 +119,8 @@ test.describe("private read marker", () => {
     const bobToken = await issueUserSession(request, bob);
 
     const bobBefore = await request.get(
-      `${solandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`,
-      { headers: authHeaders(bobToken, "GET", `${solandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`) },
+      `${colandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`,
+      { headers: authHeaders(bobToken, "GET", `${colandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`) },
     );
     expect(bobBefore.status()).toBe(200);
     expect((await bobBefore.json()).markers).toEqual([]);
@@ -139,8 +139,8 @@ test.describe("private read marker", () => {
     expect(markAliceBody.actor_id).toEqual(accountActorId(alice.id));
 
     const aliceAfter = await request.get(
-      `${solandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`,
-      { headers: authHeaders(aliceToken, "GET", `${solandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`) },
+      `${colandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`,
+      { headers: authHeaders(aliceToken, "GET", `${colandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`) },
     );
     expect(aliceAfter.status()).toBe(200);
     const aliceAfterBody = await aliceAfter.json();
@@ -152,8 +152,8 @@ test.describe("private read marker", () => {
     );
 
     const bobAfter = await request.get(
-      `${solandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`,
-      { headers: authHeaders(bobToken, "GET", `${solandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`) },
+      `${colandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`,
+      { headers: authHeaders(bobToken, "GET", `${colandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`) },
     );
     expect(bobAfter.status()).toBe(200);
     const bobAfterBody = await bobAfter.json();
@@ -161,7 +161,7 @@ test.describe("private read marker", () => {
   });
 
   // Main strand: cross-device read-cursor propagation. alice holds two device
-  // sessions on the same DID. device-1 advances the marker; soland fans the
+  // sessions on the same DID. device-1 advances the marker; coland fans the
   // actor-private update out to device-2's to-device queue, which device-2
   // observes on its next `account/subscribe` poll. mark-all-read from device-2
   // then propagates back to device-1.
@@ -239,8 +239,8 @@ test.describe("private read marker", () => {
     // reflects the latest (HLC-max) position.
     for (const token of [token1, token2]) {
       const list = await request.get(
-        `${solandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`,
-        { headers: authHeaders(token, "GET", `${solandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`) },
+        `${colandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`,
+        { headers: authHeaders(token, "GET", `${colandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`) },
       );
       expect(list.status()).toBe(200);
       const realmMarkers = (await list.json()).markers.filter(
@@ -305,8 +305,8 @@ test.describe("private read marker", () => {
     expect(converged.content.position).toEqual(second);
 
     const list = await request.get(
-      `${solandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`,
-      { headers: authHeaders(token2, "GET", `${solandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`) },
+      `${colandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`,
+      { headers: authHeaders(token2, "GET", `${colandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`) },
     );
     expect(list.status()).toBe(200);
     const realmMarkers = (await list.json()).markers.filter(
@@ -428,8 +428,8 @@ test.describe("private read marker", () => {
     // Both markers coexist, keyed by (actor_id, realm_id, read_scope); the
     // Circle marker MUST NOT pollute the Realm-default marker and vice versa.
     const list = await request.get(
-      `${solandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`,
-      { headers: authHeaders(aliceToken, "GET", `${solandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`) },
+      `${colandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`,
+      { headers: authHeaders(aliceToken, "GET", `${colandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`) },
     );
     expect(list.status()).toBe(200);
     const markers = (await list.json()).markers as Array<{
@@ -507,7 +507,7 @@ async function postReadCursor(
       position,
     },
   });
-  const url = `${solandBaseUrl()}/_arkret/self/read-cursors`;
+  const url = `${colandBaseUrl()}/_arkret/self/read-cursors`;
   return await request.post(url, {
     headers: {
       ...authHeaders(token, "POST", url),

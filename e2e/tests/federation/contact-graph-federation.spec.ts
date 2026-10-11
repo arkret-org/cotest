@@ -25,8 +25,8 @@ import { expect, test } from "../../helpers/arkret-test";
 import {
   assertServerCountNotRequired,
   hasServerCount,
-  solandBaseUrl,
-  solandServiceId,
+  colandBaseUrl,
+  colandServiceId,
 } from "../../helpers/env";
 import {
   authHeaders,
@@ -36,7 +36,7 @@ import {
   resolveDefaultStrandId,
   canonicalJson,
   waitForInviteDeliveryApi,
-} from "../../helpers/soland-api";
+} from "../../helpers/coland-api";
 import {
   ensureRegistered,
   issueUserSession,
@@ -114,7 +114,7 @@ test.describe("contact graph federation (server1/server2)", () => {
       {
         requestedScopes: ["invite"],
         server: "server1",
-        recipientServiceId: solandServiceId("server2"),
+        recipientServiceId: colandServiceId("server2"),
         introductionEvidence: {
           kind: "locator_ref",
           principal_locator: bobLocator,
@@ -145,7 +145,7 @@ test.describe("contact graph federation (server1/server2)", () => {
       action: "accept",
       grantedScopes: ["invite"],
       server: "server2",
-      requesterServiceId: solandServiceId("server1"),
+      requesterServiceId: colandServiceId("server1"),
     });
     expect(respondOutcome.state).toBe("accepted");
 
@@ -188,7 +188,7 @@ test.describe("contact graph federation (server1/server2)", () => {
     const { outcome } = await requestContactArkret(request, aliceToken, bob.id, {
       requestedScopes: ["direct_message"],
       server: "server1",
-      recipientServiceId: solandServiceId("server2"),
+      recipientServiceId: colandServiceId("server2"),
       introductionEvidence: {
         kind: "locator_ref",
         principal_locator: bobLocator,
@@ -208,7 +208,7 @@ test.describe("contact graph federation (server1/server2)", () => {
       action: "accept",
       grantedScopes: ["direct_message"],
       server: "server2",
-      requesterServiceId: solandServiceId("server1"),
+      requesterServiceId: colandServiceId("server1"),
     });
     // server1 converges to accepted once the accept fact federates back.
     await expect
@@ -221,13 +221,13 @@ test.describe("contact graph federation (server1/server2)", () => {
       .toBe("accepted");
 
     const resolved = await request.post(
-      `${solandBaseUrl("server1")}/_arkret/self/direct-conversations/resolve`,
+      `${colandBaseUrl("server1")}/_arkret/self/direct-conversations/resolve`,
       {
-        headers: { ...authHeaders(aliceToken, "POST", `${solandBaseUrl("server1")}/_arkret/self/direct-conversations/resolve`), "content-type": "application/json" },
+        headers: { ...authHeaders(aliceToken, "POST", `${colandBaseUrl("server1")}/_arkret/self/direct-conversations/resolve`), "content-type": "application/json" },
         data: canonicalJson({
           peer: {
             kind: "human",
-            account_id: { principal_id: bob.id, station_id: solandServiceId("server2") },
+            account_id: { principal_id: bob.id, station_id: colandServiceId("server2") },
           },
         }),
       },
@@ -242,7 +242,7 @@ test.describe("contact graph federation (server1/server2)", () => {
       data: canonicalJson({
         peer: {
           kind: "human",
-          account_id: { principal_id: alice.id, station_id: solandServiceId("server1") },
+          account_id: { principal_id: alice.id, station_id: colandServiceId("server1") },
         },
       }),
     };
@@ -251,8 +251,8 @@ test.describe("contact graph federation (server1/server2)", () => {
     let founderBody: Awaited<ReturnType<typeof resolved.json>>;
     await expect.poll(async () => {
       const founderResolved = await request.post(
-        `${solandBaseUrl("server2")}/_arkret/self/direct-conversations/resolve`,
-        { ...founderRequest, headers: { ...authHeaders(bobToken, "POST", `${solandBaseUrl("server2")}/_arkret/self/direct-conversations/resolve`), "content-type": "application/json" } },
+        `${colandBaseUrl("server2")}/_arkret/self/direct-conversations/resolve`,
+        { ...founderRequest, headers: { ...authHeaders(bobToken, "POST", `${colandBaseUrl("server2")}/_arkret/self/direct-conversations/resolve`), "content-type": "application/json" } },
       );
       expect(founderResolved.ok(), await founderResolved.text()).toBeTruthy();
       founderBody = await founderResolved.json();
@@ -265,10 +265,10 @@ test.describe("contact graph federation (server1/server2)", () => {
     expect(evidence.contact_round_evidence.normal_response_receipt).toBeTruthy();
     const bundle = evidence.contact_round_evidence;
     const expectedProofs = new Map([
-      [canonicalJson({ principal_id: alice.id, station_id: solandServiceId("server1") }),
-        [bundle.normal_response_receipt.response_event_ref, solandServiceId("server2")]],
-      [canonicalJson({ principal_id: bob.id, station_id: solandServiceId("server2") }),
-        [bundle.contact_round.request_event_ref, solandServiceId("server1")]],
+      [canonicalJson({ principal_id: alice.id, station_id: colandServiceId("server1") }),
+        [bundle.normal_response_receipt.response_event_ref, colandServiceId("server2")]],
+      [canonicalJson({ principal_id: bob.id, station_id: colandServiceId("server2") }),
+        [bundle.contact_round.request_event_ref, colandServiceId("server1")]],
     ]);
     const directions = new Set<string>();
     for (const proof of bundle.current_proofs) {
@@ -281,8 +281,8 @@ test.describe("contact graph federation (server1/server2)", () => {
     expect([...directions].sort()).toEqual([...expectedProofs.keys()].sort());
 
     const retry = await request.post(
-      `${solandBaseUrl("server2")}/_arkret/self/direct-conversations/resolve`,
-      { ...founderRequest, headers: { ...authHeaders(bobToken, "POST", `${solandBaseUrl("server2")}/_arkret/self/direct-conversations/resolve`), "content-type": "application/json" } },
+      `${colandBaseUrl("server2")}/_arkret/self/direct-conversations/resolve`,
+      { ...founderRequest, headers: { ...authHeaders(bobToken, "POST", `${colandBaseUrl("server2")}/_arkret/self/direct-conversations/resolve`), "content-type": "application/json" } },
     );
     expect(retry.ok(), await retry.text()).toBeTruthy();
     const retried = await retry.json();
@@ -336,7 +336,7 @@ test.describe("contact graph federation (server1/server2)", () => {
         {
           requestedScopes: ["direct_message"],
           server: "server1",
-          recipientServiceId: solandServiceId("server2"),
+          recipientServiceId: colandServiceId("server2"),
           introductionEvidence: {
             kind: "locator_ref",
             principal_locator: bobLocator,
@@ -363,7 +363,7 @@ test.describe("contact graph federation (server1/server2)", () => {
         action: "accept",
         grantedScopes: ["direct_message"],
         server: "server2",
-        requesterServiceId: solandServiceId("server1"),
+        requesterServiceId: colandServiceId("server1"),
       });
       await expect
         .poll(
@@ -467,18 +467,18 @@ test.describe("contact graph federation (server1/server2)", () => {
     const bobTokenServer2 = await issueUserSession(request, bob, { server: "server2" });
     const locator = await resolvePrincipalLocator(request, bob.id, "server2", bobTokenServer2);
     const { outcome } = await requestContactArkret(request, aliceTokenServer1, bob.id, {
-      requestedScopes: ["invite"], server: "server1", recipientServiceId: solandServiceId("server2"),
+      requestedScopes: ["invite"], server: "server1", recipientServiceId: colandServiceId("server2"),
       introductionEvidence: { kind: "locator_ref", principal_locator: locator },
     });
     await expect.poll(async () => (await contactRow(request, bobTokenServer2, alice.id, { server: "server2" }))?.state,
       { timeout: 30_000 }).toBe("pending_incoming");
     await respondContactArkret(request, bobTokenServer2, {
       requestId: outcome.request_event_ref, requesterId: alice.id, action: "accept",
-      grantedScopes: ["invite"], server: "server2", requesterServiceId: solandServiceId("server1"),
+      grantedScopes: ["invite"], server: "server2", requesterServiceId: colandServiceId("server1"),
     });
     const consent = await grantInviteConsentArkret(request, bobTokenServer2, bob, alice.id, {
       server: "server2",
-      peerStationId: solandServiceId("server1"),
+      peerStationId: colandServiceId("server1"),
     });
     const grantRef = consent.eventRef;
 
@@ -489,10 +489,10 @@ test.describe("contact graph federation (server1/server2)", () => {
       {
         title: `S4-fed pull ${stamp}`,
         ownerId: alice.id,
-        creator_id: solandServiceId("server1"),
+        creator_id: colandServiceId("server1"),
         plaintext_visible_services: [
-          solandServiceId("server1"),
-          solandServiceId("server2"),
+          colandServiceId("server1"),
+          colandServiceId("server2"),
         ],
       },
       { server: "server1" },
@@ -520,7 +520,7 @@ test.describe("contact graph federation (server1/server2)", () => {
       request, bobTokenServer2, bob.id, realmId, "server2",
     );
     expect(invite.id).toBe(inviteId);
-    const realmUrl = `${solandBaseUrl("server2")}/_arkret/self/realms/${encodeURIComponent(realmId)}`;
+    const realmUrl = `${colandBaseUrl("server2")}/_arkret/self/realms/${encodeURIComponent(realmId)}`;
     const beforeJoin = await request.get(realmUrl, {
       headers: authHeaders(bobTokenServer2, "GET", realmUrl),
     });
@@ -535,8 +535,8 @@ test.describe("contact graph federation (server1/server2)", () => {
       .poll(
         async () => {
           const resp = await request.get(
-            `${solandBaseUrl("server2")}/_arkret/self/realms/${encodeURIComponent(realmId)}`,
-            { headers: authHeaders(bobTokenServer2, "GET", `${solandBaseUrl("server2")}/_arkret/self/realms/${encodeURIComponent(realmId)}`) },
+            `${colandBaseUrl("server2")}/_arkret/self/realms/${encodeURIComponent(realmId)}`,
+            { headers: authHeaders(bobTokenServer2, "GET", `${colandBaseUrl("server2")}/_arkret/self/realms/${encodeURIComponent(realmId)}`) },
           );
           if (!resp.ok()) return false;
           const realm = await resp.json();
@@ -554,7 +554,7 @@ test.describe("contact graph federation (server1/server2)", () => {
   //
   // alice@server1 and bob@server2 first become accepted contacts (same federated handshake
   // as S1-fed). Then alice@server1 tombstones bob with block_peer=true and addresses
-  // bob's home PS via peer_id=server2. soland's contact_tombstone handler
+  // bob's home PS via peer_id=server2. coland's contact_tombstone handler
   // federates `ak.contact.tombstone` over the durable outbox; server2's
   // peer_contacts_submit downgrades its mirrored alice row to `tombstoned`.
   // Spec contact-and-direct-conversation.md §2/§4.1.
@@ -576,7 +576,7 @@ test.describe("contact graph federation (server1/server2)", () => {
     const { outcome } = await requestContactArkret(request, aliceToken, bob.id, {
       requestedScopes: ["invite"],
       server: "server1",
-      recipientServiceId: solandServiceId("server2"),
+      recipientServiceId: colandServiceId("server2"),
       introductionEvidence: {
         kind: "locator_ref",
         principal_locator: bobLocator,
@@ -596,7 +596,7 @@ test.describe("contact graph federation (server1/server2)", () => {
       action: "accept",
       grantedScopes: ["invite"],
       server: "server2",
-      requesterServiceId: solandServiceId("server1"),
+      requesterServiceId: colandServiceId("server1"),
     });
     await expect
       .poll(
@@ -610,7 +610,7 @@ test.describe("contact graph federation (server1/server2)", () => {
     // alice@server1 tombstones bob, addressing bob's home PS (server2) and hard-blocking.
     const tomb = await tombstoneContactArkret(request, aliceToken, bob.id, {
       blockPeer: true,
-      peerServiceId: solandServiceId("server2"),
+      peerServiceId: colandServiceId("server2"),
       server: "server1",
     });
     expect(tomb.state).toBe("tombstoned");

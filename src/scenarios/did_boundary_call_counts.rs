@@ -1,4 +1,4 @@
-//! DID-P1-C02 — the joint call-count contract, read off soland's DID-boundary
+//! DID-P1-C02 — the joint call-count contract, read off coland's DID-boundary
 //! counters.
 //!
 //! `zh/identity/did-usage-and-verification.md` §6 makes two claims that are
@@ -9,8 +9,8 @@
 //!
 //! | name | series |
 //! | --- | --- |
-//! | `authority_network_call_count` | `soland_did_resolve_total{source="network"}` |
-//! | `signature_verify_count` | `soland_signature_verify_total` (all labels) |
+//! | `authority_network_call_count` | `coland_did_resolve_total{source="network"}` |
+//! | `signature_verify_count` | `coland_signature_verify_total` (all labels) |
 //!
 //! Asserting only the first would pass trivially for a server that skipped
 //! verification altogether; asserting only the second would pass for a server
@@ -18,14 +18,14 @@
 //!
 //! # Why a metrics scrape and not a resolver spy
 //!
-//! See [`super::_helpers::service_metrics`] — cotest drives soland as a
+//! See [`super::_helpers::service_metrics`] — cotest drives coland as a
 //! pre-built binary over HTTP, so no in-process spy can be injected, and the
 //! counting DID host cannot be reached by a resolver whose SSRF gate rejects
 //! loopback while the URL is still being built.
 //!
 //! # Coverage boundary
 //!
-//! Every function here needs soland's metrics listener, which the harness binds
+//! Every function here needs coland's metrics listener, which the harness binds
 //! for the process spawn modes but **not** for the docker mode (the container
 //! publishes only the HTTP port). Those runs skip with a printed `skip:` line
 //! rather than silently reading an unreachable counter as zero.
@@ -40,9 +40,9 @@
 //!   Its coverage boundary is *within one process*: it proves the persisted accepted binding is
 //!   served after a restart with zero resolver calls, but not that a live inkson process serving
 //!   live sync/render traffic makes no outbound request. Nothing here substitutes for that.
-//! - **Rows 1 / 5 / 6 / 7** need soland to actually enter the authority path, which needs a
-//!   reachable DID authority. The harness's soland resolves nothing at all
-//!   (`soland_did_resolve_total` has no series after a full ordinary run), and the mock DID host
+//! - **Rows 1 / 5 / 6 / 7** need coland to actually enter the authority path, which needs a
+//!   reachable DID authority. The harness's coland resolves nothing at all
+//!   (`coland_did_resolve_total` has no series after a full ordinary run), and the mock DID host
 //!   cannot be reached by a resolver whose SSRF gate rejects loopback. They are not asserted here;
 //!   writing a scenario that "passes" by observing a counter that can never move would be a false
 //!   green.
@@ -54,17 +54,17 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use super::_helpers::service_metrics::{DidBoundaryDelta, ServiceMetricsClient};
 use crate::harness::{ArkretServer, CanonicalJsonBody, TestActorClient};
 
-/// Bring up soland with its metrics listener, or explain why the scenario
+/// Bring up coland with its metrics listener, or explain why the scenario
 /// cannot observe the counters in this run.
 ///
 /// Returns `Ok(None)` — a skip, not a pass — when the metrics endpoint is not
 /// reachable. A DID-boundary claim read off an endpoint that does not answer is
 /// worth nothing, so the caller must not continue.
-async fn metered_soland(name: &str) -> Result<Option<(ArkretServer, ServiceMetricsClient)>> {
+async fn metered_coland(name: &str) -> Result<Option<(ArkretServer, ServiceMetricsClient)>> {
     let server = ArkretServer::spawn(name).await?;
     let Some(metrics) = server.did_boundary_metrics()? else {
         eprintln!(
-            "skip: {name}: this soland spawn mode publishes no metrics listener, so \
+            "skip: {name}: this coland spawn mode publishes no metrics listener, so \
              authority_network_call_count is unobservable"
         );
         return Ok(None);
@@ -73,15 +73,15 @@ async fn metered_soland(name: &str) -> Result<Option<(ArkretServer, ServiceMetri
     metrics
         .snapshot()
         .await
-        .with_context(|| format!("{name}: soland metrics endpoint is not answering"))?;
+        .with_context(|| format!("{name}: coland metrics endpoint is not answering"))?;
     Ok(Some((server, metrics)))
 }
 
-/// Assert the `soland_signature_verify_total` family is live before reading a
-/// zero out of `soland_did_resolve_total`.
+/// Assert the `coland_signature_verify_total` family is live before reading a
+/// zero out of `coland_did_resolve_total`.
 ///
 /// The Prometheus exporter only renders series that have been touched, so an
-/// absent `soland_did_resolve_total` is indistinguishable from a build that
+/// absent `coland_did_resolve_total` is indistinguishable from a build that
 /// never had the counter. What rescues the reading is that the *sibling*
 /// counter, incremented on the very same code path this scenario just drove,
 /// **is** present: the DID-boundary instrumentation is demonstrably wired, and
@@ -151,7 +151,7 @@ fn corrupt_detached_jws(event: &mut arkret_wire::Event) -> Result<()> {
 /// of them, so the second must cost exactly what the first did in signature
 /// verification and nothing at all in DID authority.
 pub async fn two_ordinary_events_under_one_key_epoch_run() -> Result<()> {
-    let Some((server, metrics)) = metered_soland("did-c02-ordinary-events").await? else {
+    let Some((server, metrics)) = metered_coland("did-c02-ordinary-events").await? else {
         return Ok(());
     };
     let alice_did = crate::scenarios::identity_test_support::actor_did_for_service_did(
@@ -210,7 +210,7 @@ pub async fn two_ordinary_events_under_one_key_epoch_run() -> Result<()> {
 /// unauthorized is turned away *before* the DID boundary and would prove
 /// nothing about it.
 pub async fn a_reused_binding_still_rejects_a_bad_signature_run() -> Result<()> {
-    let Some((server, metrics)) = metered_soland("did-c02-bad-signature").await? else {
+    let Some((server, metrics)) = metered_coland("did-c02-bad-signature").await? else {
         return Ok(());
     };
     let alice_did = crate::scenarios::identity_test_support::actor_did_for_service_did(
@@ -294,7 +294,7 @@ pub async fn a_reused_binding_still_rejects_a_bad_signature_run() -> Result<()> 
 /// Two things are asserted, and the second is the interesting one:
 ///
 /// 1. the submission is rejected;
-/// 2. `authority_network_call_count == 0` — soland turns the request away at the admission gate
+/// 2. `authority_network_call_count == 0` — coland turns the request away at the admission gate
 ///    instead of resolving the unknown DID and reading a successful resolution as trust. §4's last
 ///    row *permits* entering the authority path for a third-party claim, but this is not that:
 ///    there is no local admission for this issuer, so a resolver success would be the only thing
@@ -304,7 +304,7 @@ pub async fn a_reused_binding_still_rejects_a_bad_signature_run() -> Result<()> 
 /// `signature_verify_count` stays at 0 because the gate is ahead of it. That is
 /// correct behaviour, and it is stated rather than dressed up.
 pub async fn unknown_issuer_fails_closed_run() -> Result<()> {
-    let Some((server, metrics)) = metered_soland("did-c02-unknown-issuer").await? else {
+    let Some((server, metrics)) = metered_coland("did-c02-unknown-issuer").await? else {
         return Ok(());
     };
     let alice_did = crate::scenarios::identity_test_support::actor_did_for_service_did(
@@ -366,17 +366,17 @@ pub async fn unknown_issuer_fails_closed_run() -> Result<()> {
     Ok(())
 }
 
-/// DID-P1-C02 row 3 (soland half) — many ordinary requests against one accepted
+/// DID-P1-C02 row 3 (coland half) — many ordinary requests against one accepted
 /// service/actor binding cost one signature verification each and zero
 /// authority calls.
 ///
 /// Row 3 names federation / applet / directory requests. bridges (applet) and
 /// flagon (directory) own two of those three surfaces and only flagon exports
-/// counters, so what is provable *here* is the shape of the claim on soland's
+/// counters, so what is provable *here* is the shape of the claim on coland's
 /// own request face: N ordinary signed requests → N verifications, 0 authority
 /// calls, no matter how many.
 pub async fn repeated_requests_under_one_binding_run() -> Result<()> {
-    let Some((server, metrics)) = metered_soland("did-c02-repeated-requests").await? else {
+    let Some((server, metrics)) = metered_coland("did-c02-repeated-requests").await? else {
         return Ok(());
     };
     let alice_did = crate::scenarios::identity_test_support::actor_did_for_service_did(
@@ -415,7 +415,7 @@ pub async fn repeated_requests_under_one_binding_run() -> Result<()> {
         );
     }
     println!(
-        "DID-P1-C02 row 3 (soland face): signature_verify_count={} \
+        "DID-P1-C02 row 3 (coland face): signature_verify_count={} \
          authority_network_call_count={}",
         delta.signature_verify_count, delta.authority_network_call_count
     );

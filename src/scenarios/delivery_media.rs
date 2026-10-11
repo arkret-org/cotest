@@ -27,7 +27,7 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
         .await?;
     let token = alice.expect_dev_bearer().to_owned();
 
-    // soland binds keys/upload to the authoritative device key: the canonical
+    // coland binds keys/upload to the authoritative device key: the canonical
     // bootstrap authorized Alice's founding device, whose deterministic
     // signing key signs the upload body.
     let device_key = alice
@@ -352,7 +352,7 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
     Ok(())
 }
 
-/// Build a spec-shaped multipart/form-data blob upload body. soland requires
+/// Build a spec-shaped multipart/form-data blob upload body. coland requires
 /// blob uploads to be `multipart/form-data` with a single `content` file part
 /// and a `size_bytes` field matching the part size (blob.rs upload parser).
 pub(crate) fn blob_upload_form(bytes: &[u8], media_type: &str) -> Result<reqwest::multipart::Form> {

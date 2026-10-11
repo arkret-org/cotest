@@ -2,7 +2,7 @@
 
 ## 目标
 
-通过 soland 公开的 conformance 端点,执行 spec `conformance/conformance-vectors.md` §1 (Encoding & crypto) 与 §3 (Redaction) 中的 conformance vector,逐项验证 canonical JSON、event digest、signature binding、HLC ordering、sync cursor 稳定性、encrypted envelope digest 与 redaction 投影,确保 soland 的实现与 spec fixture 在 byte/digest/order 层面完全一致。
+通过 coland 公开的 conformance 端点,执行 spec `conformance/conformance-vectors.md` §1 (Encoding & crypto) 与 §3 (Redaction) 中的 conformance vector,逐项验证 canonical JSON、event digest、signature binding、HLC ordering、sync cursor 稳定性、encrypted envelope digest 与 redaction 投影,确保 coland 的实现与 spec fixture 在 byte/digest/order 层面完全一致。
 
 不验证:state resolution (§2,见 sync/state-resolution-vectors)、capability vectors (§4,见 authz/capability-vectors)、sync pagination vectors (§5,见 sync/sync-vectors)、handle vectors (§8,见 identity/handle-vectors)。
 
@@ -25,14 +25,14 @@
   - §3.5 — Snapshot pruning retains verification stub
 - `arkret-spec/spec/v1/zh/encoding.md` — canonical JSON / digest 实现 profile
 - `arkret-spec/spec/v1/zh/models/event-and-attestation.md` — signature binding payload
-- 关联 artifact: `arkret-spec/spec/v1/artifacts/fixtures/` (canonical vector JSON 入口,本 scenario 通过 harness 装载并下发到 soland)
+- 关联 artifact: `arkret-spec/spec/v1/artifacts/fixtures/` (canonical vector JSON 入口,本 scenario 通过 harness 装载并下发到 coland)
 - 关联实现:`cotest/src/conformance/encoding.rs`, `cotest/src/conformance/redaction.rs`, `cotest/src/conformance/envelope.rs` (Rust 侧已有 fixture-driven 单元测试;本 e2e 任务把同一组 vector 通过 HTTP 端点驱动)
 
 ## 拓扑
 
-- 1 × soland (Station) — 假设监听 `http://127.0.0.1:<soland_port>`,暴露 `/_arkret/_conformance/*` 端点
+- 1 × coland (Station) — 假设监听 `http://127.0.0.1:<coland_port>`,暴露 `/_arkret/_conformance/*` 端点
 - 1 × coauth (private authentication process) — 仅用来给 alice 颁发 dev session,使签名向量阶段可以拿到一个真实的 actor signing key
-- 1 × conformance harness (Playwright `request` fixture) — 加载 `arkret-spec/spec/v1/artifacts/fixtures/*.json` vector,逐项 POST 到 soland,断言响应字段与 `expected_*` 字段相等
+- 1 × conformance harness (Playwright `request` fixture) — 加载 `arkret-spec/spec/v1/artifacts/fixtures/*.json` vector,逐项 POST 到 coland,断言响应字段与 `expected_*` 字段相等
 
 (都是 cotest 现有 harness 直接提供的,不需要改 scripts/run-joint-e2e.ps1;但 §1 的 endpoint 目前未实现,见 Implementation notes。)
 
@@ -46,8 +46,8 @@
 
 ## Pre-conditions
 
-- `alice` 和 `guest` 都通过 `POST /_soland/self/account/register` 注册过 (`ensureRegistered`)
-- `alice` 持有有效 dev session token (`POST /_soland/gate/auth/dev-login`)
+- `alice` 和 `guest` 都通过 `POST /_coland/self/account/register` 注册过 (`ensureRegistered`)
+- `alice` 持有有效 dev session token (`POST /_coland/gate/auth/dev-login`)
 - harness 已加载 spec fixture JSON,数据结构形如:
   ```json
   {
@@ -58,7 +58,7 @@
     "expected_digest": "sha256:43258cff783fe7036d8a43033f830adfc60ec037382473548ac742b888292777"
   }
   ```
-- soland 暴露以下 conformance 端点 (gap,见 Implementation notes):
+- coland 暴露以下 conformance 端点 (gap,见 Implementation notes):
   - `POST /_arkret/_conformance/encode` — body `{ vector_id, input }` → `{ canonical_json, digest }`
   - `POST /_arkret/_conformance/sign` — body `{ vector_id, event, signing_key_ref }` → `{ canonical_bytes, digest, signature }`
   - `POST /_arkret/_conformance/hlc-merge` — body `{ vector_id, clocks: [{actor, hlc, payload_hint}] }` → `{ ordered: [...] }`
@@ -131,7 +131,7 @@
 
 ### Phase G — 覆盖矩阵 (§1.13)
 
-34. **harness** 跑完所有 §1 vector 后,POST 一份 `coverage_report` 到 soland 的 `/_arkret/_conformance/coverage` (或直接在 harness 侧产 artifact)
+34. **harness** 跑完所有 §1 vector 后,POST 一份 `coverage_report` 到 coland 的 `/_arkret/_conformance/coverage` (或直接在 harness 侧产 artifact)
 35. 断言:每个 spec §1.13 矩阵条目至少有一个 vector 报告 `pass`;没有任何条目报告 `not_executed`
 
 ## Observable assertions (合并清单)
@@ -147,17 +147,17 @@
 
 ## Edge cases / sub-tests
 
-- **E9.1 vector version skew**:harness 加载一个 `protocol_version = "0.9"` 的旧 vector,POST `.../encode` → soland 端点必须拒绝 (`unsupported_vector_version`),不能用 v1 canonicalizer 默认处理
-- **E9.2 unknown vector_id 优雅降级**:harness POST `{ vector_id: "ak.vector.encoding.bogus.v1", input: {...} }` → soland 端点返回 `unknown_vector_id` (HTTP 4xx),不应静默执行默认 canonicalizer 然后假装 pass
+- **E9.1 vector version skew**:harness 加载一个 `protocol_version = "0.9"` 的旧 vector,POST `.../encode` → coland 端点必须拒绝 (`unsupported_vector_version`),不能用 v1 canonicalizer 默认处理
+- **E9.2 unknown vector_id 优雅降级**:harness POST `{ vector_id: "ak.vector.encoding.bogus.v1", input: {...} }` → coland 端点返回 `unknown_vector_id` (HTTP 4xx),不应静默执行默认 canonicalizer 然后假装 pass
 - **E9.3 vector mismatch 时输出 diff**:在 spec §1.6 vector 输入里故意改一个字段值,断言 harness 报告中 `actual.digest !== expected.digest`,并把 `actual_canonical_json` 与 `expected_canonical_json` 同时写到 step screenshot / artifact,便于人工 diff
-- **E9.4 redaction 跨服务器一致**:把 §3 vector 同时 POST 给 soland-server1 与 soland-server2（若 `hasServerCount(2)` 为 true），两边投影必须 byte-equal — 这条只在 multi-server topology 下跑，否则 skip
+- **E9.4 redaction 跨服务器一致**:把 §3 vector 同时 POST 给 coland-server1 与 coland-server2（若 `hasServerCount(2)` 为 true），两边投影必须 byte-equal — 这条只在 multi-server topology 下跑，否则 skip
 - **E9.5 large vector 流式**:`ak.vector.encoding.event_digest.v1` 的输入 payload 超过 1MB 时,canonicalizer 也必须产出稳定 digest (避免 streaming buffer 边界 bug)
 
 后两条建议拆成独立的小 spec(`conformance/encoding-vectors.federation`、`conformance/encoding-vectors.large-payload`),保持主 scenario 紧凑。
 
 ## Implementation notes
 
-- **soland 缺口**:`/_arkret/_conformance/{encode,sign,hlc-merge,cursor,envelope,redact}` 端点目前**未实现**。当前 conformance 只跑在 Rust 侧 (`cotest/src/conformance/encoding.rs`、`...redaction.rs`、`...envelope.rs`) 的 integration tests,直接调内部 trait,不走 HTTP。本 e2e scenario 的价值正是要把同一组 vector 通过 HTTP 暴露出来,确保 wire-level 一致(避免内部 canonicalizer 与 HTTP layer 之间的 serializer drift)
+- **coland 缺口**:`/_arkret/_conformance/{encode,sign,hlc-merge,cursor,envelope,redact}` 端点目前**未实现**。当前 conformance 只跑在 Rust 侧 (`cotest/src/conformance/encoding.rs`、`...redaction.rs`、`...envelope.rs`) 的 integration tests,直接调内部 trait,不走 HTTP。本 e2e scenario 的价值正是要把同一组 vector 通过 HTTP 暴露出来,确保 wire-level 一致(避免内部 canonicalizer 与 HTTP layer 之间的 serializer drift)
 - **fixture loader**:spec fixture 落在 `arkret-spec/spec/v1/artifacts/fixtures/<vector_id>.json`;harness 可在测试 setup 阶段一次性读入,挂在 `test.use({ vectors: ... })` 或顶层 `beforeAll` 里。Rust 侧已有 `cotest/tests/fixtures/*.json` 的 loader 范式可参考,但 e2e 侧要重写为 TS
 - **签名材料**：Phase B 使用 alice 的已接纳设备 signer 与 canonical Standard grant；公钥与设备接纳证据必须来自当前 PCR，不得通过 dev session 或虚构公钥绕过验证。
 - **cursor opacity 断言**:不要 hardcode cursor 字节格式;只断言 (a) 同输入稳定 (b) 不含明文 event_id 子串 (c) base64url decode 不报错

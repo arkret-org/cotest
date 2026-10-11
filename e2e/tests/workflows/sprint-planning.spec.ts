@@ -15,7 +15,7 @@ import {
   type APIRequestContext,
   type Page,
 } from "../../helpers/arkret-test";
-import { solandBaseUrl } from "../../helpers/env";
+import { colandBaseUrl } from "../../helpers/env";
 import { grantInviteConsentArkret } from "../../helpers/contact-api";
 import { stepShot } from "../../helpers/screenshots";
 import {
@@ -654,7 +654,7 @@ async function boardSpaceIdByTitle(
   session: DpopUserSession,
   title: string,
 ): Promise<string> {
-  const url = `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/spaces`;
+  const url = `${colandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/spaces`;
   const resp = await request.get(url, {
     headers: selfPathHeadersForDpopSession(session, "GET", url),
   });
@@ -676,7 +676,7 @@ async function strandTitlesForBoard(
   session: DpopUserSession,
   boardId: string,
 ): Promise<string[]> {
-  const url = `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/strands`;
+  const url = `${colandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/strands`;
   const resp = await request.get(url, {
     headers: selfPathHeadersForDpopSession(session, "GET", url),
   });

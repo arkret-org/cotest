@@ -9,7 +9,7 @@ import {
   optionalEnv,
   realOidcLoginHandle,
   realOidcLoginPassword,
-  solandBaseUrl,
+  colandBaseUrl,
 } from "../../helpers/env";
 import {
   registerCoauthPasswordAccount,
@@ -28,7 +28,7 @@ import {
   uniqueUser,
   type JointUserPage,
 } from "../../helpers/users";
-import { projectDidToCoreId } from "../../helpers/soland-api";
+import { projectDidToCoreId } from "../../helpers/coland-api";
 import { jwkThumbprintEd25519 } from "../../helpers/session-grant-dpop";
 
 type CapturedGrant = {
@@ -287,7 +287,7 @@ async function loginFreshBrowserToDeviceSetup(
   account: RealOidcAccount | CoauthPasswordAccount,
 ): Promise<void> {
   await page.goto("/login", { waitUntil: "domcontentloaded" });
-  await page.getByTestId("login-server-url").fill(solandBaseUrl());
+  await page.getByTestId("login-server-url").fill(colandBaseUrl());
   await page.getByTestId("start-server-login-button").click();
   await submitCoauthPasswordCredentials(page, account);
 

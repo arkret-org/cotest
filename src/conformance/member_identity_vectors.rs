@@ -630,7 +630,7 @@ pub fn run_member_identity_vector_suite() -> Result<()> {
 }
 
 /// Helper for live-integration tests — returns a Value MemberIdentity
-/// fixture suitable for serialising into a soland `ak.member.identity.update`
+/// fixture suitable for serialising into a coland `ak.member.identity.update`
 /// event payload.
 pub fn sample_member_identity_value(display_name: &str) -> Result<Value> {
     let identity = build_member_identity(display_name, "AAAA")?;

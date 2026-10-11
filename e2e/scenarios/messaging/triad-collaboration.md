@@ -17,7 +17,7 @@
 
 ## 拓扑
 
-- 1 × soland (Station) — 假设监听 `http://127.0.0.1:<soland_port>`
+- 1 × coland (Station) — 假设监听 `http://127.0.0.1:<coland_port>`
 - 1 × coauth (private authentication process) — 假设监听 `http://127.0.0.1:<coauth_port>`
 - 共享同一个 coauth;所有 actor 的 session credential 都来自这个 coauth
 
@@ -33,8 +33,8 @@
 
 ## Pre-conditions
 
-- 三个 DID 都通过 `POST /_soland/self/account/register` 注册过 (与现有 `ensureRegistered` 行为一致)
-- 三个 actor 都持有有效 dev session token (`POST /_soland/gate/auth/dev-login`)
+- 三个 DID 都通过 `POST /_coland/self/account/register` 注册过 (与现有 `ensureRegistered` 行为一致)
+- 三个 actor 都持有有效 dev session token (`POST /_coland/gate/auth/dev-login`)
 - 三个 actor 的 browser context 都通过 `inkson.config.v1` localStorage 注入 server_url + account_did + device_id + session_credential
 
 ## Steps

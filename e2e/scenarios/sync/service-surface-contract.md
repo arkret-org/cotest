@@ -2,7 +2,7 @@
 
 ## 目标
 
-通过 HTTP/JSON binding 直接验证 soland Station 暴露的 `/_arkret/describe` 与相关写/读 endpoint，并验证 coauth 作为私有认证进程不暴露公共 Arkret service describe。其余断言覆盖 canonical `ServiceDescribe`、claim-level partition、standard error envelope、幂等键、opaque cursor 分页与 unsupported feature fail-closed。
+通过 HTTP/JSON binding 直接验证 coland Station 暴露的 `/_arkret/describe` 与相关写/读 endpoint，并验证 coauth 作为私有认证进程不暴露公共 Arkret service describe。其余断言覆盖 canonical `ServiceDescribe`、claim-level partition、standard error envelope、幂等键、opaque cursor 分页与 unsupported feature fail-closed。
 
 不验证:profile claim 的真实性(见 `conformance/profile-gates`)、encoding/redaction vector(见 `conformance/encoding-vectors`)、federation transport(见 `sync/transport-negotiation`)、registry drift(见 `conformance/registry-drift`)。
 
@@ -25,11 +25,11 @@
 - `arkret-spec/spec/v1/zh/sync/service-api-schema.mdx` §2.1 — `operation_id` 分组(`ak.server.*` / `ak.events.*` / `ak.sync.*` 等)
 - `arkret-spec/spec/v1/artifacts/schemas/service-describe.schema.json` — `ak.schema.service_describe.v1` wire schema
 - `arkret-spec/spec/v1/artifacts/registry/error-code-registry.json` — `unrecognized_endpoint` / `method_not_allowed` / `unsupported_feature` / `duplicate_conflict` / `param_invalid` / `cursor_expired` canonical 定义
-- 相关实现:`soland/src/routing/system/describe.rs`(Station describe handler)、`soland/src/wire.rs`(claim-level partition)
+- 相关实现:`coland/src/routing/system/describe.rs`(Station describe handler)、`coland/src/wire.rs`(claim-level partition)
 
 ## 拓扑
 
-- 1 × soland (Station) — `solandBaseUrl()`;暴露 `/_arkret/describe`、`/_arkret/self/account/*`、`/_arkret/self/realm-state-snapshot/*` 与 `/_arkret/self/events/*` namespace
+- 1 × coland (Station) — `colandBaseUrl()`;暴露 `/_arkret/describe`、`/_arkret/self/account/*`、`/_arkret/self/realm-state-snapshot/*` 与 `/_arkret/self/events/*` namespace
 - 1 × coauth (私有认证进程) — `coauthBaseUrl()`；不得暴露 canonical `/_arkret/describe`、service kind 或 profile claim
 - 1 × harness — Playwright `request` fixture,纯 HTTP;无 browser context
 
@@ -46,9 +46,9 @@
 
 ## Pre-conditions
 
-- `alice` 已通过 `ensureRegistered` 在 soland 注册
+- `alice` 已通过 `ensureRegistered` 在 coland 注册
 - `alice` 通过 `issueUserSession` 保留 canonical 注册得到的 Standard grant；认证请求需要匹配的 DPoP，describe 是无认证 GET。
-- soland 的 `claimed_profiles` 至少含 `ak.profile.core_event_store.v1`(由 `soland/src/wire.rs` 默认写入)
+- coland 的 `claimed_profiles` 至少含 `ak.profile.core_event_store.v1`(由 `coland/src/wire.rs` 默认写入)
 - coauth 的认证方法与 Account Authority 元数据由 Station describe 公布；coauth 本身没有公共 profile
 - `development_mode=true` 时，Station 的 `verified_profiles` MUST 为空数组(spec §3.0 第 2 条)
 
@@ -56,13 +56,13 @@
 
 ### Phase A — Station describe 与私有认证进程边界(§3 / §3.0 / §17)
 
-1. `GET ${solandBaseUrl()}/_arkret/describe`(无认证)
+1. `GET ${colandBaseUrl()}/_arkret/describe`(无认证)
 2. 断言:
    - HTTP 200,`Content-Type: application/json`
    - body 含 spec §3 必填字段：`service_id`、`trust_domain`、`service_kind`、`protocol_version`、`supported_profiles`、`supported_operation_bundles`、`transport_bindings`、`supported_features`、`auth_metadata`、`limits`、`plaintext_visibility`、`development_mode`
-   - `service_kind === "station"`(soland 是 Station,见 `service-surface.md` §2.5)
+   - `service_kind === "station"`(coland 是 Station,见 `service-surface.md` §2.5)
    - `protocol_version === "1.0"`
-   - `transport_bindings[0].kind === "http_json"`、`transport_bindings[0].base_url` 是 `${solandBaseUrl()}/_arkret` 或等价
+   - `transport_bindings[0].kind === "http_json"`、`transport_bindings[0].base_url` 是 `${colandBaseUrl()}/_arkret` 或等价
    - **§3.0 claim-level partition**:`supported_features` / `claimed_profiles` / `verified_profiles` / `interop_surfaces` 全部存在且是数组
    - `claimed_profiles[*].claim_kind === "self_claimed"`(self-claim 不得直接写 `conformance_verified`)
    - 若 `development_mode === true`,则 `verified_profiles.length === 0`(spec §3.0 第 2 条 dev fail-closed)
@@ -73,14 +73,14 @@
 
 ### Phase B — Standard error envelope(§5 / §5.2)
 
-6. `GET ${solandBaseUrl()}/_arkret/self/__definitely_does_not_exist__/probe`(故意打不存在的 endpoint)
+6. `GET ${colandBaseUrl()}/_arkret/self/__definitely_does_not_exist__/probe`(故意打不存在的 endpoint)
 7. 断言:
    - HTTP 404
    - body 形如 `{ ok: false, error: { code, message, ... }, request_id? }`
    - `error.code === "unrecognized_endpoint"`(spec §5.2)
    - response **MUST NOT** 是 HTML、纯文本框架错误或栈信息
    - `error.message` 非空字符串(供开发者诊断,但客户端不依赖)
-8. `POST ${solandBaseUrl()}/_arkret/describe`(已知路径 + 错误 method)
+8. `POST ${colandBaseUrl()}/_arkret/describe`(已知路径 + 错误 method)
 9. 断言:
    - HTTP 405
    - `error.code === "method_not_allowed"`
@@ -90,8 +90,8 @@
 
 ### Phase C — Opaque pagination cursor(§7 / §7.1)
 
-12. `harness` 通过 alice token 在 soland 上播种 ≥5 条可被 list 的 event(用 `POST /_arkret/self/events` 写最小事件,或调一个已存在的 list endpoint 比如 `/_arkret/self/authz/invites`)
-13. `GET ${solandBaseUrl()}/_arkret/self/events?limit=2`(或等价 list endpoint;`limit` 故意小于总数以强制分页)
+12. `harness` 通过 alice token 在 coland 上播种 ≥5 条可被 list 的 event(用 `POST /_arkret/self/events` 写最小事件,或调一个已存在的 list endpoint 比如 `/_arkret/self/authz/invites`)
+13. `GET ${colandBaseUrl()}/_arkret/self/events?limit=2`(或等价 list endpoint;`limit` 故意小于总数以强制分页)
 14. 断言响应形状(api-conventions §7.1):
     - `items` 是数组,长度 ≤ 2
     - `next_cursor` 是字符串,匹配 `^ak:cursor:[A-Za-z0-9_-]+$`(opaque base64url,见 §7)
@@ -153,18 +153,18 @@
 - **E1 profile partition leak**:claim_kind 不混淆 — `claimed_profiles[*].claim_kind` MUST 全部是 `"self_claimed"`;任何 `conformance_verified` 条目 MUST 只出现在 `verified_profiles` 数组中(spec §3.0 第 2 + 4 条);当前已 live,并在 `verified_profiles` 非空时校验 cotest artifact 元数据与 profile_id 分区
 - **E2 dev_mode invariant**:`development_mode === true` + 非空 `verified_profiles` 是 invalid describe(SDK / conformance tooling 必须 fail);harness 不能模拟服务端违规,所以以 fixme 钉住 spec 合约,等 production-mode CI 落地后做 live 反例测试
 - **E3 cursor TTL 上限**:stream cursor TTL MUST ≤ 7 天(api-conventions §7 TTL 硬上限);本测试无法在 e2e 内等 7 天,但可以 fixme 钉住 spec,后续在 cotest fixture 里塞一个 8 天前签发的 cursor 验证 `cursor_expired`
-- **E4 idempotency cross-actor 隔离**:同一 `Idempotency-Key` 由 bob 重复提交 MUST NOT 命中 alice 的缓存项(否则可被用作 oracle);fixme 钉住,等 G3.S0 / multi-user soland scaffold 稳定后 live
+- **E4 idempotency cross-actor 隔离**:同一 `Idempotency-Key` 由 bob 重复提交 MUST NOT 命中 alice 的缓存项(否则可被用作 oracle);fixme 钉住,等 G3.S0 / multi-user coland scaffold 稳定后 live
 
 ## Implementation notes
 
-- **soland describe 已实现**:`soland/crates/http/src/routing/system/describe.rs` + `soland/crates/http/src/wire.rs` 已写入 bundle、transport、feature 与 profile claim 分层字段;Phase A 在 soland 侧可以**直接 live**
+- **coland describe 已实现**:`coland/crates/http/src/routing/system/describe.rs` + `coland/crates/http/src/wire.rs` 已写入 bundle、transport、feature 与 profile claim 分层字段;Phase A 在 coland 侧可以**直接 live**
 - **coauth describe 已实现**:`coauth/crates/backend/src/handlers/arkret.rs::server_describe` 同样按 canonical shape 返回;Phase A 在 coauth 侧也可以 live(但需 `test.skip(!coauthBaseUrl(), ...)`)
 - **Phase C list endpoint 已 live**:当前用 `/_arkret/self/events?after=...` 覆盖 §7.1 pagination shape、opaque cursor、tamper reject、gap-free / non-overlap 分页;`/sync/operations` 不存在不再阻塞本场景
-- **event_id 幂等已 live**:soland 当前依赖 `event_id` 幂等(spec §4.2);同 envelope replay 与同 `event_id` drift conflict 已由 Phase D0 覆盖
+- **event_id 幂等已 live**:coland 当前依赖 `event_id` 幂等(spec §4.2);同 envelope replay 与同 `event_id` drift conflict 已由 Phase D0 覆盖
 - **Idempotency-Key header 已在 events write live**:Phase D 覆盖 `POST /_arkret/self/events` 的同键同 body replay 与同键不同 body `duplicate_conflict`;其它 write endpoint 的一致性可另开场景
-- **闭合 Event schema 已 live**:Phase E / E2 在签名后注入顶层 `requirements` / `critical_extensions`,断言 soland 在 envelope 解析阶段返回 `schema_violation`
-- **no new helper**：用现有 `request` fixture + `ensureRegistered` / `issueUserSession` + `solandBaseUrl()` / `coauthBaseUrl()`；不要新增 helper。
+- **闭合 Event schema 已 live**:Phase E / E2 在签名后注入顶层 `requirements` / `critical_extensions`,断言 coland 在 envelope 解析阶段返回 `schema_violation`
+- **no new helper**：用现有 `request` fixture + `ensureRegistered` / `issueUserSession` + `colandBaseUrl()` / `coauthBaseUrl()`；不要新增 helper。
 
 ## 总耗时预估
 
-单次跑约 30–60s:当前 Phase A/B/C/D/E/E2 均已 live,会启动 soland 并执行 describe、error envelope、pagination、idempotency 与 fail-closed 写入验证。E2 dev-mode 反例、E3 cursor TTL 过期、E4 cross-actor Idempotency-Key 隔离仍是后续边界。
+单次跑约 30–60s:当前 Phase A/B/C/D/E/E2 均已 live,会启动 coland 并执行 describe、error envelope、pagination、idempotency 与 fail-closed 写入验证。E2 dev-mode 反例、E3 cursor TTL 过期、E4 cross-actor Idempotency-Key 隔离仍是后续边界。

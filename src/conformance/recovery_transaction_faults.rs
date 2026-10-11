@@ -1,6 +1,6 @@
 //! Independent RecoveryTransaction fault and replay model.
 //!
-//! This harness deliberately owns no Soland, Coauth, Garth, or Inkson state
+//! This harness deliberately owns no Coland, Coauth, Garth, or Inkson state
 //! types. It models only the normative durable first-outcome and authority
 //! invariants that a joint implementation must expose.
 

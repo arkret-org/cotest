@@ -116,7 +116,7 @@ pub async fn preview_account_window_backfills_without_failing_its_sibling_realm(
         .context("sibling realm_id")?
         .to_owned();
 
-    // Soland answers one Realm detail per subscribe turn; continue on the
+    // Coland answers one Realm detail per subscribe turn; continue on the
     // returned cursor until both details arrived, as one projected batch.
     let filter = json!({"realm_ids": [preview_id, sibling_id], "window_limit": 8});
     let mut batch = Vec::new();

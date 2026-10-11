@@ -100,7 +100,7 @@ impl ClaimKind {
 }
 
 /// One reason the profile claim was rejected. The structured variant lets
-/// downstream callers (e.g. `cotest` report renderers, soland CI gates) render
+/// downstream callers (e.g. `cotest` report renderers, coland CI gates) render
 /// per-profile diagnostics without re-deriving the role table.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ProfileClaimFailure {

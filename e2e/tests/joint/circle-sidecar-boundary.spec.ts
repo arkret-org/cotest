@@ -1,7 +1,7 @@
-import { accountActorId } from "../../helpers/soland-api";
+import { accountActorId } from "../../helpers/coland-api";
 import { expect, type APIRequestContext } from "../../helpers/arkret-test";
 import type { CircleOutcome } from "../../helpers/circle-api";
-import { solandBaseUrl } from "../../helpers/env";
+import { colandBaseUrl } from "../../helpers/env";
 import { test as jointTest } from "../../helpers/joint-fixture";
 import {
   selfPathHeadersForDpopSession,
@@ -43,7 +43,7 @@ jointTest.describe("Circle and Sidecar object boundary @fully-implemented", () =
       // Fail-closed assertion: the thread-shaped path is not registered and
       // MUST NOT be an alias for the first-class Sidecar API.
       const unregisteredPath = ["", "_arkret", "self", "agent-sidecar-threads:ensure"].join("/");
-      const unregisteredUrl = `${solandBaseUrl()}${unregisteredPath}`;
+      const unregisteredUrl = `${colandBaseUrl()}${unregisteredPath}`;
       const unregistered = await request.post(unregisteredUrl, {
         headers: selfPathHeadersForDpopSession(
           jointRealm.aliceSession,
@@ -62,7 +62,7 @@ async function getCircle(
   session: DpopUserSession,
   circleId: string,
 ): Promise<CircleOutcome> {
-  const url = `${solandBaseUrl()}/_arkret/self/circles/${encodeURIComponent(circleId)}`;
+  const url = `${colandBaseUrl()}/_arkret/self/circles/${encodeURIComponent(circleId)}`;
   const response = await request.get(url, {
     headers: selfPathHeadersForDpopSession(session, "GET", url),
   });

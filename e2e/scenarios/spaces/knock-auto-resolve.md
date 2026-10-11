@@ -13,7 +13,7 @@
 
 ## 拓扑
 
-- 1 × soland + 1 × coauth + 1 × mock claim issuer + 1 × mock challenge provider (e.g. captcha)
+- 1 × coland + 1 × coauth + 1 × mock claim issuer + 1 × mock challenge provider (e.g. captcha)
 
 ## Actors
 
@@ -50,9 +50,9 @@
    [Join Policy](../../../../arkret-spec/spec/v1/zh/governance/join-policy.md)）：
    `{ gate_id, kind, realm_id, applicant_actor_id, policy_digest, created_at, (challenge_kind + challenge_id | issuer_id + claims), proofs: [detached JWS] }`。
    `policy_digest` 是当前 accepted `join_policy` component 的 canonical JSON sha256。
-   裁决前 soland 读的 `claim_presentation` / `challenge_proof.*` 成员名是实现自造，spec 从未定义，现已删除。
+   裁决前 coland 读的 `claim_presentation` / `challenge_proof.*` 成员名是实现自造，spec 从未定义，现已删除。
 6. 直接提交,**不**经过 application + review
-7. soland reducer:
+7. coland reducer:
    - 加载 join policy cell
    - 按 combinator=all 校验 gates
    - 先比对绑定元组:`realm_id` / `applicant_actor_id` / `policy_digest` 必须与本次 join 一致,
@@ -109,11 +109,11 @@ schema／registry 已表达 active link、co-governance、authoritative current 
 
 ## Implementation notes
 
-- **soland 现状(2026-09-05 傍晚)**:`gate_proofs[]` 按封闭载体解析 ✓、绑定元组与 freshness 比较 ✓、
+- **coland 现状(2026-09-05 傍晚)**:`gate_proofs[]` 按封闭载体解析 ✓、绑定元组与 freshness 比较 ✓、
   issuer 边界与 claims 覆盖 ✓、detached JWS 验签接在 envelope 验证链上 ✓、cooldown 时间 tracking ✓。
-  soland 单元覆盖见 `crates/server/tests/realm_join_policy.rs`(24 条)。
+  coland 单元覆盖见 `crates/server/tests/realm_join_policy.rs`(24 条)。
 - **仍缺**:本 joint 场景本身;验签路径的定向正负例(需要真实 Ed25519 密钥与 DID document 夹具)；以及上述
-  `parent_membership` 的生产 durable transaction runner。Soland 内存 reducer 的 parent-membership 测试只说明纯求值，
+  `parent_membership` 的生产 durable transaction runner。Coland 内存 reducer 的 parent-membership 测试只说明纯求值，
   不证明 authority-tenure/link/member lock、跨 Station/handoff fail-closed 或三类零写入。
 - **harness 缺口**:mock claim-issuer 和 captcha-provider 服务
 

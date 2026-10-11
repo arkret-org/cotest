@@ -292,7 +292,7 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// C42.6 — live describe profile-claim gate fixtures for soland,
+    /// C42.6 — live describe profile-claim gate fixtures for coland,
     /// floria, flagon, and coauth. Full profile claims with
     /// limitation/scaffold/501 blockers hard-fail.
     live_describe_profile_gate_suite_matches_reference_semantics,
@@ -301,7 +301,7 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// C43.4 — station full-profile certification gate. Soland must
+    /// C43.4 — station full-profile certification gate. Coland must
     /// remain explicitly not_certified while full claims require operations,
     /// schemas, event kinds, durable signed federation, and minimum
     /// admin/agent/applet/media surfaces.
@@ -398,7 +398,7 @@ conformance_test!(
 
 conformance_test!(
     /// F-1 — recovery bridge full chain (coauth principal-cache ?
-    /// soland recovery ticket ? restore executor ? final state). Validates
+    /// coland recovery ticket ? restore executor ? final state). Validates
     /// the full per-step state machine plus transition legality.
     recovery_bridge_full_chain_fixture_suite_matches_reference_semantics,
     "recovery_bridge_full_chain_fixture",
@@ -484,7 +484,7 @@ conformance_test!(
 
 conformance_test!(
     /// Push rule core vectors promoted to spec artifacts. Asserts the shared
-    /// SDK core used by soland / chime / inkson keeps watch-level delivery,
+    /// SDK core used by coland / chime / inkson keeps watch-level delivery,
     /// blind-wakeup, and reason-code semantics aligned.
     push_rule_core_fixture_suite_matches_reference_semantics,
     "push_rule_core_fixture",

@@ -1,21 +1,21 @@
 #Requires -Version 7.0
 <#
 .SYNOPSIS
-Contract tests for `Resolve-SolandTestDatabaseUrl`.
+Contract tests for `Resolve-ColandTestDatabaseUrl`.
 
 .DESCRIPTION
 `run-server-conformance.ps1 -Profile all` starts a conformance PostgreSQL and
-published only `COTEST_SOLAND_DATABASE_URL`, which names the store a spawned SUT
-uses. Tests that link soland's storage adapter in-process read
-`SOLAND_TEST_DATABASE_URL` (then `DATABASE_URL`) instead, so four of them
+published only `COTEST_COLAND_DATABASE_URL`, which names the store a spawned SUT
+uses. Tests that link coland's storage adapter in-process read
+`COLAND_TEST_DATABASE_URL` (then `DATABASE_URL`) instead, so four of them
 panicked with "no test database is configured" on every clean shell, and the
 historical all-green baselines only existed because a developer had exported the
 variable by hand. These tests pin three properties:
 
 1. the conformance store is published to the in-process suite when nothing else
    aimed it;
-2. a caller's own `SOLAND_TEST_DATABASE_URL` or `DATABASE_URL` wins, matching
-   soland's own precedence, so a run cannot be silently redirected;
+2. a caller's own `COLAND_TEST_DATABASE_URL` or `DATABASE_URL` wins, matching
+   coland's own precedence, so a run cannot be silently redirected;
 3. nothing is published when no conformance store was resolved, which keeps the
    panic honest instead of pointing the suite at an empty string.
 #>
@@ -30,10 +30,10 @@ $runCotest = Join-Path $scriptRoot "run-server-conformance.ps1"
 $source = Get-Content -Raw -LiteralPath $runCotest
 $match = [regex]::Match(
     $source,
-    '(?ms)^function Resolve-SolandTestDatabaseUrl \{.*?^\}'
+    '(?ms)^function Resolve-ColandTestDatabaseUrl \{.*?^\}'
 )
 if (-not $match.Success) {
-    throw "Resolve-SolandTestDatabaseUrl not found in $runCotest"
+    throw "Resolve-ColandTestDatabaseUrl not found in $runCotest"
 }
 Invoke-Expression $match.Value
 
@@ -49,33 +49,33 @@ function Assert-Equal {
 $conformance = "postgresql://arkret:arkret@127.0.0.1:55432/arkret"
 
 # 1. Nothing else aimed the suite: publish the conformance store.
-Assert-Equal $conformance (Resolve-SolandTestDatabaseUrl `
+Assert-Equal $conformance (Resolve-ColandTestDatabaseUrl `
         -ConformanceDatabaseUrl $conformance `
-        -ExistingSolandTestDatabaseUrl $null `
+        -ExistingColandTestDatabaseUrl $null `
         -ExistingDatabaseUrl $null) "publishes the conformance store"
 
-# 2. An explicit SOLAND_TEST_DATABASE_URL wins.
-Assert-Equal $null (Resolve-SolandTestDatabaseUrl `
+# 2. An explicit COLAND_TEST_DATABASE_URL wins.
+Assert-Equal $null (Resolve-ColandTestDatabaseUrl `
         -ConformanceDatabaseUrl $conformance `
-        -ExistingSolandTestDatabaseUrl "postgresql://dev@127.0.0.1:5432/scratch" `
-        -ExistingDatabaseUrl $null) "keeps an explicit SOLAND_TEST_DATABASE_URL"
+        -ExistingColandTestDatabaseUrl "postgresql://dev@127.0.0.1:5432/scratch" `
+        -ExistingDatabaseUrl $null) "keeps an explicit COLAND_TEST_DATABASE_URL"
 
-# 3. DATABASE_URL is soland's documented fallback and wins too.
-Assert-Equal $null (Resolve-SolandTestDatabaseUrl `
+# 3. DATABASE_URL is coland's documented fallback and wins too.
+Assert-Equal $null (Resolve-ColandTestDatabaseUrl `
         -ConformanceDatabaseUrl $conformance `
-        -ExistingSolandTestDatabaseUrl $null `
+        -ExistingColandTestDatabaseUrl $null `
         -ExistingDatabaseUrl "postgresql://dev@127.0.0.1:5432/scratch") "keeps an explicit DATABASE_URL"
 
-# 4. Whitespace is not a configured value in soland's reader either.
-Assert-Equal $conformance (Resolve-SolandTestDatabaseUrl `
+# 4. Whitespace is not a configured value in coland's reader either.
+Assert-Equal $conformance (Resolve-ColandTestDatabaseUrl `
         -ConformanceDatabaseUrl $conformance `
-        -ExistingSolandTestDatabaseUrl "   " `
+        -ExistingColandTestDatabaseUrl "   " `
         -ExistingDatabaseUrl "") "treats blank existing values as unset"
 
 # 5. No conformance store resolved: publish nothing.
-Assert-Equal $null (Resolve-SolandTestDatabaseUrl `
+Assert-Equal $null (Resolve-ColandTestDatabaseUrl `
         -ConformanceDatabaseUrl $null `
-        -ExistingSolandTestDatabaseUrl $null `
+        -ExistingColandTestDatabaseUrl $null `
         -ExistingDatabaseUrl $null) "publishes nothing without a conformance store"
 
 # 6. The variable must survive the run: the entry restores what it overwrote.
@@ -89,7 +89,7 @@ $originalEnvList = [regex]::Match(
 if (-not $originalEnvList.Success) {
     $failures.Add("could not locate the saved/restored environment list in run-server-conformance.ps1")
 } else {
-    foreach ($required in "COTEST_SOLAND_DATABASE_URL", "SOLAND_TEST_DATABASE_URL") {
+    foreach ($required in "COTEST_COLAND_DATABASE_URL", "COLAND_TEST_DATABASE_URL") {
         if ($originalEnvList.Groups["names"].Value -notmatch [regex]::Escape("`"$required`"")) {
             $failures.Add("$required is not in the saved/restored environment list")
         }

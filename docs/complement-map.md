@@ -17,8 +17,8 @@ applies the same pattern to Arkret.
 - Complement's out-of-repo discipline maps to keeping reusable logic in `src/`
   and leaving `tests/` as wrappers only.
 - Complement's base-image workflow maps to `COTEST_SUT_IMAGE` plus
-  [docker/soland.Dockerfile](../docker/soland.Dockerfile)
-  and [scripts/build-soland-image.ps1](../scripts/build-soland-image.ps1),
+  [docker/coland.Dockerfile](../docker/coland.Dockerfile)
+  and [scripts/build-coland-image.ps1](../scripts/build-coland-image.ps1),
   including Docker cache controls for CI builds.
 - Complement's result-formatting story maps to
   [scripts/run-server-conformance.ps1](../scripts/run-server-conformance.ps1),
@@ -34,11 +34,11 @@ Complement typically expects a prebuilt homeserver image selected through
 `cotest` now mirrors that model like this:
 
 - Image build entrypoint:
-  [scripts/build-soland-image.ps1](../scripts/build-soland-image.ps1)
-  builds `cotest-soland:latest`.
+  [scripts/build-coland-image.ps1](../scripts/build-coland-image.ps1)
+  builds `cotest-coland:latest`.
 - Image source:
-  [docker/soland.Dockerfile](../docker/soland.Dockerfile)
-  compiles `soland` together with the sibling `arkret-rust-sdk` checkout.
+  [docker/coland.Dockerfile](../docker/coland.Dockerfile)
+  compiles `coland` together with the sibling `arkret-rust-sdk` checkout.
 - Build context control:
   `E:\Works\arkret\.dockerignore` limits Docker context to the trees needed
   for the SUT image, instead of sending the entire workspace.
@@ -50,7 +50,7 @@ Complement typically expects a prebuilt homeserver image selected through
   `docker` mode so federated scenarios run in one controlled runtime boundary.
 
 This is intentionally simpler than Complement's blueprint-image machinery:
-`cotest` currently builds one source-based `soland` image and uses runtime
+`cotest` currently builds one source-based `coland` image and uses runtime
 configuration plus host-side actor setup to shape each test.
 
 ## Startup, run, and result display

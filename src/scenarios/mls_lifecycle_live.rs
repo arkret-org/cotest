@@ -3,7 +3,7 @@
 //! device-lifecycle §9).
 //!
 //! Alice founds a public Realm, Bob joins it by his own `ak.member.state`,
-//! then the whole same-Station lifecycle runs against the real Soland over
+//! then the whole same-Station lifecycle runs against the real Coland over
 //! its registered surfaces:
 //!
 //! * Bob publishes KeyPackages whose LeafNode carries the complete ActorId under his device key; an
@@ -189,9 +189,9 @@ async fn run_lifecycle(
     .await?
     else {
         if observer.is_some() || genesis_observer.is_some() {
-            bail!("live MLS evidence requires a prebuilt real Soland binary");
+            bail!("live MLS evidence requires a prebuilt real Coland binary");
         }
-        return skip_or_fail(GROUP, "prebuilt Soland unavailable");
+        return skip_or_fail(GROUP, "prebuilt Coland unavailable");
     };
     let station = group.server(0);
     let alice = Member::provision(station, &coauth, "mls-alice", ALICE_DEVICE).await?;

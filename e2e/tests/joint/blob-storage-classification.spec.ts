@@ -4,8 +4,8 @@ import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { promisify } from "node:util";
 import { expect, test } from "../../helpers/arkret-test";
-import { solandBaseUrl } from "../../helpers/env";
-import { canonicalJson, createRealmApi } from "../../helpers/soland-api";
+import { colandBaseUrl } from "../../helpers/env";
+import { canonicalJson, createRealmApi } from "../../helpers/coland-api";
 import { createDpopUserSession, openDpopUserPage, selfPathHeadersForDpopSession } from "../../helpers/users";
 
 async function presignProblemDiagnostic(response: import("@playwright/test").APIResponse): Promise<string> {
@@ -69,7 +69,7 @@ test("Chat file drop keeps plaintext usable and refuses raw file upload into an 
           await expect(page.getByTestId("compose-upload-progress")).toContainText("1 attachment(s) uploaded");
           expect(uploadRequests).toHaveLength(1);
           await expect(page.getByTestId("chat-input")).toHaveValue(new RegExp(`\\[Attachment: ${expectedRef}`));
-          const base = solandBaseUrl();
+          const base = colandBaseUrl();
           const downloadUrl = `${base}/_arkret/self/blob/get?blob_ref=${encodeURIComponent(expectedRef)}`;
           const download = await request.get(downloadUrl, {
             headers: selfPathHeadersForDpopSession(flow.session, "GET", downloadUrl),
@@ -106,7 +106,7 @@ test("Blob storage classification survives multipart, tus and a real Station res
   const realmId = await createRealmApi(request, owner.grantJwt, {
     title: `Blob acceptance ${Date.now()}`, ownerId: owner.user.id,
   });
-  const base = solandBaseUrl();
+  const base = colandBaseUrl();
   const uploadUrl = `${base}/_arkret/self/blob/upload`;
   const presignUrl = `${base}/_arkret/self/blob/presign`;
   const tusUrl = `${base}/_arkret/self/blob/resumable`;
@@ -220,9 +220,9 @@ test("Blob storage classification survives multipart, tus and a real Station res
   const topologyPath = process.env.COTEST_TOPOLOGY_PATH;
   if (!topologyPath) throw new Error("Blob durability requires runner-owned Station restart control");
   const topology = JSON.parse(readFileSync(topologyPath, "utf8")) as {
-    servers: Array<{ name: string; soland: { control?: { script_path: string; state_path: string } } }>;
+    servers: Array<{ name: string; coland: { control?: { script_path: string; state_path: string } } }>;
   };
-  const control = topology.servers.find(server => server.name === "server1")?.soland.control;
+  const control = topology.servers.find(server => server.name === "server1")?.coland.control;
   if (!control) throw new Error("server1 restart control is unavailable");
   await promisify(execFile)("pwsh", ["-NoProfile", "-File", control.script_path,
     "-TopologyPath", topologyPath, "-ServerName", "server1", "-Action", "restart"],

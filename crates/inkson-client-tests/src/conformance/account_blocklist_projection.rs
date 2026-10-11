@@ -163,7 +163,7 @@ pub async fn run_account_blocklist_production_cases() -> Result<super::SuiteExec
     assert_case(&cases[1], "reject", Some("cas_conflict"))?;
     assert_case(&cases[2], "reject", Some("schema_violation"))?;
     target_closure(&cases[3])?;
-    let database = spawn_ephemeral_postgres_for("COTEST_SOLAND_DATABASE_URL")?
+    let database = spawn_ephemeral_postgres_for("COTEST_COLAND_DATABASE_URL")?
         .context("blocklist live evidence requires an isolated PostgreSQL database")?;
     let server = ArkretServer::spawn_with_database_url(
         "blocklist-cas-production",
@@ -374,7 +374,7 @@ pub async fn run_account_blocklist_production_cases() -> Result<super::SuiteExec
     );
 
     // The same principal core at another Station starts a separate key lane.
-    let other_database = spawn_ephemeral_postgres_for("COTEST_SOLAND_DATABASE_URL")?
+    let other_database = spawn_ephemeral_postgres_for("COTEST_COLAND_DATABASE_URL")?
         .context("other Station requires isolated PostgreSQL")?;
     let other_server = ArkretServer::spawn_with_database_url(
         "blocklist-other-station",
@@ -491,7 +491,7 @@ pub async fn run_account_blocklist_case4_federated_boundary_slice() -> Result<()
         ],
     )
     .await?
-    .context("case 4 federation boundary requires two real Soland processes")?;
+    .context("case 4 federation boundary requires two real Coland processes")?;
     let holder_station = group.server(0);
     let sender_station = group.server(1);
     let holder = Member::provision(
@@ -1218,7 +1218,7 @@ pub async fn contact_and_first_dm_pending_request_live() -> Result<()> {
     let node_envs = [station_env(&database.connect_url, &coauth)];
     let Some(group) = TestServerGroup::try_multi_external_with_node_envs(GROUP, &node_envs).await?
     else {
-        return skip_or_fail(GROUP, "prebuilt Soland unavailable");
+        return skip_or_fail(GROUP, "prebuilt Coland unavailable");
     };
     let station = group.server(0);
     let alice = Member::provision(
@@ -1536,7 +1536,7 @@ pub async fn contact_first_dm_cross_station_private_boundary_live() -> Result<()
     .await?;
     let station = |url: &str| {
         let mut env = station_env(url, &coauth);
-        env.push(("SOLAND_FEDERATION_OUTBOUND".to_owned(), "1".to_owned()));
+        env.push(("COLAND_FEDERATION_OUTBOUND".to_owned(), "1".to_owned()));
         env
     };
     let group = TestServerGroup::try_multi_external_with_node_envs(
@@ -1547,7 +1547,7 @@ pub async fn contact_first_dm_cross_station_private_boundary_live() -> Result<()
         ],
     )
     .await?
-    .context("first-DM Contact federation needs two real Soland processes")?;
+    .context("first-DM Contact federation needs two real Coland processes")?;
     let holder = Member::provision(
         group.server(0),
         &coauth,

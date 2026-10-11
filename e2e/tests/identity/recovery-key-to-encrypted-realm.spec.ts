@@ -1,9 +1,9 @@
 import { expect, test, type Page, type Response } from "../../helpers/arkret-test";
-import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
+import { coauthBaseUrl, colandBaseUrl } from "../../helpers/env";
 // The mock_email delivery boundary supplies the verification code; registration stays in the UI.
 import { registrationEmailCode } from "../../helpers/coauth-register";
 import { openUserPage, uniqueUser } from "../../helpers/users";
-import { assertAuthoritySubmitOutcome } from "../../helpers/soland-api";
+import { assertAuthoritySubmitOutcome } from "../../helpers/coland-api";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -51,7 +51,7 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
     try {
       await test.step("register and authorize through the product UI", async () => {
         await jointPage.gotoLogin();
-        await page.getByTestId("login-server-url").fill(solandBaseUrl());
+        await page.getByTestId("login-server-url").fill(colandBaseUrl());
         await page.getByTestId("start-server-login-button").click();
 
         await page.getByRole("link", { name: /create account/i }).click();

@@ -8,7 +8,7 @@
 // so every ordering claim below is read off the commits instead.
 
 import { expect, test } from "../../helpers/arkret-test";
-import { solandBaseUrl } from "../../helpers/env";
+import { colandBaseUrl } from "../../helpers/env";
 import {
   accountActorId,
   authHeaders,
@@ -18,7 +18,7 @@ import {
   scanRealmStreamApi,
   sendMessageApi,
   type AcceptedRealmBootstrap,
-} from "../../helpers/soland-api";
+} from "../../helpers/coland-api";
 import {
   ensureRegistered,
   issueUserSession,
@@ -167,7 +167,7 @@ test.describe("Realm genesis commit stream @fully-implemented", () => {
     );
     const before = await scanRealmStreamApi(request, aliceToken, realmId);
 
-    const eventsUrl = `${solandBaseUrl()}/_arkret/self/events`;
+    const eventsUrl = `${colandBaseUrl()}/_arkret/self/events`;
     const response = await request.post(eventsUrl, {
       headers: { ...authHeaders(aliceToken, "POST", eventsUrl), "content-type": "application/json" },
       data: canonicalJson(acceptedBootstrap!.submission),

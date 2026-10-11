@@ -30,8 +30,8 @@
     Node receives the run-scoped CA and Chromium receives the exact leaf SPKI
     pin; the current user's Root store is never modified. The exact host names
     are registered in the system hosts file for the duration of the run.
-    Caller-owned URLs (-SolandBaseUrl / -CoauthBaseUrl /
-    -SolandCommand / docker runtime) bypass this topology unchanged.
+    Caller-owned URLs (-ColandBaseUrl / -CoauthBaseUrl /
+    -ColandCommand / docker runtime) bypass this topology unchanged.
 #>
 [CmdletBinding()]
 param(
@@ -48,26 +48,26 @@ param(
     [int]$KeepRuns = 20,
     [string]$SutManifest,
     [string]$InksonRoot,
-    [string]$SolandBaseUrl,
+    [string]$ColandBaseUrl,
     [string]$InksonBaseUrl,
     [string]$InksonServer2BaseUrl,
     [string]$CoauthBaseUrl,
     # Required for caller-owned Coauth: the configured owning Station identity,
     # not an identity discovered from the private Account Authority endpoint.
     [string]$CoauthServiceId,
-    [string]$SolandCommand,
-    [string]$SolandBin,
+    [string]$ColandCommand,
+    [string]$ColandBin,
     # Optional externally provisioned PostgreSQL store for one managed
-    # process-mode Soland. Multi-server runs always use one isolated ephemeral
+    # process-mode Coland. Multi-server runs always use one isolated ephemeral
     # PostgreSQL instance per server.
-    [string]$SolandDatabaseUrl,
-    [string]$SolandPostgresImage = "postgres:18.6-alpine",
+    [string]$ColandDatabaseUrl,
+    [string]$ColandPostgresImage = "postgres:18.6-alpine",
     [switch]$RequireDecisionRace,
     [ValidateSet("process", "docker")]
-    [string]$SolandRuntime = "process",
-    [string]$SolandImage = "cotest-soland:latest",
-    [int]$SolandContainerPort = 8008,
-    [switch]$BuildSolandImage,
+    [string]$ColandRuntime = "process",
+    [string]$ColandImage = "cotest-coland:latest",
+    [int]$ColandContainerPort = 8008,
+    [switch]$BuildColandImage,
     [string[]]$DockerCacheFrom = @(),
     [string]$DockerCacheTo,
     [switch]$DockerPull,
@@ -87,18 +87,18 @@ param(
     # harness skips the docker-backed ephemeral Postgres entirely (useful when
     # Docker Desktop is unavailable and a local PostgreSQL serves instead).
     [string]$CoauthPostgresUrl,
-    [switch]$StartTeabay,
-    [string]$TeabayBin,
-    [string]$TeabayBaseUrl,
-    [string]$TeabayDatabaseUrl,
-    [string]$TeabayServiceId = "did:webvh:z6mkfixture:flagon.joint-e2e.local",
+    [switch]$StartFlagon,
+    [string]$FlagonBin,
+    [string]$FlagonBaseUrl,
+    [string]$FlagonDatabaseUrl,
+    [string]$FlagonServiceId = "did:webvh:z6mkfixture:flagon.joint-e2e.local",
     [switch]$StartSavfox,
     [string]$SavfoxRoot,
     [string]$SavfoxBin,
     [string]$SavfoxBaseUrl,
     [string]$SavfoxToken = "cotest-savfox-joint-e2e-token-0000000000000001",
-    [string]$SolandNotarySigningKey = "OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk=",
-    [string]$SolandKeyStoreMasterKey = "d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3c=",
+    [string]$ColandNotarySigningKey = "OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk=",
+    [string]$ColandKeyStoreMasterKey = "d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3c=",
     # Optional exact per-Station internal-channel credentials in
     # `serverN=secret` form. When omitted, the runner creates distinct stable
     # test credentials for every indexed Station; partial/shared assignments
@@ -109,10 +109,10 @@ param(
     # for resolver and harness witness-health checks; production clamps any
     # value back to the protocol ceiling, so this can only tighten the window.
     [int]$WebvhDegradedNoWitnessMaxSecs = 30,
-    # OAuth `client_id` soland advertises in `/_arkret/describe.auth_metadata.methods[].client_id`
-    # (soland config `oidc_client_id`). MUST match a client registered at coauth; the joint
+    # OAuth `client_id` coland advertises in `/_arkret/describe.auth_metadata.methods[].client_id`
+    # (coland config `oidc_client_id`). MUST match a client registered at coauth; the joint
     # coauth config (coauth/config.dev.yaml) seeds the "Inkson Dev" client under this ULID.
-    # Without it soland advertises no client_id and the browser OIDC bridge gets
+    # Without it coland advertises no client_id and the browser OIDC bridge gets
     # `could not find client` from coauth's /authorize. See cotest oidc-login-chain.spec.ts.
     [string]$CoauthOAuthClientId = "01GFWR28C4KNE04WG3HKXB7C9R",
     [int]$StartupTimeoutSeconds = 900,
@@ -123,7 +123,7 @@ param(
     # the browserless lane exists to skip.
     [switch]$RunHarnessClientCheck,
     # Run `tests/garth_client_live.rs`: Garth driven as a headless client over
-    # its own durable store, against this run's Coauth and Soland. Same build
+    # its own durable store, against this run's Coauth and Coland. Same build
     # cost as above, and the only path that exercises Garth's client runtime
     # without a browser.
     [switch]$RunGarthClientCheck,
@@ -141,8 +141,8 @@ param(
     [ValidateSet('local.host', 'localhost')][string]$DnsSuffix = 'local.host',
     [ValidateSet("full-mesh", "ordered-candidates")]
     [string]$NetworkShape = "full-mesh",
-    [string]$SolandServer2NotarySigningKey = "ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg=",
-    [string]$SolandServer2KeyStoreMasterKey = "ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmY=",
+    [string]$ColandServer2NotarySigningKey = "ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg=",
+    [string]$ColandServer2KeyStoreMasterKey = "ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmY=",
     [switch]$StartMockIdp,
     [switch]$StartMockEmail,
     [switch]$StartMockWitness,
@@ -241,10 +241,10 @@ $multiServer = $ServerCount -ge 2
 . (Join-Path $PSScriptRoot "lib\joint-e2e-environment.ps1")
 . (Join-Path $PSScriptRoot "lib\process-ownership.ps1")
 
-$SolandServiceId = $null
-$SolandServiceDid = $null
-$SolandServer2ServiceId = $null
-$SolandServer2ServiceDid = $null
+$ColandServiceId = $null
+$ColandServiceDid = $null
+$ColandServer2ServiceId = $null
+$ColandServer2ServiceDid = $null
 $script:UseManagedCoauthAssertionKey = [bool]($StartCoauth -and -not $CoauthCommand)
 
 # The Playwright projects this runner knows how to provision, split by whether
@@ -636,11 +636,11 @@ function Test-BinaryContainsAsciiMarker {
     return $text.Contains($Marker)
 }
 
-# This operation id is compiled into Soland only with the development-only
+# This operation id is compiled into Coland only with the development-only
 # `conformance-harness` feature. Source freshness alone cannot distinguish a
 # default production build from the feature-bearing joint-e2e SUT because both
-# write the same target/debug/soland executable.
-$solandConformanceHarnessMarker = "org.arkret.soland.conformance.realm_state_snapshot"
+# write the same target/debug/coland executable.
+$colandConformanceHarnessMarker = "org.arkret.coland.conformance.realm_state_snapshot"
 
 function Resolve-PlaywrightCliInvocation {
     param([Parameter(Mandatory = $true)][string]$E2eRoot)
@@ -684,7 +684,7 @@ function Test-DockerImagePresent {
     return $LASTEXITCODE -eq 0
 }
 
-function Invoke-SolandImageBuild {
+function Invoke-ColandImageBuild {
     param(
         [Parameter(Mandatory = $true)][string]$ImageTag,
         [string[]]$CacheFrom = @(),
@@ -695,9 +695,9 @@ function Invoke-SolandImageBuild {
 
     $buildRepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
     $buildWorkspaceRoot = (Resolve-Path (Join-Path $buildRepoRoot "..")).Path
-    $buildDockerfilePath = Join-Path $buildRepoRoot "docker\soland.Dockerfile"
+    $buildDockerfilePath = Join-Path $buildRepoRoot "docker\coland.Dockerfile"
     foreach ($path in @(
-            (Join-Path $buildWorkspaceRoot "soland"),
+            (Join-Path $buildWorkspaceRoot "coland"),
             (Join-Path $buildWorkspaceRoot "arkret-rust-sdk"),
             $buildDockerfilePath
         )) {
@@ -739,18 +739,18 @@ function Invoke-JointE2ePreflight {
         [Parameter(Mandatory = $true)][bool]$StartCoauth,
         [Parameter(Mandatory = $true)][string]$CoauthPostgresImage,
         [string]$CoauthBin,
-        [bool]$StartTeabay = $false,
-        [string]$TeabayBin,
-        [string]$TeabayDatabaseUrl,
-        [string]$SolandBaseUrl,
-        [string]$SolandCommand,
-        [string]$SolandBin,
-        [string]$SolandDatabaseUrl,
-        [string]$SolandPostgresImage = "postgres:18.6-alpine",
-        [bool]$WillStartDefaultSoland = $false,
-        [ValidateSet("process", "docker")][string]$SolandRuntime = "process",
-        [string]$SolandImage,
-        [bool]$WillStartDockerSoland = $false,
+        [bool]$StartFlagon = $false,
+        [string]$FlagonBin,
+        [string]$FlagonDatabaseUrl,
+        [string]$ColandBaseUrl,
+        [string]$ColandCommand,
+        [string]$ColandBin,
+        [string]$ColandDatabaseUrl,
+        [string]$ColandPostgresImage = "postgres:18.6-alpine",
+        [bool]$WillStartDefaultColand = $false,
+        [ValidateSet("process", "docker")][string]$ColandRuntime = "process",
+        [string]$ColandImage,
+        [bool]$WillStartDockerColand = $false,
         [string]$InksonBaseUrl,
         [string]$InksonCommand,
         # False for a browserless lane. Without it the "neither URL nor command"
@@ -845,55 +845,55 @@ function Invoke-JointE2ePreflight {
         Add-PreflightResult $results "playwright cli" "fail" "Playwright CLI is required"
     }
 
-    if ($WillStartDefaultSoland -or (-not $SolandBaseUrl -and -not $SolandCommand)) {
-        if ($SolandRuntime -eq "docker") {
-            Add-PreflightResult $results "soland runtime" "pass" "docker"
+    if ($WillStartDefaultColand -or (-not $ColandBaseUrl -and -not $ColandCommand)) {
+        if ($ColandRuntime -eq "docker") {
+            Add-PreflightResult $results "coland runtime" "pass" "docker"
         } else {
             try {
-                $solandBinary = Resolve-SolandBinary -ExplicitPath $SolandBin -WorkspaceRoot $WorkspaceRoot
-                Add-PreflightResult $results "soland binary" "pass" $solandBinary
+                $colandBinary = Resolve-ColandBinary -ExplicitPath $ColandBin -WorkspaceRoot $WorkspaceRoot
+                Add-PreflightResult $results "coland binary" "pass" $colandBinary
                 Add-BinaryFreshnessPreflight `
                     -Results $results `
-                    -Name "soland binary freshness" `
-                    -BinaryPath $solandBinary `
+                    -Name "coland binary freshness" `
+                    -BinaryPath $colandBinary `
                     -RepositoryRoots @(
-                        (Join-Path $WorkspaceRoot "soland"),
+                        (Join-Path $WorkspaceRoot "coland"),
                         (Join-Path $WorkspaceRoot "arkret-rust-sdk")
                     ) `
-                    -RequireBuildStamp (-not [bool]$SolandBin)
-                if (Test-BinaryContainsAsciiMarker -Path $solandBinary -Marker $solandConformanceHarnessMarker) {
-                    Add-PreflightResult $results "soland conformance-harness feature" "pass" $solandBinary
+                    -RequireBuildStamp (-not [bool]$ColandBin)
+                if (Test-BinaryContainsAsciiMarker -Path $colandBinary -Marker $colandConformanceHarnessMarker) {
+                    Add-PreflightResult $results "coland conformance-harness feature" "pass" $colandBinary
                 } else {
-                    Add-PreflightResult $results "soland conformance-harness feature" "fail" "cached binary lacks the conformance-harness marker; rerun without -SkipBuild"
+                    Add-PreflightResult $results "coland conformance-harness feature" "fail" "cached binary lacks the conformance-harness marker; rerun without -SkipBuild"
                 }
             } catch {
-                Add-PreflightResult $results "soland binary" "fail" $_.Exception.Message
+                Add-PreflightResult $results "coland binary" "fail" $_.Exception.Message
             }
         }
     }
 
-    if ($WillStartDefaultSoland -and -not $SolandDatabaseUrl) {
+    if ($WillStartDefaultColand -and -not $ColandDatabaseUrl) {
         $docker = Find-CommandPath @("docker.exe", "docker")
         if ($docker) {
-            Add-PreflightResult $results "soland postgres docker" "pass" $docker
+            Add-PreflightResult $results "coland postgres docker" "pass" $docker
             $dockerInfo = (Invoke-NativeCapture -FilePath $docker -Arguments @("info")) -join "`n"
             if ($LASTEXITCODE -eq 0) {
-                Add-PreflightResult $results "soland postgres daemon" "pass" "daemon reachable"
+                Add-PreflightResult $results "coland postgres daemon" "pass" "daemon reachable"
             } else {
-                Add-PreflightResult $results "soland postgres daemon" "fail" $dockerInfo
+                Add-PreflightResult $results "coland postgres daemon" "fail" $dockerInfo
             }
-            $imageInspect = (Invoke-NativeCapture -FilePath $docker -Arguments @("image", "inspect", $SolandPostgresImage)) -join "`n"
+            $imageInspect = (Invoke-NativeCapture -FilePath $docker -Arguments @("image", "inspect", $ColandPostgresImage)) -join "`n"
             if ($LASTEXITCODE -eq 0) {
-                Add-PreflightResult $results "soland postgres image" "pass" $SolandPostgresImage
+                Add-PreflightResult $results "coland postgres image" "pass" $ColandPostgresImage
             } else {
-                Add-PreflightResult $results "soland postgres image" "warn" "$SolandPostgresImage not present locally; docker run may pull it"
+                Add-PreflightResult $results "coland postgres image" "warn" "$ColandPostgresImage not present locally; docker run may pull it"
             }
         } else {
-            Add-PreflightResult $results "soland postgres docker" "fail" "docker is required for managed Soland PostgreSQL"
+            Add-PreflightResult $results "coland postgres docker" "fail" "docker is required for managed Coland PostgreSQL"
         }
     }
 
-    if ($WillStartDockerSoland) {
+    if ($WillStartDockerColand) {
         $docker = Find-CommandPath @("docker.exe", "docker")
         if ($docker) {
             Add-PreflightResult $results "docker cli" "pass" $docker
@@ -903,14 +903,14 @@ function Invoke-JointE2ePreflight {
             } else {
                 Add-PreflightResult $results "docker daemon" "fail" $dockerInfo
             }
-            $imageInspect = (Invoke-NativeCapture -FilePath $docker -Arguments @("image", "inspect", $SolandImage)) -join "`n"
+            $imageInspect = (Invoke-NativeCapture -FilePath $docker -Arguments @("image", "inspect", $ColandImage)) -join "`n"
             if ($LASTEXITCODE -eq 0) {
-                Add-PreflightResult $results "soland image" "pass" $SolandImage
+                Add-PreflightResult $results "coland image" "pass" $ColandImage
             } else {
-                Add-PreflightResult $results "soland image" "fail" "$SolandImage not present after image build/check"
+                Add-PreflightResult $results "coland image" "fail" "$ColandImage not present after image build/check"
             }
         } else {
-            Add-PreflightResult $results "docker cli" "fail" "docker is required for -SolandRuntime docker"
+            Add-PreflightResult $results "docker cli" "fail" "docker is required for -ColandRuntime docker"
         }
     }
 
@@ -943,14 +943,14 @@ function Invoke-JointE2ePreflight {
         }
     }
 
-    if ($StartTeabay) {
+    if ($StartFlagon) {
         try {
-            $teabayBinary = Resolve-TeabayBinary -ExplicitPath $TeabayBin -WorkspaceRoot $WorkspaceRoot
-            Add-PreflightResult $results "flagon binary" "pass" $teabayBinary
+            $flagonBinary = Resolve-FlagonBinary -ExplicitPath $FlagonBin -WorkspaceRoot $WorkspaceRoot
+            Add-PreflightResult $results "flagon binary" "pass" $flagonBinary
             Add-BinaryFreshnessPreflight `
                 -Results $results `
                 -Name "flagon binary freshness" `
-                -BinaryPath $teabayBinary `
+                -BinaryPath $flagonBinary `
                     -RepositoryRoots @(
                         (Join-Path $WorkspaceRoot "flagon"),
                         (Join-Path $WorkspaceRoot "arkret-rust-sdk")
@@ -959,10 +959,10 @@ function Invoke-JointE2ePreflight {
         } catch {
             Add-PreflightResult $results "flagon binary" "fail" $_.Exception.Message
         }
-        if (-not $TeabayDatabaseUrl -and -not $env:DATABASE_URL) {
-            Add-PreflightResult $results "flagon database url" "fail" "-StartTeabay requires -TeabayDatabaseUrl or DATABASE_URL in env"
+        if (-not $FlagonDatabaseUrl -and -not $env:DATABASE_URL) {
+            Add-PreflightResult $results "flagon database url" "fail" "-StartFlagon requires -FlagonDatabaseUrl or DATABASE_URL in env"
         } else {
-            $dbUrl = if ($TeabayDatabaseUrl) { $TeabayDatabaseUrl } else { $env:DATABASE_URL }
+            $dbUrl = if ($FlagonDatabaseUrl) { $FlagonDatabaseUrl } else { $env:DATABASE_URL }
             Add-PreflightResult $results "flagon database url" "pass" $dbUrl
         }
     }
@@ -1349,7 +1349,7 @@ function Sync-JointControlledServices {
     $failures = [System.Collections.Generic.List[string]]::new()
     $topology = Get-Content -Raw -LiteralPath $TopologyPath | ConvertFrom-Json
     foreach ($server in @($topology.servers)) {
-        $controlProperty = $server.soland.PSObject.Properties["control"]
+        $controlProperty = $server.coland.PSObject.Properties["control"]
         $control = if ($controlProperty) { $controlProperty.Value } else { $null }
         if (-not $control -or -not $control.state_path -or -not (Test-Path -LiteralPath $control.state_path)) { continue }
         $state = Get-Content -Raw -LiteralPath $control.state_path | ConvertFrom-Json
@@ -1363,8 +1363,8 @@ function Sync-JointControlledServices {
                 continue
             }
         }
-        if ($control.kind -eq "process" -and $state.current_process_id -and [int]$state.current_process_id -ne [int]$server.soland.process_id) {
-            $managed = @($ManagedServices | Where-Object { $_.Kind -eq "process" -and $_.Name -eq "soland-$($server.name)" }) | Select-Object -Last 1
+        if ($control.kind -eq "process" -and $state.current_process_id -and [int]$state.current_process_id -ne [int]$server.coland.process_id) {
+            $managed = @($ManagedServices | Where-Object { $_.Kind -eq "process" -and $_.Name -eq "coland-$($server.name)" }) | Select-Object -Last 1
             $replacement = Get-CotestIdentityProcess -Identity ([pscustomobject]@{ process_id = [int]$state.current_process_id; started_at = $state.current_process_started_at })
             if (-not $managed -or -not $replacement) {
                 $failures.Add("replacement process for $($server.name) is unavailable")
@@ -1586,12 +1586,12 @@ function Get-ContainerHostGatewayIpv4 {
     if ($script:ContainerHostGatewayIpv4) {
         return $script:ContainerHostGatewayIpv4
     }
-    if ($SolandRuntime -ne "docker" -or -not (Get-Command docker -ErrorAction SilentlyContinue)) {
+    if ($ColandRuntime -ne "docker" -or -not (Get-Command docker -ErrorAction SilentlyContinue)) {
         return $null
     }
     $resolved = & docker run --rm --entrypoint getent `
         --add-host "host.docker.internal:host-gateway" `
-        $SolandImage ahostsv4 host.docker.internal 2>$null
+        $ColandImage ahostsv4 host.docker.internal 2>$null
     foreach ($line in @($resolved)) {
         if ($line -match '^\s*(\d{1,3}(?:\.\d{1,3}){3})\s') {
             $script:ContainerHostGatewayIpv4 = $Matches[1]
@@ -1699,7 +1699,7 @@ function Resolve-CoauthBinary {
     throw "Unable to find coauth binary. Build coauth first or pass -CoauthBin."
 }
 
-function Resolve-SolandBinary {
+function Resolve-ColandBinary {
     param(
         [string]$ExplicitPath,
         [Parameter(Mandatory = $true)][string]$WorkspaceRoot
@@ -1707,20 +1707,20 @@ function Resolve-SolandBinary {
 
     $candidates = @()
     if ($ExplicitPath) { $candidates += $ExplicitPath }
-    if ($env:SOLAND_BIN) { $candidates += $env:SOLAND_BIN }
-    $targetDirectory = Get-CargoTargetDirectory -RepositoryRoot (Join-Path $WorkspaceRoot "soland")
-    $candidates += (Join-Path $targetDirectory ("debug/" + (Get-NativeExecutableName -Name "soland")))
-    $candidates += (Join-Path $targetDirectory ("release/" + (Get-NativeExecutableName -Name "soland")))
+    if ($env:COLAND_BIN) { $candidates += $env:COLAND_BIN }
+    $targetDirectory = Get-CargoTargetDirectory -RepositoryRoot (Join-Path $WorkspaceRoot "coland")
+    $candidates += (Join-Path $targetDirectory ("debug/" + (Get-NativeExecutableName -Name "coland")))
+    $candidates += (Join-Path $targetDirectory ("release/" + (Get-NativeExecutableName -Name "coland")))
 
     foreach ($candidate in $candidates) {
         if ($candidate -and (Test-Path $candidate)) {
             return (Resolve-Path $candidate).Path
         }
     }
-    throw "Unable to find soland binary. Build soland first or pass -SolandBin."
+    throw "Unable to find coland binary. Build coland first or pass -ColandBin."
 }
 
-function Resolve-TeabayBinary {
+function Resolve-FlagonBinary {
     param(
         [string]$ExplicitPath,
         [Parameter(Mandatory = $true)][string]$WorkspaceRoot
@@ -1728,7 +1728,7 @@ function Resolve-TeabayBinary {
 
     $candidates = @()
     if ($ExplicitPath) { $candidates += $ExplicitPath }
-    if ($env:TEABAY_BIN) { $candidates += $env:TEABAY_BIN }
+    if ($env:FLAGON_BIN) { $candidates += $env:FLAGON_BIN }
     $targetDirectory = Get-CargoTargetDirectory -RepositoryRoot (Join-Path $WorkspaceRoot "flagon")
     $candidates += (Join-Path $targetDirectory ("debug/" + (Get-NativeExecutableName -Name "flagon")))
     $candidates += (Join-Path $targetDirectory ("release/" + (Get-NativeExecutableName -Name "flagon")))
@@ -1738,7 +1738,7 @@ function Resolve-TeabayBinary {
             return (Resolve-Path $candidate).Path
         }
     }
-    throw "Unable to find flagon binary. Build flagon first or pass -TeabayBin."
+    throw "Unable to find flagon binary. Build flagon first or pass -FlagonBin."
 }
 
 function Start-EphemeralPostgres {
@@ -2415,7 +2415,7 @@ function Add-DioxusNoDownloadsEnvironment {
     return "$prefix$Command"
 }
 
-function Start-ManagedDockerSoland {
+function Start-ManagedDockerColand {
     param(
         [Parameter(Mandatory = $true)][string]$Name,
         [Parameter(Mandatory = $true)][string]$Image,
@@ -2444,8 +2444,8 @@ function Start-ManagedDockerSoland {
         "--label", "cotest.runner=joint-e2e",
         "--add-host", "host.docker.internal:host-gateway",
         "-p", ("127.0.0.1:{0}:{1}" -f $HostPort, $ContainerPort),
-        "-v", ("{0}:/tmp/soland-blobs" -f $ObjectsRoot),
-        "-v", ("{0}:/tmp/soland-state" -f $StateRoot),
+        "-v", ("{0}:/tmp/coland-blobs" -f $ObjectsRoot),
+        "-v", ("{0}:/tmp/coland-state" -f $StateRoot),
         "-v", ("{0}:/cotest-logs" -f $LogDirectory)
     )
     foreach ($key in $Environment.Keys) {
@@ -2610,7 +2610,7 @@ function Get-JointTopologyHealthFailures {
     $failures = [System.Collections.Generic.List[object]]::new()
     $topology = Get-Content -Raw -LiteralPath $TopologyPath | ConvertFrom-Json
     foreach ($server in @($topology.servers)) {
-        foreach ($kind in @("soland", "coauth")) {
+        foreach ($kind in @("coland", "coauth")) {
             $serviceProperty = $server.PSObject.Properties[$kind]
             if (-not $serviceProperty -or -not $serviceProperty.Value) { continue }
 
@@ -2908,8 +2908,8 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $workspaceRoot = (Resolve-Path (Join-Path $repoRoot "..")).Path
 $requiresDocker = (
     ($StartCoauth -and -not $CoauthPostgresUrl) -or
-    ((-not $SolandBaseUrl -and -not $SolandCommand -and -not $SolandDatabaseUrl)) -or
-    $SolandRuntime -eq "docker"
+    ((-not $ColandBaseUrl -and -not $ColandCommand -and -not $ColandDatabaseUrl)) -or
+    $ColandRuntime -eq "docker"
 )
 # Decide the Playwright selection, and with it whether this run needs Inkson at
 # all, before anything else happens — before the manifest gates below, before
@@ -3001,7 +3001,7 @@ $environmentArgs = @(
     "-OutputDirectory", $environmentOutputDirectory,
     "-PostgresImage"
 )
-$environmentPostgresImages = @($SolandPostgresImage, $CoauthPostgresImage) | Sort-Object -Unique
+$environmentPostgresImages = @($ColandPostgresImage, $CoauthPostgresImage) | Sort-Object -Unique
 $environmentArgs += $environmentPostgresImages
 if ($StartCoauth) { $environmentArgs += "-StartCoauth" }
 if ($requiresInkson) { $environmentArgs += "-RequireBrowser" }
@@ -3023,7 +3023,7 @@ if (-not $OutputRoot) {
 }
 $OutputRoot = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputRoot)
 if (-not $SutManifest) {
-    $SutManifest = Join-Path $workspaceRoot "soland\Cargo.toml"
+    $SutManifest = Join-Path $workspaceRoot "coland\Cargo.toml"
 }
 $SutManifest = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($SutManifest)
 $inksonTargetDirectory = $null
@@ -3035,7 +3035,7 @@ if ($requiresInkson) {
     $inksonTargetDirectory = Get-CargoTargetDirectory -RepositoryRoot $InksonRoot
 }
 $cotestTargetDirectory = Get-CargoTargetDirectory -RepositoryRoot $repoRoot
-$solandTargetDirectory = Get-CargoTargetDirectory -RepositoryRoot (Split-Path -Parent $SutManifest)
+$colandTargetDirectory = Get-CargoTargetDirectory -RepositoryRoot (Split-Path -Parent $SutManifest)
 $coauthTargetDirectory = Get-CargoTargetDirectory -RepositoryRoot (Join-Path $workspaceRoot "coauth")
 if (-not $SavfoxRoot) {
     $SavfoxRoot = Join-Path (Split-Path -Parent $workspaceRoot) "savfox-ai\savfox"
@@ -3052,16 +3052,16 @@ function Get-JointServerArtifactLayout {
         [Parameter(Mandatory = $true)][ValidatePattern('^server[1-9][0-9]*$')][string]$ServerName
     )
 
-    $solandName = "soland-$ServerName"
+    $colandName = "coland-$ServerName"
     return [pscustomobject]@{
         ServerName = $ServerName
         CoauthDirectory = Join-Path $JointDirectory "coauth-$ServerName"
-        SolandConfigPath = Join-Path $JointDirectory "$solandName.env"
-        SolandObjectsRoot = Join-Path $JointDirectory "$solandName-objects"
-        SolandStateRoot = Join-Path $JointDirectory "$solandName-state"
-        SolandChaosControlPath = Join-Path $JointDirectory "$solandName-decision-chaos.json"
+        ColandConfigPath = Join-Path $JointDirectory "$colandName.env"
+        ColandObjectsRoot = Join-Path $JointDirectory "$colandName-objects"
+        ColandStateRoot = Join-Path $JointDirectory "$colandName-state"
+        ColandChaosControlPath = Join-Path $JointDirectory "$colandName-decision-chaos.json"
         CoauthStoreDumpName = "coauth-$ServerName-postgres.sql"
-        SolandStoreDumpName = "$solandName-postgres.sql"
+        ColandStoreDumpName = "$colandName-postgres.sql"
     }
 }
 
@@ -3096,18 +3096,18 @@ for ($serverIndex = 1; $serverIndex -le $ServerCount; $serverIndex++) {
     $serverArtifactLayouts[$serverName] = Get-JointServerArtifactLayout -JointDirectory $jointDir -ServerName $serverName
     $null = New-Item -ItemType Directory -Force -Path $serverServiceLogDirs[$serverName]
 }
-$solandChaosControlFile = $serverArtifactLayouts["server1"].SolandChaosControlPath
+$colandChaosControlFile = $serverArtifactLayouts["server1"].ColandChaosControlPath
 
 # 0530-C: decide the public-identity topology before any base URL is minted.
 # Runner-owned process-mode services keep plain loopback listeners but publish
 # stable HTTPS names fronted by the managed TLS proxy; caller-owned or
 # docker-runtime lanes keep their existing URLs unchanged.
-$jointTlsProcessSoland = (-not $SolandCommand -and -not $SolandBaseUrl -and $SolandRuntime -eq "process")
+$jointTlsProcessColand = (-not $ColandCommand -and -not $ColandBaseUrl -and $ColandRuntime -eq "process")
 $jointTlsCoauth = ($StartCoauth -and -not $CoauthBaseUrl)
-$jointTlsEnabled = $jointTlsProcessSoland -or $jointTlsCoauth
+$jointTlsEnabled = $jointTlsProcessColand -or $jointTlsCoauth
 $jointTlsPort = $null
-$solandPublicHost = $null
-$solandServer2PublicHost = $null
+$colandPublicHost = $null
+$colandServer2PublicHost = $null
 $coauthPublicHost = $null
 $coauthServer2PublicHost = $null
 $jointTlsAssets = $null
@@ -3116,10 +3116,10 @@ $jointTlsHostsMarker = New-CotestHostsMarker -RunId $timestamp
 $jointTlsUnregisteredProbeHost = "unregistered.$DnsSuffix"
 if ($jointTlsEnabled) {
     $jointTlsPort = Get-FreeTcpPort
-    if ($jointTlsProcessSoland) {
-        $solandPublicHost = "soland-server1.$DnsSuffix"
+    if ($jointTlsProcessColand) {
+        $colandPublicHost = "coland-server1.$DnsSuffix"
         if ($multiServer) {
-            $solandServer2PublicHost = "soland-server2.$DnsSuffix"
+            $colandServer2PublicHost = "coland-server2.$DnsSuffix"
         }
     }
     if ($jointTlsCoauth) {
@@ -3128,37 +3128,37 @@ if ($jointTlsEnabled) {
     }
 }
 
-if (-not $SolandBaseUrl) {
-    $solandPort = Get-FreeTcpPort
-    if ($solandPublicHost) {
-        $SolandBaseUrl = "https://${solandPublicHost}:$jointTlsPort"
+if (-not $ColandBaseUrl) {
+    $colandPort = Get-FreeTcpPort
+    if ($colandPublicHost) {
+        $ColandBaseUrl = "https://${colandPublicHost}:$jointTlsPort"
     } else {
-        $SolandBaseUrl = "http://127.0.0.1:$solandPort"
+        $ColandBaseUrl = "http://127.0.0.1:$colandPort"
     }
 } else {
-    $solandPort = $null
+    $colandPort = $null
 }
-$solandServer2Port = $null
-$solandServer2BaseUrl = $null
+$colandServer2Port = $null
+$colandServer2BaseUrl = $null
 if ($multiServer) {
-    if ($SolandCommand) {
-        throw "Multi-server runs are incompatible with -SolandCommand; use the indexed topology interface."
+    if ($ColandCommand) {
+        throw "Multi-server runs are incompatible with -ColandCommand; use the indexed topology interface."
     }
-    $solandServer2Port = Get-FreeTcpPort
-    if ($solandServer2PublicHost) {
-        $solandServer2BaseUrl = "https://${solandServer2PublicHost}:$jointTlsPort"
+    $colandServer2Port = Get-FreeTcpPort
+    if ($colandServer2PublicHost) {
+        $colandServer2BaseUrl = "https://${colandServer2PublicHost}:$jointTlsPort"
     } else {
-        $solandServer2BaseUrl = "http://127.0.0.1:$solandServer2Port"
+        $colandServer2BaseUrl = "http://127.0.0.1:$colandServer2Port"
     }
 }
-if ($SolandRuntime -eq "docker" -and $SolandCommand) {
-    throw "-SolandRuntime docker is incompatible with -SolandCommand; omit -SolandCommand so the harness can start the image."
+if ($ColandRuntime -eq "docker" -and $ColandCommand) {
+    throw "-ColandRuntime docker is incompatible with -ColandCommand; omit -ColandCommand so the harness can start the image."
 }
-if ($SolandDatabaseUrl -and ($SolandRuntime -ne "process" -or $SolandCommand -or -not $solandPort)) {
-    throw "-SolandDatabaseUrl is supported only when the harness owns one process-mode Soland."
+if ($ColandDatabaseUrl -and ($ColandRuntime -ne "process" -or $ColandCommand -or -not $colandPort)) {
+    throw "-ColandDatabaseUrl is supported only when the harness owns one process-mode Coland."
 }
-if ($SolandDatabaseUrl -and $multiServer) {
-    throw "-SolandDatabaseUrl cannot be shared by a multi-server run; use isolated runner-owned databases."
+if ($ColandDatabaseUrl -and $multiServer) {
+    throw "-ColandDatabaseUrl cannot be shared by a multi-server run; use isolated runner-owned databases."
 }
 $inksonPort = $null
 if ($requiresInkson -and -not $InksonBaseUrl) {
@@ -3240,12 +3240,12 @@ if ($StartCoauth -and $multiServer) {
 }
 $additionalServers = [System.Collections.Generic.List[object]]::new()
 for ($serverIndex = 3; $serverIndex -le $ServerCount; $serverIndex++) {
-    if ($SolandCommand) {
-        throw "-ServerCount $ServerCount is incompatible with -SolandCommand; use indexed caller-owned topology input instead"
+    if ($ColandCommand) {
+        throw "-ServerCount $ServerCount is incompatible with -ColandCommand; use indexed caller-owned topology input instead"
     }
-    $additionalSolandPort = Get-FreeTcpPort
-    $additionalSolandHost = if ($jointTlsProcessSoland) { "soland-server$serverIndex.$DnsSuffix" } else { $null }
-    $additionalSolandBaseUrl = if ($additionalSolandHost) { "https://${additionalSolandHost}:$jointTlsPort" } else { "http://127.0.0.1:$additionalSolandPort" }
+    $additionalColandPort = Get-FreeTcpPort
+    $additionalColandHost = if ($jointTlsProcessColand) { "coland-server$serverIndex.$DnsSuffix" } else { $null }
+    $additionalColandBaseUrl = if ($additionalColandHost) { "https://${additionalColandHost}:$jointTlsPort" } else { "http://127.0.0.1:$additionalColandPort" }
     $additionalCoauthPort = if ($StartCoauth) { Get-FreeTcpPort } else { $null }
     $additionalCoauthHost = if ($jointTlsCoauth) { "coauth-server$serverIndex.$DnsSuffix" } else { $null }
     $additionalCoauthBaseUrl = if ($additionalCoauthPort) {
@@ -3254,16 +3254,16 @@ for ($serverIndex = 3; $serverIndex -le $ServerCount; $serverIndex++) {
     $additionalServers.Add([pscustomobject]@{
         Index = $serverIndex
         Name = "server$serverIndex"
-        SolandName = "soland-server$serverIndex"
-        SolandPort = $additionalSolandPort
-        SolandHost = $additionalSolandHost
-        SolandBaseUrl = $additionalSolandBaseUrl
-        SolandMetricsPort = $null
-        SolandService = $null
-        SolandServiceId = $null
-        SolandServiceDid = $null
-        SolandDatabase = $null
-        SolandDatabaseDsn = $null
+        ColandName = "coland-server$serverIndex"
+        ColandPort = $additionalColandPort
+        ColandHost = $additionalColandHost
+        ColandBaseUrl = $additionalColandBaseUrl
+        ColandMetricsPort = $null
+        ColandService = $null
+        ColandServiceId = $null
+        ColandServiceDid = $null
+        ColandDatabase = $null
+        ColandDatabaseDsn = $null
         CoauthName = "coauth-server$serverIndex"
         CoauthPort = $additionalCoauthPort
         CoauthHost = $additionalCoauthHost
@@ -3275,10 +3275,10 @@ for ($serverIndex = 3; $serverIndex -le $ServerCount; $serverIndex++) {
         NotarySigningKey = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
     })
 }
-$allSolandBaseUrls = @($SolandBaseUrl, $solandServer2BaseUrl) + @($additionalServers | ForEach-Object { $_.SolandBaseUrl }) | Where-Object { $_ }
+$allColandBaseUrls = @($ColandBaseUrl, $colandServer2BaseUrl) + @($additionalServers | ForEach-Object { $_.ColandBaseUrl }) | Where-Object { $_ }
 $stationInternalChannelBindings = @(
     New-StationInternalChannelBindings `
-        -StationBaseUrls $allSolandBaseUrls `
+        -StationBaseUrls $allColandBaseUrls `
         -BearerAssignments $CoauthStationInternalAuthoritySharedSecrets
 )
 $stationInternalChannelBindingsByName = @{}
@@ -3294,17 +3294,17 @@ if ($DualCoauth) {
 }
 
 # CT-6: flagon joint participant. Mirrors the -StartCoauth port allocation
-# pattern. Teabay additionally needs a DATABASE_URL because the binary will
-# refuse to boot without one (per TEABAY_SPEC.required_env_vars in the cotest
+# pattern. Flagon additionally needs a DATABASE_URL because the binary will
+# refuse to boot without one (per FLAGON_SPEC.required_env_vars in the cotest
 # helper).
-$teabayPort = $null
-if ($StartTeabay) {
-    if (-not $TeabayDatabaseUrl -and -not $env:DATABASE_URL) {
-        throw "-StartTeabay requires -TeabayDatabaseUrl (or DATABASE_URL in env). Teabay refuses to boot without a Postgres DSN."
+$flagonPort = $null
+if ($StartFlagon) {
+    if (-not $FlagonDatabaseUrl -and -not $env:DATABASE_URL) {
+        throw "-StartFlagon requires -FlagonDatabaseUrl (or DATABASE_URL in env). Flagon refuses to boot without a Postgres DSN."
     }
-    if (-not $TeabayBaseUrl) {
-        $teabayPort = Get-FreeTcpPort
-        $TeabayBaseUrl = "http://127.0.0.1:$teabayPort"
+    if (-not $FlagonBaseUrl) {
+        $flagonPort = Get-FreeTcpPort
+        $FlagonBaseUrl = "http://127.0.0.1:$flagonPort"
     }
 }
 
@@ -3376,16 +3376,16 @@ if ($StartMockWitness) {
     }
 }
 # DID-P1-C02 — Prometheus listeners for the two services that export the
-# DID-boundary counters (soland_/teabay_did_resolve_total{source="network"} and
+# DID-boundary counters (coland_/flagon_did_resolve_total{source="network"} and
 # *_signature_verify_total). Bound to known free ports here and exported to the
-# tests as COTEST_SOLAND_METRICS_URL / COTEST_TEABAY_METRICS_URL, the same way
+# tests as COTEST_COLAND_METRICS_URL / COTEST_FLAGON_METRICS_URL, the same way
 # -StartMockDidHost exports COTEST_MOCK_DID_HOST_BASE_URL. coauth / inkson /
 # bridges expose no metrics endpoint, so they have no counterpart here.
-$solandMetricsPort = $null
-$solandServer2MetricsPort = $null
-$teabayMetricsPort = $null
-$solandMetricsBaseUrl = $null
-$teabayMetricsBaseUrl = $null
+$colandMetricsPort = $null
+$colandServer2MetricsPort = $null
+$flagonMetricsPort = $null
+$colandMetricsBaseUrl = $null
+$flagonMetricsBaseUrl = $null
 
 # DID-P1-C01 — counting DID document authority. Started after the witness so
 # it can be handed the witness base URL for POST /control/attest.
@@ -3448,11 +3448,11 @@ $topology | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $topologyPath -E
 $mockAppletRegistryStateKeyFile = $null
 $ephemeralCoauthServer1Postgres = $null
 $ephemeralCoauthServer2Postgres = $null
-$ephemeralSolandPostgres = $null
-$ephemeralSolandServer2Postgres = $null
+$ephemeralColandPostgres = $null
+$ephemeralColandServer2Postgres = $null
 $additionalPostgresContainers = [System.Collections.Generic.List[object]]::new()
-$solandDatabaseDsn = $SolandDatabaseUrl
-$solandServer2DatabaseDsn = $null
+$colandDatabaseDsn = $ColandDatabaseUrl
+$colandServer2DatabaseDsn = $null
 # Durable protocol stores exported for the secret scan. Kept apart from the log
 # roots because the verdict differs by artifact class: signed authorization
 # evidence is expected here, recovery private material never is.
@@ -3461,12 +3461,12 @@ $storeDumpFailures = [System.Collections.Generic.List[string]]::new()
 $exitCode = 1
 $runnerError = $null
 $startedAt = Get-Date
-$generatedSolandCommand = $false
+$generatedColandCommand = $false
 $generatedInksonCommand = $false
-$willStartDefaultSoland = (-not $SolandCommand -and $null -ne $solandPort)
+$willStartDefaultColand = (-not $ColandCommand -and $null -ne $colandPort)
 $willStartDefaultInkson = ($requiresInkson -and -not $InksonCommand -and $null -ne $inksonPort)
-$willStartDockerSoland = ($SolandRuntime -eq "docker" -and ($willStartDefaultSoland -or ($multiServer -and $null -ne $solandServer2Port)))
-$startedSolandRuntime = if ($willStartDockerSoland) { "docker" } elseif ($willStartDefaultSoland) { "process" } elseif ($SolandCommand) { "process-command" } else { "attached" }
+$willStartDockerColand = ($ColandRuntime -eq "docker" -and ($willStartDefaultColand -or ($multiServer -and $null -ne $colandServer2Port)))
+$startedColandRuntime = if ($willStartDockerColand) { "docker" } elseif ($willStartDefaultColand) { "process" } elseif ($ColandCommand) { "process-command" } else { "attached" }
 $coauthConfigPath = $null
 $e2eRoot = Join-Path $repoRoot "e2e"
 $preflightJson = Join-Path $jointDir "preflight.json"
@@ -3488,9 +3488,9 @@ if ($requiresInkson) {
 }
 
 try {
-    if ($willStartDockerSoland -and ($BuildSolandImage -or -not (Test-DockerImagePresent -ImageTag $SolandImage))) {
+    if ($willStartDockerColand -and ($BuildColandImage -or -not (Test-DockerImagePresent -ImageTag $ColandImage))) {
         $imageBuildArgs = @{
-            ImageTag = $SolandImage
+            ImageTag = $ColandImage
         }
         if (@($DockerCacheFrom).Count -gt 0) {
             $imageBuildArgs.CacheFrom = $DockerCacheFrom
@@ -3504,28 +3504,28 @@ try {
         if ($DockerNoCache) {
             $imageBuildArgs.NoCache = $true
         }
-        Invoke-SolandImageBuild @imageBuildArgs
+        Invoke-ColandImageBuild @imageBuildArgs
     }
 
     $preparationTasks = New-Object System.Collections.Generic.List[object]
     $preparationTimings = New-Object System.Collections.Generic.List[object]
-    if (-not $SkipBuild -and $willStartDefaultSoland -and $SolandRuntime -eq "process" -and -not $SolandBin -and -not $env:SOLAND_BIN) {
-        $defaultSolandBinary = Join-Path $solandTargetDirectory ("debug/" + (Get-NativeExecutableName -Name "soland"))
+    if (-not $SkipBuild -and $willStartDefaultColand -and $ColandRuntime -eq "process" -and -not $ColandBin -and -not $env:COLAND_BIN) {
+        $defaultColandBinary = Join-Path $colandTargetDirectory ("debug/" + (Get-NativeExecutableName -Name "coland"))
         $freshness = Get-ArtifactFreshness `
-            -ArtifactPath $defaultSolandBinary `
+            -ArtifactPath $defaultColandBinary `
             -RepositoryRoots @(
-                (Join-Path $workspaceRoot "soland"),
+                (Join-Path $workspaceRoot "coland"),
                 (Join-Path $workspaceRoot "arkret-rust-sdk")
             )
-        $solandConformanceHarnessPresent = Test-BinaryContainsAsciiMarker `
-            -Path $defaultSolandBinary `
-            -Marker $solandConformanceHarnessMarker
-        if (-not $freshness.Fresh -or -not $solandConformanceHarnessPresent) {
-            Write-Host "Preparing soland binary: $($freshness.Detail)"
+        $colandConformanceHarnessPresent = Test-BinaryContainsAsciiMarker `
+            -Path $defaultColandBinary `
+            -Marker $colandConformanceHarnessMarker
+        if (-not $freshness.Fresh -or -not $colandConformanceHarnessPresent) {
+            Write-Host "Preparing coland binary: $($freshness.Detail)"
             $started = Get-Date
             # `conformance-harness` compiles the development-only
             # `/_arkret/_conformance/*` namespace into the SUT. It is off in
-            # soland's default (production) build, and the e2e conformance
+            # coland's default (production) build, and the e2e conformance
             # suites drive those endpoints, so the harness build must ask for it.
             #
             # Keep this comment ABOVE the call. A comment between a backtick
@@ -3533,15 +3533,15 @@ try {
             # earlier placement dispatched `Start-ManagedCommand -Name` alone
             # and every stale-binary run died on "missing mandatory parameters:
             # Command WorkingDirectory LogDirectory" instead of rebuilding.
-            $preBuildStates = @(Get-ArtifactBuildRepositoryStates -ArtifactPath $defaultSolandBinary -RepositoryRoots @((Join-Path $workspaceRoot "soland"), (Join-Path $workspaceRoot "arkret-rust-sdk")))
+            $preBuildStates = @(Get-ArtifactBuildRepositoryStates -ArtifactPath $defaultColandBinary -RepositoryRoots @((Join-Path $workspaceRoot "coland"), (Join-Path $workspaceRoot "arkret-rust-sdk")))
             $service = Start-ManagedCommand `
-                -Name "prepare-soland" `
-                -Command ("cargo build --manifest-path {0} -p soland --bin soland --features conformance-harness" -f (Quote-PsLiteral $SutManifest)) `
+                -Name "prepare-coland" `
+                -Command ("cargo build --manifest-path {0} -p coland --bin coland --features conformance-harness" -f (Quote-PsLiteral $SutManifest)) `
                 -WorkingDirectory (Split-Path -Parent $SutManifest) `
                 -LogDirectory $serviceLogDir
-            $preparationTasks.Add([pscustomobject]@{ Name = "soland"; BuildInputsBefore = $preBuildStates; Service = $service; Started = $started; Artifact = $defaultSolandBinary; AllowUnchangedArtifact = $true; RepositoryRoots = @((Join-Path $workspaceRoot "soland"), (Join-Path $workspaceRoot "arkret-rust-sdk")) })
+            $preparationTasks.Add([pscustomobject]@{ Name = "coland"; BuildInputsBefore = $preBuildStates; Service = $service; Started = $started; Artifact = $defaultColandBinary; AllowUnchangedArtifact = $true; RepositoryRoots = @((Join-Path $workspaceRoot "coland"), (Join-Path $workspaceRoot "arkret-rust-sdk")) })
         } else {
-            $preparationTimings.Add([pscustomobject]@{ name = "soland"; status = "cache-hit"; duration_seconds = 0; detail = $freshness.Detail })
+            $preparationTimings.Add([pscustomobject]@{ name = "coland"; status = "cache-hit"; duration_seconds = 0; detail = $freshness.Detail })
         }
     }
 
@@ -3578,7 +3578,7 @@ try {
             $started = Get-Date
             # Build the package, not the workspace root. `cotest-wire` lives in
             # `crates/test-support`, whose dependency graph is SDK + Garth and
-            # excludes Inkson and the soland implementation crates the root
+            # excludes Inkson and the coland implementation crates the root
             # package pulls in — 486 crates instead of 952. Naming the root
             # manifest without `-p` would resolve the bin through the root
             # package again and rebuild all of it.
@@ -3783,18 +3783,18 @@ try {
         -StartCoauth ([bool]$StartCoauth) `
         -CoauthPostgresImage $CoauthPostgresImage `
         -CoauthBin $CoauthBin `
-        -StartTeabay ([bool]$StartTeabay) `
-        -TeabayBin $TeabayBin `
-        -TeabayDatabaseUrl $TeabayDatabaseUrl `
-        -SolandBaseUrl $SolandBaseUrl `
-        -SolandCommand $SolandCommand `
-        -SolandBin $SolandBin `
-        -SolandDatabaseUrl $SolandDatabaseUrl `
-        -SolandPostgresImage $SolandPostgresImage `
-        -WillStartDefaultSoland $willStartDefaultSoland `
-        -SolandRuntime $SolandRuntime `
-        -SolandImage $SolandImage `
-        -WillStartDockerSoland $willStartDockerSoland `
+        -StartFlagon ([bool]$StartFlagon) `
+        -FlagonBin $FlagonBin `
+        -FlagonDatabaseUrl $FlagonDatabaseUrl `
+        -ColandBaseUrl $ColandBaseUrl `
+        -ColandCommand $ColandCommand `
+        -ColandBin $ColandBin `
+        -ColandDatabaseUrl $ColandDatabaseUrl `
+        -ColandPostgresImage $ColandPostgresImage `
+        -WillStartDefaultColand $willStartDefaultColand `
+        -ColandRuntime $ColandRuntime `
+        -ColandImage $ColandImage `
+        -WillStartDockerColand $willStartDockerColand `
         -InksonBaseUrl $InksonBaseUrl `
         -InksonCommand $InksonCommand `
         -RequiresInkson $requiresInkson `
@@ -3848,8 +3848,8 @@ try {
     if ($jointTlsEnabled) {
         $jointTlsDir = Join-Path $jointDir "tls"
         $jointTlsHostNames = @(
-            @($solandPublicHost, $solandServer2PublicHost, $coauthPublicHost, $coauthServer2PublicHost, $mockAppletRegistryPublicHost) +
-            @($additionalServers | ForEach-Object { @($_.SolandHost, $_.CoauthHost) })
+            @($colandPublicHost, $colandServer2PublicHost, $coauthPublicHost, $coauthServer2PublicHost, $mockAppletRegistryPublicHost) +
+            @($additionalServers | ForEach-Object { @($_.ColandHost, $_.CoauthHost) })
         ) | ForEach-Object { $_ } | Where-Object { $_ }
         $jointTlsAssets = New-JointTlsAssets `
             -Directory $jointTlsDir `
@@ -3866,35 +3866,35 @@ try {
         if ($mockAppletRegistryPublicHost) {
             $jointTlsRoutes += [pscustomobject]@{ Host = $mockAppletRegistryPublicHost; BackendPort = $mockAppletRegistryPort }
         }
-        if ($solandPublicHost) {
-            $jointTlsRoutes += [pscustomobject]@{ Host = $solandPublicHost; BackendPort = $solandPort }
+        if ($colandPublicHost) {
+            $jointTlsRoutes += [pscustomobject]@{ Host = $colandPublicHost; BackendPort = $colandPort }
         }
-        if ($solandServer2PublicHost) {
-            $jointTlsRoutes += [pscustomobject]@{ Host = $solandServer2PublicHost; BackendPort = $solandServer2Port }
+        if ($colandServer2PublicHost) {
+            $jointTlsRoutes += [pscustomobject]@{ Host = $colandServer2PublicHost; BackendPort = $colandServer2Port }
         }
         if ($coauthPublicHost) {
             $jointTlsRoutes += [pscustomobject]@{
                 Host = $coauthPublicHost
                 BackendPort = $coauthPort
-                LogoutBackendPort = $solandPort
+                LogoutBackendPort = $colandPort
             }
         }
         if ($coauthServer2PublicHost) {
             $jointTlsRoutes += [pscustomobject]@{
                 Host = $coauthServer2PublicHost
                 BackendPort = $coauthServer2Port
-                LogoutBackendPort = $solandServer2Port
+                LogoutBackendPort = $colandServer2Port
             }
         }
         foreach ($server in $additionalServers) {
-            if ($server.SolandHost) {
-                $jointTlsRoutes += [pscustomobject]@{ Host = $server.SolandHost; BackendPort = $server.SolandPort }
+            if ($server.ColandHost) {
+                $jointTlsRoutes += [pscustomobject]@{ Host = $server.ColandHost; BackendPort = $server.ColandPort }
             }
             if ($server.CoauthHost) {
                 $jointTlsRoutes += [pscustomobject]@{
                     Host = $server.CoauthHost
                     BackendPort = $server.CoauthPort
-                    LogoutBackendPort = $server.SolandPort
+                    LogoutBackendPort = $server.ColandPort
                 }
             }
         }
@@ -3944,7 +3944,7 @@ try {
         throw "Applet mock requires a prepared cotest-wire binary; run the preparation batch first"
     }
 
-    # Start mock services first so coauth/soland configurations can reference them.
+    # Start mock services first so coauth/coland configurations can reference them.
     $mocksRoot = Join-Path $repoRoot "e2e\mocks"
     if ($StartMockIdp) {
         $mockIdpCmd = "`$env:MOCK_IDP_PORT='$mockIdpPort'; node " + (Quote-PsLiteral (Join-Path $mocksRoot "mock-idp.mjs"))
@@ -4153,35 +4153,35 @@ try {
     }
 
     # CT-6: flagon (directory) - needs a Postgres DSN. The validation block
-    # above already guaranteed $TeabayDatabaseUrl is set when -StartTeabay
+    # above already guaranteed $FlagonDatabaseUrl is set when -StartFlagon
     # is passed.
-    if ($StartTeabay) {
-        if (-not $teabayPort) {
-            $teabayUri = [System.Uri]$TeabayBaseUrl
-            $teabayPort = $teabayUri.Port
+    if ($StartFlagon) {
+        if (-not $flagonPort) {
+            $flagonUri = [System.Uri]$FlagonBaseUrl
+            $flagonPort = $flagonUri.Port
         }
-        $teabayBinary = Resolve-TeabayBinary -ExplicitPath $TeabayBin -WorkspaceRoot $workspaceRoot
-        $teabayDb = if ($TeabayDatabaseUrl) { $TeabayDatabaseUrl } else { $env:DATABASE_URL }
-        $teabayConfigPath = Join-Path $jointDir "flagon.env"
+        $flagonBinary = Resolve-FlagonBinary -ExplicitPath $FlagonBin -WorkspaceRoot $workspaceRoot
+        $flagonDb = if ($FlagonDatabaseUrl) { $FlagonDatabaseUrl } else { $env:DATABASE_URL }
+        $flagonConfigPath = Join-Path $jointDir "flagon.env"
         # DID-P1-C02 — flagon is launched with --no-env-overrides, so the
         # metrics bind has to travel in the config file rather than the ambient
         # environment. Without an explicit port it would fall back to the fixed
         # 127.0.0.1:9095 and collide with a developer's running dev stack.
-        $teabayMetricsPort = Get-FreeTcpPort
-        $teabayMetricsBaseUrl = "http://127.0.0.1:$teabayMetricsPort"
-        Write-DotEnvFile -Path $teabayConfigPath -Values ([ordered]@{
-                DATABASE_URL = $teabayDb
-                TEABAY_PUBLIC_BASE_URL = $TeabayBaseUrl
-                TEABAY_SERVICE_ID = $TeabayServiceId
-                TEABAY_DEVELOPMENT_MODE = "true"
-                TEABAY_METRICS_BIND = "127.0.0.1:$teabayMetricsPort"
+        $flagonMetricsPort = Get-FreeTcpPort
+        $flagonMetricsBaseUrl = "http://127.0.0.1:$flagonMetricsPort"
+        Write-DotEnvFile -Path $flagonConfigPath -Values ([ordered]@{
+                DATABASE_URL = $flagonDb
+                FLAGON_PUBLIC_BASE_URL = $FlagonBaseUrl
+                FLAGON_SERVICE_ID = $FlagonServiceId
+                FLAGON_DEVELOPMENT_MODE = "true"
+                FLAGON_METRICS_BIND = "127.0.0.1:$flagonMetricsPort"
             })
-        $teabayCmd = "& {0} --config {1} --no-env-overrides --bind 127.0.0.1:{2}" -f `
-            (Quote-PsLiteral $teabayBinary),
-            (Quote-PsLiteral $teabayConfigPath),
-            $teabayPort
-        $managedServices.Add((Start-ManagedCommand -Name "flagon" -Command $teabayCmd -WorkingDirectory (Split-Path -Parent $teabayBinary) -LogDirectory $serviceLogDir))
-        Wait-HttpReady -Url "$($TeabayBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds
+        $flagonCmd = "& {0} --config {1} --no-env-overrides --bind 127.0.0.1:{2}" -f `
+            (Quote-PsLiteral $flagonBinary),
+            (Quote-PsLiteral $flagonConfigPath),
+            $flagonPort
+        $managedServices.Add((Start-ManagedCommand -Name "flagon" -Command $flagonCmd -WorkingDirectory (Split-Path -Parent $flagonBinary) -LogDirectory $serviceLogDir))
+        Wait-HttpReady -Url "$($FlagonBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds
     }
 
     if ($StartSavfox) {
@@ -4209,30 +4209,30 @@ try {
         }
     }
 
-    if ($willStartDefaultSoland -and -not $solandDatabaseDsn) {
-        $ephemeralSolandPostgres = Start-EphemeralPostgres `
-            -Image $SolandPostgresImage `
-            -NamePrefix "cotest-soland-$timestamp" `
+    if ($willStartDefaultColand -and -not $colandDatabaseDsn) {
+        $ephemeralColandPostgres = Start-EphemeralPostgres `
+            -Image $ColandPostgresImage `
+            -NamePrefix "cotest-coland-$timestamp" `
             -TimeoutSeconds $StartupTimeoutSeconds
-        $solandDatabaseDsn = $ephemeralSolandPostgres.Url
+        $colandDatabaseDsn = $ephemeralColandPostgres.Url
     }
     if ($multiServer) {
-        $ephemeralSolandServer2Postgres = Start-EphemeralPostgres `
-            -Image $SolandPostgresImage `
-            -NamePrefix "cotest-soland-server2-$timestamp" `
+        $ephemeralColandServer2Postgres = Start-EphemeralPostgres `
+            -Image $ColandPostgresImage `
+            -NamePrefix "cotest-coland-server2-$timestamp" `
             -TimeoutSeconds $StartupTimeoutSeconds
-        $solandServer2DatabaseDsn = $ephemeralSolandServer2Postgres.Url
+        $colandServer2DatabaseDsn = $ephemeralColandServer2Postgres.Url
     }
     foreach ($server in $additionalServers) {
-        $server.SolandDatabase = Start-EphemeralPostgres `
-            -Image $SolandPostgresImage `
-            -NamePrefix "cotest-$($server.SolandName)-$timestamp" `
+        $server.ColandDatabase = Start-EphemeralPostgres `
+            -Image $ColandPostgresImage `
+            -NamePrefix "cotest-$($server.ColandName)-$timestamp" `
             -TimeoutSeconds $StartupTimeoutSeconds
-        $server.SolandDatabaseDsn = $server.SolandDatabase.Url
-        $additionalPostgresContainers.Add($server.SolandDatabase)
+        $server.ColandDatabaseDsn = $server.ColandDatabase.Url
+        $additionalPostgresContainers.Add($server.ColandDatabase)
     }
 
-    function Build-SolandDockerEnvironment {
+    function Build-ColandDockerEnvironment {
         param(
             [string]$AccountAuthorityBaseUrl = $CoauthBaseUrl,
             [Parameter(Mandatory = $true)][string]$BaseUrl,
@@ -4254,58 +4254,58 @@ try {
         $map = [ordered]@{
             RUST_LOG = $rustLog
             DATABASE_URL = (Convert-ToContainerReachableUrl $DatabaseUrl)
-            SOLAND_BIND = "0.0.0.0:$SolandContainerPort"
-            SOLAND_PUBLIC_BASE_URL = $BaseUrl
-            SOLAND_TRUST_DOMAIN = "ak:trust_domain:local.host"
-            SOLAND_DEVELOPMENT_MODE = "true"
-            SOLAND_FIRST_PROVISIONING = "true"
-            SOLAND_KEYSTORE_BACKEND = "encrypted_file"
-            SOLAND_KEYSTORE_PATH = "/tmp/soland-state/keystore.v1"
-            SOLAND_KEYSTORE_MASTER_KEY = $KeyStoreMasterKey
-            SOLAND_SERVICE_IDENTITY_BUNDLE_DIR = "/tmp/soland-state/identity-bundle"
-            SOLAND_EMBEDDED_WEBVH_PROVIDER_ENABLED = "true"
-            SOLAND_EGRESS_ALLOW_PRIVATE_NETWORKS = "true"
-            SOLAND_CORS_ALLOW_ORIGIN = $CorsAllowOrigin
-            SOLAND_METRICS_BIND = "0.0.0.0:$MetricsPort"
-            SOLAND_OBJECT_STORAGE_BACKEND = "filesystem"
-            SOLAND_OBJECT_STORAGE_LOCAL_ROOT = "/tmp/soland-blobs"
-            SOLAND_LOG_FILE = "/cotest-logs/$LogFileName"
-            SOLAND_LIVEKIT_API_KEY = "did:web:media.example#media-token"
-            SOLAND_LIVEKIT_API_SECRET = "joint-e2e-livekit-secret"
-            SOLAND_WEBVH_DEGRADED_NO_WITNESS_MAX_SECS = "$WebvhDegradedNoWitnessMaxSecs"
-            SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER = $CoauthEmbeddedWebvhRegistrationBearer
+            COLAND_BIND = "0.0.0.0:$ColandContainerPort"
+            COLAND_PUBLIC_BASE_URL = $BaseUrl
+            COLAND_TRUST_DOMAIN = "ak:trust_domain:local.host"
+            COLAND_DEVELOPMENT_MODE = "true"
+            COLAND_FIRST_PROVISIONING = "true"
+            COLAND_KEYSTORE_BACKEND = "encrypted_file"
+            COLAND_KEYSTORE_PATH = "/tmp/coland-state/keystore.v1"
+            COLAND_KEYSTORE_MASTER_KEY = $KeyStoreMasterKey
+            COLAND_SERVICE_IDENTITY_BUNDLE_DIR = "/tmp/coland-state/identity-bundle"
+            COLAND_EMBEDDED_WEBVH_PROVIDER_ENABLED = "true"
+            COLAND_EGRESS_ALLOW_PRIVATE_NETWORKS = "true"
+            COLAND_CORS_ALLOW_ORIGIN = $CorsAllowOrigin
+            COLAND_METRICS_BIND = "0.0.0.0:$MetricsPort"
+            COLAND_OBJECT_STORAGE_BACKEND = "filesystem"
+            COLAND_OBJECT_STORAGE_LOCAL_ROOT = "/tmp/coland-blobs"
+            COLAND_LOG_FILE = "/cotest-logs/$LogFileName"
+            COLAND_LIVEKIT_API_KEY = "did:web:media.example#media-token"
+            COLAND_LIVEKIT_API_SECRET = "joint-e2e-livekit-secret"
+            COLAND_WEBVH_DEGRADED_NO_WITNESS_MAX_SECS = "$WebvhDegradedNoWitnessMaxSecs"
+            COLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER = $CoauthEmbeddedWebvhRegistrationBearer
         }
-        # No SOLAND_ACCOUNT_AUTHORITY_PUBLIC_KEY_MULTIBASE pin: the managed
+        # No COLAND_ACCOUNT_AUTHORITY_PUBLIC_KEY_MULTIBASE pin: the managed
         # Account Authority mints its assertion key in its own KeyStore, so the
-        # Station discovers it from SOLAND_ACCOUNT_AUTHORITY_URL on every start.
+        # Station discovers it from COLAND_ACCOUNT_AUTHORITY_URL on every start.
         if ($script:UseManagedCoauthAssertionKey -and $AccountAuthorityBaseUrl) {
-            $map.SOLAND_ACCOUNT_AUTHORITY_URL = $AccountAuthorityBaseUrl.TrimEnd("/")
+            $map.COLAND_ACCOUNT_AUTHORITY_URL = $AccountAuthorityBaseUrl.TrimEnd("/")
         }
         if ($AccountAuthorityBaseUrl) {
             $coauthPublic = $AccountAuthorityBaseUrl.TrimEnd("/")
             $coauthContainer = (Convert-ToContainerReachableUrl $coauthPublic).TrimEnd("/")
             # The bearer-protected targets are bound to the canonical Account
-            # Authority origin at Soland startup. In Docker the loopback host
+            # Authority origin at Coland startup. In Docker the loopback host
             # must therefore be rewritten for all three values, not only the
             # operation URLs, or the origin check correctly fails closed.
-            $map.SOLAND_ACCOUNT_AUTHORITY_URL = $coauthContainer
-            $map.SOLAND_SESSION_GRANT_INTROSPECTION_URL = "$coauthContainer/_coauth/internal/session-grants/introspect"
-            $map.SOLAND_AUTH_SESSION_LOGOUT_URL = "$coauthContainer/_coauth/internal/auth-sessions/logout"
-            $map.SOLAND_INTERNAL_AUTHORITY_SHARED_SECRET = $InternalAuthoritySharedSecret
-            $map.SOLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN = "ak:trust_domain:local.host"
-            $map.SOLAND_OAUTH_CLIENT_ID = $CoauthOAuthClientId
+            $map.COLAND_ACCOUNT_AUTHORITY_URL = $coauthContainer
+            $map.COLAND_SESSION_GRANT_INTROSPECTION_URL = "$coauthContainer/_coauth/internal/session-grants/introspect"
+            $map.COLAND_AUTH_SESSION_LOGOUT_URL = "$coauthContainer/_coauth/internal/auth-sessions/logout"
+            $map.COLAND_INTERNAL_AUTHORITY_SHARED_SECRET = $InternalAuthoritySharedSecret
+            $map.COLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN = "ak:trust_domain:local.host"
+            $map.COLAND_OAUTH_CLIENT_ID = $CoauthOAuthClientId
         }
         if ($FederationPeers) {
             $parts = $FederationPeers -split "\|", 2
-            $map.SOLAND_FEDERATION_PEERS = Convert-ToContainerReachableUrl $parts[0]
+            $map.COLAND_FEDERATION_PEERS = Convert-ToContainerReachableUrl $parts[0]
         }
         if ($NotarySigningKey) {
-            $map.SOLAND_NOTARY_SIGNING_KEY = $NotarySigningKey
+            $map.COLAND_NOTARY_SIGNING_KEY = $NotarySigningKey
         }
         return $map
     }
 
-    function Build-SolandCommand {
+    function Build-ColandCommand {
         param(
             [string]$AccountAuthorityBaseUrl = $CoauthBaseUrl,
             [Parameter(Mandatory = $true)][string]$BinaryPath,
@@ -4328,61 +4328,61 @@ try {
         $values = [ordered]@{
             RUST_LOG = $rustLog
             DATABASE_URL = $DatabaseUrl
-            SOLAND_PUBLIC_BASE_URL = $BaseUrl
-            SOLAND_TRUST_DOMAIN = "ak:trust_domain:local.host"
-            SOLAND_DEVELOPMENT_MODE = "true"
-            SOLAND_FIRST_PROVISIONING = "true"
-            SOLAND_KEYSTORE_BACKEND = "encrypted_file"
-            SOLAND_KEYSTORE_PATH = (Join-Path $StateRoot "keystore.v1")
-            SOLAND_KEYSTORE_MASTER_KEY = $KeyStoreMasterKey
-            SOLAND_SERVICE_IDENTITY_BUNDLE_DIR = (Join-Path $StateRoot "identity-bundle")
-            SOLAND_EMBEDDED_WEBVH_PROVIDER_ENABLED = "true"
-            SOLAND_EGRESS_ALLOW_PRIVATE_NETWORKS = "true"
-            SOLAND_CORS_ALLOW_ORIGIN = $CorsAllowOrigin
-            SOLAND_METRICS_BIND = "127.0.0.1:$MetricsPort"
-            SOLAND_OBJECT_STORAGE_BACKEND = "filesystem"
-            SOLAND_OBJECT_STORAGE_LOCAL_ROOT = $ObjectsRoot
-            SOLAND_LOG_FILE = $LogFile
-            SOLAND_LIVEKIT_API_KEY = "did:web:media.example#media-token"
-            SOLAND_LIVEKIT_API_SECRET = "joint-e2e-livekit-secret"
-            SOLAND_WEBVH_DEGRADED_NO_WITNESS_MAX_SECS = "$WebvhDegradedNoWitnessMaxSecs"
-            SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER = $CoauthEmbeddedWebvhRegistrationBearer
+            COLAND_PUBLIC_BASE_URL = $BaseUrl
+            COLAND_TRUST_DOMAIN = "ak:trust_domain:local.host"
+            COLAND_DEVELOPMENT_MODE = "true"
+            COLAND_FIRST_PROVISIONING = "true"
+            COLAND_KEYSTORE_BACKEND = "encrypted_file"
+            COLAND_KEYSTORE_PATH = (Join-Path $StateRoot "keystore.v1")
+            COLAND_KEYSTORE_MASTER_KEY = $KeyStoreMasterKey
+            COLAND_SERVICE_IDENTITY_BUNDLE_DIR = (Join-Path $StateRoot "identity-bundle")
+            COLAND_EMBEDDED_WEBVH_PROVIDER_ENABLED = "true"
+            COLAND_EGRESS_ALLOW_PRIVATE_NETWORKS = "true"
+            COLAND_CORS_ALLOW_ORIGIN = $CorsAllowOrigin
+            COLAND_METRICS_BIND = "127.0.0.1:$MetricsPort"
+            COLAND_OBJECT_STORAGE_BACKEND = "filesystem"
+            COLAND_OBJECT_STORAGE_LOCAL_ROOT = $ObjectsRoot
+            COLAND_LOG_FILE = $LogFile
+            COLAND_LIVEKIT_API_KEY = "did:web:media.example#media-token"
+            COLAND_LIVEKIT_API_SECRET = "joint-e2e-livekit-secret"
+            COLAND_WEBVH_DEGRADED_NO_WITNESS_MAX_SECS = "$WebvhDegradedNoWitnessMaxSecs"
+            COLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER = $CoauthEmbeddedWebvhRegistrationBearer
         }
-        # See Build-SolandDockerEnvironment: the assertion key is discovered from
+        # See Build-ColandDockerEnvironment: the assertion key is discovered from
         # the Account Authority, never pinned to a runner-side constant.
         if ($script:UseManagedCoauthAssertionKey -and $AccountAuthorityBaseUrl) {
-            $values.SOLAND_ACCOUNT_AUTHORITY_URL = $AccountAuthorityBaseUrl.TrimEnd("/")
+            $values.COLAND_ACCOUNT_AUTHORITY_URL = $AccountAuthorityBaseUrl.TrimEnd("/")
         }
         if ($AccountAuthorityBaseUrl) {
             $coauthTrimmed = $AccountAuthorityBaseUrl.TrimEnd("/")
-            $values.SOLAND_ACCOUNT_AUTHORITY_URL = $coauthTrimmed
-            $values.SOLAND_SESSION_GRANT_INTROSPECTION_URL = "$coauthTrimmed/_coauth/internal/session-grants/introspect"
-            $values.SOLAND_AUTH_SESSION_LOGOUT_URL = "$coauthTrimmed/_coauth/internal/auth-sessions/logout"
-            $values.SOLAND_INTERNAL_AUTHORITY_SHARED_SECRET = $InternalAuthoritySharedSecret
-            $values.SOLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN = "ak:trust_domain:local.host"
-            $values.SOLAND_OAUTH_CLIENT_ID = $CoauthOAuthClientId
+            $values.COLAND_ACCOUNT_AUTHORITY_URL = $coauthTrimmed
+            $values.COLAND_SESSION_GRANT_INTROSPECTION_URL = "$coauthTrimmed/_coauth/internal/session-grants/introspect"
+            $values.COLAND_AUTH_SESSION_LOGOUT_URL = "$coauthTrimmed/_coauth/internal/auth-sessions/logout"
+            $values.COLAND_INTERNAL_AUTHORITY_SHARED_SECRET = $InternalAuthoritySharedSecret
+            $values.COLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN = "ak:trust_domain:local.host"
+            $values.COLAND_OAUTH_CLIENT_ID = $CoauthOAuthClientId
         }
         if ($FederationPeers) {
-            $values.SOLAND_FEDERATION_PEERS = $FederationPeers
+            $values.COLAND_FEDERATION_PEERS = $FederationPeers
         }
         if ($NotarySigningKey) {
-            $values.SOLAND_NOTARY_SIGNING_KEY = $NotarySigningKey
+            $values.COLAND_NOTARY_SIGNING_KEY = $NotarySigningKey
         }
         Write-DotEnvFile -Path $ConfigPath -Values $values
-        return "& {{ Remove-Item Env:RUST_MIN_STACK -ErrorAction SilentlyContinue; `$env:SOLAND_ENABLE_TEST_ENDPOINTS='1'; `$env:SOLAND_TEST_CHAOS_CONTROL_FILE={0}; & {1} --config {2} --no-env-overrides --bind 127.0.0.1:{3} }}" -f `
-            (Quote-PsLiteral $solandChaosControlFile),
+        return "& {{ Remove-Item Env:RUST_MIN_STACK -ErrorAction SilentlyContinue; `$env:COLAND_ENABLE_TEST_ENDPOINTS='1'; `$env:COLAND_TEST_CHAOS_CONTROL_FILE={0}; & {1} --config {2} --no-env-overrides --bind 127.0.0.1:{3} }}" -f `
+            (Quote-PsLiteral $colandChaosControlFile),
             (Quote-PsLiteral $BinaryPath),
             (Quote-PsLiteral $ConfigPath),
             $Port
     }
 
-    # The Account Authority starts before any Soland process. Soland reads the
+    # The Account Authority starts before any Coland process. Coland reads the
     # Account Authority's published keyset on every startup and commits that
     # assertion key into its Station DID document, and coauth only mints that
     # key on its own first start (coauth 492d8ba1 moved it into the encrypted
     # KeyStore, so it is no longer a value the runner can know in advance).
     # coauth itself has no Station dependency at boot: it reads its config and
-    # its own PostgreSQL, and reaches Soland only when serving a request.
+    # its own PostgreSQL, and reaches Coland only when serving a request.
     if ($CoauthCommand) {
         if (-not $CoauthBaseUrl -and -not $CoauthHealthUrl) {
             throw "CoauthCommand requires CoauthBaseUrl or CoauthHealthUrl"
@@ -4412,260 +4412,260 @@ try {
     # Coauth is a private component of its owning Station, not a separate
     # service identity. Provision the managed Station first, then pin that
     # persisted identity when enabling its Account Authority process.
-    $needsAuthorityBootstrap = $StartCoauth -and $willStartDefaultSoland
-    $solandRestartPlans = [System.Collections.Generic.List[object]]::new()
-    $solandService = $null
-    $solandServer2Service = $null
+    $needsAuthorityBootstrap = $StartCoauth -and $willStartDefaultColand
+    $colandRestartPlans = [System.Collections.Generic.List[object]]::new()
+    $colandService = $null
+    $colandServer2Service = $null
     if ($CoauthBaseUrl -and -not $StartCoauth -and -not $CoauthServiceId) {
         throw "Caller-owned Coauth requires -CoauthServiceId with its configured owning Station identity"
     }
 
     # Per-instance tracing files. Windows fully-buffers stdout when
     # `Start-Process -RedirectStandardOutput` may buffer service output on
-    # Windows. The `SOLAND_LOG_FILE` path is a second, durable sink soland
+    # Windows. The `COLAND_LOG_FILE` path is a second, durable sink coland
     # writes through a non-blocking
-    # tracing-appender (see soland/src/main.rs `init_tracing`). This is the
+    # tracing-appender (see coland/src/main.rs `init_tracing`). This is the
     # file scenarios should `tail -f` when debugging projection / reducer
     # paths against the runner.
-    $solandTraceFile = Join-Path $serverServiceLogDirs["server1"] "soland-server1.trace.log"
+    $colandTraceFile = Join-Path $serverServiceLogDirs["server1"] "coland-server1.trace.log"
     $server1Peer = ""
-    $solandCorsOrigins = @(
+    $colandCorsOrigins = @(
         $InksonBaseUrl
         $inksonServer2BaseUrl
     ) | Where-Object { $_ } | Select-Object -Unique
-    $solandCorsAllowOrigin = if (@($solandCorsOrigins).Count -gt 0) {
-        $solandCorsOrigins -join ","
+    $colandCorsAllowOrigin = if (@($colandCorsOrigins).Count -gt 0) {
+        $colandCorsOrigins -join ","
     } else {
         "http://127.0.0.1"
     }
-    if (-not $SolandCommand -and $solandPort -and $SolandRuntime -eq "process") {
-        $generatedSolandCommand = $true
-        $solandBinary = Resolve-SolandBinary -ExplicitPath $SolandBin -WorkspaceRoot $workspaceRoot
-        $server1Peer = @($allSolandBaseUrls | Where-Object { $_ -ne $SolandBaseUrl }) -join ","
-        $solandMetricsPort = Get-FreeTcpPort
+    if (-not $ColandCommand -and $colandPort -and $ColandRuntime -eq "process") {
+        $generatedColandCommand = $true
+        $colandBinary = Resolve-ColandBinary -ExplicitPath $ColandBin -WorkspaceRoot $workspaceRoot
+        $server1Peer = @($allColandBaseUrls | Where-Object { $_ -ne $ColandBaseUrl }) -join ","
+        $colandMetricsPort = Get-FreeTcpPort
         # DID-P1-C02 — process runtime binds the metrics listener on loopback,
         # so the tests can scrape it. The docker runtime below only publishes
         # the HTTP port, so no metrics URL is exported for that mode.
-        $solandMetricsBaseUrl = "http://127.0.0.1:$solandMetricsPort"
-        $solandProcessArguments = @{
-            BinaryPath = $solandBinary
-            ConfigPath = $serverArtifactLayouts["server1"].SolandConfigPath
-            BaseUrl = $SolandBaseUrl
-            DatabaseUrl = $solandDatabaseDsn
-            ObjectsRoot = $serverArtifactLayouts["server1"].SolandObjectsRoot
-            StateRoot = $serverArtifactLayouts["server1"].SolandStateRoot
-            Port = $solandPort
-            MetricsPort = $solandMetricsPort
-            LogFile = $solandTraceFile
-            CorsAllowOrigin = $solandCorsAllowOrigin
-            KeyStoreMasterKey = $SolandKeyStoreMasterKey
+        $colandMetricsBaseUrl = "http://127.0.0.1:$colandMetricsPort"
+        $colandProcessArguments = @{
+            BinaryPath = $colandBinary
+            ConfigPath = $serverArtifactLayouts["server1"].ColandConfigPath
+            BaseUrl = $ColandBaseUrl
+            DatabaseUrl = $colandDatabaseDsn
+            ObjectsRoot = $serverArtifactLayouts["server1"].ColandObjectsRoot
+            StateRoot = $serverArtifactLayouts["server1"].ColandStateRoot
+            Port = $colandPort
+            MetricsPort = $colandMetricsPort
+            LogFile = $colandTraceFile
+            CorsAllowOrigin = $colandCorsAllowOrigin
+            KeyStoreMasterKey = $ColandKeyStoreMasterKey
             InternalAuthoritySharedSecret = $stationInternalChannelBindingsByName["server1"].InternalAuthoritySharedSecret
-            NotarySigningKey = $SolandNotarySigningKey
+            NotarySigningKey = $ColandNotarySigningKey
             FederationPeers = $server1Peer
         }
-        $SolandCommand = Build-SolandCommand @solandProcessArguments
+        $ColandCommand = Build-ColandCommand @colandProcessArguments
         if ($jointTlsAssets) {
-            $SolandCommand = "`$env:SSL_CERT_FILE=$(Quote-PsLiteral $jointTlsAssets.CaPemPath); $SolandCommand"
+            $ColandCommand = "`$env:SSL_CERT_FILE=$(Quote-PsLiteral $jointTlsAssets.CaPemPath); $ColandCommand"
         }
     }
-    if ($SolandCommand) {
-        $solandWorkingDirectory = if ($generatedSolandCommand) { $repoRoot } else { Split-Path -Parent $SutManifest }
-        $solandName = "soland-server1"
-        $launchName = if ($needsAuthorityBootstrap) { "$solandName-bootstrap" } else { $solandName }
-        $solandService = Start-ManagedCommand -Name $launchName -Command $SolandCommand -WorkingDirectory $solandWorkingDirectory -LogDirectory $serverServiceLogDirs["server1"]
-        $managedServices.Add($solandService)
+    if ($ColandCommand) {
+        $colandWorkingDirectory = if ($generatedColandCommand) { $repoRoot } else { Split-Path -Parent $SutManifest }
+        $colandName = "coland-server1"
+        $launchName = if ($needsAuthorityBootstrap) { "$colandName-bootstrap" } else { $colandName }
+        $colandService = Start-ManagedCommand -Name $launchName -Command $ColandCommand -WorkingDirectory $colandWorkingDirectory -LogDirectory $serverServiceLogDirs["server1"]
+        $managedServices.Add($colandService)
         if ($needsAuthorityBootstrap) {
-            $solandRestartPlans.Add(@{
-                Name = $solandName; BaseUrl = $SolandBaseUrl; Service = $solandService
-                ConfigArguments = $solandProcessArguments; Command = $SolandCommand
-                WorkingDirectory = $solandWorkingDirectory; LogDirectory = $serverServiceLogDirs["server1"]
+            $colandRestartPlans.Add(@{
+                Name = $colandName; BaseUrl = $ColandBaseUrl; Service = $colandService
+                ConfigArguments = $colandProcessArguments; Command = $ColandCommand
+                WorkingDirectory = $colandWorkingDirectory; LogDirectory = $serverServiceLogDirs["server1"]
             })
         }
-    } elseif ($willStartDockerSoland) {
-        $server1Peer = @($allSolandBaseUrls | Where-Object { $_ -ne $SolandBaseUrl }) -join ","
-        $solandMetricsPort = Get-FreeTcpPort
-        $solandDockerArguments = @{
-            BaseUrl = $SolandBaseUrl
-            DatabaseUrl = $solandDatabaseDsn
-            MetricsPort = $solandMetricsPort
-            LogFileName = ([System.IO.Path]::GetFileName($solandTraceFile))
-            CorsAllowOrigin = $solandCorsAllowOrigin
-            KeyStoreMasterKey = $SolandKeyStoreMasterKey
+    } elseif ($willStartDockerColand) {
+        $server1Peer = @($allColandBaseUrls | Where-Object { $_ -ne $ColandBaseUrl }) -join ","
+        $colandMetricsPort = Get-FreeTcpPort
+        $colandDockerArguments = @{
+            BaseUrl = $ColandBaseUrl
+            DatabaseUrl = $colandDatabaseDsn
+            MetricsPort = $colandMetricsPort
+            LogFileName = ([System.IO.Path]::GetFileName($colandTraceFile))
+            CorsAllowOrigin = $colandCorsAllowOrigin
+            KeyStoreMasterKey = $ColandKeyStoreMasterKey
             InternalAuthoritySharedSecret = $stationInternalChannelBindingsByName["server1"].InternalAuthoritySharedSecret
-            NotarySigningKey = $SolandNotarySigningKey
+            NotarySigningKey = $ColandNotarySigningKey
             FederationPeers = $server1Peer
         }
-        $solandDockerEnv = Build-SolandDockerEnvironment @solandDockerArguments
-        $solandName = "soland-server1"
-        $solandDockerStartArguments = @{
-            Name = $solandName
-            Image = $SolandImage
-            HostPort = $solandPort
-            ContainerPort = $SolandContainerPort
-            ObjectsRoot = $serverArtifactLayouts["server1"].SolandObjectsRoot
-            StateRoot = $serverArtifactLayouts["server1"].SolandStateRoot
+        $colandDockerEnv = Build-ColandDockerEnvironment @colandDockerArguments
+        $colandName = "coland-server1"
+        $colandDockerStartArguments = @{
+            Name = $colandName
+            Image = $ColandImage
+            HostPort = $colandPort
+            ContainerPort = $ColandContainerPort
+            ObjectsRoot = $serverArtifactLayouts["server1"].ColandObjectsRoot
+            StateRoot = $serverArtifactLayouts["server1"].ColandStateRoot
             LogDirectory = $serverServiceLogDirs["server1"]
-            Environment = $solandDockerEnv
+            Environment = $colandDockerEnv
         }
-        if ($needsAuthorityBootstrap) { $solandDockerStartArguments.Name += "-bootstrap" }
-        $solandService = Start-ManagedDockerSoland @solandDockerStartArguments
-        $managedServices.Add($solandService)
+        if ($needsAuthorityBootstrap) { $colandDockerStartArguments.Name += "-bootstrap" }
+        $colandService = Start-ManagedDockerColand @colandDockerStartArguments
+        $managedServices.Add($colandService)
         if ($needsAuthorityBootstrap) {
-            $solandRestartPlans.Add(@{
-                Name = $solandName; BaseUrl = $SolandBaseUrl; Service = $solandService
-                ConfigArguments = $solandDockerArguments; DockerArguments = $solandDockerStartArguments
+            $colandRestartPlans.Add(@{
+                Name = $colandName; BaseUrl = $ColandBaseUrl; Service = $colandService
+                ConfigArguments = $colandDockerArguments; DockerArguments = $colandDockerStartArguments
             })
         }
     }
-    Wait-HttpReady -Url "$($SolandBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds -ManagedService $solandService
-    $SolandServiceId = Get-DescribedServiceId -BaseUrl $SolandBaseUrl -ServiceName "soland"
-    $SolandServiceDid = Get-DescribedServiceDid -BaseUrl $SolandBaseUrl -ServiceName "soland"
+    Wait-HttpReady -Url "$($ColandBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds -ManagedService $colandService
+    $ColandServiceId = Get-DescribedServiceId -BaseUrl $ColandBaseUrl -ServiceName "coland"
+    $ColandServiceDid = Get-DescribedServiceDid -BaseUrl $ColandBaseUrl -ServiceName "coland"
 
     if ($multiServer) {
-        $solandServer2TraceFile = Join-Path $serverServiceLogDirs["server2"] "soland-server2.trace.log"
-        $solandServer2MetricsPort = Get-FreeTcpPort
-        $solandServer2CorsAllowOrigin = $solandCorsAllowOrigin
-        if ($SolandRuntime -eq "docker") {
-            $solandServer2DockerArguments = @{
+        $colandServer2TraceFile = Join-Path $serverServiceLogDirs["server2"] "coland-server2.trace.log"
+        $colandServer2MetricsPort = Get-FreeTcpPort
+        $colandServer2CorsAllowOrigin = $colandCorsAllowOrigin
+        if ($ColandRuntime -eq "docker") {
+            $colandServer2DockerArguments = @{
                 AccountAuthorityBaseUrl = if ($StartCoauth) { $coauthServer2BaseUrl } else { $CoauthBaseUrl }
-                BaseUrl = $solandServer2BaseUrl
-                DatabaseUrl = $solandServer2DatabaseDsn
-                MetricsPort = $solandServer2MetricsPort
-                LogFileName = ([System.IO.Path]::GetFileName($solandServer2TraceFile))
-                CorsAllowOrigin = $solandServer2CorsAllowOrigin
-                KeyStoreMasterKey = $SolandServer2KeyStoreMasterKey
+                BaseUrl = $colandServer2BaseUrl
+                DatabaseUrl = $colandServer2DatabaseDsn
+                MetricsPort = $colandServer2MetricsPort
+                LogFileName = ([System.IO.Path]::GetFileName($colandServer2TraceFile))
+                CorsAllowOrigin = $colandServer2CorsAllowOrigin
+                KeyStoreMasterKey = $ColandServer2KeyStoreMasterKey
                 InternalAuthoritySharedSecret = $stationInternalChannelBindingsByName["server2"].InternalAuthoritySharedSecret
-                NotarySigningKey = $SolandServer2NotarySigningKey
-                FederationPeers = (@($allSolandBaseUrls | Where-Object { $_ -ne $solandServer2BaseUrl }) -join ",")
+                NotarySigningKey = $ColandServer2NotarySigningKey
+                FederationPeers = (@($allColandBaseUrls | Where-Object { $_ -ne $colandServer2BaseUrl }) -join ",")
             }
-            $solandServer2DockerEnv = Build-SolandDockerEnvironment @solandServer2DockerArguments
-            $solandServer2DockerStartArguments = @{
-                Name = "soland-server2"
-                Image = $SolandImage
-                HostPort = $solandServer2Port
-                ContainerPort = $SolandContainerPort
-                ObjectsRoot = $serverArtifactLayouts["server2"].SolandObjectsRoot
-                StateRoot = $serverArtifactLayouts["server2"].SolandStateRoot
+            $colandServer2DockerEnv = Build-ColandDockerEnvironment @colandServer2DockerArguments
+            $colandServer2DockerStartArguments = @{
+                Name = "coland-server2"
+                Image = $ColandImage
+                HostPort = $colandServer2Port
+                ContainerPort = $ColandContainerPort
+                ObjectsRoot = $serverArtifactLayouts["server2"].ColandObjectsRoot
+                StateRoot = $serverArtifactLayouts["server2"].ColandStateRoot
                 LogDirectory = $serverServiceLogDirs["server2"]
-                Environment = $solandServer2DockerEnv
+                Environment = $colandServer2DockerEnv
             }
-            if ($needsAuthorityBootstrap) { $solandServer2DockerStartArguments.Name += "-bootstrap" }
-            $solandServer2Service = Start-ManagedDockerSoland @solandServer2DockerStartArguments
-            $managedServices.Add($solandServer2Service)
+            if ($needsAuthorityBootstrap) { $colandServer2DockerStartArguments.Name += "-bootstrap" }
+            $colandServer2Service = Start-ManagedDockerColand @colandServer2DockerStartArguments
+            $managedServices.Add($colandServer2Service)
             if ($needsAuthorityBootstrap) {
-                $solandRestartPlans.Add(@{
-                    Name = "soland-server2"; BaseUrl = $solandServer2BaseUrl; Service = $solandServer2Service
-                    ConfigArguments = $solandServer2DockerArguments; DockerArguments = $solandServer2DockerStartArguments
+                $colandRestartPlans.Add(@{
+                    Name = "coland-server2"; BaseUrl = $colandServer2BaseUrl; Service = $colandServer2Service
+                    ConfigArguments = $colandServer2DockerArguments; DockerArguments = $colandServer2DockerStartArguments
                 })
             }
         } else {
-            $solandServer2ProcessArguments = @{
+            $colandServer2ProcessArguments = @{
                 AccountAuthorityBaseUrl = if ($StartCoauth) { $coauthServer2BaseUrl } else { $CoauthBaseUrl }
-                BinaryPath = $solandBinary
-                ConfigPath = $serverArtifactLayouts["server2"].SolandConfigPath
-                BaseUrl = $solandServer2BaseUrl
-                DatabaseUrl = $solandServer2DatabaseDsn
-                ObjectsRoot = $serverArtifactLayouts["server2"].SolandObjectsRoot
-                StateRoot = $serverArtifactLayouts["server2"].SolandStateRoot
-                Port = $solandServer2Port
-                MetricsPort = $solandServer2MetricsPort
-                LogFile = $solandServer2TraceFile
-                CorsAllowOrigin = $solandServer2CorsAllowOrigin
-                KeyStoreMasterKey = $SolandServer2KeyStoreMasterKey
+                BinaryPath = $colandBinary
+                ConfigPath = $serverArtifactLayouts["server2"].ColandConfigPath
+                BaseUrl = $colandServer2BaseUrl
+                DatabaseUrl = $colandServer2DatabaseDsn
+                ObjectsRoot = $serverArtifactLayouts["server2"].ColandObjectsRoot
+                StateRoot = $serverArtifactLayouts["server2"].ColandStateRoot
+                Port = $colandServer2Port
+                MetricsPort = $colandServer2MetricsPort
+                LogFile = $colandServer2TraceFile
+                CorsAllowOrigin = $colandServer2CorsAllowOrigin
+                KeyStoreMasterKey = $ColandServer2KeyStoreMasterKey
                 InternalAuthoritySharedSecret = $stationInternalChannelBindingsByName["server2"].InternalAuthoritySharedSecret
-                NotarySigningKey = $SolandServer2NotarySigningKey
-                FederationPeers = (@($allSolandBaseUrls | Where-Object { $_ -ne $solandServer2BaseUrl }) -join ",")
+                NotarySigningKey = $ColandServer2NotarySigningKey
+                FederationPeers = (@($allColandBaseUrls | Where-Object { $_ -ne $colandServer2BaseUrl }) -join ",")
             }
-            $solandServer2Command = Build-SolandCommand @solandServer2ProcessArguments
+            $colandServer2Command = Build-ColandCommand @colandServer2ProcessArguments
             if ($jointTlsAssets) {
-                $solandServer2Command = "`$env:SSL_CERT_FILE=$(Quote-PsLiteral $jointTlsAssets.CaPemPath); $solandServer2Command"
+                $colandServer2Command = "`$env:SSL_CERT_FILE=$(Quote-PsLiteral $jointTlsAssets.CaPemPath); $colandServer2Command"
             }
-            $launchName = if ($needsAuthorityBootstrap) { "soland-server2-bootstrap" } else { "soland-server2" }
-            $solandServer2Service = Start-ManagedCommand -Name $launchName -Command $solandServer2Command -WorkingDirectory $repoRoot -LogDirectory $serverServiceLogDirs["server2"]
-            $managedServices.Add($solandServer2Service)
+            $launchName = if ($needsAuthorityBootstrap) { "coland-server2-bootstrap" } else { "coland-server2" }
+            $colandServer2Service = Start-ManagedCommand -Name $launchName -Command $colandServer2Command -WorkingDirectory $repoRoot -LogDirectory $serverServiceLogDirs["server2"]
+            $managedServices.Add($colandServer2Service)
             if ($needsAuthorityBootstrap) {
-                $solandRestartPlans.Add(@{
-                    Name = "soland-server2"; BaseUrl = $solandServer2BaseUrl; Service = $solandServer2Service
-                    ConfigArguments = $solandServer2ProcessArguments; Command = $solandServer2Command
+                $colandRestartPlans.Add(@{
+                    Name = "coland-server2"; BaseUrl = $colandServer2BaseUrl; Service = $colandServer2Service
+                    ConfigArguments = $colandServer2ProcessArguments; Command = $colandServer2Command
                     WorkingDirectory = $repoRoot; LogDirectory = $serverServiceLogDirs["server2"]
                 })
             }
         }
-        Wait-HttpReady -Url "$($solandServer2BaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds -ManagedService $solandServer2Service
-        $SolandServer2ServiceId = Get-DescribedServiceId -BaseUrl $solandServer2BaseUrl -ServiceName "soland-server2"
-        $SolandServer2ServiceDid = Get-DescribedServiceDid -BaseUrl $solandServer2BaseUrl -ServiceName "soland-server2"
+        Wait-HttpReady -Url "$($colandServer2BaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds -ManagedService $colandServer2Service
+        $ColandServer2ServiceId = Get-DescribedServiceId -BaseUrl $colandServer2BaseUrl -ServiceName "coland-server2"
+        $ColandServer2ServiceDid = Get-DescribedServiceDid -BaseUrl $colandServer2BaseUrl -ServiceName "coland-server2"
     }
 
     foreach ($server in $additionalServers) {
-        $server.SolandMetricsPort = Get-FreeTcpPort
-        $traceFile = Join-Path $serverServiceLogDirs[$server.Name] "$($server.SolandName).trace.log"
+        $server.ColandMetricsPort = Get-FreeTcpPort
+        $traceFile = Join-Path $serverServiceLogDirs[$server.Name] "$($server.ColandName).trace.log"
         $configArguments = @{
             AccountAuthorityBaseUrl = if ($StartCoauth) { $server.CoauthBaseUrl } else { $CoauthBaseUrl }
-            BaseUrl = $server.SolandBaseUrl
-            DatabaseUrl = $server.SolandDatabaseDsn
-            MetricsPort = $server.SolandMetricsPort
-            CorsAllowOrigin = $solandCorsAllowOrigin
+            BaseUrl = $server.ColandBaseUrl
+            DatabaseUrl = $server.ColandDatabaseDsn
+            MetricsPort = $server.ColandMetricsPort
+            CorsAllowOrigin = $colandCorsAllowOrigin
             KeyStoreMasterKey = $server.KeyStoreMasterKey
             InternalAuthoritySharedSecret = $stationInternalChannelBindingsByName[$server.Name].InternalAuthoritySharedSecret
             NotarySigningKey = $server.NotarySigningKey
-            FederationPeers = (@($allSolandBaseUrls | Where-Object { $_ -ne $server.SolandBaseUrl }) -join ",")
+            FederationPeers = (@($allColandBaseUrls | Where-Object { $_ -ne $server.ColandBaseUrl }) -join ",")
         }
-        if ($SolandRuntime -eq "docker") {
+        if ($ColandRuntime -eq "docker") {
             $configArguments.LogFileName = [System.IO.Path]::GetFileName($traceFile)
-            $dockerEnvironment = Build-SolandDockerEnvironment @configArguments
+            $dockerEnvironment = Build-ColandDockerEnvironment @configArguments
             $startArguments = @{
-                Name = $(if ($needsAuthorityBootstrap) { "$($server.SolandName)-bootstrap" } else { $server.SolandName })
-                Image = $SolandImage
-                HostPort = $server.SolandPort
-                ContainerPort = $SolandContainerPort
-                ObjectsRoot = $serverArtifactLayouts[$server.Name].SolandObjectsRoot
-                StateRoot = $serverArtifactLayouts[$server.Name].SolandStateRoot
+                Name = $(if ($needsAuthorityBootstrap) { "$($server.ColandName)-bootstrap" } else { $server.ColandName })
+                Image = $ColandImage
+                HostPort = $server.ColandPort
+                ContainerPort = $ColandContainerPort
+                ObjectsRoot = $serverArtifactLayouts[$server.Name].ColandObjectsRoot
+                StateRoot = $serverArtifactLayouts[$server.Name].ColandStateRoot
                 LogDirectory = $serverServiceLogDirs[$server.Name]
                 Environment = $dockerEnvironment
             }
-            $server.SolandService = Start-ManagedDockerSoland @startArguments
-            $managedServices.Add($server.SolandService)
+            $server.ColandService = Start-ManagedDockerColand @startArguments
+            $managedServices.Add($server.ColandService)
             if ($needsAuthorityBootstrap) {
-                $solandRestartPlans.Add(@{ Name = $server.SolandName; BaseUrl = $server.SolandBaseUrl; Service = $server.SolandService; ConfigArguments = $configArguments; DockerArguments = $startArguments })
+                $colandRestartPlans.Add(@{ Name = $server.ColandName; BaseUrl = $server.ColandBaseUrl; Service = $server.ColandService; ConfigArguments = $configArguments; DockerArguments = $startArguments })
             }
         } else {
-            $configArguments.BinaryPath = $solandBinary
-            $configArguments.ConfigPath = $serverArtifactLayouts[$server.Name].SolandConfigPath
-            $configArguments.ObjectsRoot = $serverArtifactLayouts[$server.Name].SolandObjectsRoot
-            $configArguments.StateRoot = $serverArtifactLayouts[$server.Name].SolandStateRoot
-            $configArguments.Port = $server.SolandPort
+            $configArguments.BinaryPath = $colandBinary
+            $configArguments.ConfigPath = $serverArtifactLayouts[$server.Name].ColandConfigPath
+            $configArguments.ObjectsRoot = $serverArtifactLayouts[$server.Name].ColandObjectsRoot
+            $configArguments.StateRoot = $serverArtifactLayouts[$server.Name].ColandStateRoot
+            $configArguments.Port = $server.ColandPort
             $configArguments.LogFile = $traceFile
-            $command = Build-SolandCommand @configArguments
+            $command = Build-ColandCommand @configArguments
             if ($jointTlsAssets) { $command = "`$env:SSL_CERT_FILE=$(Quote-PsLiteral $jointTlsAssets.CaPemPath); $command" }
-            $launchName = if ($needsAuthorityBootstrap) { "$($server.SolandName)-bootstrap" } else { $server.SolandName }
-            $server.SolandService = Start-ManagedCommand -Name $launchName -Command $command -WorkingDirectory $repoRoot -LogDirectory $serverServiceLogDirs[$server.Name]
-            $managedServices.Add($server.SolandService)
+            $launchName = if ($needsAuthorityBootstrap) { "$($server.ColandName)-bootstrap" } else { $server.ColandName }
+            $server.ColandService = Start-ManagedCommand -Name $launchName -Command $command -WorkingDirectory $repoRoot -LogDirectory $serverServiceLogDirs[$server.Name]
+            $managedServices.Add($server.ColandService)
             if ($needsAuthorityBootstrap) {
-                $solandRestartPlans.Add(@{ Name = $server.SolandName; BaseUrl = $server.SolandBaseUrl; Service = $server.SolandService; ConfigArguments = $configArguments; Command = $command; WorkingDirectory = $repoRoot; LogDirectory = $serverServiceLogDirs[$server.Name] })
+                $colandRestartPlans.Add(@{ Name = $server.ColandName; BaseUrl = $server.ColandBaseUrl; Service = $server.ColandService; ConfigArguments = $configArguments; Command = $command; WorkingDirectory = $repoRoot; LogDirectory = $serverServiceLogDirs[$server.Name] })
             }
         }
-        Wait-HttpReady -Url "$($server.SolandBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds -ManagedService $server.SolandService
-        $server.SolandServiceId = Get-DescribedServiceId -BaseUrl $server.SolandBaseUrl -ServiceName $server.SolandName
-        $server.SolandServiceDid = Get-DescribedServiceDid -BaseUrl $server.SolandBaseUrl -ServiceName $server.SolandName
+        Wait-HttpReady -Url "$($server.ColandBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds -ManagedService $server.ColandService
+        $server.ColandServiceId = Get-DescribedServiceId -BaseUrl $server.ColandBaseUrl -ServiceName $server.ColandName
+        $server.ColandServiceDid = Get-DescribedServiceDid -BaseUrl $server.ColandBaseUrl -ServiceName $server.ColandName
     }
 
-    if ($CoauthBaseUrl -and -not $StartCoauth -and $CoauthServiceId -ne $SolandServiceId) {
-        throw "Caller-owned Coauth owning Station identity must equal the described Soland identity"
+    if ($CoauthBaseUrl -and -not $StartCoauth -and $CoauthServiceId -ne $ColandServiceId) {
+        throw "Caller-owned Coauth owning Station identity must equal the described Coland identity"
     }
     if ($needsAuthorityBootstrap) {
-        $CoauthServiceId = $SolandServiceId
-        foreach ($plan in $solandRestartPlans) {
+        $CoauthServiceId = $ColandServiceId
+        foreach ($plan in $colandRestartPlans) {
             $expectedStationId = Get-DescribedServiceId -BaseUrl $plan.BaseUrl -ServiceName $plan.Name
             Stop-ManagedCommand -Service $plan.Service
             [void]$managedServices.Remove($plan.Service)
             $configArguments = $plan.ConfigArguments
             if ($StartCoauth) {
-                if ($plan.BaseUrl -eq $SolandBaseUrl) {
+                if ($plan.BaseUrl -eq $ColandBaseUrl) {
                     $configArguments.AccountAuthorityBaseUrl = $CoauthBaseUrl
-                } elseif ($plan.BaseUrl -eq $solandServer2BaseUrl) {
+                } elseif ($plan.BaseUrl -eq $colandServer2BaseUrl) {
                     $configArguments.AccountAuthorityBaseUrl = $coauthServer2BaseUrl
                 } else {
-                    $matchedServer = $additionalServers | Where-Object { $_.SolandBaseUrl -eq $plan.BaseUrl } | Select-Object -First 1
+                    $matchedServer = $additionalServers | Where-Object { $_.ColandBaseUrl -eq $plan.BaseUrl } | Select-Object -First 1
                     if (-not $matchedServer) { throw "No Account Authority mapping exists for $($plan.Name)" }
                     $configArguments.AccountAuthorityBaseUrl = $matchedServer.CoauthBaseUrl
                 }
@@ -4673,10 +4673,10 @@ try {
             if ($plan.Service.Kind -eq "docker") {
                 $startArguments = $plan.DockerArguments
                 $startArguments.Name = $plan.Name
-                $startArguments.Environment = Build-SolandDockerEnvironment @configArguments
-                $service = Start-ManagedDockerSoland @startArguments
+                $startArguments.Environment = Build-ColandDockerEnvironment @configArguments
+                $service = Start-ManagedDockerColand @startArguments
             } else {
-                Build-SolandCommand @configArguments | Out-Null
+                Build-ColandCommand @configArguments | Out-Null
                 $service = Start-ManagedCommand -Name $plan.Name -Command $plan.Command -WorkingDirectory $plan.WorkingDirectory -LogDirectory $plan.LogDirectory
             }
             $managedServices.Add($service)
@@ -4689,7 +4689,7 @@ try {
     }
 
     if ($StartCoauth) {
-        $CoauthServiceId = $SolandServiceId
+        $CoauthServiceId = $ColandServiceId
     }
 
 
@@ -4783,32 +4783,32 @@ try {
     }
     $env:COTEST_UI_SCREENSHOT_DIR = $screenshotDir
     $env:COTEST_UI_VISUAL_BASELINE_DIR = $visualBaselineDir
-    $env:COTEST_SOLAND_BASE_URL = $SolandBaseUrl
-    $env:COTEST_SOLAND_SERVICE_ID = $SolandServiceId
-    $env:COTEST_SOLAND_SERVICE_DID = $SolandServiceDid
+    $env:COTEST_COLAND_BASE_URL = $ColandBaseUrl
+    $env:COTEST_COLAND_SERVICE_ID = $ColandServiceId
+    $env:COTEST_COLAND_SERVICE_DID = $ColandServiceDid
     $env:COTEST_SERVER_COUNT = "$ServerCount"
     $env:COTEST_REQUIRED_SERVER_COUNT = if ($ServerCount -ge 3 -and $RunProfile -eq "joint-full") { "3" } else { "0" }
-    if ($generatedSolandCommand -and $solandDatabaseDsn) {
-        $env:COTEST_SOLAND_CHAOS_CONTROL_FILE = $solandChaosControlFile
-        $env:COTEST_SOLAND_STORAGE = "postgres"
+    if ($generatedColandCommand -and $colandDatabaseDsn) {
+        $env:COTEST_COLAND_CHAOS_CONTROL_FILE = $colandChaosControlFile
+        $env:COTEST_COLAND_STORAGE = "postgres"
         if ($RequireDecisionRace) {
             $env:COTEST_REQUIRE_DECISION_RACE = "1"
         } else {
             Remove-Item Env:COTEST_REQUIRE_DECISION_RACE -ErrorAction SilentlyContinue
         }
     } else {
-        Remove-Item Env:COTEST_SOLAND_CHAOS_CONTROL_FILE -ErrorAction SilentlyContinue
-        Remove-Item Env:COTEST_SOLAND_STORAGE -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_COLAND_CHAOS_CONTROL_FILE -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_COLAND_STORAGE -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_REQUIRE_DECISION_RACE -ErrorAction SilentlyContinue
     }
     $env:COTEST_EMBEDDED_WEBVH_REGISTRATION_BEARER = $CoauthEmbeddedWebvhRegistrationBearer
-    if ($SolandNotarySigningKey) {
+    if ($ColandNotarySigningKey) {
         # The peer-surface fixtures must sign as the configured service
         # identity. A deterministic development key is only correct when the
-        # managed Soland instance also uses that fallback.
-        $env:COTEST_SOLAND_SERVICE_SIGNING_KEY = $SolandNotarySigningKey
+        # managed Coland instance also uses that fallback.
+        $env:COTEST_COLAND_SERVICE_SIGNING_KEY = $ColandNotarySigningKey
     } else {
-        Remove-Item Env:COTEST_SOLAND_SERVICE_SIGNING_KEY -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_COLAND_SERVICE_SIGNING_KEY -ErrorAction SilentlyContinue
     }
     # The Applet author must inherit the described Station coordinates and
     # its configured signing material before starting the mock process.
@@ -4836,15 +4836,15 @@ try {
             throw "joint TLS topology verification requires the cotest-wire binary; rerun without -SkipBuild or set COTEST_WIRE_BIN"
         }
         $jointTlsServices = @()
-        if ($solandPublicHost -and $SolandServiceDid) {
-            $jointTlsServices += [pscustomobject]@{ Name = "soland-server1"; ServiceDid = $SolandServiceDid }
+        if ($colandPublicHost -and $ColandServiceDid) {
+            $jointTlsServices += [pscustomobject]@{ Name = "coland-server1"; ServiceDid = $ColandServiceDid }
         }
-        if ($solandServer2PublicHost -and $SolandServer2ServiceDid) {
-            $jointTlsServices += [pscustomobject]@{ Name = "soland-server2"; ServiceDid = $SolandServer2ServiceDid }
+        if ($colandServer2PublicHost -and $ColandServer2ServiceDid) {
+            $jointTlsServices += [pscustomobject]@{ Name = "coland-server2"; ServiceDid = $ColandServer2ServiceDid }
         }
         foreach ($server in $additionalServers) {
-            if ($server.SolandHost -and $server.SolandServiceDid) {
-                $jointTlsServices += [pscustomobject]@{ Name = $server.SolandName; ServiceDid = $server.SolandServiceDid }
+            if ($server.ColandHost -and $server.ColandServiceDid) {
+                $jointTlsServices += [pscustomobject]@{ Name = $server.ColandName; ServiceDid = $server.ColandServiceDid }
             }
         }
         Assert-JointTlsTopology `
@@ -4864,26 +4864,26 @@ try {
         Remove-Item Env:COTEST_INKSON_BASE_URL -ErrorAction SilentlyContinue
     }
     $runtimeServers.Clear()
-    $runtimeServers.Add([pscustomobject]@{ Index = 1; Name = "server1"; SolandBaseUrl = $SolandBaseUrl; SolandServiceId = $SolandServiceId; SolandServiceDid = $SolandServiceDid; SolandPort = $solandPort; SolandService = $solandService; SolandDatabase = $ephemeralSolandPostgres; CoauthBaseUrl = $CoauthBaseUrl; CoauthPort = $coauthPort; CoauthConfigPath = $coauthConfigPath; InksonBaseUrl = $InksonBaseUrl; SigningKey = $SolandNotarySigningKey })
+    $runtimeServers.Add([pscustomobject]@{ Index = 1; Name = "server1"; ColandBaseUrl = $ColandBaseUrl; ColandServiceId = $ColandServiceId; ColandServiceDid = $ColandServiceDid; ColandPort = $colandPort; ColandService = $colandService; ColandDatabase = $ephemeralColandPostgres; CoauthBaseUrl = $CoauthBaseUrl; CoauthPort = $coauthPort; CoauthConfigPath = $coauthConfigPath; InksonBaseUrl = $InksonBaseUrl; SigningKey = $ColandNotarySigningKey })
     if ($multiServer) {
-        $runtimeServers.Add([pscustomobject]@{ Index = 2; Name = "server2"; SolandBaseUrl = $solandServer2BaseUrl; SolandServiceId = $SolandServer2ServiceId; SolandServiceDid = $SolandServer2ServiceDid; SolandPort = $solandServer2Port; SolandService = $solandServer2Service; SolandDatabase = $ephemeralSolandServer2Postgres; CoauthBaseUrl = $coauthServer2BaseUrl; CoauthPort = $coauthServer2Port; CoauthConfigPath = $coauthServer2ConfigPath; InksonBaseUrl = $(if ($inksonServer2BaseUrl) { $inksonServer2BaseUrl } else { $InksonBaseUrl }); SigningKey = $SolandServer2NotarySigningKey })
+        $runtimeServers.Add([pscustomobject]@{ Index = 2; Name = "server2"; ColandBaseUrl = $colandServer2BaseUrl; ColandServiceId = $ColandServer2ServiceId; ColandServiceDid = $ColandServer2ServiceDid; ColandPort = $colandServer2Port; ColandService = $colandServer2Service; ColandDatabase = $ephemeralColandServer2Postgres; CoauthBaseUrl = $coauthServer2BaseUrl; CoauthPort = $coauthServer2Port; CoauthConfigPath = $coauthServer2ConfigPath; InksonBaseUrl = $(if ($inksonServer2BaseUrl) { $inksonServer2BaseUrl } else { $InksonBaseUrl }); SigningKey = $ColandServer2NotarySigningKey })
     }
     foreach ($server in $additionalServers) {
-        $runtimeServers.Add([pscustomobject]@{ Index = $server.Index; Name = $server.Name; SolandBaseUrl = $server.SolandBaseUrl; SolandServiceId = $server.SolandServiceId; SolandServiceDid = $server.SolandServiceDid; SolandPort = $server.SolandPort; SolandService = $server.SolandService; SolandDatabase = $server.SolandDatabase; CoauthBaseUrl = $server.CoauthBaseUrl; CoauthPort = $server.CoauthPort; CoauthConfigPath = $server.CoauthConfigPath; InksonBaseUrl = $InksonBaseUrl; SigningKey = $server.NotarySigningKey })
+        $runtimeServers.Add([pscustomobject]@{ Index = $server.Index; Name = $server.Name; ColandBaseUrl = $server.ColandBaseUrl; ColandServiceId = $server.ColandServiceId; ColandServiceDid = $server.ColandServiceDid; ColandPort = $server.ColandPort; ColandService = $server.ColandService; ColandDatabase = $server.ColandDatabase; CoauthBaseUrl = $server.CoauthBaseUrl; CoauthPort = $server.CoauthPort; CoauthConfigPath = $server.CoauthConfigPath; InksonBaseUrl = $InksonBaseUrl; SigningKey = $server.NotarySigningKey })
     }
     foreach ($server in $runtimeServers) {
-        $solandStoragePrefix = if ($server.Index -eq 1) { "soland" } else { "soland-$($server.Name)" }
-        Set-Item -Path "Env:COTEST_SOLAND_$($server.Name.ToUpperInvariant())_BASE_URL" -Value $server.SolandBaseUrl
-        Set-Item -Path "Env:COTEST_SOLAND_$($server.Name.ToUpperInvariant())_SERVICE_ID" -Value $server.SolandServiceId
-        Set-Item -Path "Env:COTEST_SOLAND_$($server.Name.ToUpperInvariant())_SERVICE_DID" -Value $server.SolandServiceDid
-        if ($server.SigningKey) { Set-Item -Path "Env:COTEST_SOLAND_$($server.Name.ToUpperInvariant())_SERVICE_SIGNING_KEY" -Value $server.SigningKey }
+        $colandStoragePrefix = if ($server.Index -eq 1) { "coland" } else { "coland-$($server.Name)" }
+        Set-Item -Path "Env:COTEST_COLAND_$($server.Name.ToUpperInvariant())_BASE_URL" -Value $server.ColandBaseUrl
+        Set-Item -Path "Env:COTEST_COLAND_$($server.Name.ToUpperInvariant())_SERVICE_ID" -Value $server.ColandServiceId
+        Set-Item -Path "Env:COTEST_COLAND_$($server.Name.ToUpperInvariant())_SERVICE_DID" -Value $server.ColandServiceDid
+        if ($server.SigningKey) { Set-Item -Path "Env:COTEST_COLAND_$($server.Name.ToUpperInvariant())_SERVICE_SIGNING_KEY" -Value $server.SigningKey }
         if ($server.InksonBaseUrl) { Set-Item -Path "Env:COTEST_INKSON_$($server.Name.ToUpperInvariant())_BASE_URL" -Value $server.InksonBaseUrl }
         if ($server.CoauthBaseUrl) { Set-Item -Path "Env:COTEST_COAUTH_$($server.Name.ToUpperInvariant())_BASE_URL" -Value $server.CoauthBaseUrl }
     }
     $topologyServers = @()
     foreach ($server in $runtimeServers) {
-        $solandStoragePrefix = if ($server.Index -eq 1) { "soland" } else { "soland-$($server.Name)" }
-        $solandManaged = @($managedServices | Where-Object { $_.Name -eq "soland-$($server.Name)" }) | Select-Object -Last 1
+        $colandStoragePrefix = if ($server.Index -eq 1) { "coland" } else { "coland-$($server.Name)" }
+        $colandManaged = @($managedServices | Where-Object { $_.Name -eq "coland-$($server.Name)" }) | Select-Object -Last 1
         $coauthManaged = @($managedServices | Where-Object { $_.Name -eq "coauth-$($server.Name)" }) | Select-Object -Last 1
         $peerNames = @($runtimeServers | Where-Object { $_.Name -ne $server.Name } | ForEach-Object { $_.Name })
         if ($NetworkShape -eq "ordered-candidates") {
@@ -4897,32 +4897,32 @@ try {
         $topologyServers += [pscustomobject]@{
             name = $server.Name
             role = "station"
-            soland = [pscustomobject]@{
-                public_url = $server.SolandBaseUrl
-                listen_address = if ($server.SolandPort) { "127.0.0.1:$($server.SolandPort)" } else { $null }
-                service_id = $server.SolandServiceId
-                service_did = $server.SolandServiceDid
+            coland = [pscustomobject]@{
+                public_url = $server.ColandBaseUrl
+                listen_address = if ($server.ColandPort) { "127.0.0.1:$($server.ColandPort)" } else { $null }
+                service_id = $server.ColandServiceId
+                service_did = $server.ColandServiceDid
                 storage = [pscustomobject]@{
-                    database = if ($server.SolandDatabase) { $server.SolandDatabase.ContainerName } else { "caller-owned" }
-                    objects = Join-Path $jointDir "$solandStoragePrefix-objects"
-                    state = Join-Path $jointDir "$solandStoragePrefix-state"
+                    database = if ($server.ColandDatabase) { $server.ColandDatabase.ContainerName } else { "caller-owned" }
+                    objects = Join-Path $jointDir "$colandStoragePrefix-objects"
+                    state = Join-Path $jointDir "$colandStoragePrefix-state"
                 }
                 log_directory = $serverServiceLogDirs[$server.Name]
-                process_id = if ($solandManaged -and $solandManaged.Kind -eq "process") { $solandManaged.Process.Id } else { $null }
-                process_started_at = if ($solandManaged -and $solandManaged.Kind -eq "process") { $solandManaged.Process.StartTime.ToUniversalTime().ToString('o') } else { $null }
-                container_id = if ($solandManaged -and $solandManaged.Kind -eq "docker") { $solandManaged.ContainerName } else { $null }
-                control = if ($solandManaged) { [pscustomobject]@{
-                    kind = $solandManaged.Kind
+                process_id = if ($colandManaged -and $colandManaged.Kind -eq "process") { $colandManaged.Process.Id } else { $null }
+                process_started_at = if ($colandManaged -and $colandManaged.Kind -eq "process") { $colandManaged.Process.StartTime.ToUniversalTime().ToString('o') } else { $null }
+                container_id = if ($colandManaged -and $colandManaged.Kind -eq "docker") { $colandManaged.ContainerName } else { $null }
+                control = if ($colandManaged) { [pscustomobject]@{
+                    kind = $colandManaged.Kind
                     script_path = (Join-Path $PSScriptRoot "control-joint-e2e-service.ps1")
                     state_path = (Join-Path $jointDir "controls\$($server.Name).json")
-                    working_directory = if ($solandManaged.Kind -eq "process") { $solandManaged.WorkingDirectory } else { $null }
-                    command_log = if ($solandManaged.Kind -eq "process") { $solandManaged.CommandLog } else { $null }
+                    working_directory = if ($colandManaged.Kind -eq "process") { $colandManaged.WorkingDirectory } else { $null }
+                    command_log = if ($colandManaged.Kind -eq "process") { $colandManaged.CommandLog } else { $null }
                 } } else { $null }
             }
             coauth = if ($server.CoauthBaseUrl) { [pscustomobject]@{
                 public_url = $server.CoauthBaseUrl
                 listen_address = if ($server.CoauthPort) { "127.0.0.1:$($server.CoauthPort)" } else { $null }
-                owning_service_id = $server.SolandServiceId
+                owning_service_id = $server.ColandServiceId
                 storage = [pscustomobject]@{ database = if ($server.Index -eq 1 -and $ephemeralCoauthServer1Postgres) { $ephemeralCoauthServer1Postgres.ContainerName } elseif ($server.Index -eq 2 -and $ephemeralCoauthServer2Postgres) { $ephemeralCoauthServer2Postgres.ContainerName } elseif ($server.Index -ge 3) { $additionalServers[$server.Index - 3].CoauthDatabase.ContainerName } else { "caller-owned" }; state = Split-Path -Parent $server.CoauthConfigPath }
                 config_path = $server.CoauthConfigPath
                 log_directory = $serverServiceLogDirs[$server.Name]
@@ -4956,15 +4956,15 @@ try {
         }
         foreach ($server in $additionalServers) { Assert-CoauthDpopGrantSeamReady -BaseUrl $server.CoauthBaseUrl }
         $env:COTEST_COAUTH_SERVICE_ID = $CoauthServiceId
-        # The OAuth client_id soland is configured to advertise (see
-        # SOLAND_OAUTH_CLIENT_ID in the generated soland config). Surfaced to e2e so
+        # The OAuth client_id coland is configured to advertise (see
+        # COLAND_OAUTH_CLIENT_ID in the generated coland config). Surfaced to e2e so
         # oidc-login-chain.spec.ts can assert /_arkret/describe advertises it.
         $env:COTEST_OIDC_CLIENT_ID = $CoauthOAuthClientId
-        # The notary signing seed this run configured soland with. A Rust
+        # The notary signing seed this run configured coland with. A Rust
         # scenario attaching to this deployment cannot derive the notary
         # descriptor from `/_arkret/describe` — the seed is the operator's — so
         # it has to be told which key the runner chose.
-        $env:COTEST_SOLAND_NOTARY_SIGNING_KEY = $SolandNotarySigningKey
+        $env:COTEST_COLAND_NOTARY_SIGNING_KEY = $ColandNotarySigningKey
         $env:COTEST_CLIENT_KIND = $ClientKind
         # Anti-false-green: coauth is up, so the crown-jewel cross-member paths
         # (MLS decrypt, cross-member kanban, multi-profile) MUST run. This flag
@@ -4987,33 +4987,33 @@ try {
         Remove-Item Env:COTEST_COAUTH_BASE_URL -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_COAUTH_SERVICE_ID -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_OIDC_CLIENT_ID -ErrorAction SilentlyContinue
-        Remove-Item Env:COTEST_SOLAND_NOTARY_SIGNING_KEY -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_COLAND_NOTARY_SIGNING_KEY -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_CLIENT_KIND -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_REQUIRE_JOINT_STACK -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_REAL_OIDC_LOGIN -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_COAUTH_SECONDARY_BASE_URL -ErrorAction SilentlyContinue
     }
-    if ($TeabayBaseUrl) {
-        $env:COTEST_TEABAY_BASE_URL = $TeabayBaseUrl.TrimEnd("/")
-        $env:COTEST_TEABAY_SERVICE_ID = $TeabayServiceId
+    if ($FlagonBaseUrl) {
+        $env:COTEST_FLAGON_BASE_URL = $FlagonBaseUrl.TrimEnd("/")
+        $env:COTEST_FLAGON_SERVICE_ID = $FlagonServiceId
     } else {
-        Remove-Item Env:COTEST_TEABAY_BASE_URL -ErrorAction SilentlyContinue
-        Remove-Item Env:COTEST_TEABAY_SERVICE_ID -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_FLAGON_BASE_URL -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_FLAGON_SERVICE_ID -ErrorAction SilentlyContinue
     }
     # DID-P1-C02 — the two DID-boundary counter endpoints. Only exported when
     # this run actually owns the listener: an unset variable makes the metrics
     # helpers report "not part of this run" instead of silently scraping some
     # other process's counters (the default binds are the fixed 9090 / 9095,
     # which a developer's dev stack is very likely already holding).
-    if ($solandMetricsBaseUrl) {
-        $env:COTEST_SOLAND_METRICS_URL = $solandMetricsBaseUrl
+    if ($colandMetricsBaseUrl) {
+        $env:COTEST_COLAND_METRICS_URL = $colandMetricsBaseUrl
     } else {
-        Remove-Item Env:COTEST_SOLAND_METRICS_URL -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_COLAND_METRICS_URL -ErrorAction SilentlyContinue
     }
-    if ($teabayMetricsBaseUrl) {
-        $env:COTEST_TEABAY_METRICS_URL = $teabayMetricsBaseUrl
+    if ($flagonMetricsBaseUrl) {
+        $env:COTEST_FLAGON_METRICS_URL = $flagonMetricsBaseUrl
     } else {
-        Remove-Item Env:COTEST_TEABAY_METRICS_URL -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_FLAGON_METRICS_URL -ErrorAction SilentlyContinue
     }
     if ($StartSavfox) {
         $env:COTEST_SAVFOX_BASE_URL = $SavfoxBaseUrl.TrimEnd("/")
@@ -5085,7 +5085,7 @@ try {
     }
     # DID-P1-C01. NOTE: these are consumed by cotest's own harness
     # (e2e/helpers/did-host.ts, src/scenarios/_helpers/did_host.rs) only. The
-    # services under test cannot currently be pointed at this host — soland /
+    # services under test cannot currently be pointed at this host — coland /
     # flagon / the SDK derive the DID-document URL from the DID string itself
     # and judge egress per request against configured trust anchors (0530-C:
     # joint services resolve through the TLS-fronted `<service>.local.host`
@@ -5103,7 +5103,7 @@ try {
 
     # The Rust provisioning module against the deployment this run owns.
     #
-    # It has to run here and nowhere else: it needs a real Coauth and Soland,
+    # It has to run here and nowhere else: it needs a real Coauth and Coland,
     # and `-KeepServices` does not outlive a runner started as a background
     # process, so there is no way to hand a running deployment to a separate
     # `cargo test` invocation. Placing it before Playwright also means a broken
@@ -5115,7 +5115,7 @@ try {
     # soft-skip proves nothing about that.
     if ($StartCoauth) {
         Write-Host ""
-        Write-Host "=== Rust provisioning check (live Coauth + Soland) ==="
+        Write-Host "=== Rust provisioning check (live Coauth + Coland) ==="
         $provisioningLog = Join-Path $jointDir "rust-provisioning-check.log"
         # Keep both native output streams draining independently, as for builds.
         # Capturing merged Cargo output can fill child pipes before Cargo exits.
@@ -5138,7 +5138,7 @@ try {
         # the light edge.
         if ($RunHarnessClientCheck) {
             Write-Host ""
-            Write-Host "=== Rust harness client check (live Coauth + Soland) ==="
+            Write-Host "=== Rust harness client check (live Coauth + Coland) ==="
             $harnessClientLog = Join-Path $jointDir "rust-harness-client-check.log"
             $harnessClientArgs = @(
                 "test", "--manifest-path", (Join-Path $repoRoot "Cargo.toml"),
@@ -5159,7 +5159,7 @@ try {
         # Inkson's browser.
         if ($RunGarthClientCheck) {
             Write-Host ""
-            Write-Host "=== Garth client check (live Coauth + Soland) ==="
+            Write-Host "=== Garth client check (live Coauth + Coland) ==="
             $garthClientLog = Join-Path $jointDir "garth-client-check.log"
             $garthClientArgs = @(
                 "test", "--manifest-path", (Join-Path $repoRoot "Cargo.toml"),
@@ -5330,32 +5330,32 @@ finally {
             }
             Stop-EphemeralPostgres -ContainerName $ephemeralCoauthServer2Postgres.ContainerName
         }
-        if ($ephemeralSolandPostgres) {
+        if ($ephemeralColandPostgres) {
             $postgresDump = Export-EphemeralPostgresDump `
-                -ContainerName $ephemeralSolandPostgres.ContainerName `
-                -OutputPath (Join-Path $storeDumpDir $serverArtifactLayouts["server1"].SolandStoreDumpName)
+                -ContainerName $ephemeralColandPostgres.ContainerName `
+                -OutputPath (Join-Path $storeDumpDir $serverArtifactLayouts["server1"].ColandStoreDumpName)
             if ($postgresDump) {
                 Write-Host "postgres dump: $postgresDump"
             } else {
-                $storeDumpFailures.Add($ephemeralSolandPostgres.ContainerName) | Out-Null
+                $storeDumpFailures.Add($ephemeralColandPostgres.ContainerName) | Out-Null
             }
-            Stop-EphemeralPostgres -ContainerName $ephemeralSolandPostgres.ContainerName
+            Stop-EphemeralPostgres -ContainerName $ephemeralColandPostgres.ContainerName
         }
-        if ($ephemeralSolandServer2Postgres) {
+        if ($ephemeralColandServer2Postgres) {
             $postgresDump = Export-EphemeralPostgresDump `
-                -ContainerName $ephemeralSolandServer2Postgres.ContainerName `
-                -OutputPath (Join-Path $storeDumpDir $serverArtifactLayouts["server2"].SolandStoreDumpName)
+                -ContainerName $ephemeralColandServer2Postgres.ContainerName `
+                -OutputPath (Join-Path $storeDumpDir $serverArtifactLayouts["server2"].ColandStoreDumpName)
             if ($postgresDump) {
                 Write-Host "postgres dump: $postgresDump"
             } else {
-                $storeDumpFailures.Add($ephemeralSolandServer2Postgres.ContainerName) | Out-Null
+                $storeDumpFailures.Add($ephemeralColandServer2Postgres.ContainerName) | Out-Null
             }
-            Stop-EphemeralPostgres -ContainerName $ephemeralSolandServer2Postgres.ContainerName
+            Stop-EphemeralPostgres -ContainerName $ephemeralColandServer2Postgres.ContainerName
         }
         foreach ($server in $additionalServers) {
             foreach ($store in @(
                 [pscustomobject]@{ Database = $server.CoauthDatabase; File = $serverArtifactLayouts[$server.Name].CoauthStoreDumpName },
-                [pscustomobject]@{ Database = $server.SolandDatabase; File = $serverArtifactLayouts[$server.Name].SolandStoreDumpName }
+                [pscustomobject]@{ Database = $server.ColandDatabase; File = $serverArtifactLayouts[$server.Name].ColandStoreDumpName }
             )) {
                 if ($store.Database) {
                     $postgresDump = Export-EphemeralPostgresDump -ContainerName $store.Database.ContainerName -OutputPath (Join-Path $storeDumpDir $store.File)
@@ -6039,7 +6039,7 @@ if (Test-Path -LiteralPath $serviceLogDir) {
 }
 foreach ($directory in Get-ChildItem -LiteralPath $jointDir -Directory -ErrorAction SilentlyContinue) {
     if ($directory.Name -match '(?i)(state|objects|diagnostic|test-results|playwright-output|crash|checkpoint|telemetry)') {
-        if ($directory.Name -match '(?i)^soland(?:-[a-z0-9_-]+)?-state$') {
+        if ($directory.Name -match '(?i)^coland(?:-[a-z0-9_-]+)?-state$') {
             # The service identity bundle is a durable restore store whose
             # signed registration receipts and WebVH operations necessarily
             # contain JWS evidence. Classify it separately; scanning the whole
@@ -6075,7 +6075,7 @@ $secretScanRootDescriptors = @(
 # material remains forbidden by the category/class verdict matrix.
 $identityBundleDirs = @(
     Get-ChildItem -LiteralPath $jointDir -Directory -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name -match '(?i)^soland(?:-[a-z0-9_-]+)?-state$' } |
+        Where-Object { $_.Name -match '(?i)^coland(?:-[a-z0-9_-]+)?-state$' } |
         ForEach-Object { Join-Path $_.FullName "identity-bundle" } |
         Where-Object { Test-Path -LiteralPath $_ }
 )
@@ -6206,8 +6206,8 @@ $summary = [pscustomobject]@{
     duration_seconds = [Math]::Round(($finishedAt - $startedAt).TotalSeconds, 2)
     exit_code = $exitCode
     runner_error = $runnerError
-    soland_runtime = $startedSolandRuntime
-    soland_image = if ($startedSolandRuntime -eq "docker") { $SolandImage } else { $null }
+    coland_runtime = $startedColandRuntime
+    coland_image = if ($startedColandRuntime -eq "docker") { $ColandImage } else { $null }
     server_count = $ServerCount
     network_shape = $NetworkShape
     topology_json = $topologyPath
@@ -6223,8 +6223,8 @@ $summary = [pscustomobject]@{
     mock_did_host_scid = if ($mockDidHostBaseUrl) { $MockDidHostScid } else { $null }
     # DID-P1-C02 resolver call-count trace: the endpoints the run's
     # authority_network_call_count / signature_verify_count were read from.
-    soland_server1_metrics_url = $solandMetricsBaseUrl
-    teabay_metrics_url = $teabayMetricsBaseUrl
+    coland_server1_metrics_url = $colandMetricsBaseUrl
+    flagon_metrics_url = $flagonMetricsBaseUrl
     mock_mimi_facade_base_url = $mockMimiFacadeBaseUrl
     mock_mimi_facade_did = if ($mockMimiFacadeBaseUrl) { $MockMimiFacadeDid } else { $null }
     inkson_server1_base_url = $InksonBaseUrl
@@ -6232,9 +6232,9 @@ $summary = [pscustomobject]@{
     coauth_secondary_base_url = $coauthSecondaryBaseUrl
     dual_coauth = [bool]$DualCoauth
     coauth_server1_service_id = if ($CoauthBaseUrl) { $CoauthServiceId } else { $null }
-    teabay_base_url = if ($TeabayBaseUrl) { $TeabayBaseUrl } else { $null }
-    teabay_service_id = if ($TeabayBaseUrl) { $TeabayServiceId } else { $null }
-    teabay_database_url = if ($TeabayBaseUrl) { $TeabayDatabaseUrl } else { $null }
+    flagon_base_url = if ($FlagonBaseUrl) { $FlagonBaseUrl } else { $null }
+    flagon_service_id = if ($FlagonBaseUrl) { $FlagonServiceId } else { $null }
+    flagon_database_url = if ($FlagonBaseUrl) { $FlagonDatabaseUrl } else { $null }
     coauth_server1_oauth_introspection_url = if ($CoauthBaseUrl) { "$($CoauthBaseUrl.TrimEnd('/'))/oauth/introspect" } else { $null }
     coauth_server1_session_grant_introspection_url = if ($CoauthBaseUrl) { "$($CoauthBaseUrl.TrimEnd('/'))/_coauth/internal/session-grants/introspect" } else { $null }
     screenshots = $screenshotDir
@@ -6281,8 +6281,8 @@ $summary | ConvertTo-Json -Depth 6 | Set-Content -Path $summaryJson -Encoding UT
 - finished_at: $($summary.finished_at)
 - duration_seconds: $($summary.duration_seconds)
 - exit_code: $($summary.exit_code)
-- soland_runtime: $($summary.soland_runtime)
-- soland_image: $($summary.soland_image)
+- coland_runtime: $($summary.coland_runtime)
+- coland_image: $($summary.coland_image)
 - server_count: $($summary.server_count)
 - network_shape: $($summary.network_shape)
 - topology_json: $($summary.topology_json)
@@ -6299,8 +6299,8 @@ $summary | ConvertTo-Json -Depth 6 | Set-Content -Path $summaryJson -Encoding UT
 - coauth_server1_service_id: $($summary.coauth_server1_service_id)
 - coauth_server1_oauth_introspection_url: $($summary.coauth_server1_oauth_introspection_url)
 - coauth_server1_session_grant_introspection_url: $($summary.coauth_server1_session_grant_introspection_url)
-- teabay_base_url: $($summary.teabay_base_url)
-- teabay_service_id: $($summary.teabay_service_id)
+- flagon_base_url: $($summary.flagon_base_url)
+- flagon_service_id: $($summary.flagon_service_id)
 - screenshots: $($summary.screenshots)
 - visual_baselines: $($summary.visual_baselines)
 - diagnostics: $($summary.diagnostics)
@@ -6342,11 +6342,11 @@ Write-Host "Arkret Joint Product E2E Summary"
 Write-Host "  status      : $($summary.status)"
 Write-Host "  profile     : $($summary.run_profile)"
 Write-Host "  projects    : $($summary.playwright_projects)"
-Write-Host "  soland rt   : $($summary.soland_runtime)"
-if ($summary.soland_image) {
-    Write-Host "  soland image: $($summary.soland_image)"
+Write-Host "  coland rt   : $($summary.coland_runtime)"
+if ($summary.coland_image) {
+    Write-Host "  coland image: $($summary.coland_image)"
 }
-foreach ($server in $runtimeServers) { Write-Host "  soland-$($server.Name): $($server.SolandBaseUrl)" }
+foreach ($server in $runtimeServers) { Write-Host "  coland-$($server.Name): $($server.ColandBaseUrl)" }
 if ($mockIdpBaseUrl) {
     Write-Host "  mock-idp    : $mockIdpBaseUrl"
 }
@@ -6362,11 +6362,11 @@ if ($mockWitnessBaseUrl) {
 if ($mockDidHostBaseUrl) {
     Write-Host "  mock-did-host: $mockDidHostBaseUrl ($MockDidHostAuthority, scid=$MockDidHostScid)"
 }
-if ($solandMetricsBaseUrl) {
-    Write-Host "  soland-server1 metrics: $solandMetricsBaseUrl/metrics"
+if ($colandMetricsBaseUrl) {
+    Write-Host "  coland-server1 metrics: $colandMetricsBaseUrl/metrics"
 }
-if ($teabayMetricsBaseUrl) {
-    Write-Host "  flagon metrics: $teabayMetricsBaseUrl/metrics"
+if ($flagonMetricsBaseUrl) {
+    Write-Host "  flagon metrics: $flagonMetricsBaseUrl/metrics"
 }
 if ($mockMimiFacadeBaseUrl) {
     Write-Host "  mock-mimi-facade: $mockMimiFacadeBaseUrl ($MockMimiFacadeDid)"
@@ -6383,8 +6383,8 @@ if ($CoauthBaseUrl) {
 if ($coauthSecondaryBaseUrl) {
     Write-Host "  coauth-server1-replica : $coauthSecondaryBaseUrl"
 }
-if ($TeabayBaseUrl) {
-    Write-Host "  flagon      : $TeabayBaseUrl"
+if ($FlagonBaseUrl) {
+    Write-Host "  flagon      : $FlagonBaseUrl"
 }
 Write-Host "  screenshots : $screenshotDir"
 Write-Host "  visual base : $visualBaselineDir"

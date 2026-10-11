@@ -8,7 +8,7 @@
 
 import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 import { cssStringEscape } from "../../helpers/dom";
-import { solandBaseUrl } from "../../helpers/env";
+import { colandBaseUrl } from "../../helpers/env";
 import {
   acceptInviteViaApi,
   createSharedRealmViaApi,
@@ -33,8 +33,8 @@ import {
   sendMessageApi,
   signedEventEnvelope,
   submitSignedEventApi,
-} from "../../helpers/soland-api";
-import { addRealmMlsMemberApi, encryptMlsMessageContent, realmMlsCreatorGroupApi } from "../../helpers/soland-api/mls";
+} from "../../helpers/coland-api";
+import { addRealmMlsMemberApi, encryptMlsMessageContent, realmMlsCreatorGroupApi } from "../../helpers/coland-api/mls";
 import {
   assertJointStackNotRequired,
   ensureRegistered,
@@ -867,7 +867,7 @@ test.describe("chat advanced", () => {
     request,
   }, testInfo) => {
     // spec: models/content-types.md §4.9 polls
-    // soland projects poll content state; inkson hydrates poll cards from sync/backfill.
+    // coland projects poll content state; inkson hydrates poll cards from sync/backfill.
     test.setTimeout(420_000);
     const stamp = Date.now();
     const [aliceFlow, bobFlow, carolFlow] = await Promise.all([
@@ -1191,7 +1191,7 @@ test.describe("chat advanced", () => {
         kind: "ak.message.create",
         payload: { ...payload, mention_sidecar_digest: ["00".repeat(32)] },
       });
-      const eventsUrl = `${solandBaseUrl()}/_arkret/self/events`;
+      const eventsUrl = `${colandBaseUrl()}/_arkret/self/events`;
       const rejected = await request.post(eventsUrl, {
         headers: { ...authHeaders(aliceToken, "POST", eventsUrl), "content-type": "application/json" },
         data: canonicalJson({ event: forbidden }),

@@ -22,7 +22,7 @@
 
 ## 拓扑
 
-- 1 × soland + 1 × coauth(设备授权 KeyPackage 需要真 DPoP session-grant)
+- 1 × coland + 1 × coauth(设备授权 KeyPackage 需要真 DPoP session-grant)
 
 ## Actors
 
@@ -44,7 +44,7 @@
 2. bob 先授权 invite consent 并通过标准接口签发 locator；alice 使用该 locator 在界面中邀请 bob。此时 Bob 尚未开启浏览器／发布 KeyPackage，邀请事实必须持久化，状态不得伪称 `MLS Welcome queued`。裸地址在缺省策略下进入 quarantine，不能用放宽默认策略替代引介证据。
 3. bob 开启浏览器完成恢复策略与首个加密备份（其 PCR 已有 consent 前驱），发布真实 KeyPackage 后 accept **加入**并收到有效 Welcome。此后内容才是 bob 可合法见+可解密的加入后内容。
 4. alice **加入后**建 board + list + card（title 使用加密 metadata），等待卡片脱离草稿态、取得已确认的 Strand 身份后，再给 card 加**加密 description**(私有 `body`);断言 `ak.strand.update` 被接受且 description **不以明文出现在 wire**。
-5. **跨成员投递闸门**:以 bob 身份使用 `POST /_arkret/self/streams/scan` 查询 Realm stream，结果必含 board space id(隔离 soland 投递 vs inkson 投影)。
+5. **跨成员投递闸门**:以 bob 身份使用 `POST /_arkret/self/streams/scan` 查询 Realm stream，结果必含 board space id(隔离 coland 投递 vs inkson 投影)。
 6. bob 深链进 `/kanban/{realm}/board/{boardId}`;bootstrap **backfill realm 事件并 ingest 进 raw_operations**→board Space 投影进 switcher→路由/auto-select 选中→列表卡片渲染。
 7. **核心断言**:bob 打开卡片,`card-description-panel` 含 alice 的明文 description,且 `card-detail-body-locked` 计数为 0(真解密,非锁态)。
 8. **假绿护栏**:目标卡不得渲染成 `kanban-card-redacted`(解密/水化失败占位)。

@@ -1,4 +1,4 @@
-import { authHeaders } from "../../helpers/soland-api";
+import { authHeaders } from "../../helpers/coland-api";
 import { readCreatorRecords } from "../../helpers/creator-bootstrap";
 // Key backup + restore
 // Contract: e2e/scenarios/encryption/key-backup.md
@@ -21,7 +21,7 @@ import {
   optionalEnv,
   realOidcLoginHandle,
   realOidcLoginPassword,
-  solandBaseUrl,
+  colandBaseUrl,
 } from "../../helpers/env";
 import {
   approvePairingLinkOnAuthorizedDevice,
@@ -63,13 +63,13 @@ test.describe("key backup + restore", () => {
     try {
       // Probe: is /_arkret/self/keys/backups routed?
       const listResp = await request.get(
-        `${solandBaseUrl()}/_arkret/self/keys/backups`,
+        `${colandBaseUrl()}/_arkret/self/keys/backups`,
         {
-          headers: authHeaders(aliceToken, "GET", `${solandBaseUrl()}/_arkret/self/keys/backups`),
+          headers: authHeaders(aliceToken, "GET", `${colandBaseUrl()}/_arkret/self/keys/backups`),
         },
       );
       // If routed, body must be JSON; backups array (possibly empty).
-      // If not routed (404), this is the soland implementation gap S13 documents.
+      // If not routed (404), this is the coland implementation gap S13 documents.
       expect([200, 404]).toContain(listResp.status());
       if (listResp.ok()) {
         const body = await listResp.json();
@@ -146,7 +146,7 @@ test.describe("key backup + restore", () => {
       // (it never carries the signed `contents` index), and the durable
       // backup is the one the accepted active-series pointer names. The
       // recovery_public_key recipient is the passphrase-free §7.2 envelope.
-      const backupsUrl = `${solandBaseUrl()}/_arkret/self/keys/backups?backup_kind=secret_storage`;
+      const backupsUrl = `${colandBaseUrl()}/_arkret/self/keys/backups?backup_kind=secret_storage`;
       await expect
         .poll(
           async () => {
@@ -757,7 +757,7 @@ async function expectDpopDeviceActive(
   request: APIRequestContext,
   session: DpopUserSession,
 ) {
-  const url = `${solandBaseUrl()}/_arkret/self/account/viewer`;
+  const url = `${colandBaseUrl()}/_arkret/self/account/viewer`;
   await expect
     .poll(
       async () => {
@@ -799,7 +799,7 @@ async function openAndPairFreshDeviceForAccount(
     });
     await requestingDevice.page
       .getByTestId("login-server-url")
-      .fill(solandBaseUrl());
+      .fill(colandBaseUrl());
     await requestingDevice.page
       .getByTestId("start-server-login-button")
       .click();

@@ -30,13 +30,13 @@ Phase B 通过标准接口读取真实 RealmStateSnapshot，并复用 SDK/Garth 
   - §8 — 错误语义(MUST reject vs SHOULD soft_fail / quarantine,不得静默截断)
 - `arkret-spec/spec/v1/zh/conformance/conformance-vectors.md` — vector loader pattern(同一目录 `spec/v1/artifacts/fixtures/<vector_id>.json`,`expected_*` 字段命名约定,失败时报告 actual / expected diff)
 - 关联 artifact: `arkret-spec/spec/v1/artifacts/fixtures/ak.vector.realm_state_snapshot.*.json`、`ak.vector.query.*.json`、`ak.vector.scalability.*.json`(目前尚未提交,见 Implementation notes 的 fixture absence fallback)
-- 关联实现:soland snapshot/query 模块、`/_arkret/_conformance/{snapshot,query}` 端点(目前未实现,见 Implementation notes)
+- 关联实现:coland snapshot/query 模块、`/_arkret/_conformance/{snapshot,query}` 端点(目前未实现,见 Implementation notes)
 
 ## 拓扑
 
-- 1 × soland (Station) — `solandBaseUrl()`,暴露(将暴露)`/_arkret/_conformance/snapshot`、`/_arkret/_conformance/query` 端点
+- 1 × coland (Station) — `colandBaseUrl()`,暴露(将暴露)`/_arkret/_conformance/snapshot`、`/_arkret/_conformance/query` 端点
 - 1 × coauth — Phase B 通过真实注册／登录取得 canonical session grant 与 DPoP，snapshot 由治理 Station 签发。
-- 1 × conformance harness (Playwright `request` fixture + node `fs`) — 在测试 setup 阶段从 `arkret-spec/spec/v1/artifacts/fixtures/` glob `ak.vector.{snapshot,query,scalability}.*.json`,逐项 POST 到 soland,断言响应与 `expected_*` 字段一致
+- 1 × conformance harness (Playwright `request` fixture + node `fs`) — 在测试 setup 阶段从 `arkret-spec/spec/v1/artifacts/fixtures/` glob `ak.vector.{snapshot,query,scalability}.*.json`,逐项 POST 到 coland,断言响应与 `expected_*` 字段一致
 
 (都是 cotest 现有 harness 直接提供的,不需要改 `scripts/run-joint-e2e.ps1`;但 `/_arkret/_conformance/{snapshot,query}` 端点目前未实现,见 Implementation notes。)
 
@@ -51,7 +51,7 @@ Phase B 通过标准接口读取真实 RealmStateSnapshot，并复用 SDK/Garth 
 
 - Phase B 使用 `openDpopUserPage` 真实 provisioning，持有 canonical session grant、holder proof 与独立 Event signer。
 - harness 可访问 `arkret-spec/spec/v1/artifacts/fixtures/` 目录(从 spec test 文件位置 `cotest/e2e/tests/conformance/*.spec.ts` 解析为 `../../../../arkret-spec/spec/v1/artifacts/fixtures`,见 Implementation notes)
-- soland 暴露以下 conformance 端点 (gap,见 Implementation notes):
+- coland 暴露以下 conformance 端点 (gap,见 Implementation notes):
   - `POST /_arkret/_conformance/snapshot` — body `{ vector_id, manifest, chunks }` → `{ manifest_digest, chunk_hashes[], signature_valid, signer_did }`
   - `POST /_arkret/_conformance/query` — body `{ vector_id, query }` → `{ items[], next_cursor, has_more, frontier{...} }` (按 spec §8)
 
@@ -142,17 +142,17 @@ Phase B 通过标准接口读取真实 RealmStateSnapshot，并复用 SDK/Garth 
 29. `POST /_arkret/_conformance/snapshot` → MUST 4xx + `error.code === "payload_too_large"`(§2 envelope 1 MiB 规则)
 30. 对每条 reject vector 额外断言:响应 envelope 符合 spec §8 错误语义(`retry_after_ms` 出现仅在 `soft_fail` / `temporarily_unavailable` 路径;reject 路径不应携带 retry 提示)
 
-### Phase F — Vector loader smoke (harness-only,no soland call)
+### Phase F — Vector loader smoke (harness-only,no coland call)
 
 31. **harness** 解析自身位置(`fileURLToPath(import.meta.url)` → `dirname(...)`)拼出 fixtures dir 绝对路径 `<repo>/arkret-spec/spec/v1/artifacts/fixtures`
 32. `readdirSync(fixturesDir)`,过滤 `ak.vector.{snapshot,query,scalability}.*.json`,得到 candidate id 列表
 33. 对每个 candidate:`JSON.parse(readFileSync(...))` MUST 不抛错(即使内容是空对象)
 34. 测试通过 `console.log` / `testInfo.attach` 输出 candidate count + id 清单,便于人工 audit;不强制 candidate count > 0(fixture 可能尚未提交,此时 count === 0 也是合法的 — assertion 用 `expect(count).toBeGreaterThanOrEqual(0)`)
-35. 这一步 **不触发任何 soland HTTP 请求**;它的目的只是让 fixture 缺失这件事在 CI 日志里立刻可见
+35. 这一步 **不触发任何 coland HTTP 请求**;它的目的只是让 fixture 缺失这件事在 CI 日志里立刻可见
 
 ### Phase G — Surface probe (optional, encouraged)
 
-36. `GET ${solandBaseUrl()}/_arkret/describe`(无认证)
+36. `GET ${colandBaseUrl()}/_arkret/describe`(无认证)
 37. 断言响应是 JSON,且内部一致:
     - **不应** 同时存在 "`development_mode === true`" 与 "`/_arkret/_conformance/snapshot` 端点返回 404" 这对矛盾状态
     - 具体表达:若 `GET /_arkret/describe` 顶层 `development_mode === true`,则对 `/_arkret/_conformance/snapshot` 发一个 minimal POST,响应 status 必须不是 404(允许 200 / 400 / 401 / 405 / 501;但 404 = 端点根本不存在,与 test-build 姿态矛盾)
@@ -177,7 +177,7 @@ Phase B 通过标准接口读取真实 RealmStateSnapshot，并复用 SDK/Garth 
 
 ## Implementation notes
 
-- **Soland test-build 要求**:`/_arkret/_conformance/{snapshot,query}` 已实现为 development-only HTTP harness。joint runner 必须以 `conformance-harness` feature 构建 Soland 且设置 `development_mode=true`；仅源码时间戳 fresh 不足以证明缓存 binary 带有该 feature。生产 binary 不得暴露该命名空间。
+- **Coland test-build 要求**:`/_arkret/_conformance/{snapshot,query}` 已实现为 development-only HTTP harness。joint runner 必须以 `conformance-harness` feature 构建 Coland 且设置 `development_mode=true`；仅源码时间戳 fresh 不足以证明缓存 binary 带有该 feature。生产 binary 不得暴露该命名空间。
 - **fixture 缺失 fallback**:目前 `arkret-spec/spec/v1/artifacts/fixtures/` 中**没有任何** `ak.vector.{snapshot,query,scalability}.*` 文件。Phase F 的 loader smoke 必须优雅降级:`readdirSync` 后命中数可以是 0,assertion 写成 `expect(count).toBeGreaterThanOrEqual(0)`(always-pass);candidate 清单与 count 用 `console.log` + `testInfo.attach` 输出,使得 (1) fixture 尚未提交时测试不红;(2) fixture 提交后日志里立刻能看到 vector 总数变化;(3) spec 作者新增 vector 时不需要改 harness。
 - **fixture loader 实现**:用 `fileURLToPath(import.meta.url)` + `dirname` + `path.resolve(..., "..", "..", "..", "..", "arkret-spec", "spec", "v1", "artifacts", "fixtures")` 从 spec 文件位置走到 fixtures 目录。**不**新增 `helpers/conformance-fixtures.ts`;loader 写在 spec 文件顶部(与 encoding-vectors 风格一致)。
 - **snapshot 信任材料**：Phase B 只从标准接口读取真实 signed snapshot、nonce-bound authority 与 retained service history，不注入 snapshot 私钥，不从未验证的展示 JSON 选签名公钥。

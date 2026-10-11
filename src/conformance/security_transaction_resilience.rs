@@ -11,7 +11,7 @@ pub fn run_security_transaction_resilience_joint_gate() -> Result<()> {
         "use arkret_",
         "use garth",
         "use inkson",
-        "use soland",
+        "use coland",
         "arkret_wire::",
         "arkret_state::",
     ] {

@@ -16,13 +16,13 @@ import {
   replaceAccountDataApi,
   signedEventEnvelope,
   submitSignedEventApi,
-} from "../../helpers/soland-api";
+} from "../../helpers/coland-api";
 import {
   addRealmMlsMemberApi,
   encryptMlsMessageContent,
   readScopeMlsGroupCurrentApi,
   realmMlsCreatorGroupApi,
-} from "../../helpers/soland-api/mls";
+} from "../../helpers/coland-api/mls";
 import {
   approvePairingLinkOnAuthorizedDevice,
   assertJointStackNotRequired,
@@ -35,7 +35,7 @@ import {
   uniqueUser,
 } from "../../helpers/users";
 import { selectDxcOption } from "../../helpers/dxc-select";
-import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
+import { coauthBaseUrl, colandBaseUrl } from "../../helpers/env";
 import { registerCoauthPasswordAccount } from "../../helpers/coauth-register";
 import { serverLoginViaCoauth, submitCoauthPasswordCredentials } from "../../helpers/real-oidc-login";
 
@@ -311,7 +311,7 @@ test.describe("notifications", () => {
         bobDeviceA.page.getByTestId("notification-settings-status"),
       ).toContainText(/do not disturb|dnd/i, { timeout: 30_000 });
 
-      const accountDataUrl = `${solandBaseUrl()}/_arkret/self/account_data/${encodeURIComponent("ak.dnd_schedule")}`;
+      const accountDataUrl = `${colandBaseUrl()}/_arkret/self/account_data/${encodeURIComponent("ak.dnd_schedule")}`;
       let storedDnd: Record<string, unknown> = {};
       await expect
         .poll(
@@ -592,7 +592,7 @@ test.describe("notifications", () => {
       await bobDevice2Page.page.goto("/login", {
         waitUntil: "domcontentloaded",
       });
-      await bobDevice2Page.page.getByTestId("login-server-url").fill(solandBaseUrl());
+      await bobDevice2Page.page.getByTestId("login-server-url").fill(colandBaseUrl());
       await bobDevice2Page.page.getByTestId("start-server-login-button").click();
       await submitCoauthPasswordCredentials(bobDevice2Page.page, bobAccount);
       const approve = bobDevice2Page.page.getByTestId("coauth-oauth-approve");

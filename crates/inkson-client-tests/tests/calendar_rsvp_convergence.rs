@@ -1,4 +1,4 @@
-//! Soland product-integration coverage for live Calendar RSVP convergence.
+//! Coland product-integration coverage for live Calendar RSVP convergence.
 //!
 //! This suite verifies Station-signed RealmStateSnapshot typed current rows
 //! against accepted RSVP RealmCommits and real Realm MLS ciphertext.

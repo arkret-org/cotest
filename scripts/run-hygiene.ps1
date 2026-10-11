@@ -198,7 +198,7 @@ if (-not $SkipProvisioningCache) {
 }
 if (-not $SkipPackageGraph) {
     # The light build edge as a gate rather than a remembered fact: neither
-    # `cotest-provision` nor `cotest-wire` may reach Inkson, Dioxus, a Soland
+    # `cotest-provision` nor `cotest-wire` may reach Inkson, Dioxus, a Coland
     # implementation crate or the root package. `cargo metadata` resolves the
     # graph without building anything, so this costs seconds, not a compile.
     $packageGraph = Join-Path $scriptDir "check_package_graph.py"

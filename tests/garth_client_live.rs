@@ -1,4 +1,4 @@
-//! Garth driven as a client, headless, against a live Coauth and Soland.
+//! Garth driven as a client, headless, against a live Coauth and Coland.
 //!
 //! This live gate exercises Garth's account subscription and durable cursor
 //! store through a canonical client provisioned on the deployment.
@@ -59,7 +59,7 @@ fn provisioning_http() -> reqwest::Client {
 fn endpoints() -> DeploymentEndpoints {
     DeploymentEndpoints {
         coauth_base_url: required_env("COTEST_COAUTH_BASE_URL"),
-        soland_base_url: required_env("COTEST_SOLAND_BASE_URL"),
+        coland_base_url: required_env("COTEST_COLAND_BASE_URL"),
         mock_email: std::env::var("COTEST_MOCK_EMAIL_BASE_URL")
             .ok()
             .filter(|url| !url.trim().is_empty())
@@ -74,16 +74,16 @@ fn unique_suffix() -> u128 {
         .as_nanos()
 }
 
-/// Gating: Requires a running Coauth and Soland with the configured durable-store test endpoints.
+/// Gating: Requires a running Coauth and Coland with the configured durable-store test endpoints.
 /// Tier: live
 #[tokio::test]
-#[ignore = "requires a running Coauth and Soland; see the module docs"]
+#[ignore = "requires a running Coauth and Coland; see the module docs"]
 async fn garth_syncs_an_account_over_its_own_durable_store() -> Result<()> {
     let endpoints = endpoints();
     let http = provisioning_http();
     let server = ArkretServer::attach(
-        &endpoints.soland_base_url,
-        &required_env("COTEST_SOLAND_NOTARY_SIGNING_KEY"),
+        &endpoints.coland_base_url,
+        &required_env("COTEST_COLAND_NOTARY_SIGNING_KEY"),
         Some(std::path::Path::new(&required_env(
             "COTEST_RUN_SCOPED_CA_PEM",
         ))),

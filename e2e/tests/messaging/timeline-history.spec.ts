@@ -1,7 +1,7 @@
 // Real account/WASM history acceptance; no injected projection or DOM fixture.
 import { expect, test } from "../../helpers/arkret-test";
 import { createSharedRealmViaApi, sendPlaintextMessageViaApi } from "../../helpers/api";
-import { resolveDefaultStrandId } from "../../helpers/soland-api";
+import { resolveDefaultStrandId } from "../../helpers/coland-api";
 import { ensureRegistered, issueUserSession, openDpopUserPage, uniqueUser } from "../../helpers/users";
 import { stepShot } from "../../helpers/screenshots";
 import { sampleAndAdvanceTimeline } from "../../helpers/timeline-visibility";

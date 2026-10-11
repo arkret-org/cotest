@@ -12,9 +12,9 @@ import { type APIRequestContext } from "@playwright/test";
 import {
   coauthOidcClientId,
   mockEmailBaseUrl,
-  solandBaseUrl,
-  solandServiceId,
-  type SolandKey,
+  colandBaseUrl,
+  colandServiceId,
+  type ColandKey,
 } from "./env";
 import {
   dpopDeviceSeedB64url,
@@ -30,7 +30,7 @@ import {
   cotestWire,
   projectDidToCoreId,
   typedId,
-} from "./soland-api";
+} from "./coland-api";
 
 export const COAUTH_DEV_EMAIL_CODE = "123456";
 
@@ -420,7 +420,7 @@ export async function createCanonicalAccountHandoff(
 export async function registerCoauthPasswordAccount(
   request: APIRequestContext,
   coauthBase: string,
-  opts: { handle?: string; password?: string; server?: SolandKey } = {},
+  opts: { handle?: string; password?: string; server?: ColandKey } = {},
 ): Promise<CoauthPasswordAccount> {
   const slug = (opts.handle ?? `e2e-oidc-${randomUUID()}`).toLowerCase();
   if (!/^[a-z0-9_-]+$/.test(slug)) {
@@ -438,12 +438,12 @@ export async function registerCoauthPasswordAccount(
 
   const genesisDeviceId = newDeviceId();
   const principalDescribe = await responseJsonRecord(
-    await request.get(`${solandBaseUrl(opts.server)}/_arkret/describe`),
-    "soland describe",
+    await request.get(`${colandBaseUrl(opts.server)}/_arkret/describe`),
+    "coland describe",
   );
   const trustDomain = stringValue(principalDescribe.trust_domain);
   const audience =
-    stringValue(principalDescribe.service_id) ?? solandServiceId(opts.server);
+    stringValue(principalDescribe.service_id) ?? colandServiceId(opts.server);
   if (!trustDomain) {
     throw new Error("Station description omitted trust_domain");
   }
@@ -465,7 +465,7 @@ export async function registerCoauthPasswordAccount(
   const fixture = cotestWire<PrincipalRegistrationFixture>(
     "principal-registration-fixture",
     {
-      station_url: solandBaseUrl(opts.server),
+      station_url: colandBaseUrl(opts.server),
       gate_account_base_url: `${coauthBase.replace(/\/$/, "")}/_arkret/gate/account`,
       handoff_request_id: handoff.requestId,
       identity_creation_lease: lease,

@@ -9,7 +9,7 @@
 //! The test is built around a small in-process simulator so it runs in
 //! CI without docker — the simulator is itself useful as a regression
 //! guard against the spec's quorum + heal-window numbers drifting.
-//! A future full wire-level version will require three soland binaries
+//! A future full wire-level version will require three coland binaries
 //! plus a packet-loss shim; this entrypoint pins the protocol invariants.
 
 use std::collections::BTreeSet;
@@ -73,13 +73,13 @@ impl Sim {
 }
 
 /// Gating: in-process partition simulator runs unconditionally; the
-/// real 3-soland wire version is tracked separately under CT-1. Marked
+/// real 3-coland wire version is tracked separately under CT-1. Marked
 /// `#[ignore]` per C.8 review: the simulator is a controlled-partition
 /// smoke, not a per-PR gate.
 /// Issue: C.8 (federation partition recovery)
 /// Tier: live
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "C.8 controlled partition simulation; opt-in only — full 3-soland wire version tracked under CT-1"]
+#[ignore = "C.8 controlled partition simulation; opt-in only — full 3-coland wire version tracked under CT-1"]
 #[serial]
 async fn federation_partition_then_heal_converges_on_canonical_frontier() -> Result<()> {
     let mut sim = Sim::new(vec!["A", "B", "C"]);

@@ -1,7 +1,7 @@
 # WebRTC Media Token Exchange (AKP-0010)
 
 Verifies the `ak.realm.media_service` foci -> media token exchange path against
-a live soland instance.
+a live coland instance.
 
 ## Setup
 
@@ -13,7 +13,7 @@ a live soland instance.
    - `arkret-native-reference` (`focus_kind = arkret_native`)
    Issuance configuration (`issuer_kid`, TTL, e2ee key source) is deployment
    configuration of the issuing service, never Realm cell state: the joint
-   runner leaves `SOLAND_MEDIA_ISSUER_KID` unset, so `issuer_kid` /
+   runner leaves `COLAND_MEDIA_ISSUER_KID` unset, so `issuer_kid` /
    `participant_binding.issuer_kid` anchors on `<service DID>#media-1`, and each
    focus `token_endpoint` origin must equal the deployment's public base URL
    (`POST /_arkret/self/rtc/token`) or issuance fails closed
@@ -36,7 +36,7 @@ a live soland instance.
   - `participant_binding.sig` is the single Realm-anchored media service
     assertion; the closed outcome has no redundant `service_signature`.
   - `backend_token` decodes to a LiveKit JWT: `iss` = the runner-configured
-    `SOLAND_LIVEKIT_API_KEY` (`did:web:media.example#media-token`, a backend
+    `COLAND_LIVEKIT_API_KEY` (`did:web:media.example#media-token`, a backend
     credential distinct from the Realm-anchored issuer kid), `sub` =
     `participant_id`, `video.room` is the opaque backend room id derived
     from `(realm_id, call_id, focus_id)` (`ak_call_<sha256-prefix>`, never raw

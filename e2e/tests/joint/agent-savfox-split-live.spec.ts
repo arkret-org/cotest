@@ -19,7 +19,7 @@ import type {
   AgentSidecarView,
   SidecarEnsureAcceptedOutcome,
 } from "../../helpers/generated/spec-wire-objects";
-import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
+import { coauthBaseUrl, colandBaseUrl } from "../../helpers/env";
 import {
   deliverInviteWithConsentGrant,
   grantInviteConsentArkret,
@@ -37,7 +37,7 @@ import {
   canonicalJson,
   expectJsonOk,
   wireErrCode,
-} from "../../helpers/soland-api";
+} from "../../helpers/coland-api";
 import {
   serverLoginViaCoauth,
   submitCoauthPasswordCredentials,
@@ -135,7 +135,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
       const lifecycleEvidenceOnly =
         process.env.COTEST_AGENT_LIFECYCLE_EVIDENCE_ONLY === "1";
       const stationDescribe = await expectJsonOk(
-        await request.get(`${solandBaseUrl()}/_arkret/describe`),
+        await request.get(`${colandBaseUrl()}/_arkret/describe`),
         "Station describe for approval notifications",
       );
       expect(Array.isArray(stationDescribe.supported_features)).toBe(true);
@@ -1918,7 +1918,7 @@ async function readSidecarCurrent(
   jointRealm: JointRealmFixture,
   sidecarId: string,
 ): Promise<AgentSidecarView> {
-  const url = `${solandBaseUrl().replace(/\/$/, "")}/_arkret/self/agent-sidecars/${encodeURIComponent(sidecarId)}`;
+  const url = `${colandBaseUrl().replace(/\/$/, "")}/_arkret/self/agent-sidecars/${encodeURIComponent(sidecarId)}`;
   const response = await request.get(url, {
     headers: selfPathHeadersForDpopSession(jointRealm.aliceSession, "GET", url),
   });
@@ -2000,7 +2000,7 @@ async function assertSidecarNonDisclosure(
   jointRealm: JointRealmFixture,
   sidecarId: string,
 ): Promise<void> {
-  const base = solandBaseUrl().replace(/\/$/, "");
+  const base = colandBaseUrl().replace(/\/$/, "");
   const detailUrl = `${base}/_arkret/self/agent-sidecars/${encodeURIComponent(sidecarId)}`;
   const controllerView = await request.get(detailUrl, {
     headers: selfPathHeadersForDpopSession(
@@ -2075,7 +2075,7 @@ async function pendingControllerApprovalId(
   jointRealm: JointRealmFixture,
   pairing: PairingHandle,
 ): Promise<string | undefined> {
-  const url = `${solandBaseUrl()}${AGENT_LIST_PATH}/${encodeURIComponent(pairing.agentId)}`;
+  const url = `${colandBaseUrl()}${AGENT_LIST_PATH}/${encodeURIComponent(pairing.agentId)}`;
   const view = await expectJsonOk(await request.get(url, {
     headers: selfPathHeadersForDpopSession(jointRealm.aliceSession, "GET", url),
   }), "controller pending runtime candidate");
@@ -2096,7 +2096,7 @@ async function runtimeKeyRequestStatus(
   pairing: PairingHandle,
 ): Promise<RuntimeKeyRequestStatus> {
   const response = await request.post(
-    `${solandBaseUrl()}${RUNTIME_KEY_REQUEST_STATUS_PATH}`,
+    `${colandBaseUrl()}${RUNTIME_KEY_REQUEST_STATUS_PATH}`,
     {
       headers: { "content-type": "application/json" },
       data: canonicalJson({

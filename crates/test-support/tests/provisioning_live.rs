@@ -1,6 +1,6 @@
 //! Live check for the Rust provisioning module.
 //!
-//! `#[ignore]` because it needs a running Coauth and Soland; it is not a unit
+//! `#[ignore]` because it needs a running Coauth and Coland; it is not a unit
 //! test with a mock behind it. Run it against a harness started with
 //! `-KeepServices`, or from a scenario that owns the deployment:
 //!
@@ -59,7 +59,7 @@ fn http_client() -> reqwest::Client {
 fn endpoints() -> DeploymentEndpoints {
     DeploymentEndpoints {
         coauth_base_url: required_env("COTEST_COAUTH_BASE_URL"),
-        soland_base_url: required_env("COTEST_SOLAND_BASE_URL"),
+        coland_base_url: required_env("COTEST_COLAND_BASE_URL"),
         mock_email: std::env::var("COTEST_MOCK_EMAIL_BASE_URL")
             .ok()
             .filter(|value| !value.trim().is_empty())
@@ -67,10 +67,10 @@ fn endpoints() -> DeploymentEndpoints {
     }
 }
 
-/// Gating: Requires a running Coauth and Soland with the configured provisioning endpoints.
+/// Gating: Requires a running Coauth and Coland with the configured provisioning endpoints.
 /// Tier: live
 #[tokio::test]
-#[ignore = "requires a running Coauth and Soland; see the module docs"]
+#[ignore = "requires a running Coauth and Coland; see the module docs"]
 async fn station_description_supplies_the_audience_a_grant_binds_to() {
     let http = http_client();
     let endpoints = endpoints();
@@ -91,10 +91,10 @@ async fn station_description_supplies_the_audience_a_grant_binds_to() {
     );
 }
 
-/// Gating: Requires a running Coauth and Soland with the configured provisioning endpoints.
+/// Gating: Requires a running Coauth and Coland with the configured provisioning endpoints.
 /// Tier: live
 #[tokio::test]
-#[ignore = "requires a running Coauth and Soland; see the module docs"]
+#[ignore = "requires a running Coauth and Coland; see the module docs"]
 async fn an_unbound_account_registers_and_authenticates() {
     let http = http_client();
     let endpoints = endpoints();
@@ -126,10 +126,10 @@ async fn an_unbound_account_registers_and_authenticates() {
     );
 }
 
-/// Gating: Requires a running Coauth and Soland with the configured provisioning endpoints.
+/// Gating: Requires a running Coauth and Coland with the configured provisioning endpoints.
 /// Tier: live
 #[tokio::test]
-#[ignore = "requires a running Coauth and Soland; see the module docs"]
+#[ignore = "requires a running Coauth and Coland; see the module docs"]
 async fn an_authenticated_account_completes_the_authorization_code_flow() {
     let http = http_client();
     let endpoints = endpoints();
@@ -172,10 +172,10 @@ async fn an_authenticated_account_completes_the_authorization_code_flow() {
     );
 }
 
-/// Gating: Requires a running Coauth and Soland with the configured provisioning endpoints.
+/// Gating: Requires a running Coauth and Coland with the configured provisioning endpoints.
 /// Tier: live
 #[tokio::test]
-#[ignore = "requires a running Coauth and Soland; see the module docs"]
+#[ignore = "requires a running Coauth and Coland; see the module docs"]
 async fn a_fresh_account_receives_an_identity_creation_lease() {
     let http = http_client();
     let endpoints = endpoints();
@@ -231,10 +231,10 @@ async fn a_fresh_account_receives_an_identity_creation_lease() {
     );
 }
 
-/// Gating: Requires a running Coauth and Soland with the configured provisioning endpoints.
+/// Gating: Requires a running Coauth and Coland with the configured provisioning endpoints.
 /// Tier: live
 #[tokio::test]
-#[ignore = "requires a running Coauth and Soland; see the module docs"]
+#[ignore = "requires a running Coauth and Coland; see the module docs"]
 async fn the_canonical_chain_founds_a_principal_end_to_end() {
     let http = http_client();
     let endpoints = endpoints();
@@ -285,7 +285,7 @@ async fn the_canonical_chain_founds_a_principal_end_to_end() {
         &http,
         FoundPrincipalRequest {
             coauth_base: &endpoints.coauth_base_url,
-            station_base: &endpoints.soland_base_url,
+            station_base: &endpoints.coland_base_url,
             trust_domain: &facts.trust_domain,
             audience_id: &facts.service_id,
             device_id: &device_id,
@@ -370,7 +370,7 @@ async fn the_canonical_chain_founds_a_principal_end_to_end() {
     // the chain produced a well-formed but unusable grant.
     let read = read_self_account_viewer(
         &http,
-        &endpoints.soland_base_url,
+        &endpoints.coland_base_url,
         &grant.session_grant,
         &handoff.device_key,
     )
@@ -415,10 +415,10 @@ async fn the_canonical_chain_founds_a_principal_end_to_end() {
 /// `cotest::harness::TestActorClient` and `ArkretServer::canonical_client` are
 /// built on, so verifying it here covers them without building the server
 /// harness.
-/// Gating: Requires a running Coauth and Soland with the configured provisioning endpoints.
+/// Gating: Requires a running Coauth and Coland with the configured provisioning endpoints.
 /// Tier: live
 #[tokio::test]
-#[ignore = "requires a running Coauth and Soland; see the module docs"]
+#[ignore = "requires a running Coauth and Coland; see the module docs"]
 async fn a_canonical_session_authorizes_a_caller_built_request() {
     let http = http_client();
     let endpoints = endpoints();
@@ -467,7 +467,7 @@ async fn a_canonical_session_authorizes_a_caller_built_request() {
         &http,
         FoundPrincipalRequest {
             coauth_base: &endpoints.coauth_base_url,
-            station_base: &endpoints.soland_base_url,
+            station_base: &endpoints.coland_base_url,
             trust_domain: &facts.trust_domain,
             audience_id: &facts.service_id,
             device_id: &device_id,
@@ -491,7 +491,7 @@ async fn a_canonical_session_authorizes_a_caller_built_request() {
 
     let url = format!(
         "{}/_arkret/self/account/viewer",
-        endpoints.soland_base_url.trim_end_matches('/')
+        endpoints.coland_base_url.trim_end_matches('/')
     );
     let response = session
         .authorize(
@@ -546,10 +546,10 @@ async fn a_canonical_session_authorizes_a_caller_built_request() {
 /// last part is the whole reason the bridge is a long-lived process: Coauth's
 /// account session lives in a cookie jar, and a fresh process per call would
 /// lose it.
-/// Gating: Requires a running Coauth and Soland with the configured provisioning endpoints.
+/// Gating: Requires a running Coauth and Coland with the configured provisioning endpoints.
 /// Tier: live
 #[tokio::test]
-#[ignore = "requires a running Coauth and Soland; see the module docs"]
+#[ignore = "requires a running Coauth and Coland; see the module docs"]
 async fn the_stdio_bridge_keeps_one_session_across_requests() {
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
@@ -573,7 +573,7 @@ async fn the_stdio_bridge_keeps_one_session_across_requests() {
     );
     let endpoints_json = serde_json::json!({
         "coauth_base_url": endpoints.coauth_base_url,
-        "soland_base_url": endpoints.soland_base_url,
+        "coland_base_url": endpoints.coland_base_url,
         "mock_email_base_url": endpoints
             .mock_email
             .as_ref()
@@ -619,7 +619,7 @@ async fn the_stdio_bridge_keeps_one_session_across_requests() {
         "id": "2",
         "op": "describe_station",
         "coauth_base_url": endpoints.coauth_base_url,
-        "soland_base_url": endpoints.soland_base_url,
+        "coland_base_url": endpoints.coland_base_url,
     });
     stdin
         .write_all(format!("{describe}\n").as_bytes())

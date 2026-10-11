@@ -14,7 +14,7 @@ fn execution() -> Result<(SuiteExecutionResult, SuiteExecutionResult)> {
         let run = || -> Result<_> {
             let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().build()?;
             let (admission,migration)=runtime.block_on(crate::scenarios::mimi_facade_live::run_evidence())?
-                .ok_or_else(||anyhow!("MIMI named suites require real database and Soland; skipped live execution is not evidence"))?;
+                .ok_or_else(||anyhow!("MIMI named suites require real database and Coland; skipped live execution is not evidence"))?;
             Ok((SuiteExecutionResult{entrypoint:ADMISSION,fixture:"mimi-admission-guards-fixture.json",cases:admission},
                 SuiteExecutionResult{entrypoint:MIGRATION,fixture:"mimi-room-binding-migration-fixture.json",cases:migration}))
         };

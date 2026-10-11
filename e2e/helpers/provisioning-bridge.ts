@@ -36,7 +36,7 @@ type BridgeResponse =
 
 export type DeploymentEndpoints = {
   coauthBaseUrl: string;
-  solandBaseUrl: string;
+  colandBaseUrl: string;
   mockEmailBaseUrl?: string;
 };
 
@@ -89,7 +89,7 @@ export type FoundedPrincipal = {
 function endpointsWire(endpoints: DeploymentEndpoints) {
   return {
     coauth_base_url: endpoints.coauthBaseUrl,
-    soland_base_url: endpoints.solandBaseUrl,
+    coland_base_url: endpoints.colandBaseUrl,
     mock_email_base_url: endpoints.mockEmailBaseUrl ?? null,
   };
 }
@@ -246,7 +246,7 @@ export class ProvisioningBridge {
     const result = await this.#call("found_principal", {
       handoff_id: args.handoffId,
       coauth_base_url: args.endpoints.coauthBaseUrl,
-      soland_base_url: args.endpoints.solandBaseUrl,
+      coland_base_url: args.endpoints.colandBaseUrl,
       trust_domain: args.trustDomain,
       audience_id: args.audienceId,
       device_id: args.deviceId,
@@ -290,11 +290,11 @@ export class ProvisioningBridge {
    */
   async readSelfAccountViewer(args: {
     handoffId: string;
-    solandBaseUrl: string;
+    colandBaseUrl: string;
   }): Promise<{ status: number; body: Record<string, unknown> }> {
     const result = await this.#call("read_self_account_viewer", {
       handoff_id: args.handoffId,
-      soland_base_url: args.solandBaseUrl,
+      coland_base_url: args.colandBaseUrl,
     });
     return {
       status: Number(result.status),
@@ -312,13 +312,13 @@ export class ProvisioningBridge {
    */
   async openGarthClient(args: {
     handoffId: string;
-    solandBaseUrl: string;
+    colandBaseUrl: string;
     accountId: { principal_id: string; station_id: string };
     deviceId: string;
   }): Promise<{ storeRoot: string }> {
     const result = await this.#call("garth_client_open", {
       handoff_id: args.handoffId,
-      soland_base_url: args.solandBaseUrl,
+      coland_base_url: args.colandBaseUrl,
       account_id: args.accountId,
       device_id: args.deviceId,
     });

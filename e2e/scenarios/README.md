@@ -125,5 +125,5 @@ e2e/
 - `summary.md` / `scenarios.md` — 整体 + scenario 维度
 - `junit.xml` — CI 友好结构化结果
 - `playwright-report/` — HTML(含 trace/video/failure screenshot)
-- `services/` — soland / coauth / inkson / mock-* 进程日志
+- `services/` — coland / coauth / inkson / mock-* 进程日志
 - `screenshots/` / `diagnostics/`(console + network HAR)

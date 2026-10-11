@@ -1,4 +1,4 @@
-//! Soland `ak.self.account.stream.subscribe.v1` long-poll + realms-incremental coverage.
+//! Coland `ak.self.account.stream.subscribe.v1` long-poll + realms-incremental coverage.
 //!
 //! Pins the two behaviors that landed in `routing::events::sync`:
 //!

@@ -8,7 +8,7 @@
 //! against an accepted Commit, the registered ciphersuite table and the
 //! endpoint KeyPackage KATs. Authority-side ledger semantics (CAS, exact replay,
 //! conflicting reuse, anti-enumeration) run against a Station claim ledger
-//! model here and against the real Soland in the live `keypackage_lifecycle`
+//! model here and against the real Coland in the live `keypackage_lifecycle`
 //! test (`scenarios::mls_lifecycle_live`).
 
 use std::collections::{BTreeMap, BTreeSet};

@@ -6,7 +6,7 @@
 //
 // MANUAL OPERATOR TOOL — deliberately NOT wired into scripts/run-joint-e2e.ps1.
 // Two properties of the contract make an in-run hook impossible:
-//   1. joint-e2e starts soland with `SOLAND_DEVELOPMENT_MODE=true`
+//   1. joint-e2e starts coland with `COLAND_DEVELOPMENT_MODE=true`
 //      (run-joint-e2e.ps1), and `sync/service-surface.md` §3.0 requires
 //      `verified_profiles=[]` for `development_mode=true`. A dev-mode run can
 //      never legitimately advertise a verified profile.
@@ -23,7 +23,7 @@
 // suites in PROFILE_SUITE_MAP — emits `<artifacts_dir>/verified-profiles.json`
 // describing which canonical Arkret v1 profile IDs the run actually
 // verified end-to-end. The Station loads this file at startup behind
-// `SOLAND_VERIFIED_PROFILES_ARTIFACT` and
+// `COLAND_VERIFIED_PROFILES_ARTIFACT` and
 // populates the wire `verified_profiles[]` from it; absent / unset env vars
 // keep the dev-mode `verified_profiles=[]` invariant in service-surface.md
 // §3.0.
@@ -147,7 +147,7 @@ function printUsage() {
       '    private key accepted by Node crypto.',
       '',
       'ENV CONSUMERS:',
-      '  - soland reads SOLAND_VERIFIED_PROFILES_ARTIFACT=<path-to-this-json>',
+      '  - coland reads COLAND_VERIFIED_PROFILES_ARTIFACT=<path-to-this-json>',
       '    and filters to entries with service_role == "station".',
       '',
     ].join('\n'),

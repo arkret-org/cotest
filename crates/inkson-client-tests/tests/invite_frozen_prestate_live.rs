@@ -1,4 +1,4 @@
-//! COT-STATE-02 — live Invite frozen-pre-state acceptance across SDK, Soland
+//! COT-STATE-02 — live Invite frozen-pre-state acceptance across SDK, Coland
 //! and the Inkson producer.
 
 use anyhow::Result;

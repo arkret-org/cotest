@@ -7,14 +7,14 @@
 //                                §11 (feature discovery)
 //       sync/service-api-schema.mdx §2 (canonical ServiceDescribe required fields)
 //
-// Both soland (`soland/src/routing/system/describe.rs` + `soland/src/wire.rs`) and coauth
+// Both coland (`coland/src/routing/system/describe.rs` + `coland/src/wire.rs`) and coauth
 // (`coauth/crates/backend/src/handlers/arkret.rs::server_describe`) already serve
 // `GET /_arkret/describe` with the supported profiles and verification evidence layer in place, so the two
 // describe probes are LIVE today. Phase A.E1 (claim_kind partition), Phase B
 // (error envelope), Phase E (unsupported_feature fail-closed), Phase C (opaque
 // list-pagination cursor on `ak.self.committed_event.read.scan.v1`) and Phase D (full-body
 // `canonical_hash` replay identity of POST /_arkret/self/events) are all live on
-// soland.
+// coland.
 //
 // Only the describe describe-block is tagged @fully-implemented — that's the slice safe to
 // run under joint-smoke. The untagged service-surface block carries the broader
@@ -29,7 +29,7 @@ import {
   createRealmViaApi,
   listRealmEventsViaApi,
 } from "../../helpers/api";
-import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
+import { coauthBaseUrl, colandBaseUrl } from "../../helpers/env";
 import {
   authHeaders,
   canonicalJson,
@@ -37,7 +37,7 @@ import {
   signedEventEnvelope,
   submitSignedEventApi,
   wireErrCode,
-} from "../../helpers/soland-api";
+} from "../../helpers/coland-api";
 import { ensureRegistered, issueUserSession, uniqueUser } from "../../helpers/users";
 
 test.describe.configure({ mode: "serial" });
@@ -50,9 +50,9 @@ type ProblemDetails = {
   instance?: string;
 };
 
-async function expectCanonicalSolandErrorEnvelope(request: APIRequestContext) {
+async function expectCanonicalColandErrorEnvelope(request: APIRequestContext) {
   const unknown = await request.get(
-    `${solandBaseUrl()}/_arkret/self/__definitely_does_not_exist__/probe`,
+    `${colandBaseUrl()}/_arkret/self/__definitely_does_not_exist__/probe`,
   );
   expect(unknown.status(), "unknown API path status").toBe(404);
   expect(unknown.headers()["content-type"] ?? "", "unknown path content-type").toContain(
@@ -66,7 +66,7 @@ async function expectCanonicalSolandErrorEnvelope(request: APIRequestContext) {
   expect(unknownBody.detail, "unknown path error message").toBeTruthy();
   expect(unknownBody.instance, "unknown path request_id").toMatch(/^ak:[a-z_]+:/);
 
-  const wrongMethod = await request.post(`${solandBaseUrl()}/_arkret/describe`);
+  const wrongMethod = await request.post(`${colandBaseUrl()}/_arkret/describe`);
   expect(wrongMethod.status(), "known path wrong method status").toBe(405);
   expect(wrongMethod.headers()["content-type"] ?? "", "wrong method content-type").toContain(
     "application/problem+json",
@@ -186,10 +186,10 @@ async function startSharedDescribeBinding(
   };
 }
 
-// ---------- LIVE: describe-endpoint probes (soland + coauth) ----------
+// ---------- LIVE: describe-endpoint probes (coland + coauth) ----------
 
-test.describe("describes soland surface @fully-implemented", () => {
-  test("soland /_arkret/describe returns canonical ServiceDescribe shape", async ({
+test.describe("describes coland surface @fully-implemented", () => {
+  test("coland /_arkret/describe returns canonical ServiceDescribe shape", async ({
     request,
   }, testInfo) => {
     // spec: service-surface.md §3 (canonical shape), §3.0 (supported profiles and verification evidence),
@@ -197,7 +197,7 @@ test.describe("describes soland surface @fully-implemented", () => {
     //
     // Asserts the canonical fields are present, conformance claims remain
     // bound to supported profiles, and dev-mode posture forces verified_profiles == [].
-    const resp = await request.get(`${solandBaseUrl()}/_arkret/describe`);
+    const resp = await request.get(`${colandBaseUrl()}/_arkret/describe`);
     expect(resp.status()).toBe(200);
     expect(resp.headers()["content-type"] ?? "").toContain("application/json");
     const body = await resp.json();
@@ -236,23 +236,23 @@ test.describe("describes soland surface @fully-implemented", () => {
       "ak.operation_bundle.station.http_core_current.v1",
     );
 
-    await testInfo.attach("soland-describe", {
+    await testInfo.attach("coland-describe", {
       body: JSON.stringify(body, null, 2),
       contentType: "application/json",
     });
   });
 
-  test("soland describe accepts only its registered role selector", async ({
+  test("coland describe accepts only its registered role selector", async ({
     request,
   }) => {
     const selected = await request.get(
-      `${solandBaseUrl()}/_arkret/describe?service_kind=station`,
+      `${colandBaseUrl()}/_arkret/describe?service_kind=station`,
     );
     expect(selected.status()).toBe(200);
     expect((await selected.json()).service_kind).toBe("station");
 
     const rejected = await request.get(
-      `${solandBaseUrl()}/_arkret/describe?service_kind=private_auth_process`,
+      `${colandBaseUrl()}/_arkret/describe?service_kind=private_auth_process`,
     );
     expect(rejected.status()).toBe(400);
     expect(wireErrCode(await rejected.json())).toBe("param_invalid");
@@ -273,7 +273,7 @@ test.describe("shared public describe binding @fully-implemented", () => {
     request,
   }) => {
     const stationResponse = await request.get(
-      `${solandBaseUrl()}/_arkret/describe?service_kind=station`,
+      `${colandBaseUrl()}/_arkret/describe?service_kind=station`,
     );
     expect(stationResponse.status()).toBe(200);
     const station = (await stationResponse.json()) as Record<string, unknown>;
@@ -326,7 +326,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
         signature?: unknown;
         timestamp?: unknown;
       };
-      const resp = await request.get(`${solandBaseUrl()}/_arkret/describe`);
+      const resp = await request.get(`${colandBaseUrl()}/_arkret/describe`);
       expect(resp.status()).toBe(200);
       const body = await resp.json();
       const supported = body.supported_profiles as string[];
@@ -384,7 +384,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       //         sole stable machine discriminator),
       //       §5.2 (404 unrecognized_endpoint, MUST NOT return HTML / stack /
       //         framework error, MUST terminate at routing layer with no side effects).
-      await expectCanonicalSolandErrorEnvelope(request);
+      await expectCanonicalColandErrorEnvelope(request);
     },
   );
 
@@ -420,9 +420,9 @@ test.describe("service surface contract — error envelope, pagination, idempote
         },
       });
       const eventId = String(envelope.event_id);
-      const submitUrl = `${solandBaseUrl()}/_arkret/self/events`;
+      const submitUrl = `${colandBaseUrl()}/_arkret/self/events`;
 
-      const first = await test.step("protocol stage: first", () => request.post(`${solandBaseUrl()}/_arkret/self/events`, {
+      const first = await test.step("protocol stage: first", () => request.post(`${colandBaseUrl()}/_arkret/self/events`, {
         headers: { ...authHeaders(token, "POST", submitUrl), "content-type": "application/json" },
         data: canonicalJson({ event: envelope }),
       }), { box: true });
@@ -431,7 +431,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       expect(submittedEventId(firstBody)).toBe(eventId);
       expect(submittedEventOutcome(firstBody, eventId)).toBe("accepted");
 
-      const duplicate = await test.step("protocol stage: duplicate", () => request.post(`${solandBaseUrl()}/_arkret/self/events`, {
+      const duplicate = await test.step("protocol stage: duplicate", () => request.post(`${colandBaseUrl()}/_arkret/self/events`, {
         headers: { ...authHeaders(token, "POST", submitUrl), "content-type": "application/json" },
         data: canonicalJson({ event: envelope }),
       }), { box: true });
@@ -457,7 +457,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       // Reuse the inner Event ID, not the full-body submission identity.
       // Ordinary signing helpers derive a new id; this negative request must not.
       drift.event_id = eventId;
-      const conflict = await test.step("protocol stage: conflict", () => request.post(`${solandBaseUrl()}/_arkret/self/events`, {
+      const conflict = await test.step("protocol stage: conflict", () => request.post(`${colandBaseUrl()}/_arkret/self/events`, {
         headers: { ...authHeaders(token, "POST", submitUrl), "content-type": "application/json" },
         data: canonicalJson({ event: drift }),
       }), { box: true });
@@ -509,7 +509,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       }
       const seededSet = new Set(seededEventIds);
 
-      const scanUrl = `${solandBaseUrl()}/_arkret/self/streams/scan`;
+      const scanUrl = `${colandBaseUrl()}/_arkret/self/streams/scan`;
       const fetchPage = async (beforePosition: number | null) => {
         const response = await request.post(scanUrl, {
           headers: { ...authHeaders(token, "POST", scanUrl), "content-type": "application/json" },
@@ -640,7 +640,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
 
       const before = await countSeededEvents();
 
-      const submitUrl = `${solandBaseUrl()}/_arkret/self/events`;
+      const submitUrl = `${colandBaseUrl()}/_arkret/self/events`;
       const submit = async (event: Record<string, unknown>) =>
         await request.post(submitUrl, {
           headers: { ...authHeaders(token, "POST", submitUrl), "content-type": "application/json" },
@@ -735,7 +735,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
         // closed Event schema must reject it before any proof evaluation.
         const tampered = { ...envelope, [retired.member]: retired.value };
 
-        const submitUrl = `${solandBaseUrl()}/_arkret/self/events`;
+        const submitUrl = `${colandBaseUrl()}/_arkret/self/events`;
         const resp = await request.post(submitUrl, {
           headers: { ...authHeaders(token, "POST", submitUrl), "content-type": "application/json" },
           data: canonicalJson({ event: tampered }),

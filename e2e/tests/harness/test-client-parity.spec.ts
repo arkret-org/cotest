@@ -24,7 +24,7 @@ import {
   coauthOidcClientId,
   inksonBaseUrl,
   mockEmailBaseUrl,
-  solandBaseUrl,
+  colandBaseUrl,
 } from "../../helpers/env";
 import { GarthTestClient } from "../../helpers/test-client-garth";
 import { InksonTestClient } from "../../helpers/test-client-inkson";
@@ -51,7 +51,7 @@ test.describe("test client parity @fully-implemented", () => {
       client = new GarthTestClient({
         endpoints: {
           coauthBaseUrl: coauth as string,
-          solandBaseUrl: solandBaseUrl(),
+          colandBaseUrl: colandBaseUrl(),
           mockEmailBaseUrl: mockEmailBaseUrl(),
         },
         oidcClientId: clientId as string,

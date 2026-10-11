@@ -12,7 +12,7 @@ import {
   type Locator,
   type Page,
 } from "../../helpers/arkret-test";
-import { solandBaseUrl } from "../../helpers/env";
+import { colandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
   accountActorId,
@@ -27,7 +27,7 @@ import {
   submitSignedEventApi,
   typedId,
   wireErrCode,
-} from "../../helpers/soland-api";
+} from "../../helpers/coland-api";
 import { relationCreatePayload } from "../../helpers/relation-api";
 import {
   assertJointStackNotRequired,
@@ -82,7 +82,7 @@ async function waitForStrandProjection(
   realmId: string,
   strandId: string,
 ): Promise<void> {
-  const url = `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/strands`;
+  const url = `${colandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/strands`;
   await expect
     .poll(
       async () => {
@@ -497,7 +497,7 @@ test.describe("kanban end-to-end", () => {
     request,
   }) => {
     // spec: models/relation.md §4 — structural relations (contains /
-    // belongs_to) MUST NOT cross Realm boundaries. soland resolves both
+    // belongs_to) MUST NOT cross Realm boundaries. coland resolves both
     // endpoints' home Realms (apply_relations.rs check_relation_cross_realm →
     // SDK validate_structural_relation_same_realm) and rejects a contains
     // edge whose endpoints live in different Realms with
@@ -553,10 +553,10 @@ test.describe("kanban end-to-end", () => {
       }),
     });
     const response = await request.post(
-      `${solandBaseUrl()}/_arkret/self/events`,
+      `${colandBaseUrl()}/_arkret/self/events`,
       {
         headers: {
-          ...authHeaders(aliceToken, "POST", `${solandBaseUrl()}/_arkret/self/events`),
+          ...authHeaders(aliceToken, "POST", `${colandBaseUrl()}/_arkret/self/events`),
           "content-type": "application/json",
         },
         data: canonicalJson({ event: crossRealm }),
@@ -584,7 +584,7 @@ test.describe("kanban end-to-end", () => {
   }) => {
     // spec: common-fields.md §5.1 — writes on a non-active object MUST fail
     // with strand_not_active. Posting into a Card's discussion track after it
-    // is archived is a track mutation (ak.strand.tracks.update); soland gates
+    // is archived is a track mutation (ak.strand.tracks.update); coland gates
     // it on the parent Strand lifecycle in apply_objects/strand.rs
     // (check_strand_tracks_transition admission preflight + apply_strand_track_touch
     // reducer defence-in-depth), both returning strand_not_active.
@@ -632,10 +632,10 @@ test.describe("kanban end-to-end", () => {
       },
     });
     const response = await request.post(
-      `${solandBaseUrl()}/_arkret/self/events`,
+      `${colandBaseUrl()}/_arkret/self/events`,
       {
         headers: {
-          ...authHeaders(aliceToken, "POST", `${solandBaseUrl()}/_arkret/self/events`),
+          ...authHeaders(aliceToken, "POST", `${colandBaseUrl()}/_arkret/self/events`),
           "content-type": "application/json",
         },
         data: canonicalJson({ event: trackWrite }),
@@ -779,7 +779,7 @@ test.describe("kanban end-to-end", () => {
       await expect(alicePage.page.getByTestId("kanban-column-title")).toHaveText(
         [third, first, second], { timeout: 30_000 },
       );
-      const spacesUrl = `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/spaces`;
+      const spacesUrl = `${colandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/spaces`;
       await expect.poll(async () => {
         const response = await request.get(spacesUrl, {
           headers: {
@@ -811,18 +811,18 @@ test.describe("kanban end-to-end", () => {
   //
   // The happy-path kanban tests above build PLAINTEXT Realms — createRealm
   // leaves encryption_profile unset, which defaults to "none" (see
-  // helpers/users.ts + soland-api.ts), so soland's content-encryption floor
+  // helpers/users.ts + coland-api.ts), so coland's content-encryption floor
   // (operations.rs validate_content_encryption_floor) is never armed and the
   // card detail only ever carries a `title`, never a private `body`. The
   // inkson setup wizard, however, defaults new Realms to `mls_rfc9420` (the
   // "Encrypted" badge). Adding a Strand description writes the private `body`
   // patch path, so on an encrypted Realm the client MUST encrypt it before
-  // submit; if it ships plaintext, soland rejects the ak.strand.update with 412
+  // submit; if it ships plaintext, coland rejects the ak.strand.update with 412
   // `content_encryption_floor_violation` (exactly the failure reported from
   // the UI). encryption/key-backup.spec.ts A2 exercises this only on a
   // RESTORED second device — never on the original creator device, which is
   // the path this guards.
-  test("alice adds a strand description on a freshly-created MLS-encrypted realm; soland accepts the encrypted ak.strand.update (no content_encryption_floor_violation)", async ({
+  test("alice adds a strand description on a freshly-created MLS-encrypted realm; coland accepts the encrypted ak.strand.update (no content_encryption_floor_violation)", async ({
     browser,
     request,
   }, testInfo) => {
@@ -842,7 +842,7 @@ test.describe("kanban end-to-end", () => {
     // The plaintext-vs-encrypted decision is client-side, and on the buggy
     // path the optimistic UI still renders the typed text even though the
     // server bounced the write — so the network verdict, not the rendered
-    // DOM, is the source of truth. Record any events submit that soland
+    // DOM, is the source of truth. Record any events submit that coland
     // rejects with the content-encryption floor reason.
     const floorViolations: string[] = [];
     alicePage.page.on("response", (response) => {
@@ -915,7 +915,7 @@ test.describe("kanban end-to-end", () => {
 
       await setCardDetailEditorValue(alicePage.page, description);
 
-      // The encrypted ak.strand.update submit must reach soland and be accepted,
+      // The encrypted ak.strand.update submit must reach coland and be accepted,
       // not bounced by the content-encryption floor.
       const strandUpdate = alicePage.page.waitForResponse(
         (response) =>
@@ -960,11 +960,11 @@ test.describe("kanban end-to-end", () => {
   });
 
   // Regression: encrypted Strand SYNTHESIS on the creator device. `synthesis` is
-  // a distinct private content path from `body` (see soland operations.rs
+  // a distinct private content path from `body` (see coland operations.rs
   // strand_operation_carries_plaintext_private_content / inkson
   // KANBAN_PRIVATE_STRAND_PATCH_PATHS) and rides its own client encryption +
   // commit code path, so it needs its own guard.
-  test("alice adds a strand synthesis on a freshly-created MLS-encrypted realm; soland accepts the encrypted ak.strand.update", async ({
+  test("alice adds a strand synthesis on a freshly-created MLS-encrypted realm; coland accepts the encrypted ak.strand.update", async ({
     browser,
     request,
   }, testInfo) => {
@@ -1041,9 +1041,9 @@ test.describe("kanban end-to-end", () => {
   // Historical regression: this path used to submit plaintext ak.message.create
   // envelopes from the discussion composer. The client now routes chat sends
   // through secure_send and SDK encrypted-envelope construction; this test pins
-  // that soland accepts the encrypted event and that plaintext does not appear
+  // that coland accepts the encrypted event and that plaintext does not appear
   // in the submitted request body.
-  test("alice posts a strand discussion comment on a freshly-created MLS-encrypted realm; soland accepts the encrypted ak.message.create", async ({
+  test("alice posts a strand discussion comment on a freshly-created MLS-encrypted realm; coland accepts the encrypted ak.message.create", async ({
     browser,
     request,
   }, testInfo) => {

@@ -125,7 +125,7 @@ pub async fn third_party_invite_claim_run() -> Result<()> {
     )
     .await?
     else {
-        return skip_or_fail(GROUP, "prebuilt Soland unavailable");
+        return skip_or_fail(GROUP, "prebuilt Coland unavailable");
     };
     let (alice, _) = standard_client(
         group.server(0),

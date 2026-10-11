@@ -14,7 +14,7 @@
 
 ## 拓扑
 
-- 1 × soland + 1 × coauth
+- 1 × coland + 1 × coauth
 
 ## Actors
 
@@ -81,7 +81,7 @@
 
 ## Implementation notes
 
-- **soland 缺口**:Circle-backed `scope_circle_id` enforcement、`confidential_discussion_of` relation profile、promoted thread projection。
+- **coland 缺口**:Circle-backed `scope_circle_id` enforcement、`confidential_discussion_of` relation profile、promoted thread projection。
 - **inkson 缺口**:"Promote discussion" 按钮、创建 Circle + discussion Strand 的组合 UI、promoted thread summary / drill-in UI。
 - **协议禁项**:`discussion_space_ref` / `discussion_realm_ref` 都不得出现在当前 wire；测试必须 hard-reject 这些字段。
 

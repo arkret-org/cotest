@@ -7,9 +7,9 @@ import { expect, test } from "../../helpers/arkret-test";
 import type { APIRequestContext } from "../../helpers/arkret-test";
 import {
   mockEmailBaseUrl,
-  solandBaseUrl,
-  solandServiceId,
-  solandServiceResolution,
+  colandBaseUrl,
+  colandServiceId,
+  colandServiceResolution,
 } from "../../helpers/env";
 import {
   authHeaders,
@@ -30,7 +30,7 @@ import {
   assertAuthoritySubmitOutcome,
   submitSignedEventApi,
   wireErrCode,
-} from "../../helpers/soland-api";
+} from "../../helpers/coland-api";
 import {
   ensureRegistered,
   issueUserSession,
@@ -47,7 +47,7 @@ import {
   type DidKeyIdentity,
   type ThirdPartyInviteCell,
 } from "../../helpers/third-party-invite";
-import { sdkInviteSubjectProof } from "../../helpers/soland-api/wire-client";
+import { sdkInviteSubjectProof } from "../../helpers/coland-api/wire-client";
 import { ed25519PrivateKeySeedB64url } from "../../helpers/encoding";
 import {
   buildWebvhGenesisEntry,
@@ -61,7 +61,7 @@ async function createVerificationService(
 ): Promise<DidKeyIdentity> {
   const signingKey = generateWebvhKey();
   const built = buildWebvhGenesisEntry({
-    baseUrl: solandBaseUrl(),
+    baseUrl: colandBaseUrl(),
     localId: `invite-verifier-${seed}-${randomUUID()}`,
     rootKey: generateWebvhKey(),
     nextRootKey: generateWebvhKey(),
@@ -82,7 +82,7 @@ async function createVerificationService(
       };
     },
   });
-  await submitPrincipalGenesisEntry(request, solandBaseUrl(), built);
+  await submitPrincipalGenesisEntry(request, colandBaseUrl(), built);
   return {
     did: built.did,
     verificationMethod: `${built.did}#invite-verification`,
@@ -116,9 +116,9 @@ async function submitSelfEvent(
   envelope: Record<string, unknown>,
 ): Promise<SelfEventsOutcome> {
   const response = await request.post(
-    `${solandBaseUrl()}/_arkret/self/events`,
+    `${colandBaseUrl()}/_arkret/self/events`,
     {
-      headers: { ...authHeaders(token, "POST", `${solandBaseUrl()}/_arkret/self/events`), "content-type": "application/json" },
+      headers: { ...authHeaders(token, "POST", `${colandBaseUrl()}/_arkret/self/events`), "content-type": "application/json" },
       data: canonicalJson({ event: envelope }),
     },
   );
@@ -407,7 +407,7 @@ test.describe("third-party invite", () => {
 
   // Live since 2026-08-06. The canonical allowlist carrier landed in spec + SDK
   // (2026-08-02, `allowed_third_party_invite_verification_ids`) and in
-  // soland's reducer (`apply_invites.rs` reads that top-level component only).
+  // coland's reducer (`apply_invites.rs` reads that top-level component only).
   // Former blocker and current live-verification owner:
   // arkret-work/tasks/impl-tailin/2026-08-02-account-status-allowlist-and-personal-blocklist-downstream.md
   test("bob submits ak.invite.claim with binding_proof + subject_proof; reducer accepts and records claimed lifecycle", async ({
@@ -457,7 +457,7 @@ test.describe("third-party invite", () => {
     const deviceSeed = registeredEventSigningSeedB64url(ctx.bob.id);
     expect(Boolean(deviceMethod && deviceSeed), "negative proof uses the accepted PCR device key").toBe(true);
     const deviceSubjectProof = sdkInviteSubjectProof({
-      subjectAccountId: { principal_id: ctx.bob.id, station_id: solandServiceId() },
+      subjectAccountId: { principal_id: ctx.bob.id, station_id: colandServiceId() },
       inviteId: ctx.cell.inviteId!, realmId: ctx.cell.realmId,
       tokenCommitment: ctx.cell.tokenCommitment, claimNonce,
       verificationId: projectDidToCoreId(ctx.verificationService.did), bindingProof,
@@ -488,7 +488,7 @@ test.describe("third-party invite", () => {
     // or joined membership. Verify its accepted source and typed lifecycle
     // through Alice's already-authorized Realm view.
     const acceptedCommit = claim.body.commit as Record<string, unknown>;
-    const acceptedUrl = `${solandBaseUrl()}/_arkret/self/committed-events/${claim.accepted[0]}`;
+    const acceptedUrl = `${colandBaseUrl()}/_arkret/self/committed-events/${claim.accepted[0]}`;
     const accepted = await expectJsonOk<Record<string, any>>(
       await request.get(acceptedUrl, {
         headers: authHeaders(ctx.aliceToken, "GET", acceptedUrl),
@@ -501,10 +501,10 @@ test.describe("third-party invite", () => {
     expect(accepted.event.payload).toEqual(claimPayload);
     expect(accepted.event.payload.subject_account_id).toEqual({
       principal_id: ctx.bob.id,
-      station_id: solandServiceId(),
+      station_id: colandServiceId(),
     });
     const readVerifiedSnapshot = async () => {
-      const snapshotUrl = `${solandBaseUrl()}/_arkret/self/realm-state-snapshot/head?realm_id=${encodeURIComponent(ctx.realmId)}`;
+      const snapshotUrl = `${colandBaseUrl()}/_arkret/self/realm-state-snapshot/head?realm_id=${encodeURIComponent(ctx.realmId)}`;
       const snapshot = await expectJsonOk<Record<string, any>>(
         await request.get(snapshotUrl, {
           headers: authHeaders(ctx.aliceToken, "GET", snapshotUrl),
@@ -512,17 +512,17 @@ test.describe("third-party invite", () => {
         "read third-party claim lifecycle at the accepted Realm cut",
       );
       const authorityRequest = { realm_id: ctx.realmId, nonce: randomBytes(32).toString("base64url") };
-      const authorityResponse = await request.post(`${solandBaseUrl()}/_arkret/open/realm-authority/bundle`, {
+      const authorityResponse = await request.post(`${colandBaseUrl()}/_arkret/open/realm-authority/bundle`, {
         headers: { "content-type": "application/json" }, data: canonicalJson(authorityRequest),
       });
       const authorityBundle = await expectJsonOk(authorityResponse, "claim Realm authority");
       const serviceResolution = await expectJsonOk(
-        await request.get(solandServiceResolution().resolution_url), "governing Station resolution",
+        await request.get(colandServiceResolution().resolution_url), "governing Station resolution",
       );
       expect(cotestWire("verify-realm-state-snapshot", {
         snapshot, expected_snapshot_id: snapshot.snapshot_id,
         authority_request: authorityRequest, authority_bundle: authorityBundle,
-        trusted_service_id: solandServiceId(), service_resolution: serviceResolution,
+        trusted_service_id: colandServiceId(), service_resolution: serviceResolution,
       })).toEqual({ verified: true });
       return snapshot;
     };
@@ -539,10 +539,10 @@ test.describe("third-party invite", () => {
     // Holder-private authz listing requires a directed delivery. A claimed
     // placeholder must not fabricate that independent notification state.
     const invitesResp = await request.get(
-      `${solandBaseUrl()}/_arkret/self/authz/invites?realm_id=${encodeURIComponent(ctx.realmId)}`,
+      `${colandBaseUrl()}/_arkret/self/authz/invites?realm_id=${encodeURIComponent(ctx.realmId)}`,
       {
         headers: {
-          ...authHeaders(ctx.bobToken, "GET", `${solandBaseUrl()}/_arkret/self/authz/invites?realm_id=${encodeURIComponent(ctx.realmId)}`),
+          ...authHeaders(ctx.bobToken, "GET", `${colandBaseUrl()}/_arkret/self/authz/invites?realm_id=${encodeURIComponent(ctx.realmId)}`),
           "Arkret-Operation": "ak.self.authz.invites.read.list.v1",
         },
       },
@@ -590,7 +590,7 @@ test.describe("third-party invite", () => {
 
   // Live since 2026-08-06. The canonical allowlist carrier landed in spec + SDK
   // (2026-08-02, `allowed_third_party_invite_verification_ids`) and in
-  // soland's reducer (`apply_invites.rs` reads that top-level component only).
+  // coland's reducer (`apply_invites.rs` reads that top-level component only).
   // Former blocker and current live-verification owner:
   // arkret-work/tasks/impl-tailin/2026-08-02-account-status-allowlist-and-personal-blocklist-downstream.md
   test("E3.1 expired token: claim failure is wire-indistinguishable", async ({
@@ -649,7 +649,7 @@ test.describe("third-party invite", () => {
 
   // Live since 2026-08-06. The canonical allowlist carrier landed in spec + SDK
   // (2026-08-02, `allowed_third_party_invite_verification_ids`) and in
-  // soland's reducer (`apply_invites.rs` reads that top-level component only).
+  // coland's reducer (`apply_invites.rs` reads that top-level component only).
   // Former blocker and current live-verification owner:
   // arkret-work/tasks/impl-tailin/2026-08-02-account-status-allowlist-and-personal-blocklist-downstream.md
   test("E3.2 wrong DID claim (subject_proof != binding_proof.subject) rejected", async ({
@@ -721,7 +721,7 @@ test.describe("third-party invite", () => {
 
   // Live since 2026-08-06. The canonical allowlist carrier landed in spec + SDK
   // (2026-08-02, `allowed_third_party_invite_verification_ids`) and in
-  // soland's reducer (`apply_invites.rs` reads that top-level component only).
+  // coland's reducer (`apply_invites.rs` reads that top-level component only).
   // Former blocker and current live-verification owner:
   // arkret-work/tasks/impl-tailin/2026-08-02-account-status-allowlist-and-personal-blocklist-downstream.md
   test("E3.3 double-claim: second claim of same token is wire-indistinguishable", async ({

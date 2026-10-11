@@ -580,7 +580,7 @@ pub fn run_session_pop_presentation_vector() -> Result<()> {
 
     let mut tampered_transcript = request.clone();
     tampered_transcript.target_uri =
-        "https://soland.example.com/_arkret/self/events/tampered".to_owned();
+        "https://coland.example.com/_arkret/self/events/tampered".to_owned();
     if verify_self_pop(
         &tampered_transcript,
         &key.verifying_key(),
@@ -672,8 +672,8 @@ pub fn run_session_bare_bearer_rejected_protected_vector() -> Result<()> {
         signing_key: &key,
         key_id: "did:web:alice.example#session-key-1",
         method: "POST",
-        target_uri: "https://soland.example.com/_arkret/self/events",
-        authority: "soland.example.com",
+        target_uri: "https://coland.example.com/_arkret/self/events",
+        authority: "coland.example.com",
         path: "/_arkret/self/events",
         body,
         idempotency_key: None,

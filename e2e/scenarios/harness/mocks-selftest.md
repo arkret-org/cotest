@@ -1,12 +1,12 @@
 # Harness — Mock Services Self-Test
 
-> **harness / smoke-only**:本 scenario **不验证 soland / inkson / coauth 业务流程**,只验证 cotest 自带 mock 中 8 类共享基础契约。是 harness 自检层,跑在任何业务 scenario 之前；claim issuer / challenge provider 的业务约束由 `spaces/knock-auto-resolve` 覆盖。
+> **harness / smoke-only**:本 scenario **不验证 coland / inkson / coauth 业务流程**,只验证 cotest 自带 mock 中 8 类共享基础契约。是 harness 自检层,跑在任何业务 scenario 之前；claim issuer / challenge provider 的业务约束由 `spaces/knock-auto-resolve` 覆盖。
 
 ## 目标
 
 通过直接 HTTP 调用这 8 类 mock service,逐条验证它们 `cotest/e2e/mocks/_shared/*.mjs` 文档化的契约形状(端点、状态码、JWT 结构、签名 kid、错误码、`/inspect` 调试 surface);每个 mock 未启动时对应测试通过 `test.skip(!baseUrl, "...")` 自动跳过,而不是失败。本套件的存在意义是:任一业务 scenario 在引用对应 `mockXxxBaseUrl()` 时,都能假设 mock 的协议层契约仍未漂移 — 否则错误源会从"业务 scenario fail"变成"harness 自检 fail",定位成本大幅降低。
 
-不验证:任何 soland / inkson / coauth 业务流程、任何跨 mock 的协作(那是业务 scenario 的事)、mock 与真实第三方服务的兼容性(mock 只追 spec 契约,不追真实 IdP 行为)。
+不验证:任何 coland / inkson / coauth 业务流程、任何跨 mock 的协作(那是业务 scenario 的事)、mock 与真实第三方服务的兼容性(mock 只追 spec 契约,不追真实 IdP 行为)。
 
 ## Spec 锚点
 
@@ -27,7 +27,7 @@
 
 ## 拓扑
 
-- 0 × soland / coauth / inkson — 本 scenario 完全不依赖业务服务
+- 0 × coland / coauth / inkson — 本 scenario 完全不依赖业务服务
 - 0..8 类本 scenario 覆盖的 mock service — 由 `run-joint-e2e.ps1` 的 `-StartMockXxx` 或 `-StartMocks` 决定启动哪些;未启动的对应测试跳过
 - 1 × Playwright `request` fixture — 直接打 mock 的 HTTP 端点,不开 browser context
 
@@ -45,7 +45,7 @@
 
 - `run-joint-e2e.ps1` 带 `-StartMocks`(或子集 `-StartMockIdp` / `-StartMockEmail` / …),把要测的 mock 拉起并把 `MOCK_<NAME>_BASE_URL` 写到 Playwright 进程的环境变量里
 - `helpers/env.ts` 的 `mockXxxBaseUrl()` 在 mock 未启动时返回 `undefined`,测试用 `test.skip(!baseUrl, "<mock> not started for this run")` 优雅跳过
-- 不需要 soland、coauth、inkson 任何一项;本套件可以单独跑(`-Grep "harness/mocks-selftest"`)做 mock 冒烟
+- 不需要 coland、coauth、inkson 任何一项;本套件可以单独跑(`-Grep "harness/mocks-selftest"`)做 mock 冒烟
 
 ## Steps
 
@@ -56,7 +56,7 @@
 3. **mock-witness**:`POST /mock/witness/sign` 连发 (h1, n=1, fresh `entry_timestamp`) 与 (h2, n=2, prev=h1, fresh `entry_timestamp`) → 200;再发 (h3, n=3, prev=WRONG) → 409 + `error="prev_entry_hash_mismatch"`;skip n=4 直接发 n=5 → 409 + `error="non_monotonic_entry_number"`;发一个 `entry_timestamp` 过旧的 → 422 + `error="entry_timestamp_stale"`;`/inspect` 中该 scid 的 `last_entry_number === 2`。
    另有一条独立 live test 遍历配置的 witness quorum，确认每个实例都暴露与配置 DID 一致的健康 policy。 `joint-smoke` 与 `joint-full` 带 `-StartMocks` 且未显式指定额外 witness 时，runner 默认追加现有 quorum fixture DID，启动两个独立 witness；仅一个实例不足以运行这条测试。
 4. **mock-push-gateway**:`DELETE /scenarios` 清空 → `POST /_arkret/edge/push/register-device` 注册 pusher → `POST /_arkret/edge/push/notify` 收到 `delivered=true` + `delivery_receipt` 是 3 段 JWT;再 `notify` 一条 `blind_wake: true` 且 payload 含明文 body → 必须返回 4xx/422(blind-wake 模式禁明文键);`/mock/push/inbox` 至少有一条历史;`/jwks` kid 为 `mock-push-gateway-key-1`。
-5. **mock-applet-registry**:`POST /sign-package` 生成 controller-signed `ak.schema.applet_package.v1` → 返回 `package_digest`、`applet_package.bot_actor_id`、`proof.payload_digest` 与可提交到 soland identity store 的 `service_id_document`;`GET /identity` 返回 registry 自身 DID。ghost 生成通过 soland 的 typed applet ingress 在 applet-bridge e2e 中覆盖。
+5. **mock-applet-registry**:`POST /sign-package` 生成 controller-signed `ak.schema.applet_package.v1` → 返回 `package_digest`、`applet_package.bot_actor_id`、`proof.payload_digest` 与可提交到 coland identity store 的 `service_id_document`;`GET /identity` 返回 registry 自身 DID。ghost 生成通过 coland 的 typed applet ingress 在 applet-bridge e2e 中覆盖。
 6. **mock-mimi-facade**:`DELETE /scenarios` 清空 → `POST /mock/mimi/join-requests` 预置 `bob_mimi` join → `POST /mock/mimi/approve` 返回 realm-scoped `did:pairwise:`;`POST /mock/mimi/outbound` happy path 返回 `delivered`;设置 `unavailable=true` 后 outbound 返回 503 + `status="deferred"`;`POST /mock/mimi/inbound` 对未知 `content_kind=m.location.share.live` 返回 202 + `status="quarantined"` + `unknown_content_kind`;`/inspect` 至少记录 join、approval、outbound、inbound、quarantine。
 
 ## Observable assertions(合并清单)

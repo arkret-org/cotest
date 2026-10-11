@@ -5,7 +5,7 @@ import {
   type BrowserContext,
   type Page,
 } from "../../helpers/arkret-test";
-import { coauthBaseUrl, optionalEnv, solandBaseUrl } from "../../helpers/env";
+import { coauthBaseUrl, optionalEnv, colandBaseUrl } from "../../helpers/env";
 import { registerCoauthPasswordAccount } from "../../helpers/coauth-register";
 import {
   hardLogoutViaAccountMenu,
@@ -292,7 +292,7 @@ test.describe("Coauth passkey browser lifecycle @fully-implemented", () => {
         await jointPage.gotoHome();
         await hardLogoutViaAccountMenu(jointPage);
         await jointPage.gotoLogin();
-        await page.getByTestId("login-server-url").fill(solandBaseUrl());
+        await page.getByTestId("login-server-url").fill(colandBaseUrl());
         await page.getByTestId("start-server-login-button").click();
 
         const identifier = page.locator("#login-handle");

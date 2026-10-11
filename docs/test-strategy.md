@@ -58,11 +58,11 @@ asserts only public HTTP behavior plus limited `arkret-rust-sdk` smoke paths.
   protocol object acceptance.
 - `space_permissions`: membership, owner-only mutation, deleted-space behavior,
   non-member denial, and private visibility policy checks. Its
-  `/_soland/self/spaces*` calls are negative-surface probes that require the
+  `/_coland/self/spaces*` calls are negative-surface probes that require the
   retired local CRUD endpoints to remain absent; they are not consumers.
-- `calendar_rsvp_convergence`: Soland product-integration coverage. Event
+- `calendar_rsvp_convergence`: Coland product-integration coverage. Event
   writes use registered protocol operations, while RSVP-head convergence is
-  observed through `/_soland/self/strands/{strand_id}` because the raw
+  observed through `/_coland/self/strands/{strand_id}` because the raw
   materialized projection is intentionally outside portable conformance.
 - `conformance_fixtures`: offline spec-owned artifact suites for Event
   Envelope, encoding, redaction, capability, state resolution, sync,
@@ -114,7 +114,7 @@ Shared UI helper behavior is classified separately from transport retry:
 ## Execution
 
 ```powershell
-$env:COTEST_SUT_MANIFEST = "..\soland\Cargo.toml"
+$env:COTEST_SUT_MANIFEST = "..\coland\Cargo.toml"
 cargo test --tests -- --nocapture
 ```
 
@@ -159,8 +159,8 @@ entries use the exact `test_target` plus `test_filter` pair.
 
 `multi-server` is a local matrix profile, not a remote workflow. It delegates to
 `run-joint-e2e.ps1 -ServerCount 3 -RunProfile joint-full -Grep "@three-server-p0"`,
-starts server1/server2/server3 Soland on separate ports with independent stores and identities,
-and injects indexed `COTEST_SOLAND_SERVERN_*`, `COTEST_COAUTH_SERVERN_*`, and
+starts server1/server2/server3 Coland on separate ports with independent stores and identities,
+and injects indexed `COTEST_COLAND_SERVERN_*`, `COTEST_COAUTH_SERVERN_*`, and
 `COTEST_INKSON_SERVERN_BASE_URL` values for federation specs.
 
 ## Lane matrix
@@ -168,7 +168,7 @@ and injects indexed `COTEST_SOLAND_SERVERN_*`, `COTEST_COAUTH_SERVERN_*`, and
 Which profile starts what. Read this before adding coverage: a browserless check
 belongs in a Rust lane, not in a Playwright one.
 
-| Profile | Runner | soland | coauth | Browser / Inkson |
+| Profile | Runner | coland | coauth | Browser / Inkson |
 | --- | --- | --- | --- | --- |
 | `fast-smoke` | conformance | in-process or spawned SUT | none | no |
 | `release-gate` | conformance | in-process or spawned SUT | mock introspection | no (plus a joint smoke gate) |
@@ -179,12 +179,12 @@ belongs in a Rust lane, not in a Playwright one.
 
 `services-live` is the only Cargo lane where coauth is a real process rather
 than `MockCoauthIntrospectionServer`. It selects the live scenarios that spawn
-soland, coauth and flagon, builds those sibling binaries first so none of them
+coland, coauth and flagon, builds those sibling binaries first so none of them
 embeds a stale SDK snapshot, and exports `COTEST_REQUIRE_LIVE_SERVICES=1`.
 That variable is what makes the lane trustworthy: without it the selected
 scenarios soft-skip on a missing binary, database or Docker daemon and the run
 reports green having started nothing. Floria is deliberately out of the lane —
-it is the push gateway, not part of the soland/coauth service contract.
+it is the push gateway, not part of the coland/coauth service contract.
 
 The local hygiene gate is `scripts/run-hygiene.ps1`. It runs `cargo deny check`,
 `typos`, and `cargo audit`, then records `raw.log`, `summary.json`,
@@ -205,18 +205,18 @@ Browser-level user simulation is intentionally separate and lives under
 
 The joint E2E runner currently targets the first live-product slice:
 
-- start or attach `soland`
-- optionally start `soland` from a built Docker image with
-  `-SolandRuntime docker`; this is the preferred release-quality joint e2e
+- start or attach `coland`
+- optionally start `coland` from a built Docker image with
+  `-ColandRuntime docker`; this is the preferred release-quality joint e2e
   path because Playwright drives the packaged server shape instead of a local
   `cargo run` child
 - start or attach `inkson` web
 - start or attach `coauth`; `scripts/run-server-conformance.ps1 -Profile joint` enables
   `-StartCoauth` by default so the local promoted profile always exercises the
-  soland + coauth + inkson topology. Direct `run-joint-e2e.ps1` runs may still
-  omit coauth for targeted soland-only debugging. `-StartCoauth` generates a
+  coland + coauth + inkson topology. Direct `run-joint-e2e.ps1` runs may still
+  omit coauth for targeted coland-only debugging. `-StartCoauth` generates a
   fresh coauth YAML config, starts ephemeral Docker PostgreSQL, runs migrations,
-  and wires soland's OAuth/session-grant introspection URLs and static service
+  and wires coland's OAuth/session-grant introspection URLs and static service
   bearers
 - run Playwright tests with multiple isolated browser contexts
 - save step screenshots, traces, videos, HAR, console/network JSONL, JUnit,
@@ -276,13 +276,13 @@ Space Admin. The runner writes these files under
 `artifacts/runs/joint-e2e/<timestamp>-<profile>/visual-baselines/` with
 `visual-baselines.md` and a hash manifest.
 
-The coauth/soland test mapping is fixed by the runner:
+The coauth/coland test mapping is fixed by the runner:
 
-- soland audience/service DID: `did:webvh:z6mkfixture:soland.joint-e2e.local`
+- coland audience/service DID: `did:webvh:z6mkfixture:coland.joint-e2e.local`
 - coauth service/issuer DID: `did:webvh:z6mkfixture:coauth.joint-e2e.local`
-- coauth publishes soland under `arkret.stations`
-- soland introspects OAuth bearer tokens at `<coauth>/oauth/introspect`
-- soland introspects session grants at
+- coauth publishes coland under `arkret.stations`
+- coland introspects OAuth bearer tokens at `<coauth>/oauth/introspect`
+- coland introspects session grants at
   `<coauth>/_arkret/gate/account/session-grants/introspect`
 - the static bearer values are local E2E-only defaults and never exposed to the
   browser
@@ -291,7 +291,7 @@ The coauth/soland test mapping is fixed by the runner:
   `dev-proof` = development placeholder, dev builds only), and
   `COTEST_FORBID_DEV_PROOF=1` hard-fails any dev-proof selection so
   production-shaped runs cannot regress onto the placeholder (implementation:
-  `e2e/helpers/soland-api.ts` `eventProofMode()`)
+  `e2e/helpers/coland-api.ts` `eventProofMode()`)
 
 Recommended local run:
 
@@ -299,7 +299,7 @@ Recommended local run:
 .\scripts\run-server-conformance.ps1 -Profile joint
 .\scripts\run-server-conformance.ps1 -Runtime docker -BuildImage -Profile joint
 .\scripts\run-joint-e2e.ps1
-.\scripts\run-joint-e2e.ps1 -SolandRuntime docker -BuildSolandImage -RunProfile joint-smoke
+.\scripts\run-joint-e2e.ps1 -ColandRuntime docker -BuildColandImage -RunProfile joint-smoke
 .\scripts\run-joint-e2e.ps1 -StartCoauth
 .\scripts\run-joint-e2e.ps1 -StartCoauth -RunProfile joint-smoke
 .\scripts\run-joint-e2e.ps1 -StartCoauth -RunProfile joint-full
@@ -315,9 +315,9 @@ user to retry elevated; only hosts ACL initialization is always administrator-on
 
 The runner performs a preflight before starting services: Node/npm/npx,
 Playwright config/package/browser registry, default cargo/dx startup tools,
-Docker daemon/image availability when `-SolandRuntime docker` is used, and
+Docker daemon/image availability when `-ColandRuntime docker` is used, and
 Docker/coauth/PostgreSQL image availability when `-StartCoauth` is used.
-Prebuilt Coauth and Teabay binaries must be at least as new as the
+Prebuilt Coauth and Flagon binaries must be at least as new as the
 tracked Rust/build inputs in their repository and `arkret-rust-sdk` dependency;
 stale binaries fail before any service starts. `-PreflightOnly` runs these
 checks without starting the stack. `-RunnerSelfTest` exercises stale/fresh
@@ -365,7 +365,7 @@ additional release-gate check and writes `joint-smoke-gate.*`. Use
 `-SkipJointSmokeGate` only for local protocol-only release-gate debugging.
 
 Multi-server runs write both `service-gaps.md` and `service-traces.md` under the
-joint artifact directory. `service-traces.md` indexes each numbered Soland
+joint artifact directory. `service-traces.md` indexes each numbered Coland
 trace file plus stdout/stderr and command logs, so projection and federation
 failures can be debugged without reconstructing paths from HAR files.
 
@@ -429,7 +429,7 @@ isolation through the per-spawn lifecycle in `ArkretServer`:
 - `ArkretServer::spawn*` allocates a fresh `127.0.0.1:<free-port>`, a
   fresh `temp_dir().join("cotest-{name}-{port}-blobs")` blob root, and a
   fresh `did:web:{name}.cotest.local` service DID per call.
-- `soland` keeps `AccountRecord`, `SpaceMetaRecord`, and
+- `coland` keeps `AccountRecord`, `SpaceMetaRecord`, and
   `ProjectionState` in process-local memory — there is no shared database
   or filesystem anchor that survives the per-test process drop.
 - `Drop for ArkretServer` kills the spawned child (or removes the docker

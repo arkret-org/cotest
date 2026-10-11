@@ -38,11 +38,11 @@ class OperationTestCoverageTests(unittest.TestCase):
             ),
         )
         self.write(
-            "soland/crates/storage/src/contract_tests.rs",
+            "coland/crates/storage/src/contract_tests.rs",
             rust_test("shared_storage_oracle", OP_ONE, "assert_eq!(value, value);")
         )
         self.write(
-            "soland/crates/server/tests/http_api/negative.rs",
+            "coland/crates/server/tests/http_api/negative.rs",
             rust_test("rejects_invalid_selector", OP_ONE, "assert!(result.is_err());"),
         )
         duplicate = rust_test("exact_protocol_oracle", OP_TWO, "assert_eq!(actual, expected);")
@@ -125,10 +125,10 @@ class OperationTestCoverageTests(unittest.TestCase):
         self.assertEqual(result["closure"]["unknown_operation_literals"], [])
         self.assertEqual(result["closure"]["unassigned_responsibilities"], [])
 
-        storage = matrix_cell(result, OP_ONE, "soland_unit")["responsibilities"]
+        storage = matrix_cell(result, OP_ONE, "coland_unit")["responsibilities"]
         self.assertEqual(len(storage["storage_parity"]), 1)
         self.assertTrue(storage["storage_parity"][0]["protected_oracle"])
-        negative = matrix_cell(result, OP_ONE, "soland_http")["responsibilities"]
+        negative = matrix_cell(result, OP_ONE, "coland_http")["responsibilities"]
         self.assertEqual(len(negative["security_negative"]), 1)
         product = matrix_cell(result, OP_ONE, "cotest_e2e")["responsibilities"]
         self.assertEqual(len(product["product_flow"]), 1)

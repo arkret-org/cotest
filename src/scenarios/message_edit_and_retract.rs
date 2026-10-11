@@ -2,7 +2,7 @@
 //! the single Event/RealmCommit carrier (`zh/models/strand-and-message.md`
 //! §9.5, `zh/sync/current-results.md` `message_revision` / `object_redaction`).
 //!
-//! The scenario proves, against a live Soland:
+//! The scenario proves, against a live Coland:
 //!
 //! 1. Bob joins Alice's Realm by accepting her directed Invite;
 //! 2. Alice's `ak.message.revise` of her Message is accepted with a RealmCommit on the Realm

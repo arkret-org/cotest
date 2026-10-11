@@ -65,11 +65,11 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
     let introspection_url = coauth.url();
     let extra_env = [
         (
-            "SOLAND_ACCOUNT_AUTHORITY_URL",
+            "COLAND_ACCOUNT_AUTHORITY_URL",
             account_authority_origin.as_str(),
         ),
         (
-            "SOLAND_SESSION_GRANT_INTROSPECTION_URL",
+            "COLAND_SESSION_GRANT_INTROSPECTION_URL",
             introspection_url.as_str(),
         ),
     ];

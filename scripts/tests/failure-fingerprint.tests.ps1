@@ -92,7 +92,7 @@ correlation_id: 01JQZ7K3NB4S9WTX
 Error: cotest-wire principal-registration-fixture failed with exit 1:
 Caused by:
     missing field ``audience_id``
-    at cotestWire (D:\cotest\e2e\helpers\soland-api\wire-client.ts:163:11)
+    at cotestWire (D:\cotest\e2e\helpers\coland-api\wire-client.ts:163:11)
     at registerCoauthPasswordAccount (D:\cotest\e2e\helpers\coauth-register.ts:462:19)
     at D:\cotest\e2e\tests\authz\capability-chain.spec.ts:177:59
 "@
@@ -108,7 +108,7 @@ Caused by:
         -Message "cotest-wire principal-registration-fixture failed" `
         -Detail ($helperDetail -replace 'authz\\capability-chain\.spec\.ts:177:59', 'calls\webrtc.spec.ts:37:5') `
         -SystemOut ""
-    Assert-True ($helperAlpha.origin_site -eq "helpers/soland-api/wire-client.ts:163") "the deepest shared helper frame must be extracted, got '$($helperAlpha.origin_site)'"
+    Assert-True ($helperAlpha.origin_site -eq "helpers/coland-api/wire-client.ts:163") "the deepest shared helper frame must be extracted, got '$($helperAlpha.origin_site)'"
     Assert-True ($helperAlpha.fingerprint -eq $helperBeta.fingerprint) "two scenarios failing in the same helper share one root cause"
     Assert-True ($helperAlpha.assertion_site -ne $helperBeta.assertion_site) "each caller must still report its own assertion site"
 
@@ -130,7 +130,7 @@ Caused by:
 Error: cotest-wire event-envelope-proof failed with exit 1:
 Caused by:
     DID URL must start with did:
-    at cotestWire (D:\cotest\e2e\helpers\soland-api\wire-client.ts:163:11)
+    at cotestWire (D:\cotest\e2e\helpers\coland-api\wire-client.ts:163:11)
     at D:\cotest\e2e\tests\invites\invite-addressing.spec.ts:170:24
 "@ `
         -SystemOut ""

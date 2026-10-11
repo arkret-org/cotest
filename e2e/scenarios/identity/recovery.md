@@ -23,7 +23,7 @@
 
 ## 拓扑
 
-- 1 × soland + 1 × coauth + 1 × backup storage service(可能就在 soland 里;或独立)
+- 1 × coland + 1 × coauth + 1 × backup storage service(可能就在 coland 里;或独立)
 - 若用 threshold recovery:外加 N 个 share-holder
 
 ## Actors

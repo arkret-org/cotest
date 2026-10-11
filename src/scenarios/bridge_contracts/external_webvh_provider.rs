@@ -1,10 +1,10 @@
-//! soland's `did:webvh` provider discovery when an *external* provider is
+//! coland's `did:webvh` provider discovery when an *external* provider is
 //! configured.
 //!
-//! Nothing here starts an external service: soland is spawned pointing at an
+//! Nothing here starts an external service: coland is spawned pointing at an
 //! unreachable provider URL, and the assertions are entirely about what
-//! soland's own `/_arkret/root/identity/describe` publishes in the
-//! `x_soland_identity_registry` extension — default provider id, provider
+//! coland's own `/_arkret/root/identity/describe` publishes in the
+//! `x_coland_identity_registry` extension — default provider id, provider
 //! entry, resolver allow-list, and trust roots (including its local identity
 //! store's webvh proof-validation policy).
 //!
@@ -22,10 +22,10 @@ pub async fn external_webvh_provider_is_discoverable() -> Result<()> {
     let server = ArkretServer::spawn_with_env(
         "external-webvh-provider",
         &[
-            ("SOLAND_DID_RESOLVER_ALLOW_METHODS", "web,key,webvh"),
-            ("SOLAND_EMBEDDED_WEBVH_PROVIDER_ENABLED", "0"),
-            ("SOLAND_EXTERNAL_WEBVH_PROVIDER_URL", EXTERNAL_PROVIDER_URL),
-            ("SOLAND_DEFAULT_WEBVH_PROVIDER_ID", "external.webvh"),
+            ("COLAND_DID_RESOLVER_ALLOW_METHODS", "web,key,webvh"),
+            ("COLAND_EMBEDDED_WEBVH_PROVIDER_ENABLED", "0"),
+            ("COLAND_EXTERNAL_WEBVH_PROVIDER_URL", EXTERNAL_PROVIDER_URL),
+            ("COLAND_DEFAULT_WEBVH_PROVIDER_ID", "external.webvh"),
         ],
     )
     .await?;
@@ -37,7 +37,7 @@ pub async fn external_webvh_provider_is_discoverable() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    let identity = &describe["x_soland_identity_registry"];
+    let identity = &describe["x_coland_identity_registry"];
     let did_webvh = &identity["did_webvh"];
     assert_eq!(did_webvh["enabled"], true);
     assert_eq!(did_webvh["method"], "did:webvh");
@@ -72,7 +72,7 @@ pub async fn external_webvh_provider_is_discoverable() -> Result<()> {
         trust_roots
             .iter()
             .any(local_trust_root_has_webvh_validation),
-        "soland must publish its local identity trust root and webvh proof-validation policy: {describe}"
+        "coland must publish its local identity trust root and webvh proof-validation policy: {describe}"
     );
     let external_root = trust_roots
         .iter()
@@ -98,7 +98,7 @@ fn local_trust_root_has_webvh_validation(root: &Value) -> bool {
         && root["proof_verification"]["controller_proof"] == "eddsa-jcs-2022"
         && root["proof_verification"]["webvh_log_chain"] == "required"
         && root["proof_verification"]["webvh_scid"] == "required"
-        // soland cannot verify witness evidence, so it declares the quorum
+        // coland cannot verify witness evidence, so it declares the quorum
         // policy fail-closed as `unsupported` instead of claiming enforcement.
         && root["proof_verification"]["webvh_witness_quorum"] == "unsupported"
 }

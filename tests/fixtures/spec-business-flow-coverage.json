@@ -78,7 +78,7 @@
       "coverage": [
         {
           "kind": "ordinary",
-          "path": "../soland/crates/http/src/routing/identity/did.rs",
+          "path": "../coland/crates/http/src/routing/identity/did.rs",
           "markers": [
             "/_arkret/root/identity/resolve",
             "/_arkret/root/identity/document"
@@ -86,7 +86,7 @@
         },
         {
           "kind": "ordinary",
-          "path": "../soland/crates/http/src/routing/system/principal_resolution.rs",
+          "path": "../coland/crates/http/src/routing/system/principal_resolution.rs",
           "markers": [
           "ak.open.identity.read.resolution",
             "principals/{principal_id}/resolution"
@@ -94,14 +94,14 @@
         },
         {
           "kind": "ordinary",
-          "path": "../soland/crates/http/src/routing/identity/recovery.rs",
+          "path": "../coland/crates/http/src/routing/identity/recovery.rs",
           "markers": [
             "/_arkret/root/identity/recovery-policy"
           ]
         },
         {
           "kind": "ordinary",
-          "path": "../soland/crates/http/src/routing/identity/recovery/session_endpoints.rs",
+          "path": "../coland/crates/http/src/routing/identity/recovery/session_endpoints.rs",
           "markers": [
             "recovery-sessions",
             "ak.root.identity.recovery_session.command.submit_proof.v1"
@@ -117,7 +117,7 @@
         },
         {
           "kind": "ordinary",
-          "path": "../soland/crates/http/src/routing/identity/recovery/security_transaction_endpoints.rs",
+          "path": "../coland/crates/http/src/routing/identity/recovery/security_transaction_endpoints.rs",
           "markers": [
             "continue_commit_recovery_unit"
           ]
@@ -206,10 +206,10 @@
       "coverage": [
         {
           "kind": "ordinary",
-          "path": "../soland/crates/server/tests/http_api/current_common.rs",
+          "path": "../coland/crates/server/tests/http_api/current_common.rs",
           "markers": [
-            "/_soland/gate/account/project",
-            "/_soland/gate/auth/dev-login"
+            "/_coland/gate/account/project",
+            "/_coland/gate/auth/dev-login"
           ]
         },
         {
@@ -230,7 +230,7 @@
         },
         {
           "kind": "ordinary",
-          "path": "../soland/crates/server/tests/account_data_sync.rs",
+          "path": "../coland/crates/server/tests/account_data_sync.rs",
           "markers": [
             "account_data",
             "/_arkret/self/account_data/"
@@ -238,7 +238,7 @@
         },
         {
           "kind": "ordinary",
-          "path": "../soland/crates/http/src/routing/spaces/read_cursor.rs",
+          "path": "../coland/crates/http/src/routing/spaces/read_cursor.rs",
           "markers": [
             "ak.self.read_cursor.command.advance.v1",
             "fn accepts_exact_holder_and_session_device_binding"
@@ -377,7 +377,7 @@
       "coverage": [
         {
           "kind": "ordinary",
-          "path": "../soland/crates/http/src/routing/identity/account/social.rs",
+          "path": "../coland/crates/http/src/routing/identity/account/social.rs",
           "markers": [
             "ak.self.contact.command.request.v1",
             "ak.self.contact.command.respond.v1"
@@ -385,7 +385,7 @@
         },
         {
           "kind": "ordinary",
-          "path": "../soland/crates/http/src/routing/circles.rs",
+          "path": "../coland/crates/http/src/routing/circles.rs",
           "markers": [
             "ak.self.circle.command.create.v1",
             "ak.self.circle.member.command.add.v1"
@@ -393,28 +393,28 @@
         },
         {
           "kind": "ordinary",
-          "path": "../soland/crates/http/src/routing/events/projection_query.rs",
+          "path": "../coland/crates/http/src/routing/events/projection_query.rs",
           "markers": [
             "ak.self.space.read.list.v1"
           ]
         },
         {
           "kind": "ordinary",
-          "path": "../soland/crates/http/src/routing/spaces/space.rs",
+          "path": "../coland/crates/http/src/routing/spaces/space.rs",
           "markers": [
             "ak.self.realm.resource.get.v1"
           ]
         },
         {
           "kind": "ordinary",
-          "path": "../soland/crates/http/src/routing/realms.rs",
+          "path": "../coland/crates/http/src/routing/realms.rs",
           "markers": [
             "ak.self.realm_link.read.list.v1"
           ]
         },
         {
           "kind": "ordinary",
-          "path": "../soland/crates/http/src/routing/identity/consent.rs",
+          "path": "../coland/crates/http/src/routing/identity/consent.rs",
           "markers": [
             "ak.self.consent.command.grant.v1",
             "ak.self.consent.command.revoke.v1"
@@ -422,7 +422,7 @@
         },
         {
           "kind": "ordinary",
-          "path": "../soland/crates/http/src/routing/interop/moderation.rs",
+          "path": "../coland/crates/http/src/routing/interop/moderation.rs",
           "markers": [
             "ak.self.moderation.command.report.v1"
           ]
@@ -585,7 +585,7 @@
       "coverage": [
         {
           "kind": "ordinary",
-          "path": "../soland/crates/http/src/routing/identity/device_pairing_open.rs",
+          "path": "../coland/crates/http/src/routing/identity/device_pairing_open.rs",
           "markers": [
             "ak.open.device_pairing.command.stage.v1",
             "ak.open.device_pairing.read.resolve.v1",
@@ -602,7 +602,7 @@
         },
         {
           "kind": "ordinary",
-          "path": "../soland/crates/server/tests/http_api/blob_resumable.rs",
+          "path": "../coland/crates/server/tests/http_api/blob_resumable.rs",
           "markers": [
             "fn resumable_chunked_upload_matches_canonical_blob_ref",
             "/_arkret/self/blob/upload"
@@ -610,7 +610,7 @@
         },
         {
           "kind": "ordinary",
-          "path": "../soland/crates/server/tests/http_api/device_message_send_admission.rs",
+          "path": "../coland/crates/server/tests/http_api/device_message_send_admission.rs",
           "markers": [
             "fn device_message_outside_the_enqueue_window_is_refused_with_zero_writes",
             "/_arkret/self/device_messages"
@@ -779,7 +779,7 @@
       "coverage": [
         {
           "kind": "ordinary",
-          "path": "../soland/crates/http/src/routing/interop/webrtc.rs",
+          "path": "../coland/crates/http/src/routing/interop/webrtc.rs",
           "markers": [
             "rtc/ice-config",
             "ak.self.call.media.exchange.issue_token.v1"
@@ -787,7 +787,7 @@
         },
         {
           "kind": "ordinary",
-          "path": "../soland/crates/server/tests/http_api/push_registration_onboarding.rs",
+          "path": "../coland/crates/server/tests/http_api/push_registration_onboarding.rs",
           "markers": [
             "fn register_with_not_onboarded_gateway_fails_closed_without_writes",
             "/_arkret/edge/push/register-device"
@@ -890,7 +890,7 @@
       "coverage": [
         {
           "kind": "ordinary",
-          "path": "../soland/crates/http/src/routing/identity/agents.rs",
+          "path": "../coland/crates/http/src/routing/identity/agents.rs",
           "markers": [
             "ak.self.agent.command.provision.v1",
             "ak.gate.account.command.pair_agent_key.v1"
@@ -999,7 +999,7 @@
       "coverage": [
         {
           "kind": "ordinary",
-          "path": "../soland/crates/http/src/routing/events/peer.rs",
+          "path": "../coland/crates/http/src/routing/events/peer.rs",
           "markers": [
             "ak.peer.events.command.submit.v1",
             "peer_events_submit"
@@ -1007,7 +1007,7 @@
         },
         {
           "kind": "ordinary",
-          "path": "../soland/crates/http/src/routing/interop/mimi.rs",
+          "path": "../coland/crates/http/src/routing/interop/mimi.rs",
           "markers": [
             "Router::with_path(\"provider-directory\")",
             "Router::with_path(\"strands/{strand_id}/messages\")"
@@ -1015,14 +1015,14 @@
         },
         {
           "kind": "ordinary",
-          "path": "../soland/crates/http/src/routing/invites.rs",
+          "path": "../coland/crates/http/src/routing/invites.rs",
           "markers": [
             "ak.open.invite_locator.read.resolve.v1"
           ]
         },
         {
           "kind": "ordinary",
-          "path": "../soland/crates/server/tests/extensions_smoke.rs",
+          "path": "../coland/crates/server/tests/extensions_smoke.rs",
           "markers": [
             "applet_protocol_describe_smoke",
             "applet_transaction_requires_signature_before_typed_body_validation"
@@ -1030,7 +1030,7 @@
         },
         {
           "kind": "ordinary",
-          "path": "../soland/crates/http/src/routing/extensions/applet_bridge/endpoints.rs",
+          "path": "../coland/crates/http/src/routing/extensions/applet_bridge/endpoints.rs",
           "markers": [
             "operation_id = \"ak.self.applet.command.install\"",
             "fn first_install_commit_rejects_expiry_but_exact_success_replay_does_not",
@@ -1131,7 +1131,7 @@
       "coverage": [
         {
           "kind": "ordinary",
-          "path": "../soland/crates/http/src/routing/authority_commit.rs",
+          "path": "../coland/crates/http/src/routing/authority_commit.rs",
           "markers": [
             "fn mounted_authority_reads_gate_before_delegating",
             "\"/_arkret/open/realm-authority/bundle\""
@@ -1219,7 +1219,7 @@
         },
         {
           "kind": "ordinary",
-          "path": "../soland/crates/storage-postgres/tests/actor_private_event_submit.rs",
+          "path": "../coland/crates/storage-postgres/tests/actor_private_event_submit.rs",
           "markers": [
             "fn push_route_revision_cas_replays_exactly_and_refuses_stale_writes_with_zero_writes",
             "fn action_request_and_rejection_are_create_once_and_the_target_state_is_terminal",

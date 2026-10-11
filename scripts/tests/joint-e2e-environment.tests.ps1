@@ -9,7 +9,7 @@ $original = "127.0.0.1 localhost`r`n10.0.0.8 user-owned.example`r`n"
 $marker = New-CotestHostsMarker -RunId "unit-1"
 $hosts = Get-CotestJointHostNames -ServerCount 3 -IncludeCoauth $true -IncludeUnregisteredProbe $true
 $withBlock = Add-CotestHostsBlock -Content $original -Hosts $hosts -Marker $marker
-Assert-True ($withBlock.Contains("127.0.0.1`tsoland-server3.local.host")) "server3 Soland host must be present"
+Assert-True ($withBlock.Contains("127.0.0.1`tcoland-server3.local.host")) "server3 Coland host must be present"
 Assert-True ($withBlock.Contains("127.0.0.1`tcoauth-server3.local.host")) "server3 Coauth host must be present"
 Assert-Equal 1 (@(Get-CotestHostsMarkers -Content $withBlock).Count) "one marker must be discoverable"
 $restored = Remove-CotestHostsBlocks -Content $withBlock -Marker $marker
@@ -32,7 +32,7 @@ foreach ($foreignMock in @("mock-applet-registry.example.com", "mock-applet-regi
     try { Add-CotestHostsBlock -Content $original -Hosts @("mock-applet-registry.local.host", $foreignMock) -Marker $marker | Out-Null } catch { $rejected = $true }
     Assert-True $rejected "a foreign or injected mock host must fail closed: $foreignMock"
 }
-$stale = Add-CotestHostsBlock -Content $withBlock -Hosts @("soland-server1.local.host") -Marker (New-CotestHostsMarker -RunId "unit-stale")
+$stale = Add-CotestHostsBlock -Content $withBlock -Hosts @("coland-server1.local.host") -Marker (New-CotestHostsMarker -RunId "unit-stale")
 Assert-Equal $original (Remove-CotestHostsBlocks -Content $stale) "stale cleanup must remove every cotest block and preserve foreign content"
 # Blocks written before `b6ab807b` separated the prefix from the stamp with a
 # space. Eight of them survived in this machine's hosts file precisely because
@@ -41,7 +41,7 @@ Assert-Equal $original (Remove-CotestHostsBlocks -Content $stale) "stale cleanup
 # introduced the new one.
 $legacyBlock = $original +
     "# cotest-joint-e2e 20260827-002729 begin`r`n" +
-    "127.0.0.1`tsoland-server1.local.host`r`n" +
+    "127.0.0.1`tcoland-server1.local.host`r`n" +
     "# cotest-joint-e2e 20260827-002729 end`r`n"
 Assert-Equal 1 (@(Get-CotestHostsMarkers -Content $legacyBlock).Count) "the pre-b6ab807b marker form must still be discoverable"
 Assert-Equal $original (Remove-CotestHostsBlocks -Content $legacyBlock) "stale cleanup must remove pre-b6ab807b blocks too"
@@ -57,7 +57,7 @@ Assert-CotestTopologyIsolation -Topology $topology
 Assert-CotestTopologyIsolation -Topology (New-CotestServerTopology -ServerCount 1 -StartCoauth $true)
 Assert-Equal 3 $topology.servers.Count "three servers must be generated"
 Assert-Equal "server1" $topology.servers[0].name "numbering starts at server1"
-Assert-Equal "https://soland-server3.local.host:24443" $topology.servers[2].soland.public_url "server3 public URL"
+Assert-Equal "https://coland-server3.local.host:24443" $topology.servers[2].coland.public_url "server3 public URL"
 Assert-Equal 2 $topology.servers[0].peers.Count "full mesh peer count"
 Assert-CotestLoopbackDns -Hosts @('127.0.0.1', '::1')
 $publicDnsRejected = $false
@@ -65,17 +65,17 @@ try { Assert-CotestLoopbackDns -Hosts @('127.0.0.1', '192.0.2.1') } catch { $pub
 Assert-True $publicDnsRejected "a non-loopback answer must reject the topology"
 $localhostTopology = New-CotestServerTopology -ServerCount 3 -StartCoauth $true -TlsPort 24443 -DnsSuffix localhost
 Assert-CotestTopologyIsolation -Topology $localhostTopology
-Assert-Equal 'https://soland-server3.localhost:24443' $localhostTopology.servers[2].soland.public_url "localhost topology must retain indexed TLS identities"
+Assert-Equal 'https://coland-server3.localhost:24443' $localhostTopology.servers[2].coland.public_url "localhost topology must retain indexed TLS identities"
 Assert-Equal 'https://unregistered.localhost:24443' $localhostTopology.unregistered_probe "unregistered localhost probe must remain a separate host"
 Assert-Equal 7 @(Get-CotestJointHostNames -ServerCount 3 -DnsSuffix localhost).Count "localhost topology must retain every service and negative probe host"
-Assert-True ($topology.servers[0].soland.storage.database -ne $topology.servers[1].soland.storage.database) "Soland stores must be isolated"
+Assert-True ($topology.servers[0].coland.storage.database -ne $topology.servers[1].coland.storage.database) "Coland stores must be isolated"
 Assert-True ($topology.servers[0].coauth.storage.database -ne $topology.servers[1].coauth.storage.database) "Coauth stores must be isolated"
 $orderedTopology = New-CotestServerTopology -ServerCount 3 -NetworkShape ordered-candidates
 Assert-Equal "server3" $orderedTopology.servers[1].candidate_sources[0] "ordered candidates must use a stable cyclic first source"
 Assert-Equal "server1" $orderedTopology.servers[1].candidate_sources[1] "ordered candidates must retain the bounded fallback source"
 
 $duplicate = New-CotestServerTopology -ServerCount 2 -StartCoauth $true
-$duplicate.servers[1].soland.listen_address = $duplicate.servers[0].soland.listen_address
+$duplicate.servers[1].coland.listen_address = $duplicate.servers[0].coland.listen_address
 $isolationRejected = $false
 try { Assert-CotestTopologyIsolation -Topology $duplicate } catch { $isolationRejected = $true }
 Assert-True $isolationRejected "reused listen address must fail topology validation"
@@ -94,8 +94,8 @@ Assert-True ($runnerScript -match 'initialize-joint-e2e-environment\.ps1') "the 
 Assert-True ($runnerScript -notmatch '\[switch\]\$SkipPreflight') "the test entry must not expose a bootstrap bypass"
 Assert-True ($runnerScript -match 'postgres:18\.6-alpine') "the runner must pin PostgreSQL 18.6 Alpine"
 Assert-True ($runnerScript -match 'GetEnvironmentVariable\("Path", "Machine"\)' -and $runnerScript -match 'GetEnvironmentVariable\("Path", "User"\)') "the entry must refresh PATH after child-process installation"
-Assert-True ($runnerScript -match '\$allSolandBaseUrls = @\(\$SolandBaseUrl, \$solandServer2BaseUrl\) \+ @\(\$additionalServers \| ForEach-Object \{ \$_.SolandBaseUrl \}\) \| Where-Object \{ \$_ \}' -and
-    $runnerScript -match 'New-StationInternalChannelBindings\s+`\s*-StationBaseUrls \$allSolandBaseUrls' -and
+Assert-True ($runnerScript -match '\$allColandBaseUrls = @\(\$ColandBaseUrl, \$colandServer2BaseUrl\) \+ @\(\$additionalServers \| ForEach-Object \{ \$_.ColandBaseUrl \}\) \| Where-Object \{ \$_ \}' -and
+    $runnerScript -match 'New-StationInternalChannelBindings\s+`\s*-StationBaseUrls \$allColandBaseUrls' -and
     $runnerScript -match '\$resolvedInksonUrls = @\(if ') "single-server Station and Inkson URL collections must remain arrays and feed indexed Station bindings under strict mode"
 Assert-True ($runnerScript -match '\$ServerCount -lt 3.*@three-server-p0') "broad runs without three servers must not select the fail-closed three-server P0 block"
 Assert-True ($runnerScript -match 'System\.IO\.StreamWriter' -and $runnerScript -match 'Write-Host \$safeLine') "Playwright output must stream while the suite is running"
@@ -103,7 +103,7 @@ Assert-True ($runnerScript -match 'authorization\\s\*.*\[redacted\\\]') "streame
 Assert-True ($runnerScript -match 'Get-JointTopologyHealthFailures' -and $runnerScript -match 'health endpoint was unavailable after test execution') "post-run reporting must detect managed services that are alive but unhealthy"
 Assert-True ($runnerScript -match 'required durable-store export failed' -and $runnerScript -match 'durable_store_coverage') "missing PostgreSQL dumps must fail closed instead of producing a successful secret scan"
 Assert-True ($runnerScript -match 'runner-error\.log' -and $runnerScript -match '\$_.ScriptStackTrace') "runner setup failures must retain a bounded stack diagnostic"
-Assert-True ($runnerScript -match '\$solandStoragePrefix = if \(\$server\.Index -eq 1\).*\r?\n\s*\$solandManaged') "runtime topology storage paths must recompute their per-server prefix"
+Assert-True ($runnerScript -match '\$colandStoragePrefix = if \(\$server\.Index -eq 1\).*\r?\n\s*\$colandManaged') "runtime topology storage paths must recompute their per-server prefix"
 Assert-True ($runnerScript -match '\$requiredScenarios = @\(@\(\$requiredScenarios; "federation/three-server-p0"\) \| Sort-Object -Unique\)') "one required three-server scenario must remain collection-shaped"
 Assert-True ($runnerScript -match '-Hosts \(@\(\$jointTlsHostNames\) \+ @\(\$jointTlsUnregisteredProbeHost\)\)') "single-server TLS hosts must remain an array when the unregistered probe is appended"
 $initializerScript = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot "..\initialize-joint-e2e-environment.ps1")

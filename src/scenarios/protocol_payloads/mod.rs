@@ -70,12 +70,12 @@ pub async fn events_keys_device_blob_push_and_moderation_surfaces_work() -> Resu
         "protocol-payloads",
         &[
             (
-                "SOLAND_ACCOUNT_AUTHORITY_URL",
+                "COLAND_ACCOUNT_AUTHORITY_URL",
                 account_authority_origin.as_str(),
             ),
-            ("SOLAND_DID_RESOLVER_ALLOW_METHODS", "web,webvh,key,uuid"),
+            ("COLAND_DID_RESOLVER_ALLOW_METHODS", "web,webvh,key,uuid"),
             (
-                "SOLAND_SESSION_GRANT_INTROSPECTION_URL",
+                "COLAND_SESSION_GRANT_INTROSPECTION_URL",
                 introspection_url.as_str(),
             ),
         ],
@@ -146,7 +146,7 @@ pub async fn events_keys_device_blob_push_and_moderation_surfaces_work() -> Resu
 pub async fn key_backup_replace_with_authorized_device_works() -> Result<()> {
     let server = spawn_with_harness_account_authority(
         "protocol-key-backup-replace",
-        &[("SOLAND_DID_RESOLVER_ALLOW_METHODS", "web,webvh,key,uuid")],
+        &[("COLAND_DID_RESOLVER_ALLOW_METHODS", "web,webvh,key,uuid")],
     )
     .await?;
     let actor_id = actor_did_for_service_did(server.service_did(), "key-backup-alice")?;
@@ -170,7 +170,7 @@ pub async fn key_backup_replace_with_authorized_device_works() -> Result<()> {
 pub async fn key_backup_list_serves_stored_backup_as_closed_metadata() -> Result<()> {
     let server = spawn_with_harness_account_authority(
         "protocol-key-backup-list-metadata",
-        &[("SOLAND_DID_RESOLVER_ALLOW_METHODS", "web,webvh,key,uuid")],
+        &[("COLAND_DID_RESOLVER_ALLOW_METHODS", "web,webvh,key,uuid")],
     )
     .await?;
     let actor_id = actor_did_for_service_did(server.service_did(), "key-backup-list-row-alice")?;
@@ -194,7 +194,7 @@ pub async fn key_backup_list_serves_stored_backup_as_closed_metadata() -> Result
 pub async fn key_backup_list_absent_at_confirmed_pcr_genesis() -> Result<()> {
     let server = spawn_with_harness_account_authority(
         "protocol-key-backup-list-absent",
-        &[("SOLAND_DID_RESOLVER_ALLOW_METHODS", "web,webvh,key,uuid")],
+        &[("COLAND_DID_RESOLVER_ALLOW_METHODS", "web,webvh,key,uuid")],
     )
     .await?;
     let actor_id = actor_did_for_service_did(server.service_did(), "key-backup-list-alice")?;

@@ -12,15 +12,15 @@ COPY inkson ./inkson
 COPY floria ./floria
 COPY coauth ./coauth
 COPY cotest ./cotest
-COPY soland ./soland
+COPY coland ./coland
 
-WORKDIR /workspace/soland
+WORKDIR /workspace/coland
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
-    --mount=type=cache,target=/workspace/soland/target \
+    --mount=type=cache,target=/workspace/coland/target \
     cargo build --release --locked --features conformance-harness \
     && target_dir="$(cargo metadata --locked --format-version 1 --no-deps | jq -er .target_directory)" \
-    && cp "$target_dir/release/soland" /tmp/soland
+    && cp "$target_dir/release/coland" /tmp/coland
 
 FROM debian:bookworm-slim
 
@@ -28,12 +28,12 @@ WORKDIR /app
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates libssl3 \
     && rm -rf /var/lib/apt/lists/*
-COPY --from=build /tmp/soland /usr/local/bin/soland
+COPY --from=build /tmp/coland /usr/local/bin/coland
 
-ENV SOLAND_BIND=0.0.0.0:8008
-ENV SOLAND_DEVELOPMENT_MODE=1
-ENV SOLAND_BLOB_ROOT=/tmp/soland-blobs
+ENV COLAND_BIND=0.0.0.0:8008
+ENV COLAND_DEVELOPMENT_MODE=1
+ENV COLAND_BLOB_ROOT=/tmp/coland-blobs
 
 EXPOSE 8008
 
-ENTRYPOINT ["soland"]
+ENTRYPOINT ["coland"]

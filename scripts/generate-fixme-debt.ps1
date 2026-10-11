@@ -8,15 +8,15 @@
 # What it scans:
 #   * e2e/tests/**/*.spec.ts — every `.fixme(` call. The leading comment block
 #     of each fixme may carry structured tags:
-#         // @blocking-on: soland#feature-id     -> feature-id / group + status
+#         // @blocking-on: coland#feature-id     -> feature-id / group + status
 #         // @user-promise: e2e/scenarios/.../x.md -> user_promise column
 #         // @expected-live-by: 2026Q3            -> expected_live_by column
 #     The first quoted string argument is the test title.
 #
-#     `@blocking-on` is sometimes free prose ("blocked on soland multi-source
+#     `@blocking-on` is sometimes free prose ("blocked on coland multi-source
 #     ...") rather than a feature-id. When the value does NOT look like a
 #     `<service>#<slug>` feature-id, the group is derived from the file path as
-#     `soland#<dir>-<spec-basename>-gap`.
+#     `coland#<dir>-<spec-basename>-gap`.
 #   * src/scenarios/*.rs — files containing `unimplemented!(` call sites are
 #     reported as one `rust-unimplemented-scaffold` entry per file, keyed off the
 #     first `pub (async) fn *_run` and the first `unimplemented!(` line.
@@ -108,12 +108,12 @@ function Get-FixmeEntriesFromSpec {
     if ($lines.Count -eq 0) { return $entries }
 
     # Path-derived group used when @blocking-on is absent or is free prose
-    # rather than a feature-id: soland#<dir>-<spec-basename>-gap.
-    # e2e/tests/authz/capability-chain.spec.ts -> soland#authz-capability-chain-gap
+    # rather than a feature-id: coland#<dir>-<spec-basename>-gap.
+    # e2e/tests/authz/capability-chain.spec.ts -> coland#authz-capability-chain-gap
     $relForId = $relPath -replace '^e2e/tests/', '' -replace '\.spec\.ts$', ''
-    $derivedFeatureId = "soland#" + (($relForId -replace '/', '-') + "-gap")
+    $derivedFeatureId = "coland#" + (($relForId -replace '/', '-') + "-gap")
 
-    $featureIdPattern = '^(soland|inkson|coauth|cotest)#[A-Za-z0-9._-]+$'
+    $featureIdPattern = '^(coland|inkson|coauth|cotest)#[A-Za-z0-9._-]+$'
 
     for ($i = 0; $i -lt $lines.Count; $i++) {
         $line = $lines[$i]

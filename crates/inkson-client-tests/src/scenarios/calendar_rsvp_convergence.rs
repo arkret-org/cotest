@@ -538,7 +538,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
 
     let create_basis = accepted_schedule_basis(&created)?;
 
-    // Exercise a real schedule revision before RSVP authoring. Soland does not
+    // Exercise a real schedule revision before RSVP authoring. Coland does not
     // claim the Calendar notification server profile: receiver-private DND,
     // blocklist and push rules remain holder-encrypted, so cross-recipient
     // Calendar fanout correctly fails closed until an authorized minimal
@@ -745,17 +745,17 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
 /// available; environments without either Postgres source report an explicit
 /// live-row skip while reducer unit tests still run.
 pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
-    // `COTEST_SOLAND_DATABASE_URL` is an administrator connection, not a test
+    // `COTEST_COLAND_DATABASE_URL` is an administrator connection, not a test
     // database: used directly, every run replays onto the previous run's rows
     // and a stale `service_identity` fails this restart assertion for reasons
     // that have nothing to do with the code under test. This helper creates a
     // per-run database from it (and falls back to Docker), dropping it on Drop.
     let ephemeral = crate::scenarios::_helpers::coauth_bootstrap::spawn_ephemeral_postgres_for(
-        "COTEST_SOLAND_DATABASE_URL",
+        "COTEST_COLAND_DATABASE_URL",
     )?;
     let Some(database) = ephemeral.as_ref() else {
         eprintln!(
-            "calendar RSVP restart row skipped: no COTEST_SOLAND_DATABASE_URL and Docker/Postgres unavailable"
+            "calendar RSVP restart row skipped: no COTEST_COLAND_DATABASE_URL and Docker/Postgres unavailable"
         );
         return Ok(());
     };
@@ -765,14 +765,14 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
     let keystore_dir = tempfile::tempdir()?;
     let keystore_path = keystore_dir
         .path()
-        .join("soland.v1")
+        .join("coland.v1")
         .to_string_lossy()
         .into_owned();
     let keystore_env = [
-        ("SOLAND_KEYSTORE_BACKEND", "encrypted_file"),
-        ("SOLAND_KEYSTORE_PATH", keystore_path.as_str()),
+        ("COLAND_KEYSTORE_BACKEND", "encrypted_file"),
+        ("COLAND_KEYSTORE_PATH", keystore_path.as_str()),
         (
-            "SOLAND_KEYSTORE_MASTER_KEY",
+            "COLAND_KEYSTORE_MASTER_KEY",
             "ERERERERERERERERERERERERERERERERERERERERERE=",
         ),
     ];

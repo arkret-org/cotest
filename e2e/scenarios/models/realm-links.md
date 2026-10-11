@@ -31,7 +31,7 @@ capability、policy、retention 与 notification 状态。
 4. `realm_link_payload.link_kind` 接受 `governed_by`、`join_gate_from`，拒绝 `inherits_policy_from`；
 5. link payload 没有 `inherits`、`policy_rules`、`capability_bundles` 或 `notification_defaults` carrier。
 
-这组检查证明 canonical wire 无法因 link 传播 policy、capability 或 notification；它不是 Soland 生产存储／HTTP
+这组检查证明 canonical wire 无法因 link 传播 policy、capability 或 notification；它不是 Coland 生产存储／HTTP
 行为的替代品。
 
 ## Production scenario（待 runner）
@@ -65,13 +65,13 @@ capability、policy、retention 与 notification 状态。
 
 ### Phase E — clean-break migration
 
-13. 用含旧 inheritance rows 的数据库启动升级后 Soland；这些 row 只按迁移策略删除／隔离，不能重解释为本地 policy、
+13. 用含旧 inheritance rows 的数据库启动升级后 Coland；这些 row 只按迁移策略删除／隔离，不能重解释为本地 policy、
     grant 或 notification。
 14. 对升级前后 `T` 的本地 current rows 做 exact comparison；除显式新写入外不得发生变化。
 
 ## 当前缺口
 
-- 当前 Cotest 没有能启动含旧 inheritance row 的生产 Soland 数据库并观测 Event、RealmCommit 与多个 current family
+- 当前 Cotest 没有能启动含旧 inheritance row 的生产 Coland 数据库并观测 Event、RealmCommit 与多个 current family
   零写入的 durable migration runner。
-- 因此旧 API-only Playwright 正向继承场景已删除，不把 Soland 内存 reducer 测试或 static registry check 宣称为产品闭环。
+- 因此旧 API-only Playwright 正向继承场景已删除，不把 Coland 内存 reducer 测试或 static registry check 宣称为产品闭环。
 - 补齐 runner 后，必须执行上述五个 phase，并以数据库事务前后快照证明拒绝路径零写入。

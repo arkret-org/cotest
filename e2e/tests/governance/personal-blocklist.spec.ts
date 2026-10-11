@@ -3,7 +3,7 @@
 // Spec: governance/content-moderation.md §4-§6, discovery/client-preferences.md §2
 
 import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
-import { solandBaseUrl } from "../../helpers/env";
+import { colandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
   accountActorId,
@@ -21,7 +21,7 @@ import {
   signedEventEnvelope,
   submitSignedEventApi,
   wireErrCode,
-} from "../../helpers/soland-api";
+} from "../../helpers/coland-api";
 import {
   assertJointStackNotRequired,
   ensureRegistered,
@@ -99,8 +99,8 @@ test.describe("personal blocklist", () => {
     expect(secondEntry.revision).toBe(2);
 
     const get = await request.get(
-      `${solandBaseUrl()}/_arkret/self/account_data/${encodeURIComponent(dataType)}`,
-      { headers: authHeaders(token, "GET", `${solandBaseUrl()}/_arkret/self/account_data/${encodeURIComponent(dataType)}`) },
+      `${colandBaseUrl()}/_arkret/self/account_data/${encodeURIComponent(dataType)}`,
+      { headers: authHeaders(token, "GET", `${colandBaseUrl()}/_arkret/self/account_data/${encodeURIComponent(dataType)}`) },
     );
     expect(get.status()).toBe(200);
     expect(
@@ -108,9 +108,9 @@ test.describe("personal blocklist", () => {
     ).toEqual(secondEntry.content);
 
     const list = await request.get(
-      `${solandBaseUrl()}/_arkret/self/account_data`,
+      `${colandBaseUrl()}/_arkret/self/account_data`,
       {
-        headers: authHeaders(token, "GET", `${solandBaseUrl()}/_arkret/self/account_data`),
+        headers: authHeaders(token, "GET", `${colandBaseUrl()}/_arkret/self/account_data`),
       },
     );
     expect(list.status()).toBe(200);
@@ -434,9 +434,9 @@ test.describe("personal blocklist", () => {
     ).toContain(mutedVisible);
 
     const registerDevice = await request.post(
-      `${solandBaseUrl()}/_arkret/edge/push/register-device`,
+      `${colandBaseUrl()}/_arkret/edge/push/register-device`,
       {
-        headers: { ...authHeaders(aliceToken, "POST", `${solandBaseUrl()}/_arkret/edge/push/register-device`), "content-type": "application/json" },
+        headers: { ...authHeaders(aliceToken, "POST", `${colandBaseUrl()}/_arkret/edge/push/register-device`), "content-type": "application/json" },
         data: canonicalJson({
           device_id: alice.deviceId,
           push_gateway_url: "https://push.example",
@@ -479,7 +479,7 @@ test.describe("personal blocklist", () => {
       },
     );
     const notify = await request.post(
-      `${solandBaseUrl()}/_arkret/edge/push/notify`,
+      `${colandBaseUrl()}/_arkret/edge/push/notify`,
       {
         headers: { "content-type": "application/json" },
         data: canonicalJson({
@@ -683,7 +683,7 @@ async function blocklistAccountDataRow(
 function accountSubscribeDpopOpts(
   session: DpopUserSession,
 ): AccountSubscribeOpts {
-  const url = new URL(`${solandBaseUrl()}/_arkret/self/account/subscribe`);
+  const url = new URL(`${colandBaseUrl()}/_arkret/self/account/subscribe`);
   url.searchParams.set("catchup", "true");
   return {
     headers: selfPathHeadersForDpopSession(session, "GET", url.toString()),

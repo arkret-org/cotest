@@ -2,7 +2,7 @@
 
 ## 目标与规范
 
-在真实 Soland、Coauth、Inkson 上验证单用户看板流程。唯一规范来源是 `arkret-spec/spec/v1`：
+在真实 Coland、Coauth、Inkson 上验证单用户看板流程。唯一规范来源是 `arkret-spec/spec/v1`：
 
 - `zh/models/realm-and-space.md`：Space 层级、顶层 rank、Strand 位置 CAS 与生命周期。
 - `zh/models/strand-and-message.md`：Strand、Discussion、私有内容和生命周期。

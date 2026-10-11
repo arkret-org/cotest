@@ -2,7 +2,7 @@
 //!
 //! This lane intentionally uses only the canonical artifacts and the public SDK
 //! frame parser. It does not insert Station rows or call the private pending
-//! ledger. Product E2E remains a separate gate once the Soland harness builds
+//! ledger. Product E2E remains a separate gate once the Coland harness builds
 //! against the current SDK.
 
 use std::fs;

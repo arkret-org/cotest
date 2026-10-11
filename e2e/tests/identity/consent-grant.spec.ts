@@ -3,7 +3,7 @@
 // Spec: identity/consent-model.md §2-§4
 
 import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
-import { solandBaseUrl, solandServiceId } from "../../helpers/env";
+import { colandBaseUrl, colandServiceId } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
   accountActorId,
@@ -21,7 +21,7 @@ import {
   sdkMimiRequestConsentProof,
   submitSignedEventApi,
   typedId,
-} from "../../helpers/soland-api";
+} from "../../helpers/coland-api";
 import {
   assertJointStackNotRequired,
   ensureRegistered,
@@ -67,14 +67,14 @@ function consentPeer(peerId: string): ConsentPeer {
     kind: "actor",
     actor_id: {
       kind: "account",
-      account_id: { principal_id: peerId, station_id: solandServiceId() },
+      account_id: { principal_id: peerId, station_id: colandServiceId() },
     },
   };
 }
 
 function consentResultUrl(peerId: string, scope: string): string {
   return (
-    `${solandBaseUrl()}/_arkret/self/consent/result` +
+    `${colandBaseUrl()}/_arkret/self/consent/result` +
     `?peer=${encodeURIComponent(canonicalJson(consentPeer(peerId)))}` +
     `&consent_scope=${encodeURIComponent(scope)}`
   );
@@ -184,7 +184,7 @@ async function grantConsentDirect(
   // Inkson no longer completes a bare principal with its own Station.
   await actor.page
     .getByTestId("consent-new-grant-grantee-station-input")
-    .fill(solandServiceId());
+    .fill(colandServiceId());
   await actor.page.getByTestId("consent-new-grant-ttl-input").fill(ttl);
   await expect(
     actor.page.getByTestId("consent-new-grant-submit-button"),
@@ -206,8 +206,8 @@ async function listConsentResults(
   token: string,
 ): Promise<ConsentView[]> {
   const response = await request.get(
-    `${solandBaseUrl()}/_arkret/self/consent/results`,
-    { headers: authHeaders(token, "GET", `${solandBaseUrl()}/_arkret/self/consent/results`) },
+    `${colandBaseUrl()}/_arkret/self/consent/results`,
+    { headers: authHeaders(token, "GET", `${colandBaseUrl()}/_arkret/self/consent/results`) },
   );
   const body = await expectJsonOk<{ consents: ConsentView[] }>(
     response,
@@ -281,14 +281,14 @@ async function requestConsentApi(
   scope: "voice_call" | "video_call" | "presence" | "any",
 ) {
   const response = await request.post(
-    `${solandBaseUrl()}/_arkret/self/consent/request`,
+    `${colandBaseUrl()}/_arkret/self/consent/request`,
     {
-      headers: { ...authHeaders(token, "POST", `${solandBaseUrl()}/_arkret/self/consent/request`), "content-type": "application/json" },
+      headers: { ...authHeaders(token, "POST", `${colandBaseUrl()}/_arkret/self/consent/request`), "content-type": "application/json" },
       data: canonicalJson({
         consent_scope: scope,
         holder_account_id: {
           principal_id: holderId,
-          station_id: solandServiceId(),
+          station_id: colandServiceId(),
         },
       }),
     },
@@ -342,7 +342,7 @@ test.describe("consent grant", () => {
         .fill(bob.id);
       await alicePage.page
         .getByTestId("consent-new-grant-grantee-station-input")
-        .fill(solandServiceId());
+        .fill(colandServiceId());
       await alicePage.page
         .getByTestId("consent-new-grant-ttl-input")
         .fill("30d");
@@ -406,7 +406,7 @@ test.describe("consent grant", () => {
         .fill(bob.id);
       await alicePage.page
         .getByTestId("consent-request-holder-station-input")
-        .fill(solandServiceId());
+        .fill(colandServiceId());
       await expect(
         alicePage.page.getByTestId("consent-request-submit-button"),
       ).toBeEnabled();
@@ -507,7 +507,7 @@ test.describe("consent grant", () => {
       service_id: string;
       trust_domain: string;
     }>(
-      await request.get(`${solandBaseUrl()}/_arkret/describe`),
+      await request.get(`${colandBaseUrl()}/_arkret/describe`),
       "MIMI consent destination describe",
     );
 
@@ -541,7 +541,7 @@ test.describe("consent grant", () => {
       request,
       provider,
       describe.service_id,
-      `${solandBaseUrl()}/_arkret/open/mimi/consent/request`,
+      `${colandBaseUrl()}/_arkret/open/mimi/consent/request`,
       { ...openUnsigned, proofs: [openProof] },
     );
     const openText = await open.text();
@@ -552,7 +552,7 @@ test.describe("consent grant", () => {
     expect(Object.keys(openBody).filter((key) => key !== "challenge")).toEqual(["consent_id"]);
     expect(openBody.consent_id).toMatch(/^ak:consent:/);
 
-    const updateUrl = `${solandBaseUrl()}/_arkret/open/mimi/consent/update`;
+    const updateUrl = `${colandBaseUrl()}/_arkret/open/mimi/consent/update`;
     const grantEvent = signedEventEnvelope({
       actorId: alice.id,
       realmId: principalControlRealmForId(alice.id),

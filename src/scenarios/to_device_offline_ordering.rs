@@ -22,9 +22,9 @@
 //!       side).
 //!
 //! ──────────────────────────────────────────────────────────────────────────
-//! Status: real test, runs against the in-process soland harness.
+//! Status: real test, runs against the in-process coland harness.
 //!
-//! Uses the normal Soland harness prerequisites and authorized device bootstrap.
+//! Uses the normal Coland harness prerequisites and authorized device bootstrap.
 //! Additional probes cover read-only pagination, cumulative and cross-bound
 //! acknowledgements, concurrent retry and logical message target conflicts.
 
@@ -115,7 +115,7 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
     .await?;
 
     // ── Step 7: bob reconnects, polls WITHOUT acking the step-3 cursor.
-    // Soland's GET /_arkret/self/device_messages without `?after=` defaults to
+    // Coland's GET /_arkret/self/device_messages without `?after=` defaults to
     // ack_position=0, returning all queued events. msg 1 may still be in
     // the queue until explicit ack; msg 2 and 3 follow it.
     let reconnect = poll_to_device(&server, &bob_token, None).await?;
@@ -147,7 +147,7 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
     }
 
     // ── Step 10: idempotency on resend — alice retries msg-2 with the
-    // same logical ID and a NEW HTTP key; soland MUST NOT deliver a duplicate.
+    // same logical ID and a NEW HTTP key; coland MUST NOT deliver a duplicate.
     send_to_device(
         &server,
         &alice_token,
@@ -651,20 +651,20 @@ async fn acknowledge_bootstrap_messages(client: &crate::harness::TestActorClient
 /// and the ACK token issued after the restart still prunes exactly it.
 pub async fn device_message_survives_station_restart() -> Result<()> {
     let ephemeral = crate::scenarios::_helpers::coauth_bootstrap::spawn_ephemeral_postgres_for(
-        "COTEST_SOLAND_DATABASE_URL",
+        "COTEST_COLAND_DATABASE_URL",
     )?
     .ok_or_else(|| anyhow!("device-message restart requires isolated PostgreSQL"))?;
     let keystore_dir = tempfile::tempdir()?;
     let keystore_path = keystore_dir
         .path()
-        .join("soland.v1")
+        .join("coland.v1")
         .to_string_lossy()
         .into_owned();
     let keystore_env = [
-        ("SOLAND_KEYSTORE_BACKEND", "encrypted_file"),
-        ("SOLAND_KEYSTORE_PATH", keystore_path.as_str()),
+        ("COLAND_KEYSTORE_BACKEND", "encrypted_file"),
+        ("COLAND_KEYSTORE_PATH", keystore_path.as_str()),
         (
-            "SOLAND_KEYSTORE_MASTER_KEY",
+            "COLAND_KEYSTORE_MASTER_KEY",
             "UlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlI=",
         ),
     ];

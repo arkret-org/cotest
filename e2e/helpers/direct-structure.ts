@@ -1,6 +1,6 @@
 import { expect, test, operationSelector } from "./arkret-test";
 import type { Page, Response, Request } from "@playwright/test";
-import { assertAuthoritySubmitOutcome, canonicalJson, sdkEventDerivedIds, sha256CanonicalJson } from "./soland-api";
+import { assertAuthoritySubmitOutcome, canonicalJson, sdkEventDerivedIds, sha256CanonicalJson } from "./coland-api";
 import { decodeEventIngressBody, ingressEvents, type IngressEvent } from "./event-ingress";
 import { readFile } from "node:fs/promises";
 import { isDeepStrictEqual } from "node:util";

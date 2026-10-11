@@ -21,7 +21,7 @@ import {
 } from "../../helpers/env";
 import { createDidHostClient } from "../../helpers/did-host";
 import { createMimiFacadeClient } from "../../helpers/mimi-facade";
-import { canonicalJson, projectDidToCoreId, sha256CanonicalJson } from "../../helpers/soland-api";
+import { canonicalJson, projectDidToCoreId, sha256CanonicalJson } from "../../helpers/coland-api";
 
 function b64url(buf: Buffer): string {
   return buf.toString("base64url");

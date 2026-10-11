@@ -2,7 +2,7 @@
 //! Invite (`zh/models/governance-objects.md` §5.3, `zh/models/common-fields.md`
 //! §4.5) on the single Event/RealmCommit carrier.
 //!
-//! Against a live Soland with real PostgreSQL:
+//! Against a live Coland with real PostgreSQL:
 //!
 //! 1. Alice creates a Realm and invites Bob, who lives on the same Station; Bob's Account realm
 //!    list does not name the Realm yet;

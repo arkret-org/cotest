@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
-import { solandBaseUrl, solandServiceId, type SolandKey } from "./env";
+import { colandBaseUrl, colandServiceId, type ColandKey } from "./env";
 import {
   accountActorId,
   authHeaders,
@@ -13,8 +13,8 @@ import {
   scanRealmStreamApi,
   signedEventEnvelope,
   submitSignedEventApi,
-} from "./soland-api";
-import { addRealmMlsMemberApi } from "./soland-api/mls";
+} from "./coland-api";
+import { addRealmMlsMemberApi } from "./coland-api/mls";
 import type { InviteObject, RealmObject } from "./generated/spec-wire-objects";
 import { allowExplicitInviteNotifications, issueUserSession, type JointUser } from "./users";
 
@@ -33,7 +33,7 @@ export type ApiRealmOpts = {
   invitees?: string[];
   inviteeStationIds?: Record<string, string>;
   ownerId?: string;
-  server?: SolandKey;
+  server?: ColandKey;
 };
 
 export type ApiMessage = {
@@ -94,12 +94,12 @@ export async function acceptInviteViaApi(
   token: string,
   actorId: string,
   realmId: string,
-  opts: { server?: SolandKey } = {},
+  opts: { server?: ColandKey } = {},
 ) {
-  const base = solandBaseUrl(opts.server);
+  const base = colandBaseUrl(opts.server);
   const listUrl = new URL("/_arkret/self/authz/invites", base);
   listUrl.searchParams.set("subject", actorId);
-  listUrl.searchParams.set("subject_station_id", solandServiceId(opts.server));
+  listUrl.searchParams.set("subject_station_id", colandServiceId(opts.server));
   listUrl.searchParams.set("realm_id", realmId);
   let invite: InviteObject | undefined;
   await expect
@@ -147,7 +147,7 @@ export async function createSharedRealmViaApi(
     ...opts,
     ownerId: owner.id,
     invitees: [member.id],
-    inviteeStationIds: { [member.id]: solandServiceId(opts.server) },
+    inviteeStationIds: { [member.id]: colandServiceId(opts.server) },
   });
   // A normal Realm has no implicit discussion Strand. This fixture promises a
   // shared messaging Realm, so establish the explicit Strand + default pointer
@@ -184,7 +184,7 @@ export async function createSharedRealmViaApi(
   return realmId;
 }
 
-// NOT a thin wrapper over `sendMessageApi` (soland-api.ts): `sendMessageApi`
+// NOT a thin wrapper over `sendMessageApi` (coland-api.ts): `sendMessageApi`
 // derives the signing actor from `GET /account/me` (the token's own account)
 // and exposes no parameter for an explicit signer, whereas this helper signs
 // with the caller-supplied `opts.actorId` (asserted required). Multi-actor
@@ -198,7 +198,7 @@ export async function sendPlaintextMessageViaApi(
   token: string,
   realmId: string,
   body: string,
-  opts: { actorId?: string; server?: SolandKey; strandId?: string } = {},
+  opts: { actorId?: string; server?: ColandKey; strandId?: string } = {},
 ): Promise<ApiMessage> {
   expect(
     opts.actorId,
@@ -238,7 +238,7 @@ export async function listRealmEventsViaApi(
   request: APIRequestContext,
   token: string,
   realmId: string,
-  opts: { limit?: number; server?: SolandKey; order?: "ascending" | "descending" } = {},
+  opts: { limit?: number; server?: ColandKey; order?: "ascending" | "descending" } = {},
 ): Promise<Array<Record<string, unknown>>> {
   const scan = await scanRealmStreamApi(request, token, realmId, {
     server: opts.server,
@@ -258,7 +258,7 @@ export async function listReadMarkersViaApi(
   request: APIRequestContext,
   token: string,
   realmId: string,
-  opts: { server?: SolandKey } = {},
+  opts: { server?: ColandKey } = {},
 ): Promise<ReadMarker[]> {
   const events = await listRealmEventsViaApi(request, token, realmId, {
     server: opts.server,

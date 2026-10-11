@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$ImageTag = "cotest-soland:latest",
+    [string]$ImageTag = "cotest-coland:latest",
     [string]$WorkspaceRoot,
     [string]$DockerfilePath,
     [string[]]$CacheFrom = @(),
@@ -17,11 +17,11 @@ if (-not $WorkspaceRoot) {
     $WorkspaceRoot = (Resolve-Path (Join-Path $repoRoot "..")).Path
 }
 if (-not $DockerfilePath) {
-    $DockerfilePath = Join-Path $repoRoot "docker\soland.Dockerfile"
+    $DockerfilePath = Join-Path $repoRoot "docker\coland.Dockerfile"
 }
 
 $requiredPaths = @(
-    (Join-Path $WorkspaceRoot "soland"),
+    (Join-Path $WorkspaceRoot "coland"),
     (Join-Path $WorkspaceRoot "arkret-rust-sdk"),
     (Join-Path $WorkspaceRoot "arkret-spec"),
     (Join-Path $WorkspaceRoot "garth"),

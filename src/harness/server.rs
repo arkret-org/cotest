@@ -157,15 +157,15 @@ pub struct ArkretServer {
     account_authority_origin: String,
     blob_root: Option<PathBuf>,
     log_path: Option<PathBuf>,
-    /// `host:port` this soland's Prometheus listener was bound to, when the
+    /// `host:port` this coland's Prometheus listener was bound to, when the
     /// harness owns the bind (DID-P1-C02 reads
-    /// `soland_did_resolve_total{source="network"}` and
-    /// `soland_signature_verify_total` from it). `None` for the docker path,
+    /// `coland_did_resolve_total{source="network"}` and
+    /// `coland_signature_verify_total` from it). `None` for the docker path,
     /// which publishes only the HTTP port.
     metrics_bind: Option<String>,
     _port_reservations: Vec<ReservedPort>,
     /// Owns the isolated PostgreSQL instance provisioned by the default
-    /// harness spawn path. Soland runtime persistence is PostgreSQL-only; the
+    /// harness spawn path. Coland runtime persistence is PostgreSQL-only; the
     /// harness must therefore keep the database alive for exactly as long as
     /// the child process rather than falling back to a test-only memory store.
     _database: Option<EphemeralPg>,
@@ -212,8 +212,8 @@ impl HarnessTls {
         // Native consumers construct their own production transports. Supply
         // the same explicit run PKI to those transports before starting any
         // test threads, rather than mutating process trust during a scenario.
-        let cert = std::env::var_os("SOLAND_TLS_CERT_PATH");
-        let key = std::env::var_os("SOLAND_TLS_KEY_PATH");
+        let cert = std::env::var_os("COLAND_TLS_CERT_PATH");
+        let key = std::env::var_os("COLAND_TLS_KEY_PATH");
         if cert.is_some() || key.is_some() {
             let cert = PathBuf::from(cert.context("native TLS override lacks certificate")?);
             let key = PathBuf::from(key.context("native TLS override lacks private key")?);
@@ -305,8 +305,8 @@ impl HarnessTls {
 
     fn apply_to_command(&self, command: &mut Command) {
         command
-            .env("SOLAND_TLS_CERT_PATH", &self.cert_path)
-            .env("SOLAND_TLS_KEY_PATH", &self.key_path)
+            .env("COLAND_TLS_CERT_PATH", &self.cert_path)
+            .env("COLAND_TLS_KEY_PATH", &self.key_path)
             .env("SSL_CERT_FILE", &self.ca_path);
     }
 }
@@ -359,7 +359,7 @@ const HARNESS_ACCOUNT_AUTHORITY_TRUST_DOMAIN: &str =
     "ak:trust_domain:account-authority.cotest.local";
 
 /// Every cotest SUT is configured the way a split Account Authority deployment is
-/// (`soland/DEPLOYMENT.md`): the Authority endpoint, its delegated assertion
+/// (`coland/DEPLOYMENT.md`): the Authority endpoint, its delegated assertion
 /// key, and the registered deployment-internal channel (shared per-edge secret
 /// plus the Authority's own trust domain). The canonical actor bootstrap acts as
 /// that Authority and admits PCR genesis over the channel, so it must be
@@ -370,27 +370,27 @@ const HARNESS_ACCOUNT_AUTHORITY_TRUST_DOMAIN: &str =
 /// trust domain.
 fn harness_account_authority_env(has: impl Fn(&str) -> bool) -> Vec<(String, String)> {
     let mut env = Vec::new();
-    if !has("SOLAND_INTERNAL_AUTHORITY_SHARED_SECRET")
-        && !has("SOLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN")
+    if !has("COLAND_INTERNAL_AUTHORITY_SHARED_SECRET")
+        && !has("COLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN")
     {
         env.push((
-            "SOLAND_INTERNAL_AUTHORITY_SHARED_SECRET".to_owned(),
+            "COLAND_INTERNAL_AUTHORITY_SHARED_SECRET".to_owned(),
             HARNESS_INTERNAL_AUTHORITY_SECRET.to_owned(),
         ));
         env.push((
-            "SOLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN".to_owned(),
+            "COLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN".to_owned(),
             HARNESS_ACCOUNT_AUTHORITY_TRUST_DOMAIN.to_owned(),
         ));
     }
-    if !has("SOLAND_ACCOUNT_AUTHORITY_URL") {
+    if !has("COLAND_ACCOUNT_AUTHORITY_URL") {
         env.push((
-            "SOLAND_ACCOUNT_AUTHORITY_URL".to_owned(),
+            "COLAND_ACCOUNT_AUTHORITY_URL".to_owned(),
             HARNESS_ACCOUNT_AUTHORITY_ORIGIN.to_owned(),
         ));
     }
-    if !has("SOLAND_ACCOUNT_AUTHORITY_PUBLIC_KEY_MULTIBASE") {
+    if !has("COLAND_ACCOUNT_AUTHORITY_PUBLIC_KEY_MULTIBASE") {
         env.push((
-            "SOLAND_ACCOUNT_AUTHORITY_PUBLIC_KEY_MULTIBASE".to_owned(),
+            "COLAND_ACCOUNT_AUTHORITY_PUBLIC_KEY_MULTIBASE".to_owned(),
             harness_account_authority_public_key_multibase(),
         ));
     }
@@ -415,7 +415,7 @@ impl ArkretServer {
     /// from configuration. The notary signing seed cannot: it is the deployment
     /// operator's, and a scenario that needs to author notary-signed Seals must
     /// be told which key the runner configured. `run-joint-e2e.ps1` exports it
-    /// as `COTEST_SOLAND_NOTARY_SIGNING_KEY`.
+    /// as `COTEST_COLAND_NOTARY_SIGNING_KEY`.
     pub async fn attach(
         base_url: &str,
         _notary_signing_key_b64: &str,
@@ -449,9 +449,9 @@ impl ArkretServer {
     }
 
     pub async fn spawn_with_env(name: &str, extra_env: &[(&str, &str)]) -> Result<Self> {
-        let database = spawn_ephemeral_postgres_for("COTEST_SOLAND_DATABASE_URL")?
+        let database = spawn_ephemeral_postgres_for("COTEST_COLAND_DATABASE_URL")?
             .context(
-                "Soland Cotest runtime requires PostgreSQL; set COTEST_SOLAND_DATABASE_URL or make Docker available for an isolated test database",
+                "Coland Cotest runtime requires PostgreSQL; set COTEST_COLAND_DATABASE_URL or make Docker available for an isolated test database",
             )?;
         let mut server =
             Self::spawn_with_database_url(name, &database.connect_url, extra_env).await?;
@@ -471,9 +471,9 @@ impl ArkretServer {
         let mut env = Vec::with_capacity(extra_env.len() + 3);
         env.push(("DATABASE_URL", database_url));
         if let Some((origin, introspection_url)) = issuer_env.as_ref() {
-            env.push(("SOLAND_ACCOUNT_AUTHORITY_URL", origin.as_str()));
+            env.push(("COLAND_ACCOUNT_AUTHORITY_URL", origin.as_str()));
             env.push((
-                "SOLAND_SESSION_GRANT_INTROSPECTION_URL",
+                "COLAND_SESSION_GRANT_INTROSPECTION_URL",
                 introspection_url.as_str(),
             ));
         }
@@ -497,10 +497,10 @@ impl ArkretServer {
         let caller_owns_authority = extra_env.iter().any(|(key, _)| {
             matches!(
                 *key,
-                "SOLAND_ACCOUNT_AUTHORITY_URL"
-                    | "SOLAND_SESSION_GRANT_INTROSPECTION_URL"
-                    | "SOLAND_INTERNAL_AUTHORITY_SHARED_SECRET"
-                    | "SOLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN"
+                "COLAND_ACCOUNT_AUTHORITY_URL"
+                    | "COLAND_SESSION_GRANT_INTROSPECTION_URL"
+                    | "COLAND_INTERNAL_AUTHORITY_SHARED_SECRET"
+                    | "COLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN"
             )
         });
         if caller_owns_authority || sut_runtime_mode() != SutRuntimeMode::Process {
@@ -644,7 +644,7 @@ impl ArkretServer {
         }
     }
 
-    /// Spawn a pre-built Soland binary directly and inject `extra_env` into
+    /// Spawn a pre-built Coland binary directly and inject `extra_env` into
     /// the child process. The binary receives `--bind <addr>` and shares the
     /// same environment path used by federation scenarios.
     async fn spawn_external_binary_with_env(
@@ -664,11 +664,11 @@ impl ArkretServer {
         .await
     }
 
-    /// Spawn a pre-built soland binary on already-reserved ports. Splitting the
+    /// Spawn a pre-built coland binary on already-reserved ports. Splitting the
     /// port reservation out of [`spawn_external_binary_with_env`] lets the
     /// multi-node federation path compute every node's `did:webvh` + base URL up
     /// front so each node can be started with the others wired in via
-    /// `SOLAND_FEDERATION_PEERS`.
+    /// `COLAND_FEDERATION_PEERS`.
     pub(crate) async fn spawn_external_binary_with_ports_and_env(
         name: &str,
         bin_path: &Path,
@@ -715,40 +715,40 @@ impl ArkretServer {
             .arg("--bind")
             .arg(&bind)
             .env_remove("DATABASE_URL")
-            .env("SOLAND_PUBLIC_BASE_URL", base_url.as_str())
-            .env("SOLAND_NOTARY_SIGNING_KEY", &notary_signing_key)
-            .env("SOLAND_METRICS_BIND", &metrics_bind)
-            .env("SOLAND_DEVELOPMENT_MODE", "1")
-            .env("SOLAND_FIRST_PROVISIONING", "1")
-            .env("SOLAND_SEED_DEMO_DATA", "1")
-            .env("SOLAND_TRUST_DOMAIN", test_trust_domain(name))
+            .env("COLAND_PUBLIC_BASE_URL", base_url.as_str())
+            .env("COLAND_NOTARY_SIGNING_KEY", &notary_signing_key)
+            .env("COLAND_METRICS_BIND", &metrics_bind)
+            .env("COLAND_DEVELOPMENT_MODE", "1")
+            .env("COLAND_FIRST_PROVISIONING", "1")
+            .env("COLAND_SEED_DEMO_DATA", "1")
+            .env("COLAND_TRUST_DOMAIN", test_trust_domain(name))
             .env(
-                "SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER",
+                "COLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER",
                 EMBEDDED_WEBVH_REGISTRATION_BEARER,
             )
-            .env("SOLAND_BLOB_ROOT", &blob_root)
+            .env("COLAND_BLOB_ROOT", &blob_root)
             .stdout(stdout)
             .stderr(stderr);
         tls.apply_to_command(&mut command);
-        // `SOLAND_KEYSTORE_PATH` / `_MASTER_KEY` only mean anything to the
+        // `COLAND_KEYSTORE_PATH` / `_MASTER_KEY` only mean anything to the
         // `encrypted_file` backend, so injecting them under a caller-chosen
-        // backend hands soland a contradictory keystore config that it rejects
+        // backend hands coland a contradictory keystore config that it rejects
         // at startup. A caller that names a backend owns the whole trio.
         let durable_keystore_needed = extra_env.iter().any(|(key, _)| {
             matches!(
                 *key,
-                "DATABASE_URL" | "SOLAND_EXTERNAL_WEBVH_REGISTRATION_BEARER"
+                "DATABASE_URL" | "COLAND_EXTERNAL_WEBVH_REGISTRATION_BEARER"
             )
         });
         let keystore_backend_chosen = extra_env
             .iter()
-            .any(|(key, _)| *key == "SOLAND_KEYSTORE_BACKEND");
+            .any(|(key, _)| *key == "COLAND_KEYSTORE_BACKEND");
         if durable_keystore_needed && !keystore_backend_chosen {
             command
-                .env("SOLAND_KEYSTORE_BACKEND", "encrypted_file")
-                .env("SOLAND_KEYSTORE_PATH", blob_root.join("keystore.v1"))
+                .env("COLAND_KEYSTORE_BACKEND", "encrypted_file")
+                .env("COLAND_KEYSTORE_PATH", blob_root.join("keystore.v1"))
                 .env(
-                    "SOLAND_KEYSTORE_MASTER_KEY",
+                    "COLAND_KEYSTORE_MASTER_KEY",
                     DURABLE_TEST_KEYSTORE_MASTER_KEY,
                 );
         }
@@ -767,7 +767,7 @@ impl ArkretServer {
         metrics_port.release();
         let mut child = command.spawn().with_context(|| {
             format!(
-                "failed to start external soland binary at {}",
+                "failed to start external coland binary at {}",
                 bin_path.display()
             )
         })?;
@@ -814,7 +814,7 @@ impl ArkretServer {
             trust_domain,
             account_authority_origin: extra_env
                 .iter()
-                .find(|(key, _)| *key == "SOLAND_ACCOUNT_AUTHORITY_URL")
+                .find(|(key, _)| *key == "COLAND_ACCOUNT_AUTHORITY_URL")
                 .map_or(HARNESS_ACCOUNT_AUTHORITY_ORIGIN, |(_, value)| *value)
                 .to_owned(),
             blob_root: Some(blob_root),
@@ -830,12 +830,12 @@ impl ArkretServer {
     async fn spawn_process(name: &str, extra_env: &[(&str, &str)]) -> Result<Self> {
         // Process mode requires a pre-built binary supplied explicitly or
         // found in the sibling checkout. Test execution never compiles a SUT.
-        use crate::scenarios::_helpers::external_binary::{SOLAND_SPEC, locate_external_binary};
-        if let Some(bin_path) = locate_external_binary(&SOLAND_SPEC) {
+        use crate::scenarios::_helpers::external_binary::{COLAND_SPEC, locate_external_binary};
+        if let Some(bin_path) = locate_external_binary(&COLAND_SPEC) {
             return Self::spawn_external_binary_with_env(name, &bin_path, extra_env).await;
         }
         Err(anyhow!(
-            "process-mode Soland requires a pre-built binary; set SOLAND_BIN or build the sibling soland target first"
+            "process-mode Coland requires a pre-built binary; set COLAND_BIN or build the sibling coland target first"
         ))
     }
 
@@ -884,25 +884,25 @@ impl ArkretServer {
         }
         command
             .arg("--env")
-            .arg(format!("SOLAND_BIND=0.0.0.0:{container_port}"))
+            .arg(format!("COLAND_BIND=0.0.0.0:{container_port}"))
             .arg("--env")
-            .arg(format!("SOLAND_PUBLIC_BASE_URL={public_base_url}"))
+            .arg(format!("COLAND_PUBLIC_BASE_URL={public_base_url}"))
             .arg("--env")
-            .arg(format!("SOLAND_NOTARY_SIGNING_KEY={}", notary_signing_key))
+            .arg(format!("COLAND_NOTARY_SIGNING_KEY={}", notary_signing_key))
             .arg("--env")
-            .arg("SOLAND_DEVELOPMENT_MODE=1")
+            .arg("COLAND_DEVELOPMENT_MODE=1")
             .arg("--env")
-            .arg("SOLAND_FIRST_PROVISIONING=1")
+            .arg("COLAND_FIRST_PROVISIONING=1")
             .arg("--env")
-            .arg("SOLAND_SEED_DEMO_DATA=1")
+            .arg("COLAND_SEED_DEMO_DATA=1")
             .arg("--env")
-            .arg(format!("SOLAND_TRUST_DOMAIN={}", test_trust_domain(name)))
+            .arg(format!("COLAND_TRUST_DOMAIN={}", test_trust_domain(name)))
             .arg("--env")
             .arg(format!(
-                "SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER={EMBEDDED_WEBVH_REGISTRATION_BEARER}"
+                "COLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER={EMBEDDED_WEBVH_REGISTRATION_BEARER}"
             ))
             .arg("--env")
-            .arg("SOLAND_BLOB_ROOT=/tmp/soland-blobs");
+            .arg("COLAND_BLOB_ROOT=/tmp/coland-blobs");
         for (key, value) in
             harness_account_authority_env(|key| extra_env.iter().any(|(k, _)| *k == key))
         {
@@ -952,7 +952,7 @@ impl ArkretServer {
             trust_domain,
             account_authority_origin: extra_env
                 .iter()
-                .find(|(key, _)| *key == "SOLAND_ACCOUNT_AUTHORITY_URL")
+                .find(|(key, _)| *key == "COLAND_ACCOUNT_AUTHORITY_URL")
                 .map_or(HARNESS_ACCOUNT_AUTHORITY_ORIGIN, |(_, value)| *value)
                 .to_owned(),
             blob_root: None,
@@ -993,7 +993,7 @@ impl ArkretServer {
         &self.account_authority_origin
     }
 
-    /// `http://host:port` of this soland's Prometheus listener, when the
+    /// `http://host:port` of this coland's Prometheus listener, when the
     /// harness owns the bind.
     ///
     /// `None` means the metrics endpoint is unreachable for this spawn mode
@@ -1005,9 +1005,9 @@ impl ArkretServer {
             .map(|bind| format!("http://{bind}"))
     }
 
-    /// Client for this soland's DID-boundary counters
-    /// (`soland_did_resolve_total{source="network"}` →
-    /// `authority_network_call_count`, `soland_signature_verify_total` →
+    /// Client for this coland's DID-boundary counters
+    /// (`coland_did_resolve_total{source="network"}` →
+    /// `authority_network_call_count`, `coland_signature_verify_total` →
     /// `signature_verify_count`). `Ok(None)` when the metrics listener is not
     /// reachable for this spawn mode.
     pub fn did_boundary_metrics(
@@ -1017,7 +1017,7 @@ impl ArkretServer {
         let Some(base_url) = self.metrics_base_url() else {
             return Ok(None);
         };
-        ServiceMetricsClient::new(MeteredService::Soland, base_url).map(Some)
+        ServiceMetricsClient::new(MeteredService::Coland, base_url).map(Some)
     }
 
     pub fn http(&self) -> OperationSelectingHttpClient {
@@ -1179,43 +1179,43 @@ impl ArkretServer {
             .with_context(|| format!("build signed peer POST {path}"))
     }
 
-    /// Build a request for Soland's deployment-local account projection fixture.
+    /// Build a request for Coland's deployment-local account projection fixture.
     /// Canonical Account Authority registration is not owned by a Station; live Cotest setup
-    /// materializes its result through `/_soland`.
+    /// materializes its result through `/_coland`.
     pub fn account_registration_request(&self) -> reqwest::RequestBuilder {
         self.http()
-            .post(self.url("/_soland/self/account/register"))
+            .post(self.url("/_coland/self/account/register"))
             .bearer_auth(EMBEDDED_WEBVH_REGISTRATION_BEARER)
     }
 
-    /// Stop an externally spawned Soland while retaining every restart input.
+    /// Stop an externally spawned Coland while retaining every restart input.
     pub async fn stop_external_process(&mut self) -> Result<()> {
         if self.external_restart.is_none() {
             return Err(anyhow!(
-                "Soland stop requires the pre-built external-binary harness"
+                "Coland stop requires the pre-built external-binary harness"
             ));
         }
         let handle = mem::replace(&mut self.handle, SutHandle::Terminated);
         let SutHandle::Local(mut child) = handle else {
             self.handle = handle;
-            return Err(anyhow!("Soland stop is only supported in process mode"));
+            return Err(anyhow!("Coland stop is only supported in process mode"));
         };
         let _ = child.kill();
-        child.wait().context("wait for stopped Soland child")?;
+        child.wait().context("wait for stopped Coland child")?;
         Ok(())
     }
 
-    /// Start a previously stopped external Soland from the exact retained
+    /// Start a previously stopped external Coland from the exact retained
     /// ports, durable database, service identity inputs, blob root, and peer
     /// wiring.
     pub async fn start_external_process(&mut self) -> Result<()> {
         let Some(config) = self.external_restart.clone() else {
             return Err(anyhow!(
-                "Soland start requires the pre-built external-binary harness"
+                "Coland start requires the pre-built external-binary harness"
             ));
         };
         if !matches!(&self.handle, SutHandle::Terminated) {
-            return Err(anyhow!("Soland start requires a stopped process"));
+            return Err(anyhow!("Coland start requires a stopped process"));
         }
         append_service_log(
             self.log_path.as_deref(),
@@ -1226,24 +1226,24 @@ impl ArkretServer {
         let blob_root = self
             .blob_root
             .as_ref()
-            .context("external Soland restart lost its blob root")?;
+            .context("external Coland restart lost its blob root")?;
         let mut command = Command::new(&config.bin_path);
         command
             .arg("--bind")
             .arg(&config.bind)
             .env_remove("DATABASE_URL")
-            .env("SOLAND_PUBLIC_BASE_URL", self.base_url.as_str())
-            .env("SOLAND_NOTARY_SIGNING_KEY", &config.notary_signing_key)
-            .env("SOLAND_METRICS_BIND", &config.metrics_bind)
-            .env("SOLAND_DEVELOPMENT_MODE", "1")
-            .env("SOLAND_FIRST_PROVISIONING", "1")
-            .env("SOLAND_SEED_DEMO_DATA", "1")
-            .env("SOLAND_TRUST_DOMAIN", self.trust_domain.as_str())
+            .env("COLAND_PUBLIC_BASE_URL", self.base_url.as_str())
+            .env("COLAND_NOTARY_SIGNING_KEY", &config.notary_signing_key)
+            .env("COLAND_METRICS_BIND", &config.metrics_bind)
+            .env("COLAND_DEVELOPMENT_MODE", "1")
+            .env("COLAND_FIRST_PROVISIONING", "1")
+            .env("COLAND_SEED_DEMO_DATA", "1")
+            .env("COLAND_TRUST_DOMAIN", self.trust_domain.as_str())
             .env(
-                "SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER",
+                "COLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER",
                 EMBEDDED_WEBVH_REGISTRATION_BEARER,
             )
-            .env("SOLAND_BLOB_ROOT", blob_root)
+            .env("COLAND_BLOB_ROOT", blob_root)
             .stdout(stdout)
             .stderr(stderr);
         if let Some(tls) = &self._tls {
@@ -1255,19 +1255,19 @@ impl ArkretServer {
         let durable_keystore_needed = config.extra_env.iter().any(|(key, _)| {
             matches!(
                 key.as_str(),
-                "DATABASE_URL" | "SOLAND_EXTERNAL_WEBVH_REGISTRATION_BEARER"
+                "DATABASE_URL" | "COLAND_EXTERNAL_WEBVH_REGISTRATION_BEARER"
             )
         });
         let keystore_backend_chosen = config
             .extra_env
             .iter()
-            .any(|(key, _)| key == "SOLAND_KEYSTORE_BACKEND");
+            .any(|(key, _)| key == "COLAND_KEYSTORE_BACKEND");
         if durable_keystore_needed && !keystore_backend_chosen {
             command
-                .env("SOLAND_KEYSTORE_BACKEND", "encrypted_file")
-                .env("SOLAND_KEYSTORE_PATH", blob_root.join("keystore.v1"))
+                .env("COLAND_KEYSTORE_BACKEND", "encrypted_file")
+                .env("COLAND_KEYSTORE_PATH", blob_root.join("keystore.v1"))
                 .env(
-                    "SOLAND_KEYSTORE_MASTER_KEY",
+                    "COLAND_KEYSTORE_MASTER_KEY",
                     DURABLE_TEST_KEYSTORE_MASTER_KEY,
                 );
         }
@@ -1281,7 +1281,7 @@ impl ArkretServer {
         }
         let mut restarted = command.spawn().with_context(|| {
             format!(
-                "failed to restart external Soland binary at {}",
+                "failed to restart external Coland binary at {}",
                 config.bin_path.display()
             )
         })?;
@@ -1306,7 +1306,7 @@ impl ArkretServer {
             let _ = restarted.kill();
             let _ = restarted.wait();
             return Err(anyhow!(
-                "restarted Soland changed durable identity: {} / {}",
+                "restarted Coland changed durable identity: {} / {}",
                 service_id,
                 trust_domain
             ));
@@ -1315,7 +1315,7 @@ impl ArkretServer {
         Ok(())
     }
 
-    /// Kill and restart an externally spawned Soland process without changing
+    /// Kill and restart an externally spawned Coland process without changing
     /// its ports, durable database, service identity inputs, blob root, or
     /// upstream participant wiring.
     pub async fn restart_external_process(&mut self) -> Result<()> {
@@ -1323,7 +1323,7 @@ impl ArkretServer {
         self.start_external_process().await
     }
 
-    /// Restart an owned Soland process with a new explicit service assertion
+    /// Restart an owned Coland process with a new explicit service assertion
     /// seed while retaining its database, KeyStore, DID, endpoints, and peers.
     pub async fn restart_external_process_with_notary_signing_key(
         &mut self,
@@ -1333,7 +1333,7 @@ impl ArkretServer {
         let config = self
             .external_restart
             .as_mut()
-            .context("Soland signer rotation requires the external-binary harness")?;
+            .context("Coland signer rotation requires the external-binary harness")?;
         config.notary_signing_key = signing_key_base64.to_owned();
         self.start_external_process().await
     }
@@ -1399,7 +1399,7 @@ impl ArkretServer {
         match handle {
             SutHandle::Local(mut child) => {
                 let _ = child.kill();
-                child.wait().context("wait for killed soland child")?;
+                child.wait().context("wait for killed coland child")?;
             }
             SutHandle::Docker { container_name } => {
                 if let Ok(logs) = docker_logs(&container_name) {
@@ -1613,7 +1613,7 @@ impl ArkretServer {
             http,
             provisioning::FoundPrincipalRequest {
                 coauth_base: &endpoints.coauth_base_url,
-                station_base: &endpoints.soland_base_url,
+                station_base: &endpoints.coland_base_url,
                 trust_domain: &facts.trust_domain,
                 audience_id: &facts.service_id,
                 device_id: &device_id,
@@ -1709,7 +1709,7 @@ impl ArkretServer {
         let mut url = self.base_url();
         url.path_segments_mut()
             .map_err(|_| anyhow!("SUT base URL cannot carry path segments"))?
-            .extend(["_soland", "accounts", account_id.as_str(), "localparts"]);
+            .extend(["_coland", "accounts", account_id.as_str(), "localparts"]);
         Ok(self
             .http()
             .post(url)
@@ -1807,7 +1807,7 @@ impl TestServerGroup {
         })
     }
 
-    /// Spawn a mutually wired pre-built Soland mesh while giving every node
+    /// Spawn a mutually wired pre-built Coland mesh while giving every node
     /// its own environment. Durable cross-service scenarios use this to bind
     /// each process to a distinct PostgreSQL database without weakening the
     /// normal role-scoped Describe federation bootstrap.
@@ -1815,9 +1815,9 @@ impl TestServerGroup {
         name: &str,
         node_envs: &[Vec<(String, String)>],
     ) -> Result<Option<Self>> {
-        use crate::scenarios::_helpers::external_binary::{SOLAND_SPEC, locate_external_binary};
+        use crate::scenarios::_helpers::external_binary::{COLAND_SPEC, locate_external_binary};
 
-        let Some(bin_path) = locate_external_binary(&SOLAND_SPEC) else {
+        let Some(bin_path) = locate_external_binary(&COLAND_SPEC) else {
             return Ok(None);
         };
         let servers =
@@ -1828,15 +1828,15 @@ impl TestServerGroup {
         }))
     }
 
-    /// Spawn `count` pre-built soland binaries with each node wired to every
-    /// other through endpoint-only `SOLAND_FEDERATION_PEERS` entries. Ports
+    /// Spawn `count` pre-built coland binaries with each node wired to every
+    /// other through endpoint-only `COLAND_FEDERATION_PEERS` entries. Ports
     /// are reserved up front and each node resolves the peer service DID from
     /// standard describe after startup. Without the resulting mutual mesh, an inbound
     /// `/_arkret/peer/events` submission can never resolve the source peer's
     /// ServiceDescribe, so the federation profile gate falls back to
     /// `federation_minimal` and rejects core kinds like `ak.message.create`.
     ///
-    /// The outbound dispatcher is disabled (`SOLAND_FEDERATION_OUTBOUND=0`)
+    /// The outbound dispatcher is disabled (`COLAND_FEDERATION_OUTBOUND=0`)
     /// because federation scenarios drive cross-server delivery with explicit
     /// `/_arkret/peer/events` POSTs; leaving the background dispatcher on would
     /// race those deterministic submissions with unsolicited broadcasts.
@@ -1848,9 +1848,9 @@ impl TestServerGroup {
         let mut databases = Vec::with_capacity(count);
         let mut node_envs = Vec::with_capacity(count);
         for _ in 0..count {
-            let database = spawn_ephemeral_postgres_for("COTEST_SOLAND_DATABASE_URL")?
+            let database = spawn_ephemeral_postgres_for("COTEST_COLAND_DATABASE_URL")?
                 .context(
-                    "federated Soland Cotest runtime requires one isolated PostgreSQL database per node",
+                    "federated Coland Cotest runtime requires one isolated PostgreSQL database per node",
                 )?;
             node_envs.push(vec![(
                 "DATABASE_URL".to_owned(),
@@ -1873,7 +1873,7 @@ impl TestServerGroup {
     ) -> Result<Vec<ArkretServer>> {
         let count = node_envs.len();
         if count == 0 {
-            return Err(anyhow!("federated Soland group requires at least one node"));
+            return Err(anyhow!("federated Coland group requires at least one node"));
         }
         let shared_trust_domain = test_trust_domain(name);
         let tls = Arc::new(HarnessTls::new()?);
@@ -1916,21 +1916,21 @@ impl TestServerGroup {
             owned_env.retain(|(key, _)| {
                 !matches!(
                     key.as_str(),
-                    "SOLAND_FEDERATION_PEERS" | "SOLAND_TRUST_DOMAIN"
+                    "COLAND_FEDERATION_PEERS" | "COLAND_TRUST_DOMAIN"
                 )
             });
             if !owned_env
                 .iter()
-                .any(|(key, _)| key == "SOLAND_FEDERATION_OUTBOUND")
+                .any(|(key, _)| key == "COLAND_FEDERATION_OUTBOUND")
             {
-                owned_env.push(("SOLAND_FEDERATION_OUTBOUND".to_owned(), "0".to_owned()));
+                owned_env.push(("COLAND_FEDERATION_OUTBOUND".to_owned(), "0".to_owned()));
             }
             owned_env.push((
-                "SOLAND_FEDERATION_PEERS".to_owned(),
+                "COLAND_FEDERATION_PEERS".to_owned(),
                 peer_lists[index].clone(),
             ));
             owned_env.push((
-                "SOLAND_TRUST_DOMAIN".to_owned(),
+                "COLAND_TRUST_DOMAIN".to_owned(),
                 shared_trust_domain.clone(),
             ));
             let extra_env = owned_env
@@ -1958,16 +1958,16 @@ impl TestServerGroup {
     }
 
     pub async fn multi(name: &str, count: usize) -> Result<Self> {
-        // In process mode, spawn the pre-built Soland binaries as a
+        // In process mode, spawn the pre-built Coland binaries as a
         // mutually-wired federation mesh so inbound
         // `/_arkret/peer/events` submissions can resolve each peer's
         // ServiceDescribe (see `spawn_external_federated`). Docker mode uses
         // the container path below.
         if sut_runtime_mode() == SutRuntimeMode::Process {
             use crate::scenarios::_helpers::external_binary::{
-                SOLAND_SPEC, locate_external_binary,
+                COLAND_SPEC, locate_external_binary,
             };
-            if let Some(bin_path) = locate_external_binary(&SOLAND_SPEC) {
+            if let Some(bin_path) = locate_external_binary(&COLAND_SPEC) {
                 let servers = Self::spawn_external_federated(name, count, &bin_path).await?;
                 return Ok(Self {
                     servers,
@@ -1994,7 +1994,7 @@ impl TestServerGroup {
             match ArkretServer::spawn_with_network_and_env(
                 &format!("{name}-{index}"),
                 docker_network.as_deref(),
-                &[("SOLAND_TRUST_DOMAIN", shared_trust_domain.as_str())],
+                &[("COLAND_TRUST_DOMAIN", shared_trust_domain.as_str())],
             )
             .await
             {
@@ -2048,7 +2048,7 @@ fn sut_runtime_mode() -> SutRuntimeMode {
 }
 
 fn sut_image() -> String {
-    std::env::var("COTEST_SUT_IMAGE").unwrap_or_else(|_| "cotest-soland:latest".to_owned())
+    std::env::var("COTEST_SUT_IMAGE").unwrap_or_else(|_| "cotest-coland:latest".to_owned())
 }
 
 fn sut_container_port() -> u16 {
@@ -2357,7 +2357,7 @@ async fn wait_until_healthy_inner(
             .as_deref_mut()
             .map(Child::try_wait)
             .transpose()
-            .context("inspect Soland child status during startup")?
+            .context("inspect Coland child status during startup")?
             .flatten()
         {
             let log = log_path
@@ -2366,11 +2366,11 @@ async fn wait_until_healthy_inner(
             let detail = log.trim();
             if detail.is_empty() {
                 return Err(anyhow!(
-                    "Soland exited before becoming healthy with status {status}"
+                    "Coland exited before becoming healthy with status {status}"
                 ));
             }
             return Err(anyhow!(
-                "Soland exited before becoming healthy with status {status}; service log:\n{detail}"
+                "Coland exited before becoming healthy with status {status}; service log:\n{detail}"
             ));
         }
         match client.get(health_url.clone()).send().await {

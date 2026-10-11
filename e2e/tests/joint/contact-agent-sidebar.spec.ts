@@ -4,10 +4,10 @@ import {
   respondContactArkret,
   type ContactListRow,
 } from "../../helpers/contact-api";
-import { solandBaseUrl } from "../../helpers/env";
+import { colandBaseUrl } from "../../helpers/env";
 import { test as jointTest } from "../../helpers/joint-fixture";
 import { publicRequestFailure } from "../../helpers/secret-safe";
-import { accountActorId, canonicalJson, sha256CanonicalJson } from "../../helpers/soland-api";
+import { accountActorId, canonicalJson, sha256CanonicalJson } from "../../helpers/coland-api";
 import {
   selfPathHeadersForDpopSession,
   type DpopUserSession,
@@ -211,7 +211,7 @@ async function provisionPendingAgent(
   controllerPage: JointUserPage,
   agentSlug: string,
 ): Promise<string> {
-  const url = `${solandBaseUrl()}/_arkret/self/agents`;
+  const url = `${colandBaseUrl()}/_arkret/self/agents`;
   const page = controllerPage.page;
   await controllerPage.gotoSettings();
   await page.getByTestId("settings-nav-item-agents").click();
@@ -437,7 +437,7 @@ async function listContacts(
   request: APIRequestContext,
   session: DpopUserSession,
 ): Promise<ContactListRow[]> {
-  const url = `${solandBaseUrl()}/_arkret/self/contacts`;
+  const url = `${colandBaseUrl()}/_arkret/self/contacts`;
   const response = await request.get(url, {
     headers: selfPathHeadersForDpopSession(session, "GET", url),
   });

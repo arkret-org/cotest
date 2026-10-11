@@ -10,7 +10,7 @@
 //! What must stay true as it grows: the dependency direction is
 //! `cotest` / test tooling -> `cotest-test-support` -> Garth / SDK. This crate
 //! never depends back on the root `cotest` package, on `inkson`, on Dioxus, or
-//! on the `soland-*` implementation crates. Process and container lifecycles
+//! on the `coland-*` implementation crates. Process and container lifecycles
 //! stay in the runner and in `_helpers/coauth_bootstrap.rs`; this crate is
 //! handed endpoints, identities and trust material, and never starts a service.
 

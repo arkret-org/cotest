@@ -8,7 +8,7 @@ $topologyFiles = @(
     "scripts\lib\joint-e2e-environment.ps1",
     "e2e\helpers\env.ts"
 )
-$forbidden = '(?i)(soland|coauth|inkson)[_-](alpha|beta|gamma)|COTEST_(SOLAND|COAUTH|INKSON)_(ALPHA|BETA|GAMMA)'
+$forbidden = '(?i)(coland|coauth|inkson)[_-](alpha|beta|gamma)|COTEST_(COLAND|COAUTH|INKSON)_(ALPHA|BETA|GAMMA)'
 $violations = @()
 foreach ($relative in $topologyFiles) {
     $path = Join-Path $repoRoot $relative
@@ -40,14 +40,14 @@ $executableFunction = $ast.FindAll({
 }, $true)
 if ($executableFunction.Count -ne 1) { throw "Expected one native executable naming function" }
 Invoke-Expression $executableFunction[0].Extent.Text
-foreach ($name in @("soland", "coauth", "flagon", "savfox", "cotest-wire", "cotest-provision")) {
+foreach ($name in @("coland", "coauth", "flagon", "savfox", "cotest-wire", "cotest-provision")) {
     $expectedName = if ($IsWindows) { "$name.exe" } else { $name }
     if ((Get-NativeExecutableName -Name $name) -ne $expectedName) {
         throw "Incorrect native executable name for $name"
     }
 }
 $runnerSource = Get-Content -LiteralPath $runnerPath -Raw
-if ($runnerSource -match '"(?:debug|release)\\(?:soland|coauth|flagon|savfox|cotest-wire|cotest-provision)\.exe"') {
+if ($runnerSource -match '"(?:debug|release)\\(?:coland|coauth|flagon|savfox|cotest-wire|cotest-provision)\.exe"') {
     throw "Cargo executable paths must use platform-native executable names"
 }
 
@@ -57,12 +57,12 @@ foreach ($serverIndex in 1..3) {
     $layout = Get-JointServerArtifactLayout -JointDirectory $jointDirectory -ServerName $serverName
     $expected = @{
         CoauthDirectory = Join-Path $jointDirectory "coauth-$serverName"
-        SolandConfigPath = Join-Path $jointDirectory "soland-$serverName.env"
-        SolandObjectsRoot = Join-Path $jointDirectory "soland-$serverName-objects"
-        SolandStateRoot = Join-Path $jointDirectory "soland-$serverName-state"
-        SolandChaosControlPath = Join-Path $jointDirectory "soland-$serverName-decision-chaos.json"
+        ColandConfigPath = Join-Path $jointDirectory "coland-$serverName.env"
+        ColandObjectsRoot = Join-Path $jointDirectory "coland-$serverName-objects"
+        ColandStateRoot = Join-Path $jointDirectory "coland-$serverName-state"
+        ColandChaosControlPath = Join-Path $jointDirectory "coland-$serverName-decision-chaos.json"
         CoauthStoreDumpName = "coauth-$serverName-postgres.sql"
-        SolandStoreDumpName = "soland-$serverName-postgres.sql"
+        ColandStoreDumpName = "coland-$serverName-postgres.sql"
     }
     foreach ($property in $expected.Keys) {
         if ($layout.$property -ne $expected[$property]) {

@@ -2,7 +2,7 @@
 
 ## 目标
 
-验证账户所有者从 Inkson `Settings / Account` 真实修改显示名称、简介并上传、发布和清除头像。浏览器产生明确的 `ak.profile.create|update`，Soland viewer 投影必须与 UI 一致；刷新后不得恢复已清除的头像。
+验证账户所有者从 Inkson `Settings / Account` 真实修改显示名称、简介并上传、发布和清除头像。浏览器产生明确的 `ak.profile.create|update`，Coland viewer 投影必须与 UI 一致；刷新后不得恢复已清除的头像。
 
 ## Spec 锚点
 

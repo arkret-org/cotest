@@ -8,7 +8,7 @@
 //!
 //! Three boundaries this module holds:
 //!
-//! * **It starts nothing.** Postgres, Coauth, Soland and the TLS proxy are the runner's job. This
+//! * **It starts nothing.** Postgres, Coauth, Coland and the TLS proxy are the runner's job. This
 //!   module is handed endpoints, identities and trust material and connects to them. A provisioning
 //!   library that could also boot a deployment would end up owning the deployment.
 //! * **Coauth's private account API is separated** into `coauth_account`, not mixed with the
@@ -44,7 +44,7 @@ use serde_json::Value;
 #[derive(Clone, Debug)]
 pub struct DeploymentEndpoints {
     pub coauth_base_url: String,
-    pub soland_base_url: String,
+    pub coland_base_url: String,
     /// Present only when the deployment verifies registration email. Absent is
     /// legitimate; absent *while the deployment asks for verification* is an
     /// error, not a skip.
@@ -76,7 +76,7 @@ pub async fn describe_station(
 ) -> Result<StationFacts> {
     let url = format!(
         "{}/_arkret/describe",
-        endpoints.soland_base_url.trim_end_matches('/')
+        endpoints.coland_base_url.trim_end_matches('/')
     );
     let described = http::get_arkret_json(http, &url, DESCRIBE_OPERATION_ID)
         .await

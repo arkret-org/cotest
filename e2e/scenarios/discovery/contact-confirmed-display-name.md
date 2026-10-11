@@ -13,7 +13,7 @@ holder 显式刷新快照。同时证明 `petname` 不随对方改名变化，�
 
 ## 拓扑
 
-- 1 × soland + 1 × coauth，alice 走浏览器；bob 只在创建 Direct Conversation 时开浏览器，其余走 API
+- 1 × coland + 1 × coauth，alice 走浏览器；bob 只在创建 Direct Conversation 时开浏览器，其余走 API
 
 ## Actors
 

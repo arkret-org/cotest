@@ -124,7 +124,7 @@ fn product_private_source_path_is_explicitly_allowed() -> Result<()> {
         &json!({
             "schema": "cotest.operation-product-private-paths.v1",
             "allowed": [{
-                "source": "soland",
+                "source": "coland",
                 "method": "POST",
                 "path": "/_arkret/self/private-control",
                 "classification": "product-private",
@@ -141,7 +141,7 @@ fn product_private_source_path_is_explicitly_allowed() -> Result<()> {
     let report = build_operation_registry_gate_report_from_paths(paths(
         &artifacts_root,
         &product_private_path,
-        source_root("soland", &source_dir, "src/api.rs"),
+        source_root("coland", &source_dir, "src/api.rs"),
     ))?;
     validate_operation_registry_gate_report(&report)?;
     let entry = report
@@ -262,7 +262,7 @@ fn production_call_after_test_item() {
     let report = build_operation_registry_gate_report_from_paths(paths(
         &artifacts_root,
         &product_private_path,
-        source_root("soland", &source_dir, "src/api.rs"),
+        source_root("coland", &source_dir, "src/api.rs"),
     ))?;
     validate_operation_registry_gate_report(&report)?;
     assert!(report.entries.iter().all(|entry| !matches!(
@@ -287,7 +287,7 @@ fn current_workspace_operation_registry_gate_passes() -> Result<()> {
     );
     assert!(
         report.registered_entries().count() > 20,
-        "source scans should find registered soland/SDK/inkson operations"
+        "source scans should find registered coland/SDK/inkson operations"
     );
     validate_operation_registry_gate_report(&report)?;
     assert_eq!(report.failed_entries().count(), 0);

@@ -3,7 +3,7 @@ name: integration
 # CT-003 live lane. MLS data-plane and provider live tests are deliberately
 # isolated in controlled.yml behind a protected GitHub environment.
 
-# Cross-project bring-up. Builds the upstream services (soland / coauth /
+# Cross-project bring-up. Builds the upstream services (coland / coauth /
 # floria) from sibling checkouts and runs the cotest harness against them.
 #
 # IMPORTANT:
@@ -23,7 +23,7 @@ env:
 
 jobs:
   joint-bringup:
-    name: bringup soland + coauth + floria + cotest
+    name: bringup coland + coauth + floria + cotest
     runs-on: ubuntu-latest
     timeout-minutes: 180
     services:
@@ -41,7 +41,7 @@ jobs:
           --health-timeout 5s
           --health-retries 12
     env:
-      SOLAND_BIN: ${{ github.workspace }}/soland/target/release/soland
+      COLAND_BIN: ${{ github.workspace }}/coland/target/release/coland
       COAUTH_BIN: ${{ github.workspace }}/coauth/target/release/coauth
       FLORIA_BIN: ${{ github.workspace }}/floria/target/release/floria
       DATABASE_URL: postgresql://cotest:cotest-ci@127.0.0.1:5432/cotest_coauth_evidence
@@ -80,8 +80,8 @@ jobs:
       # green-lighted.
       - uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository_owner }}/soland
-          path: soland
+          repository: ${{ github.repository_owner }}/coland
+          path: coland
           ref: ${{ env.SIBLING_REF }}
       - uses: actions/checkout@v4
         with:
@@ -105,7 +105,7 @@ jobs:
         with:
           workspaces: |
             cotest
-            soland
+            coland
             coauth
             floria
       - uses: actions/setup-node@v4
@@ -128,10 +128,10 @@ jobs:
         # individual `cargo build` failures.
         run: |
           set -euo pipefail
-          for svc in soland coauth floria; do
+          for svc in coland coauth floria; do
             echo "::group::cargo build $svc"
             features=""
-            if [ "$svc" = "soland" ]; then
+            if [ "$svc" = "coland" ]; then
               features="--features conformance-harness"
             elif [ "$svc" = "coauth" ]; then
               features="--features cedar"
@@ -182,7 +182,7 @@ jobs:
         working-directory: cotest
         shell: pwsh
         env:
-          COTEST_SOLAND_DATABASE_URL: postgresql://cotest:cotest-ci@127.0.0.1:5432/postgres
+          COTEST_COLAND_DATABASE_URL: postgresql://cotest:cotest-ci@127.0.0.1:5432/postgres
           COTEST_REQUIRE_LIVE_SERVICES: "1"
         # The exact 31 selections use the original live fixtures. The planner
         # rejects missing prerequisites, missing targets and empty selections;
@@ -190,45 +190,45 @@ jobs:
         run: ./scripts/run-server-conformance.ps1 -Profile inkson-client-live -Runtime process
       - name: production placeholder-proof rejection sentinel
         working-directory: cotest
-        # This is the only reverse guard for "production soland rejects the
-        # inkson dev-proof placeholder", so CI wires SOLAND_BIN explicitly and
+        # This is the only reverse guard for "production coland rejects the
+        # inkson dev-proof placeholder", so CI wires COLAND_BIN explicitly and
         # treats missing binary / test failure as red.
         run: cargo test --locked --features test-with-containers --test production_rejects_placeholder_proof_e2e -- --ignored production_rejects_placeholder_proof_e2e
       - name: run live Playwright smoke
         working-directory: cotest/e2e
         env:
-          COTEST_SOLAND_BASE_URL: http://127.0.0.1:8008
+          COTEST_COLAND_BASE_URL: http://127.0.0.1:8008
           COTEST_EMBEDDED_WEBVH_REGISTRATION_BEARER: cotest-webvh-registration
           COTEST_WIRE_BIN: ${{ github.workspace }}/cotest/target/debug/cotest-wire
           COTEST_JOINT_RUN_DIR: ${{ github.workspace }}/cotest/artifacts/runs/integration-playwright/joint-e2e
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/soland-objects"
-          SOLAND_DEVELOPMENT_MODE=1 \
-          SOLAND_CANDIDATE_JOIN_POLICY=1 \
-          SOLAND_PUBLIC_BASE_URL="$COTEST_SOLAND_BASE_URL" \
-          SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER="$COTEST_EMBEDDED_WEBVH_REGISTRATION_BEARER" \
-          SOLAND_METRICS_BIND="127.0.0.1:9008" \
-          SOLAND_OBJECT_STORAGE_BACKEND="filesystem" \
-          SOLAND_OBJECT_STORAGE_LOCAL_ROOT="$RUNNER_TEMP/soland-objects" \
-          "$SOLAND_BIN" --bind 127.0.0.1:8008 > "$RUNNER_TEMP/soland-playwright.log" 2>&1 &
-          soland_pid=$!
+          mkdir -p "$RUNNER_TEMP/coland-objects"
+          COLAND_DEVELOPMENT_MODE=1 \
+          COLAND_CANDIDATE_JOIN_POLICY=1 \
+          COLAND_PUBLIC_BASE_URL="$COTEST_COLAND_BASE_URL" \
+          COLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER="$COTEST_EMBEDDED_WEBVH_REGISTRATION_BEARER" \
+          COLAND_METRICS_BIND="127.0.0.1:9008" \
+          COLAND_OBJECT_STORAGE_BACKEND="filesystem" \
+          COLAND_OBJECT_STORAGE_LOCAL_ROOT="$RUNNER_TEMP/coland-objects" \
+          "$COLAND_BIN" --bind 127.0.0.1:8008 > "$RUNNER_TEMP/coland-playwright.log" 2>&1 &
+          coland_pid=$!
           cleanup() {
             set +e
-            kill "$soland_pid" 2>/dev/null
-            wait "$soland_pid" 2>/dev/null
+            kill "$coland_pid" 2>/dev/null
+            wait "$coland_pid" 2>/dev/null
           }
           trap cleanup EXIT
           for _ in {1..40}; do
-            if curl -fsS "$COTEST_SOLAND_BASE_URL/health" >/dev/null; then
+            if curl -fsS "$COTEST_COLAND_BASE_URL/health" >/dev/null; then
               break
             fi
             sleep 1
           done
-          curl -fsS "$COTEST_SOLAND_BASE_URL/health" >/dev/null
-          export COTEST_SOLAND_SERVICE_ID
-          COTEST_SOLAND_SERVICE_ID="$(curl -fsS "$COTEST_SOLAND_BASE_URL/health" | jq -er '.checks.service_identity.service_id')"
-          npx playwright test --config playwright.config.ts --project=chromium tests/sync/service-surface-contract.spec.ts --grep "soland /_arkret/describe"
+          curl -fsS "$COTEST_COLAND_BASE_URL/health" >/dev/null
+          export COTEST_COLAND_SERVICE_ID
+          COTEST_COLAND_SERVICE_ID="$(curl -fsS "$COTEST_COLAND_BASE_URL/health" | jq -er '.checks.service_identity.service_id')"
+          npx playwright test --config playwright.config.ts --project=chromium tests/sync/service-surface-contract.spec.ts --grep "coland /_arkret/describe"
       - name: run federation security hardening Playwright
         working-directory: cotest/e2e
         # Each node gets its own hostname (mapped to loopback below) instead of
@@ -236,42 +236,42 @@ jobs:
         # host:port, so two nodes sharing `127.0.0.1` can only be deny-listed
         # together — the assertions would then hold for any implementation.
         # Distinct hostnames also give distinct service DIDs and trust domains,
-        # because soland derives both from `SOLAND_PUBLIC_BASE_URL`, so no
+        # because coland derives both from `COLAND_PUBLIC_BASE_URL`, so no
         # identity has to be injected into boot config (decisions/0012).
         #
         # Private-network egress stays *allowed* here on purpose. With it off,
         # neither node can reach the other at all, both assertions pass without
         # the denylist ever running, and the job reports a false green. The
-        # egress guard itself is covered by soland's own unit tests.
+        # egress guard itself is covered by coland's own unit tests.
         env:
-          COTEST_SOLAND_BASE_URL: http://soland-alpha.security-ci.local:8011
-          COTEST_SOLAND_ALPHA_BASE_URL: http://soland-alpha.security-ci.local:8011
-          COTEST_SOLAND_BETA_BASE_URL: http://soland-beta.security-ci.local:8012
-          # FIXTURE ONLY, same seeds the joint-e2e runner uses: handed to soland
-          # as `SOLAND_NOTARY_SIGNING_KEY` and to the spec as the peer signing
+          COTEST_COLAND_BASE_URL: http://coland-alpha.security-ci.local:8011
+          COTEST_COLAND_ALPHA_BASE_URL: http://coland-alpha.security-ci.local:8011
+          COTEST_COLAND_BETA_BASE_URL: http://coland-beta.security-ci.local:8012
+          # FIXTURE ONLY, same seeds the joint-e2e runner uses: handed to coland
+          # as `COLAND_NOTARY_SIGNING_KEY` and to the spec as the peer signing
           # key, so the inbound push carries a cryptographically *valid*
           # signature. Without them the push dies at signature verification and
           # never reaches the denylist branch.
-          COTEST_SOLAND_SERVICE_SIGNING_KEY: OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk=
-          COTEST_SOLAND_BETA_SERVICE_SIGNING_KEY: ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg=
+          COTEST_COLAND_SERVICE_SIGNING_KEY: OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk=
+          COTEST_COLAND_BETA_SERVICE_SIGNING_KEY: ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg=
           # Outbound-fanout coverage registers a real user on alpha, and the
           # embedded did:webvh registration endpoint answers 503 until this is
           # configured on both sides.
           COTEST_EMBEDDED_WEBVH_REGISTRATION_BEARER: cotest-webvh-registration
           COTEST_EXPECT_FEDERATION_DENYLIST: "1"
-          COTEST_REQUIRE_DUAL_SOLAND: "1"
+          COTEST_REQUIRE_DUAL_COLAND: "1"
           COTEST_JOINT_RUN_DIR: ${{ github.workspace }}/cotest/artifacts/runs/federation-security-hardening/joint-e2e
           RUST_LOG: info
         run: |
           set -euo pipefail
 
-          echo "127.0.0.1 soland-alpha.security-ci.local soland-beta.security-ci.local" \
+          echo "127.0.0.1 coland-alpha.security-ci.local coland-beta.security-ci.local" \
             | sudo tee -a /etc/hosts > /dev/null
 
           # Only the deny-listing side of each pair is set, so both env names
           # carry real coverage: beta rejects alpha inbound, alpha drops beta
           # from outbound fanout.
-          start_soland() {
+          start_coland() {
             local name="$1"
             local bind="$2"
             local metrics_bind="$3"
@@ -284,41 +284,41 @@ jobs:
             local objects_root="$RUNNER_TEMP/${name}-objects"
             mkdir -p "$objects_root"
             env \
-              SOLAND_DEVELOPMENT_MODE=1 \
-              SOLAND_PUBLIC_BASE_URL="$base_url" \
-              SOLAND_TRUST_DOMAIN="$trust_domain" \
-              SOLAND_NOTARY_SIGNING_KEY="$notary_seed" \
-              SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER="$COTEST_EMBEDDED_WEBVH_REGISTRATION_BEARER" \
-              SOLAND_METRICS_BIND="$metrics_bind" \
-              SOLAND_OBJECT_STORAGE_BACKEND="filesystem" \
-              SOLAND_OBJECT_STORAGE_LOCAL_ROOT="$objects_root" \
-              SOLAND_FEDERATION_PEERS="$peer_url" \
-              SOLAND_EGRESS_ALLOW_PRIVATE_NETWORKS=1 \
+              COLAND_DEVELOPMENT_MODE=1 \
+              COLAND_PUBLIC_BASE_URL="$base_url" \
+              COLAND_TRUST_DOMAIN="$trust_domain" \
+              COLAND_NOTARY_SIGNING_KEY="$notary_seed" \
+              COLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER="$COTEST_EMBEDDED_WEBVH_REGISTRATION_BEARER" \
+              COLAND_METRICS_BIND="$metrics_bind" \
+              COLAND_OBJECT_STORAGE_BACKEND="filesystem" \
+              COLAND_OBJECT_STORAGE_LOCAL_ROOT="$objects_root" \
+              COLAND_FEDERATION_PEERS="$peer_url" \
+              COLAND_EGRESS_ALLOW_PRIVATE_NETWORKS=1 \
               "${denylist_name}=${denylist_host}" \
-              "$SOLAND_BIN" --bind "$bind" > "$RUNNER_TEMP/${name}.log" 2>&1 &
+              "$COLAND_BIN" --bind "$bind" > "$RUNNER_TEMP/${name}.log" 2>&1 &
             echo "$!"
           }
 
-          alpha_pid=$(start_soland \
-            "soland-alpha-security" \
+          alpha_pid=$(start_coland \
+            "coland-alpha-security" \
             "127.0.0.1:8011" \
             "127.0.0.1:9011" \
-            "$COTEST_SOLAND_ALPHA_BASE_URL" \
-            "ak:trust_domain:soland-alpha.security-ci.local" \
-            "$COTEST_SOLAND_SERVICE_SIGNING_KEY" \
-            "$COTEST_SOLAND_BETA_BASE_URL" \
-            "SOLAND_FEDERATION_PEER_DENYLIST" \
-            "soland-beta.security-ci.local")
-          beta_pid=$(start_soland \
-            "soland-beta-security" \
+            "$COTEST_COLAND_ALPHA_BASE_URL" \
+            "ak:trust_domain:coland-alpha.security-ci.local" \
+            "$COTEST_COLAND_SERVICE_SIGNING_KEY" \
+            "$COTEST_COLAND_BETA_BASE_URL" \
+            "COLAND_FEDERATION_PEER_DENYLIST" \
+            "coland-beta.security-ci.local")
+          beta_pid=$(start_coland \
+            "coland-beta-security" \
             "127.0.0.1:8012" \
             "127.0.0.1:9012" \
-            "$COTEST_SOLAND_BETA_BASE_URL" \
-            "ak:trust_domain:soland-beta.security-ci.local" \
-            "$COTEST_SOLAND_BETA_SERVICE_SIGNING_KEY" \
-            "$COTEST_SOLAND_ALPHA_BASE_URL" \
-            "SOLAND_FEDERATION_DENYLIST" \
-            "soland-alpha.security-ci.local")
+            "$COTEST_COLAND_BETA_BASE_URL" \
+            "ak:trust_domain:coland-beta.security-ci.local" \
+            "$COTEST_COLAND_BETA_SERVICE_SIGNING_KEY" \
+            "$COTEST_COLAND_ALPHA_BASE_URL" \
+            "COLAND_FEDERATION_DENYLIST" \
+            "coland-alpha.security-ci.local")
           cleanup() {
             set +e
             kill "$alpha_pid" "$beta_pid" 2>/dev/null
@@ -326,7 +326,7 @@ jobs:
           }
           trap cleanup EXIT
 
-          for url in "$COTEST_SOLAND_ALPHA_BASE_URL/health" "$COTEST_SOLAND_BETA_BASE_URL/health"; do
+          for url in "$COTEST_COLAND_ALPHA_BASE_URL/health" "$COTEST_COLAND_BETA_BASE_URL/health"; do
             for _ in {1..40}; do
               if curl -fsS "$url" >/dev/null; then
                 break
@@ -342,13 +342,13 @@ jobs:
           kill -0 "$beta_pid"
 
           # Service identity comes from the running process, never from config.
-          export COTEST_SOLAND_ALPHA_SERVICE_ID
-          export COTEST_SOLAND_BETA_SERVICE_ID
-          export COTEST_SOLAND_SERVICE_ID
-          COTEST_SOLAND_ALPHA_SERVICE_ID="$(curl -fsS "$COTEST_SOLAND_ALPHA_BASE_URL/health" | jq -er '.checks.service_identity.service_id')"
-          COTEST_SOLAND_BETA_SERVICE_ID="$(curl -fsS "$COTEST_SOLAND_BETA_BASE_URL/health" | jq -er '.checks.service_identity.service_id')"
-          COTEST_SOLAND_SERVICE_ID="$COTEST_SOLAND_ALPHA_SERVICE_ID"
-          if [ "$COTEST_SOLAND_ALPHA_SERVICE_ID" = "$COTEST_SOLAND_BETA_SERVICE_ID" ]; then
+          export COTEST_COLAND_ALPHA_SERVICE_ID
+          export COTEST_COLAND_BETA_SERVICE_ID
+          export COTEST_COLAND_SERVICE_ID
+          COTEST_COLAND_ALPHA_SERVICE_ID="$(curl -fsS "$COTEST_COLAND_ALPHA_BASE_URL/health" | jq -er '.checks.service_identity.service_id')"
+          COTEST_COLAND_BETA_SERVICE_ID="$(curl -fsS "$COTEST_COLAND_BETA_BASE_URL/health" | jq -er '.checks.service_identity.service_id')"
+          COTEST_COLAND_SERVICE_ID="$COTEST_COLAND_ALPHA_SERVICE_ID"
+          if [ "$COTEST_COLAND_ALPHA_SERVICE_ID" = "$COTEST_COLAND_BETA_SERVICE_ID" ]; then
             echo "::error::alpha and beta minted the same service DID; the denylist cannot distinguish them" >&2
             exit 1
           fi
@@ -357,7 +357,7 @@ jobs:
           # run, an inbound push is rejected for an unresolvable key rather than
           # by the denylist, which is exactly the vacuous pass this job exists
           # to prevent.
-          for log in "$RUNNER_TEMP/soland-alpha-security.log" "$RUNNER_TEMP/soland-beta-security.log"; do
+          for log in "$RUNNER_TEMP/coland-alpha-security.log" "$RUNNER_TEMP/coland-beta-security.log"; do
             for _ in {1..60}; do
               if grep -q "resolved federation peer service identity and assertion key" "$log"; then
                 break

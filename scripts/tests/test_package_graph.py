@@ -1,7 +1,7 @@
 """Unit tests for the light-build-edge dependency gate.
 
 These drive `evaluate` on synthetic `cargo metadata` documents, so they run in
-any checkout -- including CI jobs that do not clone the Inkson and Soland
+any checkout -- including CI jobs that do not clone the Inkson and Coland
 siblings the real workspace resolves against.
 """
 
@@ -57,12 +57,12 @@ def clean_workspace(**overrides):
     nodes = {
         "cotest": [
             ("cotest-test-support", None),
-            ("soland-services", None),
+            ("coland-services", None),
         ],
         "cotest-test-support": [("arkret", None), ("garth", None)],
         "cotest-inkson-client-tests": [("cotest", None), ("inkson", None)],
         "inkson": [("dioxus", None)],
-        "soland-services": [],
+        "coland-services": [],
         "dioxus": [],
         "arkret": [],
         "garth": [],
@@ -119,12 +119,12 @@ class PackageGraphGateTests(unittest.TestCase):
         verdict = evaluate(
             clean_workspace(
                 **{
-                    "cotest-test-support": [("arkret", None), ("soland-services", "dev")]
+                    "cotest-test-support": [("arkret", None), ("coland-services", "dev")]
                 }
             )
         )
         self.assertEqual(
-            [entry["package"] for entry in verdict["violations"]], ["soland-services"]
+            [entry["package"] for entry in verdict["violations"]], ["coland-services"]
         )
 
     def test_dev_dependency_further_out_is_not_followed(self):
@@ -137,10 +137,10 @@ class PackageGraphGateTests(unittest.TestCase):
 
     def test_build_dependency_is_followed(self):
         verdict = evaluate(
-            clean_workspace(**{"garth": [("soland-storage", "build")]})
+            clean_workspace(**{"garth": [("coland-storage", "build")]})
         )
         self.assertEqual(
-            [entry["package"] for entry in verdict["violations"]], ["soland-storage"]
+            [entry["package"] for entry in verdict["violations"]], ["coland-storage"]
         )
 
     def test_dependency_back_on_the_root_package_is_a_violation(self):

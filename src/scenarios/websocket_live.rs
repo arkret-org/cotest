@@ -840,7 +840,7 @@ pub async fn run_production_discovery() -> Result<()> {
     )
     .await?;
     let mut env = rotation_station_env(&issuer);
-    env.push(("SOLAND_DEVELOPMENT_MODE".to_owned(), "0".to_owned()));
+    env.push(("COLAND_DEVELOPMENT_MODE".to_owned(), "0".to_owned()));
     let refs = env
         .iter()
         .map(|(key, value)| (key.as_str(), value.as_str()))

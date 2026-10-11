@@ -3,7 +3,7 @@
 // Spec: models/profile.md, interfaces/http-api.md
 
 import { expect, test } from "../../helpers/arkret-test";
-import { solandBaseUrl } from "../../helpers/env";
+import { colandBaseUrl } from "../../helpers/env";
 import {
   assertJointStackNotRequired,
   openDpopUserPage,
@@ -32,8 +32,8 @@ test("@fully-implemented account owner uploads and clears the canonical profile 
   }
 
   const { page, session } = flow;
-  const profileUrl = `${solandBaseUrl()}/_arkret/self/account/profile`;
-  const viewerUrl = `${solandBaseUrl()}/_arkret/self/account/viewer`;
+  const profileUrl = `${colandBaseUrl()}/_arkret/self/account/profile`;
+  const viewerUrl = `${colandBaseUrl()}/_arkret/self/account/viewer`;
 
   try {
     await page.gotoSettings();

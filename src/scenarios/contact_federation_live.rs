@@ -214,7 +214,7 @@ pub async fn normal_round_crosses_two_stations() -> Result<()> {
     .await?;
     let station = |url: &str| {
         let mut env = station_env(url, &coauth);
-        env.push(("SOLAND_FEDERATION_OUTBOUND".to_owned(), "1".to_owned()));
+        env.push(("COLAND_FEDERATION_OUTBOUND".to_owned(), "1".to_owned()));
         env
     };
     let Some(mut group) = TestServerGroup::try_multi_external_with_node_envs(
@@ -226,7 +226,7 @@ pub async fn normal_round_crosses_two_stations() -> Result<()> {
     )
     .await?
     else {
-        return skip_or_fail(GROUP, "prebuilt Soland unavailable");
+        return skip_or_fail(GROUP, "prebuilt Coland unavailable");
     };
     let (alice, alice_account) =
         standard_client(group.server(0), &coauth, "contact-alice", ALICE_DEVICE).await?;
@@ -371,7 +371,7 @@ pub async fn old_and_new_contact_signatures_survive_cold_peer_restart() -> Resul
     )
     .await?
     else {
-        return skip_or_fail(ROTATION_GROUP, "prebuilt Soland unavailable");
+        return skip_or_fail(ROTATION_GROUP, "prebuilt Coland unavailable");
     };
     let (alice, alice_account) =
         standard_client(group.server(0), &coauth, "rotation-alice", ALICE_DEVICE).await?;
@@ -514,7 +514,7 @@ pub async fn concurrent_requests_complete_glare_round() -> Result<()> {
     .await?;
     let station = |url: &str| {
         let mut env = station_env(url, &coauth);
-        env.push(("SOLAND_FEDERATION_OUTBOUND".to_owned(), "1".to_owned()));
+        env.push(("COLAND_FEDERATION_OUTBOUND".to_owned(), "1".to_owned()));
         env
     };
     let Some(group) = TestServerGroup::try_multi_external_with_node_envs(
@@ -526,7 +526,7 @@ pub async fn concurrent_requests_complete_glare_round() -> Result<()> {
     )
     .await?
     else {
-        return skip_or_fail("contact-glare-live", "prebuilt Soland unavailable");
+        return skip_or_fail("contact-glare-live", "prebuilt Coland unavailable");
     };
     let (alice, alice_account) =
         standard_client(group.server(0), &coauth, "glare-alice", ALICE_DEVICE).await?;

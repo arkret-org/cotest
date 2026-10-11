@@ -1,6 +1,6 @@
 //! Joint device-verification checkpoint projection vectors.
 //!
-//! The assertions in this crate call Soland's production read-side fold and
+//! The assertions in this crate call Coland's production read-side fold and
 //! the SDK's production presence validator.  Cotest deliberately does not
 //! duplicate either rule in a test-only reference model.
 
@@ -10,7 +10,7 @@ use arkret_models_identity::{
     validate_device_summary_evidence,
 };
 use arkret_wire::EventId;
-use soland_services::identity::{
+use coland_services::identity::{
     DeviceCheckpointIneligibility, DeviceCheckpointLiveFacts,
     evaluate_device_checkpoint_live_eligibility, fold_device_verification_checkpoint,
 };
@@ -75,7 +75,7 @@ fn live_facts(source: DeviceSummaryVerificationSource) -> DeviceCheckpointLiveFa
 
 /// Execute the production projection, presence, and live-eligibility cases.
 ///
-/// Both decisions are imported from Soland's production identity service;
+/// Both decisions are imported from Coland's production identity service;
 /// this runner contains fixtures and exact outcome assertions, not a second
 /// authorization policy.
 pub fn run_device_verification_checkpoint_contract() -> Result<DeviceVerificationCheckpointCoverage>

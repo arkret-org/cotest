@@ -326,7 +326,7 @@ fn default_gate_paths() -> OperationRegistryGatePaths {
         artifacts_root: spec_artifacts_root(),
         product_private_path: cotest_root.join(PRODUCT_PRIVATE_REF),
         source_roots: vec![
-            OperationSourceRoot::new("soland", workspace_root.join("soland"))
+            OperationSourceRoot::new("coland", workspace_root.join("coland"))
                 .with_dir("crates/http/src/routing")
                 .with_file("crates/http/src/wire.rs")
                 .with_file("crates/http/src/did_resolver_chain.rs"),
@@ -1206,7 +1206,7 @@ fn scan_source_file(
     }
     let relative = path.strip_prefix(root).unwrap_or(path);
 
-    scan_soland_extension_table(source, relative, &scannable_lines, out);
+    scan_coland_extension_table(source, relative, &scannable_lines, out);
 
     for (index, line) in scannable_lines.iter().enumerate() {
         if is_comment_only_line(line) {
@@ -1340,7 +1340,7 @@ fn is_comment_only_line(line: &str) -> bool {
     line.starts_with("//") || line.starts_with('*')
 }
 
-fn scan_soland_extension_table(
+fn scan_coland_extension_table(
     source: &str,
     relative: &Path,
     lines: &[&str],

@@ -9,12 +9,12 @@
 //! asserts:
 //!
 //! 1. Round-trip parses back into the same `(kind, realm_id, payload)` triple (the wire bytes any
-//!    other project — soland / inkson / federation peer — would receive).
+//!    other project — coland / inkson / federation peer — would receive).
 //! 2. [`arkret_wire::events::event_product_class_from_wire`] recognises the new kinds in their new
 //!    family (Realm / Space-container).
 //! Used by `tests/realm_wire_round_trip.rs`. Pure unit-style: no
 //! binary, no network — the round-trip is entirely against the SDK so
-//! we catch contract drift in CI without spinning up soland.
+//! we catch contract drift in CI without spinning up coland.
 
 use anyhow::{Result, anyhow};
 use arkret_canonical::{canonical_json_bytes, canonical_sha256};
@@ -154,7 +154,7 @@ fn round_trip_positive(vector: &WireVector, realm_id: &RealmId) -> Result<String
 }
 
 /// R2.1 — every Realm/Space boundary split positive vector survives a
-/// canonical-encode → JSON-decode → SDK-classify round trip. Soland
+/// canonical-encode → JSON-decode → SDK-classify round trip. Coland
 /// wire-accepts the same kinds in `validate_event_envelope`, so any
 /// drift here would show up first as cross-project ingestion failures.
 pub fn run_positive_round_trip() -> Result<()> {

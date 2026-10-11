@@ -2,8 +2,8 @@
 
 > as_of：2026-08-30
 > 审计范围：`arkret-work/docs/flows` 的 12 篇流程/模型文档、60 个 Mermaid 图，以及 cotest Playwright 与 Rust conformance/scenario 入口。
-> “joint smoke”专指 `scripts/run-server-conformance.ps1 -Profile joint`：启动 Soland、Inkson、Coauth，以 `joint-inkson` project 运行 `@fully-implemented` 用例。
-> “full/分层”表示证据存在于完整 Playwright、双 Soland 或 Rust conformance/scenario 中，不等于标准 joint smoke 会执行。
+> “joint smoke”专指 `scripts/run-server-conformance.ps1 -Profile joint`：启动 Coland、Inkson、Coauth，以 `joint-inkson` project 运行 `@fully-implemented` 用例。
+> “full/分层”表示证据存在于完整 Playwright、双 Coland 或 Rust conformance/scenario 中，不等于标准 joint smoke 会执行。
 
 ## 结论
 
@@ -27,12 +27,12 @@
 | 流程文档 | 标准 joint smoke 直接证据 | full / Rust 分层证据 | 判断与主要缺口 |
 | --- | --- | --- | --- |
 | `account-authentication-and-session-lifecycle.md` | `identity/oidc-login-flow.spec.ts`、`passkey-login-flow.spec.ts`、`session-grant-dpop.spec.ts`、`device-key-lifecycle.spec.ts` | `identity/account-device-auth.spec.ts`、`account-states.spec.ts`；`auth_session_proof.rs`、issuer-ledger conformance | **较强但非全流程**：真实密码/OIDC 的 login→reload→logout→returning login、错误密码、Passkey、handoff、refresh 主链已进 smoke；DPoP 同时覆盖 holder key、`htu`、`ath`、`iat`、scheme、缺 proof 与 `jti` replay，全部撤销/失效竞态仍是分层证据。 |
-| `registration-pcr-genesis.md` | `identity/account-handoff.spec.ts`、`identity/onboarding.spec.ts` | `identity/account-states.spec.ts`、`coauth-account-lifecycle-fixture.json` | **主链覆盖**：真实 Coauth+Soland 注册与 PCR genesis 已进 smoke；故障注入/saga 恢复不是一条浏览器闭环。 |
+| `registration-pcr-genesis.md` | `identity/account-handoff.spec.ts`、`identity/onboarding.spec.ts` | `identity/account-states.spec.ts`、`coauth-account-lifecycle-fixture.json` | **主链覆盖**：真实 Coauth+Coland 注册与 PCR genesis 已进 smoke；故障注入/saga 恢复不是一条浏览器闭环。 |
 | `ordinary-realm-creation.md` | `identity/recovery-key-to-encrypted-realm.spec.ts`、`events/batch-realm-bootstrap.spec.ts`、`joint/joint-inkson-smoke.spec.ts` | `encryption/mls-group.spec.ts`、`realm_wire_round_trip.rs`、`realm_actor_frontier_e2e.rs` | **明文/MLS 创建主链对称覆盖**：真实 UI 对两种 profile 均验证 create→message→reload，并检查 wire 明文边界；明文 late join 已验证旧数据不可见且 current baseline 足以双向写，MLS current baseline 与 successor Seal availability 仍需联合场景。 |
 | `realm-invitation-history-bootstrap.md` | `joint/joint-inkson-smoke.spec.ts`、`joint/multi-profile-same-server.spec.ts` 覆盖同服务多账号邀请、`since_join` 隔离与协作 | `invites/invite-addressing.spec.ts`、`messaging/triad-collaboration.spec.ts`、`kanban/cross-member-encrypted.spec.ts`、`agent_encrypted_realm_member_e2e.rs`、`interaction_models.rs` | **明文主链进入 smoke，MLS/恢复仍分层**：Invite 后 joiner 不见 pre-join 消息，但可依 current baseline 与 creator 双向写；完整四次 Control Move、两种 history policy、MLS availability receipt 与进程重启仍缺联合 live 证据。 |
 | `service-route-discovery-handover-and-repair.md` | DID 当前状态与 Describe 反向绑定 | `service_did_routes.rs`、`fanout_route_miss_live.rs` | 原生 DID 证据替代独立地址历史；跨缓存周期与重启由共享客户端 evaluator 测试覆盖，真实网络回归以执行记录为准。 |
-| `service-route-authentication-and-relocation.md` | 同上 | 同上，另有 Soland owner plan/audience 单元与存储合同证据 | **部分覆盖**：认证已 live；plan→publish→ACK→cutover→grace 未覆盖。 |
-| `realm-event-server-fanout.md` | `joint/joint-inkson-smoke.spec.ts` 覆盖单服务 author/sync | `federation/cross-server.spec.ts`、`invite_service_fanout_live.rs`、`fanout_route_miss_live.rs`；`multi-server` lane | **双服务 lane 覆盖**，不进入标准 joint smoke；route miss/repair 与跨服务 fanout 需专用双 Soland 拓扑。 |
+| `service-route-authentication-and-relocation.md` | 同上 | 同上，另有 Coland owner plan/audience 单元与存储合同证据 | **部分覆盖**：认证已 live；plan→publish→ACK→cutover→grace 未覆盖。 |
+| `realm-event-server-fanout.md` | `joint/joint-inkson-smoke.spec.ts` 覆盖单服务 author/sync | `federation/cross-server.spec.ts`、`invite_service_fanout_live.rs`、`fanout_route_miss_live.rs`；`multi-server` lane | **双服务 lane 覆盖**，不进入标准 joint smoke；route miss/repair 与跨服务 fanout 需专用双 Coland 拓扑。 |
 | `message-authoring-seal-sync.md` | `joint/joint-inkson-smoke.spec.ts`、`joint/multi-profile-same-server.spec.ts` | `sync/offline-conflict.spec.ts`、`offline-queue-replay.spec.ts`、`messaging/*`、`account_subscribe_long_poll.rs` | **主链覆盖，边界分层**：author/seal/read/sync 有 live；offline、stream/backfill、冲突修复由 full/Rust 覆盖。 |
 | `contact-direct-conversation-lifecycle.md` | `identity/direct-conversation-founding.spec.ts` | `federation/contact-graph-federation.spec.ts`、`governance/personal-blocklist.spec.ts`、`direct_conversation_flow.rs` | **founding 覆盖、repair 未闭环**：跨服务 contact/DC 与 block 有分层证据；successor Seal 合同已闭合，真实 Commit/Welcome availability 与 lost-state repair/rejoin live 证据仍缺。 |
 | `agent-sidecar-strand-relay.md` | `joint/circle-sidecar-boundary.spec.ts`、`contact-agent-sidebar.spec.ts`；`agent-savfox-split-live.spec.ts` 仅在 Savfox 可用时执行 | Agent/Sidecar conformance、`agent_encrypted_realm_member_e2e.rs` | **部分且条件化**：对象边界进 smoke；successor Seal 合同已闭合，native Sidecar/Agent 生产入口、完整 availability/relay/恢复没有无条件闭环。 |
@@ -72,7 +72,7 @@
 - `identity/session-grant-dpop.spec.ts`
 - `kanban/cross-member-encrypted.spec.ts`
 
-本轮新增选择项的标准是：能在标准 Soland+Inkson+Coauth 拓扑中执行，不依赖双 Soland、Savfox 或外部 provider，并且断言生产 HTTP/UI 行为。`joint/*.spec.ts` 中既有的 Savfox 条件场景仍会在缺少 Savfox 时 skip；专用拓扑测试继续由对应 lane 运行，避免标准 smoke 的绿色结果被误读成全流程闭环。
+本轮新增选择项的标准是：能在标准 Coland+Inkson+Coauth 拓扑中执行，不依赖双 Coland、Savfox 或外部 provider，并且断言生产 HTTP/UI 行为。`joint/*.spec.ts` 中既有的 Savfox 条件场景仍会在缺少 Savfox 时 skip；专用拓扑测试继续由对应 lane 运行，避免标准 smoke 的绿色结果被误读成全流程闭环。
 
 此外，默认 `joint-smoke` 现在把 `identity/contact-graph`、`identity/multi-device`、`identity/recovery-key-to-encrypted-realm`、`encryption/key-backup` 与 `kanban/cross-member-encrypted` 都列为 required scenario；缺少任一 JUnit 证据、运行时 skip 或零选择都会使 gate 失败。
 
@@ -86,12 +86,12 @@
 - `npx playwright test --list --project joint-inkson --grep <两条关键标题>`：通过，明确选择 `encryption/key-backup` A3 与 `identity/recovery-key-to-encrypted-realm`，共 2 个文件 2 条测试；这同时验证两个 spec 已进入默认 conformance project，而不只是全量 `chrome` project 可发现。
 - 流程库复核：12 篇流程/模型文档加 README、60 个 Mermaid block 的 fence/type 均有效；本地 Markdown 失效链接为 0，图文引用的 `/_arkret/*` 路径均能在 current operation registry 中解析，旧 `recipient_service_id` 与未登记 Agent grant 端点均已移除。
 - `git diff --check`：`cotest` 与 `arkret-work` 均通过。
-- live-product 定向运行：**未启动服务**。runner 完成 Soland、Coauth、Inkson、`cotest-wire` freshness rebuild，Docker daemon 与 Playwright 1.60.0 均通过预检；随后因本机未安装 Caddy，且当前用户无权临时写入 `C:\Windows\System32\drivers\etc\hosts`，Joint TLS topology preflight 硬失败。该结果只能记为环境阻塞，不能记成新增 E2E 通过或失败。
+- live-product 定向运行：**未启动服务**。runner 完成 Coland、Coauth、Inkson、`cotest-wire` freshness rebuild，Docker daemon 与 Playwright 1.60.0 均通过预检；随后因本机未安装 Caddy，且当前用户无权临时写入 `C:\Windows\System32\drivers\etc\hosts`，Joint TLS topology preflight 硬失败。该结果只能记为环境阻塞，不能记成新增 E2E 通过或失败。
 
 ## 后续补测优先级
 
 1. 把已新增的明文 `since_join` 联合测试扩展到 MLS：验证 Commit/Welcome、current security baseline、availability receipt 与进程重启后仍能写，同时不泄露 pre-join 内容。
-2. Soland G3–G7 生产编排落地后，增加双 Station `plan → publish → ACK → cutover → old endpoint down → mirror repair` 的 live 场景。
+2. Coland G3–G7 生产编排落地后，增加双 Station `plan → publish → ACK → cutover → old endpoint down → mirror repair` 的 live 场景。
 3. 增加无测试后门的两账号 MLS Invite 场景，覆盖 Commit/Welcome finality、两种 history policy 与进程重启。
 4. 在现有旧 generation grant 失败断言上继续补旧 Event、KeyPackage 和 key-share 重放，并补撤销后的 MLS/backup 安全收口。
 5. Agent/Sidecar 入口可达后，把当前条件化/分层证据升级为无条件 joint lane。

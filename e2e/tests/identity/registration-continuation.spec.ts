@@ -1,9 +1,9 @@
 import { expect, test, type Page } from "../../helpers/arkret-test";
-import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
+import { coauthBaseUrl, colandBaseUrl } from "../../helpers/env";
 import { registrationEmailCode } from "../../helpers/coauth-register";
 import { submitCoauthPasswordCredentials } from "../../helpers/real-oidc-login";
 import { openUserPage, uniqueUser } from "../../helpers/users";
-import { assertAuthoritySubmitOutcome } from "../../helpers/soland-api";
+import { assertAuthoritySubmitOutcome } from "../../helpers/coland-api";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -67,7 +67,7 @@ for (const scenario of ["fresh browser", "handoff response loss", "stale busy ch
     }
     try {
       await page.goto("/register");
-      await page.getByTestId("register-server").fill(solandBaseUrl());
+      await page.getByTestId("register-server").fill(colandBaseUrl());
       await page.getByTestId("register-open-account-authority").click();
       await page.locator('input[autocomplete="username"]').fill(account.handle);
       await page.locator('input[autocomplete="email"]').fill(email);
@@ -113,7 +113,7 @@ for (const scenario of ["fresh browser", "handoff response loss", "stale busy ch
       );
       expect(firstDevice).toMatch(/^ak:device:/);
       await jointPage.gotoLogin();
-      await page.getByTestId("login-server-url").fill(solandBaseUrl());
+      await page.getByTestId("login-server-url").fill(colandBaseUrl());
       await page.getByTestId("start-server-login-button").click();
       await submitCoauthPasswordCredentials(page, account);
       const approve = page.getByTestId("coauth-oauth-approve");

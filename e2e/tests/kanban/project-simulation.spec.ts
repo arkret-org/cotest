@@ -12,7 +12,7 @@ import {
   type Locator,
 } from "../../helpers/arkret-test";
 import { stepShot } from "../../helpers/screenshots";
-import { solandBaseUrl, solandServiceId } from "../../helpers/env";
+import { colandBaseUrl, colandServiceId } from "../../helpers/env";
 import {
   accountActorId,
   authHeaders,
@@ -25,7 +25,7 @@ import {
   signedEventEnvelope,
   submitSignedEventApi,
   wireErrCode,
-} from "../../helpers/soland-api";
+} from "../../helpers/coland-api";
 import { acceptInviteViaApi } from "../../helpers/api";
 import { relationCreatePayload } from "../../helpers/relation-api";
 import {
@@ -98,7 +98,7 @@ async function readStrandRow(
   opts: { includeTerminal?: boolean } = {},
 ): Promise<StrandProjectionRow | undefined> {
   const url = new URL(
-    `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/strands`,
+    `${colandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/strands`,
   );
   if (opts.includeTerminal) {
     url.searchParams.set("include_terminal", "true");
@@ -125,8 +125,8 @@ async function readSpaceRow(
   spaceId: string,
 ): Promise<SpaceProjectionRow | undefined> {
   const response = await request.get(
-    `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/spaces?include_terminal=true`,
-    { headers: authHeaders(token, "GET", `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/spaces?include_terminal=true`) },
+    `${colandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/spaces?include_terminal=true`,
+    { headers: authHeaders(token, "GET", `${colandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/spaces?include_terminal=true`) },
   );
   expect(
     response.ok(),
@@ -306,7 +306,7 @@ test.describe("project simulation", () => {
   test("alice assigns Card 1 to bob via ak.relation.create assigned_to; bob's strand projection surfaces the assignment", async ({
     request,
   }) => {
-    // spec: relation.md §3.2 assigned_to (Strand -> DID). soland materializes
+    // spec: relation.md §3.2 assigned_to (Strand -> DID). coland materializes
     // the edge into the Strand projection's assigned_to_relations /
     // assigned_actor_ids face (projection_query.rs strand_assigned_to_relations),
     // which is the durable, queryable surface a member reads to discover "I was
@@ -326,7 +326,7 @@ test.describe("project simulation", () => {
       title: `S16 Assign ${stamp}`,
       ownerId: alice.id,
       invitees: [bob.id],
-      invitee_ids: { [bob.id]: solandServiceId() },
+      invitee_ids: { [bob.id]: colandServiceId() },
     });
     await acceptInviteViaApi(request, bobToken, bob.id, realmId);
 
@@ -471,9 +471,9 @@ test.describe("project simulation", () => {
       },
     });
     const forbiddenStatus = await request.post(
-      `${solandBaseUrl()}/_arkret/self/events`,
+      `${colandBaseUrl()}/_arkret/self/events`,
       {
-        headers: authHeaders(aliceToken, "POST", `${solandBaseUrl()}/_arkret/self/events`),
+        headers: authHeaders(aliceToken, "POST", `${colandBaseUrl()}/_arkret/self/events`),
         data: { event: forbiddenStatusEvent },
       },
     );
@@ -670,7 +670,7 @@ test.describe("project simulation", () => {
     request,
   }) => {
     // spec: relation.md §3.2 tombstoned state — unassign is a
-    // ak.relation.tombstone on the assigned_to edge. soland flips the relation
+    // ak.relation.tombstone on the assigned_to edge. coland flips the relation
     // to tombstoned (apply_relations.rs apply_relation_delete); the Strand's
     // assigned_to projection face only counts active edges, so the assignee
     // drops off.

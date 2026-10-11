@@ -1,6 +1,6 @@
 //! CT-6 — Joint service smoke scenario.
 //!
-//! Verifies the [`JointServiceStack`] bootstrap can spin up soland + coauth +
+//! Verifies the [`JointServiceStack`] bootstrap can spin up coland + coauth +
 //! flagon together and each service answers `/health` with 2xx.
 //!
 //! Marked `#[ignore]` at the test-entrypoint level because the full stack
@@ -37,9 +37,9 @@ pub async fn joint_service_smoke_run() -> Result<()> {
     // separate Service DID (service-surface §2.7). Its owning Station exposes
     // the protocol Describe; the component exposes its real readiness state.
     let description: arkret::ServiceDescribe = stack
-        .soland
+        .coland
         .http()
-        .get(stack.soland.base_url().join("/_arkret/describe")?)
+        .get(stack.coland.base_url().join("/_arkret/describe")?)
         .send()
         .await?
         .error_for_status()?
@@ -47,7 +47,7 @@ pub async fn joint_service_smoke_run() -> Result<()> {
         .await?;
     description.validate()?;
     anyhow::ensure!(
-        description.service_id == *stack.soland.service_id()
+        description.service_id == *stack.coland.service_id()
             && arkret::project_did_to_core_id(&description.service_resolution.did)?
                 == description.service_id,
         "owning Station Describe returned a different service identity"
@@ -57,7 +57,7 @@ pub async fn joint_service_smoke_run() -> Result<()> {
     wait_for_account_authority_ready(
         &format!("{}/readyz", coauth.internal_base_url),
         &coauth.health_url(),
-        "cotest-soland",
+        "cotest-coland",
     )
     .await?;
     Ok(())

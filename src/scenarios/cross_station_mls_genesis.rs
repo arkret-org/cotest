@@ -3,7 +3,7 @@
 //! (`zh/crypto-media/encryption-and-audit.md` §5.1.2, `zh/sync/federation.md`
 //! §4.1, `ak.vector.federation.authority_forward_genesis_material.v1`).
 //!
-//! Against two live Solands with separate PostgreSQL databases:
+//! Against two live Colands with separate PostgreSQL databases:
 //!
 //! 1. Alice on X creates an invite-only Realm; Bob, whose Account lives on Y, accepts her directed
 //!    Invite through Y and is granted `ak.mls.genesis`.
@@ -171,7 +171,7 @@ pub async fn cross_station_mls_genesis_run() -> Result<()> {
     )
     .await?
     else {
-        return skip_or_fail(GROUP, "prebuilt Soland unavailable");
+        return skip_or_fail(GROUP, "prebuilt Coland unavailable");
     };
     let governance = group.server(0);
     let member_station = group.server(1);
@@ -522,7 +522,7 @@ pub async fn cross_station_member_group_state_material_run() -> Result<()> {
     )
     .await?
     else {
-        return skip_or_fail(MEMBER_GROUP, "prebuilt Soland unavailable");
+        return skip_or_fail(MEMBER_GROUP, "prebuilt Coland unavailable");
     };
     let x = group.server(0);
     let y = group.server(1);

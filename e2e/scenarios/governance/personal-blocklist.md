@@ -17,8 +17,8 @@
 
 ## 拓扑
 
-- Phase A–F:1 × soland (Station) + 1 × coauth(单服务器即可覆盖个人 blocklist 主流程)
-- Phase G:2 × soland (`server1`、`server2`) + 共享 coauth — 用于验证 federation 隐私与收取边界
+- Phase A–F:1 × coland (Station) + 1 × coauth(单服务器即可覆盖个人 blocklist 主流程)
+- Phase G:2 × coland (`server1`、`server2`) + 共享 coauth — 用于验证 federation 隐私与收取边界
 
 ## Actors
 
@@ -29,7 +29,7 @@
 
 ## Pre-conditions
 
-- alice / bob 都通过 `POST /_soland/self/account/register` 注册
+- alice / bob 都通过 `POST /_coland/self/account/register` 注册
 - alice / bob 都持有有效 dev session token
 - 两个 actor 的 browser context 都注入了 `inkson.config.v1` localStorage
 
@@ -63,7 +63,7 @@
 
 ### Phase D — client 提交 account_data blocklist event
 
-8. alice 的 inkson client 应该把这次 block 持久化为 soland 的 actor-private account_data event:
+8. alice 的 inkson client 应该把这次 block 持久化为 coland 的 actor-private account_data event:
    - 调用:`POST /_arkret/self/events`,提交 `ak.account_data.set`,payload `{ key: "ak.account.blocklist", owner: alice.did, body: <ak.schema.account_data_encrypted_value.v1 envelope>, updated_at: <ts> }`
    - 断言 (HTTP 层):events submit 返回 `status=accepted`
    - 断言 (跨设备 sync):`GET /_arkret/self/account/subscribe?catchup=true` 的 `account_data.events` 返回不透明 carrier / marker, 且不包含 bob DID 明文
@@ -126,8 +126,8 @@
 ## Implementation notes
 
 - **inkson 实现**:`/settings/blocked-users` 页面已写入 `LocalStateStore::client_blocklist` 并通过 `ak.account.blocklist` account_data 同步;`blocked-users-panel` / `blocked-users-list` / `blocked-user-row` / `block-target-input` / `block-user-button` / `unblock-button` / `write-status` testids 已接入。
-- **soland 实现**:`ak.account_data.set` + `ak.self.account.stream.subscribe.v1` 已用于个人 blocklist;普通 Sync Service 不读取 encrypted/opaque blocklist 明文,只同步 holder-private carrier。客户端本地 timeline / notifications 负责最终过滤;只有显式授权的 holder-private confidential service 才能做服务器侧 target 过滤。
-- **测试侧**:主流程、E11.1、E11.2、E11.3、E11.4 均为 live tests；Phase G 需要双 soland harness
+- **coland 实现**:`ak.account_data.set` + `ak.self.account.stream.subscribe.v1` 已用于个人 blocklist;普通 Sync Service 不读取 encrypted/opaque blocklist 明文,只同步 holder-private carrier。客户端本地 timeline / notifications 负责最终过滤;只有显式授权的 holder-private confidential service 才能做服务器侧 target 过滤。
+- **测试侧**:主流程、E11.1、E11.2、E11.3、E11.4 均为 live tests；Phase G 需要双 coland harness
   同时观察 federation receive 与 alice 本地 projection，不能用明文 hint 或远端 outbox suppression 代替。
 
 ## 风险

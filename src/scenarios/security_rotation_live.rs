@@ -1,5 +1,5 @@
 //! A complete SecurityRotation of one Account over live HTTP against a fresh
-//! Soland binary and PostgreSQL: the Station's durable worker drives
+//! Coland binary and PostgreSQL: the Station's durable worker drives
 //! `revoke → upload_new_material → switch_authoritative_pointer →
 //! erase_old_material`, and the authorizing device then completes the
 //! rotation with its client-attested `local_commit`.
@@ -467,8 +467,8 @@ struct LiveRotation {
 }
 
 async fn live_rotation(server_name: &str, extra_env: &[(&str, &str)]) -> Result<LiveRotation> {
-    let database = spawn_ephemeral_postgres_for("COTEST_SOLAND_DATABASE_URL")?.context(
-        "the rotation scenario needs PostgreSQL; set COTEST_SOLAND_DATABASE_URL or make Docker available",
+    let database = spawn_ephemeral_postgres_for("COTEST_COLAND_DATABASE_URL")?.context(
+        "the rotation scenario needs PostgreSQL; set COTEST_COLAND_DATABASE_URL or make Docker available",
     )?;
     let coauth = MockCoauthIntrospectionServer::spawn_with_internal_secret(
         HARNESS_INTERNAL_AUTHORITY_SECRET,
@@ -531,13 +531,13 @@ pub(crate) struct RotationFixture {
 /// `coauth` is its Account Authority and session-grant introspection.
 pub fn rotation_station_env(coauth: &MockCoauthIntrospectionServer) -> Vec<(String, String)> {
     vec![
-        ("SOLAND_ACCOUNT_AUTHORITY_URL".to_owned(), coauth.origin()),
+        ("COLAND_ACCOUNT_AUTHORITY_URL".to_owned(), coauth.origin()),
         (
-            "SOLAND_DID_RESOLVER_ALLOW_METHODS".to_owned(),
+            "COLAND_DID_RESOLVER_ALLOW_METHODS".to_owned(),
             "web,webvh,key,uuid".to_owned(),
         ),
         (
-            "SOLAND_SESSION_GRANT_INTROSPECTION_URL".to_owned(),
+            "COLAND_SESSION_GRANT_INTROSPECTION_URL".to_owned(),
             coauth.url(),
         ),
     ]
@@ -1057,7 +1057,7 @@ pub async fn security_rotation_rejected_revoke_restores_the_target_device() -> R
     } = live_rotation(
         "security-rotation-rejected-revoke",
         &[(
-            "SOLAND_FAILPOINTS",
+            "COLAND_FAILPOINTS",
             "security_rotation_revoke_terminal=fail_after_durable_steps:0",
         )],
     )
@@ -1169,7 +1169,7 @@ pub async fn security_rotation_erase_resumes_after_a_partial_failure() -> Result
     } = live_rotation(
         "security-rotation-erase-resume",
         &[(
-            "SOLAND_FAILPOINTS",
+            "COLAND_FAILPOINTS",
             "backup_series_erase_durable_step=fail_after_durable_steps:1",
         )],
     )
@@ -1284,10 +1284,10 @@ async fn erase_resume_across(between: BetweenAttempts, name: &str) -> Result<()>
         name,
         &[
             (
-                "SOLAND_FAILPOINTS",
+                "COLAND_FAILPOINTS",
                 "backup_series_erase_durable_step=fail_after_durable_steps:1",
             ),
-            ("SOLAND_SECURITY_ROTATION_WORKER_INTERVAL_SECONDS", "30"),
+            ("COLAND_SECURITY_ROTATION_WORKER_INTERVAL_SECONDS", "30"),
         ],
     )
     .await?;
@@ -1727,7 +1727,7 @@ async fn admit_accepted_device(
         expect_json(
             server
                 .http()
-                .post(server.url("/_soland/account-authority/events/admit"))
+                .post(server.url("/_coland/account-authority/events/admit"))
                 .bearer_auth(HARNESS_INTERNAL_AUTHORITY_SECRET)
                 .header("idempotency-key", event.event_id.as_str())
                 .json(&arkret_wire::EventAdmissionSubmission::new(event.clone())),

@@ -14,7 +14,7 @@ import { stepShot } from "../../helpers/screenshots";
 import {
   grantCapabilityEventApi,
   resolveDefaultStrandId,
-} from "../../helpers/soland-api";
+} from "../../helpers/coland-api";
 import { openDpopUserPage } from "../../helpers/users";
 
 test.describe.configure({ mode: "serial" });
@@ -240,7 +240,7 @@ test.describe("workflow: support escalation", () => {
       }
       await stepShot(alexPage.page, testInfo, "kanban-A-draft");
 
-      // Once soland acks the card create, the draft state clears: the badge
+      // Once coland acks the card create, the draft state clears: the badge
       // disappears and archive unblocks. This is the gate the promote pattern
       // was waiting on.
       await expect(card).toHaveAttribute("data-card-draft", "false", {
@@ -317,7 +317,7 @@ test.describe("workflow: support escalation", () => {
       await stepShot(alexPage.page, testInfo, "redact-A-alex-tombstone");
 
       // Both parties reload: the receiver-side tombstone fold is now wired
-      // end-to-end (soland projects the redacted ak.message.create as a
+      // end-to-end (coland projects the redacted ak.message.create as a
       // tombstone on events_query/sync; inkson chat folds it into
       // chat-redacted-tombstone), so the plaintext disappears for both and
       // the tombstone surfaces on each reload.

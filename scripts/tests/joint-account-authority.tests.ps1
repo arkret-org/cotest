@@ -13,8 +13,8 @@ if ($ast.Extent.Text -match 'Get-DescribedServiceId -BaseUrl \$CoauthBaseUrl') {
 }
 $requiredFunctions = @(
     "Quote-PsLiteral", "Write-DotEnvFile", "Get-ContainerHostGatewayIpv4", "Convert-ToContainerReachableUrl",
-    "New-StationInternalChannelBindings", "Build-SolandCommand",
-    "Build-SolandDockerEnvironment", "Test-JointLoopbackUrl", "Wait-HttpReady", "Stop-ProcessTree", "Resolve-ManagedCoauthEmailMockRequirement"
+    "New-StationInternalChannelBindings", "Build-ColandCommand",
+    "Build-ColandDockerEnvironment", "Test-JointLoopbackUrl", "Wait-HttpReady", "Stop-ProcessTree", "Resolve-ManagedCoauthEmailMockRequirement"
 )
 foreach ($name in $requiredFunctions) {
     $definition = $ast.FindAll({
@@ -27,7 +27,7 @@ foreach ($name in $requiredFunctions) {
 
 $testDirectory = Join-Path ([System.IO.Path]::GetTempPath()) ("cotest-authority-" + [guid]::NewGuid())
 [void](New-Item -ItemType Directory -Path $testDirectory)
-$configPath = Join-Path $testDirectory "soland.env"
+$configPath = Join-Path $testDirectory "coland.env"
 $CoauthBaseUrl = "https://coauth.joint.example"
 $StartCoauth = $true
 $CoauthCommand = $null
@@ -35,13 +35,13 @@ $script:UseManagedCoauthAssertionKey = $true
 $CoauthServiceId = $null
 $CoauthEmbeddedWebvhRegistrationBearer = "test-registration-bearer"
 $CoauthOAuthClientId = "test-client"
-$TeabayBaseUrl = $null
+$FlagonBaseUrl = $null
 $WebvhDegradedNoWitnessMaxSecs = 60
-$SolandContainerPort = 8008
+$ColandContainerPort = 8008
 $script:ContainerHostGatewayIpv4 = "192.0.2.1"
-$solandChaosControlFile = Join-Path $testDirectory "chaos.json"
+$colandChaosControlFile = Join-Path $testDirectory "chaos.json"
 $processArguments = @{
-    BinaryPath = "soland.exe"; ConfigPath = $configPath
+    BinaryPath = "coland.exe"; ConfigPath = $configPath
     BaseUrl = "https://station.joint.example"; DatabaseUrl = "postgresql://localhost/test"
     ObjectsRoot = $testDirectory; StateRoot = $testDirectory; Port = 8008
     MetricsPort = 9001; LogFile = (Join-Path $testDirectory "trace.log")
@@ -166,85 +166,85 @@ Start-Sleep -Seconds 60
         }
     }
 
-    Build-SolandCommand @processArguments | Out-Null
+    Build-ColandCommand @processArguments | Out-Null
     $bootstrapConfig = Get-Content -LiteralPath $configPath -Raw
-    if ($bootstrapConfig -match "SOLAND_ACCOUNT_AUTHORITY_SERVICE_ID=") {
+    if ($bootstrapConfig -match "COLAND_ACCOUNT_AUTHORITY_SERVICE_ID=") {
         throw "Identity bootstrap must not guess an Account Authority identity"
     }
-    if ($bootstrapConfig -notmatch 'SOLAND_ACCOUNT_AUTHORITY_URL="https://coauth.joint.example"') {
+    if ($bootstrapConfig -notmatch 'COLAND_ACCOUNT_AUTHORITY_URL="https://coauth.joint.example"') {
         throw "Identity bootstrap must bind the managed Account Authority endpoint"
     }
-    if ($bootstrapConfig -match 'SOLAND_ACCOUNT_AUTHORITY_PUBLIC_KEY_MULTIBASE=') {
+    if ($bootstrapConfig -match 'COLAND_ACCOUNT_AUTHORITY_PUBLIC_KEY_MULTIBASE=') {
         throw "Station must discover the Account Authority assertion key from its bound endpoint"
     }
-    if ($bootstrapConfig -notmatch 'SOLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN="ak:trust_domain:local.host"' -or
-        $bootstrapConfig -notmatch 'SOLAND_INTERNAL_AUTHORITY_SHARED_SECRET="test-introspection-server1"') {
+    if ($bootstrapConfig -notmatch 'COLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN="ak:trust_domain:local.host"' -or
+        $bootstrapConfig -notmatch 'COLAND_INTERNAL_AUTHORITY_SHARED_SECRET="test-introspection-server1"') {
         throw "Process identity bootstrap must emit the minimal internal authority peer binding"
     }
     # Filling the managed command must preserve the Account Authority origin and
     # its bearer-protected operation URLs without restoring a runner-side key pin.
     $CoauthCommand = "generated-managed-coauth-command"
-    Build-SolandCommand @processArguments | Out-Null
+    Build-ColandCommand @processArguments | Out-Null
     $generatedConfig = Get-Content -LiteralPath $configPath -Raw
-    if ($generatedConfig -notmatch 'SOLAND_ACCOUNT_AUTHORITY_URL="https://coauth.joint.example"' -or
-        $generatedConfig -notmatch 'SOLAND_SESSION_GRANT_INTROSPECTION_URL="https://coauth.joint.example/_coauth/internal/session-grants/introspect"' -or
-        $generatedConfig -notmatch 'SOLAND_AUTH_SESSION_LOGOUT_URL="https://coauth.joint.example/_coauth/internal/auth-sessions/logout"' -or
-        $generatedConfig -match 'SOLAND_ACCOUNT_AUTHORITY_PUBLIC_KEY_MULTIBASE=') {
+    if ($generatedConfig -notmatch 'COLAND_ACCOUNT_AUTHORITY_URL="https://coauth.joint.example"' -or
+        $generatedConfig -notmatch 'COLAND_SESSION_GRANT_INTROSPECTION_URL="https://coauth.joint.example/_coauth/internal/session-grants/introspect"' -or
+        $generatedConfig -notmatch 'COLAND_AUTH_SESSION_LOGOUT_URL="https://coauth.joint.example/_coauth/internal/auth-sessions/logout"' -or
+        $generatedConfig -match 'COLAND_ACCOUNT_AUTHORITY_PUBLIC_KEY_MULTIBASE=') {
         throw "Generated CoauthCommand must preserve the bound Account Authority origin and operation URLs without a key pin"
     }
     $script:UseManagedCoauthAssertionKey = $false
-    Build-SolandCommand @processArguments | Out-Null
+    Build-ColandCommand @processArguments | Out-Null
     $callerOwnedConfig = Get-Content -LiteralPath $configPath -Raw
-    if ($callerOwnedConfig -notmatch 'SOLAND_ACCOUNT_AUTHORITY_URL="https://coauth.joint.example"' -or
-        $callerOwnedConfig -match 'SOLAND_ACCOUNT_AUTHORITY_PUBLIC_KEY_MULTIBASE=') {
+    if ($callerOwnedConfig -notmatch 'COLAND_ACCOUNT_AUTHORITY_URL="https://coauth.joint.example"' -or
+        $callerOwnedConfig -match 'COLAND_ACCOUNT_AUTHORITY_PUBLIC_KEY_MULTIBASE=') {
         throw "Caller-owned Coauth must retain the same authority origin without a fixture key pin"
     }
     $script:UseManagedCoauthAssertionKey = $true
-    $bootstrapDocker = Build-SolandDockerEnvironment @dockerArguments
-    if ($bootstrapDocker.SOLAND_ACCOUNT_AUTHORITY_URL -ne $CoauthBaseUrl) {
+    $bootstrapDocker = Build-ColandDockerEnvironment @dockerArguments
+    if ($bootstrapDocker.COLAND_ACCOUNT_AUTHORITY_URL -ne $CoauthBaseUrl) {
         throw "Docker identity bootstrap must bind the managed Account Authority endpoint"
     }
-    if ($bootstrapDocker.Contains("SOLAND_ACCOUNT_AUTHORITY_PUBLIC_KEY_MULTIBASE")) {
+    if ($bootstrapDocker.Contains("COLAND_ACCOUNT_AUTHORITY_PUBLIC_KEY_MULTIBASE")) {
         throw "Docker Station must discover the Account Authority assertion key from its bound endpoint"
     }
-    if ($bootstrapDocker.SOLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN -ne "ak:trust_domain:local.host" -or
-        $bootstrapDocker.SOLAND_INTERNAL_AUTHORITY_SHARED_SECRET -ne "test-introspection-server1") {
+    if ($bootstrapDocker.COLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN -ne "ak:trust_domain:local.host" -or
+        $bootstrapDocker.COLAND_INTERNAL_AUTHORITY_SHARED_SECRET -ne "test-introspection-server1") {
         throw "Docker identity bootstrap must emit the minimal internal authority peer binding"
     }
     $loopbackAuthority = "http://127.0.0.1:4455"
-    $loopbackDocker = Build-SolandDockerEnvironment @dockerArguments -AccountAuthorityBaseUrl $loopbackAuthority
+    $loopbackDocker = Build-ColandDockerEnvironment @dockerArguments -AccountAuthorityBaseUrl $loopbackAuthority
     $containerAuthority = "http://192.0.2.1:4455"
-    if ($loopbackDocker.SOLAND_ACCOUNT_AUTHORITY_URL -ne $containerAuthority -or
-        $loopbackDocker.SOLAND_SESSION_GRANT_INTROSPECTION_URL -ne "$containerAuthority/_coauth/internal/session-grants/introspect" -or
-        $loopbackDocker.SOLAND_AUTH_SESSION_LOGOUT_URL -ne "$containerAuthority/_coauth/internal/auth-sessions/logout") {
+    if ($loopbackDocker.COLAND_ACCOUNT_AUTHORITY_URL -ne $containerAuthority -or
+        $loopbackDocker.COLAND_SESSION_GRANT_INTROSPECTION_URL -ne "$containerAuthority/_coauth/internal/session-grants/introspect" -or
+        $loopbackDocker.COLAND_AUTH_SESSION_LOGOUT_URL -ne "$containerAuthority/_coauth/internal/auth-sessions/logout") {
         throw "Docker internal bearer endpoints must share the container-reachable Account Authority origin"
     }
 
     $CoauthServiceId = "ak:did_core:web:station.joint.example"
-    Build-SolandCommand @processArguments | Out-Null
+    Build-ColandCommand @processArguments | Out-Null
     $boundConfig = Get-Content -LiteralPath $configPath -Raw
-    if ($boundConfig -match "SOLAND_ACCOUNT_AUTHORITY_SERVICE_ID=") {
+    if ($boundConfig -match "COLAND_ACCOUNT_AUTHORITY_SERVICE_ID=") {
         throw "Process config must use the Station's own identity without an authority override"
     }
-    if ($boundConfig -notmatch 'SOLAND_ACCOUNT_AUTHORITY_URL="https://coauth.joint.example"') {
+    if ($boundConfig -notmatch 'COLAND_ACCOUNT_AUTHORITY_URL="https://coauth.joint.example"') {
         throw "Bound process config must advertise the Account Authority endpoint"
     }
-    $boundDocker = Build-SolandDockerEnvironment @dockerArguments
-    if ($boundDocker.Contains("SOLAND_ACCOUNT_AUTHORITY_SERVICE_ID")) {
+    $boundDocker = Build-ColandDockerEnvironment @dockerArguments
+    if ($boundDocker.Contains("COLAND_ACCOUNT_AUTHORITY_SERVICE_ID")) {
         throw "Docker config must use the Station's own identity without an authority override"
     }
-    if ($boundConfig -match "ENROLLMENT_DID" -or $boundDocker.Contains("SOLAND_ACCOUNT_AUTHORITY_ENROLLMENT_DID")) {
+    if ($boundConfig -match "ENROLLMENT_DID" -or $boundDocker.Contains("COLAND_ACCOUNT_AUTHORITY_ENROLLMENT_DID")) {
         throw "Retired independent enrollment identity must not be emitted"
     }
     $betaAuthorityUrl = "https://coauth-beta.joint.example"
-    Build-SolandCommand @processArguments -AccountAuthorityBaseUrl $betaAuthorityUrl | Out-Null
+    Build-ColandCommand @processArguments -AccountAuthorityBaseUrl $betaAuthorityUrl | Out-Null
     $betaConfig = Get-Content -LiteralPath $configPath -Raw
-    if ($betaConfig -match "SOLAND_ACCOUNT_AUTHORITY_SERVICE_ID=" -or
-        $betaConfig -notmatch [regex]::Escape("SOLAND_ACCOUNT_AUTHORITY_URL=`"$betaAuthorityUrl`"")) {
+    if ($betaConfig -match "COLAND_ACCOUNT_AUTHORITY_SERVICE_ID=" -or
+        $betaConfig -notmatch [regex]::Escape("COLAND_ACCOUNT_AUTHORITY_URL=`"$betaAuthorityUrl`"")) {
         throw "Beta must use its own Station identity and Account Authority endpoint"
     }
-    $betaDocker = Build-SolandDockerEnvironment @dockerArguments -AccountAuthorityBaseUrl $betaAuthorityUrl
-    if ($betaDocker.Contains("SOLAND_ACCOUNT_AUTHORITY_SERVICE_ID") -or $betaDocker.SOLAND_ACCOUNT_AUTHORITY_URL -ne $betaAuthorityUrl) {
+    $betaDocker = Build-ColandDockerEnvironment @dockerArguments -AccountAuthorityBaseUrl $betaAuthorityUrl
+    if ($betaDocker.Contains("COLAND_ACCOUNT_AUTHORITY_SERVICE_ID") -or $betaDocker.COLAND_ACCOUNT_AUTHORITY_URL -ne $betaAuthorityUrl) {
         throw "Docker Beta authority must remain independent from Alpha"
     }
 

@@ -17,23 +17,23 @@ Assert-True ($parseErrors.Count -eq 0) "joint runner must parse as PowerShell"
 
 $runner = $ast.Extent.Text
 Assert-True `
-    ($runner -match 'org\.arkret\.soland\.conformance\.realm_state_snapshot') `
-    "runner must identify a feature-bearing Soland conformance harness binary"
+    ($runner -match 'org\.arkret\.coland\.conformance\.realm_state_snapshot') `
+    "runner must identify a feature-bearing Coland conformance harness binary"
 Assert-True `
-    ($runner -match '-not \$freshness\.Fresh -or -not \$solandConformanceHarnessPresent') `
-    "a source-fresh production Soland binary must not bypass the conformance-harness build"
+    ($runner -match '-not \$freshness\.Fresh -or -not \$colandConformanceHarnessPresent') `
+    "a source-fresh production Coland binary must not bypass the conformance-harness build"
 Assert-True `
-    ($runner -match 'soland conformance-harness feature.*fail.*cached binary lacks the conformance-harness marker') `
-    "preflight must fail closed when SkipBuild leaves a production-only Soland binary"
+    ($runner -match 'coland conformance-harness feature.*fail.*cached binary lacks the conformance-harness marker') `
+    "preflight must fail closed when SkipBuild leaves a production-only Coland binary"
 Assert-True `
     ($runner -match 'cargo build --manifest-path.*--features conformance-harness') `
-    "the managed Soland rebuild must enable conformance-harness"
+    "the managed Coland rebuild must enable conformance-harness"
 
-$solandApi = Get-Content -Raw -LiteralPath (
-    Join-Path $PSScriptRoot "..\..\e2e\helpers\soland-api.ts"
+$colandApi = Get-Content -Raw -LiteralPath (
+    Join-Path $PSScriptRoot "..\..\e2e\helpers\coland-api.ts"
 )
 $producerProofMatch = [regex]::Match(
-    $solandApi,
+    $colandApi,
     'function eventEnvelopeProof\([\s\S]*?\r?\n\}(?=\r?\n)'
 )
 Assert-True $producerProofMatch.Success "producer proof helper must remain present"
@@ -47,4 +47,4 @@ Assert-True `
     ($producerProofMatch.Value -notmatch '\b(?:auth_context|authority_refs|key_epoch|key_id)\b') `
     "producer proof must not revive removed admission-context fields"
 
-Write-Host "joint-soland-conformance-feature.tests.ps1: PASS"
+Write-Host "joint-coland-conformance-feature.tests.ps1: PASS"

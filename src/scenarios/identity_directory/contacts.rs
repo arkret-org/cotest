@@ -153,7 +153,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     );
 
     let audit_events = expect_json(
-        alice.get("/_soland/admin/audit/events?limit=20"),
+        alice.get("/_coland/admin/audit/events?limit=20"),
         StatusCode::OK,
     )
     .await?;
@@ -162,7 +162,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     let _ = expect_audit_action(&audit_events, "account.register")?;
 
     expect_status(
-        alice.get(&format!("/_soland/admin/audit/events?actor={}", bob.actor)),
+        alice.get(&format!("/_coland/admin/audit/events?actor={}", bob.actor)),
         StatusCode::FORBIDDEN,
     )
     .await?;

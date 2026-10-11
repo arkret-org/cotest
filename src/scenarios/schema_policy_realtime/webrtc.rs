@@ -112,7 +112,7 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
         ice["signature"]["kid"]
             .as_str()
             .unwrap()
-            // soland signs the ICE config with the service's notary key
+            // coland signs the ICE config with the service's notary key
             // (`<service_id>#notary-key`); the spec allows any `#<key-id>`
             // fragment (ice-config-response.schema.json `kid`).
             .ends_with("#notary-key")
@@ -124,11 +124,11 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
     let turn_server = &ice_servers[1];
     assert_eq!(
         turn_server["urls"][0],
-        "turn:turn.soland.local:3478?transport=udp"
+        "turn:turn.coland.local:3478?transport=udp"
     );
     assert_eq!(turn_server["credential_type"], "password");
     let turn_username = turn_server["username"].as_str().unwrap();
-    // soland's REST-style TURN username is `<expiry-unix>:<pairwise-pseudonym>`
+    // coland's REST-style TURN username is `<expiry-unix>:<pairwise-pseudonym>`
     // where the pseudonym is `ak_pseudonym_call_<hex>` (webrtc-signaling.md
     // §4.1). There is no separate `pairwise_pseudonym` response field; the
     // pseudonym is carried in the username and must not leak the caller identity.
@@ -154,7 +154,7 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
     )
     .await?;
     assert_eq!(turn_only["turn_required"], true);
-    // In turn_required mode soland returns only the TURN server, carried in
+    // In turn_required mode coland returns only the TURN server, carried in
     // `ice_servers` (there is no separate `turn_servers` response field).
     let turn_only_servers = turn_only["ice_servers"].as_array().unwrap();
     assert_eq!(turn_only_servers.len(), 1);

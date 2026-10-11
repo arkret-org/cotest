@@ -71,7 +71,7 @@
     },
     {
       "profile_id": "compose",
-      "description": "Process-mode multi-service contract matrix. soland is spawned by cotest; coauth/floria/sodmin/inkson can be attached through scripts/run-compose.ps1.",
+      "description": "Process-mode multi-service contract matrix. coland is spawned by cotest; coauth/floria/codmin/inkson can be attached through scripts/run-compose.ps1.",
       "include_all_tests": false,
       "cargo_tests": [
         {
@@ -81,7 +81,7 @@
         },
         {
           "target": "directory_service",
-          "filter": "teabay_directory_service_profile_is_discoverable",
+          "filter": "flagon_directory_service_profile_is_discoverable",
           "package": "cotest"
         },
         {
@@ -204,7 +204,7 @@
         },
         {
           "target": "directory_service",
-          "filter": "teabay_directory_service_profile_is_discoverable",
+          "filter": "flagon_directory_service_profile_is_discoverable",
           "package": "cotest"
         },
         {
@@ -240,7 +240,7 @@
     },
     {
       "profile_id": "services-live",
-      "description": "Headless live-service lane: real soland and real coauth processes with real PostgreSQL and real migrations, no browser and no Inkson. Proves the server side comes up and holds its contracts; product journeys stay in the joint Playwright lanes.",
+      "description": "Headless live-service lane: real coland and real coauth processes with real PostgreSQL and real migrations, no browser and no Inkson. Proves the server side comes up and holds its contracts; product journeys stay in the joint Playwright lanes.",
       "include_all_tests": false,
       "cargo_tests": [
         {

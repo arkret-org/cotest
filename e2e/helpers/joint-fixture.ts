@@ -54,12 +54,12 @@ export const test = base.extend<{
 export { expect } from "./arkret-test";
 
 // The joint browser fixture uses real coauth-minted ak.session.grant material
-// and registers the same principal/device at soland before opening inkson.
+// and registers the same principal/device at coland before opening inkson.
 async function createJointTwoUsers(
   browser: Browser,
   request: APIRequestContext,
 ): Promise<JointUsersFixture> {
-  // Principal inception is lease-fenced by the local Coauth/Soland pair.
+  // Principal inception is lease-fenced by the local Coauth/Coland pair.
   // Starting two independent DID inception/handoff chains concurrently can
   // make each wait on the other's global identity-binding lease until the
   // caller timeout. Keep user creation sequential; browser bootstrap below is

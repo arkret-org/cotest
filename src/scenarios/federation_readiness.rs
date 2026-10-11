@@ -5,7 +5,7 @@ use crate::fixtures::TestScaffold;
 use crate::harness::expect_json;
 
 pub async fn two_sut_instances_are_isolated_and_federation_ready() -> Result<()> {
-    // CT-12: fresh_multi spawns two isolated soland processes with
+    // CT-12: fresh_multi spawns two isolated coland processes with
     // distinct service DIDs, ports, and blob roots — see
     // fixtures::scaffold module docs for the full isolation audit.
     let scaffold = TestScaffold::fresh_multi("federation-ready", 2).await?;

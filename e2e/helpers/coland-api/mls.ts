@@ -13,7 +13,7 @@
 
 import { createHash, createPrivateKey, createPublicKey, randomBytes } from "node:crypto";
 import { expect, type APIRequestContext } from "@playwright/test";
-import { type SolandKey, solandBaseUrl, solandServiceId } from "../env";
+import { type ColandKey, colandBaseUrl, colandServiceId } from "../env";
 import { authHeaders, expectJsonOk, wireErrCode } from "./request";
 import { canonicalJson, cotestWire } from "./wire-client";
 import {
@@ -25,14 +25,14 @@ import {
   signedEventEnvelope,
   submitSignedEventApi,
   uuidV7,
-} from "../soland-api";
+} from "../coland-api";
 
 /// One human device endpoint the harness holds a session and device key for.
 export type MlsDevice = {
   id: string;
   deviceId: string;
   token: string;
-  server?: SolandKey;
+  server?: ColandKey;
 };
 
 /// The closed `typed-current-result.schema.json#/$defs/mls_group_value`.
@@ -84,7 +84,7 @@ const PKCS8_ED25519_PREFIX = Buffer.from("302e020100300506032b657004220420", "he
 const CLAIM_LIFETIME_SECONDS = 240;
 
 function realmKey(
-  server: SolandKey | undefined,
+  server: ColandKey | undefined,
   realmId: string,
   scopeRef: Record<string, unknown> = { kind: "realm", realm_id: realmId },
 ): string {
@@ -147,7 +147,7 @@ async function deviceAuthorizeEventId(
   request: APIRequestContext,
   device: MlsDevice,
 ): Promise<string> {
-  const url = `${solandBaseUrl(device.server)}/_arkret/self/account/viewer`;
+  const url = `${colandBaseUrl(device.server)}/_arkret/self/account/viewer`;
   const viewer = await expectJsonOk<{
     devices?: Array<{ device_id?: unknown; authorized_event_ref?: unknown }>;
   }>(
@@ -182,7 +182,7 @@ async function uploadPublicBlob(
   realmId: string,
   bytesB64url: string,
 ): Promise<string> {
-  const url = `${solandBaseUrl(device.server)}/_arkret/self/blob/upload`;
+  const url = `${colandBaseUrl(device.server)}/_arkret/self/blob/upload`;
   const bytes = Buffer.from(bytesB64url, "base64url");
   const body = await expectJsonOk<{ blob_ref?: unknown }>(
     await request.post(url, {
@@ -214,7 +214,7 @@ async function committedEventFullView(
   reader: MlsDevice,
   eventId: string,
 ): Promise<{ commit: Record<string, unknown>; event: Record<string, unknown> }> {
-  const url = `${solandBaseUrl(reader.server)}/_arkret/self/committed-events/${eventId}`;
+  const url = `${colandBaseUrl(reader.server)}/_arkret/self/committed-events/${eventId}`;
   let view: { commit?: Record<string, unknown>; event?: Record<string, unknown> } = {};
   await expect
     .poll(
@@ -244,9 +244,9 @@ export async function readScopeMlsGroupCurrentApi(
   token: string,
   realmId: string,
   scopeRef: Record<string, unknown> = { kind: "realm", realm_id: realmId },
-  server?: SolandKey,
+  server?: ColandKey,
 ): Promise<MlsGroupCurrent | undefined> {
-  const url = new URL(`${solandBaseUrl(server)}/_arkret/self/realm-state-snapshot/head`);
+  const url = new URL(`${colandBaseUrl(server)}/_arkret/self/realm-state-snapshot/head`);
   url.searchParams.set("realm_id", realmId);
   const deadline = Date.now() + 30_000;
   let response;
@@ -363,7 +363,7 @@ export async function addRealmMlsMemberApi(
   request: APIRequestContext,
   realmId: string,
   member: MlsDevice,
-  opts: { server?: SolandKey; scopeRef?: Record<string, unknown> } = {},
+  opts: { server?: ColandKey; scopeRef?: Record<string, unknown> } = {},
 ): Promise<{ commitEventId: string; welcome: Record<string, unknown> }> {
   const creator = realmMlsCreators.get(realmKey(opts.server, realmId, opts.scopeRef));
   if (!creator) {
@@ -377,7 +377,7 @@ export async function addRealmMlsMemberApi(
     upload_request: Record<string, unknown>;
     identity_state: string;
   }>("mls-keypackages", { endpoint: endpointInput(member), count: 1 });
-  const uploadUrl = `${solandBaseUrl(member.server)}/_arkret/self/keys/keypackages/upload`;
+  const uploadUrl = `${colandBaseUrl(member.server)}/_arkret/self/keys/keypackages/upload`;
   const uploaded = await expectJsonOk<{
     accepted?: number;
     rejections?: unknown[];
@@ -409,13 +409,13 @@ export async function addRealmMlsMemberApi(
       target_device_id: member.deviceId,
       realm_id: realmId,
       ...(opts.scopeRef ? { scope_ref: opts.scopeRef } : {}),
-      source_id: solandServiceId(owner.server),
-      destination_id: solandServiceId(member.server),
+      source_id: colandServiceId(owner.server),
+      destination_id: colandServiceId(member.server),
       claim_request_id: randomBytes(16).toString("base64url"),
       lifetime_seconds: CLAIM_LIFETIME_SECONDS,
     },
   );
-  const claimUrl = `${solandBaseUrl(owner.server)}/_arkret/self/keys/keypackages/claim`;
+  const claimUrl = `${colandBaseUrl(owner.server)}/_arkret/self/keys/keypackages/claim`;
   const claimed = await expectJsonOk<{ claims?: Array<Record<string, unknown>> }>(
     await request.post(claimUrl, {
       headers: {
@@ -470,7 +470,7 @@ export async function addRealmMlsMemberApi(
     welcome: added.welcome,
     signing_seed_b64url: ownerSigner.signingSeedB64url,
   });
-  const eventsUrl = `${solandBaseUrl(owner.server)}/_arkret/self/events`;
+  const eventsUrl = `${colandBaseUrl(owner.server)}/_arkret/self/events`;
   const context = `Add Commit for ${member.id}`;
   const outcome = await expectJsonOk<Record<string, unknown>>(
     await request.post(eventsUrl, {
@@ -535,7 +535,7 @@ export async function joinRealmMlsWelcomeApi(
   if (!pending) {
     throw new Error(`no MLS Welcome was admitted for ${member.id} in ${realmId}`);
   }
-  const queueUrl = `${solandBaseUrl(member.server)}/_arkret/self/device_messages`;
+  const queueUrl = `${colandBaseUrl(member.server)}/_arkret/self/device_messages`;
   let welcome: Record<string, unknown> | undefined;
   let ackToken: string | undefined;
   await expect
@@ -647,7 +647,7 @@ export async function scopeMlsMemberGroupApi(
 export async function realmMlsCreatorGroupApi(
   request: APIRequestContext,
   realmId: string,
-  opts: { server?: SolandKey; scopeRef?: Record<string, unknown> } = {},
+  opts: { server?: ColandKey; scopeRef?: Record<string, unknown> } = {},
 ): Promise<MlsMemberGroup> {
   const creator = realmMlsCreators.get(realmKey(opts.server, realmId, opts.scopeRef));
   if (!creator) {

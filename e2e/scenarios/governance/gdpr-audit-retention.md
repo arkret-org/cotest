@@ -13,7 +13,7 @@ alice 触发 GDPR 数据导出 → 拿到完整个人数据 JSON;触发 erasure 
 
 ## 拓扑
 
-- 1 × soland + 1 × coauth
+- 1 × coland + 1 × coauth
 
 ## Actors
 
@@ -30,11 +30,11 @@ alice 触发 GDPR 数据导出 → 拿到完整个人数据 JSON;触发 erasure 
 
 ### Phase B — alice 导出 GDPR 数据
 
-> **当前阻塞（2026-08-19）**：不完整的产品私有 export 轨 `GET /_soland/self/account/export` 已被有意移除（无兼容 shim），Phase B 待完整 data-portability 工作流落地后重建；对应 e2e 用例已显式 skip。
+> **当前阻塞（2026-08-19）**：不完整的产品私有 export 轨 `GET /_coland/self/account/export` 已被有意移除（无兼容 shim），Phase B 待完整 data-portability 工作流落地后重建；对应 e2e 用例已显式 skip。
 
 2. alice 进 `/settings/account` → "Export my data"
-3. inkson 调 spec 定义的数据导出入口（原私有轨 `GET /_soland/self/account/export` 已移除，不得引用）
-4. soland 异步生成 zip 包(可能 base64 inline 或返回 download URL)
+3. inkson 调 spec 定义的数据导出入口（原私有轨 `GET /_coland/self/account/export` 已移除，不得引用）
+4. coland 异步生成 zip 包(可能 base64 inline 或返回 download URL)
 5. 断言:返回 200 + `export_id` + (可选)`download_url`
 6. alice 下载并解压 → 内含 JSON:`{ account: { did, handle, profile }, spaces: [...], messages: [...], devices: [...], audit_log: [...] }`
 7. 断言:alice 自己的消息明文在 export 中(她有解密能力);其他用户的 E2EE 消息 ciphertext-only
@@ -42,9 +42,9 @@ alice 触发 GDPR 数据导出 → 拿到完整个人数据 JSON;触发 erasure 
 ### Phase C — alice 触发 erasure
 
 8. alice 进 `/settings/account` → "Erase my account"
-9. 确认对话框 → 走 spec 定义的 Account Authority 入口 `ak.gate.account.command.request_erasure.v1`（`identity/account-lifecycle.md` §8.1），即 `POST /_arkret/gate/account/erasure-requests`（fresh high-risk authentication + durable 记录意图）。**已移除的私有轨 `/_soland/self/account/erase` 不再存在，不得引用**
-10. Account Authority 签发 `erasure_pending` AccountStatusRecord → `ak.peer.account_status.command.submit.v1` → 异步 durable execution → `ak.peer.erasure_receipt.command.submit.v1` 验收，soland 返回 `ak.schema.erasure_receipt.v1`
-11. soland 后台任务执行:
+9. 确认对话框 → 走 spec 定义的 Account Authority 入口 `ak.gate.account.command.request_erasure.v1`（`identity/account-lifecycle.md` §8.1），即 `POST /_arkret/gate/account/erasure-requests`（fresh high-risk authentication + durable 记录意图）。**已移除的私有轨 `/_coland/self/account/erase` 不再存在，不得引用**
+10. Account Authority 签发 `erasure_pending` AccountStatusRecord → `ak.peer.account_status.command.submit.v1` → 异步 durable execution → `ak.peer.erasure_receipt.command.submit.v1` 验收，coland 返回 `ak.schema.erasure_receipt.v1`
+11. coland 后台任务执行:
     - 删除 alice 的 PII(display_name、bio、avatar → pseudonymize)
     - 删除 alice 的 E2EE secret material（device keys 与 MLS backup keys 安全销毁，后续无法解密）
     - 把 alice 的消息 redact 成 tombstone(content 删除,event_id 保留以维持因果链)
@@ -55,7 +55,7 @@ alice 触发 GDPR 数据导出 → 拿到完整个人数据 JSON;触发 erasure 
 > **当前阻塞（2026-08-19 更新）**：两条协议缺口已裁决闭合（选项 b，入口整体移归 Account
 > Authority，见 spec-done `2026-08-18-2325-self-erasure-intent-has-no-channel-to-the-account-authority.md`
 > 与 `2026-08-18-2326-session-grant-introspection-carries-no-authentication-freshness.md`）；
-> soland 旧受理面已移除。erase 用例端到端驱动现阻塞于 coauth 实现 gate 面入口
+> coland 旧受理面已移除。erase 用例端到端驱动现阻塞于 coauth 实现 gate 面入口
 > `ak.gate.account.command.request_erasure.v1`（`arkret-work` 任务
 > `2026-08-19-2212-coauth-self-erasure-gate-endpoint.md`）。
 > 对应 e2e 用例（`gdpr-audit-retention.spec.ts` 的 erase 用例）已显式 skip。
@@ -70,15 +70,15 @@ alice 触发 GDPR 数据导出 → 拿到完整个人数据 JSON;触发 erasure 
 
 ### Phase E — Audit log entries
 
-16. alice (用 admin / 测试 harness 的特殊 token) 查 `/_soland/admin/audit/events?actor=alice.did`
-17. 断言:audit log 含 `org.arkret.soland.audit.exported`、`org.arkret.soland.audit.erasure_initiated`、`ak.audit.erasure_receipt`(前两者为产品私有审计语义,已去 `ak.` 前缀;`ak.audit.erasure_receipt` 为协议注册词汇)
+16. alice (用 admin / 测试 harness 的特殊 token) 查 `/_coland/admin/audit/events?actor=alice.did`
+17. 断言:audit log 含 `org.arkret.coland.audit.exported`、`org.arkret.coland.audit.erasure_initiated`、`ak.audit.erasure_receipt`(前两者为产品私有审计语义,已去 `ak.` 前缀;`ak.audit.erasure_receipt` 为协议注册词汇)
 
 ### Phase F — Retention policy
 
 18. alice 创建另一个 Realm `R_short`,`retention_policy: { ttl: "30d" }`
 19. alice 发消息 `M_old`
 20. 测试 harness 使用旧 `created_at` 或 admin sweep `now` 参数模拟 +31 天
-21. soland retention sweeper 把超过 30 天的 timeline events 改成 tombstone,不物理删除 anchored/canonical event
+21. coland retention sweeper 把超过 30 天的 timeline events 改成 tombstone,不物理删除 anchored/canonical event
 22. 断言:alice 拉 timeline → `M_old` 变 `[expired]` tombstone
 
 ## Edge cases
@@ -90,13 +90,13 @@ alice 触发 GDPR 数据导出 → 拿到完整个人数据 JSON;触发 erasure 
 
 ## Implementation notes
 
-- **soland**:retention_policy TTL sweeper 已 live;过期 timeline event 返回 `[expired]` tombstone,`event_id` / canonical history 保留不物理删除。跨服务器 erasure fan-out 和历史消息 tombstone 已由 `ak.audit.erasure_receipt` live 覆盖
+- **coland**:retention_policy TTL sweeper 已 live;过期 timeline event 返回 `[expired]` tombstone,`event_id` / canonical history 保留不物理删除。跨服务器 erasure fan-out 和历史消息 tombstone 已由 `ak.audit.erasure_receipt` live 覆盖
 - **inkson 缺口**:`/settings/account` 的 export / erase 按钮、确认对话框
-- **测试侧**:retention 时间快进通过 `/_soland/admin/retention/sweep` 的本地 admin/test surface 或旧 `created_at` fixture 覆盖
+- **测试侧**:retention 时间快进通过 `/_coland/admin/retention/sweep` 的本地 admin/test surface 或旧 `created_at` fixture 覆盖
 
 ## 风险
 
-- 整组 fixme territory;spec 写的是 MUST,但 soland 实现度低。
+- 整组 fixme territory;spec 写的是 MUST,但 coland 实现度低。
 
 ## 总耗时预估
 

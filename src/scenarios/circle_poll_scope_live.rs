@@ -209,7 +209,7 @@ pub async fn run() -> Result<()> {
     )
     .await?
     else {
-        return skip_or_fail(GROUP, "prebuilt Soland unavailable");
+        return skip_or_fail(GROUP, "prebuilt Coland unavailable");
     };
     let station = group.server(0);
     let (alice, account) = standard_client(station, &coauth, "circle-poll-alice", DEVICE).await?;

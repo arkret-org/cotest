@@ -2,7 +2,7 @@ import { openAndPairSecondController } from "../../helpers/paired-controller";
 import { test, expect, type JointUsersFixture } from "../../helpers/joint-fixture";
 import type { APIRequestContext, Browser, Page, Response } from "@playwright/test";
 import { requestContactArkret, respondContactArkret } from "../../helpers/contact-api";
-import { accountActorId, assertAuthoritySubmitOutcome, canonicalJson } from "../../helpers/soland-api";
+import { accountActorId, assertAuthoritySubmitOutcome, canonicalJson } from "../../helpers/coland-api";
 import { decodeEventIngressBody, ingressEvents } from "../../helpers/event-ingress";
 
 import { flatTopicChats } from "../../helpers/direct-structure";

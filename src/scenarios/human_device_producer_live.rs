@@ -112,7 +112,7 @@ pub fn station_env(
 ) -> Vec<(String, String)> {
     let mut env = vec![
         ("DATABASE_URL".to_owned(), database_url.to_owned()),
-        ("SOLAND_FEDERATION_OUTBOUND".to_owned(), "1".to_owned()),
+        ("COLAND_FEDERATION_OUTBOUND".to_owned(), "1".to_owned()),
     ];
     env.extend(rotation_station_env(coauth));
     env
@@ -135,7 +135,7 @@ pub async fn run_same_station_human_control_event_live() -> Result<()> {
     )
     .await?
     else {
-        return skip_or_fail(SAME_STATION_GROUP, "prebuilt Soland unavailable");
+        return skip_or_fail(SAME_STATION_GROUP, "prebuilt Coland unavailable");
     };
     let station = group.server(0);
     let (alice, alice_account) =
@@ -224,7 +224,7 @@ pub async fn run_cross_station_authority_forward_live() -> Result<()> {
     )
     .await?
     else {
-        return skip_or_fail(FORWARD_GROUP, "prebuilt Soland unavailable");
+        return skip_or_fail(FORWARD_GROUP, "prebuilt Coland unavailable");
     };
     let account_station = group.server(0);
     let governance_station = group.server(1);
@@ -602,7 +602,7 @@ fn ciphertext_message_payload(strand_id: &str, group_state_ref: &EventId) -> Res
 }
 
 pub fn database(scenario: &str) -> Result<Option<EphemeralPg>> {
-    let database = spawn_ephemeral_postgres_for("COTEST_SOLAND_DATABASE_URL")?;
+    let database = spawn_ephemeral_postgres_for("COTEST_COLAND_DATABASE_URL")?;
     if database.is_none() {
         skip_or_fail(scenario, "PostgreSQL unavailable")?;
     }
@@ -948,7 +948,7 @@ pub async fn run_message_prepare_and_account_cursor_recovery_live() -> Result<()
     )
     .await?
     else {
-        return skip_or_fail(label, "prebuilt Soland unavailable");
+        return skip_or_fail(label, "prebuilt Coland unavailable");
     };
     let station = group.server(0);
     let (alice, account) = standard_client(
@@ -1223,7 +1223,7 @@ pub async fn run_plaintext_poll_revision_live() -> Result<()> {
     )
     .await?
     else {
-        return skip_or_fail(label, "prebuilt Soland unavailable");
+        return skip_or_fail(label, "prebuilt Coland unavailable");
     };
     let station = group.server(0);
     let (alice, account) =

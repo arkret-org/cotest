@@ -65,8 +65,8 @@ def run(command: list[str]) -> int:
             private_key.chmod(0o600)
         environment = os.environ.copy()
         environment.update({
-            "SOLAND_TLS_CERT_PATH": str(chain),
-            "SOLAND_TLS_KEY_PATH": str(key),
+            "COLAND_TLS_CERT_PATH": str(chain),
+            "COLAND_TLS_KEY_PATH": str(key),
             "COTEST_RUN_SCOPED_CA_PEM": str(ca),
             "SSL_CERT_FILE": str(ca),
         })

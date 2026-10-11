@@ -5,8 +5,8 @@
 ## Live 用例
 
 1. Bob 离线发送消息后，inkson timeline 显示本地 queued-offline 状态，并暴露 outbox banner/count。
-2. 断网期间，该排队消息不会出现在 soland 事件流中。
-3. Bob 恢复联网后，inkson drain outbox，消息发送状态清空，并出现在 soland 事件流中。
+2. 断网期间，该排队消息不会出现在 coland 事件流中。
+3. Bob 恢复联网后，inkson drain outbox，消息发送状态清空，并出现在 coland 事件流中。
 
 ## 不验证
 

@@ -913,7 +913,7 @@ fn test_6_internationalized_identifier_profiles_and_collision_scope() -> Result<
 #[test]
 fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
     // SDK-level positive control: the canonical-bytes helper +
-    // effective-set filter that soland's MID reducer MUST mirror. An
+    // effective-set filter that coland's MID reducer MUST mirror. An
     // initial event followed by a replacement event with a matching
     // payload_digest collapses to a single effective entry — the second.
     use arkret_identifiers::{DidCoreId, EventId, Hash, RealmId};

@@ -160,7 +160,7 @@ pub fn next_typed_id(kind: &str) -> String {
 /// `plaintext_visible_services_payload` `services[]` item shape
 /// (`event-payload.schema.json#/$defs/plaintext_visible_services_payload`).
 ///
-/// A bare DID string carries no declared `data_classes`, so soland's realm
+/// A bare DID string carries no declared `data_classes`, so coland's realm
 /// projection records an empty per-service class map and fails closed on any
 /// private-realm plaintext send. The harness default therefore declares the
 /// common plaintext data classes for the service. Entries that are already
@@ -248,7 +248,7 @@ pub fn realm_create_payload_for_station(
         .get("encryption_profile")
         .and_then(Value::as_str)
         .unwrap_or("none");
-    // soland grants plaintext data classes per declared service (it reads the
+    // coland grants plaintext data classes per declared service (it reads the
     // typed `services[].data_classes` map, not a bare DID list — see
     // RealmMetaRecord::allows_plaintext_data_class). A flat DID string projects
     // to an EMPTY data-class map, so every private-realm plaintext send would
@@ -298,7 +298,7 @@ pub fn realm_create_payload_for_station(
     let trust_domain = input
         .get("trust_domain")
         .and_then(Value::as_str)
-        .unwrap_or("ak:trust_domain:soland.local");
+        .unwrap_or("ak:trust_domain:coland.local");
     let genesis = arkret_models_collaboration::events_payloads::RealmGenesis::new(
         arkret_models_collaboration::events_payloads::RealmPurpose::Collaboration,
         genesis_salt,

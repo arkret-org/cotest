@@ -1,4 +1,4 @@
-//! `ArkretServer::canonical_client` against a live Coauth and Soland.
+//! `ArkretServer::canonical_client` against a live Coauth and Coland.
 //!
 //! The Rust harness has three ways to hold a principal, and until this file
 //! existed only two of them were exercised: `demo_client` and `register_client`
@@ -51,7 +51,7 @@ fn provisioning_http() -> reqwest::Client {
 fn endpoints() -> DeploymentEndpoints {
     DeploymentEndpoints {
         coauth_base_url: required_env("COTEST_COAUTH_BASE_URL"),
-        soland_base_url: required_env("COTEST_SOLAND_BASE_URL"),
+        coland_base_url: required_env("COTEST_COLAND_BASE_URL"),
         mock_email: std::env::var("COTEST_MOCK_EMAIL_BASE_URL")
             .ok()
             .filter(|url| !url.trim().is_empty())
@@ -69,17 +69,17 @@ fn slug(prefix: &str) -> String {
     )
 }
 
-/// Gating: Requires a running Coauth and Soland with canonical provisioning credentials.
+/// Gating: Requires a running Coauth and Coland with canonical provisioning credentials.
 /// Tier: live
 #[tokio::test]
-#[ignore = "requires a running Coauth and Soland; see the module docs"]
+#[ignore = "requires a running Coauth and Coland; see the module docs"]
 async fn the_harness_builds_a_client_from_the_canonical_chain() -> Result<()> {
     let endpoints = endpoints();
     let http = provisioning_http();
     let client_id = required_env("COTEST_OIDC_CLIENT_ID");
     let server = ArkretServer::attach(
-        &endpoints.soland_base_url,
-        &required_env("COTEST_SOLAND_NOTARY_SIGNING_KEY"),
+        &endpoints.coland_base_url,
+        &required_env("COTEST_COLAND_NOTARY_SIGNING_KEY"),
         Some(std::path::Path::new(&required_env(
             "COTEST_RUN_SCOPED_CA_PEM",
         ))),

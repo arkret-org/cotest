@@ -18,7 +18,7 @@
 // verifies independent Space lifecycles and the live-dependent refusal.
 
 import { type APIRequestContext, expect, test } from "../../helpers/arkret-test";
-import { solandBaseUrl } from "../../helpers/env";
+import { colandBaseUrl } from "../../helpers/env";
 import type {
   ActorId,
   CommitStreamHead,
@@ -39,7 +39,7 @@ import {
   wireErrCode,
   readCommitStreamHeadApi,
   scanRealmStreamApi,
-} from "../../helpers/soland-api";
+} from "../../helpers/coland-api";
 import { relationCreatePayload } from "../../helpers/relation-api";
 import {
   assertJointStackNotRequired,
@@ -132,15 +132,15 @@ test.describe("core object invariants", () => {
       expect(realmId).toMatch(/^ak:realm:/);
       await stepShot(alicePage.page, testInfo, "A-alice-realm-created");
 
-      // ── Step 3: read back the Realm via the soland API and verify the
+      // ── Step 3: read back the Realm via the coland API and verify the
       // spec §3 common-field equivalents on the RealmLifecycleResponse
-      // serializer. Current wire shape (soland/src/wire.rs
+      // serializer. Current wire shape (coland/src/wire.rs
       // RealmLifecycleView): { realm_id, owner_id, members, deleted, ... }.
       //   - realm_id  ↔ spec `id`              (typed ak:realm: prefix)
       //   - owner_id  ↔ current owner authority (DID, actor reference)
       //   - members   ↔ membership invariant   (must contain owner)
       //   - deleted   ↔ spec `lifecycle_state` (false ⇒ active)
-      const realmUrl = `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}`;
+      const realmUrl = `${colandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}`;
       const realmRes = await request.get(realmUrl, {
         headers: authFor("GET", realmUrl),
       });
@@ -179,10 +179,10 @@ test.describe("core object invariants", () => {
       }>;
       expect(events.length).toBeGreaterThan(0);
 
-      // Find the Realm lifecycle / create event — soland writes lifecycle
+      // Find the Realm lifecycle / create event — coland writes lifecycle
       // ops via record_space_lifecycle_operation, so the kind is in the
       // ak.realm.* family. We accept any ak.realm.* kind to stay
-      // resilient to soland's exact lifecycle op naming.
+      // resilient to coland's exact lifecycle op naming.
       const lifecycleEvent =
         events.find((event) => event.kind?.startsWith("ak.realm.")) ??
         events[0];
@@ -412,7 +412,7 @@ test.describe("core object invariants", () => {
     const parentSpaceId = await createSpace("board", `lifecycle parent ${stamp}`);
     const childSpaceId = await createSpace("list", `lifecycle child ${stamp}`, parentSpaceId);
     const readStates = async () => {
-      const url = `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/spaces?include_terminal=true`;
+      const url = `${colandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/spaces?include_terminal=true`;
       const response = await request.get(url, { headers: authHeaders(aliceToken, "GET", url) });
       expect(response.ok(), await response.text()).toBeTruthy();
       const body = await response.json() as { spaces: Array<{ space_id: string; state: string }> };
@@ -496,7 +496,7 @@ test.describe("core object invariants", () => {
     });
     await submit(move, "establish live Strand placement");
     const snapshotEntries = async () => {
-      const url = new URL(`${solandBaseUrl()}/_arkret/self/realm-state-snapshot/head`);
+      const url = new URL(`${colandBaseUrl()}/_arkret/self/realm-state-snapshot/head`);
       url.searchParams.set("realm_id", realmId);
       const response = await request.get(url.toString(), {
         headers: authHeaders(token, "GET", url.toString()),
@@ -624,7 +624,7 @@ test.describe("core object invariants", () => {
   // - an exact accepted Event replay returns the original Commit.
   // - structural `contains` across Realms is rejected with
   //   `cross_realm_structural_relation` (HTTP 409) — relation.md section 4.4.
-  // Reads use the product-private `/_soland/self/relations` list.
+  // Reads use the product-private `/_coland/self/relations` list.
   test("Phase D — has_default_view is one active value per from domain; exact Relation replay is idempotent; cross-Realm contains rejected", async ({
     request,
   }) => {
@@ -646,7 +646,7 @@ test.describe("core object invariants", () => {
     );
     const v1 = typedId("view");
     const v2 = typedId("view");
-    const eventsUrl = `${solandBaseUrl()}/_arkret/self/events`;
+    const eventsUrl = `${colandBaseUrl()}/_arkret/self/events`;
     const postEvent = (envelope: Record<string, unknown>) =>
       request.post(eventsUrl, {
         headers: {
@@ -678,7 +678,7 @@ test.describe("core object invariants", () => {
       headBeforeSecond,
     );
 
-    const relationsUrl = `${solandBaseUrl()}/_soland/self/relations?from_ref=${encodeURIComponent(sourceRef)}&relation_kind=has_default_view&state=active`;
+    const relationsUrl = `${colandBaseUrl()}/_coland/self/relations?from_ref=${encodeURIComponent(sourceRef)}&relation_kind=has_default_view&state=active`;
     const activeEdges = await request.get(relationsUrl, {
       headers: authHeaders(aliceToken, "GET", relationsUrl),
     });

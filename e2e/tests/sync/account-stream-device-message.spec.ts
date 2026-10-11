@@ -4,7 +4,7 @@
 
 import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 import { sendPlaintextMessageViaApi } from "../../helpers/api";
-import { solandBaseUrl } from "../../helpers/env";
+import { colandBaseUrl } from "../../helpers/env";
 import {
   accountSubscribeFramesApi,
   authHeaders,
@@ -12,7 +12,7 @@ import {
   resolveDefaultStrandId,
   sendMessageApi,
   wireErrCode,
-} from "../../helpers/soland-api";
+} from "../../helpers/coland-api";
 import { createDpopUserSession } from "../../helpers/users";
 
 async function accountSession(request: APIRequestContext, label: string) {
@@ -301,7 +301,7 @@ test.describe("account stream + device-message convergence", () => {
       "filter.strand_ids=ak:strand:retired", "filter.lazy_load_members=invalid", "filter.realm_ids=invalid",
       `filter=${encodeURIComponent(JSON.stringify({ realm_ids: ["ak:realm:duplicate", "ak:realm:duplicate"] }))}`,
     ]) {
-      const url = `${solandBaseUrl()}/_arkret/self/account/subscribe?catchup=true&${query}`;
+      const url = `${colandBaseUrl()}/_arkret/self/account/subscribe?catchup=true&${query}`;
       const response = await request.get(url, { headers: authHeaders(token, "GET", url), timeout: 10_000 });
       expect(response.status(), query).toBe(400);
       expect(wireErrCode(await response.json()), query).toBe("param_invalid");
@@ -341,7 +341,7 @@ test.describe("account stream + device-message convergence", () => {
       const baseline = await accountSubscribeFramesApi(request, owner.token, { filter });
       expectCatchup(baseline);
       const after = latestCursor(baseline);
-      const url = new URL(`${solandBaseUrl()}/_arkret/self/account/subscribe`);
+      const url = new URL(`${colandBaseUrl()}/_arkret/self/account/subscribe`);
       url.searchParams.set("catchup", "true");
       url.searchParams.set("after", after);
       url.searchParams.set(

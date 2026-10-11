@@ -1,7 +1,7 @@
 // Mock claim issuer — issues verifiable-credential style claim presentations
 // for the join-policy auto-resolve path (spec
 // governance/join-policy.md §3.1 `claim_required`, authz/constraint-schema.md
-// §10). soland's reducer verifies the `claim_presentation` structurally:
+// §10). coland's reducer verifies the `claim_presentation` structurally:
 // the presentation MUST cover every `requires_claims[]` entry. This mock
 // signs an Ed25519 JWS-shaped presentation so the harness can drive bob
 // (valid claims) and mallory (no claims) deterministically.

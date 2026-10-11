@@ -18,7 +18,7 @@
 //! participant_binding scheme id, the 600s TTL ceiling, the
 //! oldest-membership focus-selection contract, and the
 //! `ak.profile.media_service_binding.v1` registry id so a downstream
-//! soland / floria implementation regression hard-fails before reaching
+//! coland / floria implementation regression hard-fails before reaching
 //! a live integration target. The live tokens themselves are issued
 //! server-side (R3.1 work — see scenarios under `tests/`).
 

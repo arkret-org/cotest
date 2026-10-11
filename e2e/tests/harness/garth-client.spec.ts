@@ -12,7 +12,7 @@ import {
   coauthBaseUrl,
   coauthOidcClientId,
   mockEmailBaseUrl,
-  solandBaseUrl,
+  colandBaseUrl,
 } from "../../helpers/env";
 import { GarthTestClient } from "../../helpers/test-client-garth";
 
@@ -31,7 +31,7 @@ test.describe("Garth client without Inkson @fully-implemented", () => {
     const client = new GarthTestClient({
       endpoints: {
         coauthBaseUrl: coauth as string,
-        solandBaseUrl: solandBaseUrl(),
+        colandBaseUrl: colandBaseUrl(),
         mockEmailBaseUrl: mockEmailBaseUrl(),
       },
       oidcClientId: clientId as string,

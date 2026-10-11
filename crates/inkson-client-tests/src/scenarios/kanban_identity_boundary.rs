@@ -4,7 +4,7 @@
 //! `LocalOperation` holds a semantic `EventIntent` plus a holder-local
 //! operation id, and the one `event_id` is derived at the finalize boundary,
 //! after the actor chain, HLC and CBS members are complete. This scenario
-//! drives that exact producer material through a live soland and pins the
+//! drives that exact producer material through a live coland and pins the
 //! lifecycle the UI depends on:
 //!
 //! 1. **optimistic** — before authoring, the write exposes no `event_id` and no derived object id;

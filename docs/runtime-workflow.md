@@ -48,8 +48,8 @@ day Rust work.
   is the direct analogue of Complement standing up multiple homeserver
   containers inside one deployment network.
 - `joint e2e docker`:
-  `scripts/run-joint-e2e.ps1 -SolandRuntime docker` starts the Playwright
-  target soland from the same built SUT image while keeping Playwright and
+  `scripts/run-joint-e2e.ps1 -ColandRuntime docker` starts the Playwright
+  target coland from the same built SUT image while keeping Playwright and
   optional side services host-side. This is the release-quality browser/API
   path because the server under test is the packaged appliance, not a fresh
   `cargo run` child.
@@ -63,48 +63,48 @@ The harness reads these environment variables:
 - `COTEST_SUT_IMAGE=<tag>` for docker mode
 - `COTEST_SUT_CONTAINER_PORT=<port>` if the image exposes a non-default
   internal port. Default is `8008`.
-- `scripts/run-joint-e2e.ps1 -SolandRuntime process|docker`
-- `scripts/run-joint-e2e.ps1 -SolandImage <tag>` for Playwright runs backed by
-  a soland image.
+- `scripts/run-joint-e2e.ps1 -ColandRuntime process|docker`
+- `scripts/run-joint-e2e.ps1 -ColandImage <tag>` for Playwright runs backed by
+  a coland image.
 
 ### Conformance storage
 
 `run-server-conformance.ps1 -Profile all|full-nightly` starts one ephemeral
 PostgreSQL and publishes it twice:
 
-- `COTEST_SOLAND_DATABASE_URL` is the store the harness hands to a spawned SUT.
-- `SOLAND_TEST_DATABASE_URL` is what soland's `TestDatabase::lease()` reads for
+- `COTEST_COLAND_DATABASE_URL` is the store the harness hands to a spawned SUT.
+- `COLAND_TEST_DATABASE_URL` is what coland's `TestDatabase::lease()` reads for
   tests that link the storage adapter in-process. Those tests take sibling
   `<database>_slotNN` leases, so they never touch the database the SUT migrates.
 
 Set either variable yourself to run against an existing server; an explicit
-`SOLAND_TEST_DATABASE_URL` or `DATABASE_URL` is left untouched. Without a
+`COLAND_TEST_DATABASE_URL` or `DATABASE_URL` is left untouched. Without a
 reachable database the in-process tests panic with `no test database is
-configured` rather than passing vacuously -- soland has one storage
+configured` rather than passing vacuously -- coland has one storage
 implementation, so there is nothing to fall back to.
 
 ### Docker image contract
 
-The default image asset is [docker/soland.Dockerfile](../docker/soland.Dockerfile).
-It is built from the workspace root one level above `cotest`, because `soland`
+The default image asset is [docker/coland.Dockerfile](../docker/coland.Dockerfile).
+It is built from the workspace root one level above `cotest`, because `coland`
 depends on the sibling checkout `arkret-rust-sdk`. The workspace root
-`.dockerignore` trims the build context so Docker only receives the `soland`,
+`.dockerignore` trims the build context so Docker only receives the `coland`,
 `arkret-rust-sdk`, and `cotest/docker` trees instead of the whole workspace.
 
 The image contract is intentionally simple:
 
-- start `soland` as the entrypoint
-- listen on `SOLAND_BIND`
-- honor `SOLAND_PUBLIC_BASE_URL`, `SOLAND_FIRST_PROVISIONING`,
-  `SOLAND_DEVELOPMENT_MODE`, and `SOLAND_BLOB_ROOT`; the service DID is
+- start `coland` as the entrypoint
+- listen on `COLAND_BIND`
+- honor `COLAND_PUBLIC_BASE_URL`, `COLAND_FIRST_PROVISIONING`,
+  `COLAND_DEVELOPMENT_MODE`, and `COLAND_BLOB_ROOT`; the service DID is
   resolved from durable service-identity state and never injected
 - expose port `8008`
 
-The current implementation source-builds `soland` inside Docker:
+The current implementation source-builds `coland` inside Docker:
 
 - build stage: `rust:bookworm`
 - runtime stage: `debian:bookworm-slim` with `ca-certificates` and `libssl3`
-- copied source trees: `soland` and `arkret-rust-sdk`
+- copied source trees: `coland` and `arkret-rust-sdk`
 - build command: `cargo build --release --locked`
 
 The image does not define an in-container `HEALTHCHECK`. Instead, the harness
@@ -116,25 +116,25 @@ identical between `process` and `docker` modes.
 ### Build the default Docker SUT image
 
 ```powershell
-.\scripts\build-soland-image.ps1
+.\scripts\build-coland-image.ps1
 ```
 
 This script:
 
 - uses `E:\Works\arkret` as the Docker build context by default
-- reads [docker/soland.Dockerfile](../docker/soland.Dockerfile)
-- expects sibling `soland` and `arkret-rust-sdk` checkouts to exist
-- produces `cotest-soland:latest` unless `-ImageTag` overrides it
+- reads [docker/coland.Dockerfile](../docker/coland.Dockerfile)
+- expects sibling `coland` and `arkret-rust-sdk` checkouts to exist
+- produces `cotest-coland:latest` unless `-ImageTag` overrides it
 - accepts Docker cache controls through `-CacheFrom`, `-CacheTo`, `-Pull`, and
   `-NoCache`
 
 The first Docker build is slower than `process` mode because it compiles
-`soland` inside the image and resolves crates in the container build context.
+`coland` inside the image and resolves crates in the container build context.
 
 To build with a custom tag:
 
 ```powershell
-.\scripts\build-soland-image.ps1 -ImageTag cotest-soland:dev
+.\scripts\build-coland-image.ps1 -ImageTag cotest-coland:dev
 ```
 
 ### Run in local process mode
@@ -161,7 +161,7 @@ To run the PR-sized smoke profile:
 .\scripts\run-compose.ps1
 ```
 
-The compose entrypoint runs the process-mode `compose` profile. `soland`
+The compose entrypoint runs the process-mode `compose` profile. `coland`
 instances are still spawned by cotest for each scenario. Live side services can
 be attached with base URLs:
 
@@ -191,14 +191,14 @@ With BuildKit cache wiring:
 
 ```powershell
 .\scripts\run-server-conformance.ps1 -Runtime docker -BuildImage `
-  -DockerCacheFrom type=registry,ref=registry.example/cotest-soland:buildcache `
-  -DockerCacheTo type=registry,ref=registry.example/cotest-soland:buildcache,mode=max
+  -DockerCacheFrom type=registry,ref=registry.example/cotest-coland:buildcache `
+  -DockerCacheTo type=registry,ref=registry.example/cotest-coland:buildcache,mode=max
 ```
 
 If the image already exists:
 
 ```powershell
-.\scripts\run-server-conformance.ps1 -Runtime docker -SutImage cotest-soland:latest
+.\scripts\run-server-conformance.ps1 -Runtime docker -SutImage cotest-coland:latest
 ```
 
 ### Run a filtered subset
@@ -227,7 +227,7 @@ target and fails zero-match or ambiguous filter entries.
 
 ### Prove the server side without a browser
 
-`services-live` is the headless lane. It builds the sibling soland, coauth and
+`services-live` is the headless lane. It builds the sibling coland, coauth and
 flagon binaries, provisions PostgreSQL, and runs the live Rust scenarios that
 spawn those processes for real:
 
@@ -246,14 +246,14 @@ For the full product topology, keep Inkson and coauth enabled:
 
 ```powershell
 .\scripts\run-joint-e2e.ps1 `
-  -SolandRuntime docker `
-  -BuildSolandImage `
+  -ColandRuntime docker `
+  -BuildColandImage `
   -StartCoauth `
   -RunProfile joint-smoke
 ```
 
-When soland runs in Docker and coauth/flagon/mocks run on the host, the
-runner rewrites soland's outbound localhost URLs to `host.docker.internal`
+When coland runs in Docker and coauth/flagon/mocks run on the host, the
+runner rewrites coland's outbound localhost URLs to `host.docker.internal`
 inside the container. Public URLs exposed to Playwright stay as
 `http://127.0.0.1:<port>` so browser behavior remains identical to process
 mode.
@@ -273,8 +273,8 @@ comparison is limited to the selected profile's `required_coverage_profiles`, un
 ### Verified-profile promotion (manual)
 
 `e2e/scripts/write-verified-profiles.mjs` turns a finished run's `junit.xml`
-into the `verified-profiles.json` artifact that soland and coauth read at
-startup (`SOLAND_VERIFIED_PROFILES_ARTIFACT` /
+into the `verified-profiles.json` artifact that coland and coauth read at
+startup (`COLAND_VERIFIED_PROFILES_ARTIFACT` /
 `COAUTH_VERIFIED_PROFILES_ARTIFACT`, parsed by
 `arkret_models_discovery::parse_verified_profiles_artifact`).
 
@@ -293,7 +293,7 @@ $env:COTEST_VERIFIED_PROFILES_SIGNING_KEY_PATH    = "<ed25519 private key PEM>"
 node e2e\scripts\write-verified-profiles.mjs artifacts\runs\joint-e2e\<ts>-<profile>
 
 # 2. restart the services WITHOUT development mode, pointing at the artifact
-$env:SOLAND_VERIFIED_PROFILES_ARTIFACT = "<...>\verified-profiles.json"
+$env:COLAND_VERIFIED_PROFILES_ARTIFACT = "<...>\verified-profiles.json"
 ```
 
 Refresh it whenever `PROFILE_SUITE_MAP` inside the script or the profile suites
@@ -309,8 +309,8 @@ it names change.
   processes and exports their URLs to the scenario layer; cotest still owns
   SUT process lifecycle.
 - In `docker` mode, each server is a detached `docker run --rm` container with
-  its own mapped host port, temp blob root, and `SOLAND_*` runtime env.
-- In joint Playwright Docker mode, the runner keeps soland containers until
+  its own mapped host port, temp blob root, and `COLAND_*` runtime env.
+- In joint Playwright Docker mode, the runner keeps coland containers until
   teardown so `docker logs` can be copied into the joint e2e artifact directory
   even when startup or a test assertion fails.
 - Multi-server Docker scenarios create one unique bridge network per test group
@@ -371,13 +371,13 @@ The runner now also emits:
 - Use `process` mode while iterating on server code and test logic.
 - Use `docker` mode when you need a shareable, reproducible black-box run closer
   to how Complement validates homeserver images.
-- Use `run-joint-e2e.ps1 -SolandRuntime docker` for release-quality browser/API
+- Use `run-joint-e2e.ps1 -ColandRuntime docker` for release-quality browser/API
   verification, especially when checking that the built image still exposes the
   expected `/_arkret/*` service surface.
 - Use `artifacts/latest/server-conformance/summary.md` for the latest complete result.
   Targeted/profile runs remain in their timestamped authoritative directories.
 - `process` mode is the authoritative path for validating the current local
-  `soland` checkout.
+  `coland` checkout.
 - `docker` mode should be preceded by
-  `.\scripts\build-soland-image.ps1 -ImageTag cotest-soland:latest` so the SUT
-  image reflects the current `soland` tree rather than an older cached build.
+  `.\scripts\build-coland-image.ps1 -ImageTag cotest-coland:latest` so the SUT
+  image reflects the current `coland` tree rather than an older cached build.

@@ -1,4 +1,4 @@
-//! COT-STATE-02 — Invite frozen pre-state acceptance across SDK, Soland and
+//! COT-STATE-02 — Invite frozen pre-state acceptance across SDK, Coland and
 //! the Inkson producer, on the single Event/RealmCommit carrier.
 //!
 //! `zh/models/governance-objects.md` §5.3 makes the three Invite typed current

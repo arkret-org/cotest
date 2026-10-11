@@ -1,7 +1,7 @@
 //! Independent security-transaction resilience reference runner.
 //!
 //! This module intentionally does not import Arkret wire, state, Garth, or
-//! Soland code. It interprets only the fixture vocabulary and emits the five
+//! Coland code. It interprets only the fixture vocabulary and emits the five
 //! canonical comparison fields.
 
 use std::collections::BTreeSet;

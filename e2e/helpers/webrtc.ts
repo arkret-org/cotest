@@ -4,7 +4,7 @@ import {
   type APIResponse,
 } from "@playwright/test";
 import { createHash } from "node:crypto";
-import { solandBaseUrl } from "./env";
+import { colandBaseUrl } from "./env";
 import {
   accountActorId,
   eventPrincipalId,
@@ -18,9 +18,9 @@ import {
   scanRealmStreamApi,
   registeredEventVerificationMethod,
   signWithRegisteredEventSigner,
-} from "./soland-api";
-import { readScopeMlsGroupCurrentApi, scopeMlsMemberGroupApi } from "./soland-api/mls";
-import { cotestWire } from "./soland-api/wire-client";
+} from "./coland-api";
+import { readScopeMlsGroupCurrentApi, scopeMlsMemberGroupApi } from "./coland-api/mls";
+import { cotestWire } from "./coland-api/wire-client";
 
 const signalRecipes = new WeakMap<Record<string, unknown>, Record<string, unknown>>();
 const automaticSignalTimes = new WeakMap<Record<string, unknown>, {
@@ -244,8 +244,8 @@ export async function postPreparedSignalEnvelopeRaw(
   token: string,
   envelope: Record<string, unknown>,
 ): Promise<APIResponse> {
-  return await request.post(`${solandBaseUrl()}/_arkret/self/signal`, {
-    headers: { ...authHeaders(token, "POST", `${solandBaseUrl()}/_arkret/self/signal`), "content-type": "application/json" },
+  return await request.post(`${colandBaseUrl()}/_arkret/self/signal`, {
+    headers: { ...authHeaders(token, "POST", `${colandBaseUrl()}/_arkret/self/signal`), "content-type": "application/json" },
     data: canonicalJson(envelope),
   });
 }
@@ -264,7 +264,7 @@ async function captureSignalEnvelopes<T>(
   envelopes: Array<Record<string, unknown>>;
   frames: Array<Record<string, unknown>>;
 }> {
-  const url = new URL(`${solandBaseUrl()}/_arkret/self/signal/subscribe`);
+  const url = new URL(`${colandBaseUrl()}/_arkret/self/signal/subscribe`);
   url.searchParams.set("max_duration_ms", "5000");
   url.searchParams.set("heartbeat_ms", "100");
   const controller = new AbortController();

@@ -4,7 +4,7 @@
 // crypto-media/encryption-and-audit.md §2.4.1, §2.5.2, §2.6; authz/capabilities.md §5.5
 
 import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
-import { solandBaseUrl, solandServiceId } from "../../helpers/env";
+import { colandBaseUrl, colandServiceId } from "../../helpers/env";
 import { acceptInviteViaApi } from "../../helpers/api";
 import {
   accountActorId,
@@ -16,13 +16,13 @@ import {
   scanRealmStreamApi,
   signedEventEnvelope,
   submitSignedEventApi,
-} from "../../helpers/soland-api";
+} from "../../helpers/coland-api";
 import {
   addRealmMlsMemberApi,
   encryptMlsMessageContent,
   joinRealmMlsWelcomeApi,
   type MlsDevice,
-} from "../../helpers/soland-api/mls";
+} from "../../helpers/coland-api/mls";
 import {
   allowExplicitInviteNotifications,
   ensureRegistered,
@@ -134,8 +134,8 @@ async function setupEncryptedMessage(
     ownerId: alice.id,
     invitees: [bob.id, reporter.id],
     invitee_ids: {
-      [bob.id]: solandServiceId(),
-      [reporter.id]: solandServiceId(),
+      [bob.id]: colandServiceId(),
+      [reporter.id]: colandServiceId(),
     },
   });
   await acceptInviteViaApi(request, bobToken, bob.id, realmId);
@@ -244,7 +244,7 @@ async function fileModerationReport(
       evidence_refs: [],
     },
   });
-  const url = `${solandBaseUrl()}/_arkret/self/moderation/report`;
+  const url = `${colandBaseUrl()}/_arkret/self/moderation/report`;
   const response = await request.post(url, {
     headers: {
       ...authHeaders(setup.reporterToken, "POST", url),

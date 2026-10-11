@@ -7,7 +7,7 @@
 # Usage:
 #   pwsh -File scripts/promote-fixme.ps1 `
 #       -SpecPath e2e/tests/identity/onboarding.spec.ts:42 `
-#       -FeatureId soland#identity-onboarding `
+#       -FeatureId coland#identity-onboarding `
 #       -PassedSpecCommand 'npx playwright test --config playwright.config.ts --project chromium e2e/tests/identity/onboarding.spec.ts' `
 #       -EvidencePath artifacts/regression/onboarding.har `
 #       -NewBody @'
@@ -60,8 +60,8 @@ function Assert-PromotionEvidence {
     if (-not $FeatureId) {
         throw "-FeatureId is required before removing .fixme"
     }
-    if ($FeatureId -notmatch '^(soland|inkson|coauth|cotest)#[A-Za-z0-9._-]+$|^GAP-P\d+-\d+$') {
-        throw "-FeatureId must look like soland#feature-id, inkson#feature-id, coauth#feature-id, cotest#feature-id, or GAP-Px-yyy; got '$FeatureId'"
+    if ($FeatureId -notmatch '^(coland|inkson|coauth|cotest)#[A-Za-z0-9._-]+$|^GAP-P\d+-\d+$') {
+        throw "-FeatureId must look like coland#feature-id, inkson#feature-id, coauth#feature-id, cotest#feature-id, or GAP-Px-yyy; got '$FeatureId'"
     }
     if (-not $PassedSpecCommand -or -not $PassedSpecCommand.Trim()) {
         throw "-PassedSpecCommand is required before removing .fixme"

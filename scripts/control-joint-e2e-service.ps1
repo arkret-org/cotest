@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-Controls one runner-owned Soland service for joint E2E fault scenarios.
+Controls one runner-owned Coland service for joint E2E fault scenarios.
 #>
 [CmdletBinding()]
 param(
@@ -16,8 +16,8 @@ $TopologyPath = [System.IO.Path]::GetFullPath($TopologyPath)
 $topology = Get-Content -Raw -LiteralPath $TopologyPath | ConvertFrom-Json
 $server = @($topology.servers | Where-Object { $_.name -eq $ServerName }) | Select-Object -First 1
 if (-not $server) { throw "Topology does not contain $ServerName" }
-if (-not $server.soland.control) { throw "$ServerName is not runner-controlled" }
-$control = $server.soland.control
+if (-not $server.coland.control) { throw "$ServerName is not runner-controlled" }
+$control = $server.coland.control
 $statePath = [string]$control.state_path
 $stateDirectory = Split-Path -Parent $statePath
 $null = New-Item -ItemType Directory -Force -Path $stateDirectory
@@ -90,12 +90,12 @@ function Resolve-CurrentProcessIdentity {
     if ($state -and $state.current_process_id) {
         return [pscustomobject]@{ process_id = [int]$state.current_process_id; started_at = $state.current_process_started_at }
     }
-    return [pscustomobject]@{ process_id = [int]$server.soland.process_id; started_at = $server.soland.process_started_at }
+    return [pscustomobject]@{ process_id = [int]$server.coland.process_id; started_at = $server.coland.process_started_at }
 }
 
 $kind = [string]$control.kind
 if ($kind -eq 'docker') {
-    $container = [string]$server.soland.container_id
+    $container = [string]$server.coland.container_id
     if (-not $container) { throw "$ServerName has no container ID" }
     switch ($Action) {
         'isolate' { & docker stop --time 10 $container | Out-Null; if ($LASTEXITCODE -ne 0) { throw "docker stop failed for $container" }; Write-ControlState @{ kind = $kind; status = 'isolated'; container_id = $container } }
@@ -119,7 +119,7 @@ switch ($Action) {
                 Set-ProcessSuspended -ProcessIdentities @($identity) -Suspended $true
                 $suspended.Add($identity)
             }
-            Write-ControlState @{ kind = $kind; status = 'isolated'; original_process_id = [int]$server.soland.process_id; current_process_id = $rootId; current_process_started_at = $rootIdentity.started_at; suspended_process_ids = @($suspended | ForEach-Object { $_.process_id }); suspended_processes = @($suspended) }
+            Write-ControlState @{ kind = $kind; status = 'isolated'; original_process_id = [int]$server.coland.process_id; current_process_id = $rootId; current_process_started_at = $rootIdentity.started_at; suspended_process_ids = @($suspended | ForEach-Object { $_.process_id }); suspended_processes = @($suspended) }
         } catch {
             $failure = $_
             $resumeIdentities = @($suspended)
@@ -135,7 +135,7 @@ switch ($Action) {
         $identities = @($state.suspended_processes)
         [array]::Reverse($identities)
         Set-ProcessSuspended -ProcessIdentities $identities -Suspended $false
-        Write-ControlState @{ kind = $kind; status = 'running'; original_process_id = [int]$server.soland.process_id; current_process_id = $rootId; current_process_started_at = $rootIdentity.started_at }
+        Write-ControlState @{ kind = $kind; status = 'running'; original_process_id = [int]$server.coland.process_id; current_process_id = $rootId; current_process_started_at = $rootIdentity.started_at }
     }
     'restart' {
         $state = Read-ControlState
@@ -148,8 +148,8 @@ switch ($Action) {
         $command = Get-Content -Raw -LiteralPath ([string]$control.command_log)
         $wrapped = "$command; `$ok = `$?; `$native = `$LASTEXITCODE; if (-not `$ok) { if (`$null -ne `$native -and `$native -ne 0) { exit `$native }; exit 1 }; exit 0"
         $stamp = Get-Date -Format 'yyyyMMdd-HHmmssfff'
-        $stdout = Join-Path ([string]$server.soland.log_directory) "$ServerName.restart-$stamp.stdout.log"
-        $stderr = Join-Path ([string]$server.soland.log_directory) "$ServerName.restart-$stamp.stderr.log"
+        $stdout = Join-Path ([string]$server.coland.log_directory) "$ServerName.restart-$stamp.stdout.log"
+        $stderr = Join-Path ([string]$server.coland.log_directory) "$ServerName.restart-$stamp.stderr.log"
         $startArguments = @{
             FilePath = (Get-Process -Id $PID).Path
             ArgumentList = @('-NoProfile', '-EncodedCommand', [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($wrapped)))
@@ -162,7 +162,7 @@ switch ($Action) {
         $process = Start-Process @startArguments
         $replacementIdentity = Get-CotestProcessIdentity -Process $process
         try {
-            Write-ControlState @{ kind = $kind; status = 'running'; original_process_id = [int]$server.soland.process_id; current_process_id = $process.Id; current_process_started_at = $replacementIdentity.started_at; restarted = $true; stdout = $stdout; stderr = $stderr }
+            Write-ControlState @{ kind = $kind; status = 'running'; original_process_id = [int]$server.coland.process_id; current_process_id = $process.Id; current_process_started_at = $replacementIdentity.started_at; restarted = $true; stdout = $stdout; stderr = $stderr }
         } catch {
             Stop-CotestOwnedProcessTree -RootIdentity $replacementIdentity
             throw

@@ -14,17 +14,17 @@ use crate::harness::{
 use crate::scenarios::identity_test_support::actor_did_for_service_did;
 
 pub async fn owner_invite_remove_grant_revoke_survive_restart() -> Result<()> {
-    // `COTEST_SOLAND_DATABASE_URL` is an administrator connection, not a test
+    // `COTEST_COLAND_DATABASE_URL` is an administrator connection, not a test
     // database: used directly, every run replays onto the previous run's rows
     // and a stale `service_identity` fails this restart assertion for reasons
     // that have nothing to do with the code under test. This helper creates a
     // per-run database from it (and falls back to Docker), dropping it on Drop.
     let ephemeral = crate::scenarios::_helpers::coauth_bootstrap::spawn_ephemeral_postgres_for(
-        "COTEST_SOLAND_DATABASE_URL",
+        "COTEST_COLAND_DATABASE_URL",
     )?;
     let Some(database) = ephemeral.as_ref() else {
         eprintln!(
-            "owner restart row skipped: no COTEST_SOLAND_DATABASE_URL and Docker/Postgres unavailable"
+            "owner restart row skipped: no COTEST_COLAND_DATABASE_URL and Docker/Postgres unavailable"
         );
         return Ok(());
     };
@@ -34,14 +34,14 @@ pub async fn owner_invite_remove_grant_revoke_survive_restart() -> Result<()> {
     let keystore_dir = tempfile::tempdir()?;
     let keystore_path = keystore_dir
         .path()
-        .join("soland.v1")
+        .join("coland.v1")
         .to_string_lossy()
         .into_owned();
     let keystore_env = [
-        ("SOLAND_KEYSTORE_BACKEND", "encrypted_file"),
-        ("SOLAND_KEYSTORE_PATH", keystore_path.as_str()),
+        ("COLAND_KEYSTORE_BACKEND", "encrypted_file"),
+        ("COLAND_KEYSTORE_PATH", keystore_path.as_str()),
         (
-            "SOLAND_KEYSTORE_MASTER_KEY",
+            "COLAND_KEYSTORE_MASTER_KEY",
             "UlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlI=",
         ),
     ];
@@ -172,7 +172,7 @@ pub async fn owner_invite_remove_grant_revoke_survive_restart() -> Result<()> {
     server
         .kill_immediately()
         .await
-        .context("stop restarted Soland")?;
+        .context("stop restarted Coland")?;
     drop(ephemeral);
     Ok(())
 }

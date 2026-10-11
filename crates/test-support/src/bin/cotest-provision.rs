@@ -48,7 +48,7 @@ struct Request {
 #[derive(Debug, Deserialize)]
 struct EndpointsBody {
     coauth_base_url: String,
-    soland_base_url: String,
+    coland_base_url: String,
     #[serde(default)]
     mock_email_base_url: Option<String>,
 }
@@ -57,7 +57,7 @@ impl From<EndpointsBody> for DeploymentEndpoints {
     fn from(value: EndpointsBody) -> Self {
         Self {
             coauth_base_url: value.coauth_base_url,
-            soland_base_url: value.soland_base_url,
+            coland_base_url: value.coland_base_url,
             mock_email: value
                 .mock_email_base_url
                 .filter(|url| !url.trim().is_empty())
@@ -222,7 +222,7 @@ impl Session {
                 struct Body {
                     handoff_id: String,
                     coauth_base_url: String,
-                    soland_base_url: String,
+                    coland_base_url: String,
                     trust_domain: String,
                     audience_id: String,
                     device_id: String,
@@ -237,7 +237,7 @@ impl Session {
                     &self.http,
                     FoundPrincipalRequest {
                         coauth_base: &body.coauth_base_url,
-                        station_base: &body.soland_base_url,
+                        station_base: &body.coland_base_url,
                         trust_domain: &body.trust_domain,
                         audience_id: &body.audience_id,
                         device_id: &body.device_id,
@@ -281,7 +281,7 @@ impl Session {
                 #[derive(Deserialize)]
                 struct Body {
                     handoff_id: String,
-                    soland_base_url: String,
+                    coland_base_url: String,
                 }
                 let body: Body = serde_json::from_value(request.body).context("parse request")?;
                 let handoff = self
@@ -296,7 +296,7 @@ impl Session {
                 })?;
                 let read = read_self_account_viewer(
                     &self.http,
-                    &body.soland_base_url,
+                    &body.coland_base_url,
                     grant,
                     &handoff.device_key,
                 )
@@ -313,7 +313,7 @@ impl Session {
                 #[derive(Deserialize)]
                 struct Body {
                     handoff_id: String,
-                    soland_base_url: String,
+                    coland_base_url: String,
                     account_id: arkret_wire::AccountId,
                     device_id: String,
                 }
@@ -339,7 +339,7 @@ impl Session {
                     .join(sanitize_path_component(&body.handoff_id));
                 let client = GarthClientHandle::new(
                     self.http.clone(),
-                    &body.soland_base_url,
+                    &body.coland_base_url,
                     grant.clone(),
                     handoff.device_key.signing_key(),
                     body.account_id,

@@ -77,7 +77,7 @@ async fn current_origin_fixture(name: &str) -> Result<Option<CurrentOriginFixtur
     )
     .await?
     else {
-        skip_or_fail(name, "prebuilt Soland unavailable")?;
+        skip_or_fail(name, "prebuilt Coland unavailable")?;
         return Ok(None);
     };
     let (alice, alice_account) =
@@ -431,7 +431,7 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
     )
     .await?
     else {
-        return skip_or_fail(GROUP, "prebuilt Soland unavailable");
+        return skip_or_fail(GROUP, "prebuilt Coland unavailable");
     };
     let (alice, alice_account) =
         standard_client(group.server(0), &coauth, "fanout-alice", ALICE_DEVICE).await?;

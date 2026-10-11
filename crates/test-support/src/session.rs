@@ -29,7 +29,7 @@ use reqwest::RequestBuilder;
 /// The credential a client presents, and what presenting it requires.
 #[derive(Clone)]
 pub enum ClientSession {
-    /// A bearer from `/_soland/gate/auth/dev-login`.
+    /// A bearer from `/_coland/gate/auth/dev-login`.
     ///
     /// Development seam: no account authorization, no grant issuance, no key
     /// binding. See `harness::dev_login`.

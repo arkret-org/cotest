@@ -35,7 +35,7 @@ configuration into a run.
 
 ## Native formats
 
-- Soland and Teabay accept dotenv-compatible env files. Keys are
+- Coland and Flagon accept dotenv-compatible env files. Keys are
   restricted to the server prefix plus `DATABASE_URL` and `RUST_LOG`.
 - Coauth keeps its typed YAML configuration and maps `COAUTH_*` variables using
   its existing double-underscore nesting convention.
@@ -49,7 +49,7 @@ servers into one file syntax.
 
 The joint runner starts native server binaries with generated hermetic config
 files. Docker remains an explicit packaging/runtime lane, not a prerequisite
-for local functional tests. Soland and a stale Inkson web bundle are prepared
+for local functional tests. Coland and a stale Inkson web bundle are prepared
 in parallel when both need rebuilding. A fresh Inkson bundle is served as
 static files, avoiding a repeated `dx serve` compile pass.
 

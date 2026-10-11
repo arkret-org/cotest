@@ -153,7 +153,7 @@ fn appended_kinds(before: &[String], after: &[String]) -> BTreeSet<String> {
     appended
 }
 
-/// Drive four declared write operations against a live Soland and verify each
+/// Drive four declared write operations against a live Coland and verify each
 /// one's `durable_effect` against the stream it names.
 pub async fn declared_durable_effects_match_live_producers() -> Result<()> {
     let registry = load_operation_registry()?;

@@ -41,21 +41,21 @@ async fn read_current(
 
 pub async fn current_principal_survives_index_eviction_and_restart() -> Result<()> {
     let ephemeral = crate::scenarios::_helpers::coauth_bootstrap::spawn_ephemeral_postgres_for(
-        "COTEST_SOLAND_DATABASE_URL",
+        "COTEST_COLAND_DATABASE_URL",
     )?
     .context("current-principal live row requires isolated PostgreSQL")?;
     let database_url = ephemeral.connect_url.clone();
     let keystore_dir = tempfile::tempdir()?;
     let keystore_path = keystore_dir
         .path()
-        .join("soland.v1")
+        .join("coland.v1")
         .to_string_lossy()
         .into_owned();
     let keystore_env = [
-        ("SOLAND_KEYSTORE_BACKEND", "encrypted_file"),
-        ("SOLAND_KEYSTORE_PATH", keystore_path.as_str()),
+        ("COLAND_KEYSTORE_BACKEND", "encrypted_file"),
+        ("COLAND_KEYSTORE_PATH", keystore_path.as_str()),
         (
-            "SOLAND_KEYSTORE_MASTER_KEY",
+            "COLAND_KEYSTORE_MASTER_KEY",
             "UlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlI=",
         ),
     ];

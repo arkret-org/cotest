@@ -223,9 +223,9 @@ impl SpawnedCoauth {
     }
 }
 
-/// Coauth resources reserved before Soland starts. This breaks the bootstrap
-/// cycle cleanly: Soland can be configured with [`Self::base_url`] first, then
-/// Coauth is rendered with that live Soland as its Station.
+/// Coauth resources reserved before Coland starts. This breaks the bootstrap
+/// cycle cleanly: Coland can be configured with [`Self::base_url`] first, then
+/// Coauth is rendered with that live Coland as its Station.
 pub struct PreparedCoauth {
     coauth_bin: PathBuf,
     pg: EphemeralPg,
@@ -296,8 +296,8 @@ impl PreparedCoauth {
 }
 
 /// Reserve Coauth's public address and database without starting the process.
-/// Live cross-service tests use the address to configure Soland, then call
-/// [`PreparedCoauth::spawn_for_station`] with that Soland endpoint.
+/// Live cross-service tests use the address to configure Coland, then call
+/// [`PreparedCoauth::spawn_for_station`] with that Coland endpoint.
 pub fn prepare_coauth_with_db_required() -> Result<PreparedCoauth> {
     let coauth_bin = locate_external_binary(&coauth_binary_probe_spec())
         .context("coauth binary is required for the live Agent MLS test")?;
@@ -339,7 +339,7 @@ fn patch_station_config(
     arkret.insert(
         serde_yaml_ng::Value::String("stations".to_owned()),
         serde_yaml_ng::to_value(vec![serde_json::json!({
-            "name": "cotest-soland",
+            "name": "cotest-coland",
             "endpoint": endpoint,
             "internal_authority_shared_secret": internal_authority_shared_secret,
             "embedded_webvh_registration_bearer": embedded_webvh_registration_bearer,
@@ -374,7 +374,7 @@ pub fn spawn_ephemeral_postgres() -> Result<Option<EphemeralPg>> {
 /// Use the database URL named by `database_url_env`, or provision an
 /// isolated Docker-backed PostgreSQL instance when it is unset.
 ///
-/// Soland and Coauth deliberately use distinct configuration variables. A
+/// Coland and Coauth deliberately use distinct configuration variables. A
 /// shared helper must therefore take the variable name explicitly instead of
 /// accidentally wiring one service to the other's database.
 pub fn spawn_ephemeral_postgres_for(database_url_env: &str) -> Result<Option<EphemeralPg>> {

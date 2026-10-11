@@ -5,7 +5,7 @@
 //! This is the protocol-level conformance vector for the joint client/server
 //! PoP path: a client signs a self request with its `ak.session.grant`
 //! session key; the Station verifies it with the shared SDK verifier.
-//! It exercises the same construction inkson produces and soland accepts, and
+//! It exercises the same construction inkson produces and coland accepts, and
 //! pins the negative cases (tampered body, expired window, over-long window,
 //! wrong key) that MUST be rejected.
 
@@ -92,7 +92,7 @@ fn sign_self_request(
     }
 }
 
-/// The verification soland's `session_pop` hoop performs: SDK verify (covered
+/// The verification coland's `session_pop` hoop performs: SDK verify (covered
 /// components + content-digest + the registry-generated freshness window).
 fn verify_self_pop(req: &SignedRequest, public_key: &VerifyingKey, now: i64) -> Result<(), String> {
     let applicable_components = if req.body.is_empty() {
@@ -125,8 +125,8 @@ fn test_key(seed: u8) -> SigningKey {
     SigningKey::from_bytes(&[seed; 32])
 }
 
-const URI: &str = "https://soland.example.com/_arkret/self/events";
-const AUTHORITY: &str = "soland.example.com";
+const URI: &str = "https://coland.example.com/_arkret/self/events";
+const AUTHORITY: &str = "coland.example.com";
 const PATH: &str = "/_arkret/self/events";
 
 #[test]

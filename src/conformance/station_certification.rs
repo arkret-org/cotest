@@ -55,7 +55,7 @@ pub fn run_station_certification_gate_suite() -> Result<()> {
         "Station certification cases",
     )?;
 
-    let mut saw_soland_not_certified = false;
+    let mut saw_coland_not_certified = false;
     let mut saw_full_reject = false;
     let mut saw_full_pass = false;
     for case in cases {
@@ -70,8 +70,8 @@ pub fn run_station_certification_gate_suite() -> Result<()> {
                 saw_full_pass = true;
             }
             ("not_certified", Ok(StationCertificationStatus::NotCertified)) => {
-                if describe.get("service").and_then(Value::as_str) == Some("soland") {
-                    saw_soland_not_certified = true;
+                if describe.get("service").and_then(Value::as_str) == Some("coland") {
+                    saw_coland_not_certified = true;
                 }
             }
             ("reject", Err(_)) => {
@@ -95,8 +95,8 @@ pub fn run_station_certification_gate_suite() -> Result<()> {
         );
     }
 
-    if !saw_soland_not_certified {
-        bail!("{FIXTURE} must include a soland not_certified case");
+    if !saw_coland_not_certified {
+        bail!("{FIXTURE} must include a coland not_certified case");
     }
     if !(saw_full_reject && saw_full_pass) {
         bail!("{FIXTURE} must include both rejecting and passing full-profile claims");

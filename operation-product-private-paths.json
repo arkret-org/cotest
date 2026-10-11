@@ -3,7 +3,7 @@
   "comment": "Explicit product-private classifications for discovered /_arkret/* paths that are not registered protocol operations. The operation registry gate fails any unregistered discovered path unless it is listed here with classification=product-private and a reason.",
   "allowed": [
     {
-      "source": "soland",
+      "source": "coland",
       "method": "*",
       "path": "/_arkret/_conformance/{**rest}",
       "classification": "product-private",
@@ -17,14 +17,14 @@
       "reason": "Cotest-only calls into the conformance harness namespace; these helpers are test infrastructure, not registered protocol operations."
     },
     {
-      "source": "soland",
+      "source": "coland",
       "method": "*",
       "path": "/_arkret/self/blob/resumable",
       "classification": "product-private",
       "reason": "Local tus companion transport for ak.self.blob.upload.create.v1; kept out of the operation registry until resumable-upload bindings are modeled as first-class operations."
     },
     {
-      "source": "soland",
+      "source": "coland",
       "method": "*",
       "path": "/_arkret/self/blob/resumable/{**rest}",
       "classification": "product-private",
@@ -35,28 +35,28 @@
       "method": "*",
       "path": "/_arkret/self/blob/resumable",
       "classification": "product-private",
-      "reason": "SDK discovery/client support for soland's tus companion upload binding, not a registered Arkret operation."
+      "reason": "SDK discovery/client support for coland's tus companion upload binding, not a registered Arkret operation."
     },
     {
       "source": "sdk",
       "method": "*",
       "path": "/_arkret/self/blob/resumable/{**rest}",
       "classification": "product-private",
-      "reason": "SDK discovery/client support for soland's tus companion upload binding, not a registered Arkret operation."
+      "reason": "SDK discovery/client support for coland's tus companion upload binding, not a registered Arkret operation."
     },
     {
       "source": "inkson",
       "method": "*",
       "path": "/_arkret/self/blob/resumable",
       "classification": "product-private",
-      "reason": "Client-side support for soland's tus companion upload binding, not a registered Arkret operation."
+      "reason": "Client-side support for coland's tus companion upload binding, not a registered Arkret operation."
     },
     {
       "source": "inkson",
       "method": "*",
       "path": "/_arkret/self/blob/resumable/{**rest}",
       "classification": "product-private",
-      "reason": "Client-side support for soland's tus companion upload binding, not a registered Arkret operation."
+      "reason": "Client-side support for coland's tus companion upload binding, not a registered Arkret operation."
     },
     {
       "source": "cotest",
@@ -77,7 +77,7 @@
       "method": "GET",
       "path": "/_arkret/self/__definitely_does_not_exist__/probe",
       "classification": "product-private",
-      "reason": "Synthetic unknown path used by service-surface-contract.spec.ts to assert soland's canonical 404 unrecognized_endpoint envelope; deliberately not a protocol operation."
+      "reason": "Synthetic unknown path used by service-surface-contract.spec.ts to assert coland's canonical 404 unrecognized_endpoint envelope; deliberately not a protocol operation."
     },
     {
       "source": "cotest",
@@ -112,7 +112,7 @@
       "method": "GET",
       "path": "/_arkret/self/keys/backups/{wildcard}",
       "classification": "product-private",
-      "reason": "Negative method probe: the encryption/key-backup-restore scenario issues GET on a backup resource that the registry/soland expose only via PUT/DELETE, asserting 404/405; the GET method binding is intentionally absent, not a protocol operation."
+      "reason": "Negative method probe: the encryption/key-backup-restore scenario issues GET on a backup resource that the registry/coland expose only via PUT/DELETE, asserting 404/405; the GET method binding is intentionally absent, not a protocol operation."
     },
     {
       "source": "cotest",
@@ -126,7 +126,7 @@
       "method": "GET",
       "path": "/_arkret/self/notifications",
       "classification": "product-private",
-      "reason": "registry-drift.spec.ts scans this as a may-4xx surface; soland does not route /_arkret/self/notifications and the registry defines no notifications operation, so it is a tolerated probe rather than a protocol operation."
+      "reason": "registry-drift.spec.ts scans this as a may-4xx surface; coland does not route /_arkret/self/notifications and the registry defines no notifications operation, so it is a tolerated probe rather than a protocol operation."
     },
     {
       "source": "cotest",

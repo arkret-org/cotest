@@ -8,7 +8,7 @@
 //!   * `arkret_signatures::realm_organization_statement_sign` signs the canonical transcript with
 //!     the organization's control key (the same key a verifier resolves from the organization's own
 //!     DID document).
-//!   * the verification mirrors soland's `verify_realm_organization_proof_signature` exactly:
+//!   * the verification mirrors coland's `verify_realm_organization_proof_signature` exactly:
 //!     base64url-decode `authorization.proof`, re-derive
 //!     `realm_organization_statement_signing_bytes`, and `verify_strict`.
 //!
@@ -76,10 +76,10 @@ fn active_statement() -> RealmOrganizationPayload {
     }
 }
 
-/// Run the exact verification soland performs in
+/// Run the exact verification coland performs in
 /// `verify_realm_organization_proof_signature`: decode the detached base64url
 /// proof, re-derive the canonical signing bytes, and `verify_strict`.
-fn verify_like_soland(
+fn verify_like_coland(
     payload: &RealmOrganizationPayload,
     verifying_key: &VerifyingKey,
 ) -> Result<(), String> {
@@ -97,10 +97,10 @@ fn verify_like_soland(
 }
 
 /// The organization's own control key signs; the statement then verifies through
-/// the exact soland verifier shape. The verification method's DID equals the
+/// the exact coland verifier shape. The verification method's DID equals the
 /// organization_id (the model B/C security anchor).
 #[test]
-fn organization_signed_statement_verifies_through_soland_shape() {
+fn organization_signed_statement_verifies_through_coland_shape() {
     let key = org_control_key();
     let statement = active_statement();
 
@@ -121,8 +121,8 @@ fn organization_signed_statement_verifies_through_soland_shape() {
     );
 
     let signed = realm_organization_statement_sign(&statement, &key).expect("sign ok");
-    verify_like_soland(&signed, &key.verifying_key())
-        .expect("organization-signed statement must verify through the soland verifier shape");
+    verify_like_coland(&signed, &key.verifying_key())
+        .expect("organization-signed statement must verify through the coland verifier shape");
 }
 
 /// A statement signed by any key other than the organization's control key MUST
@@ -136,7 +136,7 @@ fn statement_signed_by_a_foreign_key_is_rejected() {
     let signed =
         realm_organization_statement_sign(&active_statement(), &foreign_key).expect("sign ok");
     // The verifier resolves the organization's own key, which did NOT sign this.
-    let result = verify_like_soland(&signed, &org_key.verifying_key());
+    let result = verify_like_coland(&signed, &org_key.verifying_key());
     assert!(
         result.is_err(),
         "a statement signed by a foreign key must not verify against the organization key"
@@ -151,11 +151,11 @@ fn post_signing_field_tamper_is_rejected() {
     let mut signed = realm_organization_statement_sign(&active_statement(), &key).expect("sign ok");
 
     // Verifies before tamper.
-    verify_like_soland(&signed, &key.verifying_key()).expect("must verify before tamper");
+    verify_like_coland(&signed, &key.verifying_key()).expect("must verify before tamper");
 
     // Tamper a covered field while keeping the original proof.
     signed.relationship = RealmOrganizationRelationship::Governance;
-    let result = verify_like_soland(&signed, &key.verifying_key());
+    let result = verify_like_coland(&signed, &key.verifying_key());
     assert!(
         result.is_err(),
         "tampering a covered field after signing must invalidate the proof"

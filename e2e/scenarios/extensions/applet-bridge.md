@@ -18,7 +18,7 @@
 
 ## 拓扑与身份
 
-runner 启动最新 Soland、Coauth、Inkson 与 mock-applet-registry。Applet 的公开管理 base_url 是 runner CA 认证的 HTTPS 地址，Caddy 转发至私有本地监听端口。`COTEST_MOCK_APPLET_REGISTRY_BASE_URL` 注入该公开地址，`MOCK_APPLET_REGISTRY_PUBLIC_BASE_URL` 用于签署 package。
+runner 启动最新 Coland、Coauth、Inkson 与 mock-applet-registry。Applet 的公开管理 base_url 是 runner CA 认证的 HTTPS 地址，Caddy 转发至私有本地监听端口。`COTEST_MOCK_APPLET_REGISTRY_BASE_URL` 注入该公开地址，`MOCK_APPLET_REGISTRY_PUBLIC_BASE_URL` 用于签署 package。
 
 管理员通过 canonical Coauth/Station provisioning 获得自己的 Account/session。Applet Service 无 Account session；Bot/Ghost 创建由 Service 原签 RFC9421 调 Station，业务 Event 通过 Applet→Station transaction 入站。每个 Bot/Ghost 使用独立 did:webvh inception 与 method-history evidence，ActorId 是完整 Account，不能用 DID/Core 字符串代替。
 

@@ -67,7 +67,7 @@ const CALL_SIGNAL_KINDS: &[&str] = &[
 // ─── VECT-CS-1 — signal_kind_enum (canonical 14-value set) ─────────────────
 
 /// The receiver MUST accept exactly the §5 14-value enum and MUST reject the
-/// retired non-spec types (`offer` / `ice` / `device_change`) the old soland
+/// retired non-spec types (`offer` / `ice` / `device_change`) the old coland
 /// stack used. `signal_kind` is a *decrypted plaintext* field: the check runs
 /// on the plaintext object, never on the outer header.
 pub fn run_signal_kind_enum_vector() -> Result<()> {

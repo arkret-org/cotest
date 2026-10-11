@@ -4,9 +4,9 @@ use arkret_event_draft::test_support::raw_projected_operation;
 use arkret_models_collaboration::events_payloads::private_view_account_data_key;
 use arkret_models_collaboration::objects::queries::View;
 use arkret_wire::{ErrorCode, ErrorStatusContext, EventKind, OperationId, RealmId};
+use coland_domain::hlc::ServerHlc;
+use coland_domain::reducer::{ProjectionEffect, ProjectionState};
 use serde_json::{Value, json};
-use soland_domain::hlc::ServerHlc;
-use soland_domain::reducer::{ProjectionEffect, ProjectionState};
 
 pub fn run_downstream_impact_contract_suite() -> Result<()> {
     run_private_view_account_data_vector()?;
@@ -61,7 +61,7 @@ pub fn run_private_view_account_data_vector() -> Result<()> {
 
 pub fn run_moderation_dismiss_and_concurrent_fold_vector() -> Result<()> {
     let realm = RealmId::new("ak:realm:Aehk8ouR0nK85TCbP4F3AufePk0nSVb_1zu_q_iVuLjB")?;
-    let hlc = ServerHlc::new("did:web:cotest.soland");
+    let hlc = ServerHlc::new("did:web:cotest.coland");
     let mut state = ProjectionState::new();
 
     let dismiss = operation(

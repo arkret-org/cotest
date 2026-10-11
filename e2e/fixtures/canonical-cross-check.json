@@ -1,5 +1,5 @@
 {
-  "_comment": "Cross-language canonical JSON golden vectors. `canonical` is the authoritative output of the SDK (arkret_canonical, RFC 8785 JCS / integer-only profile) and is asserted byte-for-byte by BOTH sides: the Rust gate src/conformance/canonical_cross_lang.rs (re-derives via arkret_canonical) and the TS helper test e2e/tests/conformance/canonical-cross-lang.spec.ts (re-derives via canonicalJson in e2e/helpers/soland-api.ts). If either implementation drifts, the corresponding side fails. Regenerate `canonical` with the SDK if the canonical profile changes; never hand-edit it.",
+  "_comment": "Cross-language canonical JSON golden vectors. `canonical` is the authoritative output of the SDK (arkret_canonical, RFC 8785 JCS / integer-only profile) and is asserted byte-for-byte by BOTH sides: the Rust gate src/conformance/canonical_cross_lang.rs (re-derives via arkret_canonical) and the TS helper test e2e/tests/conformance/canonical-cross-lang.spec.ts (re-derives via canonicalJson in e2e/helpers/coland-api.ts). If either implementation drifts, the corresponding side fails. Regenerate `canonical` with the SDK if the canonical profile changes; never hand-edit it.",
   "vectors": [
     {
       "canonical": "{\"a\":1,\"b\":2,\"c\":{\"y\":25,\"z\":26}}",

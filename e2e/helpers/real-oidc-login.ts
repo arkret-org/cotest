@@ -4,7 +4,7 @@ import {
   type Browser,
   type APIRequestContext,
 } from "@playwright/test";
-import { solandBaseUrl } from "./env";
+import { colandBaseUrl } from "./env";
 import {
   createDpopUserSessionForAccount,
   openDpopUserPageFromSession,
@@ -58,7 +58,7 @@ export async function serverLoginViaCoauth(
   account: RealOidcAccount,
 ): Promise<void> {
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    await page.getByTestId("login-server-url").fill(solandBaseUrl());
+    await page.getByTestId("login-server-url").fill(colandBaseUrl());
     await page.getByTestId("start-server-login-button").click();
 
     await submitCoauthPasswordCredentials(page, account);

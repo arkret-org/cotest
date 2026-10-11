@@ -23,7 +23,7 @@ a branch, copy it from
 adapt to your local toolchain.
 
 The current default server under test is the sibling
-`../soland/Cargo.toml` checkout.
+`../coland/Cargo.toml` checkout.
 
 ## Realm vs Space
 
@@ -78,34 +78,34 @@ Recommended entrypoints:
   -PassedSpecCommand "npx playwright test --config playwright.config.ts --project chromium --grep name" `
   -EvidencePath artifacts\latest\joint-e2e\playwright-report -NewBody $body
 .\scripts\run-compose.ps1
-.\scripts\build-soland-image.ps1
-.\scripts\run-server-conformance.ps1 -Runtime docker -SutImage cotest-soland:latest
+.\scripts\build-coland-image.ps1
+.\scripts\run-server-conformance.ps1 -Runtime docker -SutImage cotest-coland:latest
 .\scripts\run-server-conformance.ps1 -Runtime docker -BuildImage -Profile joint
 .\scripts\run-server-conformance.ps1 -Runtime process -Profile services-live
 ```
 
 - `process` mode is the fast local path and spawns a pre-built SUT binary
-  (`SOLAND_BIN`, or the soland binary the runner script built); test execution
-  never compiles the SUT itself. Without `SOLAND_BIN`, lookup walks the Cargo
-  target directory this run was built into and then `../soland/target/debug/`,
+  (`COLAND_BIN`, or the coland binary the runner script built); test execution
+  never compiles the SUT itself. Without `COLAND_BIN`, lookup walks the Cargo
+  target directory this run was built into and then `../coland/target/debug/`,
   so it works whether the workspace shares one `build.target-dir` or each repo
   keeps its own `target/`. Never hard-code either layout: ask
   `cargo metadata --format-version 1 --no-deps` for `target_directory`.
 - `.\scripts\run-compose.ps1` runs the process-mode `compose` profile and can
-  attach live `coauth`, `floria`, `sodmin`, `inkson`, or `flagon` services
+  attach live `coauth`, `floria`, `codmin`, `inkson`, or `flagon` services
   through base URLs or managed service commands.
 - `docker` mode is the Complement-style path and spawns the SUT with
   `docker run` while Rust tests stay host-side.
-- Joint Playwright e2e can also run soland from the built image with
-  `run-joint-e2e.ps1 -SolandRuntime docker`.
+- Joint Playwright e2e can also run coland from the built image with
+  `run-joint-e2e.ps1 -ColandRuntime docker`.
 - `-Profile services-live` is the headless service lane: it builds the sibling
-  soland, coauth and flagon binaries, provisions PostgreSQL, and runs the Rust
+  coland, coauth and flagon binaries, provisions PostgreSQL, and runs the Rust
   scenarios that spawn those processes for real. No browser and no Inkson. It
   exports `COTEST_REQUIRE_LIVE_SERVICES=1`, so a missing binary, database or
   Docker daemon fails the run instead of soft-skipping into a green report in
   which nothing started.
-- `.\scripts\build-soland-image.ps1` builds the default SUT image from
-  `soland` plus the sibling `arkret-rust-sdk` checkout using the workspace
+- `.\scripts\build-coland-image.ps1` builds the default SUT image from
+  `coland` plus the sibling `arkret-rust-sdk` checkout using the workspace
   root as Docker build context.
 - Each scripted run writes `raw.log`, `transcript.ndjson`, `summary.json`,
   `summary.md`, `summary.html`, `junit.xml`, coverage/gap reports, and
@@ -189,11 +189,11 @@ exploratory tools can never be.
 
 ### 1. Bring the stack up, then record
 
-`playwright codegen` needs a running inkson (and the soland/coauth it talks to).
+`playwright codegen` needs a running inkson (and the coland/coauth it talks to).
 Start the stack the usual way, then point the recorder at it:
 
 ```powershell
-# Terminal A — start soland + coauth + inkson and leave them running.
+# Terminal A — start coland + coauth + inkson and leave them running.
 & "D:\Works\arkret\cotest\scripts\run-joint-e2e.ps1" -StartCoauth -KeepAlive
 
 # Terminal B — record. Default inkson URL is http://127.0.0.1:4527; override
@@ -274,8 +274,8 @@ Evidence lands in `artifacts/runs/joint-e2e/<ts>-<profile>/`:
 `playwright-report/` (HTML with trace/video/failure screenshot),
 `screenshots/` (your `stepShot` captures), and `diagnostics/` (console +
 network HAR). Runner-owned service data uses explicit topology names: each
-Coauth authority has a `coauth-serverN/` directory, while Soland configuration,
-object, state, and store-dump artifacts use `soland-serverN-*` names. Open a
+Coauth authority has a `coauth-serverN/` directory, while Coland configuration,
+object, state, and store-dump artifacts use `coland-serverN-*` names. Open a
 failure's trace for a step-by-step replay of DOM, network, and screenshots:
 
 ```powershell
@@ -301,28 +301,28 @@ with `npx playwright test --update-snapshots`.
 ## Direct Cargo Run
 
 ```powershell
-$env:COTEST_SUT_MANIFEST = "..\soland\Cargo.toml"
+$env:COTEST_SUT_MANIFEST = "..\coland\Cargo.toml"
 cargo test --tests -- --nocapture
 ```
 
 If `COTEST_SUT_MANIFEST` is not set, the harness falls back to the bundled
-default `soland` checkout.
+default `coland` checkout.
 
 The flagon Directory Service bridge is optional in normal runs. Set
-`TEABAY_BASE_URL=http://127.0.0.1:7781` to attach an already running Directory,
+`FLAGON_BASE_URL=http://127.0.0.1:7781` to attach an already running Directory,
 or build `../flagon` and provide `DATABASE_URL` so cotest can spawn it through
-the `TEABAY_BIN`/sibling-binary convention.
+the `FLAGON_BIN`/sibling-binary convention.
 
 ## Event proof mode (Playwright harness)
 
 The e2e helpers sign every submitted event envelope
-(`e2e/helpers/soland-api.ts` `eventProof`). Two environment variables control
+(`e2e/helpers/coland-api.ts` `eventProof`). Two environment variables control
 the proof shape:
 
 - `COTEST_EVENT_PROOF_MODE` — `detached-jws` (default) emits the
-  `cotest.detached_jws.fixture.v1` detached-JWS proof that soland verifies
+  `cotest.detached_jws.fixture.v1` detached-JWS proof that coland verifies
   cryptographically; `dev-proof` emits the development placeholder
-  proof, accepted only by soland development builds. Any other value throws.
+  proof, accepted only by coland development builds. Any other value throws.
 - `COTEST_FORBID_DEV_PROOF=1` — hard-fails the run if anything selects
   `dev-proof`, so production-shaped runs cannot silently fall back to the
   placeholder (see `.github/workflows/integration.yml`
@@ -336,7 +336,7 @@ Every test belongs to exactly one tier; the tier decides which CI lane runs it:
   tier for every non-`#[ignore]` cargo test and runs in the PR lane.
 - `live` — needs real service binaries, Docker, or a multi-service stack.
   Nightly lane (`integration.yml`). All Playwright e2e specs are `live` by
-  construction (they target a real soland).
+  construction (they target a real coland).
 - `mls-data-plane` — needs real MLS group state, epoch secrets, and application
   ciphertext (CT-002 harness). Controlled-environment lane. Playwright tests in
   this tier carry the `@mls-data-plane` tag.
@@ -371,7 +371,7 @@ fuzz finding.
 The MLS lane first runs inkson's real OpenMLS vector as a wasm test inside
 headless Chrome, distinguishing never-joined, removed-member, wrong-key, and
 damaged-ciphertext outcomes. It then runs the paired device-revoke control-plane
-sentinel against the declared soland/inkson versions, so cryptographic and
+sentinel against the declared coland/inkson versions, so cryptographic and
 server `device_revoked` evidence are retained separately. The former Playwright
 scenario that fabricated commit/tree digests was deleted rather than retained
 as a second, misleading `mls-data-plane` test.
@@ -379,12 +379,12 @@ as a second, misleading `mls-data-plane` test.
 ## Runtime Modes
 
 - `process`: spawn a pre-built SUT binary from the sibling checkout manifest
-  (`SOLAND_BIN` overrides with an explicit immutable binary); test execution
+  (`COLAND_BIN` overrides with an explicit immutable binary); test execution
   never compiles the SUT itself.
 - `compose`: run process-mode bridge-contract tests through
-  `scripts/run-compose.ps1`; spawned `soland` remains under cotest lifecycle,
+  `scripts/run-compose.ps1`; spawned `coland` remains under cotest lifecycle,
   while external service URLs are passed through `COAUTH_BASE_URL`,
-  `FLORIA_BASE_URL`, `SODMIN_BASE_URL`, and `INKSON_BASE_URL`.
+  `FLORIA_BASE_URL`, `CODMIN_BASE_URL`, and `INKSON_BASE_URL`.
 - `docker`: spawn the SUT from `COTEST_SUT_IMAGE` with Docker while the Rust
   tests remain host-side, similar to Complement.
 
@@ -436,7 +436,7 @@ This gives `cotest` an explicit result surface instead of relying only on
 scrolling terminal output.
 
 `-Profile fast-smoke` runs a small PR-oriented set from
-`config/ci-profiles.json`; `-Profile multi-server` starts server1/server2/server3 Soland
+`config/ci-profiles.json`; `-Profile multi-server` starts server1/server2/server3 Coland
 and the numbered joint topology locally, then runs the mandatory three-server federation matrix;
 `-Profile full-nightly` runs the complete suite.
 Selective profiles declare both the Cargo integration-test `target` and the
@@ -465,14 +465,14 @@ every fetch per DID and purpose, so a scenario can assert
 `src/scenarios/_helpers/did_host.rs`. Witness *signing* stays in
 `mock-witness.mjs`; the DID host only relays to it via `POST /control/attest`.
 Note that the services under test cannot currently be pointed at this host by
-environment alone — soland/flagon/the SDK derive the DID-document URL from the
+environment alone — coland/flagon/the SDK derive the DID-document URL from the
 DID string itself (hardcoded `https://` plus an SSRF guard that rejects
 loopback), with no resolver-base-URL override.
 
 Because of that, the joint call-count contract (DID-P1-C02) is read off the
 services' own Prometheus counters instead. `run-joint-e2e.ps1` binds
-`SOLAND_METRICS_BIND` / `TEABAY_METRICS_BIND` to ports it owns and exports
-`COTEST_SOLAND_METRICS_URL` / `COTEST_TEABAY_METRICS_URL` (both also land in
+`COLAND_METRICS_BIND` / `FLAGON_METRICS_BIND` to ports it owns and exports
+`COTEST_COLAND_METRICS_URL` / `COTEST_FLAGON_METRICS_URL` (both also land in
 `summary.json` as the run's resolver call-count trace). Two counts are derived
 from them, and every scenario records both — a zero authority count proves
 nothing unless signatures were actually verified:
@@ -490,7 +490,7 @@ inflate it. Helpers: `e2e/helpers/service-metrics.ts` and
 `expectNoAdditionalAuthorityCalls` / `expect_no_additional_authority_calls`.
 Scenarios: `e2e/tests/joint/did-boundary-call-counts.spec.ts` and
 `src/scenarios/did_boundary_call_counts.rs` (the latter also documents which
-matrix rows are deliberately uncovered). Only soland and flagon export these
+matrix rows are deliberately uncovered). Only coland and flagon export these
 counters; coauth, inkson and bridges have no metrics endpoint, so rows that
 belong to them are reported as uncovered rather than approximated.
 `-FailOnCoverageRegression` compares required coverage profiles against

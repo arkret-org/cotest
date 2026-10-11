@@ -3,7 +3,7 @@
 //! # Why metrics rather than a resolver spy
 //!
 //! The task's original shape was an in-process `DidResolver` spy. cotest has no
-//! Cargo dependency on soland / flagon / coauth / floria — they are
+//! Cargo dependency on coland / flagon / coauth / floria — they are
 //! pre-built sibling binaries driven over HTTP ([`super::external_binary`]) —
 //! so a Rust trait spy cannot be injected. The network-layer alternative (the
 //! counting DID host in [`super::did_host`]) is implemented and self-tested but
@@ -13,7 +13,7 @@
 //! dev-only base-URL override in the SSRF defence would put a test requirement
 //! inside a production security boundary.
 //!
-//! soland and flagon therefore export two counters each, and this module turns
+//! coland and flagon therefore export two counters each, and this module turns
 //! them into the two numbers the joint contract is written in:
 //!
 //! | number | series |
@@ -28,7 +28,7 @@
 //!
 //! # Coverage boundary
 //!
-//! Only **soland** and **flagon** expose these counters. coauth, inkson and
+//! Only **coland** and **flagon** expose these counters. coauth, inkson and
 //! bridges have no metrics endpoint, so a scenario about them cannot be
 //! expressed here; see the DID-P1-C02 notes in the task file rather than
 //! substituting a weaker assertion.
@@ -41,17 +41,17 @@ use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, bail};
 
-/// Env var carrying soland's `/metrics` base URL (exported by
+/// Env var carrying coland's `/metrics` base URL (exported by
 /// `scripts/run-joint-e2e.ps1`).
-pub const SOLAND_METRICS_URL_ENV: &str = "COTEST_SOLAND_METRICS_URL";
+pub const COLAND_METRICS_URL_ENV: &str = "COTEST_COLAND_METRICS_URL";
 /// Env var carrying flagon's `/metrics` base URL.
-pub const TEABAY_METRICS_URL_ENV: &str = "COTEST_TEABAY_METRICS_URL";
+pub const FLAGON_METRICS_URL_ENV: &str = "COTEST_FLAGON_METRICS_URL";
 
-/// `soland_did_resolve_total` / `teabay_did_resolve_total` metric names.
-pub const SOLAND_DID_RESOLVE_TOTAL: &str = "soland_did_resolve_total";
-pub const SOLAND_SIGNATURE_VERIFY_TOTAL: &str = "soland_signature_verify_total";
-pub const TEABAY_DID_RESOLVE_TOTAL: &str = "teabay_did_resolve_total";
-pub const TEABAY_SIGNATURE_VERIFY_TOTAL: &str = "teabay_signature_verify_total";
+/// `coland_did_resolve_total` / `flagon_did_resolve_total` metric names.
+pub const COLAND_DID_RESOLVE_TOTAL: &str = "coland_did_resolve_total";
+pub const COLAND_SIGNATURE_VERIFY_TOTAL: &str = "coland_signature_verify_total";
+pub const FLAGON_DID_RESOLVE_TOTAL: &str = "flagon_did_resolve_total";
+pub const FLAGON_SIGNATURE_VERIFY_TOTAL: &str = "flagon_signature_verify_total";
 
 /// The one `source` label value that means "an outbound request was issued".
 /// Shared by both services by design.
@@ -250,40 +250,40 @@ pub struct DidBoundaryDelta {
 /// Which service's counter family to read.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MeteredService {
-    Soland,
-    Teabay,
+    Coland,
+    Flagon,
 }
 
 impl MeteredService {
     #[must_use]
     pub fn name(self) -> &'static str {
         match self {
-            Self::Soland => "soland",
-            Self::Teabay => "flagon",
+            Self::Coland => "coland",
+            Self::Flagon => "flagon",
         }
     }
 
     #[must_use]
     pub fn did_resolve_metric(self) -> &'static str {
         match self {
-            Self::Soland => SOLAND_DID_RESOLVE_TOTAL,
-            Self::Teabay => TEABAY_DID_RESOLVE_TOTAL,
+            Self::Coland => COLAND_DID_RESOLVE_TOTAL,
+            Self::Flagon => FLAGON_DID_RESOLVE_TOTAL,
         }
     }
 
     #[must_use]
     pub fn signature_verify_metric(self) -> &'static str {
         match self {
-            Self::Soland => SOLAND_SIGNATURE_VERIFY_TOTAL,
-            Self::Teabay => TEABAY_SIGNATURE_VERIFY_TOTAL,
+            Self::Coland => COLAND_SIGNATURE_VERIFY_TOTAL,
+            Self::Flagon => FLAGON_SIGNATURE_VERIFY_TOTAL,
         }
     }
 
     #[must_use]
     pub fn base_url_env(self) -> &'static str {
         match self {
-            Self::Soland => SOLAND_METRICS_URL_ENV,
-            Self::Teabay => TEABAY_METRICS_URL_ENV,
+            Self::Coland => COLAND_METRICS_URL_ENV,
+            Self::Flagon => FLAGON_METRICS_URL_ENV,
         }
     }
 }
@@ -487,56 +487,56 @@ pub fn diff(
 mod tests {
     use super::*;
 
-    const SOLAND_SAMPLE: &str = "\
-# HELP soland_did_resolve_total DID document acquisitions.
-# TYPE soland_did_resolve_total counter
-soland_did_resolve_total{method=\"key\",source=\"sdk_cache\"} 12
-soland_did_resolve_total{method=\"webvh\",source=\"binding_store\"} 7
-soland_did_resolve_total{method=\"webvh\",source=\"network\"} 2
-soland_did_resolve_total{method=\"web\",source=\"network\"} 1
-# TYPE soland_signature_verify_total counter
-soland_signature_verify_total{scheme=\"ed25519_accepted_binding\",outcome=\"success\"} 40
-soland_signature_verify_total{scheme=\"ed25519_pinned_document\",outcome=\"failure\"} 2
-soland_http_requests_total{op=\"events_submit\",status=\"200\"} 99
+    const COLAND_SAMPLE: &str = "\
+# HELP coland_did_resolve_total DID document acquisitions.
+# TYPE coland_did_resolve_total counter
+coland_did_resolve_total{method=\"key\",source=\"sdk_cache\"} 12
+coland_did_resolve_total{method=\"webvh\",source=\"binding_store\"} 7
+coland_did_resolve_total{method=\"webvh\",source=\"network\"} 2
+coland_did_resolve_total{method=\"web\",source=\"network\"} 1
+# TYPE coland_signature_verify_total counter
+coland_signature_verify_total{scheme=\"ed25519_accepted_binding\",outcome=\"success\"} 40
+coland_signature_verify_total{scheme=\"ed25519_pinned_document\",outcome=\"failure\"} 2
+coland_http_requests_total{op=\"events_submit\",status=\"200\"} 99
 ";
 
     #[test]
     fn network_source_is_the_only_authority_call() {
-        let snapshot = MetricsSnapshot::parse(SOLAND_SAMPLE);
+        let snapshot = MetricsSnapshot::parse(COLAND_SAMPLE);
         // 2 (webvh) + 1 (web); the 12 sdk_cache and 7 binding_store hits are
         // exactly what "reused the accepted binding" means and must not count.
-        assert_eq!(authority_calls(&snapshot, MeteredService::Soland, None), 3);
+        assert_eq!(authority_calls(&snapshot, MeteredService::Coland, None), 3);
         assert_eq!(
-            authority_calls(&snapshot, MeteredService::Soland, Some("webvh")),
+            authority_calls(&snapshot, MeteredService::Coland, Some("webvh")),
             2
         );
     }
 
     #[test]
     fn signature_verify_count_sums_every_label() {
-        let snapshot = MetricsSnapshot::parse(SOLAND_SAMPLE);
-        assert_eq!(signature_verifies(&snapshot, MeteredService::Soland), 42);
+        let snapshot = MetricsSnapshot::parse(COLAND_SAMPLE);
+        assert_eq!(signature_verifies(&snapshot, MeteredService::Coland), 42);
     }
 
     #[test]
     fn an_absent_series_reads_as_zero_but_is_detectable() {
-        let snapshot = MetricsSnapshot::parse(SOLAND_SAMPLE);
-        assert_eq!(authority_calls(&snapshot, MeteredService::Teabay, None), 0);
-        assert!(!snapshot.has_metric(TEABAY_DID_RESOLVE_TOTAL));
-        assert!(snapshot.has_metric(SOLAND_DID_RESOLVE_TOTAL));
+        let snapshot = MetricsSnapshot::parse(COLAND_SAMPLE);
+        assert_eq!(authority_calls(&snapshot, MeteredService::Flagon, None), 0);
+        assert!(!snapshot.has_metric(FLAGON_DID_RESOLVE_TOTAL));
+        assert!(snapshot.has_metric(COLAND_DID_RESOLVE_TOTAL));
     }
 
     #[test]
     fn the_delta_is_what_a_scenario_asserts_on() {
-        let before = MetricsSnapshot::parse(SOLAND_SAMPLE);
+        let before = MetricsSnapshot::parse(COLAND_SAMPLE);
         let after = MetricsSnapshot::parse(
-            "soland_did_resolve_total{method=\"webvh\",source=\"network\"} 2\n\
-             soland_did_resolve_total{method=\"web\",source=\"network\"} 1\n\
-             soland_signature_verify_total{scheme=\"ed25519_accepted_binding\",outcome=\"success\"} 42\n\
-             soland_signature_verify_total{scheme=\"ed25519_pinned_document\",outcome=\"failure\"} 2\n",
+            "coland_did_resolve_total{method=\"webvh\",source=\"network\"} 2\n\
+             coland_did_resolve_total{method=\"web\",source=\"network\"} 1\n\
+             coland_signature_verify_total{scheme=\"ed25519_accepted_binding\",outcome=\"success\"} 42\n\
+             coland_signature_verify_total{scheme=\"ed25519_pinned_document\",outcome=\"failure\"} 2\n",
         );
         assert_eq!(
-            diff(&before, &after, MeteredService::Soland, None),
+            diff(&before, &after, MeteredService::Coland, None),
             DidBoundaryDelta {
                 authority_network_call_count: 0,
                 signature_verify_count: 2,
@@ -545,22 +545,22 @@ soland_http_requests_total{op=\"events_submit\",status=\"200\"} 99
     }
 
     #[test]
-    fn teabay_families_parse_the_same_way() {
+    fn flagon_families_parse_the_same_way() {
         let snapshot = MetricsSnapshot::parse(
-            "teabay_did_resolve_total{method=\"web\",source=\"binding_store\"} 5\n\
-             teabay_did_resolve_total{method=\"web\",source=\"network\"} 1\n\
-             teabay_did_resolve_total{method=\"key\",source=\"did_key\"} 3\n\
-             teabay_signature_verify_total{kind=\"invite_token\",outcome=\"ok\"} 4\n\
-             teabay_signature_verify_total{kind=\"invite_token\",outcome=\"no_binding\"} 1\n",
+            "flagon_did_resolve_total{method=\"web\",source=\"binding_store\"} 5\n\
+             flagon_did_resolve_total{method=\"web\",source=\"network\"} 1\n\
+             flagon_did_resolve_total{method=\"key\",source=\"did_key\"} 3\n\
+             flagon_signature_verify_total{kind=\"invite_token\",outcome=\"ok\"} 4\n\
+             flagon_signature_verify_total{kind=\"invite_token\",outcome=\"no_binding\"} 1\n",
         );
-        assert_eq!(authority_calls(&snapshot, MeteredService::Teabay, None), 1);
-        assert_eq!(signature_verifies(&snapshot, MeteredService::Teabay), 5);
+        assert_eq!(authority_calls(&snapshot, MeteredService::Flagon, None), 1);
+        assert_eq!(signature_verifies(&snapshot, MeteredService::Flagon), 5);
     }
 
     #[test]
     fn label_values_containing_commas_and_quotes_survive_parsing() {
         let snapshot = MetricsSnapshot::parse(
-            "teabay_did_resolve_total{method=\"web\",source=\"network\",note=\"a,b\\\"c\"} 4\n",
+            "flagon_did_resolve_total{method=\"web\",source=\"network\",note=\"a,b\\\"c\"} 4\n",
         );
         let sample = &snapshot.samples()[0];
         assert_eq!(
@@ -571,29 +571,29 @@ soland_http_requests_total{op=\"events_submit\",status=\"200\"} 99
             sample.labels.get("source").map(String::as_str),
             Some("network")
         );
-        assert_eq!(authority_calls(&snapshot, MeteredService::Teabay, None), 4);
+        assert_eq!(authority_calls(&snapshot, MeteredService::Flagon, None), 4);
     }
 
     #[test]
     fn help_and_type_lines_are_not_samples() {
-        let snapshot = MetricsSnapshot::parse(SOLAND_SAMPLE);
+        let snapshot = MetricsSnapshot::parse(COLAND_SAMPLE);
         assert!(
             snapshot
                 .samples()
                 .iter()
                 .all(|sample| !sample.name.starts_with('#'))
         );
-        assert_eq!(snapshot.series(SOLAND_DID_RESOLVE_TOTAL).len(), 4);
+        assert_eq!(snapshot.series(COLAND_DID_RESOLVE_TOTAL).len(), 4);
     }
 
     #[test]
     fn a_url_that_already_ends_in_metrics_is_not_doubled() {
         let client =
-            ServiceMetricsClient::new(MeteredService::Soland, "http://127.0.0.1:9090/metrics")
+            ServiceMetricsClient::new(MeteredService::Coland, "http://127.0.0.1:9090/metrics")
                 .unwrap();
         assert_eq!(client.metrics_url(), "http://127.0.0.1:9090/metrics");
         let bare =
-            ServiceMetricsClient::new(MeteredService::Teabay, "http://127.0.0.1:9095/").unwrap();
+            ServiceMetricsClient::new(MeteredService::Flagon, "http://127.0.0.1:9095/").unwrap();
         assert_eq!(bare.metrics_url(), "http://127.0.0.1:9095/metrics");
     }
 }

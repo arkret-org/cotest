@@ -138,9 +138,9 @@ async function startRegistry(keyPath, statePath) {
     stdio: ["ignore", "ignore", "pipe"],
     env: {
       ...process.env,
-      COTEST_SOLAND_SERVICE_ID: "ak:did_core:web:station.joint-e2e.local",
-      COTEST_SOLAND_SERVICE_DID: "did:web:station.joint-e2e.local",
-      COTEST_SOLAND_SERVICE_SIGNING_KEY: Buffer.alloc(32, 53).toString("base64"),
+      COTEST_COLAND_SERVICE_ID: "ak:did_core:web:station.joint-e2e.local",
+      COTEST_COLAND_SERVICE_DID: "did:web:station.joint-e2e.local",
+      COTEST_COLAND_SERVICE_SIGNING_KEY: Buffer.alloc(32, 53).toString("base64"),
       MOCK_APPLET_REGISTRY_PORT: "0",
       MOCK_APPLET_REGISTRY_STATE_FILE: statePath,
       MOCK_APPLET_REGISTRY_STATE_KEY_FILE: keyPath,

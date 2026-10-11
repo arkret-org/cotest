@@ -10,7 +10,7 @@
 //   - arkret-spec/spec/v1/artifacts/registry/forbidden-wire-fields.json
 //   - arkret-spec/spec/v1/artifacts/registry/operation-registry.json
 //
-// Treat the artifacts as the source-of-truth and walk soland's live
+// Treat the artifacts as the source-of-truth and walk coland's live
 // `/_arkret/describe` for drift. The LIVE phases below (C / E)
 // are pure artifact-vs-describe diffs and need no fixme — they are tagged
 // @fully-implemented so they run under the joint-smoke profile.
@@ -23,7 +23,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type APIResponse, expect, test } from "../../helpers/arkret-test";
-import { solandBaseUrl } from "../../helpers/env";
+import { colandBaseUrl } from "../../helpers/env";
 import {
   ensureRegistered,
   issueUserSession,
@@ -36,7 +36,7 @@ import {
   signedEventEnvelope,
   submitSignedEventApi,
   wireErrCode,
-} from "../../helpers/soland-api";
+} from "../../helpers/coland-api";
 
 // ---------------------------------------------------------------------------
 // Artifact loader
@@ -241,7 +241,7 @@ test.describe("conformance registry drift @fully-implemented", () => {
     const canonicalProfiles = new Set(Object.keys(conformanceProfiles.profile_roles));
     expect(canonicalProfiles.size).toBeGreaterThan(0);
 
-    const resp = await request.get(`${solandBaseUrl()}/_arkret/describe`);
+    const resp = await request.get(`${colandBaseUrl()}/_arkret/describe`);
     expect(resp.ok()).toBeTruthy();
     const describe = await resp.json();
 
@@ -256,7 +256,7 @@ test.describe("conformance registry drift @fully-implemented", () => {
     });
 
     const rogue = [...claimed].filter((id) => !canonicalProfiles.has(id));
-    expect(rogue, `soland describe claimed profile id(s) absent from canonical catalog: ${rogue.join(", ")}`).toEqual([]);
+    expect(rogue, `coland describe claimed profile id(s) absent from canonical catalog: ${rogue.join(", ")}`).toEqual([]);
   });
 
   test("Phase E — every claimed operation has a canonical operation-registry entry", async ({
@@ -270,7 +270,7 @@ test.describe("conformance registry drift @fully-implemented", () => {
     const canonicalOps = new Set(operationRegistry.operations.map((o) => o.operation_id));
     expect(canonicalOps.size).toBeGreaterThan(0);
 
-    const resp = await request.get(`${solandBaseUrl()}/_arkret/describe`);
+    const resp = await request.get(`${colandBaseUrl()}/_arkret/describe`);
     expect(resp.ok()).toBeTruthy();
     const describe = await resp.json();
 
@@ -289,13 +289,13 @@ test.describe("conformance registry drift @fully-implemented", () => {
       body: JSON.stringify(claimedOps.sort(), null, 2),
       contentType: "application/json",
     });
-    await testInfo.attach("operations-not-claimed-by-soland", {
-      // expected to be non-empty (soland is partial impl); informational only.
+    await testInfo.attach("operations-not-claimed-by-coland", {
+      // expected to be non-empty (coland is partial impl); informational only.
       body: JSON.stringify(missingFromImpl.sort(), null, 2),
       contentType: "application/json",
     });
 
-    expect(rogue, `soland describe claimed operation_id(s) absent from canonical registry: ${rogue.join(", ")}`).toEqual([]);
+    expect(rogue, `coland describe claimed operation_id(s) absent from canonical registry: ${rogue.join(", ")}`).toEqual([]);
   });
 
   // -------------------------------------------------------------------------
@@ -326,8 +326,8 @@ test.describe("conformance registry drift @fully-implemented", () => {
       // Event kind (device-lifecycle.md section 8.2.2).
       payload: {},
     });
-    const resp = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
-      headers: authHeaders(token, "POST", `${solandBaseUrl()}/_arkret/self/events`),
+    const resp = await request.post(`${colandBaseUrl()}/_arkret/self/events`, {
+      headers: authHeaders(token, "POST", `${colandBaseUrl()}/_arkret/self/events`),
       data: { event: envelope },
     });
     expect(resp.status()).toBeGreaterThanOrEqual(400);
@@ -363,8 +363,8 @@ test.describe("conformance registry drift @fully-implemented", () => {
 
     // Submit a benign event so the write receipt is part of the scan surface.
     const probeRealmId = "ak:realm:AV1vAwt2NWgRW6lXhHcPfu4l8U3dkzSjWbQ_xXTw370Q";
-    const submitReceipt = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
-      headers: authHeaders(token, "POST", `${solandBaseUrl()}/_arkret/self/events`),
+    const submitReceipt = await request.post(`${colandBaseUrl()}/_arkret/self/events`, {
+      headers: authHeaders(token, "POST", `${colandBaseUrl()}/_arkret/self/events`),
       data: { event: signedEventEnvelope({
         actorId: alice.id,
         realmId: probeRealmId,
@@ -374,12 +374,12 @@ test.describe("conformance registry drift @fully-implemented", () => {
     });
 
     const surfaces: Array<{ name: string; response: APIResponse; requireOk?: boolean }> = [
-      { name: "server.describe", response: await request.get(`${solandBaseUrl()}/_arkret/describe`), requireOk: true },
-      { name: "health", response: await request.get(`${solandBaseUrl()}/health`), requireOk: true },
-      { name: "directory.describe", response: await request.get(`${solandBaseUrl()}/_arkret/find/directory/describe`) },
-      { name: "account.viewer", response: await request.get(`${solandBaseUrl()}/_arkret/self/account/viewer`, { headers: authHeaders(token, "GET", `${solandBaseUrl()}/_arkret/self/account/viewer`) }) },
-      { name: "streams.scan", response: await request.fetch(`${solandBaseUrl()}/_arkret/self/streams/scan`, { method: "POST", data: { realm_id: probeRealmId, stream_ref: { kind: "realm", realm_id: probeRealmId }, limit: 20 }, headers: authHeaders(token, "POST", `${solandBaseUrl()}/_arkret/self/streams/scan`) }) },
-      { name: "notifications", response: await request.get(`${solandBaseUrl()}/_arkret/self/notifications`, { headers: authHeaders(token, "GET", `${solandBaseUrl()}/_arkret/self/notifications`) }) },
+      { name: "server.describe", response: await request.get(`${colandBaseUrl()}/_arkret/describe`), requireOk: true },
+      { name: "health", response: await request.get(`${colandBaseUrl()}/health`), requireOk: true },
+      { name: "directory.describe", response: await request.get(`${colandBaseUrl()}/_arkret/find/directory/describe`) },
+      { name: "account.viewer", response: await request.get(`${colandBaseUrl()}/_arkret/self/account/viewer`, { headers: authHeaders(token, "GET", `${colandBaseUrl()}/_arkret/self/account/viewer`) }) },
+      { name: "streams.scan", response: await request.fetch(`${colandBaseUrl()}/_arkret/self/streams/scan`, { method: "POST", data: { realm_id: probeRealmId, stream_ref: { kind: "realm", realm_id: probeRealmId }, limit: 20 }, headers: authHeaders(token, "POST", `${colandBaseUrl()}/_arkret/self/streams/scan`) }) },
+      { name: "notifications", response: await request.get(`${colandBaseUrl()}/_arkret/self/notifications`, { headers: authHeaders(token, "GET", `${colandBaseUrl()}/_arkret/self/notifications`) }) },
       { name: "events.submit.receipt", response: submitReceipt },
     ];
 

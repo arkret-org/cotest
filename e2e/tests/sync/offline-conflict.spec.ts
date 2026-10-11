@@ -22,11 +22,11 @@ import {
   signedEventEnvelope,
   submitSignedEventApi,
   waitForInviteDeliveryApi,
-} from "../../helpers/soland-api";
+} from "../../helpers/coland-api";
 import {
   hasServerCount,
-  solandBaseUrl,
-  solandServiceId,
+  colandBaseUrl,
+  colandServiceId,
 } from "../../helpers/env";
 import {
   allowExplicitInviteNotifications,
@@ -222,7 +222,7 @@ test.describe("offline sync + conflict repair", () => {
     const bobToken = await issueUserSession(request, bob, { server: "server2" });
 
     await grantInviteConsentArkret(request, bobToken, bob, alice.id, {
-      server: "server2", peerStationId: solandServiceId("server1"),
+      server: "server2", peerStationId: colandServiceId("server1"),
     });
     // createRealmApi addresses the invitation with explicit_address evidence.
     await allowExplicitInviteNotifications(request, bobToken, "server2");
@@ -234,12 +234,12 @@ test.describe("offline sync + conflict repair", () => {
         discoverability: "listed",
         history_access: "since_join",
         invitees: [bob.id],
-        invitee_ids: { [bob.id]: solandServiceId("server2") },
+        invitee_ids: { [bob.id]: colandServiceId("server2") },
         ownerId: alice.id,
-        creator_id: solandServiceId("server1"),
+        creator_id: colandServiceId("server1"),
         plaintext_visible_services: [
-          solandServiceId("server1"),
-          solandServiceId("server2"),
+          colandServiceId("server1"),
+          colandServiceId("server2"),
         ],
         federation_policy: "open",
       },
@@ -250,7 +250,7 @@ test.describe("offline sync + conflict repair", () => {
     await resolveDefaultStrandId(request, aliceToken, realmId, { server: "server1" });
     const invitation = await waitForInviteDeliveryApi(request, bobToken, bob.id, realmId, "server2");
     await acceptPreparedInviteApi(request, bobToken, bob.id, realmId, invitation.id, { server: "server2" });
-    const realmUrl = `${solandBaseUrl("server2")}/_arkret/self/realms/${encodeURIComponent(realmId)}`;
+    const realmUrl = `${colandBaseUrl("server2")}/_arkret/self/realms/${encodeURIComponent(realmId)}`;
     await expect.poll(async () => {
       const response = await request.get(realmUrl, { headers: authHeaders(bobToken, "GET", realmUrl) });
       expect([200, 404], "the member's own join baseline must not hide service errors")
@@ -260,7 +260,7 @@ test.describe("offline sync + conflict repair", () => {
         kind?: string; account_id?: { station_id?: string; principal_id?: string };
       }> };
       return realm.member_ids?.some((member) => member.kind === "account" &&
-        member.account_id?.station_id === solandServiceId("server2") &&
+        member.account_id?.station_id === colandServiceId("server2") &&
         member.account_id?.principal_id === bob.id) === true;
     }, { timeout: 45_000, intervals: [1_000, 2_000, 5_000] }).toBe(true);
 
@@ -285,15 +285,15 @@ test.describe("offline sync + conflict repair", () => {
     );
     const rows = await scanPeerRealmStreamRowsApi(request, {
       server: "server1",
-      sourceServiceId: solandServiceId("server2"),
+      sourceServiceId: colandServiceId("server2"),
       realmId,
     });
     expect(rows.map((row) => row.event.event_id)).toContain(sent.event_id);
     const missing = rows.filter((row) => !server2BeforeIds.has(String(row.event.event_id))).slice(0, 100);
     if (missing.length > 0) {
       const ingest = await pushCommittedRowsApi(request, missing, {
-        origin: solandServiceId("server1"),
-        destination: solandServiceId("server2"),
+        origin: colandServiceId("server1"),
+        destination: colandServiceId("server2"),
         server: "server2",
         realmId,
       });

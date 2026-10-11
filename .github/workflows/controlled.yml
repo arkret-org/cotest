@@ -51,7 +51,7 @@ jobs:
       COTEST_MLS_HARNESS_VERSION: ${{ inputs.mls_harness_version }}
       COTEST_PLATFORM_PROVIDER: ${{ inputs.platform_provider }}
       COTEST_PLATFORM_ADAPTER_VERSION: ${{ inputs.platform_adapter_version }}
-      COTEST_SOLAND_BASE_URL: ${{ secrets.COTEST_SOLAND_BASE_URL }}
+      COTEST_COLAND_BASE_URL: ${{ secrets.COTEST_COLAND_BASE_URL }}
       COTEST_INKSON_BASE_URL: ${{ secrets.COTEST_INKSON_BASE_URL }}
       COTEST_COAUTH_BASE_URL: ${{ secrets.COTEST_COAUTH_BASE_URL }}
       COTEST_REQUIRE_JOINT_STACK: "1"
@@ -99,8 +99,8 @@ jobs:
       - uses: actions/checkout@v4
         if: inputs.lane == 'mls-data-plane'
         with:
-          repository: ${{ github.repository_owner }}/soland
-          path: soland
+          repository: ${{ github.repository_owner }}/coland
+          path: coland
           ref: ${{ inputs.sibling_ref }}
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: actions/checkout@v4

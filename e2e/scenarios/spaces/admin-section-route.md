@@ -19,7 +19,7 @@
 
 ## 拓扑
 
-- 1 × soland(提供 Realm 创建)
+- 1 × coland(提供 Realm 创建)
 - 1 × coauth(发 alice 的 dev session)
 - 1 × inkson(被测对象;routing 行为)
 - 1 × Playwright browser context — 一次性 alice user
@@ -59,7 +59,7 @@
 
 - **历史背景**:多个成员管理流程都遇到过 `invite-member` 按钮"渲染不出来"的问题,人工 trace 发现 `RealmAdminPanel` 在 hard nav 时把 `active_section` 误初始化为 `overview`,导致 members section 没渲染。本 probe 把这个 race 单独抽出,fail 时无歧义指向 inkson routing 而不是 invite 逻辑
 - **不要混进 invite/role 业务断言**:本 probe 故意只读 `active_section` 文本,不点 invite 按钮、不调 invite API — 任何额外断言都会模糊"是 routing fail 还是 invite fail"的判断
-- **120s 超时不是 routing 问题的征兆**:首次加载 inkson 的 React bundle + soland 初始 claim 在 cold start 下可能慢,本 spec 容忍长 timeout,只在 `active_section` 文本错时 fail
+- **120s 超时不是 routing 问题的征兆**:首次加载 inkson 的 React bundle + coland 初始 claim 在 cold start 下可能慢,本 spec 容忍长 timeout,只在 `active_section` 文本错时 fail
 - **若以后想覆盖更多 section**:复制本 probe,把 `members` 换成 `settings` / `roles` / `audit`,断言文本换成对应的人类可读名;不要在本 spec 里 loop section,会让失败时定位变难
 - **配套 testid 约定**:inkson `RealmAdminPanel` 必须暴露:
   - `data-testid="realm-admin-panel"` — 整个 admin panel 容器
@@ -67,4 +67,4 @@
 
 ## 总耗时预估
 
-单次跑约 30-60s(主要是 inkson 冷启动 + soland 注册 + Realm 创建;真正的 routing 断言部分 < 1s)。
+单次跑约 30-60s(主要是 inkson 冷启动 + coland 注册 + Realm 创建;真正的 routing 断言部分 < 1s)。

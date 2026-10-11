@@ -64,7 +64,7 @@ pub async fn run(
         actor.authorize(
             server
                 .http()
-                .get(server.url("/_soland/admin/moderation/queue")),
+                .get(server.url("/_coland/admin/moderation/queue")),
         ),
         StatusCode::OK,
     )
@@ -106,7 +106,7 @@ pub async fn run(
         actor.authorize(
             server
                 .http()
-                .get(server.url("/_soland/admin/moderation/queue")),
+                .get(server.url("/_coland/admin/moderation/queue")),
         ),
         StatusCode::OK,
     )
@@ -141,7 +141,7 @@ pub async fn run(
         actor.authorize(
             server
                 .http()
-                .get(server.url("/_soland/admin/moderation/queue")),
+                .get(server.url("/_coland/admin/moderation/queue")),
         ),
         StatusCode::OK,
     )

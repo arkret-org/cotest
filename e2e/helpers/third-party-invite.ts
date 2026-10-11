@@ -3,7 +3,7 @@
 // sync/third-party-invites.md §3-4: a verification service signs a
 // `binding_proof` attesting "token holder == subject DID"; the claimant signs a
 // `subject_proof` attesting "I agree to be bound by this specific binding_proof".
-// soland's reducer (apply_invites.rs) + the detached-proof verifier
+// coland's reducer (apply_invites.rs) + the detached-proof verifier
 // (invite_claim_proofs.rs) check both signatures with real Ed25519 keys resolved
 // through the DID resolver, so these fixtures MUST produce genuine signatures
 // over the exact canonical transcripts.
@@ -18,15 +18,15 @@ import {
   canonicalJson,
   projectDidToCoreId,
   sha256CanonicalJson,
-} from "./soland-api";
-import { sdkInviteSubjectProof } from "./soland-api/wire-client";
+} from "./coland-api";
+import { sdkInviteSubjectProof } from "./coland-api/wire-client";
 import {
   ed25519PrivateKeySeedB64url,
   encodeEd25519PubkeyMultibase,
   rawEd25519PublicKey,
 } from "./encoding";
 
-// Domain separators — must match soland invite_claim_proofs.rs verbatim,
+// Domain separators — must match coland invite_claim_proofs.rs verbatim,
 // trailing "\n" included.
 const BINDING_PROOF_TRANSCRIPT_DOMAIN = "ak.invite.claim.binding_proof.v1\n";
 const INVITE_AUDIENCE = "arkret.invite.claim";
@@ -70,7 +70,7 @@ function cellInviteId(cell: ThirdPartyInviteCell): string {
 // Mint a fresh `did:key` Ed25519 identity. The single verification method is
 // `did:key:<mb>#<mb>`, exactly what DidKeyResolver synthesizes. The multibase
 // (`z` + base58btc(0xed01 ‖ key)) is rendered by the shared `encoding.ts`
-// authority so did:key generation can never drift from soland's decoder.
+// authority so did:key generation can never drift from coland's decoder.
 export function generateDidKeyIdentity(): DidKeyIdentity {
   const { privateKey, publicKey } = generateKeyPairSync("ed25519");
   const multibase = encodeEd25519PubkeyMultibase(rawEd25519PublicKey(publicKey));
@@ -96,7 +96,7 @@ function transcriptBytes(domain: string, transcript: unknown): Buffer {
 }
 
 // `sha256:` + canonical_sha256({expires_at, invite_id, realm_id,
-// third_party_invite}) — soland invite_record_digest
+// third_party_invite}) — coland invite_record_digest
 // (projection.rs invite_claim_proof_context). `invite_id` is the
 // Event-derived retype of the accepted invite Event; `expires_at` is the
 // rfc3339-seconds form stored on the invite cell, which for events submitted
@@ -132,7 +132,7 @@ export function buildThirdPartyInvitePayload(args: {
     token_commitment: args.tokenCommitment,
     token_salt_id: args.tokenSaltId ?? "salt-3pid-e2e-001",
     token_entropy_bits: 128,
-    // invite.schema.json types this as did_core_id, and soland compares it
+    // invite.schema.json types this as did_core_id, and coland compares it
     // byte-for-byte against the Realm allowlist and the binding_proof's
     // verification_id, so every carrier uses the core-id spelling.
     verification_id: projectDidToCoreId(args.verificationService.did),
@@ -157,7 +157,7 @@ export function buildThirdPartyInvitePayload(args: {
   };
 }
 
-// Sign the `binding_proof` exactly as soland reconstructs it: the unsigned proof
+// Sign the `binding_proof` exactly as coland reconstructs it: the unsigned proof
 // object (no `signature`/`sig`) wrapped in the domain-separated transcript that
 // binds invite_id / realm_id / subject_id / token_commitment / claim_nonce /
 // invite_digest / verification_id.

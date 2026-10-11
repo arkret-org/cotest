@@ -17,7 +17,7 @@
 
 ## 拓扑
 
-- 1 × soland + 1 × coauth
+- 1 × coland + 1 × coauth
 
 ## Actors
 
@@ -105,7 +105,7 @@
 
 ## Implementation notes
 
-- **soland 缺口**:`ak.receipt.read` ephemeral 路由、policy enforcement(`required` 强制 / `disabled` reject)、`ak.read_cursor.advance` actor-private account data — 实现度未知
+- **coland 缺口**:`ak.receipt.read` ephemeral 路由、policy enforcement(`required` 强制 / `disabled` reject)、`ak.read_cursor.advance` actor-private account data — 实现度未知
 - **inkson 缺口**:`/settings/privacy` 的 send-read-receipts toggle、space disclosure policy 编辑入口、receipt 头像渲染(`read-receipt-<actor>` testid)— 这些当前可能不全
 - **测试侧**:用 `Promise.race` 等 receipt 出现 vs 超时 5s 来断言"不出现"
 

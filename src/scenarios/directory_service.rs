@@ -6,7 +6,7 @@ use reqwest::{Client, StatusCode};
 use serde_json::Value as JsonValue;
 
 use crate::harness::NonProtocolTestBody;
-use crate::scenarios::_helpers::external_binary::{TEABAY_SPEC, try_spawn};
+use crate::scenarios::_helpers::external_binary::{FLAGON_SPEC, try_spawn};
 
 enum DirectoryTarget {
     Attached(String),
@@ -35,12 +35,12 @@ impl DirectoryTarget {
     }
 }
 
-pub async fn teabay_directory_service_profile_is_discoverable() -> Result<()> {
+pub async fn flagon_directory_service_profile_is_discoverable() -> Result<()> {
     assert_current_v1_registry_contract()?;
 
     let Some(directory) = directory_target().await? else {
         eprintln!(
-            "skipping flagon Directory cotest: set TEABAY_BASE_URL or build flagon and set DATABASE_URL"
+            "skipping flagon Directory cotest: set FLAGON_BASE_URL or build flagon and set DATABASE_URL"
         );
         return Ok(());
     };
@@ -84,7 +84,7 @@ pub async fn teabay_directory_service_profile_is_discoverable() -> Result<()> {
     assert_array_exact(&describe, "resource_kinds", &["realm"]);
     assert!(describe.get("accepted_resource_kinds").is_none());
     assert!(describe.get("ingest_modes").is_none());
-    assert!(describe.get("x_teabay_limitations").is_none());
+    assert!(describe.get("x_flagon_limitations").is_none());
 
     let openapi = get_json(&http, directory.url("/.well-known/arkret/openapi.json")).await?;
     for (path, method, operation_id) in [
@@ -185,12 +185,12 @@ fn assert_current_v1_registry_contract() -> Result<()> {
 }
 
 async fn directory_target() -> Result<Option<DirectoryTarget>> {
-    if let Ok(base_url) = std::env::var("TEABAY_BASE_URL")
+    if let Ok(base_url) = std::env::var("FLAGON_BASE_URL")
         && !base_url.trim().is_empty()
     {
         return Ok(Some(DirectoryTarget::Attached(base_url)));
     }
-    Ok(try_spawn(&TEABAY_SPEC).await?.map(DirectoryTarget::Spawned))
+    Ok(try_spawn(&FLAGON_SPEC).await?.map(DirectoryTarget::Spawned))
 }
 
 async fn get_json(http: &Client, url: String) -> Result<JsonValue> {

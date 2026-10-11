@@ -18,7 +18,7 @@
 
 ## 拓扑
 
-- 1 × soland + 1 × coauth
+- 1 × coland + 1 × coauth
 
 ## Actors
 
@@ -107,7 +107,7 @@
 
 ## Implementation notes
 
-- **soland 缺口**:`ak.content.poll{,.response}`、`ak.relation.mention`、`ak.typing` / `ak.presence` ephemeral channel — 实现度未知;reactions(OR-Set)应该已有。v1 禁止专用 mention sidecar/hash 路由。
+- **coland 缺口**:`ak.content.poll{,.response}`、`ak.relation.mention`、`ak.typing` / `ak.presence` ephemeral channel — 实现度未知;reactions(OR-Set)应该已有。v1 禁止专用 mention sidecar/hash 路由。
 - **inkson 缺口**:poll UI(`poll-option-button`、`poll-close-button`、`poll-vote-count`)、typing indicator、presence indicator — 这些 testid 未确认存在
 - **测试侧**:典型测 typing 需要"无 send" 状态;Playwright 用 `composer-input.fill()` 不 click send,等 N ms 然后查 alice 视图
 

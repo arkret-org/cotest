@@ -14,7 +14,7 @@
 //!
 //! These are SDK-pure wire-shape pins. Live reducer paths (sequenced-state
 //! reject, deactivate-terminal, session-grant agent-branch acceptance
-//! matrix, replay-cache) land in soland P2-impl; this suite hard-fails
+//! matrix, replay-cache) land in coland P2-impl; this suite hard-fails
 //! on any registry-side drift today.
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -840,7 +840,7 @@ pub fn run_agent_longevity_no_expiry_vector() -> Result<()> {
             "actions": ["ak.event.read"],
             "resources": [{"kind": "realm", "realm_id": "ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K"}]
         },
-        "audience": ["did:web:soland.example"],
+        "audience": ["did:web:coland.example"],
         "issued_at": "2026-07-12T00:00:00.000Z",
         "approval_evidence": {
             "kind": "approval_event",
@@ -1186,11 +1186,11 @@ pub fn run_agent_session_grant_replay_vector() -> Result<()> {
         );
     }
 
-    let mut verifier = MiniAgentKeyProofVerifier::new("soland.local", "sig-ok");
+    let mut verifier = MiniAgentKeyProofVerifier::new("coland.local", "sig-ok");
     verifier
         .verify(MiniAgentKeyProof {
             challenge: "challenge-1",
-            audience: "soland.local",
+            audience: "coland.local",
             signature: "sig-ok",
         })
         .map_err(|reason| anyhow!("valid agent_key_proof rejected: {reason}"))?;
@@ -1198,7 +1198,7 @@ pub fn run_agent_session_grant_replay_vector() -> Result<()> {
         &mut verifier,
         MiniAgentKeyProof {
             challenge: "challenge-1",
-            audience: "soland.local",
+            audience: "coland.local",
             signature: "sig-ok",
         },
         "agent_key_proof_replay",
@@ -1216,7 +1216,7 @@ pub fn run_agent_session_grant_replay_vector() -> Result<()> {
         &mut verifier,
         MiniAgentKeyProof {
             challenge: "challenge-3",
-            audience: "soland.local",
+            audience: "coland.local",
             signature: "sig-tampered",
         },
         arkret_wire::ReasonCode::PROOF_INVALID,
@@ -1225,7 +1225,7 @@ pub fn run_agent_session_grant_replay_vector() -> Result<()> {
         &mut verifier,
         MiniAgentKeyProof {
             challenge: "challenge-3",
-            audience: "soland.local",
+            audience: "coland.local",
             signature: "sig-ok",
         },
         "agent_key_proof_replay",

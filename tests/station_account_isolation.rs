@@ -4,10 +4,10 @@
 //! Each Station accepts the principal's PCR genesis through its registered
 //! unit, so the device every consumer below stands on is one the Station
 //! decided, and every device selector comes from that admission result.
-#[path = "../../soland/crates/test-support/src/device_authorization_history.rs"]
+#[path = "../../coland/crates/test-support/src/device_authorization_history.rs"]
 #[allow(dead_code)]
 mod device_authorization_history;
-#[path = "../../soland/crates/test-support/src/pcr_genesis.rs"]
+#[path = "../../coland/crates/test-support/src/pcr_genesis.rs"]
 #[allow(dead_code)]
 mod pcr_genesis;
 
@@ -15,12 +15,12 @@ use anyhow::{Context, Result, ensure};
 use arkret_canonical::{DigestSuite, canonical_json_bytes};
 use arkret_wire::{AccountId, ActorId, Did, DidCoreId, Event};
 use chrono::{Duration, Utc};
+use coland_storage::*;
+use coland_storage_postgres::test_database::TestDatabase;
+use coland_storage_postgres::{Db, PgPersistenceStore, PoolTuning};
 use device_authorization_history::DeviceHistoryFixtureOptions;
 use pcr_genesis::PcrGenesisFixture;
 use serde_json::json;
-use soland_storage::*;
-use soland_storage_postgres::test_database::TestDatabase;
-use soland_storage_postgres::{Db, PgPersistenceStore, PoolTuning};
 
 /// The founding device the fixture's PCR genesis authorizes.
 const DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000000001";
@@ -153,7 +153,7 @@ async fn seed(
                 recipient_device_authorization: device_authorization.clone(),
                 position: 1,
                 envelope: {
-                    let mut envelope = soland_storage::contract_tests::test_device_message_envelope(
+                    let mut envelope = coland_storage::contract_tests::test_device_message_envelope(
                         &device_authorization,
                         &device_authorization,
                         now,

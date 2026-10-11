@@ -23,7 +23,7 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
 
 ## 拓扑
 
-- 1 × soland(含 backup storage API)+ 1 × coauth
+- 1 × coland(含 backup storage API)+ 1 × coauth
 - 一个 E2EE Realm `R_e2ee` 包含 alice + bob
 
 ## Actors
@@ -72,7 +72,7 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
 
 7. (假设 device-A 关闭、不同步)
 8. bob 在 `R_e2ee` 发消息 `M1`,`M2`,使用 epoch N 的 key
-9. soland 接受;消息 ciphertext 落到 sync 队列等 alice 拉
+9. coland 接受;消息 ciphertext 落到 sync 队列等 alice 拉
 
 ### Phase C — Device-A "丢失"
 
@@ -91,7 +91,7 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
     - **commitment mismatch → 客户端在本地拒绝,不向服务器发任何 oracle 查询**(spec §7.2)
     - commitment match → 用 derived_key 解 ciphertext → 拿回 mls_history_backup_key
 15. 客户端根据 accepted recovery policy/session 构造 policy-authorized `ak.device.reanchor` + 新设备自签 PoP 的 replacement authorize 原子 unit；恢复事务不提交 DID entry。
-16. soland 校验 recovery policy/session、完整 frontier CAS 与 replacement binding 后原子接受；旧 generation 的 Event/Seal/离线队列立即 fenced。
+16. coland 校验 recovery policy/session、完整 frontier CAS 与 replacement binding 后原子接受；旧 generation 的 Event/Seal/离线队列立即 fenced。
 17. 断言:device-B `/settings/devices` 显示 alice 的 device 列表(可能含 device-A,看是否 revoke;此时未 revoke,所以 A 还在)
 
 ### Phase E — Device-B 从 MLS commit chain 重建 epoch keys + 解 bob 的消息
@@ -138,7 +138,7 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
 
 ## Implementation notes
 
-- **当前 live 覆盖**:`encryption/key-backup-restore` 已验证 soland key-backup CRUD、owner 隔离、Argon2id floor、mixed-secret stronger floor、metadata-only list、bearer-only ciphertext read 拒绝(§7.7.1 unlock proof)与 DELETE ownership proof。inkson 的加解密、wrong-Recovery-Key、BIP-39 和 late-recovery helper 由 inkson Rust 测试覆盖，不计入 Playwright live 覆盖。
+- **当前 live 覆盖**:`encryption/key-backup-restore` 已验证 coland key-backup CRUD、owner 隔离、Argon2id floor、mixed-secret stronger floor、metadata-only list、bearer-only ciphertext read 拒绝(§7.7.1 unlock proof)与 DELETE ownership proof。inkson 的加解密、wrong-Recovery-Key、BIP-39 和 late-recovery helper 由 inkson Rust 测试覆盖，不计入 Playwright live 覆盖。
 - **剩余缺口**:本 scenario 的完整"丢设备 → 新设备授权 → MLS commit chain backfill → 历史 E2EE 消息可解"仍未贯通;`key-backup.spec.ts` 保留这些全链路 fixme。
 - **2026-05-30 A1 live**:`key-backup.spec.ts` 覆盖同账号两个 fresh browser profile 的验收路径:device-A 创建 `mls_rfc9420` realm 并写历史 timeline 卡片、`MlsBackupPrompt` 自动生成 24 词 Recovery Key 并上传 `mls_account_secret` backup、device-B 空 profile 登录后出现 `MlsUnlockPrompt`、输入 24 词恢复、device-B 写入后 device-A 可见,同时收集 `keys/backups` PUT 和 subscribe/describe/events/MLS runtime 错误信号。
 - **2026-06-01 A2 live**:`key-backup.spec.ts` 覆盖 Kanban 专用回归:creator device 新建 encrypted Realm 时必须生成并上传 initial `mls_history` backup;fresh browser restore 后打开同一 Board/Card,保存 card description 时不得出现 `MissingWelcome` 或 `ak.mls.commit` payload `schema_violation`,另一端能看到详情更新。
@@ -146,7 +146,7 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
 
 ## 风险
 
-- spec §7 整章是 v1 必须项,但 soland 实现度未知。**整个 scenario 大概率 fixme starter**。
+- spec §7 整章是 v1 必须项,但 coland 实现度未知。**整个 scenario 大概率 fixme starter**。
 - MLS epoch backfill 非常复杂(spec §2.4),若 device-A 缺很多 epochs,backup 必须含 enough state — 实际工程上往往需要 server-side 配合提供 commit log。
 
 ## 总耗时预估

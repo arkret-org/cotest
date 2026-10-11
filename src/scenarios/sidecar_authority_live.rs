@@ -83,7 +83,7 @@ async fn run_with_observers(
             "recipient queue fixture capacity must be nonzero"
         );
         node_env.push((
-            "SOLAND_TO_DEVICE_QUEUE_CAPACITY".into(),
+            "COLAND_TO_DEVICE_QUEUE_CAPACITY".into(),
             capacity.to_string(),
         ));
     }
@@ -92,9 +92,9 @@ async fn run_with_observers(
     else {
         ensure!(
             observer.is_none() && sync_observer.is_none(),
-            "timestamp evidence requires a real Soland binary"
+            "timestamp evidence requires a real Coland binary"
         );
-        return skip_or_fail(GROUP, "prebuilt Soland unavailable");
+        return skip_or_fail(GROUP, "prebuilt Coland unavailable");
     };
     if let Some(probe) = sync_observer {
         probe.before_station(servers.server_mut(0)).await?;

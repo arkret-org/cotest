@@ -3,7 +3,7 @@
 import { expect, test } from "../../helpers/arkret-test";
 import { createDpopUserSession, openUserPage, type JointUserPage } from "../../helpers/users";
 import { installCircleCreatorCommitFault, readCreatorRecords } from "../../helpers/creator-bootstrap";
-import { canonicalJson, scanRealmStreamApi } from "../../helpers/soland-api";
+import { canonicalJson, scanRealmStreamApi } from "../../helpers/coland-api";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";

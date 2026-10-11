@@ -2,11 +2,11 @@
 //!
 //! This scenario now exercises the real process boundary:
 //!
-//! 1. boot soland against a persistent Postgres database;
-//! 2. submit one canonical event while soland is paused at the `post_commit_pre_response` chaos
+//! 1. boot coland against a persistent Postgres database;
+//! 2. submit one canonical event while coland is paused at the `post_commit_pre_response` chaos
 //!    breakpoint;
 //! 3. terminate the child process before the HTTP response can flush;
-//! 4. restart soland against the same database;
+//! 4. restart coland against the same database;
 //! 5. compare the durable canonical event row, projection event row, and a retry under the same
 //!    operation id.
 //!
@@ -38,7 +38,7 @@ pub async fn chaos_kill_midwrite_run() -> Result<()> {
     let Some(database) = ChaosDatabase::provision()? else {
         skip_or_fail(
             "CT-16 chaos kill mid-write",
-            "set COTEST_SOLAND_DATABASE_URL, or run with Docker available for an ephemeral Postgres",
+            "set COTEST_COLAND_DATABASE_URL, or run with Docker available for an ephemeral Postgres",
         )?;
         return Ok(());
     };
@@ -65,10 +65,10 @@ pub async fn chaos_kill_midwrite_run() -> Result<()> {
         TEST_NAME,
         &database.url,
         &[
-            ("SOLAND_ENABLE_CONFORMANCE_ENDPOINTS", "1"),
-            ("SOLAND_TEST_CHAOS_BREAKPOINT", "post_commit_pre_response"),
-            ("SOLAND_TEST_CHAOS_DELAY_MS", "1500"),
-            ("SOLAND_TEST_CHAOS_OPERATION_ID", operation_id.as_str()),
+            ("COLAND_ENABLE_CONFORMANCE_ENDPOINTS", "1"),
+            ("COLAND_TEST_CHAOS_BREAKPOINT", "post_commit_pre_response"),
+            ("COLAND_TEST_CHAOS_DELAY_MS", "1500"),
+            ("COLAND_TEST_CHAOS_OPERATION_ID", operation_id.as_str()),
         ],
     )
     .await?;
@@ -111,7 +111,7 @@ pub async fn chaos_kill_midwrite_run() -> Result<()> {
     let server = ArkretServer::spawn_with_database_url(
         TEST_NAME,
         &database.url,
-        &[("SOLAND_ENABLE_CONFORMANCE_ENDPOINTS", "1")],
+        &[("COLAND_ENABLE_CONFORMANCE_ENDPOINTS", "1")],
     )
     .await?;
     let token = dev_login(&server, &actor_did, DEVICE_ID).await?;
@@ -139,7 +139,7 @@ struct ChaosDatabase {
 
 impl ChaosDatabase {
     fn provision() -> Result<Option<Self>> {
-        if let Ok(url) = std::env::var("COTEST_SOLAND_DATABASE_URL")
+        if let Ok(url) = std::env::var("COTEST_COLAND_DATABASE_URL")
             && !url.trim().is_empty()
         {
             return Ok(Some(Self {

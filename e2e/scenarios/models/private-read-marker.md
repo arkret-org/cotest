@@ -25,7 +25,7 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
 
 ## 拓扑
 
-- 1 × soland (Station) — 监听 `http://127.0.0.1:<soland_port>`
+- 1 × coland (Station) — 监听 `http://127.0.0.1:<coland_port>`
 - 1 × coauth (private authentication process) — 监听 `http://127.0.0.1:<coauth_port>`
 - 共享同一个 coauth;alice 两台 device 都从这个 coauth 取 session credential
 
@@ -41,8 +41,8 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
 
 ## Pre-conditions
 
-- alice 和 bob 的 DID 都通过 `POST /_soland/self/account/register` 注册过
-- alice 两台 device 各持一个有效 dev session token(`POST /_soland/gate/auth/dev-login`,actor 相同、
+- alice 和 bob 的 DID 都通过 `POST /_coland/self/account/register` 注册过
+- alice 两台 device 各持一个有效 dev session token(`POST /_coland/gate/auth/dev-login`,actor 相同、
   `device_id` 不同 — 沿用 `identity/multi-device` Phase A 的 dev-login proxy)
 - bob 持有效 dev session token
 - 三个 browser context 都通过 `inkson.config.v1` localStorage 注入 server_url + account_did +
@@ -132,10 +132,10 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
 
 ## Implementation notes
 
-- **soland gap(关键)**:read cursor 的 **to-device propagation** 当前未实现 — `ak.read_cursor.advance`
+- **coland gap(关键)**:read cursor 的 **to-device propagation** 当前未实现 — `ak.read_cursor.advance`
   在 alice 当前 device 上写 actor-private state OK,但 device 间的 fan-out(to-device channel)不通,因此 Phase E /
   Phase G 的 cross-device 断言会 fail。主流程标 `test.fixme`,内联注释说明 gap
-- **soland 现状**:notification projection 的读取面是
+- **coland 现状**:notification projection 的读取面是
   `GET /_arkret/self/account/subscribe?catchup=true`;单 device 的本地 mark-all-read 由 inkson
   提交 read cursor 并更新本地 projection
 - **inkson gap**:`/settings` 当前没有 `read-position-row` testid;Phase D / E 的 UI 断言依赖该

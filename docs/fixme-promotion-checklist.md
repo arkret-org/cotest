@@ -11,7 +11,7 @@ promotion or demotion work is considered complete.
 
 | Evidence | Requirement |
 |---|---|
-| Feature id | A backing local feature or gap id such as `soland#messages-reactions`, `inkson#chat-polls`, `coauth#device-auth`, `cotest#mimi-facade`, or `GAP-P3-074`. |
+| Feature id | A backing local feature or gap id such as `coland#messages-reactions`, `inkson#chat-polls`, `coauth#device-auth`, `cotest#mimi-facade`, or `GAP-P3-074`. |
 | Single-spec pass | One command that ran only the promoted spec or an even narrower grep, recorded exactly enough to rerun locally. |
 | Regression artifact | One screenshot, HAR, trace, zip, or artifact directory from the passing run. |
 

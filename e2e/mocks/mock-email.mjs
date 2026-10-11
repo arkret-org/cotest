@@ -39,7 +39,7 @@ function signBindingProof({ token_commitment, did, issuer, audience }) {
   const payload = {
     iss: issuer,
     sub: did,
-    aud: audience ?? "soland",
+    aud: audience ?? "coland",
     iat: now,
     exp: now + 600,
     nbf: now,
@@ -212,7 +212,7 @@ const server = createServer(async (req, res) => {
     entry.did = body.did;
     entry.consumed_at = new Date().toISOString();
     // Derive a deterministic token_commitment from the token bytes for the
-    // binding_proof claim. Soland is expected to compute the same.
+    // binding_proof claim. Coland is expected to compute the same.
     const token_commitment = `sha256:${Buffer.from(body.token).toString("hex")}`;
     const binding_proof = signBindingProof({
       token_commitment,

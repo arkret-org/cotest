@@ -23,7 +23,7 @@
 /// The full address of one canonical provisioning.
 ///
 /// `stationBaseUrl` and `authorityBaseUrl` are resolved URLs, never the
-/// `SolandKey` alias: `undefined`, `"default"` and `"server1"` are three names
+/// `ColandKey` alias: `undefined`, `"default"` and `"server1"` are three names
 /// for one Station, and a memo keyed by the name provisions the same user once
 /// per name.
 export type ProvisioningTarget = {

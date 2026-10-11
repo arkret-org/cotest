@@ -1,6 +1,6 @@
 # Key backup restore live path
 
-验证 T-P1-02 的 live 服务子集:soland 必须保存、隔离、校验、按 ownership proof 删除 `ak.schema.key_backup.v1` envelope。inkson 的 Argon2id + XChaCha20-Poly1305、24 词 Recovery Key 和 late-recovery helper 由 inkson 自身的 Rust 测试覆盖，不从 Playwright 间接启动 Cargo。
+验证 T-P1-02 的 live 服务子集:coland 必须保存、隔离、校验、按 ownership proof 删除 `ak.schema.key_backup.v1` envelope。inkson 的 Argon2id + XChaCha20-Poly1305、24 词 Recovery Key 和 late-recovery helper 由 inkson 自身的 Rust 测试覆盖，不从 Playwright 间接启动 Cargo。
 
 ## 范围
 
@@ -12,7 +12,7 @@
 
 ## 不验证
 
-- 完整 MLS commit replay 与真实历史明文消息批量解密。当前用 inkson crypto 单元合同 + soland envelope 持久化合同钉住这条链路的可落地部分。
+- 完整 MLS commit replay 与真实历史明文消息批量解密。当前用 inkson crypto 单元合同 + coland envelope 持久化合同钉住这条链路的可落地部分。
 - threshold/social recovery 与第三方 recovery service。
 
 ## Live 用例

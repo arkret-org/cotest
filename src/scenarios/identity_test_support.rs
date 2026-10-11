@@ -163,19 +163,19 @@ pub async fn spawn_with_standard_grant_authority(
     let origin = coauth.origin();
     let introspection = coauth.url();
     let mut env = vec![
-        ("SOLAND_ACCOUNT_AUTHORITY_URL", origin.as_str()),
-        ("SOLAND_DID_RESOLVER_ALLOW_METHODS", "web,webvh,key,uuid"),
+        ("COLAND_ACCOUNT_AUTHORITY_URL", origin.as_str()),
+        ("COLAND_DID_RESOLVER_ALLOW_METHODS", "web,webvh,key,uuid"),
         (
-            "SOLAND_SESSION_GRANT_INTROSPECTION_URL",
+            "COLAND_SESSION_GRANT_INTROSPECTION_URL",
             introspection.as_str(),
         ),
     ];
     env.extend(extra_env.iter().copied().filter(|(key, _)| {
         !matches!(
             *key,
-            "SOLAND_ACCOUNT_AUTHORITY_URL"
-                | "SOLAND_DID_RESOLVER_ALLOW_METHODS"
-                | "SOLAND_SESSION_GRANT_INTROSPECTION_URL"
+            "COLAND_ACCOUNT_AUTHORITY_URL"
+                | "COLAND_DID_RESOLVER_ALLOW_METHODS"
+                | "COLAND_SESSION_GRANT_INTROSPECTION_URL"
         )
     }));
     let server = spawn_with_harness_account_authority(name, &env).await?;
@@ -572,7 +572,7 @@ async fn authorize_additional_principal_device(
         expect_json(
             server
                 .http()
-                .post(server.url("/_soland/account-authority/events/admit"))
+                .post(server.url("/_coland/account-authority/events/admit"))
                 .bearer_auth(HARNESS_INTERNAL_AUTHORITY_SECRET)
                 .header("idempotency-key", event.event_id.as_str())
                 .json(&arkret_wire::EventAdmissionSubmission::new(event.clone())),
@@ -960,7 +960,7 @@ async fn submit_harness_pcr_genesis(
     let value = expect_json(
         server
             .http()
-            .post(server.url("/_soland/account-authority/principal-genesis/admit"))
+            .post(server.url("/_coland/account-authority/principal-genesis/admit"))
             .bearer_auth(HARNESS_INTERNAL_AUTHORITY_SECRET)
             .header("idempotency-key", request.idempotency_key.as_str())
             .json(request),

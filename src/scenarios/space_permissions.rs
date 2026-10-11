@@ -28,10 +28,10 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
         )
         .await?;
 
-    // Negative-surface residue gate: this retired Soland product endpoint is
+    // Negative-surface residue gate: this retired Coland product endpoint is
     // intentionally absent. The request is not a product consumer.
     expect_api_error(
-        server.http().post(server.url("/_soland/self/spaces")).json(
+        server.http().post(server.url("/_coland/self/spaces")).json(
             &crate::harness::NonProtocolTestBody::new(json!({"title": "No Auth"})),
         ),
         StatusCode::NOT_FOUND,
@@ -72,7 +72,7 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
         alice.authorize(
             server
                 .http()
-                .delete(server.url(&format!("/_soland/self/spaces/{realm_id}"))),
+                .delete(server.url(&format!("/_coland/self/spaces/{realm_id}"))),
         ),
         StatusCode::NOT_FOUND,
         "unrecognized_endpoint",

@@ -58,7 +58,7 @@ fn requests(
     snapshot: &crate::scenarios::_helpers::service_metrics::MetricsSnapshot,
     op: &str,
 ) -> u64 {
-    snapshot.sum("soland_request_total", &[("op", op)]) as u64
+    snapshot.sum("coland_request_total", &[("op", op)]) as u64
 }
 
 async fn follower_socket_pump(
@@ -449,7 +449,7 @@ pub async fn run_bounded_drain() -> Result<()> {
     .await?;
     let mut env = rotation_station_env(&issuer);
     env.push((
-        "SOLAND_WEBSOCKET_MAX_LIFETIME_SECS".to_owned(),
+        "COLAND_WEBSOCKET_MAX_LIFETIME_SECS".to_owned(),
         "4".to_owned(),
     ));
     let refs = env
@@ -517,4 +517,4 @@ const BUNDLE_OP: &str = "POST /_arkret/open/realm-authority/bundle";
 const SUBSCRIBE_OP: &str =
     arkret_wire::ServiceOperationId::SELF_COMMITTED_EVENT_STREAM_SUBSCRIBE_V1;
 
-const SCAN_BYTES: &str = "soland_stream_scan_response_bytes_total";
+const SCAN_BYTES: &str = "coland_stream_scan_response_bytes_total";

@@ -26,7 +26,7 @@
 
 ## 拓扑
 
-- 1 × soland + 1 × coauth (与 messaging/triad-collaboration 同)
+- 1 × coland + 1 × coauth (与 messaging/triad-collaboration 同)
 
 ## Actors
 
@@ -80,7 +80,7 @@
 
 ### Phase D — alice 处理：capability 检查 + Seal-confirmed ban
 
-10. **alice** 调用实现私有 `GET /_soland/admin/reports` → 能看到 bob 提交的这个 report 对应的 queue View item
+10. **alice** 调用实现私有 `GET /_coland/admin/reports` → 能看到 bob 提交的这个 report 对应的 queue View item
 11. **alice** 决定 ban mallory:
     - 调用 `ak.member.state` Move,membership = `ban`,subject = mallory.did
     - 该 Move 必须签名 + 引用 `ak.moderation.decision` capability grant
@@ -95,7 +95,7 @@
 ### Phase E — Post-ban 拒绝路径 (§5.2)
 
 14. **mallory** 进 `/timeline/${realmId}` 尝试发新消息 `M_post_ban = "still here ${stamp}"`
-15. 断言:soland Reducer 拒绝 mallory 的 Operation,返回 `policy_denied` / `member_banned` / 类似 reason_code
+15. 断言:coland Reducer 拒绝 mallory 的 Operation,返回 `policy_denied` / `member_banned` / 类似 reason_code
 16. 断言:alice / bob / carol 三方的 timeline **不出现** `M_post_ban`
 
 ### Phase F — Tombstone redact (§5.1)
@@ -136,11 +136,11 @@
 
 ## Implementation notes
 
-- **soland report privacy**:`POST /_arkret/self/moderation/report` 是唯一标准 reporter 写入口;v1 没有注册 `GET /_arkret/self/moderation/reports`。dev-mode `GET /_soland/admin/reports` 是实现私有调试入口,返回由 `moderation_report` typed current family 同 cut 派生的 moderation queue View item(`id` 为 report Event token retype 成 `ak:moderation_queue_item:`),只向该 Realm 在同一 cut 可证明的 moderator(当前 Realm root controller)返回;部署 admin 身份不授予 Realm moderation 可见性,reporter、被举报人或普通成员无法枚举 report。
-- **ban Move 权限**:`soland` 对 direct submit 的 `ak.member.state{membership="ban"}` 执行 owner/moderation gate;bob 这类非 moderator 被 `missing_capability` 拒绝,alice 作为 owner 可接受。
+- **coland report privacy**:`POST /_arkret/self/moderation/report` 是唯一标准 reporter 写入口;v1 没有注册 `GET /_arkret/self/moderation/reports`。dev-mode `GET /_coland/admin/reports` 是实现私有调试入口,返回由 `moderation_report` typed current family 同 cut 派生的 moderation queue View item(`id` 为 report Event token retype 成 `ak:moderation_queue_item:`),只向该 Realm 在同一 cut 可证明的 moderator(当前 Realm root controller)返回;部署 admin 身份不授予 Realm moderation 可见性,reporter、被举报人或普通成员无法枚举 report。
+- **ban Move 权限**:`coland` 对 direct submit 的 `ak.member.state{membership="ban"}` 执行 owner/moderation gate;bob 这类非 moderator 被 `missing_capability` 拒绝,alice 作为 owner 可接受。
 - **inkson owner ban UI**：`/realms/:id/admin/members` 的 `member-row[data-member-did]` + `ban-member-button` 现在作为 live 路径，owner 点击后提交 canonical `ak.member.state` Control Move；confirmed Seal 推进 membership revision 后，server projection 移除被封禁成员。
 - **重复 ban**：第二条 `ak.member.state{membership="ban"}` 基于旧或同状态 revision 时以 `failed_precondition/invalid_membership_transition` 持久拒绝且零写入，最终成员列表不重复，也不恢复被 ban 成员。
-- **remaining inkson UI 缺口**:举报入口、moderator 报告列表 — 当前 live 测试仍通过 soland HTTP API 直接驱动;后续 UI testid 可在 inkson 任务中补。
+- **remaining inkson UI 缺口**:举报入口、moderator 报告列表 — 当前 live 测试仍通过 coland HTTP API 直接驱动;后续 UI testid 可在 inkson 任务中补。
 - 测试侧需要直接读取 `ak.component.moderation_state.v1` 的 sequenced-state revision/value，并解析对应 confirmed Seal 的命令结果；只读 Event 列表不能证明安全确认。
 - 跨 peer 一致性的 frontier 比对在单服务器场景不需要;留到 federation/cross-server+spaces/moderation-ban 组合测试
 

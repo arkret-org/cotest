@@ -587,7 +587,7 @@ pub async fn run() -> Result<()> {
     )
     .await?
     else {
-        return skip_or_fail(GROUP, "prebuilt Soland unavailable");
+        return skip_or_fail(GROUP, "prebuilt Coland unavailable");
     };
     let governance = group.server(0);
     let account_station = group.server(1);

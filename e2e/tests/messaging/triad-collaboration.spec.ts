@@ -11,7 +11,7 @@ import {
   listRealmEventsViaApi,
   sendPlaintextMessageViaApi,
 } from "../../helpers/api";
-import { solandBaseUrl, solandServiceId } from "../../helpers/env";
+import { colandBaseUrl, colandServiceId } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
   accountActorId,
@@ -23,7 +23,7 @@ import {
   scanRealmStreamApi,
   signedEventEnvelope,
   submitSignedEventApi,
-} from "../../helpers/soland-api";
+} from "../../helpers/coland-api";
 import { grantInviteConsentArkret } from "../../helpers/contact-api";
 import {
   assertJointStackNotRequired,
@@ -224,7 +224,7 @@ test.describe("single-server triad collaboration", () => {
   // Phases A-D (space lifecycle, invite, mutual messaging, reply, edit) are
   // fully wired in inkson (chat-* reply/edit testids + the realm-members invite
   // modal). Phase E's *receive-side* redaction tombstone is now wired end-to-end:
-  // soland folds a redacted ak.message.create into a per-message tombstone on the
+  // coland folds a redacted ak.message.create into a per-message tombstone on the
   // sync timeline (projection/timeline.rs + sync/snapshot.rs call
   // apply_message_redaction_timeline_projection, which uses the SDK
   // redaction_tombstone_message_value shape: event_id preserved, body stripped,
@@ -497,7 +497,7 @@ test.describe("single-server triad collaboration", () => {
               return visible.filter((invite) =>
                 invite.realm_id === realmId &&
                 invite.invitee_account_id?.principal_id === bob.id &&
-                invite.invitee_account_id.station_id === solandServiceId() &&
+                invite.invitee_account_id.station_id === colandServiceId() &&
                 invite.state === "pending"
               ).length;
             },
@@ -511,9 +511,9 @@ test.describe("single-server triad collaboration", () => {
 
     // E1.2 — pre-join message is sent BEFORE carol is invited. With
     // history_access=all_history_for_current_members (spec §3.4), late joiners must see the
-    // pre-join timeline. soland's default sync path currently exposes the
-    // full timeline regardless of visibility (see main test's soland gap
-    // comment), so this positive assertion passes today; once soland adds
+    // pre-join timeline. coland's default sync path currently exposes the
+    // full timeline regardless of visibility (see main test's coland gap
+    // comment), so this positive assertion passes today; once coland adds
     // history_access filtering, this test will still be the canonical
     // "shared visibility lets carol read history" coverage.
     test("E1.2 history_access=all_history_for_current_members exposes pre-join messages to late joiner", async ({
@@ -595,15 +595,15 @@ test.describe("single-server triad collaboration", () => {
       );
 
       const realmAfterLeave = await request.get(
-        `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}`,
-        { headers: authHeaders(aliceToken, "GET", `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}`) },
+        `${colandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}`,
+        { headers: authHeaders(aliceToken, "GET", `${colandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}`) },
       );
       expect(realmAfterLeave.status()).toBe(200);
       expect(visibleMemberIds(await realmAfterLeave.json())).not.toContain(bob.id);
 
       const afterLeaveBody = `after leave rejected ${stamp}`;
-      const rejected = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
-        headers: authHeaders(bobToken, "POST", `${solandBaseUrl()}/_arkret/self/events`),
+      const rejected = await request.post(`${colandBaseUrl()}/_arkret/self/events`, {
+        headers: authHeaders(bobToken, "POST", `${colandBaseUrl()}/_arkret/self/events`),
         data: { event: signedEventEnvelope({
           actorId: bob.id,
           realmId,

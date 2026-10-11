@@ -26,7 +26,7 @@ pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
     let integration = expect_json(
         server
             .http()
-            .get(server.url("/_soland/self/integration/describe")),
+            .get(server.url("/_coland/self/integration/describe")),
         StatusCode::OK,
     )
     .await?;
@@ -34,7 +34,7 @@ pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
         integration["contract"],
         "arkret.rest.integration_manifest.v1"
     );
-    assert_eq!(integration["service"], "soland");
+    assert_eq!(integration["service"], "coland");
     assert_eq!(integration["service_kind"], "station");
     assert_eq!(
         integration["dependencies"][0]["required_contract"],
@@ -44,7 +44,7 @@ pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
     );
     assert_eq!(
         integration["surfaces"][0]["path"],
-        "/_soland/gate/auth/bridge/describe"
+        "/_coland/gate/auth/bridge/describe"
     );
     assert!(integration["surfaces"].as_array().is_some_and(|surfaces| {
         surfaces.iter().any(|surface| {
@@ -70,7 +70,7 @@ pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
     let auth_bridge = expect_json(
         server
             .http()
-            .get(server.url("/_soland/gate/auth/bridge/describe")),
+            .get(server.url("/_coland/gate/auth/bridge/describe")),
         StatusCode::OK,
     )
     .await?;

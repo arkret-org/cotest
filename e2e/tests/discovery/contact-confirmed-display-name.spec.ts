@@ -14,7 +14,7 @@ import {
   requestContactArkret,
   respondContactArkret,
 } from "../../helpers/contact-api";
-import { solandBaseUrl } from "../../helpers/env";
+import { colandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
   assertJointStackNotRequired,
@@ -30,7 +30,7 @@ import {
   principalControlRealmForId,
   retypeEventDerivedId,
   signedEventEnvelope,
-} from "../../helpers/soland-api";
+} from "../../helpers/coland-api";
 
 /// The prepared submission carries the envelope after CBS plane, frontier
 /// binding and re-signing, so its Event id is the only one the service sees.
@@ -190,7 +190,7 @@ test.describe("contact confirmed display name", () => {
       }
 
       const bobRealmId = principalControlRealmForId(bob.id);
-      const profileUrl = `${solandBaseUrl()}/_arkret/self/account/profile`;
+      const profileUrl = `${colandBaseUrl()}/_arkret/self/account/profile`;
       const postProfile = async (
         submission: Record<string, unknown>,
         envelope: Record<string, unknown>,

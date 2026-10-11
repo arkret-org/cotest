@@ -1839,7 +1839,7 @@ dependencies = [
  "sha2 0.10.9",
  "signature 2.2.0",
  "socket2",
- "soland-contracts",
+ "coland-contracts",
  "subtle",
  "thiserror 2.0.20",
  "time",
@@ -2513,10 +2513,10 @@ dependencies = [
  "serde_yaml_ng",
  "serial_test",
  "sha2 0.11.0",
- "soland-domain",
- "soland-services",
- "soland-storage",
- "soland-storage-postgres",
+ "coland-domain",
+ "coland-services",
+ "coland-storage",
+ "coland-storage-postgres",
  "tempfile",
  "testcontainers",
  "tokio",
@@ -2591,7 +2591,7 @@ dependencies = [
  "ed25519-dalek 3.0.0",
  "serde",
  "serde_json",
- "soland-domain",
+ "coland-domain",
 ]
 
 [[package]]
@@ -2651,7 +2651,7 @@ dependencies = [
  "arkret-canonical",
  "arkret-models-identity",
  "arkret-wire",
- "soland-services",
+ "coland-services",
 ]
 
 [[package]]
@@ -10594,7 +10594,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "soland-contracts"
+name = "coland-contracts"
 version = "0.3.0"
 dependencies = [
  "arkret-canonical",
@@ -10609,7 +10609,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "soland-domain"
+name = "coland-domain"
 version = "0.3.0"
 dependencies = [
  "arkret-canonical",
@@ -10633,7 +10633,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "soland-services"
+name = "coland-services"
 version = "0.3.0"
 dependencies = [
  "arkret",
@@ -10660,8 +10660,8 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.11.0",
- "soland-domain",
- "soland-storage",
+ "coland-domain",
+ "coland-storage",
  "thiserror 2.0.20",
  "tokio",
  "tracing",
@@ -10669,7 +10669,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "soland-storage"
+name = "coland-storage"
 version = "0.3.0"
 dependencies = [
  "arkret",
@@ -10690,7 +10690,7 @@ dependencies = [
  "chrono-tz",
  "serde",
  "serde_json",
- "soland-domain",
+ "coland-domain",
  "subtle",
  "thiserror 2.0.20",
  "tokio",
@@ -10698,7 +10698,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "soland-storage-postgres"
+name = "coland-storage-postgres"
 version = "0.3.0"
 dependencies = [
  "anyhow",
@@ -10730,7 +10730,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.11.0",
- "soland-storage",
+ "coland-storage",
  "tokio",
  "tokio-postgres",
  "tracing",

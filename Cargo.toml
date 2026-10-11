@@ -8,7 +8,7 @@ publish = false
 [workspace]
 resolver = "3"
 # `crates/test-support` is the light build edge: SDK-only dependencies, so the
-# tools that live there do not compile Inkson or the soland implementation
+# tools that live there do not compile Inkson or the coland implementation
 # crates the root package pulls in.
 #
 # **The dependency arrow points one way: `cotest` -> `cotest-test-support`.**
@@ -21,14 +21,14 @@ resolver = "3"
 # What that settles in practice: the canonical provisioning chain lives in
 # test-support, because both the root harness and the TypeScript suite (through
 # `cotest-provision`) consume it. `ArkretServer` and `TestActorClient` stay in
-# the root package, because they manage processes and soland configuration —
+# the root package, because they manage processes and coland configuration —
 # exactly the weight the light edge must not carry. The root package therefore
 # calls into provisioning to build a client; provisioning knows nothing about
 # clients.
 #
 # `scripts/check_package_graph.py` is that arrow as a gate: it resolves this
 # workspace with `cargo metadata` and fails when the light edge can reach
-# Inkson, Dioxus, a `soland-*` crate or the root package, by a normal, build or
+# Inkson, Dioxus, a `coland-*` crate or the root package, by a normal, build or
 # (from the light edge itself) dev edge.
 members = [
     "crates/inkson-client-tests",
@@ -160,10 +160,10 @@ serde_json = "1.0.151"
 serde_yaml_ng = "0.10.0"
 serial_test = "4.0.1"
 sha2 = "0.11.0"
-soland-domain = { path = "../soland/crates/domain" }
-soland-services = { path = "../soland/crates/services" }
-soland-storage = { path = "../soland/crates/storage" }
-soland-storage-postgres = { path = "../soland/crates/storage-postgres", features = ["test-support"] }
+coland-domain = { path = "../coland/crates/domain" }
+coland-services = { path = "../coland/crates/services" }
+coland-storage = { path = "../coland/crates/storage" }
+coland-storage-postgres = { path = "../coland/crates/storage-postgres", features = ["test-support"] }
 tempfile = "3.27.0"
 testcontainers = "0.28"
 tokio = "1.53.1"
@@ -291,10 +291,10 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 serde_yaml_ng = { workspace = true }
 sha2 = { workspace = true }
-soland-domain = { workspace = true }
-soland-services = { workspace = true }
-soland-storage = { workspace = true }
-soland-storage-postgres = { workspace = true }
+coland-domain = { workspace = true }
+coland-services = { workspace = true }
+coland-storage = { workspace = true }
+coland-storage-postgres = { workspace = true }
 tempfile = { workspace = true }
 testcontainers = { workspace = true, optional = true, features = ["blocking"] }
 tokio = { workspace = true, features = ["macros", "process", "rt-multi-thread", "time"] }
@@ -313,7 +313,7 @@ zeroize = { workspace = true }
 proptest = { workspace = true, default-features = false, features = ["std"] }
 salvo = { workspace = true, features = ["test"] }
 serial_test = { workspace = true }
-# `Uuid::now_v7` in the soland PCR genesis fixture that
+# `Uuid::now_v7` in the coland PCR genesis fixture that
 # `tests/station_account_isolation.rs` includes by path.
 uuid = { version = "1.26.0", features = ["v7"] }
 

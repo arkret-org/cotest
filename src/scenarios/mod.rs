@@ -30,6 +30,7 @@ pub mod events_resolve;
 pub mod extension_surface_gaps;
 pub mod fanout_route_miss_live;
 pub mod federation_readiness;
+pub mod flagon_resolve_realm;
 pub mod full_stack_e2e;
 pub mod handle_to_join_e2e;
 pub mod high_assurance_realm_policy;
@@ -61,7 +62,6 @@ pub mod sidecar_authority_live;
 pub mod space_permissions;
 pub mod strand_lifecycle_live;
 pub mod strand_watch_live;
-pub mod teabay_resolve_realm;
 pub mod to_device_offline_ordering;
 
 pub mod mimi_facade_live;

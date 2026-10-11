@@ -1,10 +1,10 @@
 //! Cross-language canonical-JSON parity gate.
 //!
 //! The e2e harness runs on Node and re-implements Arkret canonical JSON in
-//! TypeScript (`canonicalJson` in `e2e/helpers/soland-api.ts`) because it cannot
+//! TypeScript (`canonicalJson` in `e2e/helpers/coland-api.ts`) because it cannot
 //! call the Rust SDK directly. The authoritative implementation is the SDK's
 //! `arkret_canonical` (RFC 8785 JCS, integer-only number profile), and the
-//! final signatures e2e produces are verified by soland using that SDK — so any
+//! final signatures e2e produces are verified by coland using that SDK — so any
 //! byte-level drift between the TS reimplementation and the SDK is a silent
 //! signature false-negative/false-positive vector.
 //!

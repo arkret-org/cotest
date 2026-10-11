@@ -1,4 +1,4 @@
-// Real OIDC browser login — the full inkson → coauth → soland lifecycle.
+// Real OIDC browser login — the full inkson → coauth → coland lifecycle.
 //
 // End-to-end regression net for the login chain brought up on 2026-06-16:
 // inkson Continue → coauth /authorize → password login → consent →
@@ -30,11 +30,11 @@
 // of reporting a false green.
 //
 //   COTEST_REAL_OIDC_LOGIN=1 \
-//   COTEST_COAUTH_BASE_URL=…  COTEST_SOLAND_BASE_URL=…  COTEST_INKSON_BASE_URL=… \
+//   COTEST_COAUTH_BASE_URL=…  COTEST_COLAND_BASE_URL=…  COTEST_INKSON_BASE_URL=… \
 //     npx playwright test identity/oidc-login-flow
 //
 import { expect, test } from "../../helpers/arkret-test";
-import { coauthBaseUrl, optionalEnv, solandBaseUrl } from "../../helpers/env";
+import { coauthBaseUrl, optionalEnv, colandBaseUrl } from "../../helpers/env";
 import { openUserPage, uniqueUser } from "../../helpers/users";
 import {
   registerCoauthPasswordAccount,
@@ -107,7 +107,7 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
       });
       try {
         await jointPage.gotoLogin();
-        await page.getByTestId("login-server-url").fill(solandBaseUrl());
+        await page.getByTestId("login-server-url").fill(colandBaseUrl());
         await page.getByTestId("start-server-login-button").click();
         await submitCoauthPasswordCredentials(page, account);
         const approve = page.getByTestId("coauth-oauth-approve");
@@ -376,7 +376,7 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
     const page = jointPage.page;
     try {
       await jointPage.gotoLogin();
-      await page.getByTestId("login-server-url").fill(solandBaseUrl());
+      await page.getByTestId("login-server-url").fill(colandBaseUrl());
       await page.getByTestId("start-server-login-button").click();
 
       // Submit the real handle with a wrong password.
@@ -460,7 +460,7 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
       });
 
       await test.step("forged principal_unknown surfaces recovery guidance", async () => {
-        await page.getByTestId("login-server-url").fill(solandBaseUrl());
+        await page.getByTestId("login-server-url").fill(colandBaseUrl());
         await page.getByTestId("start-server-login-button").click();
         await submitCoauthPasswordCredentials(page, account);
         const approve = page.getByTestId("coauth-oauth-approve");

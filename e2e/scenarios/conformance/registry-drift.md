@@ -2,7 +2,7 @@
 
 ## 目标
 
-以 arkret-spec 当前 candidate v1 的 canonical 工件为唯一真源，检查 soland 实际暴露的 `/_arkret/describe`、事件写入和读取 surface 是否发生漂移。当前 v1 尚未发布，规范明确不维护历史 migration 清单或兼容登记表；Cotest 不得依赖已删除的 `artifacts/migration/*.json`。
+以 arkret-spec 当前 candidate v1 的 canonical 工件为唯一真源，检查 coland 实际暴露的 `/_arkret/describe`、事件写入和读取 surface 是否发生漂移。当前 v1 尚未发布，规范明确不维护历史 migration 清单或兼容登记表；Cotest 不得依赖已删除的 `artifacts/migration/*.json`。
 
 本 scenario 验证：
 
@@ -23,7 +23,7 @@
 
 ## 拓扑和前置条件
 
-- 1 × soland，暴露 `/_arkret/describe` 和 `/_arkret/self/events`。
+- 1 × coland，暴露 `/_arkret/describe` 和 `/_arkret/self/events`。
 - 1 × coauth，用于给负向写入探针颁发真实 dev session。
 - Cotest Playwright request fixture 可从同级 arkret-spec 仓库读取 `artifacts/{profiles,registry}/*.json`。
 - 不需要 multi-server、browser context 或 mock service。
@@ -47,7 +47,7 @@
 
 1. 从 `operation-registry.json.operations[*].operation_id` 建立 canonical operation set。
 2. 只从当前角色 `ServiceDescribe.supported_operation_bundles[]` 按本地注册表展开精确 operation 声明；未知 bundle 必须 fail closed。
-3. 断言每个 claimed operation 都在 canonical set 中。不反向要求 soland 实现全部 registry operation。
+3. 断言每个 claimed operation 都在 canonical set 中。不反向要求 coland 实现全部 registry operation。
 
 ### Phase F/G — Server-managed response scanning
 

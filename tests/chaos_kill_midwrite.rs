@@ -1,7 +1,7 @@
 //! CT-16 - Chaos: kill server mid-write, restart, verify recovery.
 //!
 //! This test is opt-in because it starts Postgres (or uses
-//! `COTEST_SOLAND_DATABASE_URL`) and deliberately terminates a child soland
+//! `COTEST_COLAND_DATABASE_URL`) and deliberately terminates a child coland
 //! process mid-request.
 //!
 //! Run with:
@@ -11,13 +11,13 @@
 use anyhow::Result;
 use serial_test::serial;
 
-/// Gating: opt-in only — destructive process kill against a real soland
-/// child. Needs `COTEST_SOLAND_DATABASE_URL` or Docker so an ephemeral
+/// Gating: opt-in only — destructive process kill against a real coland
+/// child. Needs `COTEST_COLAND_DATABASE_URL` or Docker so an ephemeral
 /// Postgres is available. Tracked by CT-16.
 /// Issue: CT-16 (chaos kill mid-write recovery harness)
 /// Tier: live
 #[tokio::test]
-#[ignore = "destructive process-kill chaos test; requires COTEST_SOLAND_DATABASE_URL or Docker for ephemeral Postgres"]
+#[ignore = "destructive process-kill chaos test; requires COTEST_COLAND_DATABASE_URL or Docker for ephemeral Postgres"]
 #[serial]
 async fn chaos_kill_midwrite_then_restart_recovery() -> Result<()> {
     cotest::scenarios::chaos_kill_midwrite::chaos_kill_midwrite_run().await

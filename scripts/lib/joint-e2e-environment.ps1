@@ -42,7 +42,7 @@ function Get-CotestJointHostNames {
     )
     $names = [System.Collections.Generic.List[string]]::new()
     for ($index = 1; $index -le $ServerCount; $index++) {
-        $names.Add("soland-server$index.$DnsSuffix")
+        $names.Add("coland-server$index.$DnsSuffix")
         if ($IncludeCoauth) { $names.Add("coauth-server$index.$DnsSuffix") }
     }
     if ($IncludeUnregisteredProbe) { $names.Add("unregistered.$DnsSuffix") }
@@ -87,7 +87,7 @@ function Add-CotestHostsBlock {
     $normalizedHosts = @($Hosts | ForEach-Object { $_.Trim().ToLowerInvariant() } | Where-Object { $_ } | Sort-Object -Unique)
     if ($normalizedHosts.Count -eq 0) { throw "At least one hosts name is required" }
     foreach ($hostName in $normalizedHosts) {
-        if ($hostName -notmatch '^(?:soland|coauth)-server[1-9][0-9]*\.local\.host$' -and
+        if ($hostName -notmatch '^(?:coland|coauth)-server[1-9][0-9]*\.local\.host$' -and
             $hostName -notin @("unregistered.local.host", "mock-applet-registry.local.host")) {
             throw "Refusing host outside the cotest joint namespace: $hostName"
         }
@@ -233,7 +233,7 @@ function New-CotestServerTopology {
         [bool]$StartCoauth = $false,
         [ValidateSet("full-mesh", "ordered-candidates")][string]$NetworkShape = "full-mesh",
         [int]$TlsPort = 443,
-        [int]$SolandPortBase = 28080,
+        [int]$ColandPortBase = 28080,
         [int]$CoauthPortBase = 29080,
         [string]$RunRoot = "",
         [ValidateSet('local.host', 'localhost')][string]$DnsSuffix = 'local.host'
@@ -256,12 +256,12 @@ function New-CotestServerTopology {
         $servers.Add([pscustomobject]@{
             name = $name
             role = "station"
-            soland = [pscustomobject]@{
-                public_url = "https://soland-$name.${DnsSuffix}:$TlsPort"
-                listen_address = "127.0.0.1:$($SolandPortBase + $index - 1)"
+            coland = [pscustomobject]@{
+                public_url = "https://coland-$name.${DnsSuffix}:$TlsPort"
+                listen_address = "127.0.0.1:$($ColandPortBase + $index - 1)"
                 service_did = $null
-                storage = [pscustomobject]@{ database = Join-Path $serverRoot "soland-postgres"; objects = Join-Path $serverRoot "objects"; state = Join-Path $serverRoot "state" }
-                log_directory = Join-Path $serverRoot "logs\soland"
+                storage = [pscustomobject]@{ database = Join-Path $serverRoot "coland-postgres"; objects = Join-Path $serverRoot "objects"; state = Join-Path $serverRoot "state" }
+                log_directory = Join-Path $serverRoot "logs\coland"
                 process_id = $null
                 container_id = $null
             }
@@ -315,13 +315,13 @@ function Assert-CotestTopologyIsolation {
         -FailureMessage "topology contains duplicate logical names"
     foreach ($property in @("public_url", "listen_address", "service_did", "log_directory", "process_id", "container_id")) {
         Assert-CotestUniqueTopologyValues `
-            -Values @($Topology.servers | ForEach-Object { $_.soland.$property }) `
-            -FailureMessage "topology reuses soland $property across servers"
+            -Values @($Topology.servers | ForEach-Object { $_.coland.$property }) `
+            -FailureMessage "topology reuses coland $property across servers"
     }
     foreach ($property in @("database", "objects", "state")) {
         Assert-CotestUniqueTopologyValues `
-            -Values @($Topology.servers | ForEach-Object { $_.soland.storage.$property }) `
-            -FailureMessage "topology reuses Soland storage.$property across servers"
+            -Values @($Topology.servers | ForEach-Object { $_.coland.storage.$property }) `
+            -FailureMessage "topology reuses Coland storage.$property across servers"
     }
     $coauthServers = @($Topology.servers | Where-Object { $_.coauth })
     foreach ($property in @("public_url", "listen_address", "owning_service_id", "log_directory", "process_id", "container_id")) {

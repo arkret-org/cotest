@@ -1,11 +1,11 @@
 import { expect, type APIRequestContext } from "@playwright/test";
 
-import { type SolandKey, solandBaseUrl } from "../env";
+import { type ColandKey, colandBaseUrl } from "../env";
 import { authHeaders } from "./request";
 import { canonicalJson } from "./wire-client";
 
 type AccountSubscribeOptions = {
-  server?: SolandKey;
+  server?: ColandKey;
   filter?: Record<string, unknown>;
   catchup?: boolean;
   after?: string;
@@ -111,7 +111,7 @@ export async function accountSubscribeFramesApi(
 ): Promise<Array<Record<string, unknown>>> {
   void request;
   const url = new URL(
-    `${solandBaseUrl(opts.server)}/_arkret/self/account/subscribe`,
+    `${colandBaseUrl(opts.server)}/_arkret/self/account/subscribe`,
   );
   if (opts.catchup !== false) {
     url.searchParams.set("catchup", "true");

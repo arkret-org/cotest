@@ -1,7 +1,7 @@
 //! Integration entrypoints for the AKP-0007 Circle conformance
 //! scenarios (P2F.3). These tests drive the SDK types directly through
 //! the per-scenario `..._run()` functions; they do NOT require a live
-//! soland / coauth / floria stack. Cross-project joint tests live in
+//! coland / coauth / floria stack. Cross-project joint tests live in
 //! `tests/full_stack_e2e.rs` (run under `--ignored`) and will pick up
 //! the Circle strands during P5.
 

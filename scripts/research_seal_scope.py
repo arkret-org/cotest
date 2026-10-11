@@ -321,8 +321,8 @@ def inventory(workspace: Path) -> dict:
         kinds = {w["write"]["lattice"] for w in writes}
         assert len(kinds) == 1
         lattice_counts.update(kinds)
-    repos = ("arkret-spec", "arkret-rust-sdk", "soland", "garth", "inkson",
-             "sodmin", "coauth", "cotest", "floria", "chime", "flagon")
+    repos = ("arkret-spec", "arkret-rust-sdk", "coland", "garth", "inkson",
+             "codmin", "coauth", "cotest", "floria", "chime", "flagon")
     consumers = {}
     heads = {}
     for repo in repos:

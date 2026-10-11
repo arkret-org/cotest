@@ -6,7 +6,7 @@
 （`ak.capability.grant` / `ak.capability.revoke`），由 reducer 投影；以 `kind="grant"` 的
 `issuer_authority_refs[]` 签发的 child grant 必须收窄、不得扩权/扩时；revoke 必须显式且沿 authority
 chain 传播。同步 REST 授权面（`POST/DELETE /_arkret/self/authz/grants*`、
-`GET /_soland/self/audit/events`）已从 spec 移除，本 scenario 不得复活它（SPEC-CR-020：零新增
+`GET /_coland/self/audit/events`）已从 spec 移除，本 scenario 不得复活它（SPEC-CR-020：零新增
 operation）；仅存的同步读面是注册端点 `POST /_arkret/self/authz/check`
 （`ak.self.authz.read.check.v1`，诊断/预检，非签名决定）与
 `GET /_arkret/self/authz/effective-grants`（`ak.self.authz.grants.read.effective.v1`）。
@@ -21,7 +21,7 @@ operation）；仅存的同步读面是注册端点 `POST /_arkret/self/authz/ch
 
 ## 拓扑
 
-- 1 × soland + 1 × coauth
+- 1 × coland + 1 × coauth
 
 ## Actors
 
@@ -71,12 +71,12 @@ operation）；仅存的同步读面是注册端点 `POST /_arkret/self/authz/ch
 - **expiry 自动失效**:grant 到期后无需显式 revoke 自动失效(需要时间推进 hook)
 - **resource selector 收窄**：child resources 必须是 issuer authority 的 selector-narrowing 子集（`resource-selector-grammar.md`）
 - **authority cycle / depth**：§10.2 cycle detection（`authority_cycle`）与 `max_authority_depth`（`authority_depth_exceeded`）
-- **audit 事实面**:grant/revoke 作为事件本身即审计事实,经事件查询面(`/_arkret/self/events` query)或 `/_soland/` 产品审计面读取;旧 `GET /_soland/self/audit/events` 端点已移除
+- **audit 事实面**:grant/revoke 作为事件本身即审计事实,经事件查询面(`/_arkret/self/events` query)或 `/_coland/` 产品审计面读取;旧 `GET /_coland/self/audit/events` 端点已移除
 
 ## Implementation notes
 
-- 事件面 helper:`grantCapabilityEventApi` / `buildCapabilityGrantEnvelope`(负例 raw 提交)/ `revokeCapabilityApi`(`e2e/helpers/soland-api.ts`)
-- soland 的 child grant 校验在 reducer（`apply_capability.rs`）：issuer 必须是 referenced grant 的 subject、realm 一致、actions/resources 不超过 issuer authority union、expiry 不得晚于对应 authority、ancestor 被 revoke → `grant_revoked_upstream`
+- 事件面 helper:`grantCapabilityEventApi` / `buildCapabilityGrantEnvelope`(负例 raw 提交)/ `revokeCapabilityApi`(`e2e/helpers/coland-api.ts`)
+- coland 的 child grant 校验在 reducer（`apply_capability.rs`）：issuer 必须是 referenced grant 的 subject、realm 一致、actions/resources 不超过 issuer authority union、expiry 不得晚于对应 authority、ancestor 被 revoke → `grant_revoked_upstream`
 - 高层写事件引用授权走信封 `refs[role="authorized_by"]` 直接指向不可变 grant（`ak:grant:` id），不得使用承载 Event id alias。
 
 ## 总耗时预估

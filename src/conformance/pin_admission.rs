@@ -16,7 +16,7 @@ pub fn run_pin_admission_suite() -> Result<SuiteExecutionResult> {
                 .enable_all()
                 .build()
                 .unwrap()
-                .block_on(soland_storage_postgres::pin_conformance::run_pin_admission_fixture())
+                .block_on(coland_storage_postgres::pin_conformance::run_pin_admission_fixture())
         })?
         .join()
         .map_err(|_| anyhow!("Pin admission fixture failed an assertion"))?;

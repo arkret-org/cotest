@@ -4,7 +4,7 @@
 // helpers/webvh-api.ts and
 // helpers/contact-api.ts. This module is the single source of truth. The
 // implementation handles leading zero bytes (each is emitted as a leading `1`),
-// matching soland's `bs58`-backed decoder so multibase `z…` renderings produced
+// matching coland's `bs58`-backed decoder so multibase `z…` renderings produced
 // here round-trip on a live server.
 
 import type { KeyObject } from "node:crypto";
@@ -45,8 +45,8 @@ export function base58btcEncode(bytes: Buffer): string {
   return out;
 }
 
-/// Render a raw 32-byte Ed25519 public key as the `z…` multibase form soland
-/// decodes (`z` + base58btc(0xed01 ‖ key)). Mirrors soland's
+/// Render a raw 32-byte Ed25519 public key as the `z…` multibase form coland
+/// decodes (`z` + base58btc(0xed01 ‖ key)). Mirrors coland's
 /// `ed25519_pubkey_to_did_key_multibase` / SDK `decode_ed25519_multibase`.
 export function encodeEd25519PubkeyMultibase(rawPublicKey: Buffer): string {
   if (rawPublicKey.length !== 32) {

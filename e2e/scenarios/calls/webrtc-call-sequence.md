@@ -1,6 +1,6 @@
 # WebRTC 1:1 + Multi-Party Signaling Sequence
 
-Verifies the `ak.call.signal` ordering contract against a live soland instance.
+Verifies the `ak.call.signal` ordering contract against a live coland instance.
 
 ## 1:1 sequence
 

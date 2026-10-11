@@ -5,7 +5,7 @@ The supported production-shaped local topology uses runner-owned processes, inde
 On a machine that resolves service subdomains of `localhost` to loopback, pass
 `-DnsSuffix localhost` to the same entry. The initializer checks every indexed
 service name and the unregistered probe and rejects any non-loopback answer.
-This selects `https://soland-serverN.localhost:<port>` and
+This selects `https://coland-serverN.localhost:<port>` and
 `https://coauth-serverN.localhost:<port>` without changing the hosts file.
 The run-scoped CA, certificate SANs, independent Station identities, SPKI checks,
 and unregistered-host rejection remain mandatory. The default `local.host`
@@ -49,7 +49,7 @@ The rollback verifies the backup SHA-256, removes only `cotest-joint-e2e:<run-id
 
 ## Prerequisites
 
-The initializer records the OS, architecture, PowerShell, `PATH`, package managers, absolute tool paths, and versions. Required tools are Node.js/npm/npx, the local Playwright package and Chromium, OpenSSL, Rust/cargo, Caddy `>=2.8,<3`, and Docker when runner-owned PostgreSQL is requested. Runner-owned databases use the reproducible `postgres:18.6-alpine` image. A local checkout/build also needs the Soland, Coauth, Inkson and cotest-wire artifacts described by the runner.
+The initializer records the OS, architecture, PowerShell, `PATH`, package managers, absolute tool paths, and versions. Required tools are Node.js/npm/npx, the local Playwright package and Chromium, OpenSSL, Rust/cargo, Caddy `>=2.8,<3`, and Docker when runner-owned PostgreSQL is requested. Runner-owned databases use the reproducible `postgres:18.6-alpine` image. A local checkout/build also needs the Coland, Coauth, Inkson and cotest-wire artifacts described by the runner.
 
 Caddy must include the standard TLS and reverse-proxy modules. The report records its absolute path, version output, SHA-256, module result, and inferred source. On Windows every invocation first runs an exact `winget search` and installs only the package ID returned by that search; it never guesses a Caddy package ID. Chocolatey and Scoop remain supported fallbacks and are recorded as community-maintained. If the package manager requires elevation, the failed command is reported and the user is told to retry elevated.
 
@@ -57,7 +57,7 @@ Caddy must include the standard TLS and reverse-proxy modules. The report record
 
 For `-ServerCount N`, the runner temporarily adds only these names to the actual platform hosts file, all at `127.0.0.1`:
 
-- `soland-server1.local.host` through `soland-serverN.local.host`;
+- `coland-server1.local.host` through `coland-serverN.local.host`;
 - `coauth-server1.local.host` through `coauth-serverN.local.host` when independent Coauth authorities are enabled;
 - `unregistered.local.host` as a negative probe.
 
@@ -67,7 +67,7 @@ Each run holds a machine-local exclusive lock. Its marker names the exact run, a
 
 ## Three-server budget
 
-Three-server acceptance starts three Soland processes or containers, three independent service identity/state/object roots, three Soland PostgreSQL instances, and—when `-StartCoauth` is used—three Coauth processes and three more PostgreSQL instances. Caddy adds one listener and six virtual sites. Inkson may be shared as a static client origin because it is not a server identity.
+Three-server acceptance starts three Coland processes or containers, three independent service identity/state/object roots, three Coland PostgreSQL instances, and—when `-StartCoauth` is used—three Coauth processes and three more PostgreSQL instances. Caddy adds one listener and six virtual sites. Inkson may be shared as a static client origin because it is not a server identity.
 
 Reserve at least 8 GiB of available RAM, 4 CPU cores, 10 GiB of free disk, 13 free loopback TCP ports plus metrics/mock ports, and capacity for six PostgreSQL containers. The preflight prints the calculated host, port, and database count before startup. `topology.json` is the authoritative machine-readable inventory of public URLs, listeners, service identities, storage, peers, process/container IDs, and the runner-owned fault-control state used by recovery tests.
 

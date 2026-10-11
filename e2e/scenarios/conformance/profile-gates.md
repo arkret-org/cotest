@@ -3,7 +3,7 @@
 ## 目标
 
 验证 Arkret `claimed_profiles` / `verified_profiles` 在 wire 层的分区语义与 fail-closed
-守门:soland / coauth 的 `/server/describe` 输出 MUST 把 `self_claimed` 与 cotest-verified
+守门:coland / coauth 的 `/server/describe` 输出 MUST 把 `self_claimed` 与 cotest-verified
 entries 严格分开;dev mode MUST 让 `verified_profiles=[]`;声明里的 profile id MUST 都
 在 `artifacts/profiles/conformance-profiles.json` 目录中存在;声明 profile 范围之外的标准
 Event kind MUST fail closed (不能 silent accept-and-drop);profile 涉及的 critical
@@ -33,9 +33,9 @@ Schema/operation/event 注册表 drift 由 `scenarios/conformance/registry-drift
     `implementation_profiles[]` / `profile_sets.v1_profile_catalog` /
     `extension_profile_implementation` / `default_unsupported_behavior`
   - `arkret-spec/spec/v1/artifacts/registry/event-kind-registry.json` — Phase B 用来挑
-    "在目录中但不在 soland 声明范围内" 的标准 kind
+    "在目录中但不在 coland 声明范围内" 的标准 kind
 - 关联实现:
-  - `soland/src/routing/system/describe.rs::apply_claim_level_partition` —
+  - `coland/src/routing/system/describe.rs::apply_claim_level_partition` —
     `claimed_profiles` 4 条 self_claimed,`verified_profiles=[]`
   - `coauth/crates/backend/src/handlers/arkret.rs` (T6.3) —
     `claimed_profiles=Vec::new()` + `verified_profiles=Vec::new()`,coauth 不假 claim
@@ -43,13 +43,13 @@ Schema/operation/event 注册表 drift 由 `scenarios/conformance/registry-drift
 
 ## 拓扑
 
-- 1 × soland (Station) — `COTEST_SOLAND_BASE_URL`,暴露 `/_arkret/describe`
+- 1 × coland (Station) — `COTEST_COLAND_BASE_URL`,暴露 `/_arkret/describe`
 - 1 × coauth (private authentication process,可选) — `COTEST_COAUTH_BASE_URL`,缺省时 coauth-specific 子
   测试 skip
 - 1 × profile-gates harness (Playwright `request` fixture) — 纯 HTTP,无 browser context;
   另读本地 catalog JSON 做 set 运算
 
-Phase B / Phase C 依赖 soland 尚未落地的 event-submit reject 路径,先 fixme。
+Phase B / Phase C 依赖 coland 尚未落地的 event-submit reject 路径,先 fixme。
 
 ## Actors
 
@@ -60,10 +60,10 @@ Phase B / Phase C 依赖 soland 尚未落地的 event-submit reject 路径,先 f
 
 ## Pre-conditions
 
-- soland `/_arkret/describe` 已暴露 T6.1 claim-level partition
+- coland `/_arkret/describe` 已暴露 T6.1 claim-level partition
   (`supported_features` / `claimed_profiles` / `verified_profiles` /
   `interop_surfaces`)
-- soland 启动时 `development_mode=true`(cotest harness 默认配置)
+- coland 启动时 `development_mode=true`(cotest harness 默认配置)
 - catalog 通过 `path.resolve(__dirname, "../../../../arkret-spec/spec/v1/artifacts/profiles/conformance-profiles.json")`
   解析(相对于 `cotest/e2e/tests/conformance/`)
 - 当 coauth 测试运行时,`COTEST_COAUTH_BASE_URL` 已就位
@@ -72,7 +72,7 @@ Phase B / Phase C 依赖 soland 尚未落地的 event-submit reject 路径,先 f
 
 ### Phase A — claim_kind 分区(`claimed_profiles` ∩ `verified_profiles` = ∅)
 
-1. **harness** `GET ${solandBaseUrl}/_arkret/describe`
+1. **harness** `GET ${colandBaseUrl}/_arkret/describe`
 2. 断言 `claimed_profiles` 是数组,每条 entry MUST 有 `profile_id` + `claim_kind`
 3. 断言 `claimed_profiles[].claim_kind` 全部等于 `self_claimed`(`verified` 只能由
    cotest verifier 写入 `verified_profiles`)
@@ -84,9 +84,9 @@ Phase B / Phase C 依赖 soland 尚未落地的 event-submit reject 路径,先 f
 
 ### Phase B — 未声明的标准 event kind fail-closed
 
-6. **harness** 从 `event-kind-registry.json` 挑一个 active durable 但 soland
+6. **harness** 从 `event-kind-registry.json` 挑一个 active durable 但 coland
    claimed profile 不覆盖的 kind(候选 `ak.applet.transaction.v1` ↔
-   `ak.profile.applet_service.v1`,后者不在 soland claimed 列表)
+   `ak.profile.applet_service.v1`,后者不在 coland claimed 列表)
 7. alice 注册 + dev-login
 8. `POST /_arkret/self/events` with a minimal Event envelope whose `kind` is `<unsupported_kind>`
    + Bearer token
@@ -101,7 +101,7 @@ Phase B / Phase C 依赖 soland 尚未落地的 event-submit reject 路径,先 f
 ### Phase C — critical extension fail-closed
 
 11. **harness** POST 一条 event,`requirements.critical_extensions:
-    ["<not-implemented-ext>"]`(参考 soland claimed profile 中的真实 critical extension
+    ["<not-implemented-ext>"]`(参考 coland claimed profile 中的真实 critical extension
     标识)
 12. 断言任一:
     - submit fail-closed(`schema_violation` / `unsupported_feature` / `soft_fail` /
@@ -112,7 +112,7 @@ Phase B / Phase C 依赖 soland 尚未落地的 event-submit reject 路径,先 f
 
 ### Phase D — development mode `verified_profiles=[]`
 
-14. 复用 Phase A 的 soland describe response
+14. 复用 Phase A 的 coland describe response
 15. 断言顶层 `development_mode === true`(cotest harness 默认)
 16. 断言顶层 `verified_profiles` 严格等于 `[]`(Array.isArray + length === 0,**不接受**
     `null` / `undefined` / 占位 stub)
@@ -126,7 +126,7 @@ Phase B / Phase C 依赖 soland 尚未落地的 event-submit reject 路径,先 f
     tier,不在 stable catalog 但在 `implementation_profiles` 中)
 19. 断言 `claimed_profiles[].profile_id` ⊆ `catalog_known`(零容忍 typo,例如
     `ak.profile.station.v1`)
-20. **不**把 `unsupported_profiles[]`(如 `ak.profile.soland_limited_server.v1`)纳入
+20. **不**把 `unsupported_profiles[]`(如 `ak.profile.coland_limited_server.v1`)纳入
     检查 — 这类是 limitation descriptor,不是 conformance claim,也不必出现在 catalog
 
 ## Observable assertions
@@ -146,7 +146,7 @@ Phase B / Phase C 依赖 soland 尚未落地的 event-submit reject 路径,先 f
   每条 entry MUST 携带 `verification_run_id` / `artifact_digest` / `artifact_ref` /
   `verifier_did` / `signature` / `timestamp`;Phase A 的 entry-shape 断言提前钉住未来形态
 - **E3 `unsupported_profiles` 不参与 claim**:Phase E 验证
-  `ak.profile.soland_limited_server.v1` 等 limitation descriptor **不**在
+  `ak.profile.coland_limited_server.v1` 等 limitation descriptor **不**在
   `claimed_profiles` 中,且**不**要求出现在 catalog 中
 - **E4 catalog 自洽性**:`v1_profile_catalog ⊆ implementation_profiles`,作为 lint;
   不是 server 断言
@@ -155,12 +155,12 @@ E1 单独写成 coauth-specific fixme 子测试(coauth 上线后 live 化)。E2 
 
 ## Implementation notes
 
-- **soland 现状**:`apply_claim_level_partition` 已经实现 T6.1 partition;
+- **coland 现状**:`apply_claim_level_partition` 已经实现 T6.1 partition;
   `claimed_profiles` 4 条 `ak.profile.{core_event_store, station,
   station_events_api, mimi_interop}.v1`(最后一条带 `notes`),
   `verified_profiles` dev mode 下 `Vec::new()` 由 `validate` 硬性约束 — Phase A /
   D / E 可立即 live
-- **soland 缺口**:event submit handler 对超出声明 profile 范围的 kind 还没有
+- **coland 缺口**:event submit handler 对超出声明 profile 范围的 kind 还没有
   `unsupported_event_kind` 出口,Phase B / C fail-closed 路径先 fixme
 - **coauth 现状**:describe handler `claimed_profiles=Vec::new()` +
   `verified_profiles=Vec::new()`,inline test (`describe_v2_artifacts.rs::claim_kind_partition`)
@@ -171,7 +171,7 @@ E1 单独写成 coauth-specific fixme 子测试(coauth 上线后 live 化)。E2 
   catalog 集合构造与读文件逻辑放在 spec 文件顶部
 - **与 G1.T2 边界**:G1.T2 (`service-surface-contract`) 盯通用 wire 形状
   (`supported_features` / standard error envelope / pagination / idempotency);本
-  场景**只**盯 profile 声明真实性。共享 `solandBaseUrl()` helper,但不共享 fixture
+  场景**只**盯 profile 声明真实性。共享 `colandBaseUrl()` helper,但不共享 fixture
   装载
 
 ## 总耗时预估

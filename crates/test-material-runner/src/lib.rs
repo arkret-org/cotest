@@ -2,7 +2,7 @@
 //!
 //! The runner uses production SDK matchers and Coauth's production binding
 //! constructor. It also records the remaining cross-service gaps explicitly;
-//! case execution here must not be mistaken for a live WebSocket or Soland
+//! case execution here must not be mistaken for a live WebSocket or Coland
 //! trust-admission test.
 
 use std::path::PathBuf;
@@ -927,7 +927,7 @@ pub fn run_test_material_rejection_suite_with_coverage() -> Result<TestMaterialR
     Ok(TestMaterialRejectionCoverage {
         execution,
         service_e2e_status: "partial",
-        service_e2e_gaps: vec!["Cross-service Soland trust-admission and ledger/cache observation"],
+        service_e2e_gaps: vec!["Cross-service Coland trust-admission and ledger/cache observation"],
     })
 }
 

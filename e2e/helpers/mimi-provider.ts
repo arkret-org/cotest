@@ -1,4 +1,4 @@
-// A remote MIMI provider as seen by a Soland MIMI facade.
+// A remote MIMI provider as seen by a Coland MIMI facade.
 //
 // extensions/mimi-interop.md section 5 closes the per-request RFC 9421
 // provider-source signature over the listed operation ids
@@ -14,7 +14,7 @@
 import { createHash, sign } from "node:crypto";
 import type { APIRequestContext, APIResponse } from "@playwright/test";
 import { operationSelector } from "./arkret-test";
-import { canonicalJson, projectDidToCoreId } from "./soland-api";
+import { canonicalJson, projectDidToCoreId } from "./coland-api";
 import { generateDidKeyIdentity, type DidKeyIdentity } from "./third-party-invite";
 
 export type MimiProvider = {

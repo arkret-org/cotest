@@ -17,7 +17,7 @@
 
 ## 拓扑与前置
 
-- Soland 与 Coauth 提供真实注册、Standard session 和逐请求 DPoP。
+- Coland 与 Coauth 提供真实注册、Standard session 和逐请求 DPoP。
 - 外层 Event 使用已接受 PCR device producer；subject proof 使用注册 checkpoint
   对应的原生 WebVH effective update key，由 SDK oracle 在本地恢复材料托管下签名。
   Station 独立认证 authority cut 的原生 DID 历史，PCR device method 不能代替 subject

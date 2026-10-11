@@ -17,7 +17,7 @@
 
 ## 拓扑
 
-- 1 × soland(含 Blob Service)+ 1 × coauth
+- 1 × coland(含 Blob Service)+ 1 × coauth
 
 ## Actors
 
@@ -31,7 +31,7 @@
 
 - encryption/mls-group 已实现到能创建 E2EE Realm 且 alice/bob 都是成员
 - alice、bob、mallory 都注册
-- Blob Service endpoint 在 soland 同进程或独立
+- Blob Service endpoint 在 coland 同进程或独立
 
 ## Steps
 
@@ -46,17 +46,17 @@
    - body: ciphertext bytes
    - meta: `{ realm_id, media_type: "application/octet-stream", encryption: { algorithm: "MLS", group_state_ref: { epoch, key_ref } }, ciphertext_digest }`
    - **关键 invariant**:不带明文文件名、不带 plaintext media type
-4. soland Blob Service 返回 `blob_ref: sha256:...`
+4. coland Blob Service 返回 `blob_ref: sha256:...`
 5. alice 客户端组消息 `ak.message.create`:
    - `encrypted_payload`(明文 = "look at this", `attachments: [{ blob_ref, encryption, ciphertext_digest }]`)
    - 用 MLS 当前 epoch key 加密整个 payload
-6. 提交事件 → soland 接受,Sync 路由
+6. 提交事件 → coland 接受,Sync 路由
 
 ### Phase B — bob 下载 + 解密
 
 7. bob inkson 拉 sync → 解 message → 拿到 plaintext `attachments` 数组
 8. bob 客户端 `GET /_arkret/self/blob/get?blob_ref=<sha>` with `Authorization: Bearer <bob_token>`
-9. soland Blob Service 校验:
+9. coland Blob Service 校验:
    - bob 是 `R_e2ee` 的当前成员
    - 当前 confirmed Seal 中的 membership 与 MLS sequenced state 授权 bob 读取该 epoch 的密文
 10. 返回 ciphertext bytes + `Content-Type: application/octet-stream` + `Cache-Control: private, no-store`(spec §5.1)
@@ -74,7 +74,7 @@
 
 17. mallory(非 `R_e2ee` 成员)拿到 `blob_ref`(假设外漏)
 18. mallory `GET /_arkret/self/blob/get?blob_ref=<sha>` with `mallory_token`
-19. soland 应拒绝;返回**不可区分** 的 opaque 403(同样的错误码 + body 对"不存在"和"无权限"都返回)
+19. coland 应拒绝;返回**不可区分** 的 opaque 403(同样的错误码 + body 对"不存在"和"无权限"都返回)
 20. 断言:status 403/404;response 不暴露 realm_id / blob 是否存在
 
 ### Phase E — Storage 服务只见 ciphertext
@@ -101,7 +101,7 @@
 
 ## Implementation notes
 
-- **2026-05-25 P2-044 local close**:soland `POST /_arkret/self/blob/upload` 对 encrypted attachment 强制 `media_type=application/octet-stream`,丢弃明文 filename,校验 `ciphertext_digest` 与 ciphertext bytes 匹配,成员可直接下载 ciphertext,非成员拿到 opaque `not_found`,E2EE blob presign fail-closed。
+- **2026-05-25 P2-044 local close**:coland `POST /_arkret/self/blob/upload` 对 encrypted attachment 强制 `media_type=application/octet-stream`,丢弃明文 filename,校验 `ciphertext_digest` 与 ciphertext bytes 匹配,成员可直接下载 ciphertext,非成员拿到 opaque `not_found`,E2EE blob presign fail-closed。
 - **2026-05-25 P2-044 local close**:inkson 新增客户端 XChaCha20-Poly1305 MLS attachment helper,thumbnail 作为独立 ciphertext asset 加密并携带独立 digest/nonce;`ArkretApi::upload_encrypted_mls_attachment_asset` 发送 ciphertext-only headers。
 - **Moderation franking 边界**:`ak.moderation.franking_proof` 与普通举报不触发 Audit Applet release 的验证归入 `encryption/audited-e2ee`；本场景不复制该流程。
 - **仍待 UI polish**:E2EE attachment lock icon、"Decrypting..." 进度、integrity check 失败的错误 UI 可作为后续用户体验强化,不再阻塞 P2-044 protocol/privacy closure。

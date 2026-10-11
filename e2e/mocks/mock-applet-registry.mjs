@@ -1,37 +1,37 @@
 // Mock applet-registry — simulates the Arkret Applet Registry that creates
 // controller-signed Applet Packages and forwards external applet activity into
-// soland's canonical Applet transaction endpoint.
+// coland's canonical Applet transaction endpoint.
 //
 // Spec references:
 //   arkret-spec/spec/v1/zh/extensions/applet-integration.md
 //   arkret-spec/spec/v1/zh/extensions/applet-schema.md
 //
 // The mock holds its own Ed25519 signing key + auto-generated DID. The
-// harness wires soland (and other consumers) to MOCK_APPLET_REGISTRY_DID so
+// harness wires coland (and other consumers) to MOCK_APPLET_REGISTRY_DID so
 // applet package install and transaction strands can be exercised
 // end-to-end without standing up a real registry implementation.
 //
 // Endpoints:
 //   GET  /identity
-//     Returns { did, public_jwk }. Soland binds applet_registry_did to this.
+//     Returns { did, public_jwk }. Coland binds applet_registry_did to this.
 //   GET  /jwks
 //     Registry public key (for verifying registry-signed envelopes).
 //   POST /sign-package
 //     Returns a sealed controller-signed ak.schema.applet_package.v1 for
-//     soland's canonical ak.self.applet.install.command.preview.v1 / ak.self.applet.command.install.v1 strand.
+//     coland's canonical ak.self.applet.install.command.preview.v1 / ak.self.applet.command.install.v1 strand.
 //   POST /_arkret/edge/applet/managed-actors/author
 //     Delegates the closed-carrier validation, proof verification, and canonical
 //     four-Event construction to cotest-wire's shared Rust SDK authoring kernel.
 //     JavaScript owns only HTTP orchestration and durable exact-replay storage.
 //   POST /external-event
-//     Forwards an external payload to soland's typed applet ingress route.
+//     Forwards an external payload to coland's typed applet ingress route.
 //   GET  /inspect → full mock state.
 //   DELETE /inspect → reset logs.
 //
 // Notes:
 //   - This is a harness shim; real registries enforce package publication,
 //     namespace governance, and controller key rotation. The mock fakes enough
-//     of the contract for joint-e2e to assert "signed package → soland install
+//     of the contract for joint-e2e to assert "signed package → coland install
 //     → independent Bot provision → Ghost transaction with accountability".
 
 import { createServer } from "node:http";
@@ -376,15 +376,15 @@ function requiredStationSetting(name) {
 }
 
 function stationId() {
-  return requiredStationSetting("COTEST_SOLAND_SERVICE_ID");
+  return requiredStationSetting("COTEST_COLAND_SERVICE_ID");
 }
 
 function stationDid() {
-  return requiredStationSetting("COTEST_SOLAND_SERVICE_DID");
+  return requiredStationSetting("COTEST_COLAND_SERVICE_DID");
 }
 
 function configuredStationSeed() {
-  const encoded = requiredStationSetting("COTEST_SOLAND_SERVICE_SIGNING_KEY");
+  const encoded = requiredStationSetting("COTEST_COLAND_SERVICE_SIGNING_KEY");
   const normalized = encoded.replace(/-/g, "+").replace(/_/g, "/");
   const seed = Buffer.from(
     normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "="),
@@ -392,7 +392,7 @@ function configuredStationSeed() {
   );
   if (seed.length !== 32) {
     throw new Error(
-      "COTEST_SOLAND_SERVICE_SIGNING_KEY must decode to 32 bytes",
+      "COTEST_COLAND_SERVICE_SIGNING_KEY must decode to 32 bytes",
     );
   }
   return seed;
@@ -410,7 +410,7 @@ function stationNotaryPrivateKey() {
 
 function developmentAppletPrivateKey(verificationMethod) {
   const seed = createHash("sha256")
-    .update("soland:applet-service-key:")
+    .update("coland:applet-service-key:")
     .update(verificationMethod)
     .digest();
   const pkcs8Prefix = Buffer.from("302e020100300506032b657004220420", "hex");
@@ -572,13 +572,13 @@ function signedGhostMessageEvent({
 }
 
 async function submitSignedAppletTransaction({
-  solandBase,
+  colandBase,
   destinationServiceId,
   packageInfo,
   event,
   idempotencyKey,
 }) {
-  const target = `${String(solandBase).replace(/\/$/, "")}/_arkret/edge/applet/transactions`;
+  const target = `${String(colandBase).replace(/\/$/, "")}/_arkret/edge/applet/transactions`;
   const operation = "ak.edge.applet.command.transaction.v1";
   const targetUrl = new URL(target);
   const transaction = {
@@ -629,14 +629,14 @@ async function submitSignedAppletTransaction({
 }
 
 async function submitSignedGhostProvision({
-  solandBase,
+  colandBase,
   destinationServiceId,
   packageInfo,
   appletId,
   requestBody,
   idempotencyKey,
 }) {
-  const target = `${String(solandBase).replace(/\/$/, "")}/_arkret/self/applets/${encodeURIComponent(appletId)}/ghosts/provision`;
+  const target = `${String(colandBase).replace(/\/$/, "")}/_arkret/self/applets/${encodeURIComponent(appletId)}/ghosts/provision`;
   const operation = "ak.self.applet.ghost.command.provision.v1";
   const targetUrl = new URL(target);
   const body = canonicalJson(requestBody);
@@ -1128,7 +1128,7 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
       station_public_jwk: createPublicKey(
         stationNotaryPrivateKey(),
       ).export({ format: "jwk" }),
-      trust_domain: "ak:trust_domain:soland.local",
+      trust_domain: "ak:trust_domain:coland.local",
     });
     if (outcome.error) {
       res.statusCode = outcome.status ?? 400;
@@ -1151,13 +1151,13 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
       res.end(JSON.stringify({ error: "missing_applet_id" }));
       return;
     }
-    const solandBase =
-      body.soland_base_url ??
-      process.env.SOLAND_BASE_URL ??
-      process.env.COTEST_SOLAND_BASE_URL;
-    if (!solandBase) {
+    const colandBase =
+      body.coland_base_url ??
+      process.env.COLAND_BASE_URL ??
+      process.env.COTEST_COLAND_BASE_URL;
+    if (!colandBase) {
       res.statusCode = 400;
-      res.end(JSON.stringify({ error: "missing_soland_base_url" }));
+      res.end(JSON.stringify({ error: "missing_coland_base_url" }));
       return;
     }
     const packageInfo = packagesByApplet.get(body.applet_id);
@@ -1199,7 +1199,7 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
       let provisionResponse;
       try {
         provisionResponse = await submitSignedGhostProvision({
-          solandBase,
+          colandBase,
           destinationServiceId: body.destination_id,
           packageInfo,
           appletId: body.applet_id,
@@ -1276,7 +1276,7 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
     let upstream;
     try {
       upstream = await submitSignedAppletTransaction({
-        solandBase,
+        colandBase,
         destinationServiceId,
         packageInfo,
         event: signed.event,
@@ -1285,7 +1285,7 @@ const server = createServer(isolateRequestFailure(async (req, res) => {
           `external-${body.applet_id}-${safeToken(externalId)}-${Date.now()}`,
       });
     } catch (err) {
-      // soland unreachable / connection refused / timeout: degrade to a
+      // coland unreachable / connection refused / timeout: degrade to a
       // structured 502 instead of letting the rejected promise escape the
       // createServer async callback (process-level unhandledRejection) and
       // leaving the client hung with no status written.

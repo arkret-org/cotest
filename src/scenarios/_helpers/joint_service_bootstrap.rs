@@ -1,13 +1,13 @@
-//! CT-6 — joint service bootstrap (soland + coauth + flagon).
+//! CT-6 — joint service bootstrap (coland + coauth + flagon).
 //!
 //! Provides a single [`JointServiceStack`] entry point that:
-//!   1. Spawns `soland` (via the existing [`ArkretServer::spawn_with_env`] machinery, which honours
+//!   1. Spawns `coland` (via the existing [`ArkretServer::spawn_with_env`] machinery, which honours
 //!      the pre-built sibling binary fast path).
 //!   2. Optionally spawns `coauth` via [`coauth_bootstrap::spawn_coauth_with_db`] (docker-postgres
-//!      + generated config). Wires soland -> coauth session-grant introspection via
-//!      `SOLAND_SESSION_GRANT_INTROSPECTION_URL`.
-//!   3. Optionally spawns `flagon` via [`external_binary::TEABAY_SPEC`] — requires `DATABASE_URL`
-//!      in the caller's env (see `TEABAY_SPEC.required_env_vars`).
+//!      + generated config). Wires coland -> coauth session-grant introspection via
+//!      `COLAND_SESSION_GRANT_INTROSPECTION_URL`.
+//!   3. Optionally spawns `flagon` via [`external_binary::FLAGON_SPEC`] — requires `DATABASE_URL`
+//!      in the caller's env (see `FLAGON_SPEC.required_env_vars`).
 //!
 //! `try_bootstrap` is fail-soft: services that can't start (missing binary,
 //! missing DATABASE_URL, docker unreachable) are returned as `None` slots so
@@ -15,7 +15,7 @@
 //! checks into a hard error so `#[ignore]` tests opted in via `--ignored`
 //! get a descriptive bail.
 //!
-//! Drop order is LIFO (flagon → coauth → soland), so each service gets a
+//! Drop order is LIFO (flagon → coauth → coland), so each service gets a
 //! chance to flush before its upstream goes away. Postgres for coauth is
 //! reaped by `EphemeralPg::Drop` after the coauth handle drops.
 
@@ -28,7 +28,7 @@ use crate::scenarios::_helpers::coauth_bootstrap::{
     JOINT_TRUST_DOMAIN, SpawnedCoauth, coauth_with_db_available, prepare_coauth_with_db_required,
 };
 use crate::scenarios::_helpers::external_binary::{
-    SOLAND_SPEC, SpawnedExternalProcess, TEABAY_SPEC, locate_external_binary, skip_reason,
+    COLAND_SPEC, FLAGON_SPEC, SpawnedExternalProcess, locate_external_binary, skip_reason,
     try_spawn,
 };
 
@@ -37,19 +37,19 @@ use crate::scenarios::_helpers::external_binary::{
 /// any of them before `try_bootstrap`.
 #[derive(Clone)]
 pub struct JointServiceConfig {
-    /// Logical name passed to soland (used for the test DID + log directory).
+    /// Logical name passed to coland (used for the test DID + log directory).
     pub name: String,
-    /// Bearer token expected by soland when calling coauth's
+    /// Bearer token expected by coland when calling coauth's
     /// `session-grants/introspect` endpoint. Must match the value coauth's
     /// generated config patched in.
     pub internal_authority_shared_secret: String,
-    /// Bearer token soland presents when registering a did:webvh document
+    /// Bearer token coland presents when registering a did:webvh document
     /// against the embedded provider. Mirrors run-joint-e2e.ps1.
     pub embedded_webvh_registration_bearer: String,
-    /// Optional durable Soland PostgreSQL store. Recovery restart tests set
+    /// Optional durable Coland PostgreSQL store. Recovery restart tests set
     /// this so the coordinator process can be replaced without losing its
     /// transaction/session/receipt ledger.
-    pub soland_database_url: Option<String>,
+    pub coland_database_url: Option<String>,
 }
 
 impl JointServiceConfig {
@@ -58,7 +58,7 @@ impl JointServiceConfig {
             name: name.into(),
             internal_authority_shared_secret: "cotest-session-grant-introspection".to_owned(),
             embedded_webvh_registration_bearer: "cotest-webvh-registration".to_owned(),
-            soland_database_url: std::env::var("COTEST_SOLAND_DATABASE_URL").ok(),
+            coland_database_url: std::env::var("COTEST_COLAND_DATABASE_URL").ok(),
         }
     }
 }
@@ -67,7 +67,7 @@ impl JointServiceConfig {
 /// `Some` only when the corresponding service was successfully spawned.
 ///
 /// Drop order is enforced via field ordering. Rust drops fields from top to
-/// bottom, so upstream dependants are declared before `soland`; soland is the
+/// bottom, so upstream dependants are declared before `coland`; coland is the
 /// final process to be torn down.
 pub struct JointServiceStack {
     /// flagon (directory) — `Some` if sibling binary + `DATABASE_URL` were
@@ -76,15 +76,15 @@ pub struct JointServiceStack {
     /// coauth (auth/account) — `Some` if docker + sibling binary were
     /// available; `None` if the bootstrap couldn't bring it up.
     pub coauth: Option<SpawnedCoauth>,
-    /// soland (Station) — always present (or the bootstrap returns
+    /// coland (Station) — always present (or the bootstrap returns
     /// `Err`). This is the "main" service the rest of the stack talks to.
-    pub soland: ArkretServer,
+    pub coland: ArkretServer,
 }
 
 impl JointServiceStack {
-    /// Public REST base URL for soland (always present).
-    pub fn soland_base_url(&self) -> String {
-        self.soland.base_url().to_string()
+    /// Public REST base URL for coland (always present).
+    pub fn coland_base_url(&self) -> String {
+        self.coland.base_url().to_string()
     }
 
     /// Public REST base URL for coauth (when spawned).
@@ -93,7 +93,7 @@ impl JointServiceStack {
     }
 
     /// Public REST base URL for flagon (when spawned).
-    pub fn teabay_base_url(&self) -> Option<&str> {
+    pub fn flagon_base_url(&self) -> Option<&str> {
         self.flagon.as_ref().map(|p| p.base_url.as_str())
     }
 
@@ -107,9 +107,9 @@ impl JointServiceStack {
             .build()
             .context("constructing reqwest client for joint service health check")?;
 
-        // soland's base_url already ends in `/`; trim before re-joining.
-        let soland_health = format!("{}/health", self.soland_base_url().trim_end_matches('/'));
-        probe(&self.soland.http(), "soland", &soland_health).await?;
+        // coland's base_url already ends in `/`; trim before re-joining.
+        let coland_health = format!("{}/health", self.coland_base_url().trim_end_matches('/'));
+        probe(&self.coland.http(), "coland", &coland_health).await?;
 
         if let Some(url) = self.coauth_base_url() {
             // coauth's `/health` lives on its internal listener, NOT the
@@ -122,7 +122,7 @@ impl JointServiceStack {
             probe(&client, "coauth", &internal).await?;
             let _ = url; // public REST URL is exported via the accessor; nothing to probe here.
         }
-        if let Some(url) = self.teabay_base_url() {
+        if let Some(url) = self.flagon_base_url() {
             probe(
                 &client,
                 "flagon",
@@ -150,74 +150,74 @@ async fn probe(client: &reqwest::Client, name: &str, url: &str) -> Result<()> {
 }
 
 /// Try to bring up every service; return whichever subset spawned
-/// successfully. Soland is the only required participant — if soland fails to
+/// successfully. Coland is the only required participant — if coland fails to
 /// spawn, the whole bootstrap returns `Err` (every other test in cotest
-/// assumes a working soland).
+/// assumes a working coland).
 pub async fn try_bootstrap(config: JointServiceConfig) -> Result<JointServiceStack> {
     let prepared_coauth =
-        if coauth_with_db_available() && locate_external_binary(&SOLAND_SPEC).is_some() {
+        if coauth_with_db_available() && locate_external_binary(&COLAND_SPEC).is_some() {
             Some(prepare_coauth_with_db_required()?)
         } else {
             None
         };
 
     // 2. flagon — requires DATABASE_URL. Soft-skip otherwise.
-    let flagon = match skip_reason(&TEABAY_SPEC) {
+    let flagon = match skip_reason(&FLAGON_SPEC) {
         Some(_) => None,
-        None => try_spawn(&TEABAY_SPEC).await?,
+        None => try_spawn(&FLAGON_SPEC).await?,
     };
 
-    // 3. Build the soland env from the resolved upstream URLs. Empty/absent keys are simply not
-    //    exported (soland's config keeps the production-safe default when the env var is unset).
-    let mut soland_env: Vec<(String, String)> = Vec::new();
-    soland_env.push((
-        "SOLAND_TRUST_DOMAIN".to_owned(),
+    // 3. Build the coland env from the resolved upstream URLs. Empty/absent keys are simply not
+    //    exported (coland's config keeps the production-safe default when the env var is unset).
+    let mut coland_env: Vec<(String, String)> = Vec::new();
+    coland_env.push((
+        "COLAND_TRUST_DOMAIN".to_owned(),
         JOINT_TRUST_DOMAIN.to_owned(),
     ));
-    if let Some(database_url) = &config.soland_database_url {
-        soland_env.push(("DATABASE_URL".to_owned(), database_url.clone()));
+    if let Some(database_url) = &config.coland_database_url {
+        coland_env.push(("DATABASE_URL".to_owned(), database_url.clone()));
     }
 
     if let Some(coauth) = &prepared_coauth {
         let base = coauth.base_url();
         let base = base.trim_end_matches('/');
-        soland_env.push((
-            "SOLAND_SESSION_GRANT_INTROSPECTION_URL".to_owned(),
+        coland_env.push((
+            "COLAND_SESSION_GRANT_INTROSPECTION_URL".to_owned(),
             format!("{base}/_coauth/internal/session-grants/introspect"),
         ));
-        soland_env.push((
-            "SOLAND_AUTH_SESSION_LOGOUT_URL".to_owned(),
+        coland_env.push((
+            "COLAND_AUTH_SESSION_LOGOUT_URL".to_owned(),
             format!("{base}/_coauth/internal/auth-sessions/logout"),
         ));
-        soland_env.push((
-            "SOLAND_INTERNAL_AUTHORITY_SHARED_SECRET".to_owned(),
+        coland_env.push((
+            "COLAND_INTERNAL_AUTHORITY_SHARED_SECRET".to_owned(),
             config.internal_authority_shared_secret.clone(),
         ));
-        soland_env.push((
-            "SOLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN".to_owned(),
+        coland_env.push((
+            "COLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN".to_owned(),
             crate::scenarios::_helpers::coauth_bootstrap::JOINT_TRUST_DOMAIN.to_owned(),
         ));
-        soland_env.push((
-            "SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER".to_owned(),
+        coland_env.push((
+            "COLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER".to_owned(),
             config.embedded_webvh_registration_bearer.clone(),
         ));
-        soland_env.push(("SOLAND_ACCOUNT_AUTHORITY_URL".to_owned(), base.to_owned()));
+        coland_env.push(("COLAND_ACCOUNT_AUTHORITY_URL".to_owned(), base.to_owned()));
     }
     // ArkretServer::spawn_with_env takes &[(&str, &str)] — borrow the owned
     // strings before passing.
-    let env_borrowed: Vec<(&str, &str)> = soland_env
+    let env_borrowed: Vec<(&str, &str)> = coland_env
         .iter()
         .map(|(k, v)| (k.as_str(), v.as_str()))
         .collect();
-    let soland = if let (Some(_), Some(soland_bin)) = (
+    let coland = if let (Some(_), Some(coland_bin)) = (
         prepared_coauth.as_ref(),
-        locate_external_binary(&SOLAND_SPEC),
+        locate_external_binary(&COLAND_SPEC),
     ) {
-        let port = reserve_port().context("reserve joint service soland port")?;
-        let metrics_port = reserve_port().context("reserve joint service soland metrics port")?;
+        let port = reserve_port().context("reserve joint service coland port")?;
+        let metrics_port = reserve_port().context("reserve joint service coland metrics port")?;
         ArkretServer::spawn_external_binary_with_ports_and_env(
             &config.name,
-            &soland_bin,
+            &coland_bin,
             port,
             metrics_port,
             &env_borrowed,
@@ -226,16 +226,16 @@ pub async fn try_bootstrap(config: JointServiceConfig) -> Result<JointServiceSta
     } else {
         ArkretServer::spawn_with_env(&config.name, &env_borrowed).await
     }
-    .context("joint service bootstrap: failed to spawn soland with wired env")?;
+    .context("joint service bootstrap: failed to spawn coland with wired env")?;
 
     let coauth = match prepared_coauth {
         Some(prepared) => Some(
             prepared
                 .spawn_for_station(
-                    soland.base_url().as_str(),
+                    coland.base_url().as_str(),
                     &config.internal_authority_shared_secret,
                     &config.embedded_webvh_registration_bearer,
-                    soland.tls_ca_path(),
+                    coland.tls_ca_path(),
                 )
                 .await
                 .context("joint service bootstrap: failed to spawn prepared coauth")?,
@@ -246,7 +246,7 @@ pub async fn try_bootstrap(config: JointServiceConfig) -> Result<JointServiceSta
     Ok(JointServiceStack {
         flagon,
         coauth,
-        soland,
+        coland,
     })
 }
 
@@ -261,7 +261,7 @@ pub async fn bootstrap_required(config: JointServiceConfig) -> Result<JointServi
         missing.push("coauth (need docker + COAUTH_BIN or sibling checkout)");
     }
     if stack.flagon.is_none() {
-        missing.push("flagon (need TEABAY_BIN or sibling checkout + DATABASE_URL)");
+        missing.push("flagon (need FLAGON_BIN or sibling checkout + DATABASE_URL)");
     }
     if !missing.is_empty() {
         return Err(anyhow!(

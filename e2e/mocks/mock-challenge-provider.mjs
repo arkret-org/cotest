@@ -1,6 +1,6 @@
 // Mock challenge provider (CAPTCHA / proof-of-work) for the join-policy
 // auto-resolve path (spec governance/join-policy.md §3.1 `challenge_response`,
-// §11 runtime challenge). soland's reducer verifies a `challenge_proof`
+// §11 runtime challenge). coland's reducer verifies a `challenge_proof`
 // structurally: `issued_by` MUST equal the gate `provider_did`, the
 // `challenge_kind` MUST be in the gate `challenge_kinds[]`, `proof` MUST be
 // non-null, and `issued_at` MUST be within `max_proof_age`. This mock signs an

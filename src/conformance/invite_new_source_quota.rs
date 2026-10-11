@@ -351,37 +351,37 @@ impl CanonicalAdmissionCase {
         let constraints = &self.deployment_constraints;
         [
             (
-                "SOLAND_RECEIVE_POLICY_NEW_SOURCE_WINDOW_SECONDS",
+                "COLAND_RECEIVE_POLICY_NEW_SOURCE_WINDOW_SECONDS",
                 constraints
                     .window_seconds
                     .unwrap_or(NewSourceQuotaConstraints::DEFAULT_WINDOW_SECONDS),
             ),
             (
-                "SOLAND_RECEIVE_POLICY_NEW_SOURCE_DEFAULT_PER_WINDOW",
+                "COLAND_RECEIVE_POLICY_NEW_SOURCE_DEFAULT_PER_WINDOW",
                 constraints
                     .default_new_sources_per_window
                     .unwrap_or(NewSourceQuotaConstraints::DEFAULT_NEW_SOURCES_PER_WINDOW),
             ),
             (
-                "SOLAND_RECEIVE_POLICY_NEW_SOURCE_MAX_PER_WINDOW",
+                "COLAND_RECEIVE_POLICY_NEW_SOURCE_MAX_PER_WINDOW",
                 constraints
                     .max_new_sources_per_window
                     .unwrap_or(NewSourceQuotaConstraints::MAX_NEW_SOURCES_PER_WINDOW),
             ),
             (
-                "SOLAND_RECEIVE_POLICY_NEW_SOURCE_RETENTION_SECONDS",
+                "COLAND_RECEIVE_POLICY_NEW_SOURCE_RETENTION_SECONDS",
                 constraints
                     .retention_seconds
                     .unwrap_or(NewSourceQuotaConstraints::DEFAULT_RETENTION_SECONDS),
             ),
             (
-                "SOLAND_RECEIVE_POLICY_NEW_SOURCE_DEFAULT_PER_RETENTION",
+                "COLAND_RECEIVE_POLICY_NEW_SOURCE_DEFAULT_PER_RETENTION",
                 constraints
                     .default_new_sources_per_retention
                     .unwrap_or(NewSourceQuotaConstraints::DEFAULT_NEW_SOURCES_PER_RETENTION),
             ),
             (
-                "SOLAND_RECEIVE_POLICY_NEW_SOURCE_MAX_PER_RETENTION",
+                "COLAND_RECEIVE_POLICY_NEW_SOURCE_MAX_PER_RETENTION",
                 constraints
                     .max_new_sources_per_retention
                     .unwrap_or(NewSourceQuotaConstraints::MAX_NEW_SOURCES_PER_RETENTION),

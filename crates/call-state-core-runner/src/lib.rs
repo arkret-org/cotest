@@ -1,7 +1,7 @@
 //! Executable call-state core fixture runner.
 //!
 //! Participant admission is driven through the production SDK verifier. State
-//! cases are driven through Soland's production, authority-ordered reducer.
+//! cases are driven through Coland's production, authority-ordered reducer.
 //! Every rejection snapshots the affected projection facets, so an arbitrary
 //! error cannot satisfy the suite's zero-effect requirement.
 
@@ -27,13 +27,13 @@ use arkret_wire::{
     EventKind, Hash, ProfileId, RealmCommit, RealmCommitAuthorityRef, RealmCommitId, ScopeRef,
 };
 use chrono::{DateTime, Duration, TimeZone, Utc};
-use ed25519_dalek::{Signer, SigningKey};
-use serde::Deserialize;
-use serde_json::{Value, json};
-use soland_domain::reducer::{
+use coland_domain::reducer::{
     CommitStreamEffect, CommitStreamProjection, FacetRef, ProjectionEffect, ProjectionState,
     ServerHlc, facet,
 };
+use ed25519_dalek::{Signer, SigningKey};
+use serde::Deserialize;
+use serde_json::{Value, json};
 
 pub const CALL_STATE_CORE_ENTRYPOINT: &str = "ak.suite.call.state_core.v1";
 pub const FIXTURE: &str = "call-state-core-fixture.json";

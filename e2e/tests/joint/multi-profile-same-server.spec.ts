@@ -1,5 +1,5 @@
 // Same-server multi-profile browser contexts.
-// Contract: Playwright can simulate two local browser profiles against one soland.
+// Contract: Playwright can simulate two local browser profiles against one coland.
 
 import { expect, test } from "../../helpers/arkret-test";
 import {
@@ -10,7 +10,7 @@ import {
 import {
   grantCapabilityEventApi,
   resolveDefaultStrandId,
-} from "../../helpers/soland-api";
+} from "../../helpers/coland-api";
 
 test.describe.configure({ mode: "serial" });
 

@@ -22,7 +22,7 @@
 
 ## 拓扑
 
-- 1 × soland + 1 × coauth(包含 KeyPackage 存储 endpoint)
+- 1 × coland + 1 × coauth(包含 KeyPackage 存储 endpoint)
 
 ## Actors
 
@@ -58,14 +58,14 @@
    - 派生新 epoch secrets
    - 为 bob 生成 `ak.mls.welcome`(用 bob KeyPackage 的 InitKey 加密)
    - `governance_binding` 仅嵌入唯一 `security_frontier_digest`，并固定 scope/group/epoch/profile
-7. alice 提交 commit + welcome 到 soland;welcome 通过 durable Event 路由给 bob(spec §2.2.1)
+7. alice 提交 commit + welcome 到 coland;welcome 通过 durable Event 路由给 bob(spec §2.2.1)
 8. bob inkson 拉 sync → 解 welcome → 派生 epoch 1 secrets
 9. 断言:bob `/timeline/${realmId}` 可访问,timeline 渲染说"Welcome to encrypted Realm"
 
 ### Phase C — 双向加密消息
 
 10. alice 发消息 `M_a`:`payload` 明文 `"alice greet"`,客户端用 epoch 1 的 application key 加密 → AEAD 输出存进 `encrypted_payload`,plaintext metadata 含 `realm_id`, `event_kind`, `causal_refs`
-11. soland Sync Service:**只**用 plaintext metadata 路由,不解 `encrypted_payload`(关键 invariant)
+11. coland Sync Service:**只**用 plaintext metadata 路由,不解 `encrypted_payload`(关键 invariant)
 12. bob 拉 sync → 用 epoch 1 application key 解密 → timeline 渲染 `"alice greet"`
 13. 断言:bob timeline 包含 `"alice greet"`
 14. 测试 harness 直接 `GET /_arkret/self/events?realms=${realmId}&include_raw=true` → 断言 returned event 的 payload 是 ciphertext,**不含** 明文 `"alice greet"`
@@ -75,7 +75,7 @@
 
 16. alice `POST /_arkret/self/keys/keypackages/claim?actor=carol.did`
 17. alice 客户端:`ak.mls.commit` Add carol;epoch 1 → epoch 2;新 application key
-18. soland 接受 commit + welcome → carol 拉 welcome → 派生 epoch 2 secrets
+18. coland 接受 commit + welcome → carol 拉 welcome → 派生 epoch 2 secrets
 19. 断言:carol `/timeline/${realmId}` 可见;**但** carol 解 Phase C 的 `M_a` / `M_b`?
     - 看 `history_access`:since_join → carol 看不到加入前的 `M_a/M_b`(spec §3.4 + §2.4.1 `decryption_pending` for pre-join)
 20. alice 发新消息 `M_a_post_carol`,用 epoch 2 key
@@ -93,7 +93,7 @@
 
 ### Phase F — Non-member ciphertext-only
 
-29. mallory(非成员)调 `GET /_arkret/self/events?realms=${realmId}` → soland 应拒(403 / not a member)
+29. mallory(非成员)调 `GET /_arkret/self/events?realms=${realmId}` → coland 应拒(403 / not a member)
 30. 即使 mallory 拿到 raw event(假设泄漏),没有 epoch key → 无法解密
 
 ## Observable assertions(合并)
@@ -111,10 +111,10 @@
 ## Edge cases / sub-tests
 
 - **E11.1 竞争 commits**：alice 和 bob 基于同一 confirmed revision 同时提交 commit；Realm 安全序列只确认首个满足 revision 的命令，另一个以 stale rejection 持久结束且不产生 Bottom。尚未取得 winning Seal/epoch 的客户端进入 `decryption_pending`，同步确认序列后恢复（spec §2.5.2）。
-- **E11.2 Governance binding mismatch**:测试 harness 改 alice 提交的 `governance_binding.realm_policy_digest` → soland 拒绝整批,reducer reason `governance_binding_mismatch`
+- **E11.2 Governance binding mismatch**:测试 harness 改 alice 提交的 `governance_binding.realm_policy_digest` → coland 拒绝整批,reducer reason `governance_binding_mismatch`
 - **E11.3 KeyPackage 不可用**:bob 没上传 KeyPackage → alice claim 失败,`POST /keypackages/claim` 返回 404 / `no_keypackage`
 - **E11.4 加入前已发消息 + history_access=all_history_for_current_members**:把 Phase D 改用 `history_access=all_history_for_current_members`；carol 成为当前成员后通过私有 history-key 恢复流程取得获准 epoch 的历史 secret。
-- **E11.5 Cipher suite negotiation**:不同 cipher suite → alice 创建 Realm 时指定 suite,bob 的 KeyPackage 不支持 → soland 提示客户端
+- **E11.5 Cipher suite negotiation**:不同 cipher suite → alice 创建 Realm 时指定 suite,bob 的 KeyPackage 不支持 → coland 提示客户端
 - **E11.6 Realm encryption_profile create-locked**(active):对已建的 `mls_rfc9420` Realm 发送夹带 `encryption_profile` 的 `ak.realm.policy_bundle` → closed payload schema 以 `schema_violation` 拒绝。`encryption_profile` 只有 genesis carrier，任何可变 facet 都不能把已加密 Realm 静默降级成明文。
 - **E11.8 未就绪不得静默降级**(fixme,blocking-on inkson#mls-not-ready-write-guard):未收 welcome、未恢复账户密钥的同账户新设备尝试写私有内容 → 客户端必须呈现可恢复的"MLS 未就绪"提示并拒绝提交,**绝不**把明文 `ak.strand.update` 发给服务端(也不应触发 `content_encryption_floor_violation`)。需第二设备 rig + 实跑确认未就绪 UX 后从 fixme 升 active。
 
@@ -122,7 +122,7 @@
 
 - **当前 live 覆盖**:`encryption_profile=mls_rfc9420` 创建路径、非成员 raw events 拒绝、`ak.mls.genesis`、KeyPackage claim CAS、durable `ak.mls.welcome` pending queue + 一次性 drain、`ak.mls.commit` epoch `0 -> 1`、stale commit `mls_epoch_skew`、加入后的 Bob 解密 Alice post-join timeline 密文且 raw event 不含明文、ban 后 inkson 显示 `epoch_update_required` 并禁用发送。
 - **剩余缺口**：双向 E2EE 消息交换、carol pre-join history、竞争 commit 的 durable stale rejection 与 `decryption_pending` 恢复、governance binding mismatch 的精确拒绝路径。
-- **测试侧难点**:断言"服务端只见 ciphertext"需要 soland 暴露一个 raw event endpoint;若没有,可以从 service log 抓 + grep
+- **测试侧难点**:断言"服务端只见 ciphertext"需要 coland 暴露一个 raw event endpoint;若没有,可以从 service log 抓 + grep
 
 ## 风险
 

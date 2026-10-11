@@ -37,7 +37,7 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
     // the account-subscribe stream carries no typing bucket to assert on and
     // the service cannot see `typing`/`strand_id` at all. The receiver-side
     // contract lives in `conformance::presence_signal`; the send-side
-    // capability gate is a soland admission concern on
+    // capability gate is a coland admission concern on
     // `POST /_arkret/self/signal`.
 
     let initial_sync = bob.sync().await?;
@@ -46,10 +46,10 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
         "initial account subscribe must not include ak.push_rules: {initial_sync}"
     );
 
-    // `ak.push_rules` is private account_data: soland requires the content to be
+    // `ak.push_rules` is private account_data: coland requires the content to be
     // a schema-valid encrypted envelope (the plaintext rules never leave the
     // client). Seal a real `AccountDataEncryptedValue` with the SDK so the
-    // envelope matches the typed model soland validates; the zero-knowledge
+    // envelope matches the typed model coland validates; the zero-knowledge
     // account_data store round-trips it unchanged.
     let push_rules_carrier = serde_json::to_value(
         arkret::account_data_crypto::seal_account_data_value_with_nonce(

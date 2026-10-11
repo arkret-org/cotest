@@ -4,7 +4,7 @@ import {
   type Browser,
   type Page,
 } from "../../helpers/arkret-test";
-import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
+import { coauthBaseUrl, colandBaseUrl } from "../../helpers/env";
 import {
   registerCoauthPasswordAccount,
   type CoauthPasswordAccount,
@@ -24,7 +24,7 @@ import {
   type JointUserPage,
   uniqueUser,
 } from "../../helpers/users";
-import { canonicalJson, typedId } from "../../helpers/soland-api";
+import { canonicalJson, typedId } from "../../helpers/coland-api";
 
 test.describe.configure({ mode: "serial" });
 
@@ -290,7 +290,7 @@ test.describe("fresh-browser device entry paths @fully-implemented", () => {
       // Re-anchor changes the durable device generation. A non-GET request
       // forces fresh grant introspection, so the superseded founding device
       // cannot survive through a resource-server cache window.
-      const oldGenerationProbeUrl = `${solandBaseUrl()}/_arkret/self/account/current-principal`;
+      const oldGenerationProbeUrl = `${colandBaseUrl()}/_arkret/self/account/current-principal`;
       const oldGenerationProbe = await request.post(oldGenerationProbeUrl, {
         headers: {
           ...selfPathHeadersForDpopSession(
@@ -347,7 +347,7 @@ async function loginFreshBrowserToDeviceSetup(
   await page.goto("/login", {
     waitUntil: "domcontentloaded",
   });
-  await page.getByTestId("login-server-url").fill(solandBaseUrl());
+  await page.getByTestId("login-server-url").fill(colandBaseUrl());
   await page.getByTestId("start-server-login-button").click();
   await submitCoauthPasswordCredentials(page, account);
 

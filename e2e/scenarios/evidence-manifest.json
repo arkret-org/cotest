@@ -9,7 +9,7 @@
       "evidence_class": "fixture-only",
       "real_services": [
         "inkson",
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -39,7 +39,7 @@
       "realism_level": "fixture-only",
       "evidence_class": "fixture-only",
       "real_services": [
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -66,7 +66,7 @@
       "real_services": [
         "coauth",
         "inkson",
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -96,7 +96,7 @@
       "real_services": [
         "coauth",
         "inkson",
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -129,7 +129,7 @@
       "realism_level": "server-contract",
       "evidence_class": "server-contract",
       "real_services": [
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -156,7 +156,7 @@
       "real_services": [
         "coauth",
         "inkson",
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -184,7 +184,7 @@
       "realism_level": "server-contract",
       "evidence_class": "server-contract",
       "real_services": [
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -208,7 +208,7 @@
       "evidence_class": "fixture-only",
       "real_services": [
         "inkson",
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -238,7 +238,7 @@
       "realism_level": "server-contract",
       "evidence_class": "server-contract",
       "real_services": [
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -262,7 +262,7 @@
       "real_services": [
         "coauth",
         "inkson",
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -290,7 +290,7 @@
       "real_services": [
         "coauth",
         "inkson",
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -322,7 +322,7 @@
       "realism_level": "server-contract",
       "evidence_class": "server-contract",
       "real_services": [
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -349,7 +349,7 @@
       "real_services": [
         "coauth",
         "inkson",
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -380,7 +380,7 @@
       "evidence_class": "fixture-only",
       "real_services": [
         "coauth",
-        "soland"
+        "coland"
       ],
       "mocks": [
         "email"
@@ -400,7 +400,7 @@
       "realism_level": "fixture-only",
       "evidence_class": "fixture-only",
       "real_services": [
-        "soland"
+        "coland"
       ],
       "mocks": [
         "email",
@@ -428,7 +428,7 @@
       "evidence_class": "server-contract",
       "real_services": [
         "coauth",
-        "soland"
+        "coland"
       ],
       "mocks": [
         "email"
@@ -449,7 +449,7 @@
       "evidence_class": "server-contract",
       "real_services": [
         "coauth",
-        "soland"
+        "coland"
       ],
       "mocks": [
         "email"
@@ -475,7 +475,7 @@
       "evidence_class": "fixture-only",
       "real_services": [
         "coauth",
-        "soland"
+        "coland"
       ],
       "mocks": [
         "email"
@@ -497,7 +497,7 @@
       "real_services": [
         "coauth",
         "inkson",
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -524,7 +524,7 @@
       "real_services": [
         "coauth",
         "inkson",
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -556,7 +556,7 @@
       "real_services": [
         "coauth",
         "inkson",
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -583,7 +583,7 @@
       "real_services": [
         "coauth",
         "inkson",
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -613,7 +613,7 @@
       "evidence_class": "server-contract",
       "real_services": [
         "coauth",
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -637,7 +637,7 @@
       "real_services": [
         "coauth",
         "inkson",
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -656,7 +656,7 @@
       "evidence_class": "server-contract",
       "real_services": [
         "coauth",
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -680,7 +680,7 @@
       "real_services": [
         "coauth",
         "inkson",
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -708,7 +708,7 @@
       "real_services": [
         "coauth",
         "inkson",
-        "soland"
+        "coland"
       ],
       "mocks": [
         "email"
@@ -732,7 +732,7 @@
       "real_services": [
         "coauth",
         "inkson",
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -760,7 +760,7 @@
       "real_services": [
         "coauth",
         "inkson",
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -778,7 +778,7 @@
       "realism_level": "server-contract",
       "evidence_class": "server-contract",
       "real_services": [
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -803,7 +803,7 @@
       "realism_level": "server-contract",
       "evidence_class": "server-contract",
       "real_services": [
-        "soland"
+        "coland"
       ],
       "mocks": [
         "email"
@@ -833,7 +833,7 @@
         "coauth",
         "inkson",
         "savfox",
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -862,7 +862,7 @@
       "real_services": [
         "coauth",
         "inkson",
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -907,7 +907,7 @@
       "evidence_class": "fixture-only",
       "real_services": [
         "inkson",
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -933,7 +933,7 @@
       "evidence_class": "fixture-only",
       "real_services": [
         "inkson",
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -961,7 +961,7 @@
       "realism_level": "server-contract",
       "evidence_class": "server-contract",
       "real_services": [
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -985,7 +985,7 @@
       "realism_level": "server-contract",
       "evidence_class": "server-contract",
       "real_services": [
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -1010,7 +1010,7 @@
       "realism_level": "fixture-only",
       "evidence_class": "fixture-only",
       "real_services": [
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -1034,7 +1034,7 @@
       "real_services": [
         "coauth",
         "inkson",
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -1093,7 +1093,7 @@
       "real_services": [
         "coauth",
         "inkson",
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -1119,7 +1119,7 @@
       "real_services": [
         "coauth",
         "inkson",
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -1149,7 +1149,7 @@
       "real_services": [
         "coauth",
         "inkson",
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -1183,7 +1183,7 @@
       "real_services": [
         "coauth",
         "inkson",
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -1215,7 +1215,7 @@
       "real_services": [
         "coauth",
         "inkson",
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -1247,7 +1247,7 @@
       "realism_level": "server-contract",
       "evidence_class": "server-contract",
       "real_services": [
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -1272,7 +1272,7 @@
       "realism_level": "server-contract",
       "evidence_class": "server-contract",
       "real_services": [
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -1326,7 +1326,7 @@
       "real_services": [
         "coauth",
         "inkson",
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -1358,7 +1358,7 @@
       "real_services": [
         "coauth",
         "inkson",
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -1389,7 +1389,7 @@
       "evidence_class": "server-contract",
       "real_services": [
         "coauth",
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -1442,7 +1442,7 @@
       "real_services": [
         "coauth",
         "inkson",
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -1474,7 +1474,7 @@
       "real_services": [
         "coauth",
         "inkson",
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -1499,7 +1499,7 @@
       "evidence_class": "server-contract",
       "real_services": [
         "coauth",
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -1524,7 +1524,7 @@
       "evidence_class": "fixture-only",
       "real_services": [
         "inkson",
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -1580,7 +1580,7 @@
       "evidence_class": "server-contract",
       "real_services": [
         "coauth",
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -1605,7 +1605,7 @@
       "realism_level": "server-contract",
       "evidence_class": "server-contract",
       "real_services": [
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -1656,7 +1656,7 @@
       "real_services": [
         "coauth",
         "inkson",
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -1690,7 +1690,7 @@
       "real_services": [
         "coauth",
         "inkson",
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -1716,7 +1716,7 @@
       "real_services": [
         "coauth",
         "inkson",
-        "soland"
+        "coland"
       ],
       "mocks": [],
       "identity_establishment": [

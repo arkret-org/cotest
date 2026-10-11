@@ -132,7 +132,7 @@ async fn floria_can_be_spawned_with_rendered_config() -> Result<()> {
     Ok(())
 }
 
-/// CT-6 — joint service bootstrap smoke (soland + coauth + flagon).
+/// CT-6 — joint service bootstrap smoke (coland + coauth + flagon).
 ///
 /// Marked `#[ignore]` because the full stack needs docker (for coauth's
 /// ephemeral postgres), sibling `coauth.exe` / `flagon.exe` binaries, AND a

@@ -8,7 +8,7 @@ fn offline_live_stack_report_marks_unconfigured_services_explicitly() -> Result<
         .iter()
         .map(|entry| entry.service.as_str())
         .collect::<std::collections::BTreeSet<_>>();
-    for service in ["soland", "floria", "flagon", "coauth"] {
+    for service in ["coland", "floria", "flagon", "coauth"] {
         assert!(services.contains(service), "missing {service}");
     }
     assert!(
@@ -25,6 +25,6 @@ fn offline_live_stack_report_marks_unconfigured_services_explicitly() -> Result<
         cotest::scenarios::certification_report::render_stack_certification_report_markdown(
             &report,
         );
-    assert!(markdown.contains("| soland | skipped |"));
+    assert!(markdown.contains("| coland | skipped |"));
     Ok(())
 }

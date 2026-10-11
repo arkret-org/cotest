@@ -252,7 +252,7 @@ fn actor_profile_resolve_carries_the_event_without_a_seal_and_one_failure_value(
     assert!(engine.contains("pub fn forget_realm("));
 
     // The service refuses the request instead of answering per actor.
-    let service = read("soland/crates/http/src/routing/identity/account.rs");
+    let service = read("coland/crates/http/src/routing/identity/account.rs");
     let handler = source_between(
         &service,
         "async fn resolve_actor_profiles(",
@@ -266,7 +266,7 @@ fn actor_profile_resolve_carries_the_event_without_a_seal_and_one_failure_value(
 
 #[test]
 fn service_admits_the_signed_event_through_the_pcr_unit_and_product_authors_the_definition() {
-    let service = read("soland/crates/http/src/routing/identity/account.rs");
+    let service = read("coland/crates/http/src/routing/identity/account.rs");
     let handler = source_between(
         &service,
         "async fn update_profile(",
@@ -291,11 +291,11 @@ fn service_admits_the_signed_event_through_the_pcr_unit_and_product_authors_the_
 
     // The accountability decision is taken at the accepting Commit inside the
     // PCR unit, against committed identity_accountability rows.
-    let unit = read("soland/crates/storage-postgres/src/actor_profiles.rs");
+    let unit = read("coland/crates/storage-postgres/src/actor_profiles.rs");
     assert!(unit.contains("accountability_holds_in_connection"));
     assert!(unit.contains("commit.committed_at"));
     assert!(unit.contains("FOR SHARE"));
-    let schema = read("soland/crates/storage-postgres/migrations/00000000000000_initial/up.sql");
+    let schema = read("coland/crates/storage-postgres/migrations/00000000000000_initial/up.sql");
     assert!(schema.contains("CREATE TABLE actor_profile_current_results ("));
     assert!(schema.contains("CREATE TABLE identity_accountability_current_results ("));
 

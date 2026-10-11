@@ -24,7 +24,7 @@
 //
 // The remaining tests in this file are intentionally narrow:
 //   - Phase F: harness-only vector loader smoke (filesystem read; never
-//     touches soland). Always-pass on count so the suite stays green even
+//     touches coland). Always-pass on count so the suite stays green even
 //     when the fixtures directory has zero matching files today.
 //   - Phase G: optional surface probe of GET /_arkret/describe to
 //     assert the surface is *internally consistent* (`development_mode=true`
@@ -36,7 +36,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "../../helpers/arkret-test";
-import { conformanceBaseUrl, solandBaseUrl, solandServiceId, solandServiceResolution } from "../../helpers/env";
+import { conformanceBaseUrl, colandBaseUrl, colandServiceId, colandServiceResolution } from "../../helpers/env";
 import { openDpopUserPage } from "../../helpers/users";
 import {
   canonicalJson,
@@ -44,7 +44,7 @@ import {
   cotestWire,
   expectJsonOk,
   wireErrCode,
-} from "../../helpers/soland-api";
+} from "../../helpers/coland-api";
 
 const __filename_ = fileURLToPath(import.meta.url);
 const __dirname_ = dirname(__filename_);
@@ -125,7 +125,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
       reducer_profile: "ak.reducer.core.v1",
       schema_profile_refs: ["ak.schema.event.v1"],
       chunk_hashes: chunkHashes,
-      created_by: "ak:did_core:web:soland.conformance",
+      created_by: "ak:did_core:web:coland.conformance",
       created_at: "2026-05-31T00:00:00.000Z",
     };
 
@@ -173,7 +173,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
         mlsActivated: false,
       });
       const token = flow.session.grantJwt;
-      const headUrl = `${solandBaseUrl()}/_arkret/self/realm-state-snapshot/head?realm_id=${encodeURIComponent(realmId)}`;
+      const headUrl = `${colandBaseUrl()}/_arkret/self/realm-state-snapshot/head?realm_id=${encodeURIComponent(realmId)}`;
       let snapshot: Record<string, any> | undefined;
       await expect.poll(async () => {
         const response = await request.get(headUrl, {
@@ -189,7 +189,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
         return response.status();
       }, { timeout: 30_000, intervals: [250, 500, 1_000, 2_000] }).toBe(200);
       if (!snapshot) throw new Error("signed snapshot head returned no body");
-      const exactUrl = `${solandBaseUrl()}/_arkret/self/realm-state-snapshot/${encodeURIComponent(snapshot.snapshot_id)}?realm_id=${encodeURIComponent(realmId)}`;
+      const exactUrl = `${colandBaseUrl()}/_arkret/self/realm-state-snapshot/${encodeURIComponent(snapshot.snapshot_id)}?realm_id=${encodeURIComponent(realmId)}`;
       const exact = await expectJsonOk(await request.get(exactUrl, {
         headers: authHeaders(token, "GET", exactUrl),
       }), "read exact signed snapshot");
@@ -199,20 +199,20 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
         nonce: randomBytes(32).toString("base64url"),
       };
       const authorityBundle = await expectJsonOk(await request.post(
-        `${solandBaseUrl()}/_arkret/open/realm-authority/bundle`, {
+        `${colandBaseUrl()}/_arkret/open/realm-authority/bundle`, {
           headers: { "content-type": "application/json" },
           data: canonicalJson(authorityRequest),
         },
       ), "read nonce-bound Realm authority");
       const serviceResolution = await expectJsonOk(await request.get(
-        solandServiceResolution().resolution_url,
+        colandServiceResolution().resolution_url,
       ), "read retained Station history");
       const evidence = {
         snapshot,
         expected_snapshot_id: snapshot.snapshot_id,
         authority_request: authorityRequest,
         authority_bundle: authorityBundle,
-        trusted_service_id: solandServiceId(),
+        trusted_service_id: colandServiceId(),
         service_resolution: serviceResolution,
       };
       const verify = (input: unknown) => cotestWire<{ verified: boolean }>(
@@ -368,7 +368,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     }
   });
 
-  test("Phase F — vector loader smoke (harness-only, never touches soland)", async ({}, testInfo) => {
+  test("Phase F — vector loader smoke (harness-only, never touches coland)", async ({}, testInfo) => {
     // Scenario doc §"Implementation notes" → fixture-absence fallback. Today
     // the fixtures directory has zero ak.vector.{snapshot,query,scalability}.*
     // files. We still want CI to log the candidate count and id list so the
@@ -422,9 +422,9 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     //         — 200/400/401/405/501 — is acceptable; 404 alone would mean the
     //         advertised posture is a lie).
 
-    const describeResp = await request.get(`${solandBaseUrl()}/_arkret/describe`);
+    const describeResp = await request.get(`${colandBaseUrl()}/_arkret/describe`);
     if (!describeResp.ok()) {
-      // soland might be on an older build without /server/describe at all;
+      // coland might be on an older build without /server/describe at all;
       // that's a different bug, surfaced by service-surface-contract. Skip
       // this probe rather than masking it as a failure here.
       test.skip(true, `/server/describe returned ${describeResp.status()}; not in scope for this scenario`);

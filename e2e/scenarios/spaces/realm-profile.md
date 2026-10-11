@@ -12,7 +12,7 @@
 ## 流程与断言
 
 1. 用户从 Inkson UI 创建 Realm 并进入 Profile 管理面。
-2. 修改 title 与 summary，保存并等待 Soland 接受 `ak.realm.profile`。
+2. 修改 title 与 summary，保存并等待 Coland 接受 `ak.realm.profile`。
 3. 刷新 UI，断言 title 与 summary 保持。
 4. 清空 summary 再保存，断言新完整 payload 省略 summary，且 `head_eq` 前态仍携旧 summary；再次刷新后 summary 保持为空。
 

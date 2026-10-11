@@ -16,7 +16,7 @@
 //! field shapes (`exporter-label-registry.json`), the audit-lock-over-TTL
 //! deletion gate, the moderation OR-Set token-reissue gate,
 //! and the oldest-membership P2P→SFU upgrade, so
-//! a downstream soland reducer regression hard-fails before reaching a live
+//! a downstream coland reducer regression hard-fails before reaching a live
 //! integration target (see the `#[ignore]` live legs under `tests/`).
 //!
 //! `legal_hold_active` is the one reason code already minted in

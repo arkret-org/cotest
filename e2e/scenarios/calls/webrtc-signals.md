@@ -1,6 +1,6 @@
 # WebRTC Signal Catalog
 
-Verifies the `ak.call.signal` v2 signal catalog against a live soland instance.
+Verifies the `ak.call.signal` v2 signal catalog against a live coland instance.
 Each signal type is appended to a fresh call session and read back with a
 monotonic `seq`, sender DID, and `device_proof`.
 

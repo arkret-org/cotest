@@ -1,7 +1,7 @@
 # Same-server Direct Conversation recovery
 
 Live joint regression using two isolated Coauth accounts, the real Inkson client,
-and Soland. Contact request/accept uses the signed protocol helper; conversation
+and Coland. Contact request/accept uses the signed protocol helper; conversation
 creation, MLS preparation, message sends, reloads, and history rendering use Inkson.
 Three independent tests cover ordinary initialization, interrupted acknowledgement,
 and a founder sending while the peer device is offline.

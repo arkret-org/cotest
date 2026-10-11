@@ -556,7 +556,7 @@ pub async fn invite_notification_wakeup_live_run() -> Result<()> {
 }
 
 /// Execute all three Station CAS materializer fanout branches against
-/// a live Soland process.
+/// a live Coland process.
 pub async fn invite_service_fanout_live_run() -> Result<()> {
     let group = TestServerGroup::single("invite-service-fanout-live").await?;
     let server = group.server(0);

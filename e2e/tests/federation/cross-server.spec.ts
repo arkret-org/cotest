@@ -22,8 +22,8 @@ import { expect, test, type APIRequestContext } from "../../helpers/arkret-test"
 import {
   assertServerCountNotRequired,
   hasServerCount,
-  solandBaseUrl,
-  solandServiceId,
+  colandBaseUrl,
+  colandServiceId,
 } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
@@ -48,7 +48,7 @@ import {
   signedEventEnvelope,
   submitSignedEventApi,
   typedId,
-} from "../../helpers/soland-api";
+} from "../../helpers/coland-api";
 import {
   createDpopUserSession,
   allowExplicitInviteNotifications,
@@ -111,7 +111,7 @@ async function committedEventStatus(
   eventId: string,
   server: "server1" | "server2",
 ): Promise<number> {
-  const url = `${solandBaseUrl(server)}/_arkret/self/committed-events/${eventId}`;
+  const url = `${colandBaseUrl(server)}/_arkret/self/committed-events/${eventId}`;
   const response = await request.get(url, { headers: authHeaders(token, "GET", url) });
   return response.status();
 }
@@ -127,14 +127,14 @@ async function waitForMember(
   await expect
     .poll(
       async () => {
-        const url = `${solandBaseUrl(server)}/_arkret/self/realms/${encodeURIComponent(realmId)}`;
+        const url = `${colandBaseUrl(server)}/_arkret/self/realms/${encodeURIComponent(realmId)}`;
         const response = await request.get(url, { headers: authHeaders(token, "GET", url) });
         expect([200, 404], "membership baseline read uses the member's exact AccountId")
           .toContain(response.status());
         if (response.status() === 404) return false;
         const body = await response.json();
         return Array.isArray(body.member_ids) && body.member_ids.some(
-          (member: unknown) => accountActorRoutesThrough(member, solandServiceId(memberServer), memberId),
+          (member: unknown) => accountActorRoutesThrough(member, colandServiceId(memberServer), memberId),
         );
       },
       { timeout: 45_000, intervals: [1_000, 2_000, 5_000] },
@@ -179,8 +179,8 @@ function unsignedPeerHeaders(
 
 function trustDomainFromServiceId(serviceId: string): string {
   if (
-    serviceId !== solandServiceId("server1") &&
-    serviceId !== solandServiceId("server2")
+    serviceId !== colandServiceId("server1") &&
+    serviceId !== colandServiceId("server2")
   ) {
     throw new Error(`unexpected local federation service id: ${serviceId}`);
   }
@@ -189,20 +189,20 @@ function trustDomainFromServiceId(serviceId: string): string {
 
 test.describe("cross-server federation", () => {
   test.describe.configure({ mode: "serial" });
-  test("both soland instances expose the peer Event submit and peer stream scan endpoints", async ({
+  test("both coland instances expose the peer Event submit and peer stream scan endpoints", async ({
     request,
   }) => {
     // Sanity: both servers up and exposing the federation surface.
-    const server1Health = await request.get(`${solandBaseUrl("server1")}/health`);
+    const server1Health = await request.get(`${colandBaseUrl("server1")}/health`);
     expect(server1Health.ok()).toBeTruthy();
-    const server2Health = await request.get(`${solandBaseUrl("server2")}/health`);
+    const server2Health = await request.get(`${colandBaseUrl("server2")}/health`);
     expect(server2Health.ok()).toBeTruthy();
 
     // POST without auth/body should not 404 — both registered peer paths
     // (ak.peer.events.command.submit.v1, ak.peer.committed_event.read.scan.v1)
     // MUST exist.
     for (const path of ["/_arkret/peer/events", "/_arkret/peer/streams/scan"]) {
-      const probe = await request.post(`${solandBaseUrl("server2")}${path}`, { data: {} });
+      const probe = await request.post(`${colandBaseUrl("server2")}${path}`, { data: {} });
       expect(probe.status(), path).not.toBe(404);
     }
   });
@@ -210,7 +210,7 @@ test.describe("cross-server federation", () => {
   test("unsigned peer stream scan is rejected", async ({ request }) => {
     const realmId = typedId("realm");
     const response = await request.post(
-      `${solandBaseUrl("server2")}/_arkret/peer/streams/scan`,
+      `${colandBaseUrl("server2")}/_arkret/peer/streams/scan`,
       {
         data: canonicalJson({
           realm_id: realmId,
@@ -221,8 +221,8 @@ test.describe("cross-server federation", () => {
         headers: {
           "content-type": "application/json",
           ...unsignedPeerHeaders(
-            solandServiceId("server1"),
-            solandServiceId("server2"),
+            colandServiceId("server1"),
+            colandServiceId("server2"),
           ),
         },
       },
@@ -258,10 +258,10 @@ test.describe("cross-server federation", () => {
 
     try {
       await alicePage.gotoHome();
-      expect(alicePage.serverUrl).toBe(solandBaseUrl("server1"));
+      expect(alicePage.serverUrl).toBe(colandBaseUrl("server1"));
 
       // Each principal context binds to its own server.
-      const aliceMeUrl = `${solandBaseUrl("server1")}/_soland/self/account/me`;
+      const aliceMeUrl = `${colandBaseUrl("server1")}/_coland/self/account/me`;
       const aliceMeResp = await request.get(aliceMeUrl, {
         headers: selfPathHeadersForDpopSession(
           aliceSession!,
@@ -273,7 +273,7 @@ test.describe("cross-server federation", () => {
       const aliceMe = await aliceMeResp.json();
       expect(aliceMe.principal_id).toBe(aliceSession!.user.id);
 
-      const bobMeUrl = `${solandBaseUrl("server2")}/_soland/self/account/me`;
+      const bobMeUrl = `${colandBaseUrl("server2")}/_coland/self/account/me`;
       const bobMeResp = await request.get(bobMeUrl, {
         headers: authHeaders(bobToken, "GET", bobMeUrl),
       });
@@ -319,7 +319,7 @@ test.describe("cross-server federation", () => {
       });
       await alicePage.inviteFromAdmin(realmId, bob.id, undefined, {
         token: bobLocatorToken,
-        serverUrl: solandBaseUrl("server2"),
+        serverUrl: colandBaseUrl("server2"),
       });
       await stepShot(alicePage.page, testInfo, "server1-invite-issued");
 
@@ -363,12 +363,12 @@ test.describe("cross-server federation", () => {
         discoverability: "listed",
         history_access: "since_join",
         invitees: [bob.id],
-        invitee_ids: { [bob.id]: solandServiceId("server2") },
+        invitee_ids: { [bob.id]: colandServiceId("server2") },
         ownerId: alice.id,
-        creator_id: solandServiceId("server1"),
+        creator_id: colandServiceId("server1"),
         plaintext_visible_services: [
-          solandServiceId("server1"),
-          solandServiceId("server2"),
+          colandServiceId("server1"),
+          colandServiceId("server2"),
         ],
       },
       { server: "server1" },
@@ -392,7 +392,7 @@ test.describe("cross-server federation", () => {
     // The intended receiver is deliberately not authorized to scan yet.
     const sourceRows = await scanPeerRealmStreamRowsApi(request, {
       server: "server1",
-      sourceServiceId: solandServiceId("server1"),
+      sourceServiceId: colandServiceId("server1"),
       realmId,
     });
     const bootstrapRows = bootstrapEvents.map((event) => {
@@ -402,8 +402,8 @@ test.describe("cross-server federation", () => {
       return matches[0];
     });
     const refused = await pushCommittedRowsApi(request, bootstrapRows, {
-      origin: solandServiceId("server1"),
-      destination: solandServiceId("server2"),
+      origin: colandServiceId("server1"),
+      destination: colandServiceId("server2"),
       server: "server2",
       realmId,
     });
@@ -427,7 +427,7 @@ test.describe("cross-server federation", () => {
     // exact pair it already holds replays as `duplicate`, twice.
     const rows = await scanPeerRealmStreamRowsApi(request, {
       server: "server1",
-      sourceServiceId: solandServiceId("server2"),
+      sourceServiceId: colandServiceId("server2"),
       realmId,
     });
     const row = rows.find((candidate) => candidate.event.event_id === sent.event_id);
@@ -435,8 +435,8 @@ test.describe("cross-server federation", () => {
     expect(row!.commit.commit_id).toBe(sent.commit_id);
     for (const attempt of ["first", "exact replay"]) {
       const outcome = await pushCommittedRowsApi(request, [row!], {
-        origin: solandServiceId("server1"),
-        destination: solandServiceId("server2"),
+        origin: colandServiceId("server1"),
+        destination: colandServiceId("server2"),
         server: "server2",
         realmId,
       });
@@ -483,13 +483,13 @@ test.describe("cross-server federation", () => {
       });
       await alicePage.inviteFromAdmin(realmId, bob.id, undefined, {
         token: bobLocatorToken,
-        serverUrl: solandBaseUrl("server2"),
+        serverUrl: colandBaseUrl("server2"),
       });
       await stepShot(alicePage.page, testInfo, "server1-auto-invite-issued");
 
       await joinFromOwnStation(request, bobToken, bob.id, realmId, "server2");
       const server1RealmUrl =
-        `${solandBaseUrl("server1")}/_arkret/self/realms/` +
+        `${colandBaseUrl("server1")}/_arkret/self/realms/` +
         encodeURIComponent(realmId);
       await expect
         .poll(
@@ -506,7 +506,7 @@ test.describe("cross-server federation", () => {
             }
             const body = (await response.json()) as { member_ids?: unknown[] };
             return (body.member_ids ?? []).some((member) =>
-              accountActorRoutesThrough(member, solandServiceId("server2"), bob.id),
+              accountActorRoutesThrough(member, colandServiceId("server2"), bob.id),
             );
           },
           { timeout: 45_000, intervals: [1_000, 2_000, 5_000] },
@@ -539,12 +539,12 @@ test.describe("cross-server federation", () => {
         discoverability: "listed",
         history_access: "since_join",
         invitees: [bob.id],
-        invitee_ids: { [bob.id]: solandServiceId("server2") },
+        invitee_ids: { [bob.id]: colandServiceId("server2") },
         ownerId: alice.id,
-        creator_id: solandServiceId("server1"),
+        creator_id: colandServiceId("server1"),
         plaintext_visible_services: [
-          solandServiceId("server1"),
-          solandServiceId("server2"),
+          colandServiceId("server1"),
+          colandServiceId("server2"),
         ],
       },
       { server: "server1" },
@@ -564,7 +564,7 @@ test.describe("cross-server federation", () => {
     // outbox got there first only decides stored versus duplicate.
     const rows = await scanPeerRealmStreamRowsApi(request, {
       server: "server1",
-      sourceServiceId: solandServiceId("server2"),
+      sourceServiceId: colandServiceId("server2"),
       realmId,
     });
     const row = rows.find((candidate) => candidate.event.event_id === sent.event_id);
@@ -573,8 +573,8 @@ test.describe("cross-server federation", () => {
     expect(positions).toEqual([...positions].sort((left, right) => left - right));
     const replicaRows = [row!];
     const replicaTarget = {
-      origin: solandServiceId("server1"),
-      destination: solandServiceId("server2"),
+      origin: colandServiceId("server1"),
+      destination: colandServiceId("server2"),
       server: "server2" as const,
       realmId,
     };
@@ -633,12 +633,12 @@ test.describe("cross-server federation", () => {
         discoverability: "listed",
         history_access: "since_join",
         invitees: [bob.id],
-        invitee_ids: { [bob.id]: solandServiceId("server2") },
+        invitee_ids: { [bob.id]: colandServiceId("server2") },
         ownerId: alice.id,
-        creator_id: solandServiceId("server1"),
+        creator_id: colandServiceId("server1"),
         plaintext_visible_services: [
-          solandServiceId("server1"),
-          solandServiceId("server2"),
+          colandServiceId("server1"),
+          colandServiceId("server2"),
         ],
       },
       { server: "server1" },
@@ -667,11 +667,11 @@ test.describe("cross-server federation", () => {
     await expect
       .poll(
         async () => {
-          const url = `${solandBaseUrl("server1")}/_arkret/self/realms/${encodeURIComponent(realmId)}`;
+          const url = `${colandBaseUrl("server1")}/_arkret/self/realms/${encodeURIComponent(realmId)}`;
           const response = await request.get(url, { headers: authHeaders(aliceToken, "GET", url) });
           const body = response.ok() ? await response.json() as { member_ids?: unknown[] } : {};
           return (body.member_ids ?? []).some((member) =>
-            accountActorRoutesThrough(member, solandServiceId("server2"), bob.id),
+            accountActorRoutesThrough(member, colandServiceId("server2"), bob.id),
           );
         },
         { timeout: 45_000, intervals: [1_000, 2_000, 5_000] },
@@ -716,10 +716,10 @@ test.describe("cross-server federation", () => {
       {
         title: `S2 RFC 9421 ${stamp}`,
         ownerId: alice.id,
-        creator_id: solandServiceId("server1"),
+        creator_id: colandServiceId("server1"),
         invitees: [bob.id],
-        invitee_ids: { [bob.id]: solandServiceId("server2") },
-        plaintext_visible_services: [solandServiceId("server1"), solandServiceId("server2")],
+        invitee_ids: { [bob.id]: colandServiceId("server2") },
+        plaintext_visible_services: [colandServiceId("server1"), colandServiceId("server2")],
       },
       { server: "server1" },
     );
@@ -731,8 +731,8 @@ test.describe("cross-server federation", () => {
       server: "server1",
     });
     const response = await rawPushFederationEvents(request, [{ event_id: sent.event_id }], {
-      origin: solandServiceId("server1"),
-      destination: solandServiceId("server2"),
+      origin: colandServiceId("server1"),
+      destination: colandServiceId("server2"),
       server: "server2",
       realmId,
       tamperSignature: true,
@@ -742,7 +742,7 @@ test.describe("cross-server federation", () => {
     expect(response.status()).toBeLessThan(500);
     // federation.md §3.2/§8.3 minimal disclosure: every auth failure folds to a
     // single indistinguishable envelope. The key_rotation_hint is audit-only
-    // (soland signature_error → tracing::warn) and MUST NOT leak in the body.
+    // (coland signature_error → tracing::warn) and MUST NOT leak in the body.
     expect(text).not.toContain("key_rotation_hint");
     expect(text).toContain("federation request authentication failed");
   });
@@ -768,10 +768,10 @@ test.describe("cross-server federation", () => {
     const realmId = await createRealmApi(request, aliceToken, {
       title: `member governance replay ${stamp}`,
       ownerId: alice.id,
-      creator_id: solandServiceId("server1"),
+      creator_id: colandServiceId("server1"),
       invitees: [bob.id, carol.id],
-      invitee_ids: { [bob.id]: solandServiceId("server2"), [carol.id]: solandServiceId("server3") },
-      plaintext_visible_services: [solandServiceId("server1"), solandServiceId("server2"), solandServiceId("server3")],
+      invitee_ids: { [bob.id]: colandServiceId("server2"), [carol.id]: colandServiceId("server3") },
+      plaintext_visible_services: [colandServiceId("server1"), colandServiceId("server2"), colandServiceId("server3")],
       history_access: "since_join",
     }, { server: "server1" });
     await resolveDefaultStrandId(request, aliceToken, realmId, { server: "server1" });
@@ -781,7 +781,7 @@ test.describe("cross-server federation", () => {
     ]) {
       const invitation = await waitForInviteDeliveryApi(request, participant.token, participant.user.id, realmId, participant.server);
       await acceptPreparedInviteApi(request, participant.token, participant.user.id, realmId, invitation.id, { server: participant.server });
-      const realmUrl = `${solandBaseUrl(participant.server)}/_arkret/self/realms/${encodeURIComponent(realmId)}`;
+      const realmUrl = `${colandBaseUrl(participant.server)}/_arkret/self/realms/${encodeURIComponent(realmId)}`;
       await expect.poll(async () => {
         const response = await request.get(realmUrl, { headers: authHeaders(participant.token, "GET", realmUrl) });
         expect([200, 404], "a join baseline must not hide a service error").toContain(response.status());
@@ -792,7 +792,7 @@ test.describe("cross-server federation", () => {
       ownerId: alice.id, realmId, subjectId: bob.id, subjectServer: "server2",
       actions: ["ak.message.create"], server: "server1",
     });
-    const grantUrl = `${solandBaseUrl("server2")}/_arkret/self/committed-events/${grant.eventId}`;
+    const grantUrl = `${colandBaseUrl("server2")}/_arkret/self/committed-events/${grant.eventId}`;
     await expect.poll(async () => {
       const response = await request.get(grantUrl, { headers: authHeaders(bobToken, "GET", grantUrl) });
       expect([200, 404], "the member must hold its actual accepted grant").toContain(response.status());
@@ -803,7 +803,7 @@ test.describe("cross-server federation", () => {
       return true;
     }, { timeout: 45_000, intervals: [1_000, 2_000, 5_000] }).toBe(true);
     const sent = await sendMessageApi(request, bobToken, realmId, `member route ${stamp}`, { server: "server2" });
-    const sourceUrl = `${solandBaseUrl("server2")}/_arkret/self/committed-events/${sent.event_id}`;
+    const sourceUrl = `${colandBaseUrl("server2")}/_arkret/self/committed-events/${sent.event_id}`;
     let original: CommittedEventFullView | undefined;
     await expect.poll(async () => {
       const source = await request.get(sourceUrl, { headers: authHeaders(bobToken, "GET", sourceUrl) });
@@ -818,7 +818,7 @@ test.describe("cross-server federation", () => {
     expect(original, "the member holds the exact original accepted Full").toBeTruthy();
     // This exercises the publication cache's server2 self GET and the helper's
     // explicit server1 governance peer scan authorized for server3.
-    const options = { origin: solandServiceId("server1"), destination: solandServiceId("server3"), server: "server3" as const, realmId };
+    const options = { origin: colandServiceId("server1"), destination: colandServiceId("server3"), server: "server3" as const, realmId };
     const first = await rawPushFederationEvents(request, [{ event_id: sent.event_id }], options);
     expect(first.status()).toBe(200);
     const firstOutcome = await first.json();
@@ -829,7 +829,7 @@ test.describe("cross-server federation", () => {
     const replay = await rawPushFederationEvents(request, [{ event_id: sent.event_id }], options);
     expect(replay.status()).toBe(200);
     expect((await replay.json()).replication_outcomes).toEqual([{ status: "duplicate" }]);
-    const heldUrl = `${solandBaseUrl("server3")}/_arkret/self/committed-events/${sent.event_id}`;
+    const heldUrl = `${colandBaseUrl("server3")}/_arkret/self/committed-events/${sent.event_id}`;
     const held = await request.get(heldUrl, { headers: authHeaders(carolToken, "GET", heldUrl) });
     expect(held.status()).toBe(200);
     expect(canonicalJson(await held.json())).toBe(canonicalJson(original));
@@ -869,14 +869,14 @@ test.describe("prepared authoring and join", () => {
           history_access: "since_join",
           invitees: [bob.id, ...(charlie ? [charlie.id] : [])],
           invitee_ids: {
-            [bob.id]: solandServiceId("server2"),
-            ...(charlie ? { [charlie.id]: solandServiceId("server1") } : {}),
+            [bob.id]: colandServiceId("server2"),
+            ...(charlie ? { [charlie.id]: colandServiceId("server1") } : {}),
           },
           ownerId: alice.id,
-          creator_id: solandServiceId("server1"),
+          creator_id: colandServiceId("server1"),
           plaintext_visible_services: [
-            solandServiceId("server1"),
-            solandServiceId("server2"),
+            colandServiceId("server1"),
+            colandServiceId("server2"),
           ],
         },
         { server: "server1" },
@@ -931,7 +931,7 @@ test.describe("prepared authoring and join", () => {
         let afterPosition: number | null = null;
         let historyPages = 0;
         const streamRef = { kind: "realm", realm_id: realmId };
-        const scanUrl = `${solandBaseUrl("server1")}/_arkret/self/streams/scan`;
+        const scanUrl = `${colandBaseUrl("server1")}/_arkret/self/streams/scan`;
         for (;;) {
           historyPages += 1;
           expect(historyPages, "historical scan must make bounded progress").toBeLessThanOrEqual(100);
@@ -1000,7 +1000,7 @@ test.describe("prepared authoring and join", () => {
         actions: ["ak.message.create"],
         server: "server1",
       });
-      const grantUrl = `${solandBaseUrl("server2")}/_arkret/self/committed-events/${messageGrant.eventId}`;
+      const grantUrl = `${colandBaseUrl("server2")}/_arkret/self/committed-events/${messageGrant.eventId}`;
       await expect.poll(async () => {
         const response = await request.get(grantUrl, { headers: authHeaders(bobToken, "GET", grantUrl) });
         expect([200, 404], "the member's exact grant read must not bypass a service error").toContain(response.status());
@@ -1015,7 +1015,7 @@ test.describe("prepared authoring and join", () => {
         ownerId: alice.id,
         realmId,
         subjectId: bob.id,
-        subjectStationId: solandServiceId("server2"),
+        subjectStationId: colandServiceId("server2"),
         actions: ["ak.message.create"],
         server: "server1",
       });

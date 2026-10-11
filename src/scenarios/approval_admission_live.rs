@@ -92,7 +92,7 @@ pub async fn approval_admission_run() -> Result<()> {
     )
     .await?
     else {
-        return skip_or_fail(GROUP, "prebuilt Soland unavailable");
+        return skip_or_fail(GROUP, "prebuilt Coland unavailable");
     };
     let (alice, alice_account) = standard_client(
         group.server(0),

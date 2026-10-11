@@ -12,7 +12,7 @@
 
 import { generateKeyPairSync, type KeyObject } from "node:crypto";
 import type { APIRequestContext } from "@playwright/test";
-import { canonicalJson, cotestWire, expectJsonOk } from "./soland-api";
+import { canonicalJson, cotestWire, expectJsonOk } from "./coland-api";
 import {
   ed25519PrivateKeySeedB64url,
   encodeEd25519PubkeyMultibase,

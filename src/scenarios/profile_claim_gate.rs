@@ -79,7 +79,7 @@ pub fn profile_claim_gate_negative_claims_fail_closed() -> Result<()> {
     expect_profile_rejected(&failed, "failed conformance results")?;
 
     let limited = serde_json::json!({
-        "supported_profiles": ["org.arkret.soland.profile.limited_server.v1"],
+        "supported_profiles": ["org.arkret.coland.profile.limited_server.v1"],
         "supported_operation_bundles": operation_bundles(&[
             "ak.operation_bundle.station.describe.v1"
         ]),
@@ -159,9 +159,9 @@ fn configured_targets() -> Result<Vec<DescribeTarget>> {
 
     for (service, exact_env, base_env, default_path) in [
         (
-            "soland",
-            "COTEST_SOLAND_DESCRIBE_URL",
-            "COTEST_SOLAND_BASE_URL",
+            "coland",
+            "COTEST_COLAND_DESCRIBE_URL",
+            "COTEST_COLAND_BASE_URL",
             "/_arkret/describe",
         ),
         (
@@ -172,8 +172,8 @@ fn configured_targets() -> Result<Vec<DescribeTarget>> {
         ),
         (
             "flagon",
-            "COTEST_TEABAY_DESCRIBE_URL",
-            "COTEST_TEABAY_BASE_URL",
+            "COTEST_FLAGON_DESCRIBE_URL",
+            "COTEST_FLAGON_BASE_URL",
             "/_arkret/find/directory/describe",
         ),
         (

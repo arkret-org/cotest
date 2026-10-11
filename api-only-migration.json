@@ -16,8 +16,8 @@
         { "file": "cotest/src/scenarios/authz_policy_presence.rs", "symbol": "authz_grant_lifecycle_and_audit_work" },
         { "file": "cotest/src/conformance/capability.rs", "symbol": "run_capability_facet_fixture_suite" },
         { "file": "cotest/src/conformance/capability.rs", "symbol": "run_capability_boundary_fixture_suite" },
-        { "file": "soland/crates/services/src/authorization.rs", "symbol": "a_covering_grant_is_named_by_the_verdict" },
-        { "file": "soland/crates/services/src/authorization.rs", "symbol": "nothing_authorizes_an_actor_without_root_or_grant" }
+        { "file": "coland/crates/services/src/authorization.rs", "symbol": "a_covering_grant_is_named_by_the_verdict" },
+        { "file": "coland/crates/services/src/authorization.rs", "symbol": "nothing_authorizes_an_actor_without_root_or_grant" }
       ]
     },
     {
@@ -132,8 +132,8 @@
         { "file": "cotest/src/conformance/security_negative.rs", "symbol": "run_security_negative_profile_suite" },
         { "file": "arkret-rust-sdk/crates/signatures/src/http_signature.rs", "symbol": "scenario_signer_owns_headers_and_rejects_body_tampering" },
         { "file": "arkret-rust-sdk/crates/signatures/src/http_signature.rs", "symbol": "signature_policy_enforces_digest_components_and_time_window" },
-        { "file": "soland/crates/http/src/routing/federation/federation_tests.rs", "symbol": "verify_actor_headers_reject_destination_mismatch" },
-        { "file": "soland/crates/http/src/routing/federation/federation_tests.rs", "symbol": "signature_input_rejects_mismatched_federation_key" }
+        { "file": "coland/crates/http/src/routing/federation/federation_tests.rs", "symbol": "verify_actor_headers_reject_destination_mismatch" },
+        { "file": "coland/crates/http/src/routing/federation/federation_tests.rs", "symbol": "signature_input_rejects_mismatched_federation_key" }
       ]
     },
     {
@@ -148,7 +148,7 @@
       "source": "cotest/e2e/tests/governance/organization-bootstrap.spec.ts",
       "disposition": "duplicate_removed",
       "replacements": [
-        { "file": "cotest/tests/realm_organization_statement_positive.rs", "symbol": "organization_signed_statement_verifies_through_soland_shape" },
+        { "file": "cotest/tests/realm_organization_statement_positive.rs", "symbol": "organization_signed_statement_verifies_through_coland_shape" },
         { "file": "cotest/src/conformance/coauth_lifecycle.rs", "symbol": "run_coauth_account_lifecycle_fixture_suite" }
       ]
     },
@@ -244,17 +244,17 @@
       "source": "cotest/e2e/tests/spaces/knock-auto-resolve.spec.ts",
       "disposition": "duplicate_removed",
       "coverage_status": "partial",
-      "remaining_gap": "The named Soland tests cover in-memory gate evaluation only. They do not close the current-v1 parent_membership production contract: active join_gate_from and same-current-Station authority-tenure checks, canonical durable locks, cross-Station/handoff fail-closed, and zero Event/RealmCommit/member_state writes still require a Cotest production runner.",
+      "remaining_gap": "The named Coland tests cover in-memory gate evaluation only. They do not close the current-v1 parent_membership production contract: active join_gate_from and same-current-Station authority-tenure checks, canonical durable locks, cross-Station/handoff fail-closed, and zero Event/RealmCommit/member_state writes still require a Cotest production runner.",
       "replacements": [
-        { "file": "soland/crates/server/tests/realm_join_policy.rs", "symbol": "parent_membership_gate_never_uses_projection_cache_as_authority" },
-        { "file": "soland/crates/server/tests/realm_join_policy.rs", "symbol": "cooldown_gate_denies_independently_of_any_combinator" }
+        { "file": "coland/crates/server/tests/realm_join_policy.rs", "symbol": "parent_membership_gate_never_uses_projection_cache_as_authority" },
+        { "file": "coland/crates/server/tests/realm_join_policy.rs", "symbol": "cooldown_gate_denies_independently_of_any_combinator" }
       ]
     },
     {
       "source": "cotest/e2e/tests/models/realm-links.spec.ts",
       "disposition": "migrated",
       "coverage_status": "static_clean_break_only",
-      "remaining_gap": "The retired positive inheritance flow was deleted. Static artifact checks prove that policy, capability and notification propagation have no current-v1 wire carrier; a production Soland durable migration/zero-write runner remains open and is documented in e2e/scenarios/models/realm-links.md.",
+      "remaining_gap": "The retired positive inheritance flow was deleted. Static artifact checks prove that policy, capability and notification propagation have no current-v1 wire carrier; a production Coland durable migration/zero-write runner remains open and is documented in e2e/scenarios/models/realm-links.md.",
       "replacements": [
         { "file": "cotest/tests/realm_link_clean_break.rs", "symbol": "rejects_automatic_realm_inheritance_without_current_v1_carrier" },
         { "file": "cotest/tests/realm_link_clean_break.rs", "symbol": "parent_membership_contract_is_co_governed_and_caller_proof_free" }
@@ -263,7 +263,7 @@
   ],
   "pending_migration_note": "API-only Playwright specs not migrated yet. The gate treats this as a CLOSED set: each source must still exist and must still be API-only, and any API-only spec in neither this list nor specialized_api_lanes fails the gate, so new browserless Playwright coverage cannot be added. Tracked by arkret-work/tasks/impl-active/2026-09-05-1311-cotest-services-live-lane-and-joint-runner-dead-switch-cleanup.md.",
   "pending_migration": [
-    { "source": "cotest/e2e/tests/identity/oidc-login-chain.spec.ts", "needs": "Rust joint bootstrap must set soland's SOLAND_OAUTH_CLIENT_ID, establish the Coauth browser session, and complete the proof-bound OIDC/passkey exchange before the describe client_id and DPoP self-path contracts can be asserted from Rust." },
+    { "source": "cotest/e2e/tests/identity/oidc-login-chain.spec.ts", "needs": "Rust joint bootstrap must set coland's COLAND_OAUTH_CLIENT_ID, establish the Coauth browser session, and complete the proof-bound OIDC/passkey exchange before the describe client_id and DPoP self-path contracts can be asserted from Rust." },
     { "source": "cotest/e2e/tests/sync/account-stream-device-message.spec.ts", "needs": "Needs an SDK account-stream subscribe client; the spec drives the long-poll surface directly." },
     { "source": "cotest/e2e/tests/events/realm-genesis-commit-stream.spec.ts", "needs": "Needs the canonical founding-unit builder and the governance-Station submit path exposed to Rust scenarios so genesis commits are not hand-rolled." },
     { "source": "cotest/e2e/tests/sync/transport-negotiation.spec.ts", "needs": "Needs transport negotiation in the Rust harness; the spec also captures screenshots, so its evidence must move to a Rust transcript artifact." },

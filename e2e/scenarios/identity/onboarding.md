@@ -2,7 +2,7 @@
 
 ## 目标
 
-验证一次账户登录与一次 Recovery Key 确认即可完成唯一创建链：客户端在任何网络副作用前持久化 root、设备签名、设备 HPKE、DPoP 与完整 PCR genesis draft；Coauth 发布 DID 后透明转发客户端签名的两条 Event；Soland 原子接受 PCR genesis；Coauth 收到可验证 receipt 后直接签发 Standard SessionGrant。
+验证一次账户登录与一次 Recovery Key 确认即可完成唯一创建链：客户端在任何网络副作用前持久化 root、设备签名、设备 HPKE、DPoP 与完整 PCR genesis draft；Coauth 发布 DID 后透明转发客户端签名的两条 Event；Coland 原子接受 PCR genesis；Coauth 收到可验证 receipt 后直接签发 Standard SessionGrant。
 
 ## 顺序
 
@@ -13,7 +13,7 @@
 5. 客户端把 authorize 的 `prev_refs` 固定为 create Event ID，并用设备 key 签 Event proof。
 6. root 签 `identity_creation_control_proof`，覆盖 DID operation、lease fence、PCR payload digests、ordered unit 和 initial-session digest。
 7. 一次 `account_register` 提交完整 draft。Coauth 不生成、不修改、不签 PCR Event。
-8. Soland 只在两条 Event、root commitment、设备 PoP、lease 与 DID entry 0 全部匹配时原子接受，并返回 `pcr_genesis_unit` receipt。
+8. Coland 只在两条 Event、root commitment、设备 PoP、lease 与 DID entry 0 全部匹配时原子接受，并返回 `pcr_genesis_unit` receipt。
 9. Coauth 验 receipt 后绑定账号并直接返回 durable Standard SessionGrant；不存在临时 grant 或 promotion。
 10. 客户端完成首个 Seal 与 genesis recovery policy 后进入 Ready；encrypted account/history backup 是独立的持续备份流程。
 

@@ -44,7 +44,7 @@
 8. 该 Realm 的审计查询中不存在 `ak.audit.accessed`。
 
 所有 MLS 状态由 SDK 经 `cotest-wire` 的 `mls-*` 命令产生（`crates/test-support/src/mls_wire.rs`），
-TS 夹具只在步骤间搬运不透明状态（`helpers/soland-api/mls.ts`）。
+TS 夹具只在步骤间搬运不透明状态（`helpers/coland-api/mls.ts`）。
 
 ## 明确不覆盖
 

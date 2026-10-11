@@ -1,8 +1,8 @@
 // Real Station Circle stream plus Inkson poll authoring and verified readback.
 import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
-import { accountSubscribeRealmFramesApi, canonicalJson, scanRealmStreamApi, accountActorId } from "../../helpers/soland-api";
+import { accountSubscribeRealmFramesApi, canonicalJson, scanRealmStreamApi, accountActorId } from "../../helpers/coland-api";
 import { createDpopUserSession, openUserPage, type JointUserPage } from "../../helpers/users";
-import { solandBaseUrl } from "../../helpers/env";
+import { colandBaseUrl } from "../../helpers/env";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -64,7 +64,7 @@ test("Circle poll survives readback, replacement, a new browser process and anot
     historyAccess: "since_join",
     mlsActivated: false,
   });
-  const serviceHealth = await request.get(`${solandBaseUrl()}/health`);
+  const serviceHealth = await request.get(`${colandBaseUrl()}/health`);
   expect(serviceHealth.status(), "real governing Station is available").toBe(200);
   await Promise.all([
     activePage.completeRecoveryKeySetupIfPrompted(30_000),

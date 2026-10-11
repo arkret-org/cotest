@@ -6,7 +6,7 @@
 // while the deployment it talks to belongs to the runner.
 //
 // **Ownership.** The worker owns its bridge and disposes it in teardown. It
-// does not own Coauth, Soland or the mocks: the runner starts those, and a
+// does not own Coauth, Coland or the mocks: the runner starts those, and a
 // worker that stopped one would take the rest of the run with it. That is why
 // `AttachedDeployment` has no teardown and no `close()` — there is nothing here
 // that a test is allowed to shut down.
@@ -21,7 +21,7 @@ import {
   coauthBaseUrl,
   coauthOidcClientId,
   mockEmailBaseUrl,
-  solandBaseUrl,
+  colandBaseUrl,
 } from "./env";
 import { newDeviceId } from "./ids";
 import {
@@ -137,7 +137,7 @@ export const test = base.extend<
     const deployment: AttachedDeployment = {
       ownership: "attached",
       coauthBaseUrl: coauth as string,
-      solandBaseUrl: solandBaseUrl(),
+      colandBaseUrl: colandBaseUrl(),
       mockEmailBaseUrl: mockEmailBaseUrl(),
       oidcClientId: oidcClientId as string,
     };
@@ -191,7 +191,7 @@ export const test = base.extend<
       readSelfAccountViewer(principal: ProvisionedPrincipal) {
         return bridge.readSelfAccountViewer({
           handoffId: principal.handoffId,
-          solandBaseUrl: deployment.solandBaseUrl,
+          colandBaseUrl: deployment.colandBaseUrl,
         });
       },
     });

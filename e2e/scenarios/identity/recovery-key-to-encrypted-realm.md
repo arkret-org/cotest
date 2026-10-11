@@ -6,7 +6,7 @@ Canonical Arkret Joint Product E2E smoke journey for a new ordinary human accoun
 
 - `suite_kind`: `joint-e2e`
 - `realism_level`: `live-product`
-- Real services: Inkson, Coauth, Soland, PostgreSQL-backed persistence
+- Real services: Inkson, Coauth, Coland, PostgreSQL-backed persistence
 - Mocks: none for Arkret product boundaries; the runner may provide an explicitly named email-delivery mock, and this scenario reads the delivered verification code from that mock inbox while submitting it through the Coauth UI
 - Identity establishment: Coauth registration UI, OAuth authorization/consent UI, Inkson identity onboarding UI
 - Protocol object producer: Inkson and its production Arkret SDK/MLS implementation

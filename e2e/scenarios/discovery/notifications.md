@@ -14,7 +14,7 @@
 
 ## 拓扑
 
-- 1 × soland + 1 × coauth + (可选 mock push gateway)
+- 1 × coland + 1 × coauth + (可选 mock push gateway)
 
 ## Actors
 
@@ -79,7 +79,7 @@
 
 ## Implementation notes
 
-- **soland 约束**:notification projection 只经 `/_arkret/self/account/subscribe` 暴露
+- **coland 约束**:notification projection 只经 `/_arkret/self/account/subscribe` 暴露
 - **inkson 缺口**:`/notifications` panel 完整 UI、per-Realm mute toggle、`/settings/notifications` DnD picker
 - **harness 缺口**:可选 mock push gateway 接收 push payload(为了断言 push 真发了)
 

@@ -85,7 +85,7 @@ Each row names the function that executes the invariant.
 | Own-Station account stream: tail continuity, checkpoint ordering, reconnect, delivery cancellation | `src/conformance/sync.rs` (`ak.vector.sync.client_account_stream.v1`) | whole suite, entrypoint `tests/client_account_stream.rs` | **passing** |
 | Account Authority issuer ledger: identity, CAS chain, replica classification, idempotency, bounded fanout | `src/conformance/account_status_issuer_ledger.rs` (`ak.vector.account_status.issuer_ledger.v1`) | whole suite | **passing** |
 | Realm genesis takes Realm stream positions `0..n-1`; exact retry is a duplicate | `e2e/tests/events/realm-genesis-commit-stream.spec.ts` | 3 tests | present, **blocked** (live e2e) |
-| Submission returns a commit that admits the exact Event in its scope's stream | `e2e/helpers/soland-api.ts` | `assertAuthoritySubmitOutcome`, called from every submit | present, **blocked** (live e2e) |
+| Submission returns a commit that admits the exact Event in its scope's stream | `e2e/helpers/coland-api.ts` | `assertAuthoritySubmitOutcome`, called from every submit | present, **blocked** (live e2e) |
 | Concurrent edits converge by commit order | `e2e/tests/kanban/end-to-end.spec.ts` | "two moves of one card commit in order and the later commit wins" | present, **blocked** (live e2e) |
 
 ### The five invariants singled out for this round
@@ -113,7 +113,7 @@ oversights hidden by a passing suite:
 - **The authorization-lease rail.** `ak.vector.authz.authorization_lease_issuance.v1`
   is still an active vector with a live fixture, but
   `registry/operation-registry.json` no longer registers any lease HTTP
-  operation. `e2e/helpers/soland-api.ts` still posts to
+  operation. `e2e/helpers/coland-api.ts` still posts to
   `/_arkret/self/authorization-leases`. Either the endpoint should return to the
   registry or the TypeScript rail should go; this round did not guess.
 
@@ -193,7 +193,7 @@ TypeScript spec was replaced file-for-file.
 | Was | Is | What changed |
 |---|---|---|
 | `src/conformance/sync.rs` (1 923 lines, `sync-fixture.json`) | `src/conformance/sync.rs` (`client-sync-fixture.json`, `ak.vector.sync.client_account_stream.v1`), entrypoint `tests/client_account_stream.rs` | Every declared `stream_ref` is parsed into `CommitStreamRef` and every `commit_id` into `RealmCommitId`; each tail is replayed through `MemoryAuthorityCommitStore`, the store a governance Station commits with, so "accepted" means a real commit log took it. The discontinuous tail is replayed against a store already holding the sibling streams. |
-| `src/conformance/account_status_issuer_ledger.rs` (1 291 lines, importing a deleted `security_closure` module) | same path, driving the rewritten `account-status-issuer-ledger-fixture.json` | Each record's canonical core bytes, digest and content-addressed id are re-derived with `UnsignedAccountStatusRecord`; the declared proof is re-bound with the SDK's proof-binding bytes and a tampered digest is proven to be refused; every classification row runs through soland's own `classify_account_status_replica_append` and is cross-checked against `registry/account-status-replica-decision-table.json`, with a check that no table row goes unexecuted. |
+| `src/conformance/account_status_issuer_ledger.rs` (1 291 lines, importing a deleted `security_closure` module) | same path, driving the rewritten `account-status-issuer-ledger-fixture.json` | Each record's canonical core bytes, digest and content-addressed id are re-derived with `UnsignedAccountStatusRecord`; the declared proof is re-bound with the SDK's proof-binding bytes and a tampered digest is proven to be refused; every classification row runs through coland's own `classify_account_status_replica_append` and is cross-checked against `registry/account-status-replica-decision-table.json`, with a check that no table row goes unexecuted. |
 | `e2e/tests/events/batch-realm-bootstrap.spec.ts` | `e2e/tests/events/realm-genesis-commit-stream.spec.ts` + `e2e/scenarios/events/realm-genesis-commit-stream.md` | Three tests: the founding unit takes consecutive Realm stream positions from zero with each commit naming its predecessor; an exact retry is a `duplicate` that replays the original commit and takes no new position; an ordinary write continues the same stream. Also asserts the retired frontier surface no longer answers and that no accepted Event carries a retired envelope member. |
 | kanban "stale actor branch … `cas_conflict`" | kanban "two moves of one card commit in order and the later commit wins" | A producer Event has no stamp to go stale against. Both moves are admissible; convergence is decided by the order the Station commits them, read off the Realm stream. |
 | `queryRealmEventsApi` (`QUERY /_arkret/self/events`) | `scanRealmStreamApi` (`POST /_arkret/self/streams/scan`, `ak.self.committed_event.read.scan.v1`) | Returns committed-event views so a caller can assert the order the Station assigned, not just the payloads. `queryRealmEventsApi` is kept as a thin projection so ~30 specs keep their shape. |
@@ -307,7 +307,7 @@ below are untouched work.
 | `src/scenarios/calendar_rsvp_convergence.rs` | 55 | frontier waits (also inkson-coupled) |
 | `src/harness/event_builder.rs` | 42 | `EventInitialSubmission`, Cell preconditions, `realm_bootstrap_event_batch` |
 | `src/scenarios/account_subscribe_long_poll.rs` | 30 | frontier frames |
-| `e2e/helpers/soland-api.ts` | 25 | federation transport wrapper (`membership_frontier`, `service_binding_ref`) + the lease rail |
+| `e2e/helpers/coland-api.ts` | 25 | federation transport wrapper (`membership_frontier`, `service_binding_ref`) + the lease rail |
 | `e2e/tests/joint/joint-inkson-smoke.spec.ts` | 27 | `actor_seq` / `prev_refs` bootstrap assertions |
 
 ---
@@ -317,22 +317,22 @@ below are untouched work.
 Everything below is a sibling repository mid-migration by another agent. Nothing
 here was worked around by deleting or disabling a test.
 
-### 1. The root package cannot be compiled — `inkson` and `soland-services`
+### 1. The root package cannot be compiled — `inkson` and `coland-services`
 
 ```
 $ cargo check --workspace --all-targets --no-default-features
-error: could not compile `soland-services` (lib) due to 167 previous errors
+error: could not compile `coland-services` (lib) due to 167 previous errors
 error: could not compile `inkson` (lib) due to 284 previous errors; 7 warnings emitted
 exit 101
 ```
 
 - **Command:** `cargo check --workspace --all-targets --no-default-features`
 - **Pass:** 0 · **Fail:** exit 101, 459 error lines
-- **Cause:** `cotest`'s root package takes `inkson` and `soland-*` as path
+- **Cause:** `cotest`'s root package takes `inkson` and `coland-*` as path
   dependencies. Both are mid-migration in their own checkouts and neither
   compiles, so cargo never reaches cotest's own code. This is not a cotest
   failure: at the opening baseline the same command failed with 580 error lines
-  split 363 (`inkson`) / 215 (`soland-services`), and every one of those lines
+  split 363 (`inkson`) / 215 (`coland-services`), and every one of those lines
   is in a sibling repository.
 - **`cargo test --workspace --no-fail-fast` therefore has no pass/fail count to
   report.** Reporting one would be fabrication.
@@ -340,7 +340,7 @@ exit 101
 **How the two rewritten suites were executed anyway.** A throwaway harness in
 the session scratchpad re-hosts `conformance::sync`,
 `conformance::account_status_issuer_ledger` and the shared fixture DSL through
-`#[path]` against the same SDK and `soland-storage` the real package uses,
+`#[path]` against the same SDK and `coland-storage` the real package uses,
 dropping only the dependencies that do not compile. It is a measurement tool,
 not a deliverable, and is not committed. Result:
 
@@ -408,7 +408,7 @@ against and the root package would not compile even with blocker 1 cleared.
 
 - **Commands:** `cd e2e && npm test` (Playwright), `scripts/run-joint-e2e.ps1`
 - **Pass:** 0 · **Fail:** 0 · **Not started.**
-- **Cause:** the live suite drives a prebuilt `soland.exe`. soland is mid-migration
+- **Cause:** the live suite drives a prebuilt `coland.exe`. coland is mid-migration
   in another agent's hands, so a binary built now would not implement the
   submission surface these specs were just rewritten against, and a stale binary
   would test the retired behaviour. Building it is also known to collide with a
@@ -421,15 +421,15 @@ against and the root package would not compile even with blocker 1 cleared.
 ### 5. Server conformance needs a database variable the script does not export
 
 - **Commands:** `scripts/run-server-conformance.ps1`, and any
-  `soland-services` / cotest conformance test that opens a database.
+  `coland-services` / cotest conformance test that opens a database.
 - **Pass:** 0 · **Fail:** blocked upstream of the database by blocker 1.
-- **Cause:** the script exports `COTEST_SOLAND_DATABASE_URL` but the tests read
-  `SOLAND_TEST_DATABASE_URL`. In a clean shell that is 7 red in `soland-services`
+- **Cause:** the script exports `COTEST_COLAND_DATABASE_URL` but the tests read
+  `COLAND_TEST_DATABASE_URL`. In a clean shell that is 7 red in `coland-services`
   plus 1 in cotest before anything else runs.
 - **Local environment is otherwise fine** — verified this round:
   `PGPASSWORD=root psql -h 127.0.0.1 -U postgres -c "select version();"` →
   *PostgreSQL 18.1 on x86_64-windows*. Setting
-  `SOLAND_TEST_DATABASE_URL=postgres://postgres:root@127.0.0.1:5432/…` is
+  `COLAND_TEST_DATABASE_URL=postgres://postgres:root@127.0.0.1:5432/…` is
   sufficient once the workspace compiles. `psql` must carry `PGPASSWORD` or it
   blocks on a password prompt.
 
@@ -444,15 +444,15 @@ workspace. `cargo check --workspace --all-targets --message-format short`:
 | crate | errors |
 | --- | --- |
 | `inkson` (lib) | 271 |
-| `soland-services` (lib) | 167 |
-| `garth`, `soland-domain`, `soland-storage`, `soland-storage-postgres` | 0 |
+| `coland-services` (lib) | 167 |
+| `garth`, `coland-domain`, `coland-storage`, `coland-storage-postgres` | 0 |
 | `cotest-test-support` (`crates/test-support`) | 0 |
 | **`cotest` (lib)** | **never reached — 0 files type-checked** |
 
 So there was never a trustworthy cotest number to compare against. To get one,
 the §8 oracle technique was applied at whole-package scale: a scratch crate
 carrying cotest's real `src/` with the 14 inkson-importing modules removed, and
-`inkson` / `soland-services` dropped from the dependency list.
+`inkson` / `coland-services` dropped from the dependency list.
 
 | reading | cotest lib errors | files |
 | --- | --- | --- |
@@ -590,9 +590,9 @@ they gate, counted from the 542-error oracle reading.
   assert their behaviour have not been retired with them, and should be, by
   whoever retired the profiles.
 
-### 9. `soland-services` is a dead dependency of cotest
+### 9. `coland-services` is a dead dependency of cotest
 
-`Cargo.toml` declares it. `grep -rw soland_services src/ tests/ crates/` returns
+`Cargo.toml` declares it. `grep -rw coland_services src/ tests/ crates/` returns
 nothing. Its 167 errors are therefore 167 errors of compile-blocking that buy
 cotest nothing.
 
@@ -606,7 +606,7 @@ package red regardless. Recorded so the decision gets made deliberately once
 ## What the next round has to do
 
 1. Re-run `cargo check --workspace --all-targets --no-default-features` once
-   `inkson` and `soland-services` are green, and treat the resulting cotest
+   `inkson` and `coland-services` are green, and treat the resulting cotest
    error list as the real work queue. The current reading through the scratch
    oracle is 542 errors across 61 files (section 6), concentrated in
    `src/conformance/sidecar_vectors.rs` (72),
@@ -619,7 +619,7 @@ package red regardless. Recorded so the decision gets made deliberately once
    Seal frontier. Realm genesis is now one `ak.realm.create` Event whose
    `RealmGenesis` payload carries the initial policy inline.
 3. Decide the authorization-lease question (see the coverage matrix gap) and
-   finish `e2e/helpers/soland-api.ts` accordingly — the federation transport
+   finish `e2e/helpers/coland-api.ts` accordingly — the federation transport
    wrapper still sends `service_binding_ref` / `membership_frontier`, while
    `ak.peer.events.command.submit.v1` now takes the same `{ event }` body as the
    self endpoint.

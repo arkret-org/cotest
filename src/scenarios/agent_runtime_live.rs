@@ -773,7 +773,7 @@ pub async fn run_agent_capability_longevity_live() -> Result<()> {
     )
     .await?
     else {
-        return skip_or_fail(scenario, "prebuilt Soland unavailable");
+        return skip_or_fail(scenario, "prebuilt Coland unavailable");
     };
     let station = group.server(0);
     let (controller, controller_account) =
@@ -884,7 +884,7 @@ pub async fn run_agent_runtime_session_live() -> Result<()> {
     )
     .await?
     else {
-        return skip_or_fail(GROUP, "prebuilt Soland unavailable");
+        return skip_or_fail(GROUP, "prebuilt Coland unavailable");
     };
     let station = group.server(0);
     let (controller, controller_account) =
@@ -1063,7 +1063,7 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
     )
     .await?
     else {
-        return skip_or_fail(group_name, "prebuilt Soland unavailable");
+        return skip_or_fail(group_name, "prebuilt Coland unavailable");
     };
     let station = group.server(0);
     let (controller, controller_account) =
@@ -2256,7 +2256,7 @@ pub async fn run_agent_actor_private_events_live() -> Result<()> {
     )
     .await?
     else {
-        return skip_or_fail(group_name, "prebuilt Soland unavailable");
+        return skip_or_fail(group_name, "prebuilt Coland unavailable");
     };
     let station = group.server(0);
     let (controller, controller_account) =

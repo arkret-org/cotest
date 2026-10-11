@@ -21,7 +21,7 @@ use crate::scenarios::identity_test_support::actor_did_for_service_did;
 const DEVICE: &str = "ak:device:01975510-0000-7000-8000-0000000000b1";
 const TRANSACTION: &str = "ak:transaction:01975510-0000-7000-8000-0000000000b2";
 
-pub async fn security_transaction_create_is_durable_on_live_soland() -> Result<()> {
+pub async fn security_transaction_create_is_durable_on_live_coland() -> Result<()> {
     let group = TestServerGroup::single("security-transaction-live-create").await?;
     let server = group.server(0);
     let actor = actor_did_for_service_did(server.service_did(), "security-transaction")?;

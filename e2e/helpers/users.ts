@@ -14,10 +14,10 @@ import {
   coauthBaseUrl,
   diagnosticsRoot,
   inksonBaseUrl,
-  type SolandKey,
-  solandBaseUrl,
-  solandServiceDid,
-  solandServiceId,
+  type ColandKey,
+  colandBaseUrl,
+  colandServiceDid,
+  colandServiceId,
 } from "./env";
 import { selectDxcOption } from "./dxc-select";
 import type { AccountId, PublicPrincipalResolution, RealmObject } from "./generated/spec-wire-objects";
@@ -47,7 +47,7 @@ import {
   registerRequestAuth,
   typedId,
   verifyRegisteredEventSignerDeviceApi,
-} from "./soland-api";
+} from "./coland-api";
 import {
   ProvisioningLedger,
   assertCompleteIdentity,
@@ -105,7 +105,7 @@ type SessionGrantMaterial = {
 };
 type OpenUserOpts = {
   sessionCredential?: string;
-  server?: SolandKey;
+  server?: ColandKey;
   keepDeviceAuthorizationModal?: boolean;
   /// Disable the recovery-key modal auto-completer for tests that inspect or
   /// drive that setup flow themselves.
@@ -131,7 +131,7 @@ type OpenUserOpts = {
   accountId?: { principal_id: string; station_id: string };
   /// Exact principal-control Realm created by the accepted PCR genesis unit.
   principalControlRealmId?: string;
-  /// Audience the grant is bound to (the soland service DID).
+  /// Audience the grant is bound to (the coland service DID).
   grantAudience?: string;
   recoveryKey?: string;
   recoveryMaterialEvidence?: Record<string, unknown>;
@@ -191,9 +191,9 @@ function buildInviteLocatorUrl(
 export async function issueInviteLocatorToken(
   request: APIRequestContext,
   sessionToken: string,
-  server: SolandKey = "server1",
+  server: ColandKey = "server1",
 ): Promise<string> {
-  const issueUrl = `${solandBaseUrl(server)}/_arkret/self/invite-locators`;
+  const issueUrl = `${colandBaseUrl(server)}/_arkret/self/invite-locators`;
   const response = await request.post(
     issueUrl,
     {
@@ -1183,7 +1183,7 @@ export class JointUserPage {
 
   // Build the Authorization + DPoP headers for a direct (non-browser)
   // `/_arkret/self/*` call. Under the ②(A+②) model the credential is the
-  // ak.session.grant and soland requires a per-request DPoP proof.
+  // ak.session.grant and coland requires a per-request DPoP proof.
   private selfPathHeaders(method: string, url: string): Record<string, string> {
     const grant = this.session.grant;
     if (grant) {
@@ -1204,7 +1204,7 @@ export class JointUserPage {
   }
 
   // Accept a pending invite for this user. The standard v1 invite lifecycle is
-  // `ak.invite.create` followed by invitee-authored `ak.invite.accept`; soland
+  // `ak.invite.create` followed by invitee-authored `ak.invite.accept`; coland
   // then cascades the accepted invite into Realm membership.
   async acceptInvite(realmId: string) {
     // Principal Events must be signed by the device key accepted in the PCR
@@ -1478,7 +1478,7 @@ export function assertJointStackNotRequired(context: string): void {
   }
 }
 
-export function uniqueUser(prefix: string, server?: SolandKey): JointUser {
+export function uniqueUser(prefix: string, server?: ColandKey): JointUser {
   const stamp = randomUUID();
   const slug = `${prefix}-${stamp}`.toLowerCase().replace(/[^a-z0-9-]/g, "-");
   const suffix = deviceSuffix(stamp);
@@ -1489,7 +1489,7 @@ export function uniqueUser(prefix: string, server?: SolandKey): JointUser {
     if (!server) {
       return `did:webvh:${scid}:${slug}.example`;
     }
-    const serviceDid = solandServiceDid(server);
+    const serviceDid = colandServiceDid(server);
     const webvh = /^did:webvh:[^:]+:([^:]+)(?::.*)?$/.exec(serviceDid);
     if (webvh?.[1]) {
       return `did:webvh:${scid}:${webvh[1]}:webvh:${slug}`;
@@ -1533,11 +1533,11 @@ const provisioningLedger = new ProvisioningLedger();
 
 // Test-owned native identity control is independent from the Event device key.
 // Recovery derivation and signing stay in the SDK oracle; no root seed is exposed.
-export function registeredSubjectIdentityControl(user: JointUser, server?: SolandKey) {
+export function registeredSubjectIdentityControl(user: JointUser, server?: ColandKey) {
   const session = Array.from(canonicalSessionsByGrant.values()).find((candidate) =>
     candidate.user.id === user.id && candidate.user.did === user.did &&
     candidate.user.deviceId === user.deviceId &&
-    candidate.accountId.station_id === solandServiceId(server));
+    candidate.accountId.station_id === colandServiceId(server));
   const verificationMethod = session?.account.principalRegistrationCheckpoint.root_verification_method;
   if (!session?.account.recoveryKey || typeof verificationMethod !== "string") {
     throw new Error("subject native identity control is unavailable");
@@ -1548,7 +1548,7 @@ export function registeredSubjectIdentityControl(user: JointUser, server?: Solan
 export async function ensureRegistered(
   request: APIRequestContext,
   user: JointUser,
-  opts: { server?: SolandKey } = {},
+  opts: { server?: ColandKey } = {},
 ) {
   // When coauth is reachable, registration goes through the canonical
   // co-located provisioning (account → PCR genesis → verified binding) instead
@@ -1558,7 +1558,7 @@ export async function ensureRegistered(
   const coauth = coauthBaseUrl(opts.server);
   if (coauth) {
     const key = provisioningKey({
-      stationBaseUrl: solandBaseUrl(opts.server),
+      stationBaseUrl: colandBaseUrl(opts.server),
       authorityBaseUrl: coauth,
       principalName: user.name,
     });
@@ -1648,11 +1648,11 @@ export async function ensureRegistered(
 export async function issueUserSession(
   request: APIRequestContext,
   user: JointUser,
-  opts: { server?: SolandKey; deviceId?: string } = {},
+  opts: { server?: ColandKey; deviceId?: string } = {},
 ): Promise<string> {
   const accepted = Array.from(canonicalSessionsByGrant.values()).find(
     (session) => session.accountId.principal_id === user.id &&
-      session.accountId.station_id === solandServiceId(opts.server) &&
+      session.accountId.station_id === colandServiceId(opts.server) &&
       session.user.did === user.did &&
       session.user.deviceId === (opts.deviceId ?? user.deviceId),
   );
@@ -1665,7 +1665,7 @@ export async function issueUserSession(
     throw new Error("canonical user sessions require a configured Account Authority");
   }
   const key = provisioningKey({
-    stationBaseUrl: solandBaseUrl(opts.server),
+    stationBaseUrl: colandBaseUrl(opts.server),
     authorityBaseUrl: authority,
     principalName: user.name,
   });
@@ -1685,12 +1685,12 @@ export async function issueUserSession(
 export async function registeredPrincipalControlIdentity(
   request: APIRequestContext,
   user: JointUser,
-  opts: { server?: SolandKey } = {},
+  opts: { server?: ColandKey } = {},
 ) {
   await ensureRegistered(request, user, opts);
   const session = Array.from(canonicalSessionsByGrant.values()).find(
     (candidate) => candidate.accountId.principal_id === user.id &&
-      candidate.accountId.station_id === solandServiceId(opts.server) &&
+      candidate.accountId.station_id === colandServiceId(opts.server) &&
       candidate.user.did === user.did && candidate.user.deviceId === user.deviceId,
   );
   if (!session) throw new Error("native control identity has no accepted registration");
@@ -1713,7 +1713,7 @@ export async function createDpopUserSession(
   _request: APIRequestContext,
   prefix: string,
   opts: {
-    server?: SolandKey;
+    server?: ColandKey;
     coauthBase?: string;
   } = {},
 ): Promise<DpopUserSession | undefined> {
@@ -1755,7 +1755,7 @@ export async function createDpopUserSessionForAccount(
   prefix: string,
   account: CoauthPasswordAccount,
   opts: {
-    server?: SolandKey;
+    server?: ColandKey;
     coauthBase?: string;
   } = {},
 ): Promise<DpopUserSession | undefined> {
@@ -1773,7 +1773,7 @@ export async function createDpopUserSessionForAccount(
     return undefined;
   }
   seed.deviceId = account.genesisDeviceId;
-  const audience = solandServiceId(opts.server);
+  const audience = colandServiceId(opts.server);
   const grant = account.initialGrant;
   const deviceKey = account.initialHolderKey;
   const eventSigningKey = grant.eventSigningKey;
@@ -1915,7 +1915,7 @@ export async function openDpopUserPage(
   request: APIRequestContext,
   prefix: string,
   opts: {
-    server?: SolandKey;
+    server?: ColandKey;
     coauthBase?: string;
     prepareMlsDevice?: boolean;
     allowExplicitInviteNotifications?: boolean;
@@ -1934,7 +1934,7 @@ export async function openDpopUserPageForAccount(
   prefix: string,
   account: CoauthPasswordAccount,
   opts: {
-    server?: SolandKey;
+    server?: ColandKey;
     coauthBase?: string;
     prepareMlsDevice?: boolean;
     autoCompleteRecoveryKeySetup?: boolean;
@@ -1981,13 +1981,13 @@ export async function openDpopUserPageForAccount(
 export async function pairSiblingDeviceSession(
   request: APIRequestContext,
   foundingSession: DpopUserSession,
-  opts: { server?: SolandKey } = {},
+  opts: { server?: ColandKey } = {},
 ): Promise<DpopUserSession> {
   const coauth = coauthBaseUrl(opts.server);
   if (!coauth) {
     throw new Error("sibling device pairing requires a configured Account Authority");
   }
-  const station = solandBaseUrl(opts.server);
+  const station = colandBaseUrl(opts.server);
   const founding = foundingSession.user;
   const accountId = foundingSession.accountId;
   const deviceId = newDeviceId();
@@ -2378,9 +2378,9 @@ export async function approvePairingLinkOnAuthorizedDevice(
 export async function allowExplicitInviteNotifications(
   request: APIRequestContext,
   session: DpopUserSession | string,
-  server?: SolandKey,
+  server?: ColandKey,
 ) {
-  const url = `${solandBaseUrl(server)}/_arkret/self/invite-receive-policy`;
+  const url = `${colandBaseUrl(server)}/_arkret/self/invite-receive-policy`;
   const headers = (method: "GET" | "PUT") =>
     typeof session === "string"
       ? authHeaders(session, method, url)
@@ -2432,7 +2432,7 @@ export async function openDpopUserPageFromSession(
   browser: Browser,
   session: DpopUserSession | undefined,
   opts: {
-    server?: SolandKey;
+    server?: ColandKey;
     prepareMlsDevice?: boolean;
     autoCompleteRecoveryKeySetup?: boolean;
   } = {},
@@ -2492,7 +2492,7 @@ export async function openUser(
     const authority = coauthBaseUrl(opts.server);
     if (!opts.sessionCredential && authority) {
       const key = provisioningKey({
-        stationBaseUrl: solandBaseUrl(opts.server),
+        stationBaseUrl: colandBaseUrl(opts.server),
         authorityBaseUrl: authority,
         principalName: user.name,
       });
@@ -2500,7 +2500,7 @@ export async function openUser(
     }
     if (session) {
       if (session.accountId.principal_id !== user.id ||
-          session.accountId.station_id !== solandServiceId(opts.server) ||
+          session.accountId.station_id !== colandServiceId(opts.server) ||
           session.user.deviceId !== user.deviceId || session.user.did !== user.did) {
         throw new Error("browser fixture does not match the canonical account/device session");
       }
@@ -2509,7 +2509,7 @@ export async function openUser(
       throw new Error("browser fixture credential has no canonical grant and holder material");
     }
   }
-  const serverUrl = solandBaseUrl(opts.server);
+  const serverUrl = colandBaseUrl(opts.server);
   const sessionCredential = opts.sessionCredential ?? "";
   const diagnosticsDir = path.join(
     diagnosticsRoot(),
@@ -2551,13 +2551,13 @@ export async function openUser(
     }));
     try {
       const url = new URL(`${serverUrl}/_arkret/open/principals/${encodeURIComponent(user.id)}/resolution`);
-      url.searchParams.set("station_id", solandServiceId(opts.server));
+      url.searchParams.set("station_id", colandServiceId(opts.server));
       const response = await lookup.get(url.toString());
       expect(response.status(), "accepted-device principal resolution lookup").toBe(200);
       const publicResolution = await response.json() as PublicPrincipalResolution;
       expect(publicResolution.account_id).toEqual({
         principal_id: user.id,
-        station_id: solandServiceId(opts.server),
+        station_id: colandServiceId(opts.server),
       });
       expect(publicResolution.projection_attestation.attestation.resolution_projection)
         .toEqual(publicResolution.resolution_projection);
@@ -2577,7 +2577,7 @@ export async function openUser(
               profile_id: `ak:profile:${randomUUID()}`,
               authority: {
                 principal_id: user.id,
-                station_id: solandServiceId(opts.server),
+                station_id: colandServiceId(opts.server),
               },
               principal_control_realm_id: opts.principalControlRealmId,
               resolution,

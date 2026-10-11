@@ -42,12 +42,12 @@ import {
   type APIRequestContext,
   type Page,
 } from "../../helpers/arkret-test";
-import { solandBaseUrl } from "../../helpers/env";
-import { assertAuthoritySubmitOutcome, canonicalJson, grantCapabilityEventApi, queryRealmEventsApi } from "../../helpers/soland-api";
+import { colandBaseUrl } from "../../helpers/env";
+import { assertAuthoritySubmitOutcome, canonicalJson, grantCapabilityEventApi, queryRealmEventsApi } from "../../helpers/coland-api";
 import { grantInviteConsentArkret } from "../../helpers/contact-api";
 import { stepShot } from "../../helpers/screenshots";
 import { selfPathGrantHeaders } from "../../helpers/session-grant-dpop";
-import { activateRealmMlsApi, readScopeMlsGroupCurrentApi } from "../../helpers/soland-api/mls";
+import { activateRealmMlsApi, readScopeMlsGroupCurrentApi } from "../../helpers/coland-api/mls";
 import { installMlsOutboundFault } from "../../helpers/mls-outbound-fault";
 import { selectDxcOption } from "../../helpers/dxc-select";
 import {
@@ -155,7 +155,7 @@ async function waitForMlsCommit(
   await expect
     .poll(
       async () => {
-        const url = `${solandBaseUrl()}/_arkret/self/streams/scan`;
+        const url = `${colandBaseUrl()}/_arkret/self/streams/scan`;
         const response = await request.fetch(url, {
           method: "POST",
           data: canonicalJson({
@@ -358,7 +358,7 @@ async function waitForOriginalCreatorReady(
 
     // Use the registered caller-visible snapshot, with each request bounded by
     // the same readiness deadline instead of a nested independent retry budget.
-    const url = new URL(`${solandBaseUrl()}/_arkret/self/realm-state-snapshot/head`);
+    const url = new URL(`${colandBaseUrl()}/_arkret/self/realm-state-snapshot/head`);
     url.searchParams.set("realm_id", realmId);
     const response = await proof.request.get(url.toString(), {
       timeout: remaining(),
@@ -1182,7 +1182,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
           expect(stopped.settled_at).toBeTruthy();
           expect(terminal.ready_index).toHaveLength(0);
           if (rejectedOriginalAccepted) {
-            const url = `${solandBaseUrl()}/_arkret/self/events`;
+            const url = `${colandBaseUrl()}/_arkret/self/events`;
             const response = await request.post(url, {
               data: canonicalJson(stopped.submission.request),
               headers: { "content-type": "application/json", ...selfPathGrantHeaders({
@@ -1613,7 +1613,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         await bobPage.completeMlsAccountRecoveryIfPrompted(bobSession.recoveryKey!);
 
         // 3) Bob JOINS before any board content exists. This matters twice over:
-        //    under history_access=since_join, soland crops pre-join events from
+        //    under history_access=since_join, coland crops pre-join events from
         //    bob's view; and under MLS forward secrecy, bob has no key for epochs
         //    that predate his membership. So content alice creates AFTER this point
         //    is the content bob can legitimately both see and decrypt. (Pre-join
@@ -1667,16 +1667,16 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         );
         await stepShot(alicePage.page, testInfo, "A-alice-encrypted-card");
 
-        // 4b) Cross-member DELIVERY gate (isolates soland delivery from inkson
-        //     projection): soland MUST surface alice's post-join board Space create
+        // 4b) Cross-member DELIVERY gate (isolates coland delivery from inkson
+        //     projection): coland MUST surface alice's post-join board Space create
         //     on bob's own realm events feed — the same feed the kanban backfill
-        //     ingests. If the board id is absent here, the bug is soland-side
+        //     ingests. If the board id is absent here, the bug is coland-side
         //     Space delivery/visibility; if present but the board never appears in
         //     bob's UI below, the bug is inkson's board projection.
         await expect
           .poll(
             async () => {
-              const url = `${solandBaseUrl()}/_arkret/self/streams/scan`;
+              const url = `${colandBaseUrl()}/_arkret/self/streams/scan`;
               const resp = await request.fetch(url, {
                 method: "POST",
                 data: canonicalJson({
@@ -1701,7 +1701,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
             {
               timeout: 60_000,
               intervals: [1_000, 2_000, 5_000],
-              message: `soland never delivered alice's board Space (${boardId}) to bob's realm events feed — cross-member Space delivery/visibility gap (not a inkson projection issue)`,
+              message: `coland never delivered alice's board Space (${boardId}) to bob's realm events feed — cross-member Space delivery/visibility gap (not a inkson projection issue)`,
             },
           )
           .toContain(boardId);
@@ -1842,7 +1842,7 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
 
         // 7) Raw wire stays ciphertext for the private body: the encrypted realm
         //    must never expose alice's description verbatim in the event log.
-        const rawEventsUrl = `${solandBaseUrl()}/_arkret/self/streams/scan`;
+        const rawEventsUrl = `${colandBaseUrl()}/_arkret/self/streams/scan`;
         const rawEvents = await request.fetch(rawEventsUrl, {
           method: "POST",
           data: canonicalJson({

@@ -30,7 +30,7 @@
 ## Implementation notes
 
 - 主流程已是 live `test()`:覆盖三位 actor 的 war room、诊断、脱敏更新、mitigation 与最终摘要编辑。seed-member invite 投射和完整 push notification routing 由各自的专项 scenario 继续覆盖。
-- status transition 已由 inkson `incident-status-*` 控件和 soland `incident.status.transition` audit 覆盖。
+- status transition 已由 inkson `incident-status-*` 控件和 coland `incident.status.transition` audit 覆盖。
 - sanitized public-update guard 与 E2EE no-plaintext-leak 检查已 live;完整 DnD override 属于 push notification 策略覆盖。
 - 隐私 readback 使用持有者 DPoP 会话的 `POST /_arkret/self/streams/scan`，从该 Realm stream 的获准 floor 读取；必须完整覆盖、每项为 exact Event/Commit 的 full 分支。仍断言 blocked 更新零提交、safe 更新唯一密文提交且 wire 无两条明文，不使用退役的 Realm-wide Event query。
 - postmortem link controls 与本地版本列表已 live;完整 Document Morph 投影仍归 P2 文档链路。

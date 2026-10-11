@@ -11,7 +11,7 @@
 
 ## 拓扑
 
-- 1 × soland + 1 × coauth
+- 1 × coland + 1 × coauth
 
 ## Actors
 
@@ -28,7 +28,7 @@
 1. alice 完成 onboarding,初始 handle 由 `uniqueUser` 自动分配如 `@alice-s29-<uuid>`
 2. alice 进 `/settings/profile` → "Change handle",新 handle = `@alice-pretty`
 3. inkson 提交 `ak.handle.claim { handle: "@alice-pretty", actor: alice.did }`
-4. soland reducer 校验:
+4. coland reducer 校验:
    - handle 格式合法
    - handle 未被占用
    - alice 有权(自己持有)
@@ -39,7 +39,7 @@
 ### Phase B — Handle 冲突
 
 7. mallory 试 `ak.handle.claim { handle: "@alice-pretty" }`
-8. soland reducer 拒,reason `handle_already_claimed`
+8. coland reducer 拒,reason `handle_already_claimed`
 9. 断言:mallory 的 inkson UI 显示错误；其 primary handle 未变
 
 ### Phase C — alice 转移 handle 给 bob
@@ -47,7 +47,7 @@
 10. alice 进 `/settings/profile` → "Transfer handle"
 11. 输入 target = bob.did
 12. inkson 提交 `ak.handle.transfer { handle, from: alice.did, to: bob.did }`,alice 签
-13. soland reducer:
+13. coland reducer:
     - 校验 alice 是当前 holder
     - 把 handle 绑定改到 bob.did
     - alice 的 primary handle 退到 fallback 或重新申领
@@ -71,7 +71,7 @@
 
 ## Implementation notes
 
-- **soland 缺口**:`ak.handle.{claim,transfer,release}` event kinds + handle registry projection + grace period 状态
+- **coland 缺口**:`ak.handle.{claim,transfer,release}` event kinds + handle registry projection + grace period 状态
 - **inkson 缺口**:`/settings/profile` 的 change handle / transfer 按钮
 
 ## 总耗时预估

@@ -5,7 +5,7 @@ Owner: 1725, AV-UI-BOUND.
 This scenario tests presentation of accepted ordinary Realm messages, not
 independent services-live identity acceptance or the Sidecar history matrix.
 The browser uses a real Coauth DPoP session fixture; plaintext history is
-authored through the existing signed Event helper and accepted by Soland.
+authored through the existing signed Event helper and accepted by Coland.
 It does not inject client projections, message rows, or authority state.
 
 ## Acceptance

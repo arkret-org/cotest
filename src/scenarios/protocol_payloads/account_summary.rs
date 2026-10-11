@@ -3,7 +3,7 @@
 //! Account summary rows are derived from the Realm's typed current results in
 //! the same transaction as the Commit that changes them, so the realm list a
 //! fresh Account subscribe returns is exactly the committed state -- before
-//! and after a Soland restart.
+//! and after a Coland restart.
 
 use anyhow::{Context, Result, ensure};
 use arkret_models_collaboration::sync_frames::account_subscribe::AccountSubscribeFrame;
@@ -77,10 +77,10 @@ fn changed_row(frames: &[AccountSubscribeFrame], realm_id: &str) -> Result<Realm
         .with_context(|| format!("realm list changes omit the Realm: {frames:?}"))
 }
 
-/// Fresh Soland + real PostgreSQL: the creator's Account subscribe lists the
+/// Fresh Coland + real PostgreSQL: the creator's Account subscribe lists the
 /// new Realm with its committed title as a joined member; committing the
 /// default Strand publishes a newer revision carrying `default_strand_id`;
-/// after Soland restarts, a fresh Account subscribe lists the same row.
+/// after Coland restarts, a fresh Account subscribe lists the same row.
 pub async fn account_summary_follows_bootstrap_default_strand_and_restart() -> Result<()> {
     let SnapshotAuthor {
         _coauth,

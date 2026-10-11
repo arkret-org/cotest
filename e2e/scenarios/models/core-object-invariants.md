@@ -1,6 +1,6 @@
 # 核心对象不变量
 
-此场景验证当前 v1 的真实接纳、原 Event／RealmCommit、位置 CAS、Space 生命周期及 Relation 基数。真相源为 `arkret-spec/spec/v1/zh/` 正式正文及机器工件，测试使用既有 Cotest managed Coauth／Soland；浏览器 Phase A 经真实 DPoP 登录。API 阶段使用既有注册及会话 helper，不构造未接纳的结构对象作为成功前置。
+此场景验证当前 v1 的真实接纳、原 Event／RealmCommit、位置 CAS、Space 生命周期及 Relation 基数。真相源为 `arkret-spec/spec/v1/zh/` 正式正文及机器工件，测试使用既有 Cotest managed Coauth／Coland；浏览器 Phase A 经真实 DPoP 登录。API 阶段使用既有注册及会话 helper，不构造未接纳的结构对象作为成功前置。
 
 ## 规范锚点
 

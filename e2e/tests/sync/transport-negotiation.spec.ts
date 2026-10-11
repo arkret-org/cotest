@@ -7,7 +7,7 @@
 //     HTTP Message Signature for service-to-service, error envelope)
 //   - sync/federation.md §3.2 (RFC 9421 request signature) + §4.1 (push)
 //
-// soland status (2026-06 re-audit against arkret-spec v1):
+// coland status (2026-06 re-audit against arkret-spec v1):
 //   ✓ POST /_arkret/peer/events handler routed (canonical single rail)
 //   ✓ Envelope validation + idempotency on signed Event IDs
 //   ✓ RFC 9421 INBOUND: full — the single RFC 9530 Content-Digest,
@@ -24,7 +24,7 @@
 //     federation trust headers — origin IS the source-service-id header, so
 //     there is NO relay-inner signature hop. Two-layer relay verification
 //     (verify_relay_inner_signature) lives only on the private
-//     /_soland/peer/federation/* rail (dev-only, NOT an interop entry point),
+//     /_coland/peer/federation/* rail (dev-only, NOT an interop entry point),
 //     so E8.2's inner-EventEnvelope-actor-signature assertion has no landing
 //     spot on the canonical rail — see E8.2 below.
 //   ✓ RFC 9421 OUTBOUND: real — outbox.rs signs (rfc9421_sign) and POSTs for
@@ -37,7 +37,7 @@
 //   ✗ Binding fallback chain state machine — presupposes the above bindings
 
 import { expect, test } from "../../helpers/arkret-test";
-import { hasServerCount, solandBaseUrl, solandServiceId } from "../../helpers/env";
+import { hasServerCount, colandBaseUrl, colandServiceId } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
   acceptPreparedInviteApi,
@@ -48,7 +48,7 @@ import {
   resolveDefaultStrandId,
   submitSignedEventApi,
   wireErrCode,
-} from "../../helpers/soland-api";
+} from "../../helpers/coland-api";
 import {
   allowExplicitInviteNotifications,
   ensureRegistered,
@@ -78,20 +78,20 @@ test.beforeEach(() => {
 });
 
 test.describe("transport negotiation", () => {
-  test("both soland instances expose /server/describe with transport_bindings and at minimum http_json", async ({
+  test("both coland instances expose /server/describe with transport_bindings and at minimum http_json", async ({
     request,
   }) => {
     // Sanity: both servers up and exposing binding-discovery surface.
-    const server1Health = await request.get(`${solandBaseUrl("server1")}/health`);
+    const server1Health = await request.get(`${colandBaseUrl("server1")}/health`);
     expect(server1Health.ok()).toBeTruthy();
-    const server2Health = await request.get(`${solandBaseUrl("server2")}/health`);
+    const server2Health = await request.get(`${colandBaseUrl("server2")}/health`);
     expect(server2Health.ok()).toBeTruthy();
 
     // /server/describe MUST exist on both sides and SHOULD return at least
     // an http_json binding entry (transport-bindings.md §7).
-    const server1Describe = await request.get(`${solandBaseUrl("server1")}/_arkret/describe`);
+    const server1Describe = await request.get(`${colandBaseUrl("server1")}/_arkret/describe`);
     expect(server1Describe.status()).not.toBe(404);
-    const server2Describe = await request.get(`${solandBaseUrl("server2")}/_arkret/describe`);
+    const server2Describe = await request.get(`${colandBaseUrl("server2")}/_arkret/describe`);
     expect(server2Describe.status()).not.toBe(404);
 
     if (server1Describe.ok()) {
@@ -111,12 +111,12 @@ test.describe("transport negotiation", () => {
     // without any RFC 9421 signature MUST NOT 404 (route exists) and
     // MUST NOT 200 (signature required). Expected: 400 / 401 / 403.
     const probe = await request.post(
-      `${solandBaseUrl("server2")}/_arkret/peer/events`,
+      `${colandBaseUrl("server2")}/_arkret/peer/events`,
       { data: { events: [] } },
     );
     expect(probe.status()).not.toBe(404);
     expect(probe.status()).not.toBe(200);
-    // Accept the 4xx family — exact code depends on soland's auth pipeline.
+    // Accept the 4xx family — exact code depends on coland's auth pipeline.
     expect(probe.status()).toBeGreaterThanOrEqual(400);
     expect(probe.status()).toBeLessThan(500);
   });
@@ -144,10 +144,10 @@ test.describe("transport negotiation", () => {
       {
         title: "E8.1 federation signature fixture",
         ownerId: user.id,
-        creator_id: solandServiceId("server1"),
+        creator_id: colandServiceId("server1"),
         invitees: [recipient.id],
-        invitee_ids: { [recipient.id]: solandServiceId("server2") },
-        plaintext_visible_services: [solandServiceId("server1"), solandServiceId("server2")],
+        invitee_ids: { [recipient.id]: colandServiceId("server2") },
+        plaintext_visible_services: [colandServiceId("server1"), colandServiceId("server2")],
       },
       { server: "server1" },
     );
@@ -184,8 +184,8 @@ test.describe("transport negotiation", () => {
     };
 
     const pushOpts = {
-      origin: solandServiceId("server1"),
-      destination: solandServiceId("server2"),
+      origin: colandServiceId("server1"),
+      destination: colandServiceId("server2"),
       server: "server2" as const,
       realmId,
     };

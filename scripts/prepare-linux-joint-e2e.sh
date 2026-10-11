@@ -30,7 +30,7 @@ esac
 # workspace and platform dependencies on a cold runner.
 script_directory=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 workspace_root=$(dirname -- "$(dirname -- "$script_directory")")
-for repository in arkret-rust-sdk floria soland coauth garth chime inkson cotest; do
+for repository in arkret-rust-sdk floria coland coauth garth chime inkson cotest; do
   (
     cd -- "$workspace_root/$repository"
     cargo fetch --locked --manifest-path Cargo.toml

@@ -46,9 +46,9 @@ foreach ($file in Get-ChildItem -LiteralPath $testsRoot -Recurse -File -Filter "
 
     $services = New-Object System.Collections.Generic.List[string]
     if ($usesProductUi) { $services.Add("inkson") }
-    if ($source -match 'solandBaseUrl|/_arkret/|\brequest\.') { $services.Add("soland") }
+    if ($source -match 'colandBaseUrl|/_arkret/|\brequest\.') { $services.Add("coland") }
     if ($source -match 'coauthBaseUrl|serverLoginViaCoauth|Coauth') { $services.Add("coauth") }
-    foreach ($service in @("flagon", "floria", "savfox", "sodmin")) {
+    foreach ($service in @("flagon", "floria", "savfox", "codmin")) {
         if ($source -match $service) { $services.Add($service) }
     }
     # This classifier reads one file, so a spec that reaches its services
@@ -58,7 +58,7 @@ foreach ($file in Get-ChildItem -LiteralPath $testsRoot -Recurse -File -Filter "
     # letting the fixture make the manifest understate the run.
     if ($usesCanonicalProvisioning) {
         $services.Add("coauth")
-        $services.Add("soland")
+        $services.Add("coland")
     }
 
     $mocks = New-Object System.Collections.Generic.List[string]
@@ -78,7 +78,7 @@ foreach ($file in Get-ChildItem -LiteralPath $testsRoot -Recurse -File -Filter "
     $evidenceClass = if ($scenarioKey -eq "identity/recovery-key-to-encrypted-realm") {
         "live-product"
     } elseif ($usesCanonicalProvisioning) {
-        # Real Coauth, real Soland, a real account and a real PCR genesis. The
+        # Real Coauth, real Coland, a real account and a real PCR genesis. The
         # `harness/` blanket below covers specs that only exercise fixtures;
         # this one exercises server contracts through the canonical chain.
         "server-contract"

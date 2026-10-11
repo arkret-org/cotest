@@ -1,6 +1,6 @@
 // OIDC login-chain regression guards (API level).
 //
-// These lock the *server-side* contracts that the real inkson→coauth→soland
+// These lock the *server-side* contracts that the real inkson→coauth→coland
 // browser login depends on — the layers that broke (and were fixed) while
 // bringing the login flow up end-to-end on 2026-06-16. The full browser
 // ceremony (login form + consent) lives in oidc-login-flow.spec.ts; it is not
@@ -11,7 +11,7 @@
 //   1. Discovery — `/_arkret/describe` advertises a usable OIDC method:
 //      a non-empty `client_id` (else coauth answers "could not find client")
 //      and an Account Authority pinned to the private authentication process origin (so the
-//      session-grant POST + its DPoP `htu` line up with coauth, not soland).
+//      session-grant POST + its DPoP `htu` line up with coauth, not coland).
 //   2. Self-path auth — a session grant only authenticates a `/_arkret/root/*`
 //      authenticated read when accompanied by a bound DPoP proof; a bare grant
 //      (no DPoP) is rejected. This is the contract the inkson fix relied on
@@ -26,8 +26,8 @@ import { expect, test, type APIRequestContext } from "../../helpers/arkret-test"
 import {
   coauthBaseUrl,
   coauthOidcClientId,
-  solandBaseUrl,
-  solandServiceId,
+  colandBaseUrl,
+  colandServiceId,
 } from "../../helpers/env";
 import { registerCoauthPasswordAccount } from "../../helpers/coauth-register";
 import { ensureRegistered, issueUserSession, uniqueUser } from "../../helpers/users";
@@ -44,11 +44,11 @@ import {
 const RECOVERY_POLICY_PATH = "/_arkret/root/identity/recovery-policy";
 
 function describeUrl(): string {
-  return `${solandBaseUrl()}/_arkret/describe`;
+  return `${colandBaseUrl()}/_arkret/describe`;
 }
 
 function recoveryPolicyUrl(): string {
-  return `${solandBaseUrl()}${RECOVERY_POLICY_PATH}`;
+  return `${colandBaseUrl()}${RECOVERY_POLICY_PATH}`;
 }
 
 test.describe.configure({ mode: "serial" });
@@ -87,7 +87,7 @@ test.describe("OIDC login chain (server-side discovery + DPoP)", () => {
     // coauth answers "could not find client" and login dead-ends.
     expect(
       oidc!.client_id,
-      "oidc method must advertise a non-empty client_id (SOLAND_OAUTH_CLIENT_ID)",
+      "oidc method must advertise a non-empty client_id (COLAND_OAUTH_CLIENT_ID)",
     ).toBeTruthy();
     const expectedClientId = coauthOidcClientId();
     if (expectedClientId) {
@@ -97,7 +97,7 @@ test.describe("OIDC login chain (server-side discovery + DPoP)", () => {
 
     // ── Account Authority pinned to the private authentication process origin ─────────────────
     // The client POSTs session-grants to the Account Authority and DPoP-binds
-    // the proof to its origin; that origin MUST be coauth, not soland, or the
+    // the proof to its origin; that origin MUST be coauth, not coland, or the
     // grant POST 404s / the DPoP htu mismatches.
     const accountAuthority = authMetadata.account_authority;
     expect(accountAuthority, "auth_metadata.account_authority missing").toBeTruthy();
@@ -153,7 +153,7 @@ test.describe("OIDC login chain (server-side discovery + DPoP)", () => {
 
     // Same grant as a bare Bearer (no DPoP) → rejected. This is the regression
     // the inkson root-path DPoP fix protects against: without the DPoP header
-    // soland treats the grant as an opaque OAuth/dev bearer, fails to resolve
+    // coland treats the grant as an opaque OAuth/dev bearer, fails to resolve
     // it, and returns 401 — which the client read as session-expired and logged
     // the user out mid-login.
     const naked = await request.get(url, {

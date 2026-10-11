@@ -2,7 +2,7 @@
 //! Invite, and then writes into it (`zh/sync/federation.md` §3–§4.1.1,
 //! `zh/sync/authority-commit-log.md` §4, `zh/authz/offline-publication.md` §3).
 //!
-//! Against three live Solands with separate PostgreSQL databases:
+//! Against three live Colands with separate PostgreSQL databases:
 //!
 //! 1. Alice on X creates an invite-only Realm and invites Bob, whose Account lives on Y; Bob's
 //!    realm list on Y does not name the Realm.
@@ -219,7 +219,7 @@ pub async fn cross_station_invite_join_run() -> Result<()> {
     )
     .await?
     else {
-        return skip_or_fail(GROUP, "prebuilt Soland unavailable");
+        return skip_or_fail(GROUP, "prebuilt Coland unavailable");
     };
 
     // (1) Alice's invite-only Realm on X and her directed Invite to Bob on Y.

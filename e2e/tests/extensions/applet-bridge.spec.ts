@@ -20,9 +20,9 @@ import {
 } from "../../helpers/arkret-test";
 import {
   mockAppletRegistryBaseUrl,
-  solandBaseUrl,
-  solandServiceDid,
-  solandServiceId,
+  colandBaseUrl,
+  colandServiceDid,
+  colandServiceId,
 } from "../../helpers/env";
 import {
   accountActorId,
@@ -50,7 +50,7 @@ import {
   serviceActorId,
   sha256CanonicalJson,
   wireErrCode,
-} from "../../helpers/soland-api";
+} from "../../helpers/coland-api";
 import {
   assertJointStackNotRequired,
   ensureRegistered,
@@ -131,7 +131,7 @@ async function revokeAppletRuntime(
   const effectiveScope = { kind: "realm" as const, realm_id: realmId };
   const reasonCode = "requested_by_admin";
   const revokeMode = "revoke_runtime_only";
-  const base = `${solandBaseUrl()}/_arkret/self/applets/${encodeURIComponent(appletId)}/revoke`;
+  const base = `${colandBaseUrl()}/_arkret/self/applets/${encodeURIComponent(appletId)}/revoke`;
   const previewUrl = `${base}/preview`;
   const preview = await request.post(previewUrl, {
     headers: {
@@ -298,12 +298,12 @@ async function grantManagedActorActions(request: APIRequestContext, token: strin
     if(!parent) throw new Error(`Missing Service parent grant for ${action}`);
     return retypeEventDerivedId(String(parent.event_id), "grant");
   }))];
-  const materialUrl = `${solandBaseUrl()}/_arkret/self/applets/${encodeURIComponent(signed.applet_package.applet_id)}/authority/material`;
+  const materialUrl = `${colandBaseUrl()}/_arkret/self/applets/${encodeURIComponent(signed.applet_package.applet_id)}/authority/material`;
   // This live scenario exercises one real parent; multi-parent admission is guarded.
   expect(parentIds).toHaveLength(1);
   const materialRequest: AppletAuthorityMaterialRequestBody = {effective_scope:effectiveScope, grant_ids:parentIds};
   const materialResponse = await request.post(materialUrl, {
-    headers: signedAppletTransactionHeaders({body:materialRequest, targetUri:materialUrl, sourceServiceId:signed.applet_package.service_id, destinationServiceId:solandServiceId(), idempotencyKey:typedId("operation"), keyId:appletProducerKeyRef(signed), signingKey:signed.service_signing_private_key}),
+    headers: signedAppletTransactionHeaders({body:materialRequest, targetUri:materialUrl, sourceServiceId:signed.applet_package.service_id, destinationServiceId:colandServiceId(), idempotencyKey:typedId("operation"), keyId:appletProducerKeyRef(signed), signingKey:signed.service_signing_private_key}),
     data: canonicalJson(materialRequest),
   });
   expect(materialResponse.status(), await materialResponse.text()).toBe(200);
@@ -399,7 +399,7 @@ async function rawDeliverAppletEvents(
   events: Array<Record<string, unknown>>,
   idempotencyKey: string,
 ): Promise<APIResponse> {
-  const targetUri = `${solandBaseUrl()}/_arkret/edge/applet/transactions`;
+  const targetUri = `${colandBaseUrl()}/_arkret/edge/applet/transactions`;
   const body = {
     applet_id: signed.applet_package.applet_id,
     source_id: signed.applet_package.service_id,
@@ -411,7 +411,7 @@ async function rawDeliverAppletEvents(
       targetUri,
       sourceServiceId: signed.applet_package.service_id,
       keyId: appletProducerKeyRef(signed),
-      destinationServiceId: solandServiceId(),
+      destinationServiceId: colandServiceId(),
       idempotencyKey,
       signingKey: signed.service_signing_private_key,
     }),
@@ -511,7 +511,7 @@ test.describe("applet bridge", () => {
     const first = await provisionAppletBot(request,signed,realmId,`first-${stamp}`,{exerciseAuthoringKats:false});
     const key = generateWebvhKey();
     const versionTime = canonicalTimestamp();
-    const secondIdentity = buildWebvhGenesisEntry({baseUrl:solandBaseUrl(),localId:`applet-bot-second-${stamp}`,rootKey:generateWebvhKey(),nextRootKey:generateWebvhKey(),versionTime,document:did=>({"@context":["https://www.w3.org/ns/did/v1"],id:did,verificationMethod:{[`${did}#bot-event-key`]:encodeEd25519PubkeyMultibase(key.publicKey)},updated:versionTime})});
+    const secondIdentity = buildWebvhGenesisEntry({baseUrl:colandBaseUrl(),localId:`applet-bot-second-${stamp}`,rootKey:generateWebvhKey(),nextRootKey:generateWebvhKey(),versionTime,document:did=>({"@context":["https://www.w3.org/ns/did/v1"],id:did,verificationMethod:{[`${did}#bot-event-key`]:encodeEd25519PubkeyMultibase(key.publicKey)},updated:versionTime})});
     const second = await provisionAppletBot(request,signed,realmId,`second-${stamp}`,{exerciseAuthoringKats:false,botOperation:secondIdentity});
     expect(first.bot_actor_id).not.toEqual(second.bot_actor_id);
     for (const field of ["managed_actor_provision_ref","principal_control_realm_id","profile_event_ref","accountability_grant_ref"]) {
@@ -680,7 +680,7 @@ test.describe("applet bridge", () => {
         );
       }
       const ghostBuilt = buildWebvhGenesisEntry({
-        baseUrl: solandBaseUrl(),
+        baseUrl: colandBaseUrl(),
         localId: `ghost-${signed.ghost_namespace_token}:${externalUser.id.toLowerCase()}`,
         rootKey: generateWebvhKey(),
         nextRootKey: generateWebvhKey(),
@@ -691,7 +691,7 @@ test.describe("applet bridge", () => {
           updated: canonicalTimestamp(),
         }),
       });
-      await submitPrincipalGenesisEntry(request, solandBaseUrl(), ghostBuilt);
+      await submitPrincipalGenesisEntry(request, colandBaseUrl(), ghostBuilt);
       const ghostCreation = await buildGhostManagedActorCreation({
         request,
         token: aliceToken,
@@ -718,8 +718,8 @@ test.describe("applet bridge", () => {
       const provision = await request.post(`${registryBase}/external-event`, {
         headers: authHeaders(aliceToken, "POST", `${registryBase}/external-event`),
         data: {
-          soland_base_url: solandBaseUrl(),
-          destination_id: solandServiceId(),
+          coland_base_url: colandBaseUrl(),
+          destination_id: colandServiceId(),
           applet_id: registration.applet_id,
           realm_id: realmId,
           authorization_ref: messageGrantRef,
@@ -763,8 +763,8 @@ test.describe("applet bridge", () => {
       const external = await request.post(`${registryBase}/external-event`, {
         headers: authHeaders(aliceToken, "POST", `${registryBase}/external-event`),
         data: {
-          soland_base_url: solandBaseUrl(),
-          destination_id: solandServiceId(),
+          coland_base_url: colandBaseUrl(),
+          destination_id: colandServiceId(),
           applet_id: registration.applet_id,
           realm_id: realmId,
           strand_id: portalStrandId,
@@ -885,8 +885,8 @@ test.describe("applet bridge", () => {
       const afterRevoke = await request.post(`${registryBase}/external-event`, {
         headers: authHeaders(aliceToken, "POST", `${registryBase}/external-event`),
         data: {
-          soland_base_url: solandBaseUrl(),
-          destination_id: solandServiceId(),
+          coland_base_url: colandBaseUrl(),
+          destination_id: colandServiceId(),
           applet_id: registration.applet_id,
           realm_id: realmId,
           strand_id: portalStrandId,
@@ -1029,10 +1029,10 @@ test.describe("applet bridge", () => {
     expect(canonicalJson(history)).toContain(canonicalJson(registration.bot_actor_id));
 
     const removedLegacyRoute = await request.post(
-      `${solandBaseUrl()}/_soland/edge/applets/${encodeURIComponent(registration.applet_id)}/bot/messages`,
+      `${colandBaseUrl()}/_coland/edge/applets/${encodeURIComponent(registration.applet_id)}/bot/messages`,
       {
         headers: {
-          ...authHeaders(aliceToken, "POST", `${solandBaseUrl()}/_soland/edge/applets/${encodeURIComponent(registration.applet_id)}/bot/messages`),
+          ...authHeaders(aliceToken, "POST", `${colandBaseUrl()}/_coland/edge/applets/${encodeURIComponent(registration.applet_id)}/bot/messages`),
           "content-type": "application/json",
         },
         data: canonicalJson({ text: `must-not-route-${stamp}` }),
@@ -1105,11 +1105,11 @@ test.describe("applet bridge", () => {
   // tests. Spec: extensions/applet-integration.md §4.1 — `controller_principal_id` MUST
   // sign the registration; `proof` MUST be a controller DID detached proof
   // covering the canonical registration object (excluding `proof` itself), and
-  // a package whose proof does not cover its body MUST be rejected. soland's
+  // a package whose proof does not cover its body MUST be rejected. coland's
   // canonical install validator (validate_applet_package) recomputes
   // `package_digest` over the bare body and recomputes the proof
   // `payload_digest`; a package mutated after signing therefore fails closed at
-  // the preview/commit gate. These run for real against soland in dev-mode —
+  // the preview/commit gate. These run for real against coland in dev-mode —
   // no live deployment required — mirroring the runnable positive install case
   // above and the RFC 9421 inbound-signature negative cases below.
 
@@ -1130,7 +1130,7 @@ test.describe("applet bridge", () => {
       package_id: `package:bridge:evidence-carrier-${stamp}`,
       namespace: `bridge.evidence.carrier.${stamp}`,
     });
-    const previewUrl = `${solandBaseUrl()}/_arkret/self/applets/install/preview`;
+    const previewUrl = `${colandBaseUrl()}/_arkret/self/applets/install/preview`;
     await publishAppletServiceIdDocument(request, signed);
     const prepared = await prepareAppletInstallAuthoringBasis(
       request,
@@ -1346,7 +1346,7 @@ test.describe("applet bridge", () => {
 
     // Mutate the signed package body WITHOUT re-signing: the sealed
     // `package_digest` and the controller proof now cover a different byte
-    // sequence than what is submitted. soland recomputes the digest over the
+    // sequence than what is submitted. coland recomputes the digest over the
     // bare body and MUST reject the mismatch.
     // The distribution ID is covered by the package seal, but is not part of
     // registration epoch or grant approval. Keep those independent gates valid
@@ -1390,7 +1390,7 @@ test.describe("applet bridge", () => {
 
     // Keep `package_digest` consistent with the body, but corrupt the proof's
     // `payload_digest` so the controller proof no longer covers the canonical
-    // registration object. §4.1: the proof MUST cover the body; soland
+    // registration object. §4.1: the proof MUST cover the body; coland
     // recomputes the payload digest and MUST reject the mismatch.
     const tampered = tamperSignedPackage(signed, (pkg) => {
       const proof = pkg.proof as Record<string, unknown> | undefined;
@@ -1483,12 +1483,12 @@ test.describe("applet inbound transaction push — per-delivery source signature
     verificationMethod?: string;
     signingKey?: KeyObject;
   }) {
-    const sourceServiceId = args.sourceServiceId ?? solandServiceId();
+    const sourceServiceId = args.sourceServiceId ?? colandServiceId();
     const realmId = args.realmId ?? typedId("realm");
     const actorId = args.actorId ?? serviceActorId(sourceServiceId);
     const verificationMethod =
       args.verificationMethod ??
-      `${solandServiceDid()}#applet-service-key`;
+      `${colandServiceDid()}#applet-service-key`;
     const appletId = args.appletId ?? typedAppletId();
     const unidentified = {
       kind: "ak.applet.bridge_error",
@@ -1596,7 +1596,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
       ),
       signingKey: signed.service_signing_private_key,
     });
-    const targetUri = `${solandBaseUrl()}${TRANSACTIONS_PATH}`;
+    const targetUri = `${colandBaseUrl()}${TRANSACTIONS_PATH}`;
     const deliveryCreated = Math.floor(Date.now() / 1000);
     const resp = await test.step("inbound preparation: resp", () => request.post(targetUri, {
       headers: {
@@ -1608,7 +1608,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
             (signed.applet_package.webhook_auth as Record<string, unknown>)
               .key_ref,
           ),
-          destinationServiceId: solandServiceId(),
+          destinationServiceId: colandServiceId(),
           idempotencyKey,
           created: deliveryCreated,
           signingKey: signed.service_signing_private_key,
@@ -1649,7 +1649,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
       headers: signedAppletTransactionHeaders({
         body: payload, targetUri, sourceServiceId,
         keyId: String((signed.applet_package.webhook_auth as Record<string, unknown>).key_ref),
-        destinationServiceId: solandServiceId(), idempotencyKey: key,
+        destinationServiceId: colandServiceId(), idempotencyKey: key,
         created: key === idempotencyKey ? deliveryCreated : undefined,
         signingKey: signed.service_signing_private_key,
       }),
@@ -1856,14 +1856,14 @@ test.describe("applet inbound transaction push — per-delivery source signature
     // Keep the otherwise complete delivery headers, but omit both RFC 9421
     // signature headers. Session authorization alone MUST NOT authenticate the
     // source service. §7.3.1: reject.
-    const transactionUrl = `${solandBaseUrl()}${TRANSACTIONS_PATH}`;
+    const transactionUrl = `${colandBaseUrl()}${TRANSACTIONS_PATH}`;
     const body = transactionPushBody({ stamp });
     const unsignedDeliveryHeaders = signedAppletTransactionHeaders({
       body,
       targetUri: transactionUrl,
-      sourceServiceId: solandServiceId(),
-      keyId: `${solandServiceDid()}#applet-service-key`,
-      destinationServiceId: solandServiceId(),
+      sourceServiceId: colandServiceId(),
+      keyId: `${colandServiceDid()}#applet-service-key`,
+      destinationServiceId: colandServiceId(),
       idempotencyKey: `inbound-nosig-${stamp}`,
     });
     delete unsignedDeliveryHeaders.signature;
@@ -1922,7 +1922,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
     // request is otherwise signed correctly with that key; only Signature bytes
     // are then replaced, so a 401 proves the RFC 9421 verification gate rather
     // than the no-install 403 gate from §7.3.1.
-    const transactionUrl = `${solandBaseUrl()}${TRANSACTIONS_PATH}`;
+    const transactionUrl = `${colandBaseUrl()}${TRANSACTIONS_PATH}`;
     const body = transactionPushBody({
       stamp,
       sourceServiceId,
@@ -1936,7 +1936,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
       targetUri: transactionUrl,
       sourceServiceId,
       keyId: verificationMethod,
-      destinationServiceId: solandServiceId(),
+      destinationServiceId: colandServiceId(),
       idempotencyKey: `inbound-badsig-${stamp}`,
       signingKey: signed.service_signing_private_key,
     });
@@ -1960,10 +1960,10 @@ test.describe("applet inbound transaction push — per-delivery source signature
   }) => {
     const token = await setupBearer(request);
     const stamp = Date.now();
-    const sourceServiceId = solandServiceId();
+    const sourceServiceId = colandServiceId();
     const idempotencyKey = `inbound-expired-${stamp}`;
     const body = transactionPushBody({ stamp, sourceServiceId });
-    const targetUri = `${solandBaseUrl()}${TRANSACTIONS_PATH}`;
+    const targetUri = `${colandBaseUrl()}${TRANSACTIONS_PATH}`;
     // created/expires far in the past → outside the §7.3.1 freshness window
     // (expires-created ≤ 300s, created within ±30s skew, expires not past). Even
     // a byte-identical replay after replay-cache eviction MUST be rejected on the
@@ -1975,8 +1975,8 @@ test.describe("applet inbound transaction push — per-delivery source signature
           body,
           targetUri,
           sourceServiceId,
-          keyId: `${solandServiceDid()}#applet-service-key`,
-          destinationServiceId: solandServiceId(),
+          keyId: `${colandServiceDid()}#applet-service-key`,
+          destinationServiceId: colandServiceId(),
           idempotencyKey,
           created: 1_000_000_000,
           expires: 1_000_000_200,
@@ -2045,7 +2045,7 @@ function signedAppletTransactionHeaders(args: {
 
 function developmentAppletPrivateKey(verificationMethod: string) {
   const seed = createHash("sha256")
-    .update("soland:applet-service-key:")
+    .update("coland:applet-service-key:")
     .update(verificationMethod)
     .digest();
   const pkcs8Prefix = Buffer.from("302e020100300506032b657004220420", "hex");
@@ -2081,7 +2081,7 @@ async function signPackage(
     x: serviceSigningKey.publicKey.toString("base64url"),
   };
   const built = buildWebvhGenesisEntry({
-    baseUrl: solandBaseUrl(),
+    baseUrl: colandBaseUrl(),
     localId: `applet-${typedId("operation").split(":").at(-1)}`,
     rootKey: generateWebvhKey(),
     nextRootKey: generateWebvhKey(),
@@ -2102,7 +2102,7 @@ async function signPackage(
     x: botSigningKey.publicKey.toString("base64url"),
   };
   const botBuilt = buildWebvhGenesisEntry({
-    baseUrl: solandBaseUrl(),
+    baseUrl: colandBaseUrl(),
     localId: `applet-bot-${typedId("operation").split(":").at(-1)}`,
     rootKey: generateWebvhKey(),
     nextRootKey: generateWebvhKey(),
@@ -2272,7 +2272,7 @@ async function rawInstallApplet(
       realmId,
       effectiveScope,
     );
-    const previewUrl = `${solandBaseUrl()}/_arkret/self/applets/install/preview`;
+    const previewUrl = `${colandBaseUrl()}/_arkret/self/applets/install/preview`;
     const preview = await request.fetch(previewUrl, {
       method: "POST",
       headers: {
@@ -2308,7 +2308,7 @@ async function rawInstallApplet(
       "plan_digest",
     ]);
   }
-  const installUrl = `${solandBaseUrl()}/_arkret/self/applets/install`;
+  const installUrl = `${colandBaseUrl()}/_arkret/self/applets/install`;
   if (options.exerciseAuthoringKats !== false) {
     const obsolete = { ...structuredClone(resolved.commitBody), managed_actor_bundle: {} };
     const rejected = await request.fetch(installUrl, { method: "POST", headers: {...authHeaders(token,"POST",installUrl),"content-type":"application/json","Idempotency-Key":`${idempotencyKey}-obsolete-bundle`},data:canonicalJson(obsolete)});
@@ -2335,9 +2335,9 @@ async function rawInstallApplet(
 }
 
 async function provisionAppletBot(request: APIRequestContext,signed: SignedPackage,realmId:string,idempotencyKey:string,options:{exerciseAuthoringKats?:boolean; botOperation?: BuiltWebvhGenesis}): Promise<Record<string,unknown>> {
-    const previewUrl=`${solandBaseUrl()}/_arkret/self/applets/${encodeURIComponent(signed.applet_package.applet_id)}/bots/provision/preview`;
+    const previewUrl=`${colandBaseUrl()}/_arkret/self/applets/${encodeURIComponent(signed.applet_package.applet_id)}/bots/provision/preview`;
     const previewBody={effective_scope:{kind:"realm",realm_id:realmId},request_id:`${idempotencyKey}-bot`,display_name:"Applet Bot"};
-    const serviceHeaders=(body:Record<string,unknown>,targetUri:string,key:string)=>signedAppletTransactionHeaders({body,targetUri,sourceServiceId:signed.applet_package.service_id,destinationServiceId:solandServiceId(),idempotencyKey:key,keyId:appletProducerKeyRef(signed),signingKey:signed.service_signing_private_key});
+    const serviceHeaders=(body:Record<string,unknown>,targetUri:string,key:string)=>signedAppletTransactionHeaders({body,targetUri,sourceServiceId:signed.applet_package.service_id,destinationServiceId:colandServiceId(),idempotencyKey:key,keyId:appletProducerKeyRef(signed),signingKey:signed.service_signing_private_key});
     const preview=await request.post(previewUrl,{headers:serviceHeaders(previewBody,previewUrl,`${idempotencyKey}-bot-preview`),data:canonicalJson(previewBody)});
     expect(preview.status(),await preview.text()).toBe(200);
     const previewOutcome=await preview.json() as Record<string,unknown>;
@@ -2353,7 +2353,7 @@ async function provisionAppletBot(request: APIRequestContext,signed: SignedPacka
     );
     const botOperation = options.botOperation ?? signed.bot_actor_operation;
     if (!botOperation) throw new Error("Independent Bot provision requires its own identity material");
-    await submitPrincipalGenesisEntry(request, solandBaseUrl(), botOperation);
+    await submitPrincipalGenesisEntry(request, colandBaseUrl(), botOperation);
     const evidence = webvhManagedActorEvidence(botOperation);
     const material = await request.post(`${authorBaseUrl}/inspect/bot-authoring-material`, {
       data: {applet_id:signed.applet_package.applet_id, effective_scope:previewBody.effective_scope, request_id:previewBody.request_id, material:{actor_id:accountActorId(projectDidToCoreId(botOperation.did)), initial_resolution:evidence.initialResolution, method_history_evidence:evidence.methodHistoryEvidence}},
@@ -2667,7 +2667,7 @@ async function prepareAppletInstallAuthoringBasis(
   const basis: Record<string, unknown> = {
     schema: "ak.schema.applet_install_authoring_request_basis.v1",
     purpose: "install_service",
-    target_station_id: solandServiceId(),
+    target_station_id: colandServiceId(),
     install_actor_id: accountActorId(actorId),
     applet_id: signed.applet_package.applet_id,
     service_id: signed.applet_package.service_id,
@@ -2850,7 +2850,7 @@ async function buildGhostManagedActorCreation(args: {
     instance_id: "joint-e2e",
     external_id: args.externalUser.id,
   };
-  const targetUri = `${solandBaseUrl()}/_arkret/self/applets/${encodeURIComponent(args.registration.applet_id)}/ghosts/provision/preview`;
+  const targetUri = `${colandBaseUrl()}/_arkret/self/applets/${encodeURIComponent(args.registration.applet_id)}/ghosts/provision/preview`;
   const previewBody = {
     effective_scope: {kind:"realm",realm_id:args.realmId},
     external_ref: externalRef,
@@ -2861,7 +2861,7 @@ async function buildGhostManagedActorCreation(args: {
       body: previewBody,
       targetUri,
       sourceServiceId: args.signed.applet_package.service_id,
-      destinationServiceId: solandServiceId(),
+      destinationServiceId: colandServiceId(),
       keyId: `${requiredAppletServiceDid(args.signed)}#applet-service-key`,
       signingKey: args.signed.service_signing_private_key,
       idempotencyKey: `ghost-preview-${args.externalUser.id}`,
@@ -2907,7 +2907,7 @@ async function publishAppletServiceIdDocument(
   }
   await submitPrincipalGenesisEntry(
     request,
-    solandBaseUrl(),
+    colandBaseUrl(),
     signed.service_id_operation,
   );
 }

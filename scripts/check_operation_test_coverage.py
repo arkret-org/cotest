@@ -34,8 +34,8 @@ REGISTRY_PATH = SPEC_ARTIFACTS / "registry" / "operation-registry.json"
 OUTPUT_PATH = COTEST_REPO / "operation-test-coverage.json"
 
 TEST_LAYERS = (
-    "soland_unit",
-    "soland_http",
+    "coland_unit",
+    "coland_http",
     "cotest_rust",
     "cotest_e2e",
     "inkson_e2e",
@@ -49,8 +49,8 @@ RESPONSIBILITIES = (
     "security_negative",
 )
 DEFAULT_RESPONSIBILITY = {
-    "soland_unit": "protocol_kat",
-    "soland_http": "http_binding",
+    "coland_unit": "protocol_kat",
+    "coland_http": "http_binding",
     "cotest_rust": "protocol_kat",
     "cotest_e2e": "product_flow",
     "inkson_e2e": "product_flow",
@@ -175,29 +175,29 @@ def rust_test_like(path: Path, text: str) -> bool:
 
 
 def discover_layer_sources(workspace_root: Path = WORKSPACE_ROOT) -> tuple[LayerSource, ...]:
-    soland = workspace_root / "soland"
+    coland = workspace_root / "coland"
     cotest = workspace_root / "cotest"
     inkson = workspace_root / "inkson"
 
-    soland_http = {
+    coland_http = {
         path
         for root in (
-            soland / "crates" / "http" / "tests",
-            soland / "crates" / "server" / "tests",
+            coland / "crates" / "http" / "tests",
+            coland / "crates" / "server" / "tests",
         )
         if root.is_dir()
         for path in source_paths(root, ".rs")
         if source_file(path)
     }
-    soland_unit: set[Path] = set()
-    crates = soland / "crates"
+    coland_unit: set[Path] = set()
+    crates = coland / "crates"
     if crates.is_dir():
         for path in source_paths(crates, ".rs"):
-            if not source_file(path) or path in soland_http:
+            if not source_file(path) or path in coland_http:
                 continue
             text = path.read_text(encoding="utf-8", errors="replace")
             if rust_test_like(path, text):
-                soland_unit.add(path)
+                coland_unit.add(path)
 
     cotest_rust = {
         path
@@ -231,8 +231,8 @@ def discover_layer_sources(workspace_root: Path = WORKSPACE_ROOT) -> tuple[Layer
     } if (inkson / "tests" / "e2e").is_dir() else set()
 
     return (
-        LayerSource("soland_unit", tuple(sorted(soland_unit))),
-        LayerSource("soland_http", tuple(sorted(soland_http))),
+        LayerSource("coland_unit", tuple(sorted(coland_unit))),
+        LayerSource("coland_http", tuple(sorted(coland_http))),
         LayerSource("cotest_rust", tuple(sorted(cotest_rust))),
         LayerSource("cotest_e2e", tuple(sorted(cotest_e2e))),
         LayerSource("inkson_e2e", tuple(sorted(inkson_e2e))),
@@ -494,7 +494,7 @@ def evidence_from_file(
 
 def broader_test_sources(workspace_root: Path = WORKSPACE_ROOT) -> set[Path]:
     sources: set[Path] = set()
-    for repo_name in ("soland", "cotest"):
+    for repo_name in ("coland", "cotest"):
         repo = workspace_root / repo_name
         if not repo.is_dir():
             continue
@@ -718,7 +718,7 @@ def generate(workspace_root: Path = WORKSPACE_ROOT) -> dict[str, Any]:
                     "input_sha256",
                     "assertion_sha256",
                 ],
-                "protected_oracle": "soland/crates/storage/src/contract_tests.rs",
+                "protected_oracle": "coland/crates/storage/src/contract_tests.rs",
                 "same_operation_id_alone_is_never_equivalent": True,
             },
             "duplicate_candidates": candidates,

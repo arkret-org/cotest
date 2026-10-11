@@ -6,4 +6,4 @@ Ten cuts: ordinary creation, accepted Circle create response loss, persisted pub
 
 Native test covers failed atomic write, exact reopen, idempotence and substituted membership rejection. This suite does not close the complete Agent, all-terminal, or live registration/product matrix.
 
-Post-activation Circle Strand creation currently rejects with `Circle Strand create needs an admitted MLS object carrier` in Soland `strand_current_results.rs`. This separate D-group object admission gap belongs to owner 1121; creator bootstrap produces its original metadata-free discussion before activation and does not relax that server gate.
+Post-activation Circle Strand creation currently rejects with `Circle Strand create needs an admitted MLS object carrier` in Coland `strand_current_results.rs`. This separate D-group object admission gap belongs to owner 1121; creator bootstrap produces its original metadata-free discussion before activation and does not relax that server gate.

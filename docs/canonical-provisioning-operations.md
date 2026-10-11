@@ -21,13 +21,13 @@ otherwise.
 | 1 | `POST {coauth}/_coauth/account/auth/register` | Coauth private | Starts account-first registration; returns a registration id and a `next_step`. |
 | 1a | `POST {coauth}/_coauth/account/auth/register/{id}/verify-email` | Coauth private | Only when `next_step == "verify_email"`. The code comes from the mock email inbox (`GET {mockEmail}/mock/email/verification/inbox`). Managed `-StartCoauth` runs start this one required mock automatically; `-StartMocks` is only needed when scenarios also require the other optional mocks. |
 | 1b | `POST …/{id}/display-name`, `POST …/{id}/finish` | Coauth private | Completes the unbound account. |
-| 2 | `GET {soland}/_arkret/describe` | Arkret standard | Supplies `trust_domain` and `service_id`; the latter becomes the grant audience. |
+| 2 | `GET {coland}/_arkret/describe` | Arkret standard | Supplies `trust_domain` and `service_id`; the latter becomes the grant audience. |
 | 3 | `POST {coauth}/_arkret/gate/account/authentication-handoffs` | Arkret standard — `ak.gate.account.exchange.create_handoff.v1` | Must come back `identity_creation_active` with an `identity_creation_lease`. |
 | 4 | `cotest-wire principal-registration-fixture` | **Rust, already** | Builds the DID operation, PCR genesis unit, 24-word recovery key and initial session from the lease + trust domain + device key. No HTTP. |
 | 5 | `POST {coauth}/_arkret/gate/account/identity-binding-challenges` | Arkret standard — `ak.gate.account.command.issue_identity_binding_challenge.v1` | Authorized by the handoff grant + a matching DPoP proof over this exact method/URL. |
 | 6 | `cotest-wire identity-creation-register-request` | **Rust, already** | Assembles the register body from the challenge, DID operation, PCR genesis unit, initial session and recovery key. No HTTP. |
 | 7 | `POST {coauth}/_arkret/gate/account/register` | Arkret standard — `ak.gate.account.command.register.v1` | Returns `binding_receipt`, the two `pcr_genesis_commits`, and `session_grant_outcome` — the initial DPoP-bound grant, its audience, `dpop_jkt`, scopes and the founding event signing key. |
-| 8 | `POST {soland}/_soland/gate/account/project` | Soland deployment-private | An idempotent replay, not a required step. Coauth already performs this projection inside the canonical register saga (`crates/backend/src/handlers/arkret/account_register.rs:546`, before any usable grant leaves it), and `ensureRegisteredRaw` accepts the 409 that comes back. What the caller actually wants here is its other half, the local `registerEventSigner`. |
+| 8 | `POST {coland}/_coland/gate/account/project` | Coland deployment-private | An idempotent replay, not a required step. Coauth already performs this projection inside the canonical register saga (`crates/backend/src/handlers/arkret/account_register.rs:546`, before any usable grant leaves it), and `ensureRegisteredRaw` accepts the 409 that comes back. What the caller actually wants here is its other half, the local `registerEventSigner`. |
 
 Second devices do not repeat this chain: `createDpopUserSessionForAccount`
 fails closed on a second call for the same account, because reusing the founding

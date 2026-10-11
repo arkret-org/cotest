@@ -3,10 +3,10 @@ import { expect, test, type APIRequestContext } from "../../helpers/arkret-test"
 
 import {
   hasServerCount,
-  solandBaseUrl,
-  solandServiceDid,
-  solandServiceId,
-  type SolandKey,
+  colandBaseUrl,
+  colandServiceDid,
+  colandServiceId,
+  type ColandKey,
 } from "../../helpers/env";
 import {
   countInvitesFor,
@@ -14,7 +14,7 @@ import {
 } from "../../helpers/contact-api";
 import type {
   InviteDeliveryRequestBodyBodyBody,
-} from "../../helpers/soland-api";
+} from "../../helpers/coland-api";
 import {
   canonicalServiceResolution,
   canonicalJson,
@@ -32,7 +32,7 @@ import {
   submitPeerInviteDeliveryApi,
   submitSignedEventApi,
   wireErrCode,
-} from "../../helpers/soland-api";
+} from "../../helpers/coland-api";
 import {
   ensureRegistered,
   issueUserSession,
@@ -101,7 +101,7 @@ async function readAcceptedInvite(
   token: string,
   eventId: string,
 ): Promise<Record<string, unknown>> {
-  const url = `${solandBaseUrl()}/_arkret/self/committed-events/${eventId}`;
+  const url = `${colandBaseUrl()}/_arkret/self/committed-events/${eventId}`;
   const response = await request.get(url, {
     headers: authHeaders(token, "GET", url),
   });
@@ -118,7 +118,7 @@ async function readAcceptedInvite(
 async function acceptedInviteFixture(
   request: APIRequestContext,
   slug: string,
-  recipientServer?: SolandKey,
+  recipientServer?: ColandKey,
 ): Promise<AcceptedInviteFixture> {
   const inviter = uniqueUser(`${slug}-inviter`);
   const invitee = uniqueUser(`${slug}-invitee`);
@@ -135,7 +135,7 @@ async function acceptedInviteFixture(
   const inviteAddress = {
     account_id: {
       principal_id: invitee.id,
-      station_id: solandServiceId(recipientServer),
+      station_id: colandServiceId(recipientServer),
     },
     // The delivery address carries routing evidence outside the durable Event.
     service_resolution: canonicalServiceResolution(recipientServer),
@@ -190,7 +190,7 @@ async function assertNoHolderPrivateWrite(
     "inviteeToken" | "invitee" | "realmId"
   >,
   because: string,
-  opts: { server?: SolandKey } = {},
+  opts: { server?: ColandKey } = {},
 ) {
   expect(
     countInvitesFor(
@@ -201,7 +201,7 @@ async function assertNoHolderPrivateWrite(
     `${because}: no holder-private invite may surface`,
   ).toBe(0);
 
-  const accountDataUrl = `${solandBaseUrl(opts.server)}/_arkret/self/account_data`;
+  const accountDataUrl = `${colandBaseUrl(opts.server)}/_arkret/self/account_data`;
   const listed = await request.get(accountDataUrl, {
     headers: authHeaders(fixture.inviteeToken, "GET", accountDataUrl),
   });
@@ -233,7 +233,7 @@ function peerDeliveryBody(
     invite_commit: inviteCommit,
     producer_signer_fact: fixture.producerSignerFact,
     authority_locator_hints: [
-      { service_kind: "station", service_id: solandServiceId(), source: "invite" },
+      { service_kind: "station", service_id: colandServiceId(), source: "invite" },
     ],
     invite_address: fixture.inviteAddress,
     introduction_evidence: fixture.evidence,
@@ -268,7 +268,7 @@ test.describe("invite addressing", () => {
   test("peer invite delivery defers explicit_address evidence", async ({ request }) => {
     // Use the source Station's accepted Event with its authentic producer proof.
     const fixture = await acceptedInviteFixture(request, "peer-explicit");
-    const recipientServiceId = solandServiceId();
+    const recipientServiceId = colandServiceId();
 
     const outcome = await submitPeerInviteDeliveryApi(
       request,
@@ -293,10 +293,10 @@ test.describe("invite addressing", () => {
     const user = uniqueUser(`invite-locator-${Date.now()}`);
     await ensureRegistered(request, user);
     const token = await issueUserSession(request, user);
-    const issueUrl = `${solandBaseUrl()}/_arkret/self/invite-locators`;
+    const issueUrl = `${colandBaseUrl()}/_arkret/self/invite-locators`;
     const rotateUrl = `${issueUrl}/rotate`;
     const revokeUrl = `${issueUrl}/revoke`;
-    const resolveUrl = `${solandBaseUrl()}/_arkret/open/invite-locators/resolve`;
+    const resolveUrl = `${colandBaseUrl()}/_arkret/open/invite-locators/resolve`;
 
     const issueStarted = Date.now();
     const issue = await request.post(issueUrl, {
@@ -339,9 +339,9 @@ test.describe("invite addressing", () => {
     expect(resolvedResponse.status(), await resolvedResponse.text()).toBe(200);
     const locator = await resolvedResponse.json();
     expect(locator.schema).toBe("ak.schema.principal_locator.v1");
-    expect(locator.account_id).toEqual({ principal_id: user.id, station_id: solandServiceId() });
+    expect(locator.account_id).toEqual({ principal_id: user.id, station_id: colandServiceId() });
     expect(locator).not.toHaveProperty("recipient_id");
-    expect(locator.service_resolution.resolution_url).toBe(`${solandBaseUrl()}/_arkret/open/services/${encodeURIComponent(solandServiceId())}/resolution`);
+    expect(locator.service_resolution.resolution_url).toBe(`${colandBaseUrl()}/_arkret/open/services/${encodeURIComponent(colandServiceId())}/resolution`);
     expect(locator.issued_at).toMatch(
       /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
     );
@@ -354,7 +354,7 @@ test.describe("invite addressing", () => {
       "recipient_service_acceptance",
     );
     expect(locator.proofs?.[0]?.proof?.verification_method).toBe(
-      `${solandServiceDid()}#notary-key`,
+      `${colandServiceDid()}#notary-key`,
     );
 
     const rotate = await request.post(rotateUrl, {
@@ -584,10 +584,10 @@ test.describe("invite addressing", () => {
     const fixture = await acceptedInviteFixture(request, "foreign-notification", "server2");
     await assertNoHolderPrivateWrite(request, fixture, "before delivery", { server: "server2" });
     const delivered = await submitPeerInviteDeliveryApi(request, peerDeliveryBody(fixture, "foreign"), {
-      origin: solandServiceId(), destination: solandServiceId("server2"), server: "server2",
+      origin: colandServiceId(), destination: colandServiceId("server2"), server: "server2",
     });
     expect(delivered.status).toBe("deferred");
-    const realmUrl = `${solandBaseUrl("server2")}/_arkret/self/realms/${encodeURIComponent(fixture.realmId)}`;
+    const realmUrl = `${colandBaseUrl("server2")}/_arkret/self/realms/${encodeURIComponent(fixture.realmId)}`;
     const realm = await request.get(realmUrl, { headers: authHeaders(fixture.inviteeToken, "GET", realmUrl) });
     expect(realm.status(), "notification does not grant Realm read authority").toBe(404);
   });
@@ -646,7 +646,7 @@ test.describe("invite addressing", () => {
     for (const [label, event, commit] of cases) {
       const response = await rawSubmitPeerInviteDeliveryApi(
         request, peerDeliveryBody(fixture, label, event, commit),
-        { origin: solandServiceId(), destination: solandServiceId("server2"), server: "server2" },
+        { origin: colandServiceId(), destination: colandServiceId("server2"), server: "server2" },
       );
       expect(await peerRejection(response), label).toMatchObject({ status: 401, code: "signature_invalid" });
       await assertNoHolderPrivateWrite(request, fixture, label, { server: "server2" });

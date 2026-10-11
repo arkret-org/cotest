@@ -1,6 +1,6 @@
 import { expect, test, type APIRequestContext, type Browser } from "./arkret-test";
 import type { JointUsersFixture } from "./joint-fixture";
-import { coauthBaseUrl, solandBaseUrl } from "./env";
+import { coauthBaseUrl, colandBaseUrl } from "./env";
 import { serverLoginViaCoauth, submitCoauthPasswordCredentials } from "./real-oidc-login";
 import { approvePairingLinkOnAuthorizedDevice, type DpopUserSession, type JointUserPage, openUserPage, selfPathHeadersForDpopSession, uniqueUser } from "./users";
 
@@ -25,7 +25,7 @@ export async function openAndPairSecondController(
     await device.page.goto("/login", {
       waitUntil: "domcontentloaded",
     });
-    await device.page.getByTestId("login-server-url").fill(solandBaseUrl());
+    await device.page.getByTestId("login-server-url").fill(colandBaseUrl());
     await device.page.getByTestId("start-server-login-button").click();
     await submitCoauthPasswordCredentials(device.page, jointRealm.aliceSession.account);
     const approve = device.page.getByTestId("coauth-oauth-approve");
@@ -73,7 +73,7 @@ export async function openAndPairSecondController(
     expect(identity.accountId).toEqual(jointRealm.aliceSession.accountId);
     expect(identity.deviceId).toMatch(/^ak:device:/);
     expect(identity.deviceId).not.toBe(jointRealm.alice.deviceId);
-    const viewerUrl = `${solandBaseUrl()}/_arkret/self/account/viewer`;
+    const viewerUrl = `${colandBaseUrl()}/_arkret/self/account/viewer`;
     await expect.poll(async () => {
       const response = await request.get(viewerUrl, {
         headers: selfPathHeadersForDpopSession(jointRealm.aliceSession, "GET", viewerUrl),

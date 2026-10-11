@@ -13,7 +13,7 @@ import {
   listReadMarkersViaApi,
   listRealmEventsViaApi,
 } from "../../helpers/api";
-import { solandBaseUrl } from "../../helpers/env";
+import { colandBaseUrl } from "../../helpers/env";
 import { createTwoUserMessagingRealm } from "../../helpers/messaging-fixtures";
 import {
   accountActorId,
@@ -26,7 +26,7 @@ import {
   signedEventEnvelope,
   submitSignedEventApi,
   typedId,
-} from "../../helpers/soland-api";
+} from "../../helpers/coland-api";
 import { relationCreatePayload } from "../../helpers/relation-api";
 import {
   ensureRegistered,
@@ -46,7 +46,7 @@ import {
   realmMlsCreatorGroupApi,
   readScopeMlsGroupCurrentApi,
   type MlsMemberGroup,
-} from "../../helpers/soland-api/mls";
+} from "../../helpers/coland-api/mls";
 import {
   buildSignalEnvelope,
   captureSubmittedSignalEnvelope,
@@ -577,10 +577,10 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
       },
     });
     const response = await request.post(
-      `${solandBaseUrl()}/_arkret/self/events`,
+      `${colandBaseUrl()}/_arkret/self/events`,
       {
         headers: {
-          ...authHeaders(fixture.aliceToken, "POST", `${solandBaseUrl()}/_arkret/self/events`),
+          ...authHeaders(fixture.aliceToken, "POST", `${colandBaseUrl()}/_arkret/self/events`),
           "content-type": "application/json",
         },
         data: canonicalJson({ event: envelope }),

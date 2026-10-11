@@ -8,9 +8,9 @@ import fs from "node:fs";
 import { promisify } from "node:util";
 import {
   hasServerCount,
-  solandBaseUrl,
-  solandServiceId,
-  type SolandKey,
+  colandBaseUrl,
+  colandServiceId,
+  type ColandKey,
 } from "../../helpers/env";
 import {
   acceptPreparedInviteApi,
@@ -30,7 +30,7 @@ import {
   submitSignedEventApi,
   waitForInviteDeliveryApi,
   type CommittedEventFullView,
-} from "../../helpers/soland-api";
+} from "../../helpers/coland-api";
 import {
   ensureRegistered,
   issueUserSession,
@@ -43,7 +43,7 @@ test.describe.configure({ mode: "serial" });
 type Participant = {
   user: JointUser;
   token: string;
-  server: SolandKey;
+  server: ColandKey;
 };
 
 type ThreeServerRealm = {
@@ -61,7 +61,7 @@ const execFileAsync = promisify(execFile);
 type RuntimeTopology = {
   servers: Array<{
     name: string;
-    soland: {
+    coland: {
       control?: { script_path: string; state_path: string };
     };
   }>;
@@ -79,13 +79,13 @@ async function controlServer(
 ) {
   const topologyPath = process.env.COTEST_TOPOLOGY_PATH!;
   const server = runtimeTopology().servers.find((item) => item.name === serverName);
-  if (!server?.soland.control) {
+  if (!server?.coland.control) {
     throw new Error(`${serverName} has no runner-owned fault control`);
   }
   await execFileAsync("pwsh", [
     "-NoProfile",
     "-File",
-    server.soland.control.script_path,
+    server.coland.control.script_path,
     "-TopologyPath",
     topologyPath,
     "-ServerName",
@@ -93,7 +93,7 @@ async function controlServer(
     "-Action",
     action,
   ], { timeout: 60_000, windowsHide: true });
-  return JSON.parse(fs.readFileSync(server.soland.control.state_path, "utf8")) as {
+  return JSON.parse(fs.readFileSync(server.coland.control.state_path, "utf8")) as {
     status: string;
     restarted?: boolean;
     current_process_id?: number;
@@ -103,11 +103,11 @@ async function controlServer(
 
 async function waitForServerHealth(
   request: APIRequestContext,
-  server: SolandKey,
+  server: ColandKey,
 ) {
   await expect.poll(async () => {
     try {
-      return (await request.get(`${solandBaseUrl(server)}/health`, { timeout: 5_000 })).ok();
+      return (await request.get(`${colandBaseUrl(server)}/health`, { timeout: 5_000 })).ok();
     } catch {
       return false;
     }
@@ -118,7 +118,7 @@ async function allowExplicitInviteNotifications(
   request: APIRequestContext,
   participant: Participant,
 ) {
-  const url = `${solandBaseUrl(participant.server)}/_arkret/self/invite-receive-policy`;
+  const url = `${colandBaseUrl(participant.server)}/_arkret/self/invite-receive-policy`;
   const current = await request.get(url, {
     headers: authHeaders(participant.token, "GET", url),
   });
@@ -207,15 +207,15 @@ async function createThreeServerRealm(
     history_access: "since_join",
     invitees: [bob.user.id, carol.user.id],
     invitee_ids: {
-      [bob.user.id]: solandServiceId("server2"),
-      [carol.user.id]: solandServiceId("server3"),
+      [bob.user.id]: colandServiceId("server2"),
+      [carol.user.id]: colandServiceId("server3"),
     },
     ownerId: alice.user.id,
-    creator_id: solandServiceId("server1"),
+    creator_id: colandServiceId("server1"),
     plaintext_visible_services: [
-      solandServiceId("server1"),
-      solandServiceId("server2"),
-      solandServiceId("server3"),
+      colandServiceId("server1"),
+      colandServiceId("server2"),
+      colandServiceId("server3"),
     ],
     federation_policy: "open",
   }, { server: "server1" });
@@ -253,7 +253,7 @@ async function createThreeServerRealm(
     joinPositions.push(Number(joinCommit!.stream_position));
     // Freeze the pre-grant readable baseline so the following grant really
     // invalidates an installed cut instead of racing the first snapshot.
-    const memberRealmUrl = `${solandBaseUrl(participant.server)}/_arkret/self/realms/${encodeURIComponent(realmId)}`;
+    const memberRealmUrl = `${colandBaseUrl(participant.server)}/_arkret/self/realms/${encodeURIComponent(realmId)}`;
     await expect.poll(async () => {
       const response = await request.get(memberRealmUrl, {
         headers: authHeaders(participant.token, "GET", memberRealmUrl),
@@ -270,7 +270,7 @@ async function createThreeServerRealm(
       actions: ["ak.message.create"],
       server: "server1",
     });
-    const grantUrl = `${solandBaseUrl(participant.server)}/_arkret/self/committed-events/${grant.eventId}`;
+    const grantUrl = `${colandBaseUrl(participant.server)}/_arkret/self/committed-events/${grant.eventId}`;
     await expect.poll(async () => {
       const response = await request.get(grantUrl, {
         headers: authHeaders(participant.token, "GET", grantUrl),
@@ -288,8 +288,8 @@ async function createThreeServerRealm(
     await expect.poll(async () => {
       const views = await Promise.all(participants.map(async (participant) => {
         const response = await request.get(
-          `${solandBaseUrl(participant.server)}/_arkret/self/realms/${encodeURIComponent(realmId)}`,
-          { headers: authHeaders(participant.token, "GET", `${solandBaseUrl(participant.server)}/_arkret/self/realms/${encodeURIComponent(realmId)}`) },
+          `${colandBaseUrl(participant.server)}/_arkret/self/realms/${encodeURIComponent(realmId)}`,
+          { headers: authHeaders(participant.token, "GET", `${colandBaseUrl(participant.server)}/_arkret/self/realms/${encodeURIComponent(realmId)}`) },
         );
         const view = response.ok() ? JSON.stringify(await response.json()) : "";
         return {
@@ -359,7 +359,7 @@ test.describe("three-server federation P0 @three-server-p0", () => {
     // `duplicate`, and an exact replay of the same body answers the same.
     const rows = await scanPeerRealmStreamRowsApi(request, {
       server: "server1",
-      sourceServiceId: solandServiceId("server3"),
+      sourceServiceId: colandServiceId("server3"),
       realmId: realm.realmId,
     });
     const carolJoin = rows.find((row) => row.event.event_id === realm.joinEventIds.carol);
@@ -369,8 +369,8 @@ test.describe("three-server federation P0 @three-server-p0", () => {
       .slice(0, 100);
     for (const attempt of ["first", "exact replay"]) {
       const replay = await pushCommittedRowsApi(request, held, {
-        origin: solandServiceId("server1"),
-        destination: solandServiceId("server3"),
+        origin: colandServiceId("server1"),
+        destination: colandServiceId("server3"),
         server: "server3",
         realmId: realm.realmId,
       });
@@ -397,7 +397,7 @@ test.describe("three-server federation P0 @three-server-p0", () => {
       payload: { member_id: accountActorId(realm.bob.user.id, "server2"), membership: "leave" },
     }), { server: "server2", context: "bob leaves the Realm from server2" });
     await expect.poll(async () => {
-      const url = `${solandBaseUrl("server1")}/_arkret/self/realms/${encodeURIComponent(realm.realmId)}`;
+      const url = `${colandBaseUrl("server1")}/_arkret/self/realms/${encodeURIComponent(realm.realmId)}`;
       const response = await request.get(url, { headers: authHeaders(realm.alice.token, "GET", url) });
       if (!response.ok()) return true;
       const view = await response.json() as { member_ids?: Array<{ kind?: string; account_id?: { principal_id?: string } }> };
@@ -409,7 +409,7 @@ test.describe("three-server federation P0 @three-server-p0", () => {
     const after = await sendMessageApi(request, realm.alice.token, realm.realmId, isolated, { server: "server1" });
     await waitForText(request, realm.carol, realm.realmId, isolated);
     const committedAtServer2 = async () => {
-      const url = `${solandBaseUrl("server2")}/_arkret/self/committed-events/${after.event_id}`;
+      const url = `${colandBaseUrl("server2")}/_arkret/self/committed-events/${after.event_id}`;
       return (await request.get(url, { headers: authHeaders(realm.bob.token, "GET", url) })).status();
     };
     await expect.poll(committedAtServer2, { timeout: 20_000, intervals: [1_000, 2_000, 4_000] }).toBe(404);
@@ -431,7 +431,7 @@ test.describe("three-server federation P0 @three-server-p0", () => {
     try {
       isolationState = await controlServer("server2", "isolate");
       expect(isolationState.status).toBe("isolated");
-      const unavailable = await request.get(`${solandBaseUrl("server2")}/health`, {
+      const unavailable = await request.get(`${colandBaseUrl("server2")}/health`, {
         failOnStatusCode: false,
         timeout: 5_000,
       }).catch(() => undefined);
@@ -456,7 +456,7 @@ test.describe("three-server federation P0 @three-server-p0", () => {
     // server2 holds, or already held.
     const rows = await scanPeerRealmStreamRowsApi(request, {
       server: "server1",
-      sourceServiceId: solandServiceId("server2"),
+      sourceServiceId: colandServiceId("server2"),
       realmId: realm.realmId,
     });
     // A product timeline is a bounded disclosure view, not the replica head.
@@ -467,8 +467,8 @@ test.describe("three-server federation P0 @three-server-p0", () => {
       // Recovered fanout and independent catch-up requests may race. Every
       // exact body must remain stored/duplicate under the atomic replica lock.
       const recoveryOptions = {
-        origin: solandServiceId("server1"),
-        destination: solandServiceId("server2"),
+        origin: colandServiceId("server1"),
+        destination: colandServiceId("server2"),
         server: "server2" as const,
         realmId: realm.realmId,
       };
@@ -505,7 +505,7 @@ test.describe("three-server federation P0 @three-server-p0", () => {
     expect(failures[0].reason).not.toBe("unexpectedly_reachable");
     const rows = await scanPeerRealmStreamRowsApi(request, {
       server: "server1",
-      sourceServiceId: solandServiceId("server3"),
+      sourceServiceId: colandServiceId("server3"),
       realmId: realm.realmId,
     });
     expect(rows.length).toBeGreaterThan(0);

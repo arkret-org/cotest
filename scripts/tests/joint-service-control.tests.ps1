@@ -5,7 +5,7 @@ Set-StrictMode -Version Latest
 $controller = (Resolve-Path (Join-Path $PSScriptRoot '..\control-joint-e2e-service.ps1')).Path
 $root = Join-Path ([System.IO.Path]::GetTempPath()) "cotest-service-control-$PID"
 $null = New-Item -ItemType Directory -Force -Path $root
-$commandLog = Join-Path $root 'soland-server2.command.txt'
+$commandLog = Join-Path $root 'coland-server2.command.txt'
 $statePath = Join-Path $root 'controls\server2.json'
 $topologyPath = Join-Path $root 'topology.json'
 $original = $null
@@ -35,7 +35,7 @@ try {
         server_count = 1
         servers = @([pscustomobject]@{
             name = 'server2'
-            soland = [pscustomobject]@{
+            coland = [pscustomobject]@{
                 process_id = $original.Id
                 process_started_at = $originalIdentity.started_at
                 container_id = $null
@@ -55,13 +55,13 @@ try {
     $wrongIdentity = [pscustomobject]@{ process_id = $original.Id; started_at = $original.StartTime.ToUniversalTime().AddSeconds(-1).ToString('o') }
     Stop-CotestOwnedProcessTree -RootIdentity $wrongIdentity
     if (-not (Get-CotestIdentityProcess -Identity $originalIdentity)) { throw 'a reused root PID was stopped' }
-    $topology.servers[0].soland.process_started_at = $wrongIdentity.started_at
+    $topology.servers[0].coland.process_started_at = $wrongIdentity.started_at
     $topology | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $topologyPath -Encoding utf8NoBOM
     $rejected = $false
     try { & $controller -TopologyPath $topologyPath -ServerName server2 -Action isolate }
     catch { $rejected = $_.Exception.Message -match 'owned process tree has no service child' }
     if (-not $rejected -or (Test-Path -LiteralPath $statePath)) { throw 'isolate accepted a reused root PID' }
-    $topology.servers[0].soland.process_started_at = $originalIdentity.started_at
+    $topology.servers[0].coland.process_started_at = $originalIdentity.started_at
     $topology | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $topologyPath -Encoding utf8NoBOM
 
     & $controller -TopologyPath $topologyPath -ServerName server2 -Action isolate

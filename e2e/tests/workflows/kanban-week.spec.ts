@@ -18,7 +18,7 @@ import {
 import { createRealmViaApi } from "../../helpers/api";
 import { stepShot } from "../../helpers/screenshots";
 import { decodeIngressEvents } from "../../helpers/event-ingress";
-import { scanRealmStreamApi } from "../../helpers/soland-api";
+import { scanRealmStreamApi } from "../../helpers/coland-api";
 import {
   openDpopUserPage,
   type DpopUserSession,

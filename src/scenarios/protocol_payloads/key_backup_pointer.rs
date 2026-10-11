@@ -105,12 +105,12 @@ pub async fn key_backup_active_pointer_is_committed_and_listed_at_its_pcr_cut() 
         "protocol-key-backup-active-pointer",
         &[
             (
-                "SOLAND_ACCOUNT_AUTHORITY_URL",
+                "COLAND_ACCOUNT_AUTHORITY_URL",
                 account_authority_origin.as_str(),
             ),
-            ("SOLAND_DID_RESOLVER_ALLOW_METHODS", "web,webvh,key,uuid"),
+            ("COLAND_DID_RESOLVER_ALLOW_METHODS", "web,webvh,key,uuid"),
             (
-                "SOLAND_SESSION_GRANT_INTROSPECTION_URL",
+                "COLAND_SESSION_GRANT_INTROSPECTION_URL",
                 introspection_url.as_str(),
             ),
         ],

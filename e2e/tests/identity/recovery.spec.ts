@@ -1,4 +1,4 @@
-import { authHeaders } from "../../helpers/soland-api";
+import { authHeaders } from "../../helpers/coland-api";
 // Account recovery
 // Contract: e2e/scenarios/identity/recovery.md
 // Spec refs:
@@ -10,15 +10,15 @@ import { authHeaders } from "../../helpers/soland-api";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
-import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
+import { coauthBaseUrl, colandBaseUrl } from "../../helpers/env";
 import {
   accountActorId,
   canonicalJson,
   expectJsonOk,
   registeredEventSigningSeedB64url,
   registeredEventVerificationMethod,
-} from "../../helpers/soland-api";
-import { sdkKeyBackupAuthSignature } from "../../helpers/soland-api/wire-client";
+} from "../../helpers/coland-api";
+import { sdkKeyBackupAuthSignature } from "../../helpers/coland-api/wire-client";
 import {
   ensureRegistered,
   issueUserSession,
@@ -51,7 +51,7 @@ function uuidv7Like(): string {
 /**
  * Build a schema-conforming `secret_storage` key-backup envelope
  * (`ak.schema.key_backup.v1`) for `recipient_method=passphrase_kdf`. Every
- * cross-field constraint soland's decode path enforces (ciphertext_digest over
+ * cross-field constraint coland's decode path enforces (ciphertext_digest over
  * the ciphertext bytes, domain-separation subdomain, genesis series shape) is
  * satisfied so the test exercises the *profile* gate rather than tripping a
  * generic schema_violation first.
@@ -76,7 +76,7 @@ async function sessionBackupSigner(
   actorId: string,
   deviceId: string,
 ): Promise<BackupDeviceSigner> {
-  const viewerUrl = `${solandBaseUrl()}/_arkret/self/account/viewer`;
+  const viewerUrl = `${colandBaseUrl()}/_arkret/self/account/viewer`;
   const viewer = await expectJsonOk<{
     devices?: Array<{ device_id?: unknown; authorized_event_ref?: unknown }>;
   }>(
@@ -149,7 +149,7 @@ function secretStorageEnvelope(opts: {
       secret_id: item_kind,
     })),
     ciphertext: ciphertext.toString("base64url"),
-    // soland re-derives this from the ciphertext bytes, so a random digest is
+    // coland re-derives this from the ciphertext bytes, so a random digest is
     // rejected before any KDF/domain rule is reached.
     ciphertext_digest: `sha256:${createHash("sha256").update(ciphertext).digest("hex")}`,
     series_id: seriesId,
@@ -178,10 +178,10 @@ async function putBackup(
   envelope: Record<string, unknown>,
 ) {
   return request.put(
-    `${solandBaseUrl()}/_arkret/self/keys/backups/${encodeURIComponent(backupId)}`,
+    `${colandBaseUrl()}/_arkret/self/keys/backups/${encodeURIComponent(backupId)}`,
     {
       headers: {
-        ...authHeaders(token, "PUT", `${solandBaseUrl()}/_arkret/self/keys/backups/${encodeURIComponent(backupId)}`),
+        ...authHeaders(token, "PUT", `${colandBaseUrl()}/_arkret/self/keys/backups/${encodeURIComponent(backupId)}`),
         "content-type": "application/json",
         "idempotency-key": `cotest-key-backup-${backupId}`,
       },
@@ -199,9 +199,9 @@ test.describe("account recovery", () => {
     const token = await issueUserSession(request, alice);
 
     const backupsResp = await request.get(
-      `${solandBaseUrl()}/_arkret/self/keys/backups?backup_kind=secret_storage`,
+      `${colandBaseUrl()}/_arkret/self/keys/backups?backup_kind=secret_storage`,
       {
-        headers: authHeaders(token, "GET", `${solandBaseUrl()}/_arkret/self/keys/backups?backup_kind=secret_storage`),
+        headers: authHeaders(token, "GET", `${colandBaseUrl()}/_arkret/self/keys/backups?backup_kind=secret_storage`),
       },
     );
     expect(backupsResp.status()).toBe(200);
@@ -268,7 +268,7 @@ test.describe("account recovery", () => {
       const grantHeaders = (method: string, url: string) =>
         selfPathHeadersForDpopSession(session, method, url);
 
-      const policyUrl = `${solandBaseUrl()}/_arkret/root/identity/recovery-policy`;
+      const policyUrl = `${colandBaseUrl()}/_arkret/root/identity/recovery-policy`;
       await expect
         .poll(
           async () => {
@@ -285,7 +285,7 @@ test.describe("account recovery", () => {
         )
         .toBe("active");
 
-      const backupsUrl = `${solandBaseUrl()}/_arkret/self/keys/backups?backup_kind=secret_storage`;
+      const backupsUrl = `${colandBaseUrl()}/_arkret/self/keys/backups?backup_kind=secret_storage`;
       await expect
         .poll(
           async () => {
@@ -339,7 +339,7 @@ test.describe("account recovery", () => {
 
     // The recovery-policy GET surface MUST be routed and MUST report null
     // active policy for a brand-new principal (fail-closed default, §7.11).
-    const policyUrl = `${solandBaseUrl()}/_arkret/root/identity/recovery-policy`;
+    const policyUrl = `${colandBaseUrl()}/_arkret/root/identity/recovery-policy`;
     const getResp = await request.get(policyUrl, {
       headers: authHeaders(token, "GET", policyUrl),
     });
@@ -360,7 +360,7 @@ test.describe("account recovery", () => {
     // spec: key-management.md §7.1
     // §7.1: only `ak.profile.personal_node.v1` MAY accept
     // `mixed_secret_storage=true`; the dedicated profile reason code was
-    // dropped from the registry (spec C47), so soland now enforces the
+    // dropped from the registry (spec C47), so coland now enforces the
     // mixed-storage discipline through the key-management decode path:
     // A `mixed_secret_storage=true` envelope MUST satisfy the hardened
     //       Argon2id floor (memory_kib >= 262144, iterations >= 4) — a weaker

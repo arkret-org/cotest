@@ -2,7 +2,7 @@
 //! "跨站 recipient", `zh/crypto-media/device-lifecycle.md` §9.2.3,
 //! `ak.vector.mls.cross_station_welcome_replication.v1`).
 //!
-//! Against two live Solands with separate PostgreSQL databases, Alice's Realm
+//! Against two live Colands with separate PostgreSQL databases, Alice's Realm
 //! is governed by Station X and Bob, Carol and Dave live on Station Y:
 //!
 //! 1. They accept Alice's directed Invites through Y; Bob activates the scope through Y.
@@ -402,7 +402,7 @@ async fn cross_station_mls_welcome_original_run() -> Result<()> {
     )
     .await?
     else {
-        return skip_or_fail(GROUP, "prebuilt Soland unavailable");
+        return skip_or_fail(GROUP, "prebuilt Coland unavailable");
     };
     let x = group.server(0);
     let y = group.server(1);
@@ -671,7 +671,7 @@ async fn cross_station_mls_attest_add_direct_run() -> Result<()> {
         ],
     )
     .await?
-    .context("MLS attest_add live requires a prebuilt real Soland binary")?;
+    .context("MLS attest_add live requires a prebuilt real Coland binary")?;
     let x = group.server(0);
     let y = group.server(1);
     let alice = Member::provision(x, &coauth, "xroster-alice", ALICE_DEVICE).await?;

@@ -61,7 +61,7 @@ fn run_case(case: &Value) -> Result<()> {
         );
     }
     if expected == "reject" {
-        // SDK validators are transport-agnostic and do not return Soland wire
+        // SDK validators are transport-agnostic and do not return Coland wire
         // error codes. Require the formal fixture to declare one, but count
         // only the accept/reject decision here; HTTP error mapping belongs to
         // the live Station tests.

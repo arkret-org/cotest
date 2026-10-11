@@ -1,5 +1,5 @@
 //! Live MLS KeyPackage lifecycle legs of `ak.suite.crypto.keypackage_lifecycle.v1`.
-//! They need a prebuilt Soland and PostgreSQL and soft-skip without them unless
+//! They need a prebuilt Coland and PostgreSQL and soft-skip without them unless
 //! `COTEST_REQUIRE_LIVE_SERVICES=1`.
 
 use anyhow::Result;

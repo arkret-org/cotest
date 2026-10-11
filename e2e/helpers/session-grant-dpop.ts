@@ -3,10 +3,10 @@
 // Contract: arkret-spec/spec/v1/zh/sync/api-conventions.md §3.3 and
 // arkret-work/tasks/_auth_todos.md "## ② 最终路线".
 //
-// Under ②, the Station (soland) does not mint a second local
+// Under ②, the Station (coland) does not mint a second local
 // credential. A client accesses `/_arkret/self/*` by presenting
 // `Authorization: DPoP <ak.session.grant>` plus a per-request DPoP proof
-// bound to the request (`htm`/`htu`/`ath`). soland verifies the DPoP against
+// bound to the request (`htm`/`htu`/`ath`). coland verifies the DPoP against
 // the grant's `cnf.jkt` (RFC 7638 JWK SHA-256 thumbprint) obtained via
 // session-grant introspection at coauth.
 //
@@ -17,8 +17,8 @@
 // is gone, so nothing in this suite obtains a grant by asking coauth to skip
 // the ceremony.
 //
-// The DPoP proof shape mirrors exactly what soland's verifier accepts
-// (soland: crates/http/src/routing/identity/auth_grant_dpop.rs):
+// The DPoP proof shape mirrors exactly what coland's verifier accepts
+// (coland: crates/http/src/routing/identity/auth_grant_dpop.rs):
 //   * compact JWS, header `{typ:"dpop+jwt", alg:"Ed25519", jwk:<public OKP jwk>}`
 //   * claims `{htm, htu, ath, jti, iat}`
 //   * `ath = base64url(sha256(grant_jwt))` (unpadded)
@@ -35,10 +35,10 @@ import {
 } from "node:crypto";
 import { type APIRequestContext } from "@playwright/test";
 import { base64url } from "./encoding";
-import { base64urlJsonRaw } from "./soland-api";
+import { base64urlJsonRaw } from "./coland-api";
 
 /// Public JWK for an Ed25519 OKP key, as emitted by Node and as consumed by
-/// both coauth (`PublicJsonWebKey`) and soland (`parse_dpop_jwk`).
+/// both coauth (`PublicJsonWebKey`) and coland (`parse_dpop_jwk`).
 export type Ed25519PublicJwk = {
   kty: "OKP";
   crv: "Ed25519";
@@ -153,7 +153,7 @@ export function dpopDeviceSeedB64url(key: DpopDeviceKey): string {
 
 /// RFC 7638 JWK SHA-256 thumbprint for an Ed25519 OKP key. The canonical input
 /// serializes the required members `{crv, kty, x}` in lexicographic order with
-/// no whitespace, matching soland's `jwk_thumbprint_ed25519`.
+/// no whitespace, matching coland's `jwk_thumbprint_ed25519`.
 export function jwkThumbprintEd25519(x: string): string {
   const canonical = `{"crv":"Ed25519","kty":"OKP","x":"${x}"}`;
   return base64url(createHash("sha256").update(canonical).digest());
@@ -220,7 +220,7 @@ export function mintDpopProof(args: {
   return `${signingInput}.${base64url(signature)}`;
 }
 
-/// Build the full header set for a real grant + DPoP request to a soland
+/// Build the full header set for a real grant + DPoP request to a coland
 /// `/_arkret/self/*` (or `/root/`) endpoint: `Authorization: DPoP <grant>`, a
 /// request-bound `DPoP` proof. `deviceKey` MUST be the key the grant is bound
 /// to (`cnf.jkt`).

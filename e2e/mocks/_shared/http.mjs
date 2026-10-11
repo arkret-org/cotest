@@ -27,7 +27,7 @@ export function sendJson(res, status, body) {
 /// Deterministic canonical JSON (RFC 8785 / JCS-style: keys sorted by UTF-16
 /// code unit, no whitespace). This is the single canonical-JSON implementation
 /// for the `.mjs` runtime (mocks + scripts), kept in lock-step with the
-/// TypeScript authority `canonicalJson` in `e2e/helpers/soland-api.ts` (itself
+/// TypeScript authority `canonicalJson` in `e2e/helpers/coland-api.ts` (itself
 /// a port of arkret-rust-sdk/crates/core/src/canonical.rs) so mock/script
 /// computed digests cannot drift from the harness. The full canonical-profile
 /// validation matches the TS port: safe-integer-only numbers, `-0` rejected,
@@ -101,7 +101,7 @@ function assertCanonicalNumber(value, path) {
 }
 
 /// Canonical protocol timestamp (`YYYY-MM-DDTHH:MM:SS.SSSZ`). Mirrors
-/// `canonicalTimestamp` in e2e/helpers/soland-api.ts.
+/// `canonicalTimestamp` in e2e/helpers/coland-api.ts.
 export function canonicalTimestamp(date = new Date()) {
   return date.toISOString();
 }

@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 $rg = Get-Command rg -ErrorAction Stop
 $sourceRoots = @(
     "arkret-rust-sdk\crates",
-    "soland\crates",
+    "coland\crates",
     "inkson\src",
     "cotest\src",
     "coauth\crates",

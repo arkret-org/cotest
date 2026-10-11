@@ -1,14 +1,14 @@
 # demote-test.ps1 - convert a Playwright `test(...)` into `test.fixme(...)`.
 #
 # Use this only as a temporary local harness shim when a regression appears
-# before the backing soland/inkson/coauth feature can be repaired. The inserted
+# before the backing coland/inkson/coauth feature can be repaired. The inserted
 # FIXME comment records why the demotion exists so the static fixme checker can
 # keep the debt attributable.
 #
 # Usage:
 #   pwsh -File scripts/demote-test.ps1 `
 #       -SpecPath e2e/tests/chat/chat-interactions.spec.ts:42 `
-#       -Reason "GAP-P1-011 blocked by soland reaction OR-Set"
+#       -Reason "GAP-P1-011 blocked by coland reaction OR-Set"
 #
 # Use -DryRun to preview the rewrite without changing the file.
 

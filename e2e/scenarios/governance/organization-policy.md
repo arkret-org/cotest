@@ -11,7 +11,7 @@ cotest 是“**声明的 owning organization != 已验证的组织治理关系**
 - Organization moderation 是独立 `ak.organization.moderation_policy` deny 层，document scope 必须显式覆盖目标 Realm／service，且目标 Realm 的 active relationship 必须背书该适用性。
 - `revoked`、过期、not-before 未到或 scope 不覆盖的关系不生效；但失效语义不是删除一条继承链，因为 current-v1 没有 Realm automatic inheritance。
 
-cotest **不再**用 `_soland/self/organizations`(本地部署面,非标准协议面)判断协议治理语义;它至多是 directory/UI 的产品面镜像。
+cotest **不再**用 `_coland/self/organizations`(本地部署面,非标准协议面)判断协议治理语义;它至多是 directory/UI 的产品面镜像。
 
 ## Spec 锚点
 
@@ -23,7 +23,7 @@ cotest **不再**用 `_soland/self/organizations`(本地部署面,非标准协�
 
 ## 拓扑
 
-- 1 × soland + 1 × coauth
+- 1 × coland + 1 × coauth
 
 ## Actors
 
@@ -79,19 +79,19 @@ cotest 还守护 directory / flagon 的 verified badge 与上面**同一**已验
 
 - human admin 登录但**无** organization delegation 时,创建 `ak.realm.organization` 声明**失败**(组织 principal 不是某个人的账号)。
 - DID controller / governance service / Account Authority 通过 delegation 成功签发 organization authorization。
-- expired / revoked delegation **不能**继续签发,且即便签出也**不**被 soland 接受。
+- expired / revoked delegation **不能**继续签发,且即便签出也**不**被 coland 接受。
 
 ## Implementation notes / blocking-on
 
 - 旧实现把 `owning_organization_ids[]` 的单方声明或 organization relationship 当自动 policy merge 链；这是已删除行为。
-- 新的协议语义依赖 soland 侧:
+- 新的协议语义依赖 coland 侧:
   - SOL-ORG-02:`ak.realm.organization` reducer + 验证(proof / delegation / 窗口 / scope / revoke)。
   - SOL-ORG-03:organization delegation 解析(供 governance_service / account_authority issuer 使用)。
   - SOL-ORG-05：admission 只在 active verified 关系与显式 target-scoped organization policy 同时成立时应用额外 deny；
     不恢复已删除的 effective-policy operation、inheritance mode 或 merge DTO。
   - SOL-ORG-06 / TBY-ORG-*:directory verified badge 读同一关系语义。
   - COA-ORG-02/03/04:coauth organization bootstrap / delegation 签发面。
-- 在上述 soland / coauth / flagon 端点落地前,对应 e2e 以 `test.fixme` + `@blocking-on` 标注(见 `e2e/tests/governance/organization-policy.spec.ts`)。scenario 文档(本文件)与 `ak.realm.organization` 的 payload/向量回归(`tests/fixtures/event-kind-payload-coverage-fixture.json`、`tests/fixtures/realm_organization_statement_negative_vectors.json`、`tests/realm_organization_statement_negative.rs`)已经实做并由 SDK validator 消费。
+- 在上述 coland / coauth / flagon 端点落地前,对应 e2e 以 `test.fixme` + `@blocking-on` 标注(见 `e2e/tests/governance/organization-policy.spec.ts`)。scenario 文档(本文件)与 `ak.realm.organization` 的 payload/向量回归(`tests/fixtures/event-kind-payload-coverage-fixture.json`、`tests/fixtures/realm_organization_statement_negative_vectors.json`、`tests/realm_organization_statement_negative.rs`)已经实做并由 SDK validator 消费。
 
 ## 总耗时预估
 

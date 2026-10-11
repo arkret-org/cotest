@@ -13,7 +13,7 @@
 //!   Before the ruling `join_policy` was not a declared component, so the closed def rejected the
 //!   very write `join-policy.md` §3 mandates.
 //!
-//! Neither needs a live soland: the sealing entry, the receiver dispatch and
+//! Neither needs a live coland: the sealing entry, the receiver dispatch and
 //! the bundle payload type are the shared SDK surfaces both sides compile
 //! against, so a drift between them is a drift here.
 

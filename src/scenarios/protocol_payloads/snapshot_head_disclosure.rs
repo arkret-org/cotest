@@ -61,10 +61,10 @@ pub async fn snapshot_author(server_name: &str, actor: &str) -> Result<SnapshotA
     let server = spawn_with_harness_account_authority(
         server_name,
         &[
-            ("SOLAND_ACCOUNT_AUTHORITY_URL", origin.as_str()),
-            ("SOLAND_DID_RESOLVER_ALLOW_METHODS", "web,webvh,key,uuid"),
+            ("COLAND_ACCOUNT_AUTHORITY_URL", origin.as_str()),
+            ("COLAND_DID_RESOLVER_ALLOW_METHODS", "web,webvh,key,uuid"),
             (
-                "SOLAND_SESSION_GRANT_INTROSPECTION_URL",
+                "COLAND_SESSION_GRANT_INTROSPECTION_URL",
                 introspection.as_str(),
             ),
         ],
@@ -525,7 +525,7 @@ pub fn window_positions(
         .collect()
 }
 
-/// Fresh Soland + real PostgreSQL: an Account frame filtered to one Realm with
+/// Fresh Coland + real PostgreSQL: an Account frame filtered to one Realm with
 /// a limited `window_limit` names a committed-prefix basis only when `/head`
 /// already issued the exact snapshot at the window's anchor; that
 /// `snapshot_ref` reads back by reference as the same signed object. Without

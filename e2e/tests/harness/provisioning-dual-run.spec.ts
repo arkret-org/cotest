@@ -13,7 +13,7 @@
 // produces, which is the question that gates migrating consumers off it.
 
 import { registerCoauthPasswordAccount } from "../../helpers/coauth-register";
-import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
+import { coauthBaseUrl, colandBaseUrl } from "../../helpers/env";
 import { expect, test } from "../../helpers/provisioning-fixture";
 import { selfPathGrantHeaders } from "../../helpers/session-grant-dpop";
 
@@ -82,7 +82,7 @@ test.describe("provisioning dual run @fully-implemented", () => {
     // `account/viewer`, not `account/describe`: the latter answers with the
     // service description and resolves no session, so both paths would have
     // "passed" it without either grant being honoured.
-    const legacyUrl = `${solandBaseUrl()}/_arkret/self/account/viewer`;
+    const legacyUrl = `${colandBaseUrl()}/_arkret/self/account/viewer`;
     const legacyResponse = await request.get(legacyUrl, {
       headers: {
         ...selfPathGrantHeaders({

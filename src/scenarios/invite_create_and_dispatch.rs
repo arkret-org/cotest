@@ -3,7 +3,7 @@
 //! delivered to a same-Station invitee through `ak.self.invites.command.dispatch.v1`
 //! (`zh/sync/invite-addressing.md` §7).
 //!
-//! The scenario proves, against a live Soland:
+//! The scenario proves, against a live Coland:
 //!
 //! 1. the create is accepted with a RealmCommit on the Realm stream;
 //! 2. dispatching that committed Event lands one delivery entry for the Invite in the invitee's
@@ -43,8 +43,8 @@ pub struct InviteStation {
 
 impl InviteStation {
     pub async fn spawn(name: &str) -> Result<Self> {
-        let database = spawn_ephemeral_postgres_for("COTEST_SOLAND_DATABASE_URL")?.context(
-            "the invite scenarios need PostgreSQL; set COTEST_SOLAND_DATABASE_URL or make Docker available",
+        let database = spawn_ephemeral_postgres_for("COTEST_COLAND_DATABASE_URL")?.context(
+            "the invite scenarios need PostgreSQL; set COTEST_COLAND_DATABASE_URL or make Docker available",
         )?;
         let coauth = MockCoauthIntrospectionServer::spawn_with_internal_secret(
             HARNESS_INTERNAL_AUTHORITY_SECRET,

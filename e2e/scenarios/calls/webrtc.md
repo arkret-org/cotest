@@ -18,7 +18,7 @@ WebRTC 信令 + media 层的端到端:alice 主动 1:1 call bob → mute / scree
 
 ## 拓扑
 
-- 1 × soland(含 media service endpoint + ICE config endpoint)+ 1 × coauth
+- 1 × coland(含 media service endpoint + ICE config endpoint)+ 1 × coauth
 - (sub-test)外置 TURN server(可 mock 或 coturn 容器)
 
 ## Actors
@@ -40,7 +40,7 @@ WebRTC 信令 + media 层的端到端:alice 主动 1:1 call bob → mute / scree
    - 调 `POST /_arkret/self/rtc/ice-config?call_id=<callId>&device_id=<alice_dev>` 拿 ICE config:`{ stun_servers, turn_servers: [{ url, username: "pairwise-pseudonym", credential, expires_at }] }`(spec §6)
 3. alice 客户端用浏览器 RTCPeerConnection 创建 offer SDP
 4. inkson 发 `ak.call.signal`(ephemeral)`{ kind: "invite", offer_sdp, call_id, target: bob.did }`
-5. soland Sync Service 路由该 signal 到 bob 的 to-device 队列
+5. coland Sync Service 路由该 signal 到 bob 的 to-device 队列
 6. bob inkson 收到 → UI 弹 "Incoming call from alice"(`incoming-call-toast` testid)
 7. bob 点 "Accept",创建 RTCPeerConnection 应答
 8. inkson 发 `ak.call.signal { kind: "answer", answer_sdp }`
@@ -78,7 +78,7 @@ WebRTC 信令 + media 层的端到端:alice 主动 1:1 call bob → mute / scree
     - 校验 carol 是否持 `call.record` capability(spec §5)
     - 提交 `ak.call.recording.start`,随后用 `ak.call.state` 推进
       `recording_state`
-28. soland 校验 `recording_policy = "allow"` + carol 的 capability → 接受
+28. coland 校验 `recording_policy = "allow"` + carol 的 capability → 接受
 29. 后端把 recording metadata 写入 Call Morph:`recording_started_by: carol.did`,`recording_blob_ref: <blob_id>`
 30. 断言:alice/bob/carol UI 三方都显示"🔴 Recording in progress"(`recording-indicator` testid)
 
@@ -86,7 +86,7 @@ WebRTC 信令 + media 层的端到端:alice 主动 1:1 call bob → mute / scree
 
 31. 另起一个 group call,这次 Call Morph 设 `recording_policy: "none"`
 32. carol 点 "Start recording"
-33. inkson 应在本地禁用按钮(预防性);若 bypass,soland 反应 `failed_precondition`、`reason_code = "recording_policy_violation"`
+33. inkson 应在本地禁用按钮(预防性);若 bypass,coland 反应 `failed_precondition`、`reason_code = "recording_policy_violation"`
 34. 断言:UI 报错 "Recording not permitted in this call"
 
 ### Phase F — Mid-call ICE credential refresh
@@ -121,8 +121,8 @@ WebRTC 信令 + media 层的端到端:alice 主动 1:1 call bob → mute / scree
 - **spec wire**:通话信令走 `POST /_arkret/self/signal`，密文内承载
   `ak.call.signal`;持久状态走 `ak.call.state` / `ak.call.recording.start`;
   媒体凭证走 `/_arkret/self/rtc/ice-config` 与 `/_arkret/self/rtc/token`。
-  soland-private WebRTC / calls surfaces 已退役,本场景不得依赖。
-- **soland/cotest 覆盖**:服务端覆盖 Signal 路由、TTL、
+  coland-private WebRTC / calls surfaces 已退役,本场景不得依赖。
+- **coland/cotest 覆盖**:服务端覆盖 Signal 路由、TTL、
   capability guard、self-device filtering、ban 后 token 拒绝、LiveKit token
   claim;cotest 覆盖 `ak.call.signal` receiver vectors 与 `/_arkret/self/rtc/*`
   realtime policy guards。

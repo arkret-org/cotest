@@ -4,7 +4,7 @@
 //! durable owners fixed by key-management §3.6.1: the request owner retains an
 //! exact pending intent until it observes Station durable acceptance, while
 //! the Station alone owns `awaiting_accepted_frontier -> active`.  A live
-//! response-loss test still needs a Soland Agent-pair post-commit breakpoint;
+//! response-loss test still needs a Coland Agent-pair post-commit breakpoint;
 //! this oracle pins the state transitions that such a test must observe.
 
 use std::collections::BTreeMap;

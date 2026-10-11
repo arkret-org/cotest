@@ -16,7 +16,7 @@
 //!   bytes fails here;
 //! * the declared proof metadata is re-bound with the SDK's proof-binding bytes, so a proof that
 //!   names another digest, time or context is rejected;
-//! * every `replica_classification_cases` row is run through soland's shipped
+//! * every `replica_classification_cases` row is run through coland's shipped
 //!   [`classify_account_status_replica_append`] — the receiver implementation itself — and
 //!   cross-checked against the normative decision table in
 //!   `registry/account-status-replica-decision-table.json`;
@@ -35,11 +35,11 @@ use arkret_wire::{
     SchemaId,
 };
 use chrono::{DateTime, Utc};
-use serde_json::{Map, Value};
-use soland_storage::{
+use coland_storage::{
     AccountStatusReplicaAppend, AccountStatusReplicaConflictKind,
     classify_account_status_replica_append,
 };
+use serde_json::{Map, Value};
 
 use super::{
     canonical_json, fixture_runner_entrypoint, load_artifact_json, load_fixture_value,

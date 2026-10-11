@@ -247,7 +247,7 @@ pub(crate) async fn run_with_signal(include_signal: bool) -> Result<()> {
     )
     .await?
     else {
-        return skip_or_fail(GROUP, "prebuilt Soland unavailable");
+        return skip_or_fail(GROUP, "prebuilt Coland unavailable");
     };
     let x = group.server(0);
     let y = group.server(1);

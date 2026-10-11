@@ -7,7 +7,7 @@
 //   - models/morph.md §2-§4 (postmortem document morph)
 
 import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
-import { solandBaseUrl } from "../../helpers/env";
+import { colandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
   accountActorId,
@@ -20,7 +20,7 @@ import {
   retypeEventDerivedId,
   typedId,
   type StreamScanOutcome,
-} from "../../helpers/soland-api";
+} from "../../helpers/coland-api";
 import {
   assertJointStackNotRequired,
   ensureRegistered,
@@ -345,7 +345,7 @@ async function scanRealmEventsWithDpop(
   session: DpopUserSession,
   realmId: string,
 ): Promise<Record<string, unknown>> {
-  const url = `${solandBaseUrl()}/_arkret/self/streams/scan`;
+  const url = `${colandBaseUrl()}/_arkret/self/streams/scan`;
   const streamRef = { kind: "realm", realm_id: realmId };
   const response = await request.post(url, {
     data: canonicalJson({ realm_id: realmId, stream_ref: streamRef, after_position: null, limit: 100 }),

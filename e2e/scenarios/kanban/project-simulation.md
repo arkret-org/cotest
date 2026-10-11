@@ -17,7 +17,7 @@ kanban/end-to-end 的多用户进阶版:三个用户(alice 项目经理 + bob/ca
 
 ## 拓扑
 
-- 1 × soland + 1 × coauth
+- 1 × coland + 1 × coauth
 
 ## Actors
 
@@ -82,7 +82,7 @@ kanban/end-to-end 的多用户进阶版:三个用户(alice 项目经理 + bob/ca
 26. 测试 harness 用两个 alice session(等价于 alice 在两台设备并发):
     - 设备 1:alice 把 Card 2 从 carol 改成 bob
     - 设备 2(同时):alice 把 Card 2 从 carol 改成 alice 自己
-27. 两条 `ak.relation.create` 并发到 soland
+27. 两条 `ak.relation.create` 并发到 coland
 28. 按 spec §6:relation profile `on_conflict = deterministic_winner` → reducer 仅接受一条(HLC 大者赢),另一条 rejected
 29. 断言:Card 2 的最终 assignee 是 deterministic 的(测试可以读 HLC 知道),不出现两个 active assignment
 
@@ -116,7 +116,7 @@ kanban/end-to-end 的多用户进阶版:三个用户(alice 项目经理 + bob/ca
 
 - **Space 生命周期**:使用 `ak.space.archive`，父归档不隐式改变子列表或卡片生命周期。Strand `fields.status` transition rules 已由 `ak.strand.update` reducer preflight 覆盖(todo → in_progress → done、investigating → mitigated → resolved)
 - **inkson 缺口**:assignment UI、due date picker、archive board 按钮、逾期红色标记、`assigned-to-actor` testid
-- **测试侧难点**:Phase G 需要并发提交,Playwright 的 single-context 比较难;可能要用 fetch API 直接打 soland 模拟双设备
+- **测试侧难点**:Phase G 需要并发提交,Playwright 的 single-context 比较难;可能要用 fetch API 直接打 coland 模拟双设备
 
 ## 总耗时预估
 

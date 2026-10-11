@@ -6,7 +6,7 @@
 
 枚举 Complement `tests/` 下全部 122 个 `*_test.go`，其中 107 个文件含业务测试，共 211 个顶层 `TestX(t *testing.T)`；不把 `TestMain`、动态 `t.Run` 展开项算作顶层测试。按测试主题筛选，并阅读下表所列重点场景的操作与断言。这里不是“211 个用例全部逐行证明等价”的声明。
 
-对照 Cotest 的 Playwright 源码、`api-only-migration.json`、Rust `tests/`/`src/scenarios/`/`src/conformance/`，而非只搜索相似文件名。原 `complement-joint-gap-map.md` 主要覆盖三站 P0，本次补上客户端同步、账号、设备、媒体和负向授权。**代码存在、在 joint lane 中被选择、实机执行通过，是三个不同状态。** 原生 harness / fixture 证据不能直接算成 Coauth + 独立 Soland + 客户端的完整产品闭环。
+对照 Cotest 的 Playwright 源码、`api-only-migration.json`、Rust `tests/`/`src/scenarios/`/`src/conformance/`，而非只搜索相似文件名。原 `complement-joint-gap-map.md` 主要覆盖三站 P0，本次补上客户端同步、账号、设备、媒体和负向授权。**代码存在、在 joint lane 中被选择、实机执行通过，是三个不同状态。** 原生 harness / fixture 证据不能直接算成 Coauth + 独立 Coland + 客户端的完整产品闭环。
 
 最值得继续投入的是：同步窗口与当前态、断线后的 durable 重放、重启后的投递与确认、成员退出后的旧游标授权、并发 KeyPackage claim。创建/发送/接收等 happy path 已很多，再复制一份价值较低。
 
@@ -133,7 +133,7 @@ R2 已实现 limited/window-start 基础，控制状态过滤与完整长缺口�
 
 原长轮询用例保留。所有用例各自注册，不使用 serial 级联依赖；任一失败不会把其余独立用例标成未执行。使用真实 Coauth onboarding + DPoP grant；共享 account-stream helper 为每次实际 GET URL 生成 DPoP headers。未增加 `test.skip`/`test.fixme` 或放宽错误集合。当前文件仍由 `api-only-migration.json.pending_migration` 纳入 `joint-api`，SDK account-stream client 可用后应迁回 Rust。
 
-发现的源码偏差：`client-sync.md` §2/§11 的 account filter 命名是 `realms/event_kinds/not_event_kinds`；SDK `SyncFilter` 当前序列化字段为 `realm_ids/event_types/not_event_types`。Soland `account_subscribe_query` 直接反序列化该类型，snapshot 仅从 `.realm_ids` 取 Realm selector，未知 `realms` 落入 extra。旧长轮询测试使用同样的 `realm_ids`，无法发现此问题。本轮用规范 `realms`，不建立兼容 alias；该缺陷的端到端结果须以运行记录为准。
+发现的源码偏差：`client-sync.md` §2/§11 的 account filter 命名是 `realms/event_kinds/not_event_kinds`；SDK `SyncFilter` 当前序列化字段为 `realm_ids/event_types/not_event_types`。Coland `account_subscribe_query` 直接反序列化该类型，snapshot 仅从 `.realm_ids` 取 Realm selector，未知 `realms` 落入 extra。旧长轮询测试使用同样的 `realm_ids`，无法发现此问题。本轮用规范 `realms`，不建立兼容 alias；该缺陷的端到端结果须以运行记录为准。
 
 ## 验证
 
@@ -153,7 +153,7 @@ python scripts/check_api_only_migration.py
 
 Live 使用 `run-joint-e2e.ps1 -RunProfile joint-api -StartCoauth -StartMocks -Grep 'account stream' -ForbidSkippedTests -KeepRuns 0`；Docker 未启动时改用 runner 已支持的两个隔离 local PostgreSQL 数据库，不绕过环境门禁、freshness 或标准认证链。
 
-2026-09-08 定向 live 已完成，运行目录为 `artifacts/runs/joint-e2e/20260908-130445-joint-api-selection`，证据见其 `summary.md` / `junit.xml`。真实 Coauth + Soland provisioning 前置 7/7 通过；账号流 8 条全部执行，4 通过、4 失败，无 skip。新增 7 条中 4 通过、3 失败：
+2026-09-08 定向 live 已完成，运行目录为 `artifacts/runs/joint-e2e/20260908-130445-joint-api-selection`，证据见其 `summary.md` / `junit.xml`。真实 Coauth + Coland provisioning 前置 7/7 通过；账号流 8 条全部执行，4 通过、4 失败，无 skip。新增 7 条中 4 通过、3 失败：
 
 | 测试 | 实际结果 |
 | --- | --- |
@@ -166,14 +166,14 @@ Live 使用 `run-joint-e2e.ps1 -RunProfile joint-api -StartCoauth -StartMocks -G
 | not_event_kinds 排除消息 | 失败：排除 `ak.message.create` 后仍返回该消息；正向允许分支已通过 |
 | 原有 quiet long-poll | 失败：期望无相关数据时 `frontier`，实际得到 `delta`；用例期间创建了 filter 外 Realm，与 Realm filter 无效相符，尚未独立验证后续 wake 延迟 |
 
-这次运行证明新测试能捕获当前实现偏差，不表示 account sync 整体通过，也不是浏览器产品链或多站联邦覆盖。未修改 SDK/Soland 来消除失败，后续修复后需按相同选择复验。
+这次运行证明新测试能捕获当前实现偏差，不表示 account sync 整体通过，也不是浏览器产品链或多站联邦覆盖。未修改 SDK/Coland 来消除失败，后续修复后需按相同选择复验。
 
 ## 后续修复与复验
 
 用户要求继续完成剩余验收后，已在 owning 仓修改以下行为：
 
 - SDK SyncFilter 序列化与 digest 使用 `realms/event_kinds/not_event_kinds`；HTTP client 按 `filter.event_kinds/filter.not_event_kinds` 发送。增加 wire 字段读取与摘要一致性回归。
-- Soland 读取点分隔 deepObject query，与 SDK HTTP client 一致。未知字段、重复 scalar、无效类型和 Realm ID 返回 `param_invalid`；不再将失败的 filter 反序列化当作无 filter。Cotest helper 同步改用规范参数编码。
+- Coland 读取点分隔 deepObject query，与 SDK HTTP client 一致。未知字段、重复 scalar、无效类型和 Realm ID 返回 `param_invalid`；不再将失败的 filter 反序列化当作无 filter。Cotest helper 同步改用规范参数编码。
 - snapshot 在权限检查后应用 kind allow/deny，deny 优先；独立的当前控制基线保持。游标记录过滤前位置，防止同一批被排除事件反复重放。
 - 每 Realm timeline 仅保留 limit 内最新事件；截断标记 `limited=true, preview_only=true`。当前代码没有重建首事件的 seal basis / 因果闭包，因此移除截断帧中原本取自当前 metadata 的 `state_at_window_start`，不作错误的历史状态声明。
 - 新增两条 joint-api：filter 集合排序/重复项变化不改变 cursor scope；非法 filter 拒绝后正常 initial 仍可使用。原 kind 测试补充 allow 不命中与 deny 优先分支。账号流文件现有 10 条。
@@ -181,17 +181,17 @@ Live 使用 `run-joint-e2e.ps1 -RunProfile joint-api -StartCoauth -StartMocks -G
 
 首次原生实际运行 18 条（14 新增、4 原有）为 15 通过、3 失败，进一步捕获并修复：
 
-- `encoding.md` §8.3 规定 barrier cursor 用于 stream context 必须 `param_invalid`；Soland events-query parser 原将其归类为 `cursor_integrity_invalid`，现改为参数错误。真实 handle 查表绑定不符仍归类 integrity。
+- `encoding.md` §8.3 规定 barrier cursor 用于 stream context 必须 `param_invalid`；Coland events-query parser 原将其归类为 `cursor_integrity_invalid`，现改为参数错误。真实 handle 查表绑定不符仍归类 integrity。
 - `client-sync.md` §10.1 规定跨账号/设备 ACK 返回 `param_invalid` + reason `invalid_ack_token`。原 handler 只将其写入 detail，现附标准 reason code；token 原样匹配，拒绝空值或超过 1024 字节，不再 trim 后使用。
 
-SDK filter 两条单元测试及 HTTP 参数编码一条单元测试、TypeScript、nightly format、10 条选择与覆盖清单检查均通过。修复后 joint-api run `artifacts/runs/joint-e2e/20260908-145306-joint-api-selection`：**10/10 通过，0 skip**，真实 Coauth + Soland provisioning **7/7 通过**，runner status success。初轮四个账号流失败均已复验通过。该结果仍只代表定向 API 合同，不扩大为完整浏览器/多站联邦通过声明。
+SDK filter 两条单元测试及 HTTP 参数编码一条单元测试、TypeScript、nightly format、10 条选择与覆盖清单检查均通过。修复后 joint-api run `artifacts/runs/joint-e2e/20260908-145306-joint-api-selection`：**10/10 通过，0 skip**，真实 Coauth + Coland provisioning **7/7 通过**，runner status success。初轮四个账号流失败均已复验通过。该结果仍只代表定向 API 合同，不扩大为完整浏览器/多站联邦通过声明。
 
 第二轮原生结果为 Event 幂等 4/4、设备队列 6/6、backfill 7/8。用途混用测试继续揭露了反方向问题：stream cursor 放入 `X-Arkret-Wait-For` 时 header 被接受但查询忽略它。补充修复公共 header 的 barrier purpose 检查；Events QUERY 现在解析 handle、验证账号/设备绑定并等待目标投影，超时返回 `temporarily_unavailable` 和当前 frontier。该原生测试增加另一个拥有合法读取请求的账号借用 barrier 的负例，防止只做语法检查。
 
-按用户随后要求，已 fetch 相关规范、SDK、服务与客户端仓库，并将 Soland 快进至 `c0d1b988`、Cotest 快进至 `2bc821c6` 后重放本地修改。唯一冲突为生成的 catalog，已从更新后源码重新生成，远端其它测试更新保留。上述同步前运行不替代新基线验证。
+按用户随后要求，已 fetch 相关规范、SDK、服务与客户端仓库，并将 Coland 快进至 `c0d1b988`、Cotest 快进至 `2bc821c6` 后重放本地修改。唯一冲突为生成的 catalog，已从更新后源码重新生成，远端其它测试更新保留。上述同步前运行不替代新基线验证。
 
-新基线最终验证（2026-09-08 15:23）：Soland 构建通过（3m30s），三个原生 target **18/18 通过**（Event 幂等 4、backfill 8、device 6），包含全部 14 条新增原生用例与强化的 cross-account barrier 断言。SDK **3/3 通过**（wire/digest 2 + HTTP 编码 1）；TypeScript、API-only gate、coverage/evidence freshness、diff 检查通过。
+新基线最终验证（2026-09-08 15:23）：Coland 构建通过（3m30s），三个原生 target **18/18 通过**（Event 幂等 4、backfill 8、device 6），包含全部 14 条新增原生用例与强化的 cross-account barrier 断言。SDK **3/3 通过**（wire/digest 2 + HTTP 编码 1）；TypeScript、API-only gate、coverage/evidence freshness、diff 检查通过。
 
-最新 joint-api run `artifacts/runs/joint-e2e/20260908-151819-joint-api-selection`：**10/10 通过、0 skip**，真实 Coauth + Soland provisioning **7/7 通过**；`summary.md` / `junit.xml` 为最终证据，runner exit 0。因此本次累计 23 条新增 Cotest 用例及对应 5 条旧用例已在重放远端更新后通过定向验证。原生详细输出见工作区 `.codex-logs/complement-replayed-native-tests-20260908.log`。
+最新 joint-api run `artifacts/runs/joint-e2e/20260908-151819-joint-api-selection`：**10/10 通过、0 skip**，真实 Coauth + Coland provisioning **7/7 通过**；`summary.md` / `junit.xml` 为最终证据，runner exit 0。因此本次累计 23 条新增 Cotest 用例及对应 5 条旧用例已在重放远端更新后通过定向验证。原生详细输出见工作区 `.codex-logs/complement-replayed-native-tests-20260908.log`。
 
-原生复验须设置 `SOLAND_BIN` 为共享 `.shared-target/debug/soland.exe`（以 `conformance-harness` feature 构建），并设置 `COTEST_SOLAND_DATABASE_URL` 为可创建隔离数据库的本机 PostgreSQL DSN。任务记录归档到 `arkret-work/tasks/impl-done/2026-09-08-1322-complement-test-coverage-expansion.md`；表中其它待设计场景仍不计入已通过覆盖。
+原生复验须设置 `COLAND_BIN` 为共享 `.shared-target/debug/coland.exe`（以 `conformance-harness` feature 构建），并设置 `COTEST_COLAND_DATABASE_URL` 为可创建隔离数据库的本机 PostgreSQL DSN。任务记录归档到 `arkret-work/tasks/impl-done/2026-09-08-1322-complement-test-coverage-expansion.md`；表中其它待设计场景仍不计入已通过覆盖。

@@ -640,7 +640,7 @@ pub async fn cross_station_two_authorized_devices_race_founding() -> Result<()> 
     else {
         return skip_or_fail(
             "direct-conversation-two-device-race",
-            "prebuilt Soland unavailable",
+            "prebuilt Coland unavailable",
         );
     };
     let founder_server = group.server(0);
@@ -792,7 +792,7 @@ pub async fn cross_station_glare_founds_direct_conversation() -> Result<()> {
     else {
         return skip_or_fail(
             "direct-conversation-glare-founding",
-            "prebuilt Soland unavailable",
+            "prebuilt Coland unavailable",
         );
     };
     let first = Member::provision(group.server(0), &coauth, "dc-glare-a", ALICE_DEVICE).await?;
@@ -1027,7 +1027,7 @@ async fn run(
     }
     let Some(group) = TestServerGroup::try_multi_external_with_node_envs(GROUP, &node_envs).await?
     else {
-        return skip_or_fail(GROUP, "prebuilt Soland unavailable");
+        return skip_or_fail(GROUP, "prebuilt Coland unavailable");
     };
     let server = group.server(0);
     let peer_server = group.server(usize::from(cross_station));

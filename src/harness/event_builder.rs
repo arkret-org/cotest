@@ -209,7 +209,7 @@ pub async fn dev_login(server: &ArkretServer, actor: &str, device_id: &str) -> R
     let login = expect_json(
         server
             .http()
-            .post(server.url("/_soland/gate/auth/dev-login"))
+            .post(server.url("/_coland/gate/auth/dev-login"))
             .json(&crate::harness::NonProtocolTestBody::new(json!({
                 "actor": actor_id,
                 "device_id": device_id,
@@ -1125,11 +1125,11 @@ pub(crate) fn event_envelope_with_causal_refs_for_device(
 mod realm_bootstrap_tests {
     use super::*;
 
-    const ACTOR: &str = "did:webvh:z6mkfixture:alice.soland.local";
+    const ACTOR: &str = "did:webvh:z6mkfixture:alice.coland.local";
     const ACTOR_CORE: &str = "ak:did_core:webvh:z6mkfixture";
-    const SERVICE: &str = "ak:did_core:web:service.soland.local";
+    const SERVICE: &str = "ak:did_core:web:service.coland.local";
     const DEFAULT_STATION: &str = "ak:did_core:web:principal.example";
-    const SERVICE_FULL: &str = "did:web:service.soland.local";
+    const SERVICE_FULL: &str = "did:web:service.coland.local";
     const SALT: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
     fn draft(extra: Value) -> RealmBootstrapDraft {
@@ -1170,7 +1170,7 @@ mod realm_bootstrap_tests {
 
     #[test]
     fn registered_event_signers_are_scoped_by_actor_and_device() {
-        const MULTI_DEVICE_ACTOR: &str = "did:webvh:z6mkmultidevice:alice.soland.local";
+        const MULTI_DEVICE_ACTOR: &str = "did:webvh:z6mkmultidevice:alice.coland.local";
         const DEVICE_ONE: &str = "ak:device:01904100-0000-7000-8000-0000000000d1";
         const DEVICE_TWO: &str = "ak:device:01904100-0000-7000-8000-0000000000d2";
         let service = DidCoreId::new(SERVICE.to_owned()).expect("valid service id");
@@ -1206,7 +1206,7 @@ mod realm_bootstrap_tests {
     #[test]
     fn ordinary_bootstrap_uses_the_registered_order_and_explicit_creator_member() {
         let (_, events) = build(draft(json!({
-            "alias": "general:service.soland.local",
+            "alias": "general:service.coland.local",
             "alias_authority_service_did": SERVICE_FULL
         })));
         let kinds: Vec<_> = events.iter().map(|event| event.kind.as_str()).collect();

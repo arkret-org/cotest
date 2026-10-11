@@ -2,7 +2,7 @@
 //!
 //! Each submodule is single-responsibility:
 //! - [`schema`] — `/_arkret/self/schemas` registry lifecycle and visibility.
-//! - [`policy`] — `/_soland/self/policies` document shape, decisions, and ownership.
+//! - [`policy`] — `/_coland/self/policies` document shape, decisions, and ownership.
 //! - [`typing`] — `/_arkret/self/typing` + `/_arkret/self/push_rules` realtime strand.
 //! - [`webrtc`] — `/_arkret/self/rtc/*` media surface and guards.
 //!

@@ -1,11 +1,11 @@
 //! T5.3 (2026-05-20) — canonical-JSON convergence vectors.
 //!
-//! Every Arkret service (coauth / soland / inkson / floria) now
+//! Every Arkret service (coauth / coland / inkson / floria) now
 //! routes canonical-JSON encoding and `payload_digest` computation through
 //! the SDK's `arkret_canonical` module and the
 //! `arkret_signatures::EventProofBuilder` facade. This test pins a
 //! handful of fixture payloads representing the three shapes that
-//! matter on the wire — coauth `handle_claim`, soland event-envelope
+//! matter on the wire — coauth `handle_claim`, coland event-envelope
 //! payload, did:webvh log update — and asserts every entry point
 //! produces the same `sha256:<hex>` digest as the SDK's
 //! `canonical_sha256`.
@@ -54,7 +54,7 @@ fn vectors() -> Vec<CanonicalVector> {
                 "handle": "alice:arkret.example",
                 "handle_aliases": ["acct:alice@arkret.example"],
                 "issuer_id": "ak:did_core:web:coauth.example",
-                "audience": "https://soland.example/_arkret",
+                "audience": "https://coland.example/_arkret",
                 "issued_at": "2026-05-20T00:00:00.000Z",
                 "expires_at": "2026-05-20T00:05:00.000Z",
             }),
@@ -69,9 +69,9 @@ fn vectors() -> Vec<CanonicalVector> {
             expected_digest: "sha256:7c87e0fa622e365440d5d79bf7bb1fdded09f017dfa7aedc65a0f0288b988e73",
         },
         CanonicalVector {
-            vector_id: "ak.cotest_vector.canonical_hash.soland_event_envelope.v1",
-            label: "soland event envelope payload",
-            // The shape soland hashes inside `validate_event_proofs` after
+            vector_id: "ak.cotest_vector.canonical_hash.coland_event_envelope.v1",
+            label: "coland event envelope payload",
+            // The shape coland hashes inside `validate_event_proofs` after
             // stripping `proofs` / `unsigned` from the on-wire envelope.
             payload: json!({
                 "actor_id": "ak:did_core:web:alice.example",
@@ -135,7 +135,7 @@ fn vectors() -> Vec<CanonicalVector> {
                 "handle": "alice:arkret.example",
                 "handle_aliases": ["acct:alice@arkret.example"],
                 "issuer_id": "ak:did_core:webvh:zcotestcoauthscid0000000000000000",
-                "audience": "https://soland.example/_arkret",
+                "audience": "https://coland.example/_arkret",
                 "issued_at": "2026-05-20T00:00:00.000Z",
                 "expires_at": "2026-05-20T00:05:00.000Z",
             }),
@@ -240,7 +240,7 @@ fn canonical_bytes_are_stable_across_key_permutations() {
 
 /// Every service ultimately goes through one of two SDK entry points:
 /// the low-level `arkret_canonical::canonical_sha256` (used by
-/// `coauth::handlers::arkret::canonical_json_sha256` and soland's
+/// `coauth::handlers::arkret::canonical_json_sha256` and coland's
 /// `validate_event_proofs`), or
 /// the high-level `arkret_signatures::EventProofBuilder` (used by
 /// inkson / floria when emitting a fresh detached-JWS proof). Both

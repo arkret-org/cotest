@@ -129,7 +129,7 @@ pub async fn run_evidence() -> Result<Option<(Vec<CaseExecutionResult>, Vec<Case
     )
     .await?
     else {
-        skip_or_fail(GROUP, "prebuilt Soland unavailable")?;
+        skip_or_fail(GROUP, "prebuilt Coland unavailable")?;
         return Ok(None);
     };
     let server = group.server(0);

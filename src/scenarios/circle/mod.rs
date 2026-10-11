@@ -3,7 +3,7 @@
 //! Each module exposes one async `..._run()` function that returns
 //! `Result<()>`. The scenarios deliberately drive the SDK types directly
 //! (no live server) so the suite can run inside `cargo test --workspace`
-//! without bootstrapping soland / coauth / floria. Cross-project joint
+//! without bootstrapping coland / coauth / floria. Cross-project joint
 //! exercises live under [`crate::scenarios::full_stack_e2e`] and
 //! [`crate::scenarios::joint_service_smoke`] and will pick up the Circle
 //! strands in phase P5.

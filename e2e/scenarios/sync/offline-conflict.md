@@ -12,7 +12,7 @@
 
 ## 当前步骤与断言
 
-1. 同站 Alice/Bob 通过真实 Coauth/Soland API fixture 注册与加入；Bob 首次读取没有目标消息。Alice 写入后，Bob 再读包含目标消息；三条消息的回读顺序与接受顺序一致。
+1. 同站 Alice/Bob 通过真实 Coauth/Coland API fixture 注册与加入；Bob 首次读取没有目标消息。Alice 写入后，Bob 再读包含目标消息；三条消息的回读顺序与接受顺序一致。
 2. Profile succession 明确向 Bob 签发 `ak.realm.profile` grant，field_access 覆盖完整 profile。Alice 写 title A，Bob 随后写 B；scan 中顺序为[A,B]，Bob 浏览器的 Realm profile 输入显示 current B。不存在多头合并或通用 repair Event。
 3. 双站回补要求 runner `-ServerCount 2`，每站独立身份与 PostgreSQL，DualCoauth、mock email 与 TLS 保留。Realm 明确 `since_join`，Alice 在 Bob join 前接受默认 discussion。
 4. Bob 从自身 server2 的受保护邀请通知取得 locator，经本站 prepare、自签接受、提交本站，取得治理 Station covering Commit。随后在 Bob 本站等待包含完整 server2 AccountId 的获准成员 current；只允许200或暂未出现的404，其它错误致命。

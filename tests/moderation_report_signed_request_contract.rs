@@ -126,7 +126,7 @@ fn sdk_and_cotest_keep_full_proof_urls_and_core_reporter_ids() {
 
 #[test]
 fn service_must_validate_and_forward_instead_of_authoring_a_report_event() {
-    let service = read("soland/crates/http/src/routing/interop/moderation.rs");
+    let service = read("coland/crates/http/src/routing/interop/moderation.rs");
     let handler = source_between(
         &service,
         "async fn moderation_report(",

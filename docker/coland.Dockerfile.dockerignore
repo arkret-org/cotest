@@ -15,8 +15,8 @@
 !coauth/**
 !cotest/
 !cotest/**
-!soland/
-!soland/**
+!coland/
+!coland/**
 **/.git
 **/target
 **/node_modules

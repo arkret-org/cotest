@@ -476,7 +476,7 @@ fn argon2id_kdf_meets_floor(kdf: &Value) -> Result<bool> {
 }
 /// F-1 — recovery bridge full-chain state-machine legality.
 ///
-/// Spec: services/coauth-recovery.md + services/soland-recovery-ticket.md +
+/// Spec: services/coauth-recovery.md + services/coland-recovery-ticket.md +
 /// services/restore-executor.md. The chain has 5 ordered steps:
 /// principal_cache_lookup → recovery_action_proof → recovery_ticket_mint →
 /// restore_execute → final_state_observe. Each vector pins one step's

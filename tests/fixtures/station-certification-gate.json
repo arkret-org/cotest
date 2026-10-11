@@ -3,10 +3,10 @@
   "profile": "ak.profile.station_certification_gate.v1",
   "cases": [
     {
-      "name": "soland_reports_station_not_certified_with_signed_retry_boundary",
+      "name": "coland_reports_station_not_certified_with_signed_retry_boundary",
       "expect": "not_certified",
       "describe": {
-        "service": "soland",
+        "service": "coland",
         "service_kind": "station",
         "supported_profiles": [
           "ak.profile.station_events_api.v1"

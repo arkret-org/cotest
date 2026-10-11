@@ -9,7 +9,7 @@ import {
   type APIRequestContext,
   type APIResponse,
 } from "@playwright/test";
-import { type SolandKey, solandBaseUrl, solandServiceId } from "./env";
+import { type ColandKey, colandBaseUrl, colandServiceId } from "./env";
 import {
   accountActorId,
   eventPrincipalId,
@@ -38,7 +38,7 @@ import {
   type InviteDeliveryRequestBodyBodyBody,
   uuidV7,
   wireErrCode,
-} from "./soland-api";
+} from "./coland-api";
 import type { JointUser } from "./users";
 import type { ContactPeer, InviteObject } from "./generated/spec-wire-objects";
 
@@ -136,7 +136,7 @@ export async function grantInviteConsentArkret(
   token: string,
   holder: JointUser,
   peerId: string,
-  opts: { server?: SolandKey; peerStationId?: string } = {},
+  opts: { server?: ColandKey; peerStationId?: string } = {},
 ): Promise<InviteConsentGrant> {
   const consentId = `ak:consent:${uuidV7()}`;
   const peer = {
@@ -169,7 +169,7 @@ export async function grantInviteConsentArkret(
     .poll(
       async () => {
         const resultUrl =
-          `${solandBaseUrl(opts.server)}/_arkret/self/consent/result` +
+          `${colandBaseUrl(opts.server)}/_arkret/self/consent/result` +
           `?peer=${encodeURIComponent(canonicalJson(peer))}&consent_scope=invite`;
         const response = await request.get(resultUrl, {
           headers: authHeaders(token, "GET", resultUrl),
@@ -249,7 +249,7 @@ export async function requestContactArkret(
     requestedScopes: string[];
     message?: string;
     idempotencyKey?: string;
-    server?: SolandKey;
+    server?: ColandKey;
     recipientServiceId?: string;
     /**
      * Introduction evidence is required for a cross-Station
@@ -263,7 +263,7 @@ export async function requestContactArkret(
   const nonce = uuidV7();
   const operationId = `ak:operation:contact.request.${nonce}`;
   const idempotencyKey = opts.idempotencyKey ?? nonce;
-  const url = `${solandBaseUrl(opts.server)}/_arkret/self/contacts/request`;
+  const url = `${colandBaseUrl(opts.server)}/_arkret/self/contacts/request`;
   const prepareBody = {
     phase: "prepare",
     operation_id: operationId,
@@ -332,10 +332,10 @@ export async function requestContactArkret(
 export async function resolvePrincipalLocator(
   request: APIRequestContext,
   subjectId: string,
-  server: SolandKey,
+  server: ColandKey,
   sessionToken: string,
 ): Promise<Record<string, unknown>> {
-  const issueUrl = `${solandBaseUrl(server)}/_arkret/self/invite-locators`;
+  const issueUrl = `${colandBaseUrl(server)}/_arkret/self/invite-locators`;
   const issue = await request.post(issueUrl, {
     headers: {
       ...authHeaders(sessionToken, "POST", issueUrl),
@@ -347,7 +347,7 @@ export async function resolvePrincipalLocator(
     locator_token: string;
   }>(issue, `issue principal locator for ${subjectId}`);
   const response = await request.post(
-    `${solandBaseUrl(server)}/_arkret/open/invite-locators/resolve`,
+    `${colandBaseUrl(server)}/_arkret/open/invite-locators/resolve`,
     {
       headers: { "content-type": "application/json" },
       data: canonicalJson({ locator_token: issued.locator_token }),
@@ -369,7 +369,7 @@ export async function respondContactArkret(
     requesterId: string;
     action: "accept" | "reject";
     grantedScopes?: string[];
-    server?: SolandKey;
+    server?: ColandKey;
     requesterServiceId?: string;
   },
 ): Promise<ContactRespondOutcome> {
@@ -407,7 +407,7 @@ export async function respondContactArkret(
   }
   const nonce = uuidV7();
   const operationId = `ak:operation:contact.${opts.action}.${nonce}`;
-  const url = `${solandBaseUrl(opts.server)}/_arkret/self/contacts/${opts.action === "accept" ? "respond" : "reject"}`;
+  const url = `${colandBaseUrl(opts.server)}/_arkret/self/contacts/${opts.action === "accept" ? "respond" : "reject"}`;
   const prepareBody = {
     phase: "prepare",
     operation_id: operationId,
@@ -466,9 +466,9 @@ export async function respondContactArkret(
 async function listContactsArkret(
   request: APIRequestContext,
   token: string,
-  opts: { server?: SolandKey } = {},
+  opts: { server?: ColandKey } = {},
 ): Promise<ContactListRow[]> {
-  const url = `${solandBaseUrl(opts.server)}/_arkret/self/contacts`;
+  const url = `${colandBaseUrl(opts.server)}/_arkret/self/contacts`;
   const response = await request.get(url, {
     headers: authHeaders(token, "GET", url),
   });
@@ -504,7 +504,7 @@ export async function contactRow(
   request: APIRequestContext,
   token: string,
   peer: string,
-  opts: { server?: SolandKey } = {},
+  opts: { server?: ColandKey } = {},
 ): Promise<ContactListRow | undefined> {
   const rows = await listContactsArkret(request, token, opts);
   const matches = rows.filter((row) => row.peer === peer);
@@ -521,10 +521,10 @@ export async function tombstoneContactArkret(
     fullPeerRevoke?: boolean;
     blockPeer?: boolean;
     // Cross-PS addressing (spec contact-and-direct-conversation.md §4.1): the
-    // peer's home service DID so soland federates the `ak.contact.tombstone`
+    // peer's home service DID so coland federates the `ak.contact.tombstone`
     // fact to the peer's Station via `ak.peer.contacts.command.submit.v1`.
     peerServiceId?: string;
-    server?: SolandKey;
+    server?: ColandKey;
   } = {},
 ): Promise<ContactTombstoneOutcome> {
   const row = await contactRow(request, token, contact, {
@@ -544,7 +544,7 @@ export async function tombstoneContactArkret(
   ) {
     throw new Error(`contact ${contact} omits its tombstone lineage`);
   }
-  const url = `${solandBaseUrl(opts.server)}/_arkret/self/contacts/tombstone`;
+  const url = `${colandBaseUrl(opts.server)}/_arkret/self/contacts/tombstone`;
   const nonce = uuidV7();
   const operationId = `ak:operation:contact.tombstone.${nonce}`;
   const prepare = await expectJsonOk<{
@@ -593,7 +593,7 @@ async function uploadDirectConversationKeyPackage(
   request: APIRequestContext,
   token: string,
   user: JointUser,
-  opts: { server?: SolandKey } = {},
+  opts: { server?: ColandKey } = {},
 ): Promise<void> {
   const signingSeedB64url = registeredEventSigningSeedB64url(user.id);
   if (!signingSeedB64url) {
@@ -638,7 +638,7 @@ async function uploadDirectConversationKeyPackage(
     signature_algorithm: "Ed25519",
     sig: signature,
   };
-  const url = `${solandBaseUrl(opts.server)}/_arkret/self/keys/keypackages/upload`;
+  const url = `${colandBaseUrl(opts.server)}/_arkret/self/keys/keypackages/upload`;
   const response = await request.post(url, {
     headers: {
       ...authHeaders(token, "POST", url),
@@ -681,7 +681,7 @@ export type IntroductionEvidence =
   | { kind: "consent_grant"; consent_grant_ref: string; consent_id?: string }
   | { kind: "explicit_address" };
 
-// Build a `ak.invite.create` invite event whose payload satisfies soland's
+// Build a `ak.invite.create` invite event whose payload satisfies coland's
 // invite-delivery consistency checks (src/routing/invites.rs
 // validate_invite_delivery_consistency + projection required fields):
 //   - kind == ak.invite.create
@@ -694,7 +694,7 @@ function buildInviteCreateEvent(args: {
   realmId: string;
   inviteeId: string;
   recipientServiceId: string;
-  recipientServer?: SolandKey;
+  recipientServer?: ColandKey;
   evidence: IntroductionEvidence;
   inviteId?: string;
   expiresAt?: string;
@@ -747,8 +747,8 @@ async function deliverInvite(
     realmId: string;
     inviteeId: string;
     evidence: IntroductionEvidence;
-    originServer: SolandKey;
-    recipientServer: SolandKey;
+    originServer: ColandKey;
+    recipientServer: ColandKey;
     idempotencyKey?: string;
     idempotencyKeyPrefix: string;
     context: string;
@@ -757,7 +757,7 @@ async function deliverInvite(
   outcome: InviteDeliveryOutcome;
   inviteId: string;
 }> {
-  const recipientServiceId = solandServiceId(args.recipientServer);
+  const recipientServiceId = colandServiceId(args.recipientServer);
   const { event } = buildInviteCreateEvent({
     inviterId: args.inviterId,
     realmId: args.realmId,
@@ -820,7 +820,7 @@ async function deliverInvite(
     authority_locator_hints: [
       {
         service_kind: "station",
-        service_id: solandServiceId(args.originServer),
+        service_id: colandServiceId(args.originServer),
         source: "invite",
       },
     ],
@@ -830,7 +830,7 @@ async function deliverInvite(
   };
   return {
     outcome: await submitPeerInviteDeliveryApi(request, body, {
-      origin: solandServiceId(args.originServer),
+      origin: colandServiceId(args.originServer),
       destination: recipientServiceId,
       server: args.recipientServer,
     }),
@@ -848,8 +848,8 @@ export async function deliverInviteWithConsentGrant(
     realmId: string;
     inviteeId: string;
     consentGrantRef: string;
-    originServer: SolandKey;
-    recipientServer: SolandKey;
+    originServer: ColandKey;
+    recipientServer: ColandKey;
     idempotencyKey?: string;
   },
 ): Promise<{
@@ -875,11 +875,11 @@ type AuthzInvite = InviteObject;
 export async function listAuthzInvitesArkret(
   request: APIRequestContext,
   token: string,
-  opts: { server?: SolandKey } = {},
+  opts: { server?: ColandKey } = {},
 ): Promise<AuthzInvite[]> {
   const url = new URL(
     "/_arkret/self/authz/invites",
-    solandBaseUrl(opts.server),
+    colandBaseUrl(opts.server),
   );
   const response = await request.get(url.toString(), {
     headers: {
@@ -922,7 +922,7 @@ export async function acceptInviteArkret(
     accepterId: string;
     realmId: string;
     inviteId: string;
-    server?: SolandKey;
+    server?: ColandKey;
     sealBasis?: Record<string, unknown>;
   },
 ) {

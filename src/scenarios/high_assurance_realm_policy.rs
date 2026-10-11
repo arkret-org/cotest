@@ -5,11 +5,11 @@
 //! keep `federation_policy ∈ {closed, restricted, quarantine}`. The
 //! SDK exposes this as a struct invariant on `arkret_models_collaboration::objects::realm::Realm`'s
 //! [`validate_kind_invariants`](arkret_models_collaboration::objects::realm::Realm::validate_kind_invariants)
-//! and soland enforces it at the reducer with the canonical reason
+//! and coland enforces it at the reducer with the canonical reason
 //! code `high_assurance_federation_policy_invalid`.
 //!
-//! This scenario verifies the SDK side of the contract; the soland
-//! integration test lives at `soland/tests/high_assurance_policy.rs`.
+//! This scenario verifies the SDK side of the contract; the coland
+//! integration test lives at `coland/tests/high_assurance_policy.rs`.
 
 use anyhow::{Result, anyhow};
 use arkret_identifiers::{DidCoreId, RealmId, TrustDomainId};
@@ -78,7 +78,7 @@ pub fn run_high_assurance_rejects_open_federation() -> Result<()> {
 
 /// R3.4 — the three other `federation_policy` values are accepted on a
 /// high_assurance Realm. These mirror the reducer-side positive cases
-/// in `soland/tests/high_assurance_policy.
+/// in `coland/tests/high_assurance_policy.
 /// rs::high_assurance_accepts_closed_restricted_and_quarantine`.
 pub fn run_high_assurance_accepts_closed_restricted_quarantine() -> Result<()> {
     for fp in [

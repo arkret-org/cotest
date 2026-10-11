@@ -15,8 +15,8 @@ import {
   createSharedRealmViaApi,
   listReadMarkersViaApi,
 } from "../../helpers/api";
-import { solandBaseUrl, solandServiceId, solandServiceResolution } from "../../helpers/env";
-import { cotestWire } from "../../helpers/soland-api/wire-client";
+import { colandBaseUrl, colandServiceId, colandServiceResolution } from "../../helpers/env";
+import { cotestWire } from "../../helpers/coland-api/wire-client";
 import { createTwoUserMessagingRealm } from "../../helpers/messaging-fixtures";
 import {
   accountActorId,
@@ -29,11 +29,11 @@ import {
   signedEventEnvelope,
   submitSignedEventApi,
   typedId,
-  } from "../../helpers/soland-api";
+  } from "../../helpers/coland-api";
 import {
   encryptMlsMessageContent,
   realmMlsCreatorGroupApi,
-} from "../../helpers/soland-api/mls";
+} from "../../helpers/coland-api/mls";
 import {
   createDpopUserSession,
   ensureRegistered,
@@ -213,10 +213,10 @@ test.describe("read receipts + privacy", () => {
       registeredEventVerificationMethod(outsider.id, outsider.deviceId);
     finalizeSignalEnvelopeProof(envelope);
     const receipt = await request.post(
-      `${solandBaseUrl()}/_arkret/self/signal`,
+      `${colandBaseUrl()}/_arkret/self/signal`,
       {
         headers: {
-          ...authHeaders(outsiderToken, "POST", `${solandBaseUrl()}/_arkret/self/signal`),
+          ...authHeaders(outsiderToken, "POST", `${colandBaseUrl()}/_arkret/self/signal`),
           "content-type": "application/json",
         },
         data: canonicalJson(envelope),
@@ -857,7 +857,7 @@ async function setReadReceiptPolicy(
     context: `read receipt policy ${fixture.realmId}`,
   });
   const acceptedCommit = outcome.commit as Record<string, unknown>;
-  const snapshotUrl = `${solandBaseUrl()}/_arkret/self/realm-state-snapshot/head?realm_id=${encodeURIComponent(fixture.realmId)}`;
+  const snapshotUrl = `${colandBaseUrl()}/_arkret/self/realm-state-snapshot/head?realm_id=${encodeURIComponent(fixture.realmId)}`;
   const snapshotResponse = await request.get(snapshotUrl, { headers: authHeaders(token, "GET", snapshotUrl) });
   expect(snapshotResponse.status(), snapshotResponse.ok() ? "policy snapshot read" : await snapshotResponse.text()).toBe(200);
   const snapshot = await snapshotResponse.json();
@@ -869,16 +869,16 @@ async function setReadReceiptPolicy(
   expect(rows[0].revision).toEqual({ commit_id: acceptedCommit.commit_id, stream_position: acceptedCommit.stream_position });
   expect(rows[0].value).toEqual(payload);
   const authorityRequest = { realm_id: fixture.realmId, nonce: randomBytes(32).toString("base64url") };
-  const authorityResponse = await request.post(`${solandBaseUrl()}/_arkret/open/realm-authority/bundle`, {
+  const authorityResponse = await request.post(`${colandBaseUrl()}/_arkret/open/realm-authority/bundle`, {
     headers: { "content-type": "application/json" }, data: canonicalJson(authorityRequest),
   });
   expect(authorityResponse.status()).toBe(200);
-  const resolutionResponse = await request.get(solandServiceResolution().resolution_url);
+  const resolutionResponse = await request.get(colandServiceResolution().resolution_url);
   expect(resolutionResponse.status()).toBe(200);
   expect(cotestWire("verify-realm-state-snapshot", {
     snapshot, expected_snapshot_id: snapshot.snapshot_id,
     authority_request: authorityRequest, authority_bundle: await authorityResponse.json(),
-    trusted_service_id: solandServiceId(), service_resolution: await resolutionResponse.json(),
+    trusted_service_id: colandServiceId(), service_resolution: await resolutionResponse.json(),
   })).toEqual({ verified: true });
 
   acceptedReceiptPolicies.set(fixture, payload);
@@ -938,7 +938,7 @@ async function advanceReadCursor(
       position: body.position,
     },
   });
-  const url = `${solandBaseUrl()}/_arkret/self/read-cursors`;
+  const url = `${colandBaseUrl()}/_arkret/self/read-cursors`;
   return await request.post(url, {
     headers: { ...authHeaders(token, "POST", url), "content-type": "application/json" },
     data: canonicalJson({ advance_event: { event } }),
@@ -952,7 +952,7 @@ async function listReadCursors(
   token: string,
   realmId: string,
 ): Promise<ReadCursorMarker[]> {
-  const url = `${solandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`;
+  const url = `${colandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`;
   const response = await request.get(url, { headers: authHeaders(token, "GET", url) });
   expect(response.status(), await response.text()).toBe(200);
   const body = await response.json();
@@ -965,7 +965,7 @@ function withDevice(user: JointUser, deviceId: string): JointUser {
   return { ...user, deviceId };
 }
 
-// Valid position HLC per read-cursor.schema.json / soland validate_position:
+// Valid position HLC per read-cursor.schema.json / coland validate_position:
 // 12 hex - 4 hex counter - 8 hex node. The counter slot encodes ordering so a
 // larger `counter` is a strictly later HLC under lexicographic comparison.
 function makeHlc(counter: number): string {

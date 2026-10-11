@@ -3,7 +3,7 @@
 // WHY THIS IS A NETWORK MOCK AND NOT AN IN-PROCESS SPY
 // ----------------------------------------------------
 // The task DID-P1-C01 asks for a resolver spy that is resettable and can be
-// counted per DID / purpose. cotest has **no Cargo dependency** on soland /
+// counted per DID / purpose. cotest has **no Cargo dependency** on coland /
 // flagon / coauth / floria — they are launched as pre-built sibling
 // binaries and driven over HTTP (see
 // `src/scenarios/_helpers/external_binary.rs`). A Rust trait spy therefore

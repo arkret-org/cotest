@@ -1,6 +1,6 @@
 //! Executable structural-Relation Realm-boundary conformance runner.
 //!
-//! Soland's governing-Station reducer and SDK producer precheck call the same
+//! Coland's governing-Station reducer and SDK producer precheck call the same
 //! production predicate, `validate_structural_relation_same_realm`. This
 //! runner drives that predicate for every canonical fixture case and records
 //! commit/continuation effects only after admission succeeds.

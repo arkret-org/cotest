@@ -1,4 +1,4 @@
-//! Decision 0107 live legs. Both need a prebuilt Soland and PostgreSQL; they
+//! Decision 0107 live legs. Both need a prebuilt Coland and PostgreSQL; they
 //! soft-skip without them unless `COTEST_REQUIRE_LIVE_SERVICES=1`.
 
 use anyhow::Result;

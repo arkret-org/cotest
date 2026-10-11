@@ -2,7 +2,7 @@
 """Gate the light build edge of the Cotest workspace.
 
 `crates/test-support` exists so `cotest-provision` and `cotest-wire` can be
-built without Inkson, Dioxus or the Soland implementation crates. That property
+built without Inkson, Dioxus or the Coland implementation crates. That property
 was only ever asserted by hand -- the 2026-09-11 closeout ran
 `cargo tree -p cotest-test-support` once and recorded the answer. A single
 `workspace = true` dependency line is enough to lose it again, and nothing
@@ -55,8 +55,8 @@ CLIENT_TEST_TARGETS = ('account_blocklist_production_live', 'calendar_rsvp_conve
 FORBIDDEN_EXACT = frozenset({"cotest", "inkson"})
 
 # Name prefixes the light edge must not reach: the whole Dioxus UI stack and
-# every Soland implementation crate.
-FORBIDDEN_PREFIXES = ("dioxus", "soland-")
+# every Coland implementation crate.
+FORBIDDEN_PREFIXES = ("dioxus", "coland-")
 
 COMPILED_KINDS = frozenset({"normal", "build"})
 ROOT_KINDS = frozenset({"normal", "build", "dev"})

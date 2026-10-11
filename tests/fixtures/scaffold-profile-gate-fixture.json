@@ -35,10 +35,10 @@
       }
     },
     {
-      "name": "soland_principal_claim_with_outbound_push_scaffold_is_rejected",
+      "name": "coland_principal_claim_with_outbound_push_scaffold_is_rejected",
       "expect": "reject",
       "describe": {
-        "service": "soland",
+        "service": "coland",
         "supported_profiles": ["ak.profile.station.v1"],
         "limits": {
           "profile_status": {
@@ -54,10 +54,10 @@
       }
     },
     {
-      "name": "soland_limited_profile_in_unsupported_with_limitation_is_allowed",
+      "name": "coland_limited_profile_in_unsupported_with_limitation_is_allowed",
       "expect": "pass",
       "describe": {
-        "service": "soland",
+        "service": "coland",
         "supported_profiles": ["ak.profile.mimi_interop.v1"],
         "unsupported_profiles": [
           {

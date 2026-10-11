@@ -4,7 +4,7 @@
 // The `ak.self.circle.*` operations (list/create/get/members/scope-rotate) are
 // published in the arkret-spec OpenAPI artifact
 // (`/_arkret/self/circles*`), the operation registry, and the contract catalog,
-// so soland mounts them under the `/_arkret` tree. `/_soland/self/circles` is
+// so coland mounts them under the `/_arkret` tree. `/_coland/self/circles` is
 // not a mounted surface.
 //
 // The `ak.circle.*` data model itself is spec-canonical (AKP-0007); this HTTP
@@ -12,7 +12,7 @@
 // routes them through the same reducer pipeline as wire events (so reducer
 // invariants like `circle_member_must_be_realm_member` fire identically).
 //
-// Wire shapes mirror soland src/routing/circles.rs (CircleCreateRequestBody /
+// Wire shapes mirror coland src/routing/circles.rs (CircleCreateRequestBody /
 // CircleMemberRequestBody / CircleView / CircleMembershipOutcome).
 //
 // Every write body now carries the caller-signed `ak.circle.*` Event and nothing
@@ -23,7 +23,7 @@
 // DID can be the `actor_id` of a signed Event.
 
 import type { APIRequestContext, APIResponse } from "@playwright/test";
-import { type SolandKey, solandBaseUrl, solandServiceId } from "./env";
+import { type ColandKey, colandBaseUrl, colandServiceId } from "./env";
 import type { RealmObject, CircleView, CircleMembershipOutcome } from "./generated/spec-wire-objects";
 import {
   accountActorId,
@@ -37,7 +37,7 @@ import {
   submitSignedEventApi,
   retypeEventDerivedId,
   wireErrCode,
-} from "./soland-api";
+} from "./coland-api";
 
 export type CircleOutcome = CircleView;
 export type { CircleMembershipOutcome } from "./generated/spec-wire-objects";
@@ -45,7 +45,7 @@ export type CircleMembership = CircleMembershipOutcome["membership"];
 
 // capability-grant.schema.json: a Realm-root issuer authority is the typed
 // reference to the accepted Realm genesis Event at its authority generation.
-function circleGrantRealmRootRef(realmId: string, server?: SolandKey) {
+function circleGrantRealmRootRef(realmId: string, server?: ColandKey) {
   const authorityEventRef = realmAuthorityRootRef(server, realmId);
   if (!authorityEventRef) {
     throw new Error(`Circle grant in ${realmId} has no accepted Realm genesis reference`);
@@ -63,7 +63,7 @@ type CircleGrantArgs = {
   realmId: string;
   subjectId: string;
   circleId: string;
-  server?: SolandKey;
+  server?: ColandKey;
 };
 
 // A Circle-narrowed capability grant (capabilities.md: every Circle action
@@ -176,7 +176,7 @@ export function circleDisplayFromTitle(
 // whole object lives inside the signed Event rather than in REST fields.
 function circleCreateObject(args: {
   actorId: string;
-  server?: SolandKey;
+  server?: ColandKey;
   realmId: string;
   title: string;
   summary?: string;
@@ -215,7 +215,7 @@ export async function createCircleArkret(
     directoryVisibility?: string;
     historyAccess?: RealmObject["history_access"];
     summary?: string;
-    server?: SolandKey;
+    server?: ColandKey;
   },
 ): Promise<CircleOutcome> {
   const createdAt = canonicalTimestamp();
@@ -233,9 +233,9 @@ export async function createCircleArkret(
     { server: args.server, context: `prepare circle ${args.title}` },
   );
   const response = await request.post(
-    `${solandBaseUrl(args.server)}/_arkret/self/circles`,
+    `${colandBaseUrl(args.server)}/_arkret/self/circles`,
     {
-      headers: { ...authHeaders(token, "POST", `${solandBaseUrl(args.server)}/_arkret/self/circles`), "content-type": "application/json" },
+      headers: { ...authHeaders(token, "POST", `${colandBaseUrl(args.server)}/_arkret/self/circles`), "content-type": "application/json" },
       data: canonicalJson({
         create_event: {
           ...createEvent,
@@ -253,11 +253,11 @@ export async function getCircleArkret(
   request: APIRequestContext,
   token: string,
   circleId: string,
-  opts: { server?: SolandKey } = {},
+  opts: { server?: ColandKey } = {},
 ): Promise<CircleOutcome> {
   const response = await request.get(
-    `${solandBaseUrl(opts.server)}/_arkret/self/circles/${encodeURIComponent(circleId)}`,
-    { headers: authHeaders(token, "GET", `${solandBaseUrl(opts.server)}/_arkret/self/circles/${encodeURIComponent(circleId)}`) },
+    `${colandBaseUrl(opts.server)}/_arkret/self/circles/${encodeURIComponent(circleId)}`,
+    { headers: authHeaders(token, "GET", `${colandBaseUrl(opts.server)}/_arkret/self/circles/${encodeURIComponent(circleId)}`) },
   );
   return await expectJsonOk<CircleOutcome>(response, `get circle ${circleId}`);
 }
@@ -273,9 +273,9 @@ export async function readParentMembershipRevisionApi(
   token: string,
   realmId: string,
   memberId: string,
-  server?: SolandKey,
+  server?: ColandKey,
 ): Promise<{ commit_id: string; stream_position: number }> {
-  const url = new URL(`${solandBaseUrl(server)}/_arkret/self/realm-state-snapshot/head`);
+  const url = new URL(`${colandBaseUrl(server)}/_arkret/self/realm-state-snapshot/head`);
   url.searchParams.set("realm_id", realmId);
   const snapshot = await expectJsonOk<{
     current_state_entries?: Array<{
@@ -325,7 +325,7 @@ export async function addCircleMemberRaw(
     realmId: string;
     actorId: string;
     membership?: CircleMembership;
-    server?: SolandKey;
+    server?: ColandKey;
   },
 ): Promise<APIResponse> {
   const membership = args.membership ?? "join";
@@ -360,9 +360,9 @@ export async function addCircleMemberRaw(
     { server: args.server, context: `prepare circle member ${args.actorId}` },
   );
   return await request.post(
-    `${solandBaseUrl(args.server)}/_arkret/self/circles/${encodeURIComponent(circleId)}/members`,
+    `${colandBaseUrl(args.server)}/_arkret/self/circles/${encodeURIComponent(circleId)}/members`,
     {
-      headers: { ...authHeaders(token, "POST", `${solandBaseUrl(args.server)}/_arkret/self/circles/${encodeURIComponent(circleId)}/members`), "content-type": "application/json" },
+      headers: { ...authHeaders(token, "POST", `${colandBaseUrl(args.server)}/_arkret/self/circles/${encodeURIComponent(circleId)}/members`), "content-type": "application/json" },
       data: canonicalJson({
         member_event: {
           ...memberEvent,
@@ -382,7 +382,7 @@ export async function addCircleMemberArkret(
     realmId: string;
     actorId: string;
     membership?: CircleMembership;
-    server?: SolandKey;
+    server?: ColandKey;
   },
 ): Promise<CircleMembershipOutcome> {
   const response = await addCircleMemberRaw(request, token, circleId, args);
@@ -400,7 +400,7 @@ export async function removeCircleMemberArkret(
   args: {
     actorId: string;
     realmId: string;
-    server?: SolandKey;
+    server?: ColandKey;
   },
 ): Promise<CircleMembershipOutcome> {
   const memberEvent = await prepareSignedEventSubmissionApi(
@@ -422,9 +422,9 @@ export async function removeCircleMemberArkret(
     { server: args.server, context: `prepare remove circle member ${actorId}` },
   );
   const response = await request.delete(
-    `${solandBaseUrl(args.server)}/_arkret/self/circles/${encodeURIComponent(circleId)}/members/${encodeURIComponent(canonicalJson(accountActorId(actorId, args.server)))}`,
+    `${colandBaseUrl(args.server)}/_arkret/self/circles/${encodeURIComponent(circleId)}/members/${encodeURIComponent(canonicalJson(accountActorId(actorId, args.server)))}`,
     {
-      headers: { ...authHeaders(token, "DELETE", `${solandBaseUrl(args.server)}/_arkret/self/circles/${encodeURIComponent(circleId)}/members/${encodeURIComponent(canonicalJson(accountActorId(actorId, args.server)))}`), "content-type": "application/json" },
+      headers: { ...authHeaders(token, "DELETE", `${colandBaseUrl(args.server)}/_arkret/self/circles/${encodeURIComponent(circleId)}/members/${encodeURIComponent(canonicalJson(accountActorId(actorId, args.server)))}`), "content-type": "application/json" },
       data: canonicalJson({
         member_event: {
           ...memberEvent,
@@ -446,7 +446,7 @@ type CircleLifecycleArgs = {
   actorId: string;
   realmId: string;
   reason?: string;
-  server?: SolandKey;
+  server?: ColandKey;
 };
 
 async function submitCircleLifecycleArkret(

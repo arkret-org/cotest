@@ -101,14 +101,14 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
 /// Advertised JSON bundle members the live Station does not mount. Each is a
 /// false Describe claim (`service-surface.md` §3: only bundles the deployment
 /// really implements may be advertised, and a frozen bundle cannot drop a
-/// member). The set mirrors Soland's own ratchet and may only shrink.
+/// member). The set mirrors Coland's own ratchet and may only shrink.
 const KNOWN_ADVERTISED_UNMOUNTED: &[arkret_wire::ServiceOperationId] =
     &[arkret_wire::ServiceOperationId::EdgeAppletManagedActorCommandAuthorV1];
 
 /// Advertised Station members served by the Account Authority of the same
 /// Station TCB. The deployment gateway routes pairing and issuer-ledger
-/// revocation to Coauth, so a bare Soland process does not mount them. The
-/// exact hard-logout route remains on Soland. Mirrors Soland's own exemption;
+/// revocation to Coauth, so a bare Coland process does not mount them. The
+/// exact hard-logout route remains on Coland. Mirrors Coland's own exemption;
 /// these are not false Describe claims.
 const SERVED_BY_ACCOUNT_AUTHORITY: &[arkret_wire::ServiceOperationId] = &[
     arkret_wire::ServiceOperationId::GateAccountCommandPairDeviceV1,

@@ -6,15 +6,15 @@ param(
     [string]$CargoTestFilter,
     [string]$CoauthBaseUrl,
     [string]$FloriaBaseUrl,
-    [string]$SodminBaseUrl,
+    [string]$CodminBaseUrl,
     [string]$InksonBaseUrl,
     [string]$CoauthCommand,
     [string]$FloriaCommand,
-    [string]$SodminCommand,
+    [string]$CodminCommand,
     [string]$InksonCommand,
     [string]$CoauthHealthUrl,
     [string]$FloriaHealthUrl,
-    [string]$SodminHealthUrl,
+    [string]$CodminHealthUrl,
     [string]$InksonHealthUrl,
     [int]$StartupTimeoutSeconds = 120,
     [switch]$AllowSecretLeaks,
@@ -153,18 +153,18 @@ $logRoot = Join-Path $repoRoot "artifacts\compose"
 $null = New-Item -ItemType Directory -Force -Path $logRoot
 
 if (-not $SutManifest) {
-    $SutManifest = Join-Path $workspaceRoot "soland\Cargo.toml"
+    $SutManifest = Join-Path $workspaceRoot "coland\Cargo.toml"
 }
 
 $coauthBase = Normalize-BaseUrl $CoauthBaseUrl
 $floriaBase = Normalize-BaseUrl $FloriaBaseUrl
-$sodminBase = Normalize-BaseUrl $SodminBaseUrl
+$codminBase = Normalize-BaseUrl $CodminBaseUrl
 $inksonBase = Normalize-BaseUrl $InksonBaseUrl
 
 $envNames = @(
     "COAUTH_BASE_URL",
     "FLORIA_BASE_URL",
-    "SODMIN_BASE_URL",
+    "CODMIN_BASE_URL",
     "INKSON_BASE_URL",
     "COTEST_COMPOSE_PROFILE"
 )
@@ -176,13 +176,13 @@ try {
     $env:COTEST_COMPOSE_PROFILE = "process"
     if ($coauthBase) { $env:COAUTH_BASE_URL = $coauthBase }
     if ($floriaBase) { $env:FLORIA_BASE_URL = $floriaBase }
-    if ($sodminBase) { $env:SODMIN_BASE_URL = $sodminBase }
+    if ($codminBase) { $env:CODMIN_BASE_URL = $codminBase }
     if ($inksonBase) { $env:INKSON_BASE_URL = $inksonBase }
 
     foreach ($service in @(
             [pscustomobject]@{ Name = "coauth"; Command = $CoauthCommand; BaseUrl = $coauthBase; HealthUrl = $CoauthHealthUrl },
             [pscustomobject]@{ Name = "floria"; Command = $FloriaCommand; BaseUrl = $floriaBase; HealthUrl = $FloriaHealthUrl },
-            [pscustomobject]@{ Name = "sodmin"; Command = $SodminCommand; BaseUrl = $sodminBase; HealthUrl = $SodminHealthUrl },
+            [pscustomobject]@{ Name = "codmin"; Command = $CodminCommand; BaseUrl = $codminBase; HealthUrl = $CodminHealthUrl },
             [pscustomobject]@{ Name = "inkson"; Command = $InksonCommand; BaseUrl = $inksonBase; HealthUrl = $InksonHealthUrl }
         )) {
         $managed = Start-ManagedService `

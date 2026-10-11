@@ -215,7 +215,7 @@ pub async fn device_pairing_handoff_bundle_selects_all_canonical_routes() -> Res
     let authority_origin = authority.origin();
     let server = ArkretServer::spawn_with_env(
         "extension-surface-device-pairing",
-        &[("SOLAND_ACCOUNT_AUTHORITY_URL", authority_origin.as_str())],
+        &[("COLAND_ACCOUNT_AUTHORITY_URL", authority_origin.as_str())],
     )
     .await?;
     let describe = expect_json(

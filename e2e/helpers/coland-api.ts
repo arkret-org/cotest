@@ -17,13 +17,13 @@ import {
 import { xchacha20poly1305 } from "@noble/ciphers/chacha";
 import { operationSelector } from "./arkret-test";
 import {
-  type SolandKey,
+  type ColandKey,
   configuredServerKeys,
-  solandBaseUrl,
-  solandServiceDid,
-  solandServiceId,
-  solandServiceResolution,
-  teabayBaseUrl,
+  colandBaseUrl,
+  colandServiceDid,
+  colandServiceId,
+  colandServiceResolution,
+  flagonBaseUrl,
 } from "./env";
 import { base64url } from "./encoding";
 import type {
@@ -44,14 +44,14 @@ import {
   accountSubscribeDeltaApi,
   accountSubscribeFramesApi,
   accountSubscribeRealmFramesApi,
-} from "./soland-api/account-stream";
-import { activateRealmMlsApi } from "./soland-api/mls";
+} from "./coland-api/account-stream";
+import { activateRealmMlsApi } from "./coland-api/mls";
 import {
   authHeaders,
   expectJsonOk,
   registerRequestAuth,
   wireErrCode,
-} from "./soland-api/request";
+} from "./coland-api/request";
 import {
   base64urlJsonCanonical,
   base64urlJsonRaw,
@@ -65,7 +65,7 @@ import {
   sdkMimiRequestConsentProof,
   sha256CanonicalJson,
   stripUndefined,
-} from "./soland-api/wire-client";
+} from "./coland-api/wire-client";
 
 export {
   accountSubscribeDeltaApi,
@@ -103,7 +103,7 @@ type SignedEventEnvelopeArgs = {
   /// The Station coordinate of the Event's account Actor. It is nested in
   /// actor_id.account_id, never an independent Event envelope member.
   stationId?: string;
-  server?: SolandKey;
+  server?: ColandKey;
 };
 type EventProofMode = "dev-proof" | "detached-jws";
 
@@ -134,7 +134,7 @@ const principalControlEvents = new Map<
 const realmAuthorityRootEventIds = new Map<string, string>();
 
 export function realmAuthorityRootRef(
-  server: SolandKey | undefined,
+  server: ColandKey | undefined,
   realmId: string,
 ): string | undefined {
   return realmAuthorityRootEventIds.get(
@@ -143,7 +143,7 @@ export function realmAuthorityRootRef(
 }
 
 function requireRealmAuthorityRootRef(
-  server: SolandKey | undefined,
+  server: ColandKey | undefined,
   realmId: string,
 ): string {
   const eventId = realmAuthorityRootRef(server, realmId);
@@ -157,7 +157,7 @@ async function discoverRealmAuthorityRootRef(
   request: APIRequestContext,
   token: string,
   realmId: string,
-  server?: SolandKey,
+  server?: ColandKey,
 ): Promise<void> {
   if (realmAuthorityRootRef(server, realmId)) return;
   const { events, commits } = await scanRealmStreamApi(request, token, realmId, {
@@ -181,7 +181,7 @@ async function discoverRealmAuthorityRootRef(
 }
 
 function realmAuthorityControllerKey(
-  server: SolandKey | undefined,
+  server: ColandKey | undefined,
   realmId: string,
 ): string {
   return `${server ?? "default"}\0${realmId}`;
@@ -457,14 +457,14 @@ export function requireDidCoreId(id: string): string {
 
 export function accountActorId(
   principalId: string,
-  server?: SolandKey,
+  server?: ColandKey,
   stationId?: string,
 ): Extract<ActorId, { kind: "account" }> {
   return {
     kind: "account",
     account_id: {
       principal_id: requireDidCoreId(principalId),
-      station_id: requireDidCoreId(stationId ?? solandServiceId(server)),
+      station_id: requireDidCoreId(stationId ?? colandServiceId(server)),
     },
   };
 }
@@ -525,7 +525,7 @@ function eventSigningPrincipalId(event: Record<string, unknown>): string {
 // service method (identity-did.md) and did:web is reserved for explicit
 // no-history / negative fixtures, so the retired `did:web:cotest-peer.example`
 // default no longer resolves. The `source-service-id` header carries the
-// projected core id (soland parses it as a `DidCoreId`); the Signature-Input
+// projected core id (coland parses it as a `DidCoreId`); the Signature-Input
 // keyid must be the DID URL whose controller projects back to it.
 const COTEST_PEER_FIXTURE_DID = "did:webvh:z6mkpeer:cotest-peer.example";
 const COTEST_PEER_FIXTURE_CORE_ID = projectDidToCoreId(
@@ -534,7 +534,7 @@ const COTEST_PEER_FIXTURE_CORE_ID = projectDidToCoreId(
 
 // Inverse spelling of projectDidToCoreId for harness-synthetic services:
 // a federation Signature-Input keyid must be a DID URL whose controller
-// projects to the Source-Service-ID core id (soland federation signature.rs
+// projects to the Source-Service-ID core id (coland federation signature.rs
 // validate_signature_input), even though the header itself carries the core
 // id. Only the did:web adapter and the named did:webvh fixtures have a unique
 // inverse spelling.
@@ -579,10 +579,10 @@ export function plaintextVisibleServiceDeclarations(serviceIds: string[]) {
 // `invite_address.service_resolution` to be byte-for-byte equal (§7 step 6
 // re-checks it on the receiving side). Both producers therefore go through this
 // single normalizer instead of hand-rolling the scheme per call site.
-export function canonicalServiceResolution(server?: SolandKey): {
+export function canonicalServiceResolution(server?: ColandKey): {
   resolution_url: string;
 } {
-  const { resolution_url } = solandServiceResolution(server);
+  const { resolution_url } = colandServiceResolution(server);
   return {
     resolution_url: resolution_url.replace(/^http:\/\//, "https://"),
   };
@@ -606,7 +606,7 @@ export async function createRealmApi(
     history_access?: RealmObject["history_access"];
     /// Activate MLS for the new Realm: the owner's registered device founds
     /// the group and its `ak.mls.genesis` is accepted before any invite
-    /// (`soland-api/mls.ts`). There is no declared profile to compare
+    /// (`coland-api/mls.ts`). There is no declared profile to compare
     /// against: a scope is end-to-end encrypted exactly when that genesis has
     /// been accepted. Members that join afterwards need an Add Commit
     /// (`addRealmMlsMemberApi`) before new ciphertext is admitted.
@@ -624,7 +624,7 @@ export async function createRealmApi(
     invitee_ids?: Record<string, string>;
     /**
      * Override the creator's home Station. The helper defaults this
-     * to the selected Soland because the standard availability policy needs a
+     * to the selected Coland because the standard availability policy needs a
      * joined-member Station before any post-genesis Control Move can
      * be sealed.
      */
@@ -638,7 +638,7 @@ export async function createRealmApi(
     created_at?: string;
   },
   opts: {
-    server?: SolandKey;
+    server?: ColandKey;
     onAcceptedBootstrap?: (bootstrap: AcceptedRealmBootstrap) => void;
   } = {},
 ): Promise<string> {
@@ -647,7 +647,7 @@ export async function createRealmApi(
   const createdAt = data.created_at ?? canonicalTimestamp();
   const plaintextVisibleServiceIds =
     data.plaintext_visible_services ??
-    (data.mls_activated ? [] : [solandServiceId(opts.server)]);
+    (data.mls_activated ? [] : [colandServiceId(opts.server)]);
   const plaintextVisibleServices = plaintextVisibleServiceDeclarations(
     plaintextVisibleServiceIds,
   );
@@ -657,9 +657,9 @@ export async function createRealmApi(
     schema: "ak.schema.realm_genesis.v1",
     purpose: "collaboration",
     genesis_salt: base64url(randomBytes(32)),
-    trust_domain: "ak:trust_domain:soland.local",
+    trust_domain: "ak:trust_domain:coland.local",
     security_class: "standard",
-    governance_station_id: solandServiceId(opts.server),
+    governance_station_id: colandServiceId(opts.server),
     initial_join_rule: data.default_join_rule ?? "invite",
     initial_history_access: data.history_access ?? "since_join",
     initial_discoverability:
@@ -726,7 +726,7 @@ export async function createRealmApi(
     });
   }
   const creatorServiceId =
-    data.creator_id ?? solandServiceId(opts.server);
+    data.creator_id ?? colandServiceId(opts.server);
   const creatorActorId = {
     kind: "account",
     account_id: {
@@ -746,7 +746,7 @@ export async function createRealmApi(
     idempotency_key: uuidV7(),
     events: bootstrapEvents.map((event) => ({ event })),
   };
-  const eventsUrl = `${solandBaseUrl(opts.server)}/_arkret/self/events`;
+  const eventsUrl = `${colandBaseUrl(opts.server)}/_arkret/self/events`;
   const response = await request.post(eventsUrl, {
     headers: {
       ...authHeaders(token, "POST", eventsUrl),
@@ -812,9 +812,9 @@ export async function createRealmApi(
   }
   for (const invitee of data.invitees ?? []) {
     const recipientServiceId =
-      data.invitee_ids?.[invitee] ?? solandServiceId(opts.server);
+      data.invitee_ids?.[invitee] ?? colandServiceId(opts.server);
     const recipientServer = configuredServerKeys().find(
-      (server) => solandServiceId(server) === recipientServiceId,
+      (server) => colandServiceId(server) === recipientServiceId,
     );
     if (!recipientServer) throw new Error("directed invite recipient Station is not configured");
     const inviteeAccountId = accountActorId(invitee, recipientServer, recipientServiceId).account_id;
@@ -881,7 +881,7 @@ export async function joinRealmMemberByInviteApi(
   ownerToken: string,
   realmId: string,
   member: { id: string; token: string },
-  opts: { server?: SolandKey } = {},
+  opts: { server?: ColandKey } = {},
 ) {
   const ownerId = await currentActorIdApi(request, ownerToken, opts);
   const evidence = { kind: "explicit_address" } as const;
@@ -925,7 +925,7 @@ export async function readCurrentRealmPolicyBundleApi(
   request: APIRequestContext,
   token: string,
   realmId: string,
-  opts: { server?: SolandKey } = {},
+  opts: { server?: ColandKey } = {},
 ): Promise<Record<string, unknown>> {
   const scan = await scanRealmStreamApi(request, token, realmId, { server: opts.server });
   expect(scan.truncated, `Realm ${realmId} stream scan must reach the stream head`).toBe(false);
@@ -961,7 +961,7 @@ export async function writeJoinPolicyApi(
   token: string,
   realmId: string,
   joinPolicy: Record<string, unknown>,
-  opts: { server?: SolandKey } = {},
+  opts: { server?: ColandKey } = {},
 ): Promise<string> {
   const actorId = await currentActorIdApi(request, token, opts);
   const digest = `sha256:${sha256CanonicalJson(joinPolicy)}`;
@@ -1014,7 +1014,7 @@ export async function grantServiceCapabilityApi(
     realmId: string;
     subjectServiceId: string;
     action?: string;
-    server?: SolandKey;
+    server?: ColandKey;
   },
 ): Promise<string> {
   await discoverRealmAuthorityRootRef(request, ownerToken, args.realmId, args.server);
@@ -1072,7 +1072,7 @@ type CapabilityGrantEventArgs = {
   realmId: string;
   subjectId: string;
   subjectStationId?: string;
-  subjectServer?: SolandKey;
+  subjectServer?: ColandKey;
   actions: string[];
   // capabilities.md §6.1 / §8: optional finite validity upper bound. The
   // helper lowers this shorthand into a standalone global temporal
@@ -1087,7 +1087,7 @@ type CapabilityGrantEventArgs = {
   // capabilities.md §3.2 / §10: typed authority anchors. Omitted only by this
   // test helper, which then emits the initial Realm authority-root ref.
   issuerAuthorityRefs?: CapabilityGrantObject["issuer_authority_refs"];
-  server?: SolandKey;
+  server?: ColandKey;
 };
 
 // Build (but do not submit) a signed `ak.capability.grant` envelope. Exposed
@@ -1184,7 +1184,7 @@ export async function revokeCapabilityApi(
     ownerId: string;
     realmId: string;
     grantId: string;
-    server?: SolandKey;
+    server?: ColandKey;
   },
 ) {
   const outcome = await submitSignedEventApi(
@@ -1217,7 +1217,7 @@ const joinPolicyDigestCache = new Map<string, string>();
 // has to hold this per (server, realm) rather than derive it from the payload.
 // The `createRealmApi` genesis already occupies `policy_revision: 1`
 function joinWorkflowKey(
-  server: SolandKey | undefined,
+  server: ColandKey | undefined,
   realmId: string,
   actorId?: string,
 ): string {
@@ -1231,7 +1231,7 @@ export async function acceptInviteApi(
   realmId: string,
   inviteId: string,
   opts: {
-    server?: SolandKey;
+    server?: ColandKey;
     previousState?: "pending" | "claimed";
     /// Set `false` for a third-party invite, which stores no account.
     ///
@@ -1266,10 +1266,10 @@ async function readOwnInviteDeliveryApi(
   request: APIRequestContext,
   token: string,
   realmId: string,
-  opts: { server?: SolandKey },
+  opts: { server?: ColandKey },
   inviteId?: string,
 ) {
-  const dataUrl = `${solandBaseUrl(opts.server)}/_arkret/self/account_data`;
+  const dataUrl = `${colandBaseUrl(opts.server)}/_arkret/self/account_data`;
   const holder = await expectJsonOk<{ account_data_entries: Array<{
     account_data_key: string; content: { delivery_entries?: Array<{
       invite_id: string; realm_id: string;
@@ -1290,7 +1290,7 @@ export async function waitForInviteDeliveryApi(
   token: string,
   inviteeId: string,
   realmId: string,
-  server: SolandKey,
+  server: ColandKey,
 ) {
   expect(await currentActorIdApi(request, token, { server })).toBe(inviteeId);
   let delivery: Awaited<ReturnType<typeof readOwnInviteDeliveryApi>>;
@@ -1309,7 +1309,7 @@ export async function acceptPreparedInviteApi(
   realmId: string,
   inviteId: string,
   opts: {
-    server?: SolandKey;
+    server?: ColandKey;
     onAccepted?: (outcome: Record<string, unknown>) => void;
   } = {},
 ) {
@@ -1329,7 +1329,7 @@ export async function acceptPreparedInviteApi(
     },
     intent: { kind: "invite_accept", invite_id: inviteId },
   };
-  const url = `${solandBaseUrl(opts.server)}/_arkret/self/realm-joins/prepare`;
+  const url = `${colandBaseUrl(opts.server)}/_arkret/self/realm-joins/prepare`;
   const prepare = () => request.post(url, {
     headers: { ...authHeaders(token, "POST", url), "content-type": "application/json" },
     data: canonicalJson(input),
@@ -1355,7 +1355,7 @@ export async function acceptPreparedInviteApi(
     payload: { invite_id: inviteId, previous_state: "pending", invitee_account_id: account },
     server: opts.server,
   });
-  const submitUrl = `${solandBaseUrl(opts.server)}/_arkret/self/events`;
+  const submitUrl = `${colandBaseUrl(opts.server)}/_arkret/self/events`;
   const signed = canonicalJson({ event });
   const submit = () => request.post(submitUrl, {
     headers: { ...authHeaders(token, "POST", submitUrl), "content-type": "application/json" },
@@ -1376,11 +1376,11 @@ export async function acceptPreparedInviteApi(
 export async function listInvitesApi(
   request: APIRequestContext,
   token: string,
-  opts: { server?: SolandKey } = {},
+  opts: { server?: ColandKey } = {},
 ): Promise<InviteObject[]> {
   const url = new URL(
     "/_arkret/self/authz/invites",
-    solandBaseUrl(opts.server),
+    colandBaseUrl(opts.server),
   );
   const response = await request.get(url.toString(), {
     headers: {
@@ -1400,7 +1400,7 @@ export async function sendPreparedMessageApi(
   token: string,
   realmId: string,
   body: string,
-  opts: { server?: SolandKey } = {},
+  opts: { server?: ColandKey } = {},
 ) {
   const principal = await currentActorIdApi(request, token, opts);
   const actor = accountActorId(principal, opts.server);
@@ -1418,7 +1418,7 @@ export async function sendPreparedMessageApi(
     intent,
     created_at: canonicalTimestamp(),
   };
-  const prepareUrl = `${solandBaseUrl(opts.server)}/_arkret/self/messages/prepare`;
+  const prepareUrl = `${colandBaseUrl(opts.server)}/_arkret/self/messages/prepare`;
   const fetch = () => request.post(prepareUrl, {
     headers: {
       ...authHeaders(token, "POST", prepareUrl),
@@ -1479,7 +1479,7 @@ export async function sendPreparedMessageApi(
   const event = { ...unsigned, event_id: derived.event_id };
   expect(prepared.draft.event_digest).toBe(`sha256:${sha256CanonicalJson(unsigned)}`);
   event.producer_proof = eventEnvelopeProof({ actorId: principal, event });
-  const url = `${solandBaseUrl(opts.server)}/_arkret/self/events`;
+  const url = `${colandBaseUrl(opts.server)}/_arkret/self/events`;
   const submission = canonicalJson({ event });
   const submit = () => request.post(url, {
     headers: {
@@ -1522,7 +1522,7 @@ export async function sendMessageApi(
   realmId: string,
   body: string,
   opts: {
-    server?: SolandKey;
+    server?: ColandKey;
     encrypted?: boolean;
     createdAt?: string;
     retryTemporarilyUnavailable?: boolean;
@@ -1597,7 +1597,7 @@ export async function setStrandWatchLevelApi(
   strandId: string,
   watcherActorId: string,
   level: "mentions_only" | "participating" | "all" | "muted" | null,
-  opts: { server?: SolandKey; levelPublic?: boolean; context?: string } = {},
+  opts: { server?: ColandKey; levelPublic?: boolean; context?: string } = {},
 ) {
   const actorId = await currentActorIdApi(request, token, opts);
   const payload: Record<string, unknown> = {
@@ -1637,7 +1637,7 @@ export async function scanRealmStreamApi(
   token: string,
   realmId: string,
   opts: {
-    server?: SolandKey;
+    server?: ColandKey;
     limit?: number;
     streamRef?: Record<string, unknown>;
     waitForJoinedCut?: boolean;
@@ -1650,7 +1650,7 @@ export async function scanRealmStreamApi(
   authorizationPending?: boolean;
 }> {
   const streamRef = opts.streamRef ?? { kind: "realm", realm_id: realmId };
-  const url = `${solandBaseUrl(opts.server)}/_arkret/self/streams/scan`;
+  const url = `${colandBaseUrl(opts.server)}/_arkret/self/streams/scan`;
   const response = await request.post(url, {
     headers: {
       ...authHeaders(token, "POST", url),
@@ -1701,7 +1701,7 @@ export async function queryRealmEventsApi(
   request: APIRequestContext,
   token: string,
   realmId: string,
-  opts: { server?: SolandKey; limit?: number; waitForJoinedCut?: boolean; afterPosition?: number } = {},
+  opts: { server?: ColandKey; limit?: number; waitForJoinedCut?: boolean; afterPosition?: number } = {},
 ): Promise<Record<string, unknown>> {
   const scan = await scanRealmStreamApi(request, token, realmId, opts);
   return {
@@ -1748,7 +1748,7 @@ async function prepareAccountDataSetSubmissionApi(
   request: APIRequestContext,
   token: string,
   args: Parameters<typeof accountDataSetSubmission>[0],
-  opts: { server?: SolandKey; context?: string } = {},
+  opts: { server?: ColandKey; context?: string } = {},
 ): Promise<Record<string, unknown>> {
   const draft = accountDataSetSubmission(args);
   const event = draft.event as Record<string, unknown>;
@@ -1762,7 +1762,7 @@ export async function replaceAccountDataApi(
   key: string,
   body: Record<string, unknown>,
   expectedRevision: number,
-  opts: { server?: SolandKey; context?: string } = {},
+  opts: { server?: ColandKey; context?: string } = {},
 ) {
   const content = privateAccountDataKeys.has(key)
     ? encryptedAccountDataValue(accountActorId(actorId, opts.server), key, body)
@@ -1779,10 +1779,10 @@ export async function replaceAccountDataApi(
     opts,
   );
   const response = await request.put(
-    `${solandBaseUrl(opts.server)}/_arkret/self/account_data/${encodeURIComponent(key)}`,
+    `${colandBaseUrl(opts.server)}/_arkret/self/account_data/${encodeURIComponent(key)}`,
     {
       headers: {
-        ...authHeaders(token, "PUT", `${solandBaseUrl(opts.server)}/_arkret/self/account_data/${encodeURIComponent(key)}`),
+        ...authHeaders(token, "PUT", `${colandBaseUrl(opts.server)}/_arkret/self/account_data/${encodeURIComponent(key)}`),
         "content-type": "application/json",
       },
       data: canonicalJson({
@@ -1853,9 +1853,9 @@ function encryptedAccountDataValue(
 export async function currentActorIdApi(
   request: APIRequestContext,
   token: string,
-  opts: { server?: SolandKey } = {},
+  opts: { server?: ColandKey } = {},
 ): Promise<string> {
-  const url = `${solandBaseUrl(opts.server)}/_arkret/self/account/viewer`;
+  const url = `${colandBaseUrl(opts.server)}/_arkret/self/account/viewer`;
   const response = await request.get(url, {
     headers: authHeaders(token, "GET", url),
   });
@@ -1876,17 +1876,17 @@ export async function originalHumanSignerFactApi(
   token: string,
   event: InviteDeliveryRequestBody["invite_event"],
   commit: InviteDeliveryRequestBody["invite_commit"],
-  opts: { server?: SolandKey } = {},
+  opts: { server?: ColandKey } = {},
 ): Promise<NonNullable<InviteDeliveryRequestBody["producer_signer_fact"]>> {
   const query = cotestWire<Record<string, unknown>>("historical-human-signer-query", {
     event,
     commit,
     recipient_account_id: {
       principal_id: await currentActorIdApi(request, token, opts),
-      station_id: solandServiceId(opts.server),
+      station_id: colandServiceId(opts.server),
     },
   });
-  const url = `${solandBaseUrl(opts.server)}/_arkret/self/signer-keys/query`;
+  const url = `${colandBaseUrl(opts.server)}/_arkret/self/signer-keys/query`;
   const response = await request.post(url, {
     data: canonicalJson(query),
     headers: { ...authHeaders(token, "POST", url), "content-type": "application/json" },
@@ -1928,14 +1928,14 @@ export async function verifyRegisteredEventSignerDeviceApi(
     accountId: AccountCoordinate;
     deviceId: string;
     verificationMethod: string;
-    server?: SolandKey;
+    server?: ColandKey;
   },
 ): Promise<void> {
   if (args.accountId.principal_id !== args.actorId) {
     throw new Error("signer evidence account principal does not match actor");
   }
 
-  const viewerUrl = `${solandBaseUrl(args.server)}/_arkret/self/account/viewer`;
+  const viewerUrl = `${colandBaseUrl(args.server)}/_arkret/self/account/viewer`;
   const viewer = await expectJsonOk<{
     principal_id?: unknown;
     devices?: Array<{
@@ -1982,7 +1982,7 @@ export async function verifyRegisteredEventSignerDeviceApi(
     );
   }
 
-  const keysUrl = `${solandBaseUrl(args.server)}/_arkret/self/keys/query`;
+  const keysUrl = `${colandBaseUrl(args.server)}/_arkret/self/keys/query`;
   const keys = await expectJsonOk<{
     device_keys?: Array<{
       account_id?: unknown;
@@ -2228,14 +2228,14 @@ export async function submitSignedEventApi(
   token: string,
   envelope: Record<string, unknown>,
   opts: {
-    server?: SolandKey;
+    server?: ColandKey;
     context?: string;
     controlObserverToken?: string;
     retryTemporarilyUnavailable?: boolean;
   } = {},
 ) {
   const context = opts.context ?? `submit ${String(envelope.kind)}`;
-  const eventsUrl = `${solandBaseUrl(opts.server)}/_arkret/self/events`;
+  const eventsUrl = `${colandBaseUrl(opts.server)}/_arkret/self/events`;
   const submission = canonicalJson({ event: envelope });
   const deadline = Date.now() + 30_000;
   let response: APIResponse;
@@ -2367,7 +2367,7 @@ export async function prepareSignedEventSubmissionApi(
   _request: APIRequestContext,
   _token: string,
   envelope: Record<string, unknown>,
-  _opts: { server?: SolandKey; context?: string } = {},
+  _opts: { server?: ColandKey; context?: string } = {},
 ): Promise<Record<string, unknown>> {
   return { event: envelope };
 }
@@ -2380,7 +2380,7 @@ export async function prepareSignedEventBatchSubmissionsApi(
   _request: APIRequestContext,
   _token: string,
   events: Array<Record<string, unknown>>,
-  _opts: { server?: SolandKey; context?: string } = {},
+  _opts: { server?: ColandKey; context?: string } = {},
 ): Promise<Array<Record<string, unknown>>> {
   return events.map((event) => ({ event }));
 }
@@ -2397,9 +2397,9 @@ export async function rawSubmitSignedEventApi(
   request: APIRequestContext,
   token: string,
   envelope: Record<string, unknown>,
-  opts: { server?: SolandKey } = {},
+  opts: { server?: ColandKey } = {},
 ): Promise<APIResponse> {
-  const eventsUrl = `${solandBaseUrl(opts.server)}/_arkret/self/events`;
+  const eventsUrl = `${colandBaseUrl(opts.server)}/_arkret/self/events`;
   return await request.post(eventsUrl, {
     headers: {
       ...authHeaders(token, "POST", eventsUrl),
@@ -2420,12 +2420,12 @@ function parseJsonOrRaw(text: string): unknown {
 // Where each Event this process published was accepted. Federation reads the
 // exact accepted `(RealmCommit, Event)` pair back from that source Station
 // (`CommittedEventView`), so only the caller-scoped source is remembered.
-const publicationSourceByEventId = new Map<string, { token: string; server?: SolandKey }>();
+const publicationSourceByEventId = new Map<string, { token: string; server?: ColandKey }>();
 
 function rememberPublicationEvidence(
   events: Array<Record<string, unknown>>,
   outcome: Record<string, unknown>,
-  source: { token: string; server?: SolandKey },
+  source: { token: string; server?: ColandKey },
 ): void {
   const commits = Array.isArray(outcome.commits)
     ? (outcome.commits as Array<Record<string, unknown>>)
@@ -2466,7 +2466,7 @@ export async function readCommitStreamHeadApi(
   request: APIRequestContext,
   token: string,
   realmId: string,
-  opts: { server?: SolandKey; streamRef?: Record<string, unknown> } = {},
+  opts: { server?: ColandKey; streamRef?: Record<string, unknown> } = {},
 ): Promise<CommitStreamHead | undefined> {
   return readCommitStreamCut(request, token, realmId, opts);
 }
@@ -2479,7 +2479,7 @@ export async function readCommitStreamCutApi(
   token: string,
   realmId: string,
   commitId: string,
-  opts: { server?: SolandKey; streamRef?: Record<string, unknown> } = {},
+  opts: { server?: ColandKey; streamRef?: Record<string, unknown> } = {},
 ): Promise<CommitStreamHead | undefined> {
   return readCommitStreamCut(request, token, realmId, opts, commitId);
 }
@@ -2488,11 +2488,11 @@ async function readCommitStreamCut(
   request: APIRequestContext,
   token: string,
   realmId: string,
-  opts: { server?: SolandKey; streamRef?: Record<string, unknown> },
+  opts: { server?: ColandKey; streamRef?: Record<string, unknown> },
   commitId?: string,
 ): Promise<CommitStreamHead | undefined> {
   const streamRef = opts.streamRef ?? { kind: "realm", realm_id: realmId };
-  const url = `${solandBaseUrl(opts.server)}/_arkret/self/streams/scan`;
+  const url = `${colandBaseUrl(opts.server)}/_arkret/self/streams/scan`;
   let afterPosition: number | null = null;
   let head: CommitStreamHead | undefined;
   let exact: CommitStreamHead | undefined;
@@ -2548,12 +2548,12 @@ export async function resolveDefaultStrandId(
   token: string,
   realmId: string,
   opts: {
-    server?: SolandKey;
+    server?: ColandKey;
     authorityRootController?: string;
   } = {},
 ): Promise<string> {
-  const realmUrl = `${solandBaseUrl(opts.server)}/_arkret/self/realms/${encodeURIComponent(realmId)}`;
-  const strandsUrl = `${solandBaseUrl(opts.server)}/_arkret/self/realms/${encodeURIComponent(realmId)}/strands`;
+  const realmUrl = `${colandBaseUrl(opts.server)}/_arkret/self/realms/${encodeURIComponent(realmId)}`;
+  const strandsUrl = `${colandBaseUrl(opts.server)}/_arkret/self/realms/${encodeURIComponent(realmId)}/strands`;
   const actorId = await currentActorIdApi(request, token, opts);
   const controller = realmAuthorityControllers.get(
     realmAuthorityControllerKey(opts.server, realmId),
@@ -2630,7 +2630,7 @@ export async function resolveDefaultStrandId(
     // UI-authored Realm bootstrap is outside this API helper's in-memory
     // registry. The fixture supplies the genesis actor it just observed so
     // applyRegisteredCbsPlane can stamp the explicit authority-root claim;
-    // Soland still validates that claim against the accepted Seal state.
+    // Coland still validates that claim against the accepted Seal state.
     realmAuthorityControllers.set(
       realmAuthorityControllerKey(opts.server, realmId),
       accountActorId(actorId, opts.server),
@@ -2783,7 +2783,7 @@ export async function pushFederationEvents(
     origin: string;
     destination?: string;
     realmId: string;
-    server?: SolandKey;
+    server?: ColandKey;
   },
 ): Promise<PeerCommittedReplicationOutcome> {
   const response = await rawPushFederationEvents(request, events, opts);
@@ -2814,7 +2814,7 @@ type PeerPushOpts = {
   origin: string;
   destination?: string;
   realmId: string;
-  server?: SolandKey;
+  server?: ColandKey;
   tamperSignature?: boolean;
   // Negative-coverage hook: drive the RFC 9421 freshness window past its
   // bound so verify rejects on expiry (federation.md §3.2). The signature
@@ -2829,7 +2829,7 @@ export async function rawPushFederationEvents(
   opts: PeerPushOpts & {
     // Applet transactions accept Events outside the self-submit helper's
     // publication cache. Resolve their original accepted bytes at this source.
-    acceptedSource?: { token: string; server?: SolandKey };
+    acceptedSource?: { token: string; server?: ColandKey };
   },
 ) {
   return await rawPushCommittedReplication(
@@ -2865,8 +2865,8 @@ async function rawPushCommittedReplication(
   replications: CommittedEventSubmission[],
   opts: PeerPushOpts,
 ) {
-  const destination = opts.destination ?? solandServiceId(opts.server);
-  const url = `${solandBaseUrl(opts.server)}/_arkret/peer/events`;
+  const destination = opts.destination ?? colandServiceId(opts.server);
+  const url = `${colandBaseUrl(opts.server)}/_arkret/peer/events`;
   const body = peerCommittedReplicationBody(opts.realmId, replications);
   const sourceServiceId = opts.relaySourceServiceId ?? opts.origin;
   // `ak.peer.events.command.submit.v1` is `canonical_hash / full_body`: the
@@ -2928,7 +2928,7 @@ export async function dispatchSelfInviteApi(
   request: APIRequestContext,
   token: string,
   body: SelfInviteDispatchRequestBody,
-  opts: { server?: SolandKey } = {},
+  opts: { server?: ColandKey } = {},
 ): Promise<InviteDeliveryOutcomeView> {
   const response = await rawDispatchSelfInviteApi(request, token, body, opts);
   return await expectJsonOk<InviteDeliveryOutcomeView>(
@@ -2941,9 +2941,9 @@ export async function rawDispatchSelfInviteApi(
   request: APIRequestContext,
   token: string,
   body: SelfInviteDispatchRequestBody,
-  opts: { server?: SolandKey } = {},
+  opts: { server?: ColandKey } = {},
 ) {
-  const url = `${solandBaseUrl(opts.server)}/_arkret/self/invites/dispatch`;
+  const url = `${colandBaseUrl(opts.server)}/_arkret/self/invites/dispatch`;
   return await request.post(url, {
     data: canonicalJson(body),
     headers: {
@@ -2970,7 +2970,7 @@ export async function submitPeerInviteDeliveryApi(
   opts: {
     origin: string;
     destination?: string;
-    server?: SolandKey;
+    server?: ColandKey;
   },
 ) {
   const response = await rawSubmitPeerInviteDeliveryApi(request, body, opts);
@@ -2987,12 +2987,12 @@ export async function rawSubmitPeerInviteDeliveryApi(
   opts: {
     origin: string;
     destination?: string;
-    server?: SolandKey;
+    server?: ColandKey;
   },
 ) {
   const destination =
     opts.destination ?? body.invite_address.account_id.station_id;
-  const url = `${solandBaseUrl(opts.server)}/_arkret/peer/invites`;
+  const url = `${colandBaseUrl(opts.server)}/_arkret/peer/invites`;
   return await request.post(url, {
     data: canonicalJson(body),
     headers: signedFederationPushHeaders(opts.origin, destination, url, body),
@@ -3014,7 +3014,7 @@ async function committedReplicationRows(
   request: APIRequestContext,
   events: Array<Record<string, unknown>>,
   opts: PeerPushOpts,
-  acceptedSource?: { token: string; server?: SolandKey },
+  acceptedSource?: { token: string; server?: ColandKey },
 ): Promise<CommittedEventSubmission[]> {
   return Promise.all(events.map(async (event) => {
     const eventId = stringValue(event.event_id);
@@ -3029,7 +3029,7 @@ async function committedReplicationRows(
     }
     // Read the exact accepted Event and covering Commit from the registered
     // caller-scoped resource. A withheld view cannot be forwarded as an Event.
-    const url = `${solandBaseUrl(source.server)}/_arkret/self/committed-events/${eventId}`;
+    const url = `${colandBaseUrl(source.server)}/_arkret/self/committed-events/${eventId}`;
     const response = await request.get(url, {
       headers: authHeaders(source.token, "GET", url),
     });
@@ -3057,14 +3057,14 @@ async function committedReplicationRows(
       // The registered peer scan itself must authorize this destination;
       // exact Event/Commit/fact checks below never fall back to a member scan.
       const governors = configuredServerKeys().filter(
-        (server) => solandServiceId(server) === opts.origin,
+        (server) => colandServiceId(server) === opts.origin,
       );
       if (governors.length !== 1) {
         throw new Error("replication governance source has no unique configured Station");
       }
       const page = await scanPeerRealmStreamApi(request, {
         server: governors[0],
-        sourceServiceId: opts.destination ?? solandServiceId(opts.server),
+        sourceServiceId: opts.destination ?? colandServiceId(opts.server),
         realmId: opts.realmId,
         afterPosition: Number(position) === 0 ? null : Number(position) - 1,
         limit: 1,
@@ -3107,7 +3107,7 @@ export type StreamScanOutcome = {
 export async function scanPeerRealmStreamApi(
   request: APIRequestContext,
   opts: {
-    server: SolandKey;
+    server: ColandKey;
     sourceServiceId: string;
     realmId: string;
     afterPosition?: number | null;
@@ -3120,12 +3120,12 @@ export async function scanPeerRealmStreamApi(
     after_position: opts.afterPosition ?? null,
     limit: opts.limit ?? 100,
   };
-  const targetUri = `${solandBaseUrl(opts.server)}/_arkret/peer/streams/scan`;
+  const targetUri = `${colandBaseUrl(opts.server)}/_arkret/peer/streams/scan`;
   const response = await request.post(targetUri, {
     data: canonicalJson(body),
     headers: signedFederationPushHeaders(
       opts.sourceServiceId,
-      solandServiceId(opts.server),
+      colandServiceId(opts.server),
       targetUri,
       body,
     ),
@@ -3211,7 +3211,7 @@ export function fullCommittedRows(page: StreamScanOutcome): CommittedEventFullVi
 /// of the previous page; the scan stops when a page is not truncated.
 export async function scanPeerRealmStreamRowsApi(
   request: APIRequestContext,
-  opts: { server: SolandKey; sourceServiceId: string; realmId: string },
+  opts: { server: ColandKey; sourceServiceId: string; realmId: string },
 ): Promise<CommittedEventFullView[]> {
   const rows: CommittedEventFullView[] = [];
   let afterPosition: number | null = null;
@@ -3365,9 +3365,9 @@ function signedFederationPushHeaders(
   const created = opts.expireSignature ? nowSeconds - 600 : nowSeconds;
   const expires = opts.expireSignature ? nowSeconds - 300 : created + 300;
   const sourceKey = configuredServerKeys().find(
-    (key) => solandServiceId(key) === sourceServiceId,
+    (key) => colandServiceId(key) === sourceServiceId,
   );
-  const keyid = `${sourceKey ? solandServiceDid(sourceKey) : serviceCoreIdToDid(sourceServiceId)}#federation-fanout-key`;
+  const keyid = `${sourceKey ? colandServiceDid(sourceKey) : serviceCoreIdToDid(sourceServiceId)}#federation-fanout-key`;
   const signatureParams =
     `("@method" "@target-uri" "@authority" "content-digest" "arkret-operation" "source-service-id" ` +
     `"destination-service-id" "source-trust-domain" "destination-trust-domain"` +
@@ -3430,7 +3430,7 @@ function developmentProtocolPrivateKey(verificationMethod: string) {
   });
 }
 
-// FIXTURE ONLY: mirrors soland development_mode service HTTP signing keys.
+// FIXTURE ONLY: mirrors coland development_mode service HTTP signing keys.
 function serviceHttpPrivateKey(serviceId: string) {
   const seed = serviceSigningSeed(serviceId);
   const pkcs8Prefix = Buffer.from("302e020100300506032b657004220420", "hex");
@@ -3445,7 +3445,7 @@ function serviceSigningSeed(serviceId: string): Buffer {
   return (
     configuredServiceSigningSeed(serviceId) ??
     createHash("sha256")
-      .update("soland:notary-ephemeral:")
+      .update("coland:notary-ephemeral:")
       .update(serviceId)
       .digest()
   );
@@ -3453,15 +3453,15 @@ function serviceSigningSeed(serviceId: string): Buffer {
 
 function configuredServiceSigningSeed(serviceId: string): Buffer | undefined {
   const server = configuredServerKeys().find(
-    (candidate) => solandServiceId(candidate) === serviceId,
+    (candidate) => colandServiceId(candidate) === serviceId,
   );
   const indexedName = server
-    ? `COTEST_SOLAND_${String(server).toUpperCase()}_SERVICE_SIGNING_KEY`
+    ? `COTEST_COLAND_${String(server).toUpperCase()}_SERVICE_SIGNING_KEY`
     : undefined;
   const encoded =
     (indexedName ? process.env[indexedName]?.trim() : undefined) ??
     (server === "server1"
-      ? process.env.COTEST_SOLAND_SERVICE_SIGNING_KEY?.trim()
+      ? process.env.COTEST_COLAND_SERVICE_SIGNING_KEY?.trim()
       : undefined);
   if (!encoded) {
     return undefined;
@@ -3471,7 +3471,7 @@ function configuredServiceSigningSeed(serviceId: string): Buffer | undefined {
   const seed = Buffer.from(padded, "base64");
   if (seed.length !== 32) {
     throw new Error(
-      `configured Soland service signing key for ${serviceId} must decode to 32 bytes`,
+      `configured Coland service signing key for ${serviceId} must decode to 32 bytes`,
     );
   }
   return seed;
@@ -3480,7 +3480,7 @@ function configuredServiceSigningSeed(serviceId: string): Buffer | undefined {
 function trustDomainFromServiceId(serviceId: string): string {
   requireDidCoreId(serviceId);
   const localKey = configuredServerKeys().find(
-    (key) => solandServiceId(key) === serviceId,
+    (key) => colandServiceId(key) === serviceId,
   );
   if (localKey) {
     return "ak:trust_domain:local.host";

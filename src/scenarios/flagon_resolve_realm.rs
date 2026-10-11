@@ -6,10 +6,10 @@ use anyhow::{Context, Result, bail};
 use arkret_models_discovery::DirectoryResolveRealmRequestBody;
 use arkret_wire::{Problem, RealmId, ServiceOperationId};
 
-use crate::scenarios::_helpers::external_binary::{TEABAY_SPEC, spawn_required};
+use crate::scenarios::_helpers::external_binary::{FLAGON_SPEC, spawn_required};
 
-pub async fn teabay_resolve_realm_unknown_is_blinded_run() -> Result<()> {
-    let proc = spawn_required(&TEABAY_SPEC)
+pub async fn flagon_resolve_realm_unknown_is_blinded_run() -> Result<()> {
+    let proc = spawn_required(&FLAGON_SPEC)
         .await
         .context("spawn flagon binary for resolve-realm test")?;
     let client = reqwest::Client::builder()

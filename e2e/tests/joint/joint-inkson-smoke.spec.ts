@@ -1,5 +1,5 @@
 // T-P0-05 joint harness smoke.
-// Contract: true inkson UI + true soland process create a realm and render messages.
+// Contract: true inkson UI + true coland process create a realm and render messages.
 
 import type { APIRequestContext } from "../../helpers/arkret-test";
 import { test, expect } from "../../helpers/joint-fixture";
@@ -9,7 +9,7 @@ import {
   grantCapabilityEventApi,
   retypeEventDerivedId,
   signedEventEnvelope,
-} from "../../helpers/soland-api";
+} from "../../helpers/coland-api";
 import {
   assertJointStackNotRequired,
   createDpopUserSession,
@@ -30,12 +30,12 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
   // Inkson consumes the accepted default-Strand projection. The Realm token
   // is never retyped into a Strand token; this smoke test resolves the exact
   // projected coordinate before submitting the message.
-  test("creates a public realm and renders a soland message in inkson", async ({
+  test("creates a public realm and renders a coland message in inkson", async ({
     jointRealm,
   }) => {
     // Regression: the Coauth service-account hint belongs to the Account
     // Authority namespace. Public principal identity must instead use the
-    // Soland-signed handle consistently across every shell/chat surface.
+    // Coland-signed handle consistently across every shell/chat surface.
     const stamp = Date.now();
     const aliceMessage = `joint smoke from Alice ${stamp}`;
     const principalHandle = canonicalHandle(
@@ -478,7 +478,7 @@ async function listInvitesForDpop(
 
 // COT-06-004: discover the default Strand via projection rather than deriving it
 // from the Realm identity token. This joint harness submits against an explicit serverUrl
-// (true soland process), so it cannot reuse the shared solandBaseUrl-bound
+// (true coland process), so it cannot reuse the shared colandBaseUrl-bound
 // helper; the discovery logic mirrors it: authoritative Realm `default_strand_id`
 // first, Strand projection `is_default` marker as fallback.
 async function resolveDefaultStrandId(

@@ -2,11 +2,11 @@
 // (DID-P1-C01/C02) — the TypeScript twin of
 // src/scenarios/_helpers/service_metrics.rs.
 //
-// Why metrics rather than a resolver spy: cotest drives soland / flagon as
+// Why metrics rather than a resolver spy: cotest drives coland / flagon as
 // pre-built binaries over HTTP, so no in-process spy can be injected, and the
 // network-layer counting DID host (mock-did-host.mjs, e2e/helpers/did-host.ts)
 // cannot be wired to them because DID→URL derivation hard-codes `https` and the
-// SSRF gate rejects loopback hosts while the URL is still being built. soland
+// SSRF gate rejects loopback hosts while the URL is still being built. coland
 // and flagon therefore export two counters each, and this module turns them
 // into the two numbers the joint contract is written in:
 //
@@ -18,14 +18,14 @@
 // local_snapshot / sdk_cache / did_key hits — which are exactly what "reused the
 // accepted binding" means — never inflate it.
 //
-// Coverage boundary: only soland and flagon expose these counters. coauth,
+// Coverage boundary: only coland and flagon expose these counters. coauth,
 // inkson and bridges have no metrics endpoint, so a scenario about them cannot
 // be expressed here.
 
 import { expect, type APIRequestContext } from "@playwright/test";
-import { solandMetricsUrl, teabayMetricsUrl } from "./env";
+import { colandMetricsUrl, flagonMetricsUrl } from "./env";
 
-export type MeteredService = "soland" | "flagon";
+export type MeteredService = "coland" | "flagon";
 
 /// A single Prometheus sample line.
 export type MetricSample = {
@@ -46,13 +46,13 @@ export type DidBoundaryDelta = {
 export const SOURCE_NETWORK = "network";
 
 const METRIC_NAMES: Record<MeteredService, { didResolve: string; signatureVerify: string }> = {
-  soland: {
-    didResolve: "soland_did_resolve_total",
-    signatureVerify: "soland_signature_verify_total",
+  coland: {
+    didResolve: "coland_did_resolve_total",
+    signatureVerify: "coland_signature_verify_total",
   },
   flagon: {
-    didResolve: "teabay_did_resolve_total",
-    signatureVerify: "teabay_signature_verify_total",
+    didResolve: "flagon_did_resolve_total",
+    signatureVerify: "flagon_signature_verify_total",
   },
 };
 
@@ -250,7 +250,7 @@ function normalizeBaseUrl(value: string): string {
 }
 
 export function metricsUrlFor(service: MeteredService): string | undefined {
-  return service === "soland" ? solandMetricsUrl() : teabayMetricsUrl();
+  return service === "coland" ? colandMetricsUrl() : flagonMetricsUrl();
 }
 
 /// Build a client bound to `request`, or `undefined` when the service's metrics

@@ -4,8 +4,8 @@
 //! [`cotest::scenarios::realm_wire_round_trip`]. The scenario uses the
 //! SDK canonical encoder and event classifier directly — no binary or
 //! network — so this file boots in <1ms and runs in default `cargo
-//! test -p cotest --tests`. Cross-project contract gate: if soland,
-//! inkson, sodmin or federation peers drift on Realm/Space event kinds,
+//! test -p cotest --tests`. Cross-project contract gate: if coland,
+//! inkson, codmin or federation peers drift on Realm/Space event kinds,
 //! the failure surfaces here long before it hits an integration scenario.
 //!
 //! Coverage map:

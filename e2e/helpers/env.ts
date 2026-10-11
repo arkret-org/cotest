@@ -14,7 +14,7 @@ export function optionalEnv(name: string): string | undefined {
   return value ? value : undefined;
 }
 
-export type SolandKey = `server${number}` | "default";
+export type ColandKey = `server${number}` | "default";
 
 type TopologyService = {
   public_url?: string;
@@ -24,7 +24,7 @@ type TopologyService = {
 
 type TopologyServer = {
   name: string;
-  soland?: TopologyService;
+  coland?: TopologyService;
   coauth?: TopologyService;
   inkson?: TopologyService;
 };
@@ -39,7 +39,7 @@ function topology(): { server_count?: number; servers?: TopologyServer[] } | und
   return cachedTopology;
 }
 
-function canonicalServer(key: SolandKey): `server${number}` {
+function canonicalServer(key: ColandKey): `server${number}` {
   const normalized = key === "default" ? "server1" : key;
   if (!/^server[1-9][0-9]*$/.test(normalized)) {
     throw new Error(`Invalid joint topology server key: ${key}`);
@@ -47,17 +47,17 @@ function canonicalServer(key: SolandKey): `server${number}` {
   return normalized;
 }
 
-function serverEnvPrefix(key: SolandKey): string {
+function serverEnvPrefix(key: ColandKey): string {
   return canonicalServer(key).toUpperCase();
 }
 
-function topologyServer(key: SolandKey): TopologyServer | undefined {
+function topologyServer(key: ColandKey): TopologyServer | undefined {
   const name = canonicalServer(key);
   return topology()?.servers?.find((server) => server.name === name);
 }
 
 function requiredServerValue(
-  key: SolandKey,
+  key: ColandKey,
   suffix: string,
   topologyValue: string | undefined,
   server1Fallback?: string,
@@ -77,12 +77,12 @@ function requiredServerValue(
   return value;
 }
 
-export function solandBaseUrl(key: SolandKey = "default"): string {
+export function colandBaseUrl(key: ColandKey = "default"): string {
   return requiredServerValue(
     key,
-    "SOLAND_BASE_URL",
-    topologyServer(key)?.soland?.public_url,
-    "COTEST_SOLAND_BASE_URL",
+    "COLAND_BASE_URL",
+    topologyServer(key)?.coland?.public_url,
+    "COTEST_COLAND_BASE_URL",
   ).replace(/\/$/, "");
 }
 
@@ -92,37 +92,37 @@ export function solandBaseUrl(key: SolandKey = "default"): string {
 // trust-surface classifier; it is gated on `development_mode=true`, and
 // production builds MUST 404 the whole namespace. Tests target this base; the
 // harness only reaches it when the server runs in the canonical test posture.
-export function conformanceBaseUrl(key: SolandKey = "default"): string {
-  return `${solandBaseUrl(key)}/_arkret/_conformance`;
+export function conformanceBaseUrl(key: ColandKey = "default"): string {
+  return `${colandBaseUrl(key)}/_arkret/_conformance`;
 }
 
 // Service DIDs default to did:webvh (v1 core default service method,
 // identity-did.md); the fixture SCID form matches the spec conformance
 // vectors. did:web is reserved for explicit no-history / negative fixtures.
-export function solandServiceId(key: SolandKey = "default"): string {
+export function colandServiceId(key: ColandKey = "default"): string {
   return requiredServerValue(
     key,
-    "SOLAND_SERVICE_ID",
-    topologyServer(key)?.soland?.service_id,
-    "COTEST_SOLAND_SERVICE_ID",
+    "COLAND_SERVICE_ID",
+    topologyServer(key)?.coland?.service_id,
+    "COTEST_COLAND_SERVICE_ID",
   );
 }
 
-export function solandServiceDid(key: SolandKey = "default"): string {
+export function colandServiceDid(key: ColandKey = "default"): string {
   return requiredServerValue(
     key,
-    "SOLAND_SERVICE_DID",
-    topologyServer(key)?.soland?.service_did,
-    "COTEST_SOLAND_SERVICE_DID",
+    "COLAND_SERVICE_DID",
+    topologyServer(key)?.coland?.service_did,
+    "COTEST_COLAND_SERVICE_DID",
   );
 }
 
-export function solandServiceResolution(
-  key: SolandKey = "default",
+export function colandServiceResolution(
+  key: ColandKey = "default",
 ): { resolution_url: string } {
-  const serviceId = solandServiceId(key);
+  const serviceId = colandServiceId(key);
   return {
-    resolution_url: `${solandBaseUrl(key)}/_arkret/open/services/${encodeURIComponent(serviceId)}/resolution`,
+    resolution_url: `${colandBaseUrl(key)}/_arkret/open/services/${encodeURIComponent(serviceId)}/resolution`,
   };
 }
 
@@ -138,10 +138,10 @@ export function hasServerCount(required: number): boolean {
   return configuredServerCount() >= required;
 }
 
-export function configuredServerKeys(): SolandKey[] {
+export function configuredServerKeys(): ColandKey[] {
   return Array.from(
     { length: configuredServerCount() },
-    (_, index) => `server${index + 1}` as SolandKey,
+    (_, index) => `server${index + 1}` as ColandKey,
   );
 }
 
@@ -154,7 +154,7 @@ export function assertServerCountNotRequired(context: string, required: number):
   }
 }
 
-export function inksonBaseUrl(key: SolandKey = "default"): string {
+export function inksonBaseUrl(key: ColandKey = "default"): string {
   const value =
     optionalEnv(`COTEST_INKSON_${serverEnvPrefix(key)}_BASE_URL`) ??
     topologyServer(key)?.inkson?.public_url ??
@@ -163,7 +163,7 @@ export function inksonBaseUrl(key: SolandKey = "default"): string {
   return value.replace(/\/$/, "");
 }
 
-export function coauthBaseUrl(key: SolandKey = "default"): string | undefined {
+export function coauthBaseUrl(key: ColandKey = "default"): string | undefined {
   return (
     optionalEnv(`COTEST_COAUTH_${serverEnvPrefix(key)}_BASE_URL`) ??
     topologyServer(key)?.coauth?.public_url ??
@@ -177,8 +177,8 @@ export function embeddedWebvhRegistrationBearer(): string | undefined {
   return optionalEnv("COTEST_EMBEDDED_WEBVH_REGISTRATION_BEARER");
 }
 
-// The OAuth `client_id` soland is configured to advertise in
-// `/_arkret/describe.auth_metadata.methods[].client_id` (soland config
+// The OAuth `client_id` coland is configured to advertise in
+// `/_arkret/describe.auth_metadata.methods[].client_id` (coland config
 // `oidc_client_id`). The joint harness sets this to the coauth-seeded
 // "Inkson Dev" client ULID; tests assert describe surfaces it verbatim.
 export function coauthOidcClientId(): string | undefined {
@@ -295,17 +295,17 @@ export function mockDidHostScid(): string | undefined {
 // DID-boundary counters (DID-P1-C01). See e2e/helpers/service-metrics.ts.
 // coauth / inkson / bridges expose no metrics endpoint, so they have no
 // counterpart here — a scenario about them cannot be expressed this way.
-export function solandMetricsUrl(): string | undefined {
-  return optionalEnv("COTEST_SOLAND_METRICS_URL")?.replace(/\/$/, "");
+export function colandMetricsUrl(): string | undefined {
+  return optionalEnv("COTEST_COLAND_METRICS_URL")?.replace(/\/$/, "");
 }
 
-export function teabayMetricsUrl(): string | undefined {
-  return optionalEnv("COTEST_TEABAY_METRICS_URL")?.replace(/\/$/, "");
+export function flagonMetricsUrl(): string | undefined {
+  return optionalEnv("COTEST_FLAGON_METRICS_URL")?.replace(/\/$/, "");
 }
 
 // flagon's public REST base URL (the directory face), when the run includes it.
-export function teabayBaseUrl(): string | undefined {
-  return optionalEnv("COTEST_TEABAY_BASE_URL")?.replace(/\/$/, "");
+export function flagonBaseUrl(): string | undefined {
+  return optionalEnv("COTEST_FLAGON_BASE_URL")?.replace(/\/$/, "");
 }
 
 // The joint run directory for this process. playwright.config.ts always sets
