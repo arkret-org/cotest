@@ -234,7 +234,7 @@ return async ({ jointUsers, request, browser }: { jointUsers: JointUsersFixture;
       expect(jointUsers.aliceSession.recoveryKey).toBeTruthy();
       await paired.page.unlockMlsAccountSecret(jointUsers.aliceSession.recoveryKey!);
       await expect(paired.page.page.getByTestId("send-chat-button")).toBeEnabled({ timeout: 180_000 });
-      await flatTopicChats(alice, bob, [...messages, afterReload], [paired.page.page]);
+      await flatTopicChats(alice, bob, [...messages, afterReload], [paired.page.page], { request, token: aliceSession.grantJwt });
     } finally {
       await paired.page.close();
     }

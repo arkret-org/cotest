@@ -1,9 +1,11 @@
 import { expect, test, operationSelector } from "./arkret-test";
-import type { Page, Response, Request } from "@playwright/test";
-import { assertAuthoritySubmitOutcome, canonicalJson, sdkEventDerivedIds, sha256CanonicalJson } from "./coland-api";
+import type { Page, Response, Request, APIRequestContext } from "@playwright/test";
+import { assertAuthoritySubmitOutcome, authHeaders, canonicalJson, readCommitStreamHeadApi, scanRealmStreamApi, sdkEventDerivedIds, sha256CanonicalJson, wireErrCode } from "./coland-api";
 import { decodeEventIngressBody, ingressEvents, type IngressEvent } from "./event-ingress";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile, rename, rm } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
+import { colandBaseUrl } from "./env";
 
 // Diagnostic pairing of one real self submit; not an independent authority/Ed verifier.
 async function observeSelectedHumanSend(page: Page, strandId: string) {
@@ -120,7 +122,7 @@ async function observeSelectedHumanSend(page: Page, strandId: string) {
   };
 }
 
-export async function structureWrite(page: Page, action: string, kind: string, title?: string, topic?: string): Promise<IngressEvent> {
+export async function structureWrite(page: Page, action: string, kind: string, title?: string, topic?: string, refusal?: string): Promise<IngressEvent> {
   const panel = page.getByTestId("direct-structure");
   await expect(panel).toBeVisible();
   if (!await panel.getByRole("combobox", { name: "Action", exact: true }).isVisible()) {
@@ -158,6 +160,14 @@ export async function structureWrite(page: Page, action: string, kind: string, t
       const outcome = await accepted.json() as Record<string, unknown>;
       if (accepted.status() === 503 && outcome.type === "https://arkret.org/problems/temporarily_unavailable"
         && outcome.status === 503) continue;
+      if (refusal) {
+        expect(accepted.status(), JSON.stringify(outcome)).toBe(409);
+        expect(wireErrCode(outcome)).toBe("failed_precondition");
+        expect(outcome.reason_code).toBe(refusal);
+        expect(outcome.commit).toBeUndefined();
+        await expect(panel.getByTestId("direct-structure-status")).not.toHaveText("Saved");
+        return event;
+      }
       expect(accepted.ok(), `structure HTTP refusal: ${accepted.status()} ${String(outcome.type)}`).toBeTruthy();
       expect(outcome.status, `structure refusal: ${String(outcome.reason_code)}`).toBe("committed");
       assertAuthoritySubmitOutcome(outcome, event, action);
@@ -171,7 +181,7 @@ export async function structureWrite(page: Page, action: string, kind: string, t
   }
 }
 
-export async function agentTopicChats(page: Page, receiptPath: string) {
+export async function agentTopicChats(page: Page, receiptPath: string, proof: DirectStructureProof) {
   expect(receiptPath, "actual runtime model receipt path").not.toBe("");
   const panel = page.getByTestId("direct-structure");
   const mainId = decodeURIComponent(new URL(page.url()).pathname.split("/")[3]);
@@ -230,7 +240,7 @@ export async function agentTopicChats(page: Page, receiptPath: string) {
   }
   const markerA = `isolated-chat-a-${suffix}`;
   const markerB = `isolated-chat-b-${suffix}`;
-  const receipts = async (): Promise<Array<{ request: unknown }>> => (await readFile(receiptPath, "utf8"))
+  const receipts = async (): Promise<Array<{ request: unknown; response_pending?: boolean; hold_token?: string }>> => (await readFile(receiptPath, "utf8"))
     .trim().split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line));
   const replyIds = async (): Promise<Set<string>> => {
     const feed = page.getByTestId("message-list").last();
@@ -257,7 +267,25 @@ export async function agentTopicChats(page: Page, receiptPath: string) {
     }
     throw new Error("message history scan did not reach the final virtual window");
   };
-  const send = async (id: string, marker: string, prior?: string, excluded?: string) => {
+  const send = async (id: string, marker: string, prior?: string, excluded?: string, switchTo?: string) => {
+    const realmId = decodeURIComponent(new URL(page.url()).pathname.split("/")[2]);
+    const humanActor = await page.evaluate(() => {
+      const config = JSON.parse(localStorage.getItem("inkson.config.v1") ?? "{}");
+      return { kind: "account", account_id: config.active_account.authority };
+    });
+    const head = switchTo ? await readCommitStreamHeadApi(proof.request, proof.token, realmId) : undefined;
+    let otherReplies: Set<string> | undefined;
+    if (switchTo) {
+      await panel.getByRole("combobox", { name: "Chat", exact: true }).selectOption(switchTo);
+      otherReplies = await replyIds();
+    }
+    const holdPath = `${receiptPath}.hold.json`;
+    const holdToken = randomUUID();
+    if (switchTo) {
+      await writeFile(`${holdPath}.tmp`, JSON.stringify({ marker, token: holdToken }));
+      await rename(`${holdPath}.tmp`, holdPath);
+    }
+    try {
     await panel.getByRole("combobox", { name: "Chat", exact: true }).selectOption(id);
     const before = (await receipts()).length;
     const repliesBefore = await replyIds();
@@ -281,6 +309,33 @@ export async function agentTopicChats(page: Page, receiptPath: string) {
     expect(input, "live runtime must forward the selected Chat message").toBeDefined();
     if (prior) expect(input).toContain(prior);
     if (excluded) expect(input).not.toContain(excluded);
+    if (switchTo) {
+      const held = (await receipts()).slice(before).find(row => row.hold_token === holdToken);
+      expect(held?.response_pending, "the actual model request must be held before its reply").toBe(true);
+      await panel.getByRole("combobox", { name: "Chat", exact: true }).selectOption(switchTo);
+      await expect(panel.getByRole("combobox", { name: "Chat", exact: true })).toHaveValue(switchTo);
+      expect([...await replyIds()].sort()).toEqual([...otherReplies!].sort());
+      await rm(holdPath, { force: true });
+      expect(head, "held generation must have an authenticated accepted cut").toBeDefined();
+      let acceptedReply: Record<string, unknown> | undefined;
+      await expect.poll(async () => {
+        const scan = await scanRealmStreamApi(proof.request, proof.token, realmId, { afterPosition: head!.stream_position });
+        expect(scan.truncated).toBe(false);
+        const agentReplies = scan.events.filter(event => event.kind === "ak.message.create"
+          && canonicalJson(event.actor_id) !== canonicalJson(humanActor));
+        expect(agentReplies.every(event => (event.payload as Record<string, unknown>).strand_id === id)).toBe(true);
+        acceptedReply = agentReplies[0];
+        return agentReplies.length;
+      }, { timeout: 180_000 }).toBe(1);
+      expect([...await replyIds()].sort()).toEqual([...otherReplies!].sort());
+      await test.info().attach("direct-generation-ui-switch-original-strand", {
+        body: Buffer.from(JSON.stringify({ hold_token: holdToken, original_strand_id: id, selected_during_generation: switchTo,
+          reply_event_id: acceptedReply!.event_id, reply_strand_id: (acceptedReply!.payload as Record<string, unknown>).strand_id })),
+        contentType: "application/json",
+      });
+      await panel.getByRole("combobox", { name: "Chat", exact: true }).selectOption(id);
+    }
+
     await expect.poll(async () => {
       const replies = await replyIds();
       return { total: replies.size, added: [...replies].filter(id => !repliesBefore.has(id)).length,
@@ -305,8 +360,11 @@ export async function agentTopicChats(page: Page, receiptPath: string) {
       });
       throw error;
     });
+    } finally {
+      if (switchTo) await rm(holdPath, { force: true });
+    }
   };
-  await send(chats[0], markerA, undefined, markerB);
+  await send(chats[0], markerA, undefined, markerB, chats[1]);
   await send(chats[1], markerB, undefined, markerA);
   await structureWrite(page, "rename_topic_target", "ak.space.update", `agent-topic-renamed-${suffix}`, topicId);
   await structureWrite(page, "archive_topic_target", "ak.space.archive", undefined, topicId);
@@ -316,7 +374,9 @@ export async function agentTopicChats(page: Page, receiptPath: string) {
   await panel.getByRole("combobox", { name: "Chat", exact: true }).selectOption(mainId);
 }
 
-export async function flatTopicChats(alice: Page, bob: Page, mainMessages: string[], extraDevices: Page[] = []) {
+type DirectStructureProof = { request: APIRequestContext; token: string };
+
+export async function flatTopicChats(alice: Page, bob: Page, mainMessages: string[], extraDevices: Page[] = [], proof?: DirectStructureProof) {
   const pages = [alice, bob, ...extraDevices];
   for (const page of pages) {
     await page.addLocatorHandler(page.getByTestId("mls-backup-modal"), async () => {
@@ -324,7 +384,7 @@ export async function flatTopicChats(alice: Page, bob: Page, mainMessages: strin
     });
   }
   try {
-    await runFlatTopicChats(alice, bob, mainMessages, extraDevices);
+    await runFlatTopicChats(alice, bob, mainMessages, extraDevices, proof);
   } finally {
     for (const page of pages) {
       await page.removeLocatorHandler(page.getByTestId("mls-backup-modal"));
@@ -332,7 +392,7 @@ export async function flatTopicChats(alice: Page, bob: Page, mainMessages: strin
   }
 }
 
-async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[], extraDevices: Page[]) {
+async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[], extraDevices: Page[], proof?: DirectStructureProof) {
   const mainPath = new URL(alice.url()).pathname;
   const mainId = decodeURIComponent(mainPath.split("/")[3]);
   const suffix = Date.now();
@@ -372,8 +432,27 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
   await chooseAlice.selectOption(mainId);
   await expect(alice.getByTestId("chat-input")).toHaveValue("");
   await alice.getByTestId("chat-input").fill(mainDraft);
+  await expect(alice.getByTestId("chat-input")).toHaveAttribute("data-draft-storage", "saved");
   await chooseAlice.selectOption(chatId);
   await expect(alice.getByTestId("chat-input")).toHaveValue(chatDraft);
+  await expect(alice.getByTestId("chat-input")).toHaveAttribute("data-draft-storage", "saved");
+  // Both drafts are nonempty at process restart. Storage must isolate the
+  // actual Strand and device rather than merely preserve mounted Signals.
+  await expect(alice).toHaveURL(url => {
+    const parts = url.pathname.split("/");
+    return parts[1] === "direct"
+      && decodeURIComponent(parts[2]) === decodeURIComponent(mainPath.split("/")[2])
+      && decodeURIComponent(parts[3]) === chatId;
+  });
+  await alice.reload();
+  await expect(chooseAlice).toHaveValue(chatId, { timeout: 90_000 });
+  await expect(alice.getByTestId("chat-input")).toHaveValue(chatDraft);
+  await chooseAlice.selectOption(mainId);
+  await expect(alice.getByTestId("chat-input")).toHaveValue(mainDraft);
+  await chooseAlice.selectOption(chatId);
+  for (const device of extraDevices) {
+    await expect(device.getByTestId("chat-input")).toHaveValue("");
+  }
   for (const [sender, recipient] of [[alice, bob], [bob, alice]] as const) {
     const text = `topic-chat-${sender === alice ? "a" : "b"}-${suffix}`;
     if (sender === alice) {
@@ -421,6 +500,61 @@ async function runFlatTopicChats(alice: Page, bob: Page, mainMessages: string[],
     await expect(choose.locator(`option[value=${JSON.stringify(chatId)}]`)).toContainText(renamed, { timeout: 90_000 });
     await choose.selectOption(chatId);
   }
+  const realmId = decodeURIComponent(mainPath.split("/")[2]);
+  const snapshot = async () => {
+    if (!proof) return undefined;
+    const url = new URL(`${colandBaseUrl()}/_arkret/self/realm-state-snapshot/head`);
+    url.searchParams.set("realm_id", realmId);
+    const response = await proof.request.get(url.toString(), { headers: authHeaders(proof.token, "GET", url.toString()) });
+    expect(response.ok(), await response.text()).toBeTruthy();
+    const body = await response.json() as { current_state_entries: Array<Record<string, unknown>> };
+    return body.current_state_entries;
+  };
+  const refusedTopic = async (referenceState: "active" | "archived") => {
+    const head = proof && await readCommitStreamHeadApi(proof.request, proof.token, realmId);
+    const current = await snapshot();
+    const event = await structureWrite(alice, "delete_topic_target", "ak.space.tombstone", undefined, topicId, "space_has_live_dependents");
+    expect(event.payload?.space_id).toBe(topicId);
+    if (proof) {
+      expect(head, "rejection must have an authenticated pre-submit cut").toBeDefined();
+      expect(await readCommitStreamHeadApi(proof.request, proof.token, realmId)).toEqual(head);
+      expect(await snapshot()).toEqual(current);
+      const scan = await scanRealmStreamApi(proof.request, proof.token, realmId, { afterPosition: head!.stream_position });
+      expect(scan.truncated).toBe(false);
+      expect(scan.events).toEqual([]);
+      expect(scan.commits).toEqual([]);
+    }
+    await test.info().attach(`topic-tombstone-${referenceState}-refusal`, {
+      body: Buffer.from(JSON.stringify({ event_id: event.event_id, reason_code: "space_has_live_dependents", head, current_unchanged: !!proof })),
+      contentType: "application/json",
+    });
+    await alice.reload();
+    await expect(chooseAlice.locator(`option[value=${JSON.stringify(chatId)}]`)).toContainText(renamed, { timeout: 90_000 });
+    await chooseAlice.selectOption(chatId);
+  };
+  await refusedTopic("active");
+  const archived = await structureWrite(alice, "archive_chat", "ak.strand.archive");
+  expect(archived.payload?.strand_id).toBe(chatId);
+  expect(archived.payload?.strand_id).not.toBe(mainId);
+  for (const page of [alice, bob, ...extraDevices]) {
+    await expect(page.getByTestId("direct-structure").getByRole("combobox", { name: "Chat", exact: true })
+      .locator(`option[value=${JSON.stringify(chatId)}]`)).toContainText("(archived)", { timeout: 90_000 });
+  }
+  await refusedTopic("archived");
+  const restored = await structureWrite(alice, "restore_chat", "ak.strand.restore");
+  expect(restored.payload?.strand_id).toBe(chatId);
+  for (const page of [alice, bob, ...extraDevices]) {
+    const option = page.getByTestId("direct-structure").getByRole("combobox", { name: "Chat", exact: true })
+      .locator(`option[value=${JSON.stringify(chatId)}]`);
+    await expect(option).not.toContainText("(archived)", { timeout: 90_000 });
+    await expect(option).toContainText(renamed);
+  }
+  // Committed sends cleared the extra Chat, while the untouched main draft
+  // survived the second cold reload and both lifecycle transitions.
+  await chooseAlice.selectOption(mainId);
+  await expect(alice.getByTestId("chat-input")).toHaveValue(mainDraft);
+  await chooseAlice.selectOption(chatId);
+  await expect(alice.getByTestId("chat-input")).toHaveValue("");
   const cleared = await structureWrite(alice, "unplace", "ak.strand.update");
   expect((cleared.payload?.patch as Record<string, unknown>).topic).toEqual({ $op: "unset" });
   await structureWrite(bob, "delete_topic_target", "ak.space.tombstone", undefined, topicId);

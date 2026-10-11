@@ -33,18 +33,44 @@ const server = http.createServer((request, response) => {
 
   const chunks = [];
   request.on("data", (chunk) => chunks.push(chunk));
-  request.on("end", () => {
+  request.on("end", async () => {
     const raw = Buffer.concat(chunks).toString("utf8");
     const requestBody = raw ? JSON.parse(raw) : {};
+    // This loopback fixture barrier affects only the named test request. It
+    // does not change gateway configuration or any production model protocol.
+    const holdPath = receiptPath && `${receiptPath}.hold.json`;
+    let hold;
+    if (holdPath && fs.existsSync(holdPath)) {
+      const candidate = JSON.parse(fs.readFileSync(holdPath, "utf8"));
+      if (typeof candidate.marker === "string" && typeof candidate.token === "string"
+          && JSON.stringify(requestBody).includes(candidate.marker)) hold = candidate;
+    }
     if (receiptPath) {
       fs.appendFileSync(
         receiptPath,
         `${JSON.stringify({
           received_at: new Date().toISOString(),
           request: requestBody,
+          ...(hold ? { response_pending: true, hold_token: hold.token } : {}),
         })}\n`,
         "utf8",
       );
+    }
+
+    if (hold) {
+      try {
+        await new Promise((resolve, reject) => {
+          const deadline = Date.now() + 180_000;
+          const timer = setInterval(() => {
+            if (!fs.existsSync(holdPath)) { clearInterval(timer); resolve(); }
+            else if (Date.now() >= deadline) { clearInterval(timer); reject(new Error("model barrier was not released")); }
+          }, 20);
+          response.once("close", () => { clearInterval(timer); reject(new Error("model client disconnected")); });
+        });
+      } catch (error) {
+        if (!response.destroyed) writeJson(response, 503, { error: { message: error.message } });
+        return;
+      }
     }
 
     const suffix = Date.now().toString(36);

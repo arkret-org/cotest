@@ -609,7 +609,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           await accountOutage.restore();
         }
 
-        await agentTopicChats(inkson, process.env.COTEST_SAVFOX_MODEL_RECEIPTS?.trim() ?? "");
+        await agentTopicChats(inkson, process.env.COTEST_SAVFOX_MODEL_RECEIPTS?.trim() ?? "", { request, token: jointRealm.aliceSession.grantJwt });
 
         if (lifecycleEvidenceOnly) {
           const directConversationUrl = inkson.url();
