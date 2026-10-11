@@ -115,7 +115,7 @@ pub fn run_managed_governance_suite() -> Result<()> {
     ensure!(fixture["runner"]["entrypoint"] == MANAGED_GOVERNANCE_ENTRYPOINT);
     // Run the authoritative reference model as reference evidence, never as SUT execution.
     let output = Command::new(std::env::var_os("COTEST_PYTHON").unwrap_or_else(|| "python".into()))
-        .args(["-m", "tools.test_managed_governance_contract"])
+        .args(["-X", "utf8", "-m", "tools.test_managed_governance_contract"])
         .current_dir(&root)
         .output()
         .context("execute canonical management reference decisions")?;
