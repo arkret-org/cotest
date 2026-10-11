@@ -242,13 +242,28 @@ async fn closure_checks(
             if row.event == *target && row.commit == *commit),
             "reverse scan crossed the departure cut"
         );
-        let late = replication_body(&fixture.alice, &terminal, &terminal_commit).await?;
-        for _ in 0..2 {
-            ensure!(
-                matches!(replicate(fixture.group.server(1), fixture.group.server(0), &late).await?.as_slice(),
-                [PeerCommittedReplicationOutcomeRecord::Rejected { reason_code }] if reason_code == "capability_denied")
-            );
-            ensure!(acceptance_rows(&receiver_url).await? == installed);
+        ensure!(
+            after.1.previous_commit_ref.as_ref() == Some(&commit.commit_id)
+                && after.1.stream_position == commit.stream_position + 1
+        );
+        let late_message = replication_body(&fixture.alice, &after.0, &after.1).await?;
+        let late_terminal = replication_body(&fixture.alice, &terminal, &terminal_commit).await?;
+        // The direct successor reaches the departed-host gate. The terminal
+        // has an unavailable predecessor and must fail continuity first.
+        for (late, expected) in [
+            (&late_message, "capability_denied"),
+            (&late_terminal, "dependency_missing"),
+        ] {
+            for _ in 0..2 {
+                let outcome =
+                    replicate(fixture.group.server(1), fixture.group.server(0), late).await?;
+                ensure!(
+                    matches!(outcome.as_slice(),
+                    [PeerCommittedReplicationOutcomeRecord::Rejected { reason_code }] if reason_code == expected),
+                    "post-departure signed replica expected {expected}, received {outcome:?}"
+                );
+                ensure!(acceptance_rows(&receiver_url).await? == installed);
+            }
         }
         ensure!(
             commit_row(&receiver_url, &after.1).await?.is_none()
