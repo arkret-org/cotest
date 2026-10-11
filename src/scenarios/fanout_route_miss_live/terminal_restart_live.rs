@@ -5,7 +5,7 @@ use arkret_models_collaboration::governance::realm_lifecycle::RealmTombstonePayl
 use super::*;
 use crate::scenarios::_helpers::acceptance_footprint::acceptance_rows;
 
-async fn sql(url: &str, statement: &str) -> Result<()> {
+pub(super) async fn sql(url: &str, statement: &str) -> Result<()> {
     let url = url.to_owned();
     let statement = statement.to_owned();
     tokio::task::spawn_blocking(move || -> Result<()> {
@@ -15,7 +15,7 @@ async fn sql(url: &str, statement: &str) -> Result<()> {
     .await?
 }
 
-async fn fanout(url: &str, commit: &RealmCommit) -> Result<Vec<Value>> {
+pub(super) async fn fanout(url: &str, commit: &RealmCommit) -> Result<Vec<Value>> {
     let url = url.to_owned();
     let event = commit.event_ref.to_string();
     tokio::task::spawn_blocking(move || -> Result<_> {
@@ -27,7 +27,7 @@ async fn fanout(url: &str, commit: &RealmCommit) -> Result<Vec<Value>> {
     }).await?
 }
 
-async fn tombstone(fixture: &CurrentOriginFixture) -> Result<(Event, RealmCommit)> {
+pub(super) async fn tombstone(fixture: &CurrentOriginFixture) -> Result<(Event, RealmCommit)> {
     let successor = fixture
         .alice
         .create_realm("Terminal restart successor")
@@ -84,7 +84,7 @@ fn ensure_ordinary_refusal_rows(
     Ok(())
 }
 
-fn ensure_same_intent(before: &Value, after: &Value) -> Result<()> {
+pub(super) fn ensure_same_intent(before: &Value, after: &Value) -> Result<()> {
     for key in [
         "id",
         "peer_id",
@@ -102,7 +102,7 @@ fn ensure_same_intent(before: &Value, after: &Value) -> Result<()> {
     Ok(())
 }
 
-async fn qualified_ordinary_candidate(
+pub(super) async fn qualified_ordinary_candidate(
     fixture: &CurrentOriginFixture,
 ) -> Result<(Event, RealmCommit, Event)> {
     let principal = fixture.bob.principal.as_ref().context("member principal")?;

@@ -1046,8 +1046,64 @@ pub async fn run_agent_runtime_session_live() -> Result<()> {
     Ok(())
 }
 
-/// An Agent publishes with its own current key after restoring persisted MLS
-/// identity state; a Device branch cannot be smuggled through that session.
+/// Persist the joined group and the exact consume inputs in one journal,
+/// then reopen it before any receipt signing or remote queue acknowledgement.
+fn persist_and_reopen_agent_welcome(
+    group: &arkret::ArkretMlsGroup,
+    welcome: &arkret_wire::MlsWelcomeDelivery,
+    outcome: &arkret_models_crypto::KeyPackagesClaimOutcome,
+    path: &std::path::Path,
+) -> Result<arkret::ArkretMlsGroup> {
+    use std::io::Write as _;
+    let record = group.export_state_record()?;
+    let bytes = arkret_canonical::canonical_json_bytes(&json!({
+        "group": record, "welcome": welcome, "claim_outcome": outcome,
+    }))?;
+    let mut pending = tempfile::NamedTempFile::new_in(path.parent().context("journal parent")?)?;
+    pending.write_all(&bytes)?;
+    pending.as_file().sync_all()?;
+    let committed = pending.persist_noclobber(path)?;
+    committed.sync_all()?;
+    #[cfg(unix)]
+    std::fs::File::open(path.parent().context("journal parent")?)?.sync_all()?;
+    drop(committed);
+    let stored: serde_json::Value = serde_json::from_slice(&std::fs::read(path)?)?;
+    ensure!(
+        stored["welcome"] == serde_json::to_value(welcome)?
+            && stored["claim_outcome"] == serde_json::to_value(outcome)?,
+        "durable Agent consume intent differs from admitted inputs"
+    );
+    let record: arkret_models_crypto::MlsGroupStateRecord =
+        serde_json::from_value(stored["group"].clone())?;
+    arkret::ArkretMlsGroup::restore_from_state_record(&record).map_err(Into::into)
+}
+
+/// Freeze the signed consume request before sending, so recovery cannot re-sign it.
+fn persist_and_reopen_agent_consume(
+    request: &arkret_models_crypto::KeyPackagesConsumeRequestBody,
+    path: &std::path::Path,
+) -> Result<arkret_models_crypto::KeyPackagesConsumeRequestBody> {
+    use std::io::Write as _;
+    request.validate_shape().map_err(anyhow::Error::msg)?;
+    let bytes = arkret_canonical::canonical_json_bytes(request)?;
+    let mut pending = tempfile::NamedTempFile::new_in(path.parent().context("consume parent")?)?;
+    pending.write_all(&bytes)?;
+    pending.as_file().sync_all()?;
+    let committed = pending.persist_noclobber(path)?;
+    committed.sync_all()?;
+    #[cfg(unix)]
+    std::fs::File::open(path.parent().context("consume parent")?)?.sync_all()?;
+    drop(committed);
+    let recovered: arkret_models_crypto::KeyPackagesConsumeRequestBody =
+        serde_json::from_slice(&std::fs::read(path)?)?;
+    ensure!(
+        arkret_canonical::canonical_json_bytes(&recovered)? == bytes,
+        "durable Agent consume request changed its exact signed bytes"
+    );
+    Ok(recovered)
+}
+
+/// An Agent publishes and durably joins using its authorized runtime key.
 pub async fn run_agent_keypackage_upload_live() -> Result<()> {
     let group_name = "agent-keypackage-upload";
     let Some(database) = database(group_name)? else {
@@ -1463,6 +1519,37 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
         ),
     )
     .map_err(anyhow::Error::msg)?;
+    for (name, field, value) in [
+        ("agent_present_empty", "target_device_ids", json!([])),
+        ("agent_null", "target_device_ids", serde_json::Value::Null),
+        ("empty_capabilities", "required_capabilities", json!([])),
+        (
+            "duplicate_capabilities",
+            "required_capabilities",
+            json!(["ak.content.v1", "ak.content.v1"]),
+        ),
+        ("zero_timeout", "timeout_ms", json!(0)),
+    ] {
+        let before = super::mls_lifecycle_live::upload_durable_cut(&database.connect_url).await?;
+        let mut invalid = serde_json::to_value(&controller_claim)?;
+        invalid[field] = value;
+        let (status, refused) = super::mls_lifecycle_live::post_bytes_at(
+            &controller,
+            "/_arkret/self/keys/keypackages/claim",
+            &invalid,
+        )
+        .await?;
+        ensure!(
+            status == StatusCode::UNPROCESSABLE_ENTITY
+                && super::mls_lifecycle_live::problem_type(&refused)? == "schema_violation",
+            "{name} self claim bypassed DTO admission: {status} {}",
+            String::from_utf8_lossy(&refused)
+        );
+        ensure!(
+            super::mls_lifecycle_live::upload_durable_cut(&database.connect_url).await? == before,
+            "{name} self claim changed inventory, claim or Welcome state"
+        );
+    }
     let (status, response) =
         crate::scenarios::mls_lifecycle_live::post_claim(&controller, &controller_claim).await?;
     ensure!(
@@ -1475,6 +1562,16 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
         outcome.claims.len() == 1,
         "controller claim selected an unexpected set: {outcome:?}"
     );
+    outcome.validate_shape()?;
+    let station_resolution = agent
+        .runtime
+        .sdk()
+        .open_service_resolution(station.service_id())
+        .await?;
+    arkret::verify_peer_keypackage_claim_receipt_signature(
+        &outcome.claim_receipt,
+        &station_resolution,
+    )?;
     let add_claim = outcome.claims[0].clone();
     ensure!(
         add_claim.agent_id.as_ref() == Some(&agent.agent_account.principal_id)
@@ -1557,13 +1654,7 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
         1,
         0,
     )?;
-    let mut add_record = add_keypackage.clone();
-    add_record.keypackage = add_claim.keypackage.clone();
-    add_record.keypackage_ref = arkret_wire::Hash::new(add_claim.keypackage_ref.clone())?;
-    add_record.capabilities = add_claim.capabilities.clone();
-    add_record.state = arkret_models_crypto::MlsKeyPackageState::Claimed;
-    add_record.claim_id = Some(add_claim.claim_id.clone());
-    add_record.expires_at = Some(add_claim.expires_at);
+    let add_record = arkret::mls_key_package_record_from_claim(&add_claim)?;
     let add = controller_group.add_member_with_governance_binding(&add_record, &add_binding)?;
     let commit_payload =
         arkret::MlsCommitPayload::new(genesis.event_id.clone(), 0, &add.commit, add_binding)?;
@@ -1606,7 +1697,7 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
     welcome.producer_proof = arkret_signatures::detached_object::sign_detached_object(
         &unsigned,
         arkret_wire::DetachedSignatureContext::MlsWelcomeDelivery,
-        controller_method,
+        controller_method.clone(),
         arkret_canonical::normalize_timestamp_canonical(Utc::now()),
         &controller_principal.device_signing_key,
     )?;
@@ -1659,6 +1750,115 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
         queued == vec![welcome.clone()],
         "Agent queue did not receive exact Welcome: {queued:?}"
     );
+    let own_outcome = agent
+        .runtime
+        .sdk()
+        .keypackages_claim_query(&arkret_models_crypto::KeyPackagesClaimQueryRequestBody {
+            claim_id: arkret_wire::KeypackageClaimId::new(add_claim.claim_id.clone())?,
+        })
+        .await?;
+    ensure!(
+        serde_json::to_value(&own_outcome)? == serde_json::to_value(&outcome)?,
+        "Agent own-Station read changed the original claim outcome"
+    );
+    arkret::verify_peer_keypackage_claim_receipt_signature(
+        &own_outcome.claim_receipt,
+        &station_resolution,
+    )?;
+    let local_endpoint = garth::mls::LocalMlsEndpoint::agent_runtime(
+        joined_realm.clone(),
+        ActorId::account(agent.agent_account.clone()),
+        agent.verification_method.clone(),
+    );
+    let verified_claim = garth::mls::verify_welcome_claim(
+        &welcome,
+        &local_endpoint,
+        &accepted.event,
+        &own_outcome,
+        station.service_id(),
+        &agent.key_authorization,
+    )?;
+    ensure!(
+        serde_json::to_value(&verified_claim)? == serde_json::to_value(&add_claim)?,
+        "Agent Welcome verifier selected another claim"
+    );
+    let private_store = tempfile::tempdir()?;
+    let journal_path = private_store.path().join("welcome");
+    let before_refusals =
+        super::mls_lifecycle_live::upload_durable_cut(&database.connect_url).await?;
+    // Re-sign adversarial outcomes with the actual harness Station key to
+    // exercise the binding checks independently of signature corruption.
+    let (_, station_seed) = crate::harness::test_service_signing_key(&format!("{group_name}-0"));
+    let station_key = SigningKey::from_bytes(&station_seed);
+    for (name, mut changed) in [
+        ("actor", own_outcome.clone()),
+        ("station", own_outcome.clone()),
+        ("runtime_method", own_outcome.clone()),
+        ("authorization", own_outcome.clone()),
+        ("leaf_key", own_outcome.clone()),
+    ] {
+        match name {
+            "actor" => changed.claims[0].actor_id = ActorId::account(controller_account.clone()),
+            "station" => {
+                changed.claims[0].actor_id = ActorId::account(AccountId::new(
+                    agent.agent_account.principal_id.clone(),
+                    DidCoreId::new("ak:did_core:web:wrong-station.example")?,
+                ))
+            }
+            "runtime_method" => {
+                changed.claims[0].agent_verification_method = Some(controller_method.clone())
+            }
+            "authorization" => {
+                changed.claims[0].agent_key_authorize_event_id = Some(genesis.event_id.clone())
+            }
+            "leaf_key" => {
+                let other_identity = ArkretMlsIdentity::new_agent(
+                    ActorId::account(agent.agent_account.clone()),
+                    agent.verification_method.clone(),
+                    agent.key_authorization.clone(),
+                    ArkretMlsSigner::from_ed25519_signing_key(SigningKey::from_bytes(&[91; 32])),
+                )?;
+                let other = other_identity.key_package_record()?;
+                changed.claims[0].keypackage = other.keypackage;
+                changed.claims[0].keypackage_ref = other.keypackage_ref.to_string();
+            }
+            _ => unreachable!(),
+        }
+        changed.claim_receipt.claims_digest =
+            arkret_wire::Hash::new(arkret_canonical::canonical_sha256(&changed.claims)?)?;
+        let signing_bytes = arkret_models_crypto::peer_keypackage_claim_receipt_signing_bytes(
+            &changed.claim_receipt,
+        )?;
+        changed.claim_receipt.signature.sig = arkret_wire::Base64UrlString::new(
+            arkret_canonical::base64url_encode(station_key.sign(&signing_bytes).to_bytes()),
+        )
+        .map_err(anyhow::Error::msg)?;
+        arkret::verify_peer_keypackage_claim_receipt_signature(
+            &changed.claim_receipt,
+            &station_resolution,
+        )?;
+        ensure!(
+            garth::mls::verify_welcome_claim(
+                &welcome,
+                &local_endpoint,
+                &accepted.event,
+                &changed,
+                station.service_id(),
+                &agent.key_authorization,
+            )
+            .is_err(),
+            "Agent Welcome accepted {name} mismatch"
+        );
+        ensure!(
+            !journal_path.exists(),
+            "{name} mismatch installed partial durable group"
+        );
+        ensure!(
+            super::mls_lifecycle_live::upload_durable_cut(&database.connect_url).await?
+                == before_refusals,
+            "{name} mismatch consumed a claim or acknowledged a Welcome"
+        );
+    }
     let mut agent_group =
         arkret::ArkretMlsGroup::join_from_verified_welcome_delivery(restored, &welcome, &accepted)?;
     ensure!(agent_group.epoch() == 1, "Agent did not install epoch 1");
@@ -1713,18 +1913,37 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
             .any(|row| row.commit().event_ref == commit_event.event_id),
         "Agent stream scan did not return its accepted Add Commit"
     );
-    agent
-        .runtime
-        .post("/_arkret/self/device_messages/ack")
-        .json(
-            &arkret_models_collaboration::device_messages::DeviceMessagesAckRequestBody {
-                ack_token,
-            },
+    let blocked_parent = private_store.path().join("blocked");
+    std::fs::write(&blocked_parent, b"not a directory")?;
+    let before_save_failure =
+        super::mls_lifecycle_live::upload_durable_cut(&database.connect_url).await?;
+    ensure!(
+        persist_and_reopen_agent_welcome(
+            &agent_group,
+            &welcome,
+            &own_outcome,
+            &blocked_parent.join("welcome"),
         )
-        .send()
-        .await?
-        .error_for_status()?;
-
+        .is_err(),
+        "Agent Welcome persistence unexpectedly succeeded under a file"
+    );
+    ensure!(
+        !journal_path.exists(),
+        "failed save installed a partial durable group"
+    );
+    ensure!(
+        super::mls_lifecycle_live::upload_durable_cut(&database.connect_url).await?
+            == before_save_failure,
+        "failed save consumed a claim or acknowledged a Welcome"
+    );
+    let reopened =
+        persist_and_reopen_agent_welcome(&agent_group, &welcome, &own_outcome, &journal_path)?;
+    drop(agent_group);
+    let mut agent_group = reopened;
+    ensure!(
+        agent_group.epoch() == 1 && agent_group.verified_leaf_bindings()?.len() == 2,
+        "durable Agent group lost its epoch or complete roster"
+    );
     let receipt = arkret_models_crypto::RecipientMlsDurableReceipt {
         domain: arkret_wire::NonEmptyString::new(
             arkret_wire::DomainSeparationId::MLS_RECIPIENT_DURABLE_RECEIPT_V1.to_owned(),
@@ -1754,8 +1973,10 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
     };
     let mut wrong_binding = receipt.clone();
     wrong_binding.claim_request_id = claim.claim_request_id.clone();
-    let wrong_binding = identity.sign_recipient_mls_durable_receipt(wrong_binding)?;
-    let wrong_consume = identity.signed_key_packages_consume_request(
+    let wrong_binding = agent_group
+        .identity()
+        .sign_recipient_mls_durable_receipt(wrong_binding)?;
+    let wrong_consume = agent_group.identity().signed_key_packages_consume_request(
         arkret_wire::KeypackageClaimId::new(add_claim.claim_id.clone())?,
         wrong_binding,
     )?;
@@ -1770,11 +1991,42 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
         "Agent consume accepted another claim's receipt binding: {status} {result}"
     );
 
-    let receipt = identity.sign_recipient_mls_durable_receipt(receipt)?;
-    let consume = identity.signed_key_packages_consume_request(
+    let receipt = agent_group
+        .identity()
+        .sign_recipient_mls_durable_receipt(receipt)?;
+    let consume = agent_group.identity().signed_key_packages_consume_request(
         arkret_wire::KeypackageClaimId::new(add_claim.claim_id.clone())?,
         receipt,
     )?;
+    let consume_path = private_store.path().join("consume");
+    let before_intent_failure =
+        super::mls_lifecycle_live::upload_durable_cut(&database.connect_url).await?;
+    ensure!(
+        persist_and_reopen_agent_consume(&consume, &blocked_parent.join("consume")).is_err(),
+        "Agent consume intent unexpectedly persisted under a file"
+    );
+    ensure!(
+        !consume_path.exists(),
+        "failed save installed a partial intent"
+    );
+    ensure!(
+        super::mls_lifecycle_live::upload_durable_cut(&database.connect_url).await?
+            == before_intent_failure,
+        "failed intent save consumed a claim or acknowledged a Welcome"
+    );
+    let consume = persist_and_reopen_agent_consume(&consume, &consume_path)?;
+    let frozen_consume = std::fs::read(&consume_path)?;
+    agent
+        .runtime
+        .post("/_arkret/self/device_messages/ack")
+        .json(
+            &arkret_models_collaboration::device_messages::DeviceMessagesAckRequestBody {
+                ack_token,
+            },
+        )
+        .send()
+        .await?
+        .error_for_status()?;
     let (status, result) = crate::scenarios::mls_lifecycle_live::post_json_at(
         &controller,
         "/_arkret/self/keys/keypackages/consume",
@@ -1785,7 +2037,7 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
         matches!(status, StatusCode::FORBIDDEN | StatusCode::NOT_FOUND),
         "the controller consumed its Agent's KeyPackage claim: {status} {result}"
     );
-    let (status, result) = crate::scenarios::mls_lifecycle_live::post_json_at(
+    let (status, result) = crate::scenarios::mls_lifecycle_live::post_bytes_at(
         &agent.runtime,
         "/_arkret/self/keys/keypackages/consume",
         &consume,
@@ -1793,10 +2045,57 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
     .await?;
     ensure!(
         status == StatusCode::OK,
-        "Agent durable consume refused: {status} {result}"
+        "Agent durable consume refused: {status} {}",
+        String::from_utf8_lossy(&result)
+    );
+    let consumed: arkret_models_crypto::KeyPackagesConsumeOutcome =
+        serde_json::from_slice(&result)?;
+    consumed
+        .consume_receipt
+        .validate_shape()
+        .map_err(anyhow::Error::msg)?;
+    let service_document = arkret_identity::authenticated_service_document_at(
+        &station_resolution,
+        station.service_id(),
+        consumed.consume_receipt.consumed_at,
+    )
+    .map_err(anyhow::Error::msg)?;
+    let receipt_method =
+        DidUrl::new(consumed.consume_receipt.signature.kid.as_str()).map_err(anyhow::Error::msg)?;
+    arkret_identity::validate_verification_method_relationship(
+        &service_document,
+        &receipt_method,
+        &service_document.id,
+        arkret_identity::DidVerificationRelationship::AssertionMethod,
+    )
+    .map_err(anyhow::Error::msg)?;
+    let receipt_key =
+        arkret_identity::public_key_material_from_document(&service_document, &receipt_method)
+            .map_err(anyhow::Error::msg)?
+            .ed25519_bytes()
+            .map_err(anyhow::Error::msg)?;
+    arkret_signatures::keypackages::verify_keypackage_signing_input(
+        &receipt_key,
+        receipt_method.as_str(),
+        &consumed.consume_receipt.canonical_signing_bytes()?,
+        &consumed.consume_receipt.signature,
+    )
+    .map_err(anyhow::Error::msg)?;
+    ensure!(
+        consumed.consume_receipt.claim_id == consume.claim_id
+            && serde_json::to_value(&consumed.consume_receipt.recipient_durable_receipt)?
+                == serde_json::to_value(&consume.recipient_durable_receipt)?,
+        "Agent consume outcome changed the exact claim or durable receipt"
     );
     let first_consume = result;
-    let (status, replay) = crate::scenarios::mls_lifecycle_live::post_json_at(
+    drop(consume);
+    let consume: arkret_models_crypto::KeyPackagesConsumeRequestBody =
+        serde_json::from_slice(&std::fs::read(&consume_path)?)?;
+    ensure!(
+        arkret_canonical::canonical_json_bytes(&consume)? == frozen_consume,
+        "Agent consume recovery regenerated its signed request"
+    );
+    let (status, replay) = crate::scenarios::mls_lifecycle_live::post_bytes_at(
         &agent.runtime,
         "/_arkret/self/keys/keypackages/consume",
         &consume,
@@ -1804,12 +2103,15 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
     .await?;
     ensure!(
         status == StatusCode::OK && replay == first_consume,
-        "exact Agent receipt replay must preserve the original result: {status} {replay}"
+        "exact Agent receipt replay must preserve the original bytes: {status} {}",
+        String::from_utf8_lossy(&replay)
     );
     let mut changed_receipt = consume.recipient_durable_receipt.clone();
     changed_receipt.durable_at += chrono::Duration::milliseconds(1);
-    let changed_receipt = identity.sign_recipient_mls_durable_receipt(changed_receipt)?;
-    let changed_consume = identity.signed_key_packages_consume_request(
+    let changed_receipt = agent_group
+        .identity()
+        .sign_recipient_mls_durable_receipt(changed_receipt)?;
+    let changed_consume = agent_group.identity().signed_key_packages_consume_request(
         arkret_wire::KeypackageClaimId::new(add_claim.claim_id.clone())?,
         changed_receipt,
     )?;

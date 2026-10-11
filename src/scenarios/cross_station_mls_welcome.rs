@@ -639,6 +639,7 @@ async fn cross_station_mls_welcome_original_run() -> Result<()> {
         group_id.as_str(),
         &relayed_request,
         &relayed_bytes,
+        &member_database.connect_url,
     )
     .await?;
     drop(coauth);
@@ -1107,6 +1108,7 @@ async fn peer_claim_at_destination(
     group_id: &str,
     request: &KeyPackagesClaimRequestBody,
     outcome_bytes: &[u8],
+    destination_database_url: &str,
 ) -> Result<()> {
     let (status, replay) = post_claim(&requester.client, request).await?;
     ensure!(
@@ -1130,6 +1132,70 @@ async fn peer_claim_at_destination(
         status == StatusCode::OK && json_equal(&read, outcome_bytes)?,
         "Dave could not read the relayed claim on Y: {status}"
     );
+
+    // The service signature covers each malformed canonical body, so these
+    // refusals exercise DTO admission after real peer authentication.
+    let mut agent_selector = request.clone();
+    agent_selector.target_account_id = None;
+    agent_selector.target_device_ids.clear();
+    agent_selector.target_agent_id = Some(target.account.principal_id.clone());
+    agent_selector.target_agent_verification_method = Some(target.method.clone());
+    agent_selector.target_agent_key_authorize_event_id = Some(target.authorize_event_id.clone());
+    let input = arkret_models_crypto::keypackage_claim_authorization_signing_bytes(
+        &agent_selector.unsigned_request(),
+        &agent_selector.service_binding,
+        &agent_selector.requester_authorization,
+    )?;
+    let arkret_models_crypto::PeerKeyPackageRequesterAuthorization::Device { signature, .. } =
+        &mut agent_selector.requester_authorization
+    else {
+        bail!("device requester expected");
+    };
+    signature.sig = arkret_wire::Base64UrlString::new(arkret_canonical::base64url_encode(
+        ed25519_dalek::Signer::sign(&requester.key, &input).to_bytes(),
+    ))
+    .map_err(anyhow::Error::msg)?;
+    agent_selector.validate_shape()?;
+    let mut agent_empty = serde_json::to_value(&agent_selector)?;
+    agent_empty["target_device_ids"] = json!([]);
+    let mut malformed = vec![("agent_present_empty", agent_empty)];
+    for (name, field, value) in [
+        ("human_empty", "target_device_ids", json!([])),
+        ("human_null", "target_device_ids", Value::Null),
+        (
+            "duplicate_devices",
+            "target_device_ids",
+            json!([target.device, target.device]),
+        ),
+        ("empty_capabilities", "required_capabilities", json!([])),
+        (
+            "duplicate_capabilities",
+            "required_capabilities",
+            json!(["ak.content.v1", "ak.content.v1"]),
+        ),
+        ("zero_timeout", "timeout_ms", json!(0)),
+    ] {
+        let mut value_body = serde_json::to_value(request)?;
+        value_body[field] = value;
+        malformed.push((name, value_body));
+    }
+    for (name, body) in malformed {
+        let before =
+            super::mls_lifecycle_live::upload_durable_cut(destination_database_url).await?;
+        let (status, bytes) =
+            peer_post(y, x, PEER_CLAIM, &body, request.claim_request_id.as_str()).await?;
+        ensure!(
+            status == StatusCode::UNPROCESSABLE_ENTITY
+                && problem_type(&bytes)? == "schema_violation",
+            "{name} peer claim bypassed DTO admission: {status} {}",
+            String::from_utf8_lossy(&bytes)
+        );
+        ensure!(
+            super::mls_lifecycle_live::upload_durable_cut(destination_database_url).await?
+                == before,
+            "{name} peer claim changed inventory, claim or Welcome state"
+        );
+    }
 
     // Y: the exact peer command replays its stored outcome, and the query
     // under the exact digest answers the same view.
