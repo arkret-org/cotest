@@ -6,13 +6,7 @@
 //! acceptance decision from `arkret_state::AuthorityCommitStore`, and every
 //! reason code from the generated `arkret_wire::ReasonCode` constants.
 //!
-//! The fixture's `commit_id` placeholders (`ak:realm_commit:AAAA…`) are not
-//! canonical suite-tagged content ids — their first decoded byte is not the
-//! SHA-256 suite code — so they cannot be parsed as `RealmCommitId`. The suite
-//! therefore takes the fixture's *linkage* (stream kind, position, and which
-//! declared id each `previous_commit_ref` names) as the contract and binds each
-//! declared id to a canonical `RealmCommitId` derived from that string, so the
-//! identity relation the fixture asserts is preserved one-for-one.
+//! Fixture stream linkage retains the exact normative typed Commit IDs.
 
 use anyhow::{Result, anyhow, bail, ensure};
 use arkret_canonical::DigestSuite;
@@ -99,8 +93,7 @@ fn verify_fixture_identity(fixture: &Value) -> Result<()> {
     Ok(())
 }
 
-/// One declared commit in the fixture, with its placeholder ids bound to
-/// canonical typed ids.
+/// One declared Commit retaining the normative fixture's exact typed IDs.
 #[derive(Clone, Debug)]
 struct DeclaredCommit {
     declared_id: String,
@@ -118,11 +111,9 @@ struct DeclaredStream {
     commits: Vec<DeclaredCommit>,
 }
 
-/// Bind a fixture placeholder id to a canonical suite-tagged `RealmCommitId`.
-///
-/// The mapping is injective on the fixture's own strings, so "this commit names
-/// that commit as its predecessor" survives the binding unchanged.
-fn bind_declared_commit_id(declared: &str) -> RealmCommitId {
+/// Synthetic ID for locally constructed shape-only candidates.
+/// Normative fixture IDs are parsed directly and never rewritten.
+fn synthetic_commit_id(declared: &str) -> RealmCommitId {
     let mut hasher = Sha256::new();
     hasher.update(b"cotest-authority-commit-fixture-id-v1");
     hasher.update(declared.as_bytes());
@@ -195,8 +186,11 @@ fn parse_independent_streams(fixture: &Value) -> Result<Vec<DeclaredStream>> {
                 .and_then(Value::as_str)
                 .map(str::to_owned);
             commits.push(DeclaredCommit {
-                commit_id: bind_declared_commit_id(&declared_id),
-                previous_commit_ref: declared_previous.as_deref().map(bind_declared_commit_id),
+                commit_id: RealmCommitId::new(declared_id.clone())?,
+                previous_commit_ref: declared_previous
+                    .clone()
+                    .map(RealmCommitId::new)
+                    .transpose()?,
                 declared_id,
                 declared_previous,
                 stream_position: required_u64(commit, "stream_position")?,
@@ -483,7 +477,7 @@ fn verify_forked_position_is_rejected(streams: &[DeclaredStream]) -> Result<()> 
     // A second, differently-identified commit at the same position is a fork.
     let fork_event = producer_event(stream, 113)?;
     let mut fork = first;
-    fork.commit_id = bind_declared_commit_id("cotest-fork-of-position-one");
+    fork.commit_id = synthetic_commit_id("cotest-fork-of-position-one");
     fork.event_ref = fork_event.event_id.clone();
     fork.authority_ref = RealmCommitAuthorityRef::GenesisOrChangeEvent(fork_event.event_id.clone());
     ensure!(
@@ -657,7 +651,7 @@ fn verify_producer_event_carries_no_commit_ordering() -> Result<()> {
 fn commit_member_names() -> Result<Vec<String>> {
     let realm_id = RealmId::from_event_id(&EventId::from_digest(DigestSuite::Sha256, [0x42; 32]));
     let commit = RealmCommit {
-        commit_id: bind_declared_commit_id("cotest-member-probe"),
+        commit_id: synthetic_commit_id("cotest-member-probe"),
         realm_id: realm_id.clone(),
         stream_ref: CommitStreamRef::Realm { realm_id },
         stream_position: 0,
@@ -823,7 +817,7 @@ fn build_authority_fixture(declared: &[DeclaredStream]) -> Result<AuthorityFixtu
         .ok_or_else(|| anyhow!("the fixture must declare a Realm stream"))?;
     let realm_stream_ref = realm_stream.stream_ref.clone();
     let genesis_commit = RealmCommit {
-        commit_id: bind_declared_commit_id("cotest-genesis-commit"),
+        commit_id: synthetic_commit_id("cotest-genesis-commit"),
         realm_id: realm_id.clone(),
         stream_ref: realm_stream_ref.clone(),
         stream_position: 0,
@@ -848,7 +842,7 @@ fn build_authority_fixture(declared: &[DeclaredStream]) -> Result<AuthorityFixtu
         fixed_time(10),
     )?)?;
     let change_commit = RealmCommit {
-        commit_id: bind_declared_commit_id("cotest-change-commit"),
+        commit_id: synthetic_commit_id("cotest-change-commit"),
         realm_id: realm_id.clone(),
         stream_ref: realm_stream_ref.clone(),
         stream_position: 1,
@@ -1196,7 +1190,7 @@ fn verify_old_authority_writes_are_rejected(authority: &AuthorityFixture) -> Res
 
     let event = signed_event(producer_event(realm_stream, 151)?)?;
     let late_write = RealmCommit {
-        commit_id: bind_declared_commit_id("cotest-old-authority-late-write"),
+        commit_id: synthetic_commit_id("cotest-old-authority-late-write"),
         realm_id: authority.realm_id.clone(),
         stream_ref: realm_stream.stream_ref.clone(),
         stream_position: head.stream_position + 1,
@@ -1267,7 +1261,7 @@ fn verify_new_generation_continues_imported_heads(authority: &AuthorityFixture) 
             .ok_or_else(|| anyhow!("the manifest must carry every stream head"))?;
         let event = producer_event(stream, 161)?;
         let first = RealmCommit {
-            commit_id: bind_declared_commit_id(&format!(
+            commit_id: synthetic_commit_id(&format!(
                 "cotest-new-generation-first-{}",
                 head.stream_position
             )),
@@ -1470,7 +1464,7 @@ fn submit_mls_commit(
         .validate()
         .map_err(|error| anyhow!("MLS submission rejected before any write: {error}"))?;
     let commit = RealmCommit {
-        commit_id: bind_declared_commit_id(&format!("cotest-mls-commit-{position}")),
+        commit_id: synthetic_commit_id(&format!("cotest-mls-commit-{position}")),
         realm_id: stream.realm_id.clone(),
         stream_ref: stream.stream_ref.clone(),
         stream_position: position,

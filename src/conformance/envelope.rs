@@ -272,14 +272,11 @@ fn validate_event_envelope(
     } else {
         &[]
     };
-    if let Some(causal_refs) = event.get("causal_refs") {
-        let causal_refs = value_array(causal_refs, "event.causal_refs")?;
-        if causal_refs.is_empty() {
-            return Ok(EventEnvelopeDecision::reject(
-                "schema_violation",
-                "event.causal_refs must be omitted when empty",
-            ));
-        }
+    if event.get("causal_refs").is_some() {
+        return Ok(EventEnvelopeDecision::reject(
+            "schema_violation",
+            "producer Event cannot carry retired causal_refs",
+        ));
     }
     let content = event
         .get("payload")

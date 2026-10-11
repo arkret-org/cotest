@@ -36,7 +36,7 @@ async fn committed_stream(
     client: &TestActorClient,
     realm_id: &str,
 ) -> Result<Vec<(String, Option<Value>)>> {
-    let scanned = client.realm_seal_frontier(realm_id).await?;
+    let scanned = client.realm_committed_tail(realm_id).await?;
     scanned["committed_events"]
         .as_array()
         .ok_or_else(|| anyhow!("committed stream scan missing events: {scanned}"))?

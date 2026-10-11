@@ -412,17 +412,14 @@ fn realm_bootstrap_followup_event(
     verification_method: &DidUrl,
     station_id: Option<&DidCoreId>,
 ) -> Result<Event> {
-    let event = event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
+    let event = event_envelope_with_signing_identity(
         actor,
         realm_id,
         kind,
         payload,
-        None,
-        Vec::new(),
         signing_seed,
         verification_method,
         station_id,
-        Vec::new(),
     );
     Ok(event)
 }
@@ -490,17 +487,14 @@ fn realm_bootstrap_event_batch_with_signing_identity(
     } = draft;
     // Genesis carries no Realm id at all — the scope is `realm_genesis` and the
     // id falls out of the signed Event. The placeholder below is never read.
-    let realm_event = event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
+    let realm_event = event_envelope_with_signing_identity(
         actor,
         "ak:realm:AbJKasiJAuypE52tDrie6RY7PJds4G20xbtLIvYRInJk",
         "ak.realm.create",
         create.to_value()?,
-        None,
-        Vec::new(),
         signing_seed,
         verification_method,
         station_id,
-        Vec::new(),
     );
     // The genesis carries no realm_id; the SDK resolved it from the Event, and
     // every follow-up in this batch MUST name that derived value or admission
@@ -663,10 +657,8 @@ pub async fn submit_event_with_signing_seed_and_verification_method(
     Ok(body)
 }
 
-/// Build the exact signed Event a submit helper would POST, bound to the live
-/// actor frontier. A Control Move carries the current Seal basis; an ordinary
-/// Event carries signer authority references from the verified authority
-/// frontier, which production clients may retain for offline authoring.
+/// Build the exact signed Event a submit helper would POST.
+/// Commit order is determined by the governing Station after submission.
 /// Callers that relay the Event through another admission surface — the
 /// device-pairing gate, for instance — wrap the result in
 /// `publication::initial_submission` themselves.
@@ -681,13 +673,11 @@ pub(crate) async fn prepare_event_submission_with_signing_identity(
     signing_seed: [u8; 32],
     verification_method: &DidUrl,
 ) -> Result<Event> {
-    let event = event_envelope_with_chain_and_signing_identity(
+    let event = event_envelope_with_signing_identity(
         actor,
         realm_id,
         kind,
         payload,
-        None,
-        Vec::new(),
         signing_seed,
         verification_method,
         Some(server.service_id()),
@@ -732,109 +722,18 @@ pub fn event_envelope_with_signing_seed_and_verification_method(
     signing_seed: [u8; 32],
     verification_method: &DidUrl,
 ) -> Event {
-    event_envelope_with_chain_and_signing_identity(
+    event_envelope_with_signing_identity(
         actor,
         realm_id,
         kind,
         payload,
-        None,
-        Vec::new(),
         signing_seed,
         verification_method,
         None,
     )
 }
 
-#[allow(clippy::too_many_arguments)]
-pub fn event_envelope_at_frontier_with_signing_seed(
-    actor: &str,
-    realm_id: &str,
-    kind: &str,
-    payload: Value,
-    next_actor_seq: u64,
-    frontier_event_ids: Vec<EventId>,
-    signing_seed: [u8; 32],
-) -> Event {
-    event_envelope_with_chain_and_signing_identity(
-        actor,
-        realm_id,
-        kind,
-        payload,
-        Some(next_actor_seq),
-        frontier_event_ids,
-        signing_seed,
-        &verification_method_for_actor(actor),
-        None,
-    )
-}
-
-#[allow(clippy::too_many_arguments)]
-fn event_envelope_with_chain_and_signing_identity(
-    actor: &str,
-    realm_id: &str,
-    kind: &str,
-    payload: Value,
-    actor_seq: Option<u64>,
-    prev_event_ids: Vec<EventId>,
-    signing_seed: [u8; 32],
-    verification_method: &DidUrl,
-    station_id: Option<&DidCoreId>,
-) -> Event {
-    event_envelope_with_chain_and_signing_identity_and_causal_refs(
-        actor,
-        realm_id,
-        kind,
-        payload,
-        actor_seq,
-        prev_event_ids,
-        signing_seed,
-        verification_method,
-        station_id,
-        Vec::new(),
-    )
-}
-
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn event_envelope_with_chain_and_signing_identity_and_causal_refs(
-    actor: &str,
-    realm_id: &str,
-    kind: &str,
-    payload: Value,
-    actor_seq: Option<u64>,
-    prev_event_ids: Vec<EventId>,
-    signing_seed: [u8; 32],
-    verification_method: &DidUrl,
-    station_id: Option<&DidCoreId>,
-    causal_refs: Vec<String>,
-) -> Event {
-    event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
-        actor,
-        realm_id,
-        kind,
-        payload,
-        actor_seq,
-        prev_event_ids,
-        signing_seed,
-        verification_method,
-        station_id,
-        causal_refs,
-    )
-}
-
-/// Envelope `created_at` for the next Event this process builds: the platform
-/// clock, never moving backward.
-///
-/// It has to be the real clock rather than a base stamped at process start and
-/// stepped per Event. Tests share this process and run concurrently, so a test
-/// that begins a minute in has its Realm bootstrap stamped by the SDK with the
-/// real clock while a counter anchored at process start is still handing out
-/// timestamps from a minute ago — the harness Event then lands before the
-/// bootstrap Event it names in `prev_refs` and the server rejects it with
-/// `created_at_before_causal_predecessor`.
-///
-/// The floor exists because `created_at` sits in the digest preimage: two
-/// Events built inside one millisecond would otherwise tie while one names the
-/// other.
+/// Use a monotonic fixture clock to keep independently authored content IDs distinct.
 fn harness_event_created_at() -> DateTime<Utc> {
     static CLOCK: std::sync::LazyLock<arkret_test_kit::FixtureClock> =
         std::sync::LazyLock::new(|| Box::new(arkret_test_kit::monotonic_floor_clock()));
@@ -842,28 +741,15 @@ fn harness_event_created_at() -> DateTime<Utc> {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
+pub(crate) fn event_envelope_with_signing_identity(
     actor: &str,
     realm_id: &str,
     kind: &str,
     payload: Value,
-    actor_seq: Option<u64>,
-    prev_event_ids: Vec<EventId>,
     signing_seed: [u8; 32],
     verification_method: &DidUrl,
     station_id: Option<&DidCoreId>,
-    causal_refs: Vec<String>,
 ) -> Event {
-    assert!(
-        actor_seq.is_none() && prev_event_ids.is_empty() && causal_refs.is_empty(),
-        "actor frontier and causal references belong to committed RealmCommit ordering, not producer Events"
-    );
-    // A static timestamp cannot stay behind a causal predecessor: the Realm
-    // bootstrap the SDK submits is stamped with the real clock, so any harness
-    // Event pinned to a fixed past date lands before the Event it names in
-    // `prev_refs` and the server rejects it with
-    // `created_at_before_causal_predecessor`. Anchor on the process clock and
-    // step once per built Event so successors are strictly later.
     // Genesis freezes one creation timestamp in its payload and envelope.
     // Malformed payloads still reach the service's schema rejection path.
     let created_at = if kind == "ak.mls.genesis" {
@@ -1092,29 +978,23 @@ pub fn encrypted_envelope(content_type: &str, ciphertext: &str) -> Value {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn event_envelope_with_causal_refs_for_device(
+pub(crate) fn event_envelope_for_device(
     actor: &str,
     device_id: &str,
     station_id: &DidCoreId,
     realm_id: &str,
     kind: &str,
     payload: Value,
-    actor_seq: Option<u64>,
-    prev_event_ids: Vec<EventId>,
-    causal_refs: Vec<String>,
 ) -> Event {
     let (signing_seed, verification_method) = event_signing_identity_for_device(actor, device_id);
-    event_envelope_with_chain_and_signing_identity_and_causal_refs(
+    event_envelope_with_signing_identity(
         actor,
         realm_id,
         kind,
         payload,
-        actor_seq,
-        prev_event_ids,
         signing_seed,
         &verification_method,
         Some(station_id),
-        causal_refs,
     )
 }
 

@@ -753,7 +753,7 @@ async fn submit_event_now(
     )
     .await?;
     seal_source
-        .await_event_seal_coverage(realm_id, &event.event_id)
+        .await_event_commit(realm_id, &event.event_id)
         .await?;
     Ok(response)
 }

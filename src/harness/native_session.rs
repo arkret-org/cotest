@@ -88,15 +88,19 @@ pub(super) async fn bind_standard_host(
         anyhow::bail!("native host requires an issuer-ledger Standard grant");
     };
     let state = issuer.own_station_session_state(grant, station)?;
-    ensure!(
-        state
-            .device_id
-            .as_ref()
-            .context("native grant has no device")?
-            .as_str()
-            == client.device_id,
-        "native grant belongs to another device"
-    );
+    if let Some(device) = &state.device_id {
+        ensure!(
+            device.as_str() == client.device_id,
+            "native grant belongs to another device"
+        );
+    } else {
+        ensure!(
+            client.principal.is_none()
+                && arkret::project_did_to_core_id(&arkret_wire::Did::new(client.actor.clone())?)?
+                    == state.account_id.principal_id,
+            "Agent host belongs to another issuer-bound principal"
+        );
+    }
     let factory = HostFactory {
         http: client.sdk.clone(),
         issuer: issuer.grant_ledger(),

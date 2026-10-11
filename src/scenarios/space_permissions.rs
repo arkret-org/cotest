@@ -164,7 +164,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
     )
     .await?;
 
-    let before_destroy = alice.realm_seal_frontier(&realm_id).await?;
+    let before_destroy = alice.realm_committed_tail(&realm_id).await?;
     let destroy = alice
         .author_event(
             &realm_id,
@@ -189,7 +189,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
         "reserved terminal reason_code: {problem:?}"
     );
     assert_eq!(
-        alice.realm_seal_frontier(&realm_id).await?,
+        alice.realm_committed_tail(&realm_id).await?,
         before_destroy,
         "forbidden destroy changed the accepted Event/Commit stream"
     );
@@ -238,7 +238,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
         "reserved terminal reason_code: {problem:?}"
     );
 
-    let after_terminal = alice.realm_seal_frontier(&realm_id).await?;
+    let after_terminal = alice.realm_committed_tail(&realm_id).await?;
     let before_events = before_destroy["committed_events"]
         .as_array()
         .ok_or_else(|| anyhow!("pre-terminal stream missing committed_events"))?;
@@ -265,7 +265,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
     );
     // Both members retain their authorized historical interval. The refused
     // pre-signed member write cannot install any Event or advance its head.
-    assert_eq!(bob.realm_seal_frontier(&realm_id).await?, after_terminal);
+    assert_eq!(bob.realm_committed_tail(&realm_id).await?, after_terminal);
     for event in [duplicate_terminal, restore_terminal] {
         let problem = expect_api_error(
             alice
@@ -284,7 +284,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
             "reserved terminal reason_code: {problem:?}"
         );
         assert_eq!(
-            alice.realm_seal_frontier(&realm_id).await?,
+            alice.realm_committed_tail(&realm_id).await?,
             after_terminal,
             "terminal refusal changed the retained Event/Commit stream"
         );
@@ -297,7 +297,7 @@ async fn current_commit_id(
     client: &crate::harness::TestActorClient,
     realm_id: &str,
 ) -> Result<String> {
-    client.realm_seal_frontier(realm_id).await?["committed_events"]
+    client.realm_committed_tail(realm_id).await?["committed_events"]
         .as_array()
         .and_then(|events| events.last())
         .and_then(|event| event.get("commit"))

@@ -1,8 +1,7 @@
 // Conformance — Snapshot / Query / Scalability Vectors
-// Contract: e2e/scenarios/conformance/snapshot-query-scalability.md
+// Contract: e2e/scenarios/conformance/realm-state-snapshot-query-scalability.md
 // Spec:
-//   - conformance/realm-state-realm-state-snapshot-schema.md (§2 manifest, §3 chunk, §4 state_digest,
-//     §5 signature binding, §6 event_set_commitment)
+//   - sync/authority-commit-log.md (current signed inline snapshot)
 //   - conformance/query-schema.md (§2 query object, §3 filter, §6 sort,
 //     §8 response, §9 security)
 //   - conformance/scalability-constraints.md (§2 wire limits, §3 authz limits,
@@ -14,8 +13,8 @@
 //           ak.vector.query.*.json, ak.vector.scalability.*.json
 //
 // Phase B verifies an actual issued snapshot through Garth and the SDK.
-// Phases A, C-E exercise the test-only conformance endpoints under the
-// spec-reserved namespace /_arkret/_conformance/{snapshot,query}
+// Phases C-E exercise the test-only conformance endpoints under the
+// spec-reserved namespace /_arkret/_conformance/{query}
 // (service-http-binding.md §2.1.3). The leading `_` marks `_conformance` as a
 // reserved test-only segment, NOT a production trust-surface; the namespace is
 // gated on ServiceDescribe `development_mode=true`, and production builds MUST
@@ -90,13 +89,6 @@ function sha256Prefixed(value: string): string {
   return `sha256:${createHash("sha256").update(value).digest("hex")}`;
 }
 
-function chunkDigest(chunk: { payload?: unknown; bytes?: string; data?: unknown }): string {
-  if (chunk.payload !== undefined) return sha256Prefixed(canonicalJson(chunk.payload));
-  if (chunk.bytes !== undefined) return sha256Prefixed(chunk.bytes);
-  if (chunk.data !== undefined) return sha256Prefixed(canonicalJson(chunk.data));
-  return sha256Prefixed(canonicalJson(chunk));
-}
-
 function expectNoResultPayload(body: unknown) {
   const serialized = JSON.stringify(body);
   expect(serialized).not.toContain('"items"');
@@ -111,51 +103,6 @@ function decodedCursorText(cursor: string): string {
 test.describe.configure({ mode: "serial" });
 
 test.describe("conformance snapshot/query/scalability vectors @fully-implemented", () => {
-  test("Phase A — snapshot manifest integrity (digest, chunk count, chunk hashes)", async ({
-    request,
-  }) => {
-    const chunks = [
-      { chunk_id: "chunk-1", payload: { cell: "a", value: "alpha", version: 1 } },
-      { chunk_id: "chunk-2", payload: { cell: "b", value: ["beta", "gamma"], version: 1 } },
-    ];
-    const chunkHashes = chunks.map(chunkDigest);
-    const manifest = {
-      id: "ak:realm_state_snapshot:ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K:fixture",
-      realm_id: "ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K",
-      reducer_profile: "ak.reducer.core.v1",
-      schema_profile_refs: ["ak.schema.event.v1"],
-      chunk_hashes: chunkHashes,
-      created_by: "ak:did_core:web:coland.conformance",
-      created_at: "2026-05-31T00:00:00.000Z",
-    };
-
-    const resp = await request.post(`${conformanceBaseUrl()}/snapshot`, {
-      headers: { "content-type": "application/json" },
-      data: canonicalJson({
-        vector_id: "ak.vector.realm_state_snapshot.manifest_integrity.v1",
-        manifest,
-        chunks,
-      }),
-    });
-    expect(resp.status(), await resp.text()).toBe(200);
-    const body = await resp.json();
-    expect(body.manifest_digest).toBe(sha256Prefixed(canonicalJson(manifest)));
-    expect(body.chunk_hashes).toEqual(chunkHashes);
-    expect(body.expected_chunk_count).toBe(2);
-    expect(body.state_digest).toMatch(/^sha256:[0-9a-f]{64}$/);
-
-    const tampered = await request.post(`${conformanceBaseUrl()}/snapshot`, {
-      headers: { "content-type": "application/json" },
-      data: canonicalJson({
-        vector_id: "ak.vector.realm_state_snapshot.tampered_chunk.v1",
-        manifest,
-        chunks: [{ ...chunks[0], payload: { cell: "a", value: "tampered", version: 1 } }, chunks[1]],
-      }),
-    });
-    expect(tampered.status()).toBe(422);
-    expect(wireErrCode(await tampered.json())).toBe("digest_mismatch");
-  });
-
   test("Phase B — snapshot signature binding verifies against recorded signer DID", async ({
     browser,
     request,
@@ -261,7 +208,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     expect(page1.items.map((row: { id: string }) => row.id)).toEqual(["row-1", "row-2"]);
     expect(page1.has_more).toBe(true);
     expect(page1.next_cursor).toMatch(/^ak:cursor:/);
-    expect(page1.frontier.barrier_cursor).toMatch(/^ak:cursor:/);
+    expect(page1.barrier.barrier_cursor).toMatch(/^ak:cursor:/);
     expect(decodedCursorText(page1.next_cursor)).not.toContain("row-");
 
     const page2Req = {
@@ -283,16 +230,16 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
       data: canonicalJson(page2Req),
     });
     const page2Again = await secondAgain.json();
-    expect(page2Again.frontier.barrier_cursor).toMatch(/^ak:cursor:/);
+    expect(page2Again.barrier.barrier_cursor).toMatch(/^ak:cursor:/);
     // The barrier cursor is an opaque, freshly issued read barrier (§8), not
     // an idempotency token. Repeating a read must preserve the result page and
-    // frontier facts, but need not reproduce the cursor bytes or timestamps.
+    // barrier facts, but need not reproduce the cursor bytes or timestamps.
     expect({
       ...page2Again,
-      frontier: { ...page2Again.frontier, barrier_cursor: "<opaque>" },
+      barrier: { ...page2Again.barrier, barrier_cursor: "<opaque>" },
     }).toEqual({
       ...page2,
-      frontier: { ...page2.frontier, barrier_cursor: "<opaque>" },
+      barrier: { ...page2.barrier, barrier_cursor: "<opaque>" },
     });
   });
 
@@ -415,10 +362,10 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     // Optional surface probe — the assertion is "the surface is internally
     // consistent", NOT "the endpoint works". Two outcomes are acceptable:
     //   (a) /server/describe reports development_mode=false
-    //       → any status from /_arkret/_conformance/snapshot (incl. 404) is OK,
+    //       → any status from /_arkret/_conformance/query (incl. 404) is OK,
     //         because the server isn't promising the endpoint exists.
     //   (b) /server/describe reports development_mode=true
-    //       → /_arkret/_conformance/snapshot MUST NOT return 404 (anything else
+    //       → /_arkret/_conformance/query MUST NOT return 404 (anything else
     //         — 200/400/401/405/501 — is acceptable; 404 alone would mean the
     //         advertised posture is a lie).
 
@@ -448,17 +395,17 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     // NOT 404. We don't care about correctness of the body — we just need to
     // distinguish "endpoint absent" (404) from "endpoint present but stubbed
     // / rejecting / requiring auth" (anything else).
-    const probe = await request.post(`${conformanceBaseUrl()}/snapshot`, {
+    const probe = await request.post(`${conformanceBaseUrl()}/query`, {
       headers: { "content-type": "application/json" },
       data: canonicalJson({
-        vector_id: "ak.vector.realm_state_snapshot.surface_probe.v1",
-        manifest: {},
-        chunks: [],
+        vector_id: "ak.vector.query.surface_probe.v1",
+        query: { limit: 1 },
+        rows: [],
       }),
     });
     expect(
       probe.status(),
-      `server reports development_mode=true but /_arkret/_conformance/snapshot returned 404 — surface is inconsistent`,
+      `server reports development_mode=true but /_arkret/_conformance/query returned 404 — surface is inconsistent`,
     ).not.toBe(404);
   });
 });

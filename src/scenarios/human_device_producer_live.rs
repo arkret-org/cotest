@@ -45,9 +45,8 @@ use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{
-    ArkretServer, TestActorClient, TestServerGroup,
-    event_envelope_with_chain_and_signing_identity_and_causal_refs, expect_api_error, expect_json,
-    message_create_text_payload,
+    ArkretServer, TestActorClient, TestServerGroup, event_envelope_with_signing_identity,
+    expect_api_error, expect_json, message_create_text_payload,
 };
 use crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
 use crate::scenarios::_helpers::coauth_bootstrap::{EphemeralPg, spawn_ephemeral_postgres_for};
@@ -389,17 +388,14 @@ pub async fn run_cross_station_authority_forward_live() -> Result<()> {
     let station_a_id = DidCoreId::new(account_station.service_id().as_str().to_owned())?;
     let revoked_method =
         DidUrl::new(format!("{}#{DEVICE_C}", principal.did)).map_err(|error| anyhow!("{error}"))?;
-    let revoked_event = event_envelope_with_chain_and_signing_identity_and_causal_refs(
+    let revoked_event = event_envelope_with_signing_identity(
         principal.did.as_str(),
         &realm_id,
         EventKind::MessageCreate.as_str(),
         message_create_text_payload(&strand_id, "signed by a revoked device")?,
-        None,
-        Vec::new(),
         DEVICE_C_SEED,
         &revoked_method,
         Some(&station_a_id),
-        Vec::new(),
     );
     ensure_human_producer(&revoked_event, &alice_account, DEVICE_C)?;
     let refusal = expect_api_error(

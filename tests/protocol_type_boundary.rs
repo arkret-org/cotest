@@ -52,9 +52,8 @@ fn authored_events_remain_sdk_events_until_the_submission_wrapper() {
         "event_envelope",
         "event_envelope_with_signing_seed",
         "event_envelope_with_signing_seed_and_verification_method",
-        "event_envelope_at_frontier_with_signing_seed",
-        "event_envelope_with_chain_and_signing_identity",
-        "event_envelope_with_causal_refs_for_device",
+        "event_envelope_with_signing_identity",
+        "event_envelope_for_device",
     ] {
         let start = builder
             .find(&format!("fn {function}"))

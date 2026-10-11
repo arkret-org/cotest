@@ -238,8 +238,7 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// FLOW-002/004/005/008/014 — single derived MLS group, exact first-valid
-    /// founding replay, Commit/Welcome finality fences and same-group repair.
+    /// Validate the current bilateral continuity checkpoint fixture.
     direct_conversation_end_to_end_flow_matches_reference_semantics,
     "direct_conversation_end_to_end_flow",
     cotest::conformance::run_direct_conversation_flow_suite,
@@ -247,7 +246,7 @@ conformance_test!(
 
 conformance_test!(
     /// C40.5 — security negative profile vectors. Hard-fails bad signatures,
-    /// canonical-byte conflicts, schema/payload violations, replay, downgrade,
+    /// canonical-byte conflicts, schema/payload violations, retired requirement carriers,
     /// and query-string auth leakage.
     security_negative_profile_suite_matches_reference_semantics,
     "security_negative_profile",

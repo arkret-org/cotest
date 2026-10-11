@@ -11,7 +11,10 @@ fn main() -> Result<()> {
     if evidence.is_object() {
         let account = serde_json::from_value(evidence["account"].clone())?;
         let realm = serde_json::from_value(evidence["realm"].clone())?;
-        let store = inkson::LocalStateStore::with_path(std::path::PathBuf::from(state_path));
+        let mut store = inkson::LocalStateStore::with_path(std::path::PathBuf::from(state_path));
+        if evidence.get("sidecar_exchange_projections").is_some() {
+            inkson::conformance::hydrate_native_private_cache(&mut store)?;
+        }
         ensure!(
             store.sync_cursor().as_deref() == evidence["cursor"].as_str(),
             "fresh process lost the ordering checkpoint"
@@ -64,6 +67,29 @@ fn main() -> Result<()> {
                 serde_json::to_value(inkson::conformance::retained_sidecar_cut(&store, &scope)?)?
                     == evidence["private_sidecar_cut"],
                 "fresh process changed the original private signed Sidecar cut"
+            );
+        }
+        if let Some(projections) = evidence.get("sidecar_exchange_projections") {
+            ensure!(
+                serde_json::to_value(inkson::sidecar::cached_sidecar_exchange_projections(
+                    &store,
+                    &account,
+                    realm.as_str()
+                )?)? == *projections,
+                "fresh process changed the authenticated private discussion projection"
+            );
+            let scope = serde_json::from_value(evidence["private_sidecar_scope"].clone())?;
+            let event = serde_json::from_value(evidence["response_event_id"].clone())?;
+            let plaintext = inkson::conformance::private_sidecar_response_plaintext(
+                &store, &account, &scope, &event,
+            )?;
+            ensure!(
+                arkret_canonical::canonical_sha256(&serde_json::from_slice::<serde_json::Value>(
+                    &plaintext
+                )?)? == evidence["response_plaintext_digest"]
+                    .as_str()
+                    .context("response digest")?,
+                "fresh process lost the actual private Agent response plaintext"
             );
         }
         return Ok(());

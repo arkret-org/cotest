@@ -14,15 +14,32 @@ pub struct ScanGapControl(Arc<Mutex<GapState>>);
 #[derive(Default)]
 struct GapState {
     stream: Option<CommitStreamRef>,
+    position: u64,
     observations: Vec<StreamScanOutcome>,
     scan_requests: Vec<StreamScanRequest>,
+    event_submissions: Vec<arkret_wire::EventId>,
 }
 
 impl ScanGapControl {
     pub fn omit_position_one(&self, stream: CommitStreamRef) {
+        self.omit_position(stream, 1);
+    }
+
+    pub fn omit_position(&self, stream: CommitStreamRef, position: u64) {
         let mut state = self.0.lock().unwrap();
         state.stream = Some(stream);
+        state.position = position;
         state.observations.clear();
+    }
+
+    pub fn event_submission_count(&self, event: &arkret_wire::EventId) -> usize {
+        self.0
+            .lock()
+            .unwrap()
+            .event_submissions
+            .iter()
+            .filter(|id| *id == event)
+            .count()
     }
 
     pub fn clear(&self) {
@@ -75,6 +92,23 @@ impl Relay {
             .as_str();
         let target = self.upstream.join(path)?;
         let body = req.payload().await?.to_vec();
+        if req.uri().path() == "/_arkret/self/events" && req.method() == salvo::http::Method::POST {
+            if let Ok(
+                arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest::Event(
+                    submission,
+                ),
+            ) = serde_json::from_slice::<
+                arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest,
+            >(&body)
+            {
+                self.control
+                    .0
+                    .lock()
+                    .unwrap()
+                    .event_submissions
+                    .push(submission.event.event_id);
+            }
+        }
         let mut headers = req.headers().clone();
         // Record the actual ingress authority for the production gateway
         // reconstruction path. The private HTTP/2 hop has another URI
@@ -118,7 +152,7 @@ impl Relay {
                 let old_len = outcome.committed_events.len();
                 outcome
                     .committed_events
-                    .retain(|row| row.commit().stream_position != 1);
+                    .retain(|row| row.commit().stream_position != state.position);
                 if outcome.committed_events.len() != old_len {
                     state.observations.push(outcome.clone());
                     bytes = serde_json::to_vec(&outcome)?;
