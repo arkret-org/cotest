@@ -624,9 +624,86 @@ function Test-BinaryContainsAsciiMarker {
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
         return $false
     }
-    $bytes = [System.IO.File]::ReadAllBytes($Path)
-    $text = [System.Text.Encoding]::ASCII.GetString($bytes)
-    return $text.Contains($Marker)
+    # Debug ELF/WASM artifacts can be gigabytes long. Keep the exact ASCII
+    # marker check bounded, including a match split across read boundaries.
+    if (-not ("Cotest.Joint.BinaryMarkers" -as [type])) {
+        Add-Type -TypeDefinition @'
+namespace Cotest.Joint {
+    public static class BinaryMarkers {
+        public static bool ContainsAscii(string path, string marker) {
+            var needle = new byte[marker.Length];
+            for (int i = 0; i < marker.Length; i++) {
+                if (marker[i] > 127)
+                    throw new System.ArgumentException("Binary marker must be ASCII", "marker");
+                needle[i] = (byte)marker[i];
+            }
+            if (needle.Length == 0) return true;
+
+            // Prefix lengths retain partial matches between chunks and handle
+            // overlapping prefixes without rereading or decoding binary bytes.
+            var prefix = new int[needle.Length];
+            for (int i = 1, matched = 0; i < needle.Length; i++) {
+                while (matched > 0 && needle[i] != needle[matched])
+                    matched = prefix[matched - 1];
+                if (needle[i] == needle[matched]) matched++;
+                prefix[i] = matched;
+            }
+            var buffer = new byte[65536];
+            using (var stream = new System.IO.FileStream(path,
+                System.IO.FileMode.Open, System.IO.FileAccess.Read,
+                System.IO.FileShare.Read, buffer.Length,
+                System.IO.FileOptions.SequentialScan)) {
+                int count, matched = 0;
+                while ((count = stream.Read(buffer, 0, buffer.Length)) > 0) {
+                    for (int i = 0; i < count; i++) {
+                        while (matched > 0 && buffer[i] != needle[matched])
+                            matched = prefix[matched - 1];
+                        if (buffer[i] == needle[matched]) matched++;
+                        if (matched == needle.Length) return true;
+                    }
+                }
+            }
+            return false;
+        }
+    }
+}
+'@
+    }
+    return [Cotest.Joint.BinaryMarkers]::ContainsAscii($Path, $Marker)
+}
+
+function Get-JointSourceHeads {
+    param([Parameter(Mandatory = $true)][System.Collections.IDictionary]$RepositoryPaths)
+
+    $heads = [ordered]@{}
+    foreach ($name in $RepositoryPaths.Keys) {
+        $path = $RepositoryPaths[$name]
+        $record = [ordered]@{ head = $null; status = "unknown" }
+        if (-not [string]::IsNullOrWhiteSpace($path) -and (Test-Path -LiteralPath $path -PathType Container)) {
+            try {
+                $root = (Resolve-Path -LiteralPath $path).Path
+                $prefix = (Invoke-BuildInputGit -RepositoryRoot $root -Arguments @("rev-parse", "--show-prefix")).Trim()
+                # A sibling missing its own Git checkout must not inherit the
+                # enclosing repository's HEAD or a caller-supplied assumption.
+                if ($prefix -eq "") {
+                    $head = (Invoke-BuildInputGit -RepositoryRoot $root -Arguments @("rev-parse", "--verify", "HEAD")).Trim()
+                    if ($head -match '^[0-9a-f]{40}$') {
+                        $record.head = $head
+                        $record.status = "recorded"
+                    }
+                }
+            } catch {
+                # Missing/non-Git optional siblings are evidence unknowns,
+                # never filled from a different checkout or historical run.
+            }
+        }
+        $heads[$name] = $record
+    }
+    return [pscustomobject]@{
+        captured_at_utc = [DateTimeOffset]::UtcNow.ToString("O")
+        boundary = "Actual selected checkout HEADs at preparation entry; not artifact-byte freshness, dirty-diff identity, or a business pass. Missing/unreadable siblings remain unknown."
+        repository_heads = $heads
+    }
 }
 
 # This operation id is compiled into Coland only with the development-only
@@ -3467,6 +3544,8 @@ $coauthConfigPath = $null
 $e2eRoot = Join-Path $repoRoot "e2e"
 $preflightJson = Join-Path $jointDir "preflight.json"
 $preflightMd = Join-Path $jointDir "preflight.md"
+$preflightSourceHeadsJson = Join-Path $jointDir "preflight-source-heads.json"
+$preflightSourceHeads = $null
 $managedServiceFailuresJson = Join-Path $jointDir "managed-service-failures.json"
 $managedServiceFailuresMd = Join-Path $jointDir "managed-service-failures.md"
 # The harness serves a static bundle, not a Dioxus devserver. A debug bundle
@@ -3484,6 +3563,21 @@ if ($requiresInkson) {
 }
 
 try {
+    $preflightSourceHeads = Get-JointSourceHeads -RepositoryPaths ([ordered]@{
+        cotest = $repoRoot
+        coland = (Split-Path -Parent $SutManifest)
+        coauth = (Join-Path $workspaceRoot "coauth")
+        "arkret-spec" = (Join-Path $workspaceRoot "arkret-spec")
+        "arkret-rust-sdk" = (Join-Path $workspaceRoot "arkret-rust-sdk")
+        garth = (Join-Path $workspaceRoot "garth")
+        chime = (Join-Path $workspaceRoot "chime")
+        inkson = $(if ($InksonRoot) { $InksonRoot } else { Join-Path $workspaceRoot "inkson" })
+        floria = (Join-Path $workspaceRoot "floria")
+        flagon = (Join-Path $workspaceRoot "flagon")
+        savfox = $SavfoxRoot
+    })
+    $preflightSourceHeads | ConvertTo-Json -Depth 5 |
+        Set-Content -LiteralPath $preflightSourceHeadsJson -Encoding UTF8
     if ($StartCoauth) {
         # Accepted test identity custody stays outside publishable artifacts.
         # The runner owns cleanup even if a worker terminates its bridge abruptly.
@@ -6283,6 +6377,8 @@ $summary = [pscustomobject]@{
     playwright_stderr = Join-Path $jointDir "playwright.stderr.log"
     preflight_json = $preflightJson
     preflight_md = $preflightMd
+    preflight_source_heads_json = $preflightSourceHeadsJson
+    preflight_source_heads = $preflightSourceHeads
     junit_xml = Join-Path $jointDir "junit.xml"
     screenshot_index = $screenshotIndex
     visual_baseline_index = $visualBaselineIndex
@@ -6347,6 +6443,7 @@ $summary | ConvertTo-Json -Depth 6 | Set-Content -Path $summaryJson -Encoding UT
 - playwright_stderr: $($summary.playwright_stderr)
 - preflight_json: $($summary.preflight_json)
 - preflight_md: $($summary.preflight_md)
+- preflight_source_heads_json: $($summary.preflight_source_heads_json)
 - junit_xml: $($summary.junit_xml)
 - screenshot_index: $($summary.screenshot_index)
 - visual_baseline_index: $($summary.visual_baseline_index)

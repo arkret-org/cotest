@@ -919,11 +919,11 @@ pub(crate) async fn assert_closed_upload_boundary(
     Ok(serde_json::from_value(full)?)
 }
 
-async fn upload_durable_cut(database_url: &str) -> Result<Value> {
+pub(crate) async fn upload_durable_cut(database_url: &str) -> Result<Value> {
     let database_url = database_url.to_owned();
     tokio::task::spawn_blocking(move || -> Result<Value> {
         let mut database = postgres::Client::connect(&database_url, postgres::NoTls)?;
-        Ok(database.query_one("SELECT COALESCE(jsonb_agg(to_jsonb(k) ORDER BY id), '[]'::jsonb) FROM mls_key_packages k", &[])?.get(0))
+        Ok(database.query_one("SELECT jsonb_build_object('mls_key_packages', (SELECT COALESCE(jsonb_agg(to_jsonb(t) ORDER BY to_jsonb(t)), '[]'::jsonb) FROM mls_key_packages t), 'peer_keypackage_claims', (SELECT COALESCE(jsonb_agg(to_jsonb(t) ORDER BY to_jsonb(t)), '[]'::jsonb) FROM peer_keypackage_claims t), 'keypackage_claim_welcome_bindings', (SELECT COALESCE(jsonb_agg(to_jsonb(t) ORDER BY to_jsonb(t)), '[]'::jsonb) FROM keypackage_claim_welcome_bindings t), 'mls_welcome_deliveries', (SELECT COALESCE(jsonb_agg(to_jsonb(t) ORDER BY to_jsonb(t)), '[]'::jsonb) FROM mls_welcome_deliveries t), 'device_messages', (SELECT COALESCE(jsonb_agg(to_jsonb(t) ORDER BY to_jsonb(t)), '[]'::jsonb) FROM device_messages t), 'device_message_ack_tokens', (SELECT COALESCE(jsonb_agg(to_jsonb(t) ORDER BY to_jsonb(t)), '[]'::jsonb) FROM device_message_ack_tokens t))", &[])?.get(0))
     }).await?
 }
 
