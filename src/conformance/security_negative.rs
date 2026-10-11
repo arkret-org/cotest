@@ -7,7 +7,6 @@ use url::Url;
 
 use super::{
     load_local_fixture_value, required_field, required_str, sha256_prefixed, validate_profile,
-    value_field_u64,
 };
 use crate::transcripts::record_vector_event;
 
@@ -51,10 +50,6 @@ pub fn run_security_negative_profile_suite() -> Result<()> {
                 covered.bad_schema_payload = true;
                 validate_bad_schema_payload(case)?
             }
-            "replay" => {
-                covered.replay = true;
-                validate_replay(case)?
-            }
             "downgrade" => {
                 covered.downgrade = true;
                 validate_downgrade(case)?
@@ -90,19 +85,15 @@ fn validate_bad_signature(case: &Value) -> Result<SecurityDecision> {
     // comparison.
     let public_key = parse_public_key(required_str(input, "signing_public_key_hex")?)?;
 
-    for proof in event
-        .get("proofs")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-    {
-        let proof: ProducerEventProof = match serde_json::from_value(proof.clone()) {
-            Ok(proof) => proof,
-            Err(_) => return Ok(SecurityDecision::reject("signature_invalid")),
-        };
-        if let Err(error_code) = verify_event_proof_signature(event, &proof, &public_key) {
-            return Ok(SecurityDecision::reject(error_code));
-        }
+    let Some(proof) = event.get("producer_proof") else {
+        return Ok(SecurityDecision::reject("signature_invalid"));
+    };
+    let proof: ProducerEventProof = match serde_json::from_value(proof.clone()) {
+        Ok(proof) => proof,
+        Err(_) => return Ok(SecurityDecision::reject("schema_violation")),
+    };
+    if let Err(error_code) = verify_event_proof_signature(event, &proof, &public_key) {
+        return Ok(SecurityDecision::reject(error_code));
     }
     Ok(SecurityDecision::accept())
 }
@@ -145,18 +136,9 @@ fn decode_hex_32(hex: &str) -> Option<[u8; 32]> {
 }
 
 fn canonical_event_payload_bytes(event: &Value) -> Result<Vec<u8>> {
-    let object = event
-        .as_object()
-        .ok_or_else(|| anyhow!("event must be an object"))?;
-    let mut without_proofs = serde_json::Map::new();
-    for (key, value) in object {
-        if key != "proofs" && key != "unsigned" {
-            without_proofs.insert(key.clone(), value.clone());
-        }
-    }
-    Ok(canonical::canonical_json_bytes(&Value::Object(
-        without_proofs,
-    ))?)
+    Ok(canonical::canonical_json_bytes(
+        &arkret_wire::event_envelope::event_digest_preimage(event)?,
+    )?)
 }
 
 fn validate_bad_canonical_bytes(case: &Value) -> Result<SecurityDecision> {
@@ -176,70 +158,20 @@ fn validate_bad_canonical_bytes(case: &Value) -> Result<SecurityDecision> {
 
 fn validate_bad_schema_payload(case: &Value) -> Result<SecurityDecision> {
     let event = required_field(required_field(case, "input")?, "event")?;
-    for field in [
-        "event_id",
-        "kind",
-        "realm_id",
-        "actor_id",
-        "actor_seq",
-        "created_at",
-        "prev_refs",
-        "semantic_refs",
-        "payload",
-        "proofs",
-    ] {
-        if event.get(field).is_none() {
-            return Ok(SecurityDecision::reject("schema_violation"));
-        }
-    }
-    if required_str(event, "kind")? == "ak.message.create" {
-        let payload = required_field(event, "payload")?;
-        let has_body = ["content", "encrypted_content", "blob_refs"]
-            .iter()
-            .any(|field| payload.get(*field).is_some());
-        if payload.get("strand_id").and_then(Value::as_str).is_none() || !has_body {
-            return Ok(SecurityDecision::reject("schema_violation"));
-        }
-    }
-    Ok(SecurityDecision::accept())
-}
-
-fn validate_replay(case: &Value) -> Result<SecurityDecision> {
-    let input = required_field(case, "input")?;
-    let event = required_field(input, "event")?;
-    let frontier = required_field(input, "actor_frontier")?;
-    if required_str(event, "actor_id")? == required_str(frontier, "actor_id")?
-        && value_field_u64(event, "actor_seq")? <= value_field_u64(frontier, "actor_seq")?
+    let registry = arkret_schema_conformance::schema_registry_from_default_spec_artifacts()?
+        .ok_or_else(|| anyhow!("security negative suite requires the canonical spec schemas"))?;
+    if registry
+        .validate_value(arkret_wire::SchemaId::EVENT_V1, event)
+        .is_err()
     {
-        return Ok(SecurityDecision::reject("causal_conflict"));
+        return Ok(SecurityDecision::reject("schema_violation"));
     }
     Ok(SecurityDecision::accept())
 }
 
 fn validate_downgrade(case: &Value) -> Result<SecurityDecision> {
-    let input = required_field(case, "input")?;
-    let event = required_field(input, "event")?;
-    let supported = input
-        .get("supported_features")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .collect::<Vec<_>>();
-    for extension in event
-        .pointer("/requirements/critical_extensions")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-    {
-        let id = required_str(extension, "id")?;
-        if extension.get("fail_closed").and_then(Value::as_bool) == Some(true)
-            && !supported.contains(&id)
-        {
-            return Ok(SecurityDecision::reject("unsupported_feature"));
-        }
-    }
-    Ok(SecurityDecision::accept())
+    // A retired producer requirements carrier is a closed-schema refusal.
+    validate_bad_schema_payload(case)
 }
 
 fn validate_query_auth_leakage(case: &Value) -> Result<SecurityDecision> {
@@ -327,7 +259,6 @@ struct SecurityCoverage {
     bad_signature: bool,
     bad_canonical_bytes: bool,
     bad_schema_payload: bool,
-    replay: bool,
     downgrade: bool,
     query_auth_leakage: bool,
 }
@@ -338,7 +269,6 @@ impl SecurityCoverage {
             ("bad_signature", self.bad_signature),
             ("bad_canonical_bytes", self.bad_canonical_bytes),
             ("bad_schema_payload", self.bad_schema_payload),
-            ("replay", self.replay),
             ("downgrade", self.downgrade),
             ("query_auth_leakage", self.query_auth_leakage),
         ]
@@ -367,7 +297,8 @@ mod tests {
         json!({
             "event_id": "ak:event:AaIU5-FloksbTF8lIRYIpxdzmtMlKw6ZQ46eU2SAH2-4",
             "kind": "ak.message.create",
-            "realm_id": "ak:realm:01970e589d21-8000-8000-000000000001",
+            "realm_id": arkret_wire::RealmId::from_event_id(&crate::fixture_event_id("security-negative")),
+            "scope_ref": {"kind":"realm","realm_id":arkret_wire::RealmId::from_event_id(&crate::fixture_event_id("security-negative"))},
             "actor_id": {
                 "kind": "account",
                 "account_id": {
@@ -375,14 +306,11 @@ mod tests {
                     "station_id": "ak:did_core:web:station.example"
                 }
             },
-            "actor_seq": 1,
             "created_at": "2026-05-02T00:00:00.000Z",
-            "hlc": "01970e589d21-0001-a13f9c2e",
-            "prev_refs": [],
             "payload": {
-                "strand_id": "ak:strand:01970e589d21-8000-8000-000000000010",
+                "strand_id": "ak:strand:AT3ARBdH1FM6GjXK9ulTx-YMvQOXys39dlUzZV6KyID9",
                 "track_name": "discussion",
-                "content": {"kind": "ak.content.text", "body": "signed body"}
+                "content": {"kind": "ak.content.text", "body": "signed body", "format":"plain"}
             }
         })
     }

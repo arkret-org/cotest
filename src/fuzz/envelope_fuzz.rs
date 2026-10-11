@@ -47,22 +47,15 @@ pub struct FuzzEventInput {
     pub event_id: String,
     pub kind: String,
     pub realm_id: String,
-    pub actor_id: String,
-    pub actor_seq: u64,
+    pub principal_id: String,
+    pub station_id: String,
     pub created_at: String,
-    pub hlc_physical_ms: u64,
-    pub hlc_logical: u32,
-    pub prev_refs: Vec<String>,
     pub semantic_refs: Vec<ArbRefValue>,
     pub payload: ArbValue,
-    pub proofs: Vec<ArbValue>,
-    pub auth_context: Option<ArbValue>,
+    pub producer_proof: Option<ArbValue>,
     /// A signed `scope_ref` is required on every v1 Event; a Circle scope
     /// exercises the second variant of the enum.
     pub scope_circle_id: Option<String>,
-    /// A Control Move is just an Event carrying a basis — there is no separate
-    /// Move wire — so the basis is fuzzed here rather than in its own target.
-    pub seal_basis: Option<ArbValue>,
 }
 
 #[derive(Debug, Arbitrary)]
@@ -74,10 +67,6 @@ pub struct ArbRefValue {
 
 impl FuzzEventInput {
     fn to_json(&self) -> Value {
-        let hlc = json!({
-            "physical_ms": self.hlc_physical_ms,
-            "logical": self.hlc_logical,
-        });
         let scope_ref = match &self.scope_circle_id {
             Some(circle_id) => json!({
                 "kind": "circle",
@@ -91,24 +80,17 @@ impl FuzzEventInput {
             "kind": self.kind,
             "realm_id": self.realm_id,
             "scope_ref": scope_ref,
-            "actor_id": self.actor_id,
-            "actor_seq": self.actor_seq,
+            "actor_id": {"kind":"account","account_id":{"principal_id":self.principal_id,"station_id":self.station_id}},
             "created_at": self.created_at,
-            "hlc": hlc,
-            "prev_refs": self.prev_refs,
             "semantic_refs": self.semantic_refs.iter().map(|r| json!({
                 "id": r.id,
                 "role": r.role,
                 "critical": r.critical,
             })).collect::<Vec<_>>(),
             "payload": self.payload.0,
-            "proofs": self.proofs.iter().map(|proof| proof.0.clone()).collect::<Vec<_>>(),
         });
-        if let Some(auth_context) = &self.auth_context {
-            envelope["auth_context"] = auth_context.0.clone();
-        }
-        if let Some(basis) = &self.seal_basis {
-            envelope["seal_basis"] = basis.0.clone();
+        if let Some(proof) = &self.producer_proof {
+            envelope["producer_proof"] = proof.0.clone();
         }
         envelope
     }
@@ -143,8 +125,8 @@ pub fn fuzz_event_envelope(data: &[u8]) -> Result<(), String> {
 /// `arbitrary`-derived input that mirrors the encrypted-only `SignalEnvelope`
 /// wire (`zh/sync/signal.md` §1).
 ///
-/// A Control Move is covered by [`FuzzEventInput`] because it is an Event with
-/// `seal_basis`. `SignalEnvelope` has its own parser reachable from untrusted
+/// A durable control operation is covered by [`FuzzEventInput`].
+/// `SignalEnvelope` has its own parser reachable from untrusted
 /// network input, so it gets a separate input shape here.
 #[derive(Debug, Arbitrary)]
 pub struct FuzzSignalInput {
@@ -200,7 +182,6 @@ impl FuzzSignalInput {
             None => json!({ "kind": "realm", "realm_id": self.realm_id }),
         };
         json!({
-            "realm_id": self.realm_id,
             "scope_ref": scope_ref,
             "sender_actor_id": self.sender_actor_id,
             "sender_device_id": self.sender_device_id,

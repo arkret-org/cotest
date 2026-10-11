@@ -3,7 +3,7 @@
   "profile": "ak.profile.agent_payload_vectors.v1",
   "schema_ref": "ak.schema.event_payload.v1",
   "spec_anchor": "spec/v1/artifacts/schemas/event-payload.schema.json",
-  "comment": "Minimal payload shapes for agent event kinds. Lifecycle authorization basis is carried by the enclosing Control Move seal_basis, not by a payload frontier.",
+  "comment": "Minimal payload shapes for agent event kinds. Lifecycle Events bind current authorization evidence through their registered payload and producer proof.",
   "cases": [
     {
       "name": "agent_pause_payload_minimal",

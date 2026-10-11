@@ -210,7 +210,7 @@ fn run_independent_replay_model(
 /// number of distinct positions a fault can be injected at.
 ///
 /// A RecoveryTransaction has exactly one: `commit_recovery_unit` carries both
-/// re-anchor Events, the first new-generation Seal and the terminal result
+/// re-anchor Events, the first new-generation RealmCommit and the terminal result
 /// across a single boundary. The old two-step shape is gone, so a second
 /// position here would be modelling a boundary the protocol no longer has.
 fn remote_effect_count(kind: &str) -> Result<usize> {

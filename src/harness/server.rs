@@ -413,7 +413,7 @@ impl ArkretServer {
     ///
     /// The identity comes from the Station's own `/_arkret/describe`, never
     /// from configuration. The notary signing seed cannot: it is the deployment
-    /// operator's, and a scenario that needs to author notary-signed Seals must
+    /// operator's, and a scenario that needs to author authority-signed Commits must
     /// be told which key the runner configured. `run-joint-e2e.ps1` exports it
     /// as `COTEST_COLAND_NOTARY_SIGNING_KEY`.
     pub async fn attach(

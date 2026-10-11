@@ -324,7 +324,7 @@ static PROVISIONED_PRINCIPALS: LazyLock<
 /// Atomically provision a self-sovereign test principal: deterministic
 /// `did:webvh` inception, requested registration/session, and the closed
 /// §5.1 PCR genesis unit (`ak.realm.create` purpose=principal_control +
-/// `registration_anchor` `ak.device.authorize`) with its bootstrap Seal.
+/// `registration_anchor` `ak.device.authorize`) with its bootstrap RealmCommit.
 ///
 /// Scenarios MUST NOT hand-assemble principal DIDs, PCR ids, or authorization
 /// Event ids; they consume the returned typed handles. Negative fixtures that
@@ -556,17 +556,14 @@ async fn authorize_additional_principal_device(
         .map_err(anyhow::Error::msg)?,
     );
     let founding_method = crate::fixture_did_url(format!("{actor}#{}", founding.device_id));
-    let event = crate::harness::event_envelope_with_chain_and_signing_identity_and_causal_refs(
+    let event = crate::harness::event_envelope_with_signing_identity(
         actor,
         founding.pcr_realm_id.as_str(),
         arkret_wire::EventKind::DeviceAuthorize.as_str(),
         serde_json::to_value(&payload)?,
-        None,
-        Vec::new(),
         founding.device_signing_key.to_bytes(),
         &founding_method,
         Some(server.service_id()),
-        Vec::new(),
     );
     let outcome: arkret_wire::AuthoritySubmitOutcome = serde_json::from_value(
         expect_json(
@@ -595,14 +592,14 @@ async fn authorize_additional_principal_device(
 /// Read the current signed PCR RealmCommit head after verifying every
 /// caller-authored pending Event has actually been accepted. The governance
 /// Station, not this device, signs and orders RealmCommits.
-pub async fn seal_current_principal_control_frontier(
+pub async fn current_principal_control_head(
     client: &TestActorClient,
     device_signing_key: &SigningKey,
 ) -> Result<arkret_wire::RealmCommitId> {
-    seal_principal_control_frontier_with_pending_events(client, device_signing_key, &[]).await
+    principal_control_head_with_pending_events(client, device_signing_key, &[]).await
 }
 
-pub async fn seal_principal_control_frontier_with_pending_events(
+pub async fn principal_control_head_with_pending_events(
     client: &TestActorClient,
     _device_signing_key: &SigningKey,
     caller_pending_events: &[arkret_wire::Event],

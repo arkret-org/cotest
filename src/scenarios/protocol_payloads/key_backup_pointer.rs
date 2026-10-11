@@ -18,8 +18,8 @@ use ed25519_dalek::{Signer, SigningKey};
 use reqwest::StatusCode;
 
 use crate::harness::{
-    ArkretServer, TestActorClient, event_envelope_with_causal_refs_for_device,
-    event_signing_identity_for_device, expect_json, expect_response,
+    ArkretServer, TestActorClient, event_envelope_for_device, event_signing_identity_for_device,
+    expect_json, expect_response,
 };
 use crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
 use crate::scenarios::bridge_contracts::session_grant::mock_session_grant_jwt;
@@ -80,16 +80,13 @@ impl PointerSigner {
             Base64UrlString::new(arkret::canonical::base64url_encode(signature))
                 .map_err(anyhow::Error::msg)?,
         )?;
-        Ok(event_envelope_with_causal_refs_for_device(
+        Ok(event_envelope_for_device(
             &self.actor,
             &self.device_id,
             &self.station,
             &self.pcr_realm_id,
             arkret_wire::EventKind::KeyBackupActiveSeries.as_str(),
             serde_json::to_value(record)?,
-            None,
-            Vec::new(),
-            Vec::new(),
         ))
     }
 }

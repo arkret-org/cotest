@@ -82,7 +82,7 @@ pub async fn owner_invite_remove_grant_revoke_survive_restart() -> Result<()> {
         return Err(anyhow!("restarted owner could not create invite: {invite}"));
     }
     alice
-        .await_event_seal_coverage(&realm_id, &submitted_event_id(&invite)?)
+        .await_event_commit(&realm_id, &submitted_event_id(&invite)?)
         .await?;
 
     // The invitee's own accept is its join (`realm-membership.md`).
@@ -108,7 +108,7 @@ pub async fn owner_invite_remove_grant_revoke_survive_restart() -> Result<()> {
         ));
     }
     alice
-        .await_event_seal_coverage(&realm_id, &submitted_event_id(&added)?)
+        .await_event_commit(&realm_id, &submitted_event_id(&added)?)
         .await?;
     let grant_id = alice
         .grant_realm_actions_to_client(&realm_id, &bob, &["ak.message.create"])
@@ -139,7 +139,7 @@ pub async fn owner_invite_remove_grant_revoke_survive_restart() -> Result<()> {
         return Err(anyhow!("restarted owner could not revoke grant: {revoked}"));
     }
     alice
-        .await_event_seal_coverage(&realm_id, &submitted_event_id(&revoked)?)
+        .await_event_commit(&realm_id, &submitted_event_id(&revoked)?)
         .await?;
     let denied = expect_json(
         bob.post("/_arkret/self/authz/check")
@@ -166,7 +166,7 @@ pub async fn owner_invite_remove_grant_revoke_survive_restart() -> Result<()> {
         ));
     }
     alice
-        .await_event_seal_coverage(&realm_id, &submitted_event_id(&removed)?)
+        .await_event_commit(&realm_id, &submitted_event_id(&removed)?)
         .await?;
 
     server

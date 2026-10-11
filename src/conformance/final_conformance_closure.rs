@@ -1075,8 +1075,8 @@ fn evaluate_moderation_franking_roundtrip(scenario: &Value) -> Result<Value> {
     if !required_bool(scenario, "target_event_content_commitment_matches")?
         || !required_bool(scenario, "franking_signature_matches")?
         || !required_bool(scenario, "durable_proof_event_matches")?
-        // Renamed with the move to scoped Seals: the condition is now that
-        // the Event has a valid existence anchor, not that a covering Seal was
+        // The condition requires a valid Event existence anchor; no separate
+        // finality carrier is
         // observed.
         || !required_bool(scenario, "existence_anchor_valid")?
     {

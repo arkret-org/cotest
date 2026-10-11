@@ -20,7 +20,7 @@ enum RecoveryModel {
 impl RecoveryModel {
     /// `create` prepares and freezes; `commit_recovery_unit` is the single
     /// client-attested terminal step that carries both Events, the first
-    /// new-generation Seal and the receipt. There is no separate re-anchor
+    /// new-generation RealmCommit and the receipt. There is no separate re-anchor
     /// submission and no separate receipt issuance any more.
     fn steps(self) -> &'static [&'static str] {
         match self {

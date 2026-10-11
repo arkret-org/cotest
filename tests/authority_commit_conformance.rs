@@ -10,6 +10,12 @@
 //! `CommittedEventRef`s in one PCR Realm stream.
 
 use anyhow::Result;
+
+#[test]
+fn shared_authority_objects_keep_conformance_transport_bytes() {
+    let (commit, handoff) = arkret_test_kit::authority_objects::objects();
+    arkret_test_kit::authority_objects::assert_canonical_objects(&commit, &handoff);
+}
 use cotest::conformance::{
     VECTOR_ID_AUTHORITY_COMMIT_INDEPENDENT_STREAMS, run_authority_commit_suite,
 };

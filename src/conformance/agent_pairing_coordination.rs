@@ -3,7 +3,7 @@
 //! This is deliberately not a mock HTTP success test.  It models the two
 //! durable owners fixed by key-management §3.6.1: the request owner retains an
 //! exact pending intent until it observes Station durable acceptance, while
-//! the Station alone owns `awaiting_accepted_frontier -> active`.  A live
+//! the Station alone owns `awaiting_source_commit -> active`.  A live
 //! response-loss test still needs a Coland Agent-pair post-commit breakpoint;
 //! this oracle pins the state transitions that such a test must observe.
 
@@ -35,7 +35,7 @@ impl PairIntent {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ActivationState {
-    AwaitingAcceptedFrontier,
+    AwaitingSourceCommit,
     Active,
     Invalidated,
 }
@@ -92,7 +92,7 @@ impl StationPairingLedger {
             authorize_event_id: intent.authorize_event_id.clone(),
             authorization_id: intent.authorization_id.clone(),
             request_digest,
-            activation_state: ActivationState::AwaitingAcceptedFrontier,
+            activation_state: ActivationState::AwaitingSourceCommit,
         };
         self.accepted.insert(
             intent.pairing_request_id.clone(),
@@ -104,7 +104,7 @@ impl StationPairingLedger {
         Ok(outcome)
     }
 
-    fn reconcile_accepted_frontier(
+    fn reconcile_source_commit(
         &mut self,
         pairing_request_id: &str,
         covered_authorize_event_id: Option<&str>,
@@ -143,7 +143,7 @@ impl StationPairingLedger {
     fn renew_pairing(&mut self) -> u64 {
         self.current_generation += 1;
         for record in self.accepted.values_mut() {
-            if record.outcome.activation_state == ActivationState::AwaitingAcceptedFrontier {
+            if record.outcome.activation_state == ActivationState::AwaitingSourceCommit {
                 record.outcome.activation_state = ActivationState::Invalidated;
             }
         }
@@ -153,7 +153,7 @@ impl StationPairingLedger {
     fn cancel_pairing(&mut self) {
         for record in self.accepted.values_mut() {
             if record.intent.generation == self.current_generation
-                && record.outcome.activation_state == ActivationState::AwaitingAcceptedFrontier
+                && record.outcome.activation_state == ActivationState::AwaitingSourceCommit
             {
                 record.outcome.activation_state = ActivationState::Invalidated;
             }
@@ -289,7 +289,7 @@ pub fn run_agent_pairing_durable_coordination_matrix() -> Result<()> {
     ensure!(matches!(
         delivered,
         DeliveryObservation::Accepted(PairOutcome {
-            activation_state: ActivationState::AwaitingAcceptedFrontier,
+            activation_state: ActivationState::AwaitingSourceCommit,
             ..
         })
     ));
@@ -335,7 +335,7 @@ pub fn run_agent_pairing_durable_coordination_matrix() -> Result<()> {
     );
 
     // Active is a later Station-owned transition. A durable accept alone is
-    // never active, a non-covering Seal is inert, and the background
+    // never active, an unrelated Commit is inert, and the background
     // reconciler needs no second delivery or user approval to activate.
     let background = PairIntent::fixture("background", 1);
     let mut owner = PairingRequestOwner::default();
@@ -348,9 +348,9 @@ pub fn run_agent_pairing_durable_coordination_matrix() -> Result<()> {
     )?;
     ensure!(
         station.state(&background.pairing_request_id)
-            == Some(ActivationState::AwaitingAcceptedFrontier)
+            == Some(ActivationState::AwaitingSourceCommit)
     );
-    ensure!(!station.reconcile_accepted_frontier(&background.pairing_request_id, None)?);
+    ensure!(!station.reconcile_source_commit(&background.pairing_request_id, None)?);
     ensure!(station.current_authorization_id.is_none());
     let mut issuer = IssuerProjection::default();
     ensure!(
@@ -360,7 +360,7 @@ pub fn run_agent_pairing_durable_coordination_matrix() -> Result<()> {
             .to_string()
             == "station_authorization_not_current"
     );
-    ensure!(station.reconcile_accepted_frontier(
+    ensure!(station.reconcile_source_commit(
         &background.pairing_request_id,
         Some(&background.authorize_event_id),
     )?);
@@ -372,7 +372,7 @@ pub fn run_agent_pairing_durable_coordination_matrix() -> Result<()> {
     issuer.consume_station_current(&station, &background.pairing_request_id)?;
     ensure!(issuer.permits(&station));
 
-    // A late Seal/outcome from an old handle cannot revive it after renew or
+    // A late source Commit/outcome from an old handle cannot revive it after renew or
     // cancel, and deactivation invalidates both pending and active authority.
     let old = PairIntent::fixture("old", 1);
     let mut station = StationPairingLedger::new();
@@ -388,8 +388,8 @@ pub fn run_agent_pairing_durable_coordination_matrix() -> Result<()> {
     );
     ensure!(
         station
-            .reconcile_accepted_frontier(&old.pairing_request_id, Some(&old.authorize_event_id))
-            .expect_err("late old-generation Seal")
+            .reconcile_source_commit(&old.pairing_request_id, Some(&old.authorize_event_id))
+            .expect_err("late old-generation source Commit")
             .to_string()
             == "superseded_by_repairing"
     );
@@ -400,21 +400,19 @@ pub fn run_agent_pairing_durable_coordination_matrix() -> Result<()> {
     ensure!(station.state(&cancelled.pairing_request_id) == Some(ActivationState::Invalidated));
     ensure!(
         station
-            .reconcile_accepted_frontier(
+            .reconcile_source_commit(
                 &cancelled.pairing_request_id,
                 Some(&cancelled.authorize_event_id),
             )
-            .expect_err("late cancelled-generation Seal")
+            .expect_err("late cancelled-generation source Commit")
             .to_string()
             == "superseded_by_repairing"
     );
 
     let active = PairIntent::fixture("active", 3);
     station.accept(&active)?;
-    station.reconcile_accepted_frontier(
-        &active.pairing_request_id,
-        Some(&active.authorize_event_id),
-    )?;
+    station
+        .reconcile_source_commit(&active.pairing_request_id, Some(&active.authorize_event_id))?;
     station.deactivate();
     ensure!(station.current_authorization_id.is_none());
     ensure!(station.state(&active.pairing_request_id) == Some(ActivationState::Invalidated));
@@ -441,7 +439,7 @@ pub fn run_agent_pairing_durable_coordination_matrix() -> Result<()> {
     if station.accepted.values().any(|record| {
         matches!(
             record.outcome.activation_state,
-            ActivationState::AwaitingAcceptedFrontier | ActivationState::Active
+            ActivationState::AwaitingSourceCommit | ActivationState::Active
         )
     }) {
         bail!("old Agent authorization remained usable after deactivation");

@@ -1,38 +1,16 @@
-//! Direct Conversation continuity and MLS finality fences.
+//! Direct Conversation bilateral continuity fixture validation.
 //!
 //! The formal `direct-conversation-fixture.json` was retired upstream; its
 //! founding, crash-replay, founder-loss and Contact prepare vectors are
 //! registry-only now and have no machine fixture to execute. What remains
-//! executable here is the bilateral continuity checkpoint fixture and the
-//! Commit/Welcome covering-Seal fence ordering.
+//! executable here is the bilateral continuity checkpoint fixture. Live MLS
+//! Commit/Welcome finality is verified by the protocol admission suites.
 
 use anyhow::{Result, anyhow, bail};
 use serde_json::{Value, json};
 
 use super::load_artifact_json;
 use crate::transcripts::record_vector_event;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum AdmissionStage {
-    CommitPending,
-    CommitAcceptedWaitingSeal,
-    WelcomesAuthored,
-    WelcomesAcceptedWaitingSeal,
-    Complete,
-}
-
-fn advance_admission(stage: AdmissionStage, observation: &str) -> Result<AdmissionStage> {
-    use AdmissionStage::*;
-    match (stage, observation) {
-        (CommitPending, "commit_accepted") => Ok(CommitAcceptedWaitingSeal),
-        (CommitAcceptedWaitingSeal, "commit_covering_seal") => Ok(WelcomesAuthored),
-        (WelcomesAuthored, "welcomes_accepted") => Ok(WelcomesAcceptedWaitingSeal),
-        (WelcomesAcceptedWaitingSeal, "welcome_covering_seals") => Ok(Complete),
-        (CommitPending, "commit_rejected") => Ok(CommitPending),
-        (WelcomesAuthored, "welcome_rejected") => Ok(WelcomesAuthored),
-        _ => bail!("MLS admission attempted to cross a missing exact finality fence"),
-    }
-}
 
 fn validate_bilateral_continuity_checkpoint_fixture() -> Result<()> {
     let fixture = load_artifact_json("fixtures/bilateral-continuity-checkpoint-fixture.json")?;
@@ -130,38 +108,13 @@ fn validate_bilateral_continuity_checkpoint_fixture() -> Result<()> {
     Ok(())
 }
 
-fn validate_commit_welcome_fences() -> Result<()> {
-    let mut stage = AdmissionStage::CommitPending;
-    if advance_admission(stage, "commit_covering_seal").is_ok() {
-        bail!("Welcome authoring crossed an unaccepted Commit");
-    }
-    stage = advance_admission(stage, "commit_rejected")?;
-    stage = advance_admission(stage, "commit_accepted")?;
-    if advance_admission(stage, "welcomes_accepted").is_ok() {
-        bail!("Welcome authoring crossed a Commit without an exact covering Seal");
-    }
-    stage = advance_admission(stage, "commit_covering_seal")?;
-    stage = advance_admission(stage, "welcome_rejected")?;
-    stage = advance_admission(stage, "welcomes_accepted")?;
-    if advance_admission(stage, "activate_without_welcome_seal").is_ok() {
-        bail!("delivery handoff crossed a Welcome without its covering Seal");
-    }
-    stage = advance_admission(stage, "welcome_covering_seals")?;
-    if stage != AdmissionStage::Complete {
-        bail!("MLS admission did not finish after both exact finality fences");
-    }
-    Ok(())
-}
-
 pub fn run_direct_conversation_flow_suite() -> Result<()> {
     validate_bilateral_continuity_checkpoint_fixture()?;
-    validate_commit_welcome_fences()?;
     record_vector_event(
         "direct_conversation.end_to_end_flow",
         &json!({"fixture": "bilateral-continuity-checkpoint-fixture.json"}),
         &json!({
-            "continuity": "bilateral_checkpoint_plus_bounded_tail_reaches_unique_root",
-            "flow_005": "commit_and_welcome_each_wait_for_exact_covering_seal"
+            "continuity": "bilateral_checkpoint_plus_bounded_tail_reaches_unique_root"
         }),
         &json!({"status": "validated"}),
     );
@@ -173,7 +126,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn direct_conversation_flow_suite_closes_registered_transitions() {
+    fn direct_conversation_flow_suite_validates_continuity_fixture() {
         run_direct_conversation_flow_suite().expect("Direct Conversation flow suite");
     }
 }

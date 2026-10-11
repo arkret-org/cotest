@@ -41,8 +41,8 @@ use reqwest::StatusCode;
 use serde::Serialize;
 
 use crate::harness::{
-    ArkretServer, ProvisionedTestPrincipal, TestActorClient,
-    event_envelope_with_causal_refs_for_device, event_signing_identity_for_device, expect_json,
+    ArkretServer, ProvisionedTestPrincipal, TestActorClient, event_envelope_for_device,
+    event_signing_identity_for_device, expect_json,
 };
 use crate::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
 use crate::scenarios::_helpers::coauth_bootstrap::spawn_ephemeral_postgres_for;
@@ -199,16 +199,13 @@ impl RotationAuthor {
             Base64UrlString::new(arkret_canonical::base64url_encode(signature))
                 .map_err(anyhow::Error::msg)?,
         )?;
-        Ok(event_envelope_with_causal_refs_for_device(
+        Ok(event_envelope_for_device(
             &self.actor,
             DEVICE_A,
             &self.station,
             self.principal.pcr_realm_id.as_str(),
             arkret_wire::EventKind::KeyBackupActiveSeries.as_str(),
             serde_json::to_value(record)?,
-            None,
-            Vec::new(),
-            Vec::new(),
         ))
     }
 
@@ -249,16 +246,13 @@ impl RotationAuthor {
             SigningKey::from_bytes(&seed).sign(&transcript).to_bytes(),
         ))
         .map_err(anyhow::Error::msg)?;
-        Ok(event_envelope_with_causal_refs_for_device(
+        Ok(event_envelope_for_device(
             &self.actor,
             DEVICE_A,
             &self.station,
             self.principal.pcr_realm_id.as_str(),
             arkret_wire::EventKind::PolicySet.as_str(),
             serde_json::json!({"policy_id": policy_id, "value": policy}),
-            None,
-            Vec::new(),
-            Vec::new(),
         ))
     }
 
@@ -324,16 +318,13 @@ impl RotationAuthor {
                 .to_bytes(),
         ))
         .map_err(anyhow::Error::msg)?;
-        Ok(event_envelope_with_causal_refs_for_device(
+        Ok(event_envelope_for_device(
             &self.actor,
             DEVICE_A,
             &self.station,
             self.principal.pcr_realm_id.as_str(),
             arkret_wire::EventKind::PolicySet.as_str(),
             serde_json::json!({"policy_id": policy_id, "value": policy}),
-            None,
-            Vec::new(),
-            Vec::new(),
         ))
     }
 
@@ -374,7 +365,7 @@ impl RotationAuthor {
         lifetime: chrono::Duration,
     ) -> Result<(SecurityTransactionCreateRequest, BackupRotationBinding)> {
         let now = arkret::canonical::normalize_timestamp_canonical(Utc::now());
-        let revoke = crate::harness::event_envelope_with_chain_and_signing_identity_and_causal_refs(
+        let revoke = crate::harness::event_envelope_with_signing_identity(
             &self.actor,
             self.principal.pcr_realm_id.as_str(),
             arkret_wire::EventKind::DeviceRevoke.as_str(),
@@ -384,12 +375,9 @@ impl RotationAuthor {
                 "revoked_at": arkret_canonical::format_timestamp_canonical(now),
                 "reason": "security_rotation",
             }),
-            None,
-            Vec::new(),
             revoke_seed,
             &self.method,
             Some(&self.station),
-            Vec::new(),
         );
         let series = BackupSeriesId::new(format!(
             "ak:backup_series:01904100-0000-7000-8000-{suffix}00000001"
@@ -1712,16 +1700,13 @@ async fn admit_accepted_device(
 ) -> Result<EventId> {
     let station = DidCoreId::new(server.service_id().as_str().to_owned())?;
     let payload = device_authorization(account, device, seed, Utc::now())?;
-    let event = event_envelope_with_causal_refs_for_device(
+    let event = event_envelope_for_device(
         actor,
         DEVICE_A,
         &station,
         principal.pcr_realm_id.as_str(),
         arkret_wire::EventKind::DeviceAuthorize.as_str(),
         serde_json::to_value(&payload)?,
-        None,
-        Vec::new(),
-        Vec::new(),
     );
     let AuthoritySubmitOutcome::Accepted { status, commit } = serde_json::from_value(
         expect_json(

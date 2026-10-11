@@ -6,31 +6,41 @@
       "name": "bad_signature_correct_digest_forged_jws_rejects",
       "category": "bad_signature",
       "operation_id": "ak.self.events.command.submit.v1",
-      "comment": "event_digest binds the canonical Event bytes correctly, but the detached JWS signature is forged. A real Ed25519 verification MUST reject it — a bare digest comparison would not. signing_public_key_hex is the verifying key resolved from proof.verification_method.",
+      "comment": "event_digest binds the canonical Event bytes correctly, but the detached JWS signature is forged. A real Ed25519 verification MUST reject it \u2014 a bare digest comparison would not. signing_public_key_hex is the verifying key resolved from proof.verification_method.",
       "input": {
         "signing_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
         "event": {
-          "event_id": "ak:event:AaIU5-FloksbTF8lIRYIpxdzmtMlKw6ZQ46eU2SAH2-4",
+          "event_id": "ak:event:AdyEwgVhmwXJsVM0LgEjIhkO3j0H9seuhNhspGSeeeBd",
           "kind": "ak.message.create",
-          "realm_id": "ak:realm:01970e589d21-8000-8000-000000000001",
-          "actor_id": "ak:did_core:web:alice.example",
-          "actor_seq": 1,
-          "created_at": "2026-05-02T00:00:00.000Z",
-          "hlc": "01970e589d21-0001-a13f9c2e",
-          "prev_refs": [],
-          "payload": {
-            "strand_id": "ak:strand:01970e589d21-8000-8000-000000000010",
-            "body": "signed body"
+          "realm_id": "ak:realm:ASkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkp",
+          "scope_ref": {
+            "kind": "realm",
+            "realm_id": "ak:realm:ASkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkp"
           },
-          "proofs": [
-            {
-              "kind": "detached_jws",
-              "verification_method": "did:web:alice.example#device",
-              "event_digest": "sha256:6c6a1010f4d9c84a36812a9e715a067ee5f7c321777c94f2bb734784df96e9fc",
-              "created_at": "2026-05-02T00:00:00.000Z",
-              "jws": "eyJhbGciOiJFZDI1NTE5In0..bad"
+          "actor_id": {
+            "kind": "account",
+            "account_id": {
+              "principal_id": "ak:did_core:web:alice.example",
+              "station_id": "ak:did_core:web:station.example"
             }
-          ]
+          },
+          "created_at": "2026-05-02T00:00:00.000Z",
+          "payload": {
+            "strand_id": "ak:strand:AT3ARBdH1FM6GjXK9ulTx-YMvQOXys39dlUzZV6KyID9",
+            "track_name": "discussion",
+            "content": {
+              "kind": "ak.content.text",
+              "body": "signed body",
+              "format": "plain"
+            }
+          },
+          "producer_proof": {
+            "kind": "detached_jws",
+            "verification_method": "did:web:alice.example#device",
+            "event_digest": "sha256:dc84c205619b05c9b153342e012322190ede3d07f6c7ae84d86ca4649e79e05d",
+            "created_at": "2026-05-02T00:00:00.000Z",
+            "jws": "eyJhbGciOiJFZDI1NTE5In0..AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+          }
         }
       },
       "expected": {
@@ -45,34 +55,70 @@
       "operation_id": "ak.self.events.command.submit.v1",
       "input": {
         "stored_event": {
-          "event_id": "ak:event:AWXsf2rFLkYFYlF5uh4gif0IP3q1iVowzqCZ987Rqza8",
+          "event_id": "ak:event:AaFNzqu50GsPL3eo1sIYpwCBdL76HVVMOWF9z4mHpjP0",
           "kind": "ak.message.create",
-          "realm_id": "ak:realm:01970e589d21-8000-8000-000000000001",
-          "actor_id": "ak:did_core:web:alice.example",
-          "actor_seq": 2,
-          "created_at": "2026-05-02T00:00:01.000Z",
-          "hlc": "01970e589d22-0001-a13f9c2e",
-          "prev_refs": [],
-          "payload": {
-            "strand_id": "ak:strand:01970e589d21-8000-8000-000000000010",
-            "body": "canonical body a"
+          "realm_id": "ak:realm:ASkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkp",
+          "scope_ref": {
+            "kind": "realm",
+            "realm_id": "ak:realm:ASkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkp"
           },
-          "proofs": []
+          "actor_id": {
+            "kind": "account",
+            "account_id": {
+              "principal_id": "ak:did_core:web:alice.example",
+              "station_id": "ak:did_core:web:station.example"
+            }
+          },
+          "created_at": "2026-05-02T00:00:00.000Z",
+          "payload": {
+            "strand_id": "ak:strand:AT3ARBdH1FM6GjXK9ulTx-YMvQOXys39dlUzZV6KyID9",
+            "track_name": "discussion",
+            "content": {
+              "kind": "ak.content.text",
+              "body": "canonical body a",
+              "format": "plain"
+            }
+          },
+          "producer_proof": {
+            "kind": "detached_jws",
+            "verification_method": "did:web:alice.example#device",
+            "event_digest": "sha256:a14dceabb9d06b0f2f77a8d6c218a7008174befa1d554c39617dcf8987a633f4",
+            "created_at": "2026-05-02T00:00:00.000Z",
+            "jws": "eyJhbGciOiJFZDI1NTE5In0..AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+          }
         },
         "incoming_event": {
-          "event_id": "ak:event:AWXsf2rFLkYFYlF5uh4gif0IP3q1iVowzqCZ987Rqza8",
+          "event_id": "ak:event:AaFNzqu50GsPL3eo1sIYpwCBdL76HVVMOWF9z4mHpjP0",
           "kind": "ak.message.create",
-          "realm_id": "ak:realm:01970e589d21-8000-8000-000000000001",
-          "actor_id": "ak:did_core:web:alice.example",
-          "actor_seq": 2,
-          "created_at": "2026-05-02T00:00:01.000Z",
-          "hlc": "01970e589d22-0001-a13f9c2e",
-          "prev_refs": [],
-          "payload": {
-            "strand_id": "ak:strand:01970e589d21-8000-8000-000000000010",
-            "body": "canonical body b"
+          "realm_id": "ak:realm:ASkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkp",
+          "scope_ref": {
+            "kind": "realm",
+            "realm_id": "ak:realm:ASkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkp"
           },
-          "proofs": []
+          "actor_id": {
+            "kind": "account",
+            "account_id": {
+              "principal_id": "ak:did_core:web:alice.example",
+              "station_id": "ak:did_core:web:station.example"
+            }
+          },
+          "created_at": "2026-05-02T00:00:00.000Z",
+          "payload": {
+            "strand_id": "ak:strand:AT3ARBdH1FM6GjXK9ulTx-YMvQOXys39dlUzZV6KyID9",
+            "track_name": "discussion",
+            "content": {
+              "kind": "ak.content.text",
+              "body": "canonical body b",
+              "format": "plain"
+            }
+          },
+          "producer_proof": {
+            "kind": "detached_jws",
+            "verification_method": "did:web:alice.example#device",
+            "event_digest": "sha256:18bc733396ac39ff6f8db8fe63ae6e37f2c78614d423ebf2aef5bfb13c561cc0",
+            "created_at": "2026-05-02T00:00:00.000Z",
+            "jws": "eyJhbGciOiJFZDI1NTE5In0..AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+          }
         }
       },
       "expected": {
@@ -87,18 +133,36 @@
       "operation_id": "ak.self.events.command.submit.v1",
       "input": {
         "event": {
-          "event_id": "ak:event:Ab1wW6h5QnGMlhhFi-yxg6txnBC4jwSBbzmiKBpMOfTO",
+          "event_id": "ak:event:ASDT6yojXyhToTOMx5hMgXoZ_X4mr2V7Dxkj8df-X4C1",
           "kind": "ak.message.create",
-          "realm_id": "ak:realm:01970e589d21-8000-8000-000000000001",
-          "actor_id": "ak:did_core:web:alice.example",
-          "actor_seq": 3,
-          "created_at": "2026-05-02T00:00:02.000Z",
-          "hlc": "01970e589d23-0001-a13f9c2e",
-          "prev_refs": [],
-          "payload": {
-            "body": "missing strand_id"
+          "realm_id": "ak:realm:ASkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkp",
+          "scope_ref": {
+            "kind": "realm",
+            "realm_id": "ak:realm:ASkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkp"
           },
-          "proofs": []
+          "actor_id": {
+            "kind": "account",
+            "account_id": {
+              "principal_id": "ak:did_core:web:alice.example",
+              "station_id": "ak:did_core:web:station.example"
+            }
+          },
+          "created_at": "2026-05-02T00:00:00.000Z",
+          "payload": {
+            "track_name": "discussion",
+            "content": {
+              "kind": "ak.content.text",
+              "body": "schema test",
+              "format": "plain"
+            }
+          },
+          "producer_proof": {
+            "kind": "detached_jws",
+            "verification_method": "did:web:alice.example#device",
+            "event_digest": "sha256:20d3eb2a235f2853a1338cc7984c817a19fd7e26af657b0f1923f1d7fe5f80b5",
+            "created_at": "2026-05-02T00:00:00.000Z",
+            "jws": "eyJhbGciOiJFZDI1NTE5In0..AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+          }
         }
       },
       "expected": {
@@ -108,38 +172,7 @@
       }
     },
     {
-      "name": "replay_actor_seq_rejects",
-      "category": "replay",
-      "operation_id": "ak.self.events.command.submit.v1",
-      "input": {
-        "actor_frontier": {
-          "actor_id": "ak:did_core:web:alice.example",
-          "actor_seq": 4
-        },
-        "event": {
-          "event_id": "ak:event:AYnFYKgVfgLS_SOEzeTumtZXKFoFSE2qAGFDYpwhRlFA",
-          "kind": "ak.message.create",
-          "realm_id": "ak:realm:01970e589d21-8000-8000-000000000001",
-          "actor_id": "ak:did_core:web:alice.example",
-          "actor_seq": 4,
-          "created_at": "2026-05-02T00:00:03.000Z",
-          "hlc": "01970e589d24-0001-a13f9c2e",
-          "prev_refs": [],
-          "payload": {
-            "strand_id": "ak:strand:01970e589d21-8000-8000-000000000010",
-            "body": "replay"
-          },
-          "proofs": []
-        }
-      },
-      "expected": {
-        "decision": "reject",
-        "error_code": "causal_conflict",
-        "hard_fail": true
-      }
-    },
-    {
-      "name": "downgrade_missing_critical_profile_rejects",
+      "name": "retired_producer_requirements_rejects",
       "category": "downgrade",
       "operation_id": "ak.self.events.command.submit.v1",
       "input": {
@@ -147,14 +180,37 @@
         "attempted_profile": "ak.profile.full_client.v1",
         "supported_features": [],
         "event": {
-          "event_id": "ak:event:AXYx-zhSalG-tArhMJCv6-Hzc89jxTUx9pnTNmkguR2H",
+          "event_id": "ak:event:AfPRKNsGkLwF_gHcc5u8-pzwiXiDsnsZE78007jHwKof",
           "kind": "ak.message.create",
-          "realm_id": "ak:realm:01970e589d21-8000-8000-000000000001",
-          "actor_id": "ak:did_core:web:alice.example",
-          "actor_seq": 5,
-          "created_at": "2026-05-02T00:00:04.000Z",
-          "hlc": "01970e589d25-0001-a13f9c2e",
-          "prev_refs": [],
+          "realm_id": "ak:realm:ASkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkp",
+          "scope_ref": {
+            "kind": "realm",
+            "realm_id": "ak:realm:ASkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkp"
+          },
+          "actor_id": {
+            "kind": "account",
+            "account_id": {
+              "principal_id": "ak:did_core:web:alice.example",
+              "station_id": "ak:did_core:web:station.example"
+            }
+          },
+          "created_at": "2026-05-02T00:00:00.000Z",
+          "payload": {
+            "strand_id": "ak:strand:AT3ARBdH1FM6GjXK9ulTx-YMvQOXys39dlUzZV6KyID9",
+            "track_name": "discussion",
+            "content": {
+              "kind": "ak.content.text",
+              "body": "must reject retired carrier",
+              "format": "plain"
+            }
+          },
+          "producer_proof": {
+            "kind": "detached_jws",
+            "verification_method": "did:web:alice.example#device",
+            "event_digest": "sha256:f3d128db0690bc05fe01dc739bbcfa9cf0897883b27b1913bf34d3b8c7c0aa1f",
+            "created_at": "2026-05-02T00:00:00.000Z",
+            "jws": "eyJhbGciOiJFZDI1NTE5In0..AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+          },
           "requirements": {
             "critical_extensions": [
               {
@@ -162,17 +218,12 @@
                 "fail_closed": true
               }
             ]
-          },
-          "payload": {
-            "strand_id": "ak:strand:01970e589d21-8000-8000-000000000010",
-            "body": "must not downgrade"
-          },
-          "proofs": []
+          }
         }
       },
       "expected": {
         "decision": "reject",
-        "error_code": "unsupported_feature",
+        "error_code": "schema_violation",
         "hard_fail": true
       }
     },

@@ -26,7 +26,7 @@ use url::Url;
 
 use super::assertions::{account_subscribe_delta_from_text, expect_json, expect_response};
 use super::event_builder::{
-    event_envelope_with_causal_refs_for_device, event_signing_identity_for_device,
+    event_envelope_for_device, event_signing_identity_for_device,
     realm_bootstrap_event_batch_for_device,
 };
 use super::server::OperationSelectingHttpClient;
@@ -321,7 +321,7 @@ impl TestActorClient {
     /// Read the committed Realm stream from its retained floor to its head.
     /// Callers that still inspect the retired Seal JSON shape must migrate to
     /// the `committed_events[]` and `RealmCommit` fields returned here.
-    pub async fn realm_seal_frontier(&self, realm_id: &str) -> Result<Value> {
+    pub async fn realm_committed_tail(&self, realm_id: &str) -> Result<Value> {
         let realm_id = RealmId::new(realm_id.to_owned())?;
         let outcome = self
             .sdk
@@ -383,18 +383,13 @@ impl TestActorClient {
             .await?;
         let grant_id_typed = arkret_identifiers::GrantId::new(grant_id.clone())?;
         let grant_event_id = EventId::from_token_bytes(grant_id_typed.token_bytes())?;
-        self.await_event_seal_coverage(realm_id, &grant_event_id)
-            .await?;
+        self.await_event_commit(realm_id, &grant_event_id).await?;
         subject.remember_grant(realm_id, &grant_id, actions);
         Ok(grant_id)
     }
 
     /// Wait for exact signed commit inclusion of one Event in this Realm.
-    pub async fn await_event_seal_coverage(
-        &self,
-        realm_id: &str,
-        event_id: &EventId,
-    ) -> Result<String> {
+    pub async fn await_event_commit(&self, realm_id: &str, event_id: &EventId) -> Result<String> {
         let expected_realm = RealmId::new(realm_id.to_owned())?;
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
         loop {
@@ -646,7 +641,7 @@ impl TestActorClient {
     /// Submit only the Realm bootstrap control batch.
     ///
     /// Durable convergence scenarios use this entry point so they can wait
-    /// for the bootstrap Seal before authoring their first ordinary Event, without
+    /// for the bootstrap Commit before authoring their first ordinary Event, without
     /// racing the convenience helper's default Discussion Strand.
     pub async fn create_realm_bootstrap_with(&self, body: Value) -> Result<Value> {
         let draft = realm_create_payload_for_station(&self.service_id, &body)?;
@@ -931,103 +926,26 @@ impl TestActorClient {
 
     /// Authors and submits an Event carrying explicit semantic causal edges.
     ///
-    /// RSVP convergence is defined by `causal_refs`: a response dominates
-    /// exactly the heads it names. Two responses that omit each other are
-    /// concurrent, which is the case the projection has to keep exposed.
-    /// `prev_refs` is passed into the builder before signing rather than
-    /// patched on afterwards, so the proof covers the actor chain it claims.
-    pub async fn submit_event_with_causal_refs(
-        &self,
-        realm_id: &str,
-        kind: &str,
-        payload: Value,
-        causal_refs: Vec<String>,
-        capability_refs: Vec<String>,
-    ) -> Result<Value> {
-        let event = self
-            .author_event_with_causal_refs(realm_id, kind, payload, causal_refs, capability_refs)
-            .await?;
-        let mut body = expect_json(
-            self.post("/_arkret/self/events")
-                .json(&crate::publication::initial_submission(event.clone(), "")?),
-            StatusCode::OK,
-        )
-        .await?;
-        // The digest is what a later response names to dominate this head, so
-        // hand it back to the caller alongside the submit result.
-        body["cotest_event_digest"] = json!(
-            event
-                .producer_proof
-                .as_ref()
-                .expect("authored Event has producer proof")
-                .event_digest
-        );
-        Ok(body)
-    }
-
     /// Author the signed producer Event. Commit order and admission authority
     /// are resolved by the governing Station when it signs the RealmCommit.
-    pub async fn author_event_with_causal_refs(
-        &self,
-        realm_id: &str,
-        kind: &str,
-        payload: Value,
-        causal_refs: Vec<String>,
-        capability_refs: Vec<String>,
-    ) -> Result<Event> {
-        anyhow::ensure!(
-            causal_refs.is_empty(),
-            "producer Event has no causal_refs; migrate this case to committed RealmCommit references"
-        );
+    pub async fn author_event(&self, realm_id: &str, kind: &str, payload: Value) -> Result<Event> {
         self.ensure_authority_for_kind(realm_id, kind).await?;
-        let mut event = event_envelope_with_causal_refs_for_device(
+        let mut event = event_envelope_for_device(
             &self.actor,
             &self.device_id,
             &DidCoreId::new(self.service_id.clone())?,
             realm_id,
             kind,
             payload,
-            None,
-            Vec::new(),
-            Vec::new(),
         );
         if kind != arkret_wire::event_kind_str::SELF_MODERATION_REPORT {
             self.stamp_authority(&mut event, realm_id, kind, true);
-        }
-        if !capability_refs.is_empty() {
-            event.semantic_refs = capability_refs
-                .into_iter()
-                .map(|grant_id| {
-                    SemanticRef::new(grant_id, arkret_wire::SEMANTIC_REF_ROLE_AUTHORIZED_BY)
-                })
-                .collect();
         }
         let (signing_seed, _) = event_signing_identity_for_device(&self.actor, &self.device_id);
         refresh_typed_event_proof_with_signing_seed(&mut event, signing_seed)?;
         Ok(event)
     }
 
-    pub async fn author_event(&self, realm_id: &str, kind: &str, payload: Value) -> Result<Event> {
-        self.author_event_with_causal_refs(realm_id, kind, payload, Vec::new(), Vec::new())
-            .await
-    }
-
-    /// A producer Event cannot carry the retired Cell precondition array.
-    /// Keep this entry point only so old negative cases fail explicitly until
-    /// they are rewritten against the typed current revision carried by payload.
-    pub async fn author_event_with_preconditions<P: serde::Serialize>(
-        &self,
-        realm_id: &str,
-        kind: &str,
-        payload: Value,
-        preconditions: Vec<P>,
-    ) -> Result<Event> {
-        anyhow::ensure!(
-            preconditions.is_empty(),
-            "producer Event has no Cell preconditions; use payload expected_revision"
-        );
-        self.author_event(realm_id, kind, payload).await
-    }
     /// Author and submit one actor-private `ak.read_cursor.advance`.
     ///
     /// `read-receipts.md` §6.6 keeps this Event off the shared Realm timeline:
