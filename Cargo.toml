@@ -308,6 +308,12 @@ url = { workspace = true }
 zeroize = { workspace = true }
 
 [dev-dependencies]
+# Owned-process issuer-ledger input uses signed storage fixtures only in tests.
+coauth-backend = { workspace = true }
+coauth-data = { workspace = true }
+coauth-storage-postgres = { path = "../coauth/crates/storage-postgres", features = ["test-support"] }
+rand_chacha_03 = { package = "rand_chacha", version = "0.3.1" }
+rand_core_06 = { package = "rand_core", version = "0.6.4", features = ["std"] }
 # T8.2 — property tests for canonical-JSON / proof vectors and handle
 # claim validators across the SDK contract surface.
 proptest = { workspace = true, default-features = false, features = ["std"] }

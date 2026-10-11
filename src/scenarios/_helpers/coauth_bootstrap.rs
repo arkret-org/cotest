@@ -245,6 +245,24 @@ impl PreparedCoauth {
         embedded_webvh_registration_bearer: &str,
         station_ca_path: Option<&Path>,
     ) -> Result<SpawnedCoauth> {
+        self.spawn_for_station_with_chaos(
+            station_endpoint,
+            internal_authority_shared_secret,
+            embedded_webvh_registration_bearer,
+            station_ca_path,
+            None,
+        )
+        .await
+    }
+
+    async fn spawn_for_station_with_chaos(
+        self,
+        station_endpoint: &str,
+        internal_authority_shared_secret: &str,
+        embedded_webvh_registration_bearer: &str,
+        station_ca_path: Option<&Path>,
+        chaos: Option<CoauthChaosConfig>,
+    ) -> Result<SpawnedCoauth> {
         let Self {
             coauth_bin,
             pg,
@@ -260,7 +278,8 @@ impl PreparedCoauth {
         )?;
         run_coauth_migrations(&coauth_bin, bundle.file.path())?;
 
-        let mut command = coauth_process_command(&coauth_bin, bundle.file.path(), true, true, None);
+        let mut command =
+            coauth_process_command(&coauth_bin, bundle.file.path(), true, true, chaos.as_ref());
         if let Some(ca_path) = station_ca_path {
             command.env("SSL_CERT_FILE", ca_path);
         }
@@ -289,10 +308,49 @@ impl PreparedCoauth {
             _internal_port_reservation: bundle.internal_port_reservation,
             pg,
             restart_with_test_endpoints: true,
-            restart_chaos: None,
+            restart_chaos: chaos,
             station_ca_path: station_ca_path.map(Path::to_path_buf),
         })
     }
+}
+
+/// Own a real HTTPS Station and a Coauth child with a durable fault breakpoint.
+/// The Station supplies verified WebVH history and endpoint proofs to Coauth's
+/// ordinary trust preflight; no runtime identity is injected by the harness.
+pub async fn spawn_coauth_with_station_and_chaos(
+    chaos: CoauthChaosConfig,
+) -> Result<(SpawnedCoauth, crate::harness::ArkretServer)> {
+    let prepared = prepare_coauth_with_db_required()?;
+    let base = prepared.base_url();
+    let introspection = format!("{base}/_coauth/internal/session-grants/introspect");
+    let station = crate::harness::ArkretServer::spawn_with_env(
+        "coauth-ledger-chaos",
+        &[
+            ("COLAND_TRUST_DOMAIN", JOINT_TRUST_DOMAIN),
+            ("COLAND_ACCOUNT_AUTHORITY_URL", &base),
+            ("COLAND_SESSION_GRANT_INTROSPECTION_URL", &introspection),
+            (
+                "COLAND_INTERNAL_AUTHORITY_SHARED_SECRET",
+                "cotest-ledger-chaos",
+            ),
+            ("COLAND_ACCOUNT_AUTHORITY_TRUST_DOMAIN", JOINT_TRUST_DOMAIN),
+            (
+                "COLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER",
+                "cotest-webvh-chaos",
+            ),
+        ],
+    )
+    .await?;
+    let coauth = prepared
+        .spawn_for_station_with_chaos(
+            station.base_url().as_str(),
+            "cotest-ledger-chaos",
+            "cotest-webvh-chaos",
+            station.tls_ca_path(),
+            Some(chaos),
+        )
+        .await?;
+    Ok((coauth, station))
 }
 
 /// Reserve Coauth's public address and database without starting the process.
@@ -300,9 +358,9 @@ impl PreparedCoauth {
 /// [`PreparedCoauth::spawn_for_station`] with that Coland endpoint.
 pub fn prepare_coauth_with_db_required() -> Result<PreparedCoauth> {
     let coauth_bin = locate_external_binary(&coauth_binary_probe_spec())
-        .context("coauth binary is required for the live Agent MLS test")?;
+        .context("coauth binary is required for an owned Coauth process")?;
     let pg = spawn_ephemeral_postgres()?
-        .context("Docker-backed Postgres is required for the live Agent MLS test")?;
+        .context("isolated PostgreSQL is required for an owned Coauth process")?;
     let bind_port = reserve_port().context("reserve prepared coauth public port")?;
     let bind_addr = format!("127.0.0.1:{}", bind_port.port());
     Ok(PreparedCoauth {
@@ -826,18 +884,6 @@ pub fn run_coauth_migrations(coauth_bin: &Path, config_path: &Path) -> Result<()
 /// we still return `Ok(None)` and the postgres container is reaped via
 /// `EphemeralPg::Drop`.
 pub async fn spawn_coauth_with_db() -> Result<Option<SpawnedCoauth>> {
-    spawn_coauth_with_db_options(None).await
-}
-
-/// Spawn the real Coprivate authentication process over PostgreSQL with one selected debug-only
-/// post-commit response pause. Intended solely for owned-process fault tests.
-pub async fn spawn_coauth_with_db_chaos(chaos: CoauthChaosConfig) -> Result<Option<SpawnedCoauth>> {
-    spawn_coauth_with_db_options(Some(chaos)).await
-}
-
-async fn spawn_coauth_with_db_options(
-    chaos: Option<CoauthChaosConfig>,
-) -> Result<Option<SpawnedCoauth>> {
     // Verbose diagnostic logging is gated on the `COTEST_COAUTH_BOOTSTRAP_DEBUG`
     // env var so opt-in tests + CI can surface the exact failure step
     // without spamming the conformance run with normal-path bootstrap noise.
@@ -929,13 +975,7 @@ async fn spawn_coauth_with_db_options(
     //    baked into the config YAML, so the standard try_spawn helper that allocates its own port
     //    is the wrong tool here).
     step!("spawning coprivate authentication process bound to {bind_addr}");
-    let mut command = coauth_process_command(
-        &coauth_bin,
-        bundle.file.path(),
-        true,
-        chaos.is_some(),
-        chaos.as_ref(),
-    );
+    let mut command = coauth_process_command(&coauth_bin, bundle.file.path(), true, false, None);
     if debug {
         command.stdout(Stdio::inherit()).stderr(Stdio::inherit());
     } else {
@@ -979,8 +1019,8 @@ async fn spawn_coauth_with_db_options(
         _custody: bundle.custody,
         _internal_port_reservation: internal_port_reservation,
         pg,
-        restart_with_test_endpoints: chaos.is_some(),
-        restart_chaos: chaos,
+        restart_with_test_endpoints: false,
+        restart_chaos: None,
         station_ca_path: None,
     }))
 }
