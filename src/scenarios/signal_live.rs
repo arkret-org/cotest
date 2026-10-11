@@ -31,6 +31,22 @@ pub async fn run_terminal() -> Result<()> {
     .await
 }
 
+pub async fn run_remaining_member_leave() -> Result<()> {
+    super::message_mls_cross_station_live::run_with_signal_boundary(
+        true,
+        emission::Boundary::LeaveWithRemainingMember,
+    )
+    .await
+}
+
+pub async fn run_remaining_member_ban() -> Result<()> {
+    super::message_mls_cross_station_live::run_with_signal_boundary(
+        true,
+        emission::Boundary::BanWithRemainingMember,
+    )
+    .await
+}
+
 #[expect(
     clippy::too_many_arguments,
     reason = "Signal fixture binds the complete authenticated sender and recipient scope"

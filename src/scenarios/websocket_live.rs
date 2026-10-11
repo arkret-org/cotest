@@ -398,6 +398,61 @@ impl LiveSignalReader {
         Ok(Self(socket))
     }
 
+    /// Settle the separate durable rail before measuring Signal effects.
+    pub(crate) async fn wait_for_committed_event(
+        &mut self,
+        expected: &arkret_wire::CommittedEventFullView,
+    ) -> Result<()> {
+        use arkret_models_collaboration::sync_frames::committed_event_subscribe::CommittedEventSubscribeFramePayload;
+        // The committed reader's ordinary idle response waits up to 30s.
+        // Wait for an actual frame through that poll, rather than sleeping.
+        tokio::time::timeout(Duration::from_secs(35), async {
+            loop {
+                match next(&mut self.0).await? {
+                    WebSocketServerFrame::Data {
+                        channel_id,
+                        payload: WebSocketDataPayload::Events(frame),
+                    } if channel_id == "events-1" => {
+                        if let Some(CommittedEventSubscribeFramePayload::CommittedEvent(view)) =
+                            frame.payload
+                        {
+                            if view.commit().commit_id == expected.commit.commit_id {
+                                ensure!(
+                                    *view
+                                        == arkret_wire::CommittedEventView::Full(expected.clone())
+                                );
+                                return Ok(());
+                            }
+                        }
+                    }
+                    WebSocketServerFrame::ChannelControl {
+                        channel_id,
+                        payload: WebSocketChannelControlPayload::Events(frame),
+                        ..
+                    } if channel_id == "events-1" && frame.is_terminal() => {
+                        bail!(
+                            "durable Events rail ended before exact transition: {:?}",
+                            frame.kind
+                        )
+                    }
+                    WebSocketServerFrame::Data {
+                        payload: WebSocketDataPayload::Signal(frame),
+                        ..
+                    } if matches!(*frame, arkret_wire::SignalStreamFrame::Signal { .. }) => {
+                        bail!("unexpected Signal while settling the durable Events rail")
+                    }
+                    WebSocketServerFrame::ChannelError { error, .. } => {
+                        bail!("shared socket channel error: {}", error.code)
+                    }
+                    WebSocketServerFrame::Closed { .. } => bail!("shared socket closed"),
+                    _ => {}
+                }
+            }
+        })
+        .await
+        .context("exact accepted transition on the shared Events rail")?
+    }
+
     pub(crate) async fn next_frame(&mut self) -> Result<Option<arkret_wire::SignalStreamFrame>> {
         loop {
             match next(&mut self.0).await? {

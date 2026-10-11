@@ -434,6 +434,27 @@ pub(crate) async fn run_with_signal_boundary(
     install_bindings(&mut alice_group, &[&alice, &bob]).await?;
     install_bindings(&mut bob_group, &[&alice, &bob]).await?;
     if include_signal {
+        if matches!(
+            boundary,
+            super::signal_live::emission::Boundary::LeaveWithRemainingMember
+                | super::signal_live::emission::Boundary::BanWithRemainingMember
+        ) {
+            return super::signal_live::emission::exercise_remaining_member(
+                &alice,
+                &bob,
+                &mut alice_group,
+                &mut bob_group,
+                &realm_id,
+                &strand,
+                x,
+                y,
+                &coauth,
+                &[&x_database.connect_url, &y_database.connect_url],
+                &pause_file,
+                boundary,
+            )
+            .await;
+        }
         // Signal uses the accepted device/member/MLS bootstrap directly.
         // Ordinary Message franking publication belongs to the other scenario
         // and must not race the negative Signal zero-write observations.

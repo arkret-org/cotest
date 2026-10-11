@@ -11,11 +11,16 @@ use crate::harness::ArkretServer;
 use crate::scenarios::_helpers::acceptance_footprint::acceptance_rows;
 use crate::scenarios::human_device_producer_live::{membership_payload, submit_and_expect_commit};
 
+mod remaining_member;
+pub(crate) use remaining_member::exercise as exercise_remaining_member;
+
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum Boundary {
     Leave,
     Ban,
     Tombstone,
+    LeaveWithRemainingMember,
+    BanWithRemainingMember,
 }
 
 enum Rail {
@@ -52,16 +57,28 @@ impl Rail {
     }
 }
 
-fn arm(path: &Path, signal: &SignalEnvelope) -> Result<()> {
-    for extension in ["reached.json", "outcome.json"] {
-        match std::fs::remove_file(path.with_extension(extension)) {
-            Ok(()) => {}
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(error.into()),
+fn arm(
+    path: &Path,
+    signal: &SignalEnvelope,
+    recipients: &[&arkret_wire::AccountId],
+) -> Result<Vec<std::path::PathBuf>> {
+    let mut selected = Vec::new();
+    let mut paths = Vec::new();
+    for (index, recipient) in recipients.iter().enumerate() {
+        let path = path.with_extension(format!("{index}.pause"));
+        for extension in ["reached.json", "outcome.json", "skip"] {
+            match std::fs::remove_file(path.with_extension(extension)) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error.into()),
+            }
         }
+        std::fs::write(&path, [])?;
+        paths.push(path);
+        selected.push(((*recipient).clone(), signal.envelope_digest()?));
     }
-    std::fs::write(path, signal.envelope_digest()?.as_str())?;
-    Ok(())
+    std::fs::write(path, arkret_canonical::canonical_json_bytes(&selected)?)?;
+    Ok(paths)
 }
 
 fn retain_observation(path: &Path, boundary: Boundary, phase: &str) -> Result<()> {
@@ -191,7 +208,7 @@ async fn transition(
     use arkret_models_collaboration::governance::membership_invite::MembershipPayloadState;
     use arkret_models_collaboration::governance::realm_lifecycle::RealmTombstonePayload;
     let (author, kind, payload) = match boundary {
-        Boundary::Leave => (
+        Boundary::Leave | Boundary::LeaveWithRemainingMember => (
             bob,
             EventKind::MemberState,
             membership_payload(
@@ -201,7 +218,7 @@ async fn transition(
                 "Signal emission departure",
             )?,
         ),
-        Boundary::Ban => (
+        Boundary::Ban | Boundary::BanWithRemainingMember => (
             alice,
             EventKind::MemberState,
             membership_payload(
@@ -281,12 +298,13 @@ pub(super) async fn exercise(
         SignalClass::Session,
         20,
     )?;
-    arm(pause_file, &control)?;
+    let probe = arm(pause_file, &control, &[&bob.account])?.remove(0);
+    let observed_path = probe.as_path();
     ensure!(alice.client.sdk().signal_send(&control).await?.accepted);
-    reached(pause_file, &control).await?;
-    std::fs::remove_file(pause_file)?;
-    outcome(pause_file, &control, true).await?;
-    retain_observation(pause_file, boundary, "control")?;
+    reached(observed_path, &control).await?;
+    std::fs::remove_file(observed_path)?;
+    outcome(observed_path, &control, true).await?;
+    retain_observation(observed_path, boundary, "control")?;
     let (received, authority) = tokio::time::timeout(Duration::from_secs(5), async {
         loop {
             match rail.next().await?.context("positive resumed rail open")? {
@@ -329,10 +347,11 @@ pub(super) async fn exercise(
     verify_plaintext(alice, bob, bob_group, &queued, &authority, state, head, 21)?;
     verify_plaintext(alice, bob, bob_group, &delayed, &authority, state, head, 22)?;
     ensure!(queued.envelope_digest()? != delayed.envelope_digest()?);
-    arm(pause_file, &queued)?;
+    let probe = arm(pause_file, &queued, &[&bob.account])?.remove(0);
+    let observed_path = probe.as_path();
     let before = [counts(urls[0], realm).await?, counts(urls[1], realm).await?];
     ensure!(alice.client.sdk().signal_send(&queued).await?.accepted);
-    reached(pause_file, &queued).await?;
+    reached(observed_path, &queued).await?;
     for (index, url) in urls.iter().enumerate() {
         let after = counts(url, realm).await?;
         ensure!(
@@ -359,32 +378,15 @@ pub(super) async fn exercise(
         held == commit,
         "recipient installed the exact source transition before release"
     );
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
-    loop {
-        let url = urls[0].to_owned();
-        let event = commit.event_ref.to_string();
-        let complete = tokio::task::spawn_blocking(move || -> Result<bool> {
-            let mut conn = postgres::Client::connect(&url, postgres::NoTls)?;
-            let row = conn.query_one("SELECT count(*) FROM federation_outbox WHERE realm_fanout->'source_event_ids' ? $1 AND state != 'delivered'", &[&event])?;
-            Ok(row.get::<_, i64>(0) == 0)
-        }).await??;
-        if complete {
-            break;
-        }
-        ensure!(
-            tokio::time::Instant::now() < deadline,
-            "source marks actual transition delivery before zero-effect observations"
-        );
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
+    wait_for_delivery(urls[0], &commit).await?;
     let snapshots = [
         acceptance_rows(urls[0]).await?,
         acceptance_rows(urls[1]).await?,
     ];
     let closed = [counts(urls[0], realm).await?, counts(urls[1], realm).await?];
-    std::fs::remove_file(pause_file)?;
-    outcome(pause_file, &queued, false).await?;
-    retain_observation(pause_file, boundary, "closed")?;
+    std::fs::remove_file(observed_path)?;
+    outcome(observed_path, &queued, false).await?;
+    retain_observation(observed_path, boundary, "closed")?;
     rail.quiet().await?;
     ensure!(Utc::now() + chrono::Duration::seconds(3) < delayed.expires_at);
     deny_peer(&delayed, x, y, urls).await?;
@@ -411,4 +413,24 @@ pub(super) async fn exercise(
         if websocket { "websocket" } else { "http" }
     );
     Ok(())
+}
+
+async fn wait_for_delivery(url: &str, commit: &arkret_wire::RealmCommit) -> Result<()> {
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    loop {
+        let url = url.to_owned();
+        let event = commit.event_ref.to_string();
+        let complete = tokio::task::spawn_blocking(move || -> Result<bool> {
+            let mut db = postgres::Client::connect(&url, postgres::NoTls)?;
+            Ok(db.query_one("SELECT count(*) FROM federation_outbox WHERE realm_fanout->'source_event_ids' ? $1 AND state != 'delivered'", &[&event])?.get::<_, i64>(0) == 0)
+        }).await??;
+        if complete {
+            return Ok(());
+        }
+        ensure!(
+            tokio::time::Instant::now() < deadline,
+            "departure fanout settled before the read-only observation"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
 }
