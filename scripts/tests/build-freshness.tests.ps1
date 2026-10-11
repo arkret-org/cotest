@@ -39,7 +39,8 @@ try {
         [pscustomobject]@{ RequiredTimeUtc = $recentInputTime; BuildInputsDirty = $true }
     )
     Assert-True (Test-ArtifactSourceFreshness -ArtifactTimeUtc $oldArtifactTime -RepositoryStates $cleanInputs -StampMatches $true) "a clean checkout at stamped commits may have newer file timestamps"
-    Assert-True (-not (Test-ArtifactSourceFreshness -ArtifactTimeUtc $oldArtifactTime -RepositoryStates $dirtyInputs -StampMatches $true)) "dirty build inputs newer than the artifact must rebuild"
+    Assert-True (Test-ArtifactSourceFreshness -ArtifactTimeUtc $oldArtifactTime -RepositoryStates $dirtyInputs -StampMatches $true) "an exact source/artifact content stamp must admit a verified Cargo cache hit without touching mtime"
+    Assert-True (-not (Test-ArtifactSourceFreshness -ArtifactTimeUtc $recentInputTime -RepositoryStates $dirtyInputs -StampMatches $false)) "even a newer artifact cannot bypass a missing or mismatched content stamp"
     Assert-True (-not (Test-ArtifactSourceFreshness -ArtifactTimeUtc $oldArtifactTime -RepositoryStates $cleanInputs -StampMatches $false)) "a mismatched stamp must rebuild even for a clean checkout"
 
     # Keep the artifact timestamp unchanged while advancing one repository.
@@ -196,7 +197,10 @@ try {
     $graphRoot = Join-Path $testRoot "cargo-graph"
     $pathRoot = Join-Path $testRoot "cargo-optional"
     $patchRoot = Join-Path $testRoot "cargo-patch"
-    foreach ($root in @($graphRoot, $pathRoot, $patchRoot)) {
+    $devRoot = Join-Path $testRoot "cargo-dev"
+    $buildRoot = Join-Path $testRoot "cargo-build"
+    $targetRoot = Join-Path $testRoot "cargo-target"
+    foreach ($root in @($graphRoot, $pathRoot, $patchRoot, $devRoot, $buildRoot, $targetRoot)) {
         $null = New-Item -ItemType Directory -Path (Join-Path $root "src") -Force
         Set-Content -LiteralPath (Join-Path $root "src/lib.rs") -Value "pub fn source() {}" -Encoding UTF8
         Invoke-BuildInputGit -RepositoryRoot $root -Arguments @('init', '--quiet') | Out-Null
@@ -216,16 +220,47 @@ name = "freshness_patched"
 version = "0.1.0"
 edition = "2021"
 '@ -Encoding UTF8
+    foreach ($entry in @(@($devRoot, 'freshness_dev'), @($buildRoot, 'freshness_build'), @($targetRoot, 'freshness_target'))) {
+        $packageManifest = @"
+[package]
+name = "$($entry[1])"
+version = "0.1.0"
+edition = "2021"
+"@
+        Set-Content -LiteralPath (Join-Path $entry[0] "Cargo.toml") -Value $packageManifest -Encoding UTF8
+    }
+    $helperRoot = Join-Path $graphRoot "helper"
+    $null = New-Item -ItemType Directory -Path (Join-Path $helperRoot "src") -Force
+    Set-Content -LiteralPath (Join-Path $helperRoot "src/lib.rs") -Value "pub fn helper() {}" -Encoding UTF8
+    Set-Content -LiteralPath (Join-Path $helperRoot "Cargo.toml") -Value @'
+[package]
+name = "freshness_helper"
+version = "0.1.0"
+edition = "2021"
+[dependencies]
+freshness_dev = { path = "../../cargo-dev" }
+'@ -Encoding UTF8
     Set-Content -LiteralPath (Join-Path $graphRoot "Cargo.toml") -Value @'
 [package]
 name = "freshness_root"
 version = "0.1.0"
 edition = "2021"
+[[bin]]
+name = "coauth"
+path = "src/lib.rs"
 [workspace]
 resolver = "2"
+members = ["helper"]
+[dev-dependencies]
+freshness_dev = { path = "../cargo-dev" }
+freshness_optional = { path = "../cargo-optional" }
+[build-dependencies]
+freshness_build = { path = "../cargo-build" }
 [dependencies]
 freshness_optional = { path = "../cargo-optional", optional = true }
 freshness_patched = "=0.1.0"
+[target.'cfg(windows)'.dependencies]
+freshness_target = { path = "../cargo-target" }
 [patch.crates-io]
 freshness_patched = { path = "../cargo-patch" }
 '@ -Encoding UTF8
@@ -238,20 +273,88 @@ version = "0.1.0"
 name = "freshness_patched"
 version = "0.1.0"
 [[package]]
+name = "freshness_dev"
+version = "0.1.0"
+[[package]]
+name = "freshness_build"
+version = "0.1.0"
+[[package]]
+name = "freshness_target"
+version = "0.1.0"
+[[package]]
+name = "freshness_helper"
+version = "0.1.0"
+dependencies = ["freshness_dev"]
+[[package]]
 name = "freshness_root"
 version = "0.1.0"
-dependencies = ["freshness_optional", "freshness_patched"]
+dependencies = ["freshness_build", "freshness_dev", "freshness_optional", "freshness_patched", "freshness_target"]
 '@ -Encoding UTF8
     $graphRoots = @(Resolve-RepositoryBuildInputRoots -RepositoryRoots @($graphRoot))
-    $expectedRoots = @($graphRoot, $pathRoot, $patchRoot) | ForEach-Object {
+    $expectedRoots = @($graphRoot, $pathRoot, $patchRoot, $devRoot, $buildRoot, $targetRoot) | ForEach-Object {
         (Invoke-BuildInputGit -RepositoryRoot $_ -Arguments @('rev-parse', '--show-toplevel')).Trim()
     }
-    Assert-True ($graphRoots.Count -eq 3 -and @($expectedRoots | Where-Object { $graphRoots -cnotcontains $_ }).Count -eq 0) "real offline Cargo metadata must include optional local and patched dependency repositories"
+    Assert-True ($graphRoots.Count -eq 6 -and @($expectedRoots | Where-Object { $graphRoots -cnotcontains $_ }).Count -eq 0) "real offline Cargo metadata must include optional local and patched dependency repositories"
+    $productRoots = @(Resolve-RepositoryBuildInputRoots -RepositoryRoots @($graphRoot) -DependencyScope product -TargetName coauth)
+    $resolvedDev = Resolve-BuildInputPath -Path $devRoot
+    $resolvedBuild = Resolve-BuildInputPath -Path $buildRoot
+    Assert-True ($productRoots.Count -eq 5 -and $productRoots -cnotcontains $resolvedDev -and $productRoots -ccontains $resolvedBuild) "product target must omit dev-only and unrelated helper-member dependencies while keeping build/optional/patch/target-specific and shared normal-dev inputs"
+    Assert-True ((Get-ArtifactBuildDependencyScope -ArtifactPath (Join-Path $testRoot 'coauth')) -eq 'product') "canonical service binary must select production dependency edges"
+    foreach ($target in @('cotest-wire', 'cotest-provision', 'integration-approval', 'unknown-service')) {
+        Assert-True ((Get-ArtifactBuildDependencyScope -ArtifactPath (Join-Path $testRoot $target)) -eq 'all') "tools, examples and unknown targets must retain development inputs"
+    }
     Set-Content -LiteralPath (Join-Path $graphRoot "Cargo.toml") -Value "invalid = [" -Encoding UTF8
     $graphRejected = $false
     try { Resolve-RepositoryBuildInputRoots -RepositoryRoots @($graphRoot) | Out-Null }
     catch { $graphRejected = $true }
     Assert-True $graphRejected "failed actual Cargo metadata must reject freshness rather than falling back to guessed dependencies"
+
+    # A real, dependency-free Cargo binary proves managed preparation rather
+    # than manufacturing a stamp around an arbitrary existing executable.
+    $prepareScript = Join-Path $PSScriptRoot '../prepare-cargo-artifact.ps1'
+    $buildRoot = Join-Path $testRoot 'managed-build'
+    $null = New-Item -ItemType Directory -Path (Join-Path $buildRoot 'src')
+    Invoke-BuildInputNative -FilePath (Get-Command git).Source -WorkingDirectory $buildRoot -Arguments @('init', '-q') | Out-Null
+    Set-Content -LiteralPath (Join-Path $buildRoot '.gitignore') -Value '/target/' -Encoding UTF8
+    Set-Content -LiteralPath (Join-Path $buildRoot 'Cargo.toml') -Value @'
+[package]
+name = "managed_fixture"
+version = "0.1.0"
+edition = "2021"
+[[bin]]
+name = "managed_fixture"
+path = "src/main.rs"
+'@ -Encoding UTF8
+    Set-Content -LiteralPath (Join-Path $buildRoot 'src/main.rs') -Value 'fn main() { println!("managed fixture"); }' -Encoding UTF8
+    Invoke-BuildInputNative -FilePath (Get-Command cargo).Source -WorkingDirectory $buildRoot -Arguments @('generate-lockfile', '--offline') | Out-Null
+    Invoke-BuildInputGit -RepositoryRoot $buildRoot -Arguments @('add', '.') | Out-Null
+    Invoke-BuildInputGit -RepositoryRoot $buildRoot -Arguments @('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.test', 'commit', '-qm', 'fixture') | Out-Null
+    $fixtureTarget = Join-Path $buildRoot 'target'
+    $prepared = & $prepareScript -ManifestPath (Join-Path $buildRoot 'Cargo.toml') -BinaryName managed_fixture -TargetDirectory $fixtureTarget -Jobs 1
+    Assert-True (-not $prepared.CargoFresh -and (Test-Path -LiteralPath $prepared.StampPath)) 'actual Cargo build must report and stamp its selected executable'
+    $originalFixtureTime = (Get-Item -LiteralPath $prepared.ArtifactPath).LastWriteTimeUtc
+    Set-Content -LiteralPath (Join-Path $buildRoot 'README.md') -Value 'changed non-Cargo source input' -Encoding UTF8
+    $cached = & $prepareScript -ManifestPath (Join-Path $buildRoot 'Cargo.toml') -BinaryName managed_fixture -TargetDirectory $fixtureTarget -Jobs 1
+    Assert-True ($cached.CargoFresh -and $cached.ArtifactTimeUtc -eq $originalFixtureTime) 'actual Cargo cache hit must preserve the executable mtime'
+    $cachedStates = @(Get-ArtifactBuildRepositoryStates -ArtifactPath $cached.ArtifactPath -RepositoryRoots @($buildRoot))
+    $cachedStamp = Test-ArtifactBuildStamp -ArtifactPath $cached.ArtifactPath -RepositoryStates $cachedStates
+    Assert-True ($cachedStamp.Matches -and (Test-ArtifactSourceFreshness -ArtifactTimeUtc $originalFixtureTime -RepositoryStates $cachedStates -StampMatches $cachedStamp.Matches)) 'current dirty bytes and unchanged artifact bytes must be admitted only after managed cache-hit preparation'
+    $savedStamp = Get-Content -Raw -LiteralPath $cached.StampPath
+    $wrongTargetRejected = $false
+    try { & $prepareScript -ManifestPath (Join-Path $buildRoot 'Cargo.toml') -BinaryName unrelated_executable -TargetDirectory $fixtureTarget -Jobs 1 | Out-Null }
+    catch { $wrongTargetRejected = $_.Exception.Message -like 'Cargo metadata must select exactly one workspace binary:*' }
+    Assert-True ($wrongTargetRejected -and (Get-Content -Raw -LiteralPath $cached.StampPath) -ceq $savedStamp) 'unselected executable must not be built or stamped'
+    Set-Content -LiteralPath (Join-Path $buildRoot 'src/main.rs') -Value 'not valid Rust' -Encoding UTF8
+    $failedBuildRejected = $false
+    try { & $prepareScript -ManifestPath (Join-Path $buildRoot 'Cargo.toml') -BinaryName managed_fixture -TargetDirectory $fixtureTarget -Jobs 1 | Out-Null }
+    catch { $failedBuildRejected = $_.Exception.Message -like 'Cargo binary preparation failed (exit=*' }
+    Assert-True ($failedBuildRejected -and (Get-Content -Raw -LiteralPath $cached.StampPath) -ceq $savedStamp) 'failed actual Cargo build must not refresh the previous stamp'
+    Set-Content -LiteralPath (Join-Path $buildRoot 'src/main.rs') -Value 'fn main() {}' -Encoding UTF8
+    Set-Content -LiteralPath (Join-Path $buildRoot 'build.rs') -Value 'fn main() { std::fs::write("input-changed-during-build.txt", "changed").unwrap(); }' -Encoding UTF8
+    $changedDuringBuildRejected = $false
+    try { & $prepareScript -ManifestPath (Join-Path $buildRoot 'Cargo.toml') -BinaryName managed_fixture -TargetDirectory $fixtureTarget -Jobs 1 | Out-Null }
+    catch { $changedDuringBuildRejected = $_.Exception.Message -like 'Build inputs changed during the managed build;*' }
+    Assert-True ($changedDuringBuildRejected -and (Get-Content -Raw -LiteralPath $cached.StampPath) -ceq $savedStamp) 'actual build that changes source inventory must not refresh the previous stamp'
 
     $stampPath = Get-ArtifactBuildStampPath -ArtifactPath $artifact
     $stamp = Get-Content -Raw -LiteralPath $stampPath | ConvertFrom-Json

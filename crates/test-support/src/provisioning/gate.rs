@@ -10,8 +10,10 @@
 //! TypeScript suite reaches through the `cotest-wire` CLI — so the two sides
 //! cannot drift on what a registration looks like.
 
-use anyhow::{Context, Result, bail};
-use arkret_models_collaboration::account_operations::AccountRegisterOutcome;
+use anyhow::{Context, Result, bail, ensure};
+use arkret_models_collaboration::account_operations::{
+    AccountRegisterOutcome, AccountRegisterRequestBody,
+};
 use arkret_models_collaboration::session_grants::SessionGrantOutcome;
 use base64::Engine as _;
 use serde_json::{Value, json};
@@ -235,6 +237,18 @@ impl FoundingDeviceKey {
     /// caller that holds this key can act as the principal. The Rust harness
     /// needs it to build a client that signs its own DPoP proofs; the
     /// TypeScript suite asks the bridge to act instead.
+    /// Restore the exact run-owned key; generating a replacement would break holder binding.
+    pub fn restore(seed_b64url: &str) -> Result<Self> {
+        let bytes = arkret_canonical::base64url_decode(seed_b64url)?;
+        let seed: [u8; 32] = bytes
+            .try_into()
+            .map_err(|_| anyhow::anyhow!("stored session key seed has the wrong length"))?;
+        Ok(Self {
+            seed_b64url: seed_b64url.to_owned(),
+            signing_key: ed25519_dalek::SigningKey::from_bytes(&seed),
+        })
+    }
+
     pub fn signing_key(&self) -> ed25519_dalek::SigningKey {
         self.signing_key.clone()
     }
@@ -314,8 +328,8 @@ pub async fn create_account_handoff(
     if !status.is_success() {
         bail!("{url} returned {status}: {text}");
     }
-    let outcome: Value =
-        serde_json::from_str(&text).with_context(|| format!("parse handoff outcome: {text}"))?;
+    let outcome: Value = serde_json::from_str(&text)
+        .with_context(|| "parse the canonical handoff outcome".to_owned())?;
 
     // Validated through the same oracle the TypeScript side uses, so a change
     // in what a valid outcome looks like reaches both at once.
@@ -323,7 +337,7 @@ pub async fn create_account_handoff(
         .context("validate the account handoff outcome")?;
     let validated = json_object(&validated, "account handoff outcome")?;
     if validated.get("request_id").and_then(Value::as_str) != Some(request_id.as_str()) {
-        bail!("account handoff outcome answered a different request: {validated:?}");
+        bail!("account handoff outcome answered a different request");
     }
     let binding = validated
         .get("binding")
@@ -331,9 +345,7 @@ pub async fn create_account_handoff(
         .context("account handoff outcome carried no binding")?;
     let state = binding.get("state").and_then(Value::as_str);
     if state != Some("identity_creation_active") {
-        bail!(
-            "a fresh account must receive an active identity-creation lease, got {state:?}:              {binding}"
-        );
+        bail!("a fresh account must receive an active identity-creation lease, got {state:?}");
     }
 
     Ok(AccountHandoff {
@@ -369,8 +381,10 @@ pub async fn create_account_handoff(
 /// not declare fails here, loudly, instead of being read past — which is the
 /// difference between a suite that checks conformance and one that checks that
 /// two implementations happen to agree.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct FoundedPrincipal {
+    /// The exact SDK request whose accepted receipts must survive host recovery.
+    pub accepted_request: AccountRegisterRequestBody,
     /// The register outcome, in the model's own type.
     pub outcome: AccountRegisterOutcome,
     /// The resolvable DID the chain minted, from the registration checkpoint.
@@ -392,6 +406,78 @@ pub struct FoundedPrincipal {
 }
 
 impl FoundedPrincipal {
+    /// Revalidate disk-restored custody and accepted authority before opening a runtime store.
+    pub async fn validate_restored(
+        &self,
+        http: &reqwest::Client,
+        coauth: &str,
+        station: &str,
+        trust_domain: &str,
+        session_key: &FoundingDeviceKey,
+    ) -> Result<()> {
+        garth::validate_identity_creation_outcome(&self.outcome, &self.accepted_request)?;
+        let grant = self
+            .outcome
+            .session_grant_outcome
+            .as_ref()
+            .context("stored initial grant absent")?;
+        ensure!(
+            self.did == self.accepted_request.did.as_str()
+                && grant.account_id.principal_id == self.accepted_request.principal_id
+                && grant.audience_id == grant.account_id.station_id
+                && grant.device_id.as_ref().map(|id| id.as_str()) == Some(self.device_id.as_str())
+                && self.event_verification_method == format!("{}#{}", self.did, self.device_id)
+                && serde_json::to_value(&grant.session_public_key)?
+                    == json!(session_key.canonical_public_jwk()?)
+                && grant.expires_at > chrono::Utc::now(),
+            "stored Account, Device, signer or session holder binding differs from accepted material"
+        );
+        let registration = self
+            .accepted_request
+            .identity_creation
+            .as_ref()
+            .context("stored registration request absent")?;
+        let device: arkret_models_collaboration::events_payloads::DeviceAuthorizePayload =
+            serde_json::from_value(serde_json::to_value(
+                &registration.pcr_genesis_unit.events[1].payload,
+            )?)?;
+        let event_key = FoundingDeviceKey::restore(
+            self.event_signing_seed_b64url()
+                .context("stored Event key absent")?,
+        )?;
+        let multikey = arkret_canonical::ed25519_pubkey_to_did_key_multibase(
+            &event_key.signing_key().verifying_key().to_bytes(),
+        );
+        ensure!(
+            device.device_id.as_str() == self.device_id
+                && device.device_public_key_did.as_str() == format!("did:key:{multikey}")
+                && registration
+                    .pcr_genesis_unit
+                    .create()
+                    .actor_id
+                    .as_account_id()
+                    == Some(&grant.account_id)
+                && registration
+                    .pcr_genesis_unit
+                    .create()
+                    .payload
+                    .get("object")
+                    .and_then(|object| object.get("trust_domain"))
+                    .and_then(Value::as_str)
+                    == Some(trust_domain),
+            "stored Device private key or trust domain differs from the accepted founding PCR"
+        );
+        verify_accepted_identity_material(
+            http,
+            coauth,
+            station,
+            &self.accepted_request,
+            &self.outcome,
+            session_key,
+        )
+        .await
+    }
+
     /// The initial DPoP-bound session grant.
     ///
     /// Not an `Option`: the chain asks for one and a founding that produced no
@@ -596,10 +682,36 @@ pub async fn found_principal(
     // out here beats finding out in whichever assertion happens to touch the
     // missing field first.
     let outcome: AccountRegisterOutcome = serde_json::from_value(registered.clone())
-        .with_context(|| format!("parse the identity-creation register outcome: {registered}"))?;
-    if outcome.session_grant_outcome.is_none() {
-        bail!("register outcome carried no session grant: {registered}");
-    }
+        .context("parse the identity-creation register outcome")?;
+    let accepted_request: AccountRegisterRequestBody = serde_json::from_value(register_body)
+        .context("parse the canonical frozen identity-creation request")?;
+    garth::validate_identity_creation_outcome(&outcome, &accepted_request)
+        .context("bind registration outcome to its canonical request")?;
+    let grant = outcome
+        .session_grant_outcome
+        .as_ref()
+        .context("register outcome carried no session grant")?;
+    ensure!(
+        grant.account_id.principal_id == accepted_request.principal_id
+            && grant.account_id.station_id.as_str() == audience_id
+            && grant.audience_id.as_str() == audience_id
+            && grant.device_id.as_ref().map(|id| id.as_str()) == Some(device_id)
+            && serde_json::to_value(&grant.session_public_key)?
+                == json!(handoff.device_key.canonical_public_jwk()?)
+            && grant.expires_at > chrono::Utc::now(),
+        "initial grant does not match the accepted Account, Station, Device and session key"
+    );
+
+    verify_accepted_identity_material(
+        http,
+        coauth,
+        station_base,
+        &accepted_request,
+        &outcome,
+        &handoff.device_key,
+    )
+    .await
+    .context("verify canonical registration authority receipts before retaining identity")?;
 
     let did = checkpoint
         .get("did")
@@ -607,6 +719,7 @@ pub async fn found_principal(
         .context("checkpoint omitted the DID")?
         .to_owned();
     Ok(FoundedPrincipal {
+        accepted_request,
         event_verification_method: format!("{did}#{device_id}"),
         did,
         device_id: device_id.to_owned(),
@@ -614,6 +727,227 @@ pub async fn found_principal(
         checkpoint: checkpoint.clone(),
         outcome,
     })
+}
+
+/// Receipt signatures use complete method-native history at their issuance
+/// coordinate. No grant or current DID document substitutes for that history.
+async fn verify_accepted_identity_material(
+    http: &reqwest::Client,
+    coauth: &str,
+    station: &str,
+    request: &AccountRegisterRequestBody,
+    outcome: &AccountRegisterOutcome,
+    device_key: &FoundingDeviceKey,
+) -> Result<()> {
+    fn scoped_builder(
+        base: &str,
+        http: &reqwest::Client,
+    ) -> Result<arkret_http_client::ClientBuilder> {
+        let url = url::Url::parse(base)?;
+        let mut builder =
+            arkret_http_client::Client::builder(url.clone()).http_client(http.clone());
+        if let Some(host) = url.host_str() {
+            for namespace in ["local.host", "localhost"] {
+                if host == namespace || host.ends_with(&format!(".{namespace}")) {
+                    builder = builder.loopback_service_discovery(
+                        namespace,
+                        url.port_or_known_default()
+                            .context("deployment HTTPS port absent")?,
+                    )?;
+                    break;
+                }
+            }
+        }
+        Ok(builder)
+    }
+    struct CompleteHistory(arkret_models_identity::IdentityLogListOutcome);
+    impl arkret_identity::AuthorityDidHistoryResolver for CompleteHistory {
+        fn resolve_complete_history(
+            &self,
+            did: &arkret_wire::Did,
+        ) -> std::result::Result<
+            arkret_models_identity::IdentityLogListOutcome,
+            arkret_identity::AuthorityHistoryUnavailable,
+        > {
+            if did != &self.0.did {
+                return Err(arkret_identity::AuthorityHistoryUnavailable {
+                    message: "authority DID mismatch".into(),
+                });
+            }
+            Ok(self.0.clone())
+        }
+    }
+    let receipt = &outcome.binding_receipt;
+    let authority_did =
+        arkret_identity::verification_method_did(receipt.proof.verification_method.as_str())?;
+    let authority_log = arkret_identity::DidWebvhResolver::log_url(&authority_did)?;
+    let registration = request
+        .identity_creation
+        .as_ref()
+        .context("identity creation request absent")?;
+    let grant = outcome
+        .session_grant_outcome
+        .as_ref()
+        .context("initial grant absent")?;
+    let commits = outcome
+        .pcr_genesis_commits
+        .as_ref()
+        .context("accepted PCR genesis receipts absent")?;
+    let founding_station_did = arkret_identity::verification_method_did(
+        commits[0].signature.verification_method.as_str(),
+    )?;
+    // This canonical deployment's Account Authority is the owning Station;
+    // Coauth serves the gate at its own origin while the Station hosts the
+    // authority DID and assertionMethod. Bind both to the original frozen
+    // holder proof and accepted PCR, never to an arbitrary response DID.
+    ensure!(
+        receipt.account_authority_id == grant.account_id.station_id
+            && receipt.account_authority_id == registration.initial_session.audience_id
+            && receipt.account_authority_id == registration.control_proof.audience_id
+            && arkret_wire::project_did_to_core_id(&authority_did)? == receipt.account_authority_id
+            && authority_did == founding_station_did
+            && registration.control_proof.origin.as_str()
+                == url::Url::parse(coauth)?.origin().ascii_serialization()
+            && url::Url::parse(&authority_log)?.origin() == url::Url::parse(station)?.origin(),
+        "binding receipt authority must match the frozen owning Station and gate source"
+    );
+    // Account Authority is an authority role, not a service-kind registry entry.
+    // Fetch only its method-native files from the original Station HTTPS origin;
+    // this transport has no account cookies, bearer grant, or DPoP credentials.
+    let ca_path = std::env::var("COTEST_RUN_SCOPED_CA_PEM")
+        .context("canonical receipt verification requires the run-scoped CA")?;
+    let ca_pem = std::fs::read(ca_path)?;
+    let discovery = reqwest::Client::builder()
+        .add_root_certificate(reqwest::Certificate::from_pem(&ca_pem)?)
+        .redirect(reqwest::redirect::Policy::none())
+        .no_proxy()
+        .gzip(false)
+        .build()?;
+    async fn fetch_native_file(
+        http: &reqwest::Client,
+        url: &str,
+        optional: bool,
+    ) -> Result<Option<Vec<u8>>> {
+        let mut response = http
+            .get(url)
+            .header("Accept-Encoding", "identity")
+            .timeout(std::time::Duration::from_secs(10))
+            .send()
+            .await?;
+        if optional && response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        ensure!(
+            response.url().as_str() == url && response.status().is_success(),
+            "native authority history fetch failed or changed its source"
+        );
+        ensure!(
+            response
+                .headers()
+                .get("Content-Encoding")
+                .is_none_or(|value| value.as_bytes() == b"identity"),
+            "native authority history must use identity encoding"
+        );
+        let mut body = Vec::new();
+        while let Some(chunk) = response.chunk().await? {
+            ensure!(
+                body.len() + chunk.len() <= arkret_identity::DID_WEB_MAX_DOCUMENT_BYTES,
+                "native authority history exceeds the SDK byte bound"
+            );
+            body.extend_from_slice(&chunk);
+        }
+        Ok(Some(body))
+    }
+    let log_bytes = fetch_native_file(&discovery, &authority_log, false)
+        .await?
+        .context("complete authority native history absent")?;
+    let witness_url = arkret_identity::DidWebvhResolver::witness_url(&authority_did)?;
+    let witnesses = fetch_native_file(&discovery, &witness_url, true).await?;
+    let log = arkret_identity::verify_did_webvh_v1_chain_and_witness_bytes(
+        &authority_did,
+        &log_bytes,
+        witnesses.as_deref(),
+    )?;
+    let log_entries = log.log.raw_entries;
+    arkret_identity::verify_account_binding_receipt_at_issuance(
+        receipt,
+        &CompleteHistory(arkret_models_identity::IdentityLogListOutcome {
+            did: authority_did,
+            method: arkret_models_identity::DidMethodUri::Webvh,
+            native_history: Some(true),
+            entries: log_entries,
+            next_cursor: None,
+            has_more: false,
+        }),
+    )?;
+
+    for (event, commit) in registration.pcr_genesis_unit.events.iter().zip(commits) {
+        ensure!(
+            commit.event_ref == event.event_id && commit.realm_id == event.realm_id,
+            "PCR receipt must bind the exact frozen founding Event and Realm"
+        );
+    }
+    ensure!(
+        grant.device_id.as_ref() == Some(&registration.initial_session.device_id)
+            && grant.audience_id == registration.initial_session.audience_id
+            && grant.session_public_key == registration.initial_session.session_public_key,
+        "initial grant must bind the frozen SDK initial-session intent"
+    );
+    // A disk-restored locator cannot authorize sending the retained grant.
+    // Resolve the original Commit signer's native route without credentials first.
+    let station_did = arkret_identity::verification_method_did(
+        commits[0].signature.verification_method.as_str(),
+    )?;
+    let station_resolution = scoped_builder(station, http)?
+        .build()?
+        .resolve_service_from_did(&station_did, arkret_wire::ServiceKind::Station)
+        .await?;
+    let route = station_resolution.projection()?;
+    ensure!(
+        route.service_id == grant.account_id.station_id
+            && url::Url::parse(&route.base_url)?
+                == url::Url::parse(&format!("{}/", station.trim_end_matches('/')))?,
+        "retained Station locator differs from its authenticated native route"
+    );
+    let signer = std::sync::Arc::new(device_key.signing_key());
+    let auth = arkret_http_client::Auth::Dpop(arkret_http_client::DpopAuth::with_dpop_token(
+        grant.session_grant.clone(),
+        move |request| {
+            garth::session::dpop::build_http_dpop_proof(request, &signer)
+                .map_err(|error| arkret_http_client::Error::Protocol(error.to_string()))
+        },
+    ));
+    let sdk = scoped_builder(station, http)?.auth(auth).build()?;
+    let authority = garth::AuthorityClient::new(sdk);
+    let nonce = arkret_wire::Base64UrlString::new(random_b64url("pcr_authority_nonce"))
+        .map_err(anyhow::Error::msg)?;
+    let bundle_request = arkret_wire::AuthorityBundleRequest {
+        realm_id: registration.pcr_genesis_unit.create().realm_id.clone(),
+        nonce: nonce.clone(),
+    };
+    let bundle = authority.resolve_authority(&bundle_request).await?;
+    ensure!(
+        bundle.genesis_event == *registration.pcr_genesis_unit.create(),
+        "PCR authority bundle must contain the original frozen genesis Event"
+    );
+    let keys = garth::fetch_historical_station_keys_for_commits(
+        authority.transport(),
+        &bundle,
+        &[&commits[0], &commits[1]],
+    )
+    .await?;
+    let freshness = arkret_identity::RealmAuthorityFreshness::new(chrono::Utc::now(), nonce);
+    let verified = arkret_identity::verify_realm_authority_bundle(&bundle, &freshness, &keys)?;
+    for (event, commit) in registration.pcr_genesis_unit.events.iter().zip(commits) {
+        verified.verify_committed_item(
+            &arkret_wire::CommittedEventFullView {
+                event: event.clone(),
+                commit: commit.clone(),
+            },
+            &keys,
+        )?;
+    }
+    Ok(())
 }
 
 impl AccountHandoff {

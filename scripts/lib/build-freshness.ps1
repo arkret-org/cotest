@@ -57,8 +57,21 @@ function Resolve-BuildInputPath {
     return $current
 }
 
+function Get-ArtifactBuildDependencyScope {
+    param([Parameter(Mandatory = $true)][string]$ArtifactPath)
+    # These are product binaries, not their workspace's integration examples.
+    # Unknown names and Cotest tools remain conservative and include dev edges.
+    $name = [System.IO.Path]::GetFileNameWithoutExtension($ArtifactPath)
+    if ($name -in @('coland', 'coauth', 'savfox', 'flagon')) { return 'product' }
+    return 'all'
+}
+
 function Resolve-RepositoryBuildInputRoots {
-    param([Parameter(Mandatory = $true)][string[]]$RepositoryRoots)
+    param(
+        [Parameter(Mandatory = $true)][string[]]$RepositoryRoots,
+        [ValidateSet('all', 'product')][string]$DependencyScope = 'all',
+        [string]$TargetName
+    )
     $roots = [System.Collections.Generic.SortedSet[string]]::new([System.StringComparer]::Ordinal)
     $cargo = Get-Command cargo -ErrorAction Stop
     foreach ($candidate in $RepositoryRoots) {
@@ -67,13 +80,48 @@ function Resolve-RepositoryBuildInputRoots {
         $manifest = Join-Path $root 'Cargo.toml'
         if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) { throw "Build dependency root has no Cargo manifest: $root" }
         # Full offline metadata includes local patches as well as inherited,
-        # target-specific, build, dev and optional path dependencies. --no-deps
-        # cannot discover a registry dependency replaced by a local patch.
+        # target-specific, build, dev and optional dependencies. Product binaries
+        # traverse only normal/build edges; examples/tools retain the complete
+        # inventory. --no-deps cannot discover local registry replacements.
         $metadata = Invoke-BuildInputNative -FilePath $cargo.Source -WorkingDirectory $root -Arguments @(
             'metadata', '--format-version', '1', '--locked', '--offline', '--all-features', '--manifest-path', $manifest
         ) | ConvertFrom-Json -AsHashtable -ErrorAction Stop
         if ($metadata -isnot [System.Collections.IDictionary] -or -not $metadata.Contains('packages')) { throw "Cargo build dependency inventory is missing: $root" }
+        $selectedPackages = $null
+        if ($DependencyScope -eq 'product') {
+            if ($null -eq $metadata.resolve -or $null -eq $metadata.resolve.nodes -or $null -eq $metadata.workspace_members) {
+                throw "Cargo product dependency graph is missing: $root"
+            }
+            $nodes = [System.Collections.Generic.Dictionary[string, object]]::new([System.StringComparer]::Ordinal)
+            foreach ($node in $metadata.resolve.nodes) { $nodes.Add($node.id, $node) }
+            $selectedPackages = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+            $queue = [System.Collections.Generic.Queue[string]]::new()
+            $seeds = @($metadata.workspace_members)
+            if ($TargetName) {
+                $binaryPackages = @($metadata.packages | Where-Object {
+                    $metadata.workspace_members -ccontains $_.id -and
+                    @($_.targets | Where-Object { $_.name -ceq $TargetName -and $_.kind -contains 'bin' }).Count -gt 0
+                })
+                # Explicit supplemental roots (such as the SDK workspace) have
+                # no matching product target and keep their full member set.
+                if ($binaryPackages.Count -gt 0) { $seeds = @($binaryPackages | ForEach-Object { $_.id }) }
+            }
+            foreach ($member in $seeds) { $queue.Enqueue($member) }
+            while ($queue.Count -gt 0) {
+                $id = $queue.Dequeue()
+                if (-not $selectedPackages.Add($id)) { continue }
+                if (-not $nodes.ContainsKey($id)) { throw "Cargo dependency node is missing: $id" }
+                foreach ($dependency in $nodes[$id].deps) {
+                    # Cargo represents normal with null; preserve every target
+                    # condition and any normal/build use of a shared dev package.
+                    if (@($dependency.dep_kinds | Where-Object { $null -eq $_.kind -or $_.kind -in @('normal', 'build') }).Count -gt 0) {
+                        $queue.Enqueue($dependency.pkg)
+                    }
+                }
+            }
+        }
         foreach ($package in $metadata.packages) {
+            if ($null -ne $selectedPackages -and -not $selectedPackages.Contains($package.id)) { continue }
             if ($null -ne $package.source) { continue }
             $packageRoot = Split-Path -Parent $package.manifest_path
             $dependencyRoot = (Invoke-BuildInputGit -RepositoryRoot $packageRoot -Arguments @('rev-parse', '--show-toplevel')).Trim()
@@ -179,7 +227,7 @@ function Get-RepositoryBuildInputState {
 function Get-ArtifactBuildRepositoryStates {
     param([Parameter(Mandatory = $true)][string]$ArtifactPath, [Parameter(Mandatory = $true)][string[]]$RepositoryRoots, [string]$ArtifactRoot)
     return @(
-        foreach ($root in (Resolve-RepositoryBuildInputRoots -RepositoryRoots $RepositoryRoots)) {
+        foreach ($root in (Resolve-RepositoryBuildInputRoots -RepositoryRoots $RepositoryRoots -DependencyScope (Get-ArtifactBuildDependencyScope -ArtifactPath $ArtifactPath) -TargetName ([System.IO.Path]::GetFileNameWithoutExtension($ArtifactPath)))) {
             Get-RepositoryBuildInputState -RepositoryRoot $root -BinaryPath $ArtifactPath -ArtifactRoot $ArtifactRoot
         }
     )
@@ -335,14 +383,10 @@ function Test-ArtifactSourceFreshness {
     if (-not $StampMatches) {
         return $false
     }
-    $newest = $RepositoryStates | Sort-Object RequiredTimeUtc -Descending | Select-Object -First 1
-    if ($ArtifactTimeUtc -ge $newest.RequiredTimeUtc) {
-        return $true
-    }
-    # A content-bound stamp proves the exact source tree; timestamps are only
-    # an additional guard for dirty files newer than the verified build.
-    # A clean checkout at the exact stamped commits has the same inputs
-    # even when a formatter or checkout has refreshed file modification times.
-    # Dirty inputs still require a build newer than their on-disk contents.
-    return @($RepositoryStates | Where-Object { $_.BuildInputsDirty }).Count -eq 0
+    # The matched stamp binds the exact current source inventory and artifact
+    # bytes. A successful managed Cargo build may leave an unchanged executable
+    # with its natural older mtime, including for a dirty source tree. Source
+    # changes invalidate the content stamp; timestamps cannot add evidence to
+    # an already exact byte comparison.
+    return $true
 }

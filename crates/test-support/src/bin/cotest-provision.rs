@@ -30,11 +30,12 @@ use std::io::{BufRead, Write};
 use anyhow::{Context, Result, bail};
 use cotest_test_support::garth_client::GarthClientHandle;
 use cotest_test_support::provisioning::{
-    AccountHandoff, DeploymentEndpoints, FoundPrincipalRequest, FoundingDeviceKey, MockEmailInbox,
-    UnboundAccount, authorize_with_current_account, create_account_handoff, describe_station,
-    found_principal, provision_unbound_account, read_self_account_viewer,
+    AccountHandoff, DeploymentEndpoints, FoundPrincipalRequest, FoundedPrincipal,
+    FoundingDeviceKey, MockEmailInbox, UnboundAccount, authorize_with_current_account,
+    create_account_handoff, describe_station, found_principal, provision_unbound_account,
+    read_self_account_viewer,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 #[derive(Debug, Deserialize)]
@@ -111,6 +112,17 @@ fn sanitize_path_component(value: &str) -> String {
         .collect()
 }
 
+/// Private test-run custody only; formal request/outcome DTOs remain SDK-owned.
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DurableIdentity {
+    principal: FoundedPrincipal,
+    trust_domain: String,
+    station_base: String,
+    coauth_base: String,
+    session_signing_seed_b64url: String,
+}
+
 /// State that must live across requests.
 ///
 /// Handoffs are held by id because `found_principal` needs the one this session
@@ -131,6 +143,7 @@ struct Session {
     /// different process's view of the same account, which is the opposite of
     /// what a client is.
     garth_clients: HashMap<String, GarthClientHandle>,
+    store_root: std::path::PathBuf,
 }
 
 impl Session {
@@ -151,12 +164,96 @@ impl Session {
             .redirect(reqwest::redirect::Policy::none())
             .build()
             .context("build the provisioning HTTP client")?;
+        let run_id =
+            arkret_wire::RequestId::new_v7_at(chrono::Utc::now().timestamp_millis() as u64);
+        let custody_root =
+            std::path::PathBuf::from(std::env::var_os("COTEST_PROVISION_CUSTODY_ROOT").context(
+                "COTEST_PROVISION_CUSTODY_ROOT must come from the canonical runner lifecycle",
+            )?);
+        let custody_metadata = std::fs::symlink_metadata(&custody_root)?;
+        anyhow::ensure!(
+            custody_metadata.is_dir() && !custody_metadata.file_type().is_symlink(),
+            "run-owned custody root must be a regular directory"
+        );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            anyhow::ensure!(
+                custody_metadata.permissions().mode() & 0o077 == 0,
+                "run-owned custody root permissions must exclude other users"
+            );
+        }
+        let store_root = custody_root.join(sanitize_path_component(run_id.as_str()));
+        std::fs::create_dir_all(&store_root)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&store_root, std::fs::Permissions::from_mode(0o700))?;
+        }
         Ok(Self {
             http,
             handoffs: HashMap::new(),
             session_grants: HashMap::new(),
             garth_clients: HashMap::new(),
+            store_root,
         })
+    }
+
+    fn identity_path(&self, handoff_id: &str) -> std::path::PathBuf {
+        self.store_root
+            .join(sanitize_path_component(handoff_id))
+            .join("accepted-identity.json")
+    }
+
+    fn persist_identity(&self, handoff_id: &str, identity: &DurableIdentity) -> Result<()> {
+        let path = self.identity_path(handoff_id);
+        let directory = path.parent().context("identity directory absent")?;
+        std::fs::create_dir_all(directory)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(directory, std::fs::Permissions::from_mode(0o700))?;
+        }
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let mut file = options
+            .open(path)
+            .context("create run-owned accepted identity snapshot")?;
+        file.write_all(&serde_json::to_vec(identity)?)?;
+        file.sync_all()?;
+        Ok(())
+    }
+
+    fn read_identity(&self, handoff_id: &str) -> Result<DurableIdentity> {
+        // Validate the canonical key before filesystem normalization; arbitrary
+        // strings must not alias a different handoff's custody directory.
+        arkret_wire::RequestId::new(handoff_id.to_owned()).map_err(anyhow::Error::msg)?;
+        let path = self.identity_path(handoff_id);
+        let metadata = std::fs::symlink_metadata(&path)
+            .context("durable accepted identity snapshot unavailable")?;
+        anyhow::ensure!(
+            metadata.file_type().is_file() && !metadata.file_type().is_symlink(),
+            "accepted identity snapshot must be a run-owned regular file"
+        );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            anyhow::ensure!(
+                metadata.permissions().mode() & 0o077 == 0,
+                "accepted identity snapshot custody permissions are too broad"
+            );
+        }
+        anyhow::ensure!(
+            metadata.len() <= 8 * 1024 * 1024,
+            "accepted identity snapshot exceeds its private host bound"
+        );
+        serde_json::from_slice(&std::fs::read(path)?)
+            .context("decode durable accepted identity snapshot")
     }
 
     async fn dispatch(&mut self, request: Request) -> Result<Value> {
@@ -258,6 +355,16 @@ impl Session {
                 // material stays on this side of it. What crosses is the
                 // identity — including the verification method the seed backs,
                 // which is public.
+                self.persist_identity(
+                    &body.handoff_id,
+                    &DurableIdentity {
+                        principal: principal.clone(),
+                        trust_domain: body.trust_domain,
+                        station_base: body.coland_base_url,
+                        coauth_base: body.coauth_base_url,
+                        session_signing_seed_b64url: handoff.device_key.seed_b64url.clone(),
+                    },
+                )?;
                 Ok(json!({
                     "principal_id": principal.outcome.principal_id,
                     "did": principal.did,
@@ -318,41 +425,66 @@ impl Session {
                     device_id: String,
                 }
                 let body: Body = serde_json::from_value(request.body).context("parse request")?;
-                let handoff = self
-                    .handoffs
-                    .get(&body.handoff_id)
-                    .with_context(|| format!("no handoff {} in this session", body.handoff_id))?;
-                let grant = self.session_grants.get(&body.handoff_id).with_context(|| {
-                    format!(
-                        "handoff {} has no session grant; found_principal has not run for it",
-                        body.handoff_id
+                let identity = self.read_identity(&body.handoff_id)?;
+                let principal = &identity.principal;
+                let accepted_grant = principal
+                    .outcome
+                    .session_grant_outcome
+                    .as_ref()
+                    .context("durable accepted initial session grant unavailable")?;
+                anyhow::ensure!(
+                    accepted_grant.account_id == body.account_id
+                        && principal.device_id == body.device_id,
+                    "Garth client identity must match the durable accepted principal and grant"
+                );
+                anyhow::ensure!(
+                    url::Url::parse(&body.coland_base_url)?
+                        == url::Url::parse(&identity.station_base)?,
+                    "Garth Station endpoint must match the canonical provisioning source"
+                );
+                let session_key =
+                    FoundingDeviceKey::restore(&identity.session_signing_seed_b64url)?;
+                principal
+                    .validate_restored(
+                        &self.http,
+                        &identity.coauth_base,
+                        &identity.station_base,
+                        &identity.trust_domain,
+                        &session_key,
                     )
-                })?;
-                // One store directory per principal, under this process's
-                // scratch root, so a restart check reopens the same bytes.
-                //
-                // The handoff id is a `ak:request:<uuid>` and colons are not
-                // legal in a Windows path component, so the directory is named
-                // by a sanitized form rather than the id itself.
-                let store_root = std::env::temp_dir()
-                    .join("cotest-garth-client")
+                    .await?;
+                let seed = principal
+                    .event_signing_seed_b64url()
+                    .context("accepted Device signer seed is unavailable")?;
+                let seed = arkret_canonical::base64url_decode(seed)?;
+                let seed: [u8; 32] = seed
+                    .try_into()
+                    .map_err(|_| anyhow::anyhow!("Device signer seed must have 32 bytes"))?;
+                let store_root = self
+                    .store_root
                     .join(sanitize_path_component(&body.handoff_id));
                 let client = GarthClientHandle::new(
                     self.http.clone(),
                     &body.coland_base_url,
-                    grant.clone(),
-                    handoff.device_key.signing_key(),
+                    principal.session_grant().session_grant.clone(),
+                    session_key.signing_key(),
                     body.account_id,
                     &body.device_id,
                     &store_root,
+                    ed25519_dalek::SigningKey::from_bytes(&seed),
+                    &principal.event_verification_method,
+                    &identity.trust_domain,
                 )?;
                 self.garth_clients.insert(body.handoff_id.clone(), client);
-                Ok(json!({ "store_root": store_root.to_string_lossy() }))
+                Ok(json!({ "store_root": store_root.to_string_lossy(),
+                    "identity_snapshot_path":self.identity_path(&body.handoff_id).to_string_lossy(),
+                    "identity_restored_from_disk":true }))
             }
             "garth_sync_account" => {
                 #[derive(Deserialize)]
                 struct Body {
                     handoff_id: String,
+                    realm_id: Option<arkret_wire::RealmId>,
                 }
                 let body: Body = serde_json::from_value(request.body).context("parse request")?;
                 let client = self.garth_clients.get(&body.handoff_id).with_context(|| {
@@ -361,29 +493,127 @@ impl Session {
                         body.handoff_id
                     )
                 })?;
-                let outcome = client.sync_account_once().await?;
+                let outcome = client.sync_account_once(body.realm_id).await?;
                 Ok(json!({
                     "rounds": outcome.rounds,
                     "cursor": outcome.cursor,
                     "stop_reason": outcome.stop_reason,
+                    "projected": outcome.projected,
+                    "event_ids": outcome.event_ids,
                 }))
             }
             "garth_cursor_after_restart" => {
                 #[derive(Deserialize)]
                 struct Body {
                     handoff_id: String,
+                    realm_id: Option<arkret_wire::RealmId>,
                 }
                 let body: Body = serde_json::from_value(request.body).context("parse request")?;
-                let client = self.garth_clients.get(&body.handoff_id).with_context(|| {
-                    format!(
-                        "no Garth client for handoff {}; call garth_client_open first",
-                        body.handoff_id
-                    )
-                })?;
-                Ok(json!({ "cursor": client.cursor_after_restart().await? }))
+                // Discard the full runtime before reading custody from disk. A
+                // missing or invalid snapshot cannot fall back to Session memory.
+                drop(self.garth_clients.remove(&body.handoff_id));
+                let identity = self.read_identity(&body.handoff_id)?;
+                let principal = identity.principal;
+                let accepted_grant = principal
+                    .outcome
+                    .session_grant_outcome
+                    .as_ref()
+                    .context("durable accepted initial session grant unavailable")?;
+                let origin = identity.station_base;
+                Box::pin(self.dispatch(Request {
+                    id: request.id,
+                    op: "garth_client_open".into(),
+                    body: json!({
+                        "handoff_id":body.handoff_id,"coland_base_url":origin,
+                        "account_id":accepted_grant.account_id,"device_id":principal.device_id
+                    }),
+                }))
+                .await?;
+                let client = self
+                    .garth_clients
+                    .get(&body.handoff_id)
+                    .context("rebuilt Garth runtime missing")?;
+                let cursor = client.cursor().await?;
+                let sync = client.sync_account_once(body.realm_id).await?;
+                Ok(
+                    json!({ "cursor":cursor,"rounds":sync.rounds,"projected":sync.projected,"stop_reason":sync.stop_reason,"identity_restored_from_disk":true }),
+                )
+            }
+            "garth_create_realm"
+            | "garth_join_realm"
+            | "garth_grant_messages"
+            | "garth_send_message"
+            | "garth_read_messages"
+            | "garth_retained_message" => {
+                let handoff_id = request
+                    .body
+                    .get("handoff_id")
+                    .and_then(Value::as_str)
+                    .context("handoff_id required")?;
+                let client = self
+                    .garth_clients
+                    .get(handoff_id)
+                    .context("Garth runtime not opened")?;
+                let field = |name: &str| {
+                    request
+                        .body
+                        .get(name)
+                        .cloned()
+                        .with_context(|| format!("{name} required"))
+                };
+                match request.op.as_str() {
+                    "garth_create_realm" => {
+                        client
+                            .create_realm(
+                                field("title")?.as_str().context("title must be a string")?,
+                            )
+                            .await
+                    }
+                    "garth_join_realm" => {
+                        client
+                            .join_realm(serde_json::from_value(field("realm_id")?)?)
+                            .await
+                    }
+                    "garth_grant_messages" => {
+                        client
+                            .grant_messages(
+                                serde_json::from_value(field("realm_id")?)?,
+                                serde_json::from_value(field("genesis_event_id")?)?,
+                                serde_json::from_value(field("subject_account_id")?)?,
+                            )
+                            .await
+                    }
+                    "garth_send_message" => {
+                        client
+                            .send_message(
+                                serde_json::from_value(field("realm_id")?)?,
+                                serde_json::from_value(field("strand_id")?)?,
+                                field("body")?
+                                    .as_str()
+                                    .context("message body must be a string")?,
+                            )
+                            .await
+                    }
+                    "garth_read_messages" => Ok(
+                        json!({"messages":client.read_messages(serde_json::from_value(field("realm_id")?)?).await?}),
+                    ),
+                    "garth_retained_message" => {
+                        client
+                            .retained_message(serde_json::from_value(field("event_id")?)?)
+                            .await
+                    }
+                    _ => unreachable!(),
+                }
             }
             other => bail!("unknown provisioning op {other:?}"),
         }
+    }
+}
+
+impl Drop for Session {
+    fn drop(&mut self) {
+        self.garth_clients.clear();
+        let _ = std::fs::remove_dir_all(&self.store_root);
     }
 }
 
@@ -402,7 +632,7 @@ async fn main() -> Result<()> {
         // the bridge rather than being silently dropped: a caller waiting on a
         // response it will never get is worse than a crash.
         let request: Request =
-            serde_json::from_str(&line).with_context(|| format!("parse request: {line}"))?;
+            serde_json::from_str(&line).context("parse provisioning bridge request")?;
         let id = request.id.clone();
         let response = match session.dispatch(request).await {
             Ok(result) => json!({ "id": id, "ok": true, "result": result }),

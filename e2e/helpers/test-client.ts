@@ -43,6 +43,8 @@ export type SyncOutcome = {
   hasCursor: boolean;
   /** The cursor, when the client exposes it. Inkson does not. */
   cursor?: string;
+  /** Event identities the real subscription delivered; diagnostic observations, never authority proof. */
+  eventIds?: string[];
   /** Client-specific detail, for failure messages only — never asserted on. */
   detail: string;
 };
@@ -89,4 +91,13 @@ export function selectedClientKind(): ClientKind {
   throw new Error(
     `COTEST_CLIENT_KIND must be "inkson" or "garth"; got ${JSON.stringify(raw)}`,
   );
+}
+
+/** Production writes currently driven by the Garth lane; no stub is advertised for another client. */
+export type TestRealm = { realmId: string; strandId: string; genesisEventId: string };
+export interface WritingTestClient extends TestClient {
+  createRealm(owner: TestUser, member: TestUser, title: string): Promise<TestRealm>;
+  sendMessage(user: TestUser, realm: TestRealm, body: string): Promise<{ eventId: string; commitId: string }>;
+  readMessages(user: TestUser, realm: TestRealm): Promise<Array<Record<string, any>>>;
+  retainedMessage(user: TestUser, eventId: string): Promise<Record<string, any>>;
 }

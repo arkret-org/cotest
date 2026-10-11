@@ -134,6 +134,9 @@ param(
     # the client it measured.
     [ValidateSet("inkson", "garth")]
     [string]$ClientKind = "inkson",
+    # Run another repository's live checks with this deployment's exported identities,
+    # trust root and canonical bridge after provisioning gates and before the joint suite.
+    [string]$PostProvisionCommand,
     [switch]$PreflightOnly,
     [switch]$RunnerSelfTest,
     [ValidateRange(1, 32)]
@@ -444,13 +447,7 @@ function Add-BinaryFreshnessPreflight {
     )
 
     try {
-        $states = @(
-            foreach ($repositoryRoot in (Resolve-RepositoryBuildInputRoots -RepositoryRoots $RepositoryRoots)) {
-                Get-RepositoryBuildInputState `
-                    -RepositoryRoot $repositoryRoot `
-                    -BinaryPath $BinaryPath
-            }
-        )
+        $states = @(Get-ArtifactBuildRepositoryStates -ArtifactPath $BinaryPath -RepositoryRoots $RepositoryRoots)
         $newest = $states | Sort-Object RequiredTimeUtc -Descending | Select-Object -First 1
         $stamp = Test-ArtifactBuildStamp -ArtifactPath $BinaryPath -RepositoryStates $states
         $shortHead = if ($newest.Head.Length -gt 12) { $newest.Head.Substring(0, 12) } else { $newest.Head }
@@ -484,11 +481,7 @@ function Get-ArtifactFreshness {
         return [pscustomobject]@{ Fresh = $false; Detail = "artifact missing: $ArtifactPath" }
     }
     try {
-        $states = @(
-            foreach ($repositoryRoot in (Resolve-RepositoryBuildInputRoots -RepositoryRoots $RepositoryRoots)) {
-                Get-RepositoryBuildInputState -RepositoryRoot $repositoryRoot -BinaryPath $ArtifactPath -ArtifactRoot $ArtifactRoot
-            }
-        )
+        $states = @(Get-ArtifactBuildRepositoryStates -ArtifactPath $ArtifactPath -RepositoryRoots $RepositoryRoots -ArtifactRoot $ArtifactRoot)
         $newest = $states | Sort-Object RequiredTimeUtc -Descending | Select-Object -First 1
         $stamp = Test-ArtifactBuildStamp -ArtifactPath $ArtifactPath -RepositoryStates $states -ArtifactRoot $ArtifactRoot -RequiredArtifactPaths $RequiredArtifactPaths
         $fresh = Test-ArtifactSourceFreshness `
@@ -3460,6 +3453,9 @@ $storeDumpDir = Join-Path $jointDir "stores"
 $storeDumpFailures = [System.Collections.Generic.List[string]]::new()
 $exitCode = 1
 $runnerError = $null
+$provisionCustodyRoot = $null
+$previousProvisionCustodyRoot = $env:COTEST_PROVISION_CUSTODY_ROOT
+$previousSdkTlsRoots = $env:SSL_CERT_FILE
 $startedAt = Get-Date
 $generatedColandCommand = $false
 $generatedInksonCommand = $false
@@ -3488,6 +3484,17 @@ if ($requiresInkson) {
 }
 
 try {
+    if ($StartCoauth) {
+        # Accepted test identity custody stays outside publishable artifacts.
+        # The runner owns cleanup even if a worker terminates its bridge abruptly.
+        $provisionCustodyRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("cotest-provision-custody-" + [Guid]::NewGuid().ToString("N"))
+        $null = New-Item -ItemType Directory -Path $provisionCustodyRoot
+        if (-not $IsWindows) {
+            & chmod 700 $provisionCustodyRoot
+            if ($LASTEXITCODE -ne 0) { throw "cannot protect run-owned provisioning custody directory" }
+        }
+        $env:COTEST_PROVISION_CUSTODY_ROOT = $provisionCustodyRoot
+    }
     if ($willStartDockerColand -and ($BuildColandImage -or -not (Test-DockerImagePresent -ImageTag $ColandImage))) {
         $imageBuildArgs = @{
             ImageTag = $ColandImage
@@ -3745,19 +3752,13 @@ try {
             if (-not $task.AllowUnchangedArtifact) {
                 throw "preparing $($task.Name) failed (exit=$exitCode, artifact_updated=False); see $($task.Service.Stdout) and $($task.Service.Stderr)"
             }
-            # Cargo may prove the current source tree already matches an existing
-            # executable and exit successfully without relinking it. Refresh the
-            # filesystem timestamp only after that successful build so the HEAD
-            # freshness gate records this explicit verification.
-            (Get-Item -LiteralPath $task.Artifact -Force).LastWriteTimeUtc = [DateTime]::UtcNow
+            # Cargo may verify unchanged executable bytes without relinking.
+            # The content-bound stamp below records this actual successful
+            # build; preserve the executable's natural filesystem timestamp.
             $status = "verified-cargo-cache-hit"
         }
         $artifactRoot = if ($task.PSObject.Properties["ArtifactRoot"]) { $task.ArtifactRoot } else { $null }
-        $repositoryStates = @(
-            foreach ($repositoryRoot in (Resolve-RepositoryBuildInputRoots -RepositoryRoots $task.RepositoryRoots)) {
-                Get-RepositoryBuildInputState -RepositoryRoot $repositoryRoot -BinaryPath $task.Artifact -ArtifactRoot $artifactRoot
-            }
-        )
+        $repositoryStates = @(Get-ArtifactBuildRepositoryStates -ArtifactPath $task.Artifact -RepositoryRoots $task.RepositoryRoots -ArtifactRoot $artifactRoot)
         Assert-BuildInputStatesUnchanged -Before $task.BuildInputsBefore -After $repositoryStates
         $requiredArtifactPaths = if ($task.PSObject.Properties["RequiredArtifactPaths"]) { $task.RequiredArtifactPaths } else { @() }
         Write-ArtifactBuildStamp -ArtifactPath $task.Artifact -RepositoryStates $repositoryStates -ArtifactRoot $artifactRoot -RequiredArtifactPaths $requiredArtifactPaths | Out-Null
@@ -3860,6 +3861,8 @@ try {
             -Marker $jointTlsHostsMarker
         $env:NODE_EXTRA_CA_CERTS = $jointTlsAssets.CaPemPath
         $env:COTEST_RUN_SCOPED_CA_PEM = $jointTlsAssets.CaPemPath
+        # Native SDK method discovery uses its credential-free TLS transport.
+        $env:SSL_CERT_FILE = $jointTlsAssets.CaPemPath
         $env:COTEST_TLS_SPKI_SHA256 = $jointTlsAssets.ServerSpkiSha256
 
         $jointTlsRoutes = @()
@@ -5176,6 +5179,19 @@ try {
         }
     }
 
+    if (-not [string]::IsNullOrWhiteSpace($PostProvisionCommand)) {
+        if (-not $StartCoauth) { throw "-PostProvisionCommand requires -StartCoauth and its canonical provisioning gate." }
+        Write-Host "Running post-provision live checks against the canonical deployment."
+        $postProvisionService = Start-ManagedCommand `
+            -Name "prepare-post-provision" `
+            -Command $PostProvisionCommand `
+            -WorkingDirectory $repoRoot `
+            -LogDirectory $serviceLogDir
+        foreach ($path in @($postProvisionService.Stdout, $postProvisionService.Stderr)) {
+            if (Test-Path -LiteralPath $path) { Get-Content -LiteralPath $path | ForEach-Object { Write-Host $_ } }
+        }
+    }
+
         $playwrightArgs = @("test", "--config", "playwright.config.ts")
         foreach ($project in $playwrightProjects) {
             $playwrightArgs += @("--project", $project)
@@ -5381,10 +5397,32 @@ finally {
             }
             Remove-Item Env:NODE_EXTRA_CA_CERTS -ErrorAction SilentlyContinue
             Remove-Item Env:COTEST_RUN_SCOPED_CA_PEM -ErrorAction SilentlyContinue
+            if ($null -eq $previousSdkTlsRoots) {
+                Remove-Item Env:SSL_CERT_FILE -ErrorAction SilentlyContinue
+            } else {
+                $env:SSL_CERT_FILE = $previousSdkTlsRoots
+            }
             Remove-Item Env:COTEST_TLS_SPKI_SHA256 -ErrorAction SilentlyContinue
         }
         if ($mockAppletRegistryStateKeyFile) {
             Remove-Item -LiteralPath $mockAppletRegistryStateKeyFile -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    if ($provisionCustodyRoot) {
+        try {
+            Remove-Item -LiteralPath $provisionCustodyRoot -Recurse -Force -ErrorAction Stop
+        } catch {
+            $managedServiceFailures += [pscustomobject]@{
+                name = "provision-custody-cleanup"; kind = "private-test-state"; exit_code = $null
+                detail = "run-owned accepted identity custody cleanup failed"
+                stdout = $null; stderr = $null
+            }
+        }
+        if ($null -eq $previousProvisionCustodyRoot) {
+            Remove-Item Env:COTEST_PROVISION_CUSTODY_ROOT -ErrorAction SilentlyContinue
+        } else {
+            $env:COTEST_PROVISION_CUSTODY_ROOT = $previousProvisionCustodyRoot
         }
     }
 

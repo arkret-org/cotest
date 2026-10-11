@@ -137,7 +137,7 @@ export class ProvisioningBridge {
     const binary = requiredEnv("COTEST_PROVISION_BIN");
     const child = spawn(binary, [], {
       stdio: ["pipe", "pipe", "inherit"],
-      env: process.env,
+      env: { ...process.env, SSL_CERT_FILE: requiredEnv("COTEST_RUN_SCOPED_CA_PEM") },
     });
     return new ProvisioningBridge(child);
   }
@@ -315,38 +315,82 @@ export class ProvisioningBridge {
     colandBaseUrl: string;
     accountId: { principal_id: string; station_id: string };
     deviceId: string;
-  }): Promise<{ storeRoot: string }> {
+  }): Promise<{ storeRoot: string; identitySnapshotPath: string }> {
     const result = await this.#call("garth_client_open", {
       handoff_id: args.handoffId,
       coland_base_url: args.colandBaseUrl,
       account_id: args.accountId,
       device_id: args.deviceId,
     });
-    return { storeRoot: String(result.store_root) };
+    if (result.identity_restored_from_disk !== true) throw new Error("Garth identity was not restored from durable accepted material");
+    return { storeRoot: String(result.store_root), identitySnapshotPath: String(result.identity_snapshot_path) };
   }
 
   /** Run one bounded account-subscribe round through Garth's engine. */
   async garthSyncAccount(args: {
     handoffId: string;
-  }): Promise<{ rounds: number; cursor: string | null; stopReason: string }> {
+    realmId?: string;
+  }): Promise<{ rounds: number; cursor: string | null; stopReason: string; eventIds: string[] }> {
     const result = await this.#call("garth_sync_account", {
       handoff_id: args.handoffId,
+      ...(args.realmId ? { realm_id: args.realmId } : {}),
     });
     return {
       rounds: Number(result.rounds),
       cursor: (result.cursor ?? null) as string | null,
       stopReason: String(result.stop_reason),
+      eventIds: Array.isArray(result.event_ids) ? result.event_ids.map(String) : [],
     };
   }
 
-  /** What Garth's store reports when reopened, as a restarted process sees it. */
+  /** Destroy and rebuild the entire runtime, then resume its real subscription from the durable cursor. */
   async garthCursorAfterRestart(args: {
     handoffId: string;
-  }): Promise<{ cursor: string | null }> {
+    realmId?: string;
+  }): Promise<{ cursor: string | null; identityRestoredFromDisk: boolean }> {
     const result = await this.#call("garth_cursor_after_restart", {
       handoff_id: args.handoffId,
+      ...(args.realmId ? { realm_id: args.realmId } : {}),
     });
-    return { cursor: (result.cursor ?? null) as string | null };
+    return { cursor: (result.cursor ?? null) as string | null, identityRestoredFromDisk: result.identity_restored_from_disk === true };
+  }
+
+  /** Submit a registered Realm bootstrap and explicit discussion through Garth's durable queue. */
+  async garthCreateRealm(args: { handoffId: string; title: string }): Promise<{
+    realmId: string; strandId: string; genesisEventId: string;
+  }> {
+    const result = await this.#call("garth_create_realm", { handoff_id: args.handoffId, title: args.title });
+    return { realmId: String(result.realm_id), strandId: String(result.strand_id), genesisEventId: String(result.genesis_event_id) };
+  }
+
+  async garthJoinRealm(args: { handoffId: string; realmId: string }): Promise<void> {
+    await this.#call("garth_join_realm", { handoff_id: args.handoffId, realm_id: args.realmId });
+  }
+
+  async garthGrantMessages(args: {
+    handoffId: string; realmId: string; genesisEventId: string; subjectAccountId: AccountId;
+  }): Promise<void> {
+    await this.#call("garth_grant_messages", { handoff_id: args.handoffId, realm_id: args.realmId,
+      genesis_event_id: args.genesisEventId, subject_account_id: args.subjectAccountId });
+  }
+
+  async garthSendMessage(args: {
+    handoffId: string; realmId: string; strandId: string; body: string;
+  }): Promise<{ eventId: string; commitId: string }> {
+    const result = await this.#call("garth_send_message", { handoff_id: args.handoffId,
+      realm_id: args.realmId, strand_id: args.strandId, body: args.body });
+    return { eventId: String(result.event_id), commitId: String(result.commit_id) };
+  }
+
+  /** Rows authenticated by Garth's fresh authority chain and independent contiguous stream replica. */
+  async garthReadMessages(args: { handoffId: string; realmId: string }): Promise<Array<Record<string, any>>> {
+    const result = await this.#call("garth_read_messages", { handoff_id: args.handoffId, realm_id: args.realmId });
+    if (!Array.isArray(result.messages)) throw new Error("Garth message read returned no row array");
+    return result.messages;
+  }
+
+  async garthRetainedMessage(args: { handoffId: string; eventId: string }): Promise<Record<string, any>> {
+    return this.#call("garth_retained_message", { handoff_id: args.handoffId, event_id: args.eventId });
   }
 
   /** Close stdin and let the bridge exit; safe to call twice. */
