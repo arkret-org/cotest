@@ -69,9 +69,11 @@
     - 24 词 BIP-39 输入校验(非法词串本地拒绝)→ 派生 recovery private key → HPKE open `recovery_public_key` envelope
     - 解 ciphertext → 拿回 MLS backup key
 14. 客户端根据 accepted recovery policy/session 构造 policy-authorized `ak.device.reanchor` + 新设备自签 PoP 的 replacement `ak.device.authorize` 原子 unit；RecoveryTransaction 不发布 DID operation。
-15. PCR-policy unit 绑定完整 `pre_fence_seal_frontier` CAS 与 recovery session;无 prior Seal 时 basis 必须显式为 null。任一拆批、错 authority/ref、无效或已消费 proof、frontier 漂移均零副作用拒绝。
-16. 断言 typed receipt 同时绑定两个 Event;`GET /_arkret/self/account/viewer` 显示 device-2 active,当前 PCR generation 单调推进且不使用 DID `versionId`,所有未提交旧代 Event/Seal 被 `device_generation_fenced` 拒绝。
+15. create 冻结两条原签 Event 与 `reanchor_commit_intent={realm_id,predecessor_ref,unit_event_digests}`，不产生恢复效果。唯一 `commit_recovery_unit` 携 replacement-device-signed receipt；治理 Station 在同一 stream-head/generation CAS 中签发两条连续 RealmCommit，原子保存新 generation、设备授权与 session consumption。错 predecessor、policy、session 或 generation 零恢复副作用拒绝。
+16. 断言 typed receipt 与 completion attestation 同时绑定两个 Event 及其 CommittedEventRef;`GET /_arkret/self/account/viewer` 显示 device-2 active,当前 PCR generation 单调推进且不使用 DID `versionId`,所有旧代设备的新请求被 `device_generation_fenced` 拒绝。
 17. 客户端以仍有效的 Bound AccountHandoff、terminal receipt、completion attestation、replacement authorize 与 `InitialSessionGrantIntent` 调用 recovery-completion issuance；Coauth 直接返回 DPoP-bound Standard grant。exact retry 返回逐字节相同 outcome；不存在临时 recovery grant、第二次 OIDC 或换发步骤。
+    - `identity/multi-device.spec.ts` 的 `completion_grant_response_loss` 在真实 issuer 接受后丢弃响应并 reload；`account_config_commit_failure` 在 grant 已保存后令首次账号配置提交失败。两者都断言原 canonical issuance request 重放，且没有第二个 recovery session、transaction 或 terminal continue。
+    - 本地 pending transaction pointer 保留到账号与会话耐久提交；completed 续接不重新用 consumed recovery session 解锁备份。最终清理绑定原 namespace，不删除后来创建的 pending transaction。
 
 ### Phase D — alice 在 device-2 上 sync E2EE history
 

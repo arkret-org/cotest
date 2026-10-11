@@ -8,8 +8,8 @@
       "realism_level": "fixture-only",
       "evidence_class": "fixture-only",
       "real_services": [
-        "inkson",
-        "coland"
+        "coland",
+        "inkson"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -65,8 +65,8 @@
       "evidence_class": "fixture-only",
       "real_services": [
         "coauth",
-        "inkson",
-        "coland"
+        "coland",
+        "inkson"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -95,8 +95,8 @@
       "evidence_class": "fixture-only",
       "real_services": [
         "coauth",
-        "inkson",
-        "coland"
+        "coland",
+        "inkson"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -155,8 +155,8 @@
       "evidence_class": "fixture-only",
       "real_services": [
         "coauth",
-        "inkson",
-        "coland"
+        "coland",
+        "inkson"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -207,8 +207,8 @@
       "realism_level": "fixture-only",
       "evidence_class": "fixture-only",
       "real_services": [
-        "inkson",
-        "coland"
+        "coland",
+        "inkson"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -261,8 +261,8 @@
       "evidence_class": "fixture-only",
       "real_services": [
         "coauth",
-        "inkson",
-        "coland"
+        "coland",
+        "inkson"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -289,8 +289,8 @@
       "evidence_class": "fixture-only",
       "real_services": [
         "coauth",
-        "inkson",
-        "coland"
+        "coland",
+        "inkson"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -348,8 +348,8 @@
       "evidence_class": "fixture-only",
       "real_services": [
         "coauth",
-        "inkson",
-        "coland"
+        "coland",
+        "inkson"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -496,8 +496,8 @@
       "evidence_class": "fixture-only",
       "real_services": [
         "coauth",
-        "inkson",
-        "coland"
+        "coland",
+        "inkson"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -523,8 +523,8 @@
       "evidence_class": "fixture-only",
       "real_services": [
         "coauth",
-        "inkson",
-        "coland"
+        "coland",
+        "inkson"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -555,8 +555,8 @@
       "evidence_class": "fixture-only",
       "real_services": [
         "coauth",
-        "inkson",
-        "coland"
+        "coland",
+        "inkson"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -582,8 +582,8 @@
       "evidence_class": "fixture-only",
       "real_services": [
         "coauth",
-        "inkson",
-        "coland"
+        "coland",
+        "inkson"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -636,8 +636,8 @@
       "evidence_class": "live-product",
       "real_services": [
         "coauth",
-        "inkson",
-        "coland"
+        "coland",
+        "inkson"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -679,8 +679,8 @@
       "evidence_class": "fixture-only",
       "real_services": [
         "coauth",
-        "inkson",
-        "coland"
+        "coland",
+        "inkson"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -707,8 +707,8 @@
       "evidence_class": "live-product",
       "real_services": [
         "coauth",
-        "inkson",
-        "coland"
+        "coland",
+        "inkson"
       ],
       "mocks": [
         "email"
@@ -731,8 +731,8 @@
       "evidence_class": "fixture-only",
       "real_services": [
         "coauth",
-        "inkson",
-        "coland"
+        "coland",
+        "inkson"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -759,8 +759,8 @@
       "evidence_class": "live-product",
       "real_services": [
         "coauth",
-        "inkson",
-        "coland"
+        "coland",
+        "inkson"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -831,9 +831,9 @@
       "evidence_class": "fixture-only",
       "real_services": [
         "coauth",
+        "coland",
         "inkson",
-        "savfox",
-        "coland"
+        "savfox"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -861,8 +861,8 @@
       "evidence_class": "fixture-only",
       "real_services": [
         "coauth",
-        "inkson",
-        "coland"
+        "coland",
+        "inkson"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -906,8 +906,8 @@
       "realism_level": "fixture-only",
       "evidence_class": "fixture-only",
       "real_services": [
-        "inkson",
-        "coland"
+        "coland",
+        "inkson"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -932,8 +932,8 @@
       "realism_level": "fixture-only",
       "evidence_class": "fixture-only",
       "real_services": [
-        "inkson",
-        "coland"
+        "coland",
+        "inkson"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -1033,8 +1033,8 @@
       "evidence_class": "fixture-only",
       "real_services": [
         "coauth",
-        "inkson",
-        "coland"
+        "coland",
+        "inkson"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -1092,8 +1092,8 @@
       "evidence_class": "fixture-only",
       "real_services": [
         "coauth",
-        "inkson",
-        "coland"
+        "coland",
+        "inkson"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -1118,8 +1118,8 @@
       "evidence_class": "fixture-only",
       "real_services": [
         "coauth",
-        "inkson",
-        "coland"
+        "coland",
+        "inkson"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -1148,8 +1148,8 @@
       "evidence_class": "fixture-only",
       "real_services": [
         "coauth",
-        "inkson",
-        "coland"
+        "coland",
+        "inkson"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -1182,8 +1182,8 @@
       "evidence_class": "fixture-only",
       "real_services": [
         "coauth",
-        "inkson",
-        "coland"
+        "coland",
+        "inkson"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -1214,8 +1214,8 @@
       "evidence_class": "fixture-only",
       "real_services": [
         "coauth",
-        "inkson",
-        "coland"
+        "coland",
+        "inkson"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -1325,8 +1325,8 @@
       "evidence_class": "fixture-only",
       "real_services": [
         "coauth",
-        "inkson",
-        "coland"
+        "coland",
+        "inkson"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -1357,8 +1357,8 @@
       "evidence_class": "fixture-only",
       "real_services": [
         "coauth",
-        "inkson",
-        "coland"
+        "coland",
+        "inkson"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -1441,8 +1441,8 @@
       "evidence_class": "fixture-only",
       "real_services": [
         "coauth",
-        "inkson",
-        "coland"
+        "coland",
+        "inkson"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -1473,8 +1473,8 @@
       "evidence_class": "fixture-only",
       "real_services": [
         "coauth",
-        "inkson",
-        "coland"
+        "coland",
+        "inkson"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -1523,8 +1523,8 @@
       "realism_level": "fixture-only",
       "evidence_class": "fixture-only",
       "real_services": [
-        "inkson",
-        "coland"
+        "coland",
+        "inkson"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -1655,8 +1655,8 @@
       "evidence_class": "fixture-only",
       "real_services": [
         "coauth",
-        "inkson",
-        "coland"
+        "coland",
+        "inkson"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -1689,8 +1689,8 @@
       "evidence_class": "fixture-only",
       "real_services": [
         "coauth",
-        "inkson",
-        "coland"
+        "coland",
+        "inkson"
       ],
       "mocks": [],
       "identity_establishment": [
@@ -1715,8 +1715,8 @@
       "evidence_class": "fixture-only",
       "real_services": [
         "coauth",
-        "inkson",
-        "coland"
+        "coland",
+        "inkson"
       ],
       "mocks": [],
       "identity_establishment": [

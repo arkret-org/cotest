@@ -150,7 +150,8 @@ test.describe("fresh-browser device entry paths @fully-implemented", () => {
     }
   });
 
-  test("a fresh browser can use the 24-word Recovery Key instead of first-device approval", async ({
+  for (const cut of ["none", "completion_grant_response_loss", "account_config_commit_failure"] as const) {
+  test("a fresh browser can use the 24-word Recovery Key instead of first-device approval; " + cut, async ({
     browser,
     request,
   }) => {
@@ -193,6 +194,37 @@ test.describe("fresh-browser device entry paths @fully-implemented", () => {
       "device-recovery-replacement",
     );
     const responses = collectProtocolResponses(replacement.page);
+    const completionRequests: string[] = [];
+    let lostCompletionResponse = false;
+    let failedAccountCommit = false;
+    await replacement.page.route("**/_arkret/gate/account/recovery-session-grants/issue", async (route) => {
+      completionRequests.push(route.request().postData() ?? "");
+      if (cut === "completion_grant_response_loss" && !lostCompletionResponse) {
+        const response = await route.fetch();
+        expect(response.ok(), await response.text()).toBe(true);
+        lostCompletionResponse = true;
+        await route.abort("connectionfailed");
+        return;
+      }
+      if (cut === "account_config_commit_failure" && !failedAccountCommit) {
+        const response = await route.fetch();
+        expect(response.ok(), await response.text()).toBe(true);
+        await replacement.page.evaluate(() => {
+          const original = Storage.prototype.setItem;
+          Storage.prototype.setItem = function (key: string, value: string) {
+            if (this === window.localStorage && key === "inkson.config.v1") {
+              Storage.prototype.setItem = original;
+              throw new DOMException("injected recovery account commit failure", "QuotaExceededError");
+            }
+            return original.call(this, key, value);
+          };
+        });
+        failedAccountCommit = true;
+        await route.fulfill({ response });
+        return;
+      }
+      await route.continue();
+    });
     try {
       await loginFreshBrowserToDeviceSetup(replacement.page, account);
       await expect(
@@ -215,6 +247,20 @@ test.describe("fresh-browser device entry paths @fully-implemented", () => {
       await recoveryPanel
         .getByRole("button", { name: "Authorize this device" })
         .click();
+
+      if (cut !== "none") {
+        await expect(recoveryPanel.getByRole("status")).toContainText(
+          cut === "completion_grant_response_loss"
+            ? "Recovery could not finish:"
+            : "Recovered device could not be committed:", { timeout: 300_000 },
+        );
+        expect(cut === "completion_grant_response_loss" ? lostCompletionResponse : failedAccountCommit).toBe(true);
+        await replacement.page.reload({ waitUntil: "domcontentloaded" });
+        await expect(replacement.page.getByTestId("device-setup-required")).toBeVisible({ timeout: 120_000 });
+        await replacement.page.getByTestId("device-setup-use-recovery-key").click();
+        await recoveryPanel.locator("#root-recovery-words").fill(activeRecoveryKey!);
+        await recoveryPanel.getByRole("button", { name: "Authorize this device" }).click();
+      }
 
       const shell = replacement.page.getByTestId("client-shell");
       const terminalFailure = recoveryPanel
@@ -258,6 +304,12 @@ test.describe("fresh-browser device entry paths @fully-implemented", () => {
         /^\/_arkret\/self\/security-transactions\/[^/]+\/continue$/;
       expectSuccessfulPathMatch(responses, "POST", continuePath);
       expectExactlyOnePathMatch(responses, "POST", continuePath);
+      if (cut !== "none") {
+        expect(completionRequests).toHaveLength(2);
+        expect(completionRequests[1]).toBe(completionRequests[0]);
+        expectExactlyOnePathMatch(responses, "POST", /^\/_arkret\/root\/identity\/recovery-sessions$/);
+        expectExactlyOnePathMatch(responses, "POST", /^\/_arkret\/self\/security-transactions$/);
+      }
 
       // Both re-anchor Events and the terminal result enter through that one
       // continue step, as two consecutive Principal Control Realm Commits.
@@ -322,6 +374,7 @@ test.describe("fresh-browser device entry paths @fully-implemented", () => {
       ]);
     }
   });
+  }
 });
 
 type ProtocolResponse = {
