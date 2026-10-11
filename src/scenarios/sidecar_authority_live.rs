@@ -22,6 +22,8 @@ use crate::scenarios::mls_lifecycle_live::{ACTIVE_SUITE, Member, canonical, uplo
 
 const GROUP: &str = "sidecar-authority-live";
 
+mod private_reply;
+
 pub async fn run() -> Result<()> {
     run_with_genesis_observer(None).await
 }
@@ -38,6 +40,22 @@ pub async fn run_with_genesis_observer(
 
 #[async_trait::async_trait(?Send)]
 pub trait SidecarSyncObserver {
+    fn requires_private_agent_reply(&self) -> bool {
+        false
+    }
+
+    async fn private_agent_ready(
+        &self,
+        _controller: &Member,
+        _agent: &crate::scenarios::agent_runtime_live::AgentRuntimeSession,
+        _controller_group: &mut arkret::ArkretMlsGroup,
+        _agent_group: &mut arkret::ArkretMlsGroup,
+        _accepted: &arkret_wire::CommittedEventFullView,
+        _coauth: &MockCoauthIntrospectionServer,
+        _database_url: &str,
+    ) -> Result<()> {
+        Ok(())
+    }
     async fn before_station(&self, _station: &mut crate::harness::ArkretServer) -> Result<()> {
         Ok(())
     }
@@ -78,7 +96,12 @@ pub trait SidecarSyncObserver {
 }
 
 pub async fn run_with_sync_observer(observer: &dyn SidecarSyncObserver) -> Result<()> {
-    run_with_observers(None, Some(observer)).await
+    run_with_options(
+        None,
+        Some(observer),
+        observer.requires_private_agent_reply(),
+    )
+    .await
 }
 
 async fn run_with_observers(
@@ -173,15 +196,32 @@ async fn run_with_options(
     .await?;
     let agent = if pending_agent {
         use arkret_wire::ServiceOperationId as Op;
-        let operations = arkret_schema::agent_runtime_scope::complete_agent_runtime_scope([
+        let mut requested = vec![
             Op::SELF_COMMITTED_EVENT_READ_SCAN_V1,
             Op::SELF_REALM_READ_STREAMS_V1,
             Op::SELF_REALM_STATE_SNAPSHOT_READ_MANIFEST_HEAD_V1,
             Op::SELF_REALM_STATE_SNAPSHOT_READ_BY_REF_V1,
             Op::SELF_MLS_READ_GROUP_STATE_MATERIAL_V1,
-        ])?;
+        ];
+        if sync_observer.is_some_and(|probe| probe.requires_private_agent_reply()) {
+            requested.extend([
+                Op::SELF_KEYS_KEYPACKAGES_UPLOAD_CREATE_V1,
+                Op::SELF_KEYS_KEYPACKAGES_COMMAND_CLAIM_V1,
+                Op::SELF_KEYS_KEYPACKAGES_READ_CLAIM_V1,
+                Op::SELF_KEYS_KEYPACKAGES_COMMAND_CONSUME_V1,
+                Op::SELF_MLS_READ_ROSTER_AUTHORITY_V1,
+                Op::SELF_SIGNER_KEYS_READ_RESOLVE_V1,
+                Op::SELF_CURRENT_RESULTS_READ_EXACT_V1,
+                Op::SELF_EVENTS_COMMAND_SUBMIT_V1,
+                Op::SELF_DEVICE_MESSAGES_READ_LIST_V1,
+                Op::SELF_DEVICE_MESSAGES_COMMAND_ACK_V1,
+                "ak.message.create",
+            ]);
+        }
+        let operations =
+            arkret_schema::agent_runtime_scope::complete_agent_runtime_scope(requested)?;
         let operations = operations.iter().map(String::as_str).collect::<Vec<_>>();
-        let agent =
+        let mut agent =
             crate::scenarios::agent_runtime_live::AgentRuntimeSession::establish_with_operations(
                 station,
                 &coauth,
@@ -191,6 +231,11 @@ async fn run_with_options(
                 &operations,
             )
             .await?;
+        if sync_observer.is_some_and(|probe| probe.requires_private_agent_reply()) {
+            agent.runtime = station
+                .bind_native_host_session(agent.runtime.clone(), &coauth)
+                .await?;
+        }
         let page = controller
             .client
             .sdk()
@@ -607,6 +652,24 @@ async fn run_with_options(
             && roster_response.next_cursor.is_none(),
         "native Sidecar Genesis roster is partial"
     );
+    if let Some(probe) = sync_observer.filter(|probe| probe.requires_private_agent_reply()) {
+        let agent = agent
+            .as_ref()
+            .context("private reply requires a real Agent")?;
+        let (accepted, mut agent_group) =
+            private_reply::join_agent(&controller, agent, &mut group, &genesis).await?;
+        probe
+            .private_agent_ready(
+                &controller,
+                agent,
+                &mut group,
+                &mut agent_group,
+                &accepted,
+                &coauth,
+                &database.connect_url,
+            )
+            .await?;
+    }
     if let Some(probe) = sync_observer {
         probe
             .after_station_checks(

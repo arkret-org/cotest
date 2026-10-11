@@ -166,6 +166,30 @@ pub struct AgentRuntimeSession {
 }
 
 impl AgentRuntimeSession {
+    /// Author on the selected independent scope with the actual runtime key.
+    pub fn author_scoped_event(
+        &self,
+        kind: arkret_wire::EventKind,
+        scope: ScopeRef,
+        payload: serde_json::Value,
+        semantic_refs: Vec<arkret_wire::SemanticRef>,
+    ) -> Result<Event> {
+        let suite = scope.realm_id().digest_suite_code().digest_suite();
+        let mut raw = arkret_wire::test_support::raw_event_for_actor_at(
+            kind.as_str(),
+            scope,
+            ActorId::account(self.agent_account.clone()),
+            payload,
+            arkret::canonical::normalize_timestamp_canonical(Utc::now()),
+        )?;
+        raw.semantic_refs = semantic_refs;
+        sign(
+            arkret_wire::AuthoredEvent::finalize_with_digest_suite(raw, suite)?,
+            &self.verification_method,
+            self.runtime_key.to_bytes(),
+        )
+    }
+
     /// Provision an Agent of `controller` on `server`, found its PCR, pair a
     /// runtime key and open its session through `coauth`.
     pub async fn establish(

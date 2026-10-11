@@ -12,6 +12,7 @@ use garth::{AccountSubscribeBatch, AccountSubscribeTransport, SyncRequestBody};
 use inkson::sync_engine::NativeAccountHost;
 use serde_json::Value;
 
+mod private_reply;
 mod recovery;
 
 const CASES: [&str; 3] = [
@@ -53,7 +54,7 @@ pub const PRODUCTION_CASE_COUNT: usize = CASES.len()
     + STREAM_AND_DELIVERY_CASES.len()
     + ACK_CASES.len()
     + QUEUE_CASES.len()
-    + 5
+    + 6
     + ORDERING_CASES.len();
 
 const QUEUE_WRITE_EVIDENCE: &str = "SELECT jsonb_build_object(\
@@ -84,9 +85,18 @@ fn queue_request(
 }
 
 pub fn run_sync_client_production_suite() -> Result<super::SuiteExecutionResult> {
+    run_native_sync(false)
+}
+
+/// Focused real private-runtime boundary, dispatched through the same native host.
+pub fn run_sync_private_reply_production_case() -> Result<super::SuiteExecutionResult> {
+    run_native_sync(true)
+}
+
+fn run_native_sync(private_only: bool) -> Result<super::SuiteExecutionResult> {
     std::thread::Builder::new()
         .stack_size(32 * 1024 * 1024)
-        .spawn(|| -> Result<super::SuiteExecutionResult> {
+        .spawn(move || -> Result<super::SuiteExecutionResult> {
             let executable = std::env::current_exe()?;
             let parent = executable
                 .parent()
@@ -116,7 +126,11 @@ pub fn run_sync_client_production_suite() -> Result<super::SuiteExecutionResult>
                 .thread_stack_size(32 * 1024 * 1024)
                 .enable_all()
                 .build()?;
-            let cases = runtime.block_on(run_sync_production_cases(&reader))?;
+            let cases = if private_only {
+                vec![runtime.block_on(private_reply::run(&reader))?]
+            } else {
+                runtime.block_on(run_sync_production_cases(&reader))?
+            };
             Ok(super::SuiteExecutionResult {
                 entrypoint: cotest::conformance::SYNC_CLIENT_ENTRYPOINT,
                 fixture: "client-sync-fixture.json",
@@ -3126,6 +3140,11 @@ pub async fn run_sync_production_cases(
     };
     cotest::scenarios::sidecar_authority_live::run_with_sync_observer(&probe).await?;
     let mut results = probe.results.into_inner();
+    results.push(
+        private_reply::run(reader)
+            .await
+            .context("actual private Agent Sidecar automatic recovery")?,
+    );
     results.sort_by(|a, b| a.case_id.cmp(&b.case_id));
     let expected = CASES
         .into_iter()
@@ -3138,6 +3157,7 @@ pub async fn run_sync_production_cases(
         .chain(std::iter::once(STREAM_GAP_CASE))
         .chain(std::iter::once(REVISION_STALE_CASE))
         .chain(std::iter::once(MISSING_CIRCLE_CASE))
+        .chain(std::iter::once(private_reply::CASE))
         .chain(ORDERING_CASES)
         .collect::<std::collections::BTreeSet<_>>();
     ensure!(
@@ -3148,6 +3168,15 @@ pub async fn run_sync_production_cases(
                 .collect::<std::collections::BTreeSet<_>>()
                 == expected,
         "production checkpoint subset was not fully executed"
+    );
+    let execution = super::SuiteExecutionResult {
+        entrypoint: cotest::conformance::SYNC_CLIENT_ENTRYPOINT,
+        fixture: "client-sync-fixture.json",
+        cases: results.clone(),
+    };
+    ensure!(
+        cotest::conformance::missing_sync_production_cases(&execution, &fixture)?.is_empty(),
+        "a complete Sync claim requires its exact canonical case closure"
     );
     for case in &results {
         cotest::transcripts::record_vector_event(
@@ -3164,7 +3193,7 @@ pub async fn run_sync_production_cases(
                 "Station/PG original Realm prefix + actual Account driver + exact verified stream checkpoint and signed anchor + fresh-process readback"
             } else if case.case_id == BASELINE_CASE {
                 "Station/PG Realm join + held baseline completion + durable current merge + fresh-process readback"
-            } else { "AccountSubscription + InksonAccountProjector + Station/PG + private MLS checkpoint + unacknowledged queue" }, "complete_suite_claim":false}),
+            } else { "AccountSubscription + InksonAccountProjector + Station/PG + private MLS checkpoint + unacknowledged queue" }, "complete_suite_claim":true}),
         );
     }
     Ok(results)

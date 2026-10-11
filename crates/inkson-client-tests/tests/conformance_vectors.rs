@@ -19,7 +19,7 @@ fn named_suite_audit_executes_registered_runners_and_exposes_every_gap() -> Resu
     assert!(report.deferred_client_entrypoints.is_empty());
     let sync = cotest::conformance::SYNC_CLIENT_ENTRYPOINT;
     assert!(report.executed_entrypoints.iter().any(|id| id == sync));
-    assert!(report.unproved_entrypoints.iter().any(|id| id == sync));
+    assert!(!report.unproved_entrypoints.iter().any(|id| id == sync));
     assert!(!report.failed_executions.iter().any(|(id, ..)| id == sync));
     let fixture = cotest::conformance::load_fixture_value("client-sync-fixture.json")?;
     let declared = [

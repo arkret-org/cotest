@@ -131,23 +131,30 @@ impl MockCoauthGrantLedger {
                 && claims["sub"].as_str() == Some(binding.subject.as_str()),
             "issuer credential belongs to another Station or principal"
         );
-        let CoauthGrantHolder::HumanDevice { device_id, .. } = &binding.holder else {
-            anyhow::bail!("native Account host requires the exact human device grant");
+        let (device_id, granted_scope) = match &binding.holder {
+            CoauthGrantHolder::HumanDevice { device_id, .. } => (
+                Some(arkret_wire::DeviceId::new(device_id.clone())?),
+                standard_human_grant_scopes()
+                    .into_iter()
+                    .map(str::to_owned)
+                    .collect(),
+            ),
+            CoauthGrantHolder::AgentRuntime { scopes, .. } => (None, scopes.clone()),
+            CoauthGrantHolder::RecoveryCandidateDevice { .. } => {
+                anyhow::bail!("recovery credential cannot become an ordinary own-Station host");
+            }
         };
         Ok(garth::SessionGrantState {
             account_id: arkret_wire::AccountId::new(
                 arkret_wire::DidCoreId::new(binding.subject.clone())?,
                 station.clone(),
             ),
-            device_id: Some(arkret_wire::DeviceId::new(device_id.clone())?),
+            device_id,
             grant_id: arkret_wire::SessionGrantId::new(recorded_grant_id(index, credential))?,
             grant_jwt: binding.grant_jwt.clone(),
             expires_at: binding.expires_at,
             audience_id: station.clone(),
-            granted_scope: standard_human_grant_scopes()
-                .into_iter()
-                .map(str::to_owned)
-                .collect(),
+            granted_scope,
             session_public_key: Some(binding.session_public_key.clone()),
             dpop_jkt: Some(binding.cnf_jkt.clone()),
         })
