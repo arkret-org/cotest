@@ -1777,6 +1777,7 @@ dependencies = [
  "coauth-storage-postgres",
  "coauth-tasks",
  "coauth-templates",
+ "coland-contracts",
  "cookie",
  "deadpool",
  "der 0.7.10",
@@ -1839,7 +1840,6 @@ dependencies = [
  "sha2 0.10.9",
  "signature 2.2.0",
  "socket2",
- "coland-contracts",
  "subtle",
  "thiserror 2.0.20",
  "time",
@@ -2008,16 +2008,15 @@ dependencies = [
 name = "coauth-keyring"
 version = "0.3.0"
 dependencies = [
- "aead 0.5.2",
+ "aead 0.6.1",
  "base64ct",
- "chacha20poly1305 0.10.1",
+ "chacha20poly1305 0.11.0",
  "coauth-iana",
  "coauth-jose",
  "const-oid 0.9.6",
  "der 0.7.10",
  "ed25519-dalek 2.2.0",
  "elliptic-curve 0.13.8",
- "generic-array",
  "k256",
  "p256 0.13.2",
  "p384",
@@ -2187,6 +2186,150 @@ dependencies = [
  "tracing",
  "url",
  "walkdir",
+]
+
+[[package]]
+name = "coland-contracts"
+version = "0.3.0"
+dependencies = [
+ "arkret-canonical",
+ "arkret-identifiers",
+ "arkret-models-collaboration",
+ "arkret-models-crypto",
+ "arkret-wire",
+ "chrono",
+ "serde",
+ "serde_json",
+ "url",
+]
+
+[[package]]
+name = "coland-domain"
+version = "0.3.0"
+dependencies = [
+ "arkret-canonical",
+ "arkret-event-draft",
+ "arkret-hlc",
+ "arkret-identifiers",
+ "arkret-mls",
+ "arkret-models-collaboration",
+ "arkret-models-crypto",
+ "arkret-models-identity",
+ "arkret-policy",
+ "arkret-schema",
+ "arkret-wire",
+ "base64 0.23.1",
+ "chrono",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "tracing",
+]
+
+[[package]]
+name = "coland-services"
+version = "0.3.0"
+dependencies = [
+ "arkret",
+ "arkret-canonical",
+ "arkret-event-draft",
+ "arkret-identifiers",
+ "arkret-identity",
+ "arkret-models-collaboration",
+ "arkret-models-crypto",
+ "arkret-models-identity",
+ "arkret-policy",
+ "arkret-schema",
+ "arkret-signatures",
+ "arkret-state",
+ "arkret-wire",
+ "async-trait",
+ "bytes",
+ "chrono",
+ "coland-domain",
+ "coland-storage",
+ "ed25519-dalek 3.0.0",
+ "futures-util",
+ "getrandom 0.4.3",
+ "hex",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "coland-storage"
+version = "0.3.0"
+dependencies = [
+ "arkret",
+ "arkret-canonical",
+ "arkret-event-draft",
+ "arkret-identifiers",
+ "arkret-identity",
+ "arkret-models-collaboration",
+ "arkret-models-crypto",
+ "arkret-models-identity",
+ "arkret-models-integration",
+ "arkret-schema",
+ "arkret-state",
+ "arkret-wire",
+ "async-trait",
+ "base64 0.23.1",
+ "chrono",
+ "chrono-tz",
+ "coland-domain",
+ "serde",
+ "serde_json",
+ "subtle",
+ "thiserror 2.0.20",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "coland-storage-postgres"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "arkret",
+ "arkret-bootstrap",
+ "arkret-canonical",
+ "arkret-event-draft",
+ "arkret-identifiers",
+ "arkret-identity",
+ "arkret-mls",
+ "arkret-models-collaboration",
+ "arkret-models-crypto",
+ "arkret-models-identity",
+ "arkret-models-integration",
+ "arkret-policy",
+ "arkret-schema",
+ "arkret-signatures",
+ "arkret-state",
+ "arkret-wire",
+ "async-trait",
+ "base64 0.23.1",
+ "chrono",
+ "coland-storage",
+ "deadpool",
+ "diesel",
+ "diesel-async",
+ "diesel_migrations",
+ "ed25519-dalek 3.0.0",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "tokio",
+ "tokio-postgres",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -2463,6 +2606,10 @@ dependencies = [
  "bip39",
  "chacha20poly1305 0.11.0",
  "chrono",
+ "coland-domain",
+ "coland-services",
+ "coland-storage",
+ "coland-storage-postgres",
  "cotest-account-data-cas-convergence-runner",
  "cotest-aead-nonce-replay-runner",
  "cotest-agent-mls-keypackage-authorization-runner",
@@ -2513,10 +2660,6 @@ dependencies = [
  "serde_yaml_ng",
  "serial_test",
  "sha2 0.11.0",
- "coland-domain",
- "coland-services",
- "coland-storage",
- "coland-storage-postgres",
  "tempfile",
  "testcontainers",
  "tokio",
@@ -2588,10 +2731,10 @@ dependencies = [
  "arkret-models-collaboration",
  "arkret-wire",
  "chrono",
+ "coland-domain",
  "ed25519-dalek 3.0.0",
  "serde",
  "serde_json",
- "coland-domain",
 ]
 
 [[package]]
@@ -10591,150 +10734,6 @@ checksum = "c3d1e2c7f27f8d4cb10542a02c49005dbd6e93095799d6f3be745fae9f8fedd4"
 dependencies = [
  "libc",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "coland-contracts"
-version = "0.3.0"
-dependencies = [
- "arkret-canonical",
- "arkret-identifiers",
- "arkret-models-collaboration",
- "arkret-models-crypto",
- "arkret-wire",
- "chrono",
- "serde",
- "serde_json",
- "url",
-]
-
-[[package]]
-name = "coland-domain"
-version = "0.3.0"
-dependencies = [
- "arkret-canonical",
- "arkret-event-draft",
- "arkret-hlc",
- "arkret-identifiers",
- "arkret-mls",
- "arkret-models-collaboration",
- "arkret-models-crypto",
- "arkret-models-identity",
- "arkret-policy",
- "arkret-schema",
- "arkret-wire",
- "base64 0.23.1",
- "chrono",
- "parking_lot",
- "serde",
- "serde_json",
- "thiserror 2.0.20",
- "tracing",
-]
-
-[[package]]
-name = "coland-services"
-version = "0.3.0"
-dependencies = [
- "arkret",
- "arkret-canonical",
- "arkret-event-draft",
- "arkret-identifiers",
- "arkret-identity",
- "arkret-models-collaboration",
- "arkret-models-crypto",
- "arkret-models-identity",
- "arkret-policy",
- "arkret-schema",
- "arkret-signatures",
- "arkret-state",
- "arkret-wire",
- "async-trait",
- "bytes",
- "chrono",
- "ed25519-dalek 3.0.0",
- "futures-util",
- "getrandom 0.4.3",
- "hex",
- "parking_lot",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "coland-domain",
- "coland-storage",
- "thiserror 2.0.20",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "coland-storage"
-version = "0.3.0"
-dependencies = [
- "arkret",
- "arkret-canonical",
- "arkret-event-draft",
- "arkret-identifiers",
- "arkret-identity",
- "arkret-models-collaboration",
- "arkret-models-crypto",
- "arkret-models-identity",
- "arkret-models-integration",
- "arkret-schema",
- "arkret-state",
- "arkret-wire",
- "async-trait",
- "base64 0.23.1",
- "chrono",
- "chrono-tz",
- "serde",
- "serde_json",
- "coland-domain",
- "subtle",
- "thiserror 2.0.20",
- "tokio",
- "uuid",
-]
-
-[[package]]
-name = "coland-storage-postgres"
-version = "0.3.0"
-dependencies = [
- "anyhow",
- "arkret",
- "arkret-bootstrap",
- "arkret-canonical",
- "arkret-event-draft",
- "arkret-identifiers",
- "arkret-identity",
- "arkret-mls",
- "arkret-models-collaboration",
- "arkret-models-crypto",
- "arkret-models-identity",
- "arkret-models-integration",
- "arkret-policy",
- "arkret-schema",
- "arkret-signatures",
- "arkret-state",
- "arkret-wire",
- "async-trait",
- "base64 0.23.1",
- "chrono",
- "deadpool",
- "diesel",
- "diesel-async",
- "diesel_migrations",
- "ed25519-dalek 3.0.0",
- "parking_lot",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "coland-storage",
- "tokio",
- "tokio-postgres",
- "tracing",
- "uuid",
 ]
 
 [[package]]
