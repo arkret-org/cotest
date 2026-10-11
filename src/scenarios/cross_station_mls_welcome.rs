@@ -191,14 +191,14 @@ async fn wait_for_joined_row(member: &Member, realm: &str) -> Result<()> {
 pub(crate) async fn publish_one(member: &Member) -> Result<arkret::ArkretMlsIdentity> {
     let identity = member.mls_identity()?;
     let record = identity.key_package_record()?;
-    let upload =
-        identity.signed_key_packages_upload_request(&[record], member.method.as_str(), None)?;
+    let upload = identity.signed_key_packages_upload_request(&[record], member.method.as_str())?;
     let uploaded: KeyPackagesUploadOutcome = serde_json::from_value(
         expect_json(
             member
                 .client
                 .post("/_arkret/self/keys/keypackages/upload")
-                .json(&upload),
+                .header("content-type", "application/json")
+                .body(arkret_canonical::canonical_json_bytes(&upload)?),
             StatusCode::OK,
         )
         .await?,

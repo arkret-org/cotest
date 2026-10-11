@@ -1470,14 +1470,12 @@ fn validate_unsigned_selector_transcripts(
                     && request.target_agent_id.is_none()
                     && request.target_agent_verification_method.is_none()
                     && request.target_agent_key_authorize_event_id.is_none()
-                    && request.target_pairwise_verification_method.is_none()
             }
             "agent" => {
                 request.target_device_ids.is_empty()
                     && request.target_agent_id.is_some()
                     && request.target_agent_verification_method.is_some()
                     && request.target_agent_key_authorize_event_id.is_some()
-                    && request.target_pairwise_verification_method.is_none()
             }
             other => bail!("unknown unsigned selector transcript branch {other}"),
         };

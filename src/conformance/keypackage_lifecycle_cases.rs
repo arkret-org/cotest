@@ -670,7 +670,6 @@ fn peer_claim_double_authorization_privacy_case(case: &Value, tally: &mut Tally)
             "claim_purpose": required_str(case, "claim_purpose")?,
             "required_capabilities": ["ak.content.v1"],
             "expires_at": "2026-09-26T00:04:00.000Z",
-            "timeout_ms": null,
             "strand_id": case["strand_id"],
             "pair_key": case["pair_key"],
             "service_binding": {"source_id": source, "destination_id": destination_id},

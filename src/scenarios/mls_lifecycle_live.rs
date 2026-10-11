@@ -225,8 +225,65 @@ async fn run_lifecycle(
     let valid_upload = bob_identity.signed_key_packages_upload_request(
         &[first.clone(), second.clone()],
         bob.method.as_str(),
-        None,
     )?;
+    let valid_upload =
+        assert_closed_upload_boundary(&bob.client, &valid_upload, &bob.key, &database.connect_url)
+            .await?;
+    for (label, identity) in [
+        (
+            "wrong_leaf_station",
+            ArkretMlsIdentity::new_human_device(
+                ActorId::account(AccountId::new(
+                    bob.account.principal_id.clone(),
+                    arkret_wire::DidCoreId::new("ak:did_core:web:another-station.example")?,
+                )),
+                bob.device.clone(),
+                ArkretMlsSigner::from_ed25519_signing_key(bob.key.clone()),
+            )?,
+        ),
+        (
+            "unauthorized_leaf_key",
+            ArkretMlsIdentity::new_human_device(
+                bob.actor.clone(),
+                bob.device.clone(),
+                ArkretMlsSigner::from_ed25519_signing_key(SigningKey::from_bytes(&[97; 32])),
+            )?,
+        ),
+    ] {
+        let before = upload_durable_cut(&database.connect_url).await?;
+        let mut unsigned = valid_upload.unsigned();
+        unsigned.keypackages = vec![
+            mls_key_package_record_upload_entry(&identity.key_package_record()?)
+                .map_err(anyhow::Error::msg)?,
+        ];
+        let signature = arkret_signatures::keypackages::sign_keypackages_upload_request(
+            &unsigned,
+            bob.method.as_str(),
+            &bob.key.to_bytes(),
+        )?;
+        let response: KeyPackagesUploadOutcome = serde_json::from_value(
+            expect_json(
+                bob.client
+                    .post("/_arkret/self/keys/keypackages/upload")
+                    .header("content-type", "application/json")
+                    .body(arkret_canonical::canonical_json_bytes(
+                        &unsigned.into_signed(signature),
+                    )?),
+                StatusCode::OK,
+            )
+            .await?,
+        )?;
+        ensure!(
+            response.accepted == 0
+                && response.rejections.len() == 1
+                && response.rejections[0].reason_code.as_str() == "claim_generation_mismatch",
+            "{label} was accepted: {response:?}"
+        );
+        ensure!(
+            upload_durable_cut(&database.connect_url).await? == before,
+            "{label} wrote durable state"
+        );
+    }
     let mut unsigned = valid_upload.unsigned();
     unsigned
         .keypackages
@@ -241,7 +298,8 @@ async fn run_lifecycle(
         expect_json(
             bob.client
                 .post("/_arkret/self/keys/keypackages/upload")
-                .json(&upload),
+                .header("content-type", "application/json")
+                .body(arkret_canonical::canonical_json_bytes(&upload)?),
             StatusCode::OK,
         )
         .await?,
@@ -512,7 +570,7 @@ async fn run_lifecycle(
         idempotency_key: arkret_wire::UuidV7::new(fresh_uuid_v7().parse()?)?,
     });
     submission.validate()?;
-    let (status, outcome) = post_json(&alice.client, &submission).await?;
+    let (status, outcome) = post_mls_with_exact_retry(&alice.client, &submission).await?;
     ensure!(
         status == StatusCode::OK,
         "the Add Commit with its Welcome was not admitted: {status} {outcome}"
@@ -522,7 +580,7 @@ async fn run_lifecycle(
         matches!(
             &outcome,
             AuthoritySubmitOutcome::Accepted {
-                status: AuthorityCommitStatus::Committed,
+                status: AuthorityCommitStatus::Committed | AuthorityCommitStatus::Duplicate,
                 commit,
             } if commit.event_ref == commit_event.event_id
         ),
@@ -729,6 +787,146 @@ async fn run_lifecycle(
     Ok(())
 }
 
+/// Exercise the registered HTTP parser and signature verifier with otherwise
+/// valid, authorized material before installing any KeyPackage in the pool.
+pub(crate) async fn assert_closed_upload_boundary(
+    client: &crate::harness::TestActorClient,
+    upload: &arkret_models_crypto::KeyPackagesUploadRequestBody,
+    key: &SigningKey,
+    database_url: &str,
+) -> Result<arkret_models_crypto::KeyPackagesUploadRequestBody> {
+    let original = serde_json::to_value(upload)?;
+    let before = upload_durable_cut(database_url).await?;
+    let mut negatives = Vec::new();
+    for field in ["pairwise_verification_method", "intended_realm_id"] {
+        for value in [Value::Null, json!("retired")] {
+            let mut candidate = original.clone();
+            candidate[field] = value;
+            negatives.push((field.to_owned(), candidate));
+        }
+    }
+    for field in [
+        "device_id",
+        "agent_verification_method",
+        "agent_key_authorize_event_id",
+        "expires_at",
+        "strand_id",
+        "mls_group_id",
+    ] {
+        let mut candidate = original.clone();
+        candidate[field] = Value::Null;
+        negatives.push((format!("null_{field}"), candidate));
+    }
+    let mut mixed = original.clone();
+    mixed["device_id"] = json!(BOB_DEVICE);
+    mixed["agent_verification_method"] = original["endpoint_signature"]["kid"].clone();
+    mixed["agent_key_authorize_event_id"] =
+        json!("ak:event:ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM");
+    negatives.push(("mixed_authority".to_owned(), mixed));
+    let mut no_endpoint = original.clone();
+    for field in [
+        "device_id",
+        "agent_verification_method",
+        "agent_key_authorize_event_id",
+    ] {
+        no_endpoint.as_object_mut().unwrap().remove(field);
+    }
+    negatives.push(("missing_endpoint".to_owned(), no_endpoint));
+    for algorithm in [Value::Null, json!("EdDSA")] {
+        let mut candidate = original.clone();
+        candidate["endpoint_signature"]["signature_algorithm"] = algorithm;
+        negatives.push(("invalid_signature_algorithm".to_owned(), candidate));
+    }
+    let mut candidate = original.clone();
+    candidate["endpoint_signature"]
+        .as_object_mut()
+        .unwrap()
+        .remove("signature_algorithm");
+    negatives.push(("missing_signature_algorithm".to_owned(), candidate));
+    let mut candidate = original.clone();
+    candidate["endpoint_signature"]["sig"] = json!("AA");
+    negatives.push(("invalid_signature_bytes".to_owned(), candidate));
+    let mut signed_optional = upload.unsigned();
+    signed_optional.expires_at = Some(arkret_canonical::normalize_timestamp_canonical(
+        chrono::Utc::now() + chrono::Duration::days(3),
+    ));
+    signed_optional.strand_id = Some(arkret_wire::StrandId::new(
+        "ak:strand:AY6DJbBwavsGTQuBZZiqqw9MVcqPZ8QX8invQ3i2kpi7",
+    )?);
+    signed_optional.mls_group_id = Some(
+        arkret_wire::MlsGroupId::new("_eWozxgdBxDHaOyjY_q0ZstYlzkfbmcnpTqLf9g2aDQ")
+            .map_err(anyhow::Error::msg)?,
+    );
+    signed_optional.keypackages[0].last_resort = Some(false);
+    let signature = arkret_signatures::keypackages::sign_keypackages_upload_request(
+        &signed_optional,
+        upload.endpoint_signature.kid.as_str(),
+        &key.to_bytes(),
+    )?;
+    let full = serde_json::to_value(signed_optional.into_signed(signature))?;
+    for field in ["expires_at", "strand_id", "mls_group_id"] {
+        let mut candidate = full.clone();
+        candidate.as_object_mut().unwrap().remove(field);
+        negatives.push((format!("unsigned_optional_{field}"), candidate));
+    }
+    let mut candidate = full.clone();
+    candidate["keypackages"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("last_resort");
+    negatives.push(("unsigned_entry_last_resort".to_owned(), candidate));
+    let mut reversed = original.clone();
+    reversed["keypackages"].as_array_mut().unwrap().reverse();
+    negatives.push(("reordered_entries".to_owned(), reversed));
+    let mut truncated = original.clone();
+    truncated["keypackages"].as_array_mut().unwrap().pop();
+    negatives.push(("truncated_entries".to_owned(), truncated));
+    let mut wrong_station = upload.unsigned();
+    wrong_station.actor_id = ActorId::account(AccountId::new(
+        upload.principal_id.clone(),
+        arkret_wire::DidCoreId::new("ak:did_core:web:another-station.example")?,
+    ));
+    let signature = arkret_signatures::keypackages::sign_keypackages_upload_request(
+        &wrong_station,
+        upload.endpoint_signature.kid.as_str(),
+        &key.to_bytes(),
+    )?;
+    negatives.push((
+        "signed_wrong_station".to_owned(),
+        serde_json::to_value(wrong_station.into_signed(signature))?,
+    ));
+    for (name, candidate) in negatives {
+        let response = client
+            .post("/_arkret/self/keys/keypackages/upload")
+            .header("content-type", "application/json")
+            .body(arkret_canonical::canonical_json_bytes(&candidate)?)
+            .send()
+            .await?;
+        let status = response.status();
+        let detail = response.text().await?;
+        ensure!(
+            matches!(
+                status,
+                StatusCode::FORBIDDEN | StatusCode::BAD_REQUEST | StatusCode::UNPROCESSABLE_ENTITY
+            ),
+            "{name} was not refused at upload admission: {status} {detail}"
+        );
+        ensure!(
+            upload_durable_cut(database_url).await? == before,
+            "{name} wrote durable state"
+        );
+    }
+    Ok(serde_json::from_value(full)?)
+}
+
+async fn upload_durable_cut(database_url: &str) -> Result<Value> {
+    let database_url = database_url.to_owned();
+    tokio::task::spawn_blocking(move || -> Result<Value> {
+        let mut database = postgres::Client::connect(&database_url, postgres::NoTls)?;
+        Ok(database.query_one("SELECT COALESCE(jsonb_agg(to_jsonb(k) ORDER BY id), '[]'::jsonb) FROM mls_key_packages k", &[])?.get(0))
+    }).await?
+}
+
 /// A self claim for one of `target`'s device KeyPackages, signed by the
 /// requester's device over the exact request and service binding.
 fn claim_request(
@@ -802,7 +1000,6 @@ pub fn claim_request_to(
         "claim_purpose": "realm_membership",
         "required_capabilities": [CONTENT_CAPABILITY],
         "expires_at": arkret_canonical::format_timestamp_canonical(signed_at + lifetime),
-        "timeout_ms": null,
         "service_binding": {
             "source_id": source.service_id(),
             "destination_id": destination.service_id(),
@@ -1107,6 +1304,37 @@ pub async fn post_json(
     post_json_at(client, "/_arkret/self/events", body).await
 }
 
+/// A moving stream head is retryable, preserving the exact MLS candidate,
+/// producer proof, Welcomes and retry identity (authority-commit-log section 2).
+async fn post_mls_with_exact_retry(
+    client: &TestActorClient,
+    submission: &SelfAuthoritySubmitRequest,
+) -> Result<(StatusCode, Value)> {
+    let frozen = arkret_canonical::canonical_json_bytes(submission)?;
+    for attempt in 0..4 {
+        let response = client
+            .post("/_arkret/self/events")
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(frozen.clone())
+            .send()
+            .await?;
+        let status = response.status();
+        let bytes = response.bytes().await?;
+        let outcome: Value = serde_json::from_slice(&bytes)?;
+        if attempt < 3
+            && status == StatusCode::SERVICE_UNAVAILABLE
+            && outcome["type"]
+                .as_str()
+                .is_some_and(|kind| kind.ends_with("/temporarily_unavailable"))
+        {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            continue;
+        }
+        return Ok((status, outcome));
+    }
+    unreachable!("the final exact retry always returns its response")
+}
+
 pub async fn post_json_at(
     client: &TestActorClient,
     path: &str,
@@ -1173,23 +1401,17 @@ pub fn claimed_keypackage_record(
     claim: &arkret_models_crypto::KeyPackageClaimRecord,
     owner: &Member,
 ) -> Result<MlsKeyPackageRecord> {
-    Ok(MlsKeyPackageRecord {
-        keypackage_id: format!("ak:mls:kp:{}", fresh_uuid_v7()),
-        actor_id: claim.actor_id.clone(),
-        endpoint: arkret_models_crypto::MlsEndpointIdentity::human_device(
-            owner.account.principal_id.clone(),
-            owner.device.clone(),
-        ),
-        keypackage: claim.keypackage.clone(),
-        keypackage_ref: arkret_wire::Hash::new(claim.keypackage_ref.clone())?,
-        cipher_suites: vec![ACTIVE_SUITE.to_owned()],
-        capabilities: claim.capabilities.clone(),
-        state: arkret_models_crypto::MlsKeyPackageState::Claimed,
-        claim_id: Some(claim.claim_id.clone()),
-        created_at: chrono::Utc::now(),
-        expires_at: Some(claim.expires_at),
-        last_resort: false,
-    })
+    let record = arkret::mls_key_package_record_from_claim(claim)?;
+    ensure!(
+        record.actor_id == owner.actor
+            && record.endpoint
+                == arkret_models_crypto::MlsEndpointIdentity::human_device(
+                    owner.account.principal_id.clone(),
+                    owner.device.clone()
+                ),
+        "claimed endpoint differs from the intended full AccountId"
+    );
+    Ok(record)
 }
 
 /// Seal the Welcome for `recipient` under the method that signed the Commit.

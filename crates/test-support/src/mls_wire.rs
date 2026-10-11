@@ -106,7 +106,6 @@ pub fn mls_keypackages(input: Value) -> Result<Value> {
     let upload = identity.signed_key_packages_upload_request(
         &records,
         input.endpoint.verification_method.as_str(),
-        None,
     )?;
     Ok(json!({
         "upload_request": upload,
@@ -235,7 +234,6 @@ pub fn mls_keypackage_claim_request(input: Value) -> Result<Value> {
         "expires_at": arkret_canonical::format_timestamp_canonical(
             signed_at + chrono::Duration::seconds(input.lifetime_seconds),
         ),
-        "timeout_ms": null,
         "service_binding": {
             "source_id": input.source_id,
             "destination_id": input.destination_id,

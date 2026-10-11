@@ -1353,13 +1353,13 @@ async fn run(
     let upload = bob_identity.signed_key_packages_upload_request(
         std::slice::from_ref(&bob_package),
         bob.method.as_str(),
-        None,
     )?;
     let uploaded: KeyPackagesUploadOutcome = serde_json::from_value(
         expect_json(
             bob.client
                 .post("/_arkret/self/keys/keypackages/upload")
-                .json(&upload),
+                .header("content-type", "application/json")
+                .body(arkret_canonical::canonical_json_bytes(&upload)?),
             StatusCode::OK,
         )
         .await?,

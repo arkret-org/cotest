@@ -1120,14 +1120,21 @@ pub async fn run_agent_keypackage_upload_live() -> Result<()> {
     let upload = restored.signed_key_packages_upload_request(
         &[keypackage.clone(), add_keypackage.clone()],
         agent.verification_method.as_str(),
-        None,
     )?;
+    let upload = crate::scenarios::mls_lifecycle_live::assert_closed_upload_boundary(
+        &agent.runtime,
+        &upload,
+        &agent.runtime_key,
+        &database.connect_url,
+    )
+    .await?;
     let outcome: KeyPackagesUploadOutcome = serde_json::from_value(
         expect_json(
             agent
                 .runtime
                 .post("/_arkret/self/keys/keypackages/upload")
-                .json(&upload),
+                .header("content-type", "application/json")
+                .body(arkret_canonical::canonical_json_bytes(&upload)?),
             StatusCode::OK,
         )
         .await?,
