@@ -1028,7 +1028,7 @@ impl ArkretServer {
 
     /// The Ed25519 key this harness configured as the Station's notary and
     /// federation signing key. Only a Station the harness spawned has one.
-    fn federation_signing_key(&self) -> Result<ed25519_dalek::SigningKey> {
+    pub(crate) fn federation_signing_key(&self) -> Result<ed25519_dalek::SigningKey> {
         let config = self
             .external_restart
             .as_ref()
