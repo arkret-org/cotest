@@ -1,6 +1,6 @@
 //! Real signed Sidecar ensure and independent private stream reads.
 
-use anyhow::{Result, anyhow, bail, ensure};
+use anyhow::{Context, Result, anyhow, bail, ensure};
 use arkret_models_collaboration::sidecar_operations::{
     SidecarContextRef, SidecarEnsureCommitPhase, SidecarEnsureCommitRequestBody,
     SidecarEnsureOutcome, SidecarEnsurePreparePhase, SidecarEnsurePrepareRequestBody,
@@ -24,6 +24,10 @@ const GROUP: &str = "sidecar-authority-live";
 
 pub async fn run() -> Result<()> {
     run_with_genesis_observer(None).await
+}
+
+pub async fn run_pending_agent_disclosure() -> Result<()> {
+    run_with_options(None, None, true).await
 }
 
 pub async fn run_with_genesis_observer(
@@ -64,6 +68,14 @@ pub async fn run_with_sync_observer(observer: &dyn SidecarSyncObserver) -> Resul
 async fn run_with_observers(
     observer: Option<&dyn crate::scenarios::mls_lifecycle_live::MlsGenesisObserver>,
     sync_observer: Option<&dyn SidecarSyncObserver>,
+) -> Result<()> {
+    run_with_options(observer, sync_observer, false).await
+}
+
+async fn run_with_options(
+    observer: Option<&dyn crate::scenarios::mls_lifecycle_live::MlsGenesisObserver>,
+    sync_observer: Option<&dyn SidecarSyncObserver>,
+    pending_agent: bool,
 ) -> Result<()> {
     let Some(database) = database(GROUP)? else {
         ensure!(
@@ -131,6 +143,76 @@ async fn run_with_observers(
         &join,
     )
     .await?;
+    let agent = if pending_agent {
+        use arkret_wire::ServiceOperationId as Op;
+        let operations = arkret_schema::agent_runtime_scope::complete_agent_runtime_scope([
+            Op::SELF_COMMITTED_EVENT_READ_SCAN_V1,
+            Op::SELF_REALM_READ_STREAMS_V1,
+            Op::SELF_REALM_STATE_SNAPSHOT_READ_MANIFEST_HEAD_V1,
+            Op::SELF_REALM_STATE_SNAPSHOT_READ_BY_REF_V1,
+            Op::SELF_MLS_READ_GROUP_STATE_MATERIAL_V1,
+        ])?;
+        let operations = operations.iter().map(String::as_str).collect::<Vec<_>>();
+        let agent =
+            crate::scenarios::agent_runtime_live::AgentRuntimeSession::establish_with_operations(
+                station,
+                &coauth,
+                &controller.client,
+                &controller.account,
+                "sidecar-pending-reader",
+                &operations,
+            )
+            .await?;
+        let page = controller
+            .client
+            .sdk()
+            .scan_commit_stream(&StreamScanRequest {
+                realm_id: realm.clone(),
+                stream_ref: CommitStreamRef::Realm {
+                    realm_id: realm.clone(),
+                },
+                direction: StreamScanDirection::After(None),
+                limit: 200,
+            })
+            .await?;
+        let controller_generation = page
+            .committed_events
+            .iter()
+            .filter_map(|row| row.reducer_input())
+            .find(|event| {
+                event.kind == EventKind::MemberState
+                    && event.payload.get("member_id")
+                        == serde_json::to_value(&controller.actor).ok().as_ref()
+            })
+            .ok_or_else(|| anyhow!("controller membership generation unavailable"))?
+            .event_id
+            .clone();
+        let mut membership =
+            arkret_models_collaboration::governance::membership_invite::MembershipPayload::join(
+                realm.clone(),
+                arkret_wire::ActorId::account(agent.agent_account.clone()),
+                "pending Sidecar reader",
+            );
+        membership.agent_controller_binding = Some(arkret_models_collaboration::governance::agent_membership_cascade::AgentControllerMembershipBinding {
+            controller_account_id: controller.account.clone(), controller_membership_generation_ref: controller_generation,
+            controller_terminal_event_ref: None,
+        });
+        controller
+            .client
+            .submit_event(
+                realm.as_str(),
+                EventKind::MemberState.as_str(),
+                membership.to_value()?,
+            )
+            .await?;
+        Some(agent)
+    } else {
+        None
+    };
+    let desired = agent
+        .as_ref()
+        .map(|agent| vec![agent.agent_account.principal_id.clone()])
+        .unwrap_or_default();
     let strand = controller
         .client
         .default_strand_id(realm.as_str())?
@@ -186,7 +268,7 @@ async fn run_with_observers(
         .sdk()
         .agent_sidecar_get(&accepted.sidecar_id)
         .await?;
-    ensure!(view.desired_agent_ids.is_empty() && view.effective_agent_ids.is_empty());
+    ensure!(view.desired_agent_ids == desired && view.effective_agent_ids.is_empty());
     ensure!(
         view.mls_context.mls_group_id.is_none()
             && !view.mls_context.current_controller_device_ready,
@@ -404,15 +486,55 @@ async fn run_with_observers(
     ensure!(
         ready.mls_context.current_controller_device_ready
             && ready.mls_context.epoch == Some(0)
-            && ready.desired_agent_ids.is_empty()
+            && ready.desired_agent_ids == desired
             && ready.effective_agent_ids.is_empty(),
-        "native Genesis creator is not ready at its accepted empty-agent cut"
+        "native Genesis creator is not ready at its accepted participant cut"
     );
     let material=arkret_models_collaboration::mls_group_state_material::MlsMemberGroupStateMaterialReadRequestBody{
         realm_id:realm.clone(),effective_scope:scope.clone(),mls_group_id:scope.canonical_mls_group_id()?,epoch:Default::default(),
         group_state_event_id:genesis.event_id.clone(),caller_actor_id:controller.actor.clone(),target_commit_event_ref:genesis.event_id.clone(),target_epoch:0,
         group_info_ref:arkret_wire::BlobRef::new(group_info_ref)?,ratchet_tree_ref:arkret_wire::BlobRef::new(tree_ref)?,max_response_bytes:None,
     };
+    if let Some(agent) = &agent {
+        // Put a private row after the first public handshake so it falls
+        // inside the pending recipient's interval and must be withheld.
+        let mut private = controller
+            .client
+            .author_event(
+                realm.as_str(),
+                EventKind::SidecarContextAttach.as_str(),
+                canonical(json!({
+                    "sidecar_id":sidecar,"source_context_ref":attach.payload["source_context_ref"],
+                    "version":2,"predecessor_event_ref":attach.event_id,
+                }))?,
+            )
+            .await?;
+        private.scope_ref = scope.clone();
+        private.semantic_refs = vec![arkret_wire::SemanticRef::new(
+            create.event_id.to_string(),
+            "after",
+        )];
+        crate::harness::refresh_typed_event_proof(&mut private)?;
+        let private_commit = submit_and_expect_commit(
+            &controller.client,
+            &controller.account,
+            controller.device.as_str(),
+            &private,
+        )
+        .await?;
+        ensure!(private_commit.stream_position == 2 && private_commit.stream_ref == stream);
+        verify_pending_agent_reads(
+            agent,
+            &controller,
+            &realm,
+            &stream,
+            &create,
+            &private,
+            &genesis,
+            &material,
+        )
+        .await?;
+    }
     let response = expect_json(
         controller
             .client
@@ -456,6 +578,141 @@ async fn run_with_observers(
             && roster_response.manifest.total_records == 1
             && roster_response.next_cursor.is_none(),
         "native Sidecar Genesis roster is partial"
+    );
+    Ok(())
+}
+
+async fn verify_pending_agent_reads(
+    agent: &crate::scenarios::agent_runtime_live::AgentRuntimeSession,
+    controller: &Member,
+    realm: &RealmId,
+    stream: &CommitStreamRef,
+    create: &arkret_wire::Event,
+    attach: &arkret_wire::Event,
+    genesis: &arkret_wire::Event,
+    material: &arkret_models_collaboration::mls_group_state_material::MlsMemberGroupStateMaterialReadRequestBody,
+) -> Result<()> {
+    let http = agent.runtime.sdk();
+    let list = http
+        .realm_streams_page(realm, None, 500)
+        .await
+        .context("pending Agent stream discovery")?;
+    ensure!(
+        list.streams.iter().any(|row| &row.stream_ref == stream),
+        "pending Agent cannot discover public handshake stream"
+    );
+    let snapshot = http
+        .realm_state_snapshot_head(realm)
+        .await
+        .context("pending Agent snapshot head")?;
+    ensure!(
+        snapshot
+            .visible_stream_heads
+            .iter()
+            .any(|head| &head.stream_ref == stream)
+    );
+    ensure!(
+        !snapshot.current_state_entries.iter().any(|row| matches!(
+            row,
+            arkret_wire::TypedCurrentRow::Value {
+                selector: arkret_wire::CurrentSelector::Sidecar { .. }
+                    | arkret_wire::CurrentSelector::SidecarContext { .. },
+                ..
+            }
+        )),
+        "pending Agent received private current"
+    );
+    let public = snapshot.current_state_entries.iter().filter(|row| matches!(row,
+        arkret_wire::TypedCurrentRow::Value { source_stream_ref, .. } if source_stream_ref == stream)).collect::<Vec<_>>();
+    ensure!(
+        public.len() == 1
+            && matches!(
+                public[0],
+                arkret_wire::TypedCurrentRow::Value {
+                    selector: arkret_wire::CurrentSelector::MlsGroup { .. },
+                    ..
+                }
+            ),
+        "pending Agent must receive only public MLS current"
+    );
+    let exact = http
+        .realm_state_snapshot_by_ref(realm, &snapshot.snapshot_id)
+        .await
+        .context("pending Agent exact snapshot by-ref")?;
+    ensure!(
+        exact == snapshot,
+        "pending Agent by-ref changed the signed object"
+    );
+    for direction in [
+        StreamScanDirection::After(None),
+        StreamScanDirection::Before(None),
+    ] {
+        let query = StreamScanRequest {
+            realm_id: realm.clone(),
+            stream_ref: stream.clone(),
+            direction,
+            limit: 50,
+        };
+        let page = http
+            .scan_commit_stream(&query)
+            .await
+            .context("pending Agent Sidecar scan")?;
+        page.validate_for_request(&query)?;
+        ensure!(page.committed_events.len() == 2 && !page.truncated);
+        let (private, handshake) = match direction {
+            StreamScanDirection::After(_) => (&page.committed_events[1], &page.committed_events[0]),
+            StreamScanDirection::Before(_) => {
+                (&page.committed_events[0], &page.committed_events[1])
+            }
+        };
+        ensure!(
+            private.commit().event_ref == attach.event_id && private.reducer_input().is_none(),
+            "pending Agent received private context bytes"
+        );
+        ensure!(
+            handshake
+                .reducer_input()
+                .is_some_and(|event| event == genesis),
+            "pending Agent cannot verify MLS Genesis"
+        );
+        ensure!(
+            private.commit().previous_commit_ref.as_ref() == Some(&handshake.commit().commit_id)
+        );
+    }
+    let parent = http
+        .scan_commit_stream(&StreamScanRequest {
+            realm_id: realm.clone(),
+            stream_ref: CommitStreamRef::Realm {
+                realm_id: realm.clone(),
+            },
+            direction: StreamScanDirection::After(None),
+            limit: 200,
+        })
+        .await?;
+    ensure!(
+        parent
+            .committed_events
+            .iter()
+            .any(|row| row.commit().event_ref == create.event_id && row.reducer_input().is_none()),
+        "Agent Realm membership disclosed controller-private creation"
+    );
+    let mut request = material.clone();
+    request.caller_actor_id = arkret_wire::ActorId::account(agent.agent_account.clone());
+    http.self_mls_group_state_material(&request)
+        .await
+        .context("pending Agent public group-state material")?
+        .validate_for_request(&request.as_peer_request())?;
+    // Another Account's issued object remains unavailable even when both know
+    // the same public handshake head.
+    let owner = controller
+        .client
+        .sdk()
+        .realm_state_snapshot_head(realm)
+        .await?;
+    ensure!(
+        http.realm_state_snapshot_by_ref(realm, &owner.snapshot_id)
+            .await
+            .is_err()
     );
     Ok(())
 }
