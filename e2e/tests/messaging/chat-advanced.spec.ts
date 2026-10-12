@@ -1042,7 +1042,20 @@ test.describe("chat advanced", () => {
       const aliceTypingIndicator = bobPage.page.locator(
         `[data-testid="typing-indicator"][data-typing-actors*="${cssStringEscape(alice.id)}"]`,
       );
-      await expect(aliceTypingIndicator).toBeVisible({ timeout: 5_000 });
+      try {
+        await expect(aliceTypingIndicator).toBeVisible({ timeout: 5_000 });
+      } finally {
+        const receiverEvidence = await bobPage.page.evaluate(() => {
+          const read = (window as unknown as {
+            __inkson_signal_receiver_evidence?: (command: string) => string;
+          }).__inkson_signal_receiver_evidence;
+          return typeof read === "function" ? read("read") : "receiver observer unavailable";
+        });
+        await testInfo.attach("typing-receiver-evidence.json", {
+          body: receiverEvidence,
+          contentType: "application/json",
+        });
+      }
       await stepShot(bobPage.page, testInfo, "typing-visible");
       await expect(aliceTypingIndicator).toHaveCount(0, { timeout: 7_000 });
     } finally {
