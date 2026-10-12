@@ -650,11 +650,9 @@ impl AgentRuntimeSession {
         );
         coauth.bind_agent_runtime_grant(
             &grant,
-            agent_id.as_str(),
-            authorize.event_id.as_str(),
-            verification_method.as_str(),
+            &authorize.event_id,
+            &authorization,
             &runtime_key.verifying_key(),
-            operations,
         )?;
         let runtime = server.client_with_agent_runtime_grant(
             agent_did.as_str(),
