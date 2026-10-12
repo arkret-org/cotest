@@ -12,8 +12,8 @@ fn agent_genesis_cases_cross_real_http_admission_and_preserve_rejected_state() -
         .clone();
     cases.extend_from_slice(fixture["cases"].as_array().unwrap());
     let missing = execution.missing_against_cases(&cases)?;
-    assert_eq!(execution.cases.len(), 19);
-    assert_eq!(missing.len(), 11);
+    assert_eq!(execution.cases.len(), 20);
+    assert_eq!(missing.len(), 10);
     assert!(
         execution
             .cases
@@ -39,6 +39,14 @@ fn agent_genesis_cases_cross_real_http_admission_and_preserve_rejected_state() -
     );
     assert!(!missing.iter().any(|case| case == "agent_pairing_expiry"));
     assert!(execution.cases.iter().all(|case| case.assertions > 0));
+    assert!(execution.cases.iter().any(|case| case.case_id
+        == "agent_pcr_genesis_same_batch_rejected"
+        && case.assertions == 3));
+    assert!(
+        !missing
+            .iter()
+            .any(|case| case == "agent_pcr_genesis_same_batch_rejected")
+    );
     assert!(execution.assert_complete_against(&fixture).is_err());
     Ok(())
 }

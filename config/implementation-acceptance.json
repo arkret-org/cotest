@@ -263,7 +263,7 @@
           "path": "cotest/tests/agent_vectors_production.rs",
           "symbol": "agent_genesis_cases_cross_real_http_admission_and_preserve_rejected_state",
           "kind": "live",
-          "covers": "当前19项/11项缺口显式拒绝complete；真实pairing expiry/DID/proof/deactivated拒绝零写"
+          "covers": "当前20项/10项缺口显式拒绝complete；四pairing reason与合法Event的未登记batch载体零写拒绝"
         },
         {
           "path": "cotest/tests/federation_current_origin_replay_live.rs",

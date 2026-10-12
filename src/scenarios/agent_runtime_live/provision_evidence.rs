@@ -16,6 +16,7 @@ pub(crate) struct ProvisionEvidence {
     forward_assertions: usize,
     negative_assertions: usize,
     collision_assertions: usize,
+    batch_assertions: usize,
     genesis_cut: Option<Value>,
 }
 
@@ -200,6 +201,36 @@ impl ProvisionEvidence {
         };
         self.reject_second_pcr_claim(server, controller, original, provision_event)
             .await?;
+
+        // Both Events are valid, independently frozen identities. The negative
+        // is the unregistered carrier, never a fabricated digest failure.
+        genesis.verify_event_id_matches_content_with_digest_suite(
+            arkret_canonical::DigestSuite::Sha256,
+        )?;
+        provision_event.verify_event_id_matches_content_with_digest_suite(
+            arkret_canonical::DigestSuite::Sha256,
+        )?;
+        let batch = arkret_wire::EventsSubmitBatchRequestBody {
+            events: vec![
+                original.provision_event.clone(),
+                arkret_wire::EventAdmissionSubmission::new(genesis.clone()),
+            ],
+        };
+        let before = self.snapshot().await?;
+        crate::harness::expect_api_error(
+            controller
+                .post("/_arkret/self/events")
+                .header(reqwest::header::CONTENT_TYPE, "application/json")
+                .body(arkret_canonical::canonical_json_bytes(&batch)?),
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "schema_violation",
+        )
+        .await?;
+        ensure!(
+            self.snapshot().await? == before,
+            "unsupported Agent batch carrier changed complete accepted/Agent state"
+        );
+        self.batch_assertions += 3;
 
         // Reopen the original serialized intent before recovery. The retry
         // cannot mint replacement Event ids, proofs or allocation bindings.
@@ -515,6 +546,7 @@ pub async fn run_agent_genesis_production_cases() -> Result<SuiteExecutionResult
         forward_assertions: 0,
         negative_assertions: 0,
         collision_assertions: 0,
+        batch_assertions: 0,
         genesis_cut: None,
     };
     AgentRuntimeSession::establish_observed(
@@ -542,6 +574,10 @@ pub async fn run_agent_genesis_production_cases() -> Result<SuiteExecutionResult
             CaseExecutionResult {
                 case_id: "two_provisions_declaring_one_realm_id_rejected".into(),
                 assertions: evidence.collision_assertions,
+            },
+            CaseExecutionResult {
+                case_id: "agent_pcr_genesis_same_batch_rejected".into(),
+                assertions: evidence.batch_assertions,
             },
         ],
     })
