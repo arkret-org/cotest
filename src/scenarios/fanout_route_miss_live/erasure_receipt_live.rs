@@ -43,10 +43,9 @@ fn package(
     message: &Event,
     redaction: &Event,
 ) -> Result<ErasureReceiptPackage> {
-    let id = format!(
-        "ak:receipt:{}",
-        arkret_identifiers::uuid_v7_at(chrono::Utc::now().timestamp_millis().try_into()?)
-    );
+    let id =
+        arkret_identifiers::ReceiptId::new_v7_at(chrono::Utc::now().timestamp_millis().try_into()?)
+            .to_string();
     let at = arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now());
     let trigger = ErasureTrigger::Event {
         event_id: redaction.event_id.clone(),
