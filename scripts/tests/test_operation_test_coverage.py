@@ -172,6 +172,81 @@ class OperationTestCoverageTests(unittest.TestCase):
             inventory.generate(self.root)
 
 
+class AcceptanceTraceabilityTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+        self.active = self.root / "arkret-work/tasks/impl-active"
+        self.active.mkdir(parents=True)
+        self.task = self.active / "owner.md"
+        self.task.write_text("# Owner\n- [ ] Exact retry after expiry.\n  Retain until ACK.\n", encoding="utf-8")
+        source = self.root / "cotest/tests/probe.rs"
+        source.parent.mkdir(parents=True)
+        source.write_text(rust_test("expiry_probe", OP_ONE, "assert_eq!(actual, expected);"), encoding="utf-8")
+        count, digest = inventory.acceptance_digest(self.task.read_text(encoding="utf-8"))
+        self.manifest = {
+            "format_version": 1, "source_of_truth": False, "complete_claim": False,
+            "tasks": [{
+                "task": "owner.md", "criteria_count": count, "criteria_sha256": digest,
+                "spec_refs": [], "source_refs": ["cotest/tests/probe.rs"],
+                "engineering_checks": ["Run the selected test with the actual SUT"],
+                "remaining_scenarios": ["Restart after expiry with the original outcome"],
+                "tests": [{"path": "cotest/tests/probe.rs", "symbol": "expiry_probe", "kind": "live", "covers": "HTTP retry"}],
+            }],
+        }
+        self.addCleanup(self.temp.cleanup)
+
+    def test_traceability_is_not_an_execution_claim(self) -> None:
+        result = inventory.validate_acceptance_manifest(self.root, self.manifest)
+        self.assertEqual(result, {"owners": 1, "criteria": 1, "test_references": 1})
+        self.assertNotIn("passed", result)
+        self.manifest["complete_claim"] = True
+        with self.assertRaisesRegex(ValueError, "complete claim"):
+            inventory.validate_acceptance_manifest(self.root, self.manifest)
+
+    def test_same_count_scope_edit_and_continuation_edit_invalidate_mapping(self) -> None:
+        for text in ("- [ ] Rebuild instead of replay.\n  Retain until ACK.\n", "- [ ] Exact retry after expiry.\n  Delete on expiry.\n"):
+            with self.subTest(text=text):
+                self.task.write_text(text, encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, "criteria drifted"):
+                    inventory.validate_acceptance_manifest(self.root, self.manifest)
+
+    def test_new_owner_and_duplicate_owner_cannot_silently_reduce_coverage(self) -> None:
+        extra = self.active / "unassigned.md"
+        extra.write_text("- [ ] New consumer\n", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "owners missing"):
+            inventory.validate_acceptance_manifest(self.root, self.manifest)
+        extra.unlink()
+        self.manifest["tasks"].append(self.manifest["tasks"][0])
+        with self.assertRaisesRegex(ValueError, "duplicate active owner"):
+            inventory.validate_acceptance_manifest(self.root, self.manifest)
+
+    def test_helper_or_comment_cannot_impersonate_a_test(self) -> None:
+        (self.root / "cotest/tests/probe.rs").write_text('fn expiry_probe() { let label = "expiry_probe"; }\n', encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "helper/string is not a test"):
+            inventory.validate_acceptance_manifest(self.root, self.manifest)
+
+    def test_non_spec_authority_and_workspace_escape_are_rejected(self) -> None:
+        record = self.manifest["tasks"][0]
+        record["spec_refs"] = ["cotest/tests/probe.rs"]
+        with self.assertRaisesRegex(ValueError, "current v1 Spec"):
+            inventory.validate_acceptance_manifest(self.root, self.manifest)
+        record["spec_refs"] = []
+        record["source_refs"] = ["../outside.rs"]
+        with self.assertRaisesRegex(ValueError, "out-of-workspace"):
+            inventory.validate_acceptance_manifest(self.root, self.manifest)
+
+    def test_missing_scenarios_or_deleted_test_cannot_look_complete(self) -> None:
+        record = self.manifest["tasks"][0]
+        record["remaining_scenarios"] = []
+        with self.assertRaisesRegex(ValueError, "remaining scenarios"):
+            inventory.validate_acceptance_manifest(self.root, self.manifest)
+        record["remaining_scenarios"] = ["Restart"]
+        (self.root / "cotest/tests/probe.rs").unlink()
+        with self.assertRaisesRegex(ValueError, "acceptance source"):
+            inventory.validate_acceptance_manifest(self.root, self.manifest)
+
+
 def rust_test(name: str, operation_id: str, assertion: str) -> str:
     return f'''#[test]
 fn {name}() {{

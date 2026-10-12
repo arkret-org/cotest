@@ -59,3 +59,15 @@ async fn device_message_id_conflict_cannot_redirect_delivery() -> Result<()> {
 async fn device_message_survives_station_restart() -> Result<()> {
     cotest::scenarios::to_device_offline_ordering::device_message_survives_station_restart().await
 }
+
+#[tokio::test]
+#[serial]
+async fn expired_device_message_replays_exactly_and_remains_until_ack() -> Result<()> {
+    cotest::scenarios::to_device_offline_ordering::expired_device_message_replays_exactly_and_remains_until_ack().await
+}
+
+#[tokio::test]
+#[serial]
+async fn invalid_device_message_expiry_rejects_the_whole_batch() -> Result<()> {
+    cotest::scenarios::to_device_offline_ordering::invalid_device_message_expiry_rejects_the_whole_batch().await
+}

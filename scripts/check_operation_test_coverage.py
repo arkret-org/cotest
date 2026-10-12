@@ -10,6 +10,7 @@ normalized test scopes as well as equal input and assertion fingerprints.
 from __future__ import annotations
 
 import argparse
+import ast
 import hashlib
 import json
 import os
@@ -739,12 +740,109 @@ def check_output(generated: str, output_path: Path = OUTPUT_PATH) -> bool:
     return current == generated
 
 
+def acceptance_digest(text: str) -> tuple[int, str]:
+    """Bind the remaining criteria, including indented continuation lines."""
+    criteria: list[str] = []
+    collecting = False
+    for line in text.splitlines():
+        if re.match(r"^\s*[-*] \[ \] ", line):
+            criteria.append(line.rstrip())
+            collecting = True
+        elif collecting and line[:1].isspace() and line.strip():
+            criteria.append(line.rstrip())
+        elif line.strip():
+            collecting = False
+    count = sum(bool(re.match(r"^\s*[-*] \[ \] ", line)) for line in criteria)
+    return count, sha256_text("\n".join(criteria))
+
+
+def validate_acceptance_manifest(workspace_root: Path, manifest: dict[str, Any]) -> dict[str, int]:
+    """Check engineering traceability only; never infer execution or a protocol claim."""
+    root = workspace_root.resolve()
+    if set(manifest) != {"format_version", "source_of_truth", "complete_claim", "tasks"}:
+        raise ValueError("acceptance manifest has unknown or missing fields")
+    if manifest["format_version"] != 1 or manifest["source_of_truth"] is not False or manifest["complete_claim"] is not False:
+        raise ValueError("acceptance inventory must not assert authority or a complete claim")
+    active = root / "arkret-work/tasks/impl-active"
+    if not active.is_dir():
+        raise ValueError("acceptance inventory requires the coordination checkout")
+    expected = {path.name for path in active.glob("*.md") if path.name != "00-roadmap.md"}
+    records = manifest["tasks"]
+    if not isinstance(records, list) or not records:
+        raise ValueError("acceptance inventory must contain tasks")
+    seen: set[str] = set()
+    test_count = 0
+    criterion_count = 0
+
+    def checked_file(relative: str) -> Path:
+        path = (root / relative).resolve()
+        if not path.is_relative_to(root) or not path.is_file():
+            raise ValueError(f"missing or out-of-workspace acceptance source: {relative}")
+        return path
+
+    for record in records:
+        fields = {"task", "criteria_count", "criteria_sha256", "spec_refs", "source_refs", "tests", "engineering_checks", "remaining_scenarios"}
+        if set(record) != fields:
+            raise ValueError("acceptance task has unknown or missing fields")
+        task = record["task"]
+        if task not in expected or task in seen:
+            raise ValueError(f"unknown or duplicate active owner: {task}")
+        seen.add(task)
+        count, digest = acceptance_digest((active / task).read_text(encoding="utf-8"))
+        if not count or count != record["criteria_count"] or digest != record["criteria_sha256"]:
+            raise ValueError(f"remaining criteria drifted: {task}")
+        criterion_count += count
+        if not record["remaining_scenarios"] or not all(isinstance(item, str) and item.strip() for item in record["remaining_scenarios"]):
+            raise ValueError(f"active owner must name observable remaining scenarios: {task}")
+        if not record["source_refs"]:
+            raise ValueError(f"active owner needs implementation sources: {task}")
+        for reference in record["spec_refs"]:
+            if not reference.startswith("arkret-spec/spec/v1/"):
+                raise ValueError(f"acceptance truth must reference current v1 Spec: {reference}")
+            checked_file(reference)
+        for reference in record["source_refs"]:
+            checked_file(reference)
+        if not record["tests"] and not record["engineering_checks"]:
+            raise ValueError(f"owner needs tests or an engineering oracle: {task}")
+        if not record["spec_refs"] and not record["engineering_checks"]:
+            raise ValueError(f"protocol owner needs a Spec source: {task}")
+        local_tests: set[tuple[str, str]] = set()
+        for test in record["tests"]:
+            if set(test) != {"path", "symbol", "kind", "covers"} or test["kind"] not in {"contract", "live", "product", "engineering"} or not test["covers"].strip():
+                raise ValueError(f"invalid test responsibility: {task}")
+            key = (test["path"], test["symbol"])
+            if key in local_tests:
+                raise ValueError(f"duplicate test responsibility: {task}: {key}")
+            local_tests.add(key)
+            path = checked_file(test["path"])
+            text = path.read_text(encoding="utf-8")
+            if path.suffix == ".py":
+                symbols = [node.name for node in ast.walk(ast.parse(text)) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test_")]
+            else:
+                symbols = [scope.name for scope in source_scopes(path, text)]
+            if test["symbol"] not in symbols:
+                raise ValueError(f"test entrypoint missing (helper/string is not a test): {key}")
+            test_count += 1
+    if seen != expected:
+        raise ValueError(f"acceptance owners missing: {sorted(expected - seen)}")
+    return {"owners": len(seen), "criteria": criterion_count, "test_references": test_count}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--workspace-root", type=Path, default=WORKSPACE_ROOT)
     parser.add_argument("--output", type=Path, default=OUTPUT_PATH)
+    parser.add_argument("--check-acceptance", action="store_true", help="validate active-owner traceability without claiming execution")
     args = parser.parse_args(argv)
+    if args.check_acceptance:
+        try:
+            summary = validate_acceptance_manifest(args.workspace_root, load_json(args.workspace_root / "cotest/config/implementation-acceptance.json"))
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            print(f"acceptance traceability failed: {error}", file=sys.stderr)
+            return 1
+        print(f"acceptance traceability: {summary}; execution/complete claim NOT assessed")
+        return 0
     try:
         generated = serialized(generate(args.workspace_root))
     except (OSError, ValueError, json.JSONDecodeError) as error:
