@@ -8,6 +8,7 @@ use cotest::scenarios::agent_runtime_live::AgentRuntimeSession;
 use cotest::scenarios::mls_lifecycle_live::{
     accepted_full_view, canonical, fresh_uuid_v7, post_json,
 };
+use cotest::scenarios::sidecar_authority_live::PrivateAgentReadyContext;
 
 use super::*;
 
@@ -146,12 +147,12 @@ impl AccountSubscribeTransport for HealingRail {
     ) -> garth::Result<AccountSubscribeSnapshotResult> {
         let attempt = {
             let mut requests = self.requests.lock().unwrap();
-            if let Some(first) = requests.first() {
-                if serde_json::to_value(first).unwrap() != serde_json::to_value(request).unwrap() {
-                    return Err(garth::Error::Protocol(
-                        "automatic retry replaced its frozen Account request".into(),
-                    ));
-                }
+            if let Some(first) = requests.first()
+                && serde_json::to_value(first).unwrap() != serde_json::to_value(request).unwrap()
+            {
+                return Err(garth::Error::Protocol(
+                    "automatic retry replaced its frozen Account request".into(),
+                ));
             }
             requests.push(request.clone());
             requests.len()
@@ -278,9 +279,9 @@ impl SidecarSyncObserver for PrivateReplyProbe {
         controller_group: &mut arkret::ArkretMlsGroup,
         agent_group: &mut arkret::ArkretMlsGroup,
         accepted: &arkret_wire::CommittedEventFullView,
-        _coauth: &cotest::scenarios::_helpers::bridge::MockCoauthIntrospectionServer,
-        database_url: &str,
+        context: PrivateAgentReadyContext<'_>,
     ) -> Result<()> {
+        let PrivateAgentReadyContext { database_url, .. } = context;
         let scope = &accepted.event.scope_ref;
         let realm = scope.realm_id();
         let selection = arkret::ParticipationReplaceRequestBody {
@@ -608,7 +609,10 @@ impl SidecarSyncObserver for PrivateReplyProbe {
             "same-call automatic recovery did not perform exactly one bounded retry"
         );
         let scans = fault.scan_requests();
-        let initial_scans = rail.initial_scans.lock().unwrap();
+        let initial_scans = {
+            let observed = rail.initial_scans.lock().unwrap();
+            observed.clone()
+        };
         let recovery_scans = scans
             .strip_prefix(initial_scans.as_slice())
             .context("automatic retry changed its original scan observations")?;

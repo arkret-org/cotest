@@ -309,7 +309,7 @@ async fn assert_committed(
     realm_id: &str,
     event_id: &EventId,
 ) -> Result<RealmCommit> {
-    client.await_event_seal_coverage(realm_id, event_id).await?;
+    client.await_event_commit(realm_id, event_id).await?;
     let view = client.sdk().committed_event_get(event_id).await?;
     view.validate_shape()?;
     Ok(view.commit().clone())

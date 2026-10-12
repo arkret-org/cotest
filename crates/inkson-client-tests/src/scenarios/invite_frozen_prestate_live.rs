@@ -36,7 +36,7 @@ struct RealmObservation {
 }
 
 async fn observe(client: &TestActorClient, realm_id: &str) -> Result<RealmObservation> {
-    let committed = client.realm_seal_frontier(realm_id).await?;
+    let committed = client.realm_committed_tail(realm_id).await?;
     let events = committed["committed_events"]
         .as_array()
         .ok_or_else(|| anyhow!("committed stream scan missing events: {committed}"))?;

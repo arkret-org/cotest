@@ -666,6 +666,28 @@ jobs:
             coauth
       - name: Install Dioxus CLI
         run: cargo install dioxus-cli --version 0.7.10 --locked
+      - name: Install locked Inkson wasm-bindgen CLI
+        shell: bash
+        run: |
+          version="$(python - <<'PY'
+          import re
+          import tomllib
+          from pathlib import Path
+          packages = tomllib.loads(Path("inkson/Cargo.lock").read_text())["package"]
+          versions = {p["version"] for p in packages if p["name"] == "wasm-bindgen"}
+          if len(versions) != 1:
+              raise SystemExit("Expected exactly one locked Inkson wasm-bindgen version")
+          version = versions.pop()
+          if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
+              raise SystemExit("Expected a stable wasm-bindgen version")
+          print(version)
+          PY
+          )"
+          tools="${DX_HOME:-$HOME/.dx}/tools/wasm-bindgen-$version"
+          cargo install wasm-bindgen-cli --version "$version" --locked --bin wasm-bindgen --root "$tools"
+          # The joint runner prepends this versioned directory to Inkson's PATH.
+          install -m 755 "$tools/bin/wasm-bindgen" "$tools/wasm-bindgen"
+          test "$("$tools/wasm-bindgen" --version)" = "wasm-bindgen $version"
       - name: Install frontend task runner
         uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
         with:
