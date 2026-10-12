@@ -55,6 +55,9 @@ use crate::scenarios::_helpers::live_gate::skip_or_fail;
 use crate::scenarios::human_device_producer_live::{database, standard_client, station_env};
 use crate::scenarios::identity_test_support::HARNESS_INTERNAL_AUTHORITY_SECRET;
 
+mod provision_evidence;
+pub use provision_evidence::run_agent_genesis_production_cases;
+
 const GROUP: &str = "agent-runtime-session";
 const CONTROLLER_LABEL: &str = "agent-controller";
 const CONTROLLER_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002301";
@@ -218,6 +221,27 @@ impl AgentRuntimeSession {
         label: &str,
         operations: &[&str],
     ) -> Result<Self> {
+        Self::establish_observed(
+            server,
+            coauth,
+            controller,
+            controller_account,
+            label,
+            operations,
+            None,
+        )
+        .await
+    }
+
+    async fn establish_observed(
+        server: &ArkretServer,
+        coauth: &MockCoauthIntrospectionServer,
+        controller: &TestActorClient,
+        controller_account: &AccountId,
+        label: &str,
+        operations: &[&str],
+        mut evidence: Option<&mut provision_evidence::ProvisionEvidence>,
+    ) -> Result<Self> {
         let principal = controller
             .principal
             .as_ref()
@@ -326,6 +350,12 @@ impl AgentRuntimeSession {
         )?;
         let agent_pcr = genesis.realm_id.clone();
 
+        if let Some(evidence) = evidence.as_deref_mut() {
+            evidence
+                .prepared(server, controller, &prepared, &genesis)
+                .await?;
+        }
+
         // 4. The provision forward-declares that genesis and commits alone.
         let provision_event = sign(
             arkret_bootstrap::build_agent_provision_intent(
@@ -356,7 +386,7 @@ impl AgentRuntimeSession {
             slug,
             requested_scope: scope.clone(),
             allocation_handle: prepared.allocation_handle.clone(),
-            provision_event: arkret_wire::EventAdmissionSubmission::new(provision_event),
+            provision_event: arkret_wire::EventAdmissionSubmission::new(provision_event.clone()),
             pairing_ttl_ms: None,
         });
         let awaiting = provision(controller, &commit_body, StatusCode::OK).await?;
@@ -364,6 +394,18 @@ impl AgentRuntimeSession {
             matches!(awaiting, AgentProvisionOutcome::AwaitingPcrGenesis(_)),
             "an accepted provision awaits its PCR genesis: {awaiting:?}"
         );
+        if let Some(evidence) = evidence.as_deref_mut() {
+            evidence
+                .declared(
+                    server,
+                    controller,
+                    &commit_body,
+                    &awaiting,
+                    &genesis,
+                    &provision_event,
+                )
+                .await?;
+        }
 
         // 5. The genesis is its own submission; the Station finds the declaration by
         //    retype(event_id).
@@ -390,6 +432,18 @@ impl AgentRuntimeSession {
             matches!(awaiting, AgentProvisionOutcome::AwaitingDidBinding(_)),
             "an accepted genesis awaits the DID binding update: {awaiting:?}"
         );
+        if let Some(evidence) = evidence.as_deref_mut() {
+            evidence
+                .founded(
+                    server,
+                    controller,
+                    &commit_body,
+                    &awaiting,
+                    &genesis,
+                    &commit,
+                )
+                .await?;
+        }
 
         // 6. The continuous DID update binds the create-locked tuple.
         let update = arkret_signatures::webvh::prepare_agent_binding_update(
@@ -415,6 +469,9 @@ impl AgentRuntimeSession {
         let AgentProvisionOutcome::Complete(complete) = complete else {
             bail!("the bound Agent completes provisioning: {complete:?}");
         };
+        if let Some(evidence) = evidence.as_deref_mut() {
+            evidence.bound(server, controller, &complete).await?;
+        }
         let pairing_code = complete
             .pairing_code
             .clone()
