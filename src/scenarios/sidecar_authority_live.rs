@@ -38,6 +38,11 @@ pub async fn run_with_genesis_observer(
     run_with_observers(observer, None).await
 }
 
+pub struct PrivateAgentReadyContext<'a> {
+    pub coauth: &'a MockCoauthIntrospectionServer,
+    pub database_url: &'a str,
+}
+
 #[async_trait::async_trait(?Send)]
 pub trait SidecarSyncObserver {
     fn requires_private_agent_reply(&self) -> bool {
@@ -51,8 +56,7 @@ pub trait SidecarSyncObserver {
         _controller_group: &mut arkret::ArkretMlsGroup,
         _agent_group: &mut arkret::ArkretMlsGroup,
         _accepted: &arkret_wire::CommittedEventFullView,
-        _coauth: &MockCoauthIntrospectionServer,
-        _database_url: &str,
+        _context: PrivateAgentReadyContext<'_>,
     ) -> Result<()> {
         Ok(())
     }
@@ -601,9 +605,11 @@ async fn run_with_options(
             &controller,
             &realm,
             &stream,
-            &create,
-            &private,
-            &genesis,
+            PendingAgentDisclosureEvents {
+                create: &create,
+                attach: &private,
+                genesis: &genesis,
+            },
             &material,
         )
         .await?;
@@ -665,8 +671,10 @@ async fn run_with_options(
                 &mut group,
                 &mut agent_group,
                 &accepted,
-                &coauth,
-                &database.connect_url,
+                PrivateAgentReadyContext {
+                    coauth: &coauth,
+                    database_url: &database.connect_url,
+                },
             )
             .await?;
     }
@@ -687,16 +695,25 @@ async fn run_with_options(
     Ok(())
 }
 
+struct PendingAgentDisclosureEvents<'a> {
+    create: &'a arkret_wire::Event,
+    attach: &'a arkret_wire::Event,
+    genesis: &'a arkret_wire::Event,
+}
+
 async fn verify_pending_agent_reads(
     agent: &crate::scenarios::agent_runtime_live::AgentRuntimeSession,
     controller: &Member,
     realm: &RealmId,
     stream: &CommitStreamRef,
-    create: &arkret_wire::Event,
-    attach: &arkret_wire::Event,
-    genesis: &arkret_wire::Event,
+    events: PendingAgentDisclosureEvents<'_>,
     material: &arkret_models_collaboration::mls_group_state_material::MlsMemberGroupStateMaterialReadRequestBody,
 ) -> Result<()> {
+    let PendingAgentDisclosureEvents {
+        create,
+        attach,
+        genesis,
+    } = events;
     let http = agent.runtime.sdk();
     let list = http
         .realm_streams_page(realm, None, 500)

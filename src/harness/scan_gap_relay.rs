@@ -92,22 +92,22 @@ impl Relay {
             .as_str();
         let target = self.upstream.join(path)?;
         let body = req.payload().await?.to_vec();
-        if req.uri().path() == "/_arkret/self/events" && req.method() == salvo::http::Method::POST {
-            if let Ok(
+        if req.uri().path() == "/_arkret/self/events"
+            && req.method() == salvo::http::Method::POST
+            && let Ok(
                 arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest::Event(
                     submission,
                 ),
             ) = serde_json::from_slice::<
                 arkret_models_collaboration::authority_commit::SelfAuthoritySubmitRequest,
             >(&body)
-            {
-                self.control
-                    .0
-                    .lock()
-                    .unwrap()
-                    .event_submissions
-                    .push(submission.event.event_id);
-            }
+        {
+            self.control
+                .0
+                .lock()
+                .unwrap()
+                .event_submissions
+                .push(submission.event.event_id);
         }
         let mut headers = req.headers().clone();
         // Record the actual ingress authority for the production gateway

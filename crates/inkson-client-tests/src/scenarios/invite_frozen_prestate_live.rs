@@ -19,7 +19,7 @@
 //! released slot accepts a re-invite, and an `ak.invite.revoke` of that
 //! re-invite releases the slot again for a third invite.
 
-use anyhow::{Result, anyhow};
+use anyhow::{Result, anyhow, ensure};
 use chrono::Duration as ChronoDuration;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
@@ -29,29 +29,70 @@ use crate::transcripts::record_vector_event;
 
 /// The server-side observable a refused Invite Event must leave untouched:
 /// the committed Realm stream, Event by Event.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 struct RealmObservation {
     event_ids: Vec<String>,
     commit_head_id: String,
+    committed_events: Vec<arkret_wire::CommittedEventView>,
 }
 
 async fn observe(client: &TestActorClient, realm_id: &str) -> Result<RealmObservation> {
-    let committed = client.realm_seal_frontier(realm_id).await?;
-    let events = committed["committed_events"]
-        .as_array()
-        .ok_or_else(|| anyhow!("committed stream scan missing events: {committed}"))?;
-    let event_ids = events
+    let realm = arkret_wire::RealmId::new(realm_id.to_owned())?;
+    let mut committed_events: Vec<arkret_wire::CommittedEventView> = Vec::new();
+    let mut after = None;
+    loop {
+        let request = arkret_wire::StreamScanRequest {
+            realm_id: realm.clone(),
+            stream_ref: arkret_wire::CommitStreamRef::Realm {
+                realm_id: realm.clone(),
+            },
+            direction: arkret_wire::StreamScanDirection::After(after),
+            limit: 1000,
+        };
+        let outcome: arkret_wire::StreamScanOutcome = serde_json::from_value(
+            crate::harness::expect_json(
+                client
+                    .post("/_arkret/self/streams/scan")
+                    .canonical_json(&request)?,
+                StatusCode::OK,
+            )
+            .await?,
+        )?;
+        outcome.validate_for_request(&request)?;
+        if let (Some(previous), Some(next)) =
+            (committed_events.last(), outcome.committed_events.first())
+        {
+            next.commit().validate_successor_of(previous.commit())?;
+        }
+        let truncated = outcome.truncated;
+        let next = outcome
+            .committed_events
+            .last()
+            .map(|item| item.commit().stream_position);
+        committed_events.extend(outcome.committed_events);
+        if !truncated {
+            break;
+        }
+        ensure!(
+            next.is_some() && (after.is_none() || next > after),
+            "truncated Realm stream scan did not advance its position"
+        );
+        after = next;
+    }
+    let event_ids = committed_events
         .iter()
-        .filter_map(|item| item["commit"]["event_ref"].as_str().map(ToOwned::to_owned))
+        .map(|item| item.commit().event_ref.to_string())
         .collect();
-    let commit_head_id = events
+    let commit_head_id = committed_events
         .last()
-        .and_then(|item| item["commit"]["commit_id"].as_str())
-        .ok_or_else(|| anyhow!("committed Realm stream has no head: {committed}"))?
-        .to_owned();
+        .ok_or_else(|| anyhow!("committed Realm stream has no readable head"))?
+        .commit()
+        .commit_id
+        .to_string();
     Ok(RealmObservation {
         event_ids,
         commit_head_id,
+        committed_events,
     })
 }
 

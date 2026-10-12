@@ -415,14 +415,12 @@ impl LiveSignalReader {
                     } if channel_id == "events-1" => {
                         if let Some(CommittedEventSubscribeFramePayload::CommittedEvent(view)) =
                             frame.payload
+                            && view.commit().commit_id == expected.commit.commit_id
                         {
-                            if view.commit().commit_id == expected.commit.commit_id {
-                                ensure!(
-                                    *view
-                                        == arkret_wire::CommittedEventView::Full(expected.clone())
-                                );
-                                return Ok(());
-                            }
+                            ensure!(
+                                *view == arkret_wire::CommittedEventView::Full(expected.clone())
+                            );
+                            return Ok(());
                         }
                     }
                     WebSocketServerFrame::ChannelControl {

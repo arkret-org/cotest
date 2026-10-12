@@ -12,13 +12,24 @@ fn agent_genesis_cases_cross_real_http_admission_and_preserve_rejected_state() -
         .clone();
     cases.extend_from_slice(fixture["cases"].as_array().unwrap());
     let missing = execution.missing_against_cases(&cases)?;
-    assert_eq!(execution.cases.len(), 17);
-    assert_eq!(missing.len(), 13);
+    assert_eq!(execution.cases.len(), 18);
+    assert_eq!(missing.len(), 12);
     assert!(
         execution
             .cases
             .iter()
             .any(|case| case.case_id == "agent_presence_requires_expiry_and_refresh")
+    );
+    assert!(
+        execution
+            .cases
+            .iter()
+            .any(|case| case.case_id == "two_provisions_declaring_one_realm_id_rejected")
+    );
+    assert!(
+        !missing
+            .iter()
+            .any(|case| case == "two_provisions_declaring_one_realm_id_rejected")
     );
     assert!(execution.cases.iter().all(|case| case.assertions > 0));
     assert!(execution.assert_complete_against(&fixture).is_err());

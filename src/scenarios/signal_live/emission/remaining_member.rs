@@ -305,7 +305,7 @@ pub(crate) async fn exercise(
     let accepted = accept_mls(alice, x, &event, vec![welcome.clone()]).await?;
     let commit = &accepted.commit;
     ensure!(alice_group.install_accepted_commit(&accepted, &base)? == 3);
-    wait_for_replica_cut(urls[1], &commit).await?;
+    wait_for_replica_cut(urls[1], commit).await?;
     ensure!(accepted_full_view(&bob.client, &event.event_id).await? == accepted);
     ensure!(bob_group.install_accepted_commit(&accepted, &base)? == 3);
     wait_for_welcome(&carol, &welcome).await?;
@@ -461,8 +461,10 @@ pub(crate) async fn exercise(
         4,
         dirty.current_key_access_revision,
     )?;
-    let remove = alice_group
-        .remove_members_by_actor_with_governance_binding(&[bob.actor.clone()], &remove_binding)?;
+    let remove = alice_group.remove_members_by_actor_with_governance_binding(
+        std::slice::from_ref(&bob.actor),
+        &remove_binding,
+    )?;
     let remove_payload = MlsCommitPayload::new(
         state.clone(),
         dirty.current_key_access_revision,

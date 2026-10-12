@@ -8,12 +8,14 @@ use serde_json::Value;
 
 use super::*;
 use crate::conformance::{CaseExecutionResult, SuiteExecutionResult};
+use crate::harness::CanonicalJsonBody;
 use crate::scenarios::_helpers::acceptance_footprint::acceptance_rows_with_agent_stores;
 
 pub(crate) struct ProvisionEvidence {
     database_url: String,
     forward_assertions: usize,
     negative_assertions: usize,
+    collision_assertions: usize,
     genesis_cut: Option<Value>,
 }
 
@@ -193,6 +195,12 @@ impl ProvisionEvidence {
         );
         self.forward_assertions += 2;
 
+        let AgentProvisionRequestBody::Commit(original) = body else {
+            bail!("accepted declaration must retain its exact provision commit request");
+        };
+        self.reject_second_pcr_claim(server, controller, original, provision_event)
+            .await?;
+
         // Reopen the original serialized intent before recovery. The retry
         // cannot mint replacement Event ids, proofs or allocation bindings.
         let frozen = arkret_canonical::canonical_json_bytes(body)?;
@@ -213,6 +221,139 @@ impl ProvisionEvidence {
             "provision replay added durable accepting effects"
         );
         self.forward_assertions += 3;
+        Ok(())
+    }
+
+    async fn reject_second_pcr_claim(
+        &mut self,
+        server: &ArkretServer,
+        controller: &TestActorClient,
+        original: &AgentProvisionCommitRequestBody,
+        provision_event: &Event,
+    ) -> Result<()> {
+        let ActorId::Account { account_id } = &provision_event.actor_id else {
+            bail!("first provision is not authored by its controller Account");
+        };
+        let principal = controller
+            .principal
+            .as_ref()
+            .context("controller principal")?;
+        let method = DidUrl::new(format!("{}#{}", principal.did, principal.device_id))
+            .map_err(anyhow::Error::msg)?;
+        let local_id = format!("genesis-claim-collision-{}", unique_uuid7());
+        let root_seed = arkret_canonical::sha256_bytes(local_id.as_bytes());
+        let next_seed = arkret_canonical::sha256_bytes(format!("{local_id}:next").as_bytes());
+        let endpoint = url::Url::parse(&server.url("/"))?;
+        let next_key = arkret_canonical::ed25519_pubkey_to_did_key_multibase(
+            SigningKey::from_bytes(&next_seed)
+                .verifying_key()
+                .as_bytes(),
+        );
+        let inception = arkret_signatures::webvh::prepare_agent_inception(
+            &arkret_signatures::webvh::AgentInceptionInput {
+                principal_endpoint: &endpoint,
+                local_id: &local_id,
+                controller_principal_id: &account_id.principal_id,
+                version_time: Utc::now() - chrono::Duration::seconds(5),
+                root_seed: &root_seed,
+                next_root_public_key_multibase: &next_key,
+            },
+        )?;
+        submit_did_operation(server, &inception.submit_body).await?;
+        let did = Did::new(inception.did.clone())?;
+        let operation_id = ProtocolOperationId::new(format!("ak:operation:{}", unique_uuid7()))
+            .map_err(anyhow::Error::msg)?;
+        let idempotency_key = IdempotencyKey::new(unique_uuid7()).map_err(anyhow::Error::msg)?;
+        let slug = "genesis-claim-collision".to_owned();
+        let prepared = provision(
+            controller,
+            &AgentProvisionRequestBody::Prepare(AgentProvisionPrepareRequestBody {
+                phase: AgentProvisionPreparePhase::Prepare,
+                operation_id: operation_id.clone(),
+                idempotency_key: idempotency_key.clone(),
+                did: did.clone(),
+                slug: slug.clone(),
+                requested_scope: original.requested_scope.clone(),
+                pairing_ttl_ms: None,
+                controller_station_id: account_id.station_id.clone(),
+            }),
+            StatusCode::OK,
+        )
+        .await?;
+        let AgentProvisionOutcome::AwaitingControllerEvent(prepared) = prepared else {
+            bail!("second Agent prepare did not await its controller Event");
+        };
+        ensure!(
+            prepared.agent_id != original.agent_id
+                && prepared.initial_resolution.did == did
+                && prepared.initial_resolution.version_id == inception.version_id,
+            "the collision must use a distinct real accepted Agent inception"
+        );
+        let scope_digest = arkret_signatures::agent::agent_requested_scope_digest(
+            &prepared.agent_id,
+            &account_id.principal_id,
+            &original.requested_scope,
+        )?;
+        let candidate = sign(
+            arkret_bootstrap::build_agent_provision_intent(
+                &account_id.principal_id,
+                &prepared.controller_realm_id,
+                &prepared.agent_id,
+                &original.principal_control_realm_id,
+                &prepared.controller_authorization_ref,
+                &slug,
+                &scope_digest,
+                arkret_models_identity::handle::HandleVisibility::Private,
+                None,
+                arkret_bootstrap::AgentProvisionIntentOptions {
+                    controller_station_id: account_id.station_id.clone(),
+                    created_at: Utc::now(),
+                },
+            )?,
+            &method,
+            principal.device_signing_key.to_bytes(),
+        )?;
+        candidate.verify_event_id_matches_content_with_digest_suite(
+            arkret_canonical::DigestSuite::Sha256,
+        )?;
+        ensure!(
+            candidate.event_id != provision_event.event_id
+                && candidate.payload["principal_control_realm_id"]
+                    == original.principal_control_realm_id.as_str(),
+            "second provision is not a distinct content-bound claim of the same PCR id"
+        );
+        let request = AgentProvisionRequestBody::Commit(AgentProvisionCommitRequestBody {
+            phase: AgentProvisionCommitPhase::Commit,
+            operation_id,
+            idempotency_key,
+            agent_id: prepared.agent_id,
+            did,
+            principal_control_realm_id: original.principal_control_realm_id.clone(),
+            slug,
+            requested_scope: original.requested_scope.clone(),
+            allocation_handle: prepared.allocation_handle,
+            provision_event: arkret_wire::EventAdmissionSubmission::new(candidate),
+            pairing_ttl_ms: None,
+        });
+        let before = self.snapshot().await?;
+        let problem = crate::harness::expect_api_error(
+            controller
+                .post("/_arkret/self/agents")
+                .canonical_json(&request)?,
+            StatusCode::CONFLICT,
+            "failed_precondition",
+        )
+        .await?;
+        ensure!(
+            serde_json::to_value(problem)?["reason_code"]
+                == "agent_pcr_genesis_declaration_conflict",
+            "duplicate PCR declaration did not return its exact registered reason"
+        );
+        ensure!(
+            self.snapshot().await? == before,
+            "rejected second declaration changed accepted business or Agent state"
+        );
+        self.collision_assertions += 6;
         Ok(())
     }
 
@@ -373,6 +514,7 @@ pub async fn run_agent_genesis_production_cases() -> Result<SuiteExecutionResult
         database_url: database.connect_url.clone(),
         forward_assertions: 0,
         negative_assertions: 0,
+        collision_assertions: 0,
         genesis_cut: None,
     };
     AgentRuntimeSession::establish_observed(
@@ -396,6 +538,10 @@ pub async fn run_agent_genesis_production_cases() -> Result<SuiteExecutionResult
             CaseExecutionResult {
                 case_id: "agent_pcr_genesis_without_declaration_rejected".into(),
                 assertions: evidence.negative_assertions,
+            },
+            CaseExecutionResult {
+                case_id: "two_provisions_declaring_one_realm_id_rejected".into(),
+                assertions: evidence.collision_assertions,
             },
         ],
     })

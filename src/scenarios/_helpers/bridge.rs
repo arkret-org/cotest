@@ -47,6 +47,7 @@ enum CoauthGrantHolder {
         agent_key_authorization_ref: String,
         verification_method: String,
         scopes: Vec<String>,
+        scope_details: serde_json::Map<String, Value>,
     },
     RecoveryCandidateDevice {
         device_id: String,
@@ -266,19 +267,42 @@ impl MockCoauthIntrospectionServer {
     pub fn bind_agent_runtime_grant(
         &self,
         grant_jwt: &str,
-        agent_id: &str,
-        agent_key_authorization_ref: &str,
-        verification_method: &str,
+        authorization_ref: &arkret_wire::EventId,
+        authorization: &arkret_models_collaboration::events_payloads::agent::AgentKeyAuthorizePayload,
         runtime_key: &ed25519_dalek::VerifyingKey,
-        scopes: &[&str],
     ) -> Result<()> {
+        use arkret_models_collaboration::events_payloads::agent::AgentKeyScopeResourceKind;
+        anyhow::ensure!(
+            authorization.agent_key_scope.constraints.is_empty()
+                && authorization
+                    .agent_key_scope
+                    .resources
+                    .iter()
+                    .all(|resource| resource.kind == AgentKeyScopeResourceKind::Operation),
+            "fixture issuer cannot discard an unrepresented key constraint or content resource ceiling"
+        );
+        let key = serde_json::to_value(&authorization.public_key)?;
+        anyhow::ensure!(
+            key["key"].as_str()
+                == Some(arkret_canonical::base64url_encode(runtime_key.as_bytes()).as_str()),
+            "issuer runtime holder differs from the accepted authorization key"
+        );
+        let scope_details = json!({
+            "controller_principal_id": authorization.accountable_principal_id,
+            "agent_key_authorization_ref": authorization_ref,
+            "realm_ids": [], "strand_ids": [],
+            "resources": {"realm_ids": [], "strand_ids": []},
+            "constraints": {"allowed_tracks": [], "allowed_data_labels": [], "allowed_endpoints": []},
+            "capability_grant_refs": [], "policy_refs": []
+        }).as_object().unwrap().clone();
         self.record(
             grant_jwt,
-            agent_id,
+            authorization.agent_id.as_str(),
             CoauthGrantHolder::AgentRuntime {
-                agent_key_authorization_ref: agent_key_authorization_ref.to_owned(),
-                verification_method: verification_method.to_owned(),
-                scopes: scopes.iter().map(|scope| (*scope).to_owned()).collect(),
+                agent_key_authorization_ref: authorization_ref.to_string(),
+                verification_method: authorization.verification_method.to_string(),
+                scopes: authorization.agent_key_scope.actions.clone(),
+                scope_details,
             },
             runtime_key,
         )
@@ -733,8 +757,10 @@ async fn coauth_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respo
             agent_key_authorization_ref,
             verification_method,
             scopes,
+            scope_details,
         } => {
             grant["scopes"] = json!(scopes);
+            grant["scope_details"] = json!(scope_details);
             grant["holder_binding"] = json!({
                 "kind": "agent_runtime",
                 "agent_id": binding.subject,
