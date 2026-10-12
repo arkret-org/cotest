@@ -28,8 +28,8 @@
     },
     {
       "task": "2026-09-06-0914-sdk-contract-generation-and-canonical-reuse.md",
-      "criteria_count": 6,
-      "criteria_sha256": "6618b9b66a261e44659c862727dfbb3b7b61a1896b15282e578af1bca47eba8e",
+      "criteria_count": 2,
+      "criteria_sha256": "03839f334a9b3e2643ebeb7dea44ea51ddc8238fdfab15ad318302a0a7a568fa",
       "spec_refs": [
         "arkret-spec/spec/v1/zh/overview/protocol-layers.md"
       ],
