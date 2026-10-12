@@ -17,6 +17,7 @@ pub mod cross_station_invite_join;
 pub mod cross_station_mls_genesis;
 pub mod cross_station_mls_welcome;
 pub mod current_principal_restart;
+pub mod cursor_revocation_live;
 pub mod delivery_media;
 pub mod did_boundary_call_counts;
 pub mod direct_conversation_founding_live;

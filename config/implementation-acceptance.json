@@ -254,7 +254,9 @@
         "arkret-spec/spec/v1/zh/conformance/conformance-suite.md"
       ],
       "source_refs": [
-        "cotest/src/conformance/named_suite_audit.rs"
+        "cotest/src/conformance/named_suite_audit.rs",
+        "cotest/src/scenarios/cursor_revocation_live.rs",
+        "coland/crates/http/src/routing/events/sync/websocket.rs"
       ],
       "tests": [
         {
@@ -316,6 +318,36 @@
           "symbol": "canonical_federation_cases_use_real_ingress_and_keep_the_missing_binding_explicit",
           "kind": "live",
           "covers": "正式生产子集4/5；binding移除仍缺，complete显式拒绝"
+        },
+        {
+          "path": "cotest/tests/cursor_revocation_live.rs",
+          "symbol": "same_device_sessions_remain_distinct_across_durable_cursor_revocation",
+          "kind": "live",
+          "covers": "同设备不同session、重复撤销不续期、新句柄覆盖及独立重启零写拒绝"
+        },
+        {
+          "path": "cotest/tests/cursor_revocation_live.rs",
+          "symbol": "a_revoked_waiting_http_continuation_never_publishes_or_advances",
+          "kind": "live",
+          "covers": "真实HTTP等待中撤销；fresh read cursor_revoked及完整句柄/业务/ACK零推进"
+        },
+        {
+          "path": "cotest/tests/cursor_revocation_live.rs",
+          "symbol": "a_revoked_waiting_websocket_preserves_the_canonical_cursor_error",
+          "kind": "live",
+          "covers": "真实WS等待中撤销正式cursor_revoked及channel关闭零推进"
+        },
+        {
+          "path": "cotest/tests/cursor_revocation_live.rs",
+          "symbol": "queued_account_frames_recheck_revocation_at_physical_websocket_output",
+          "kind": "live",
+          "covers": "真实排队Account frame正对照原字节与撤销后物理输出拒绝"
+        },
+        {
+          "path": "cotest/tests/cursor_revocation_live.rs",
+          "symbol": "cursor_revocation_is_visible_between_two_processes_sharing_one_durable_issuer",
+          "kind": "live",
+          "covers": "两个OS进程共享耐久issuer/PG/加密keystore；跨进程组撤销及独立重启"
         }
       ],
       "engineering_checks": [],
