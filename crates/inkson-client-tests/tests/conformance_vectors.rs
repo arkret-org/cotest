@@ -15,6 +15,11 @@ fn webrtc_media_plaintext_named_suite_returns_one_result_per_case() -> Result<()
 fn named_suite_audit_executes_registered_runners_and_exposes_every_gap() -> Result<()> {
     let report = inspect_named_suite_execution()?;
     println!("{report:#?}");
+    assert!(
+        report.failed_executions.is_empty(),
+        "registered runner failed: {:?}",
+        report.failed_executions
+    );
     assert!(report.assert_complete().is_err());
     assert!(report.deferred_client_entrypoints.is_empty());
     let sync = cotest::conformance::SYNC_CLIENT_ENTRYPOINT;

@@ -27,6 +27,26 @@ pub(super) async fn fanout(url: &str, commit: &RealmCommit) -> Result<Vec<Value>
     }).await?
 }
 
+async fn wait_delivered_intent(url: &str, commit: &RealmCommit) -> Result<()> {
+    let deadline = Instant::now() + HELD_WINDOW;
+    loop {
+        let rows = fanout(url, commit).await?;
+        ensure!(
+            rows.len() == 1,
+            "qualified peer delivery needs one original source intent"
+        );
+        if rows[0]["state"] == "delivered" {
+            return Ok(());
+        }
+        ensure!(
+            Instant::now() < deadline,
+            "accepted replica did not finish its source delivery: {}",
+            rows[0]["state"]
+        );
+        tokio::time::sleep(Duration::from_millis(40)).await;
+    }
+}
+
 pub(super) async fn tombstone(fixture: &CurrentOriginFixture) -> Result<(Event, RealmCommit)> {
     let successor = fixture
         .alice
@@ -77,9 +97,43 @@ pub(super) fn ensure_ordinary_refusal_rows(
         ensure!(row["evidence_ref"] == serde_json::to_value(evidence.signer_evidence_ref()?)?);
     }
     after["account_device_signer_evidence"] = before["account_device_signer_evidence"].clone();
+    let changed = before
+        .as_object()
+        .context("before accepting snapshot")?
+        .iter()
+        .filter(|(name, rows)| after.get(*name) != Some(*rows))
+        .map(|(name, _)| name.as_str())
+        .collect::<Vec<_>>();
+    if changed.contains(&"federation_outbox") {
+        let old = before["federation_outbox"]
+            .as_array()
+            .context("before outbox")?;
+        let new = after["federation_outbox"]
+            .as_array()
+            .context("after outbox")?;
+        for row in new {
+            if let Some(previous) = old.iter().find(|entry| entry["id"] == row["id"]) {
+                let fields = previous
+                    .as_object()
+                    .context("outbox row")?
+                    .iter()
+                    .filter(|(name, value)| row.get(*name) != Some(*value))
+                    .map(|(name, _)| name.as_str())
+                    .collect::<Vec<_>>();
+                if !fields.is_empty() {
+                    eprintln!(
+                        "terminal refusal outbox drift id={} fields={fields:?}",
+                        row["id"]
+                    );
+                }
+            } else {
+                eprintln!("terminal refusal added outbox row id={}", row["id"]);
+            }
+        }
+    }
     ensure!(
         &after == before,
-        "refused ordinary request mutated accepting rows or forward evidence"
+        "refused ordinary request mutated accepting rows or forward evidence: {changed:?}"
     );
     Ok(())
 }
@@ -143,6 +197,11 @@ pub(super) async fn qualified_ordinary_candidate(
         &commit,
         &wait_held(&fixture.bob, &control.event_id, HELD_WINDOW).await?,
     )?;
+    // Receiving the Commit precedes source lease completion. Freeze the
+    // refusal baseline only after both successful deliveries finish, so the
+    // live worker cannot mutate an unrelated earlier intent during refusal.
+    wait_delivered_intent(&fixture._governance_database.connect_url, &grant).await?;
+    wait_delivered_intent(&fixture._governance_database.connect_url, &commit).await?;
     let candidate = fixture
         .bob
         .author_event(
