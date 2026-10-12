@@ -46,3 +46,30 @@ async fn completed_revocation_remains_visible_under_a_repeatable_read_database_d
 -> Result<()> {
     cotest::scenarios::cursor_revocation_live::issuance_racing_repeatable_read_default_live().await
 }
+
+#[tokio::test(flavor = "multi_thread")]
+#[serial]
+async fn old_realm_pages_keep_their_original_snapshot_and_independent_revocation_identity()
+-> Result<()> {
+    cotest::scenarios::cursor_revocation_live::immutable_realm_pages_remain_isolated_live().await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[serial]
+async fn legal_wire_expiry_precedes_unknown_binding_and_revocation_without_state_changes()
+-> Result<()> {
+    cotest::scenarios::cursor_revocation_live::legal_expired_wire_precedes_binding_and_revocation_live().await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[serial]
+async fn realm_list_issuance_cannot_install_a_page_after_its_input_was_revoked() -> Result<()> {
+    cotest::scenarios::cursor_revocation_live::realm_list_issuance_racing_revocation_live().await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[serial]
+async fn immutable_cursor_issuance_lookup_and_gc_costs_are_measured_on_real_postgres() -> Result<()>
+{
+    cotest::scenarios::cursor_revocation_live::immutable_cursor_cost_live().await
+}

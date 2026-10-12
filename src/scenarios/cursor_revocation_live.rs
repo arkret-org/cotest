@@ -545,14 +545,18 @@ pub async fn shared_database_two_process_cursor_revocation_live() -> Result<()> 
 }
 
 pub async fn issuance_racing_completed_revocation_live() -> Result<()> {
-    issuance_racing_revocation(false).await
+    issuance_racing_revocation(false, false).await
 }
 
 pub async fn issuance_racing_repeatable_read_default_live() -> Result<()> {
-    issuance_racing_revocation(true).await
+    issuance_racing_revocation(true, false).await
 }
 
-async fn issuance_racing_revocation(repeatable_read: bool) -> Result<()> {
+pub async fn realm_list_issuance_racing_revocation_live() -> Result<()> {
+    issuance_racing_revocation(false, true).await
+}
+
+async fn issuance_racing_revocation(repeatable_read: bool, realm_list: bool) -> Result<()> {
     use std::time::Duration;
     let database = database("cursor-issuance-revoke-race")?.context("real PostgreSQL required")?;
     let issuer = MockCoauthIntrospectionServer::spawn_with_internal_secret(
@@ -572,7 +576,36 @@ async fn issuance_racing_revocation(repeatable_read: bool) -> Result<()> {
         "ak:device:01904100-0000-7000-8000-000000004506",
     )
     .await?;
-    let original = cursor(&client).await?;
+    let original = if realm_list {
+        use arkret_models_collaboration::sync_frames::account_subscribe::RealmListRequest;
+        for title in [
+            "Issuance page alpha",
+            "Issuance page beta",
+            "Issuance page gamma",
+        ] {
+            client.create_realm(title).await?;
+        }
+        let response = client
+            .sdk()
+            .account_subscribe_batch(&SyncRequestBody {
+                catchup: Some(true),
+                realm_list: Some(RealmListRequest {
+                    after: None,
+                    limit: Some(1),
+                }),
+                ..Default::default()
+            })
+            .await?;
+        let token = response
+            .frames
+            .iter()
+            .find_map(|frame| frame.realm_list.as_ref())
+            .and_then(|page| page.next_cursor.clone())
+            .context("actual Realm-list continuation")?;
+        token
+    } else {
+        cursor(&client).await?
+    };
     if repeatable_read {
         let connect = database.connect_url.clone();
         tokio::task::spawn_blocking(move || -> Result<()> {
@@ -635,10 +668,24 @@ async fn issuance_racing_revocation(repeatable_read: bool) -> Result<()> {
     let pending = tokio::spawn(async move {
         reader
             .sdk()
-            .account_subscribe_batch(&SyncRequestBody {
-                after: Some(after),
-                catchup: Some(true),
-                ..Default::default()
+            .account_subscribe_batch(&if realm_list {
+                use arkret_models_collaboration::sync_frames::account_subscribe::RealmListRequest;
+                SyncRequestBody {
+                    realm_list: Some(RealmListRequest {
+                        after: Some(
+                            arkret_wire::Cursor::new(after).expect("validated original page token"),
+                        ),
+                        limit: Some(1),
+                    }),
+                    catchup: Some(true),
+                    ..Default::default()
+                }
+            } else {
+                SyncRequestBody {
+                    after: Some(after),
+                    catchup: Some(true),
+                    ..Default::default()
+                }
             })
             .await
     });
@@ -691,9 +738,416 @@ async fn issuance_racing_revocation(repeatable_read: bool) -> Result<()> {
         after == after_revocation,
         "refused issuance/revoke race advanced complete handle/business/ACK state: {changed:?}"
     );
-    revoked(&client, &original, &database.connect_url).await?;
+    if !realm_list {
+        revoked(&client, &original, &database.connect_url).await?;
+    }
     println!(
         "[cursor-revocation] blocked_real_handle_insert=1 completed_this_cursor_revoke=1 refused_continuation=1 zero_post_revoke_handle_progress=1"
     );
+    Ok(())
+}
+
+pub async fn immutable_realm_pages_remain_isolated_live() -> Result<()> {
+    use arkret_models_collaboration::sync_frames::account_subscribe::RealmListRequest;
+    let database = database("cursor-old-page-isolation")?.context("real PostgreSQL required")?;
+    let issuer = MockCoauthIntrospectionServer::spawn_with_internal_secret(
+        HARNESS_INTERNAL_AUTHORITY_SECRET,
+    )
+    .await?;
+    let group = TestServerGroup::try_multi_external_with_node_envs(
+        "cursor-old-page-isolation",
+        &[station_env(&database.connect_url, &issuer)],
+    )
+    .await?
+    .context("actual Coland process required")?;
+    let (client, _) = standard_client(
+        group.server(0),
+        &issuer,
+        "cursor-pager",
+        "ak:device:01904100-0000-7000-8000-000000004507",
+    )
+    .await?;
+    for title in ["Cursor page alpha", "Cursor page beta", "Cursor page gamma"] {
+        client.create_realm(title).await?;
+    }
+    let first = client
+        .sdk()
+        .account_subscribe_batch(&SyncRequestBody {
+            catchup: Some(true),
+            realm_list: Some(RealmListRequest {
+                after: None,
+                limit: Some(1),
+            }),
+            ..Default::default()
+        })
+        .await?;
+    let first_page = first
+        .frames
+        .iter()
+        .find_map(|frame| frame.realm_list.as_ref())
+        .context("actual Realm list page")?
+        .clone();
+    ensure!(first_page.items.len() == 1);
+    let page_cursor = first_page
+        .next_cursor
+        .clone()
+        .context("actual continuation from at least three Realm rows")?;
+    let request = SyncRequestBody {
+        catchup: Some(true),
+        realm_list: Some(RealmListRequest {
+            after: Some(arkret_wire::Cursor::new(page_cursor.clone())?),
+            limit: Some(1),
+        }),
+        ..Default::default()
+    };
+    let original = footprint(&database.connect_url).await?;
+    let next = client.sdk().account_subscribe_batch(&request).await?;
+    let next_page = next
+        .frames
+        .iter()
+        .find_map(|frame| frame.realm_list.as_ref())
+        .context("actual next page")?
+        .clone();
+    ensure!(
+        next_page.snapshot_cursor == first_page.snapshot_cursor
+            && next_page.snapshot_revision == first_page.snapshot_revision
+            && next_page.items.len() == 1
+            && next_page.items[0].realm_id != first_page.items[0].realm_id
+    );
+    let replay = client.sdk().account_subscribe_batch(&request).await?;
+    let replay_page = replay
+        .frames
+        .iter()
+        .find_map(|frame| frame.realm_list.as_ref())
+        .context("actual old page replay")?;
+    ensure!(
+        replay_page.items == next_page.items
+            && replay_page.snapshot_cursor == first_page.snapshot_cursor
+            && replay_page.snapshot_revision == first_page.snapshot_revision,
+        "new issuance changed the old immutable page progress"
+    );
+    let after_replay = footprint(&database.connect_url).await?;
+    let old = original["cursor_progress_and_ack"]["sync_cursor_handles"]
+        .as_array()
+        .context("old handles")?;
+    let retained = after_replay["cursor_progress_and_ack"]["sync_cursor_handles"]
+        .as_array()
+        .context("retained handles")?;
+    ensure!(
+        old.iter().all(|row| retained.contains(row)),
+        "new page issuance rewrote or deleted an original handle"
+    );
+    let later = next_page
+        .next_cursor
+        .clone()
+        .context("another independent page handle")?;
+    client
+        .sdk()
+        .account_cursor_revoke(&AccountCursorRevokeRequestBody {
+            cursor: page_cursor,
+            reason_code: ReasonCode::from_wire("user_requested"),
+            revoke_scope: CursorRevokeScope::ThisCursor,
+        })
+        .await?;
+    let before_refusal = footprint(&database.connect_url).await?;
+    let error = client
+        .sdk()
+        .account_subscribe_batch(&request)
+        .await
+        .expect_err("revoked page cannot resume");
+    ensure!(error.error_code() == Some(ErrorCode::CursorRevoked));
+    ensure!(
+        footprint(&database.connect_url).await? == before_refusal,
+        "revoked old page advanced handles, business state, progress or ACK"
+    );
+    client
+        .sdk()
+        .account_subscribe_batch(&SyncRequestBody {
+            catchup: Some(true),
+            realm_list: Some(RealmListRequest {
+                after: Some(arkret_wire::Cursor::new(later)?),
+                limit: Some(1),
+            }),
+            ..Default::default()
+        })
+        .await?;
+    println!(
+        "[cursor-revocation] real_immutable_realm_list_pages=3 old_page_replay_same_snapshot=1 original_handles_unchanged=1 one_page_revoke_does_not_revoke_other_page=1 complete_refusal_footprint_unchanged=1"
+    );
+    Ok(())
+}
+
+pub async fn legal_expired_wire_precedes_binding_and_revocation_live() -> Result<()> {
+    let database = database("cursor-expiry-precedence")?.context("real PostgreSQL required")?;
+    let issuer = MockCoauthIntrospectionServer::spawn_with_internal_secret(
+        HARNESS_INTERNAL_AUTHORITY_SECRET,
+    )
+    .await?;
+    let group = TestServerGroup::try_multi_external_with_node_envs(
+        "cursor-expiry-precedence",
+        &[station_env(&database.connect_url, &issuer)],
+    )
+    .await?
+    .context("actual Coland process required")?;
+    let (alice, _) = standard_client(
+        group.server(0),
+        &issuer,
+        "cursor-expiring",
+        "ak:device:01904100-0000-7000-8000-000000004508",
+    )
+    .await?;
+    let (bob, _) = standard_client(
+        group.server(0),
+        &issuer,
+        "cursor-other-owner",
+        "ak:device:01904100-0000-7000-8000-000000004509",
+    )
+    .await?;
+    let original = cursor(&alice).await?;
+    alice
+        .sdk()
+        .account_cursor_revoke(&AccountCursorRevokeRequestBody {
+            cursor: original.clone(),
+            reason_code: ReasonCode::from_wire("user_requested"),
+            revoke_scope: CursorRevokeScope::ThisCursor,
+        })
+        .await?;
+    let before = footprint(&database.connect_url).await?;
+    let error = bob
+        .sdk()
+        .account_subscribe_batch(&SyncRequestBody {
+            after: Some(original.clone()),
+            catchup: Some(true),
+            ..Default::default()
+        })
+        .await
+        .expect_err("another owner cannot inspect revoked status");
+    ensure!(error.error_code() == Some(ErrorCode::CursorIntegrityInvalid));
+    ensure!(footprint(&database.connect_url).await? == before);
+    // Wire mutation belongs only to the negative test fixture. Both normal
+    // clients still pass opaque strings and never derive authority from them.
+    let bytes = arkret_canonical::base64url_decode(
+        original
+            .strip_prefix("ak:cursor:")
+            .context("registered cursor syntax")?,
+    )?;
+    let mut known: arkret_hlc::Cursor = serde_json::from_slice(&bytes)?;
+    known.issued_at = arkret_canonical::normalize_timestamp_canonical(
+        chrono::Utc::now() - chrono::Duration::seconds(2),
+    );
+    known.expires_at = known.issued_at + chrono::Duration::seconds(1);
+    let mut unknown = known.clone();
+    unknown.h = arkret_hlc::generate_cursor_handle()
+        .map_err(|error| anyhow::anyhow!("fixture handle: {error}"))?;
+    for wire in [&known, &unknown] {
+        let token = format!(
+            "ak:cursor:{}",
+            arkret_canonical::base64url_encode(arkret_canonical::canonical_json_bytes(wire)?)
+        );
+        for client in [&alice, &bob] {
+            let before = footprint(&database.connect_url).await?;
+            let error = client
+                .sdk()
+                .account_subscribe_batch(&SyncRequestBody {
+                    after: Some(token.clone()),
+                    catchup: Some(true),
+                    ..Default::default()
+                })
+                .await
+                .expect_err("legal expired wire cannot resume");
+            ensure!(
+                error.error_code() == Some(ErrorCode::CursorExpired),
+                "expiry lost canonical precedence: {error:?}"
+            );
+            let error = client
+                .sdk()
+                .account_cursor_revoke(&AccountCursorRevokeRequestBody {
+                    cursor: token.clone(),
+                    reason_code: ReasonCode::from_wire("user_requested"),
+                    revoke_scope: CursorRevokeScope::ThisCursor,
+                })
+                .await
+                .expect_err("expired target cannot change revocation ledger");
+            ensure!(error.error_code() == Some(ErrorCode::CursorExpired));
+            ensure!(
+                footprint(&database.connect_url).await? == before,
+                "expired wire changed complete handle/business/progress/ACK state"
+            );
+        }
+    }
+    println!(
+        "[cursor-revocation] revoked_binding_ownership_before_revoke_disclosure=1 legal_wire_expiry_first=1 known_revoked_and_unknown_handles=2 authenticated_owners=2 expired_read_and_revoke_refusals=8 complete_refusal_footprint_unchanged=1"
+    );
+    Ok(())
+}
+
+pub async fn immutable_cursor_cost_live() -> Result<()> {
+    use std::time::Instant;
+
+    use arkret_models_collaboration::sync_frames::account_subscribe::RealmListRequest;
+    use coland_storage::SyncCursorStore;
+    fn latency(mut values: Vec<f64>) -> Value {
+        values.sort_by(f64::total_cmp);
+        serde_json::json!({"samples": values.len(), "p50_ms": values[values.len().div_ceil(2)-1],
+            "p95_ms": values[(values.len()*95).div_ceil(100)-1], "max_ms": values[values.len()-1]})
+    }
+    let database = database("cursor-cost")?.context("real PostgreSQL required")?;
+    let issuer = MockCoauthIntrospectionServer::spawn_with_internal_secret(
+        HARNESS_INTERNAL_AUTHORITY_SECRET,
+    )
+    .await?;
+    let group = TestServerGroup::try_multi_external_with_node_envs(
+        "cursor-cost",
+        &[station_env(&database.connect_url, &issuer)],
+    )
+    .await?
+    .context("actual Coland process required")?;
+    let (client, _) = standard_client(
+        group.server(0),
+        &issuer,
+        "cursor-cost-actor",
+        "ak:device:01904100-0000-7000-8000-000000004510",
+    )
+    .await?;
+    for title in ["Cost alpha", "Cost beta", "Cost gamma"] {
+        client.create_realm(title).await?;
+    }
+    let first = client
+        .sdk()
+        .account_subscribe_batch(&SyncRequestBody {
+            catchup: Some(true),
+            realm_list: Some(RealmListRequest {
+                after: None,
+                limit: Some(1),
+            }),
+            ..Default::default()
+        })
+        .await?;
+    let original = first
+        .frames
+        .iter()
+        .find_map(|frame| frame.realm_list.as_ref())
+        .and_then(|page| page.next_cursor.clone())
+        .context("actual page handle")?;
+    let request = SyncRequestBody {
+        catchup: Some(true),
+        realm_list: Some(RealmListRequest {
+            after: Some(arkret_wire::Cursor::new(original.clone())?),
+            limit: Some(1),
+        }),
+        ..Default::default()
+    };
+    let before = footprint(&database.connect_url).await?;
+    let original_rows = before["cursor_progress_and_ack"]["sync_cursor_handles"]
+        .as_array()
+        .context("original handles")?;
+    let mut phases = Vec::new();
+    for concurrency in [1usize, 8usize] {
+        let baseline = footprint(&database.connect_url).await?;
+        let baseline_count = baseline["cursor_progress_and_ack"]["sync_cursor_handles"]
+            .as_array()
+            .context("handles")?
+            .len();
+        let started = Instant::now();
+        let mut timings = Vec::new();
+        for _ in 0..(24 / concurrency) {
+            let mut tasks = tokio::task::JoinSet::new();
+            for _ in 0..concurrency {
+                let reader = client.clone();
+                let request = request.clone();
+                tasks.spawn(async move {
+                    let start = Instant::now();
+                    let response = reader.sdk().account_subscribe_batch(&request).await?;
+                    let page = response
+                        .frames
+                        .iter()
+                        .find_map(|frame| frame.realm_list.as_ref())
+                        .context("live continuation page")?;
+                    ensure!(page.items.len() == 1 && page.next_cursor.is_some());
+                    Ok::<f64, anyhow::Error>(start.elapsed().as_secs_f64() * 1000.0)
+                });
+            }
+            while let Some(result) = tasks.join_next().await {
+                timings.push(result??);
+            }
+        }
+        let elapsed = started.elapsed().as_secs_f64();
+        let after = footprint(&database.connect_url).await?;
+        let rows = after["cursor_progress_and_ack"]["sync_cursor_handles"]
+            .as_array()
+            .context("handles")?;
+        ensure!(
+            original_rows.iter().all(|row| rows.contains(row)),
+            "load rewrote an original frozen progress/expiry/identity"
+        );
+        phases.push(serde_json::json!({"concurrency":concurrency,"requests":24,"seconds":elapsed,"requests_per_second":24.0/elapsed,
+            "latency":latency(timings),"new_handle_rows":rows.len()-baseline_count,"original_instances_unchanged":true}));
+    }
+    client
+        .sdk()
+        .account_cursor_revoke(&AccountCursorRevokeRequestBody {
+            cursor: original.clone(),
+            reason_code: ReasonCode::from_wire("user_requested"),
+            revoke_scope: CursorRevokeScope::ThisCursor,
+        })
+        .await?;
+    let refusal_before = footprint(&database.connect_url).await?;
+    let error = client
+        .sdk()
+        .account_subscribe_batch(&request)
+        .await
+        .expect_err("load cannot resurrect revoked original");
+    ensure!(error.error_code() == Some(ErrorCode::CursorRevoked));
+    ensure!(footprint(&database.connect_url).await? == refusal_before);
+    // This storage observer is test-only; client requests retain the opaque token.
+    let original_cursor = arkret_hlc::Cursor::decode(&original)?;
+    let db = coland_storage_postgres::Db::connect(
+        Some(&database.connect_url),
+        coland_storage_postgres::PoolTuning {
+            max_size: Some(8),
+            acquire_timeout_seconds: Some(30),
+        },
+    )
+    .await?;
+    let store = coland_storage_postgres::PgSyncCursorStore {
+        pool: db.pool.context("PG pool")?,
+    };
+    let mut lookup = Vec::new();
+    for _ in 0..100 {
+        let start = Instant::now();
+        ensure!(store.get(&original_cursor.h).await?.is_some());
+        lookup.push(start.elapsed().as_secs_f64() * 1000.0);
+    }
+    let connect = database.connect_url.clone();
+    let statistics=tokio::task::spawn_blocking(move || -> Result<Value> {
+        let mut connection=postgres::Client::connect(&connect,postgres::NoTls)?;
+        let row=connection.query_one("SELECT count(*)::bigint,min(expires_at_ms-issued_at_ms)::bigint,max(expires_at_ms-issued_at_ms)::bigint,max(expires_at_ms)::bigint,pg_total_relation_size('sync_cursor_handles')::bigint,pg_total_relation_size('account_sync_cursor_retention')::bigint FROM sync_cursor_handles",&[])?;
+        Ok(serde_json::json!({"postgres_version":connection.query_one("SHOW server_version",&[])?.get::<_,String>(0),"handle_rows":row.get::<_,i64>(0),"minimum_ttl_ms":row.get::<_,i64>(1),"maximum_ttl_ms":row.get::<_,i64>(2),"max_expiry_ms":row.get::<_,i64>(3),"handle_relation_bytes":row.get::<_,i64>(4),"retention_relation_bytes":row.get::<_,i64>(5)}))
+    }).await??;
+    drop(group);
+    let started = Instant::now();
+    let kept = store
+        .prune_expired(chrono::Utc::now().timestamp_millis())
+        .await?;
+    let current_gc_ms = started.elapsed().as_secs_f64() * 1000.0;
+    ensure!(
+        kept == 0 && store.get(&original_cursor.h).await?.is_some(),
+        "current-time GC deleted a live immutable handle"
+    );
+    let maintenance_time = statistics["max_expiry_ms"].as_i64().context("expiry")? + 1;
+    let started = Instant::now();
+    let removed = store.prune_expired(maintenance_time).await?;
+    let expired_gc_ms = started.elapsed().as_secs_f64() * 1000.0;
+    ensure!(
+        removed as i64 == statistics["handle_rows"].as_i64().context("handle count")?
+            && store.get(&original_cursor.h).await?.is_none()
+    );
+    let result = serde_json::json!({"kind":"actual_process_http_and_postgres_store_measurement","baseline":"same binary, same three-Realm frozen page, concurrency 1 versus 8; no previous-version improvement claim",
+        "phases":phases,"handle_lookup":latency(lookup),"storage":statistics,"current_time_gc":{"removed":kept,"ms":current_gc_ms},"expiry_boundary_gc":{"removed":removed,"ms":expired_gc_ms,"clock":"explicit store maintenance cutoff after maximum recorded expiry; no wire lifetime was changed"},
+        "revoked_refusal_zero_effect":true,"global_stack_override":false,"deduplication":false});
+    if let Ok(path) = std::env::var("COTEST_CURSOR_COST_OUTPUT") {
+        std::fs::write(path, serde_json::to_vec_pretty(&result)?)?;
+    }
+    println!("[cursor-cost] {}", serde_json::to_string(&result)?);
     Ok(())
 }

@@ -248,8 +248,8 @@
     },
     {
       "task": "2026-09-18-2345c-security-evidence-suites-must-actually-run.md",
-      "criteria_count": 5,
-      "criteria_sha256": "f5576aeb9b917bb50dc7600af8f9d1027269f1fbe66af28f04052c54bddd04b1",
+      "criteria_count": 3,
+      "criteria_sha256": "e4232e617924a3b8c33e752cbfb44cbed95129d1650225e578f3d71656b5b49f",
       "spec_refs": [
         "arkret-spec/spec/v1/zh/conformance/conformance-suite.md"
       ],
@@ -360,11 +360,35 @@
           "symbol": "completed_revocation_remains_visible_under_a_repeatable_read_database_default",
           "kind": "live",
           "covers": "独立数据库默认repeatable-read、新OS进程与完成撤销可见性；完整拒绝零推进"
+        },
+        {
+          "path": "cotest/tests/cursor_revocation_live.rs",
+          "symbol": "old_realm_pages_keep_their_original_snapshot_and_independent_revocation_identity",
+          "kind": "live",
+          "covers": "真实Realm-list旧页冻结窗口/原句柄不变；单页撤销隔离与完整零副作用"
+        },
+        {
+          "path": "cotest/tests/cursor_revocation_live.rs",
+          "symbol": "legal_wire_expiry_precedes_unknown_binding_and_revocation_without_state_changes",
+          "kind": "live",
+          "covers": "合法wire到期优先未知/撤销/不同绑定；read/revoke八次正式拒绝零写"
+        },
+        {
+          "path": "cotest/tests/cursor_revocation_live.rs",
+          "symbol": "realm_list_issuance_cannot_install_a_page_after_its_input_was_revoked",
+          "kind": "live",
+          "covers": "真实续页INSERT等待与完成原页撤销；拒绝时完整handle/retention/业务/ACK回滚"
+        },
+        {
+          "path": "cotest/tests/cursor_revocation_live.rs",
+          "symbol": "immutable_cursor_issuance_lookup_and_gc_costs_are_measured_on_real_postgres",
+          "kind": "live",
+          "covers": "同SUT单/八并发真实续页、签发行数/空间、PG查表/GC成本；原进度/期限/撤销身份保持"
         }
       ],
       "engineering_checks": [],
       "remaining_scenarios": [
-        "逐case named生产消费/required-ref合取；原origin binding移除；旧页与mutable下载进度隔离、合法wire到期优先级；成本；最终签名SDK/profile闭包"
+        "逐case named生产消费/required-ref合取；原origin binding移除；最终签名SDK/profile闭包"
       ]
     },
     {
